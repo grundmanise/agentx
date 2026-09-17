@@ -20,7 +20,8 @@ Single-context repo:
 ├── docs/
 │   ├── adr/
 │   │   ├── 0001-go-cli-owns-machine-and-account-tauri-renders.md
-│   │   └── 0002-per-machine-libraries-one-account-repo-content-moves-by-install.md
+│   │   ├── 0002-per-machine-libraries-one-account-repo-content-moves-by-install.md
+│   │   └── 0003-account-repo-one-branch-per-fork-checked-out-as-worktrees.md
 │   └── spec/
 └── apps/
 ```
@@ -39,4 +40,4 @@ If the concept you need isn't in the glossary yet, that's a signal: either you'r
 
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
 
-> _Contradicts ADR-0002 (per-machine libraries), but worth reopening because…_
+> _Contradicts ADR-0003 (per-machine libraries), but worth reopening because…_

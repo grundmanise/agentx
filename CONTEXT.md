@@ -68,7 +68,7 @@ A skill created from scratch in agentx with no upstream. Behaves as a fork with 
 _Avoid_: custom skill, new skill
 
 **Account repo**:
-The one git repository per account that holds every fork and greenfield skill, one subdirectory per skill. Each machine works in its own clone in agentx home; a machine without an account has the clone before the remote exists. Which machine has which fork placed is metadata, not repository layout.
+The one git repository per account that holds every fork and greenfield skill, one branch per skill. Each machine has its own clone in agentx home and checks out only the forks placed on it, one worktree per fork; a machine without an account has the clone before the remote exists. Ancestry between imported upstream versions is reconstructed locally with replace refs.
 _Avoid_: cloud repo, library repo, fork repo
 
 **Account remote**:
@@ -76,7 +76,7 @@ The git remote per account that account repos push to and fetch from once the ma
 _Avoid_: cloud, server, origin
 
 **Publish**:
-An explicit user action that pushes a fork or greenfield skill from the account repo to the account remote. After publishing it is an upstream like any other and reaches other machines through install and update. Local commits happen on their own; publishing does not.
+An explicit user action that pushes one fork's or greenfield skill's branch from the account repo to the account remote. After publishing it is an upstream like any other and reaches other machines through install and update. Local commits happen on their own; publishing does not.
 _Avoid_: sync, share, upload
 
 **Modified skill**:
@@ -84,12 +84,12 @@ A managed skill whose on-disk content no longer matches its base version because
 _Avoid_: dirty, drifted, changed
 
 **Lineage record**:
-The record that ties a fork, greenfield or managed skill to its upstream, meaning a source, a subpath and a version, and to the content hash of its base. Lives in the local database; for forks it is also written to the manifest.
-_Avoid_: metadata, provenance
+The record that ties a fork, greenfield or managed skill to its upstream, meaning a source, a subpath and a version, and to the content hash of its base. Lives in the local database; for forks the upstream coordinates and the base are also recorded as lineage trailers in the account repo.
+_Avoid_: metadata
 
-**Manifest**:
-The file committed at the root of the account repo, outside every skill directory, with one entry per fork: its third-party upstream coordinates and base content hash. Reaches every clone by fetch, so a fork's provenance travels with the fork.
-_Avoid_: lock file, metadata file, manifest.json
+**Lineage trailers**:
+The `Agentx-` commit trailers in the account repo: source, path, upstream commit and content hash on every imported upstream version, and the id of the current base on every merge agentx makes. How a fork's provenance reaches every clone by fetch, with no file in the branch tree.
+_Avoid_: manifest, metadata file, provenance file
 
 **Library**:
 One machine's canonical skills directory at ~/.agents/skills, where every skill that machine has lives exactly once. Each machine owns its own library; nothing moves between libraries except through install and update.
@@ -104,7 +104,7 @@ The upstream content a skill was installed, forked or last updated from, named b
 _Avoid_: original, parent, snapshot
 
 **Agentx home**:
-The ~/.agentx directory holding the local database, machine identity, the base version cache and the account repo clone. Agents read forks through symlinks from the library into the account repo; nothing else in it is read by agents.
+The ~/.agentx directory holding the local database, machine identity, the base version cache and the account repo clone with its worktrees. Agents read forks through symlinks from the library into those worktrees; nothing else in it is read by agents.
 
 **Enabled configuration**:
 An agent configuration on a machine that agentx installs into by default. The user chooses which configurations are enabled per machine.
