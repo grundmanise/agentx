@@ -1,0 +1,46 @@
+---
+title: "Output and exit codes"
+description: "Read agentx output from a script and act on its exit codes."
+---
+
+## JSON output
+
+Add `--json` before or after any command to get one JSON object per line on stdout. Every object has a `type` and an integer `schema_version`. The last line is always a `result` with `ok` set to `true` or `false`.
+
+```sh
+agentx --json version
+```
+
+Parse each line on its own. Read the exit code before trusting the output.
+
+## Logs
+
+Logs go to stderr, never to stdout. Add `--verbose` to see debug lines, such as which agentx home and library the command used. With `--json`, log lines are JSON objects too.
+
+## Errors
+
+A failed command prints `error: ...` and, when there is a fix, `hint: ...` on stderr. With `--json` it emits an `error` event with `code`, `message` and `hint` instead, followed by a `result` with `ok: false`.
+
+## Exit codes
+
+| Exit code | Code | Meaning |
+|---|---|---|
+| 0 | `ok` | Success. |
+| 1 | `usage` | Unknown command, bad flag or missing argument. Run `agentx help`. |
+| 2 | `git` | Git is missing or older than 2.40. Install or upgrade git. |
+| 3 | `source` | A source is unreachable or authentication failed. |
+| 4 | `pending_merge` | A pending merge blocks the action. |
+| 5 | `not_found` | The skill, source or configuration does not exist. |
+| 6 | `refused` | A collision or an unmet precondition. |
+| 7 | `locked` | Another agentx command is running. Retry when it finishes. |
+| 8 | `account_repo` | The account repo is unusable. |
+| 10 | `internal` | An internal error. The message names the file or command involved. |
+
+## Directories
+
+| Variable | Default | Use |
+|---|---|---|
+| `AGENTX_HOME` | `~/.agentx` | Where agentx keeps its own state. |
+| `AGENTX_LIBRARY` | `~/.agents/skills` | The library of skills agentx manages. |
+
+Set either to move that directory. `agentx` reads `HOME` and `XDG_CONFIG_HOME` to find your agent clients.

@@ -1,0 +1,28 @@
+---
+title: "agentx version"
+description: "Print the CLI version and its output schema version."
+---
+
+Run `agentx version` to see which build you have and which output schema it emits.
+
+```sh
+agentx version
+```
+
+```text
+CLI version     dev
+Schema version  1
+```
+
+`dev` means an unreleased build. The schema version changes only when the `--json` output changes incompatibly, so a script can check it before parsing events.
+
+Add `--json` to get the same as events:
+
+```sh
+agentx version --json
+```
+
+```json
+{"type":"version","schema_version":1,"cli_version":"dev"}
+{"type":"result","schema_version":1,"ok":true}
+```
