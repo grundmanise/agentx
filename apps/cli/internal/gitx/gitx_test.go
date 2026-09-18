@@ -69,7 +69,7 @@ func TestEnvironments(t *testing.T) {
 		},
 		[]string{"GIT_AUTHOR_NAME=Someone", "GIT_SSH_COMMAND=ssh -i /home/someone/key", "AGENTX_LEAK=from the process", "GIT_TERMINAL_PROMPT=0"})
 
-	out, err = New(env, false, logf).User(ctx, "/repo.git", "fetch", "origin")
+	out, err = New(env, false, logf).run(ctx, false, "--git-dir=/repo.git", "fetch", "origin")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestEnvironments(t *testing.T) {
 		[]string{"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "AGENTX_LEAK=from the process", "GIT_ASKPASS=/bin/false"})
 
 	serve := New(env, true, logf)
-	out, err = serve.User(ctx, "/repo.git", "fetch")
+	out, err = serve.run(ctx, false, "fetch")
 	if err != nil {
 		t.Fatal(err)
 	}

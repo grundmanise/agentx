@@ -172,7 +172,7 @@ The machine id names one computer across reinstalls. It is derived, in this orde
 
 ## Lock and version file
 
-Every command that changes agentx home takes an exclusive advisory `flock` on `lock` in agentx home without waiting, does its writes, rewrites `version` as its last step and releases the lock. `version` holds one decimal integer and a newline, incremented on every successful mutation (a missing file counts as 0); it is a change signal for watchers, not an ordering of snapshots. A command that finds the lock held exits at once with code 7 and a hint naming the lock file. A failed mutation leaves `version` untouched. Reading commands do not take the lock, except `agentx machine` for the one write that stores a random id; that write does not touch `version`. Taking the lock creates agentx home and its `ops` directory when they are missing; nothing writes into `ops` yet.
+Every command that changes agentx home takes an exclusive advisory `flock` on `lock` in agentx home without waiting, does its writes, rewrites `version` as its last step and releases the lock. `version` holds one decimal integer and a newline, incremented on every successful mutation (a missing file counts as 0); it is a change signal for watchers, not an ordering of snapshots. A command that finds the lock held exits at once with code 7 and a hint naming the lock file. While it holds the lock, a command keeps its process id in the lock file, so `agentx doctor` can name the holder. A failed mutation leaves `version` untouched. Reading commands do not take the lock, except `agentx machine` for the one write that stores a random id; that write does not touch `version`. Taking the lock creates agentx home and its `ops` directory when they are missing; nothing writes into `ops` yet.
 
 ## Content hash
 
@@ -206,7 +206,7 @@ In the serve child every git call additionally has `GIT_TERMINAL_PROMPT=0`, `-o 
 | `relative_worktree_paths` | `info` | whether git is 2.48 or newer, which enables relative worktree paths |
 | `isolated_commit` | `ok`, `fail` | the isolated environment gives a fixed input the known commit id `5d75017e77f5413f4337ef776244b8d8dc77ca90` |
 | `home` | `ok`, `fail` | agentx home exists, or was created, and is writable |
-| `lock` | `ok`, `warn` | the lock is free, or held by another agentx command |
+| `lock` | `ok`, `warn` | the lock is free, or held by another agentx command; the detail names the holder's process id |
 | `settings` | `ok`, `fail` | `settings.json` parses, or does not exist yet; the detail and hint name the path |
 | `account_repo` | `ok`, `fail` | the account repo opens, or was created by this run |
 | `library` | `ok`, `warn` | the library directory exists; a missing library is a warning, not a failure |

@@ -49,6 +49,10 @@ func takeLock(dir string) (*os.File, error) {
 		}
 		return nil, fmt.Errorf("lock %s: %w", path, err)
 	}
+	// The holder's pid lets doctor name it; it is informational, so a failed write is ignored.
+	if err := f.Truncate(0); err == nil {
+		f.WriteAt([]byte(strconv.Itoa(os.Getpid())+"\n"), 0)
+	}
 	return f, nil
 }
 
@@ -63,15 +67,17 @@ func bumpVersion(dir string) error {
 	return writeAtomic(path, []byte(strconv.Itoa(n+1)+"\n"))
 }
 
-// LockHeld reports whether another command holds the lock, without waiting.
-func LockHeld(dir string) (bool, error) {
+// LockHeld reports whether another command holds the lock, without waiting,
+// and the pid that command wrote into the lock file.
+func LockHeld(dir string) (held bool, pid string, err error) {
 	f, err := takeLock(dir)
 	if errors.Is(err, ErrLocked) {
-		return true, nil
+		b, _ := os.ReadFile(LockPath(dir))
+		return true, strings.TrimSpace(string(b)), nil
 	}
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	f.Close()
-	return false, nil
+	return false, "", nil
 }

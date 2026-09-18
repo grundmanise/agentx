@@ -222,9 +222,19 @@ func TestDoctorReportsHeldLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer f.Close()
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		t.Fatal(err)
+	// hold takes the lock as another agentx command does: flock, then its pid.
+	hold := func() {
+		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+			t.Fatal(err)
+		}
+		if err := f.Truncate(0); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.WriteAt([]byte("4242\n"), 0); err != nil {
+			t.Fatal(err)
+		}
 	}
+	hold()
 
 	// Creating the account repo is a mutation, so a held lock blocks it.
 	out := h.run("--json", "doctor")
@@ -232,8 +242,7 @@ func TestDoctorReportsHeldLock(t *testing.T) {
 	events := h.events(out.stdout)
 	rows, _ := doctorRows(t, events)
 	equal(t, "lock.status", rows["lock"]["status"], "warn")
-	contains(t, "lock.detail", rows["lock"]["detail"].(string), "held")
-	contains(t, "lock.detail", rows["lock"]["detail"].(string), lock)
+	equal(t, "lock.detail", rows["lock"]["detail"], "held by process 4242: "+lock)
 	equal(t, "account_repo.status", rows["account_repo"]["status"], "fail")
 	equal(t, "error.code", events[len(events)-2]["code"], "locked")
 
@@ -241,9 +250,7 @@ func TestDoctorReportsHeldLock(t *testing.T) {
 		t.Fatal(err)
 	}
 	equal(t, "exit", h.run("doctor").exit, 0)
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		t.Fatal(err)
-	}
+	hold()
 
 	// With the repo in place doctor only reports the lock.
 	out = h.run("--json", "doctor")
@@ -254,7 +261,7 @@ func TestDoctorReportsHeldLock(t *testing.T) {
 
 	out = h.run("doctor")
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "lock                     warn  held: another agentx command holds "+lock)
+	contains(t, "stdout", out.stdout, "lock                     warn  held by process 4242: "+lock)
 }
 
 func TestDoctorReportsCorruptSettings(t *testing.T) {

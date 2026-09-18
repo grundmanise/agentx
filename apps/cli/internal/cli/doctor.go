@@ -66,25 +66,26 @@ func (d *doctor) run(ctx context.Context) error {
 	}
 	d.row("git", "ok", "git "+v.String(), "")
 
+	const verbose = "run with --verbose to see the git commands"
 	commit, mergeErr, probeErr := gitx.Probe(ctx, inv.git)
 	switch {
 	case probeErr != nil:
-		d.row("merge_tree", "fail", "cannot set up the probe repository: "+probeErr.Error(), "run with --verbose to see the failing git command")
+		d.row("merge_tree", "fail", "cannot set up the probe repository: "+probeErr.Error(), verbose)
 	case mergeErr != nil:
-		d.row("merge_tree", "fail", mergeErr.Error(), "install git 2.40 or newer")
+		d.row("merge_tree", "fail", mergeErr.Error(), verbose)
 	default:
 		d.row("merge_tree", "ok", "merge-tree --write-tree --merge-base merges two branches", "")
 	}
 	if v.AtLeast(2, 48) {
 		d.row("relative_worktree_paths", "info", "available: git "+v.String()+" is 2.48 or newer", "")
 	} else {
-		d.row("relative_worktree_paths", "info", "not available: git "+v.String()+" is older than 2.48, so worktree paths stay absolute", "")
+		d.row("relative_worktree_paths", "info", "not available: git "+v.String()+" is older than 2.48", "")
 	}
 	switch {
-	case commit == "" && probeErr != nil:
-		d.row("isolated_commit", "fail", "cannot set up the probe repository: "+probeErr.Error(), "run with --verbose to see the failing git command")
+	case commit == "":
+		d.row("isolated_commit", "fail", "cannot set up the probe repository: "+probeErr.Error(), verbose)
 	case commit != gitx.FixedCommit:
-		d.row("isolated_commit", "fail", "the isolated environment produced commit "+commit+", not "+gitx.FixedCommit, "run with --verbose to see the git commands")
+		d.row("isolated_commit", "fail", "the isolated environment produced commit "+commit+", not "+gitx.FixedCommit, verbose)
 	default:
 		d.row("isolated_commit", "ok", "commit "+commit, "")
 	}
@@ -96,11 +97,13 @@ func (d *doctor) run(ctx context.Context) error {
 	}
 
 	lock := home.LockPath(inv.dirs.Home)
-	switch held, err := home.LockHeld(inv.dirs.Home); {
+	switch held, pid, err := home.LockHeld(inv.dirs.Home); {
 	case err != nil:
 		d.row("lock", "fail", err.Error(), "")
+	case held && pid != "":
+		d.row("lock", "warn", "held by process "+pid+": "+lock, "wait for it to finish")
 	case held:
-		d.row("lock", "warn", "held: another agentx command holds "+lock, "wait for it to finish")
+		d.row("lock", "warn", "held by another agentx command: "+lock, "wait for it to finish")
 	default:
 		d.row("lock", "ok", "free: "+lock, "")
 	}

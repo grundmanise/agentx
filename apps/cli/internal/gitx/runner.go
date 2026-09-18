@@ -103,12 +103,8 @@ func (r *Runner) Isolated(ctx context.Context, gitDir string, args ...string) (s
 	return r.run(ctx, true, all...)
 }
 
-// User runs git against gitDir in the user's own environment, so credential
-// helpers, SSH configuration and URL rewrites apply. Network commands use it.
-func (r *Runner) User(ctx context.Context, gitDir string, args ...string) (string, error) {
-	return r.run(ctx, false, append([]string{"--git-dir=" + gitDir}, args...)...)
-}
-
+// run executes git with args; isolated false is the user's own environment,
+// in which credential helpers, SSH configuration and URL rewrites apply.
 func (r *Runner) run(ctx context.Context, isolated bool, args ...string) (string, error) {
 	git, err := r.lookPath()
 	if err != nil {

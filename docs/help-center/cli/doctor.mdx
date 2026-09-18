@@ -12,7 +12,7 @@ agentx doctor
 ```text
 git                      ok    git 2.43.0
 merge_tree               ok    merge-tree --write-tree --merge-base merges two branches
-relative_worktree_paths  info  not available: git 2.43.0 is older than 2.48, so worktree paths stay absolute
+relative_worktree_paths  info  not available: git 2.43.0 is older than 2.48
 isolated_commit          ok    commit 5d75017e77f5413f4337ef776244b8d8dc77ca90
 home                     ok    /home/me/.agentx is writable
 lock                     ok    free: /home/me/.agentx/lock
@@ -30,7 +30,7 @@ library                  warn  missing: /home/me/.agents/skills  create it with 
 | `relative_worktree_paths` | Whether git is 2.48 or newer. Informational. |
 | `isolated_commit` | agentx commits produce the same id on this machine as on every other, whatever your git configuration. |
 | `home` | agentx home is writable. |
-| `lock` | No other agentx command is running. |
+| `lock` | No other agentx command holds the lock. When one does, the detail names its process id. |
 | `settings` | `settings.json` parses. |
 | `account_repo` | The account repo opens. The first run creates it. |
 | `library` | The library directory exists. A missing library is a warning, not a failure. |
