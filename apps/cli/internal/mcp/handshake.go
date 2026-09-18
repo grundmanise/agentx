@@ -13,6 +13,7 @@ import (
 	"maps"
 	"mime"
 	"net/http"
+	"os"
 	"os/exec"
 	"slices"
 	"strconv"
@@ -21,8 +22,10 @@ import (
 	"time"
 )
 
-// protocolVersion is the latest MCP revision that opens with an initialize
-// request; the server may answer with an earlier one, which is accepted as is.
+// protocolVersion is the last MCP revision that opens with an initialize
+// request; the server may answer with an earlier one, which is accepted as
+// is. Revisions from 2026-07-28 on carry the version on every request
+// instead; a server implementing only those rejects initialize.
 const protocolVersion = "2025-11-25"
 
 // Item is one tool, prompt, resource or resource template a server exposes.
@@ -30,7 +33,7 @@ type Item struct {
 	Kind        string // tool, prompt, resource or resource_template
 	Name        string
 	Description string
-	Hash        string // hex SHA-256 over the item's serialisation, see Signature
+	Hash        string // hex SHA-256 over the item's serialisation, see signature
 
 	serialised string
 }
@@ -90,15 +93,15 @@ func Handshake(ctx context.Context, s Server, env map[string]string, clientVersi
 		}
 		items = append(items, found...)
 	}
-	return Signature(items), nil
+	return signature(items), nil
 }
 
-// Signature sorts items by kind, name and serialisation and computes the
+// signature sorts items by kind, name and serialisation and computes the
 // signature: SHA-256 over the items' serialisations joined by NUL. An item's
 // serialisation is its kind, name, description, input schema and output
 // schema joined by NUL, the schemas as canonical JSON, empty where absent;
 // its hash is SHA-256 over that serialisation.
-func Signature(items []Item) Result {
+func signature(items []Item) Result {
 	slices.SortFunc(items, func(a, b Item) int {
 		if c := strings.Compare(a.Kind, b.Kind); c != 0 {
 			return c
@@ -138,7 +141,7 @@ type entry struct {
 	OutputSchema json.RawMessage `json:"outputSchema"`
 }
 
-// item serialises e as Signature documents and hashes it.
+// item serialises e as signature documents and hashes it.
 func (l listing) item(e entry) (Item, error) {
 	input, err := canonical(e.InputSchema)
 	if err != nil {
@@ -277,10 +280,13 @@ type stdioConn struct {
 	cmd    *exec.Cmd
 	cancel context.CancelFunc
 	in     io.WriteCloser
-	out    *bufio.Scanner
+	out    *os.File // the read end of the server's stdout
+	lines  *bufio.Scanner
 	next   int64
 }
 
+// startStdio starts the server. The command is looked up on the PATH of the
+// agentx process, as any subprocess is.
 func startStdio(ctx context.Context, s Server, env map[string]string) (*stdioConn, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	cmd := exec.CommandContext(ctx, s.Command, s.Args...)
@@ -290,26 +296,31 @@ func startStdio(ctx context.Context, s Server, env map[string]string) (*stdioCon
 	for _, k := range slices.Sorted(maps.Keys(merged)) {
 		cmd.Env = append(cmd.Env, k+"="+merged[k])
 	}
-	cmd.Stderr = io.Discard // never recorded: a server may log what it was given
+	// Stderr stays on the null device: a server may log what it was given.
 	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
 	cmd.WaitDelay = time.Second
+	out, w, err := os.Pipe()
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	cmd.Stdout = w
 	in, err := cmd.StdinPipe()
+	if err == nil {
+		err = cmd.Start()
+	}
+	w.Close() // the server holds the write end now
 	if err != nil {
 		cancel()
+		out.Close()
 		return nil, err
 	}
-	out, err := cmd.StdoutPipe()
-	if err != nil {
-		cancel()
-		return nil, err
-	}
-	if err := cmd.Start(); err != nil {
-		cancel()
-		return nil, err
-	}
-	sc := bufio.NewScanner(out)
-	sc.Buffer(make([]byte, 64<<10), maxMessage)
-	return &stdioConn{cmd: cmd, cancel: cancel, in: in, out: sc}, nil
+	// A server, or a child it leaves behind, that keeps stdout open past
+	// the deadline must not block the scan: the pending read fails instead.
+	context.AfterFunc(ctx, func() { out.SetReadDeadline(time.Now()) })
+	lines := bufio.NewScanner(out)
+	lines.Buffer(make([]byte, 64<<10), maxMessage)
+	return &stdioConn{cmd: cmd, cancel: cancel, in: in, out: out, lines: lines}, nil
 }
 
 func (c *stdioConn) send(m message) error {
@@ -326,10 +337,10 @@ func (c *stdioConn) send(m message) error {
 func (c *stdioConn) call(ctx context.Context, method string, params any, out any) error {
 	c.next++
 	if err := c.send(request(c.next, method, params)); err != nil {
-		return fmt.Errorf("%s: %w", method, c.exited(ctx, err))
+		return c.fail(ctx, method, err)
 	}
-	for c.out.Scan() {
-		line := bytes.TrimSpace(c.out.Bytes())
+	for c.lines.Scan() {
+		line := bytes.TrimSpace(c.lines.Bytes())
 		if len(line) == 0 {
 			continue
 		}
@@ -344,25 +355,25 @@ func (c *stdioConn) call(ctx context.Context, method string, params any, out any
 			return nil
 		}
 	}
-	err := c.out.Err()
+	err := c.lines.Err()
 	if err == nil {
 		err = errors.New("the server exited before answering")
 	}
-	return fmt.Errorf("%s: %w", method, c.exited(ctx, err))
+	return c.fail(ctx, method, err)
 }
 
-// exited is ctx's error when the deadline passed, which is why the server
-// is gone, else err.
-func (c *stdioConn) exited(ctx context.Context, err error) error {
+// fail wraps a transport error with the method; once ctx is done that is
+// why the server is gone, so ctx's error replaces it.
+func (c *stdioConn) fail(ctx context.Context, method string, err error) error {
 	if ctx.Err() != nil {
-		return ctx.Err()
+		err = ctx.Err()
 	}
-	return err
+	return fmt.Errorf("%s: %w", method, err)
 }
 
 func (c *stdioConn) notify(ctx context.Context, method string) error {
 	if err := c.send(message{JSONRPC: "2.0", Method: method}); err != nil {
-		return fmt.Errorf("%s: %w", method, c.exited(ctx, err))
+		return c.fail(ctx, method, err)
 	}
 	return nil
 }
@@ -370,11 +381,15 @@ func (c *stdioConn) notify(ctx context.Context, method string) error {
 func (c *stdioConn) initialized(string) {}
 
 // close ends the session as the protocol asks: stdin is closed, a server
-// still running receives SIGTERM, and one that ignores it is killed.
+// still running a second later receives SIGTERM, and one that ignores that
+// for another second is killed.
 func (c *stdioConn) close() {
 	c.in.Close()
-	c.cancel()
+	term := time.AfterFunc(time.Second, c.cancel)
 	c.cmd.Wait()
+	term.Stop()
+	c.cancel()
+	c.out.Close()
 }
 
 // httpConn is a streamable HTTP endpoint.
@@ -394,6 +409,8 @@ func newHTTP(s Server, env map[string]string) *httpConn {
 			headers[name] = v
 		}
 	}
+	// The default transport takes its proxy from the environment of the agentx
+	// process (HTTP_PROXY, HTTPS_PROXY, NO_PROXY), as any HTTP client does.
 	return &httpConn{client: &http.Client{}, url: s.URL, headers: headers}
 }
 
@@ -501,26 +518,27 @@ func (c *httpConn) call(ctx context.Context, method string, params any, out any)
 	return nil
 }
 
-// event reads one server-sent event and returns its data; false at the end
-// of the stream.
+// event reads server-sent events up to the next one with data and returns
+// that data; false at the end of the stream. An event without data, such as
+// the one a server sends first to hand out an event id, is skipped.
 func event(sc *bufio.Scanner) ([]byte, bool) {
-	var data [][]byte
+	var data []byte
 	for sc.Scan() {
 		line := sc.Bytes()
 		if len(line) == 0 {
 			if len(data) > 0 {
-				return bytes.Join(data, []byte("\n")), true
+				return data, true
 			}
 			continue
 		}
 		if rest, ok := bytes.CutPrefix(line, []byte("data:")); ok {
-			data = append(data, bytes.Clone(bytes.TrimPrefix(rest, []byte(" "))))
+			if len(data) > 0 {
+				data = append(data, '\n')
+			}
+			data = append(data, bytes.TrimPrefix(rest, []byte(" "))...)
 		}
 	}
-	if len(data) > 0 {
-		return bytes.Join(data, []byte("\n")), true
-	}
-	return nil, false
+	return data, len(data) > 0
 }
 
 func (c *httpConn) notify(ctx context.Context, method string) error {

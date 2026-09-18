@@ -57,9 +57,6 @@ func newScanCommand(inv *invocation) *cobra.Command {
 // AGENTX_HANDSHAKE_TIMEOUT, a duration such as 500ms, for tests and diagnosis.
 const handshakeTimeout = 10 * time.Second
 
-// handshakeParallel is how many servers are handshaken at once.
-const handshakeParallel = 4
-
 // scan inventories the machine under the shared lock, then, with handshake,
 // connects to every declared server outside the lock and stores what each
 // exposed. The machine id is read first: storing a random one takes the
@@ -112,7 +109,7 @@ func (inv *invocation) scan(ctx context.Context, project string, handshake bool)
 		return scan.Snapshot{}, err
 	}
 	if handshake {
-		sc.Handshake(ctx, scan.HandshakeOptions{Env: inv.env, Timeout: timeout, Parallel: handshakeParallel, Version: cliVersion})
+		sc.Handshake(ctx, scan.HandshakeOptions{Env: inv.env, Timeout: timeout, Version: cliVersion})
 	}
 	snap, fresh := sc.Snapshot()
 	if len(fresh) > 0 {
@@ -171,8 +168,11 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 	servers := map[string][]row{} // name, transport, command line or URL, what a handshake found
 	for _, s := range snap.MCPServers {
 		var exposed string
-		if len(s.Tools) > 0 {
-			exposed = fmt.Sprintf("%d tools", len(s.Tools))
+		switch n := len(s.Tools); {
+		case n == 1:
+			exposed = "1 tool"
+		case n > 1:
+			exposed = fmt.Sprintf("%d tools", n)
 		}
 		for _, o := range s.Occurrences {
 			what := o.URL

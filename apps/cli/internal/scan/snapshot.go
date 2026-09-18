@@ -112,13 +112,6 @@ type Edge struct {
 	To   string `json:"to"`
 }
 
-// Run scans the machine described by o and returns its snapshot without
-// handshaking any server: Read followed by Snapshot.
-func Run(o Options) Snapshot {
-	snap, _ := Read(o).Snapshot()
-	return snap
-}
-
 // Read performs the local reads of one scan under the caller's shared lock.
 // Nothing is written; what cannot be read becomes a warning. Handshake the
 // declared servers outside the lock, then compose with Snapshot.

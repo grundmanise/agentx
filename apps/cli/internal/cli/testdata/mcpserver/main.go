@@ -3,8 +3,9 @@
 // (one prompt) and resources/list (one resource); every other method is
 // unknown. Its behaviour comes from flags: --variant a|b picks a tool
 // description (MCPSERVER_VARIANT in the environment is the default),
-// --hang never answers and --exit exits right after initialize. It prints
-// its environment to stderr, as a real server may.
+// --hang never answers, --exit exits right after initialize and --linger
+// exits at once leaving a child that holds stdout open, as a launcher such
+// as npx can. It prints its environment to stderr, as a real server may.
 package main
 
 import (
@@ -14,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 )
 
 type message struct {
@@ -34,6 +36,7 @@ func main() {
 	variant := flag.String("variant", "", "a or b; defaults to MCPSERVER_VARIANT, then a")
 	hang := flag.Bool("hang", false, "never answer")
 	exit := flag.Bool("exit", false, "exit after initialize")
+	linger := flag.Bool("linger", false, "exit leaving a child that holds stdout")
 	flag.Parse()
 	if *variant == "" {
 		*variant = os.Getenv("MCPSERVER_VARIANT")
@@ -46,6 +49,14 @@ func main() {
 	}
 	if *hang {
 		io.Copy(io.Discard, os.Stdin) // reads every request and answers none
+		return
+	}
+	if *linger {
+		child := exec.Command(os.Args[0], "--hang")
+		child.Stdin, child.Stdout = os.Stdin, os.Stdout
+		if err := child.Start(); err != nil {
+			os.Exit(1)
+		}
 		return
 	}
 	out := bufio.NewWriter(os.Stdout)

@@ -46,7 +46,8 @@ func TestMain(m *testing.M) {
 
 // webServer is a streamable-http MCP endpoint: it refuses a request without
 // the declared header value, assigns a session id that must be echoed, and
-// answers tools/list as an event stream.
+// answers tools/list as an event stream that opens with a comment, an event
+// without data and a notification before the response.
 func webServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -78,7 +79,7 @@ func webServer(t *testing.T) *httptest.Server {
 			w.WriteHeader(http.StatusAccepted)
 		case "tools/list":
 			w.Header().Set("Content-Type", "text/event-stream")
-			fmt.Fprintf(w, ": keep-alive\n\nevent: message\ndata: {\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"tools\":[{\"name\":\"search\",\"description\":\"Search the web\",\"inputSchema\":{\"type\":\"object\"}}]}}\n\n", m.ID)
+			fmt.Fprintf(w, ": keep-alive\n\nid: 1\ndata:\n\nid: 2\ndata: {\"jsonrpc\":\"2.0\",\"method\":\"notifications/message\",\"params\":{\"level\":\"info\",\"data\":\"listing\"}}\n\nevent: message\r\nid: 3\r\ndata: {\"jsonrpc\":\"2.0\",\"id\":%s,\r\ndata: \"result\":{\"tools\":[{\"name\":\"search\",\"description\":\"Search the web\",\"inputSchema\":{\"type\":\"object\"}}]}}\r\n\r\n", m.ID)
 		default:
 			w.Header().Set("Content-Type", "application/json")
 			fmt.Fprintf(w, `{"jsonrpc":"2.0","id":%s,"error":{"code":-32601,"message":"method not found"}}`, m.ID)
@@ -90,7 +91,8 @@ func webServer(t *testing.T) *httptest.Server {
 
 // handshakeFixture declares the fixture server twice with the same command
 // line and different environments, a server for each failure, a legacy sse
-// server and the web endpoint.
+// server and the web endpoint. Two servers take the whole budget: hang never
+// answers, and linger leaves a child holding stdout open past the deadline.
 func handshakeFixture(web string) fixture {
 	return fixture{
 		dirs: []string{".claude", ".cursor"},
@@ -99,6 +101,7 @@ func handshakeFixture(web string) fixture {
   "fix": {"command": %[1]q, "args": [], "env": {"SECRET_TOKEN": "secret-hand-env-value"}},
   "hang": {"command": %[1]q, "args": ["--hang"]},
   "exit": {"command": %[1]q, "args": ["--exit"]},
+  "linger": {"command": %[1]q, "args": ["--linger"]},
   "missing": {"command": "$HOME/nowhere/mcpserver"},
   "legacy": {"type": "sse", "url": "https://legacy.example.com/sse"}}}`, mcpServer),
 			".cursor/mcp.json": fmt.Sprintf(`{"mcpServers": {
@@ -139,6 +142,9 @@ func TestScanHandshake(t *testing.T) {
 	f := handshakeFixture(webServer(t).URL)
 	h.build(t, f)
 	h.env["AGENTX_HANDSHAKE_TIMEOUT"] = "1s"
+	if err := os.WriteFile(filepath.Join(h.agentx, "handshakes.json"), []byte("{"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	start := time.Now()
 	snap := h.snapshot(t, "--handshake")
@@ -188,7 +194,7 @@ func TestScanHandshake(t *testing.T) {
 	}
 	equal(t, "web handshake", web["occurrences"].([]any)[0].(map[string]any)["handshake"], true)
 
-	for _, name := range []string{"hang", "exit", "missing", "legacy"} {
+	for _, name := range []string{"hang", "linger", "exit", "missing", "legacy"} {
 		node := nodes[name][0]
 		equal(t, name+" signature", node["signature"], "none")
 		equal(t, name+" handshake", node["occurrences"].([]any)[0].(map[string]any)["handshake"], false)
@@ -201,17 +207,20 @@ func TestScanHandshake(t *testing.T) {
 	warnings := fmt.Sprint(snap["warnings"])
 	for _, want := range []string{
 		"~/.claude.json: server hang: timed out after 1s",
+		"~/.claude.json: server linger: timed out after 1s",
 		"~/.claude.json: server exit: ",
 		"the server exited",
 		"~/.claude.json: server missing: fork/exec ~/nowhere/mcpserver: no such file or directory",
 		"~/.claude.json: server legacy: legacy sse transport is not handshaken",
+		"handshakes.json: not a handshakes file, ignored",
 	} {
 		contains(t, "warnings", h.portable(warnings), want)
 	}
-	equal(t, "warnings", len(snap["warnings"].([]any)), 4)
+	equal(t, "warnings", len(snap["warnings"].([]any)), 6)
 
-	// The handshakes file keeps the last signature per logical server and
-	// nothing for a server that failed; it is derived state, so no version bump.
+	// The handshakes file, corrupt before, now keeps the last signature per
+	// logical server and nothing for a server that failed; it is derived
+	// state, so no version bump.
 	stored := map[string]map[string]any{}
 	b, err := os.ReadFile(filepath.Join(h.agentx, "handshakes.json"))
 	if err != nil {
@@ -234,7 +243,9 @@ func TestScanHandshake(t *testing.T) {
 
 	// A plain scan reuses the stored signature: the two declarations now
 	// merge into one node, and no occurrence claims a handshake.
-	plain := serverNodes(h.snapshot(t))
+	after := h.snapshot(t)
+	equal(t, "warnings after", len(after["warnings"].([]any)), 0)
+	plain := serverNodes(after)
 	equal(t, "fix nodes after", len(plain["fix"]), 1)
 	equal(t, "fix signature after", plain["fix"][0]["signature"], variantB["signature"])
 	equal(t, "fix signature_at after", plain["fix"][0]["signature_at"], variantB["signature_at"])
@@ -261,7 +272,7 @@ func TestScanHandshake(t *testing.T) {
 		}
 		if args[0] == "scan" {
 			contains(t, "stdout", out.stdout, "4 tools")
-			contains(t, "stdout", out.stdout, "1 tools")
+			contains(t, "stdout", out.stdout, "1 tool\n")
 			contains(t, "stderr", h.portable(out.stderr), "warning: ~/.claude.json: server hang: timed out after 1s")
 		}
 	}
