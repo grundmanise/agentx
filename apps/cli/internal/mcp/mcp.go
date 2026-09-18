@@ -1,6 +1,7 @@
 // Package mcp reads the MCP servers declared in agent client configuration
-// files. Environment and header values never leave the parser: a Server
-// carries key names only.
+// files and handshakes them. Environment and header values never leave the
+// package: a Server exports key names only and hands the values to the
+// server process or request alone.
 package mcp
 
 import (
@@ -23,6 +24,10 @@ type Server struct {
 	URL        string
 	HeaderKeys []string // sorted header names
 	Transport  string   // stdio, sse or streamable-http
+
+	env        map[string]string // the declared environment, for the handshake only
+	headers    map[string]string // the declared headers, for the handshake only
+	envHeaders map[string]string // header name to the environment variable holding its value (Codex env_http_headers)
 }
 
 // Format is the shape of a configuration file.
@@ -83,6 +88,7 @@ func server(f Format, name string, e map[string]any) Server {
 		Command: str(e["command"]),
 		Args:    strs(e["args"]),
 		EnvKeys: keys(e["env"]),
+		env:     values(e["env"]),
 	}
 	kind := str(e["type"])
 	if kind == "" {
@@ -93,6 +99,8 @@ func server(f Format, name string, e map[string]any) Server {
 		s.URL = str(e["url"])
 		s.HeaderKeys = append(keys(e["http_headers"]), keys(e["env_http_headers"])...)
 		sort.Strings(s.HeaderKeys)
+		s.headers = values(e["http_headers"])
+		s.envHeaders = values(e["env_http_headers"])
 	} else {
 		s.URL = str(e["httpUrl"])
 		if s.URL == "" {
@@ -103,6 +111,7 @@ func server(f Format, name string, e map[string]any) Server {
 			s.URL = str(e["serverUrl"])
 		}
 		s.HeaderKeys = keys(e["headers"])
+		s.headers = values(e["headers"])
 	}
 	switch {
 	case s.Command != "":
@@ -132,7 +141,7 @@ func strs(v any) []string {
 	return out
 }
 
-// keys lists the keys of an object, sorted; its values are never read.
+// keys lists the keys of an object, sorted; never nil, so JSON shows [].
 func keys(v any) []string {
 	m, _ := v.(map[string]any)
 	out := make([]string, 0, len(m))
@@ -140,5 +149,18 @@ func keys(v any) []string {
 		out = append(out, k)
 	}
 	sort.Strings(out)
+	return out
+}
+
+// values is the string values of an object by key; a value of another type
+// is dropped.
+func values(v any) map[string]string {
+	m, _ := v.(map[string]any)
+	out := map[string]string{}
+	for k, val := range m {
+		if s, ok := val.(string); ok {
+			out[k] = s
+		}
+	}
 	return out
 }

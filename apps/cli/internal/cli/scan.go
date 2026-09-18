@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -23,6 +25,7 @@ type snapshotEvent struct {
 
 func newScanCommand(inv *invocation) *cobra.Command {
 	var project, configuration string
+	var handshake bool
 	cmd := &cobra.Command{
 		Use:   "scan",
 		Short: "Inventory the agent configurations on this machine and the skills each one sees",
@@ -33,7 +36,7 @@ func newScanCommand(inv *invocation) *cobra.Command {
 					return err
 				}
 			}
-			snap, err := inv.scan(project)
+			snap, err := inv.scan(cmd.Context(), project, handshake)
 			if err != nil {
 				return err
 			}
@@ -46,12 +49,30 @@ func newScanCommand(inv *invocation) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&project, "project", "", "also inventory the project-scope skills under this directory, read-only")
 	cmd.Flags().StringVar(&configuration, "configuration", "", "the configuration that changed; the whole machine is scanned regardless")
+	cmd.Flags().BoolVar(&handshake, "handshake", false, "start or connect to every MCP server and record the tools, prompts and resources it exposes")
 	return cmd
 }
 
-// scan inventories the machine under the shared lock. The machine id is read
-// first: storing a random one takes the exclusive lock.
-func (inv *invocation) scan(project string) (scan.Snapshot, error) {
+// handshakeTimeout is the budget per server: ten seconds, or
+// AGENTX_HANDSHAKE_TIMEOUT, a duration such as 500ms, for tests and diagnosis.
+const handshakeTimeout = 10 * time.Second
+
+// handshakeParallel is how many servers are handshaken at once.
+const handshakeParallel = 4
+
+// scan inventories the machine under the shared lock, then, with handshake,
+// connects to every declared server outside the lock and stores what each
+// exposed. The machine id is read first: storing a random one takes the
+// exclusive lock.
+func (inv *invocation) scan(ctx context.Context, project string, handshake bool) (scan.Snapshot, error) {
+	timeout := handshakeTimeout
+	if v := inv.env["AGENTX_HANDSHAKE_TIMEOUT"]; handshake && v != "" {
+		d, err := time.ParseDuration(v)
+		if err != nil || d <= 0 {
+			return scan.Snapshot{}, fail(exitUsage, "AGENTX_HANDSHAKE_TIMEOUT "+v+" is not a duration", "set it like 10s or 500ms, or unset it")
+		}
+		timeout = d
+	}
 	if project != "" {
 		abs, err := filepath.Abs(project)
 		if err != nil {
@@ -66,7 +87,7 @@ func (inv *invocation) scan(project string) (scan.Snapshot, error) {
 	if err != nil {
 		return scan.Snapshot{}, err
 	}
-	var snap scan.Snapshot
+	var sc *scan.Scan
 	err = home.ReadLocked(inv.dirs.Home, func() error {
 		s, err := inv.loadSettings()
 		if err != nil {
@@ -76,7 +97,7 @@ func (inv *invocation) scan(project string) (scan.Snapshot, error) {
 		if err := json.Unmarshal(s.CopyMode, &copyMode); err != nil {
 			return fail(exitInternal, "parse "+home.SettingsPath(inv.dirs.Home)+": copy_mode must map skill names to configuration ids", "fix copy_mode in the settings file")
 		}
-		snap = scan.Run(scan.Options{
+		sc = scan.Read(scan.Options{
 			Dirs:       inv.dirs,
 			MachineID:  machineID,
 			Label:      inv.label(s),
@@ -87,7 +108,19 @@ func (inv *invocation) scan(project string) (scan.Snapshot, error) {
 		})
 		return nil
 	})
-	return snap, err
+	if err != nil {
+		return scan.Snapshot{}, err
+	}
+	if handshake {
+		sc.Handshake(ctx, scan.HandshakeOptions{Env: inv.env, Timeout: timeout, Parallel: handshakeParallel, Version: cliVersion})
+	}
+	snap, fresh := sc.Snapshot()
+	if len(fresh) > 0 {
+		if err := home.SaveHandshakes(inv.dirs.Home, fresh); err != nil {
+			return scan.Snapshot{}, err
+		}
+	}
+	return snap, nil
 }
 
 // instanceID is fresh per process; AGENTX_INSTANCE_ID fixes it for tests.
@@ -135,8 +168,12 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 			rows[o.Configuration] = append(rows[o.Configuration], row{s.Name, o.Kind, o.Scope, path})
 		}
 	}
-	servers := map[string][]row{} // name, transport, command line or URL
+	servers := map[string][]row{} // name, transport, command line or URL, what a handshake found
 	for _, s := range snap.MCPServers {
+		var exposed string
+		if len(s.Tools) > 0 {
+			exposed = fmt.Sprintf("%d tools", len(s.Tools))
+		}
 		for _, o := range s.Occurrences {
 			what := o.URL
 			if o.Command != "" {
@@ -145,7 +182,7 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 			if o.Plugin != "" {
 				what += "  (plugin " + o.Plugin + ")"
 			}
-			servers[o.Configuration] = append(servers[o.Configuration], row{name: s.Name, kind: o.Transport, path: what})
+			servers[o.Configuration] = append(servers[o.Configuration], row{name: s.Name, kind: o.Transport, path: what, scope: exposed})
 		}
 	}
 	plugins := map[string][]row{} // name, version
@@ -181,7 +218,7 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 			byName(list)
 			fmt.Fprintln(t, "  servers:")
 			for _, r := range list {
-				fmt.Fprintf(t, "    %s\t%s\t%s\n", r.name, r.kind, r.path)
+				fmt.Fprintf(t, "    %s\t%s\t%s\t%s\n", r.name, r.kind, r.path, r.scope)
 			}
 		}
 		if list := plugins[c.ID]; len(list) > 0 {

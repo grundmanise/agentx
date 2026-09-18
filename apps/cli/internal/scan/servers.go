@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/mcp"
 )
 
@@ -11,73 +12,125 @@ import (
 // it with the signature hash and sets Handshake on the occurrence.
 const noSignature = "none"
 
+// declaration is one server declared in one configuration file. Its node is
+// built when the snapshot is composed, since the physical identity depends
+// on the handshake.
+type declaration struct {
+	conf    Configuration
+	file    string
+	server  mcp.Server
+	logical string
+	plugin  string // the plugin declaring it, "" for a configuration's own server
+	owner   string // that plugin's physical id, for the provides edge
+	fresh   *mcp.Result
+	at      string // when fresh was taken, RFC 3339
+}
+
 // addServers records every server declared in cfg inside conf, owned by
-// plugin when the file belongs to one, and returns their nodes. A missing
-// file declares nothing; an unreadable or malformed one is a warning.
-func (b *builder) addServers(conf Configuration, cfg MCPConfig, plugin string) []*Server {
+// plugin when the file belongs to one. A missing file declares nothing; an
+// unreadable or malformed one is a warning.
+func (s *Scan) addServers(conf Configuration, cfg MCPConfig, plugin, owner string) {
 	data, err := os.ReadFile(cfg.Path)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			b.warn(err.Error() + ", skipped")
+			s.warn(err.Error() + ", skipped")
 		}
-		return nil
+		return
 	}
 	declared, err := mcp.Parse(cfg.Format, data)
 	if err != nil {
-		b.warn(cfg.Path + ": " + err.Error() + ", skipped")
-		return nil
+		s.warn(cfg.Path + ": " + err.Error() + ", skipped")
+		return
 	}
-	var nodes []*Server
-	for _, s := range declared {
-		nodes = append(nodes, b.addServer(conf, cfg.Path, s, plugin))
+	for _, server := range declared {
+		s.declared = append(s.declared, &declaration{
+			conf:    conf,
+			file:    cfg.Path,
+			server:  server,
+			logical: s.serverLogicalID(server),
+			plugin:  plugin,
+			owner:   owner,
+		})
 	}
-	return nodes
-}
-
-func (b *builder) addServer(conf Configuration, file string, s mcp.Server, plugin string) *Server {
-	logical := b.serverLogicalID(s)
-	physical := id("server", logical, b.MachineID, noSignature)
-	node, ok := b.servers[physical]
-	if !ok {
-		node = &Server{PhysicalID: physical, LogicalID: logical, Name: s.Name, Signature: noSignature}
-		b.servers[physical] = node
-	}
-	occ := ServerOccurrence{
-		Configuration: conf.ID,
-		ConfigFile:    file,
-		Command:       s.Command,
-		Args:          s.Args,
-		EnvKeys:       s.EnvKeys,
-		URL:           s.URL,
-		HeaderKeys:    s.HeaderKeys,
-		Transport:     s.Transport,
-		Plugin:        plugin,
-	}
-	occ.ID = id("occurrence", conf.PhysicalID, physical, b.portable(file), s.Name)
-	if !b.seen[occ.ID] {
-		b.seen[occ.ID] = true
-		node.Occurrences = append(node.Occurrences, occ)
-	}
-	b.edge(conf.PhysicalID, physical)
-	return node
 }
 
 // serverLogicalID is what the server is, wherever it was configured: its
 // normalised URL for a remote server, its registry and package for a local
 // server that resolves to one, else its command line on this machine.
-func (b *builder) serverLogicalID(s mcp.Server) string {
-	if u, ok := mcp.NormalizeURL(s.URL); ok {
+func (s *Scan) serverLogicalID(server mcp.Server) string {
+	if u, ok := mcp.NormalizeURL(server.URL); ok {
 		return id("server", "url", u)
 	}
-	if registry, pkg, ok := mcp.Package(s.Command, s.Args); ok {
+	if registry, pkg, ok := mcp.Package(server.Command, server.Args); ok {
 		return id("server", registry, pkg)
 	}
-	return id("server", append([]string{"machine", b.MachineID, s.Command, s.URL}, s.Args...)...)
+	return id("server", append([]string{"machine", s.MachineID, server.Command, server.URL}, server.Args...)...)
+}
+
+// composeServers builds the server nodes from the declarations: this scan's
+// handshake gives the signature, else the stored one, else noSignature. The
+// fresh handshakes are returned by logical id for the handshakes file.
+func (s *Scan) composeServers() map[string]home.Handshake {
+	fresh := map[string]home.Handshake{}
+	for _, d := range s.declared {
+		signature, tools, at := noSignature, []home.Tool(nil), ""
+		if d.fresh != nil {
+			signature, tools, at = d.fresh.Signature, s.tools(d.logical, d.fresh.Items), d.at
+			fresh[d.logical] = home.Handshake{Signature: signature, Tools: tools, At: at}
+		} else if h, ok := s.stored[d.logical]; ok {
+			signature, tools, at = h.Signature, h.Tools, h.At
+		}
+		physical := id("server", d.logical, s.MachineID, signature)
+		node, ok := s.servers[physical]
+		if !ok {
+			node = &Server{PhysicalID: physical, LogicalID: d.logical, Name: d.server.Name, Signature: signature, SignatureAt: at, Tools: tools}
+			s.servers[physical] = node
+		} else if d.fresh != nil {
+			node.SignatureAt = at
+		}
+		occ := ServerOccurrence{
+			Configuration: d.conf.ID,
+			ConfigFile:    d.file,
+			Command:       d.server.Command,
+			Args:          d.server.Args,
+			EnvKeys:       d.server.EnvKeys,
+			URL:           d.server.URL,
+			HeaderKeys:    d.server.HeaderKeys,
+			Transport:     d.server.Transport,
+			Handshake:     d.fresh != nil,
+			Plugin:        d.plugin,
+		}
+		occ.ID = id("occurrence", d.conf.PhysicalID, physical, s.portable(d.file), d.server.Name)
+		if !s.seen[occ.ID] {
+			s.seen[occ.ID] = true
+			node.Occurrences = append(node.Occurrences, occ)
+		}
+		s.edge(d.conf.PhysicalID, physical)
+		if d.owner != "" {
+			s.edge(d.owner, physical)
+		}
+	}
+	return fresh
+}
+
+// tools are the nodes of what a server exposed, one per distinct item.
+func (s *Scan) tools(logical string, items []mcp.Item) []home.Tool {
+	tools := []home.Tool{}
+	seen := map[string]bool{}
+	for _, it := range items {
+		tid := id("tool", logical, it.Hash)
+		if seen[tid] {
+			continue
+		}
+		seen[tid] = true
+		tools = append(tools, home.Tool{ID: tid, Kind: it.Kind, Name: it.Name, Description: it.Description})
+	}
+	return tools
 }
 
 // addPlugin records p inside conf with an edge from conf, then the skills
 // and servers it provides with an edge from the plugin to each.
-func (b *builder) addPlugin(conf Configuration, p InstalledPlugin) {
+func (s *Scan) addPlugin(conf Configuration, p InstalledPlugin) {
 	node := Plugin{
 		LogicalID:     id("plugin", p.Marketplace, p.Name),
 		Name:          p.Name,
@@ -86,17 +139,15 @@ func (b *builder) addPlugin(conf Configuration, p InstalledPlugin) {
 		Configuration: conf.ID,
 		Path:          p.Path,
 	}
-	node.PhysicalID = id("plugin", node.LogicalID, b.MachineID, conf.PhysicalID, p.Version)
-	if !b.plugins[node.PhysicalID] {
-		b.plugins[node.PhysicalID] = true
-		b.snap.Plugins = append(b.snap.Plugins, node)
+	node.PhysicalID = id("plugin", node.LogicalID, s.MachineID, conf.PhysicalID, p.Version)
+	if !s.plugins[node.PhysicalID] {
+		s.plugins[node.PhysicalID] = true
+		s.snap.Plugins = append(s.snap.Plugins, node)
 	}
-	b.edge(conf.PhysicalID, node.PhysicalID)
-	for _, placement := range b.skillsIn(filepath.Join(p.Path, "skills")) {
-		skill := b.add(conf, placement, "user", p.Name)
-		b.edge(node.PhysicalID, skill.PhysicalID)
+	s.edge(conf.PhysicalID, node.PhysicalID)
+	for _, placement := range s.skillsIn(filepath.Join(p.Path, "skills")) {
+		skill := s.add(conf, placement, "user", p.Name)
+		s.edge(node.PhysicalID, skill.PhysicalID)
 	}
-	for _, server := range b.addServers(conf, p.Servers, p.Name) {
-		b.edge(node.PhysicalID, server.PhysicalID)
-	}
+	s.addServers(conf, p.Servers, p.Name, node.PhysicalID)
 }

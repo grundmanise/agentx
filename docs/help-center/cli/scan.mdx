@@ -3,7 +3,7 @@ title: "agentx scan"
 description: "See every agent configuration on this machine with the skills, MCP servers and plugins each one has."
 ---
 
-`agentx scan` reads your agent clients' directories, their MCP configuration files and the library and prints what it finds. It writes nothing and never starts a server.
+`agentx scan` reads your agent clients' directories, their MCP configuration files and the library and prints what it finds. It writes nothing and never starts a server unless you ask for a handshake.
 
 ## Scan the machine
 
@@ -57,6 +57,26 @@ The inventory shows the command and arguments of a local server and the URL of a
 The same server declared in two clients is one server with two occurrences: agentx recognises a remote server by its address and a local `npx`, `uvx`, `pipx` or `docker` server by its package or image, whatever the version. A server that cannot be identified that way is unique to this machine.
 
 A configuration file that cannot be parsed is reported as a warning and the scan continues.
+
+## Handshake the servers
+
+```sh
+agentx scan --handshake
+```
+
+```text
+  servers:
+    context7  stdio            npx -y @upstash/context7-mcp  12 tools
+    stripe    streamable-http  https://mcp.stripe.com        9 tools
+```
+
+Starts or connects to every MCP server and records the tools, prompts and resources it exposes. Each server gets ten seconds. A local server runs with the environment variables its declaration sets; a remote server receives its declared headers. Neither is ever printed.
+
+What a server exposed becomes its signature. Two servers with the same command or address but different tools get different signatures, so the inventory tells them apart; the same server declared in two clients with the same tools stays one server. In JSON output the node carries the `signature`, when it was taken as `signature_at`, and the `tools` list.
+
+The signatures are kept in `handshakes.json` in agentx home. A later scan without `--handshake` shows them until the next handshake replaces them; each occurrence's `handshake` field says whether that scan handshook the server itself.
+
+A server that does not start, exits early, answers badly or does not answer within ten seconds is reported as a warning and keeps its previous signature. Servers on the legacy `sse` transport are skipped with a warning. The scan still succeeds.
 
 ## Read the plugins
 
