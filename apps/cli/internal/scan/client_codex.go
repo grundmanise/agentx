@@ -14,5 +14,4 @@ func (codex) ConfigDir(d home.Dirs) string { return filepath.Join(d.User, ".code
 func (c codex) SkillsDirs(d home.Dirs) []string {
 	return []string{filepath.Join(c.ConfigDir(d), "skills"), d.Library}
 }
-func (codex) ReadsLibrary() bool          { return true }
 func (codex) ProjectSkillsDirs() []string { return []string{".codex/skills", ".agents/skills"} }

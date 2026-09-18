@@ -23,11 +23,9 @@ type Client interface {
 	ConfigDir(d home.Dirs) string
 	// SkillsDirs are the user-scope skills directories the client reads, its
 	// own first, then other clients' directories and the library where the
-	// client reads them.
+	// client reads them. A client that lists the library reads it directly,
+	// so a library skill needs no placement in its own directory.
 	SkillsDirs(d home.Dirs) []string
-	// ReadsLibrary reports whether the client reads the library directly, so
-	// a library skill needs no placement in its own directory.
-	ReadsLibrary() bool
 	// ProjectSkillsDirs are the project-scope skills directories, relative
 	// to a project root.
 	ProjectSkillsDirs() []string

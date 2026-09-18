@@ -44,7 +44,7 @@ func contentHash(root string, fm frontmatter, warn func(string)) string {
 func hashFile(h hash.Hash, rel, real string, warn func(string)) {
 	b, err := os.ReadFile(real)
 	if err != nil {
-		warn(real + ": " + err.Error() + ", skipped")
+		warn(err.Error() + ", skipped")
 		return
 	}
 	h.Write([]byte(rel))
@@ -67,7 +67,7 @@ type walker struct {
 func (w *walker) walk(dir, rel string, stack []string) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		w.warn(dir + ": " + err.Error() + ", skipped")
+		w.warn(err.Error() + ", skipped")
 		return
 	}
 	for _, e := range entries {
@@ -90,7 +90,7 @@ func (w *walker) walk(dir, rel string, stack []string) {
 		}
 		info, err := os.Stat(real)
 		if err != nil {
-			w.warn(path + ": " + err.Error() + ", skipped")
+			w.warn(err.Error() + ", skipped")
 			continue
 		}
 		switch {

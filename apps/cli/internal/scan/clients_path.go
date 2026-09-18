@@ -21,7 +21,6 @@ func (p pathClient) ConfigDir(d home.Dirs) string { return p.at(d, p.config) }
 func (p pathClient) SkillsDirs(d home.Dirs) []string {
 	return []string{p.at(d, p.skills)}
 }
-func (p pathClient) ReadsLibrary() bool          { return p.skills == "library" }
 func (p pathClient) ProjectSkillsDirs() []string { return []string{p.project} }
 
 func (pathClient) at(d home.Dirs, spec string) string {

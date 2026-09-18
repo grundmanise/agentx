@@ -16,14 +16,14 @@ import (
 var update = flag.Bool("update", false, "rewrite the golden snapshot files from the current output")
 
 // fixture builds one machine under the harness's HOME. Paths are relative to
-// HOME; a link target is too, unless absolute. The library is moved under
-// HOME so that every path in the snapshot starts with it.
+// HOME, link targets too. The library is moved under HOME so that every path
+// in the snapshot starts with it.
 type fixture struct {
 	files    map[string]string
 	links    map[string]string
 	dirs     []string
-	settings string   // settings.json content, "" for none
-	args     []string // extra scan arguments
+	settings string // settings.json content, "" for none
+	project  string // passed to --project, relative to HOME
 }
 
 const skillMD = "---\nname: %s\ndescription: %s\n---\n\n# %s\n"
@@ -55,10 +55,7 @@ func (h *harness) build(t *testing.T, f fixture) {
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if !filepath.IsAbs(target) {
-			target = filepath.Join(h.home, target)
-		}
-		if err := os.Symlink(target, full); err != nil {
+		if err := os.Symlink(filepath.Join(h.home, target), full); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -114,6 +111,7 @@ var fixtures = map[string]fixture{
 		links: map[string]string{
 			".claude/skills/commit": ".agents/skills/commit",
 			".cursor/skills/commit": ".claude/skills/commit",
+			".codex/skills":         ".claude/skills",
 		},
 	},
 	"broken-symlink": {
@@ -162,18 +160,14 @@ var fixtures = map[string]fixture{
 			"work/app/.github/skills/release/SKILL.md":        skill("release", "Cut a release"),
 			"work/app/.cursor/skills/node_modules/x/SKILL.md": skill("x", "Not a skill"),
 		},
-		args: []string{"--project", "work/app"},
+		project: "work/app",
 	},
 }
 
 func scanArgs(h *harness, f fixture) []string {
 	args := []string{"--json", "scan"}
-	for i := 0; i < len(f.args); i++ {
-		args = append(args, f.args[i])
-		if f.args[i] == "--project" {
-			i++
-			args = append(args, filepath.Join(h.home, f.args[i]))
-		}
+	if f.project != "" {
+		args = append(args, "--project", filepath.Join(h.home, f.project))
 	}
 	return args
 }
@@ -302,7 +296,9 @@ func TestScanSymlinkChainAndLibrary(t *testing.T) {
 	want := []string{
 		"claude-code symlink user ~/.claude/skills/commit",
 		"codex directory user ~/.agents/skills/commit",
+		"codex symlink user ~/.codex/skills/commit",
 		"cursor symlink user ~/.claude/skills/commit",
+		"cursor symlink user ~/.codex/skills/commit",
 		"cursor symlink user ~/.cursor/skills/commit",
 	}
 	if got := occurrences(t, h, snap, "commit"); !reflect.DeepEqual(got, want) {
@@ -522,7 +518,7 @@ func TestScanSpawnBudget(t *testing.T) {
 	start := time.Now()
 	snap := h.snapshot(t)
 	if elapsed := time.Since(start); elapsed > 3*time.Second {
-		t.Errorf("scan took %s, want well under a second", elapsed)
+		t.Errorf("scan took %s, want a fraction of a second", elapsed)
 	}
 	equal(t, "skills", len(snap["skills"].([]any)), 100)
 	for _, s := range snap["skills"].([]any) {

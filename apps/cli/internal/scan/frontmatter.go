@@ -17,7 +17,7 @@ var errNoFrontmatter = errors.New("no frontmatter")
 // parseFrontmatter reads name and description from the --- block at the top
 // of SKILL.md. It understands `key: value` lines, quoted values, folded (>)
 // and literal (|) block scalars and comments; nested values are skipped. An
-// error says why the block is unusable.
+// unusable block is an error and an empty frontmatter.
 func parseFrontmatter(text string) (frontmatter, error) {
 	var fm frontmatter
 	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
@@ -51,7 +51,7 @@ func parseFrontmatter(text string) (frontmatter, error) {
 		}
 		if line[0] == ' ' || line[0] == '\t' {
 			if key == "" {
-				return fm, fmt.Errorf("unparsable frontmatter at line %d", i+1)
+				return frontmatter{}, fmt.Errorf("unparsable frontmatter at line %d", i+1)
 			}
 			if style != 'n' {
 				parts = append(parts, trimmed)
@@ -61,7 +61,7 @@ func parseFrontmatter(text string) (frontmatter, error) {
 		flush()
 		k, v, ok := strings.Cut(line, ":")
 		if !ok || strings.ContainsAny(k, " \t") || k == "" {
-			return fm, fmt.Errorf("unparsable frontmatter at line %d", i+1)
+			return frontmatter{}, fmt.Errorf("unparsable frontmatter at line %d", i+1)
 		}
 		key, style, parts = k, 0, nil
 		v = strings.TrimSpace(v)
@@ -76,7 +76,7 @@ func parseFrontmatter(text string) (frontmatter, error) {
 			parts = []string{unquote(v)}
 		}
 	}
-	return fm, errors.New("unparsable frontmatter, the --- block is not closed")
+	return frontmatter{}, errors.New("unparsable frontmatter, the --- block is not closed")
 }
 
 func (fm *frontmatter) set(key, value string) {

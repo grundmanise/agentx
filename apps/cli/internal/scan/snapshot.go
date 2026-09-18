@@ -87,21 +87,21 @@ func Run(o Options) Snapshot {
 			Edges:          []Edge{},
 		},
 	}
-	b.realUser = b.realPath(o.Dirs.User)
 	for _, c := range Detect(o.Dirs) {
+		dirs := c.SkillsDirs(o.Dirs)
 		conf := Configuration{
 			ID:           c.Slug(),
 			Client:       c.Slug(),
 			Name:         c.Name(),
 			Path:         c.ConfigDir(o.Dirs),
 			Enabled:      !slices.Contains(o.Disabled, c.Slug()),
-			ReadsLibrary: c.ReadsLibrary(),
+			ReadsLibrary: slices.Contains(dirs, o.Dirs.Library),
 		}
 		conf.PhysicalID = id("configuration", o.MachineID, conf.ID, b.portable(conf.Path))
 		conf.LogicalID = conf.PhysicalID
 		b.snap.Configurations = append(b.snap.Configurations, conf)
 		b.snap.Edges = append(b.snap.Edges, Edge{From: o.MachineID, To: conf.PhysicalID})
-		for _, dir := range c.SkillsDirs(o.Dirs) {
+		for _, dir := range dirs {
 			for _, p := range b.skillsIn(dir) {
 				b.add(conf, p, "user")
 			}
@@ -120,10 +120,9 @@ func Run(o Options) Snapshot {
 type builder struct {
 	Options
 	*scanner
-	realUser string            // the user's HOME with symlinks resolved
-	nodes    map[string]*Skill // by content hash
-	seen     map[string]bool   // occurrence and edge ids already recorded
-	snap     Snapshot
+	nodes map[string]*Skill // by content hash
+	seen  map[string]bool   // occurrence and edge ids already recorded
+	snap  Snapshot
 }
 
 // add records one placement of a skill inside conf.
@@ -171,16 +170,11 @@ func (b *builder) kind(conf Configuration, p placement, scope string) string {
 // portable replaces the user's HOME with ~ so an identity does not depend
 // on where the home directory is.
 func (b *builder) portable(path string) string {
-	for _, prefix := range []string{b.Dirs.User, b.realUser} {
-		if prefix == "" {
-			continue
-		}
-		if path == prefix {
-			return "~"
-		}
-		if rest, ok := strings.CutPrefix(path, prefix+string(filepath.Separator)); ok {
-			return "~/" + filepath.ToSlash(rest)
-		}
+	if path == b.Dirs.User {
+		return "~"
+	}
+	if rest, ok := strings.CutPrefix(path, b.Dirs.User+string(filepath.Separator)); ok {
+		return "~/" + filepath.ToSlash(rest)
 	}
 	return path
 }

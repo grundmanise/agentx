@@ -14,7 +14,6 @@ func (githubCopilot) ConfigDir(d home.Dirs) string { return filepath.Join(d.User
 func (c githubCopilot) SkillsDirs(d home.Dirs) []string {
 	return []string{filepath.Join(c.ConfigDir(d), "skills")}
 }
-func (githubCopilot) ReadsLibrary() bool { return false }
 func (githubCopilot) ProjectSkillsDirs() []string {
 	return []string{".github/skills", ".agents/skills"}
 }

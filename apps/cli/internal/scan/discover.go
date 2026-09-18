@@ -73,7 +73,7 @@ func (s *scanner) skillsIn(dir string) []placement {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			s.warn(dir + ": " + err.Error() + ", skipped")
+			s.warn(err.Error() + ", skipped")
 		}
 		s.listings[dir] = nil
 		return nil
@@ -115,7 +115,7 @@ func (s *scanner) skill(dir string) *skillInfo {
 	skillMD := filepath.Join(dir, "SKILL.md")
 	fm := frontmatter{}
 	if b, err := os.ReadFile(skillMD); err != nil {
-		s.warn(skillMD + ": " + err.Error() + ", using the directory name")
+		s.warn(err.Error() + ", using the directory name")
 	} else if fm, err = parseFrontmatter(string(b)); err != nil {
 		s.warn(skillMD + ": " + err.Error() + ", using the directory name")
 	} else if fm.name == "" {

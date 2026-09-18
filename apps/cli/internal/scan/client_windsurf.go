@@ -14,5 +14,4 @@ func (windsurf) ConfigDir(d home.Dirs) string { return filepath.Join(d.User, ".c
 func (c windsurf) SkillsDirs(d home.Dirs) []string {
 	return []string{filepath.Join(c.ConfigDir(d), "skills")}
 }
-func (windsurf) ReadsLibrary() bool          { return false }
 func (windsurf) ProjectSkillsDirs() []string { return []string{".windsurf/skills"} }

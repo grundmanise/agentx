@@ -20,7 +20,6 @@ func (c cursor) SkillsDirs(d home.Dirs) []string {
 		filepath.Join(codex{}.ConfigDir(d), "skills"),
 	}
 }
-func (cursor) ReadsLibrary() bool { return false }
 func (cursor) ProjectSkillsDirs() []string {
 	return []string{".cursor/skills", ".claude/skills", ".codex/skills", ".agents/skills"}
 }

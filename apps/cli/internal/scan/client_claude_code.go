@@ -14,5 +14,4 @@ func (claudeCode) ConfigDir(d home.Dirs) string { return filepath.Join(d.User, "
 func (c claudeCode) SkillsDirs(d home.Dirs) []string {
 	return []string{filepath.Join(c.ConfigDir(d), "skills")}
 }
-func (claudeCode) ReadsLibrary() bool          { return false }
 func (claudeCode) ProjectSkillsDirs() []string { return []string{".claude/skills"} }
