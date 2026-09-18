@@ -1,0 +1,71 @@
+---
+title: "agentx scan"
+description: "See every agent configuration on this machine and the skills each one can see."
+---
+
+`agentx scan` reads your agent clients' directories and the library and prints what it finds. It writes nothing.
+
+## Scan the machine
+
+```sh
+agentx scan
+```
+
+```text
+Claude Code (claude-code)  /home/me/.claude  enabled
+  commit  symlink    user  /home/me/.claude/skills/commit -> /home/me/.agents/skills/commit
+  review  directory  user  /home/me/.claude/skills/review
+
+Codex (codex)  /home/me/.codex  enabled
+  commit  directory  user  /home/me/.agents/skills/commit
+
+Cursor (cursor)  /home/me/.cursor  enabled
+  commit  symlink    user  /home/me/.claude/skills/commit -> /home/me/.agents/skills/commit
+  review  directory  user  /home/me/.claude/skills/review
+```
+
+One section per agent configuration, headed by the client name, its id, its configuration directory and whether it is enabled. One line per skill the configuration can see: the skill name, the kind of placement, the scope and the path the client reads.
+
+A configuration is detected when its configuration directory exists, such as `~/.claude` for Claude Code or `~/.cursor` for Cursor.
+
+## Read the kind
+
+| Kind | Meaning |
+|---|---|
+| `symlink` | The path is a symlink. The arrow shows where it resolves to. A skill symlinked into several clients is one skill with one source of truth. |
+| `copy` | The path is a real directory that agentx placed as a copy for this configuration. |
+| `directory` | The path is a real directory that nothing links to. |
+
+## See who reads what
+
+A client can read other clients' directories. Cursor reads `~/.claude/skills` and `~/.codex/skills` next to its own `~/.cursor/skills`, so a skill you put in the Claude Code directory appears under Cursor too. Codex and Gemini CLI read the library at `~/.agents/skills` directly, so every library skill appears under them without any link in their own directories.
+
+## Include a project
+
+```sh
+agentx scan --project ~/code/my-app
+```
+
+Adds the skills found in the project's own skills directories, such as `.claude/skills`, `.cursor/skills` and `.agents/skills`, with scope `project`. The project is only read. Without the flag, only user scope is scanned.
+
+## Rescan after a change
+
+```sh
+agentx scan --configuration cursor
+```
+
+Names the configuration that changed. The whole machine is scanned either way, so the output is always complete. An id that is not detected exits with code 5 and lists the detected ids.
+
+## Warnings
+
+A broken symlink, a `SKILL.md` without usable frontmatter or a symlink that points outside its skill does not stop the scan. Each one is reported on stderr as `warning: ...` and the skill is skipped or named after its directory.
+
+## Script it
+
+Add `--json` to get one `snapshot` event with the machine, every configuration, every skill with its occurrences, the edges between them and the warnings:
+
+```sh
+agentx --json scan
+```
+
+Every node carries a stable identity, and two scans of an unchanged machine are byte-identical apart from `instance_id`. Set `AGENTX_INSTANCE_ID` to fix that too.

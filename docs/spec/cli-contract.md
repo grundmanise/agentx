@@ -16,6 +16,7 @@ The CLI reads its environment once, at startup, from the variables below. Nothin
 | `XDG_CONFIG_HOME` | where agent clients keep user-scope configuration | `$HOME/.config` |
 | `AGENTX_PLATFORM_ID` | the platform id the machine id is derived from; set it empty to declare that the machine has none | the operating system's platform id, see [Machine identity](#machine-identity) |
 | `AGENTX_HOSTNAME` | the default machine label | the operating system's hostname |
+| `AGENTX_INSTANCE_ID` | the `instance_id` carried by snapshots, so a script can fix it | a fresh random id per process |
 
 ## Streams
 
@@ -80,7 +81,9 @@ Every run emits exactly one `result` as its last stdout event, after any `error`
 | `level` | string | the log level; `debug` lines appear only with `--verbose` |
 | `message` | string | the log line |
 
-The other event types are `progress`, `snapshot`, `reconcile`, `configuration`, `skill`, `mcp_server`, `plugin`, `doctor`, `search`, `refresh_complete`, `drift`, `update_available` and `conflict`. Their fields are added to this document by the command that first emits them. `operation` and `fleet` are reserved and never emitted.
+`snapshot`, emitted by `agentx scan`, is described under [Snapshot](#snapshot).
+
+The other event types are `progress`, `reconcile`, `configuration`, `skill`, `mcp_server`, `plugin`, `doctor`, `search`, `refresh_complete`, `drift`, `update_available` and `conflict`. Their fields are added to this document by the command that first emits them. `operation` and `fleet` are reserved and never emitted.
 
 ## Exit codes
 
@@ -127,13 +130,15 @@ No agent client reads anything in agentx home except the fork worktrees, through
 
 `agentx config list` prints every setting, `agentx config get <key>` one, and `agentx config set <key> <value>` changes `label`, `auto_push` or `accept_operations`; the booleans take `true` or `false`. An unknown key, a key that `config set` cannot change, or an invalid value is exit code 1 with a hint listing the keys. Without `--json`, `list` prints a `key  value` table and `get` prints the bare value.
 
+`agentx config disable <id>` adds a configuration id to `disabled_configurations` and `agentx config enable <id>` removes it; both are mutations, both are no-ops when the list already has the wanted state, and both emit the `settings` event. The id must name a detected configuration (see [Snapshot](#snapshot)), else exit code 5 with a hint listing the detected ids. A detected configuration is enabled unless it is listed, so every configuration is enabled on first detection without a write.
+
 ```json
 {
   "schema_version": 1,
   "label": "my-laptop",
   "auto_push": false,
   "accept_operations": false,
-  "enabled_configurations": ["claude-code", "cursor"],
+  "disabled_configurations": ["windsurf"],
   "sources": [
     {
       "url": "https://github.com/example/skills",
@@ -154,9 +159,9 @@ No agent client reads anything in agentx home except the fork worktrees, through
 | `label` | the machine label; absent until set with `config set label` or `machine rename`, and reported as the hostname meanwhile |
 | `auto_push` | whether published forks are pushed automatically |
 | `accept_operations` | reserved; whether this machine executes operations queued for it |
-| `enabled_configurations` | configuration ids selected by default for explicit placements; every detected configuration is enabled on first detection |
+| `disabled_configurations` | configuration ids the user took out of the default set for explicit placements, sorted; every other detected configuration is enabled |
 | `sources` | each source by canonical `url`, with optional `alias` (a second URL mapped to the canonical one), optional `pin` (a ref the source is held at) and `last_fetched` (RFC 3339) |
-| `copy_mode` | skill name to the configuration ids that receive a copy instead of a symlink |
+| `copy_mode` | skill directory name to the configuration ids that receive a copy instead of a symlink |
 
 Git config in the account repo holds only what git owns: remotes and tracking branches.
 
@@ -172,7 +177,7 @@ The machine id names one computer across reinstalls. It is derived, in this orde
 
 ## Lock and version file
 
-Every command that changes agentx home takes an exclusive advisory `flock` on `lock` in agentx home without waiting, does its writes, rewrites `version` as its last step and releases the lock. `version` holds one decimal integer and a newline, incremented on every successful mutation (a missing file counts as 0); it is a change signal for watchers, not an ordering of snapshots. A command that finds the lock held exits at once with code 7 and a hint naming the lock file. A failed mutation leaves `version` untouched. Reading commands do not take the lock, except `agentx machine` for the one write that stores a random id; that write does not touch `version`. Taking the lock creates agentx home and its `ops` directory when they are missing; nothing writes into `ops` yet.
+Every command that changes agentx home takes an exclusive advisory `flock` on `lock` in agentx home without waiting, does its writes, rewrites `version` as its last step and releases the lock. `version` holds one decimal integer and a newline, incremented on every successful mutation (a missing file counts as 0); it is a change signal for watchers, not an ordering of snapshots. A command that finds the lock held exits at once with code 7 and a hint naming the lock file. A failed mutation leaves `version` untouched. `agentx scan` holds a shared `flock` on the same file while it reads settings and the filesystem, retrying for up to one second while a mutation holds the exclusive lock and exiting with code 7 after that; it never writes `version`. Other reading commands do not take the lock, except `agentx machine` for the one write that stores a random id; that write does not touch `version`. Taking either lock creates agentx home and its `ops` directory when they are missing; nothing writes into `ops` yet.
 
 ## Content hash
 
@@ -182,4 +187,69 @@ The content hash identifies one version of a skill by its content. It is SHA-256
 2. the frontmatter `description`, then `NUL`;
 3. for every regular file under the skill directory, in bytewise order of its relative path with `/` as the separator: the relative path, `NUL`, the byte length in decimal, `NUL`, the file bytes.
 
-A missing name or description contributes empty bytes. A symlink inside the skill is followed when it resolves inside the skill directory and skipped with a warning otherwise. File modes and times do not contribute. The hash is rendered as a short type prefix and lowercase hex; the prefix is fixed by the command that first emits it.
+A missing name or description contributes empty bytes; a missing or unparsable frontmatter counts as both missing, even though the skill is then named after its directory. A symlink inside the skill is followed when it resolves inside the skill directory and skipped with a warning otherwise: a file symlink contributes the target's bytes under the symlink's path, a directory symlink is walked under the symlink's path, and a directory symlink that points back at a directory being walked is a loop, skipped with a warning. File modes and times do not contribute. The hash is rendered as bare lowercase hex in the `content_hash` field of a skill node.
+
+## Snapshot
+
+`agentx scan` inventories the machine and emits one `snapshot` event: every detected agent configuration and every skill each one can see. It writes nothing. Two scans of an unchanged machine produce byte-identical events when `instance_id` is fixed.
+
+`agentx scan --project <path>` adds the project-scope skills found under `<path>` in each detected configuration's project skills directories, read-only; `<path>` must exist, else exit code 5. `agentx scan --configuration <id>` names the configuration that changed; the id must be detected, else exit code 5 with a hint listing the detected ids, and the whole machine is scanned regardless, since a one-shot command has no earlier snapshot to reuse.
+
+Without `--json`, the output is one section per configuration, headed `<name> (<id>)  <path>  enabled|disabled`, with one line per occurrence: skill name, kind, scope and placement path, followed by ` -> <resolved path>` for a symlink. Warnings go to stderr as `warning: <message>`.
+
+The event:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `instance_id` | string | fresh per process, or `AGENTX_INSTANCE_ID` |
+| `scan_counter` | integer | `1` for a one-shot scan |
+| `machine` | object | `id`, the machine id, and `label` |
+| `configurations` | array | the detected configurations, sorted by `id` |
+| `skills` | array | the skill nodes, sorted by `physical_id` |
+| `edges` | array | `{"from", "to"}` pairs of node ids, sorted by `from` then `to`: the machine id to each configuration, each configuration to each skill it sees |
+| `warnings` | array of strings | what could not be read, sorted; a warning never fails the scan |
+
+A configuration:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `id` | string | the configuration id: the client's slug, such as `claude-code`, `cursor`, `codex`, `gemini-cli`, `windsurf`, `github-copilot` |
+| `client` | string | the client's slug |
+| `name` | string | the client's display name |
+| `path` | string | the user-scope configuration directory; the configuration is detected because it exists |
+| `enabled` | boolean | `false` when the id is in `disabled_configurations` |
+| `reads_library` | boolean | whether the client reads the library directly, so a library skill needs no placement in its own directory |
+| `physical_id`, `logical_id` | string | the same value, see below |
+
+A skill node is one content version seen on this machine; the same content found through several placements is one node with several occurrences:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `physical_id`, `logical_id` | string | see below |
+| `name` | string | the frontmatter `name`, or the directory name when the frontmatter is missing, unparsable or has no name |
+| `description` | string | the frontmatter `description`, or empty |
+| `content_hash` | string | the content hash, lowercase hex |
+| `occurrences` | array | sorted by `id` |
+
+An occurrence:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `id` | string | see below |
+| `configuration` | string | the configuration id |
+| `path` | string | the placement path as the client sees it |
+| `resolved_path` | string | the real directory after following every symlink |
+| `kind` | string | `symlink` when the placement path is a symlink; `copy` when it is a real directory in user scope and `copy_mode` lists the configuration under the directory's name; `directory` for every other real directory |
+| `scope` | string | `user`, or `project` under `--project` |
+
+Discovery: inside each skills directory a client reads, every child directory, or symlink to one, that holds a `SKILL.md` is a skill; hidden entries and `node_modules` are skipped; a broken symlink is a warning. A client's user-scope skills directories are its own, other clients' directories it reads (Cursor reads the Claude Code and Codex directories) and the library for clients that read it directly (Codex and Gemini CLI), which yields an occurrence with the library path as placement path whatever the enabled state. Each directory is canonicalised once and each skill is hashed once per scan.
+
+Identities are SHA-256 over the type name and its inputs, each input preceded by one `NUL` byte, rendered as `<type>:<lowercase hex>`. Paths under the user's home are hashed with the home replaced by `~`, so an identity does not depend on where the home directory is.
+
+| Identity | Inputs |
+|---|---|
+| machine node id | the machine id itself, no hash |
+| configuration | `configuration`, machine id, configuration id, configuration path |
+| skill, logical | `skill`, `content`, content hash: an unmanaged skill is its content |
+| skill, physical | `skill`, logical id, machine id, content hash |
+| occurrence | `occurrence`, configuration physical id, skill physical id, scope, placement path |

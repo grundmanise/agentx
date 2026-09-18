@@ -10,16 +10,16 @@ import (
 )
 
 // Settings is the machine settings file, settings.json in agentx home. Sources
-// and CopyMode are kept as raw JSON: nothing reads them yet, but a write must
-// not lose them.
+// and CopyMode are kept as raw JSON: the commands that read them parse them,
+// and a write must not lose them.
 type Settings struct {
-	SchemaVersion         int             `json:"schema_version"`
-	Label                 string          `json:"label,omitempty"` // empty until set; the hostname stands in
-	AutoPush              bool            `json:"auto_push"`
-	AcceptOperations      bool            `json:"accept_operations"`
-	EnabledConfigurations []string        `json:"enabled_configurations"`
-	Sources               json.RawMessage `json:"sources"`
-	CopyMode              json.RawMessage `json:"copy_mode"`
+	SchemaVersion          int             `json:"schema_version"`
+	Label                  string          `json:"label,omitempty"` // empty until set; the hostname stands in
+	AutoPush               bool            `json:"auto_push"`
+	AcceptOperations       bool            `json:"accept_operations"`
+	DisabledConfigurations []string        `json:"disabled_configurations"`
+	Sources                json.RawMessage `json:"sources"`
+	CopyMode               json.RawMessage `json:"copy_mode"`
 }
 
 func SettingsPath(dir string) string { return filepath.Join(dir, "settings.json") }
@@ -38,8 +38,8 @@ func LoadSettings(dir string) (Settings, error) {
 			return s, fmt.Errorf("parse %s: %w", path, err)
 		}
 	}
-	if s.EnabledConfigurations == nil {
-		s.EnabledConfigurations = []string{}
+	if s.DisabledConfigurations == nil {
+		s.DisabledConfigurations = []string{}
 	}
 	if s.Sources == nil {
 		s.Sources = json.RawMessage("[]")

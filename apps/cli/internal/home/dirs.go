@@ -8,6 +8,7 @@ import (
 
 // Dirs are the roots every command works under. Home is agentx home.
 type Dirs struct {
+	User    string // the user's HOME, where most agent clients keep their configuration
 	Home    string
 	Library string
 	Config  string // the XDG config home, where agent clients keep user-scope configuration
@@ -21,6 +22,7 @@ func Resolve(env map[string]string) (Dirs, error) {
 		return Dirs{}, errors.New("HOME is not set")
 	}
 	d := Dirs{
+		User:    user,
 		Home:    env["AGENTX_HOME"],
 		Library: env["AGENTX_LIBRARY"],
 		Config:  env["XDG_CONFIG_HOME"],
