@@ -13,7 +13,6 @@ func TestUsageErrors(t *testing.T) {
 		args    []string
 		message string
 	}{
-		{"no command", nil, "no command given"},
 		{"unknown command", []string{"bogus"}, `unknown command "bogus" for "agentx"`},
 		{"unknown global flag", []string{"--bogus", "version"}, "unknown flag: --bogus"},
 		{"unknown command flag", []string{"version", "--bogus"}, "unknown flag: --bogus"},
@@ -44,7 +43,7 @@ func TestUsageErrors(t *testing.T) {
 
 func TestHelp(t *testing.T) {
 	h := newHarness(t)
-	for _, args := range [][]string{{"help"}, {"--help"}, {"-h"}, {"version", "--help"}} {
+	for _, args := range [][]string{nil, {"help"}, {"--help"}, {"-h"}, {"version", "--help"}} {
 		out := h.run(args...)
 		equal(t, "exit", out.exit, 0)
 		contains(t, "stdout", out.stdout, "Usage:")
@@ -61,6 +60,17 @@ func TestHelp(t *testing.T) {
 	if got, want := h.types(h.events(out.stdout)), []string{"result"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("event types = %v, want %v", got, want)
 	}
+
+	// A script that forgets the command gets an error, not help.
+	out = h.run("--json")
+	equal(t, "exit", out.exit, 1)
+	equal(t, "stderr", out.stderr, "")
+	events := h.events(out.stdout)
+	if got, want := h.types(events), []string{"error", "result"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("event types = %v, want %v", got, want)
+	}
+	equal(t, "error.code", events[0]["code"], "usage")
+	equal(t, "error.message", events[0]["message"], "no command given")
 }
 
 func TestVerboseLogsDirectories(t *testing.T) {

@@ -4,7 +4,7 @@ Status: accepted, 2026-09-18. Implements the output contract in ADR 0001 and the
 
 ## Invocation
 
-`agentx [--json] [--verbose] <command> [arguments]`. The two global flags are accepted before or after the command. `--json` switches stdout to newline-delimited JSON events. `--verbose` raises the log level on stderr to debug. `agentx help`, `--help` and `-h` print usage and exit 0; the usage text goes to stdout, or to stderr in JSON mode.
+`agentx [--json] [--verbose] <command> [arguments]`. The two global flags are accepted before or after the command. `--json` switches stdout to newline-delimited JSON events. `--verbose` raises the log level on stderr to debug. `agentx help`, `--help`, `-h` and a bare `agentx` print usage and exit 0; the usage text goes to stdout, or to stderr in JSON mode. A bare `agentx --json` is a usage error instead: a script that omits the command has made a mistake.
 
 The CLI reads its environment once, at startup, from the variables below. Nothing else in the environment changes its behaviour.
 

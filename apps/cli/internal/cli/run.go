@@ -15,7 +15,6 @@ import (
 // invocation is what every command shares for one run.
 type invocation struct {
 	env    map[string]string
-	dirs   home.Dirs
 	out    *writer
 	parsed bool // set once cobra has parsed the command line; errors after that are agentx's own
 }
@@ -31,6 +30,9 @@ func Run(ctx context.Context, args []string, env map[string]string, stdin io.Rea
 	inv := &invocation{env: env, out: out}
 
 	root := newRoot(inv)
+	if args == nil {
+		args = []string{} // cobra reads the process arguments when given nil
+	}
 	root.SetArgs(args)
 	root.SetIn(stdin)
 	root.SetErr(stderr)
@@ -55,12 +57,14 @@ func newRoot(inv *invocation) *cobra.Command {
 			if err != nil {
 				return fail(exitUsage, err.Error(), "set HOME to your home directory")
 			}
-			inv.dirs = dirs
 			inv.out.debugf("agentx home %s, library %s, config home %s", dirs.Home, dirs.Library, dirs.Config)
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fail(exitUsage, "no command given", "run 'agentx help' to list commands")
+			if inv.out.json {
+				return fail(exitUsage, "no command given", "run 'agentx help' to list commands")
+			}
+			return cmd.Help()
 		},
 	}
 	root.CompletionOptions.DisableDefaultCmd = true

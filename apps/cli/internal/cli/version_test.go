@@ -11,8 +11,7 @@ func TestVersionHuman(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "CLI version")
 	contains(t, "stdout", out.stdout, cliVersion)
-	contains(t, "stdout", out.stdout, "Schema version")
-	contains(t, "stdout", out.stdout, "1")
+	contains(t, "stdout", out.stdout, "Schema version  1")
 	equal(t, "stderr", out.stderr, "")
 }
 
