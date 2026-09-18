@@ -1,0 +1,61 @@
+---
+title: "agentx doctor"
+description: "Check that this machine can run agentx: git, agentx home and the account repo."
+---
+
+Run `agentx doctor` before your first install, or whenever something looks wrong.
+
+```sh
+agentx doctor
+```
+
+```text
+git                      ok    git 2.43.0
+merge_tree               ok    merge-tree --write-tree --merge-base merges two branches
+relative_worktree_paths  info  not available: git 2.43.0 is older than 2.48, so worktree paths stay absolute
+isolated_commit          ok    commit 5d75017e77f5413f4337ef776244b8d8dc77ca90
+home                     ok    /home/me/.agentx is writable
+lock                     ok    free: /home/me/.agentx/lock
+settings                 ok    defaults: /home/me/.agentx/settings.json is not written yet
+account_repo             ok    created /home/me/.agentx/account.git
+library                  warn  missing: /home/me/.agents/skills  create it with mkdir -p /home/me/.agents/skills
+```
+
+## What it checks
+
+| Check | Meaning |
+|---|---|
+| `git` | git is in `PATH` and at least 2.40. |
+| `merge_tree` | git can merge with `merge-tree --write-tree`, which updates need. |
+| `relative_worktree_paths` | Whether git is 2.48 or newer. Informational. |
+| `isolated_commit` | agentx commits produce the same id on this machine as on every other, whatever your git configuration. |
+| `home` | agentx home is writable. |
+| `lock` | No other agentx command is running. |
+| `settings` | `settings.json` parses. |
+| `account_repo` | The account repo opens. The first run creates it. |
+| `library` | The library directory exists. A missing library is a warning, not a failure. |
+
+Each row is `ok`, `warn`, `fail` or `info`. A row with a fix shows it after the detail.
+
+## Exit codes
+
+- `2`: git is missing or older than 2.40. The hint names the fix; on Ubuntu 22.04, which ships git 2.34, install a newer git or upgrade the distribution. Every other command except `version` refuses to run until git is fixed.
+- `8`: `account.git` in agentx home exists but is not a repository git can read. Check the directory, or move it aside to have doctor create a new one.
+- `7`: the account repo had to be created while another agentx command was running. Retry when it finishes.
+- `0`: everything else, warnings included.
+
+## Script it
+
+Add `--json` to get one `doctor` event per check with `check`, `status`, `detail` and, when there is a fix, `hint`:
+
+```sh
+agentx --json doctor
+```
+
+```json
+{"type":"doctor","schema_version":1,"check":"git","status":"ok","detail":"git 2.43.0"}
+{"type":"doctor","schema_version":1,"check":"library","status":"warn","detail":"missing: /home/me/.agents/skills","hint":"create it with mkdir -p /home/me/.agents/skills"}
+{"type":"result","schema_version":1,"ok":true}
+```
+
+Add `--verbose` to see every git command doctor ran and what git printed.

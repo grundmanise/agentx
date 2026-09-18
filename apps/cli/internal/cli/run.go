@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 )
 
@@ -17,6 +18,7 @@ type invocation struct {
 	env    map[string]string
 	out    *writer
 	dirs   home.Dirs
+	git    *gitx.Runner
 	parsed bool // set once cobra has parsed the command line; errors after that are agentx's own
 }
 
@@ -60,6 +62,12 @@ func newRoot(inv *invocation) *cobra.Command {
 			}
 			inv.dirs = dirs
 			inv.out.debugf("agentx home %s, library %s, config home %s", dirs.Home, dirs.Library, dirs.Config)
+			inv.git = gitx.New(inv.env, false, inv.out.debugf)
+			if needsGit(cmd.Name()) {
+				if _, err := inv.gitVersion(cmd.Context()); err != nil {
+					return err
+				}
+			}
 			return nil
 		},
 		RunE: needSubcommand(inv, "no command given", "run 'agentx help' to list commands"),
@@ -71,6 +79,7 @@ func newRoot(inv *invocation) *cobra.Command {
 	root.AddCommand(newVersionCommand(inv))
 	root.AddCommand(newConfigCommand(inv))
 	root.AddCommand(newMachineCommand(inv))
+	root.AddCommand(newDoctorCommand(inv))
 	return root
 }
 

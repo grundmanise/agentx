@@ -62,3 +62,16 @@ func bumpVersion(dir string) error {
 	}
 	return writeAtomic(path, []byte(strconv.Itoa(n+1)+"\n"))
 }
+
+// LockHeld reports whether another command holds the lock, without waiting.
+func LockHeld(dir string) (bool, error) {
+	f, err := takeLock(dir)
+	if errors.Is(err, ErrLocked) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	f.Close()
+	return false, nil
+}

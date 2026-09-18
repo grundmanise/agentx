@@ -183,3 +183,45 @@ The content hash identifies one version of a skill by its content. It is SHA-256
 3. for every regular file under the skill directory, in bytewise order of its relative path with `/` as the separator: the relative path, `NUL`, the byte length in decimal, `NUL`, the file bytes.
 
 A missing name or description contributes empty bytes. A symlink inside the skill is followed when it resolves inside the skill directory and skipped with a warning otherwise. File modes and times do not contribute. The hash is rendered as a short type prefix and lowercase hex; the prefix is fixed by the command that first emits it.
+
+## Git
+
+The CLI runs the system git as a subprocess and never embeds a git implementation. Git is located through `PATH` of the environment the CLI was given. The floor is git 2.40, compared by numeric version components, so 2.4 and 2.39 are rejected and 2.100 is accepted. Before any command other than `version`, `doctor` and `help` runs, the CLI runs `git --version` once; a missing or too-old git is exit code 2 with a hint naming the distribution package where known, before the command does anything. `version` and `doctor` stay available to report the problem.
+
+Every git call names its repository with `--git-dir` explicitly, captures stdout and stderr, and logs the command line and stderr at debug level. Git runs in one of two environments, built from the CLI's own environment:
+
+- Isolated, for every command that writes objects or merges: `GIT_CONFIG_GLOBAL` points at `/dev/null`, `GIT_CONFIG_NOSYSTEM=1`, every `GIT_*` variable of the user's is dropped, author and committer are fixed to `agentx <agentx@localhost>` at `946684800 +0000`, and `core.autocrlf=false`, `commit.gpgsign=false` and `core.hooksPath=/dev/null` are passed with `-c`. A commit made this way has the same id on every machine whatever the user's git configuration.
+- User, for network commands: the CLI's environment as is, so credential helpers, SSH configuration and URL rewrites apply. agentx never stores git credentials.
+
+In the serve child every git call additionally has `GIT_TERMINAL_PROMPT=0`, `-o BatchMode=yes` appended to the SSH command and `GIT_ASKPASS=/bin/false`, so a prompt becomes an error rather than a hang.
+
+## Doctor
+
+`agentx doctor` checks whether this machine can run agentx and reports one row per check, in this order:
+
+| Check | Statuses | What it means |
+|---|---|---|
+| `git` | `ok`, `fail` | git is in `PATH` and 2.40 or newer; the detail names the version |
+| `merge_tree` | `ok`, `fail` | `git merge-tree --write-tree --merge-base=<base> <ours> <theirs>` merges two branches of a throwaway repository in the temporary directory, made with deterministic commits |
+| `relative_worktree_paths` | `info` | whether git is 2.48 or newer, which enables relative worktree paths |
+| `isolated_commit` | `ok`, `fail` | the isolated environment gives a fixed input the known commit id `5d75017e77f5413f4337ef776244b8d8dc77ca90` |
+| `home` | `ok`, `fail` | agentx home exists, or was created, and is writable |
+| `lock` | `ok`, `warn` | the lock is free, or held by another agentx command |
+| `settings` | `ok`, `fail` | `settings.json` parses, or does not exist yet; the detail and hint name the path |
+| `account_repo` | `ok`, `fail` | the account repo opens, or was created by this run |
+| `library` | `ok`, `warn` | the library directory exists; a missing library is a warning, not a failure |
+
+`doctor`, one event per check:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `check` | string | the check name from the table above |
+| `status` | string | `ok`, `warn`, `fail` or `info` |
+| `detail` | string | what was found, naming the version, path or error involved |
+| `hint` | string | how to fix it; absent when there is nothing to suggest |
+
+Without `--json` the same rows print as a `check  status  detail  hint` table. Exit code 2 when git is missing or too old; the run stops after the `git` row, since nothing else can be checked. Exit code 8 when the account repo is unusable, after every row. Exit code 7 when the account repo has to be created and another command holds the lock. Otherwise 0, warnings included. The `result` event carries `ok: false` exactly when the exit code is non-zero.
+
+## Account repo
+
+The account repo is `account.git` in agentx home, a bare repository. It is created on first use, under the lock, by the first command that opens it; `agentx doctor` is that command on a fresh machine. Creation runs `git init --bare` in the isolated environment and sets `gc.auto=0` (maintenance runs on the serve child's timer, never inside a command), `core.logAllRefUpdates=true` (reflogs, which a bare repository lacks by default), `merge.conflictStyle=zdiff3` and, on git 2.48 or newer, `worktree.useRelativePaths=true`. The repository is renamed into place only once every step succeeded. A present `account.git` that is not a bare repository git can read is exit code 8 with a hint naming the path.
