@@ -22,7 +22,8 @@ Single-context repo:
 │   ├── adr/
 │   │   ├── 0001-go-cli-owns-machine-and-account-tauri-renders.md
 │   │   ├── 0002-per-machine-libraries-one-account-repo-content-moves-by-install.md
-│   │   └── 0003-account-repo-one-branch-per-fork-checked-out-as-worktrees.md
+│   │   ├── 0003-account-repo-one-branch-per-fork-checked-out-as-worktrees.md
+│   │   └── 0004-no-local-database-git-holds-lineage-files-hold-machine-state.md
 │   ├── spec/
 │   └── help-center/
 └── apps/
