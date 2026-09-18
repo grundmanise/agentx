@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -33,7 +35,11 @@ func newScanCommand(inv *invocation) *cobra.Command {
 					return err
 				}
 			}
-			snap, err := inv.scan(project)
+			// A one-shot scan waits for a mutation to finish for at most a
+			// second; a longer wait is exit code 7.
+			ctx, cancel := context.WithTimeout(cmd.Context(), time.Second)
+			defer cancel()
+			snap, err := inv.scan(ctx, project)
 			if err != nil {
 				return err
 			}
@@ -49,9 +55,10 @@ func newScanCommand(inv *invocation) *cobra.Command {
 	return cmd
 }
 
-// scan inventories the machine under the shared lock. The machine id is read
-// first: storing a random one takes the exclusive lock.
-func (inv *invocation) scan(project string) (scan.Snapshot, error) {
+// scan inventories the machine under the shared lock, waiting for a mutation
+// in progress until ctx is done. The machine id is read first: storing a
+// random one takes the exclusive lock.
+func (inv *invocation) scan(ctx context.Context, project string) (scan.Snapshot, error) {
 	if project != "" {
 		abs, err := filepath.Abs(project)
 		if err != nil {
@@ -67,7 +74,7 @@ func (inv *invocation) scan(project string) (scan.Snapshot, error) {
 		return scan.Snapshot{}, err
 	}
 	var snap scan.Snapshot
-	err = home.ReadLocked(inv.dirs.Home, func() error {
+	err = home.ReadLocked(ctx, inv.dirs.Home, func() error {
 		s, err := inv.loadSettings()
 		if err != nil {
 			return err

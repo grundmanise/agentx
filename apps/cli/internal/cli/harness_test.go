@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // harness drives Run against a temporary home. Every test goes through it;
@@ -107,4 +109,109 @@ func contains(t *testing.T, what, text, sub string) {
 	if !strings.Contains(text, sub) {
 		t.Errorf("%s does not contain %q:\n%s", what, sub, text)
 	}
+}
+
+// serveProc is one `agentx serve` run in a goroutine, driven through pipes.
+// Every wait is on a channel or a pipe read, never a sleep: send writes a
+// request line, next reads the next stdout event, close ends stdin and
+// cancel ends the context; both return the exit code once Run returned.
+type serveProc struct {
+	t      *testing.T
+	stdin  *os.File
+	lines  chan string
+	done   chan int
+	cancel context.CancelFunc
+	stderr bytes.Buffer // read only after done
+}
+
+const serveDeadline = 10 * time.Second
+
+func (h *harness) serve(t *testing.T, args ...string) *serveProc {
+	t.Helper()
+	inR, inW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	outR, outW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	p := &serveProc{t: t, stdin: inW, lines: make(chan string, 256), done: make(chan int, 1), cancel: cancel}
+	go func() {
+		defer close(p.lines)
+		sc := bufio.NewScanner(outR)
+		for sc.Scan() {
+			p.lines <- sc.Text()
+		}
+	}()
+	go func() {
+		exit := Run(ctx, append([]string{"serve"}, args...), h.env, inR, outW, &p.stderr)
+		outW.Close()
+		inR.Close()
+		p.done <- exit
+	}()
+	t.Cleanup(func() {
+		cancel()
+		inW.Close()
+	})
+	return p
+}
+
+// send writes one request line to the child's stdin.
+func (p *serveProc) send(line string) {
+	p.t.Helper()
+	if _, err := p.stdin.Write([]byte(line + "\n")); err != nil {
+		p.t.Fatal(err)
+	}
+}
+
+// next returns the next stdout event, which must be of type typ.
+func (p *serveProc) next(typ string) jsonEvent {
+	p.t.Helper()
+	select {
+	case line, ok := <-p.lines:
+		if !ok {
+			p.t.Fatalf("serve ended before a %s event", typ)
+		}
+		var e jsonEvent
+		if err := json.Unmarshal([]byte(line), &e); err != nil {
+			p.t.Fatalf("not a JSON event: %q: %v", line, err)
+		}
+		if e["schema_version"] != float64(1) {
+			p.t.Errorf("event %v: schema_version = %v, want 1", e, e["schema_version"])
+		}
+		if e["type"] != typ {
+			p.t.Fatalf("next event = %v, want type %s", e, typ)
+		}
+		return e
+	case <-time.After(serveDeadline):
+		p.t.Fatalf("no %s event within %s", typ, serveDeadline)
+	}
+	return nil
+}
+
+// close ends stdin and returns the exit code once Run returned.
+func (p *serveProc) close() int {
+	p.t.Helper()
+	p.stdin.Close()
+	return p.wait()
+}
+
+// cancelRun cancels the context and returns the exit code once Run returned.
+func (p *serveProc) cancelRun() int {
+	p.t.Helper()
+	p.cancel()
+	return p.wait()
+}
+
+func (p *serveProc) wait() int {
+	p.t.Helper()
+	select {
+	case exit := <-p.done:
+		return exit
+	case <-time.After(serveDeadline):
+		p.t.Fatalf("serve did not end within %s", serveDeadline)
+	}
+	return -1
 }

@@ -65,6 +65,22 @@ func (w *writer) table() *tabwriter.Writer {
 	return tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
 }
 
+// printf writes a human line; it does nothing in JSON mode.
+func (w *writer) printf(format string, args ...any) {
+	if !w.json {
+		fmt.Fprintf(w.stdout, format, args...)
+	}
+}
+
+// warnf logs at warn level.
+func (w *writer) warnf(msg string) {
+	if w.json {
+		w.line(w.stderr, logEvent{event: newEvent("log"), Level: "warn", Message: msg})
+		return
+	}
+	fmt.Fprintf(w.stderr, "warning: %s\n", msg)
+}
+
 // debugf logs at debug level, shown only with --verbose.
 func (w *writer) debugf(format string, args ...any) {
 	if !w.verbose {
