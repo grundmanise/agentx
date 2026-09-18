@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -28,7 +29,7 @@ func newScanCommand(inv *invocation) *cobra.Command {
 	var handshake bool
 	cmd := &cobra.Command{
 		Use:   "scan",
-		Short: "Inventory the agent configurations on this machine and the skills each one sees",
+		Short: "Inventory the agent configurations on this machine with their skills, MCP servers and plugins",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if configuration != "" {
@@ -133,12 +134,14 @@ func (inv *invocation) scan(ctx context.Context, wait time.Duration, project str
 
 // instanceID is fresh per process; AGENTX_INSTANCE_ID fixes it for tests.
 func (inv *invocation) instanceID() string {
-	if id := inv.env["AGENTX_INSTANCE_ID"]; id != "" {
-		return id
+	if inv.instance == "" {
+		if inv.instance = inv.env["AGENTX_INSTANCE_ID"]; inv.instance == "" {
+			var b [16]byte
+			rand.Read(b[:])
+			inv.instance = hex.EncodeToString(b[:])
+		}
 	}
-	var b [16]byte
-	rand.Read(b[:])
-	return hex.EncodeToString(b[:])
+	return inv.instance
 }
 
 // detectedConfiguration is nil when slug names a detected configuration, else
@@ -162,8 +165,7 @@ func (inv *invocation) detectedConfiguration(slug string) error {
 // with one line per skill occurrence, then its servers and its plugins.
 // Warnings go to stderr.
 func (inv *invocation) printSnapshot(snap scan.Snapshot) {
-	type row struct{ name, kind, scope, path string }
-	rows := map[string][]row{}
+	skills := map[string][][]string{} // name, kind, scope, placement
 	for _, s := range snap.Skills {
 		for _, o := range s.Occurrences {
 			path := o.Path
@@ -173,18 +175,11 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 			if o.Plugin != "" {
 				path += "  (plugin " + o.Plugin + ")"
 			}
-			rows[o.Configuration] = append(rows[o.Configuration], row{s.Name, o.Kind, o.Scope, path})
+			skills[o.Configuration] = append(skills[o.Configuration], []string{s.Name, o.Kind, o.Scope, path})
 		}
 	}
-	servers := map[string][]row{} // name, transport, command line or URL, what a handshake found
+	servers := map[string][][]string{} // name, transport, command line or URL, what a handshake found
 	for _, s := range snap.MCPServers {
-		var exposed string
-		switch n := len(s.Tools); {
-		case n == 1:
-			exposed = "1 tool"
-		case n > 1:
-			exposed = fmt.Sprintf("%d tools", n)
-		}
 		for _, o := range s.Occurrences {
 			what := o.URL
 			if o.Command != "" {
@@ -193,20 +188,16 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 			if o.Plugin != "" {
 				what += "  (plugin " + o.Plugin + ")"
 			}
-			servers[o.Configuration] = append(servers[o.Configuration], row{name: s.Name, kind: o.Transport, path: what, scope: exposed})
+			cells := []string{s.Name, o.Transport, what}
+			if n := len(s.Tools); n > 0 {
+				cells = append(cells, plural(n, "tool"))
+			}
+			servers[o.Configuration] = append(servers[o.Configuration], cells)
 		}
 	}
-	plugins := map[string][]row{} // name, version
+	plugins := map[string][][]string{} // name, version
 	for _, p := range snap.Plugins {
-		plugins[p.Configuration] = append(plugins[p.Configuration], row{name: p.Name, kind: p.Version})
-	}
-	byName := func(list []row) {
-		sort.Slice(list, func(i, j int) bool {
-			if list[i].name != list[j].name {
-				return list[i].name < list[j].name
-			}
-			return list[i].path < list[j].path
-		})
+		plugins[p.Configuration] = append(plugins[p.Configuration], []string{p.Name, p.Version})
 	}
 	if len(snap.Configurations) == 0 {
 		fmt.Fprintln(inv.out.stdout, "No agent configurations detected.")
@@ -221,27 +212,38 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 			state = "disabled"
 		}
 		fmt.Fprintf(t, "%s (%s)  %s  %s\n", c.Name, c.ID, c.Path, state)
-		byName(rows[c.ID])
-		for _, r := range rows[c.ID] {
-			fmt.Fprintf(t, "  %s\t%s\t%s\t%s\n", r.name, r.kind, r.scope, r.path)
-		}
-		if list := servers[c.ID]; len(list) > 0 {
-			byName(list)
+		printRows(t, "  ", skills[c.ID])
+		if len(servers[c.ID]) > 0 {
 			fmt.Fprintln(t, "  servers:")
-			for _, r := range list {
-				fmt.Fprintf(t, "    %s\t%s\t%s\t%s\n", r.name, r.kind, r.path, r.scope)
-			}
+			printRows(t, "    ", servers[c.ID])
 		}
-		if list := plugins[c.ID]; len(list) > 0 {
-			byName(list)
+		if len(plugins[c.ID]) > 0 {
 			fmt.Fprintln(t, "  plugins:")
-			for _, r := range list {
-				fmt.Fprintf(t, "    %s\t%s\n", r.name, r.kind)
-			}
+			printRows(t, "    ", plugins[c.ID])
 		}
 	}
 	t.Flush()
 	for _, w := range snap.Warnings {
 		fmt.Fprintf(inv.out.stderr, "warning: %s\n", w)
+	}
+}
+
+// printRows writes rows of cells as one indented table line each, sorted by
+// the first cell and then the whole line.
+func printRows(t io.Writer, indent string, rows [][]string) {
+	lines := make([]string, len(rows))
+	for i, cells := range rows {
+		lines[i] = strings.Join(cells, "\t")
+	}
+	sort.Slice(lines, func(i, j int) bool {
+		a, _, _ := strings.Cut(lines[i], "\t")
+		b, _, _ := strings.Cut(lines[j], "\t")
+		if a != b {
+			return a < b
+		}
+		return lines[i] < lines[j]
+	})
+	for _, line := range lines {
+		fmt.Fprintln(t, indent+line)
 	}
 }
