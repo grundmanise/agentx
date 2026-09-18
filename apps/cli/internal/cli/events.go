@@ -72,8 +72,8 @@ func (w *writer) printf(format string, args ...any) {
 	}
 }
 
-// warnf logs at warn level.
-func (w *writer) warnf(msg string) {
+// warn logs at warn level.
+func (w *writer) warn(msg string) {
 	if w.json {
 		w.line(w.stderr, logEvent{event: newEvent("log"), Level: "warn", Message: msg})
 		return

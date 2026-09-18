@@ -179,7 +179,9 @@ type request struct {
 }
 
 // readRequests parses stdin line by line into a channel that is closed at
-// EOF. Blank lines are skipped. The reader stops when ctx is done.
+// EOF. Blank lines are skipped. Once ctx is done nothing more is delivered,
+// but a read blocked on stdin cannot be interrupted: that goroutine outlives
+// Run until stdin closes, which for the serve process means until it exits.
 func readRequests(ctx context.Context, stdin io.Reader) <-chan request {
 	reqs := make(chan request)
 	go func() {

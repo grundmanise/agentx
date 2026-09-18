@@ -114,14 +114,15 @@ func contains(t *testing.T, what, text, sub string) {
 // serveProc is one `agentx serve` run in a goroutine, driven through pipes.
 // Every wait is on a channel or a pipe read, never a sleep: send writes a
 // request line, next reads the next stdout event, close ends stdin and
-// cancel ends the context; both return the exit code once Run returned.
+// cancelRun ends the context; both return the exit code once Run returned.
 type serveProc struct {
 	t      *testing.T
 	stdin  *os.File
 	lines  chan string
-	done   chan int
+	done   chan struct{} // closed once Run returned
+	exit   int           // read only after done
+	stderr bytes.Buffer  // read only after done
 	cancel context.CancelFunc
-	stderr bytes.Buffer // read only after done
 }
 
 const serveDeadline = 10 * time.Second
@@ -137,23 +138,25 @@ func (h *harness) serve(t *testing.T, args ...string) *serveProc {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	p := &serveProc{t: t, stdin: inW, lines: make(chan string, 256), done: make(chan int, 1), cancel: cancel}
+	p := &serveProc{t: t, stdin: inW, lines: make(chan string, 256), done: make(chan struct{}), cancel: cancel}
 	go func() {
 		defer close(p.lines)
+		defer outR.Close()
 		sc := bufio.NewScanner(outR)
 		for sc.Scan() {
 			p.lines <- sc.Text()
 		}
 	}()
 	go func() {
-		exit := Run(ctx, append([]string{"serve"}, args...), h.env, inR, outW, &p.stderr)
+		p.exit = Run(ctx, append([]string{"serve"}, args...), h.env, inR, outW, &p.stderr)
 		outW.Close()
 		inR.Close()
-		p.done <- exit
+		close(p.done)
 	}()
-	t.Cleanup(func() {
+	t.Cleanup(func() { // no serve outlives its test, whichever way the test ended
 		cancel()
 		inW.Close()
+		p.wait()
 	})
 	return p
 }
@@ -208,8 +211,8 @@ func (p *serveProc) cancelRun() int {
 func (p *serveProc) wait() int {
 	p.t.Helper()
 	select {
-	case exit := <-p.done:
-		return exit
+	case <-p.done:
+		return p.exit
 	case <-time.After(serveDeadline):
 		p.t.Fatalf("serve did not end within %s", serveDeadline)
 	}

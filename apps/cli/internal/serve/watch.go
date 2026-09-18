@@ -15,9 +15,8 @@ import (
 // it does not. Reading a nil channel blocks forever, so the loop selects on
 // all three.
 type watcher struct {
-	w      *fsnotify.Watcher
-	todo   []string // directories not watched yet because they do not exist
-	err    error    // why watching stopped; nil while it works
+	w      *fsnotify.Watcher // nil once watching failed
+	todo   []string          // directories not watched yet because they do not exist
 	ticker *time.Ticker
 
 	events <-chan fsnotify.Event
@@ -31,7 +30,7 @@ func newWatcher(dirs []string) (*watcher, error) {
 	ws := &watcher{todo: dirs}
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
-		ws.fail(err)
+		ws.fail()
 		return ws, err
 	}
 	ws.w, ws.events, ws.errors = w, w.Events, w.Errors
@@ -42,8 +41,8 @@ func newWatcher(dirs []string) (*watcher, error) {
 // the real directory is watched; one that does not exist stays in todo. The
 // error is fatal: watching stops and the periodic rescan takes over.
 func (ws *watcher) add() error {
-	if ws.err != nil {
-		return nil // reported when it happened
+	if ws.w == nil {
+		return nil // watching failed earlier and was reported then
 	}
 	var todo []string
 	for _, dir := range ws.todo {
@@ -56,9 +55,8 @@ func (ws *watcher) add() error {
 			err = ws.w.Add(real)
 		}
 		if err != nil {
-			err = fmt.Errorf("watch %s: %w", dir, err)
-			ws.fail(err)
-			return err
+			ws.fail()
+			return fmt.Errorf("watch %s: %w", dir, err)
 		}
 	}
 	ws.todo = todo
@@ -66,8 +64,7 @@ func (ws *watcher) add() error {
 }
 
 // fail closes the filesystem watcher and starts the periodic rescan.
-func (ws *watcher) fail(err error) {
-	ws.err = err
+func (ws *watcher) fail() {
 	ws.close()
 	ws.events, ws.errors = nil, nil
 	ws.ticker = time.NewTicker(fallback)

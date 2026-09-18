@@ -7,6 +7,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 )
 
 // serveHarness is a harness with a Codex configuration, which reads the
@@ -36,6 +37,19 @@ func (h *harness) addLibrarySkill(t *testing.T, name string) {
 	}
 }
 
+// serveOnce runs `serve --once` after an earlier serve of the same home
+// ended. Every test here is one process: a git process another parallel test
+// forks at that moment holds a copy of the earlier serve's lock descriptor
+// until it execs, so a refusal within that window is retried.
+func (h *harness) serveOnce(args ...string) outcome {
+	args = append([]string{"serve", "--once"}, args...)
+	out := h.run(args...)
+	for start := time.Now(); out.exit == 6 && time.Since(start) < serveDeadline; out = h.run(args...) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	return out
+}
+
 func skillNames(e jsonEvent) []string {
 	var names []string
 	for _, s := range e["skills"].([]any) {
@@ -50,7 +64,7 @@ func TestServeOnceEmitsInitialSnapshot(t *testing.T) {
 	h.addLibrarySkill(t, "commit")
 	var instances []string
 	for range 2 {
-		out := h.run("serve", "--once", "--json")
+		out := h.serveOnce("--json")
 		equal(t, "exit", out.exit, 0)
 		events := h.events(out.stdout)
 		if got, want := h.types(events), []string{"snapshot", "result"}; !reflect.DeepEqual(got, want) {
@@ -65,7 +79,7 @@ func TestServeOnceEmitsInitialSnapshot(t *testing.T) {
 		t.Errorf("instance ids %v: want two distinct 32-character ids", instances)
 	}
 
-	out := h.run("serve", "--once")
+	out := h.serveOnce()
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "snapshot 1: 1 configuration, 1 skill")
 }
@@ -92,7 +106,7 @@ func TestServeRefusesASecondChild(t *testing.T) {
 	p.next("result")
 
 	// The lock is released with the child.
-	out = h.run("serve", "--once", "--json")
+	out = h.serveOnce("--json")
 	equal(t, "exit", out.exit, 0)
 }
 
@@ -167,6 +181,11 @@ func TestServeRescansOnVersionBumpWithoutSnapshot(t *testing.T) {
 	h := serveHarness(t)
 	p := h.serve(t, "--json")
 	p.next("snapshot")
+	// Wait until serve is idle: its first scan created the lock file, a
+	// change in agentx home that schedules one more scan, and a mutation
+	// that meets a scan's read section exits 7 instead of waiting.
+	p.send(`{"type":"refresh","request_id":"idle"}`)
+	p.next("refresh_complete")
 
 	// A one-shot mutation that changes nothing the snapshot shows.
 	out := h.run("config", "set", "auto_push", "true")
@@ -208,15 +227,20 @@ func TestServeWatchesTheLibrary(t *testing.T) {
 	equal(t, "exit", p.cancelRun(), 0)
 }
 
-func TestServeEndsOnStdinEOFAndOnCancel(t *testing.T) {
+func TestServeEndsOnStdinEOF(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
 	p := h.serve(t, "--json")
 	p.next("snapshot")
 	equal(t, "exit", p.close(), 0)
 	p.next("result")
+	equal(t, "stderr", p.stderr.String(), "")
+}
 
-	p = h.serve(t, "--json")
+func TestServeEndsOnCancel(t *testing.T) {
+	t.Parallel()
+	h := serveHarness(t)
+	p := h.serve(t, "--json")
 	p.next("snapshot")
 	equal(t, "exit", p.cancelRun(), 0)
 	p.next("result")

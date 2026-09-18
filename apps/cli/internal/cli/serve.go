@@ -62,7 +62,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 				BadRequest: func(message, hint string) {
 					inv.out.fail(&failure{status: exitUsage, message: message, hint: hint})
 				},
-				Warn: inv.out.warnf,
+				Warn: inv.out.warn,
 			})
 		},
 	}
