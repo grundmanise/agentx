@@ -38,6 +38,9 @@ func (c geminiCLI) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 	var plugins []InstalledPlugin
 	for _, e := range entries {
 		dir := filepath.Join(root, e.Name())
+		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+			continue // Gemini keeps its own files next to the extensions
+		}
 		manifest := filepath.Join(dir, "gemini-extension.json")
 		var ext struct {
 			Name    string `json:"name"`

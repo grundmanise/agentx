@@ -194,15 +194,16 @@ var fixtures = map[string]fixture{
 	"mcp-malformed": {
 		dirs: []string{".claude", ".codex", ".cursor"},
 		files: map[string]string{
-			".claude.json":       `{"mcpServers": {"empty": {"env": {"X": "secret-empty-env-value"}}, "ok": {"command": "echo"}, "text": "not an object"}}`,
-			".cursor/mcp.json":   `{"mcpServers": {"broken": }`,
-			".codex/config.toml": "[mcp_servers.fetch\ncommand = \"uvx\"\n",
+			".claude.json":                           `{"mcpServers": {"empty": {"env": {"X": "secret-empty-env-value"}}, "ok": {"command": "echo"}, "text": "not an object"}}`,
+			".claude/plugins/installed_plugins.json": `{"version": 2, "plugins": ["formatter@acme-tools"]}`,
+			".cursor/mcp.json":                       `{"mcpServers": {"broken": {"env": {"K": "secret-cursor-broken-value"}}, "bare": {"env": {"K": secret-cursor-bare-value}}}}`,
+			".codex/config.toml":                     "[mcp_servers.fetch]\ncommand = \"uvx\"\nenv = { K = secretcodexbarevalue }\n",
 		},
 	},
 	"plugins": {
 		dirs: []string{".codex", ".cursor"},
 		files: map[string]string{
-			".claude/plugins/installed_plugins.json":                                      `{"version": 2, "plugins": {"formatter@acme-tools": [{"scope": "user", "installPath": "$HOME/.claude/plugins/cache/acme-tools/formatter/1.2.0", "version": "1.2.0", "installedAt": "2026-09-01T00:00:00Z"}]}}`,
+			".claude/plugins/installed_plugins.json":                                      `{"version": 2, "plugins": {"formatter@acme-tools": [{"scope": "user", "installPath": "$HOME/.claude/plugins/cache/acme-tools/formatter/1.2.0", "version": "1.2.0", "installedAt": "2026-09-01T00:00:00Z"}], "legacy@acme-tools": {"version": "0.1.0"}, "gone@acme-tools": [{"installPath": "$HOME/.claude/plugins/cache/acme-tools/gone/2.0.0", "version": "2.0.0"}]}}`,
 			".claude/plugins/cache/acme-tools/formatter/1.2.0/.claude-plugin/plugin.json": `{"name": "formatter", "version": "1.2.0", "description": "Format code"}`,
 			".claude/plugins/cache/acme-tools/formatter/1.2.0/skills/format/SKILL.md":     skill("format", "Format the code"),
 			".claude/plugins/cache/acme-tools/formatter/1.2.0/.mcp.json":                  `{"mcpServers": {"formatter-db": {"command": "npx", "args": ["-y", "@acme/formatter-mcp"], "env": {"DB_TOKEN": "secret-plugin-env-value"}}}}`,
@@ -385,8 +386,13 @@ func TestScanWarnings(t *testing.T) {
 			"~/.claude/skills/docs/outside.md: symlink resolves outside the skill, skipped",
 		}},
 		{"mcp-malformed", []string{
-			"~/.codex/config.toml: toml: line 2: expected '.' or ']' to end table name, but got '\\n' instead, skipped",
-			"~/.cursor/mcp.json: invalid character '}' looking for beginning of value, skipped",
+			"~/.claude/plugins/installed_plugins.json: invalid JSON, skipped",
+			"~/.codex/config.toml: invalid TOML, skipped",
+			"~/.cursor/mcp.json: invalid JSON, skipped",
+		}},
+		{"plugins", []string{
+			"~/.claude/plugins/cache/acme-tools/gone/2.0.0: plugin gone@acme-tools is not installed there, skipped",
+			"~/.claude/plugins/installed_plugins.json: plugin legacy@acme-tools has no installPath, skipped",
 		}},
 	}
 	for _, tt := range tests {
@@ -408,6 +414,7 @@ func TestScanWarnings(t *testing.T) {
 			for _, w := range tt.want {
 				contains(t, "stderr", h.portable(out.stderr), "warning: "+w)
 			}
+			noSecrets(t, h, fixtures[tt.fixture])
 		})
 	}
 }
@@ -594,14 +601,30 @@ func TestScanSpawnBudget(t *testing.T) {
 	}
 }
 
-// secrets lists every distinctive secret value a fixture's config files hold.
+// secrets lists every distinctive secret value a fixture's config files hold,
+// including the bare tokens a decoder quotes in its error message.
 func secrets(f fixture) []string {
 	var found []string
 	for _, content := range f.files {
-		found = append(found, regexp.MustCompile(`secret-[a-z-]+`).FindAllString(content, -1)...)
+		found = append(found, regexp.MustCompile(`secret[a-z-]*`).FindAllString(content, -1)...)
 	}
 	sort.Strings(found)
 	return found
+}
+
+// noSecrets scans in both output modes and fails when any secret value of
+// f reaches stdout or stderr.
+func noSecrets(t *testing.T, h *harness, f fixture) {
+	t.Helper()
+	for _, args := range [][]string{{"scan"}, {"--json", "scan"}} {
+		out := h.run(args...)
+		equal(t, "exit", out.exit, 0)
+		for _, secret := range secrets(f) {
+			if strings.Contains(out.stdout, secret) || strings.Contains(out.stderr, secret) {
+				t.Errorf("%v printed %q", args, secret)
+			}
+		}
+	}
 }
 
 // servers lists "name transport configuration command args|url" for every server occurrence.
@@ -693,16 +716,8 @@ func TestScanMCPServers(t *testing.T) {
 	}
 	equal(t, "edges", len(snap["edges"].([]any)), 6+17) // machine to six configurations, one per occurrence
 
-	for _, args := range [][]string{{"scan"}, {"--json", "scan"}} {
-		out := h.run(args...)
-		equal(t, "exit", out.exit, 0)
-		for _, secret := range secrets(f) {
-			if strings.Contains(out.stdout, secret) || strings.Contains(out.stderr, secret) {
-				t.Errorf("%v printed %q", args, secret)
-			}
-		}
-	}
 	equal(t, "secrets in fixture", len(secrets(f)), 12)
+	noSecrets(t, h, f)
 
 	out := h.run("scan")
 	contains(t, "stdout", out.stdout, "  servers:\n")
@@ -784,7 +799,5 @@ func TestScanPlugins(t *testing.T) {
 	contains(t, "stdout", out.stdout, "(plugin formatter)")
 	contains(t, "stdout", out.stdout, "notes     1.0.0\n")
 	contains(t, "stdout", out.stdout, "security  0.3.0\n")
-	if strings.Contains(out.stdout, "secret-plugin-env-value") {
-		t.Errorf("scan printed a plugin server's environment value")
-	}
+	noSecrets(t, h, fixtures["plugins"])
 }

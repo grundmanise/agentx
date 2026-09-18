@@ -251,7 +251,6 @@ An MCP server node is one server in one signature version; the same server decla
 |---|---|---|
 | `physical_id`, `logical_id` | string | see below |
 | `name` | string | the key the server is declared under, from its first declaration in scan order |
-| `transport` | string | `stdio`, `sse` or `streamable-http`, from its first declaration |
 | `signature` | string | the hash of the tools, prompts and resources the server exposed during a handshake; `none`, the fixed no-signature marker, when no handshake ran |
 | `occurrences` | array | sorted by `id` |
 
@@ -282,7 +281,7 @@ A plugin node is one plugin bundle installed in one configuration, in one versio
 | `configuration` | string | the configuration id |
 | `path` | string | the plugin's directory |
 
-Server discovery reads these user-scope files, each parsed as a map of server name to declaration under its top-level key, ignoring unknown keys; a declaration that is not an object or has neither a command nor a URL is ignored; a missing file declares nothing; a file that cannot be read or parsed is one warning naming it and the scan continues:
+Server discovery reads these user-scope files, each parsed as a map of server name to declaration under its top-level key, ignoring unknown keys; a declaration that is not an object or has neither a command nor a URL is ignored; a missing file declares nothing; a file that cannot be read or parsed is one warning naming the file, never its content, and the scan continues:
 
 | Configuration | File | Format |
 |---|---|---|
@@ -295,7 +294,7 @@ Server discovery reads these user-scope files, each parsed as a map of server na
 
 In the JSON files a declaration holds `command`, `args` and `env` for a local server, `url` (or the client's variant) and `headers` for a remote one, and an optional `type` or `transport`. Every other configuration contributes skills only.
 
-Plugin discovery: Claude Code plugins are the records in `~/.claude/plugins/installed_plugins.json`, keyed `<name>@<marketplace>`, each with its `installPath` and `version`; a record whose directory does not exist is a warning; the version falls back to the `version` in the plugin's `.claude-plugin/plugin.json`, and the plugin's servers are read from `.mcp.json` at its root, in the `mcpServers` JSON format. Gemini CLI extensions are every directory under `~/.gemini/extensions` that holds a `gemini-extension.json`, which gives the `name`, the `version` and the `mcpServers`; the marketplace is the `source` in `.gemini-extension-install.json` next to it, when present. In both cases the skills a plugin provides are discovered under its `skills` directory exactly like a skills directory, merged with every other skill by content hash, and recorded as occurrences with the plugin's name. Every other configuration, Codex included, reports no plugins.
+Plugin discovery: Claude Code plugins are the records in `~/.claude/plugins/installed_plugins.json`, keyed `<name>@<marketplace>`, each with its `installPath` and `version`; a record without an `installPath` or whose directory does not exist is a warning; the version falls back to the `version` in the plugin's `.claude-plugin/plugin.json`, and the plugin's servers are read from `.mcp.json` at its root, in the `mcpServers` JSON format. Gemini CLI extensions are every directory under `~/.gemini/extensions` that holds a `gemini-extension.json`, which gives the `name`, the `version` and the `mcpServers`; the marketplace is the `source` in `.gemini-extension-install.json` next to it, when present. In both cases the skills a plugin provides are discovered under its `skills` directory exactly like a skills directory, merged with every other skill by content hash, and recorded as occurrences with the plugin's name. Every other configuration, Codex included, reports no plugins.
 
 Discovery: inside each skills directory a client reads, every child directory, or symlink to one, that holds a `SKILL.md` is a skill; hidden entries and `node_modules` are skipped; a broken symlink is a warning. A client's user-scope skills directories are its own, other clients' directories it reads (Cursor reads the Claude Code and Codex directories) and the library for clients that read it directly (Codex and Gemini CLI), which yields an occurrence with the library path as placement path whatever the enabled state. Each directory is canonicalised once and each skill is hashed once per scan.
 

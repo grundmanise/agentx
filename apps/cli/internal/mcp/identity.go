@@ -18,7 +18,7 @@ func NormalizeURL(raw string) (normalized string, ok bool) {
 		return "", false
 	}
 	host := strings.ToLower(u.Hostname())
-	if host == "localhost" || net.ParseIP(strings.Trim(host, "[]")) != nil {
+	if host == "localhost" || net.ParseIP(host) != nil {
 		return "", false
 	}
 	scheme := strings.ToLower(u.Scheme)

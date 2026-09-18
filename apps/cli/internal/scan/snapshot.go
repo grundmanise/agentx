@@ -74,7 +74,6 @@ type Server struct {
 	PhysicalID  string             `json:"physical_id"`
 	LogicalID   string             `json:"logical_id"`
 	Name        string             `json:"name"`
-	Transport   string             `json:"transport"`
 	Signature   string             `json:"signature"` // the handshake signature, or noSignature
 	Occurrences []ServerOccurrence `json:"occurrences"`
 }

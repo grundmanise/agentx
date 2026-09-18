@@ -5,6 +5,9 @@ package mcp
 
 import (
 	"encoding/json"
+	"errors"
+	"maps"
+	"slices"
 	"sort"
 	"strings"
 
@@ -40,28 +43,29 @@ const (
 
 // Parse reads every server in data. Unknown keys are ignored; an entry that
 // is not an object or declares neither a command nor a URL is skipped. The
-// result is sorted by name.
+// result is sorted by name. The error for a malformed file is fixed text:
+// a decoder's message can quote the file, and the file can hold secrets.
 func Parse(f Format, data []byte) ([]Server, error) {
 	var entries map[string]any
 	if f == CodexTOML {
 		var doc struct {
 			Servers map[string]any `toml:"mcp_servers"`
 		}
-		if err := toml.Unmarshal(data, &doc); err != nil {
-			return nil, err
+		if toml.Unmarshal(data, &doc) != nil {
+			return nil, errors.New("invalid TOML")
 		}
 		entries = doc.Servers
 	} else {
 		var doc struct {
 			Servers map[string]any `json:"mcpServers"`
 		}
-		if err := json.Unmarshal(data, &doc); err != nil {
-			return nil, err
+		if json.Unmarshal(data, &doc) != nil {
+			return nil, errors.New("invalid JSON")
 		}
 		entries = doc.Servers
 	}
 	var servers []Server
-	for _, name := range sortedKeys(entries) {
+	for _, name := range slices.Sorted(maps.Keys(entries)) {
 		entry, ok := entries[name].(map[string]any)
 		if !ok {
 			continue
@@ -128,13 +132,9 @@ func strs(v any) []string {
 	return out
 }
 
-// keys lists the keys of an object; its values are never read.
+// keys lists the keys of an object, sorted; its values are never read.
 func keys(v any) []string {
 	m, _ := v.(map[string]any)
-	return sortedKeys(m)
-}
-
-func sortedKeys(m map[string]any) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
 		out = append(out, k)

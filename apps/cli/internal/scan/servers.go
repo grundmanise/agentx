@@ -39,7 +39,7 @@ func (b *builder) addServer(conf Configuration, file string, s mcp.Server, plugi
 	physical := id("server", logical, b.MachineID, noSignature)
 	node, ok := b.servers[physical]
 	if !ok {
-		node = &Server{PhysicalID: physical, LogicalID: logical, Name: s.Name, Transport: s.Transport, Signature: noSignature}
+		node = &Server{PhysicalID: physical, LogicalID: logical, Name: s.Name, Signature: noSignature}
 		b.servers[physical] = node
 	}
 	occ := ServerOccurrence{

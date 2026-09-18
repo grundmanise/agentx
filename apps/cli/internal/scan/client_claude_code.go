@@ -2,9 +2,10 @@ package scan
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
@@ -28,8 +29,9 @@ func (claudeCode) MCPConfigs(d home.Dirs) []MCPConfig {
 
 // Plugins reads the install records in ~/.claude/plugins/installed_plugins.json:
 // `{"plugins": {"<name>@<marketplace>": [{"installPath", "version"}]}}`, or one
-// record instead of a list in the older layout. The version falls back to the
-// plugin's manifest. A plugin declares servers in .mcp.json at its root.
+// record instead of a list in the older layout. A record without an install
+// path is a warning. The version falls back to the plugin's manifest. A
+// plugin declares servers in .mcp.json at its root.
 func (c claudeCode) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 	path := filepath.Join(c.ConfigDir(d), "plugins", "installed_plugins.json")
 	var file struct {
@@ -39,7 +41,7 @@ func (c claudeCode) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 		return nil
 	}
 	var plugins []InstalledPlugin
-	for _, key := range sortedKeys(file.Plugins) {
+	for _, key := range slices.Sorted(maps.Keys(file.Plugins)) {
 		type record struct {
 			InstallPath string `json:"installPath"`
 			Version     string `json:"version"`
@@ -55,6 +57,7 @@ func (c claudeCode) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 		name, marketplace, _ := strings.Cut(key, "@")
 		for _, r := range records {
 			if r.InstallPath == "" {
+				warn(path + ": plugin " + key + " has no installPath, skipped")
 				continue
 			}
 			if info, err := os.Stat(r.InstallPath); err != nil || !info.IsDir() {
@@ -82,7 +85,8 @@ func (c claudeCode) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 }
 
 // readJSON decodes path into v and reports whether it could. A missing file
-// is silently false; anything else is a warning.
+// is silently false; anything else is a warning naming the path, never the
+// content.
 func readJSON(path string, v any, warn func(string)) bool {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -91,18 +95,9 @@ func readJSON(path string, v any, warn func(string)) bool {
 		}
 		return false
 	}
-	if err := json.Unmarshal(b, v); err != nil {
-		warn(path + ": " + err.Error() + ", skipped")
+	if json.Unmarshal(b, v) != nil {
+		warn(path + ": invalid JSON, skipped")
 		return false
 	}
 	return true
-}
-
-func sortedKeys[V any](m map[string]V) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }
