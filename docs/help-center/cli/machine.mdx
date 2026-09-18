@@ -1,0 +1,54 @@
+---
+title: "agentx machine"
+description: "See this machine's stable id and label, rename it, or reset the id."
+---
+
+Every machine has an id that survives a reinstall and a label you can change.
+
+## Show the machine
+
+```sh
+agentx machine
+```
+
+```text
+Machine id  3ea501b8fb5db1ad3cc85268972d7012
+Label       my-laptop
+Derivation  platform
+```
+
+`Derivation` tells you where the id comes from:
+
+- `platform`: derived from the computer's own platform id (`/etc/machine-id` on Linux, the hardware UUID on macOS) and your user id. Reinstalling agentx on the same computer gives the same id.
+- `random`: generated once and kept in `machine.json` in agentx home, because the computer has no platform id or you reset the id.
+
+## Rename the machine
+
+```sh
+agentx machine rename "work laptop"
+```
+
+The label defaults to the hostname until you set it. `agentx config set label` does the same thing.
+
+## Reset the id
+
+```sh
+agentx machine reset-id
+```
+
+Use this when two machines report the same id, for example after cloning a virtual machine. The new id is random and stays in use even though the platform id still exists. Delete `machine.json` in agentx home to go back to the platform-derived id.
+
+## Script it
+
+Add `--json` to get a `machine` event with `id`, `label` and `derivation`:
+
+```sh
+agentx --json machine
+```
+
+```json
+{"type":"machine","schema_version":1,"id":"3ea501b8fb5db1ad3cc85268972d7012","label":"my-laptop","derivation":"platform"}
+{"type":"result","schema_version":1,"ok":true}
+```
+
+`rename` and `reset-id` emit the same event with the new values. If another agentx command is running, both exit with code 7 at once; retry when it finishes.
