@@ -1,9 +1,9 @@
 ---
 title: "agentx scan"
-description: "See every agent configuration on this machine and the skills each one can see."
+description: "See every agent configuration on this machine with the skills, MCP servers and plugins each one has."
 ---
 
-`agentx scan` reads your agent clients' directories and the library and prints what it finds. It writes nothing.
+`agentx scan` reads your agent clients' directories, their MCP configuration files and the library and prints what it finds. It writes nothing and never starts a server.
 
 ## Scan the machine
 
@@ -22,9 +22,17 @@ Codex (codex)  /home/me/.codex  enabled
 Cursor (cursor)  /home/me/.cursor  enabled
   commit  symlink    user  /home/me/.claude/skills/commit -> /home/me/.agents/skills/commit
   review  directory  user  /home/me/.claude/skills/review
+  format  directory  user  /home/me/.claude/plugins/cache/acme-tools/formatter/1.2.0/skills/format  (plugin formatter)
+  servers:
+    context7  stdio            npx -y @upstash/context7-mcp
+    stripe    streamable-http  https://mcp.stripe.com
+  plugins:
+    formatter  1.2.0
 ```
 
-One section per agent configuration, headed by the client name, its id, its configuration directory and whether it is enabled. One line per skill the configuration can see: the skill name, the kind of placement, the scope and the path the client reads.
+One section per agent configuration, headed by the client name, its id, its configuration directory and whether it is enabled. One line per skill the configuration can see: the skill name, the kind of placement, the scope and the path the client reads. A skill that comes from a plugin ends with the plugin's name.
+
+Then, when the configuration declares MCP servers, a `servers:` block with one line per server: its name, its transport (`stdio`, `sse` or `streamable-http`) and its command line or URL. Then, when the configuration has plugins, a `plugins:` block with one line per plugin: its name and version.
 
 A configuration is detected when its configuration directory exists, such as `~/.claude` for Claude Code or `~/.cursor` for Cursor.
 
@@ -39,6 +47,20 @@ A configuration is detected when its configuration directory exists, such as `~/
 ## See who reads what
 
 A client can read other clients' directories. Cursor reads `~/.claude/skills` and `~/.codex/skills` next to its own `~/.cursor/skills`, so a skill you put in the Claude Code directory appears under Cursor too. Codex and Gemini CLI read the library at `~/.agents/skills` directly, so every library skill appears under them without any link in their own directories.
+
+## Read the servers
+
+agentx reads the user-scope MCP configuration of Claude Code (`~/.claude.json`), Codex (`~/.codex/config.toml`), Cursor (`~/.cursor/mcp.json`), Gemini CLI (`~/.gemini/settings.json`), Windsurf (`~/.codeium/windsurf/mcp_config.json`) and GitHub Copilot (`~/.copilot/mcp-config.json`). Other clients contribute skills only.
+
+The inventory shows the command and arguments of a local server and the URL of a remote one. It never shows the values of environment variables or headers, in any output mode: a scan does not print your secrets. In JSON output only their names appear, as `env_keys` and `header_keys`.
+
+The same server declared in two clients is one server with two occurrences: agentx recognises a remote server by its address and a local `npx`, `uvx`, `pipx` or `docker` server by its package or image, whatever the version. A server that cannot be identified that way is unique to this machine.
+
+A configuration file that cannot be parsed is reported as a warning and the scan continues.
+
+## Read the plugins
+
+Claude Code plugins and Gemini CLI extensions are listed under the configuration they are installed in, with their version. The skills and MCP servers a plugin provides appear in the configuration's list like any other, marked with the plugin's name. A skill that is installed both standalone and through a plugin is one skill with two placements.
 
 ## Include a project
 
@@ -62,7 +84,7 @@ A broken symlink, a `SKILL.md` without usable frontmatter or a symlink that poin
 
 ## Script it
 
-Add `--json` to get one `snapshot` event with the machine, every configuration, every skill with its occurrences, the edges between them and the warnings:
+Add `--json` to get one `snapshot` event with the machine, every configuration, every skill, MCP server and plugin with its occurrences, the edges between them and the warnings:
 
 ```sh
 agentx --json scan

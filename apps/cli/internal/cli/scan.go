@@ -117,8 +117,9 @@ func (inv *invocation) detectedConfiguration(slug string) error {
 	return fail(exitNotFound, fmt.Sprintf("configuration %q is not detected on this machine", slug), hint)
 }
 
-// printSnapshot writes the human inventory: one section per configuration,
-// one line per skill occurrence. Warnings go to stderr.
+// printSnapshot writes the human inventory: one section per configuration
+// with one line per skill occurrence, then its servers and its plugins.
+// Warnings go to stderr.
 func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 	type row struct{ name, kind, scope, path string }
 	rows := map[string][]row{}
@@ -128,8 +129,36 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 			if o.Kind == "symlink" {
 				path += " -> " + o.ResolvedPath
 			}
+			if o.Plugin != "" {
+				path += "  (plugin " + o.Plugin + ")"
+			}
 			rows[o.Configuration] = append(rows[o.Configuration], row{s.Name, o.Kind, o.Scope, path})
 		}
+	}
+	servers := map[string][]row{} // name, transport, command line or URL
+	for _, s := range snap.MCPServers {
+		for _, o := range s.Occurrences {
+			what := o.URL
+			if o.Command != "" {
+				what = strings.Join(append([]string{o.Command}, o.Args...), " ")
+			}
+			if o.Plugin != "" {
+				what += "  (plugin " + o.Plugin + ")"
+			}
+			servers[o.Configuration] = append(servers[o.Configuration], row{name: s.Name, kind: o.Transport, path: what})
+		}
+	}
+	plugins := map[string][]row{} // name, version
+	for _, p := range snap.Plugins {
+		plugins[p.Configuration] = append(plugins[p.Configuration], row{name: p.Name, kind: p.Version})
+	}
+	byName := func(list []row) {
+		sort.Slice(list, func(i, j int) bool {
+			if list[i].name != list[j].name {
+				return list[i].name < list[j].name
+			}
+			return list[i].path < list[j].path
+		})
 	}
 	if len(snap.Configurations) == 0 {
 		fmt.Fprintln(inv.out.stdout, "No agent configurations detected.")
@@ -144,15 +173,23 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 			state = "disabled"
 		}
 		fmt.Fprintf(t, "%s (%s)  %s  %s\n", c.Name, c.ID, c.Path, state)
-		list := rows[c.ID]
-		sort.Slice(list, func(i, j int) bool {
-			if list[i].name != list[j].name {
-				return list[i].name < list[j].name
-			}
-			return list[i].path < list[j].path
-		})
-		for _, r := range list {
+		byName(rows[c.ID])
+		for _, r := range rows[c.ID] {
 			fmt.Fprintf(t, "  %s\t%s\t%s\t%s\n", r.name, r.kind, r.scope, r.path)
+		}
+		if list := servers[c.ID]; len(list) > 0 {
+			byName(list)
+			fmt.Fprintln(t, "  servers:")
+			for _, r := range list {
+				fmt.Fprintf(t, "    %s\t%s\t%s\n", r.name, r.kind, r.path)
+			}
+		}
+		if list := plugins[c.ID]; len(list) > 0 {
+			byName(list)
+			fmt.Fprintln(t, "  plugins:")
+			for _, r := range list {
+				fmt.Fprintf(t, "    %s\t%s\n", r.name, r.kind)
+			}
 		}
 	}
 	t.Flush()

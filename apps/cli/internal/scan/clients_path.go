@@ -23,6 +23,10 @@ func (p pathClient) SkillsDirs(d home.Dirs) []string {
 }
 func (p pathClient) ProjectSkillsDirs() []string { return []string{p.project} }
 
+// MCPConfigs and Plugins: a path client contributes skills only.
+func (pathClient) MCPConfigs(home.Dirs) []MCPConfig                  { return nil }
+func (pathClient) Plugins(home.Dirs, func(string)) []InstalledPlugin { return nil }
+
 func (pathClient) at(d home.Dirs, spec string) string {
 	if spec == "library" {
 		return d.Library
