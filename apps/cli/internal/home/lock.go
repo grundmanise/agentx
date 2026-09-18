@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // ErrLocked is returned when another agentx command holds the lock.
@@ -30,10 +31,32 @@ func Mutate(dir string, fn func() error) error {
 	return bumpVersion(dir)
 }
 
+// ReadLocked runs fn, a scan's local reads, while holding the shared lock of
+// agentx home dir, so no mutation lands halfway through the reads. A mutation
+// in progress is waited for briefly; one that outlasts the wait is ErrLocked.
+func ReadLocked(dir string, fn func() error) error {
+	lock, err := takeSharedLock(dir)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	return fn()
+}
+
 // takeLock takes the exclusive advisory lock of agentx home without waiting;
 // a held lock is ErrLocked at once. It creates agentx home, ops directory
 // included, on first use, since the lock file lives there.
 func takeLock(dir string) (*os.File, error) {
+	return flock(dir, syscall.LOCK_EX, 1)
+}
+
+// takeSharedLock takes the shared advisory lock, retrying for up to a second
+// while a mutation holds the exclusive one.
+func takeSharedLock(dir string) (*os.File, error) {
+	return flock(dir, syscall.LOCK_SH, 20)
+}
+
+func flock(dir string, how, attempts int) (*os.File, error) {
 	if err := os.MkdirAll(filepath.Join(dir, "ops"), 0o755); err != nil {
 		return nil, err
 	}
@@ -42,16 +65,26 @@ func takeLock(dir string) (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		f.Close()
-		if errors.Is(err, syscall.EWOULDBLOCK) {
+	for i := 1; ; i++ {
+		err := syscall.Flock(int(f.Fd()), how|syscall.LOCK_NB)
+		if err == nil {
+			break
+		}
+		if !errors.Is(err, syscall.EWOULDBLOCK) {
+			f.Close()
+			return nil, fmt.Errorf("lock %s: %w", path, err)
+		}
+		if i == attempts {
+			f.Close()
 			return nil, ErrLocked
 		}
-		return nil, fmt.Errorf("lock %s: %w", path, err)
+		time.Sleep(50 * time.Millisecond)
 	}
-	// The holder's pid lets doctor name it; it is informational, so a failed write is ignored.
-	if err := f.Truncate(0); err == nil {
-		f.WriteAt([]byte(strconv.Itoa(os.Getpid())+"\n"), 0)
+	if how == syscall.LOCK_EX {
+		// The holder's pid lets doctor name it; it is informational, so a failed write is ignored.
+		if err := f.Truncate(0); err == nil {
+			f.WriteAt([]byte(strconv.Itoa(os.Getpid())+"\n"), 0)
+		}
 	}
 	return f, nil
 }

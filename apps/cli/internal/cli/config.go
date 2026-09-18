@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -61,7 +62,7 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 					return nil
 				}
 			}
-			return fail(exitUsage, fmt.Sprintf("unknown setting %q", args[0]), "keys: schema_version, "+settableKeys+", enabled_configurations, sources, copy_mode")
+			return fail(exitUsage, fmt.Sprintf("unknown setting %q", args[0]), "keys: schema_version, "+settableKeys+", disabled_configurations, sources, copy_mode")
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
@@ -89,7 +90,43 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 			return nil
 		},
 	})
+	cmd.AddCommand(newEnableCommand(inv, "enable", "Select a configuration for placements by default"))
+	cmd.AddCommand(newEnableCommand(inv, "disable", "Leave a configuration out of placements by default"))
 	return cmd
+}
+
+// newEnableCommand builds config enable or config disable: both edit the
+// disabled_configurations list, and the configuration must be detected.
+func newEnableCommand(inv *invocation, use, short string) *cobra.Command {
+	disable := use == "disable"
+	return &cobra.Command{
+		Use:   use + " <configuration>",
+		Short: short,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := inv.detectedConfiguration(args[0]); err != nil {
+				return err
+			}
+			var s home.Settings
+			err := home.Mutate(inv.dirs.Home, func() error {
+				var err error
+				if s, err = inv.loadSettings(); err != nil {
+					return err
+				}
+				s.DisabledConfigurations = slices.DeleteFunc(s.DisabledConfigurations, func(id string) bool { return id == args[0] })
+				if disable {
+					s.DisabledConfigurations = append(s.DisabledConfigurations, args[0])
+					slices.Sort(s.DisabledConfigurations)
+				}
+				return home.SaveSettings(inv.dirs.Home, s)
+			})
+			if err != nil {
+				return err
+			}
+			inv.emitSettings(s)
+			return nil
+		},
+	}
 }
 
 // settingSetter validates value for key before any lock is taken and returns
@@ -107,7 +144,7 @@ func settingSetter(key, value string) (func(*home.Settings), error) {
 	case "accept_operations":
 		b, err := parseBool(key, value)
 		return func(s *home.Settings) { s.AcceptOperations = b }, err
-	case "schema_version", "enabled_configurations", "sources", "copy_mode":
+	case "schema_version", "disabled_configurations", "sources", "copy_mode":
 		return nil, fail(exitUsage, key+" cannot be changed with config set", "settable keys: "+settableKeys)
 	}
 	return nil, fail(exitUsage, fmt.Sprintf("unknown setting %q", key), "settable keys: "+settableKeys)
@@ -158,7 +195,7 @@ func (inv *invocation) settingRows(s home.Settings) []settingRow {
 		{"label", inv.label(s)},
 		{"auto_push", strconv.FormatBool(s.AutoPush)},
 		{"accept_operations", strconv.FormatBool(s.AcceptOperations)},
-		{"enabled_configurations", strings.Join(s.EnabledConfigurations, ", ")},
+		{"disabled_configurations", strings.Join(s.DisabledConfigurations, ", ")},
 		{"sources", compact(s.Sources)},
 		{"copy_mode", compact(s.CopyMode)},
 	}

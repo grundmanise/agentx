@@ -29,13 +29,13 @@ func TestConfigListDefaults(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	equal(t, "stderr", out.stderr, "")
 	for _, row := range []string{
-		"schema_version          1",
-		"label                   test-host",
-		"auto_push               false",
-		"accept_operations       false",
-		"enabled_configurations  ",
-		"sources                 []",
-		"copy_mode               {}",
+		"schema_version           1",
+		"label                    test-host",
+		"auto_push                false",
+		"accept_operations        false",
+		"disabled_configurations  ",
+		"sources                  []",
+		"copy_mode                {}",
 	} {
 		contains(t, "stdout", out.stdout, row)
 	}
@@ -53,13 +53,13 @@ func TestConfigListDefaults(t *testing.T) {
 		t.Fatalf("event types = %v, want %v", got, want)
 	}
 	want := map[string]any{
-		"schema_version":         float64(1),
-		"label":                  "test-host",
-		"auto_push":              false,
-		"accept_operations":      false,
-		"enabled_configurations": []any{},
-		"sources":                []any{},
-		"copy_mode":              map[string]any{},
+		"schema_version":          float64(1),
+		"label":                   "test-host",
+		"auto_push":               false,
+		"accept_operations":       false,
+		"disabled_configurations": []any{},
+		"sources":                 []any{},
+		"copy_mode":               map[string]any{},
 	}
 	if got := events[0]["settings"]; !reflect.DeepEqual(got, want) {
 		t.Errorf("settings = %#v, want %#v", got, want)
@@ -107,14 +107,14 @@ func TestConfigSetAndGet(t *testing.T) {
 	out = h.run("config", "get", "auto_push")
 	equal(t, "stdout", out.stdout, "true\n")
 	out = h.run("config", "list")
-	contains(t, "stdout", out.stdout, "label                   work laptop")
-	contains(t, "stdout", out.stdout, "auto_push               true")
+	contains(t, "stdout", out.stdout, "label                    work laptop")
+	contains(t, "stdout", out.stdout, "auto_push                true")
 }
 
 func TestConfigSetKeepsUnknownCollections(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	file := `{"schema_version":1,"enabled_configurations":["cursor"],"sources":[{"url":"https://example.com/skills"}],"copy_mode":{"my-skill":["cursor"]}}`
+	file := `{"schema_version":1,"disabled_configurations":["cursor"],"sources":[{"url":"https://example.com/skills"}],"copy_mode":{"my-skill":["cursor"]}}`
 	if err := os.WriteFile(filepath.Join(h.agentx, "settings.json"), []byte(file), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -124,8 +124,8 @@ func TestConfigSetKeepsUnknownCollections(t *testing.T) {
 
 	got := readSettingsFile(t, h)
 	equal(t, "label", got["label"], "kept")
-	if want := []any{"cursor"}; !reflect.DeepEqual(got["enabled_configurations"], want) {
-		t.Errorf("enabled_configurations = %#v, want %#v", got["enabled_configurations"], want)
+	if want := []any{"cursor"}; !reflect.DeepEqual(got["disabled_configurations"], want) {
+		t.Errorf("disabled_configurations = %#v, want %#v", got["disabled_configurations"], want)
 	}
 	if want := []any{map[string]any{"url": "https://example.com/skills"}}; !reflect.DeepEqual(got["sources"], want) {
 		t.Errorf("sources = %#v, want %#v", got["sources"], want)
@@ -135,9 +135,9 @@ func TestConfigSetKeepsUnknownCollections(t *testing.T) {
 	}
 
 	out = h.run("config", "list")
-	contains(t, "stdout", out.stdout, "enabled_configurations  cursor")
-	contains(t, "stdout", out.stdout, `sources                 [{"url":"https://example.com/skills"}]`)
-	contains(t, "stdout", out.stdout, `copy_mode               {"my-skill":["cursor"]}`)
+	contains(t, "stdout", out.stdout, "disabled_configurations  cursor")
+	contains(t, "stdout", out.stdout, `sources                  [{"url":"https://example.com/skills"}]`)
+	contains(t, "stdout", out.stdout, `copy_mode                {"my-skill":["cursor"]}`)
 }
 
 func TestConfigErrors(t *testing.T) {
