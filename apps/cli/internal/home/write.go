@@ -13,21 +13,18 @@ func writeAtomic(path string, data []byte) error {
 		return err
 	}
 	tmp := f.Name()
-	if _, err := f.Write(data); err == nil {
+	_, err = f.Write(data)
+	if err == nil {
 		err = f.Sync()
 	}
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	if err == nil {
+		err = os.Rename(tmp, path)
+	}
 	if err != nil {
-		f.Close()
 		os.Remove(tmp)
-		return err
 	}
-	if err := f.Close(); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		os.Remove(tmp)
-		return err
-	}
-	return nil
+	return err
 }
