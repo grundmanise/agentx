@@ -36,8 +36,11 @@ _Avoid_: device id, installation id
 ### Identity
 
 **Logical asset**:
-The fleet-wide identity of a skill or MCP server. For a managed skill its upstream: source and subpath. For a fork or greenfield skill its root commit in the account repo. For an unmanaged skill its content. For a server its address or package. Copies on any machine, in any version, share one logical asset, and a rename changes nothing.
+The fleet-wide identity of a skill or MCP server. For a managed skill its upstream: source and subpath. For a fork or greenfield skill its fork id. For an unmanaged skill its content. For a server its address or package. Copies on any machine, in any version, share one logical asset, and a rename changes nothing.
 _Avoid_: skill id, key
+
+**Fork id**:
+The permanent identity assigned when a fork or greenfield skill is created. Installing that published fork elsewhere preserves it; independently creating another fork assigns a different identity, even from the same upstream version.
 
 **Physical asset**:
 One logical asset on one machine in one version, the version being the content hash for a skill and the tool signature for a server. The unit drift is evaluated on and machine views count.
@@ -81,7 +84,7 @@ A skill created from scratch in agentx with no upstream. Behaves as a fork with 
 _Avoid_: custom skill, new skill
 
 **Account repo**:
-The one git repository per account that holds every fork and greenfield skill as one branch per skill, every managed skill's base version as an import branch, and the last fetched state of each source. Each machine has its own clone in agentx home and checks out only the forks placed on it, one worktree per fork; import branches have no worktree; a machine without an account has the clone before the remote exists. Ancestry between imported upstream versions is reconstructed locally with replace refs.
+The one git repository per account that holds every fork and greenfield skill as one branch per skill, every managed skill's base version as an import branch, and the last fetched state of each source. Each machine has its own clone in agentx home and checks out only the forks placed on it, one worktree per fork; import branches have no worktree; a machine without an account has the clone before the remote exists. Shared upstream versions establish lineage, separately from each fork's identity.
 _Avoid_: cloud repo, library repo, fork repo
 
 **Import commit**:
@@ -121,26 +124,26 @@ The `Agentx-` commit trailers in the account repo: source, path, upstream commit
 _Avoid_: manifest, metadata file, provenance file
 
 **Library**:
-One machine's canonical skills directory at ~/.agents/skills, where every skill that machine has lives exactly once. Each machine owns its own library; nothing moves between libraries except through install and update.
+One machine's canonical directory for skills managed by agentx at ~/.agents/skills. Installing there makes a skill available to every agent client that reads this universal location, regardless of placement choices.
 _Avoid_: store, cache, vault
 
 **Placement**:
-The path inside one agent configuration's skills directory through which that client sees a library skill. A symlink by default, a copy when a client needs one.
+The path inside one agent configuration's skills directory through which that client sees a library skill. The library itself for an agent client that reads the universal location; otherwise a symlink by default or a copy when needed.
 _Avoid_: install, link, copy
 
 **Base version**:
-The upstream content a skill was installed, forked or last updated from, named by its content hash. The common ancestor in every three-way merge. Always an import commit in the account repo that every machine reproduces identically: the tip of a managed skill's import branch, or the last imported version on a fork's branch.
+The upstream content a skill was installed, forked or last updated from, named by its content hash. The recorded upstream version used to distinguish local edits from upstream changes. Always an import commit in the account repo that every machine reproduces identically: the tip of a managed skill's import branch, or the last imported version on a fork's branch.
 _Avoid_: original, parent, snapshot
 
 **Agentx home**:
-The ~/.agentx directory holding the account repo clone with its worktrees, the machine settings and in-flight operation records. There is no database. Agents read forks through symlinks from the library into those worktrees; nothing else in it is read by agents.
+The ~/.agentx directory holding the account repo clone with its worktrees, the machine settings, local mutation journals and in-flight operation records. There is no database. Agents read forks through symlinks from the library into those worktrees; nothing else in it is read by agents.
 
 **Machine settings**:
-The one file in agentx home holding what only this machine decides: its label, enabled configurations, sources and their pins, copy modes and the install generation. Never leaves the machine; `agentx export` copies it.
+The one file in agentx home holding what only this machine decides: its label, enabled configurations, sources and their pins, and copy modes. Never leaves the machine; `agentx export` copies it.
 _Avoid_: config, preferences, local state
 
 **Enabled configuration**:
-An agent configuration on a machine that agentx installs into by default. The user chooses which configurations are enabled per machine.
+An agent configuration selected by default for explicit placements. This choice does not disable an agent client's own discovery of the universal library.
 _Avoid_: active, target, selected
 
 ### Sync
@@ -154,11 +157,11 @@ The hosted service that keeps the account's machine records, snapshots and opera
 _Avoid_: sync server, backend, cloud, sync engine
 
 **Install generation**:
-A counter in machine settings that increases on every fresh install of agentx on a machine, so the account service can tell a reinstall from a continuation.
+The registered incarnation of a machine on the account service. A replacement installation gets a new generation so uploads from the previous installation cannot replace its state; restarting a process keeps the same generation.
 _Avoid_: epoch, session
 
 **Operation**:
-A user-requested change to one machine (install, remove, update), queued until that machine's agentx executes it. Has a state: pending, claimed, applied, failed, skipped, cancelled or needs-input. Delivering an operation twice changes nothing. A bulk install is a batch of install operations, not a new kind. There is no move; a move is a remove on one machine and an install on another.
+A user-requested change to one machine (install, remove, update), queued until that machine's agentx executes it. Has a state: pending, claimed, applied, failed, skipped, cancelled or needs-input. Delivering an operation twice changes nothing. A bulk install is a batch of install operations, not a new kind. There is no separate move operation; a move installs on the destination first, then removes from the source after the destination confirms the requested content and placements.
 _Avoid_: task, job, command, intent, move
 
 **Operation record**:
