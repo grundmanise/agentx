@@ -63,14 +63,21 @@ func TakeServeLock(dir string) (*os.File, error) {
 	return f, err
 }
 
-// takeLock takes the exclusive advisory lock of agentx home without waiting;
-// a held lock is ErrLocked at once. It creates agentx home, ops directory
-// included, on first use, since the lock file lives there.
+// takeLock takes the exclusive advisory lock of agentx home; a held lock is
+// ErrLocked after a few quick retries, which cover a lock a child process
+// inherited for the instant between its fork and its exec. It creates agentx
+// home, ops directory included, on first use, since the lock file lives there.
 func takeLock(dir string) (*os.File, error) {
 	if err := createHome(dir); err != nil {
 		return nil, err
 	}
-	return flock(LockPath(dir), syscall.LOCK_EX)
+	for attempt := 1; ; attempt++ {
+		f, err := flock(LockPath(dir), syscall.LOCK_EX)
+		if !errors.Is(err, ErrLocked) || attempt == 5 {
+			return f, err
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 // takeSharedLock takes the shared advisory lock, retrying every 50 ms while
