@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"sync"
 	"testing"
 )
 
@@ -32,6 +33,7 @@ func showMachine(t *testing.T, h *harness) jsonEvent {
 }
 
 func TestMachineFromPlatformID(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	mac := hmac.New(sha256.New, []byte("agentx-machine-id/v1"))
@@ -63,6 +65,7 @@ func TestMachineFromPlatformID(t *testing.T) {
 }
 
 func TestMachineRandomFallback(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	h.env["AGENTX_PLATFORM_ID"] = ""
 	if err := os.Remove(h.agentx); err != nil {
@@ -72,17 +75,7 @@ func TestMachineRandomFallback(t *testing.T) {
 	first := showMachine(t, h)
 	equal(t, "derivation", first["derivation"], "random")
 
-	b, err := os.ReadFile(filepath.Join(h.agentx, "machine.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var file struct {
-		ID string `json:"id"`
-	}
-	if err := json.Unmarshal(b, &file); err != nil {
-		t.Fatalf("machine.json: %v\n%s", err, b)
-	}
-	equal(t, "machine.json id", file.ID, first["id"])
+	equal(t, "machine.json id", readMachineFile(t, h), first["id"])
 
 	second := showMachine(t, h)
 	equal(t, "id on the second run", second["id"], first["id"])
@@ -98,7 +91,56 @@ func TestMachineRandomFallback(t *testing.T) {
 	contains(t, "error.message", h.events(out.stdout)[0]["message"].(string), filepath.Join(h.agentx, "machine.json"))
 }
 
+// Concurrent first runs without a platform id agree on one stored id.
+func TestMachineRandomFallbackConcurrent(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.env["AGENTX_PLATFORM_ID"] = ""
+	outs := make([]outcome, 4)
+	var wg sync.WaitGroup
+	for i := range outs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			outs[i] = h.run("--json", "machine")
+		}()
+	}
+	wg.Wait()
+
+	stored := readMachineFile(t, h)
+	succeeded := 0
+	for _, out := range outs {
+		switch out.exit {
+		case 0:
+			equal(t, "id", h.events(out.stdout)[0]["id"], stored)
+			succeeded++
+		case 7:
+		default:
+			t.Errorf("agentx machine: exit %d, stdout %q", out.exit, out.stdout)
+		}
+	}
+	if succeeded == 0 {
+		t.Fatal("no run succeeded")
+	}
+}
+
+func readMachineFile(t *testing.T, h *harness) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(h.agentx, "machine.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(b, &file); err != nil {
+		t.Fatalf("machine.json: %v\n%s", err, b)
+	}
+	return file.ID
+}
+
 func TestMachineResetID(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	before := showMachine(t, h)
 
@@ -129,6 +171,7 @@ func TestMachineResetID(t *testing.T) {
 }
 
 func TestMachineRename(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	out := h.run("--json", "machine", "rename", "desk")

@@ -67,7 +67,7 @@ func newMachineCommand(inv *invocation) *cobra.Command {
 
 // mutateMachine runs fn as a mutation and then reports the machine as it now is.
 func (inv *invocation) mutateMachine(fn func() error) error {
-	if err := inv.mutate(fn); err != nil {
+	if err := home.Mutate(inv.dirs.Home, fn); err != nil {
 		return err
 	}
 	m, err := inv.machine()

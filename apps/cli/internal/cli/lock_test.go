@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -23,6 +24,7 @@ func readVersion(t *testing.T, h *harness) int {
 }
 
 func TestMutationBumpsVersionAndCreatesOps(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	if err := os.Remove(h.agentx); err != nil {
 		t.Fatal(err)
@@ -40,14 +42,27 @@ func TestMutationBumpsVersionAndCreatesOps(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	equal(t, "version", readVersion(t, h), 3)
 
-	entries, err := os.ReadDir(filepath.Join(h.agentx, "ops"))
+	// Agentx home holds exactly the lock, the empty ops directory, the
+	// settings and the version file: no temp file is left behind.
+	equal(t, "home entries", listDir(t, h.agentx), "lock ops settings.json version")
+	equal(t, "ops entries", listDir(t, filepath.Join(h.agentx, "ops")), "")
+}
+
+func listDir(t *testing.T, dir string) string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		t.Fatalf("ops directory: %v", err)
+		t.Fatal(err)
 	}
-	equal(t, "ops entries", len(entries), 0)
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	return strings.Join(names, " ")
 }
 
 func TestHeldLockExits7(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	lock := filepath.Join(h.agentx, "lock")
 	f, err := os.OpenFile(lock, os.O_CREATE|os.O_RDWR, 0o644)
@@ -88,6 +103,7 @@ func TestHeldLockExits7(t *testing.T) {
 }
 
 func TestConcurrentConfigWrites(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	const n = 8
 	type write struct {

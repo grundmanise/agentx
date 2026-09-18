@@ -22,6 +22,7 @@ func readSettingsFile(t *testing.T, h *harness) map[string]any {
 }
 
 func TestConfigListDefaults(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	out := h.run("config", "list")
@@ -66,6 +67,7 @@ func TestConfigListDefaults(t *testing.T) {
 }
 
 func TestConfigSetAndGet(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	out := h.run("config", "set", "label", "work laptop")
@@ -110,6 +112,7 @@ func TestConfigSetAndGet(t *testing.T) {
 }
 
 func TestConfigSetKeepsUnknownCollections(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	file := `{"schema_version":1,"enabled_configurations":["cursor"],"sources":[{"url":"https://example.com/skills"}],"copy_mode":{"my-skill":["cursor"]}}`
 	if err := os.WriteFile(filepath.Join(h.agentx, "settings.json"), []byte(file), 0o644); err != nil {
@@ -138,6 +141,7 @@ func TestConfigSetKeepsUnknownCollections(t *testing.T) {
 }
 
 func TestConfigErrors(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	tests := []struct {
 		name string
@@ -146,8 +150,8 @@ func TestConfigErrors(t *testing.T) {
 		code string
 		hint string
 	}{
-		{"get unknown key", []string{"config", "get", "colour"}, 5, "not_found", "label"},
-		{"set unknown key", []string{"config", "set", "colour", "blue"}, 5, "not_found", "auto_push"},
+		{"get unknown key", []string{"config", "get", "colour"}, 1, "usage", "label"},
+		{"set unknown key", []string{"config", "set", "colour", "blue"}, 1, "usage", "auto_push"},
 		{"set read-only key", []string{"config", "set", "sources", "[]"}, 1, "usage", "auto_push"},
 		{"set bad bool", []string{"config", "set", "auto_push", "yes"}, 1, "usage", "true or false"},
 		{"set empty label", []string{"config", "set", "label", " "}, 1, "usage", ""},
@@ -180,6 +184,7 @@ func TestConfigErrors(t *testing.T) {
 }
 
 func TestUnreadableSettingsExit10(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	path := filepath.Join(h.agentx, "settings.json")
 	if err := os.WriteFile(path, []byte("{\n"), 0o644); err != nil {

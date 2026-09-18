@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -62,12 +61,12 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 					return nil
 				}
 			}
-			return fail(exitNotFound, fmt.Sprintf("unknown setting %q", args[0]), "keys: schema_version, "+settableKeys+", enabled_configurations, sources, copy_mode")
+			return fail(exitUsage, fmt.Sprintf("unknown setting %q", args[0]), "keys: schema_version, "+settableKeys+", enabled_configurations, sources, copy_mode")
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
 		Use:   "set <key> <value>",
-		Short: "Change one setting; " + settableKeys,
+		Short: "Change label, auto_push or accept_operations",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			apply, err := settingSetter(args[0], args[1])
@@ -75,7 +74,7 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 				return err
 			}
 			var s home.Settings
-			err = inv.mutate(func() error {
+			err = home.Mutate(inv.dirs.Home, func() error {
 				var err error
 				if s, err = inv.loadSettings(); err != nil {
 					return err
@@ -111,7 +110,7 @@ func settingSetter(key, value string) (func(*home.Settings), error) {
 	case "schema_version", "enabled_configurations", "sources", "copy_mode":
 		return nil, fail(exitUsage, key+" cannot be changed with config set", "settable keys: "+settableKeys)
 	}
-	return nil, fail(exitNotFound, fmt.Sprintf("unknown setting %q", key), "settable keys: "+settableKeys)
+	return nil, fail(exitUsage, fmt.Sprintf("unknown setting %q", key), "settable keys: "+settableKeys)
 }
 
 func parseBool(key, value string) (bool, error) {
@@ -136,16 +135,6 @@ func (inv *invocation) loadSettings() (home.Settings, error) {
 		return s, fail(exitInternal, err.Error(), "fix "+home.SettingsPath(inv.dirs.Home)+" or delete it to start from defaults")
 	}
 	return s, nil
-}
-
-// mutate runs fn under the exclusive lock and bumps the version file; a held
-// lock is exit 7.
-func (inv *invocation) mutate(fn func() error) error {
-	err := home.Mutate(inv.dirs.Home, fn)
-	if errors.Is(err, home.ErrLocked) {
-		return fail(exitLocked, err.Error(), "wait for the command holding "+home.LockPath(inv.dirs.Home)+" to finish, then retry")
-	}
-	return err
 }
 
 // label is the effective machine label: the setting, or the hostname until set.

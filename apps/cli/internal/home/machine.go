@@ -16,53 +16,67 @@ import (
 	"strings"
 )
 
-// Derivations of the machine id.
+// How a machine id was derived, as agentx machine reports it.
 const (
-	DerivedFromPlatform = "platform" // HMAC over the platform id and the uid
-	DerivedRandom       = "random"   // generated once and kept in machine.json
+	derivedPlatform = "platform" // HMAC over the platform id and the uid
+	derivedRandom   = "random"   // generated once and kept in machine.json
 )
 
 func machinePath(dir string) string { return filepath.Join(dir, "machine.json") }
 
 // MachineID returns this machine's id and how it was derived. A stored random
-// id wins over a platform id; without either, a random id is generated and
-// stored. Set AGENTX_PLATFORM_ID in env to fix the platform id, or to empty to
-// declare that there is none.
+// id wins over a platform id; without either, a random id is generated once,
+// under the lock, and stored. Set AGENTX_PLATFORM_ID in env to fix the
+// platform id, or to empty to declare that there is none.
 func MachineID(dir string, env map[string]string) (id, derivation string, err error) {
-	path := machinePath(dir)
-	b, err := os.ReadFile(path)
-	switch {
-	case err == nil:
-		var m struct {
-			ID string `json:"id"`
-		}
-		if err := json.Unmarshal(b, &m); err != nil || m.ID == "" {
-			return "", "", fmt.Errorf("parse %s: not a machine file", path)
-		}
-		return m.ID, DerivedRandom, nil
-	case !errors.Is(err, fs.ErrNotExist):
-		return "", "", err
+	if id, err := storedMachineID(dir); id != "" || err != nil {
+		return id, derivedRandom, err
 	}
 	if pid := platformID(env); pid != "" {
 		mac := hmac.New(sha256.New, []byte("agentx-machine-id/v1"))
 		fmt.Fprintf(mac, "%s\n%d", pid, os.Getuid())
-		return hex.EncodeToString(mac.Sum(nil))[:32], DerivedFromPlatform, nil
+		return hex.EncodeToString(mac.Sum(nil))[:32], derivedPlatform, nil
+	}
+	lock, err := takeLock(dir)
+	if err != nil {
+		return "", "", err
+	}
+	defer lock.Close()
+	if id, err := storedMachineID(dir); id != "" || err != nil { // stored meanwhile by another command
+		return id, derivedRandom, err
 	}
 	id, err = ResetMachineID(dir)
-	return id, DerivedRandom, err
+	return id, derivedRandom, err
+}
+
+// storedMachineID reads the id in machine.json; a missing file is "" and no error.
+func storedMachineID(dir string) (string, error) {
+	path := machinePath(dir)
+	b, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	var m struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(b, &m); err != nil || m.ID == "" {
+		return "", fmt.Errorf("parse %s: not a machine file", path)
+	}
+	return m.ID, nil
 }
 
 // ResetMachineID stores a new random id in machine.json and returns it. From
-// then on the machine id is random even where a platform id exists.
+// then on the machine id is random even where a platform id exists. The
+// caller holds the lock.
 func ResetMachineID(dir string) (string, error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", err
 	}
 	id := hex.EncodeToString(b[:])
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
-	}
 	return id, writeAtomic(machinePath(dir), []byte(`{"id": "`+id+`"}`+"\n"))
 }
 

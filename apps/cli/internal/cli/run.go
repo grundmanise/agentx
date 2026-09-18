@@ -93,12 +93,14 @@ func finish(inv *invocation, err error) int {
 		return exitOK.exit
 	}
 	var f *failure
-	if !errors.As(err, &f) {
-		if inv.parsed {
-			f = &failure{status: exitInternal, message: err.Error()}
-		} else {
-			f = &failure{status: exitUsage, message: err.Error(), hint: "run 'agentx help' for usage"}
-		}
+	switch {
+	case errors.As(err, &f):
+	case errors.Is(err, home.ErrLocked):
+		f = &failure{status: exitLocked, message: err.Error(), hint: "wait for the command holding " + home.LockPath(inv.dirs.Home) + " to finish, then retry"}
+	case inv.parsed:
+		f = &failure{status: exitInternal, message: err.Error()}
+	default:
+		f = &failure{status: exitUsage, message: err.Error(), hint: "run 'agentx help' for usage"}
 	}
 	out.fail(f)
 	out.result(false, f.message)

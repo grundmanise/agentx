@@ -10,20 +10,16 @@ import (
 	"syscall"
 )
 
-// ErrLocked is returned by Mutate when another agentx command holds the lock.
+// ErrLocked is returned when another agentx command holds the lock.
 var ErrLocked = errors.New("another agentx command holds the lock")
 
 func LockPath(dir string) string { return filepath.Join(dir, "lock") }
 
-// Mutate runs fn while holding the exclusive advisory lock of agentx home dir,
-// then rewrites the version file as the change signal and releases the lock.
-// It creates agentx home on first use. A held lock is ErrLocked at once; a
-// failing fn leaves the version file alone.
+// Mutate runs fn while holding the lock of agentx home dir, then rewrites the
+// version file as the change signal and releases the lock. A failing fn
+// leaves the version file alone.
 func Mutate(dir string, fn func() error) error {
-	if err := os.MkdirAll(filepath.Join(dir, "ops"), 0o755); err != nil {
-		return err
-	}
-	lock, err := flock(dir, syscall.LOCK_EX)
+	lock, err := takeLock(dir)
 	if err != nil {
 		return err
 	}
@@ -34,14 +30,19 @@ func Mutate(dir string, fn func() error) error {
 	return bumpVersion(dir)
 }
 
-// flock takes the lock file without waiting; how is LOCK_EX or LOCK_SH.
-func flock(dir string, how int) (*os.File, error) {
+// takeLock takes the exclusive advisory lock of agentx home without waiting;
+// a held lock is ErrLocked at once. It creates agentx home, ops directory
+// included, on first use, since the lock file lives there.
+func takeLock(dir string) (*os.File, error) {
+	if err := os.MkdirAll(filepath.Join(dir, "ops"), 0o755); err != nil {
+		return nil, err
+	}
 	path := LockPath(dir)
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
 		return nil, err
 	}
-	if err := syscall.Flock(int(f.Fd()), how|syscall.LOCK_NB); err != nil {
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		f.Close()
 		if errors.Is(err, syscall.EWOULDBLOCK) {
 			return nil, ErrLocked
