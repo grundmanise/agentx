@@ -1,6 +1,7 @@
 package home
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -14,7 +15,11 @@ import (
 // ErrLocked is returned when another agentx command holds the lock.
 var ErrLocked = errors.New("another agentx command holds the lock")
 
-func LockPath(dir string) string { return filepath.Join(dir, "lock") }
+// ErrServing is returned when another agentx serve runs for the same home.
+var ErrServing = errors.New("another agentx serve is running for this agentx home")
+
+func LockPath(dir string) string      { return filepath.Join(dir, "lock") }
+func ServeLockPath(dir string) string { return filepath.Join(dir, "serve.lock") }
 
 // Mutate runs fn while holding the lock of agentx home dir, then rewrites the
 // version file as the change signal and releases the lock. A failing fn
@@ -33,9 +38,10 @@ func Mutate(dir string, fn func() error) error {
 
 // ReadLocked runs fn, a scan's local reads, while holding the shared lock of
 // agentx home dir, so no mutation lands halfway through the reads. A mutation
-// in progress is waited for briefly; one that outlasts the wait is ErrLocked.
-func ReadLocked(dir string, fn func() error) error {
-	lock, err := takeSharedLock(dir)
+// in progress is waited for until ctx is done; then the error is ErrLocked
+// wrapping ctx's error.
+func ReadLocked(ctx context.Context, dir string, fn func() error) error {
+	lock, err := takeSharedLock(ctx, dir)
 	if err != nil {
 		return err
 	}
@@ -43,42 +49,66 @@ func ReadLocked(dir string, fn func() error) error {
 	return fn()
 }
 
+// TakeServeLock takes the lock one serve child holds for its lifetime; a
+// second serve for the same home gets ErrServing at once. Close the file to
+// release it.
+func TakeServeLock(dir string) (*os.File, error) {
+	if err := createHome(dir); err != nil {
+		return nil, err
+	}
+	f, err := flock(ServeLockPath(dir), syscall.LOCK_EX)
+	if errors.Is(err, ErrLocked) {
+		return nil, ErrServing
+	}
+	return f, err
+}
+
 // takeLock takes the exclusive advisory lock of agentx home without waiting;
 // a held lock is ErrLocked at once. It creates agentx home, ops directory
 // included, on first use, since the lock file lives there.
 func takeLock(dir string) (*os.File, error) {
-	return flock(dir, syscall.LOCK_EX, 1)
-}
-
-// takeSharedLock takes the shared advisory lock, retrying for up to a second
-// while a mutation holds the exclusive one.
-func takeSharedLock(dir string) (*os.File, error) {
-	return flock(dir, syscall.LOCK_SH, 20)
-}
-
-func flock(dir string, how, attempts int) (*os.File, error) {
-	if err := os.MkdirAll(filepath.Join(dir, "ops"), 0o755); err != nil {
+	if err := createHome(dir); err != nil {
 		return nil, err
 	}
-	path := LockPath(dir)
+	return flock(LockPath(dir), syscall.LOCK_EX)
+}
+
+// takeSharedLock takes the shared advisory lock, retrying every 50 ms while
+// a mutation holds the exclusive one, until ctx is done.
+func takeSharedLock(ctx context.Context, dir string) (*os.File, error) {
+	if err := createHome(dir); err != nil {
+		return nil, err
+	}
+	for {
+		f, err := flock(LockPath(dir), syscall.LOCK_SH)
+		if !errors.Is(err, ErrLocked) {
+			return f, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("%w: %w", ErrLocked, ctx.Err())
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+}
+
+func createHome(dir string) error {
+	return os.MkdirAll(filepath.Join(dir, "ops"), 0o755)
+}
+
+// flock opens path and takes the advisory lock how on it without waiting; a
+// held lock is ErrLocked.
+func flock(path string, how int) (*os.File, error) {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
 		return nil, err
 	}
-	for i := 1; ; i++ {
-		err := syscall.Flock(int(f.Fd()), how|syscall.LOCK_NB)
-		if err == nil {
-			break
-		}
-		if !errors.Is(err, syscall.EWOULDBLOCK) {
-			f.Close()
-			return nil, fmt.Errorf("lock %s: %w", path, err)
-		}
-		if i == attempts {
-			f.Close()
+	if err := syscall.Flock(int(f.Fd()), how|syscall.LOCK_NB); err != nil {
+		f.Close()
+		if errors.Is(err, syscall.EWOULDBLOCK) {
 			return nil, ErrLocked
 		}
-		time.Sleep(50 * time.Millisecond)
+		return nil, fmt.Errorf("lock %s: %w", path, err)
 	}
 	if how == syscall.LOCK_EX {
 		// The holder's pid lets doctor name it; it is informational, so a failed write is ignored.

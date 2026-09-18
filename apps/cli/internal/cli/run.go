@@ -62,7 +62,7 @@ func newRoot(inv *invocation) *cobra.Command {
 			}
 			inv.dirs = dirs
 			inv.out.debugf("agentx home %s, library %s, config home %s", dirs.Home, dirs.Library, dirs.Config)
-			inv.git = gitx.New(inv.env, false, inv.out.debugf)
+			inv.git = gitx.New(inv.env, cmd.Name() == "serve", inv.out.debugf) // serve must fail rather than prompt
 			if needsGit(cmd.Name()) {
 				if _, err := inv.gitVersion(cmd.Context()); err != nil {
 					return err
@@ -81,6 +81,7 @@ func newRoot(inv *invocation) *cobra.Command {
 	root.AddCommand(newMachineCommand(inv))
 	root.AddCommand(newScanCommand(inv))
 	root.AddCommand(newDoctorCommand(inv))
+	root.AddCommand(newServeCommand(inv))
 	return root
 }
 
