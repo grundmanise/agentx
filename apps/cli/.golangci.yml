@@ -1,0 +1,17 @@
+version: "2"
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - govet # in the standard set already, kept explicit: it replaces a separate `go vet`
+    - misspell
+  exclusions:
+    presets:
+      # errcheck ignores best-effort calls nothing can act on: Close, Flush,
+      # os.Remove(All), fmt.Fprint*, writes to stdout/stderr. Every other
+      # ignored error is discarded explicitly with `_ =`.
+      - std-error-handling
+
+formatters:
+  enable:
+    - gofmt
