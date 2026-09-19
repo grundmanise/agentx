@@ -2,6 +2,7 @@ package scan
 
 import (
 	"os"
+	"slices"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/mcp"
@@ -15,20 +16,22 @@ const noSignature = "none"
 // built when the snapshot is composed, since the physical identity depends
 // on the handshake.
 type declaration struct {
-	conf    Configuration
-	file    string
-	server  mcp.Server
-	logical string
-	plugin  string // the plugin declaring it, "" for a configuration's own server
-	owner   string // that plugin's physical id, for the provides edge
-	fresh   *mcp.Result
-	at      string // when fresh was taken, RFC 3339
+	conf     Configuration
+	file     string
+	server   mcp.Server
+	logical  string
+	plugin   string // the plugin declaring it, "" for a configuration's own server
+	owner    string // that plugin's physical id, for the provides edge
+	disabled bool   // the client records the server as turned off
+	fresh    *mcp.Result
+	at       string // when fresh was taken, RFC 3339
 }
 
 // addServers records every server declared in cfg inside conf, owned by
-// plugin when the source belongs to one. A missing file declares nothing;
-// an unreadable or malformed one is a warning.
-func (s *Scan) addServers(conf Configuration, cfg MCPConfig, plugin, owner string) {
+// plugin when the source belongs to one, marking those named in disabled.
+// A missing file declares nothing; an unreadable or malformed one is a
+// warning.
+func (s *Scan) addServers(conf Configuration, cfg MCPConfig, plugin, owner string, disabled []string) {
 	data := cfg.Data
 	if data == nil {
 		var err error
@@ -47,12 +50,13 @@ func (s *Scan) addServers(conf Configuration, cfg MCPConfig, plugin, owner strin
 	for _, server := range declared {
 		server.Expand(cfg.Vars)
 		s.declared = append(s.declared, &declaration{
-			conf:    conf,
-			file:    cfg.Path,
-			server:  server,
-			logical: s.serverLogicalID(server),
-			plugin:  plugin,
-			owner:   owner,
+			conf:     conf,
+			file:     cfg.Path,
+			server:   server,
+			logical:  s.serverLogicalID(server),
+			plugin:   plugin,
+			owner:    owner,
+			disabled: slices.Contains(disabled, server.Name),
 		})
 	}
 }
@@ -108,6 +112,9 @@ func (s *Scan) composeServers() map[string]home.Handshake {
 			Handshake:     d.fresh != nil,
 			Plugin:        d.plugin,
 		}
+		if d.disabled {
+			occ.Enabled = new(bool)
+		}
 		occ.ID = id("occurrence", d.conf.PhysicalID, physical, s.portable(d.file), d.server.Name)
 		if !s.seen[occ.ID] {
 			s.seen[occ.ID] = true
@@ -160,5 +167,5 @@ func (s *Scan) addPlugin(conf Configuration, p InstalledPlugin) {
 			s.edge(node.PhysicalID, skill.PhysicalID)
 		}
 	}
-	s.addServers(conf, p.Servers, p.Name, node.PhysicalID)
+	s.addServers(conf, p.Servers, p.Name, node.PhysicalID, p.DisabledServers)
 }

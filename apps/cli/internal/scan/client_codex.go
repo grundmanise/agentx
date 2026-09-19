@@ -29,17 +29,36 @@ func (c codex) MCPConfigs(d home.Dirs) []MCPConfig {
 	return []MCPConfig{{Path: filepath.Join(c.ConfigDir(d), "config.toml"), Format: mcp.CodexTOML}}
 }
 
+// codexPluginTable is one `[plugins."<name>@<marketplace>"]` table of
+// config.toml: the plugin's enabled state and, under mcp_servers, one
+// overlay per server the plugin provides, which can turn that server off.
+type codexPluginTable struct {
+	Enabled *bool `toml:"enabled"`
+	Servers map[string]struct {
+		Enabled *bool `toml:"enabled"`
+	} `toml:"mcp_servers"`
+}
+
+// disabledServers names the servers whose overlay sets enabled = false.
+func (t codexPluginTable) disabledServers() []string {
+	var names []string
+	for name, s := range t.Servers {
+		if s.Enabled != nil && !*s.Enabled {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
 // Plugins joins the `[plugins."<name>@<marketplace>"]` tables of config.toml,
-// each with its enabled state, with the bundles under
+// each with its enabled state and its server overlays, with the bundles under
 // plugins/cache/<marketplace>/<name>/<version>. A table without a bundle is
 // a warning; a bundle without a table, which is how a remote install shows
 // up, is reported without an enabled state.
 func (c codex) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 	configPath := filepath.Join(c.ConfigDir(d), "config.toml")
 	var config struct {
-		Plugins map[string]struct {
-			Enabled *bool `toml:"enabled"`
-		} `toml:"plugins"`
+		Plugins map[string]codexPluginTable `toml:"plugins"`
 	}
 	if b, err := os.ReadFile(configPath); err != nil {
 		if !os.IsNotExist(err) {
@@ -57,7 +76,7 @@ func (c codex) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 			}
 		}
 	}
-	enabled := map[string]*bool{}
+	tables := map[string]codexPluginTable{}
 	for key, table := range config.Plugins {
 		name, marketplace, ok := pluginKey(key)
 		if !ok {
@@ -68,14 +87,17 @@ func (c codex) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 			warn(filepath.Join(cache, marketplace, name) + ": plugin " + key + " is not installed there, skipped")
 			continue
 		}
-		on := table.Enabled == nil || *table.Enabled
-		enabled[key] = &on
+		tables[key] = table
 	}
 	var plugins []InstalledPlugin
 	for _, key := range slices.Sorted(maps.Keys(bundles)) {
 		name, marketplace, _ := pluginKey(key)
 		p := codexPlugin(name, marketplace, bundles[key], warn)
-		p.Enabled = enabled[key]
+		if table, ok := tables[key]; ok {
+			on := table.Enabled == nil || *table.Enabled
+			p.Enabled = &on
+			p.DisabledServers = table.disabledServers()
+		}
 		plugins = append(plugins, p)
 	}
 	return plugins

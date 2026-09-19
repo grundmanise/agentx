@@ -51,15 +51,17 @@ type MCPConfig struct {
 
 // InstalledPlugin is one plugin bundle found on disk. Its skills are the
 // children of its Skills directories; its servers are declared in Servers,
-// a file that may not exist.
+// a file that may not exist, and DisabledServers names those of them the
+// client records as turned off.
 type InstalledPlugin struct {
-	Name        string
-	Marketplace string // where it was installed from; empty when unknown
-	Version     string
-	Path        string
-	Skills      []string
-	Servers     MCPConfig
-	Enabled     *bool // nil for a client that records no enabled state
+	Name            string
+	Marketplace     string // where it was installed from; empty when unknown
+	Version         string
+	Path            string
+	Skills          []string
+	Servers         MCPConfig
+	DisabledServers []string
+	Enabled         *bool // nil for a client that records no enabled state
 }
 
 // Detect returns the registered clients whose configuration directory

@@ -217,14 +217,15 @@ var fixtures = map[string]fixture{
 	"codex-plugins": {
 		files: map[string]string{
 			".codex/config.toml": "model = \"o3\"\n\n[marketplaces.team]\nsource_type = \"local\"\nsource = \"$HOME/marketplaces/team\"\n\n" +
-				"[plugins.\"alpha@personal\"]\nenabled = true\n\n[plugins.\"beta@team\"]\nenabled = false\n\n[plugins.\"beta@team\".mcp_servers.agent-srv]\nenabled = true\n\n" +
+				"[plugins.\"alpha@personal\"]\nenabled = true\n\n[plugins.\"alpha@personal\".mcp_servers.alpha-web]\nenabled = false\nstartup_timeout_sec = 30\n\n[plugins.\"beta@team\"]\nenabled = false\n\n[plugins.\"beta@team\".mcp_servers.agent-srv]\nenabled = true\n\n" +
 				"[plugins.\"broken@personal\"]\n\n[plugins.\"delta@team\"]\n\n[plugins.\"ghost@team\"]\nenabled = true\n\n[plugins.\"no-marketplace\"]\nenabled = true\n",
-			// alpha: two versions, local wins; the manifest names the server file.
+			// alpha: two versions, local wins; the manifest names the server file;
+			// the table disables one of its two servers.
 			".codex/plugins/cache/personal/alpha/1.2.3/.codex-plugin/plugin.json": `{"name": "alpha", "version": "1.2.3"}`,
 			".codex/plugins/cache/personal/alpha/1.2.3/skills/old/SKILL.md":       skill("old", "Must not appear"),
 			".codex/plugins/cache/personal/alpha/local/.codex-plugin/plugin.json": `{"name": "alpha", "description": "Alpha tools", "mcpServers": "./conf/mcp.json"}`,
 			".codex/plugins/cache/personal/alpha/local/skills/one/SKILL.md":       skill("one", "The first skill"),
-			".codex/plugins/cache/personal/alpha/local/conf/mcp.json":             `{"mcpServers": {"alpha-db": {"command": "npx", "args": ["-y", "@acme/alpha-mcp"], "env": {"DB_TOKEN": "secret-codex-plugin-env-value"}}}}`,
+			".codex/plugins/cache/personal/alpha/local/conf/mcp.json":             `{"mcpServers": {"alpha-db": {"command": "npx", "args": ["-y", "@acme/alpha-mcp"], "env": {"DB_TOKEN": "secret-codex-plugin-env-value"}}, "alpha-web": {"url": "https://mcp.example.com/alpha"}}}`,
 			// beta: disabled, agent-plugins manifest at the root, servers in mcp.json.
 			".codex/plugins/cache/team/beta/0.4.0/plugin.json":         `{"$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json", "name": "beta", "version": "0.4.0"}`,
 			".codex/plugins/cache/team/beta/0.4.0/mcp.json":            `{"$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json", "mcpServers": {"agent-srv": {"type": "http", "url": "https://mcp.example.com/beta", "http_headers": {"X-Key": "secret-codex-plugin-header-value"}, "env_http_headers": {"X-Env": "BETA_ENV"}}}}`,
@@ -924,16 +925,20 @@ func TestScanCodexPlugins(t *testing.T) {
 	wantServers := []string{
 		"agent-srv streamable-http codex https://mcp.example.com/beta",
 		"alpha-db stdio codex npx -y @acme/alpha-mcp",
+		"alpha-web streamable-http codex https://mcp.example.com/alpha",
 		"delta-srv stdio codex node srv.js",
 		"gamma-srv stdio codex python -m gamma",
 	}
 	if !reflect.DeepEqual(serverRows, wantServers) {
 		t.Errorf("server occurrences = %q, want %q", serverRows, wantServers)
 	}
-	equal(t, "server nodes", nodes, 4)
+	equal(t, "server nodes", nodes, 5)
 	for _, s := range snap["mcp_servers"].([]any) {
 		node := s.(map[string]any)
 		occ := node["occurrences"].([]any)[0].(map[string]any)
+		if _, ok := occ["enabled"]; ok != (node["name"] == "alpha-web") {
+			t.Errorf("%s occurrence enabled = %v, want it only on alpha-web", node["name"], occ["enabled"])
+		}
 		switch node["name"] {
 		case "agent-srv":
 			equal(t, "agent-srv plugin", occ["plugin"], "beta")
@@ -941,6 +946,9 @@ func TestScanCodexPlugins(t *testing.T) {
 			if got := occ["header_keys"]; !reflect.DeepEqual(got, []any{"X-Env", "X-Key"}) {
 				t.Errorf("agent-srv header_keys = %v", got)
 			}
+		case "alpha-web":
+			equal(t, "alpha-web plugin", occ["plugin"], "alpha")
+			equal(t, "alpha-web enabled", occ["enabled"], false)
 		case "alpha-db":
 			equal(t, "alpha-db config_file", h.portable(occ["config_file"].(string)), "~/.codex/plugins/cache/personal/alpha/local/conf/mcp.json")
 			if got := occ["env_keys"]; !reflect.DeepEqual(got, []any{"DB_TOKEN"}) {
@@ -960,23 +968,28 @@ func TestScanCodexPlugins(t *testing.T) {
 	for _, e := range snap["edges"].([]any) {
 		from[e.(map[string]any)["from"].(string)]++
 	}
-	for name, n := range map[string]int{"alpha": 2, "beta": 2, "broken": 0, "delta": 2, "gamma": 2} {
+	for name, n := range map[string]int{"alpha": 3, "beta": 2, "broken": 0, "delta": 2, "gamma": 2} {
 		equal(t, "edges from "+name, from[ids[name]], n)
 	}
-	equal(t, "edges", len(snap["edges"].([]any)), 1+5+4+4+8) // machine to codex, five plugins, four skills, four servers, eight provides
+	equal(t, "edges", len(snap["edges"].([]any)), 1+5+4+5+9) // machine to codex, five plugins, four skills, five servers, nine provides
 
 	out := h.run("scan")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "  plugins:\n")
-	var beta string
+	var beta, alphaWeb string
 	for _, line := range strings.Split(out.stdout, "\n") {
-		if strings.HasPrefix(strings.TrimSpace(line), "beta ") {
+		switch row := strings.TrimSpace(line); {
+		case strings.HasPrefix(row, "beta "):
 			beta = line
+		case strings.HasPrefix(row, "alpha-web "):
+			alphaWeb = line
 		}
 	}
 	contains(t, "beta line", beta, "0.4.0")
 	contains(t, "beta line", beta, "(disabled)")
-	equal(t, "disabled markers", strings.Count(out.stdout, "(disabled)"), 1)
+	contains(t, "alpha-web line", alphaWeb, "(plugin alpha)")
+	contains(t, "alpha-web line", alphaWeb, "(disabled)")
+	equal(t, "disabled markers", strings.Count(out.stdout, "(disabled)"), 2)
 	equal(t, "secrets in fixture", len(secrets(f)), 3)
 	noSecrets(t, h, f)
 }

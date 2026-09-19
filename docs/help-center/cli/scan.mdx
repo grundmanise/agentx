@@ -91,7 +91,7 @@ Plugins are listed under the configuration they are installed in, with their ver
 | Client | What agentx reads |
 |---|---|
 | Claude Code | The install records in `~/.claude/plugins/installed_plugins.json` and each plugin's directory. |
-| Codex | The `[plugins."<name>@<marketplace>"]` tables in `~/.codex/config.toml` and the plugin copies under `~/.codex/plugins/cache`. A plugin with `enabled = false` is listed with `(disabled)`. A plugin that has a copy but no table, such as one installed through your account, is listed without an enabled state. |
+| Codex | The `[plugins."<name>@<marketplace>"]` tables in `~/.codex/config.toml` and the plugin copies under `~/.codex/plugins/cache`. A plugin with `enabled = false` is listed with `(disabled)`, and so is a server the plugin's table turns off with `[plugins."<name>@<marketplace>".mcp_servers.<server>]` and `enabled = false`. A plugin that has a copy but no table, such as one installed through your account, is listed without an enabled state. |
 | Cursor | Your local plugins under `~/.cursor/plugins/local` and the marketplace plugins Cursor has cached under `~/.cursor/plugins/cache`. Cursor keeps the list of enabled plugins in your account, not on disk, so a cached plugin is installed but not necessarily enabled. The Claude Code plugins Cursor also loads are listed under Claude Code only. |
 | Gemini CLI | The extensions under `~/.gemini/extensions`. |
 

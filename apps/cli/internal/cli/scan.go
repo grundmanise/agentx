@@ -178,7 +178,7 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 			skills[o.Configuration] = append(skills[o.Configuration], []string{s.Name, o.Kind, o.Scope, path})
 		}
 	}
-	servers := map[string][][]string{} // name, transport, command line or URL, what a handshake found
+	servers := map[string][][]string{} // name, transport, command line or URL, what a handshake found, (disabled)
 	for _, s := range snap.MCPServers {
 		for _, o := range s.Occurrences {
 			what := o.URL
@@ -191,6 +191,9 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 			cells := []string{s.Name, o.Transport, what}
 			if n := len(s.Tools); n > 0 {
 				cells = append(cells, plural(n, "tool"))
+			}
+			if o.Enabled != nil && !*o.Enabled {
+				cells = append(cells, "(disabled)")
 			}
 			servers[o.Configuration] = append(servers[o.Configuration], cells)
 		}
