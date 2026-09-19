@@ -195,9 +195,13 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 			servers[o.Configuration] = append(servers[o.Configuration], cells)
 		}
 	}
-	plugins := map[string][][]string{} // name, version
+	plugins := map[string][][]string{} // name, version, (disabled)
 	for _, p := range snap.Plugins {
-		plugins[p.Configuration] = append(plugins[p.Configuration], []string{p.Name, p.Version})
+		cells := []string{p.Name, p.Version}
+		if p.Enabled != nil && !*p.Enabled {
+			cells = append(cells, "(disabled)")
+		}
+		plugins[p.Configuration] = append(plugins[p.Configuration], cells)
 	}
 	if len(snap.Configurations) == 0 {
 		fmt.Fprintln(inv.out.stdout, "No agent configurations detected.")

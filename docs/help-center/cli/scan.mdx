@@ -15,24 +15,30 @@ agentx scan
 Claude Code (claude-code)  /home/me/.claude  enabled
   commit  symlink    user  /home/me/.claude/skills/commit -> /home/me/.agents/skills/commit
   review  directory  user  /home/me/.claude/skills/review
+  format  directory  user  /home/me/.claude/plugins/cache/acme-tools/formatter/1.2.0/skills/format  (plugin formatter)
+  plugins:
+    formatter  1.2.0
 
 Codex (codex)  /home/me/.codex  enabled
   commit  directory  user  /home/me/.agents/skills/commit
+  sales   directory  user  /home/me/.codex/plugins/cache/acme-tools/sales/1.0.8/skills/sales  (plugin sales)
+  plugins:
+    notes  local  (disabled)
+    sales  1.0.8
 
 Cursor (cursor)  /home/me/.cursor  enabled
   commit  symlink    user  /home/me/.claude/skills/commit -> /home/me/.agents/skills/commit
   review  directory  user  /home/me/.claude/skills/review
-  format  directory  user  /home/me/.claude/plugins/cache/acme-tools/formatter/1.2.0/skills/format  (plugin formatter)
   servers:
     context7  stdio            npx -y @upstash/context7-mcp
     stripe    streamable-http  https://mcp.stripe.com
   plugins:
-    formatter  1.2.0
+    thermos  9f86d081884c7d659a2feaa0c55ad015a3bf4f1b
 ```
 
 One section per agent configuration, headed by the client name, its id, its configuration directory and whether it is enabled. One line per skill the configuration can see: the skill name, the kind of placement, the scope and the path the client reads. A skill that comes from a plugin ends with the plugin's name.
 
-Then, when the configuration declares MCP servers, a `servers:` block with one line per server: its name, its transport (`stdio`, `sse` or `streamable-http`) and its command line or URL. Then, when the configuration has plugins, a `plugins:` block with one line per plugin: its name and version.
+Then, when the configuration declares MCP servers, a `servers:` block with one line per server: its name, its transport (`stdio`, `sse` or `streamable-http`) and its command line or URL. Then, when the configuration has plugins, a `plugins:` block with one line per plugin: its name and version, and `(disabled)` when the client has turned it off.
 
 A configuration is detected when its configuration directory exists, such as `~/.claude` for Claude Code or `~/.cursor` for Cursor.
 
@@ -80,7 +86,16 @@ A server that does not start, exits early, answers badly or does not answer with
 
 ## Read the plugins
 
-Claude Code plugins and Gemini CLI extensions are listed under the configuration they are installed in, with their version. The skills and MCP servers a plugin provides appear in the configuration's list like any other, marked with the plugin's name. A skill that is installed both standalone and through a plugin is one skill with two placements.
+Plugins are listed under the configuration they are installed in, with their version. The skills and MCP servers a plugin provides appear in the configuration's list like any other, marked with the plugin's name. A skill that is installed both standalone and through a plugin is one skill with two placements.
+
+| Client | What agentx reads |
+|---|---|
+| Claude Code | The install records in `~/.claude/plugins/installed_plugins.json` and each plugin's directory. |
+| Codex | The `[plugins."<name>@<marketplace>"]` tables in `~/.codex/config.toml` and the plugin copies under `~/.codex/plugins/cache`. A plugin with `enabled = false` is listed with `(disabled)`. A plugin that has a copy but no table, such as one installed through your account, is listed without an enabled state. |
+| Cursor | Your local plugins under `~/.cursor/plugins/local` and the marketplace plugins Cursor has cached under `~/.cursor/plugins/cache`. Cursor keeps the list of enabled plugins in your account, not on disk, so a cached plugin is installed but not necessarily enabled. The Claude Code plugins Cursor also loads are listed under Claude Code only. |
+| Gemini CLI | The extensions under `~/.gemini/extensions`. |
+
+A plugin's version is what its manifest or install record says. For a Codex or Cursor plugin without one, the cache directory name stands in: `local`, a commit id or a release tag. A plugin manifest that cannot be read is reported as a warning naming the file, and the plugin is still listed by its directory name.
 
 ## Include a project
 

@@ -69,35 +69,16 @@ func (c claudeCode) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 				Marketplace: marketplace,
 				Version:     r.Version,
 				Path:        r.InstallPath,
+				Skills:      []string{filepath.Join(r.InstallPath, "skills")},
 				Servers:     MCPConfig{Path: filepath.Join(r.InstallPath, ".mcp.json"), Format: mcp.JSON},
 			}
 			if p.Version == "" {
-				var manifest struct {
-					Version string `json:"version"`
-				}
-				readJSON(filepath.Join(r.InstallPath, ".claude-plugin", "plugin.json"), &manifest, warn)
-				p.Version = manifest.Version
+				var m pluginManifest
+				readJSON(filepath.Join(r.InstallPath, ".claude-plugin", "plugin.json"), &m, warn)
+				p.Version = m.Version
 			}
 			plugins = append(plugins, p)
 		}
 	}
 	return plugins
-}
-
-// readJSON decodes path into v and reports whether it could. A missing file
-// is silently false; anything else is a warning naming the path, never the
-// content.
-func readJSON(path string, v any, warn func(string)) bool {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			warn(err.Error() + ", skipped")
-		}
-		return false
-	}
-	if json.Unmarshal(b, v) != nil {
-		warn(path + ": invalid JSON, skipped")
-		return false
-	}
-	return true
 }
