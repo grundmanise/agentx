@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 )
 
 // pluginManifest is what a plugin.json manifest gives every client that
-// reads one; Codex also reads its skills and mcpServers.
+// reads one; Codex and Cursor also read its skills and mcpServers.
 type pluginManifest struct {
 	Schema     string          `json:"$schema"`
 	Name       string          `json:"name"`
@@ -60,4 +62,56 @@ func readJSON(path string, v any, warn func(string)) bool {
 		return false
 	}
 	return true
+}
+
+// manifestSkills is where the plugin at dir keeps its skills: the paths its
+// manifest names, else skills.
+func manifestSkills(m pluginManifest, manifest, dir string, warn func(string)) []string {
+	var dirs []string
+	for _, rel := range manifestPaths(m.Skills, manifest, "skills", warn) {
+		dirs = append(dirs, filepath.Join(dir, rel))
+	}
+	if dirs == nil {
+		dirs = []string{filepath.Join(dir, "skills")}
+	}
+	return dirs
+}
+
+// manifestServers is where the plugin at dir declares its servers: the
+// manifest itself when its mcpServers is an object, returned as the data to
+// parse in the `{"mcpServers": ...}` shape, else the file the manifest
+// names, else the first of the fallbacks that exists, else the first one.
+func manifestServers(m pluginManifest, manifest, dir string, warn func(string), fallbacks ...string) (path string, data []byte) {
+	if len(m.MCPServers) > 0 && m.MCPServers[0] == '{' {
+		return manifest, append(append([]byte(`{"mcpServers":`), m.MCPServers...), '}')
+	}
+	if named := manifestPaths(m.MCPServers, manifest, "mcpServers", warn); len(named) == 1 {
+		return filepath.Join(dir, named[0]), nil
+	}
+	if path = firstFile(dir, fallbacks...); path == "" {
+		path = filepath.Join(dir, fallbacks[0])
+	}
+	return path, nil
+}
+
+// manifestPaths reads a manifest path field, one string or a list, keeping
+// the paths that start with ./ and stay inside the bundle; another path is
+// a warning naming it.
+func manifestPaths(raw json.RawMessage, manifest, field string, warn func(string)) []string {
+	var one string
+	var list []string
+	if json.Unmarshal(raw, &one) == nil {
+		list = []string{one}
+	} else {
+		_ = json.Unmarshal(raw, &list) // neither a string nor a list names no path
+	}
+	var paths []string
+	for _, rel := range list {
+		if !strings.HasPrefix(rel, "./") || slices.Contains(strings.Split(rel, "/"), "..") {
+			warn(manifest + ": " + field + " path " + strconv.Quote(rel) + " must start with ./ and stay inside the plugin, skipped")
+			continue
+		}
+		paths = append(paths, rel)
+	}
+	return paths
 }

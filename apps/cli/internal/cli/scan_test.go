@@ -263,7 +263,16 @@ var fixtures = map[string]fixture{
 			".cursor/plugins/local/bad/.cursor-plugin/plugin.json":           `{not json`,
 			".cursor/plugins/local/.store/stored/.cursor-plugin/plugin.json": `{"name": "stored", "version": "2.0.0"}`,
 			".cursor/plugins/local/README.md":                                "not a plugin\n",
-			"elsewhere/escaped/.cursor-plugin/plugin.json":                   `{"name": "escaped", "version": "1.0.0"}`,
+			// mani: the manifest names the skills root, one path that leaves
+			// the plugin, and declares its server inline.
+			".cursor/plugins/local/mani/.cursor-plugin/plugin.json": `{"name": "mani", "version": "0.2.0", "skills": ["./tools", "../outside"], "mcpServers": {"mani-srv": {"command": "${CURSOR_PLUGIN_ROOT}/bin/mani", "env": {"KEY": "secret-cursor-inline-env-value"}}}}`,
+			".cursor/plugins/local/mani/tools/plan/SKILL.md":        skill("plan", "Plan the work"),
+			".cursor/plugins/local/mani/skills/ignored/SKILL.md":    skill("ignored", "Must not appear"),
+			// named: the manifest names the server file; mcp.json is not read.
+			".cursor/plugins/local/named/.cursor-plugin/plugin.json": `{"name": "named", "version": "0.3.0", "mcpServers": "./conf/servers.json"}`,
+			".cursor/plugins/local/named/conf/servers.json":          `{"mcpServers": {"named-srv": {"url": "https://named.example.com/mcp"}}}`,
+			".cursor/plugins/local/named/mcp.json":                   `{"mcpServers": {"decoy-srv": {"command": "decoy"}}}`,
+			"elsewhere/escaped/.cursor-plugin/plugin.json":           `{"name": "escaped", "version": "1.0.0"}`,
 			// cache: a commit SHA and a release tag as version directories, one
 			// entry without the completion marker.
 			".cursor/plugins/cache/cursor-public/thermos/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b/.cache-complete":            "",
@@ -468,6 +477,7 @@ func TestScanWarnings(t *testing.T) {
 			"~/.cursor/plugins/cache/cursor-public/half/0000000000000000000000000000000000000000: incomplete plugin cache, skipped",
 			"~/.cursor/plugins/local/bad/.cursor-plugin/plugin.json: invalid JSON, skipped",
 			"~/.cursor/plugins/local/escape: symlink resolves outside ~/.cursor/plugins/local, skipped",
+			"~/.cursor/plugins/local/mani/.cursor-plugin/plugin.json: skills path \"../outside\" must start with ./ and stay inside the plugin, skipped",
 		}},
 	}
 	for _, tt := range tests {
@@ -1008,6 +1018,8 @@ func TestScanCursorPlugins(t *testing.T) {
 		"bad|||cursor|~/.cursor/plugins/local/bad",
 		"bare|||cursor|~/.cursor/plugins/local/bare",
 		"cursor-fmt||1.0.0|cursor|~/.cursor/plugins/local/cursor-fmt",
+		"mani||0.2.0|cursor|~/.cursor/plugins/local/mani",
+		"named||0.3.0|cursor|~/.cursor/plugins/local/named",
 		"stored||2.0.0|cursor|~/.cursor/plugins/local/linked",
 		"thermos|cursor-public|9f86d081884c7d659a2feaa0c55ad015a3bf4f1b|cursor|~/.cursor/plugins/cache/cursor-public/thermos/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b",
 		"tools|acme-team|1.2.0|cursor|~/.cursor/plugins/cache/acme-team/tools/release_v1.2.0",
@@ -1016,12 +1028,14 @@ func TestScanCursorPlugins(t *testing.T) {
 		t.Errorf("plugins = %q, want %q", rows, want)
 	}
 
-	equal(t, "skill nodes", len(snap["skills"].([]any)), 4)
+	equal(t, "skill nodes", len(snap["skills"].([]any)), 5)
 	for skill, wantOcc := range map[string][]string{
-		"lint":   {"cursor directory user ~/.cursor/plugins/local/agent-std/skills/lint plugin=agent-std"},
-		"format": {"cursor directory user ~/.cursor/plugins/local/cursor-fmt/skills/format plugin=cursor-fmt"},
-		"notes":  {"cursor directory user ~/.cursor/plugins/local/bare/skills/notes plugin=bare"},
-		"brew":   {"cursor directory user ~/.cursor/plugins/cache/cursor-public/thermos/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b/skills/brew plugin=thermos"},
+		"lint":    {"cursor directory user ~/.cursor/plugins/local/agent-std/skills/lint plugin=agent-std"},
+		"format":  {"cursor directory user ~/.cursor/plugins/local/cursor-fmt/skills/format plugin=cursor-fmt"},
+		"notes":   {"cursor directory user ~/.cursor/plugins/local/bare/skills/notes plugin=bare"},
+		"brew":    {"cursor directory user ~/.cursor/plugins/cache/cursor-public/thermos/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b/skills/brew plugin=thermos"},
+		"plan":    {"cursor directory user ~/.cursor/plugins/local/mani/tools/plan plugin=mani"},
+		"ignored": nil,
 	} {
 		if got := occurrences(t, h, snap, skill); !reflect.DeepEqual(got, wantOcc) {
 			t.Errorf("%s occurrences = %q, want %q", skill, got, wantOcc)
@@ -1034,13 +1048,15 @@ func TestScanCursorPlugins(t *testing.T) {
 	}
 	wantServers := []string{
 		"fmt-srv stdio cursor node ~/.cursor/plugins/local/cursor-fmt/server.js",
+		"mani-srv stdio cursor ~/.cursor/plugins/local/mani/bin/mani",
+		"named-srv streamable-http cursor https://named.example.com/mcp",
 		"std-srv stdio cursor ~/.cursor/plugins/local/agent-std/bin/srv --root ~/.cursor/plugins/local/agent-std",
 		"thermos-api streamable-http cursor https://api.thermos.example.com/mcp",
 	}
 	if !reflect.DeepEqual(serverRows, wantServers) {
 		t.Errorf("server occurrences = %q, want %q", serverRows, wantServers)
 	}
-	equal(t, "server nodes", nodes, 3)
+	equal(t, "server nodes", nodes, 5)
 	for _, s := range snap["mcp_servers"].([]any) {
 		node := s.(map[string]any)
 		occ := node["occurrences"].([]any)[0].(map[string]any)
@@ -1050,6 +1066,13 @@ func TestScanCursorPlugins(t *testing.T) {
 			equal(t, "std-srv config_file", h.portable(occ["config_file"].(string)), "~/.cursor/plugins/local/agent-std/mcp.json")
 		case "fmt-srv":
 			equal(t, "fmt-srv config_file", h.portable(occ["config_file"].(string)), "~/.cursor/plugins/local/cursor-fmt/.mcp.json")
+		case "mani-srv":
+			equal(t, "mani-srv config_file", h.portable(occ["config_file"].(string)), "~/.cursor/plugins/local/mani/.cursor-plugin/plugin.json")
+			if got := occ["env_keys"]; !reflect.DeepEqual(got, []any{"KEY"}) {
+				t.Errorf("mani-srv env_keys = %v", got)
+			}
+		case "named-srv":
+			equal(t, "named-srv config_file", h.portable(occ["config_file"].(string)), "~/.cursor/plugins/local/named/conf/servers.json")
 		case "thermos-api":
 			if got := occ["header_keys"]; !reflect.DeepEqual(got, []any{"Authorization"}) {
 				t.Errorf("thermos-api header_keys = %v", got)
@@ -1061,10 +1084,10 @@ func TestScanCursorPlugins(t *testing.T) {
 	for _, e := range snap["edges"].([]any) {
 		from[e.(map[string]any)["from"].(string)]++
 	}
-	for name, n := range map[string]int{"agent-std": 2, "bad": 0, "bare": 1, "cursor-fmt": 2, "stored": 0, "thermos": 2, "tools": 0} {
+	for name, n := range map[string]int{"agent-std": 2, "bad": 0, "bare": 1, "cursor-fmt": 2, "mani": 2, "named": 1, "stored": 0, "thermos": 2, "tools": 0} {
 		equal(t, "edges from "+name, from[ids[name]], n)
 	}
-	equal(t, "edges", len(snap["edges"].([]any)), 1+7+4+3+7) // machine to cursor, seven plugins, four skills, three servers, seven provides
+	equal(t, "edges", len(snap["edges"].([]any)), 1+9+5+5+10) // machine to cursor, nine plugins, five skills, five servers, ten provides
 
 	out := h.run("scan")
 	equal(t, "exit", out.exit, 0)
@@ -1076,6 +1099,6 @@ func TestScanCursorPlugins(t *testing.T) {
 	if strings.Contains(out.stdout, "(disabled)") {
 		t.Errorf("Cursor records no enabled state, yet the output marks a plugin disabled:\n%s", out.stdout)
 	}
-	equal(t, "secrets in fixture", len(secrets(f)), 2)
+	equal(t, "secrets in fixture", len(secrets(f)), 3)
 	noSecrets(t, h, f)
 }
