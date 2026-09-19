@@ -6,86 +6,101 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
-	"time"
-
-	"github.com/fsnotify/fsnotify"
 )
 
-// watcher signals changes in the directories serve cares about: through
-// events and errors while the filesystem watcher works, through tick once
-// it does not. Reading a nil channel blocks forever, so the loop selects on
-// all three.
+// watcher signals changes in the directories serve cares about, through
+// events and errors. Watching is a precondition of serve: when it cannot be
+// set up, or a directory cannot be watched later, the error ends serve.
 type watcher struct {
-	w       *fsnotify.Watcher // nil once watching failed
-	dirs    []string          // directories to watch, in order
-	trees   []string          // directories whose subdirectories are watched too
-	watched map[string]bool   // real paths with a watch
-	ticker  *time.Ticker
+	b     backend
+	dirs  []string // directories to watch, in order
+	trees []string // directories whose subdirectories are watched too
 
-	events <-chan fsnotify.Event
+	events <-chan struct{}
 	errors <-chan error
-	tick   <-chan time.Time
 }
 
-// newWatcher watches dirs and every directory below each of trees. On error
-// the watcher is still usable: it ticks instead.
-func newWatcher(dirs, trees []string) (*watcher, error) {
-	ws := &watcher{dirs: dirs, trees: trees, watched: map[string]bool{}}
-	w, err := fsnotify.NewWatcher()
-	if err != nil {
-		ws.fail()
-		return ws, err
+// backend is one platform's way of watching: one fsnotify watch per
+// directory everywhere, one FSEvents stream over the whole set on macOS
+// built with cgo. Both deliver through signals.
+type backend interface {
+	// sync brings the watches in line with the directories that exist now.
+	sync(dirs, trees []string) error
+	close()
+}
+
+// signals is where a backend delivers: at most one pending change signal
+// and one pending error, since the loop coalesces changes anyway and warns
+// once per error it reads.
+type signals struct {
+	events chan<- struct{}
+	errors chan<- error
+}
+
+func (s signals) changed() {
+	select {
+	case s.events <- struct{}{}:
+	default:
 	}
-	ws.w, ws.events, ws.errors = w, w.Events, w.Errors
-	return ws, ws.sync()
+}
+
+func (s signals) failed(err error) {
+	select {
+	case s.errors <- err:
+	default:
+	}
+}
+
+// newWatcher watches dirs and every directory below each of trees.
+func newWatcher(dirs, trees []string) (*watcher, error) {
+	events := make(chan struct{}, 1)
+	errs := make(chan error, 1)
+	b, err := newBackend(signals{events: events, errors: errs})
+	if err != nil {
+		return nil, err
+	}
+	ws := &watcher{b: b, dirs: dirs, trees: trees, events: events, errors: errs}
+	if err := ws.sync(); err != nil {
+		ws.close()
+		return nil, err
+	}
+	return ws, nil
 }
 
 // sync brings the watches in line with the directories that exist now: one
-// watch per real path after resolving symlinks, added for a directory that
-// appeared and dropped for one that disappeared. A watch fsnotify has
-// already dropped with its directory is dropped again without complaint.
-// The error is fatal: watching stops and the periodic rescan takes over.
-func (ws *watcher) sync() error {
-	if ws.w == nil {
-		return nil // watching failed earlier and was reported then
-	}
-	var want []string
+// that appeared is watched from now on, one that disappeared is dropped.
+func (ws *watcher) sync() error { return ws.b.sync(ws.dirs, ws.trees) }
+
+func (ws *watcher) close() { ws.b.close() }
+
+// roots resolves dirs to the real paths that exist now, in order and each
+// once; a directory that does not exist is left out and tried again on the
+// next sync. Any other failure to resolve one is an error.
+func roots(dirs []string) ([]string, error) {
+	var real []string
 	seen := map[string]bool{}
-	for _, dir := range ws.dirs {
-		real, err := filepath.EvalSymlinks(dir)
+	for _, dir := range dirs {
+		r, err := filepath.EvalSymlinks(dir)
 		if errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
 		if err != nil {
-			ws.fail()
-			return fmt.Errorf("watch %s: %w", dir, err)
+			return nil, fmt.Errorf("watch %s: %w", dir, err)
 		}
-		if !seen[real] {
-			seen[real] = true
-			want = append(want, real)
-		}
-	}
-	for _, tree := range ws.trees {
-		want = subdirs(tree, want, seen)
-	}
-	for real := range ws.watched {
-		if !seen[real] {
-			_ = ws.w.Remove(real) // ErrNonExistentWatch when the directory went away first
-			delete(ws.watched, real)
+		if !seen[r] {
+			seen[r] = true
+			real = append(real, r)
 		}
 	}
-	for _, real := range want {
-		if ws.watched[real] {
-			continue
-		}
-		if err := ws.w.Add(real); err != nil {
-			ws.fail()
-			return fmt.Errorf("watch %s: %w", real, err)
-		}
-		ws.watched[real] = true
-	}
-	return nil
+	return real, nil
+}
+
+// skipped reports whether a directory entry is left out of a tree, as
+// discovery leaves it out: hidden entries and node_modules.
+func skipped(name string) bool {
+	return strings.HasPrefix(name, ".") || name == "node_modules"
 }
 
 // subdirs appends the real path of every directory below dir, following
@@ -100,7 +115,7 @@ func subdirs(dir string, want []string, seen map[string]bool) []string {
 	}
 	for _, e := range entries {
 		name := e.Name()
-		if strings.HasPrefix(name, ".") || name == "node_modules" {
+		if skipped(name) {
 			continue
 		}
 		if !e.IsDir() && e.Type()&fs.ModeSymlink == 0 {
@@ -120,20 +135,58 @@ func subdirs(dir string, want []string, seen map[string]bool) []string {
 	return want
 }
 
-// fail closes the filesystem watcher and starts the periodic rescan.
-func (ws *watcher) fail() {
-	ws.close()
-	ws.events, ws.errors = nil, nil
-	ws.ticker = time.NewTicker(fallback)
-	ws.tick = ws.ticker.C
+// extend appends to trees the directories below them that a recursive watch
+// over them misses because it does not follow symlinks: every real path
+// subdirs reaches that accept does not already cover, so one reached through
+// a symlink out of every tree or through a skipped directory, in order and
+// each once. A subdirectory of one is below it and left out. flat and trees
+// are real paths; the result is a fresh slice.
+func extend(flat, trees []string) []string {
+	seen := map[string]bool{}
+	for _, r := range flat {
+		seen[r] = true
+	}
+	for _, t := range trees {
+		seen[t] = true
+	}
+	all := slices.Clone(trees)
+	for _, t := range trees {
+		for _, dir := range subdirs(t, nil, seen) {
+			if !accept(dir, flat, all) {
+				all = append(all, dir)
+			}
+		}
+	}
+	return all
 }
 
-func (ws *watcher) close() {
-	if ws.w != nil {
-		ws.w.Close()
-		ws.w = nil
+// accept reports whether a change in the directory dir is a change signal:
+// dir is one of the flat directories, or one of the trees, or below a tree
+// without a skipped directory on the way. flat and trees are real paths.
+func accept(dir string, flat, trees []string) bool {
+	for _, f := range flat {
+		if dir == f {
+			return true
+		}
 	}
-	if ws.ticker != nil {
-		ws.ticker.Stop()
+	for _, t := range trees {
+		rel, err := filepath.Rel(t, dir)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, "../") || filepath.IsAbs(rel) {
+			continue
+		}
+		if rel == "." {
+			return true
+		}
+		ok := true
+		for _, name := range strings.Split(rel, string(filepath.Separator)) {
+			if skipped(name) {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return true
+		}
 	}
+	return false
 }

@@ -332,7 +332,7 @@ func TestServeEndsOnCancel(t *testing.T) {
 	equal(t, "stderr", p.stderr.String(), "")
 }
 
-func TestServeFallsBackToPeriodicRescan(t *testing.T) {
+func TestServeRefusesWhenWatchingFails(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
 	// A library that resolves to a symlink loop cannot be watched.
@@ -343,26 +343,11 @@ func TestServeFallsBackToPeriodicRescan(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := h.serve(t, "--json")
-	p.next("snapshot")
-
-	// Nothing watches the Codex skills directory; the periodic rescan finds the skill.
-	dir := filepath.Join(h.home, ".codex", "skills", "commit")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte(skill("commit", "Write a commit message")), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	snap := p.next("snapshot")
-	equal(t, "scan_counter", snap["scan_counter"], float64(2))
-	equal(t, "skills", strings.Join(skillNames(snap), " "), "commit")
-	equal(t, "exit", p.close(), 0)
-
-	logs := h.events(p.stderr.String())
-	if len(logs) == 0 {
-		t.Fatal("no warning on stderr")
-	}
-	equal(t, "log.level", logs[0]["level"], "warn")
-	contains(t, "log.message", logs[0]["message"].(string), "rescanning every 2s")
-	contains(t, "log.message", logs[0]["message"].(string), h.library)
+	e := p.next("error")
+	equal(t, "error.code", e["code"], "refused")
+	contains(t, "error.message", e["message"].(string), "cannot watch for changes")
+	contains(t, "error.message", e["message"].(string), h.library)
+	contains(t, "error.hint", e["hint"].(string), "watch limit")
+	equal(t, "result.ok", p.next("result")["ok"], false)
+	equal(t, "exit", p.close(), 6)
 }
