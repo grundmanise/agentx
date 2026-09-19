@@ -84,12 +84,14 @@ func (c cursor) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 
 // cursorPlugin reads the plugin at dir: the first of the .cursor-plugin,
 // .claude-plugin and root manifests names and versions it, falling back to
-// the directory names; skills are under skills; servers are in mcp.json,
-// else .mcp.json, with ${CURSOR_PLUGIN_ROOT} and ${CLAUDE_PLUGIN_ROOT}
-// standing for dir.
+// the directory names. Skills live in the manifest's skills paths, else
+// under skills; servers are the manifest's mcpServers object or the file
+// it names, else mcp.json, else .mcp.json, with ${CURSOR_PLUGIN_ROOT} and
+// ${CLAUDE_PLUGIN_ROOT} standing for dir.
 func cursorPlugin(name, marketplace, version, dir string, warn func(string)) InstalledPlugin {
 	var m pluginManifest
-	if manifest := firstFile(dir, ".cursor-plugin/plugin.json", ".claude-plugin/plugin.json", "plugin.json"); manifest != "" {
+	manifest := firstFile(dir, ".cursor-plugin/plugin.json", ".claude-plugin/plugin.json", "plugin.json")
+	if manifest != "" {
 		readJSON(manifest, &m, warn)
 	}
 	p := InstalledPlugin{
@@ -97,21 +99,18 @@ func cursorPlugin(name, marketplace, version, dir string, warn func(string)) Ins
 		Marketplace: marketplace,
 		Version:     m.Version,
 		Path:        dir,
-		Skills:      []string{filepath.Join(dir, "skills")},
+		Skills:      manifestSkills(m, manifest, dir, warn),
 		Servers: MCPConfig{
-			Path:   firstFile(dir, "mcp.json", ".mcp.json"),
 			Format: mcp.JSON,
 			Vars:   map[string]string{"CURSOR_PLUGIN_ROOT": dir, "CLAUDE_PLUGIN_ROOT": dir},
 		},
 	}
+	p.Servers.Path, p.Servers.Data = manifestServers(m, manifest, dir, warn, "mcp.json", ".mcp.json")
 	if p.Name == "" {
 		p.Name = name
 	}
 	if p.Version == "" {
 		p.Version = version
-	}
-	if p.Servers.Path == "" {
-		p.Servers.Path = filepath.Join(dir, "mcp.json")
 	}
 	return p
 }

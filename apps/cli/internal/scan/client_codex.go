@@ -1,7 +1,6 @@
 package scan
 
 import (
-	"encoding/json"
 	"maps"
 	"os"
 	"path/filepath"
@@ -110,43 +109,10 @@ func codexPlugin(name, marketplace, dir string, warn func(string)) InstalledPlug
 	if m.Version != "" {
 		p.Version = m.Version
 	}
-	for _, rel := range manifestPaths(m.Skills) {
-		p.Skills = append(p.Skills, filepath.Join(dir, rel))
-	}
-	if p.Skills == nil {
-		p.Skills = []string{filepath.Join(dir, "skills")}
-	}
+	p.Skills = manifestSkills(m, manifest, dir, warn)
 	p.Servers = MCPConfig{Format: mcp.CodexJSON}
-	switch named := manifestPaths(m.MCPServers); {
-	case len(m.MCPServers) > 0 && m.MCPServers[0] == '{':
-		p.Servers.Path, p.Servers.Data = manifest, m.MCPServers
-	case len(named) == 1:
-		p.Servers.Path = filepath.Join(dir, named[0])
-	default:
-		if p.Servers.Path = firstFile(dir, ".mcp.json", "mcp.json"); p.Servers.Path == "" {
-			p.Servers.Path = filepath.Join(dir, ".mcp.json")
-		}
-	}
+	p.Servers.Path, p.Servers.Data = manifestServers(m, manifest, dir, warn, ".mcp.json", "mcp.json")
 	return p
-}
-
-// manifestPaths reads a manifest path field, one string or a list, keeping
-// the paths that start with ./ and stay inside the bundle.
-func manifestPaths(raw json.RawMessage) []string {
-	var one string
-	var list []string
-	if json.Unmarshal(raw, &one) == nil {
-		list = []string{one}
-	} else {
-		_ = json.Unmarshal(raw, &list) // neither a string nor a list names no path
-	}
-	var paths []string
-	for _, rel := range list {
-		if strings.HasPrefix(rel, "./") && !slices.Contains(strings.Split(rel, "/"), "..") {
-			paths = append(paths, rel)
-		}
-	}
-	return paths
 }
 
 // versionName is what Codex allows in a version directory name.

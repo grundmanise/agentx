@@ -92,7 +92,7 @@ Plugins are listed under the configuration they are installed in, with their ver
 |---|---|
 | Claude Code | The install records in `~/.claude/plugins/installed_plugins.json` and each plugin's directory. |
 | Codex | The `[plugins."<name>@<marketplace>"]` tables in `~/.codex/config.toml` and the plugin copies under `~/.codex/plugins/cache`. A plugin with `enabled = false` is listed with `(disabled)`. A plugin that has a copy but no table, such as one installed through your account, is listed without an enabled state. |
-| Cursor | Your local plugins under `~/.cursor/plugins/local` and the marketplace plugins Cursor has cached under `~/.cursor/plugins/cache`. Cursor keeps the list of enabled plugins in your account, not on disk, so a cached plugin is installed but not necessarily enabled. The Claude Code plugins Cursor also loads are listed under Claude Code only. |
+| Cursor | Your local plugins under `~/.cursor/plugins/local` and the marketplace plugins Cursor has cached under `~/.cursor/plugins/cache`. Cursor keeps the list of enabled plugins in your account, not on disk, so a cached plugin is installed but not necessarily enabled. A plugin's skills and MCP servers are read from where its manifest points, else from `skills` and `mcp.json`. The Claude Code plugins Cursor also loads are listed under Claude Code only. |
 | Gemini CLI | The extensions under `~/.gemini/extensions`. |
 
 A plugin's version is what its manifest or install record says. For a Codex or Cursor plugin without one, the cache directory name stands in: `local`, a commit id or a release tag. A plugin manifest that cannot be read is reported as a warning naming the file, and the plugin is still listed by its directory name.
