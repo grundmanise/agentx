@@ -162,8 +162,8 @@ func TestMachineResetID(t *testing.T) {
 
 	out = h.run("machine", "reset-id")
 	equal(t, "exit", out.exit, 0)
-	equal(t, "stdout", out.stdout, "")
 	again := showMachine(t, h)
+	equal(t, "stdout", out.stdout, "✓ machine id is now "+again["id"].(string)+"\n")
 	if again["id"] == after["id"] {
 		t.Errorf("id did not change after the second reset-id")
 	}

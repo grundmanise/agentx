@@ -178,7 +178,9 @@ func TestDoctorPassesAndChangesNothing(t *testing.T) {
 		"mutations                ok    none unfinished: " + filepath.Join(h.agentx, "mutations"),
 		"account_repo             ok    " + account + " opens",
 		"library                  ok    " + h.library,
-		"clients                  warn  0 of " + strconv.Itoa(scan.Registered()) + " registered clients detected  install an agent client or check HOME",
+		"clients                  warn  0 of " + strconv.Itoa(scan.Registered()) + " registered clients detected\n",
+		"hint: install an agent client or check HOME\n",
+		"\n11 checks: 1 warning, 9 ok, 1 info\n",
 	} {
 		contains(t, "stdout", out.stdout, line)
 	}

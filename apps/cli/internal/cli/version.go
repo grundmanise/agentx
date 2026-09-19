@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"fmt"
+	"strconv"
 
 	"github.com/spf13/cobra"
 )
@@ -22,10 +22,11 @@ func newVersionCommand(inv *invocation) *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			inv.out.emit(versionEvent{event: newEvent("version"), CLIVersion: cliVersion})
-			t := inv.out.table()
-			fmt.Fprintf(t, "CLI version\t%s\n", cliVersion)
-			fmt.Fprintf(t, "Schema version\t%d\n", schemaVersion)
-			return t.Flush()
+			t := &table{}
+			t.add(c("CLI version", label), c(cliVersion, heading))
+			t.add(c("Schema version", label), c(strconv.Itoa(schemaVersion), plain))
+			inv.out.render(t, "")
+			return nil
 		},
 	}
 }

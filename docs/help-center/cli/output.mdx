@@ -3,6 +3,27 @@ title: "Output and exit codes"
 description: "Read agentx output from a script and act on its exit codes."
 ---
 
+## Text output
+
+Without `--json`, every command prints aligned text for you to read. Tables pad their columns, a row that reports a state starts with a glyph (`✓` ok, `!` warning, `✗` failure, `•` information), and a command that changes something confirms it on one line:
+
+```text
+✓ label is now work laptop
+```
+
+## Colour
+
+Text output is coloured when it goes to a terminal. Each colour means one thing everywhere: green for ok and enabled, yellow for a warning, a hint and disabled, red for a failure and an error, blue for information, cyan for a key or a flag name, and dim for secondary detail.
+
+Output piped into another program or a file carries no colour, so the text a script reads is the same as before. Control it explicitly with the global `--color` flag:
+
+```sh
+agentx --color always doctor | less -R
+agentx --color never scan
+```
+
+Set the `NO_COLOR` environment variable to any value to turn colour off in every terminal. `--json` output is never coloured.
+
 ## JSON output
 
 Add `--json` before or after any command to get one JSON object per line on stdout. Every object has a `type` and an integer `schema_version`. The last line is always a `result` with `ok` set to `true` or `false`.

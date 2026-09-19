@@ -6,10 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -175,23 +173,24 @@ func (inv *invocation) detectedConfiguration(slug string) error {
 }
 
 // printSnapshot writes the human inventory: one section per configuration
-// with one line per skill occurrence, then its servers and its plugins.
-// Warnings go to stderr.
+// with its skills, servers and plugins as labelled blocks, then one summary
+// line. Warnings go to stderr.
 func (inv *invocation) printSnapshot(snap scan.Snapshot) {
-	skills := map[string][][]string{} // name, kind, scope, placement
+	out := inv.out
+	skills := map[string]*table{} // name, kind, scope, placement
 	for _, s := range snap.Skills {
 		for _, o := range s.Occurrences {
 			path := o.Path
 			if o.Kind == "symlink" {
-				path += " -> " + o.ResolvedPath
+				path += out.paint(muted, " -> "+o.ResolvedPath)
 			}
 			if o.Plugin != "" {
-				path += "  (plugin " + o.Plugin + ")"
+				path += "  " + out.paint(tagStyle, "(plugin "+o.Plugin+")")
 			}
-			skills[o.Configuration] = append(skills[o.Configuration], []string{s.Name, o.Kind, o.Scope, path})
+			block(skills, o.Configuration).add(c(s.Name, heading), c(o.Kind, muted), c(o.Scope, muted), c(path, plain))
 		}
 	}
-	servers := map[string][][]string{} // name, transport, command line or URL, what a handshake found, (disabled)
+	servers := map[string]*table{} // name, transport, command line or URL, what a handshake found, (disabled)
 	for _, s := range snap.MCPServers {
 		for _, o := range s.Occurrences {
 			what := o.URL
@@ -199,71 +198,72 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 				what = strings.Join(append([]string{o.Command}, o.Args...), " ")
 			}
 			if o.Plugin != "" {
-				what += "  (plugin " + o.Plugin + ")"
+				what += "  " + out.paint(tagStyle, "(plugin "+o.Plugin+")")
 			}
-			cells := []string{s.Name, o.Transport, what}
+			cells := []cell{c(s.Name, heading), c(o.Transport, muted), c(what, plain)}
 			if n := len(s.Tools); n > 0 {
-				cells = append(cells, plural(n, "tool"))
+				cells = append(cells, c(plural(n, "tool"), noteStyle))
 			}
 			if o.Enabled != nil && !*o.Enabled {
-				cells = append(cells, "(disabled)")
+				cells = append(cells, c("(disabled)", warnStyle))
 			}
-			servers[o.Configuration] = append(servers[o.Configuration], cells)
+			block(servers, o.Configuration).add(cells...)
 		}
 	}
-	plugins := map[string][][]string{} // name, version, (disabled)
+	plugins := map[string]*table{} // name, version, (disabled)
 	for _, p := range snap.Plugins {
-		cells := []string{p.Name, p.Version}
+		cells := []cell{c(p.Name, heading), c(p.Version, plain)}
 		if p.Enabled != nil && !*p.Enabled {
-			cells = append(cells, "(disabled)")
+			cells = append(cells, c("(disabled)", warnStyle))
 		}
-		plugins[p.Configuration] = append(plugins[p.Configuration], cells)
+		block(plugins, p.Configuration).add(cells...)
 	}
 	if len(snap.Configurations) == 0 {
-		fmt.Fprintln(inv.out.stdout, "No agent configurations detected.")
+		out.print(out.paint(warnStyle, "No agent configurations detected."))
+		out.print(out.paint(muted, "A configuration is detected by its directory, such as ~/.claude or ~/.cursor; check HOME."))
+		return
 	}
-	t := inv.out.table()
-	for i, c := range snap.Configurations {
+	for i, conf := range snap.Configurations {
 		if i > 0 {
-			fmt.Fprintln(t)
+			out.print("")
 		}
-		state := "enabled"
-		if !c.Enabled {
-			state = "disabled"
+		state := out.paint(okStyle, "enabled")
+		if !conf.Enabled {
+			state = out.paint(warnStyle, "disabled")
 		}
-		fmt.Fprintf(t, "%s (%s)  %s  %s\n", c.Name, c.ID, c.Path, state)
-		printRows(t, "  ", skills[c.ID])
-		if len(servers[c.ID]) > 0 {
-			fmt.Fprintln(t, "  servers:")
-			printRows(t, "    ", servers[c.ID])
+		out.print(out.paint(heading, conf.Name), " ", out.paint(muted, "("+conf.ID+")"), "  ", conf.Path, "  ", state)
+		empty := true
+		for _, b := range []struct {
+			name string
+			rows map[string]*table
+		}{{"skills", skills}, {"servers", servers}, {"plugins", plugins}} {
+			t, ok := b.rows[conf.ID]
+			if !ok {
+				continue
+			}
+			empty = false
+			out.print("  ", out.paint(label, b.name+":"))
+			t.sortRows()
+			out.render(t, "    ")
 		}
-		if len(plugins[c.ID]) > 0 {
-			fmt.Fprintln(t, "  plugins:")
-			printRows(t, "    ", plugins[c.ID])
+		if empty {
+			out.print("  ", out.paint(muted, "no skills, servers or plugins"))
 		}
 	}
-	t.Flush()
+	out.print("")
+	out.print(out.paint(heading, plural(len(snap.Configurations), "configuration")), ", ",
+		plural(len(snap.Skills), "skill"), ", ", plural(len(snap.MCPServers), "server"), ", ", plural(len(snap.Plugins), "plugin"))
 	for _, w := range snap.Warnings {
-		fmt.Fprintf(inv.out.stderr, "warning: %s\n", w)
+		out.warn(w)
 	}
 }
 
-// printRows writes rows of cells as one indented table line each, sorted by
-// the first cell and then the whole line.
-func printRows(t io.Writer, indent string, rows [][]string) {
-	lines := make([]string, len(rows))
-	for i, cells := range rows {
-		lines[i] = strings.Join(cells, "\t")
+// block returns the table for configuration id in m, creating it on first use.
+func block(m map[string]*table, id string) *table {
+	t, ok := m[id]
+	if !ok {
+		t = &table{}
+		m[id] = t
 	}
-	sort.Slice(lines, func(i, j int) bool {
-		a, _, _ := strings.Cut(lines[i], "\t")
-		b, _, _ := strings.Cut(lines[j], "\t")
-		if a != b {
-			return a < b
-		}
-		return lines[i] < lines[j]
-	})
-	for _, line := range lines {
-		fmt.Fprintln(t, indent+line)
-	}
+	return t
 }

@@ -13,32 +13,39 @@ agentx scan
 
 ```text
 Claude Code (claude-code)  /home/me/.claude  enabled
-  commit  symlink    user  /home/me/.claude/skills/commit -> /home/me/.agents/skills/commit
-  review  directory  user  /home/me/.claude/skills/review
-  format  directory  user  /home/me/.claude/plugins/cache/acme-tools/formatter/1.2.0/skills/format  (plugin formatter)
+  skills:
+    commit  symlink    user  /home/me/.claude/skills/commit -> /home/me/.agents/skills/commit
+    format  directory  user  /home/me/.claude/plugins/cache/acme-tools/formatter/1.2.0/skills/format  (plugin formatter)
+    review  directory  user  /home/me/.claude/skills/review
   plugins:
     formatter  1.2.0
 
 Codex (codex)  /home/me/.codex  enabled
-  commit  directory  user  /home/me/.agents/skills/commit
-  sales   directory  user  /home/me/.codex/plugins/cache/acme-tools/sales/1.0.8/skills/sales  (plugin sales)
+  skills:
+    commit  directory  user  /home/me/.agents/skills/commit
+    sales   directory  user  /home/me/.codex/plugins/cache/acme-tools/sales/1.0.8/skills/sales  (plugin sales)
   plugins:
     notes  local  (disabled)
     sales  1.0.8
 
 Cursor (cursor)  /home/me/.cursor  enabled
-  commit  symlink    user  /home/me/.claude/skills/commit -> /home/me/.agents/skills/commit
-  review  directory  user  /home/me/.claude/skills/review
+  skills:
+    commit  symlink    user  /home/me/.claude/skills/commit -> /home/me/.agents/skills/commit
+    review  directory  user  /home/me/.claude/skills/review
   servers:
     context7  stdio            npx -y @upstash/context7-mcp
     stripe    streamable-http  https://mcp.stripe.com
   plugins:
     thermos  9f86d081884c7d659a2feaa0c55ad015a3bf4f1b
+
+3 configurations, 4 skills, 2 servers, 4 plugins
 ```
 
-One section per agent configuration, headed by the client name, its id, its configuration directory and whether it is enabled. One line per skill the configuration can see: the skill name, the kind of placement, the scope and the path the client reads. A skill that comes from a plugin ends with the plugin's name.
+One section per agent configuration, headed by the client name, its id, its configuration directory and whether it is enabled. A `skills:` block lists every skill the configuration can see, one per line: the skill name, the kind of placement, the scope and the path the client reads. A skill that comes from a plugin ends with the plugin's name.
 
-Then, when the configuration declares MCP servers, a `servers:` block with one line per server: its name, its transport (`stdio`, `sse` or `streamable-http`) and its command line or URL. Then, when the configuration has plugins, a `plugins:` block with one line per plugin: its name and version, and `(disabled)` when the client has turned it off.
+Then, when the configuration declares MCP servers, a `servers:` block with one line per server: its name, its transport (`stdio`, `sse` or `streamable-http`) and its command line or URL. Then, when the configuration has plugins, a `plugins:` block with one line per plugin: its name and version, and `(disabled)` when the client has turned it off. The last line counts the machine's configurations, skills, servers and plugins, each once however many configurations share it.
+
+In a terminal the names are bold, the block labels cyan, the kind and scope dim, `enabled` green, `(disabled)` yellow and a plugin marker magenta, so the names and states stand out from the paths.
 
 A configuration is detected when its configuration directory exists, such as `~/.claude` for Claude Code or `~/.cursor` for Cursor.
 

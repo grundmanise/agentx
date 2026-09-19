@@ -4,7 +4,7 @@ Status: accepted, 2026-09-18. Implements the output contract in ADR 0001 and the
 
 ## Invocation
 
-`agentx [--json] [--verbose] <command> [arguments]`. The two global flags are accepted before or after the command. `--json` switches stdout to newline-delimited JSON events. `--verbose` raises the log level on stderr to debug. `agentx help`, `--help`, `-h` and a bare `agentx` print usage and exit 0; the usage text goes to stdout, or to stderr in JSON mode. A bare `agentx --json` is a usage error instead: a script that omits the command has made a mistake.
+`agentx [--json] [--verbose] [--color auto|always|never] <command> [arguments]`. The three global flags are accepted before or after the command. `--json` switches stdout to newline-delimited JSON events. `--verbose` raises the log level on stderr to debug. `--color` decides whether text output carries ANSI colour, see [Streams](#streams); any other value is a usage error. `agentx help`, `--help`, `-h` and a bare `agentx` print usage and exit 0; the usage text goes to stdout, or to stderr in JSON mode. A bare `agentx --json` is a usage error instead: a script that omits the command has made a mistake.
 
 The CLI reads its environment once, at startup, from the variables below. Beyond them, `PATH` locates git and the command of a local MCP server, and the [handshake](#handshake) hands the environment on to the servers it starts.
 
@@ -21,7 +21,9 @@ The CLI reads its environment once, at startup, from the variables below. Beyond
 
 ## Streams
 
-Without `--json`, stdout carries plain aligned text and stderr carries log lines as `level: message`.
+Without `--json`, stdout carries aligned text and stderr carries log lines as `level: message`, with `error: <message>` and `hint: <fix>` for a failure. A table pads every column to its widest cell with two spaces between columns and nothing after the last cell. A row that reports a state starts with a glyph: `✓` ok, `!` warning, `✗` failure, `•` information. A command that changes something confirms it with one `✓ <what> is now <value>` line.
+
+Text output is coloured per stream when that stream is a terminal, the `NO_COLOR` variable is not set (see no-color.org) and `TERM` is not `dumb`; `--color always` colours a pipe too, and `--color never` colours nothing. Colour is added by SGR escape sequences around the text and changes nothing else: stripping the sequences gives the exact text a pipe receives, alignment included. JSON output is never coloured, whatever `--color` says. The palette has one meaning per colour: bold for a heading or the name that starts a row, cyan for the key of a key-value row and for a command or flag name, dim for secondary detail, green for ok and enabled, yellow for a warning, a hint and disabled, bold red for a failure and an error, blue for information, magenta for a `(plugin <name>)` marker, cyan for a count such as `12 tools`.
 
 With `--json`, stdout carries only events, one JSON object per line, and nothing else. Stderr carries log events in the same envelope. A consumer reads the exit code before trusting either stream.
 
@@ -131,7 +133,7 @@ No agent client reads anything in agentx home except the fork worktrees, through
 
 `settings.json` in agentx home holds what only this machine decides. It is read whole and written by temp file, fsync and rename while the lock is held. A missing file means defaults. An unreadable file is exit code 10 with a hint naming the path.
 
-`agentx config list` prints every setting, `agentx config get <key>` one, and `agentx config set <key> <value>` changes `label`, `auto_push` or `accept_operations`; the booleans take `true` or `false`. An unknown key, a key that `config set` cannot change, or an invalid value is exit code 1 with a hint listing the keys. Without `--json`, `list` prints a `key  value` table and `get` prints the bare value.
+`agentx config list` prints every setting, `agentx config get <key>` one, and `agentx config set <key> <value>` changes `label`, `auto_push` or `accept_operations`; the booleans take `true` or `false`. An unknown key, a key that `config set` cannot change, or an invalid value is exit code 1 with a hint listing the keys. Without `--json`, `list` prints a `key  value` table, showing an empty value as `(none)`, `get` prints the bare value, and `set`, `enable` and `disable` print one confirmation line: `✓ <key> is now <value>`, `✓ <id> is now enabled` or `✓ <id> is now disabled`.
 
 `agentx config disable <id>` adds a configuration id to `disabled_configurations` and `agentx config enable <id>` removes it; both are mutations, both are no-ops when the list already has the wanted state, and both emit the `settings` event. The id must name a detected configuration (see [Snapshot](#snapshot)), else exit code 5 with a hint listing the detected ids. A detected configuration is enabled unless it is listed, so every configuration is enabled on first detection without a write.
 
@@ -176,7 +178,7 @@ The machine id names one computer across reinstalls. It is derived, in this orde
 2. Otherwise, when a platform id exists, the machine id is HMAC-SHA256 with the key `agentx-machine-id/v1` over the message `<platform id> LF <uid>`, where `LF` is one newline byte and `<uid>` is the numeric user id in decimal, rendered as the first 32 lowercase hex characters of the MAC. The derivation is `platform`. The platform id is `AGENTX_PLATFORM_ID` when the variable is set, else the content of `/etc/machine-id` without surrounding whitespace on Linux, else `IOPlatformUUID` from `ioreg -rd1 -c IOPlatformExpertDevice` on macOS.
 3. Otherwise 16 random bytes are generated once, under the lock, stored as hex in `machine.json`, and used from then on as in 1.
 
-`agentx machine` prints the id, the label and the derivation. `agentx machine rename <label>` sets the label in the settings file. `agentx machine reset-id` writes a new random id to `machine.json`; from then on the id is random even where a platform id exists, until the file is deleted.
+`agentx machine` prints the id, the label and the derivation. `agentx machine rename <label>` sets the label in the settings file. `agentx machine reset-id` writes a new random id to `machine.json`; from then on the id is random even where a platform id exists, until the file is deleted. Without `--json`, `machine` prints a `key  value` table with the rows `Machine id`, `Label` and `Derivation`, and the two mutations print one confirmation line: `✓ machine label is now <label>` or `✓ machine id is now <id>`.
 
 ## Lock and version file
 
@@ -219,7 +221,7 @@ A missing name or description contributes empty bytes; a missing or unparsable f
 
 `agentx scan --project <path>` adds the project-scope skills found under `<path>` in each detected configuration's project skills directories, read-only; `<path>` must exist, else exit code 5. `agentx scan --configuration <id>` names the configuration that changed; the id must be detected, else exit code 5 with a hint listing the detected ids, and the whole machine is scanned regardless, since a one-shot command has no earlier snapshot to reuse.
 
-Without `--json`, the output is one section per configuration, headed `<name> (<id>)  <path>  enabled|disabled`, with one line per occurrence: skill name, kind, scope and placement path, followed by ` -> <resolved path>` for a symlink and by `  (plugin <name>)` for a placement inside a plugin. A configuration that declares servers continues with a `servers:` line and one line per server: name, transport, then the command line or the URL, with `  (plugin <name>)` for a server a plugin provides, then `<n> tools` (`1 tool`) for a server with a signature, counting its tools, prompts, resources and resource templates together, ending with `  (disabled)` for a server its client records as turned off. A configuration with plugins continues with a `plugins:` line and one `name  version` line per plugin, ending with `  (disabled)` for a plugin its client records as disabled. Environment and header values are never printed. Warnings go to stderr as `warning: <message>`.
+Without `--json`, the output is one section per configuration, separated by a blank line and headed `<name> (<id>)  <path>  enabled|disabled`, followed by up to three labelled blocks, each present only when it has rows: `skills:` with one line per occurrence (skill name, kind, scope and placement path, followed by ` -> <resolved path>` for a symlink and by `  (plugin <name>)` for a placement inside a plugin); `servers:` with one line per server (name, transport, then the command line or the URL, with `  (plugin <name>)` for a server a plugin provides, then `<n> tools` (`1 tool`) for a server with a signature, counting its tools, prompts, resources and resource templates together, ending with `(disabled)` for a server its client records as turned off); and `plugins:` with one `name  version` line per plugin, ending with `(disabled)` for a plugin its client records as disabled. The block labels are indented two spaces and their rows four; rows are sorted by name. A configuration with no rows at all says `no skills, servers or plugins`. After the sections, a blank line and one summary line count the machine: `<n> configurations, <n> skills, <n> servers, <n> plugins` (`1 skill`), counting skills, servers and plugins as the snapshot does, once each however many occurrences. With no configuration detected the output is `No agent configurations detected.` and a hint line instead. Environment and header values are never printed. Warnings go to stderr as `warning: <message>`.
 
 The event:
 
@@ -408,7 +410,7 @@ In the serve child every git call additionally has `GIT_TERMINAL_PROMPT=0`, `-o 
 | `detail` | string | what was found, naming the version, path or error involved |
 | `hint` | string | how to fix it; absent when there is nothing to suggest |
 
-Without `--json` the same rows print as a `check  status  detail  hint` table. Exit code 2 when git is missing or too old; the run stops after the `git` row, since nothing else can be checked. Exit code 8 when the account repo is unusable, after every row. Otherwise 0, warnings included. The `result` event carries `ok: false` exactly when the exit code is non-zero.
+Without `--json` the same rows print as a `<glyph> <check>  <status>  <detail>` table, the glyph being `✓` for `ok`, `!` for `warn`, `✗` for `fail` and `•` for `info`; a row's `hint` follows on its own line as `hint: <hint>`, aligned under the detail. After the rows, a blank line and one summary line count them: `<n> checks: <n> failed, <n> warnings, <n> ok, <n> info`, leaving out a count of zero. Exit code 2 when git is missing or too old; the run stops after the `git` row, since nothing else can be checked. Exit code 8 when the account repo is unusable, after every row. Otherwise 0, warnings included. The `result` event carries `ok: false` exactly when the exit code is non-zero.
 
 ## Account repo
 
@@ -416,7 +418,7 @@ The account repo is `account.git` in agentx home, a bare repository. It is creat
 
 ## Serve
 
-`agentx serve --json` is the long-running child the desktop app holds open. It scans once on start, emits that snapshot, then rescans when the machine changes and emits the snapshot again only when the inventory changed. It runs until its stdin closes or its context is cancelled, then emits `result` and exits 0. Without `--json` it prints one line per event: `snapshot <counter>: <n> configurations, <n> skills` and `refresh <request_id>: ok, snapshot <counter>`.
+`agentx serve --json` is the long-running child the desktop app holds open. It scans once on start, emits that snapshot, then rescans when the machine changes and emits the snapshot again only when the inventory changed. It runs until its stdin closes or its context is cancelled, then emits `result` and exits 0. Without `--json` it prints one line per event: `snapshot <counter>: <n> configurations, <n> skills`, `refresh <request_id>: ok, snapshot <counter>` or `refresh <request_id>: failed: <error>`.
 
 One serve child per agentx home: on start it takes an exclusive advisory `flock` on `serve.lock` in agentx home and holds it until it exits. A second `agentx serve` for the same home, `--once` included, exits at once with code 6 and a hint naming `serve.lock`. This lock is distinct from `lock`: serve never blocks a mutating command.
 

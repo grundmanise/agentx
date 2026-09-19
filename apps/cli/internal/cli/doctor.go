@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"text/tabwriter"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
@@ -30,29 +30,78 @@ func newDoctorCommand(inv *invocation) *cobra.Command {
 		Short: "Check that this machine can run agentx: git, agentx home and the account repo",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			d := &doctor{inv: inv, table: inv.out.table()}
+			d := &doctor{inv: inv, table: &table{}}
 			err := d.run(cmd.Context())
-			if flushErr := d.table.Flush(); err == nil {
-				err = flushErr
-			}
+			d.print()
 			return err
 		},
 	}
 }
 
 type doctor struct {
-	inv   *invocation
-	table *tabwriter.Writer
+	inv    *invocation
+	table  *table
+	counts map[string]int // rows per status
 }
 
-// row reports one check as a doctor event and a table line.
+// row reports one check as a doctor event and a table line: a glyph, the
+// check, its status and the detail, with the hint on a line of its own
+// under the detail.
 func (d *doctor) row(check, status, detail, hint string) {
 	d.inv.out.emit(doctorEvent{event: newEvent("doctor"), Check: check, Status: status, Detail: detail, Hint: hint})
-	fmt.Fprintf(d.table, "%s\t%s\t%s", check, status, detail)
-	if hint != "" {
-		fmt.Fprintf(d.table, "\t%s", hint)
+	if d.counts == nil {
+		d.counts = map[string]int{}
 	}
-	fmt.Fprintln(d.table)
+	d.counts[status]++
+	glyph, st := statusStyle(status)
+	out := d.inv.out
+	d.table.add(c(out.paint(st, glyph)+" "+out.paint(heading, check), plain), c(status, st), c(detail, plain))
+	if hint != "" {
+		d.table.add(c("", plain), c("", plain), c(out.paint(warnStyle, "hint:")+" "+hint, plain))
+	}
+}
+
+// statusStyle maps a doctor status to the glyph its row starts with and the
+// style both the glyph and the status word are painted in.
+func statusStyle(status string) (string, style) {
+	switch status {
+	case "ok":
+		return glyphOK, okStyle
+	case "warn":
+		return glyphWarn, warnStyle
+	case "fail":
+		return glyphFail, failStyle
+	}
+	return glyphInfo, infoStyle
+}
+
+// print writes the table and then one summary line counting the rows by
+// status, the failures first.
+func (d *doctor) print() {
+	out := d.inv.out
+	if out.json {
+		return
+	}
+	out.render(d.table, "")
+	total := 0
+	for _, n := range d.counts {
+		total += n
+	}
+	var parts []string
+	for _, s := range []struct{ status, word string }{{"fail", "failed"}, {"warn", "warning"}, {"ok", "ok"}, {"info", "info"}} {
+		n := d.counts[s.status]
+		if n == 0 {
+			continue
+		}
+		_, st := statusStyle(s.status)
+		count := fmt.Sprintf("%d %s", n, s.word)
+		if s.status == "warn" {
+			count = plural(n, s.word)
+		}
+		parts = append(parts, out.paint(st, count))
+	}
+	out.print("")
+	out.print(out.paint(heading, plural(total, "check")), ": ", strings.Join(parts, ", "))
 }
 
 // run performs the checks in a fixed order and changes nothing in agentx

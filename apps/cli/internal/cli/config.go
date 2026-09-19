@@ -22,10 +22,11 @@ type settingsEvent struct {
 
 func newConfigCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "config",
-		Short: "Read and change this machine's settings",
-		Args:  cobra.NoArgs,
-		RunE:  needSubcommand(inv, "no config command given", "run 'agentx config --help' to list commands"),
+		Use:         "config",
+		Short:       "Read and change this machine's settings",
+		Annotations: map[string]string{annotationGroup: "true"},
+		Args:        cobra.NoArgs,
+		RunE:        needSubcommand(inv, "no config command given", "run 'agentx config --help' to list commands"),
 	}
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",
@@ -37,11 +38,8 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 				return err
 			}
 			inv.emitSettings(s)
-			t := inv.out.table()
-			for _, row := range inv.settingRows(s) {
-				fmt.Fprintf(t, "%s\t%s\n", row.key, row.value)
-			}
-			return t.Flush()
+			inv.printSettings(s)
+			return nil
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
@@ -87,6 +85,7 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 				return err
 			}
 			inv.emitSettings(s)
+			inv.out.done(inv.out.paint(label, args[0]) + " is now " + inv.out.paint(heading, args[1]))
 			return nil
 		},
 	})
@@ -124,6 +123,11 @@ func newEnableCommand(inv *invocation, use, short string) *cobra.Command {
 				return err
 			}
 			inv.emitSettings(s)
+			if disable {
+				inv.out.done(inv.out.paint(label, args[0]) + " is now " + inv.out.paint(warnStyle, "disabled"))
+			} else {
+				inv.out.done(inv.out.paint(label, args[0]) + " is now " + inv.out.paint(okStyle, "enabled"))
+			}
 			return nil
 		},
 	}
@@ -188,6 +192,29 @@ func (inv *invocation) emitSettings(s home.Settings) {
 }
 
 type settingRow struct{ key, value string }
+
+// printSettings writes the key-value table of config list. Booleans are
+// painted by value and an empty value is shown as (none), so that a blank
+// cell is never mistaken for a missing row.
+func (inv *invocation) printSettings(s home.Settings) {
+	t := &table{}
+	for _, row := range inv.settingRows(s) {
+		t.add(c(row.key, label), valueCell(row.value))
+	}
+	inv.out.render(t, "")
+}
+
+func valueCell(value string) cell {
+	switch value {
+	case "":
+		return c("(none)", muted)
+	case "true":
+		return c(value, okStyle)
+	case "false":
+		return c(value, muted)
+	}
+	return c(value, plain)
+}
 
 func (inv *invocation) settingRows(s home.Settings) []settingRow {
 	return []settingRow{

@@ -33,7 +33,7 @@ func TestConfigListDefaults(t *testing.T) {
 		"label                    test-host",
 		"auto_push                false",
 		"accept_operations        false",
-		"disabled_configurations  ",
+		"disabled_configurations  (none)",
 		"sources                  []",
 		"copy_mode                {}",
 	} {
@@ -72,7 +72,7 @@ func TestConfigSetAndGet(t *testing.T) {
 
 	out := h.run("config", "set", "label", "work laptop")
 	equal(t, "exit", out.exit, 0)
-	equal(t, "stdout", out.stdout, "")
+	equal(t, "stdout", out.stdout, "✓ label is now work laptop\n")
 	equal(t, "stderr", out.stderr, "")
 
 	out = h.run("config", "get", "label")

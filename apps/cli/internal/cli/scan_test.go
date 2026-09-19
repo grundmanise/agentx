@@ -625,7 +625,7 @@ func TestConfigEnableDisable(t *testing.T) {
 
 	out = h.run("config", "enable", "cursor")
 	equal(t, "exit", out.exit, 0)
-	equal(t, "stdout", out.stdout, "")
+	equal(t, "stdout", out.stdout, "✓ cursor is now enabled\n")
 	if got, want := readSettingsFile(t, h)["disabled_configurations"], []any{}; !reflect.DeepEqual(got, want) {
 		t.Errorf("disabled_configurations = %v, want %v", got, want)
 	}
