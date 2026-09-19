@@ -43,7 +43,6 @@ func writeJournal(t *testing.T, h *harness, id, progress, old string, staged []b
 		}
 	}
 	entry := map[string]any{
-		"kind":     "settings",
 		"progress": progress,
 		"replace": []map[string]string{{
 			"path":   filepath.Join(h.agentx, "settings.json"),
@@ -88,6 +87,11 @@ func TestScanResumesAStagedJournal(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	live := filepath.Join(h.agentx, "settings.json")
 	journal, staged := writeJournal(t, h, "1000-aaaa", "staged", sha(readFile(t, live)), relabel(t, h, "two"))
+	// And one that stopped between staging and writing its journal: an orphan.
+	orphan := filepath.Join(h.agentx, "mutations", "0999-ffff.staged")
+	if err := os.WriteFile(orphan, []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	out = h.run("--json", "scan")
 	equal(t, "exit", out.exit, 0)
@@ -190,6 +194,29 @@ func TestEditedLiveFileRefusesRecovery(t *testing.T) {
 	equal(t, "label", readSettingsFile(t, h)["label"], "two")
 	gone(t, "journal", journal)
 	equal(t, "version", readVersion(t, h), 3)
+}
+
+func TestDoctorCreatingTheAccountRepoRefusesRecovery(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	out := h.run("config", "set", "label", "one")
+	equal(t, "exit", out.exit, 0)
+	journal, _ := writeJournal(t, h, "1000-aaaa", "staged", sha([]byte("{}\n")), relabel(t, h, "two"))
+
+	out = h.run("--json", "doctor")
+	equal(t, "exit", out.exit, 6)
+	events := h.events(out.stdout)
+	rows, _ := doctorRows(t, events)
+	equal(t, "mutations.status", rows["mutations"]["status"], "warn")
+	equal(t, "account_repo.status", rows["account_repo"]["status"], "fail")
+	contains(t, "account_repo.detail", rows["account_repo"]["detail"].(string), "recovery required")
+	contains(t, "account_repo.detail", rows["account_repo"]["detail"].(string), journal)
+	equal(t, "error.code", events[len(events)-2]["code"], "refused")
+	equal(t, "result.ok", events[len(events)-1]["ok"], false)
+	if _, err := os.Stat(filepath.Join(h.agentx, "account.git")); !os.IsNotExist(err) {
+		t.Errorf("account.git was created: %v", err)
+	}
+	equal(t, "label", readSettingsFile(t, h)["label"], "one")
 }
 
 func TestServeRecoversAJournalOnRescan(t *testing.T) {

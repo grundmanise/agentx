@@ -1,10 +1,12 @@
 package cli
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -13,12 +15,24 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 )
 
-// stubGit puts a git shell script alone on the harness PATH.
+// stubGit puts a git shell script alone on the harness PATH. Every test is
+// one process: a git process another parallel test forks while the script is
+// being written inherits the write descriptor until it execs, and running
+// the script in that instant fails with ETXTBSY, so it is run once here,
+// retrying until it starts. After that no process holds the descriptor.
 func stubGit(t *testing.T, h *harness, script string) {
 	t.Helper()
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "git"), []byte(script), 0o755); err != nil {
+	path := filepath.Join(dir, "git")
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
+	}
+	for {
+		err := exec.Command(path, "--version").Run()
+		if !errors.Is(err, syscall.ETXTBSY) {
+			break
+		}
+		runtime.Gosched()
 	}
 	h.env["PATH"] = dir
 }

@@ -62,6 +62,6 @@ func SaveHandshakes(dir string, fresh map[string]Handshake) error {
 		if err != nil {
 			return err
 		}
-		return replaceFile(dir, "handshakes", handshakesPath(dir), append(b, '\n'))
+		return replaceFile(dir, handshakesPath(dir), append(b, '\n'))
 	})
 }

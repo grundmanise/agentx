@@ -75,7 +75,7 @@ func ResetMachineID(dir string) (string, error) {
 		return "", err
 	}
 	id := hex.EncodeToString(b[:])
-	return id, replaceFile(dir, "machine", machinePath(dir), []byte(`{"id": "`+id+`"}`+"\n"))
+	return id, replaceFile(dir, machinePath(dir), []byte(`{"id": "`+id+`"}`+"\n"))
 }
 
 func platformID(env map[string]string) string {

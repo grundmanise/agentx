@@ -56,5 +56,5 @@ func SaveSettings(dir string, s Settings) error {
 	if err != nil {
 		return err
 	}
-	return replaceFile(dir, "settings", SettingsPath(dir), append(b, '\n'))
+	return replaceFile(dir, SettingsPath(dir), append(b, '\n'))
 }
