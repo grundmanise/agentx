@@ -5,8 +5,23 @@ A desktop app and CLI that inventories the AI agent clients, skills, MCP servers
 ## CLI
 
 ```sh
-cd apps/cli && go build ./... && go test ./...
-go build -o agentx .   # the binary
+cd apps/cli && go build -o agentx .   # the binary
 ```
 
 Requires Go 1.24. Commands are [cobra](https://github.com/spf13/cobra) commands; the tree is built in `apps/cli/internal/cli/run.go` and every test drives `cli.Run` against a temporary home. On Linux `CGO_ENABLED=0 go build` produces a static binary. On macOS build with cgo enabled, the default there, so `agentx serve` watches through FSEvents; a macOS binary built without cgo falls back to kqueue, which costs one descriptor per watched file. The output contract is in `docs/spec/cli-contract.md`.
+
+## Checks
+
+`make check` runs what the `CI` workflow (`.github/workflows/ci.yml`) runs on every pull request, in the same order, against the Go module in `apps/cli`. A green `make check` means a green pull request.
+
+| Target | Command |
+| --- | --- |
+| `fmt` | `gofmt -w .` |
+| `fmt-check` | `gofmt -l .`, fails when any file is listed |
+| `lint` | `golangci-lint run ./...` with `apps/cli/.golangci.yml` (includes `go vet`) |
+| `tidy-check` | `go mod tidy`, fails when `go.mod` or `go.sum` change |
+| `build` | `go build ./...` with `CGO_ENABLED=0` on Linux and `1` on macOS, where the serve watcher uses FSEvents |
+| `test` | `go test -race -count=1 ./...` |
+| `check` | `fmt-check lint tidy-check build test` |
+
+Requires Go 1.24 and, for `make lint`, the golangci-lint version pinned in the `Makefile`; `make lint` prints the install command when the tool is missing.

@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  GOLANGCI_LINT_VERSION: v2.13.2
+
+jobs:
+  go:
+    name: Go (apps/cli, ${{ matrix.os }})
+    # Linux and macOS: the serve watcher has a backend per platform, and the
+    # macOS one (FSEvents, cgo) only compiles there.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: apps/cli
+    steps:
+      - uses: actions/checkout@v7
+
+      # The Go module lands in apps/cli through a series of pull requests.
+      # Until it is on the branch under test, the checks below are skipped.
+      - name: Look for the Go module
+        id: mod
+        working-directory: .
+        run: |
+          if [ -f apps/cli/go.mod ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Go checks skipped::apps/cli/go.mod is not on this ref, nothing to check yet"
+          fi
+
+      - uses: actions/setup-go@v7
+        if: steps.mod.outputs.present == 'true'
+        with:
+          go-version-file: apps/cli/go.mod
+          cache-dependency-path: apps/cli/go.sum
+
+      - name: gofmt
+        if: steps.mod.outputs.present == 'true'
+        run: |
+          files=$(gofmt -l .)
+          if [ -n "$files" ]; then
+            echo "$files"
+            echo "gofmt: the files above are not formatted, run 'make fmt'"
+            exit 1
+          fi
+
+      - name: golangci-lint
+        if: steps.mod.outputs.present == 'true'
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          working-directory: apps/cli
+
+      - name: go mod tidy
+        if: steps.mod.outputs.present == 'true'
+        run: go mod tidy && git diff --exit-code go.mod go.sum
+
+      # Static on Linux; cgo on macOS for the FSEvents watcher, as in the Makefile.
+      - name: go build
+        if: steps.mod.outputs.present == 'true'
+        run: CGO_ENABLED=${{ runner.os == 'macOS' && '1' || '0' }} go build ./...
+
+      - name: go test
+        if: steps.mod.outputs.present == 'true'
+        run: go test -race -count=1 ./...

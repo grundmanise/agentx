@@ -3,6 +3,7 @@
 package serve
 
 import (
+	"errors"
 	"path/filepath"
 	"slices"
 
@@ -67,6 +68,11 @@ func (b *fseventsBackend) sync(dirs, trees []string) error {
 				return
 			case events := <-es.Events:
 				for _, e := range events {
+					// Dropped events are reported like an inotify queue overflow
+					// is: a warning, then the rescan that MustScanSubDirs asks for.
+					if e.Flags&(fsevents.KernelDropped|fsevents.UserDropped) != 0 {
+						b.sig.failed(errors.New("fsevents dropped events"))
+					}
 					if e.Flags&(fsevents.MustScanSubDirs|fsevents.RootChanged) != 0 || accept(filepath.Clean(e.Path), flat, treeRoots) {
 						b.sig.changed()
 						break
