@@ -118,6 +118,7 @@ Everything the CLI keeps on the machine lives under agentx home. Durable entries
   ops/<ulid>.json     durable   operation records; reserved, nothing writes them today
   version             transient mutation counter, rewritten last by every mutating command
   lock                transient advisory lock: shared for local scans, exclusive for mutations and recovery
+  serve.lock          transient advisory lock held by the one serve child of this home for its lifetime
   machine.json        derived   the machine id, only where no platform identity exists
   handshakes.json     derived   last MCP signature per server
 ```
@@ -356,3 +357,31 @@ Without `--json` the same rows print as a `check  status  detail  hint` table. E
 ## Account repo
 
 The account repo is `account.git` in agentx home, a bare repository. It is created on first use, under the lock, by the first command that opens it; `agentx doctor` is that command on a fresh machine. Creation runs `git init --bare` in the isolated environment and sets `gc.auto=0` (maintenance runs on the serve child's timer, never inside a command), `core.logAllRefUpdates=true` (reflogs, which a bare repository lacks by default), `merge.conflictStyle=zdiff3` and, on git 2.48 or newer, `worktree.useRelativePaths=true`. The repository is renamed into place only once every step succeeded. A present `account.git` that is not a bare repository git can read is exit code 8 with a hint naming the path.
+
+## Serve
+
+`agentx serve --json` is the long-running child the desktop app holds open. It scans once on start, emits that snapshot, then rescans when the machine changes and emits the snapshot again only when the inventory changed. It runs until its stdin closes or its context is cancelled, then emits `result` and exits 0. Without `--json` it prints one line per event: `snapshot <counter>: <n> configurations, <n> skills` and `refresh <request_id>: ok, snapshot <counter>`.
+
+One serve child per agentx home: on start it takes an exclusive advisory `flock` on `serve.lock` in agentx home and holds it until it exits. A second `agentx serve` for the same home, `--once` included, exits at once with code 6 and a hint naming `serve.lock`. This lock is distinct from `lock`: serve never blocks a mutating command.
+
+Snapshots: every serve process has a fresh `instance_id` (or `AGENTX_INSTANCE_ID`). The initial scan always emits a `snapshot` with `scan_counter` `1`, even when an earlier process saw identical content. Each later scan is compared with the last emitted snapshot on its serialised bytes with `instance_id` and `scan_counter` excluded; an identical snapshot emits nothing, a different one increments the counter and is emitted whole. The desktop applies snapshots only from its active child and only with increasing counters, as [snapshot ordering](snapshot-ordering.md) prescribes.
+
+Scans: every scan holds the shared `flock` on `lock` over its local reads, like `agentx scan`, but waits for a mutation in progress for as long as it takes instead of giving up after a second; it never takes the exclusive lock. Scans are serialised, one at a time. A change signal that arrives during a scan schedules one more scan after it.
+
+Change signals: serve watches, in this order, agentx home (where every mutating command rewrites `version` last), `account.git`, `worktrees` and the library, one non-recursive watch per directory, on the real path after resolving symlinks. A directory that does not exist at start is skipped and tried again after every scan. Events are debounced: a rescan runs 100 ms after the last event, or 500 ms after the first event of a burst, whichever comes first. When the watcher cannot be created or a watch fails, serve emits one `log` event with level `warn` on stderr saying why and rescans every 2 s instead.
+
+Stdin carries requests, one JSON object per line. The one request is `{"type": "refresh", "request_id": "<unique id>"}`. A refresh is satisfied only by a scan that begins after the request was received; a scan already in progress cannot satisfy it, and every request received before the next scan begins shares that scan. After the scan, a changed snapshot is emitted first, then one `refresh_complete` per request. A line that is not a JSON object, a request without a known `type`, or a refresh without a `request_id` is answered with an `error` event with code `usage` on stdout, and serve keeps running; under serve an `error` event therefore does not announce the end of the run. Blank lines are ignored.
+
+`refresh_complete`:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `request_id` | string | the id from the request |
+| `instance_id` | string | this serve process's instance id |
+| `ok` | boolean | whether the scan succeeded |
+| `scan_counter` | integer | the counter of the current snapshot, changed or not; absent when `ok` is `false`, since a failed scan claims no freshness |
+| `error` | string | why the scan failed; present only when `ok` is `false` |
+
+A failed rescan is also reported as a `log` warning; the last snapshot stays in force and serve keeps running. A failed initial scan ends serve with the error's exit code.
+
+`agentx serve --once` takes the serve lock, runs the initial scan, emits its snapshot and exits 0 with exactly the events `snapshot` and `result`. It watches nothing and reads no requests.
