@@ -39,7 +39,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 			defer lock.Close()
 			instance := inv.instanceID()
 			return serve.Run(cmd.Context(), serve.Options{
-				Scan:       func(ctx context.Context) (scan.Snapshot, error) { return inv.scan(ctx, "") },
+				Scan:       func(ctx context.Context) (scan.Snapshot, error) { return inv.scan(ctx, 0, "", false) },
 				Watch:      inv.watchedDirs(),
 				Once:       once,
 				Stdin:      cmd.InOrStdin(),
