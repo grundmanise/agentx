@@ -8,22 +8,18 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 )
 
-// watcher signals changes in the directories serve cares about: through
-// events and errors while the filesystem watcher works, through tick once
-// it does not. Reading a nil channel blocks forever, so the loop selects on
-// all three.
+// watcher signals changes in the directories serve cares about, through
+// events and errors. Watching is a precondition of serve: when it cannot be
+// set up, or a directory cannot be watched later, the error ends serve.
 type watcher struct {
-	b      backend  // nil once watching failed
-	dirs   []string // directories to watch, in order
-	trees  []string // directories whose subdirectories are watched too
-	ticker *time.Ticker
+	b     backend
+	dirs  []string // directories to watch, in order
+	trees []string // directories whose subdirectories are watched too
 
 	events <-chan struct{}
 	errors <-chan error
-	tick   <-chan time.Time
 }
 
 // backend is one platform's way of watching: one fsnotify watch per
@@ -31,7 +27,6 @@ type watcher struct {
 // built with cgo. Both deliver through signals.
 type backend interface {
 	// sync brings the watches in line with the directories that exist now.
-	// The error is fatal: watching stops and the periodic rescan takes over.
 	sync(dirs, trees []string) error
 	close()
 }
@@ -58,51 +53,27 @@ func (s signals) failed(err error) {
 	}
 }
 
-// newWatcher watches dirs and every directory below each of trees. On error
-// the watcher is still usable: it ticks instead.
+// newWatcher watches dirs and every directory below each of trees.
 func newWatcher(dirs, trees []string) (*watcher, error) {
 	events := make(chan struct{}, 1)
 	errs := make(chan error, 1)
-	ws := &watcher{dirs: dirs, trees: trees, events: events, errors: errs}
 	b, err := newBackend(signals{events: events, errors: errs})
 	if err != nil {
-		ws.fail()
-		return ws, err
+		return nil, err
 	}
-	ws.b = b
-	return ws, ws.sync()
+	ws := &watcher{b: b, dirs: dirs, trees: trees, events: events, errors: errs}
+	if err := ws.sync(); err != nil {
+		ws.close()
+		return nil, err
+	}
+	return ws, nil
 }
 
 // sync brings the watches in line with the directories that exist now: one
 // that appeared is watched from now on, one that disappeared is dropped.
-func (ws *watcher) sync() error {
-	if ws.b == nil {
-		return nil // watching failed earlier and was reported then
-	}
-	if err := ws.b.sync(ws.dirs, ws.trees); err != nil {
-		ws.fail()
-		return err
-	}
-	return nil
-}
+func (ws *watcher) sync() error { return ws.b.sync(ws.dirs, ws.trees) }
 
-// fail closes the filesystem watcher and starts the periodic rescan.
-func (ws *watcher) fail() {
-	ws.close()
-	ws.events, ws.errors = nil, nil
-	ws.ticker = time.NewTicker(fallback)
-	ws.tick = ws.ticker.C
-}
-
-func (ws *watcher) close() {
-	if ws.b != nil {
-		ws.b.close()
-		ws.b = nil
-	}
-	if ws.ticker != nil {
-		ws.ticker.Stop()
-	}
-}
+func (ws *watcher) close() { ws.b.close() }
 
 // roots resolves dirs to the real paths that exist now, in order and each
 // once; a directory that does not exist is left out and tried again on the

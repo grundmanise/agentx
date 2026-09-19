@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -18,8 +19,11 @@ import (
 const (
 	debounce = 100 * time.Millisecond // quiet time after the last change before a rescan
 	maxWait  = 500 * time.Millisecond // a rescan happens this long after the first change at the latest
-	fallback = 2 * time.Second        // rescan period when watching is impossible
 )
+
+// ErrWatch wraps the error that ends serve because a directory cannot be
+// watched: the watcher cannot be created, or a watch cannot be added.
+var ErrWatch = errors.New("cannot watch for changes")
 
 // Options wires one serve loop to the command that runs it: how to scan and
 // how to report. Every report function is called from the loop's goroutine.
@@ -39,8 +43,9 @@ type Options struct {
 const requestHint = `send one JSON object per line, such as {"type":"refresh","request_id":"<unique id>"}`
 
 // Run serves until ctx is done, stdin closes or, under Once, the initial
-// snapshot is emitted. It returns an error only when the initial scan fails;
-// a cancelled ctx is a clean end.
+// snapshot is emitted. It returns an error when the initial scan fails or
+// when watching fails, at start or later, wrapped in ErrWatch; a cancelled
+// ctx is a clean end.
 func Run(ctx context.Context, o Options) error {
 	ctx, cancel := context.WithCancel(ctx) // ends the stdin reader when Run returns for another reason
 	defer cancel()
@@ -49,13 +54,10 @@ func Run(ctx context.Context, o Options) error {
 		return l.initial(ctx)
 	}
 
-	warnWatch := func(err error) {
-		if err != nil {
-			o.Warn(fmt.Sprintf("cannot watch for changes, rescanning every %s: %v", fallback, err))
-		}
-	}
 	w, err := newWatcher(o.Watch, o.Trees) // before the initial scan, so a change during it is not missed
-	warnWatch(err)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrWatch, err)
+	}
 	defer w.close()
 	if err := l.initial(ctx); err != nil {
 		return err
@@ -71,12 +73,17 @@ func Run(ctx context.Context, o Options) error {
 		}
 		debounceC = time.After(debounce)
 	}
-	rescan := func() {
+	// rescan brings the watches in line first, so a directory the scan finds
+	// is watched from then on; a directory that cannot be watched ends serve.
+	rescan := func() error {
 		debounceC, deadlineC = nil, nil
-		warnWatch(w.sync()) // before the scan, so a directory the scan finds is watched from then on
+		if err := w.sync(); err != nil {
+			return fmt.Errorf("%w: %w", ErrWatch, err)
+		}
 		if err := l.scan(ctx); err != nil && ctx.Err() == nil {
 			o.Warn("scan failed: " + err.Error())
 		}
+		return nil
 	}
 	for {
 		select {
@@ -102,12 +109,14 @@ func Run(ctx context.Context, o Options) error {
 		case err := <-w.errors:
 			o.Warn("watch: " + err.Error())
 			schedule()
-		case <-w.tick:
-			rescan()
 		case <-debounceC:
-			rescan()
+			if err := rescan(); err != nil {
+				return err
+			}
 		case <-deadlineC:
-			rescan()
+			if err := rescan(); err != nil {
+				return err
+			}
 		}
 	}
 }

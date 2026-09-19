@@ -39,7 +39,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 			}
 			defer lock.Close()
 			dirs, trees := inv.watchedDirs()
-			return serve.Run(cmd.Context(), serve.Options{
+			err = serve.Run(cmd.Context(), serve.Options{
 				Scan:  func(ctx context.Context) (scan.Snapshot, error) { return inv.scan(ctx, 0, "", false) },
 				Watch: dirs,
 				Trees: trees,
@@ -65,6 +65,10 @@ func newServeCommand(inv *invocation) *cobra.Command {
 				},
 				Warn: inv.out.warn,
 			})
+			if errors.Is(err, serve.ErrWatch) {
+				return fail(exitRefused, err.Error(), "raise the system's watch limit: fs.inotify.max_user_watches on Linux, open files (ulimit -n) on macOS")
+			}
+			return err
 		},
 	}
 	cmd.Flags().BoolVar(&once, "once", false, "scan once, emit the snapshot and exit")
