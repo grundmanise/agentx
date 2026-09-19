@@ -1,7 +1,6 @@
 package scan
 
 import (
-	"encoding/json"
 	"maps"
 	"os"
 	"path/filepath"
@@ -29,17 +28,36 @@ func (c codex) MCPConfigs(d home.Dirs) []MCPConfig {
 	return []MCPConfig{{Path: filepath.Join(c.ConfigDir(d), "config.toml"), Format: mcp.CodexTOML}}
 }
 
+// codexPluginTable is one `[plugins."<name>@<marketplace>"]` table of
+// config.toml: the plugin's enabled state and, under mcp_servers, one
+// overlay per server the plugin provides, which can turn that server off.
+type codexPluginTable struct {
+	Enabled *bool `toml:"enabled"`
+	Servers map[string]struct {
+		Enabled *bool `toml:"enabled"`
+	} `toml:"mcp_servers"`
+}
+
+// disabledServers names the servers whose overlay sets enabled = false.
+func (t codexPluginTable) disabledServers() []string {
+	var names []string
+	for name, s := range t.Servers {
+		if s.Enabled != nil && !*s.Enabled {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
 // Plugins joins the `[plugins."<name>@<marketplace>"]` tables of config.toml,
-// each with its enabled state, with the bundles under
+// each with its enabled state and its server overlays, with the bundles under
 // plugins/cache/<marketplace>/<name>/<version>. A table without a bundle is
 // a warning; a bundle without a table, which is how a remote install shows
 // up, is reported without an enabled state.
 func (c codex) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 	configPath := filepath.Join(c.ConfigDir(d), "config.toml")
 	var config struct {
-		Plugins map[string]struct {
-			Enabled *bool `toml:"enabled"`
-		} `toml:"plugins"`
+		Plugins map[string]codexPluginTable `toml:"plugins"`
 	}
 	if b, err := os.ReadFile(configPath); err != nil {
 		if !os.IsNotExist(err) {
@@ -57,7 +75,7 @@ func (c codex) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 			}
 		}
 	}
-	enabled := map[string]*bool{}
+	tables := map[string]codexPluginTable{}
 	for key, table := range config.Plugins {
 		name, marketplace, ok := pluginKey(key)
 		if !ok {
@@ -68,14 +86,17 @@ func (c codex) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 			warn(filepath.Join(cache, marketplace, name) + ": plugin " + key + " is not installed there, skipped")
 			continue
 		}
-		on := table.Enabled == nil || *table.Enabled
-		enabled[key] = &on
+		tables[key] = table
 	}
 	var plugins []InstalledPlugin
 	for _, key := range slices.Sorted(maps.Keys(bundles)) {
 		name, marketplace, _ := pluginKey(key)
 		p := codexPlugin(name, marketplace, bundles[key], warn)
-		p.Enabled = enabled[key]
+		if table, ok := tables[key]; ok {
+			on := table.Enabled == nil || *table.Enabled
+			p.Enabled = &on
+			p.DisabledServers = table.disabledServers()
+		}
 		plugins = append(plugins, p)
 	}
 	return plugins
@@ -110,43 +131,10 @@ func codexPlugin(name, marketplace, dir string, warn func(string)) InstalledPlug
 	if m.Version != "" {
 		p.Version = m.Version
 	}
-	for _, rel := range manifestPaths(m.Skills) {
-		p.Skills = append(p.Skills, filepath.Join(dir, rel))
-	}
-	if p.Skills == nil {
-		p.Skills = []string{filepath.Join(dir, "skills")}
-	}
+	p.Skills = manifestSkills(m, manifest, dir, warn)
 	p.Servers = MCPConfig{Format: mcp.CodexJSON}
-	switch named := manifestPaths(m.MCPServers); {
-	case len(m.MCPServers) > 0 && m.MCPServers[0] == '{':
-		p.Servers.Path, p.Servers.Data = manifest, m.MCPServers
-	case len(named) == 1:
-		p.Servers.Path = filepath.Join(dir, named[0])
-	default:
-		if p.Servers.Path = firstFile(dir, ".mcp.json", "mcp.json"); p.Servers.Path == "" {
-			p.Servers.Path = filepath.Join(dir, ".mcp.json")
-		}
-	}
+	p.Servers.Path, p.Servers.Data = manifestServers(m, manifest, dir, warn, ".mcp.json", "mcp.json")
 	return p
-}
-
-// manifestPaths reads a manifest path field, one string or a list, keeping
-// the paths that start with ./ and stay inside the bundle.
-func manifestPaths(raw json.RawMessage) []string {
-	var one string
-	var list []string
-	if json.Unmarshal(raw, &one) == nil {
-		list = []string{one}
-	} else {
-		_ = json.Unmarshal(raw, &list) // neither a string nor a list names no path
-	}
-	var paths []string
-	for _, rel := range list {
-		if strings.HasPrefix(rel, "./") && !slices.Contains(strings.Split(rel, "/"), "..") {
-			paths = append(paths, rel)
-		}
-	}
-	return paths
 }
 
 // versionName is what Codex allows in a version directory name.

@@ -94,6 +94,7 @@ type ServerOccurrence struct {
 	Transport     string   `json:"transport"`
 	Handshake     bool     `json:"handshake"` // whether this scan handshook the server
 	Plugin        string   `json:"plugin,omitempty"`
+	Enabled       *bool    `json:"enabled,omitempty"` // false only when the client records the server as turned off
 }
 
 // Plugin is one plugin bundle installed in one configuration, in one version.
@@ -162,7 +163,7 @@ func Read(o Options) *Scan {
 			}
 		}
 		for _, cfg := range c.MCPConfigs(o.Dirs) {
-			b.addServers(conf, cfg, "", "")
+			b.addServers(conf, cfg, "", "", nil)
 		}
 		for _, p := range c.Plugins(o.Dirs, b.warn) {
 			b.addPlugin(conf, p)
