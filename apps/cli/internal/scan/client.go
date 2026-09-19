@@ -39,21 +39,27 @@ type Client interface {
 	Plugins(d home.Dirs, warn func(string)) []InstalledPlugin
 }
 
-// MCPConfig is one file that declares MCP servers.
+// MCPConfig is one source of MCP server declarations: a file, or, with
+// Data set, content already read from Path (a manifest that declares its
+// servers inline). Vars are expanded in the declarations as `${<name>}`.
 type MCPConfig struct {
 	Path   string
 	Format mcp.Format
+	Data   []byte
+	Vars   map[string]string
 }
 
 // InstalledPlugin is one plugin bundle found on disk. Its skills are the
-// children of <Path>/skills; its servers are declared in Servers, a file
-// that may not exist.
+// children of its Skills directories; its servers are declared in Servers,
+// a file that may not exist.
 type InstalledPlugin struct {
 	Name        string
 	Marketplace string // where it was installed from; empty when unknown
 	Version     string
 	Path        string
+	Skills      []string
 	Servers     MCPConfig
+	Enabled     *bool // nil for a client that records no enabled state
 }
 
 // Detect returns the registered clients whose configuration directory

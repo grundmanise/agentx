@@ -44,6 +44,9 @@ const (
 	// CodexTOML is `[mcp_servers.<name>]` tables: command, args and env for a
 	// local server; url, http_headers and env_http_headers for a remote one.
 	CodexTOML
+	// CodexJSON is a Codex plugin's server file: the CodexTOML fields as JSON,
+	// under `mcpServers` or as a bare map of name to declaration.
+	CodexJSON
 )
 
 // Parse reads every server in data. Unknown keys are ignored; an entry that
@@ -52,7 +55,8 @@ const (
 // a decoder's message can quote the file, and the file can hold secrets.
 func Parse(f Format, data []byte) ([]Server, error) {
 	var entries map[string]any
-	if f == CodexTOML {
+	switch f {
+	case CodexTOML:
 		var doc struct {
 			Servers map[string]any `toml:"mcp_servers"`
 		}
@@ -60,7 +64,14 @@ func Parse(f Format, data []byte) ([]Server, error) {
 			return nil, errors.New("invalid TOML")
 		}
 		entries = doc.Servers
-	} else {
+	case CodexJSON:
+		if json.Unmarshal(data, &entries) != nil {
+			return nil, errors.New("invalid JSON")
+		}
+		if wrapped, ok := entries["mcpServers"].(map[string]any); ok {
+			entries = wrapped
+		}
+	default:
 		var doc struct {
 			Servers map[string]any `json:"mcpServers"`
 		}
@@ -95,7 +106,7 @@ func server(f Format, name string, e map[string]any) Server {
 		kind = str(e["transport"])
 	}
 	sse := strings.EqualFold(kind, "sse")
-	if f == CodexTOML {
+	if f == CodexTOML || f == CodexJSON {
 		s.URL = str(e["url"])
 		s.HeaderKeys = append(keys(e["http_headers"]), keys(e["env_http_headers"])...)
 		sort.Strings(s.HeaderKeys)
@@ -122,6 +133,24 @@ func server(f Format, name string, e map[string]any) Server {
 		s.Transport = "streamable-http"
 	}
 	return s
+}
+
+// Expand replaces `${<name>}` for every name in vars in the command, the
+// arguments and the environment values, for a declaration that refers to
+// where its plugin lives.
+func (s *Server) Expand(vars map[string]string) {
+	var pairs []string
+	for k, v := range vars {
+		pairs = append(pairs, "${"+k+"}", v)
+	}
+	r := strings.NewReplacer(pairs...)
+	s.Command = r.Replace(s.Command)
+	for i, a := range s.Args {
+		s.Args[i] = r.Replace(a)
+	}
+	for k, v := range s.env {
+		s.env[k] = r.Replace(v)
+	}
 }
 
 func str(v any) string {

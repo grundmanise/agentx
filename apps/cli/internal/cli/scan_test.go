@@ -214,6 +214,70 @@ var fixtures = map[string]fixture{
 			".gemini/extensions/notes/gemini-extension.json":                              `{"name": "notes", "version": "1.0.0"}`,
 		},
 	},
+	"codex-plugins": {
+		files: map[string]string{
+			".codex/config.toml": "model = \"o3\"\n\n[marketplaces.team]\nsource_type = \"local\"\nsource = \"$HOME/marketplaces/team\"\n\n" +
+				"[plugins.\"alpha@personal\"]\nenabled = true\n\n[plugins.\"beta@team\"]\nenabled = false\n\n[plugins.\"beta@team\".mcp_servers.agent-srv]\nenabled = true\n\n" +
+				"[plugins.\"broken@personal\"]\n\n[plugins.\"delta@team\"]\n\n[plugins.\"ghost@team\"]\nenabled = true\n\n[plugins.\"no-marketplace\"]\nenabled = true\n",
+			// alpha: two versions, local wins; the manifest names the server file.
+			".codex/plugins/cache/personal/alpha/1.2.3/.codex-plugin/plugin.json": `{"name": "alpha", "version": "1.2.3"}`,
+			".codex/plugins/cache/personal/alpha/1.2.3/skills/old/SKILL.md":       skill("old", "Must not appear"),
+			".codex/plugins/cache/personal/alpha/local/.codex-plugin/plugin.json": `{"name": "alpha", "description": "Alpha tools", "mcpServers": "./conf/mcp.json"}`,
+			".codex/plugins/cache/personal/alpha/local/skills/one/SKILL.md":       skill("one", "The first skill"),
+			".codex/plugins/cache/personal/alpha/local/conf/mcp.json":             `{"mcpServers": {"alpha-db": {"command": "npx", "args": ["-y", "@acme/alpha-mcp"], "env": {"DB_TOKEN": "secret-codex-plugin-env-value"}}}}`,
+			// beta: disabled, agent-plugins manifest at the root, servers in mcp.json.
+			".codex/plugins/cache/team/beta/0.4.0/plugin.json":         `{"$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json", "name": "beta", "version": "0.4.0"}`,
+			".codex/plugins/cache/team/beta/0.4.0/mcp.json":            `{"$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json", "mcpServers": {"agent-srv": {"type": "http", "url": "https://mcp.example.com/beta", "http_headers": {"X-Key": "secret-codex-plugin-header-value"}, "env_http_headers": {"X-Env": "BETA_ENV"}}}}`,
+			".codex/plugins/cache/team/beta/0.4.0/skills/two/SKILL.md": skill("two", "The second skill"),
+			// broken: a manifest that is not JSON.
+			".codex/plugins/cache/personal/broken/1.0.0/.codex-plugin/plugin.json": `{not json`,
+			// delta: semver decides between 1.9.0 and 1.10.0; a root plugin.json
+			// without the agent-plugins schema is not the manifest; the manifest
+			// names the skills root and declares its server inline.
+			".codex/plugins/cache/team/delta/1.9.0/.codex-plugin/plugin.json":  `{"name": "delta", "version": "1.9.0"}`,
+			".codex/plugins/cache/team/delta/1.10.0/plugin.json":               `{"name": "decoy", "version": "9.9.9"}`,
+			".codex/plugins/cache/team/delta/1.10.0/.codex-plugin/plugin.json": `{"name": "delta", "version": "1.10.0", "skills": ["./extra"], "mcpServers": {"delta-srv": {"command": "node", "args": ["srv.js"], "env": {"TOKEN": "secret-codex-inline-env-value"}}}}`,
+			".codex/plugins/cache/team/delta/1.10.0/extra/four/SKILL.md":       skill("four", "The fourth skill"),
+			".codex/plugins/cache/team/delta/1.10.0/skills/ignored/SKILL.md":   skill("ignored", "Must not appear"),
+			// gamma: a cache entry without a config key, a legacy .claude-plugin
+			// manifest, a bare server map in .mcp.json.
+			".codex/plugins/cache/team/gamma/2.0.0/.claude-plugin/plugin.json":  `{"name": "gamma", "version": "2.0.0"}`,
+			".codex/plugins/cache/team/gamma/2.0.0/skills/three/SKILL.md":       skill("three", "The third skill"),
+			".codex/plugins/cache/team/gamma/2.0.0/.mcp.json":                   `{"gamma-srv": {"command": "python", "args": ["-m", "gamma"]}}`,
+			".codex/plugins/cache/team/gamma/.codex-remote-plugin-install.json": `{"schema_version": 1, "remote_plugin_id": "gamma-remote"}`,
+		},
+	},
+	"cursor-plugins": {
+		files: map[string]string{
+			// local: both manifest formats, a plugin without a manifest, a
+			// manifest that is not JSON, a file, a hidden directory.
+			".cursor/plugins/local/agent-std/plugin.json":                    `{"$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json", "name": "agent-std", "version": "0.1.0"}`,
+			".cursor/plugins/local/agent-std/skills/lint/SKILL.md":           skill("lint", "Lint the code"),
+			".cursor/plugins/local/agent-std/mcp.json":                       `{"mcpServers": {"std-srv": {"command": "${CURSOR_PLUGIN_ROOT}/bin/srv", "args": ["--root", "${CURSOR_PLUGIN_ROOT}"], "env": {"TOKEN": "secret-cursor-plugin-env-value"}}}}`,
+			".cursor/plugins/local/cursor-fmt/.cursor-plugin/plugin.json":    `{"name": "cursor-fmt", "version": "1.0.0", "description": "Format"}`,
+			".cursor/plugins/local/cursor-fmt/rules/style.mdc":               "# style\n",
+			".cursor/plugins/local/cursor-fmt/skills/format/SKILL.md":        skill("format", "Format the code"),
+			".cursor/plugins/local/cursor-fmt/.mcp.json":                     `{"mcpServers": {"fmt-srv": {"command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/server.js"]}}}`,
+			".cursor/plugins/local/bare/skills/notes/SKILL.md":               skill("notes", "Take notes"),
+			".cursor/plugins/local/bad/.cursor-plugin/plugin.json":           `{not json`,
+			".cursor/plugins/local/.store/stored/.cursor-plugin/plugin.json": `{"name": "stored", "version": "2.0.0"}`,
+			".cursor/plugins/local/README.md":                                "not a plugin\n",
+			"elsewhere/escaped/.cursor-plugin/plugin.json":                   `{"name": "escaped", "version": "1.0.0"}`,
+			// cache: a commit SHA and a release tag as version directories, one
+			// entry without the completion marker.
+			".cursor/plugins/cache/cursor-public/thermos/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b/.cache-complete":            "",
+			".cursor/plugins/cache/cursor-public/thermos/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b/.cursor-plugin/plugin.json": `{"name": "thermos", "description": "Keep it warm"}`,
+			".cursor/plugins/cache/cursor-public/thermos/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b/skills/brew/SKILL.md":       skill("brew", "Brew tea"),
+			".cursor/plugins/cache/cursor-public/thermos/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b/.mcp.json":                  `{"mcpServers": {"thermos-api": {"url": "https://api.thermos.example.com/mcp", "headers": {"Authorization": "secret-cursor-plugin-header-value"}}}}`,
+			".cursor/plugins/cache/acme-team/tools/release_v1.2.0/.cache-complete":                                            "",
+			".cursor/plugins/cache/acme-team/tools/release_v1.2.0/.claude-plugin/plugin.json":                                 `{"name": "tools", "version": "1.2.0"}`,
+			".cursor/plugins/cache/cursor-public/half/0000000000000000000000000000000000000000/.cursor-plugin/plugin.json":    `{"name": "half"}`,
+		},
+		links: map[string]string{
+			".cursor/plugins/local/escape": "elsewhere/escaped",
+			".cursor/plugins/local/linked": ".cursor/plugins/local/.store/stored",
+		},
+	},
 }
 
 func scanArgs(h *harness, f fixture) []string {
@@ -393,6 +457,15 @@ func TestScanWarnings(t *testing.T) {
 		{"plugins", []string{
 			"~/.claude/plugins/cache/acme-tools/gone/2.0.0: plugin gone@acme-tools is not installed there, skipped",
 			"~/.claude/plugins/installed_plugins.json: plugin legacy@acme-tools has no installPath, skipped",
+		}},
+		{"codex-plugins", []string{
+			"~/.codex/config.toml: plugin key \"no-marketplace\" is not <name>@<marketplace>, skipped",
+			"~/.codex/plugins/cache/personal/broken/1.0.0/.codex-plugin/plugin.json: invalid JSON, skipped",
+			"~/.codex/plugins/cache/team/ghost: plugin ghost@team is not installed there, skipped",
+		}},
+		{"cursor-plugins", []string{
+			"~/.cursor/plugins/local/bad/.cursor-plugin/plugin.json: invalid JSON, skipped",
+			"~/.cursor/plugins/local/escape: symlink resolves outside ~/.cursor/plugins/local, skipped",
 		}},
 	}
 	for _, tt := range tests {
@@ -729,20 +802,32 @@ func TestScanMCPServers(t *testing.T) {
 	}
 }
 
+// plugins lists "name|marketplace|version|configuration|path" for every
+// plugin node, with "|enabled=<bool>" when the node carries the field, and
+// the physical ids by name.
+func plugins(t *testing.T, h *harness, snap jsonEvent) (rows []string, ids map[string]string) {
+	t.Helper()
+	ids = map[string]string{}
+	for _, p := range snap["plugins"].([]any) {
+		plugin := p.(map[string]any)
+		ids[plugin["name"].(string)] = plugin["physical_id"].(string)
+		row := fmt.Sprintf("%s|%s|%s|%s|%s", plugin["name"], plugin["marketplace"], plugin["version"], plugin["configuration"], h.portable(plugin["path"].(string)))
+		if enabled, ok := plugin["enabled"]; ok {
+			row += fmt.Sprintf("|enabled=%v", enabled)
+		}
+		rows = append(rows, row)
+	}
+	sort.Strings(rows)
+	return rows, ids
+}
+
 func TestScanPlugins(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	h.build(t, fixtures["plugins"])
 	snap := h.snapshot(t)
 
-	var rows []string
-	ids := map[string]string{} // plugin name to physical id
-	for _, p := range snap["plugins"].([]any) {
-		plugin := p.(map[string]any)
-		ids[plugin["name"].(string)] = plugin["physical_id"].(string)
-		rows = append(rows, fmt.Sprintf("%s|%s|%s|%s|%s", plugin["name"], plugin["marketplace"], plugin["version"], plugin["configuration"], h.portable(plugin["path"].(string))))
-	}
-	sort.Strings(rows)
+	rows, ids := plugins(t, h, snap)
 	want := []string{
 		"formatter|acme-tools|1.2.0|claude-code|~/.claude/plugins/cache/acme-tools/formatter/1.2.0",
 		"notes||1.0.0|gemini-cli|~/.gemini/extensions/notes",
@@ -800,4 +885,183 @@ func TestScanPlugins(t *testing.T) {
 	contains(t, "stdout", out.stdout, "notes     1.0.0\n")
 	contains(t, "stdout", out.stdout, "security  0.3.0\n")
 	noSecrets(t, h, fixtures["plugins"])
+}
+
+func TestScanCodexPlugins(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	f := fixtures["codex-plugins"]
+	h.build(t, f)
+	snap := h.snapshot(t)
+
+	rows, ids := plugins(t, h, snap)
+	want := []string{
+		"alpha|personal|local|codex|~/.codex/plugins/cache/personal/alpha/local|enabled=true",
+		"beta|team|0.4.0|codex|~/.codex/plugins/cache/team/beta/0.4.0|enabled=false",
+		"broken|personal|1.0.0|codex|~/.codex/plugins/cache/personal/broken/1.0.0|enabled=true",
+		"delta|team|1.10.0|codex|~/.codex/plugins/cache/team/delta/1.10.0|enabled=true",
+		"gamma|team|2.0.0|codex|~/.codex/plugins/cache/team/gamma/2.0.0",
+	}
+	if !reflect.DeepEqual(rows, want) {
+		t.Errorf("plugins = %q, want %q", rows, want)
+	}
+
+	equal(t, "skill nodes", len(snap["skills"].([]any)), 4)
+	for skill, wantOcc := range map[string][]string{
+		"one":     {"codex directory user ~/.codex/plugins/cache/personal/alpha/local/skills/one plugin=alpha"},
+		"two":     {"codex directory user ~/.codex/plugins/cache/team/beta/0.4.0/skills/two plugin=beta"},
+		"three":   {"codex directory user ~/.codex/plugins/cache/team/gamma/2.0.0/skills/three plugin=gamma"},
+		"four":    {"codex directory user ~/.codex/plugins/cache/team/delta/1.10.0/extra/four plugin=delta"},
+		"old":     nil,
+		"ignored": nil,
+	} {
+		if got := occurrences(t, h, snap, skill); !reflect.DeepEqual(got, wantOcc) {
+			t.Errorf("%s occurrences = %q, want %q", skill, got, wantOcc)
+		}
+	}
+
+	serverRows, nodes := servers(t, snap)
+	wantServers := []string{
+		"agent-srv streamable-http codex https://mcp.example.com/beta",
+		"alpha-db stdio codex npx -y @acme/alpha-mcp",
+		"delta-srv stdio codex node srv.js",
+		"gamma-srv stdio codex python -m gamma",
+	}
+	if !reflect.DeepEqual(serverRows, wantServers) {
+		t.Errorf("server occurrences = %q, want %q", serverRows, wantServers)
+	}
+	equal(t, "server nodes", nodes, 4)
+	for _, s := range snap["mcp_servers"].([]any) {
+		node := s.(map[string]any)
+		occ := node["occurrences"].([]any)[0].(map[string]any)
+		switch node["name"] {
+		case "agent-srv":
+			equal(t, "agent-srv plugin", occ["plugin"], "beta")
+			equal(t, "agent-srv config_file", h.portable(occ["config_file"].(string)), "~/.codex/plugins/cache/team/beta/0.4.0/mcp.json")
+			if got := occ["header_keys"]; !reflect.DeepEqual(got, []any{"X-Env", "X-Key"}) {
+				t.Errorf("agent-srv header_keys = %v", got)
+			}
+		case "alpha-db":
+			equal(t, "alpha-db config_file", h.portable(occ["config_file"].(string)), "~/.codex/plugins/cache/personal/alpha/local/conf/mcp.json")
+			if got := occ["env_keys"]; !reflect.DeepEqual(got, []any{"DB_TOKEN"}) {
+				t.Errorf("alpha-db env_keys = %v", got)
+			}
+		case "delta-srv":
+			equal(t, "delta-srv config_file", h.portable(occ["config_file"].(string)), "~/.codex/plugins/cache/team/delta/1.10.0/.codex-plugin/plugin.json")
+			if got := occ["env_keys"]; !reflect.DeepEqual(got, []any{"TOKEN"}) {
+				t.Errorf("delta-srv env_keys = %v", got)
+			}
+		case "gamma-srv":
+			equal(t, "gamma-srv config_file", h.portable(occ["config_file"].(string)), "~/.codex/plugins/cache/team/gamma/2.0.0/.mcp.json")
+		}
+	}
+
+	from := map[string]int{}
+	for _, e := range snap["edges"].([]any) {
+		from[e.(map[string]any)["from"].(string)]++
+	}
+	for name, n := range map[string]int{"alpha": 2, "beta": 2, "broken": 0, "delta": 2, "gamma": 2} {
+		equal(t, "edges from "+name, from[ids[name]], n)
+	}
+	equal(t, "edges", len(snap["edges"].([]any)), 1+5+4+4+8) // machine to codex, five plugins, four skills, four servers, eight provides
+
+	out := h.run("scan")
+	equal(t, "exit", out.exit, 0)
+	contains(t, "stdout", out.stdout, "  plugins:\n")
+	var beta string
+	for _, line := range strings.Split(out.stdout, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "beta ") {
+			beta = line
+		}
+	}
+	contains(t, "beta line", beta, "0.4.0")
+	contains(t, "beta line", beta, "(disabled)")
+	equal(t, "disabled markers", strings.Count(out.stdout, "(disabled)"), 1)
+	equal(t, "secrets in fixture", len(secrets(f)), 3)
+	noSecrets(t, h, f)
+}
+
+func TestScanCursorPlugins(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	f := fixtures["cursor-plugins"]
+	h.build(t, f)
+	snap := h.snapshot(t)
+
+	rows, ids := plugins(t, h, snap)
+	want := []string{
+		"agent-std||0.1.0|cursor|~/.cursor/plugins/local/agent-std",
+		"bad|||cursor|~/.cursor/plugins/local/bad",
+		"bare|||cursor|~/.cursor/plugins/local/bare",
+		"cursor-fmt||1.0.0|cursor|~/.cursor/plugins/local/cursor-fmt",
+		"stored||2.0.0|cursor|~/.cursor/plugins/local/linked",
+		"thermos|cursor-public|9f86d081884c7d659a2feaa0c55ad015a3bf4f1b|cursor|~/.cursor/plugins/cache/cursor-public/thermos/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b",
+		"tools|acme-team|1.2.0|cursor|~/.cursor/plugins/cache/acme-team/tools/release_v1.2.0",
+	}
+	if !reflect.DeepEqual(rows, want) {
+		t.Errorf("plugins = %q, want %q", rows, want)
+	}
+
+	equal(t, "skill nodes", len(snap["skills"].([]any)), 4)
+	for skill, wantOcc := range map[string][]string{
+		"lint":   {"cursor directory user ~/.cursor/plugins/local/agent-std/skills/lint plugin=agent-std"},
+		"format": {"cursor directory user ~/.cursor/plugins/local/cursor-fmt/skills/format plugin=cursor-fmt"},
+		"notes":  {"cursor directory user ~/.cursor/plugins/local/bare/skills/notes plugin=bare"},
+		"brew":   {"cursor directory user ~/.cursor/plugins/cache/cursor-public/thermos/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b/skills/brew plugin=thermos"},
+	} {
+		if got := occurrences(t, h, snap, skill); !reflect.DeepEqual(got, wantOcc) {
+			t.Errorf("%s occurrences = %q, want %q", skill, got, wantOcc)
+		}
+	}
+
+	serverRows, nodes := servers(t, snap)
+	for i := range serverRows {
+		serverRows[i] = h.portable(serverRows[i])
+	}
+	wantServers := []string{
+		"fmt-srv stdio cursor node ~/.cursor/plugins/local/cursor-fmt/server.js",
+		"std-srv stdio cursor ~/.cursor/plugins/local/agent-std/bin/srv --root ~/.cursor/plugins/local/agent-std",
+		"thermos-api streamable-http cursor https://api.thermos.example.com/mcp",
+	}
+	if !reflect.DeepEqual(serverRows, wantServers) {
+		t.Errorf("server occurrences = %q, want %q", serverRows, wantServers)
+	}
+	equal(t, "server nodes", nodes, 3)
+	for _, s := range snap["mcp_servers"].([]any) {
+		node := s.(map[string]any)
+		occ := node["occurrences"].([]any)[0].(map[string]any)
+		switch node["name"] {
+		case "std-srv":
+			equal(t, "std-srv plugin", occ["plugin"], "agent-std")
+			equal(t, "std-srv config_file", h.portable(occ["config_file"].(string)), "~/.cursor/plugins/local/agent-std/mcp.json")
+		case "fmt-srv":
+			equal(t, "fmt-srv config_file", h.portable(occ["config_file"].(string)), "~/.cursor/plugins/local/cursor-fmt/.mcp.json")
+		case "thermos-api":
+			if got := occ["header_keys"]; !reflect.DeepEqual(got, []any{"Authorization"}) {
+				t.Errorf("thermos-api header_keys = %v", got)
+			}
+		}
+	}
+
+	from := map[string]int{}
+	for _, e := range snap["edges"].([]any) {
+		from[e.(map[string]any)["from"].(string)]++
+	}
+	for name, n := range map[string]int{"agent-std": 2, "bad": 0, "bare": 1, "cursor-fmt": 2, "stored": 0, "thermos": 2, "tools": 0} {
+		equal(t, "edges from "+name, from[ids[name]], n)
+	}
+	equal(t, "edges", len(snap["edges"].([]any)), 1+7+4+3+7) // machine to cursor, seven plugins, four skills, three servers, seven provides
+
+	out := h.run("scan")
+	equal(t, "exit", out.exit, 0)
+	contains(t, "stdout", out.stdout, "  plugins:\n")
+	contains(t, "stdout", h.portable(out.stdout), "~/.cursor/plugins/local/agent-std/bin/srv --root ~/.cursor/plugins/local/agent-std  (plugin agent-std)")
+	if !regexp.MustCompile(`(?m)^ +thermos +9f86d081884c7d659a2feaa0c55ad015a3bf4f1b$`).MatchString(out.stdout) {
+		t.Errorf("stdout has no thermos plugin line with its commit as the version:\n%s", out.stdout)
+	}
+	if strings.Contains(out.stdout, "(disabled)") {
+		t.Errorf("Cursor records no enabled state, yet the output marks a plugin disabled:\n%s", out.stdout)
+	}
+	equal(t, "secrets in fixture", len(secrets(f)), 2)
+	noSecrets(t, h, f)
 }

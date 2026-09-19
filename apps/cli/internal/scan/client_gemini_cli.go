@@ -58,6 +58,7 @@ func (c geminiCLI) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 			Marketplace: install.Source,
 			Version:     ext.Version,
 			Path:        dir,
+			Skills:      []string{filepath.Join(dir, "skills")},
 			Servers:     MCPConfig{Path: manifest, Format: mcp.GeminiJSON},
 		}
 		if p.Name == "" {

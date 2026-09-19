@@ -69,19 +69,55 @@ func (c claudeCode) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 				Marketplace: marketplace,
 				Version:     r.Version,
 				Path:        r.InstallPath,
+				Skills:      []string{filepath.Join(r.InstallPath, "skills")},
 				Servers:     MCPConfig{Path: filepath.Join(r.InstallPath, ".mcp.json"), Format: mcp.JSON},
 			}
 			if p.Version == "" {
-				var manifest struct {
-					Version string `json:"version"`
-				}
-				readJSON(filepath.Join(r.InstallPath, ".claude-plugin", "plugin.json"), &manifest, warn)
-				p.Version = manifest.Version
+				var m pluginManifest
+				readJSON(filepath.Join(r.InstallPath, ".claude-plugin", "plugin.json"), &m, warn)
+				p.Version = m.Version
 			}
 			plugins = append(plugins, p)
 		}
 	}
 	return plugins
+}
+
+// pluginManifest is what a plugin.json manifest gives every client that
+// reads one; Codex also reads its skills and mcpServers.
+type pluginManifest struct {
+	Schema     string          `json:"$schema"`
+	Name       string          `json:"name"`
+	Version    string          `json:"version"`
+	Skills     json.RawMessage `json:"skills"`
+	MCPServers json.RawMessage `json:"mcpServers"`
+}
+
+// subdirs lists the directories directly under dir by name, skipping hidden
+// ones; a missing dir has none, another error is a warning.
+func subdirs(dir string, warn func(string)) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil && !os.IsNotExist(err) {
+		warn(err.Error() + ", skipped")
+	}
+	var names []string
+	for _, e := range entries {
+		if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+			names = append(names, e.Name())
+		}
+	}
+	return names
+}
+
+// firstFile is the first of the names that is a regular file under dir, or "".
+func firstFile(dir string, names ...string) string {
+	for _, name := range names {
+		path := filepath.Join(dir, name)
+		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
+			return path
+		}
+	}
+	return ""
 }
 
 // readJSON decodes path into v and reports whether it could. A missing file

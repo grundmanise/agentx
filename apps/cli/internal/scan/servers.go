@@ -2,7 +2,6 @@ package scan
 
 import (
 	"os"
-	"path/filepath"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/mcp"
@@ -27,15 +26,18 @@ type declaration struct {
 }
 
 // addServers records every server declared in cfg inside conf, owned by
-// plugin when the file belongs to one. A missing file declares nothing; an
-// unreadable or malformed one is a warning.
+// plugin when the source belongs to one. A missing file declares nothing;
+// an unreadable or malformed one is a warning.
 func (s *Scan) addServers(conf Configuration, cfg MCPConfig, plugin, owner string) {
-	data, err := os.ReadFile(cfg.Path)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			s.warn(err.Error() + ", skipped")
+	data := cfg.Data
+	if data == nil {
+		var err error
+		if data, err = os.ReadFile(cfg.Path); err != nil {
+			if !os.IsNotExist(err) {
+				s.warn(err.Error() + ", skipped")
+			}
+			return
 		}
-		return
 	}
 	declared, err := mcp.Parse(cfg.Format, data)
 	if err != nil {
@@ -43,6 +45,7 @@ func (s *Scan) addServers(conf Configuration, cfg MCPConfig, plugin, owner strin
 		return
 	}
 	for _, server := range declared {
+		server.Expand(cfg.Vars)
 		s.declared = append(s.declared, &declaration{
 			conf:    conf,
 			file:    cfg.Path,
@@ -56,7 +59,8 @@ func (s *Scan) addServers(conf Configuration, cfg MCPConfig, plugin, owner strin
 
 // serverLogicalID is what the server is, wherever it was configured: its
 // normalised URL for a remote server, its registry and package for a local
-// server that resolves to one, else its command line on this machine.
+// server that resolves to one, else its command line on this machine, with
+// the home directory replaced by ~ like every other hashed path.
 func (s *Scan) serverLogicalID(server mcp.Server) string {
 	if u, ok := mcp.NormalizeURL(server.URL); ok {
 		return id("server", "url", u)
@@ -64,7 +68,11 @@ func (s *Scan) serverLogicalID(server mcp.Server) string {
 	if registry, pkg, ok := mcp.Package(server.Command, server.Args); ok {
 		return id("server", registry, pkg)
 	}
-	return id("server", append([]string{"machine", s.MachineID, server.Command, server.URL}, server.Args...)...)
+	parts := []string{"machine", s.MachineID, s.portable(server.Command), server.URL}
+	for _, a := range server.Args {
+		parts = append(parts, s.portable(a))
+	}
+	return id("server", parts...)
 }
 
 // composeServers builds the server nodes from the declarations: this scan's
@@ -138,6 +146,7 @@ func (s *Scan) addPlugin(conf Configuration, p InstalledPlugin) {
 		Version:       p.Version,
 		Configuration: conf.ID,
 		Path:          p.Path,
+		Enabled:       p.Enabled,
 	}
 	node.PhysicalID = id("plugin", node.LogicalID, s.MachineID, conf.PhysicalID, p.Version)
 	if !s.plugins[node.PhysicalID] {
@@ -145,9 +154,11 @@ func (s *Scan) addPlugin(conf Configuration, p InstalledPlugin) {
 		s.snap.Plugins = append(s.snap.Plugins, node)
 	}
 	s.edge(conf.PhysicalID, node.PhysicalID)
-	for _, placement := range s.skillsIn(filepath.Join(p.Path, "skills")) {
-		skill := s.add(conf, placement, "user", p.Name)
-		s.edge(node.PhysicalID, skill.PhysicalID)
+	for _, dir := range p.Skills {
+		for _, placement := range s.skillsIn(dir) {
+			skill := s.add(conf, placement, "user", p.Name)
+			s.edge(node.PhysicalID, skill.PhysicalID)
+		}
 	}
 	s.addServers(conf, p.Servers, p.Name, node.PhysicalID)
 }

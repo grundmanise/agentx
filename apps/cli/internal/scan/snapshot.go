@@ -105,6 +105,7 @@ type Plugin struct {
 	Version       string `json:"version"`
 	Configuration string `json:"configuration"`
 	Path          string `json:"path"`
+	Enabled       *bool  `json:"enabled,omitempty"` // only for a client that records it
 }
 
 type Edge struct {
