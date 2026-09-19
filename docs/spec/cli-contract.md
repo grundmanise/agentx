@@ -83,7 +83,7 @@ Every run emits exactly one `result` as its last stdout event, after any `error`
 
 `snapshot`, emitted by `agentx scan`, is described under [Snapshot](#snapshot).
 
-The other event types are `progress`, `reconcile`, `configuration`, `skill`, `mcp_server`, `plugin`, `doctor`, `search`, `refresh_complete`, `drift`, `update_available` and `conflict`. Their fields are added to this document by the command that first emits them. `operation` and `fleet` are reserved and never emitted.
+`configuration`, `skill`, `mcp_server` and `plugin` are node types carried inside `snapshot`; no command emits them as events of their own. The other event types are `progress`, `reconcile`, `doctor`, `search`, `refresh_complete`, `drift`, `update_available` and `conflict`. Their fields are added to this document by the command that first emits them. `operation` and `fleet` are reserved and never emitted.
 
 ## Exit codes
 
@@ -191,11 +191,11 @@ A missing name or description contributes empty bytes; a missing or unparsable f
 
 ## Snapshot
 
-`agentx scan` inventories the machine and emits one `snapshot` event: every detected agent configuration and every skill each one can see. It writes nothing. Two scans of an unchanged machine produce byte-identical events when `instance_id` is fixed.
+`agentx scan` inventories the machine and emits one `snapshot` event: every detected agent configuration, every skill each one can see, every MCP server each one declares and every plugin each one has installed, with the skills and servers a plugin provides. It writes nothing and never starts or connects to a server. Two scans of an unchanged machine produce byte-identical events when `instance_id` is fixed.
 
 `agentx scan --project <path>` adds the project-scope skills found under `<path>` in each detected configuration's project skills directories, read-only; `<path>` must exist, else exit code 5. `agentx scan --configuration <id>` names the configuration that changed; the id must be detected, else exit code 5 with a hint listing the detected ids, and the whole machine is scanned regardless, since a one-shot command has no earlier snapshot to reuse.
 
-Without `--json`, the output is one section per configuration, headed `<name> (<id>)  <path>  enabled|disabled`, with one line per occurrence: skill name, kind, scope and placement path, followed by ` -> <resolved path>` for a symlink. Warnings go to stderr as `warning: <message>`.
+Without `--json`, the output is one section per configuration, headed `<name> (<id>)  <path>  enabled|disabled`, with one line per occurrence: skill name, kind, scope and placement path, followed by ` -> <resolved path>` for a symlink and by `  (plugin <name>)` for a placement inside a plugin. A configuration that declares servers continues with a `servers:` line and one line per server: name, transport, then the command line or the URL, with `  (plugin <name>)` for a server a plugin provides. A configuration with plugins continues with a `plugins:` line and one `name  version` line per plugin. Environment and header values are never printed. Warnings go to stderr as `warning: <message>`.
 
 The event:
 
@@ -206,7 +206,9 @@ The event:
 | `machine` | object | `id`, the machine id, and `label` |
 | `configurations` | array | the detected configurations, sorted by `id` |
 | `skills` | array | the skill nodes, sorted by `physical_id` |
-| `edges` | array | `{"from", "to"}` pairs of node ids, sorted by `from` then `to`: the machine id to each configuration, each configuration to each skill it sees |
+| `mcp_servers` | array | the MCP server nodes, sorted by `physical_id` |
+| `plugins` | array | the plugin nodes, sorted by `physical_id` |
+| `edges` | array | `{"from", "to"}` pairs of node ids, sorted by `from` then `to`: the machine id to each configuration; each configuration to each skill it sees, each server it declares and each plugin it has installed; each plugin to each skill and server it provides |
 | `warnings` | array of strings | what could not be read, sorted; a warning never fails the scan |
 
 A configuration:
@@ -241,10 +243,62 @@ An occurrence:
 | `resolved_path` | string | the real directory after following every symlink |
 | `kind` | string | `symlink` when the placement path is a symlink; `copy` when it is a real directory in user scope and `copy_mode` lists the configuration under the directory's name; `directory` for every other real directory |
 | `scope` | string | `user`, or `project` under `--project` |
+| `plugin` | string | the name of the plugin the placement is inside; absent for every other placement |
+
+An MCP server node is one server in one signature version; the same server declared in several configurations is one node with several occurrences:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `physical_id`, `logical_id` | string | see below |
+| `name` | string | the key the server is declared under, from its first declaration in scan order |
+| `signature` | string | the hash of the tools, prompts and resources the server exposed during a handshake; `none`, the fixed no-signature marker, when no handshake ran |
+| `occurrences` | array | sorted by `id` |
+
+A server occurrence:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `id` | string | see below |
+| `configuration` | string | the configuration id |
+| `config_file` | string | the file the server is declared in |
+| `command` | string | the command of a local server, or empty |
+| `args` | array of strings | its arguments, in order |
+| `env_keys` | array of strings | the names of the environment variables the declaration sets, sorted; the values are never recorded |
+| `url` | string | the URL of a remote server as written, or empty |
+| `header_keys` | array of strings | the names of the headers the declaration sets, sorted; the values are never recorded |
+| `transport` | string | `stdio` when the declaration has a command; `sse` when its `type` or `transport` says so, or, for Gemini CLI, when it uses `url` rather than `httpUrl`; `streamable-http` for every other URL |
+| `handshake` | boolean | whether a handshake ran; `false` for every occurrence `agentx scan` records |
+| `plugin` | string | the name of the plugin that declares the server; absent for a configuration's own servers |
+
+A plugin node is one plugin bundle installed in one configuration, in one version:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `physical_id`, `logical_id` | string | see below |
+| `name` | string | the plugin name |
+| `marketplace` | string | where the plugin was installed from: the marketplace name for Claude Code, the recorded install source for a Gemini CLI extension; empty when the client records none |
+| `version` | string | the installed version, or empty when the client records none |
+| `configuration` | string | the configuration id |
+| `path` | string | the plugin's directory |
+
+Server discovery reads these user-scope files, each parsed as a map of server name to declaration under its top-level key, ignoring unknown keys; a declaration that is not an object or has neither a command nor a URL is ignored; a missing file declares nothing; a file that cannot be read or parsed is one warning naming the file, never its content, and the scan continues:
+
+| Configuration | File | Format |
+|---|---|---|
+| `claude-code` | `~/.claude.json` | JSON, `mcpServers` |
+| `codex` | `~/.codex/config.toml` | TOML, `[mcp_servers.<name>]` tables with `command`, `args`, `env`, `url`, `http_headers` and `env_http_headers` |
+| `cursor` | `~/.cursor/mcp.json` | JSON, `mcpServers` |
+| `gemini-cli` | `~/.gemini/settings.json` | JSON, `mcpServers`, with `url` an SSE endpoint and `httpUrl` a streamable HTTP one |
+| `windsurf` | `~/.codeium/windsurf/mcp_config.json` | JSON, `mcpServers`, with `url` or `serverUrl` |
+| `github-copilot` | `~/.copilot/mcp-config.json` | JSON, `mcpServers` |
+
+In the JSON files a declaration holds `command`, `args` and `env` for a local server, `url` (or the client's variant) and `headers` for a remote one, and an optional `type` or `transport`. Every other configuration contributes skills only.
+
+Plugin discovery: Claude Code plugins are the records in `~/.claude/plugins/installed_plugins.json`, keyed `<name>@<marketplace>`, each with its `installPath` and `version`; a record without an `installPath` or whose directory does not exist is a warning; the version falls back to the `version` in the plugin's `.claude-plugin/plugin.json`, and the plugin's servers are read from `.mcp.json` at its root, in the `mcpServers` JSON format. Gemini CLI extensions are every directory under `~/.gemini/extensions` that holds a `gemini-extension.json`, which gives the `name`, the `version` and the `mcpServers`; the marketplace is the `source` in `.gemini-extension-install.json` next to it, when present. In both cases the skills a plugin provides are discovered under its `skills` directory exactly like a skills directory, merged with every other skill by content hash, and recorded as occurrences with the plugin's name. Every other configuration, Codex included, reports no plugins.
 
 Discovery: inside each skills directory a client reads, every child directory, or symlink to one, that holds a `SKILL.md` is a skill; hidden entries and `node_modules` are skipped; a broken symlink is a warning. A client's user-scope skills directories are its own, other clients' directories it reads (Cursor reads the Claude Code and Codex directories) and the library for clients that read it directly (Codex and Gemini CLI), which yields an occurrence with the library path as placement path whatever the enabled state. Each directory is canonicalised once and each skill is hashed once per scan.
 
-Identities are SHA-256 over the type name and its inputs, each input preceded by one `NUL` byte, rendered as `<type>:<lowercase hex>`. Paths under the user's home are hashed with the home replaced by `~`, so an identity does not depend on where the home directory is. Every identity but a skill's logical one includes the machine id; since the platform-derived id also covers the user id, a snapshot that must compare across users or machines, such as the CLI's own golden files, pins the id with `machine.json`.
+Identities are SHA-256 over the type name and its inputs, each input preceded by one `NUL` byte, rendered as `<type>:<lowercase hex>`. Paths under the user's home are hashed with the home replaced by `~`, so an identity does not depend on where the home directory is. Every identity but a skill's, a plugin's and a remote or package server's logical one includes the machine id; since the platform-derived id also covers the user id, a snapshot that must compare across users or machines, such as the CLI's own golden files, pins the id with `machine.json`.
 
 | Identity | Inputs |
 |---|---|
@@ -252,7 +306,14 @@ Identities are SHA-256 over the type name and its inputs, each input preceded by
 | configuration | `configuration`, machine id, configuration id, configuration path |
 | skill, logical | `skill`, `content`, content hash: an unmanaged skill is its content |
 | skill, physical | `skill`, logical id, machine id, content hash |
-| occurrence | `occurrence`, configuration physical id, skill physical id, scope, placement path |
+| skill occurrence | `occurrence`, configuration physical id, skill physical id, scope, placement path |
+| server, logical, remote | `server`, `url`, the normalised URL: lowercase scheme and host, no user information, no default port (80 for `http`, 443 for `https`), no trailing slash, no query or fragment; a remote server is one whose URL has a host other than `localhost` or an IP address |
+| server, logical, package | `server`, the registry, the package: `npm` and the first non-flag argument of `npx` without its `@version`; `pypi` and the first non-flag argument of `uvx` or of `pipx run` before any version specifier or extras; `docker` and the first argument of `docker run` that is neither a flag nor the value of one (`-e`, `-v`, `-p`, `--name`, `-w`, `--network`, `--entrypoint`, `-u`, `--mount`, `--env-file`, `--platform`, `-l`, `--add-host`, `-h` and their long forms), without its tag or digest |
+| server, logical, other | `server`, `machine`, machine id, command, URL, each argument: a server that is neither remote nor a package never matches one on another machine |
+| server, physical | `server`, logical id, machine id, signature |
+| server occurrence | `occurrence`, configuration physical id, server physical id, config file, server name |
+| plugin, logical | `plugin`, marketplace, name |
+| plugin, physical | `plugin`, logical id, machine id, configuration physical id, version |
 
 ## Git
 

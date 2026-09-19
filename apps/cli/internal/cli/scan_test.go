@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"syscall"
@@ -47,6 +48,7 @@ func (h *harness) build(t *testing.T, f fixture) {
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			t.Fatal(err)
 		}
+		content = strings.ReplaceAll(content, "$HOME", h.home) // a config file that names an absolute path
 		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -163,6 +165,55 @@ var fixtures = map[string]fixture{
 		},
 		project: "work/app",
 	},
+	"mcp-all-clients": {
+		dirs: []string{".claude", ".codex", ".cursor", ".gemini", ".codeium/windsurf", ".copilot"},
+		files: map[string]string{
+			".claude.json": `{"numStartups": 3, "mcpServers": {
+  "context7": {"type": "stdio", "command": "npx", "args": ["-y", "@upstash/context7-mcp@1.0.0"], "env": {"CONTEXT7_TOKEN": "secret-claude-env-value"}},
+  "stripe": {"type": "http", "url": "https://MCP.Stripe.com:443/", "headers": {"Authorization": "Bearer secret-claude-header-value"}},
+  "legacy": {"type": "sse", "url": "https://legacy.example.com/sse"}}}`,
+			".cursor/mcp.json": `{"mcpServers": {
+  "context7": {"command": "npx", "args": ["-y", "@upstash/context7-mcp"]},
+  "stripe": {"url": "https://mcp.stripe.com", "headers": {"X-Key": "secret-cursor-header-value"}},
+  "pg": {"command": "docker", "args": ["run", "-i", "--rm", "-e", "PGURL", "ghcr.io/example/pg-mcp:1.4"], "env": {"PGURL": "secret-cursor-env-value"}}}}`,
+			".codex/config.toml": "model = \"o3\"\n\n[mcp_servers.fetch]\ncommand = \"uvx\"\nargs = [\"mcp-server-fetch==0.6\"]\nenv = { FETCH_KEY = \"secret-codex-env-value\" }\n\n[mcp_servers.figma]\nurl = \"https://mcp.figma.com/mcp\"\nbearer_token_env_var = \"FIGMA_TOKEN\"\nhttp_headers = { \"X-Figma-Region\" = \"secret-codex-header-value\" }\nenv_http_headers = { \"X-Env\" = \"FIGMA_ENV\" }\n",
+			".gemini/settings.json": `{"theme": "dark", "mcpServers": {
+  "events": {"url": "https://events.example.com/sse", "headers": {"Authorization": "secret-gemini-header-value"}},
+  "stream": {"httpUrl": "https://stream.example.com/mcp"},
+  "git": {"command": "pipx", "args": ["run", "mcp-server-git"]},
+  "local": {"command": "python", "args": ["-m", "my_server"], "env": {"DB": "secret-gemini-env-value"}}}}`,
+			".codeium/windsurf/mcp_config.json": `{"mcpServers": {
+  "remote": {"serverUrl": "https://remote.example.com/mcp", "headers": {"API_KEY": "secret-windsurf-header-value"}},
+  "pg": {"command": "docker", "args": ["run", "--rm", "-i", "ghcr.io/example/pg-mcp:2.0"], "env": {"PGURL": "secret-windsurf-env-value"}}}}`,
+			".copilot/mcp-config.json": `{"mcpServers": {
+  "sentry": {"type": "local", "command": "npx", "args": ["@sentry/mcp-server@latest"], "env": {"SENTRY_TOKEN": "secret-copilot-env-value"}, "tools": ["*"]},
+  "cloudflare": {"type": "sse", "url": "https://docs.mcp.cloudflare.com/sse", "tools": ["*"]},
+  "gh": {"type": "http", "url": "https://api.githubcopilot.com/mcp/readonly", "headers": {"X-MCP-Toolsets": "secret-copilot-header-value"}, "tools": ["*"]}}}`,
+		},
+	},
+	"mcp-malformed": {
+		dirs: []string{".claude", ".codex", ".cursor"},
+		files: map[string]string{
+			".claude.json":                           `{"mcpServers": {"empty": {"env": {"X": "secret-empty-env-value"}}, "ok": {"command": "echo"}, "text": "not an object"}}`,
+			".claude/plugins/installed_plugins.json": `{"version": 2, "plugins": ["formatter@acme-tools"]}`,
+			".cursor/mcp.json":                       `{"mcpServers": {"broken": {"env": {"K": "secret-cursor-broken-value"}}, "bare": {"env": {"K": secret-cursor-bare-value}}}}`,
+			".codex/config.toml":                     "[mcp_servers.fetch]\ncommand = \"uvx\"\nenv = { K = secretcodexbarevalue }\n",
+		},
+	},
+	"plugins": {
+		dirs: []string{".codex", ".cursor"},
+		files: map[string]string{
+			".claude/plugins/installed_plugins.json":                                      `{"version": 2, "plugins": {"formatter@acme-tools": [{"scope": "user", "installPath": "$HOME/.claude/plugins/cache/acme-tools/formatter/1.2.0", "version": "1.2.0", "installedAt": "2026-09-01T00:00:00Z"}], "legacy@acme-tools": {"version": "0.1.0"}, "gone@acme-tools": [{"installPath": "$HOME/.claude/plugins/cache/acme-tools/gone/2.0.0", "version": "2.0.0"}]}}`,
+			".claude/plugins/cache/acme-tools/formatter/1.2.0/.claude-plugin/plugin.json": `{"name": "formatter", "version": "1.2.0", "description": "Format code"}`,
+			".claude/plugins/cache/acme-tools/formatter/1.2.0/skills/format/SKILL.md":     skill("format", "Format the code"),
+			".claude/plugins/cache/acme-tools/formatter/1.2.0/.mcp.json":                  `{"mcpServers": {"formatter-db": {"command": "npx", "args": ["-y", "@acme/formatter-mcp"], "env": {"DB_TOKEN": "secret-plugin-env-value"}}}}`,
+			".claude/skills/format/SKILL.md":                                              skill("format", "Format the code"),
+			".gemini/extensions/security/gemini-extension.json":                           `{"name": "security", "version": "0.3.0", "mcpServers": {"scanner": {"command": "node", "args": ["${extensionPath}/server.js"]}}}`,
+			".gemini/extensions/security/.gemini-extension-install.json":                  `{"source": "https://github.com/example/security-ext", "type": "git"}`,
+			".gemini/extensions/security/skills/security-audit/SKILL.md":                  skill("security-audit", "Audit the code"),
+			".gemini/extensions/notes/gemini-extension.json":                              `{"name": "notes", "version": "1.0.0"}`,
+		},
+	},
 }
 
 func scanArgs(h *harness, f fixture) []string {
@@ -240,7 +291,11 @@ func occurrences(t *testing.T, h *harness, snap jsonEvent, name string) []string
 		}
 		for _, o := range skill["occurrences"].([]any) {
 			occ := o.(map[string]any)
-			rows = append(rows, fmt.Sprintf("%s %s %s %s", occ["configuration"], occ["kind"], occ["scope"], h.portable(occ["path"].(string))))
+			row := fmt.Sprintf("%s %s %s %s", occ["configuration"], occ["kind"], occ["scope"], h.portable(occ["path"].(string)))
+			if plugin, ok := occ["plugin"]; ok {
+				row += " plugin=" + plugin.(string)
+			}
+			rows = append(rows, row)
 		}
 	}
 	sort.Strings(rows)
@@ -330,6 +385,15 @@ func TestScanWarnings(t *testing.T) {
 			"~/.claude/skills/docs/loop: symlink loops inside the skill, skipped",
 			"~/.claude/skills/docs/outside.md: symlink resolves outside the skill, skipped",
 		}},
+		{"mcp-malformed", []string{
+			"~/.claude/plugins/installed_plugins.json: invalid JSON, skipped",
+			"~/.codex/config.toml: invalid TOML, skipped",
+			"~/.cursor/mcp.json: invalid JSON, skipped",
+		}},
+		{"plugins", []string{
+			"~/.claude/plugins/cache/acme-tools/gone/2.0.0: plugin gone@acme-tools is not installed there, skipped",
+			"~/.claude/plugins/installed_plugins.json: plugin legacy@acme-tools has no installPath, skipped",
+		}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.fixture, func(t *testing.T) {
@@ -350,6 +414,7 @@ func TestScanWarnings(t *testing.T) {
 			for _, w := range tt.want {
 				contains(t, "stderr", h.portable(out.stderr), "warning: "+w)
 			}
+			noSecrets(t, h, fixtures[tt.fixture])
 		})
 	}
 }
@@ -534,4 +599,205 @@ func TestScanSpawnBudget(t *testing.T) {
 	if got := strings.TrimSpace(string(b)); got != "--version" {
 		t.Errorf("git spawned with:\n%s\nwant exactly one --version", b)
 	}
+}
+
+// secrets lists every distinctive secret value a fixture's config files hold,
+// including the bare tokens a decoder quotes in its error message.
+func secrets(f fixture) []string {
+	var found []string
+	for _, content := range f.files {
+		found = append(found, regexp.MustCompile(`secret[a-z-]*`).FindAllString(content, -1)...)
+	}
+	sort.Strings(found)
+	return found
+}
+
+// noSecrets scans in both output modes and fails when any secret value of
+// f reaches stdout or stderr.
+func noSecrets(t *testing.T, h *harness, f fixture) {
+	t.Helper()
+	for _, args := range [][]string{{"scan"}, {"--json", "scan"}} {
+		out := h.run(args...)
+		equal(t, "exit", out.exit, 0)
+		for _, secret := range secrets(f) {
+			if strings.Contains(out.stdout, secret) || strings.Contains(out.stderr, secret) {
+				t.Errorf("%v printed %q", args, secret)
+			}
+		}
+	}
+}
+
+// servers lists "name transport configuration command args|url" for every server occurrence.
+func servers(t *testing.T, snap jsonEvent) (rows []string, nodes int) {
+	t.Helper()
+	for _, s := range snap["mcp_servers"].([]any) {
+		node := s.(map[string]any)
+		nodes++
+		for _, o := range node["occurrences"].([]any) {
+			occ := o.(map[string]any)
+			what := occ["url"].(string)
+			if cmd := occ["command"].(string); cmd != "" {
+				what = cmd
+				for _, a := range occ["args"].([]any) {
+					what += " " + a.(string)
+				}
+			}
+			rows = append(rows, fmt.Sprintf("%s %s %s %s", node["name"], occ["transport"], occ["configuration"], what))
+		}
+	}
+	sort.Strings(rows)
+	return rows, nodes
+}
+
+func TestScanMCPServers(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	f := fixtures["mcp-all-clients"]
+	h.build(t, f)
+	snap := h.snapshot(t)
+
+	rows, nodes := servers(t, snap)
+	want := []string{
+		"cloudflare sse github-copilot https://docs.mcp.cloudflare.com/sse",
+		"context7 stdio claude-code npx -y @upstash/context7-mcp@1.0.0",
+		"context7 stdio cursor npx -y @upstash/context7-mcp",
+		"events sse gemini-cli https://events.example.com/sse",
+		"fetch stdio codex uvx mcp-server-fetch==0.6",
+		"figma streamable-http codex https://mcp.figma.com/mcp",
+		"gh streamable-http github-copilot https://api.githubcopilot.com/mcp/readonly",
+		"git stdio gemini-cli pipx run mcp-server-git",
+		"legacy sse claude-code https://legacy.example.com/sse",
+		"local stdio gemini-cli python -m my_server",
+		"pg stdio cursor docker run -i --rm -e PGURL ghcr.io/example/pg-mcp:1.4",
+		"pg stdio windsurf docker run --rm -i ghcr.io/example/pg-mcp:2.0",
+		"remote streamable-http windsurf https://remote.example.com/mcp",
+		"sentry stdio github-copilot npx @sentry/mcp-server@latest",
+		"stream streamable-http gemini-cli https://stream.example.com/mcp",
+		"stripe streamable-http claude-code https://MCP.Stripe.com:443/",
+		"stripe streamable-http cursor https://mcp.stripe.com",
+	}
+	if !reflect.DeepEqual(rows, want) {
+		t.Errorf("server occurrences = %q, want %q", rows, want)
+	}
+	// The same package, the same normalised URL and the same image with another
+	// tag each merge into one node with two occurrences.
+	equal(t, "server nodes", nodes, 14)
+
+	logical := map[string]string{}
+	for _, s := range snap["mcp_servers"].([]any) {
+		node := s.(map[string]any)
+		logical[node["name"].(string)] = node["logical_id"].(string)
+		equal(t, node["name"].(string)+" signature", node["signature"], "none")
+		for _, o := range node["occurrences"].([]any) {
+			occ := o.(map[string]any)
+			equal(t, node["name"].(string)+" handshake", occ["handshake"], false)
+			if _, ok := occ["plugin"]; ok {
+				t.Errorf("%s: a configuration's own server carries a plugin field", node["name"])
+			}
+			switch node["name"] {
+			case "figma":
+				if got := occ["header_keys"]; !reflect.DeepEqual(got, []any{"X-Env", "X-Figma-Region"}) {
+					t.Errorf("figma header_keys = %v", got)
+				}
+			case "sentry":
+				if got := occ["env_keys"]; !reflect.DeepEqual(got, []any{"SENTRY_TOKEN"}) {
+					t.Errorf("sentry env_keys = %v", got)
+				}
+				equal(t, "sentry config_file", h.portable(occ["config_file"].(string)), "~/.copilot/mcp-config.json")
+			case "stream":
+				if got := occ["header_keys"]; !reflect.DeepEqual(got, []any{}) {
+					t.Errorf("stream header_keys = %v, want empty", got)
+				}
+			}
+		}
+	}
+	if logical["local"] == logical["git"] || logical["context7"] == logical["sentry"] {
+		t.Errorf("distinct servers share a logical id: %v", logical)
+	}
+	equal(t, "edges", len(snap["edges"].([]any)), 6+17) // machine to six configurations, one per occurrence
+
+	equal(t, "secrets in fixture", len(secrets(f)), 12)
+	noSecrets(t, h, f)
+
+	out := h.run("scan")
+	contains(t, "stdout", out.stdout, "  servers:\n")
+	contains(t, "stdout", out.stdout, "npx -y @upstash/context7-mcp@1.0.0")
+	contains(t, "stdout", out.stdout, "streamable-http")
+	contains(t, "stdout", out.stdout, "https://stream.example.com/mcp")
+	if strings.Contains(out.stdout, "plugins:") {
+		t.Errorf("a machine without plugins prints a plugins block:\n%s", out.stdout)
+	}
+}
+
+func TestScanPlugins(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.build(t, fixtures["plugins"])
+	snap := h.snapshot(t)
+
+	var rows []string
+	ids := map[string]string{} // plugin name to physical id
+	for _, p := range snap["plugins"].([]any) {
+		plugin := p.(map[string]any)
+		ids[plugin["name"].(string)] = plugin["physical_id"].(string)
+		rows = append(rows, fmt.Sprintf("%s|%s|%s|%s|%s", plugin["name"], plugin["marketplace"], plugin["version"], plugin["configuration"], h.portable(plugin["path"].(string))))
+	}
+	sort.Strings(rows)
+	want := []string{
+		"formatter|acme-tools|1.2.0|claude-code|~/.claude/plugins/cache/acme-tools/formatter/1.2.0",
+		"notes||1.0.0|gemini-cli|~/.gemini/extensions/notes",
+		"security|https://github.com/example/security-ext|0.3.0|gemini-cli|~/.gemini/extensions/security",
+	}
+	if !reflect.DeepEqual(rows, want) {
+		t.Errorf("plugins = %q, want %q", rows, want)
+	}
+
+	equal(t, "skill nodes", len(snap["skills"].([]any)), 2)
+	wantOcc := []string{
+		"claude-code directory user ~/.claude/plugins/cache/acme-tools/formatter/1.2.0/skills/format plugin=formatter",
+		"claude-code directory user ~/.claude/skills/format",
+		"cursor directory user ~/.claude/skills/format",
+	}
+	if got := occurrences(t, h, snap, "format"); !reflect.DeepEqual(got, wantOcc) {
+		t.Errorf("format occurrences = %q, want %q", got, wantOcc)
+	}
+	wantOcc = []string{"gemini-cli directory user ~/.gemini/extensions/security/skills/security-audit plugin=security"}
+	if got := occurrences(t, h, snap, "security-audit"); !reflect.DeepEqual(got, wantOcc) {
+		t.Errorf("security-audit occurrences = %q, want %q", got, wantOcc)
+	}
+
+	serverRows, nodes := servers(t, snap)
+	wantServers := []string{
+		"formatter-db stdio claude-code npx -y @acme/formatter-mcp",
+		"scanner stdio gemini-cli node ${extensionPath}/server.js",
+	}
+	if !reflect.DeepEqual(serverRows, wantServers) {
+		t.Errorf("server occurrences = %q, want %q", serverRows, wantServers)
+	}
+	equal(t, "server nodes", nodes, 2)
+	for _, s := range snap["mcp_servers"].([]any) {
+		node := s.(map[string]any)
+		occ := node["occurrences"].([]any)[0].(map[string]any)
+		equal(t, node["name"].(string)+" plugin", occ["plugin"], map[string]string{"formatter-db": "formatter", "scanner": "security"}[node["name"].(string)])
+	}
+
+	// Provides edges: plugin to skill and plugin to server, next to the
+	// configuration's own edges.
+	from := map[string]int{}
+	for _, e := range snap["edges"].([]any) {
+		from[e.(map[string]any)["from"].(string)]++
+	}
+	equal(t, "edges from formatter", from[ids["formatter"]], 2)
+	equal(t, "edges from security", from[ids["security"]], 2)
+	equal(t, "edges from notes", from[ids["notes"]], 0)
+	equal(t, "edges", len(snap["edges"].([]any)), 4+3+3+2+4) // machine to four configurations, three plugins, three skill placements, two servers, four provides
+
+	out := h.run("scan")
+	equal(t, "exit", out.exit, 0)
+	contains(t, "stdout", out.stdout, "  plugins:\n")
+	contains(t, "stdout", out.stdout, "formatter  1.2.0")
+	contains(t, "stdout", out.stdout, "(plugin formatter)")
+	contains(t, "stdout", out.stdout, "notes     1.0.0\n")
+	contains(t, "stdout", out.stdout, "security  0.3.0\n")
+	noSecrets(t, h, fixtures["plugins"])
 }

@@ -1,5 +1,5 @@
 // Package scan inventories one machine: the agent configurations on it and
-// the skills each one can see.
+// the skills, MCP servers and plugins each one can see.
 package scan
 
 import (
@@ -7,11 +7,13 @@ import (
 	"sort"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
+	"github.com/grundmanise/agentx/apps/cli/internal/mcp"
 )
 
 // Client is one agent client the registry knows. A client contributes path
-// data only; the scanner does the reading. Add a client by adding one file
-// with a value of this interface and listing it in registry.go.
+// data and, where it has them, its plugin records; the scanner does the
+// reading. Add a client by adding one file with a value of this interface
+// and listing it in registry.go.
 type Client interface {
 	// Slug is the stable lowercase id, such as "claude-code"; it names the
 	// configuration in settings and output.
@@ -29,6 +31,29 @@ type Client interface {
 	// ProjectSkillsDirs are the project-scope skills directories, relative
 	// to a project root.
 	ProjectSkillsDirs() []string
+	// MCPConfigs are the user-scope files that declare MCP servers; nil for
+	// a client whose files agentx does not parse.
+	MCPConfigs(d home.Dirs) []MCPConfig
+	// Plugins lists the plugins installed in the configuration; nil for a
+	// client without plugins. What cannot be read is reported through warn.
+	Plugins(d home.Dirs, warn func(string)) []InstalledPlugin
+}
+
+// MCPConfig is one file that declares MCP servers.
+type MCPConfig struct {
+	Path   string
+	Format mcp.Format
+}
+
+// InstalledPlugin is one plugin bundle found on disk. Its skills are the
+// children of <Path>/skills; its servers are declared in Servers, a file
+// that may not exist.
+type InstalledPlugin struct {
+	Name        string
+	Marketplace string // where it was installed from; empty when unknown
+	Version     string
+	Path        string
+	Servers     MCPConfig
 }
 
 // Detect returns the registered clients whose configuration directory
