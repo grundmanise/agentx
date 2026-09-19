@@ -1,0 +1,128 @@
+---
+title: "agentx scan"
+description: "See every agent configuration on this machine with the skills, MCP servers and plugins each one has."
+---
+
+`agentx scan` reads your agent clients' directories, their MCP configuration files and the library and prints what it finds. It writes nothing and never starts a server unless you ask for a handshake.
+
+## Scan the machine
+
+```sh
+agentx scan
+```
+
+```text
+Claude Code (claude-code)  /home/me/.claude  enabled
+  commit  symlink    user  /home/me/.claude/skills/commit -> /home/me/.agents/skills/commit
+  review  directory  user  /home/me/.claude/skills/review
+  format  directory  user  /home/me/.claude/plugins/cache/acme-tools/formatter/1.2.0/skills/format  (plugin formatter)
+  plugins:
+    formatter  1.2.0
+
+Codex (codex)  /home/me/.codex  enabled
+  commit  directory  user  /home/me/.agents/skills/commit
+  sales   directory  user  /home/me/.codex/plugins/cache/acme-tools/sales/1.0.8/skills/sales  (plugin sales)
+  plugins:
+    notes  local  (disabled)
+    sales  1.0.8
+
+Cursor (cursor)  /home/me/.cursor  enabled
+  commit  symlink    user  /home/me/.claude/skills/commit -> /home/me/.agents/skills/commit
+  review  directory  user  /home/me/.claude/skills/review
+  servers:
+    context7  stdio            npx -y @upstash/context7-mcp
+    stripe    streamable-http  https://mcp.stripe.com
+  plugins:
+    thermos  9f86d081884c7d659a2feaa0c55ad015a3bf4f1b
+```
+
+One section per agent configuration, headed by the client name, its id, its configuration directory and whether it is enabled. One line per skill the configuration can see: the skill name, the kind of placement, the scope and the path the client reads. A skill that comes from a plugin ends with the plugin's name.
+
+Then, when the configuration declares MCP servers, a `servers:` block with one line per server: its name, its transport (`stdio`, `sse` or `streamable-http`) and its command line or URL. Then, when the configuration has plugins, a `plugins:` block with one line per plugin: its name and version, and `(disabled)` when the client has turned it off.
+
+A configuration is detected when its configuration directory exists, such as `~/.claude` for Claude Code or `~/.cursor` for Cursor.
+
+## Read the kind
+
+| Kind | Meaning |
+|---|---|
+| `symlink` | The path is a symlink. The arrow shows where it resolves to. A skill symlinked into several clients is one skill with one source of truth. |
+| `copy` | The path is a real directory that agentx placed as a copy for this configuration. |
+| `directory` | The path is a real directory. |
+
+## See who reads what
+
+A client can read other clients' directories. Cursor reads `~/.claude/skills` and `~/.codex/skills` next to its own `~/.cursor/skills`, so a skill you put in the Claude Code directory appears under Cursor too. Codex and Gemini CLI read the library at `~/.agents/skills` directly, so every library skill appears under them without any link in their own directories.
+
+## Read the servers
+
+agentx reads the user-scope MCP configuration of Claude Code (`~/.claude.json`), Codex (`~/.codex/config.toml`), Cursor (`~/.cursor/mcp.json`), Gemini CLI (`~/.gemini/settings.json`), Windsurf (`~/.codeium/windsurf/mcp_config.json`) and GitHub Copilot (`~/.copilot/mcp-config.json`). Other clients contribute skills only.
+
+The inventory shows the command and arguments of a local server and the URL of a remote one. It never shows the values of environment variables or headers, in any output mode: a scan does not print your secrets. In JSON output only their names appear, as `env_keys` and `header_keys`.
+
+The same server declared in two clients is one server with two occurrences: agentx recognises a remote server by its address and a local `npx`, `uvx`, `pipx` or `docker` server by its package or image, whatever the version. A server that cannot be identified that way is unique to this machine.
+
+A configuration file that cannot be parsed is reported as a warning and the scan continues.
+
+## Handshake the servers
+
+```sh
+agentx scan --handshake
+```
+
+```text
+  servers:
+    context7  stdio            npx -y @upstash/context7-mcp  12 tools
+    stripe    streamable-http  https://mcp.stripe.com        9 tools
+```
+
+Starts or connects to every MCP server and records the tools, prompts and resources it exposes. Each server gets ten seconds. A local server runs with the environment variables its declaration sets; a remote server receives its declared headers. Neither is ever printed.
+
+What a server exposed becomes its signature. Two servers with the same command or address but different tools get different signatures, so the inventory tells them apart; the same server declared in two clients with the same tools stays one server. In JSON output the node carries the `signature`, when it was taken as `signature_at`, and the `tools` list.
+
+The signatures are kept in `handshakes.json` in agentx home. A later scan without `--handshake` shows them until the next handshake replaces them; each occurrence's `handshake` field says whether that scan handshook the server itself.
+
+A server that does not start, exits early, answers badly or does not answer within ten seconds is reported as a warning and keeps its previous signature. Servers on the legacy `sse` transport are skipped with a warning. The scan still succeeds.
+
+## Read the plugins
+
+Plugins are listed under the configuration they are installed in, with their version. The skills and MCP servers a plugin provides appear in the configuration's list like any other, marked with the plugin's name. A skill that is installed both standalone and through a plugin is one skill with two placements.
+
+| Client | What agentx reads |
+|---|---|
+| Claude Code | The install records in `~/.claude/plugins/installed_plugins.json` and each plugin's directory. |
+| Codex | The `[plugins."<name>@<marketplace>"]` tables in `~/.codex/config.toml` and the plugin copies under `~/.codex/plugins/cache`. A plugin with `enabled = false` is listed with `(disabled)`, and so is a server the plugin's table turns off with `[plugins."<name>@<marketplace>".mcp_servers.<server>]` and `enabled = false`. A plugin that has a copy but no table, such as one installed through your account, is listed without an enabled state. |
+| Cursor | Your local plugins under `~/.cursor/plugins/local` and the marketplace plugins Cursor has cached under `~/.cursor/plugins/cache`. Cursor keeps the list of enabled plugins in your account, not on disk, so a cached plugin is installed but not necessarily enabled. A cached copy that Cursor did not finish writing is reported as a warning naming its directory and is not listed. A plugin's skills and MCP servers are read from where its manifest points, else from `skills` and `mcp.json`. The Claude Code plugins Cursor also loads are listed under Claude Code only. |
+| Gemini CLI | The extensions under `~/.gemini/extensions`. |
+
+A plugin's version is what its manifest or install record says. For a Codex or Cursor plugin without one, the cache directory name stands in: `local`, a commit id or a release tag. A plugin manifest that cannot be read is reported as a warning naming the file, and the plugin is still listed by its directory name.
+
+## Include a project
+
+```sh
+agentx scan --project ~/code/my-app
+```
+
+Adds the skills found in the project's own skills directories, such as `.claude/skills`, `.cursor/skills` and `.agents/skills`, with scope `project`. The project is only read. Without the flag, only user scope is scanned.
+
+## Rescan after a change
+
+```sh
+agentx scan --configuration cursor
+```
+
+Names the configuration that changed. The whole machine is scanned either way, so the output is always complete. An id that is not detected exits with code 5 and lists the detected ids.
+
+## Warnings
+
+A broken symlink, a `SKILL.md` without usable frontmatter or a symlink that points outside its skill does not stop the scan. Each one is reported on stderr as `warning: ...` and the skill is skipped or named after its directory.
+
+## Script it
+
+Add `--json` to get one `snapshot` event with the machine, every configuration, every skill, MCP server and plugin with its occurrences, the edges between them and the warnings:
+
+```sh
+agentx --json scan
+```
+
+Every node carries a stable identity, and two scans of an unchanged machine are byte-identical apart from `instance_id`. Set `AGENTX_INSTANCE_ID` to fix that too.

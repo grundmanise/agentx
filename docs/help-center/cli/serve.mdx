@@ -1,0 +1,49 @@
+---
+title: "agentx serve"
+description: "Keep watching this machine and get a new snapshot whenever something changes."
+---
+
+`agentx serve` is what the desktop app runs in the background. It scans the machine once, then rescans whenever the library, a skill inside it or agentx itself changes, and prints the snapshot again only when the inventory changed. You rarely need to run it yourself.
+
+## Run it
+
+```sh
+agentx serve --json
+```
+
+The first line is the whole snapshot. Every later snapshot line means the inventory changed; a change that leaves the inventory as it was prints nothing. Close the process's stdin, or interrupt it, to stop it.
+
+Without `--json` it prints one line per event instead:
+
+```text
+snapshot 1: 3 configurations, 5 skills
+snapshot 2: 3 configurations, 6 skills
+```
+
+## Ask for a fresh snapshot
+
+Write one JSON line to its stdin:
+
+```json
+{"type": "refresh", "request_id": "any unique id"}
+```
+
+Serve scans again and answers with a `refresh_complete` line carrying your `request_id` and the counter of the current snapshot. If the inventory changed, the new snapshot line comes first. A line serve does not understand gets an `error` line; serve keeps running.
+
+## Run one pass
+
+```sh
+agentx serve --once --json
+```
+
+Scans once, prints the snapshot and exits. It shows what the app receives on start; for an inventory to read, `agentx scan` prints the same snapshot.
+
+## One serve per home
+
+Only one serve runs per agentx home. Starting a second one exits with code 6 and names the lock file, `serve.lock` in agentx home. Stop the running one first.
+
+## When watching is not possible
+
+If a directory cannot be watched, serve exits with code 6 and an error naming the directory and the cause. On Linux this usually means the inotify watch limit is reached; raise `fs.inotify.max_user_watches`. Serve never polls instead.
+
+On macOS the released binary watches through FSEvents, which handles a library of any size. A macOS binary built without cgo watches through kqueue instead, which needs one open file per watched file and reaches the default limit of 256 with a library of a few dozen skills; raise the limit with `ulimit -n`, or use the released binary.

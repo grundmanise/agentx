@@ -1,0 +1,77 @@
+---
+title: "agentx config"
+description: "List, get and set the settings that only this machine decides."
+---
+
+Machine settings live in `settings.json` in agentx home. They never leave the machine.
+
+## List every setting
+
+```sh
+agentx config list
+```
+
+```text
+schema_version           1
+label                    my-laptop
+auto_push                false
+accept_operations        false
+disabled_configurations  
+sources                  []
+copy_mode                {}
+```
+
+| Key | Meaning |
+|---|---|
+| `schema_version` | The settings file format version. |
+| `label` | The machine label. Until you set it, it is the hostname. |
+| `auto_push` | Whether published forks are pushed automatically. |
+| `accept_operations` | Whether this machine executes operations queued for it. |
+| `disabled_configurations` | The agent configurations left out of placements by default. Every other detected configuration is enabled. |
+| `sources` | The sources skills are installed from. |
+| `copy_mode` | The skills placed as a copy instead of a symlink, per configuration. |
+
+## Get one setting
+
+```sh
+agentx config get label
+```
+
+The command prints the bare value, so a script can use it directly. An unknown key exits with code 1 and lists the keys.
+
+## Set a setting
+
+```sh
+agentx config set label "work laptop"
+agentx config set auto_push true
+```
+
+Set `label`, `auto_push` or `accept_operations`. The booleans take `true` or `false`. Any other value, an unknown key, or a key this command cannot change exits with code 1.
+
+The write is atomic: the file is replaced whole, or not at all. If another agentx command is running, the command exits with code 7 at once; retry when it finishes.
+
+## Enable or disable a configuration
+
+```sh
+agentx config disable windsurf
+agentx config enable windsurf
+```
+
+Every agent configuration `agentx scan` detects is enabled from the start. Disable one to leave it out of placements by default; enable it to put it back. Use the id shown in parentheses by `agentx scan`. An id that is not detected on this machine exits with code 5 and lists the detected ids. Disabling a configuration does not stop its client from reading the library.
+
+## Script it
+
+Add `--json` to any `config` command to get a `settings` event with every setting as an object:
+
+```sh
+agentx --json config set auto_push true
+```
+
+```json
+{"type":"settings","schema_version":1,"settings":{"schema_version":1,"label":"work laptop","auto_push":true,"accept_operations":false,"disabled_configurations":[],"sources":[],"copy_mode":{}}}
+{"type":"result","schema_version":1,"ok":true}
+```
+
+## Fix a broken file
+
+If `settings.json` cannot be parsed, every `config` command exits with code 10 and names the file. Fix the JSON, or delete the file to start again from defaults.
