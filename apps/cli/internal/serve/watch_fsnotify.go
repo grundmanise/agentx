@@ -4,8 +4,6 @@ package serve
 
 import (
 	"fmt"
-	"io/fs"
-	"os"
 	"path/filepath"
 
 	"github.com/fsnotify/fsnotify"
@@ -24,18 +22,19 @@ func newBackend(sig signals) (backend, error) {
 	if err != nil {
 		return nil, err
 	}
+	events, errs := w.Events, w.Errors
 	go func() { // until Close closes both channels
-		for w.Events != nil || w.Errors != nil {
+		for events != nil || errs != nil {
 			select {
-			case _, ok := <-w.Events:
+			case _, ok := <-events:
 				if !ok {
-					w.Events = nil
+					events = nil
 					continue
 				}
 				sig.changed()
-			case err, ok := <-w.Errors:
+			case err, ok := <-errs:
 				if !ok {
-					w.Errors = nil
+					errs = nil
 					continue
 				}
 				sig.failed(err)
@@ -83,35 +82,3 @@ func (b *fsnotifyBackend) sync(dirs, trees []string) error {
 }
 
 func (b *fsnotifyBackend) close() { _ = b.w.Close() }
-
-// subdirs appends the real path of every directory below dir, following
-// symlinks, to want, skipping hidden directories and node_modules as
-// discovery does; seen keeps each real path once, which also ends a symlink
-// loop. A directory that cannot be read or resolved is left out: the scan
-// reports it.
-func subdirs(dir string, want []string, seen map[string]bool) []string {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return want
-	}
-	for _, e := range entries {
-		name := e.Name()
-		if skipped(name) {
-			continue
-		}
-		if !e.IsDir() && e.Type()&fs.ModeSymlink == 0 {
-			continue
-		}
-		real, err := filepath.EvalSymlinks(filepath.Join(dir, name))
-		if err != nil || seen[real] {
-			continue
-		}
-		if info, err := os.Stat(real); err != nil || !info.IsDir() {
-			continue
-		}
-		seen[real] = true
-		want = append(want, real)
-		want = subdirs(real, want, seen)
-	}
-	return want
-}

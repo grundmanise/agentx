@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 )
@@ -128,6 +130,63 @@ func roots(dirs []string) ([]string, error) {
 // discovery leaves it out: hidden entries and node_modules.
 func skipped(name string) bool {
 	return strings.HasPrefix(name, ".") || name == "node_modules"
+}
+
+// subdirs appends the real path of every directory below dir, following
+// symlinks, to want, skipping hidden directories and node_modules as
+// discovery does; seen keeps each real path once, which also ends a symlink
+// loop. A directory that cannot be read or resolved is left out: the scan
+// reports it.
+func subdirs(dir string, want []string, seen map[string]bool) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return want
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if skipped(name) {
+			continue
+		}
+		if !e.IsDir() && e.Type()&fs.ModeSymlink == 0 {
+			continue
+		}
+		real, err := filepath.EvalSymlinks(filepath.Join(dir, name))
+		if err != nil || seen[real] {
+			continue
+		}
+		if info, err := os.Stat(real); err != nil || !info.IsDir() {
+			continue
+		}
+		seen[real] = true
+		want = append(want, real)
+		want = subdirs(real, want, seen)
+	}
+	return want
+}
+
+// extend appends to trees the directories below them that a recursive watch
+// over them misses because it does not follow symlinks: every real path
+// subdirs reaches that accept does not already cover, so one reached through
+// a symlink out of every tree or through a skipped directory, in order and
+// each once. A subdirectory of one is below it and left out. flat and trees
+// are real paths; the result is a fresh slice.
+func extend(flat, trees []string) []string {
+	seen := map[string]bool{}
+	for _, r := range flat {
+		seen[r] = true
+	}
+	for _, t := range trees {
+		seen[t] = true
+	}
+	all := slices.Clone(trees)
+	for _, t := range trees {
+		for _, dir := range subdirs(t, nil, seen) {
+			if !accept(dir, flat, all) {
+				all = append(all, dir)
+			}
+		}
+	}
+	return all
 }
 
 // accept reports whether a change in the directory dir is a change signal:

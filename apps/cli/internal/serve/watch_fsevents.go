@@ -16,8 +16,8 @@ import (
 // backend would watch.
 type fseventsBackend struct {
 	sig   signals
-	flat  []string // real paths of the flat directories watched now
-	trees []string // real paths of the trees watched now
+	flat  []string // real paths of the directories watched now
+	trees []string // real paths of the directories watched with everything below now
 	es    *fsevents.EventStream
 	done  chan struct{} // closed to end the goroutine reading es.Events
 }
@@ -25,13 +25,7 @@ type fseventsBackend struct {
 func newBackend(sig signals) (backend, error) { return &fseventsBackend{sig: sig}, nil }
 
 func (b *fseventsBackend) sync(dirs, trees []string) error {
-	var flatDirs []string
-	for _, dir := range dirs {
-		if !slices.Contains(trees, dir) {
-			flatDirs = append(flatDirs, dir)
-		}
-	}
-	flat, err := roots(flatDirs)
+	flat, err := roots(dirs)
 	if err != nil {
 		return err
 	}
@@ -39,12 +33,21 @@ func (b *fseventsBackend) sync(dirs, trees []string) error {
 	if err != nil {
 		return err
 	}
+	// FSEvents does not follow symlinks, so a directory a symlink below a
+	// tree leads out of it is a root of its own, as the fsnotify backend
+	// watches it.
+	treeRoots = extend(flat, treeRoots)
 	if b.es != nil && slices.Equal(flat, b.flat) && slices.Equal(treeRoots, b.trees) {
 		return nil
 	}
 	b.close()
 	b.flat, b.trees = flat, treeRoots
-	paths := append(slices.Clone(flat), treeRoots...)
+	paths := slices.Clone(flat)
+	for _, t := range treeRoots {
+		if !slices.Contains(paths, t) {
+			paths = append(paths, t)
+		}
+	}
 	if len(paths) == 0 {
 		return nil // nothing exists yet; the next sync looks again
 	}
@@ -76,6 +79,9 @@ func (b *fseventsBackend) sync(dirs, trees []string) error {
 	return nil
 }
 
+// close stops the stream before it ends the goroutine, so a callback still
+// delivering a batch finds a reader; a callback after Stop finds the stream
+// gone from the package's registry and delivers nothing.
 func (b *fseventsBackend) close() {
 	if b.es != nil {
 		b.es.Stop()
