@@ -38,9 +38,11 @@ func newServeCommand(inv *invocation) *cobra.Command {
 				return err
 			}
 			defer lock.Close()
+			dirs, trees := inv.watchedDirs()
 			return serve.Run(cmd.Context(), serve.Options{
 				Scan:  func(ctx context.Context) (scan.Snapshot, error) { return inv.scan(ctx, 0, "", false) },
-				Watch: inv.watchedDirs(),
+				Watch: dirs,
+				Trees: trees,
 				Once:  once,
 				Stdin: cmd.InOrStdin(),
 				Snapshot: func(snap scan.Snapshot) {
@@ -72,9 +74,11 @@ func newServeCommand(inv *invocation) *cobra.Command {
 // watchedDirs are the directories a change signal can come from, most
 // important first: agentx home holds the version file every mutation
 // rewrites; the account repo, the worktrees and the library hold content.
-func (inv *invocation) watchedDirs() []string {
+// The last two are trees: an edit anywhere inside a skill is a signal too.
+func (inv *invocation) watchedDirs() (dirs, trees []string) {
 	h := inv.dirs.Home
-	return []string{h, gitx.AccountRepoPath(h), filepath.Join(h, "worktrees"), inv.dirs.Library}
+	trees = []string{filepath.Join(h, "worktrees"), inv.dirs.Library}
+	return append([]string{h, gitx.AccountRepoPath(h)}, trees...), trees
 }
 
 func plural(n int, noun string) string {
