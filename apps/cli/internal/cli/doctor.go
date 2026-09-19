@@ -11,6 +11,7 @@ import (
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
+	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 )
 
 type doctorEvent struct {
@@ -108,6 +109,16 @@ func (d *doctor) run(ctx context.Context) error {
 		d.row("lock", "ok", "free: "+lock, "")
 	}
 
+	// Reported, never recovered: doctor holds no lock.
+	switch journals, err := home.Journals(inv.dirs.Home); {
+	case err != nil:
+		d.row("mutations", "fail", err.Error(), "")
+	case len(journals) > 0:
+		d.row("mutations", "warn", plural(len(journals), "unfinished mutation")+": "+journals[0], "run agentx scan to recover; when it refuses, restore the file it names or move the journal aside")
+	default:
+		d.row("mutations", "ok", "none unfinished: "+home.MutationsDir(inv.dirs.Home), "")
+	}
+
 	settings := home.SettingsPath(inv.dirs.Home)
 	switch _, err := inv.loadSettings(); {
 	case err != nil:
@@ -121,7 +132,7 @@ func (d *doctor) run(ctx context.Context) error {
 
 	var repoErr error
 	switch gitDir, created, err := gitx.OpenAccountRepo(ctx, inv.git, inv.dirs.Home); {
-	case errors.Is(err, home.ErrLocked):
+	case errors.Is(err, home.ErrLocked), errors.Is(err, home.ErrRecovery):
 		d.row("account_repo", "fail", "cannot create "+gitDir+": "+err.Error(), "")
 		repoErr = err
 	case err != nil:
@@ -137,6 +148,17 @@ func (d *doctor) run(ctx context.Context) error {
 		d.row("library", "ok", inv.dirs.Library, "")
 	} else {
 		d.row("library", "warn", "missing: "+inv.dirs.Library, "create it with mkdir -p "+inv.dirs.Library)
+	}
+
+	detected := scan.Detect(inv.dirs)
+	for _, c := range detected {
+		d.row("client:"+c.Slug(), "ok", c.Name()+": "+c.ConfigDir(inv.dirs), "")
+	}
+	summary := fmt.Sprintf("%d of %d registered clients detected", len(detected), scan.Registered())
+	if len(detected) == 0 {
+		d.row("clients", "warn", summary, "install an agent client or check HOME")
+	} else {
+		d.row("clients", "info", summary, "")
 	}
 	return repoErr
 }

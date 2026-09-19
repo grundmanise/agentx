@@ -24,14 +24,24 @@ func ServeLockPath(dir string) string { return filepath.Join(dir, "serve.lock") 
 // Mutate runs fn while holding the lock of agentx home dir, then rewrites the
 // version file as the change signal and releases the lock. A failing fn
 // leaves the version file alone.
-func Mutate(dir string, fn func() error) error {
+func Mutate(dir string, fn func() error) error { return mutate(dir, true, fn) }
+
+// mutate takes the exclusive lock, recovers the unfinished journals of
+// earlier mutations, runs fn and, with bump, rewrites the version file.
+func mutate(dir string, bump bool, fn func() error) error {
 	lock, err := takeLock(dir)
 	if err != nil {
 		return err
 	}
 	defer lock.Close() // closing releases the flock
+	if err := recoverJournals(dir); err != nil {
+		return err
+	}
 	if err := fn(); err != nil {
 		return err
+	}
+	if !bump {
+		return nil
 	}
 	return bumpVersion(dir)
 }
@@ -41,7 +51,7 @@ func Mutate(dir string, fn func() error) error {
 // in progress is waited for until ctx is done; then the error is ErrLocked
 // wrapping ctx's error.
 func ReadLocked(ctx context.Context, dir string, fn func() error) error {
-	lock, err := takeSharedLock(ctx, dir)
+	lock, err := waitLock(ctx, dir, syscall.LOCK_SH)
 	if err != nil {
 		return err
 	}
@@ -66,7 +76,8 @@ func TakeServeLock(dir string) (*os.File, error) {
 // takeLock takes the exclusive advisory lock of agentx home; a held lock is
 // ErrLocked after a few quick retries, which cover a lock a child process
 // inherited for the instant between its fork and its exec. It creates agentx
-// home, ops directory included, on first use, since the lock file lives there.
+// home, mutations and ops directories included, on first use, since the
+// lock file lives there.
 func takeLock(dir string) (*os.File, error) {
 	if err := createHome(dir); err != nil {
 		return nil, err
@@ -80,14 +91,14 @@ func takeLock(dir string) (*os.File, error) {
 	}
 }
 
-// takeSharedLock takes the shared advisory lock, retrying every 50 ms while
-// a mutation holds the exclusive one, until ctx is done.
-func takeSharedLock(ctx context.Context, dir string) (*os.File, error) {
+// waitLock takes the advisory lock how (shared for a scan's reads, exclusive
+// for recovery), retrying every 50 ms while it is held, until ctx is done.
+func waitLock(ctx context.Context, dir string, how int) (*os.File, error) {
 	if err := createHome(dir); err != nil {
 		return nil, err
 	}
 	for {
-		f, err := flock(LockPath(dir), syscall.LOCK_SH)
+		f, err := flock(LockPath(dir), how)
 		if !errors.Is(err, ErrLocked) {
 			return f, err
 		}
@@ -100,7 +111,12 @@ func takeSharedLock(ctx context.Context, dir string) (*os.File, error) {
 }
 
 func createHome(dir string) error {
-	return os.MkdirAll(filepath.Join(dir, "ops"), 0o755)
+	for _, sub := range []string{"mutations", "ops"} {
+		if err := os.MkdirAll(filepath.Join(dir, sub), 0o755); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // flock opens path and takes the advisory lock how on it without waiting; a
@@ -118,9 +134,15 @@ func flock(path string, how int) (*os.File, error) {
 		return nil, fmt.Errorf("lock %s: %w", path, err)
 	}
 	if how == syscall.LOCK_EX {
-		// The holder's pid lets doctor name it; it is informational, so a failed write is ignored.
-		if err := f.Truncate(0); err == nil {
-			_, _ = f.WriteAt([]byte(strconv.Itoa(os.Getpid())+"\n"), 0)
+		// The holder's pid lets doctor name it; it is informational, so a
+		// failed write is ignored. It is written only when it differs, so
+		// that a serve child recovering a journal it cannot resolve does not
+		// signal itself a change in agentx home on every attempt.
+		pid := []byte(strconv.Itoa(os.Getpid()) + "\n")
+		if b, err := os.ReadFile(path); err != nil || string(b) != string(pid) {
+			if err := f.Truncate(0); err == nil {
+				_, _ = f.WriteAt(pid, 0)
+			}
 		}
 	}
 	return f, nil

@@ -37,6 +37,27 @@ func (h *harness) addLibrarySkill(t *testing.T, name string) {
 	}
 }
 
+// editLibrarySkill replaces the SKILL.md of a library skill in one rename,
+// so the watcher sees one complete file rather than a truncation and a write.
+func (h *harness) editLibrarySkill(t *testing.T, name, description string) {
+	t.Helper()
+	stage := filepath.Join(t.TempDir(), "SKILL.md")
+	if err := os.WriteFile(stage, []byte(skill(name, description)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(stage, filepath.Join(h.library, name, "SKILL.md")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func skillDescriptions(e jsonEvent) []string {
+	var descriptions []string
+	for _, s := range e["skills"].([]any) {
+		descriptions = append(descriptions, s.(map[string]any)["description"].(string))
+	}
+	return descriptions
+}
+
 // serveOnce runs `serve --once` after an earlier serve of the same home
 // ended. Every test here is one process: a git process another parallel test
 // forks at that moment holds a copy of the earlier serve's lock descriptor
@@ -225,6 +246,70 @@ func TestServeWatchesTheLibrary(t *testing.T) {
 	equal(t, "scan_counter", snap["scan_counter"], float64(3))
 	equal(t, "skills", strings.Join(skillNames(snap), " "), "")
 	equal(t, "exit", p.cancelRun(), 0)
+}
+
+func TestServeWatchesInsideSkills(t *testing.T) {
+	t.Parallel()
+	h := serveHarness(t)
+	h.addLibrarySkill(t, "commit")
+	p := h.serve(t, "--json")
+	snap := p.next("snapshot")
+	equal(t, "skills", strings.Join(skillDescriptions(snap), " "), "A commit skill")
+	// Wait until serve is idle: its first scan created the lock file, a
+	// change in agentx home that schedules one more scan.
+	p.send(`{"type":"refresh","request_id":"idle"}`)
+	p.next("refresh_complete")
+
+	// An edit inside the skill directory is a change signal: no refresh is requested.
+	h.editLibrarySkill(t, "commit", "Write a commit message")
+	snap = p.next("snapshot")
+	equal(t, "scan_counter", snap["scan_counter"], float64(2))
+	equal(t, "skills", strings.Join(skillDescriptions(snap), " "), "Write a commit message")
+	equal(t, "exit", p.close(), 0)
+	equal(t, "stderr", p.stderr.String(), "")
+}
+
+func TestServeWatchesInsideSkillsAddedLater(t *testing.T) {
+	t.Parallel()
+	h := serveHarness(t)
+	p := h.serve(t, "--json")
+	p.next("snapshot")
+
+	h.addLibrarySkill(t, "commit")
+	snap := p.next("snapshot")
+	equal(t, "scan_counter", snap["scan_counter"], float64(2))
+	equal(t, "skills", strings.Join(skillNames(snap), " "), "commit")
+
+	h.editLibrarySkill(t, "commit", "Write a commit message")
+	snap = p.next("snapshot")
+	equal(t, "scan_counter", snap["scan_counter"], float64(3))
+	equal(t, "skills", strings.Join(skillDescriptions(snap), " "), "Write a commit message")
+	equal(t, "exit", p.close(), 0)
+	equal(t, "stderr", p.stderr.String(), "")
+}
+
+func TestServeSurvivesARemovedSkillDirectory(t *testing.T) {
+	t.Parallel()
+	h := serveHarness(t)
+	h.addLibrarySkill(t, "commit")
+	p := h.serve(t, "--json")
+	p.next("snapshot")
+
+	if err := os.RemoveAll(filepath.Join(h.library, "commit")); err != nil {
+		t.Fatal(err)
+	}
+	snap := p.next("snapshot")
+	equal(t, "scan_counter", snap["scan_counter"], float64(2))
+	equal(t, "skills", strings.Join(skillNames(snap), " "), "")
+
+	// The loop still scans and acknowledges.
+	p.send(`{"type":"refresh","request_id":"r1"}`)
+	e := p.next("refresh_complete")
+	equal(t, "request_id", e["request_id"], "r1")
+	equal(t, "ok", e["ok"], true)
+	equal(t, "scan_counter", e["scan_counter"], float64(2))
+	equal(t, "exit", p.close(), 0)
+	equal(t, "stderr", p.stderr.String(), "")
 }
 
 func TestServeEndsOnStdinEOF(t *testing.T) {

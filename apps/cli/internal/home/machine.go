@@ -37,15 +37,13 @@ func MachineID(dir string, env map[string]string) (id, derivation string, err er
 		fmt.Fprintf(mac, "%s\n%d", pid, os.Getuid())
 		return hex.EncodeToString(mac.Sum(nil))[:32], derivedPlatform, nil
 	}
-	lock, err := takeLock(dir)
-	if err != nil {
-		return "", "", err
-	}
-	defer lock.Close()
-	if id, err := storedMachineID(dir); id != "" || err != nil { // stored meanwhile by another command
-		return id, derivedRandom, err
-	}
-	id, err = ResetMachineID(dir)
+	err = mutate(dir, false, func() error { // the file is derived state: no version bump
+		if id, err = storedMachineID(dir); id != "" || err != nil { // stored meanwhile by another command
+			return err
+		}
+		id, err = ResetMachineID(dir)
+		return err
+	})
 	return id, derivedRandom, err
 }
 
@@ -77,7 +75,7 @@ func ResetMachineID(dir string) (string, error) {
 		return "", err
 	}
 	id := hex.EncodeToString(b[:])
-	return id, writeAtomic(machinePath(dir), []byte(`{"id": "`+id+`"}`+"\n"))
+	return id, replaceFile(dir, machinePath(dir), []byte(`{"id": "`+id+`"}`+"\n"))
 }
 
 func platformID(env map[string]string) string {
