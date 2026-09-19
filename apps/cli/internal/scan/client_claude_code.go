@@ -48,10 +48,10 @@ func (c claudeCode) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 		}
 		var records []record
 		if raw := file.Plugins[key]; len(raw) > 0 && raw[0] == '[' {
-			json.Unmarshal(raw, &records)
+			_ = json.Unmarshal(raw, &records) // a malformed record yields no plugins, reported below
 		} else {
 			var one record
-			json.Unmarshal(raw, &one)
+			_ = json.Unmarshal(raw, &one)
 			records = []record{one}
 		}
 		name, marketplace, _ := strings.Cut(key, "@")
