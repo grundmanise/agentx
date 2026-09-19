@@ -114,7 +114,8 @@ Everything the CLI keeps on the machine lives under agentx home. Durable entries
                                 update candidates, refs/agentx/sources/<id> the last fetched state of each source
   worktrees/<name>/   durable   one linked worktree per placed fork
   settings.json       durable   machine settings
-  mutations/<id>.json durable   local mutation journal, kept until completion or recovery
+  mutations/<id>.json durable   local mutation journal, kept until completion or recovery; the content it
+                                stages waits in mutations/<id>.staged next to it (see Mutation journal)
   sync.json           durable   fleet upload protocol metadata; reserved, nothing writes it today
   ops/<ulid>.json     durable   operation records; reserved, nothing writes them today
   version             transient mutation counter, rewritten last by every mutating command
@@ -179,7 +180,27 @@ The machine id names one computer across reinstalls. It is derived, in this orde
 
 ## Lock and version file
 
-Every command that changes agentx home takes an exclusive advisory `flock` on `lock` in agentx home without waiting, does its writes, rewrites `version` as its last step and releases the lock. `version` holds one decimal integer and a newline, incremented on every successful mutation (a missing file counts as 0); it is a change signal for watchers, not an ordering of snapshots. A command that finds the lock held exits with code 7 and a hint naming the lock file after at most 50 ms of retrying; it never waits for the holder. While it holds the exclusive lock, a command keeps its process id in the lock file, so `agentx doctor` can name the holder. A failed mutation leaves `version` untouched. `agentx scan` holds a shared `flock` on the same file while it reads settings and the filesystem, retrying for up to one second while a mutation holds the exclusive lock and exiting with code 7 after that; it never writes `version`. With `--handshake` it releases the shared lock before it starts or connects to any server, and writes `handshakes.json` afterwards under the exclusive lock, again without touching `version`. Other reading commands do not take the lock, except for the one write that stores a random machine id; that write does not touch `version`. Taking either lock creates agentx home and its `ops` directory when they are missing; nothing writes into `ops` yet.
+Every command that changes agentx home takes an exclusive advisory `flock` on `lock` in agentx home without waiting, recovers any unfinished [mutation journal](#mutation-journal), does its writes through a journal of its own, rewrites `version` as its last step and releases the lock. `version` holds one decimal integer and a newline, incremented on every successful mutation (a missing file counts as 0); it is a change signal for watchers, not an ordering of snapshots. A command that finds the lock held exits with code 7 and a hint naming the lock file after at most 50 ms of retrying; it never waits for the holder. While it holds the exclusive lock, a command keeps its process id in the lock file, so `agentx doctor` can name the holder. A failed mutation leaves `version` untouched. `agentx scan` holds a shared `flock` on the same file while it reads settings and the filesystem, retrying for up to one second while a mutation holds the exclusive lock and exiting with code 7 after that; it never writes `version`. With `--handshake` it releases the shared lock before it starts or connects to any server, and writes `handshakes.json` afterwards under the exclusive lock, again without touching `version`. Other reading commands do not take the lock, except for the one write that stores a random machine id; that write does not touch `version`. Taking either lock creates agentx home and its `mutations` and `ops` directories when they are missing; nothing writes into `ops` yet.
+
+## Mutation journal
+
+Every replacement of a file in agentx home is journaled, so that a process stopped at any point leaves either the old file or the new one and a later command can tell which and finish the job. This covers `settings.json` (`config set`, `config enable`, `config disable`, `machine rename`), `machine.json` (`machine reset-id`, and the first command that stores a random machine id) and `handshakes.json` (`scan --handshake`). Creating the account repo is not journaled: it builds the repository in a temporary directory and renames it into place.
+
+Under the exclusive lock the command writes the new content to `mutations/<id>.staged`, then the journal `mutations/<id>.json`, each by temp file, fsync, rename and directory fsync. Only then does it rename the staged file over the live file, rewrite the journal with `progress` `applied` and remove it. `<id>` is the Unix time in nanoseconds, `-` and four random bytes in hex, so journals sort oldest first. The journal is one JSON object:
+
+| Field | Meaning |
+|---|---|
+| `kind` | `settings`, `machine` or `handshakes` |
+| `progress` | `staged` until every live file is replaced, then `applied` |
+| `replace` | the live files the mutation replaces, one entry each |
+| `replace[].path` | the live file's absolute path |
+| `replace[].old` | SHA-256 hex of the live file before the mutation, or `absent` when there was no file |
+| `replace[].new` | SHA-256 hex of the staged content |
+| `replace[].staged` | the staged file, next to the journal |
+
+Recovery runs under the exclusive lock and decides from what the live file holds, not from `progress`, since a process can stop after the rename and before recording it. A live file whose hash is `new` is done: the journal, and a staged file still present, are removed and `version` is not bumped. A live file whose hash is `old` while the staged file exists gets the staged file renamed over it, which bumps `version` once. A live file that matches neither was changed meanwhile: nothing is touched, the file, the staged content and the journal all stay, and the command fails with exit code 6 (`refused`) and a message that says `recovery required` and names the file and the journal, with a hint to restore the file's previous content and rerun, or to move the journal aside to keep the file as it is. A `.json` file under `mutations/` that is not a journal, or one whose staged file is missing, is refused the same way. Recovery never repeats a completed step, so it can run any number of times. Journals are recovered oldest first and recovery stops at the first refusal.
+
+Every mutating command recovers before its own change, under the lock it already holds; a refused recovery refuses the command. `agentx scan` and every scan of `agentx serve` look for journals under the shared lock and, when one exists, release it, recover under the exclusive lock (waiting for a mutation in progress the way they wait for the shared lock), release that and start their reads over, so no inventory is composed from a half-applied change. A refused recovery is exit code 6 for `agentx scan` and for the initial scan of `agentx serve`; for a later scan of `agentx serve` it is a `log` warning on stderr and a `refresh_complete` with `ok: false` and the message in `error` for every pending refresh, while the last snapshot stays in force until the journal is resolved. `agentx doctor` reports unfinished journals in its `mutations` row and recovers nothing. Reading commands such as `config get` and `machine` neither check for journals nor recover.
 
 ## Content hash
 
@@ -370,6 +391,7 @@ In the serve child every git call additionally has `GIT_TERMINAL_PROMPT=0`, `-o 
 | `isolated_commit` | `ok`, `fail` | the isolated environment gives a fixed input the known commit id `5d75017e77f5413f4337ef776244b8d8dc77ca90` |
 | `home` | `ok`, `fail` | agentx home exists, or was created, and is writable |
 | `lock` | `ok`, `warn` | the lock is free, or held by another agentx command; the detail names the holder's process id |
+| `mutations` | `ok`, `warn`, `fail` | no [mutation journal](#mutation-journal) is unfinished; a warning names the count and the oldest journal, and the hint says how to recover; doctor recovers nothing itself; `fail` when the directory cannot be read |
 | `settings` | `ok`, `fail` | `settings.json` parses, or does not exist yet; the detail and hint name the path |
 | `account_repo` | `ok`, `fail` | the account repo opens, or was created by this run |
 | `library` | `ok`, `warn` | the library directory exists; a missing library is a warning, not a failure |
@@ -385,7 +407,7 @@ In the serve child every git call additionally has `GIT_TERMINAL_PROMPT=0`, `-o 
 | `detail` | string | what was found, naming the version, path or error involved |
 | `hint` | string | how to fix it; absent when there is nothing to suggest |
 
-Without `--json` the same rows print as a `check  status  detail  hint` table. Exit code 2 when git is missing or too old; the run stops after the `git` row, since nothing else can be checked. Exit code 8 when the account repo is unusable, after every row. Exit code 7 when the account repo has to be created and another command holds the lock. Otherwise 0, warnings included. The `result` event carries `ok: false` exactly when the exit code is non-zero.
+Without `--json` the same rows print as a `check  status  detail  hint` table. Exit code 2 when git is missing or too old; the run stops after the `git` row, since nothing else can be checked. Exit code 8 when the account repo is unusable, after every row. Exit code 7 when the account repo has to be created and another command holds the lock, and 6 when it has to be created and an unfinished mutation cannot be recovered. Otherwise 0, warnings included. The `result` event carries `ok: false` exactly when the exit code is non-zero.
 
 ## Account repo
 
@@ -399,7 +421,7 @@ One serve child per agentx home: on start it takes an exclusive advisory `flock`
 
 Snapshots: every serve process has a fresh `instance_id` (or `AGENTX_INSTANCE_ID`). The initial scan always emits a `snapshot` with `scan_counter` `1`, even when an earlier process saw identical content. Each later scan is compared with the last emitted snapshot on its serialised bytes with `instance_id` and `scan_counter` excluded; an identical snapshot emits nothing, a different one increments the counter and is emitted whole. The desktop applies snapshots only from its active child and only with increasing counters, as [snapshot ordering](snapshot-ordering.md) prescribes.
 
-Scans: every scan holds the shared `flock` on `lock` over its local reads, like `agentx scan`, but waits for a mutation in progress for as long as it takes instead of giving up after a second; it never takes the exclusive lock. Scans are serialised, one at a time. A change signal that arrives during a scan schedules one more scan after it.
+Scans: every scan holds the shared `flock` on `lock` over its local reads, like `agentx scan`, but waits for a mutation in progress for as long as it takes instead of giving up after a second; it takes the exclusive lock only to recover an unfinished [mutation journal](#mutation-journal). Scans are serialised, one at a time. A change signal that arrives during a scan schedules one more scan after it.
 
 Change signals: serve watches, in this order, agentx home (where every mutating command rewrites `version` last), `account.git`, `worktrees` and the library, and then every directory below `worktrees` and the library, so an edit inside a skill is a signal too. Watches are not recursive: each directory gets its own, on its real path after resolving symlinks, and a real path reached twice, as a library symlink to a fork worktree is, gets one watch. Hidden directories and `node_modules` are skipped, as in discovery. Before every rescan the watches are brought in line with the directories that exist then: one that appeared, or did not exist at start, is watched from then on and one that disappeared is not. A library of a few hundred skills takes a few hundred watches, within the default inotify limit on Linux. Events are debounced: a rescan runs 100 ms after the last event, or 500 ms after the first event of a burst, whichever comes first. When the watcher cannot be created or a watch fails, serve emits one `log` event with level `warn` on stderr saying why and rescans every 2 s instead.
 

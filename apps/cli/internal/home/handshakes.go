@@ -48,23 +48,20 @@ func LoadHandshakes(dir string) (map[string]Handshake, error) {
 	return m, nil
 }
 
-// SaveHandshakes replaces the entries in fresh under the exclusive lock and
-// writes the file atomically. The file is derived state, so the version
-// file is not touched: no other command needs to rescan for it.
+// SaveHandshakes replaces the entries in fresh under the exclusive lock as a
+// journaled mutation. The file is derived state, so the version file is not
+// touched: no other command needs to rescan for it.
 func SaveHandshakes(dir string, fresh map[string]Handshake) error {
-	lock, err := takeLock(dir)
-	if err != nil {
-		return err
-	}
-	defer lock.Close()
-	stored, err := LoadHandshakes(dir)
-	if err != nil {
-		stored = map[string]Handshake{} // an unreadable file is replaced
-	}
-	maps.Copy(stored, fresh)
-	b, err := json.MarshalIndent(stored, "", "  ")
-	if err != nil {
-		return err
-	}
-	return writeAtomic(handshakesPath(dir), append(b, '\n'))
+	return mutate(dir, false, func() error {
+		stored, err := LoadHandshakes(dir)
+		if err != nil {
+			stored = map[string]Handshake{} // an unreadable file is replaced
+		}
+		maps.Copy(stored, fresh)
+		b, err := json.MarshalIndent(stored, "", "  ")
+		if err != nil {
+			return err
+		}
+		return replaceFile(dir, "handshakes", handshakesPath(dir), append(b, '\n'))
+	})
 }

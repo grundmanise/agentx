@@ -109,6 +109,16 @@ func (d *doctor) run(ctx context.Context) error {
 		d.row("lock", "ok", "free: "+lock, "")
 	}
 
+	// Reported, never recovered: doctor holds no lock.
+	switch journals, err := home.Journals(inv.dirs.Home); {
+	case err != nil:
+		d.row("mutations", "fail", err.Error(), "")
+	case len(journals) > 0:
+		d.row("mutations", "warn", plural(len(journals), "unfinished mutation")+": "+journals[0], "run agentx scan to recover; when it refuses, restore the file it names or move the journal aside")
+	default:
+		d.row("mutations", "ok", "none unfinished: "+home.MutationsDir(inv.dirs.Home), "")
+	}
+
 	settings := home.SettingsPath(inv.dirs.Home)
 	switch _, err := inv.loadSettings(); {
 	case err != nil:
@@ -122,7 +132,7 @@ func (d *doctor) run(ctx context.Context) error {
 
 	var repoErr error
 	switch gitDir, created, err := gitx.OpenAccountRepo(ctx, inv.git, inv.dirs.Home); {
-	case errors.Is(err, home.ErrLocked):
+	case errors.Is(err, home.ErrLocked), errors.Is(err, home.ErrRecovery):
 		d.row("account_repo", "fail", "cannot create "+gitDir+": "+err.Error(), "")
 		repoErr = err
 	case err != nil:

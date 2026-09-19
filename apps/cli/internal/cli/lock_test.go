@@ -42,9 +42,10 @@ func TestMutationBumpsVersionAndCreatesOps(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	equal(t, "version", readVersion(t, h), 3)
 
-	// Agentx home holds exactly the lock, the empty ops directory, the
+	// Agentx home holds exactly the lock, the empty mutations and ops directories, the
 	// settings and the version file: no temp file is left behind.
-	equal(t, "home entries", listDir(t, h.agentx), "lock ops settings.json version")
+	equal(t, "home entries", listDir(t, h.agentx), "lock mutations ops settings.json version")
+	equal(t, "mutations entries", listDir(t, filepath.Join(h.agentx, "mutations")), "")
 	equal(t, "ops entries", listDir(t, filepath.Join(h.agentx, "ops")), "")
 }
 
