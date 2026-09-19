@@ -465,6 +465,7 @@ func TestScanWarnings(t *testing.T) {
 			"~/.codex/plugins/cache/team/ghost: plugin ghost@team is not installed there, skipped",
 		}},
 		{"cursor-plugins", []string{
+			"~/.cursor/plugins/cache/cursor-public/half/0000000000000000000000000000000000000000: incomplete plugin cache, skipped",
 			"~/.cursor/plugins/local/bad/.cursor-plugin/plugin.json: invalid JSON, skipped",
 			"~/.cursor/plugins/local/escape: symlink resolves outside ~/.cursor/plugins/local, skipped",
 		}},
