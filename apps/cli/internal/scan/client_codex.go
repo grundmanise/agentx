@@ -138,7 +138,7 @@ func manifestPaths(raw json.RawMessage) []string {
 	if json.Unmarshal(raw, &one) == nil {
 		list = []string{one}
 	} else {
-		json.Unmarshal(raw, &list)
+		_ = json.Unmarshal(raw, &list) // neither a string nor a list names no path
 	}
 	var paths []string
 	for _, rel := range list {
