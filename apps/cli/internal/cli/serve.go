@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 	"github.com/grundmanise/agentx/apps/cli/internal/serve"
@@ -37,20 +38,18 @@ func newServeCommand(inv *invocation) *cobra.Command {
 				return err
 			}
 			defer lock.Close()
-			instance := inv.instanceID()
 			return serve.Run(cmd.Context(), serve.Options{
-				Scan:       func(ctx context.Context) (scan.Snapshot, error) { return inv.scan(ctx, 0, "", false) },
-				Watch:      inv.watchedDirs(),
-				Once:       once,
-				Stdin:      cmd.InOrStdin(),
-				InstanceID: instance,
+				Scan:  func(ctx context.Context) (scan.Snapshot, error) { return inv.scan(ctx, 0, "", false) },
+				Watch: inv.watchedDirs(),
+				Once:  once,
+				Stdin: cmd.InOrStdin(),
 				Snapshot: func(snap scan.Snapshot) {
 					inv.out.emit(snapshotEvent{event: newEvent("snapshot"), Snapshot: snap})
 					inv.out.printf("snapshot %d: %s, %s\n", snap.ScanCounter,
 						plural(len(snap.Configurations), "configuration"), plural(len(snap.Skills), "skill"))
 				},
 				RefreshComplete: func(id string, counter int, err error) {
-					ev := refreshCompleteEvent{event: newEvent("refresh_complete"), RequestID: id, InstanceID: instance, OK: err == nil, ScanCounter: counter}
+					ev := refreshCompleteEvent{event: newEvent("refresh_complete"), RequestID: id, InstanceID: inv.instanceID(), OK: err == nil, ScanCounter: counter}
 					if err != nil {
 						ev.Error = err.Error()
 						inv.out.printf("refresh %s: failed: %s\n", id, err)
@@ -75,7 +74,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 // rewrites; the account repo, the worktrees and the library hold content.
 func (inv *invocation) watchedDirs() []string {
 	h := inv.dirs.Home
-	return []string{h, filepath.Join(h, "account.git"), filepath.Join(h, "worktrees"), inv.dirs.Library}
+	return []string{h, gitx.AccountRepoPath(h), filepath.Join(h, "worktrees"), inv.dirs.Library}
 }
 
 func plural(n int, noun string) string {

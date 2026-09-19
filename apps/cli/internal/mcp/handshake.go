@@ -317,7 +317,7 @@ func startStdio(ctx context.Context, s Server, env map[string]string) (*stdioCon
 	}
 	// A server, or a child it leaves behind, that keeps stdout open past
 	// the deadline must not block the scan: the pending read fails instead.
-	context.AfterFunc(ctx, func() { out.SetReadDeadline(time.Now()) })
+	context.AfterFunc(ctx, func() { _ = out.SetReadDeadline(time.Now()) })
 	lines := bufio.NewScanner(out)
 	lines.Buffer(make([]byte, 64<<10), maxMessage)
 	return &stdioConn{cmd: cmd, cancel: cancel, in: in, out: out, lines: lines}, nil
@@ -386,7 +386,7 @@ func (c *stdioConn) initialized(string) {}
 func (c *stdioConn) close() {
 	c.in.Close()
 	term := time.AfterFunc(time.Second, c.cancel)
-	c.cmd.Wait()
+	_ = c.cmd.Wait() // the exit status is irrelevant once the handshake is done
 	term.Stop()
 	c.cancel()
 	c.out.Close()

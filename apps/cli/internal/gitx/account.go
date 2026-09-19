@@ -11,12 +11,15 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 )
 
+// AccountRepoPath is the git directory of the account repo in agentx home.
+func AccountRepoPath(homeDir string) string { return filepath.Join(homeDir, "account.git") }
+
 // OpenAccountRepo returns the git directory of the account repo in agentx
 // home, creating the repo under the lock when it does not exist yet. A
 // present repo that git cannot read is an error; so is one that cannot be
 // created. created reports whether this call made it.
 func OpenAccountRepo(ctx context.Context, r *Runner, homeDir string) (gitDir string, created bool, err error) {
-	gitDir = filepath.Join(homeDir, "account.git")
+	gitDir = AccountRepoPath(homeDir)
 	_, err = os.Stat(gitDir)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):

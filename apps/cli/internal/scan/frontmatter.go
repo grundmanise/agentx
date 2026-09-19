@@ -65,12 +65,12 @@ func parseFrontmatter(text string) (frontmatter, error) {
 		}
 		key, style, parts = k, 0, nil
 		v = strings.TrimSpace(v)
-		switch {
-		case v == "|" || v == "|-" || v == "|+":
+		switch v {
+		case "|", "|-", "|+":
 			style = '|'
-		case v == ">" || v == ">-" || v == ">+":
+		case ">", ">-", ">+":
 			style = '>'
-		case v == "":
+		case "":
 			style = 'n' // a nested value: its indented lines are skipped
 		default:
 			parts = []string{unquote(v)}

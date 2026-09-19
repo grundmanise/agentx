@@ -26,11 +26,11 @@ type Tool struct {
 	Description string `json:"description"`
 }
 
-func HandshakesPath(dir string) string { return filepath.Join(dir, "handshakes.json") }
+func handshakesPath(dir string) string { return filepath.Join(dir, "handshakes.json") }
 
 // LoadHandshakes reads the handshakes file; a missing file is empty.
 func LoadHandshakes(dir string) (map[string]Handshake, error) {
-	path := HandshakesPath(dir)
+	path := handshakesPath(dir)
 	b, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return map[string]Handshake{}, nil
@@ -66,5 +66,5 @@ func SaveHandshakes(dir string, fresh map[string]Handshake) error {
 	if err != nil {
 		return err
 	}
-	return writeAtomic(HandshakesPath(dir), append(b, '\n'))
+	return writeAtomic(handshakesPath(dir), append(b, '\n'))
 }

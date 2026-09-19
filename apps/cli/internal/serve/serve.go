@@ -24,11 +24,10 @@ const (
 // Options wires one serve loop to the command that runs it: how to scan and
 // how to report. Every report function is called from the loop's goroutine.
 type Options struct {
-	Scan       func(ctx context.Context) (scan.Snapshot, error) // one whole scan; ctx bounds its wait for the lock
-	Watch      []string                                         // directories to watch, in order; a missing one is retried after each scan
-	Once       bool                                             // scan once, emit and return
-	Stdin      io.Reader                                        // request lines
-	InstanceID string
+	Scan  func(ctx context.Context) (scan.Snapshot, error) // one whole scan; ctx bounds its wait for the lock
+	Watch []string                                         // directories to watch, in order; a missing one is retried after each scan
+	Once  bool                                             // scan once, emit and return
+	Stdin io.Reader                                        // request lines
 
 	Snapshot        func(scan.Snapshot)                            // a changed whole snapshot, counter set
 	RefreshComplete func(requestID string, counter int, err error) // the acknowledgement of one refresh request
@@ -149,7 +148,6 @@ func (l *loop) scan(ctx context.Context) error {
 	if l.counter == 0 || !bytes.Equal(b, l.last) {
 		l.counter++
 		l.last = b
-		snap.InstanceID = l.InstanceID
 		snap.ScanCounter = l.counter
 		l.Snapshot(snap)
 	}
@@ -159,10 +157,9 @@ func (l *loop) scan(ctx context.Context) error {
 	return nil
 }
 
-// canonical serialises a snapshot without the fields that differ between
-// identical inventories: the instance id and the counter.
+// canonical serialises a snapshot without the counter, the one field that
+// differs between identical inventories of one serve process.
 func canonical(snap scan.Snapshot) []byte {
-	snap.InstanceID = ""
 	snap.ScanCounter = 0
 	b, err := json.Marshal(snap)
 	if err != nil {

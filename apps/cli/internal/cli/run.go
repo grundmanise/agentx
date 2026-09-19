@@ -15,11 +15,12 @@ import (
 
 // invocation is what every command shares for one run.
 type invocation struct {
-	env    map[string]string
-	out    *writer
-	dirs   home.Dirs
-	git    *gitx.Runner
-	parsed bool // set once cobra has parsed the command line; errors after that are agentx's own
+	env      map[string]string
+	out      *writer
+	dirs     home.Dirs
+	git      *gitx.Runner
+	instance string // the instance_id snapshots carry, fixed once per run
+	parsed   bool   // set once cobra has parsed the command line; errors after that are agentx's own
 }
 
 // Run executes one agentx invocation and returns its exit code. It reads
