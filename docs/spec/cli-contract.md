@@ -14,6 +14,8 @@ The CLI reads its environment once, at startup, from the variables below. Nothin
 | `AGENTX_LIBRARY` | the library | `$HOME/.agents/skills` |
 | `HOME` | the user's home; agent client paths derive from it | required |
 | `XDG_CONFIG_HOME` | where agent clients keep user-scope configuration | `$HOME/.config` |
+| `AGENTX_PLATFORM_ID` | the platform id the machine id is derived from; set it empty to declare that the machine has none | the operating system's platform id, see [Machine identity](#machine-identity) |
+| `AGENTX_HOSTNAME` | the default machine label | the operating system's hostname |
 
 ## Streams
 
@@ -42,6 +44,20 @@ Every run emits exactly one `result` as its last stdout event, after any `error`
 |---|---|---|
 | `cli_version` | string | the CLI version, `dev` for an unreleased build |
 
+`settings`, emitted by every `agentx config` command:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `settings` | object | the machine settings as they now are, in the shape of the settings file below, with `label` filled in from the hostname when it is not set |
+
+`machine`, emitted by every `agentx machine` command:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `id` | string | the machine id, 32 lowercase hex characters |
+| `label` | string | the machine label |
+| `derivation` | string | `platform` when the id is derived from the platform id, `random` when it comes from `machine.json` |
+
 `error`, emitted when a command fails:
 
 | Field | Type | Meaning |
@@ -64,7 +80,7 @@ Every run emits exactly one `result` as its last stdout event, after any `error`
 | `level` | string | the log level; `debug` lines appear only with `--verbose` |
 | `message` | string | the log line |
 
-The other event types are `progress`, `snapshot`, `reconcile`, `configuration`, `skill`, `mcp_server`, `plugin`, `machine`, `doctor`, `search`, `refresh_complete`, `drift`, `update_available` and `conflict`. Their fields are added to this document by the command that first emits them. `operation` and `fleet` are reserved and never emitted.
+The other event types are `progress`, `snapshot`, `reconcile`, `configuration`, `skill`, `mcp_server`, `plugin`, `doctor`, `search`, `refresh_complete`, `drift`, `update_available` and `conflict`. Their fields are added to this document by the command that first emits them. `operation` and `fleet` are reserved and never emitted.
 
 ## Exit codes
 
@@ -109,6 +125,8 @@ No agent client reads anything in agentx home except the fork worktrees, through
 
 `settings.json` in agentx home holds what only this machine decides. It is read whole and written by temp file, fsync and rename while the lock is held. A missing file means defaults. An unreadable file is exit code 10 with a hint naming the path.
 
+`agentx config list` prints every setting, `agentx config get <key>` one, and `agentx config set <key> <value>` changes `label`, `auto_push` or `accept_operations`; the booleans take `true` or `false`. An unknown key, a key that `config set` cannot change, or an invalid value is exit code 1 with a hint listing the keys. Without `--json`, `list` prints a `key  value` table and `get` prints the bare value.
+
 ```json
 {
   "schema_version": 1,
@@ -133,7 +151,7 @@ No agent client reads anything in agentx home except the fork worktrees, through
 | Key | Meaning |
 |---|---|
 | `schema_version` | the settings schema version, currently `1` |
-| `label` | the machine label; defaults to the hostname |
+| `label` | the machine label; absent until set with `config set label` or `machine rename`, and reported as the hostname meanwhile |
 | `auto_push` | whether published forks are pushed automatically |
 | `accept_operations` | reserved; whether this machine executes operations queued for it |
 | `enabled_configurations` | configuration ids selected by default for explicit placements; every detected configuration is enabled on first detection |
@@ -141,6 +159,20 @@ No agent client reads anything in agentx home except the fork worktrees, through
 | `copy_mode` | skill name to the configuration ids that receive a copy instead of a symlink |
 
 Git config in the account repo holds only what git owns: remotes and tracking branches.
+
+## Machine identity
+
+The machine id names one computer across reinstalls. It is derived, in this order:
+
+1. When `machine.json` exists in agentx home, its `id` is the machine id and the derivation is `random`. The file is `{"id": "<32 lowercase hex characters>"}`.
+2. Otherwise, when a platform id exists, the machine id is HMAC-SHA256 with the key `agentx-machine-id/v1` over the message `<platform id> LF <uid>`, where `LF` is one newline byte and `<uid>` is the numeric user id in decimal, rendered as the first 32 lowercase hex characters of the MAC. The derivation is `platform`. The platform id is `AGENTX_PLATFORM_ID` when the variable is set, else the content of `/etc/machine-id` without surrounding whitespace on Linux, else `IOPlatformUUID` from `ioreg -rd1 -c IOPlatformExpertDevice` on macOS.
+3. Otherwise 16 random bytes are generated once, under the lock, stored as hex in `machine.json`, and used from then on as in 1.
+
+`agentx machine` prints the id, the label and the derivation. `agentx machine rename <label>` sets the label in the settings file. `agentx machine reset-id` writes a new random id to `machine.json`; from then on the id is random even where a platform id exists, until the file is deleted.
+
+## Lock and version file
+
+Every command that changes agentx home takes an exclusive advisory `flock` on `lock` in agentx home without waiting, does its writes, rewrites `version` as its last step and releases the lock. `version` holds one decimal integer and a newline, incremented on every successful mutation (a missing file counts as 0); it is a change signal for watchers, not an ordering of snapshots. A command that finds the lock held exits at once with code 7 and a hint naming the lock file. A failed mutation leaves `version` untouched. Reading commands do not take the lock, except `agentx machine` for the one write that stores a random id; that write does not touch `version`. Taking the lock creates agentx home and its `ops` directory when they are missing; nothing writes into `ops` yet.
 
 ## Content hash
 

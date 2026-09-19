@@ -37,10 +37,12 @@ func newHarness(t *testing.T) *harness {
 		}
 	}
 	h.env = map[string]string{
-		"HOME":            h.home,
-		"AGENTX_HOME":     h.agentx,
-		"AGENTX_LIBRARY":  h.library,
-		"XDG_CONFIG_HOME": h.config,
+		"HOME":               h.home,
+		"AGENTX_HOME":        h.agentx,
+		"AGENTX_LIBRARY":     h.library,
+		"XDG_CONFIG_HOME":    h.config,
+		"AGENTX_HOSTNAME":    "test-host",
+		"AGENTX_PLATFORM_ID": "platform-test",
 	}
 	return h
 }

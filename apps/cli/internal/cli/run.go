@@ -16,6 +16,7 @@ import (
 type invocation struct {
 	env    map[string]string
 	out    *writer
+	dirs   home.Dirs
 	parsed bool // set once cobra has parsed the command line; errors after that are agentx's own
 }
 
@@ -57,22 +58,31 @@ func newRoot(inv *invocation) *cobra.Command {
 			if err != nil {
 				return fail(exitUsage, err.Error(), "set HOME to your home directory")
 			}
+			inv.dirs = dirs
 			inv.out.debugf("agentx home %s, library %s, config home %s", dirs.Home, dirs.Library, dirs.Config)
 			return nil
 		},
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if inv.out.json {
-				return fail(exitUsage, "no command given", "run 'agentx help' to list commands")
-			}
-			return cmd.Help()
-		},
+		RunE: needSubcommand(inv, "no command given", "run 'agentx help' to list commands"),
 	}
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.PersistentFlags().Bool("json", false, "write newline-delimited JSON events to stdout")
 	root.PersistentFlags().BoolVar(&inv.out.verbose, "verbose", false, "log at debug level on stderr")
 
 	root.AddCommand(newVersionCommand(inv))
+	root.AddCommand(newConfigCommand(inv))
+	root.AddCommand(newMachineCommand(inv))
 	return root
+}
+
+// needSubcommand is the RunE of a command that only groups subcommands: help
+// for a human, a usage error for a script.
+func needSubcommand(inv *invocation, message, hint string) func(*cobra.Command, []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		if inv.out.json {
+			return fail(exitUsage, message, hint)
+		}
+		return cmd.Help()
+	}
 }
 
 // finish reports err, emits the terminating result and maps err to an exit code.
@@ -83,12 +93,14 @@ func finish(inv *invocation, err error) int {
 		return exitOK.exit
 	}
 	var f *failure
-	if !errors.As(err, &f) {
-		if inv.parsed {
-			f = &failure{status: exitInternal, message: err.Error()}
-		} else {
-			f = &failure{status: exitUsage, message: err.Error(), hint: "run 'agentx help' for usage"}
-		}
+	switch {
+	case errors.As(err, &f):
+	case errors.Is(err, home.ErrLocked):
+		f = &failure{status: exitLocked, message: err.Error(), hint: "wait for the command holding " + home.LockPath(inv.dirs.Home) + " to finish, then retry"}
+	case inv.parsed:
+		f = &failure{status: exitInternal, message: err.Error()}
+	default:
+		f = &failure{status: exitUsage, message: err.Error(), hint: "run 'agentx help' for usage"}
 	}
 	out.fail(f)
 	out.result(false, f.message)
