@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -84,12 +85,18 @@ func takeLock(dir string) (*os.File, error) {
 	}
 	for attempt := 1; ; attempt++ {
 		f, err := flock(LockPath(dir), syscall.LOCK_EX)
-		if !errors.Is(err, ErrLocked) || attempt == 5 {
+		if !errors.Is(err, ErrLocked) || attempt == lockAttempts {
 			return f, err
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(lockRetry)
 	}
 }
+
+// A held lock is reported after lockAttempts tries lockRetry apart.
+const (
+	lockAttempts = 5
+	lockRetry    = 10 * time.Millisecond
+)
 
 // waitLock takes the advisory lock how (shared for a scan's reads, exclusive
 // for recovery), retrying every 50 ms while it is held, until ctx is done.
@@ -159,17 +166,33 @@ func bumpVersion(dir string) error {
 	return writeAtomic(path, []byte(strconv.Itoa(n+1)+"\n"))
 }
 
-// LockHeld reports whether another command holds the lock, without waiting,
-// and the pid that command wrote into the lock file.
+// LockHeld reports whether another command holds the lock, and the pid that
+// command wrote into the lock file. It creates nothing: a lock file that does
+// not exist is free. A held lock is confirmed after the same few quick
+// retries as takeLock, so a child process inheriting the lock for the instant
+// between its fork and its exec is not mistaken for a holder.
 func LockHeld(dir string) (held bool, pid string, err error) {
-	f, err := takeLock(dir)
-	if errors.Is(err, ErrLocked) {
-		b, _ := os.ReadFile(LockPath(dir))
-		return true, strings.TrimSpace(string(b)), nil
+	path := LockPath(dir)
+	f, err := os.Open(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, "", nil
 	}
 	if err != nil {
 		return false, "", err
 	}
-	f.Close()
-	return false, "", nil
+	defer f.Close()
+	for attempt := 1; ; attempt++ {
+		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		if err == nil {
+			return false, "", nil // closing f releases the lock again
+		}
+		if !errors.Is(err, syscall.EWOULDBLOCK) {
+			return false, "", fmt.Errorf("lock %s: %w", path, err)
+		}
+		if attempt == lockAttempts {
+			b, _ := os.ReadFile(path)
+			return true, strings.TrimSpace(string(b)), nil
+		}
+		time.Sleep(lockRetry)
+	}
 }

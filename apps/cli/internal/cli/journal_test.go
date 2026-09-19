@@ -130,9 +130,7 @@ func TestMutationFinishesAnAppliedJournal(t *testing.T) {
 func TestEditedLiveFileRefusesRecovery(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	out := h.run("doctor") // creates the account repo, a mutation of its own
-	equal(t, "exit", out.exit, 0)
-	out = h.run("config", "set", "label", "one")
+	out := h.run("config", "set", "label", "one")
 	equal(t, "exit", out.exit, 0)
 	live := filepath.Join(h.agentx, "settings.json")
 	before := readFile(t, live)
@@ -170,7 +168,7 @@ func TestEditedLiveFileRefusesRecovery(t *testing.T) {
 	if _, err := os.Stat(journal); err != nil {
 		t.Errorf("journal: %v", err)
 	}
-	equal(t, "version", readVersion(t, h), 2)
+	equal(t, "version", readVersion(t, h), 1)
 
 	// Doctor reports without recovering.
 	out = h.run("--json", "doctor")
@@ -193,30 +191,7 @@ func TestEditedLiveFileRefusesRecovery(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	equal(t, "label", readSettingsFile(t, h)["label"], "two")
 	gone(t, "journal", journal)
-	equal(t, "version", readVersion(t, h), 3)
-}
-
-func TestDoctorCreatingTheAccountRepoRefusesRecovery(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	out := h.run("config", "set", "label", "one")
-	equal(t, "exit", out.exit, 0)
-	journal, _ := writeJournal(t, h, "1000-aaaa", "staged", sha([]byte("{}\n")), relabel(t, h, "two"))
-
-	out = h.run("--json", "doctor")
-	equal(t, "exit", out.exit, 6)
-	events := h.events(out.stdout)
-	rows, _ := doctorRows(t, events)
-	equal(t, "mutations.status", rows["mutations"]["status"], "warn")
-	equal(t, "account_repo.status", rows["account_repo"]["status"], "fail")
-	contains(t, "account_repo.detail", rows["account_repo"]["detail"].(string), "recovery required")
-	contains(t, "account_repo.detail", rows["account_repo"]["detail"].(string), journal)
-	equal(t, "error.code", events[len(events)-2]["code"], "refused")
-	equal(t, "result.ok", events[len(events)-1]["ok"], false)
-	if _, err := os.Stat(filepath.Join(h.agentx, "account.git")); !os.IsNotExist(err) {
-		t.Errorf("account.git was created: %v", err)
-	}
-	equal(t, "label", readSettingsFile(t, h)["label"], "one")
+	equal(t, "version", readVersion(t, h), 2)
 }
 
 func TestServeRecoversAJournalOnRescan(t *testing.T) {

@@ -382,7 +382,7 @@ In the serve child every git call additionally has `GIT_TERMINAL_PROMPT=0`, `-o 
 
 ## Doctor
 
-`agentx doctor` checks whether this machine can run agentx and reports one row per check, in this order:
+`agentx doctor` checks whether this machine can run agentx and reports one row per check, in this order. It only reads: it creates neither agentx home, nor the lock file, nor the account repo, and its git probes run in a throwaway repository in the temporary directory.
 
 | Check | Statuses | What it means |
 |---|---|---|
@@ -390,11 +390,11 @@ In the serve child every git call additionally has `GIT_TERMINAL_PROMPT=0`, `-o 
 | `merge_tree` | `ok`, `fail` | `git merge-tree --write-tree --merge-base=<base> <ours> <theirs>` merges two branches of a throwaway repository in the temporary directory, made with deterministic commits |
 | `relative_worktree_paths` | `info` | whether git is 2.48 or newer, which enables relative worktree paths |
 | `isolated_commit` | `ok`, `fail` | the isolated environment gives a fixed input the known commit id `5d75017e77f5413f4337ef776244b8d8dc77ca90` |
-| `home` | `ok`, `fail` | agentx home exists, or was created, and is writable |
-| `lock` | `ok`, `warn` | the lock is free, or held by another agentx command; the detail names the holder's process id |
+| `home` | `ok`, `fail` | agentx home is writable, or does not exist yet; the first scan creates it |
+| `lock` | `ok`, `warn` | the lock is free, a missing lock file included, or held by another agentx command; the detail names the holder's process id |
 | `mutations` | `ok`, `warn`, `fail` | no [mutation journal](#mutation-journal) is unfinished; a warning names the count and the oldest journal, and the hint says how to recover; doctor recovers nothing itself; `fail` when the directory cannot be read |
 | `settings` | `ok`, `fail` | `settings.json` parses, or does not exist yet; the detail and hint name the path |
-| `account_repo` | `ok`, `fail` | the account repo opens, or was created by this run |
+| `account_repo` | `ok`, `fail` | the account repo opens, or does not exist yet |
 | `library` | `ok`, `warn` | the library directory exists; a missing library is a warning, not a failure |
 | `client:<slug>` | `ok` | one row per detected agent configuration, sorted by slug; the detail is `<name>: <configuration directory>` |
 | `clients` | `info`, `warn` | `<n> of <m> registered clients detected`, where `m` is the size of the client registry; `warn` with a hint when nothing is detected |
@@ -408,11 +408,11 @@ In the serve child every git call additionally has `GIT_TERMINAL_PROMPT=0`, `-o 
 | `detail` | string | what was found, naming the version, path or error involved |
 | `hint` | string | how to fix it; absent when there is nothing to suggest |
 
-Without `--json` the same rows print as a `check  status  detail  hint` table. Exit code 2 when git is missing or too old; the run stops after the `git` row, since nothing else can be checked. Exit code 8 when the account repo is unusable, after every row. Exit code 7 when the account repo has to be created and another command holds the lock, and 6 when it has to be created and an unfinished mutation cannot be recovered. Otherwise 0, warnings included. The `result` event carries `ok: false` exactly when the exit code is non-zero.
+Without `--json` the same rows print as a `check  status  detail  hint` table. Exit code 2 when git is missing or too old; the run stops after the `git` row, since nothing else can be checked. Exit code 8 when the account repo is unusable, after every row. Otherwise 0, warnings included. The `result` event carries `ok: false` exactly when the exit code is non-zero.
 
 ## Account repo
 
-The account repo is `account.git` in agentx home, a bare repository. It is created on first use, under the lock, by the first command that opens it; `agentx doctor` is that command on a fresh machine. Creation runs `git init --bare` in the isolated environment and sets `gc.auto=0` (maintenance runs on the serve child's timer, never inside a command), `core.logAllRefUpdates=true` (reflogs, which a bare repository lacks by default), `merge.conflictStyle=zdiff3` and, on git 2.48 or newer, `worktree.useRelativePaths=true`. The repository is renamed into place only once every step succeeded. A present `account.git` that is not a bare repository git can read is exit code 8 with a hint naming the path.
+The account repo is `account.git` in agentx home, a bare repository. It is created on first use, under the lock, by the first command that opens it. No command of this milestone opens it, so on a fresh machine it does not exist and `agentx doctor` reports that. Creation runs `git init --bare` in the isolated environment and sets `gc.auto=0` (maintenance runs on the serve child's timer, never inside a command), `core.logAllRefUpdates=true` (reflogs, which a bare repository lacks by default), `merge.conflictStyle=zdiff3` and, on git 2.48 or newer, `worktree.useRelativePaths=true`. The repository is renamed into place only once every step succeeded. A present `account.git` that is not a bare repository git can read is exit code 8 with a hint naming the path.
 
 ## Serve
 

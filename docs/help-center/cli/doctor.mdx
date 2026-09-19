@@ -3,7 +3,7 @@ title: "agentx doctor"
 description: "Check that this machine can run agentx: git, agentx home and the account repo."
 ---
 
-Run `agentx doctor` before your first install, or whenever something looks wrong.
+Run `agentx doctor` before your first install, or whenever something looks wrong. It only reads: it never creates or changes anything in agentx home.
 
 ```sh
 agentx doctor
@@ -14,11 +14,11 @@ git                      ok    git 2.43.0
 merge_tree               ok    merge-tree --write-tree --merge-base merges two branches
 relative_worktree_paths  info  not available: git 2.43.0 is older than 2.48
 isolated_commit          ok    commit 5d75017e77f5413f4337ef776244b8d8dc77ca90
-home                     ok    /home/me/.agentx is writable
+home                     ok    not created yet: /home/me/.agentx; the first scan creates it
 lock                     ok    free: /home/me/.agentx/lock
 mutations                ok    none unfinished: /home/me/.agentx/mutations
 settings                 ok    defaults: /home/me/.agentx/settings.json is not written yet
-account_repo             ok    created /home/me/.agentx/account.git
+account_repo             ok    not created yet: /home/me/.agentx/account.git
 library                  warn  missing: /home/me/.agents/skills  create it with mkdir -p /home/me/.agents/skills
 client:claude-code       ok    Claude Code: /home/me/.claude
 client:cursor            ok    Cursor: /home/me/.cursor
@@ -33,11 +33,11 @@ clients                  info  2 of 75 registered clients detected
 | `merge_tree` | git can merge with `merge-tree --write-tree`, which updates need. |
 | `relative_worktree_paths` | Whether git is 2.48 or newer. Informational. |
 | `isolated_commit` | agentx commits produce the same id on this machine as on every other, whatever your git configuration. |
-| `home` | agentx home is writable. |
+| `home` | agentx home is writable, or does not exist yet. The first scan creates it. |
 | `lock` | No other agentx command holds the lock. When one does, the detail names its process id. |
 | `mutations` | No change to agentx home was cut short by a crash. When one was, the detail names its journal; run `agentx scan` to finish it. If that refuses because the file changed meanwhile, restore the file or move the journal aside. Doctor only reports. |
 | `settings` | `settings.json` parses. |
-| `account_repo` | The account repo opens. The first run creates it. |
+| `account_repo` | The account repo opens, or does not exist yet. |
 | `library` | The library directory exists. A missing library is a warning, not a failure. |
 | `client:<id>` | One row per detected agent configuration, naming the client and its configuration directory. |
 | `clients` | How many of the clients agentx knows are detected. A warning when none is: install an agent client, or check that `HOME` points at the right user. |
@@ -47,9 +47,7 @@ Each row is `ok`, `warn`, `fail` or `info`. A row with a fix shows it after the 
 ## Exit codes
 
 - `2`: git is missing or older than 2.40. The hint names the fix; on Ubuntu 22.04, which ships git 2.34, install a newer git or upgrade the distribution. Every other command except `version` refuses to run until git is fixed.
-- `8`: `account.git` in agentx home exists but is not a repository git can read. Check the directory, or move it aside to have doctor create a new one.
-- `7`: the account repo had to be created while another agentx command was running. Retry when it finishes.
-- `6`: the account repo had to be created while a change cut short by a crash could not be finished. Follow the `mutations` row, then retry.
+- `8`: `account.git` in agentx home exists but is not a repository git can read. Check the directory, or move it aside.
 - `0`: everything else, warnings included.
 
 ## Script it

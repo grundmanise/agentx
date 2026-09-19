@@ -8,7 +8,6 @@ import (
 	"reflect"
 	"runtime"
 	"strconv"
-	"strings"
 	"syscall"
 	"testing"
 
@@ -68,15 +67,6 @@ func doctorRows(t *testing.T, events []jsonEvent) (map[string]jsonEvent, []strin
 	return rows, order
 }
 
-func accountConfig(t *testing.T, h *harness, key string) string {
-	t.Helper()
-	out, err := exec.Command("git", "--git-dir="+filepath.Join(h.agentx, "account.git"), "config", "--get", key).Output()
-	if err != nil {
-		t.Fatalf("git config %s: %v", key, err)
-	}
-	return strings.TrimSpace(string(out))
-}
-
 func TestDoctorNoGitExits2(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -132,10 +122,15 @@ func TestDoctorRejectsOldGit(t *testing.T) {
 	}
 }
 
-func TestDoctorPassesAndCreatesAccountRepo(t *testing.T) {
+func TestDoctorPassesAndChangesNothing(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
+	account := filepath.Join(h.agentx, "account.git")
 
+	// A fresh machine: agentx home does not exist and doctor leaves it so.
+	if err := os.Remove(h.agentx); err != nil {
+		t.Fatal(err)
+	}
 	out := h.run("--json", "doctor")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "stderr", out.stderr, "")
@@ -156,26 +151,20 @@ func TestDoctorPassesAndCreatesAccountRepo(t *testing.T) {
 	equal(t, "clients.hint", rows["clients"]["hint"], "install an agent client or check HOME")
 	contains(t, "git.detail", rows["git"]["detail"].(string), "git 2.")
 	contains(t, "isolated_commit.detail", rows["isolated_commit"]["detail"].(string), "commit 5d75017e77f5413f4337ef776244b8d8dc77ca90")
-	contains(t, "home.detail", rows["home"]["detail"].(string), h.agentx)
+	equal(t, "home.detail", rows["home"]["detail"], "not created yet: "+h.agentx+"; the first scan creates it")
+	equal(t, "lock.detail", rows["lock"]["detail"], "free: "+filepath.Join(h.agentx, "lock"))
 	contains(t, "settings.detail", rows["settings"]["detail"].(string), "defaults")
-	equal(t, "account_repo.detail", rows["account_repo"]["detail"], "created "+filepath.Join(h.agentx, "account.git"))
+	equal(t, "account_repo.detail", rows["account_repo"]["detail"], "not created yet: "+account)
 	equal(t, "library.detail", rows["library"]["detail"], h.library)
+	gone(t, "agentx home", h.agentx)
 
-	equal(t, "gc.auto", accountConfig(t, h, "gc.auto"), "0")
-	equal(t, "core.logAllRefUpdates", accountConfig(t, h, "core.logAllRefUpdates"), "true")
-	equal(t, "merge.conflictStyle", accountConfig(t, h, "merge.conflictStyle"), "zdiff3")
-	equal(t, "core.bare", accountConfig(t, h, "core.bare"), "true")
-	equal(t, "version", readVersion(t, h), 1)
-	equal(t, "home entries", listDir(t, h.agentx), "account.git lock mutations ops version")
-
-	// The second run finds the repo and changes nothing.
-	out = h.run("--json", "doctor")
-	equal(t, "exit", out.exit, 0)
-	rows, _ = doctorRows(t, h.events(out.stdout))
-	equal(t, "account_repo.status", rows["account_repo"]["status"], "ok")
-	equal(t, "account_repo.detail", rows["account_repo"]["detail"], filepath.Join(h.agentx, "account.git")+" opens")
-	equal(t, "version", readVersion(t, h), 1)
-
+	// With a home and an account repo in place doctor reads both and writes nothing.
+	if err := os.MkdirAll(h.agentx, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("git", "init", "--bare", "--quiet", account).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
 	out = h.run("doctor")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "stderr", out.stderr, "")
@@ -184,14 +173,16 @@ func TestDoctorPassesAndCreatesAccountRepo(t *testing.T) {
 		"merge_tree               ok    ",
 		"relative_worktree_paths  info  ",
 		"isolated_commit          ok    commit 5d75017e77f5413f4337ef776244b8d8dc77ca90",
+		"home                     ok    " + h.agentx + " is writable",
 		"lock                     ok    free: " + filepath.Join(h.agentx, "lock"),
 		"mutations                ok    none unfinished: " + filepath.Join(h.agentx, "mutations"),
-		"account_repo             ok    " + filepath.Join(h.agentx, "account.git") + " opens",
+		"account_repo             ok    " + account + " opens",
 		"library                  ok    " + h.library,
 		"clients                  warn  0 of " + strconv.Itoa(scan.Registered()) + " registered clients detected  install an agent client or check HOME",
 	} {
 		contains(t, "stdout", out.stdout, line)
 	}
+	equal(t, "home entries", listDir(t, h.agentx), "account.git")
 }
 
 func TestDoctorReportsDetectedClients(t *testing.T) {
@@ -261,7 +252,6 @@ func TestDoctorAcceptsGitAtAndAboveFloorByNumericComparison(t *testing.T) {
 			equal(t, "result.ok", events[len(events)-1]["ok"], true)
 			if tt.relative {
 				contains(t, "relative_worktree_paths.detail", rows["relative_worktree_paths"]["detail"].(string), "available: git "+tt.version)
-				equal(t, "worktree.useRelativePaths", accountConfig(t, h, "worktree.useRelativePaths"), "true")
 			} else {
 				contains(t, "relative_worktree_paths.detail", rows["relative_worktree_paths"]["detail"].(string), "not available: git "+tt.version)
 			}
@@ -325,28 +315,16 @@ func TestDoctorReportsHeldLock(t *testing.T) {
 	}
 	hold()
 
-	// Creating the account repo is a mutation, so a held lock blocks it.
+	// Doctor takes no lock itself, so it only reports the holder.
 	out := h.run("--json", "doctor")
-	equal(t, "exit", out.exit, 7)
+	equal(t, "exit", out.exit, 0)
 	events := h.events(out.stdout)
 	rows, _ := doctorRows(t, events)
 	equal(t, "lock.status", rows["lock"]["status"], "warn")
 	equal(t, "lock.detail", rows["lock"]["detail"], "held by process 4242: "+lock)
-	equal(t, "account_repo.status", rows["account_repo"]["status"], "fail")
-	equal(t, "error.code", events[len(events)-2]["code"], "locked")
-
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_UN); err != nil {
-		t.Fatal(err)
-	}
-	equal(t, "exit", h.run("doctor").exit, 0)
-	hold()
-
-	// With the repo in place doctor only reports the lock.
-	out = h.run("--json", "doctor")
-	equal(t, "exit", out.exit, 0)
-	rows, _ = doctorRows(t, h.events(out.stdout))
-	equal(t, "lock.status", rows["lock"]["status"], "warn")
+	equal(t, "lock.hint", rows["lock"]["hint"], "wait for it to finish")
 	equal(t, "account_repo.status", rows["account_repo"]["status"], "ok")
+	equal(t, "result.ok", events[len(events)-1]["ok"], true)
 
 	out = h.run("doctor")
 	equal(t, "exit", out.exit, 0)
