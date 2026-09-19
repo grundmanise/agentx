@@ -373,6 +373,8 @@ In the serve child every git call additionally has `GIT_TERMINAL_PROMPT=0`, `-o 
 | `settings` | `ok`, `fail` | `settings.json` parses, or does not exist yet; the detail and hint name the path |
 | `account_repo` | `ok`, `fail` | the account repo opens, or was created by this run |
 | `library` | `ok`, `warn` | the library directory exists; a missing library is a warning, not a failure |
+| `client:<slug>` | `ok` | one row per detected agent configuration, sorted by slug; the detail is `<name>: <configuration directory>` |
+| `clients` | `info`, `warn` | `<n> of <m> registered clients detected`, where `m` is the size of the client registry; `warn` with a hint when nothing is detected |
 
 `doctor`, one event per check:
 
