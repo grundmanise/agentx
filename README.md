@@ -9,4 +9,4 @@ cd apps/cli && go build ./... && go test ./...
 go build -o agentx .   # the binary
 ```
 
-Requires Go 1.24. Commands are [cobra](https://github.com/spf13/cobra) commands; the tree is built in `apps/cli/internal/cli/run.go` and every test drives `cli.Run` against a temporary home. The CLI has no cgo dependency; `CGO_ENABLED=0 go build` produces a static binary. The output contract is in `docs/spec/cli-contract.md`.
+Requires Go 1.24. Commands are [cobra](https://github.com/spf13/cobra) commands; the tree is built in `apps/cli/internal/cli/run.go` and every test drives `cli.Run` against a temporary home. On Linux `CGO_ENABLED=0 go build` produces a static binary. On macOS build with cgo enabled, the default there, so `agentx serve` watches through FSEvents; a macOS binary built without cgo falls back to kqueue, which costs one descriptor per watched file. The output contract is in `docs/spec/cli-contract.md`.

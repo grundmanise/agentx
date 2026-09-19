@@ -45,3 +45,5 @@ Only one serve runs per agentx home. Starting a second one exits with code 6 and
 ## When watching is not possible
 
 If the directories cannot be watched, serve warns once on stderr and rescans every two seconds instead. The snapshots are the same; they just arrive a little later.
+
+On macOS the released binary watches through FSEvents, which handles a library of any size. A macOS binary built without cgo watches through kqueue instead, which needs one open file per watched file and reaches the default limit of 256 with a library of a few dozen skills; serve then falls back to the periodic rescan.
