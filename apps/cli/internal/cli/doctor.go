@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/sys/unix"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
@@ -53,10 +55,11 @@ func (d *doctor) row(check, status, detail, hint string) {
 	fmt.Fprintln(d.table)
 }
 
-// run performs the checks in a fixed order. A missing or too-old git ends
-// the run with exit 2, since nothing after it can be checked; an unusable
-// account repo is exit 8 after every row; anything else is reported and
-// exits 0.
+// run performs the checks in a fixed order and changes nothing in agentx
+// home: it creates neither the directory, nor the lock file, nor the
+// account repo. A missing or too-old git ends the run with exit 2, since
+// nothing after it can be checked; an unusable account repo is exit 8 after
+// every row; anything else is reported and exits 0.
 func (d *doctor) run(ctx context.Context) error {
 	inv := d.inv
 	v, err := inv.gitVersion(ctx)
@@ -91,10 +94,18 @@ func (d *doctor) run(ctx context.Context) error {
 		d.row("isolated_commit", "ok", "commit "+commit, "")
 	}
 
-	if err := writable(inv.dirs.Home); err != nil {
-		d.row("home", "fail", err.Error(), "make "+inv.dirs.Home+" writable")
-	} else {
-		d.row("home", "ok", inv.dirs.Home+" is writable", "")
+	h := inv.dirs.Home
+	switch info, err := os.Stat(h); {
+	case errors.Is(err, fs.ErrNotExist):
+		d.row("home", "ok", "not created yet: "+h+"; the first scan creates it", "")
+	case err != nil:
+		d.row("home", "fail", err.Error(), "")
+	case !info.IsDir():
+		d.row("home", "fail", h+" is not a directory", "move it aside")
+	case unix.Access(h, unix.W_OK) != nil:
+		d.row("home", "fail", h+" is not writable", "make "+h+" writable")
+	default:
+		d.row("home", "ok", h+" is writable", "")
 	}
 
 	lock := home.LockPath(inv.dirs.Home)
@@ -131,15 +142,12 @@ func (d *doctor) run(ctx context.Context) error {
 	}
 
 	var repoErr error
-	switch gitDir, created, err := gitx.OpenAccountRepo(ctx, inv.git, inv.dirs.Home); {
-	case errors.Is(err, home.ErrLocked), errors.Is(err, home.ErrRecovery):
-		d.row("account_repo", "fail", "cannot create "+gitDir+": "+err.Error(), "")
-		repoErr = err
+	switch gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home); {
 	case err != nil:
 		d.row("account_repo", "fail", err.Error(), "")
-		repoErr = fail(exitAccountRepo, err.Error(), "check that "+gitDir+" is a bare repository this git can read, or move it aside to have doctor create a new one")
-	case created:
-		d.row("account_repo", "ok", "created "+gitDir, "")
+		repoErr = fail(exitAccountRepo, err.Error(), "check that "+gitDir+" is a bare repository this git can read, or move it aside")
+	case !exists:
+		d.row("account_repo", "ok", "not created yet: "+gitDir, "")
 	default:
 		d.row("account_repo", "ok", gitDir+" opens", "")
 	}
@@ -161,19 +169,6 @@ func (d *doctor) run(ctx context.Context) error {
 		d.row("clients", "info", summary, "")
 	}
 	return repoErr
-}
-
-// writable creates dir when missing and proves a file can be written in it.
-func writable(dir string) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(dir, ".doctor.*")
-	if err != nil {
-		return err
-	}
-	f.Close()
-	return os.Remove(f.Name())
 }
 
 func exists(path string) bool {
