@@ -120,7 +120,7 @@ func flock(path string, how int) (*os.File, error) {
 	if how == syscall.LOCK_EX {
 		// The holder's pid lets doctor name it; it is informational, so a failed write is ignored.
 		if err := f.Truncate(0); err == nil {
-			f.WriteAt([]byte(strconv.Itoa(os.Getpid())+"\n"), 0)
+			_, _ = f.WriteAt([]byte(strconv.Itoa(os.Getpid())+"\n"), 0)
 		}
 	}
 	return f, nil

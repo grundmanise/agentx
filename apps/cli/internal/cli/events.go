@@ -115,5 +115,5 @@ func (w *writer) line(out io.Writer, ev any) {
 	if err != nil {
 		panic(err) // events are plain structs; marshalling cannot fail
 	}
-	out.Write(append(b, '\n'))
+	_, _ = out.Write(append(b, '\n')) // stdout errors surface through the exit code, not per event
 }
