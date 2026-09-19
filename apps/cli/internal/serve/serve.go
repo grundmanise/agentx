@@ -25,7 +25,8 @@ const (
 // how to report. Every report function is called from the loop's goroutine.
 type Options struct {
 	Scan  func(ctx context.Context) (scan.Snapshot, error) // one whole scan; ctx bounds its wait for the lock
-	Watch []string                                         // directories to watch, in order; a missing one is retried after each scan
+	Watch []string                                         // directories to watch, in order; a missing one is retried before each rescan
+	Trees []string                                         // directories whose subdirectories, present or added later, are watched too
 	Once  bool                                             // scan once, emit and return
 	Stdin io.Reader                                        // request lines
 
@@ -53,7 +54,7 @@ func Run(ctx context.Context, o Options) error {
 			o.Warn(fmt.Sprintf("cannot watch for changes, rescanning every %s: %v", fallback, err))
 		}
 	}
-	w, err := newWatcher(o.Watch) // before the initial scan, so a change during it is not missed
+	w, err := newWatcher(o.Watch, o.Trees) // before the initial scan, so a change during it is not missed
 	warnWatch(err)
 	defer w.close()
 	if err := l.initial(ctx); err != nil {
@@ -72,10 +73,10 @@ func Run(ctx context.Context, o Options) error {
 	}
 	rescan := func() {
 		debounceC, deadlineC = nil, nil
+		warnWatch(w.sync()) // before the scan, so a directory the scan finds is watched from then on
 		if err := l.scan(ctx); err != nil && ctx.Err() == nil {
 			o.Warn("scan failed: " + err.Error())
 		}
-		warnWatch(w.add())
 	}
 	for {
 		select {
