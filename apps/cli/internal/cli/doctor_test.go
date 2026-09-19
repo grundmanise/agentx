@@ -5,9 +5,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 )
 
 // stubGit puts a git shell script alone on the harness PATH.
@@ -22,6 +25,17 @@ func stubGit(t *testing.T, h *harness, script string) {
 
 func versionStub(version string) string {
 	return "#!/bin/sh\necho 'git version " + version + "'\n"
+}
+
+// delegatingStub reports version for --version and hands every other
+// invocation to the real git.
+func delegatingStub(t *testing.T, version string) string {
+	t.Helper()
+	real, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'git version " + version + "'; exit 0; fi\nexec " + real + " \"$@\"\n"
 }
 
 // doctorRows indexes the doctor events by check and returns their order.
@@ -113,7 +127,7 @@ func TestDoctorPassesAndCreatesAccountRepo(t *testing.T) {
 	equal(t, "stderr", out.stderr, "")
 	events := h.events(out.stdout)
 	rows, order := doctorRows(t, events)
-	wantOrder := []string{"git", "merge_tree", "relative_worktree_paths", "isolated_commit", "home", "lock", "settings", "account_repo", "library"}
+	wantOrder := []string{"git", "merge_tree", "relative_worktree_paths", "isolated_commit", "home", "lock", "settings", "account_repo", "library", "clients"}
 	if !reflect.DeepEqual(order, wantOrder) {
 		t.Fatalf("checks = %v, want %v", order, wantOrder)
 	}
@@ -123,6 +137,9 @@ func TestDoctorPassesAndCreatesAccountRepo(t *testing.T) {
 		equal(t, check+".status", rows[check]["status"], "ok")
 	}
 	equal(t, "relative_worktree_paths.status", rows["relative_worktree_paths"]["status"], "info")
+	equal(t, "clients.status", rows["clients"]["status"], "warn")
+	equal(t, "clients.detail", rows["clients"]["detail"], "0 of "+strconv.Itoa(scan.Registered())+" registered clients detected")
+	equal(t, "clients.hint", rows["clients"]["hint"], "install an agent client or check HOME")
 	contains(t, "git.detail", rows["git"]["detail"].(string), "git 2.")
 	contains(t, "isolated_commit.detail", rows["isolated_commit"]["detail"].(string), "commit 5d75017e77f5413f4337ef776244b8d8dc77ca90")
 	contains(t, "home.detail", rows["home"]["detail"].(string), h.agentx)
@@ -156,28 +173,85 @@ func TestDoctorPassesAndCreatesAccountRepo(t *testing.T) {
 		"lock                     ok    free: " + filepath.Join(h.agentx, "lock"),
 		"account_repo             ok    " + filepath.Join(h.agentx, "account.git") + " opens",
 		"library                  ok    " + h.library,
+		"clients                  warn  0 of " + strconv.Itoa(scan.Registered()) + " registered clients detected  install an agent client or check HOME",
 	} {
 		contains(t, "stdout", out.stdout, line)
 	}
 }
 
-func TestDoctorAcceptsGit2100ByNumericComparison(t *testing.T) {
+func TestDoctorReportsDetectedClients(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	real, err := exec.LookPath("git")
-	if err != nil {
-		t.Fatal(err)
+	claude := filepath.Join(h.home, ".claude")
+	cursor := filepath.Join(h.home, ".cursor")
+	for _, dir := range []string{claude, cursor} {
+		if err := os.Mkdir(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
-	stubGit(t, h, "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'git version 2.100.0'; exit 0; fi\nexec "+real+" \"$@\"\n")
+	summary := "2 of " + strconv.Itoa(scan.Registered()) + " registered clients detected"
 
 	out := h.run("--json", "doctor")
 	equal(t, "exit", out.exit, 0)
-	rows, _ := doctorRows(t, h.events(out.stdout))
-	equal(t, "git.status", rows["git"]["status"], "ok")
-	equal(t, "git.detail", rows["git"]["detail"], "git 2.100.0")
-	equal(t, "merge_tree.status", rows["merge_tree"]["status"], "ok")
-	contains(t, "relative_worktree_paths.detail", rows["relative_worktree_paths"]["detail"].(string), "available: git 2.100.0")
-	equal(t, "worktree.useRelativePaths", accountConfig(t, h, "worktree.useRelativePaths"), "true")
+	events := h.events(out.stdout)
+	rows, order := doctorRows(t, events)
+	if got, want := order[len(order)-4:], []string{"library", "client:claude-code", "client:cursor", "clients"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("last checks = %v, want %v", got, want)
+	}
+	equal(t, "client:claude-code.status", rows["client:claude-code"]["status"], "ok")
+	equal(t, "client:claude-code.detail", rows["client:claude-code"]["detail"], "Claude Code: "+claude)
+	equal(t, "client:cursor.status", rows["client:cursor"]["status"], "ok")
+	equal(t, "client:cursor.detail", rows["client:cursor"]["detail"], "Cursor: "+cursor)
+	equal(t, "clients.status", rows["clients"]["status"], "info")
+	equal(t, "clients.detail", rows["clients"]["detail"], summary)
+	if _, ok := rows["clients"]["hint"]; ok {
+		t.Errorf("clients.hint = %v, want none", rows["clients"]["hint"])
+	}
+	equal(t, "result.ok", events[len(events)-1]["ok"], true)
+
+	out = h.run("doctor")
+	equal(t, "exit", out.exit, 0)
+	for _, line := range []string{
+		"client:claude-code       ok    Claude Code: " + claude + "\n",
+		"client:cursor            ok    Cursor: " + cursor + "\n",
+		"clients                  info  " + summary + "\n",
+	} {
+		contains(t, "stdout", out.stdout, line)
+	}
+}
+
+func TestDoctorAcceptsGitAtAndAboveFloorByNumericComparison(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		version  string
+		relative bool
+	}{
+		{"2.40.0", false},
+		{"2.100.0", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.version, func(t *testing.T) {
+			t.Parallel()
+			h := newHarness(t)
+			stubGit(t, h, delegatingStub(t, tt.version))
+
+			out := h.run("--json", "doctor")
+			equal(t, "exit", out.exit, 0)
+			events := h.events(out.stdout)
+			rows, _ := doctorRows(t, events)
+			equal(t, "git.status", rows["git"]["status"], "ok")
+			equal(t, "git.detail", rows["git"]["detail"], "git "+tt.version)
+			equal(t, "merge_tree.status", rows["merge_tree"]["status"], "ok")
+			equal(t, "account_repo.status", rows["account_repo"]["status"], "ok")
+			equal(t, "result.ok", events[len(events)-1]["ok"], true)
+			if tt.relative {
+				contains(t, "relative_worktree_paths.detail", rows["relative_worktree_paths"]["detail"].(string), "available: git "+tt.version)
+				equal(t, "worktree.useRelativePaths", accountConfig(t, h, "worktree.useRelativePaths"), "true")
+			} else {
+				contains(t, "relative_worktree_paths.detail", rows["relative_worktree_paths"]["detail"].(string), "not available: git "+tt.version)
+			}
+		})
+	}
 }
 
 func TestDoctorIsolatedFromUserGitConfig(t *testing.T) {
@@ -330,7 +404,7 @@ func TestDoctorUnusableAccountRepoExits8(t *testing.T) {
 			equal(t, "exit", out.exit, 8)
 			events := h.events(out.stdout)
 			rows, order := doctorRows(t, events)
-			equal(t, "last check", order[len(order)-1], "library")
+			equal(t, "last check", order[len(order)-1], "clients")
 			equal(t, "account_repo.status", rows["account_repo"]["status"], "fail")
 			contains(t, "account_repo.detail", rows["account_repo"]["detail"].(string), path)
 			errorEvent := events[len(events)-2]

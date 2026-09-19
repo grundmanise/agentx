@@ -10,3 +10,6 @@ var registry = append([]Client{
 	windsurf{},
 	githubCopilot{},
 }, pathClients...)
+
+// Registered is the number of clients the registry knows.
+func Registered() int { return len(registry) }

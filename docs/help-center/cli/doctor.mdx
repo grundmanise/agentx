@@ -19,6 +19,9 @@ lock                     ok    free: /home/me/.agentx/lock
 settings                 ok    defaults: /home/me/.agentx/settings.json is not written yet
 account_repo             ok    created /home/me/.agentx/account.git
 library                  warn  missing: /home/me/.agents/skills  create it with mkdir -p /home/me/.agents/skills
+client:claude-code       ok    Claude Code: /home/me/.claude
+client:cursor            ok    Cursor: /home/me/.cursor
+clients                  info  2 of 75 registered clients detected
 ```
 
 ## What it checks
@@ -34,6 +37,8 @@ library                  warn  missing: /home/me/.agents/skills  create it with 
 | `settings` | `settings.json` parses. |
 | `account_repo` | The account repo opens. The first run creates it. |
 | `library` | The library directory exists. A missing library is a warning, not a failure. |
+| `client:<id>` | One row per detected agent configuration, naming the client and its configuration directory. |
+| `clients` | How many of the clients agentx knows are detected. A warning when none is: install an agent client, or check that `HOME` points at the right user. |
 
 Each row is `ok`, `warn`, `fail` or `info`. A row with a fix shows it after the detail.
 
