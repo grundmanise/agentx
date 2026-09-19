@@ -558,7 +558,7 @@ func TestScanHoldsSharedLock(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(h.agentx, "version")); !os.IsNotExist(err) {
 		t.Errorf("scan wrote the version file: %v", err)
 	}
-	equal(t, "home entries", listDir(t, h.agentx), "lock machine.json ops")
+	equal(t, "home entries", listDir(t, h.agentx), "lock machine.json mutations ops")
 
 	lock, err := os.OpenFile(filepath.Join(h.agentx, "lock"), os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {

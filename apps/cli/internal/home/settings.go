@@ -50,11 +50,11 @@ func LoadSettings(dir string) (Settings, error) {
 	return s, nil
 }
 
-// SaveSettings writes the settings file atomically. Call it inside Mutate.
+// SaveSettings replaces the settings file as a journaled mutation. Call it inside Mutate.
 func SaveSettings(dir string, s Settings) error {
 	b, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err
 	}
-	return writeAtomic(SettingsPath(dir), append(b, '\n'))
+	return replaceFile(dir, "settings", SettingsPath(dir), append(b, '\n'))
 }

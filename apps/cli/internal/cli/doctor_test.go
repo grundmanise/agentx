@@ -113,13 +113,13 @@ func TestDoctorPassesAndCreatesAccountRepo(t *testing.T) {
 	equal(t, "stderr", out.stderr, "")
 	events := h.events(out.stdout)
 	rows, order := doctorRows(t, events)
-	wantOrder := []string{"git", "merge_tree", "relative_worktree_paths", "isolated_commit", "home", "lock", "settings", "account_repo", "library"}
+	wantOrder := []string{"git", "merge_tree", "relative_worktree_paths", "isolated_commit", "home", "lock", "mutations", "settings", "account_repo", "library"}
 	if !reflect.DeepEqual(order, wantOrder) {
 		t.Fatalf("checks = %v, want %v", order, wantOrder)
 	}
 	equal(t, "last event", events[len(events)-1]["type"], "result")
 	equal(t, "result.ok", events[len(events)-1]["ok"], true)
-	for _, check := range []string{"git", "merge_tree", "isolated_commit", "home", "lock", "settings", "account_repo", "library"} {
+	for _, check := range []string{"git", "merge_tree", "isolated_commit", "home", "lock", "mutations", "settings", "account_repo", "library"} {
 		equal(t, check+".status", rows[check]["status"], "ok")
 	}
 	equal(t, "relative_worktree_paths.status", rows["relative_worktree_paths"]["status"], "info")
@@ -135,7 +135,7 @@ func TestDoctorPassesAndCreatesAccountRepo(t *testing.T) {
 	equal(t, "merge.conflictStyle", accountConfig(t, h, "merge.conflictStyle"), "zdiff3")
 	equal(t, "core.bare", accountConfig(t, h, "core.bare"), "true")
 	equal(t, "version", readVersion(t, h), 1)
-	equal(t, "home entries", listDir(t, h.agentx), "account.git lock ops version")
+	equal(t, "home entries", listDir(t, h.agentx), "account.git lock mutations ops version")
 
 	// The second run finds the repo and changes nothing.
 	out = h.run("--json", "doctor")
@@ -154,6 +154,7 @@ func TestDoctorPassesAndCreatesAccountRepo(t *testing.T) {
 		"relative_worktree_paths  info  ",
 		"isolated_commit          ok    commit 5d75017e77f5413f4337ef776244b8d8dc77ca90",
 		"lock                     ok    free: " + filepath.Join(h.agentx, "lock"),
+		"mutations                ok    none unfinished: " + filepath.Join(h.agentx, "mutations"),
 		"account_repo             ok    " + filepath.Join(h.agentx, "account.git") + " opens",
 		"library                  ok    " + h.library,
 	} {

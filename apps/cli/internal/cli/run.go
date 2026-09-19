@@ -109,6 +109,8 @@ func finish(inv *invocation, err error) int {
 	case errors.As(err, &f):
 	case errors.Is(err, home.ErrLocked):
 		f = &failure{status: exitLocked, message: err.Error(), hint: "wait for the command holding " + home.LockPath(inv.dirs.Home) + " to finish, then retry"}
+	case errors.Is(err, home.ErrRecovery):
+		f = &failure{status: exitRefused, message: err.Error(), hint: "restore the file to let the change finish, or move the journal aside to keep the file as it is"}
 	case inv.parsed:
 		f = &failure{status: exitInternal, message: err.Error()}
 	default:

@@ -66,7 +66,9 @@ const lockWait = time.Second
 // in progress for wait (or until ctx is done when wait is 0), then, with
 // handshake, connects to every declared server outside the lock and stores
 // what each exposed. The machine id is read first: storing a random one takes
-// the exclusive lock.
+// the exclusive lock. An unfinished mutation journal found under the shared
+// lock is recovered under the exclusive one, and the reads start over: no
+// inventory is composed from half-applied state.
 func (inv *invocation) scan(ctx context.Context, wait time.Duration, project string, handshake bool) (scan.Snapshot, error) {
 	timeout := handshakeTimeout
 	if v := inv.env["AGENTX_HANDSHAKE_TIMEOUT"]; handshake && v != "" {
@@ -97,28 +99,39 @@ func (inv *invocation) scan(ctx context.Context, wait time.Duration, project str
 		defer cancel()
 	}
 	var sc *scan.Scan
-	err = home.ReadLocked(lockCtx, inv.dirs.Home, func() error {
-		s, err := inv.loadSettings()
-		if err != nil {
-			return err
-		}
-		var copyMode map[string][]string
-		if err := json.Unmarshal(s.CopyMode, &copyMode); err != nil {
-			return fail(exitInternal, "parse "+home.SettingsPath(inv.dirs.Home)+": copy_mode must map skill names to configuration ids", "fix copy_mode in the settings file")
-		}
-		sc = scan.Read(scan.Options{
-			Dirs:       inv.dirs,
-			MachineID:  machineID,
-			Label:      inv.label(s),
-			InstanceID: inv.instanceID(),
-			Project:    project,
-			Disabled:   s.DisabledConfigurations,
-			CopyMode:   copyMode,
+	for sc == nil {
+		var journals []string
+		err = home.ReadLocked(lockCtx, inv.dirs.Home, func() error {
+			var err error
+			if journals, err = home.Journals(inv.dirs.Home); err != nil || len(journals) > 0 {
+				return err
+			}
+			s, err := inv.loadSettings()
+			if err != nil {
+				return err
+			}
+			var copyMode map[string][]string
+			if err := json.Unmarshal(s.CopyMode, &copyMode); err != nil {
+				return fail(exitInternal, "parse "+home.SettingsPath(inv.dirs.Home)+": copy_mode must map skill names to configuration ids", "fix copy_mode in the settings file")
+			}
+			sc = scan.Read(scan.Options{
+				Dirs:       inv.dirs,
+				MachineID:  machineID,
+				Label:      inv.label(s),
+				InstanceID: inv.instanceID(),
+				Project:    project,
+				Disabled:   s.DisabledConfigurations,
+				CopyMode:   copyMode,
+			})
+			return nil
 		})
-		return nil
-	})
-	if err != nil {
-		return scan.Snapshot{}, err
+		if err == nil && len(journals) > 0 {
+			inv.out.debugf("recovering %s", strings.Join(journals, ", "))
+			err = home.Recover(lockCtx, inv.dirs.Home)
+		}
+		if err != nil {
+			return scan.Snapshot{}, err
+		}
 	}
 	if handshake {
 		sc.Handshake(ctx, scan.HandshakeOptions{Env: inv.env, Timeout: timeout, Version: cliVersion})
