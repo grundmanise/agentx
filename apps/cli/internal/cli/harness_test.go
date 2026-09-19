@@ -25,7 +25,12 @@ type harness struct {
 
 func newHarness(t *testing.T) *harness {
 	t.Helper()
-	root := t.TempDir()
+	// The real path: on macOS the temporary directory is a symlink into
+	// /private, and the scan reports symlink targets on their real path.
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	h := &harness{
 		t:       t,
 		home:    filepath.Join(root, "home"),
