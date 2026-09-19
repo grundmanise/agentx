@@ -12,7 +12,7 @@ A desktop app and CLI that inventories the AI agent clients, skills, MCP servers
 | `fmt-check` | `gofmt -l .`, fails when any file is listed |
 | `lint` | `golangci-lint run ./...` with `apps/cli/.golangci.yml` (includes `go vet`) |
 | `tidy-check` | `go mod tidy`, fails when `go.mod` or `go.sum` change |
-| `build` | `CGO_ENABLED=0 go build ./...` |
+| `build` | `go build ./...` with `CGO_ENABLED=0` on Linux and `1` on macOS, where the serve watcher uses FSEvents |
 | `test` | `go test -race -count=1 ./...` |
 | `check` | `fmt-check lint tidy-check build test` |
 

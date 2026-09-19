@@ -2,6 +2,8 @@
 
 GOLANGCI_LINT_VERSION = v2.13.2
 CLI = apps/cli
+# Static on Linux; cgo on macOS, where the serve watcher uses FSEvents.
+CGO_ENABLED ?= $(if $(filter Darwin,$(shell uname -s)),1,0)
 
 .PHONY: check fmt fmt-check lint tidy-check build test
 
@@ -21,7 +23,7 @@ tidy-check:
 	cd $(CLI) && go mod tidy && git diff --exit-code go.mod go.sum
 
 build:
-	cd $(CLI) && CGO_ENABLED=0 go build ./...
+	cd $(CLI) && CGO_ENABLED=$(CGO_ENABLED) go build ./...
 
 test:
 	cd $(CLI) && go test -race -count=1 ./...
