@@ -80,16 +80,17 @@ func manifestSkills(m pluginManifest, manifest, dir string, warn func(string)) [
 // manifestServers is where the plugin at dir declares its servers: the
 // manifest itself when its mcpServers is an object, returned as the data to
 // parse in the `{"mcpServers": ...}` shape, else the file the manifest
-// names, else the first of the fallbacks that exists, else the first one.
-func manifestServers(m pluginManifest, manifest, dir string, warn func(string), fallbacks ...string) (path string, data []byte) {
+// names, else the first of the client's two default files that exists,
+// else the first default.
+func manifestServers(m pluginManifest, manifest, dir string, warn func(string), first, second string) (path string, data []byte) {
 	if len(m.MCPServers) > 0 && m.MCPServers[0] == '{' {
 		return manifest, append(append([]byte(`{"mcpServers":`), m.MCPServers...), '}')
 	}
 	if named := manifestPaths(m.MCPServers, manifest, "mcpServers", warn); len(named) == 1 {
 		return filepath.Join(dir, named[0]), nil
 	}
-	if path = firstFile(dir, fallbacks...); path == "" {
-		path = filepath.Join(dir, fallbacks[0])
+	if path = firstFile(dir, first, second); path == "" {
+		path = filepath.Join(dir, first)
 	}
 	return path, nil
 }

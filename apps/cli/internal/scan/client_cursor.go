@@ -34,9 +34,10 @@ func (c cursor) MCPConfigs(d home.Dirs) []MCPConfig {
 // (a symlink is followed only when it stays inside that directory), and the
 // marketplace plugins the client cached under
 // plugins/cache/<marketplace>/<name>/<version> once a .cache-complete marker
-// says the copy finished (a version without one is a warning). Cursor keeps its install records in the account,
-// so a cached plugin is installed, not necessarily enabled. The Claude Code
-// plugins Cursor imports are reported under Claude Code only.
+// says the copy finished; a version without one is a warning. Cursor keeps
+// its install records in the account, so a cached plugin is installed, not
+// necessarily enabled. The Claude Code plugins Cursor imports are reported
+// under Claude Code only.
 func (c cursor) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 	root := filepath.Join(c.ConfigDir(d), "plugins")
 	var plugins []InstalledPlugin
