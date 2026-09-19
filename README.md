@@ -8,7 +8,7 @@ A desktop app and CLI that inventories the AI agent clients, skills, MCP servers
 cd apps/cli && go build -o agentx .   # the binary
 ```
 
-Requires Go 1.24. Commands are [cobra](https://github.com/spf13/cobra) commands; the tree is built in `apps/cli/internal/cli/run.go` and every test drives `cli.Run` against a temporary home. On Linux `CGO_ENABLED=0 go build` produces a static binary. On macOS build with cgo enabled, the default there, so `agentx serve` watches through FSEvents; a macOS binary built without cgo falls back to kqueue, which costs one descriptor per watched file. The output contract is in `docs/spec/cli-contract.md`.
+Requires Go 1.27. Commands are [cobra](https://github.com/spf13/cobra) commands; the tree is built in `apps/cli/internal/cli/run.go` and every test drives `cli.Run` against a temporary home. On Linux `CGO_ENABLED=0 go build` produces a static binary. On macOS build with cgo enabled, the default there, so `agentx serve` watches through FSEvents; a macOS binary built without cgo falls back to kqueue, which costs one descriptor per watched file. The output contract is in `docs/spec/cli-contract.md`.
 
 ## Checks
 
@@ -18,10 +18,10 @@ Requires Go 1.24. Commands are [cobra](https://github.com/spf13/cobra) commands;
 | --- | --- |
 | `fmt` | `gofmt -w .` |
 | `fmt-check` | `gofmt -l .`, fails when any file is listed |
-| `lint` | `golangci-lint run ./...` with `apps/cli/.golangci.yml` (includes `go vet`) |
+| `lint` | `go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v<pin> run ./...` with `apps/cli/.golangci.yml` (includes `go vet`) |
 | `tidy-check` | `go mod tidy`, fails when `go.mod` or `go.sum` change |
 | `build` | `go build ./...` with `CGO_ENABLED=0` on Linux and `1` on macOS, where the serve watcher uses FSEvents |
 | `test` | `go test -race -count=1 ./...` |
 | `check` | `fmt-check lint tidy-check build test` |
 
-Requires Go 1.24 and, for `make lint`, the golangci-lint version pinned in the `Makefile`; `make lint` prints the install command when the tool is missing.
+Requires Go 1.27. golangci-lint needs no install: its version is pinned in `apps/cli/.golangci-lint-version`, `make lint` builds that release into the build cache on first use through `go run`, and CI installs the same version. To bump it, edit the file.
