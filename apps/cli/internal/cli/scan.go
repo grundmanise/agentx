@@ -239,7 +239,7 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 		out.print(out.paint(muted, "A configuration is detected by its directory, such as ~/.claude or ~/.cursor; check HOME."))
 		return
 	}
-	out.print(out.paint(infoStyle, plural(len(snap.Configurations), "configuration")+", "+
+	out.print(out.paint(noteStyle.Bold(true), plural(len(snap.Configurations), "configuration")+", "+
 		plural(len(snap.Skills), "skill")+", "+plural(len(snap.MCPServers), "server")+", "+plural(len(snap.Plugins), "plugin")+" detected"))
 	for _, conf := range snap.Configurations {
 		out.print("")
