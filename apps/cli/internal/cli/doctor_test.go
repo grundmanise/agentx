@@ -136,7 +136,7 @@ func TestDoctorPassesAndChangesNothing(t *testing.T) {
 	equal(t, "stderr", out.stderr, "")
 	events := h.events(out.stdout)
 	rows, order := doctorRows(t, events)
-	wantOrder := []string{"git", "merge_tree", "relative_worktree_paths", "isolated_commit", "home", "lock", "mutations", "settings", "account_repo", "library", "clients"}
+	wantOrder := []string{"git", "merge_tree", "isolated_commit", "home", "relative_worktree_paths", "lock", "mutations", "settings", "account_repo", "library", "clients"}
 	if !reflect.DeepEqual(order, wantOrder) {
 		t.Fatalf("checks = %v, want %v", order, wantOrder)
 	}

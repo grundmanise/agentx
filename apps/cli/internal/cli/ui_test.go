@@ -141,7 +141,7 @@ func TestHelpSections(t *testing.T) {
 	out := h.run("config", "--help")
 	equal(t, "exit", out.exit, 0)
 	for _, s := range []string{
-		"Read and change this machine's settings\n\nUsage:\n  agentx config [command]\n",
+		"Read and change the settings\n\nUsage:\n  agentx config [command]\n",
 		"Commands:\n",
 		"  disable  Leave a configuration out of placements by default\n",
 		"  list     Print every setting\n",

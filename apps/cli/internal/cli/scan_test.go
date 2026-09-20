@@ -556,7 +556,7 @@ func TestScanConfigurationFlag(t *testing.T) {
 	equal(t, "exit", out.exit, 5)
 	events := h.events(out.stdout)
 	equal(t, "error.code", events[0]["code"], "not_found")
-	equal(t, "error.message", events[0]["message"], `configuration "codex" is not detected on this machine`)
+	equal(t, "error.message", events[0]["message"], `configuration "codex" is not detected`)
 	equal(t, "error.hint", events[0]["hint"], "detected configurations: claude-code, cursor")
 }
 

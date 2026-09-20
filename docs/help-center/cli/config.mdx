@@ -1,6 +1,6 @@
 ---
 title: "agentx config"
-description: "List, get and set the settings that only this machine decides."
+description: "List, get and set the settings of one machine."
 ---
 
 Machine settings live in `settings.json` in agentx home. They never leave the machine.
@@ -28,7 +28,7 @@ An empty setting shows as `(none)`. In a terminal the keys are cyan and `true` i
 | `schema_version` | The settings file format version. |
 | `label` | The machine label. Until you set it, it is the hostname. |
 | `auto_push` | Whether published forks are pushed automatically. |
-| `accept_operations` | Whether this machine executes operations queued for it. |
+| `accept_operations` | Whether the machine executes operations queued for it. |
 | `disabled_configurations` | The agent configurations left out of placements by default. Every other detected configuration is enabled. |
 | `sources` | The sources skills are installed from. |
 | `copy_mode` | The skills placed as a copy instead of a symlink, per configuration. |
@@ -68,7 +68,7 @@ agentx config enable windsurf
 ✓ windsurf is now enabled
 ```
 
-Every agent configuration `agentx scan` detects is enabled from the start. Disable one to leave it out of placements by default; enable it to put it back. Use the id shown in parentheses by `agentx scan`. An id that is not detected on this machine exits with code 5 and lists the detected ids. Disabling a configuration does not stop its client from reading the library.
+Every agent configuration `agentx scan` detects is enabled from the start. Disable one to leave it out of placements by default; enable it to put it back. Use the id shown in parentheses by `agentx scan`. An id that is not detected exits with code 5 and lists the detected ids. Disabling a configuration does not stop its client from reading the library.
 
 ## Script it
 

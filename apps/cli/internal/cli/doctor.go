@@ -27,7 +27,7 @@ type doctorEvent struct {
 func newDoctorCommand(inv *invocation) *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor",
-		Short: "Check that this machine can run agentx: git, agentx home and the account repo",
+		Short: "Check that agentx can run: git, agentx home and the account repo",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			d := &doctor{inv: inv}
@@ -54,7 +54,7 @@ var doctorSections = []struct {
 	title  string
 	checks []string
 }{
-	{"System", []string{"git", "merge_tree", "relative_worktree_paths", "isolated_commit", "home"}},
+	{"System", []string{"git", "merge_tree", "isolated_commit", "home", "relative_worktree_paths"}},
 	{"App", []string{"lock", "mutations", "settings", "account_repo", "library"}},
 	{"Clients", nil}, // client:<id> and clients
 }
@@ -179,11 +179,6 @@ func (d *doctor) run(ctx context.Context) error {
 	default:
 		d.row("merge_tree", "ok", "merge-tree --write-tree --merge-base merges two branches", "")
 	}
-	if v.AtLeast(2, 48) {
-		d.row("relative_worktree_paths", "info", "available: git "+v.String()+" is 2.48 or newer", "")
-	} else {
-		d.row("relative_worktree_paths", "info", "not available: git "+v.String()+" is older than 2.48", "")
-	}
 	switch {
 	case commit == "":
 		d.row("isolated_commit", "fail", "cannot set up the probe repository: "+probeErr.Error(), verbose)
@@ -205,6 +200,11 @@ func (d *doctor) run(ctx context.Context) error {
 		d.row("home", "fail", h+" is not writable", "make "+h+" writable")
 	default:
 		d.row("home", "ok", h+" is writable", "")
+	}
+	if v.AtLeast(2, 48) {
+		d.row("relative_worktree_paths", "info", "available: git "+v.String()+" is 2.48 or newer", "")
+	} else {
+		d.row("relative_worktree_paths", "info", "not available: git "+v.String()+" is older than 2.48", "")
 	}
 
 	lock := home.LockPath(inv.dirs.Home)

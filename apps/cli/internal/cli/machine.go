@@ -16,7 +16,7 @@ type machineEvent struct {
 func newMachineCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "machine",
-		Short: "Print this machine's id, label and how the id was derived",
+		Short: "Print the machine id, label and how the id was derived",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			m, err := inv.machine()

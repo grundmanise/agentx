@@ -71,7 +71,7 @@ func newRoot(inv *invocation) *cobra.Command {
 	var colorFlag string // parsed by cobra; the pre-scanned value stands until then
 	root := &cobra.Command{
 		Use:           "agentx",
-		Short:         "Inventory the agent clients, skills, MCP servers and plugins on this machine",
+		Short:         "Inventory agent clients, skills, MCP servers and plugins",
 		Annotations:   map[string]string{annotationGroup: "true"},
 		SilenceUsage:  true,
 		SilenceErrors: true,

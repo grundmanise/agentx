@@ -1,6 +1,6 @@
 ---
 title: "agentx doctor"
-description: "Check that this machine can run agentx: git, agentx home and the account repo."
+description: "Check that agentx can run: git, agentx home and the account repo."
 ---
 
 Run `agentx doctor` before your first install, or whenever something looks wrong. It only reads: it never creates or changes anything in agentx home.
@@ -13,9 +13,9 @@ agentx doctor
 System
   ✓ git                      ok    git 2.43.0
   ✓ merge_tree               ok    merge-tree --write-tree --merge-base merges two branches
-  • relative_worktree_paths  info  not available: git 2.43.0 is older than 2.48
   ✓ isolated_commit          ok    commit 5d75017e77f5413f4337ef776244b8d8dc77ca90
   ✓ home                     ok    not created yet: /home/me/.agentx; the first scan creates it
+  • relative_worktree_paths  info  not available: git 2.43.0 is older than 2.48
 
 App
   ✓ lock                     ok    free: /home/me/.agentx/lock
@@ -48,7 +48,7 @@ The rows are grouped by what they check: `System` is git and the home directory,
 | `git` | git is in `PATH` and at least 2.40. |
 | `merge_tree` | git can merge with `merge-tree --write-tree`, which updates need. |
 | `relative_worktree_paths` | Whether git is 2.48 or newer. Informational. |
-| `isolated_commit` | agentx commits produce the same id on this machine as on every other, whatever your git configuration. |
+| `isolated_commit` | agentx commits produce the same id on every machine, whatever your git configuration. |
 | `home` | agentx home is writable, or does not exist yet. The first scan creates it. |
 | `lock` | No other agentx command holds the lock. When one does, the detail names its process id. |
 | `mutations` | No change to agentx home was cut short by a crash. When one was, the detail names its journal; run `agentx scan` to finish it. If that refuses because the file changed meanwhile, restore the file or move the journal aside. Doctor only reports. |

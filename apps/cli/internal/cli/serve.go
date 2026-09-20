@@ -27,7 +27,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 	var once bool
 	cmd := &cobra.Command{
 		Use:   "serve",
-		Short: "Watch this machine and stream a snapshot whenever it changes, until stdin closes",
+		Short: "Watch for changes and stream a snapshot on each one, until stdin closes",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			lock, err := home.TakeServeLock(inv.dirs.Home)

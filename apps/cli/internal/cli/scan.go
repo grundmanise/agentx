@@ -27,7 +27,7 @@ func newScanCommand(inv *invocation) *cobra.Command {
 	var handshake bool
 	cmd := &cobra.Command{
 		Use:   "scan",
-		Short: "Inventory the agent configurations on this machine with their skills, MCP servers and plugins",
+		Short: "Inventory the agent configurations with their skills, MCP servers and plugins",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if configuration != "" {
@@ -169,7 +169,7 @@ func (inv *invocation) detectedConfiguration(slug string) error {
 	if len(slugs) > 0 {
 		hint = "detected configurations: " + strings.Join(slugs, ", ")
 	}
-	return fail(exitNotFound, fmt.Sprintf("configuration %q is not detected on this machine", slug), hint)
+	return fail(exitNotFound, fmt.Sprintf("configuration %q is not detected", slug), hint)
 }
 
 // printSnapshot writes the human inventory: one section per configuration

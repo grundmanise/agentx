@@ -23,7 +23,7 @@ type settingsEvent struct {
 func newConfigCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "config",
-		Short:       "Read and change this machine's settings",
+		Short:       "Read and change the settings",
 		Annotations: map[string]string{annotationGroup: "true"},
 		Args:        cobra.NoArgs,
 		RunE:        needSubcommand(inv, "no config command given", "run 'agentx config --help' to list commands"),
