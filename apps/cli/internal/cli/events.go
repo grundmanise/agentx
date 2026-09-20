@@ -51,7 +51,7 @@ type writer struct {
 	env     map[string]string
 	json    bool
 	verbose bool
-	color   string // the --color flag: auto, always or never
+	color   string // the --color flag: on, off, or empty when left out
 	outInk  *ink   // decided on first use, once the flags are parsed
 	errInk  *ink
 }

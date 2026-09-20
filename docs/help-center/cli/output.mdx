@@ -18,8 +18,8 @@ Text output is coloured when it goes to a terminal. Each colour means one thing 
 Output piped into another program or a file carries no colour, so the text a script reads is the same as before. Control it explicitly with the global `--color` flag:
 
 ```sh
-agentx --color always doctor | less -R
-agentx --color never scan
+agentx --color on doctor | less -R
+agentx --color off scan
 ```
 
 Set the `NO_COLOR` environment variable to any value to turn colour off in every terminal. `--json` output is never coloured.

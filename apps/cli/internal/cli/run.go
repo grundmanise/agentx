@@ -53,7 +53,7 @@ func Run(ctx context.Context, args []string, env map[string]string, stdin io.Rea
 }
 
 // colorFromArgs returns the value of --color on the command line, as
-// --color=value or --color value, or auto; cobra validates it after parsing.
+// --color=value or --color value, or unset; cobra validates it after parsing.
 func colorFromArgs(args []string) string {
 	for i, arg := range args {
 		if v, ok := strings.CutPrefix(arg, "--color="); ok {
@@ -63,7 +63,7 @@ func colorFromArgs(args []string) string {
 			return args[i+1]
 		}
 	}
-	return string(colorAuto)
+	return string(colorUnset)
 }
 
 // newRoot builds the whole command tree; a new command is one AddCommand line here.
@@ -77,10 +77,10 @@ func newRoot(inv *invocation) *cobra.Command {
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			switch colorMode(colorFlag) {
-			case colorAuto, colorAlways, colorNever:
+			case colorUnset, colorOn, colorOff:
 				inv.out.color = colorFlag
 			default:
-				return fail(exitUsage, fmt.Sprintf("invalid value %q for --color", colorFlag), "use auto, always or never")
+				return fail(exitUsage, fmt.Sprintf("invalid value %q for --color", colorFlag), "use on or off")
 			}
 			inv.parsed = true
 			dirs, err := home.Resolve(inv.env)
@@ -102,7 +102,7 @@ func newRoot(inv *invocation) *cobra.Command {
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.PersistentFlags().Bool("json", false, "write newline-delimited JSON events to stdout")
 	root.PersistentFlags().BoolVar(&inv.out.verbose, "verbose", false, "log at debug level on stderr")
-	root.PersistentFlags().StringVar(&colorFlag, "color", string(colorAuto), "colour the text output: auto, always or never")
+	root.PersistentFlags().StringVar(&colorFlag, "color", string(colorUnset), "colour the text output: on or off; left out, a terminal gets colour and a pipe does not")
 	root.SetHelpFunc(inv.help)
 	root.SetUsageFunc(inv.usage)
 

@@ -59,23 +59,24 @@ func (k ink) paint(st style, s string) string {
 	return "\x1b[" + string(st) + "m" + s + "\x1b[0m"
 }
 
-// colorMode is the value of --color: auto, always or never.
+// colorMode is the value of --color: on, off, or unset when the flag is
+// left out.
 type colorMode string
 
 const (
-	colorAuto   colorMode = "auto"
-	colorAlways colorMode = "always"
-	colorNever  colorMode = "never"
+	colorUnset colorMode = ""
+	colorOn    colorMode = "on"
+	colorOff   colorMode = "off"
 )
 
-// resolve decides the ink for out. With auto, colour is on when out is a
-// terminal, NO_COLOR is unset and TERM is not dumb, following the
+// resolve decides the ink for out. With the flag unset, colour is on when
+// out is a terminal, NO_COLOR is unset and TERM is not dumb, following the
 // conventions at no-color.org.
 func (m colorMode) resolve(out io.Writer, env map[string]string) ink {
 	switch m {
-	case colorAlways:
+	case colorOn:
 		return true
-	case colorNever:
+	case colorOff:
 		return false
 	}
 	if _, set := env["NO_COLOR"]; set || env["TERM"] == "dumb" {
