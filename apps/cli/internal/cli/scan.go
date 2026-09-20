@@ -172,9 +172,9 @@ func (inv *invocation) detectedConfiguration(slug string) error {
 	return fail(exitNotFound, fmt.Sprintf("configuration %q is not detected", slug), hint)
 }
 
-// printSnapshot writes the human inventory: one section per configuration
-// with its skills, servers and plugins as labelled blocks, then one summary
-// line. Warnings go to stderr.
+// printSnapshot writes the human inventory: one summary line counting the
+// machine, then one section per configuration with its skills, servers and
+// plugins as labelled blocks. Warnings go to stderr.
 func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 	out := inv.out
 	// Counts per configuration and, keyed by configuration and plugin name,
@@ -239,10 +239,10 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 		out.print(out.paint(muted, "A configuration is detected by its directory, such as ~/.claude or ~/.cursor; check HOME."))
 		return
 	}
-	for i, conf := range snap.Configurations {
-		if i > 0 {
-			out.print("")
-		}
+	out.print(out.paint(heading, plural(len(snap.Configurations), "configuration")), ", ",
+		plural(len(snap.Skills), "skill"), ", ", plural(len(snap.MCPServers), "server"), ", ", plural(len(snap.Plugins), "plugin"), " detected")
+	for _, conf := range snap.Configurations {
+		out.print("")
 		state := out.paint(okStyle, "enabled")
 		if !conf.Enabled {
 			state = out.paint(warnStyle, "disabled")
@@ -270,9 +270,6 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 			out.print("  ", out.paint(muted, "no skills, servers or plugins"))
 		}
 	}
-	out.print("")
-	out.print(out.paint(heading, plural(len(snap.Configurations), "configuration")), ", ",
-		plural(len(snap.Skills), "skill"), ", ", plural(len(snap.MCPServers), "server"), ", ", plural(len(snap.Plugins), "plugin"))
 	for _, w := range snap.Warnings {
 		out.warn(w)
 	}
