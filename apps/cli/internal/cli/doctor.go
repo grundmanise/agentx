@@ -54,7 +54,7 @@ var doctorSections = []struct {
 	title  string
 	checks []string
 }{
-	{"System", []string{"git", "merge_tree", "isolated_commit", "home", "relative_worktree_paths"}},
+	{"System", []string{"git", "fork_merges", "commit_identity", "home"}},
 	{"App", []string{"lock", "mutations", "settings", "account_repo", "library"}},
 	{"Clients", nil}, // client:<id> and clients
 }
@@ -173,19 +173,19 @@ func (d *doctor) run(ctx context.Context) error {
 	commit, mergeErr, probeErr := gitx.Probe(ctx, inv.git)
 	switch {
 	case probeErr != nil:
-		d.row("merge_tree", "fail", "cannot set up the probe repository: "+probeErr.Error(), verbose)
+		d.row("fork_merges", "fail", "cannot merge upstream changes into forks: cannot set up the probe repository: "+probeErr.Error(), verbose)
 	case mergeErr != nil:
-		d.row("merge_tree", "fail", mergeErr.Error(), verbose)
+		d.row("fork_merges", "fail", "cannot merge upstream changes into forks: "+mergeErr.Error(), verbose)
 	default:
-		d.row("merge_tree", "ok", "merge-tree --write-tree --merge-base merges two branches", "")
+		d.row("fork_merges", "ok", "upstream changes can be merged into forks", "")
 	}
 	switch {
 	case commit == "":
-		d.row("isolated_commit", "fail", "cannot set up the probe repository: "+probeErr.Error(), verbose)
+		d.row("commit_identity", "fail", "cannot check commit ids: cannot set up the probe repository: "+probeErr.Error(), verbose)
 	case commit != gitx.FixedCommit:
-		d.row("isolated_commit", "fail", "the isolated environment produced commit "+commit+", not "+gitx.FixedCommit, verbose)
+		d.row("commit_identity", "fail", "commits would differ between machines: got "+commit+", expected "+gitx.FixedCommit, verbose)
 	default:
-		d.row("isolated_commit", "ok", "commit "+commit, "")
+		d.row("commit_identity", "ok", "commits get the same id on every machine", "")
 	}
 
 	h := inv.dirs.Home
@@ -201,11 +201,6 @@ func (d *doctor) run(ctx context.Context) error {
 	default:
 		d.row("home", "ok", h+" is writable", "")
 	}
-	if v.AtLeast(2, 48) {
-		d.row("relative_worktree_paths", "info", "available: git "+v.String()+" is 2.48 or newer", "")
-	} else {
-		d.row("relative_worktree_paths", "info", "not available: git "+v.String()+" is older than 2.48", "")
-	}
 
 	lock := home.LockPath(inv.dirs.Home)
 	switch held, pid, err := home.LockHeld(inv.dirs.Home); {
@@ -216,7 +211,7 @@ func (d *doctor) run(ctx context.Context) error {
 	case held:
 		d.row("lock", "warn", "held by another agentx command: "+lock, "wait for it to finish")
 	default:
-		d.row("lock", "ok", "free: "+lock, "")
+		d.row("lock", "ok", "no other agentx command is running", "")
 	}
 
 	// Reported, never recovered: doctor holds no lock.
@@ -226,7 +221,7 @@ func (d *doctor) run(ctx context.Context) error {
 	case len(journals) > 0:
 		d.row("mutations", "warn", plural(len(journals), "unfinished mutation")+": "+journals[0], "run agentx scan to recover; when it refuses, restore the file it names or move the journal aside")
 	default:
-		d.row("mutations", "ok", "none unfinished: "+home.MutationsDir(inv.dirs.Home), "")
+		d.row("mutations", "ok", "no interrupted changes", "")
 	}
 
 	settings := home.SettingsPath(inv.dirs.Home)
@@ -237,7 +232,7 @@ func (d *doctor) run(ctx context.Context) error {
 	case !exists(settings):
 		d.row("settings", "ok", "defaults: "+settings+" is not written yet", "")
 	default:
-		d.row("settings", "ok", settings+" parses", "")
+		d.row("settings", "ok", settings+" is valid", "")
 	}
 
 	var repoErr error
