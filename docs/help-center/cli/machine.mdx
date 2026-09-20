@@ -1,6 +1,6 @@
 ---
 title: "agentx machine"
-description: "See this machine's stable id and label, rename it, or reset the id."
+description: "See the machine's stable id and label, rename it, or reset the id."
 ---
 
 Every machine has an id that survives a reinstall and a label you can change.
@@ -28,12 +28,20 @@ Derivation  platform
 agentx machine rename "work laptop"
 ```
 
+```text
+✓ machine label is now work laptop
+```
+
 The label defaults to the hostname until you set it. `agentx config set label` does the same thing.
 
 ## Reset the id
 
 ```sh
 agentx machine reset-id
+```
+
+```text
+✓ machine id is now 7c1f0a2e9b3d4c5e8f6a1b2c3d4e5f60
 ```
 
 Use this when two machines report the same id, for example after cloning a virtual machine. The new id is random and stays in use even though the platform id still exists. Delete `machine.json` in agentx home to go back to the platform-derived id.

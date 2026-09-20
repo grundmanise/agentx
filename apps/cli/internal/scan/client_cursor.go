@@ -101,13 +101,13 @@ func cursorPlugin(name, marketplace, version, dir string, warn func(string)) Ins
 		Marketplace: marketplace,
 		Version:     m.Version,
 		Path:        dir,
-		Skills:      manifestSkills(m, manifest, dir, warn),
+		Skills:      manifestSkills(m, manifest, dir, true, warn),
 		Servers: MCPConfig{
 			Format: mcp.JSON,
 			Vars:   map[string]string{"CURSOR_PLUGIN_ROOT": dir, "CLAUDE_PLUGIN_ROOT": dir},
 		},
 	}
-	p.Servers.Path, p.Servers.Data = manifestServers(m, manifest, dir, warn, "mcp.json", ".mcp.json")
+	p.Servers.Path, p.Servers.Data = manifestServers(m, manifest, dir, true, warn, "mcp.json", ".mcp.json")
 	if p.Name == "" {
 		p.Name = name
 	}

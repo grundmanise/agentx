@@ -4,8 +4,10 @@ package cli
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"slices"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -30,7 +32,9 @@ func Run(ctx context.Context, args []string, env map[string]string, stdin io.Rea
 	// --json is decided by this scan, not by flag parsing, so that cobra's own
 	// text (help, usage) and every error, including a flag cobra rejects, stay
 	// off JSON stdout. The flag is still declared on the root so cobra accepts it.
-	out := &writer{stdout: stdout, stderr: stderr, json: slices.Contains(args, "--json")}
+	// --color is scanned the same way, so that an error cobra reports before
+	// it parsed the flags, such as an unknown command, is painted as asked.
+	out := &writer{stdout: stdout, stderr: stderr, env: env, json: slices.Contains(args, "--json"), color: colorFromArgs(args)}
 	inv := &invocation{env: env, out: out}
 
 	root := newRoot(inv)
@@ -48,14 +52,36 @@ func Run(ctx context.Context, args []string, env map[string]string, stdin io.Rea
 	return finish(inv, root.ExecuteContext(ctx))
 }
 
+// colorFromArgs returns the value of --color on the command line, as
+// --color=value or --color value, or unset; cobra validates it after parsing.
+func colorFromArgs(args []string) string {
+	for i, arg := range args {
+		if v, ok := strings.CutPrefix(arg, "--color="); ok {
+			return v
+		}
+		if arg == "--color" && i+1 < len(args) {
+			return args[i+1]
+		}
+	}
+	return string(colorUnset)
+}
+
 // newRoot builds the whole command tree; a new command is one AddCommand line here.
 func newRoot(inv *invocation) *cobra.Command {
+	var colorFlag string // parsed by cobra; the pre-scanned value stands until then
 	root := &cobra.Command{
 		Use:           "agentx",
-		Short:         "Inventory the agent clients, skills, MCP servers and plugins on this machine",
+		Short:         "Inventory agent clients, skills, MCP servers and plugins",
+		Annotations:   map[string]string{annotationGroup: "true"},
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			switch colorMode(colorFlag) {
+			case colorUnset, colorOn, colorOff:
+				inv.out.color = colorFlag
+			default:
+				return fail(exitUsage, fmt.Sprintf("invalid value %q for --color", colorFlag), "use on or off")
+			}
 			inv.parsed = true
 			dirs, err := home.Resolve(inv.env)
 			if err != nil {
@@ -76,6 +102,9 @@ func newRoot(inv *invocation) *cobra.Command {
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.PersistentFlags().Bool("json", false, "write newline-delimited JSON events to stdout")
 	root.PersistentFlags().BoolVar(&inv.out.verbose, "verbose", false, "log at debug level on stderr")
+	root.PersistentFlags().StringVar(&colorFlag, "color", string(colorUnset), "colour the text output: on or off; left out, a terminal gets colour and a pipe does not")
+	root.SetHelpFunc(inv.help)
+	root.SetUsageFunc(inv.usage)
 
 	root.AddCommand(newVersionCommand(inv))
 	root.AddCommand(newConfigCommand(inv))

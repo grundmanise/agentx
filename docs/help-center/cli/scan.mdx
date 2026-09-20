@@ -1,6 +1,6 @@
 ---
 title: "agentx scan"
-description: "See every agent configuration on this machine with the skills, MCP servers and plugins each one has."
+description: "See every agent configuration with the skills, MCP servers and plugins each one has."
 ---
 
 `agentx scan` reads your agent clients' directories, their MCP configuration files and the library and prints what it finds. It writes nothing and never starts a server unless you ask for a handshake.
@@ -12,23 +12,28 @@ agentx scan
 ```
 
 ```text
-Claude Code (claude-code)  /home/me/.claude  enabled
-  commit  symlink    user  /home/me/.claude/skills/commit -> /home/me/.agents/skills/commit
-  review  directory  user  /home/me/.claude/skills/review
-  format  directory  user  /home/me/.claude/plugins/cache/acme-tools/formatter/1.2.0/skills/format  (plugin formatter)
-  plugins:
-    formatter  1.2.0
+3 configurations, 4 skills, 2 servers, 4 plugins detected
 
-Codex (codex)  /home/me/.codex  enabled
-  commit  directory  user  /home/me/.agents/skills/commit
-  sales   directory  user  /home/me/.codex/plugins/cache/acme-tools/sales/1.0.8/skills/sales  (plugin sales)
+Claude Code (claude-code)  /home/me/.claude  enabled  3 skills, 1 plugin
+  skills:
+    commit  symlink    user  /home/me/.claude/skills/commit -> /home/me/.agents/skills/commit
+    format  directory  user  /home/me/.claude/plugins/cache/acme-tools/formatter/1.2.0/skills/format  (plugin formatter)
+    review  directory  user  /home/me/.claude/skills/review
+  plugins:
+    formatter  1.2.0  1 skill
+
+Codex (codex)  /home/me/.codex  enabled  2 skills, 2 plugins
+  skills:
+    commit  directory  user  /home/me/.agents/skills/commit
+    sales   directory  user  /home/me/.codex/plugins/cache/acme-tools/sales/1.0.8/skills/sales  (plugin sales)
   plugins:
     notes  local  (disabled)
-    sales  1.0.8
+    sales  1.0.8  1 skill
 
-Cursor (cursor)  /home/me/.cursor  enabled
-  commit  symlink    user  /home/me/.claude/skills/commit -> /home/me/.agents/skills/commit
-  review  directory  user  /home/me/.claude/skills/review
+Cursor (cursor)  /home/me/.cursor  enabled  2 skills, 2 servers, 1 plugin
+  skills:
+    commit  symlink    user  /home/me/.claude/skills/commit -> /home/me/.agents/skills/commit
+    review  directory  user  /home/me/.claude/skills/review
   servers:
     context7  stdio            npx -y @upstash/context7-mcp
     stripe    streamable-http  https://mcp.stripe.com
@@ -36,9 +41,11 @@ Cursor (cursor)  /home/me/.cursor  enabled
     thermos  9f86d081884c7d659a2feaa0c55ad015a3bf4f1b
 ```
 
-One section per agent configuration, headed by the client name, its id, its configuration directory and whether it is enabled. One line per skill the configuration can see: the skill name, the kind of placement, the scope and the path the client reads. A skill that comes from a plugin ends with the plugin's name.
+The first line counts the machine: configurations, skills, servers and plugins, each once however many configurations share it. Then one section per agent configuration, headed by the client name, its id, its configuration directory, whether it is enabled and how many skills, servers and plugins it has. A `skills:` block lists every skill the configuration can see, one per line: the skill name, the kind of placement, the scope and the path the client reads. A skill that comes from a plugin ends with the plugin's name.
 
-Then, when the configuration declares MCP servers, a `servers:` block with one line per server: its name, its transport (`stdio`, `sse` or `streamable-http`) and its command line or URL. Then, when the configuration has plugins, a `plugins:` block with one line per plugin: its name and version, and `(disabled)` when the client has turned it off.
+Then, when the configuration declares MCP servers, a `servers:` block with one line per server: its name, its transport (`stdio`, `sse` or `streamable-http`) and its command line or URL. Then, when the configuration has plugins, a `plugins:` block with one line per plugin: its name, its version, how many skills and servers the plugin provides in this configuration, and `(disabled)` when the client has turned it off.
+
+In a terminal the names are bold, the block labels cyan, the kind and scope dim, `enabled` green, `(disabled)` yellow and a plugin marker magenta, so the names and states stand out from the paths.
 
 A configuration is detected when its configuration directory exists, such as `~/.claude` for Claude Code or `~/.cursor` for Cursor.
 
@@ -92,7 +99,7 @@ Plugins are listed under the configuration they are installed in, with their ver
 |---|---|
 | Claude Code | The install records in `~/.claude/plugins/installed_plugins.json` and each plugin's directory. |
 | Codex | The `[plugins."<name>@<marketplace>"]` tables in `~/.codex/config.toml` and the plugin copies under `~/.codex/plugins/cache`. A plugin with `enabled = false` is listed with `(disabled)`, and so is a server the plugin's table turns off with `[plugins."<name>@<marketplace>".mcp_servers.<server>]` and `enabled = false`. A plugin that has a copy but no table, such as one installed through your account, is listed without an enabled state. |
-| Cursor | Your local plugins under `~/.cursor/plugins/local` and the marketplace plugins Cursor has cached under `~/.cursor/plugins/cache`. Cursor keeps the list of enabled plugins in your account, not on disk, so a cached plugin is installed but not necessarily enabled. A cached copy that Cursor did not finish writing is reported as a warning naming its directory and is not listed. A plugin's skills and MCP servers are read from where its manifest points, else from `skills` and `mcp.json`. The Claude Code plugins Cursor also loads are listed under Claude Code only. |
+| Cursor | Your local plugins under `~/.cursor/plugins/local` and the marketplace plugins Cursor has cached under `~/.cursor/plugins/cache`. Cursor keeps the list of enabled plugins in your account, not on disk, so a cached plugin is installed but not necessarily enabled. A cached copy that Cursor did not finish writing is reported as a warning naming its directory and is not listed. A plugin's skills and MCP servers are read from where its manifest points, with or without a leading `./`, else from `skills` and `mcp.json`. A manifest path that leaves the plugin is reported as a warning and skipped. The Claude Code plugins Cursor also loads are listed under Claude Code only. |
 | Gemini CLI | The extensions under `~/.gemini/extensions`. |
 
 A plugin's version is what its manifest or install record says. For a Codex or Cursor plugin without one, the cache directory name stands in: `local`, a commit id or a release tag. A plugin manifest that cannot be read is reported as a warning naming the file, and the plugin is still listed by its directory name.
@@ -115,7 +122,13 @@ Names the configuration that changed. The whole machine is scanned either way, s
 
 ## Warnings
 
-A broken symlink, a `SKILL.md` without usable frontmatter or a symlink that points outside its skill does not stop the scan. Each one is reported on stderr as `warning: ...` and the skill is skipped or named after its directory.
+A broken symlink, a `SKILL.md` without usable frontmatter or a symlink that points outside its skill does not stop the scan. Each one is reported on stderr as `warning: ...` and the skill is skipped or named after its directory. Several broken symlinks in one skills directory are reported as one warning that names the directory and lists the links:
+
+```
+warning: /home/me/.qwen/skills: 3 broken symlinks (audit, polish, shape), skipped
+```
+
+Delete the listed links to clear the warning.
 
 ## Script it
 

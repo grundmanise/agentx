@@ -136,26 +136,25 @@ func TestDoctorPassesAndChangesNothing(t *testing.T) {
 	equal(t, "stderr", out.stderr, "")
 	events := h.events(out.stdout)
 	rows, order := doctorRows(t, events)
-	wantOrder := []string{"git", "merge_tree", "relative_worktree_paths", "isolated_commit", "home", "lock", "mutations", "settings", "account_repo", "library", "clients"}
+	wantOrder := []string{"git", "fork_merges", "commit_identity", "home", "lock", "mutations", "settings", "account_repo", "library", "clients"}
 	if !reflect.DeepEqual(order, wantOrder) {
 		t.Fatalf("checks = %v, want %v", order, wantOrder)
 	}
 	equal(t, "last event", events[len(events)-1]["type"], "result")
 	equal(t, "result.ok", events[len(events)-1]["ok"], true)
-	for _, check := range []string{"git", "merge_tree", "isolated_commit", "home", "lock", "mutations", "settings", "account_repo", "library"} {
+	for _, check := range []string{"git", "fork_merges", "commit_identity", "home", "lock", "mutations", "settings", "account_repo", "library"} {
 		equal(t, check+".status", rows[check]["status"], "ok")
 	}
-	equal(t, "relative_worktree_paths.status", rows["relative_worktree_paths"]["status"], "info")
 	equal(t, "clients.status", rows["clients"]["status"], "warn")
 	equal(t, "clients.detail", rows["clients"]["detail"], "0 of "+strconv.Itoa(scan.Registered())+" registered clients detected")
 	equal(t, "clients.hint", rows["clients"]["hint"], "install an agent client or check HOME")
 	contains(t, "git.detail", rows["git"]["detail"].(string), "git 2.")
-	contains(t, "isolated_commit.detail", rows["isolated_commit"]["detail"].(string), "commit 5d75017e77f5413f4337ef776244b8d8dc77ca90")
+	equal(t, "commit_identity.detail", rows["commit_identity"]["detail"], "commits get the same id on every machine")
 	equal(t, "home.detail", rows["home"]["detail"], "not created yet: "+h.agentx+"; the first scan creates it")
-	equal(t, "lock.detail", rows["lock"]["detail"], "free: "+filepath.Join(h.agentx, "lock"))
+	equal(t, "lock.detail", rows["lock"]["detail"], "no other agentx command is running")
 	contains(t, "settings.detail", rows["settings"]["detail"].(string), "defaults")
 	equal(t, "account_repo.detail", rows["account_repo"]["detail"], "not created yet: "+account)
-	equal(t, "library.detail", rows["library"]["detail"], h.library)
+	equal(t, "library.detail", rows["library"]["detail"], h.library+" is writable")
 	gone(t, "agentx home", h.agentx)
 
 	// With a home and an account repo in place doctor reads both and writes nothing.
@@ -169,16 +168,18 @@ func TestDoctorPassesAndChangesNothing(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	equal(t, "stderr", out.stderr, "")
 	for _, line := range []string{
-		"git                      ok    git 2.",
-		"merge_tree               ok    ",
-		"relative_worktree_paths  info  ",
-		"isolated_commit          ok    commit 5d75017e77f5413f4337ef776244b8d8dc77ca90",
-		"home                     ok    " + h.agentx + " is writable",
-		"lock                     ok    free: " + filepath.Join(h.agentx, "lock"),
-		"mutations                ok    none unfinished: " + filepath.Join(h.agentx, "mutations"),
-		"account_repo             ok    " + account + " opens",
-		"library                  ok    " + h.library,
-		"clients                  warn  0 of " + strconv.Itoa(scan.Registered()) + " registered clients detected  install an agent client or check HOME",
+		"git              ok  git 2.",
+		"fork_merges      ok  upstream changes can be merged into forks",
+		"commit_identity  ok  commits get the same id on every machine",
+		"home             ok  " + h.agentx + " is writable",
+		"lock             ok  no other agentx command is running",
+		"mutations        ok  no interrupted changes",
+		"account_repo     ok  " + account + " opens",
+		"library          ok  " + h.library + " is writable",
+		"\nApp\n  ✓ lock ",
+		"\nClients  0 of " + strconv.Itoa(scan.Registered()) + " registered clients detected\n\n1 issue\n",
+		"\n1 issue\n  ! clients  0 of " + strconv.Itoa(scan.Registered()) + " registered clients detected\n",
+		"hint: install an agent client or check HOME\n",
 	} {
 		contains(t, "stdout", out.stdout, line)
 	}
@@ -204,9 +205,9 @@ func TestDoctorReportsDetectedClients(t *testing.T) {
 	if got, want := order[len(order)-4:], []string{"library", "client:claude-code", "client:cursor", "clients"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("last checks = %v, want %v", got, want)
 	}
-	equal(t, "client:claude-code.status", rows["client:claude-code"]["status"], "ok")
+	equal(t, "client:claude-code.status", rows["client:claude-code"]["status"], "info")
 	equal(t, "client:claude-code.detail", rows["client:claude-code"]["detail"], "Claude Code: "+claude)
-	equal(t, "client:cursor.status", rows["client:cursor"]["status"], "ok")
+	equal(t, "client:cursor.status", rows["client:cursor"]["status"], "info")
 	equal(t, "client:cursor.detail", rows["client:cursor"]["detail"], "Cursor: "+cursor)
 	equal(t, "clients.status", rows["clients"]["status"], "info")
 	equal(t, "clients.detail", rows["clients"]["detail"], summary)
@@ -218,9 +219,8 @@ func TestDoctorReportsDetectedClients(t *testing.T) {
 	out = h.run("doctor")
 	equal(t, "exit", out.exit, 0)
 	for _, line := range []string{
-		"client:claude-code       ok    Claude Code: " + claude + "\n",
-		"client:cursor            ok    Cursor: " + cursor + "\n",
-		"clients                  info  " + summary + "\n",
+		"\nClients  " + summary + "\n  • client:claude-code  info  Claude Code: " + claude + "\n",
+		"  • client:cursor       info  Cursor: " + cursor + "\n\n✓ No issues detected\n",
 	} {
 		contains(t, "stdout", out.stdout, line)
 	}
@@ -228,13 +228,7 @@ func TestDoctorReportsDetectedClients(t *testing.T) {
 
 func TestDoctorAcceptsGitAtAndAboveFloorByNumericComparison(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		version  string
-		relative bool
-	}{
-		{"2.40.0", false},
-		{"2.100.0", true},
-	}
+	tests := []struct{ version string }{{"2.40.0"}, {"2.100.0"}}
 	for _, tt := range tests {
 		t.Run(tt.version, func(t *testing.T) {
 			t.Parallel()
@@ -247,14 +241,9 @@ func TestDoctorAcceptsGitAtAndAboveFloorByNumericComparison(t *testing.T) {
 			rows, _ := doctorRows(t, events)
 			equal(t, "git.status", rows["git"]["status"], "ok")
 			equal(t, "git.detail", rows["git"]["detail"], "git "+tt.version)
-			equal(t, "merge_tree.status", rows["merge_tree"]["status"], "ok")
+			equal(t, "fork_merges.status", rows["fork_merges"]["status"], "ok")
 			equal(t, "account_repo.status", rows["account_repo"]["status"], "ok")
 			equal(t, "result.ok", events[len(events)-1]["ok"], true)
-			if tt.relative {
-				contains(t, "relative_worktree_paths.detail", rows["relative_worktree_paths"]["detail"].(string), "available: git "+tt.version)
-			} else {
-				contains(t, "relative_worktree_paths.detail", rows["relative_worktree_paths"]["detail"].(string), "not available: git "+tt.version)
-			}
 		})
 	}
 }
@@ -286,9 +275,9 @@ func TestDoctorIsolatedFromUserGitConfig(t *testing.T) {
 	out := h.run("--json", "doctor")
 	equal(t, "exit", out.exit, 0)
 	rows, _ := doctorRows(t, h.events(out.stdout))
-	equal(t, "isolated_commit.status", rows["isolated_commit"]["status"], "ok")
-	equal(t, "isolated_commit.detail", rows["isolated_commit"]["detail"], "commit 5d75017e77f5413f4337ef776244b8d8dc77ca90")
-	equal(t, "merge_tree.status", rows["merge_tree"]["status"], "ok")
+	equal(t, "commit_identity.status", rows["commit_identity"]["status"], "ok")
+	equal(t, "commit_identity.detail", rows["commit_identity"]["detail"], "commits get the same id on every machine")
+	equal(t, "fork_merges.status", rows["fork_merges"]["status"], "ok")
 	equal(t, "account_repo.status", rows["account_repo"]["status"], "ok")
 }
 
@@ -328,7 +317,7 @@ func TestDoctorReportsHeldLock(t *testing.T) {
 
 	out = h.run("doctor")
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "lock                     warn  held by process 4242: "+lock)
+	contains(t, "stdout", out.stdout, "lock             warn  held by process 4242: "+lock)
 }
 
 func TestDoctorReportsCorruptSettings(t *testing.T) {
@@ -349,7 +338,9 @@ func TestDoctorReportsCorruptSettings(t *testing.T) {
 	equal(t, "result.ok", events[len(events)-1]["ok"], true)
 }
 
-func TestDoctorMissingLibraryIsWarning(t *testing.T) {
+// A missing library is not an issue: the first install creates it. A path
+// that exists but cannot serve as the library is.
+func TestDoctorLibraryStates(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	if err := os.Remove(h.library); err != nil {
@@ -360,13 +351,25 @@ func TestDoctorMissingLibraryIsWarning(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	events := h.events(out.stdout)
 	rows, _ := doctorRows(t, events)
-	equal(t, "library.status", rows["library"]["status"], "warn")
-	equal(t, "library.detail", rows["library"]["detail"], "missing: "+h.library)
-	contains(t, "library.hint", rows["library"]["hint"].(string), h.library)
+	equal(t, "library.status", rows["library"]["status"], "ok")
+	equal(t, "library.detail", rows["library"]["detail"], "not created yet: "+h.library+"; the first install creates it")
+	if _, ok := rows["library"]["hint"]; ok {
+		t.Errorf("library.hint = %v, want none", rows["library"]["hint"])
+	}
 	equal(t, "result.ok", events[len(events)-1]["ok"], true)
 	if _, err := os.Stat(h.library); !os.IsNotExist(err) {
 		t.Errorf("doctor created the library: %v", err)
 	}
+
+	if err := os.WriteFile(h.library, []byte("not a directory"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out = h.run("--json", "doctor")
+	equal(t, "exit", out.exit, 0)
+	rows, _ = doctorRows(t, h.events(out.stdout))
+	equal(t, "library.status", rows["library"]["status"], "fail")
+	equal(t, "library.detail", rows["library"]["detail"], h.library+" is not a directory")
+	equal(t, "library.hint", rows["library"]["hint"], "move it aside")
 }
 
 func TestDoctorUnusableAccountRepoExits8(t *testing.T) {

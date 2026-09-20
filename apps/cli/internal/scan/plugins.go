@@ -65,10 +65,10 @@ func readJSON(path string, v any, warn func(string)) bool {
 }
 
 // manifestSkills is where the plugin at dir keeps its skills: the paths its
-// manifest names, else skills.
-func manifestSkills(m pluginManifest, manifest, dir string, warn func(string)) []string {
+// manifest names, else skills. bare is whether a path may omit the ./.
+func manifestSkills(m pluginManifest, manifest, dir string, bare bool, warn func(string)) []string {
 	var dirs []string
-	for _, rel := range manifestPaths(m.Skills, manifest, "skills", warn) {
+	for _, rel := range manifestPaths(m.Skills, manifest, "skills", bare, warn) {
 		dirs = append(dirs, filepath.Join(dir, rel))
 	}
 	if dirs == nil {
@@ -82,11 +82,11 @@ func manifestSkills(m pluginManifest, manifest, dir string, warn func(string)) [
 // parse in the `{"mcpServers": ...}` shape, else the file the manifest
 // names, else the first of the client's two default files that exists,
 // else the first default.
-func manifestServers(m pluginManifest, manifest, dir string, warn func(string), first, second string) (path string, data []byte) {
+func manifestServers(m pluginManifest, manifest, dir string, bare bool, warn func(string), first, second string) (path string, data []byte) {
 	if len(m.MCPServers) > 0 && m.MCPServers[0] == '{' {
 		return manifest, append(append([]byte(`{"mcpServers":`), m.MCPServers...), '}')
 	}
-	if named := manifestPaths(m.MCPServers, manifest, "mcpServers", warn); len(named) == 1 {
+	if named := manifestPaths(m.MCPServers, manifest, "mcpServers", bare, warn); len(named) == 1 {
 		return filepath.Join(dir, named[0]), nil
 	}
 	if path = firstFile(dir, first, second); path == "" {
@@ -97,8 +97,9 @@ func manifestServers(m pluginManifest, manifest, dir string, warn func(string), 
 
 // manifestPaths reads a manifest path field, one string or a list, keeping
 // the paths that start with ./ and stay inside the bundle; another path is
-// a warning naming it.
-func manifestPaths(raw json.RawMessage, manifest, field string, warn func(string)) []string {
+// a warning naming it. With bare, a relative path without the ./ is kept
+// too, as Cursor's own marketplace plugins write them.
+func manifestPaths(raw json.RawMessage, manifest, field string, bare bool, warn func(string)) []string {
 	var one string
 	var list []string
 	if json.Unmarshal(raw, &one) == nil {
@@ -108,8 +109,14 @@ func manifestPaths(raw json.RawMessage, manifest, field string, warn func(string
 	}
 	var paths []string
 	for _, rel := range list {
-		if !strings.HasPrefix(rel, "./") || slices.Contains(strings.Split(rel, "/"), "..") {
-			warn(manifest + ": " + field + " path " + strconv.Quote(rel) + " must start with ./ and stay inside the plugin, skipped")
+		rule := "must start with ./ and stay inside the plugin"
+		ok := strings.HasPrefix(rel, "./")
+		if bare {
+			rule = "must be relative and stay inside the plugin"
+			ok = rel != "" && !strings.HasPrefix(rel, "/")
+		}
+		if !ok || slices.Contains(strings.Split(rel, "/"), "..") {
+			warn(manifest + ": " + field + " path " + strconv.Quote(rel) + " " + rule + ", skipped")
 			continue
 		}
 		paths = append(paths, rel)

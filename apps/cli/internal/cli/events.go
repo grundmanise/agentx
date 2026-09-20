@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"text/tabwriter"
+	"strings"
 )
 
 // schemaVersion is the output schema every event carries. Bump it when an
@@ -42,11 +42,30 @@ type resultEvent struct {
 // NDJSON events and stderr carries log events; otherwise stdout carries text
 // and tables and stderr carries plain log lines. Methods that do not apply
 // to the current mode do nothing, so a command calls all of them.
+//
+// Human text is painted per stream: a stream that is a terminal gets colour
+// unless NO_COLOR or --color says otherwise, a pipe gets the same text bare.
 type writer struct {
 	stdout  io.Writer
 	stderr  io.Writer
+	env     map[string]string
 	json    bool
 	verbose bool
+	color   string // the --color flag: on, off, or empty when left out
+	outInk  *ink   // decided on first use, once the flags are parsed
+	errInk  *ink
+}
+
+// out is the ink for stdout; err the ink for stderr.
+func (w *writer) out() ink { return w.inkFor(&w.outInk, w.stdout) }
+func (w *writer) err() ink { return w.inkFor(&w.errInk, w.stderr) }
+
+func (w *writer) inkFor(cached **ink, stream io.Writer) ink {
+	if *cached == nil {
+		k := colorMode(w.color).resolve(stream, w.env)
+		*cached = &k
+	}
+	return **cached
 }
 
 // emit writes one event line in JSON mode.
@@ -56,20 +75,33 @@ func (w *writer) emit(ev any) {
 	}
 }
 
-// table returns an aligned-text writer for human mode. Flush it when done.
-func (w *writer) table() *tabwriter.Writer {
-	out := w.stdout
+// print writes one human line to stdout from parts that are joined as they
+// are; it does nothing in JSON mode.
+func (w *writer) print(parts ...string) {
 	if w.json {
-		out = io.Discard
+		return
 	}
-	return tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	var b strings.Builder
+	for _, p := range parts {
+		b.WriteString(p)
+	}
+	b.WriteByte('\n')
+	_, _ = io.WriteString(w.stdout, b.String())
 }
 
-// printf writes a human line; it does nothing in JSON mode.
-func (w *writer) printf(format string, args ...any) {
+// paint styles s for stdout.
+func (w *writer) paint(st style, s string) string { return w.out().paint(st, s) }
+
+// render writes t to stdout with indent before every row; nothing in JSON mode.
+func (w *writer) render(t *table, indent string) {
 	if !w.json {
-		fmt.Fprintf(w.stdout, format, args...)
+		t.render(w.stdout, w.out(), indent)
 	}
+}
+
+// done confirms a change on stdout: a green check and the message.
+func (w *writer) done(msg string) {
+	w.print(w.paint(okStyle, glyphOK), " ", msg)
 }
 
 // warn logs at warn level.
@@ -78,7 +110,7 @@ func (w *writer) warn(msg string) {
 		w.line(w.stderr, logEvent{event: newEvent("log"), Level: "warn", Message: msg})
 		return
 	}
-	fmt.Fprintf(w.stderr, "warning: %s\n", msg)
+	fmt.Fprintf(w.stderr, "%s %s\n", w.err().paint(warnStyle, "warning:"), msg)
 }
 
 // debugf logs at debug level, shown only with --verbose.
@@ -91,7 +123,7 @@ func (w *writer) debugf(format string, args ...any) {
 		w.line(w.stderr, logEvent{event: newEvent("log"), Level: "debug", Message: msg})
 		return
 	}
-	fmt.Fprintf(w.stderr, "debug: %s\n", msg)
+	fmt.Fprintf(w.stderr, "%s %s\n", w.err().paint(muted, "debug:"), msg)
 }
 
 func (w *writer) fail(f *failure) {
@@ -99,9 +131,10 @@ func (w *writer) fail(f *failure) {
 		w.emit(errorEvent{event: newEvent("error"), Code: f.status.code, Message: f.message, Hint: f.hint})
 		return
 	}
-	fmt.Fprintf(w.stderr, "error: %s\n", f.message)
+	k := w.err()
+	fmt.Fprintf(w.stderr, "%s %s\n", k.paint(failStyle, "error:"), f.message)
 	if f.hint != "" {
-		fmt.Fprintf(w.stderr, "hint: %s\n", f.hint)
+		fmt.Fprintf(w.stderr, "%s %s\n", k.paint(warnStyle, "hint:"), f.hint)
 	}
 }
 

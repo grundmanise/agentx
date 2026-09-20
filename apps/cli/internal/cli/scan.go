@@ -6,10 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -29,7 +27,7 @@ func newScanCommand(inv *invocation) *cobra.Command {
 	var handshake bool
 	cmd := &cobra.Command{
 		Use:   "scan",
-		Short: "Inventory the agent configurations on this machine with their skills, MCP servers and plugins",
+		Short: "Inventory the agent configurations with their skills, MCP servers and plugins",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if configuration != "" {
@@ -171,99 +169,131 @@ func (inv *invocation) detectedConfiguration(slug string) error {
 	if len(slugs) > 0 {
 		hint = "detected configurations: " + strings.Join(slugs, ", ")
 	}
-	return fail(exitNotFound, fmt.Sprintf("configuration %q is not detected on this machine", slug), hint)
+	return fail(exitNotFound, fmt.Sprintf("configuration %q is not detected", slug), hint)
 }
 
-// printSnapshot writes the human inventory: one section per configuration
-// with one line per skill occurrence, then its servers and its plugins.
-// Warnings go to stderr.
+// printSnapshot writes the human inventory: one summary line counting the
+// machine, then one section per configuration with its skills, servers and
+// plugins as labelled blocks. Warnings go to stderr.
 func (inv *invocation) printSnapshot(snap scan.Snapshot) {
-	skills := map[string][][]string{} // name, kind, scope, placement
+	out := inv.out
+	// Counts per configuration and, keyed by configuration and plugin name,
+	// per plugin: what each one carries.
+	nSkills, nServers, nPlugins := map[string]int{}, map[string]int{}, map[string]int{}
+	pluginSkills, pluginServers := map[string]int{}, map[string]int{}
+	skills := map[string]*table{} // name, kind, scope, placement
 	for _, s := range snap.Skills {
 		for _, o := range s.Occurrences {
+			nSkills[o.Configuration]++
+			if o.Plugin != "" {
+				pluginSkills[o.Configuration+"\x00"+o.Plugin]++
+			}
 			path := o.Path
 			if o.Kind == "symlink" {
-				path += " -> " + o.ResolvedPath
+				path += out.paint(muted, " -> "+o.ResolvedPath)
 			}
 			if o.Plugin != "" {
-				path += "  (plugin " + o.Plugin + ")"
+				path += "  " + out.paint(tagStyle, "(plugin "+o.Plugin+")")
 			}
-			skills[o.Configuration] = append(skills[o.Configuration], []string{s.Name, o.Kind, o.Scope, path})
+			block(skills, o.Configuration).add(c(s.Name, heading), c(o.Kind, muted), c(o.Scope, muted), c(path, plain))
 		}
 	}
-	servers := map[string][][]string{} // name, transport, command line or URL, what a handshake found, (disabled)
+	servers := map[string]*table{} // name, transport, command line or URL, what a handshake found, (disabled)
 	for _, s := range snap.MCPServers {
 		for _, o := range s.Occurrences {
+			nServers[o.Configuration]++
+			if o.Plugin != "" {
+				pluginServers[o.Configuration+"\x00"+o.Plugin]++
+			}
 			what := o.URL
 			if o.Command != "" {
 				what = strings.Join(append([]string{o.Command}, o.Args...), " ")
 			}
 			if o.Plugin != "" {
-				what += "  (plugin " + o.Plugin + ")"
+				what += "  " + out.paint(tagStyle, "(plugin "+o.Plugin+")")
 			}
-			cells := []string{s.Name, o.Transport, what}
+			cells := []cell{c(s.Name, heading), c(o.Transport, muted), c(what, plain)}
 			if n := len(s.Tools); n > 0 {
-				cells = append(cells, plural(n, "tool"))
+				cells = append(cells, c(plural(n, "tool"), noteStyle))
 			}
 			if o.Enabled != nil && !*o.Enabled {
-				cells = append(cells, "(disabled)")
+				cells = append(cells, c("(disabled)", warnStyle))
 			}
-			servers[o.Configuration] = append(servers[o.Configuration], cells)
+			block(servers, o.Configuration).add(cells...)
 		}
 	}
-	plugins := map[string][][]string{} // name, version, (disabled)
+	plugins := map[string]*table{} // name, version, what it provides, (disabled)
 	for _, p := range snap.Plugins {
-		cells := []string{p.Name, p.Version}
-		if p.Enabled != nil && !*p.Enabled {
-			cells = append(cells, "(disabled)")
+		nPlugins[p.Configuration]++
+		cells := []cell{c(p.Name, heading), c(p.Version, plain)}
+		if provides := counts(pluginSkills[p.Configuration+"\x00"+p.Name], "skill", pluginServers[p.Configuration+"\x00"+p.Name], "server"); provides != "" {
+			cells = append(cells, c(provides, noteStyle))
 		}
-		plugins[p.Configuration] = append(plugins[p.Configuration], cells)
+		if p.Enabled != nil && !*p.Enabled {
+			cells = append(cells, c("(disabled)", warnStyle))
+		}
+		block(plugins, p.Configuration).add(cells...)
 	}
 	if len(snap.Configurations) == 0 {
-		fmt.Fprintln(inv.out.stdout, "No agent configurations detected.")
+		out.print(out.paint(warnStyle, "No agent configurations detected."))
+		out.print(out.paint(muted, "A configuration is detected by its directory, such as ~/.claude or ~/.cursor; check HOME."))
+		return
 	}
-	t := inv.out.table()
-	for i, c := range snap.Configurations {
-		if i > 0 {
-			fmt.Fprintln(t)
+	out.print(out.paint(noteStyle.Bold(true), plural(len(snap.Configurations), "configuration")+", "+
+		plural(len(snap.Skills), "skill")+", "+plural(len(snap.MCPServers), "server")+", "+plural(len(snap.Plugins), "plugin")+" detected"))
+	for _, conf := range snap.Configurations {
+		out.print("")
+		state := out.paint(okStyle, "enabled")
+		if !conf.Enabled {
+			state = out.paint(warnStyle, "disabled")
 		}
-		state := "enabled"
-		if !c.Enabled {
-			state = "disabled"
+		line := []string{out.paint(heading, conf.Name), " ", out.paint(muted, "("+conf.ID+")"), "  ", conf.Path, "  ", state}
+		if has := counts(nSkills[conf.ID], "skill", nServers[conf.ID], "server", nPlugins[conf.ID], "plugin"); has != "" {
+			line = append(line, "  ", out.paint(noteStyle, has))
 		}
-		fmt.Fprintf(t, "%s (%s)  %s  %s\n", c.Name, c.ID, c.Path, state)
-		printRows(t, "  ", skills[c.ID])
-		if len(servers[c.ID]) > 0 {
-			fmt.Fprintln(t, "  servers:")
-			printRows(t, "    ", servers[c.ID])
+		out.print(line...)
+		empty := true
+		for _, b := range []struct {
+			name string
+			rows map[string]*table
+		}{{"skills", skills}, {"servers", servers}, {"plugins", plugins}} {
+			t, ok := b.rows[conf.ID]
+			if !ok {
+				continue
+			}
+			empty = false
+			out.print("  ", out.paint(label, b.name+":"))
+			t.sortRows()
+			out.render(t, "    ")
 		}
-		if len(plugins[c.ID]) > 0 {
-			fmt.Fprintln(t, "  plugins:")
-			printRows(t, "    ", plugins[c.ID])
+		if empty {
+			out.print("  ", out.paint(muted, "no skills, servers or plugins"))
 		}
 	}
-	t.Flush()
 	for _, w := range snap.Warnings {
-		fmt.Fprintf(inv.out.stderr, "warning: %s\n", w)
+		out.warn(w)
 	}
 }
 
-// printRows writes rows of cells as one indented table line each, sorted by
-// the first cell and then the whole line.
-func printRows(t io.Writer, indent string, rows [][]string) {
-	lines := make([]string, len(rows))
-	for i, cells := range rows {
-		lines[i] = strings.Join(cells, "\t")
-	}
-	sort.Slice(lines, func(i, j int) bool {
-		a, _, _ := strings.Cut(lines[i], "\t")
-		b, _, _ := strings.Cut(lines[j], "\t")
-		if a != b {
-			return a < b
+// counts joins the non-zero counts of pairs of count and noun, so that a
+// heading says what is there and nothing about what is not: "2 skills,
+// 1 server", or "" when every count is zero.
+func counts(pairs ...any) string {
+	var parts []string
+	for i := 0; i+1 < len(pairs); i += 2 {
+		if n := pairs[i].(int); n > 0 {
+			parts = append(parts, plural(n, pairs[i+1].(string)))
 		}
-		return lines[i] < lines[j]
-	})
-	for _, line := range lines {
-		fmt.Fprintln(t, indent+line)
 	}
+	return strings.Join(parts, ", ")
+}
+
+// block returns the table for configuration id in m, creating it on first use.
+func block(m map[string]*table, id string) *table {
+	t, ok := m[id]
+	if !ok {
+		t = &table{}
+		m[id] = t
+	}
+	return t
 }

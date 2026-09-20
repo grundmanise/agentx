@@ -27,7 +27,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 	var once bool
 	cmd := &cobra.Command{
 		Use:   "serve",
-		Short: "Watch this machine and stream a snapshot whenever it changes, until stdin closes",
+		Short: "Watch for changes and stream a snapshot on each one, until stdin closes",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			lock, err := home.TakeServeLock(inv.dirs.Home)
@@ -47,16 +47,16 @@ func newServeCommand(inv *invocation) *cobra.Command {
 				Stdin: cmd.InOrStdin(),
 				Snapshot: func(snap scan.Snapshot) {
 					inv.out.emit(snapshotEvent{event: newEvent("snapshot"), Snapshot: snap})
-					inv.out.printf("snapshot %d: %s, %s\n", snap.ScanCounter,
-						plural(len(snap.Configurations), "configuration"), plural(len(snap.Skills), "skill"))
+					inv.out.print(inv.out.paint(heading, fmt.Sprintf("snapshot %d", snap.ScanCounter)), ": ",
+						plural(len(snap.Configurations), "configuration"), ", ", plural(len(snap.Skills), "skill"))
 				},
 				RefreshComplete: func(id string, counter int, err error) {
 					ev := refreshCompleteEvent{event: newEvent("refresh_complete"), RequestID: id, InstanceID: inv.instanceID(), OK: err == nil, ScanCounter: counter}
 					if err != nil {
 						ev.Error = err.Error()
-						inv.out.printf("refresh %s: failed: %s\n", id, err)
+						inv.out.print(inv.out.paint(heading, "refresh "+id), ": ", inv.out.paint(failStyle, "failed"), ": ", err.Error())
 					} else {
-						inv.out.printf("refresh %s: ok, snapshot %d\n", id, counter)
+						inv.out.print(inv.out.paint(heading, "refresh "+id), ": ", inv.out.paint(okStyle, "ok"), fmt.Sprintf(", snapshot %d", counter))
 					}
 					inv.out.emit(ev)
 				},

@@ -125,6 +125,15 @@ var fixtures = map[string]fixture{
 			".claude/skills/gone": ".agents/skills/missing",
 		},
 	},
+	"broken-symlinks": {
+		files: map[string]string{
+			".claude/skills/commit/SKILL.md": skill("commit", "Write a commit message"),
+		},
+		links: map[string]string{
+			".claude/skills/gone": ".agents/skills/missing",
+			".claude/skills/lost": ".agents/skills/missing",
+		},
+	},
 	"library-read-by-codex": {
 		dirs: []string{".codex", ".gemini", ".cursor"},
 		files: map[string]string{
@@ -263,10 +272,12 @@ var fixtures = map[string]fixture{
 			".cursor/plugins/local/bad/.cursor-plugin/plugin.json":           `{not json`,
 			".cursor/plugins/local/.store/stored/.cursor-plugin/plugin.json": `{"name": "stored", "version": "2.0.0"}`,
 			".cursor/plugins/local/README.md":                                "not a plugin\n",
-			// mani: the manifest names the skills root, one path that leaves
-			// the plugin, and declares its server inline.
-			".cursor/plugins/local/mani/.cursor-plugin/plugin.json": `{"name": "mani", "version": "0.2.0", "skills": ["./tools", "../outside"], "mcpServers": {"mani-srv": {"command": "${CURSOR_PLUGIN_ROOT}/bin/mani", "env": {"KEY": "secret-cursor-inline-env-value"}}}}`,
+			// mani: the manifest names the skills root without the ./, one skill
+			// by its own directory, one path that leaves the plugin, and
+			// declares its server inline.
+			".cursor/plugins/local/mani/.cursor-plugin/plugin.json": `{"name": "mani", "version": "0.2.0", "skills": ["tools", "solo/draft", "../outside"], "mcpServers": {"mani-srv": {"command": "${CURSOR_PLUGIN_ROOT}/bin/mani", "env": {"KEY": "secret-cursor-inline-env-value"}}}}`,
 			".cursor/plugins/local/mani/tools/plan/SKILL.md":        skill("plan", "Plan the work"),
+			".cursor/plugins/local/mani/solo/draft/SKILL.md":        skill("draft", "Draft the text"),
 			".cursor/plugins/local/mani/skills/ignored/SKILL.md":    skill("ignored", "Must not appear"),
 			// named: the manifest names the server file; mcp.json is not read.
 			".cursor/plugins/local/named/.cursor-plugin/plugin.json": `{"name": "named", "version": "0.3.0", "mcpServers": "./conf/servers.json"}`,
@@ -449,6 +460,7 @@ func TestScanWarnings(t *testing.T) {
 		want    []string
 	}{
 		{"broken-symlink", []string{"~/.claude/skills/gone: broken symlink, skipped"}},
+		{"broken-symlinks", []string{"~/.claude/skills: 2 broken symlinks (gone, lost), skipped"}},
 		{"unparsable-frontmatter", []string{
 			"~/.claude/skills/broken/SKILL.md: unparsable frontmatter at line 3, using the directory name",
 			"~/.claude/skills/nameless/SKILL.md: frontmatter has no name, using the directory name",
@@ -477,7 +489,7 @@ func TestScanWarnings(t *testing.T) {
 			"~/.cursor/plugins/cache/cursor-public/half/0000000000000000000000000000000000000000: incomplete plugin cache, skipped",
 			"~/.cursor/plugins/local/bad/.cursor-plugin/plugin.json: invalid JSON, skipped",
 			"~/.cursor/plugins/local/escape: symlink resolves outside ~/.cursor/plugins/local, skipped",
-			"~/.cursor/plugins/local/mani/.cursor-plugin/plugin.json: skills path \"../outside\" must start with ./ and stay inside the plugin, skipped",
+			"~/.cursor/plugins/local/mani/.cursor-plugin/plugin.json: skills path \"../outside\" must be relative and stay inside the plugin, skipped",
 		}},
 	}
 	for _, tt := range tests {
@@ -556,7 +568,7 @@ func TestScanConfigurationFlag(t *testing.T) {
 	equal(t, "exit", out.exit, 5)
 	events := h.events(out.stdout)
 	equal(t, "error.code", events[0]["code"], "not_found")
-	equal(t, "error.message", events[0]["message"], `configuration "codex" is not detected on this machine`)
+	equal(t, "error.message", events[0]["message"], `configuration "codex" is not detected`)
 	equal(t, "error.hint", events[0]["hint"], "detected configurations: claude-code, cursor")
 }
 
@@ -625,7 +637,7 @@ func TestConfigEnableDisable(t *testing.T) {
 
 	out = h.run("config", "enable", "cursor")
 	equal(t, "exit", out.exit, 0)
-	equal(t, "stdout", out.stdout, "")
+	equal(t, "stdout", out.stdout, "✓ cursor is now enabled\n")
 	if got, want := readSettingsFile(t, h)["disabled_configurations"], []any{}; !reflect.DeepEqual(got, want) {
 		t.Errorf("disabled_configurations = %v, want %v", got, want)
 	}
@@ -892,10 +904,10 @@ func TestScanPlugins(t *testing.T) {
 	out := h.run("scan")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "  plugins:\n")
-	contains(t, "stdout", out.stdout, "formatter  1.2.0")
+	contains(t, "stdout", out.stdout, "formatter  1.2.0  1 skill, 1 server\n")
 	contains(t, "stdout", out.stdout, "(plugin formatter)")
 	contains(t, "stdout", out.stdout, "notes     1.0.0\n")
-	contains(t, "stdout", out.stdout, "security  0.3.0\n")
+	contains(t, "stdout", out.stdout, "security  0.3.0  1 skill, 1 server\n")
 	noSecrets(t, h, fixtures["plugins"])
 }
 
@@ -1028,13 +1040,14 @@ func TestScanCursorPlugins(t *testing.T) {
 		t.Errorf("plugins = %q, want %q", rows, want)
 	}
 
-	equal(t, "skill nodes", len(snap["skills"].([]any)), 5)
+	equal(t, "skill nodes", len(snap["skills"].([]any)), 6)
 	for skill, wantOcc := range map[string][]string{
 		"lint":    {"cursor directory user ~/.cursor/plugins/local/agent-std/skills/lint plugin=agent-std"},
 		"format":  {"cursor directory user ~/.cursor/plugins/local/cursor-fmt/skills/format plugin=cursor-fmt"},
 		"notes":   {"cursor directory user ~/.cursor/plugins/local/bare/skills/notes plugin=bare"},
 		"brew":    {"cursor directory user ~/.cursor/plugins/cache/cursor-public/thermos/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b/skills/brew plugin=thermos"},
 		"plan":    {"cursor directory user ~/.cursor/plugins/local/mani/tools/plan plugin=mani"},
+		"draft":   {"cursor directory user ~/.cursor/plugins/local/mani/solo/draft plugin=mani"},
 		"ignored": nil,
 	} {
 		if got := occurrences(t, h, snap, skill); !reflect.DeepEqual(got, wantOcc) {
@@ -1084,16 +1097,16 @@ func TestScanCursorPlugins(t *testing.T) {
 	for _, e := range snap["edges"].([]any) {
 		from[e.(map[string]any)["from"].(string)]++
 	}
-	for name, n := range map[string]int{"agent-std": 2, "bad": 0, "bare": 1, "cursor-fmt": 2, "mani": 2, "named": 1, "stored": 0, "thermos": 2, "tools": 0} {
+	for name, n := range map[string]int{"agent-std": 2, "bad": 0, "bare": 1, "cursor-fmt": 2, "mani": 3, "named": 1, "stored": 0, "thermos": 2, "tools": 0} {
 		equal(t, "edges from "+name, from[ids[name]], n)
 	}
-	equal(t, "edges", len(snap["edges"].([]any)), 1+9+5+5+10) // machine to cursor, nine plugins, five skills, five servers, ten provides
+	equal(t, "edges", len(snap["edges"].([]any)), 1+9+6+5+11) // machine to cursor, nine plugins, six skills, five servers, eleven provides
 
 	out := h.run("scan")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "  plugins:\n")
 	contains(t, "stdout", h.portable(out.stdout), "~/.cursor/plugins/local/agent-std/bin/srv --root ~/.cursor/plugins/local/agent-std  (plugin agent-std)")
-	if !regexp.MustCompile(`(?m)^ +thermos +9f86d081884c7d659a2feaa0c55ad015a3bf4f1b$`).MatchString(out.stdout) {
+	if !regexp.MustCompile(`(?m)^ +thermos +9f86d081884c7d659a2feaa0c55ad015a3bf4f1b  1 skill, 1 server$`).MatchString(out.stdout) {
 		t.Errorf("stdout has no thermos plugin line with its commit as the version:\n%s", out.stdout)
 	}
 	if strings.Contains(out.stdout, "(disabled)") {

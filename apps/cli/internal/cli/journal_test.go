@@ -181,7 +181,7 @@ func TestEditedLiveFileRefusesRecovery(t *testing.T) {
 		t.Errorf("doctor touched the journal: %v", err)
 	}
 	out = h.run("doctor")
-	contains(t, "stdout", out.stdout, "mutations                warn  1 unfinished mutation: "+journal)
+	contains(t, "stdout", out.stdout, "mutations        warn  1 unfinished mutation: "+journal)
 
 	// Restoring the expected live content lets the mutation finish.
 	if err := os.WriteFile(live, []byte("{}\n"), 0o644); err != nil {

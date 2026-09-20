@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"text/tabwriter"
+	"slices"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
@@ -27,32 +27,131 @@ type doctorEvent struct {
 func newDoctorCommand(inv *invocation) *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor",
-		Short: "Check that this machine can run agentx: git, agentx home and the account repo",
+		Short: "Check that agentx can run: git, agentx home and the account repo",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			d := &doctor{inv: inv, table: inv.out.table()}
+			d := &doctor{inv: inv}
 			err := d.run(cmd.Context())
-			if flushErr := d.table.Flush(); err == nil {
-				err = flushErr
-			}
+			d.print()
 			return err
 		},
 	}
 }
 
 type doctor struct {
-	inv   *invocation
-	table *tabwriter.Writer
+	inv  *invocation
+	rows []doctorRow
 }
 
-// row reports one check as a doctor event and a table line.
+// doctorRow is one reported check, kept until print groups it by section.
+type doctorRow struct {
+	check, status, detail, hint string
+}
+
+// The sections of the text report, in print order. A check belongs to the
+// first section whose prefix matches, or to the last one.
+var doctorSections = []struct {
+	title  string
+	checks []string
+}{
+	{"System", []string{"git", "fork_merges", "commit_identity", "home"}},
+	{"App", []string{"lock", "mutations", "settings", "account_repo", "library"}},
+	{"Clients", nil}, // client:<id> and clients
+}
+
+// row reports one check as a doctor event and keeps it for the text report.
 func (d *doctor) row(check, status, detail, hint string) {
 	d.inv.out.emit(doctorEvent{event: newEvent("doctor"), Check: check, Status: status, Detail: detail, Hint: hint})
-	fmt.Fprintf(d.table, "%s\t%s\t%s", check, status, detail)
-	if hint != "" {
-		fmt.Fprintf(d.table, "\t%s", hint)
+	d.rows = append(d.rows, doctorRow{check, status, detail, hint})
+}
+
+// statusStyle maps a doctor status to the glyph its row starts with and the
+// style both the glyph and the status word are painted in.
+func statusStyle(status string) (string, style) {
+	switch status {
+	case "ok":
+		return glyphOK, okStyle
+	case "warn":
+		return glyphWarn, warnStyle
+	case "fail":
+		return glyphFail, failStyle
 	}
-	fmt.Fprintln(d.table)
+	return glyphInfo, infoStyle
+}
+
+// print writes the text report: one block per section with a glyph, the
+// check, its status and the detail on each row, then the warnings and
+// failures again under Issues with their hints, or one line saying there
+// are none.
+func (d *doctor) print() {
+	out := d.inv.out
+	if out.json {
+		return
+	}
+	t := &table{}
+	for i, section := range doctorSections {
+		rows := d.section(i)
+		if len(rows) == 0 {
+			continue
+		}
+		if len(t.rows) > 0 {
+			t.add(c("", plain))
+		}
+		title := out.paint(heading, section.title)
+		var body [][]cell
+		for _, r := range rows {
+			if r.check == "clients" { // the count belongs in the title, not in a row
+				title += "  " + out.paint(muted, r.detail)
+				continue
+			}
+			glyph, st := statusStyle(r.status)
+			body = append(body, []cell{c("  "+out.paint(st, glyph)+" "+r.check, plain), c(r.status, st), c(r.detail, plain)})
+		}
+		t.add(c(title, plain))
+		t.rows = append(t.rows, body...)
+	}
+	out.render(t, "")
+	out.print("")
+	var issues []doctorRow
+	for _, r := range d.rows {
+		if r.status == "warn" || r.status == "fail" {
+			issues = append(issues, r)
+		}
+	}
+	if len(issues) == 0 {
+		out.print(out.paint(okStyle, glyphOK), " No issues detected")
+		return
+	}
+	t = &table{}
+	t.add(c(out.paint(heading, plural(len(issues), "issue")), plain))
+	for _, r := range issues {
+		glyph, st := statusStyle(r.status)
+		t.add(c("  "+out.paint(st, glyph)+" "+out.paint(heading, r.check), plain), c(r.detail, plain))
+		if r.hint != "" {
+			t.add(c("", plain), c(out.paint(warnStyle, "hint:")+" "+r.hint, plain))
+		}
+	}
+	out.render(t, "")
+}
+
+// section returns the rows of section i in the order they were reported.
+func (d *doctor) section(i int) []doctorRow {
+	var rows []doctorRow
+	for _, r := range d.rows {
+		if sectionOf(r.check) == i {
+			rows = append(rows, r)
+		}
+	}
+	return rows
+}
+
+func sectionOf(check string) int {
+	for i, section := range doctorSections {
+		if slices.Contains(section.checks, check) {
+			return i
+		}
+	}
+	return len(doctorSections) - 1
 }
 
 // run performs the checks in a fixed order and changes nothing in agentx
@@ -74,24 +173,19 @@ func (d *doctor) run(ctx context.Context) error {
 	commit, mergeErr, probeErr := gitx.Probe(ctx, inv.git)
 	switch {
 	case probeErr != nil:
-		d.row("merge_tree", "fail", "cannot set up the probe repository: "+probeErr.Error(), verbose)
+		d.row("fork_merges", "fail", "cannot merge upstream changes into forks: cannot set up the probe repository: "+probeErr.Error(), verbose)
 	case mergeErr != nil:
-		d.row("merge_tree", "fail", mergeErr.Error(), verbose)
+		d.row("fork_merges", "fail", "cannot merge upstream changes into forks: "+mergeErr.Error(), verbose)
 	default:
-		d.row("merge_tree", "ok", "merge-tree --write-tree --merge-base merges two branches", "")
-	}
-	if v.AtLeast(2, 48) {
-		d.row("relative_worktree_paths", "info", "available: git "+v.String()+" is 2.48 or newer", "")
-	} else {
-		d.row("relative_worktree_paths", "info", "not available: git "+v.String()+" is older than 2.48", "")
+		d.row("fork_merges", "ok", "upstream changes can be merged into forks", "")
 	}
 	switch {
 	case commit == "":
-		d.row("isolated_commit", "fail", "cannot set up the probe repository: "+probeErr.Error(), verbose)
+		d.row("commit_identity", "fail", "cannot check commit ids: cannot set up the probe repository: "+probeErr.Error(), verbose)
 	case commit != gitx.FixedCommit:
-		d.row("isolated_commit", "fail", "the isolated environment produced commit "+commit+", not "+gitx.FixedCommit, verbose)
+		d.row("commit_identity", "fail", "commits would differ between machines: got "+commit+", expected "+gitx.FixedCommit, verbose)
 	default:
-		d.row("isolated_commit", "ok", "commit "+commit, "")
+		d.row("commit_identity", "ok", "commits get the same id on every machine", "")
 	}
 
 	h := inv.dirs.Home
@@ -117,7 +211,7 @@ func (d *doctor) run(ctx context.Context) error {
 	case held:
 		d.row("lock", "warn", "held by another agentx command: "+lock, "wait for it to finish")
 	default:
-		d.row("lock", "ok", "free: "+lock, "")
+		d.row("lock", "ok", "no other agentx command is running", "")
 	}
 
 	// Reported, never recovered: doctor holds no lock.
@@ -127,7 +221,7 @@ func (d *doctor) run(ctx context.Context) error {
 	case len(journals) > 0:
 		d.row("mutations", "warn", plural(len(journals), "unfinished mutation")+": "+journals[0], "run agentx scan to recover; when it refuses, restore the file it names or move the journal aside")
 	default:
-		d.row("mutations", "ok", "none unfinished: "+home.MutationsDir(inv.dirs.Home), "")
+		d.row("mutations", "ok", "no interrupted changes", "")
 	}
 
 	settings := home.SettingsPath(inv.dirs.Home)
@@ -138,7 +232,7 @@ func (d *doctor) run(ctx context.Context) error {
 	case !exists(settings):
 		d.row("settings", "ok", "defaults: "+settings+" is not written yet", "")
 	default:
-		d.row("settings", "ok", settings+" parses", "")
+		d.row("settings", "ok", settings+" is valid", "")
 	}
 
 	var repoErr error
@@ -152,15 +246,25 @@ func (d *doctor) run(ctx context.Context) error {
 		d.row("account_repo", "ok", gitDir+" opens", "")
 	}
 
-	if exists(inv.dirs.Library) {
-		d.row("library", "ok", inv.dirs.Library, "")
-	} else {
-		d.row("library", "warn", "missing: "+inv.dirs.Library, "create it with mkdir -p "+inv.dirs.Library)
+	// The first install creates the library; doctor only checks that what
+	// exists is usable.
+	lib := inv.dirs.Library
+	switch info, err := os.Stat(lib); {
+	case errors.Is(err, fs.ErrNotExist):
+		d.row("library", "ok", "not created yet: "+lib+"; the first install creates it", "")
+	case err != nil:
+		d.row("library", "fail", err.Error(), "")
+	case !info.IsDir():
+		d.row("library", "fail", lib+" is not a directory", "move it aside")
+	case unix.Access(lib, unix.W_OK) != nil:
+		d.row("library", "fail", lib+" is not writable", "make "+lib+" writable")
+	default:
+		d.row("library", "ok", lib+" is writable", "")
 	}
 
 	detected := scan.Detect(inv.dirs)
 	for _, c := range detected {
-		d.row("client:"+c.Slug(), "ok", c.Name()+": "+c.ConfigDir(inv.dirs), "")
+		d.row("client:"+c.Slug(), "info", c.Name()+": "+c.ConfigDir(inv.dirs), "")
 	}
 	summary := fmt.Sprintf("%d of %d registered clients detected", len(detected), scan.Registered())
 	if len(detected) == 0 {
