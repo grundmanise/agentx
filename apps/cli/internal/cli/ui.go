@@ -5,30 +5,39 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"unicode/utf8"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	"golang.org/x/term"
 )
 
-// style is one ANSI SGR parameter list, applied only when a stream is coloured.
-type style string
+// style is a lipgloss style; the palette below is every one in use.
+type style = lipgloss.Style
 
-const (
-	plain   style = ""
-	bold    style = "1"
-	dim     style = "2"
-	red     style = "31"
-	green   style = "32"
-	yellow  style = "33"
-	blue    style = "34"
-	magenta style = "35"
-	cyan    style = "36"
-	boldRed style = "1;31"
+// base is the style every other derives from. It leaves tabs alone, so a
+// painted fragment carries the exact text a pipe receives.
+var base = lipgloss.NewStyle().TabWidth(lipgloss.NoTabConversion)
+
+// fg is base in one of the basic ANSI colours, 0 to 7, so that --color on
+// gives the same 16-colour sequences on every terminal.
+func fg(colour string) style { return base.Foreground(lipgloss.Color(colour)) }
+
+var (
+	plain   = base
+	bold    = base.Bold(true)
+	dim     = base.Faint(true)
+	red     = fg("1")
+	green   = fg("2")
+	yellow  = fg("3")
+	blue    = fg("4")
+	magenta = fg("5")
+	cyan    = fg("6")
+	boldRed = red.Bold(true)
 )
 
 // The one meaning each colour has across every command, so that a reader
 // learns the palette once.
-const (
+var (
 	heading   = bold    // a section title or a row's leading name
 	label     = cyan    // the key of a key-value row
 	muted     = dim     // secondary detail: kinds, scopes, resolved paths
@@ -48,15 +57,19 @@ const (
 	glyphInfo = "•"
 )
 
-// ink is the colour decision for one stream: true paints, false passes text through.
-type ink bool
+// ink is the colour decision for one stream: the renderer that paints it,
+// or nil when text passes through bare.
+type ink struct{ r *lipgloss.Renderer }
+
+// on reports whether the ink paints.
+func (k ink) on() bool { return k.r != nil }
 
 // paint wraps s in st when the ink is on.
 func (k ink) paint(st style, s string) string {
-	if !k || st == plain || s == "" {
+	if k.r == nil || s == "" {
 		return s
 	}
-	return "\x1b[" + string(st) + "m" + s + "\x1b[0m"
+	return st.Renderer(k.r).Render(s)
 }
 
 // colorMode is the value of --color: on, off, or unset when the flag is
@@ -75,14 +88,29 @@ const (
 func (m colorMode) resolve(out io.Writer, env map[string]string) ink {
 	switch m {
 	case colorOn:
-		return true
+		return ink{r: painter(out)}
 	case colorOff:
-		return false
+		return ink{}
 	}
 	if _, set := env["NO_COLOR"]; set || env["TERM"] == "dumb" {
-		return false
+		return ink{}
 	}
-	return ink(isTerminal(out))
+	if isTerminal(out) {
+		return ink{r: painter(out)}
+	}
+	return ink{}
+}
+
+// painter is the renderer for a stream that resolve decided to paint, fixed
+// at the basic 16 colours. The profile is set twice on purpose: without the
+// option termenv detects one from the process environment and the stream
+// when the output is created, and without the call lipgloss detects one
+// again when the first style is rendered. Neither may happen here: resolve
+// is the only decision, and it reads the environment it was given.
+func painter(out io.Writer) *lipgloss.Renderer {
+	r := lipgloss.NewRenderer(out, termenv.WithProfile(termenv.ANSI))
+	r.SetColorProfile(termenv.ANSI)
+	return r
 }
 
 func isTerminal(out io.Writer) bool {
@@ -98,31 +126,12 @@ type cell struct {
 	style style
 }
 
-// width is the number of columns text takes on a terminal: its runes,
-// escape sequences excluded.
-func width(text string) int {
-	n := 0
-	for i := 0; i < len(text); {
-		if text[i] == '\x1b' && i+1 < len(text) && text[i+1] == '[' {
-			j := i + 2
-			for j < len(text) && text[j] != 'm' {
-				j++
-			}
-			i = j + 1
-			continue
-		}
-		_, size := utf8.DecodeRuneInString(text[i:])
-		i += size
-		n++
-	}
-	return n
-}
-
 func c(text string, st style) cell { return cell{text: text, style: st} }
 
 // table is aligned text: columns padded to their widest cell, two spaces
 // apart, with nothing after the last non-empty cell of a row. It replaces
-// text/tabwriter, which cannot measure painted text.
+// text/tabwriter, which cannot measure painted text, and lipgloss/table,
+// which pads the last cell of a row to its column.
 type table struct {
 	rows [][]cell
 }
@@ -156,7 +165,7 @@ func (t *table) render(out io.Writer, k ink, indent string) {
 			if i >= len(widths) {
 				widths = append(widths, 0)
 			}
-			widths[i] = max(widths[i], width(c.text))
+			widths[i] = max(widths[i], lipgloss.Width(c.text))
 		}
 	}
 	var b strings.Builder
@@ -169,7 +178,7 @@ func (t *table) render(out io.Writer, k ink, indent string) {
 		for i := 0; i <= last; i++ {
 			b.WriteString(k.paint(row[i].style, row[i].text))
 			if i < last {
-				b.WriteString(strings.Repeat(" ", widths[i]-width(row[i].text)+2))
+				b.WriteString(strings.Repeat(" ", widths[i]-lipgloss.Width(row[i].text)+2))
 			}
 		}
 		b.WriteByte('\n')

@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"regexp"
 	"testing"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 var escapes = regexp.MustCompile(`\x1b\[[0-9;]*m`)
@@ -16,7 +18,7 @@ func TestColorResolve(t *testing.T) {
 		name string
 		mode colorMode
 		env  map[string]string
-		want ink
+		want bool
 	}{
 		{"unset on a pipe", colorUnset, map[string]string{}, false},
 		{"on, on a pipe", colorOn, map[string]string{}, true},
@@ -27,7 +29,7 @@ func TestColorResolve(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			equal(t, "ink", tt.mode.resolve(&pipe, tt.env), tt.want)
+			equal(t, "ink", tt.mode.resolve(&pipe, tt.env).on(), tt.want)
 		})
 	}
 }
@@ -119,17 +121,17 @@ func TestTableAlignsPaintedCells(t *testing.T) {
 	tb.add(c("abcd", plain), c("", plain), c("", plain))
 	tb.add(c("", plain), c("", plain), c("note", plain))
 	var plainOut, painted bytes.Buffer
-	tb.render(&plainOut, false, "> ")
-	tb.render(&painted, true, "> ")
+	tb.render(&plainOut, ink{}, "> ")
+	tb.render(&painted, colorOn.resolve(&painted, nil), "> ")
 	equal(t, "plain", plainOut.String(), "> \x1b[1mab\x1b[0m    x  end\n> abcd\n>          note\n")
 	equal(t, "painted equals plain: cells carry their own escapes", painted.String(), plainOut.String())
 
 	styled := &table{}
 	styled.add(c("k", label), c("v", okStyle))
 	painted.Reset()
-	styled.render(&painted, true, "")
+	styled.render(&painted, colorOn.resolve(&painted, nil), "")
 	equal(t, "styled", painted.String(), "\x1b[36mk\x1b[0m  \x1b[32mv\x1b[0m\n")
-	equal(t, "width", width("\x1b[1;31m✓\x1b[0m ab"), 4)
+	equal(t, "width", lipgloss.Width("\x1b[1;31m✓\x1b[0m ab"), 4)
 }
 
 func TestHelpSections(t *testing.T) {
