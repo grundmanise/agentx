@@ -62,23 +62,23 @@ func TestEnvironments(t *testing.T) {
 	expect(t, "isolated", out,
 		[]string{
 			"-c core.autocrlf=false -c commit.gpgsign=false -c core.hooksPath=/dev/null --git-dir=/repo.git commit",
-			"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
+			"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_NO_LAZY_FETCH=1",
 			"GIT_AUTHOR_NAME=agentx", "GIT_AUTHOR_EMAIL=agentx@localhost", "GIT_AUTHOR_DATE=946684800 +0000",
 			"GIT_COMMITTER_NAME=agentx", "GIT_COMMITTER_EMAIL=agentx@localhost", "GIT_COMMITTER_DATE=946684800 +0000",
 			"HOME=/home/someone",
 		},
 		[]string{"GIT_AUTHOR_NAME=Someone", "GIT_SSH_COMMAND=ssh -i /home/someone/key", "AGENTX_LEAK=from the process", "GIT_TERMINAL_PROMPT=0"})
 
-	out, err = New(env, false, logf).run(ctx, false, "--git-dir=/repo.git", "fetch", "origin")
+	out, err = New(env, false, logf).User(ctx, "/repo.git", "fetch", "origin")
 	if err != nil {
 		t.Fatal(err)
 	}
 	expect(t, "user", out,
 		[]string{"--git-dir=/repo.git fetch origin", "GIT_AUTHOR_NAME=Someone", "GIT_SSH_COMMAND=ssh -i /home/someone/key", "HOME=/home/someone"},
-		[]string{"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "AGENTX_LEAK=from the process", "GIT_ASKPASS=/bin/false"})
+		[]string{"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_NO_LAZY_FETCH=1", "AGENTX_LEAK=from the process", "GIT_ASKPASS=/bin/false"})
 
 	serve := New(env, true, logf)
-	out, err = serve.run(ctx, false, "fetch")
+	out, err = serve.run(ctx, false, nil, "fetch")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -62,6 +62,29 @@ Every run emits exactly one `result` as its last stdout event, after any `error`
 | `label` | string | the machine label |
 | `derivation` | string | `platform` when the id is derived from the platform id, `random` when it comes from `machine.json` |
 
+`source`, emitted by every `agentx source` command, one per source (see [Sources](#sources)):
+
+| Field | Type | Meaning |
+|---|---|---|
+| `id` | string | the source id, 16 lowercase hex characters |
+| `url` | string | the canonical URL |
+| `alias` | string | a second URL mapped onto the canonical one; absent until aliases exist |
+| `pin` | string | the ref the source is pinned to; absent when it follows the remote's default branch |
+| `subpath` | string | the directory the command's listing was scoped to; absent for the whole repository, never stored |
+| `last_fetched` | string | when the source was last fetched, RFC 3339 in UTC; absent from the event of `source remove` |
+| `commit` | string | the fetched commit; absent when the account repo holds no ref for the source |
+| `skills` | integer | how many skills the listing found; present after `add` and `skills`, absent from `list` and `remove` |
+
+`source_skill`, emitted by `agentx source skills`, one per installable skill, after the `source` event, sorted by `subpath`:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `source` | string | the source id |
+| `subpath` | string | the skill directory from the repository root, `""` when the root itself is the skill |
+| `name` | string | the frontmatter `name`, else the directory name (the repository name for the root) |
+| `description` | string | the frontmatter `description`, `""` when it has none |
+| `tree` | string | the tree id of the skill directory at the fetched commit |
+
 `error`, emitted when a command fails:
 
 | Field | Type | Meaning |
@@ -86,7 +109,7 @@ Every run emits exactly one `result` as its last stdout event, after any `error`
 
 `snapshot`, emitted by `agentx scan`, is described under [Snapshot](#snapshot).
 
-`configuration`, `skill`, `mcp_server` and `plugin` are node types carried inside `snapshot`; no command emits them as events of their own. `doctor` is described under [Doctor](#doctor) and `refresh_complete` under [Serve](#serve). The types `progress`, `reconcile`, `search`, `drift`, `update_available` and `conflict` are named for later commands and not emitted yet; `operation` and `fleet` are reserved and never emitted.
+`configuration`, `skill`, `mcp_server` and `plugin` are node types carried inside `snapshot`; no command emits them as events of their own (`source_skill` is not the `skill` node). `doctor` is described under [Doctor](#doctor) and `refresh_complete` under [Serve](#serve). The types `progress`, `reconcile`, `search`, `drift`, `update_available` and `conflict` are named for later commands and not emitted yet; `operation` and `fleet` are reserved and never emitted.
 
 ## Exit codes
 
@@ -165,7 +188,7 @@ No agent client reads anything in agentx home except the fork worktrees, through
 | `auto_push` | whether published forks are pushed automatically |
 | `accept_operations` | reserved; whether this machine executes operations queued for it |
 | `disabled_configurations` | configuration ids the user took out of the default set for explicit placements, sorted; every other detected configuration is enabled |
-| `sources` | each source by canonical `url`, with optional `alias` (a second URL mapped to the canonical one), optional `pin` (a ref the source is held at) and `last_fetched` (RFC 3339) |
+| `sources` | each source by canonical `url`, sorted by it, with optional `alias` (a second URL mapped to the canonical one; reserved, nothing sets it), optional `pin` (the ref the source is held at, absent when it follows the remote's default branch) and `last_fetched` (RFC 3339 in UTC); written by `source add` and `source remove`, see [Sources](#sources) |
 | `copy_mode` | skill directory name to the configuration ids that receive a copy instead of a symlink |
 
 Git config in the account repo holds only what git owns: remotes and tracking branches.
@@ -377,8 +400,8 @@ The CLI runs the system git as a subprocess and never embeds a git implementatio
 
 Every git call names its repository with `--git-dir` explicitly, captures stdout and stderr, and logs the command line and stderr at debug level. Git runs in one of two environments, built from the CLI's own environment:
 
-- Isolated, for every command that writes objects or merges: `GIT_CONFIG_GLOBAL` points at `/dev/null`, `GIT_CONFIG_NOSYSTEM=1`, every `GIT_*` variable of the user's is dropped, author and committer are fixed to `agentx <agentx@localhost>` at `946684800 +0000`, and `core.autocrlf=false`, `commit.gpgsign=false` and `core.hooksPath=/dev/null` are passed with `-c`. A commit made this way has the same id on every machine whatever the user's git configuration.
-- User, for network commands: the CLI's environment as is, so credential helpers, SSH configuration and URL rewrites apply. agentx never stores git credentials.
+- Isolated, for every command that writes objects or merges, and for every local read of the account repo: `GIT_CONFIG_GLOBAL` points at `/dev/null`, `GIT_CONFIG_NOSYSTEM=1`, every `GIT_*` variable of the user's is dropped, author and committer are fixed to `agentx <agentx@localhost>` at `946684800 +0000`, `GIT_NO_LAZY_FETCH=1` forbids fetching a missing object one at a time (git 2.45 and newer honour it; older gits ignore it), and `core.autocrlf=false`, `commit.gpgsign=false` and `core.hooksPath=/dev/null` are passed with `-c`. A commit made this way has the same id on every machine whatever the user's git configuration, and nothing in this environment touches the network.
+- User, for network commands, today the fetches of `source add`: the CLI's environment as is, so credential helpers, SSH configuration and URL rewrites (`url.<base>.insteadOf`) apply. agentx never stores git credentials.
 
 In the serve child every git call additionally has `GIT_TERMINAL_PROMPT=0`, `-o BatchMode=yes` appended to the SSH command and `GIT_ASKPASS=/bin/false`, so a prompt becomes an error rather than a hang.
 
@@ -413,7 +436,25 @@ Without `--json` the rows print in three titled sections, `System` (`git`, `fork
 
 ## Account repo
 
-The account repo is `account.git` in agentx home, a bare repository. It is created on first use, under the lock, by the first command that opens it. No command of this milestone opens it, so on a fresh machine it does not exist and `agentx doctor` reports that. Creation runs `git init --bare` in the isolated environment and sets `gc.auto=0` (maintenance runs on the serve child's timer, never inside a command), `core.logAllRefUpdates=true` (reflogs, which a bare repository lacks by default), `merge.conflictStyle=zdiff3` and, on git 2.48 or newer, `worktree.useRelativePaths=true`. The repository is renamed into place only once every step succeeded. A present `account.git` that is not a bare repository git can read is exit code 8 with a hint naming the path.
+The account repo is `account.git` in agentx home, a bare repository. It is created on first use, under the lock, by the first command that opens it: `agentx source add` today. Its creation bumps `version` like any mutation. On a fresh machine it does not exist and `agentx doctor` reports that. Creation runs `git init --bare` in the isolated environment and sets `gc.auto=0` (maintenance runs on the serve child's timer, never inside a command), `core.logAllRefUpdates=true` (reflogs, which a bare repository lacks by default), `merge.conflictStyle=zdiff3` and, on git 2.48 or newer, `worktree.useRelativePaths=true`. The repository is renamed into place only once every step succeeded. A present `account.git` that is not a bare repository git can read is exit code 8 with a hint naming the path.
+
+Git config in the account repo holds only what git owns: the remotes of [Sources](#sources), and later tracking branches.
+
+## Sources
+
+A source is a git repository added by URL, from which skills are installed. `agentx source add <url>` fetches it, `agentx source list` lists the sources of this machine, `agentx source skills <url|id>` lists the installable skills of a fetched source, and `agentx source remove <url|id>` deletes one. `add` and `remove` are mutations; `list` and `skills` read and never touch the network.
+
+**URL forms.** `source add` and every `<url>` argument accept, with an optional `#<ref>` fragment on each: `owner/repo` and `owner/repo/<subpath>`, which resolve to GitHub; `https://github.com/owner/repo`, with or without `.git` or a trailing slash, followed by an optional `/<subpath>` or `/tree/<ref>/<subpath>`; a GitLab URL, `https://gitlab.com/group/subgroup/repo`, with an optional `/-/tree/<ref>/<subpath>`; the SSH shorthand `git@host:path` and `ssh://` and `git://` URLs; any `https://` or `http://` host; and `file://<path>`. Everything else, a GitHub `blob`, `pull` or other page URL included, is exit code 1 with a hint listing the forms. The result is the canonical URL, an optional subpath and an optional ref. The canonical URL is the source's identity: the scheme and host in lower case, `.git` and a trailing slash dropped, `git@host:path` written as `ssh://git@host/path`, and a `file://` path cleaned but otherwise as it is on disk. On GitHub the repository is `owner/repo` and what follows is the subpath; elsewhere the repository path ends at `/-/` or at the first segment named `*.git`, and what follows is the subpath, so `https://git.example.com/team/repo.git/skills` and `file:///srv/skills.git/tools` name a subpath and `https://git.example.com/team/repo/skills` is the repository `team/repo/skills`. The ref of a tree URL is the pin; a fragment naming a different ref is exit code 1. A ref must be a name git accepts for a branch or tag, or a commit id. The subpath scopes what the command lists and is never stored; a subpath that is not a directory of the repository at the fetched commit is exit code 5. A user or token embedded in the URL is removed before the URL is used anywhere: it never enters the settings, the account repo's configuration, a trailer or an event, and the command logs one warning saying so and naming the credential helper. For an `ssh://` URL the user name (`git@`) is part of the address and is kept; only a password is removed.
+
+**Id.** The source id is the first 16 lowercase hex characters of SHA-256 over the canonical URL. It names the remote `src-<id>` and the ref `refs/agentx/sources/<id>` in the account repo and is accepted wherever a URL is.
+
+**Fetch.** `source add` opens the account repo, creating it when needed, then writes the remote in the isolated environment: `remote.src-<id>.url` is the canonical URL, `remote.src-<id>.fetch` is `+<pin>:refs/agentx/sources/<id>`, or `+HEAD:refs/agentx/sources/<id>` for an unpinned source so that the remote's default branch is followed whatever its name, `remote.src-<id>.tagOpt=--no-tags`, `remote.src-<id>.promisor=true` and `remote.src-<id>.partialclonefilter=blob:none`. It then runs `git fetch --no-tags --no-write-fetch-head --recurse-submodules=no --filter=blob:none src-<id>` in the user environment, outside the lock, so that a slow fetch never blocks a scan (git serialises the ref update on its own). The fetch brings every commit and tree of the ref and no blob; a server that does not support partial clone ignores the filter, which git reports as a warning, and the fetch is a full one. A pin that names no branch, tag or commit of the source is exit code 5; any other fetch failure, unreachable host, authentication, or not a repository, is exit code 3 with the first line of git's error and a hint naming the credential helper, worded for the dropped credential when the URL carried one. The ref is then read as a commit (an annotated tag is peeled), and the skills under the subpath are listed from the trees, tree objects only: every directory holding a `SKILL.md` (a regular file; a symlink does not count), the root included, skipping any directory below the subpath whose name starts with `.` or is `node_modules`, at any depth, while a skill inside another skill's directory counts. The `SKILL.md` blobs of every listed skill are fetched in one batch, by object id on the standard input of one `git fetch --filter=blob:none --stdin src-<id>`, the way git itself fills a partial clone; a server that serves the filtered fetch but refuses single objects gets one `git fetch --refetch --no-filter src-<id>` instead, which makes the fetch a full one. No blob is ever fetched one at a time: every local read runs with `GIT_NO_LAZY_FETCH=1`. The blobs are read in one `cat-file --batch`, and the skill list (subpath, name, description, tree id) is built in memory and never written to disk. Finally, under the lock, the settings entry is written: `url`, `pin` when set and `last_fetched` now; an existing entry for the URL is replaced, its `alias` kept, so adding a source again re-fetches it and changes its pin to what the new command said, a missing fragment included.
+
+**Listing.** `source skills` resolves its argument to an entry of the settings, exit code 5 when there is none, with a hint to add it; a URL argument may carry a subpath, and a fragment naming a ref other than the entry's pin is exit code 1. It reads `refs/agentx/sources/<id>` (exit code 5 when the account repo holds no ref for the source) and lists the skills as above from the account repo alone. `source list` reads the settings and one `for-each-ref` over `refs/agentx/sources/`.
+
+**Removal.** `source remove` deletes the settings entry, then the remote (`git remote remove src-<id>`) and the ref (`git update-ref -d`), all under the lock. The objects stay until maintenance reclaims them. A managed skill installed from the source keeps its coordinates. Adding the source again fetches it anew.
+
+Without `--json`: `source add` prints `✓ added <url> at <short commit>: <n> skills` (`✓ fetched ...` when the entry existed, ` pinned to <ref>` after the URL when pinned, ` under <subpath>` at the end when scoped); `source list` prints `<n> sources` and one row per source, `<url>  <pin or (unpinned)>  <short commit or not fetched>  <last_fetched>  <id>`, or `No sources. Add one with agentx source add <url>.`; `source skills` prints `<n> skills in <url>[ under <subpath>] at <short commit>` and one row per skill, `<name>  <subpath or .>  <description>`; `source remove` prints `✓ removed <url>`. A short commit is its first seven characters.
 
 ## Serve
 

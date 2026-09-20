@@ -100,3 +100,10 @@ func unquote(v string) string {
 	}
 	return v
 }
+
+// SkillFrontmatter reads the name and description of a SKILL.md. An
+// unusable frontmatter is an error and both are empty.
+func SkillFrontmatter(text string) (name, description string, err error) {
+	fm, err := parseFrontmatter(text)
+	return fm.name, fm.description, err
+}

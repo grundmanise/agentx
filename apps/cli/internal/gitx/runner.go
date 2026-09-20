@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -51,11 +52,11 @@ func (r *Runner) Version(ctx context.Context) (Version, error) {
 	if r.version != nil {
 		return *r.version, nil
 	}
-	out, err := r.run(ctx, false, "--version")
+	out, err := r.run(ctx, false, nil, "--version")
 	if err != nil {
 		return Version{}, err
 	}
-	v, err := parseVersion(out)
+	v, err := parseVersion(strings.TrimRight(out, "\n"))
 	if err != nil {
 		return Version{}, err
 	}
@@ -90,22 +91,48 @@ func parseVersion(out string) (Version, error) {
 }
 
 // Isolated runs git against gitDir in the isolated environment: no global or
-// system configuration, a fixed author and committer, and the settings agentx
-// needs. Object writes and merges use it so that ids match on every machine.
-// It returns stdout without its trailing newline.
+// system configuration, a fixed author and committer, no lazy fetch of
+// missing objects, and the settings agentx needs. Object writes and merges
+// use it so that ids match on every machine. It returns stdout without its
+// trailing newline.
 func (r *Runner) Isolated(ctx context.Context, gitDir string, args ...string) (string, error) {
-	all := append([]string{
+	out, err := r.run(ctx, true, nil, isolatedArgs(gitDir, args)...)
+	return strings.TrimRight(out, "\n"), err
+}
+
+// IsolatedInput is Isolated with stdin fed to git, for the commands that
+// read object ids from it. It returns stdout as is, since a batch of
+// objects ends how it ends.
+func (r *Runner) IsolatedInput(ctx context.Context, gitDir string, stdin io.Reader, args ...string) (string, error) {
+	return r.run(ctx, true, stdin, isolatedArgs(gitDir, args)...)
+}
+
+func isolatedArgs(gitDir string, args []string) []string {
+	return append([]string{
 		"-c", "core.autocrlf=false",
 		"-c", "commit.gpgsign=false",
 		"-c", "core.hooksPath=" + os.DevNull,
 		"--git-dir=" + gitDir,
 	}, args...)
-	return r.run(ctx, true, all...)
+}
+
+// User runs git against gitDir in the user's own environment, in which
+// credential helpers, SSH configuration and URL rewrites apply. Network
+// commands use it. It returns stdout without its trailing newline.
+func (r *Runner) User(ctx context.Context, gitDir string, args ...string) (string, error) {
+	out, err := r.run(ctx, false, nil, append([]string{"--git-dir=" + gitDir}, args...)...)
+	return strings.TrimRight(out, "\n"), err
+}
+
+// UserInput is User with stdin fed to git.
+func (r *Runner) UserInput(ctx context.Context, gitDir string, stdin io.Reader, args ...string) (string, error) {
+	return r.run(ctx, false, stdin, append([]string{"--git-dir=" + gitDir}, args...)...)
 }
 
 // run executes git with args; isolated false is the user's own environment,
 // in which credential helpers, SSH configuration and URL rewrites apply.
-func (r *Runner) run(ctx context.Context, isolated bool, args ...string) (string, error) {
+// stdout is returned as is.
+func (r *Runner) run(ctx context.Context, isolated bool, stdin io.Reader, args ...string) (string, error) {
 	git, err := r.lookPath()
 	if err != nil {
 		return "", err
@@ -113,6 +140,7 @@ func (r *Runner) run(ctx context.Context, isolated bool, args ...string) (string
 	r.logf("git %s", strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, git, args...)
 	cmd.Env = r.childEnv(isolated)
+	cmd.Stdin = stdin
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -127,7 +155,7 @@ func (r *Runner) run(ctx context.Context, isolated bool, args ...string) (string
 		}
 		return "", fmt.Errorf("git %s: %s", subcommand(args), detail)
 	}
-	return strings.TrimRight(stdout.String(), "\n"), nil
+	return stdout.String(), nil
 }
 
 // subcommand is the first argument that is not a global option, so an error
@@ -160,9 +188,11 @@ func (r *Runner) lookPath() (string, error) {
 }
 
 // childEnv builds the environment of one git process from the environment
-// map. The isolated environment drops every GIT_ variable of the user's and
-// fixes configuration, author and committer; the user environment is the map
-// as is. Under serve, both fail instead of prompting.
+// map. The isolated environment drops every GIT_ variable of the user's,
+// fixes configuration, author and committer, and forbids the lazy fetch of
+// a missing object (git 2.45 and newer honour the variable), since it never
+// touches the network; the user environment is the map as is. Under serve,
+// both fail instead of prompting.
 func (r *Runner) childEnv(isolated bool) []string {
 	env := make(map[string]string, len(r.env)+12)
 	for k, v := range r.env {
@@ -174,6 +204,7 @@ func (r *Runner) childEnv(isolated bool) []string {
 	if isolated {
 		env["GIT_CONFIG_GLOBAL"] = os.DevNull
 		env["GIT_CONFIG_NOSYSTEM"] = "1"
+		env["GIT_NO_LAZY_FETCH"] = "1"
 		for _, who := range []string{"AUTHOR", "COMMITTER"} {
 			env["GIT_"+who+"_NAME"] = "agentx"
 			env["GIT_"+who+"_EMAIL"] = "agentx@localhost"

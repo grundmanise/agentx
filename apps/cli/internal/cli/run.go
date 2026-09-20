@@ -109,6 +109,7 @@ func newRoot(inv *invocation) *cobra.Command {
 	root.AddCommand(newVersionCommand(inv))
 	root.AddCommand(newConfigCommand(inv))
 	root.AddCommand(newMachineCommand(inv))
+	root.AddCommand(newSourceCommand(inv))
 	root.AddCommand(newScanCommand(inv))
 	root.AddCommand(newDoctorCommand(inv))
 	root.AddCommand(newServeCommand(inv))
