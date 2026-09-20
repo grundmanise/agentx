@@ -131,9 +131,9 @@ func codexPlugin(name, marketplace, dir string, warn func(string)) InstalledPlug
 	if m.Version != "" {
 		p.Version = m.Version
 	}
-	p.Skills = manifestSkills(m, manifest, dir, warn)
+	p.Skills = manifestSkills(m, manifest, dir, false, warn)
 	p.Servers = MCPConfig{Format: mcp.CodexJSON}
-	p.Servers.Path, p.Servers.Data = manifestServers(m, manifest, dir, warn, ".mcp.json", "mcp.json")
+	p.Servers.Path, p.Servers.Data = manifestServers(m, manifest, dir, false, warn, ".mcp.json", "mcp.json")
 	return p
 }
 

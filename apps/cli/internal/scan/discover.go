@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -64,7 +65,8 @@ func (s *scanner) realPath(path string) string {
 
 // skillsIn lists the skills in one skills directory: every child directory,
 // or symlink to one, that holds a SKILL.md. Hidden entries and node_modules
-// are skipped; a broken symlink is a warning. A missing directory is empty.
+// are skipped; the broken symlinks are one warning naming them. A missing
+// directory is empty.
 func (s *scanner) skillsIn(dir string) []placement {
 	if found, ok := s.listings[dir]; ok {
 		return found
@@ -79,6 +81,7 @@ func (s *scanner) skillsIn(dir string) []placement {
 		return nil
 	}
 	realDir := s.realPath(dir)
+	var broken []string
 	for _, e := range entries {
 		name := e.Name()
 		if strings.HasPrefix(name, ".") || name == "node_modules" {
@@ -89,7 +92,7 @@ func (s *scanner) skillsIn(dir string) []placement {
 		resolved := filepath.Join(realDir, name)
 		if symlink {
 			if resolved = s.realPath(path); resolved == "" {
-				s.warn(path + ": broken symlink, skipped")
+				broken = append(broken, name)
 				continue
 			}
 		} else if !e.IsDir() {
@@ -103,8 +106,26 @@ func (s *scanner) skillsIn(dir string) []placement {
 		}
 		found = append(found, placement{path: path, resolved: resolved, symlink: symlink, info: s.skill(resolved)})
 	}
+	if len(broken) == 1 {
+		s.warn(filepath.Join(dir, broken[0]) + ": broken symlink, skipped")
+	} else if len(broken) > 1 {
+		s.warn(dir + ": " + strconv.Itoa(len(broken)) + " broken symlinks (" + strings.Join(broken, ", ") + "), skipped")
+	}
 	s.listings[dir] = found
 	return found
+}
+
+// pluginSkills lists the skills at a path a plugin names: the path itself
+// when it holds a SKILL.md, as a manifest may name each skill, else the
+// skills directory it is.
+func (s *scanner) pluginSkills(dir string) []placement {
+	if info, err := os.Stat(filepath.Join(dir, "SKILL.md")); err != nil || !info.Mode().IsRegular() {
+		return s.skillsIn(dir)
+	}
+	resolved := s.realPath(dir)
+	link, err := os.Lstat(dir)
+	symlink := err == nil && link.Mode()&os.ModeSymlink != 0
+	return []placement{{path: dir, resolved: resolved, symlink: symlink, info: s.skill(resolved)}}
 }
 
 // skill reads and hashes the skill at real path dir, once.
