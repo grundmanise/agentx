@@ -892,10 +892,10 @@ func TestScanPlugins(t *testing.T) {
 	out := h.run("scan")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "  plugins:\n")
-	contains(t, "stdout", out.stdout, "formatter  1.2.0")
+	contains(t, "stdout", out.stdout, "formatter  1.2.0  1 skill, 1 server\n")
 	contains(t, "stdout", out.stdout, "(plugin formatter)")
 	contains(t, "stdout", out.stdout, "notes     1.0.0\n")
-	contains(t, "stdout", out.stdout, "security  0.3.0\n")
+	contains(t, "stdout", out.stdout, "security  0.3.0  1 skill, 1 server\n")
 	noSecrets(t, h, fixtures["plugins"])
 }
 
@@ -1093,7 +1093,7 @@ func TestScanCursorPlugins(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "  plugins:\n")
 	contains(t, "stdout", h.portable(out.stdout), "~/.cursor/plugins/local/agent-std/bin/srv --root ~/.cursor/plugins/local/agent-std  (plugin agent-std)")
-	if !regexp.MustCompile(`(?m)^ +thermos +9f86d081884c7d659a2feaa0c55ad015a3bf4f1b$`).MatchString(out.stdout) {
+	if !regexp.MustCompile(`(?m)^ +thermos +9f86d081884c7d659a2feaa0c55ad015a3bf4f1b  1 skill, 1 server$`).MatchString(out.stdout) {
 		t.Errorf("stdout has no thermos plugin line with its commit as the version:\n%s", out.stdout)
 	}
 	if strings.Contains(out.stdout, "(disabled)") {

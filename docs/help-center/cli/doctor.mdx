@@ -10,25 +10,33 @@ agentx doctor
 ```
 
 ```text
-✓ git                      ok    git 2.43.0
-✓ merge_tree               ok    merge-tree --write-tree --merge-base merges two branches
-• relative_worktree_paths  info  not available: git 2.43.0 is older than 2.48
-✓ isolated_commit          ok    commit 5d75017e77f5413f4337ef776244b8d8dc77ca90
-✓ home                     ok    not created yet: /home/me/.agentx; the first scan creates it
-✓ lock                     ok    free: /home/me/.agentx/lock
-✓ mutations                ok    none unfinished: /home/me/.agentx/mutations
-✓ settings                 ok    defaults: /home/me/.agentx/settings.json is not written yet
-✓ account_repo             ok    not created yet: /home/me/.agentx/account.git
-! library                  warn  missing: /home/me/.agents/skills
-                                 hint: create it with mkdir -p /home/me/.agents/skills
-✓ client:claude-code       ok    Claude Code: /home/me/.claude
-✓ client:cursor            ok    Cursor: /home/me/.cursor
-• clients                  info  2 of 75 registered clients detected
+System
+  ✓ git                      ok    git 2.43.0
+  ✓ merge_tree               ok    merge-tree --write-tree --merge-base merges two branches
+  • relative_worktree_paths  info  not available: git 2.43.0 is older than 2.48
+  ✓ isolated_commit          ok    commit 5d75017e77f5413f4337ef776244b8d8dc77ca90
+  ✓ home                     ok    not created yet: /home/me/.agentx; the first scan creates it
 
-13 checks: 1 warning, 10 ok, 2 info
+App
+  ✓ lock                     ok    free: /home/me/.agentx/lock
+  ✓ mutations                ok    none unfinished: /home/me/.agentx/mutations
+  ✓ settings                 ok    defaults: /home/me/.agentx/settings.json is not written yet
+  ✓ account_repo             ok    not created yet: /home/me/.agentx/account.git
+  ! library                  warn  missing: /home/me/.agents/skills
+
+Clients
+  • client:claude-code       info  Claude Code: /home/me/.claude
+  • client:cursor            info  Cursor: /home/me/.cursor
+  • clients                  info  2 of 75 registered clients detected
+
+1 issue
+  ! library  missing: /home/me/.agents/skills
+             hint: create it with mkdir -p /home/me/.agents/skills
 ```
 
-In a terminal the rows are coloured by status: green for `ok`, yellow for `warn`, red for `fail`, blue for `info`. Scan the first column for anything that is not a green check mark.
+When every row is `ok` or `info`, the report ends with `✓ No issues detected` instead.
+
+The rows are grouped by what they check: `System` is git and the home directory, `App` is agentx's own state, `Clients` is every detected agent configuration and their count. In a terminal the rows are coloured by status: green for `ok`, yellow for `warn`, red for `fail`, blue for `info`. Read the last block first: it repeats every warning and failure with its fix.
 
 ## What it checks
 
@@ -47,7 +55,7 @@ In a terminal the rows are coloured by status: green for `ok`, yellow for `warn`
 | `client:<id>` | One row per detected agent configuration, naming the client and its configuration directory. |
 | `clients` | How many of the clients agentx knows are detected. A warning when none is: install an agent client, or check that `HOME` points at the right user. |
 
-Each row is `ok`, `warn`, `fail` or `info`, marked `✓`, `!`, `✗` or `•`. A row with a fix shows it as a `hint:` line under the detail. The last line counts the rows by status.
+Each row is `ok`, `warn`, `fail` or `info`, marked `✓`, `!`, `✗` or `•`. Every `warn` and `fail` row is listed again at the end under `<n> issues`, with its fix as a `hint:` line under the detail.
 
 ## Exit codes
 

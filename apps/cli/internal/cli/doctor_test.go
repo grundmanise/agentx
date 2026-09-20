@@ -178,9 +178,10 @@ func TestDoctorPassesAndChangesNothing(t *testing.T) {
 		"mutations                ok    none unfinished: " + filepath.Join(h.agentx, "mutations"),
 		"account_repo             ok    " + account + " opens",
 		"library                  ok    " + h.library,
-		"clients                  warn  0 of " + strconv.Itoa(scan.Registered()) + " registered clients detected\n",
+		"\nApp\n  ✓ lock ",
+		"\nClients\n  ! clients                  warn  0 of " + strconv.Itoa(scan.Registered()) + " registered clients detected\n",
+		"\n1 issue\n  ! clients  0 of " + strconv.Itoa(scan.Registered()) + " registered clients detected\n",
 		"hint: install an agent client or check HOME\n",
-		"\n11 checks: 1 warning, 9 ok, 1 info\n",
 	} {
 		contains(t, "stdout", out.stdout, line)
 	}
@@ -206,9 +207,9 @@ func TestDoctorReportsDetectedClients(t *testing.T) {
 	if got, want := order[len(order)-4:], []string{"library", "client:claude-code", "client:cursor", "clients"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("last checks = %v, want %v", got, want)
 	}
-	equal(t, "client:claude-code.status", rows["client:claude-code"]["status"], "ok")
+	equal(t, "client:claude-code.status", rows["client:claude-code"]["status"], "info")
 	equal(t, "client:claude-code.detail", rows["client:claude-code"]["detail"], "Claude Code: "+claude)
-	equal(t, "client:cursor.status", rows["client:cursor"]["status"], "ok")
+	equal(t, "client:cursor.status", rows["client:cursor"]["status"], "info")
 	equal(t, "client:cursor.detail", rows["client:cursor"]["detail"], "Cursor: "+cursor)
 	equal(t, "clients.status", rows["clients"]["status"], "info")
 	equal(t, "clients.detail", rows["clients"]["detail"], summary)
@@ -220,9 +221,10 @@ func TestDoctorReportsDetectedClients(t *testing.T) {
 	out = h.run("doctor")
 	equal(t, "exit", out.exit, 0)
 	for _, line := range []string{
-		"client:claude-code       ok    Claude Code: " + claude + "\n",
-		"client:cursor            ok    Cursor: " + cursor + "\n",
-		"clients                  info  " + summary + "\n",
+		"\nClients\n  • client:claude-code       info  Claude Code: " + claude + "\n",
+		"  • client:cursor            info  Cursor: " + cursor + "\n",
+		"  • clients                  info  " + summary + "\n",
+		"\n✓ No issues detected\n",
 	} {
 		contains(t, "stdout", out.stdout, line)
 	}

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"strings"
+	"slices"
 
 	"github.com/spf13/cobra"
 	"golang.org/x/sys/unix"
@@ -30,7 +30,7 @@ func newDoctorCommand(inv *invocation) *cobra.Command {
 		Short: "Check that this machine can run agentx: git, agentx home and the account repo",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			d := &doctor{inv: inv, table: &table{}}
+			d := &doctor{inv: inv}
 			err := d.run(cmd.Context())
 			d.print()
 			return err
@@ -39,26 +39,30 @@ func newDoctorCommand(inv *invocation) *cobra.Command {
 }
 
 type doctor struct {
-	inv    *invocation
-	table  *table
-	counts map[string]int // rows per status
+	inv  *invocation
+	rows []doctorRow
 }
 
-// row reports one check as a doctor event and a table line: a glyph, the
-// check, its status and the detail, with the hint on a line of its own
-// under the detail.
+// doctorRow is one reported check, kept until print groups it by section.
+type doctorRow struct {
+	check, status, detail, hint string
+}
+
+// The sections of the text report, in print order. A check belongs to the
+// first section whose prefix matches, or to the last one.
+var doctorSections = []struct {
+	title  string
+	checks []string
+}{
+	{"System", []string{"git", "merge_tree", "relative_worktree_paths", "isolated_commit", "home"}},
+	{"App", []string{"lock", "mutations", "settings", "account_repo", "library"}},
+	{"Clients", nil}, // client:<id> and clients
+}
+
+// row reports one check as a doctor event and keeps it for the text report.
 func (d *doctor) row(check, status, detail, hint string) {
 	d.inv.out.emit(doctorEvent{event: newEvent("doctor"), Check: check, Status: status, Detail: detail, Hint: hint})
-	if d.counts == nil {
-		d.counts = map[string]int{}
-	}
-	d.counts[status]++
-	glyph, st := statusStyle(status)
-	out := d.inv.out
-	d.table.add(c(out.paint(st, glyph)+" "+out.paint(heading, check), plain), c(status, st), c(detail, plain))
-	if hint != "" {
-		d.table.add(c("", plain), c("", plain), c(out.paint(warnStyle, "hint:")+" "+hint, plain))
-	}
+	d.rows = append(d.rows, doctorRow{check, status, detail, hint})
 }
 
 // statusStyle maps a doctor status to the glyph its row starts with and the
@@ -75,33 +79,72 @@ func statusStyle(status string) (string, style) {
 	return glyphInfo, infoStyle
 }
 
-// print writes the table and then one summary line counting the rows by
-// status, the failures first.
+// print writes the text report: one block per section with a glyph, the
+// check, its status and the detail on each row, then the warnings and
+// failures again under Issues with their hints, or one line saying there
+// are none.
 func (d *doctor) print() {
 	out := d.inv.out
 	if out.json {
 		return
 	}
-	out.render(d.table, "")
-	total := 0
-	for _, n := range d.counts {
-		total += n
-	}
-	var parts []string
-	for _, s := range []struct{ status, word string }{{"fail", "failed"}, {"warn", "warning"}, {"ok", "ok"}, {"info", "info"}} {
-		n := d.counts[s.status]
-		if n == 0 {
+	t := &table{}
+	for i, section := range doctorSections {
+		rows := d.section(i)
+		if len(rows) == 0 {
 			continue
 		}
-		_, st := statusStyle(s.status)
-		count := fmt.Sprintf("%d %s", n, s.word)
-		if s.status == "warn" {
-			count = plural(n, s.word)
+		if len(t.rows) > 0 {
+			t.add(c("", plain))
 		}
-		parts = append(parts, out.paint(st, count))
+		t.add(c(out.paint(heading, section.title), plain))
+		for _, r := range rows {
+			glyph, st := statusStyle(r.status)
+			t.add(c("  "+out.paint(st, glyph)+" "+r.check, plain), c(r.status, st), c(r.detail, plain))
+		}
 	}
+	out.render(t, "")
 	out.print("")
-	out.print(out.paint(heading, plural(total, "check")), ": ", strings.Join(parts, ", "))
+	var issues []doctorRow
+	for _, r := range d.rows {
+		if r.status == "warn" || r.status == "fail" {
+			issues = append(issues, r)
+		}
+	}
+	if len(issues) == 0 {
+		out.print(out.paint(okStyle, glyphOK), " No issues detected")
+		return
+	}
+	t = &table{}
+	t.add(c(out.paint(heading, plural(len(issues), "issue")), plain))
+	for _, r := range issues {
+		glyph, st := statusStyle(r.status)
+		t.add(c("  "+out.paint(st, glyph)+" "+out.paint(heading, r.check), plain), c(r.detail, plain))
+		if r.hint != "" {
+			t.add(c("", plain), c(out.paint(warnStyle, "hint:")+" "+r.hint, plain))
+		}
+	}
+	out.render(t, "")
+}
+
+// section returns the rows of section i in the order they were reported.
+func (d *doctor) section(i int) []doctorRow {
+	var rows []doctorRow
+	for _, r := range d.rows {
+		if sectionOf(r.check) == i {
+			rows = append(rows, r)
+		}
+	}
+	return rows
+}
+
+func sectionOf(check string) int {
+	for i, section := range doctorSections {
+		if slices.Contains(section.checks, check) {
+			return i
+		}
+	}
+	return len(doctorSections) - 1
 }
 
 // run performs the checks in a fixed order and changes nothing in agentx
@@ -209,7 +252,7 @@ func (d *doctor) run(ctx context.Context) error {
 
 	detected := scan.Detect(inv.dirs)
 	for _, c := range detected {
-		d.row("client:"+c.Slug(), "ok", c.Name()+": "+c.ConfigDir(inv.dirs), "")
+		d.row("client:"+c.Slug(), "info", c.Name()+": "+c.ConfigDir(inv.dirs), "")
 	}
 	summary := fmt.Sprintf("%d of %d registered clients detected", len(detected), scan.Registered())
 	if len(detected) == 0 {

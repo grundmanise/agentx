@@ -56,7 +56,7 @@ func TestColorAlwaysPaintsEveryStream(t *testing.T) {
 	contains(t, "stdout", out.stdout, "\x1b[1m"+cliVersion+"\x1b[0m")
 
 	out = h.run("--color=on", "doctor")
-	contains(t, "stdout", out.stdout, "\x1b[32m✓\x1b[0m \x1b[1mgit\x1b[0m")
+	contains(t, "stdout", out.stdout, "\x1b[1mSystem\x1b[0m\n  \x1b[32m✓\x1b[0m git")
 	contains(t, "stdout", out.stdout, "\x1b[33m!\x1b[0m \x1b[1mclients\x1b[0m")
 	contains(t, "stdout", out.stdout, "\x1b[33mhint:\x1b[0m install an agent client")
 

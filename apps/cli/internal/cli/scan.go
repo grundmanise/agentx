@@ -177,9 +177,17 @@ func (inv *invocation) detectedConfiguration(slug string) error {
 // line. Warnings go to stderr.
 func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 	out := inv.out
+	// Counts per configuration and, keyed by configuration and plugin name,
+	// per plugin: what each one carries.
+	nSkills, nServers, nPlugins := map[string]int{}, map[string]int{}, map[string]int{}
+	pluginSkills, pluginServers := map[string]int{}, map[string]int{}
 	skills := map[string]*table{} // name, kind, scope, placement
 	for _, s := range snap.Skills {
 		for _, o := range s.Occurrences {
+			nSkills[o.Configuration]++
+			if o.Plugin != "" {
+				pluginSkills[o.Configuration+"\x00"+o.Plugin]++
+			}
 			path := o.Path
 			if o.Kind == "symlink" {
 				path += out.paint(muted, " -> "+o.ResolvedPath)
@@ -193,6 +201,10 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 	servers := map[string]*table{} // name, transport, command line or URL, what a handshake found, (disabled)
 	for _, s := range snap.MCPServers {
 		for _, o := range s.Occurrences {
+			nServers[o.Configuration]++
+			if o.Plugin != "" {
+				pluginServers[o.Configuration+"\x00"+o.Plugin]++
+			}
 			what := o.URL
 			if o.Command != "" {
 				what = strings.Join(append([]string{o.Command}, o.Args...), " ")
@@ -210,9 +222,13 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 			block(servers, o.Configuration).add(cells...)
 		}
 	}
-	plugins := map[string]*table{} // name, version, (disabled)
+	plugins := map[string]*table{} // name, version, what it provides, (disabled)
 	for _, p := range snap.Plugins {
+		nPlugins[p.Configuration]++
 		cells := []cell{c(p.Name, heading), c(p.Version, plain)}
+		if provides := counts(pluginSkills[p.Configuration+"\x00"+p.Name], "skill", pluginServers[p.Configuration+"\x00"+p.Name], "server"); provides != "" {
+			cells = append(cells, c(provides, noteStyle))
+		}
 		if p.Enabled != nil && !*p.Enabled {
 			cells = append(cells, c("(disabled)", warnStyle))
 		}
@@ -231,7 +247,11 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 		if !conf.Enabled {
 			state = out.paint(warnStyle, "disabled")
 		}
-		out.print(out.paint(heading, conf.Name), " ", out.paint(muted, "("+conf.ID+")"), "  ", conf.Path, "  ", state)
+		line := []string{out.paint(heading, conf.Name), " ", out.paint(muted, "("+conf.ID+")"), "  ", conf.Path, "  ", state}
+		if has := counts(nSkills[conf.ID], "skill", nServers[conf.ID], "server", nPlugins[conf.ID], "plugin"); has != "" {
+			line = append(line, "  ", out.paint(noteStyle, has))
+		}
+		out.print(line...)
 		empty := true
 		for _, b := range []struct {
 			name string
@@ -256,6 +276,19 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 	for _, w := range snap.Warnings {
 		out.warn(w)
 	}
+}
+
+// counts joins the non-zero counts of pairs of count and noun, so that a
+// heading says what is there and nothing about what is not: "2 skills,
+// 1 server", or "" when every count is zero.
+func counts(pairs ...any) string {
+	var parts []string
+	for i := 0; i+1 < len(pairs); i += 2 {
+		if n := pairs[i].(int); n > 0 {
+			parts = append(parts, plural(n, pairs[i+1].(string)))
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 // block returns the table for configuration id in m, creating it on first use.

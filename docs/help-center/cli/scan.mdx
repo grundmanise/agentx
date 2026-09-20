@@ -12,23 +12,23 @@ agentx scan
 ```
 
 ```text
-Claude Code (claude-code)  /home/me/.claude  enabled
+Claude Code (claude-code)  /home/me/.claude  enabled  3 skills, 1 plugin
   skills:
     commit  symlink    user  /home/me/.claude/skills/commit -> /home/me/.agents/skills/commit
     format  directory  user  /home/me/.claude/plugins/cache/acme-tools/formatter/1.2.0/skills/format  (plugin formatter)
     review  directory  user  /home/me/.claude/skills/review
   plugins:
-    formatter  1.2.0
+    formatter  1.2.0  1 skill
 
-Codex (codex)  /home/me/.codex  enabled
+Codex (codex)  /home/me/.codex  enabled  2 skills, 2 plugins
   skills:
     commit  directory  user  /home/me/.agents/skills/commit
     sales   directory  user  /home/me/.codex/plugins/cache/acme-tools/sales/1.0.8/skills/sales  (plugin sales)
   plugins:
     notes  local  (disabled)
-    sales  1.0.8
+    sales  1.0.8  1 skill
 
-Cursor (cursor)  /home/me/.cursor  enabled
+Cursor (cursor)  /home/me/.cursor  enabled  2 skills, 2 servers, 1 plugin
   skills:
     commit  symlink    user  /home/me/.claude/skills/commit -> /home/me/.agents/skills/commit
     review  directory  user  /home/me/.claude/skills/review
@@ -41,9 +41,9 @@ Cursor (cursor)  /home/me/.cursor  enabled
 3 configurations, 4 skills, 2 servers, 4 plugins
 ```
 
-One section per agent configuration, headed by the client name, its id, its configuration directory and whether it is enabled. A `skills:` block lists every skill the configuration can see, one per line: the skill name, the kind of placement, the scope and the path the client reads. A skill that comes from a plugin ends with the plugin's name.
+One section per agent configuration, headed by the client name, its id, its configuration directory, whether it is enabled and how many skills, servers and plugins it has. A `skills:` block lists every skill the configuration can see, one per line: the skill name, the kind of placement, the scope and the path the client reads. A skill that comes from a plugin ends with the plugin's name.
 
-Then, when the configuration declares MCP servers, a `servers:` block with one line per server: its name, its transport (`stdio`, `sse` or `streamable-http`) and its command line or URL. Then, when the configuration has plugins, a `plugins:` block with one line per plugin: its name and version, and `(disabled)` when the client has turned it off. The last line counts the machine's configurations, skills, servers and plugins, each once however many configurations share it.
+Then, when the configuration declares MCP servers, a `servers:` block with one line per server: its name, its transport (`stdio`, `sse` or `streamable-http`) and its command line or URL. Then, when the configuration has plugins, a `plugins:` block with one line per plugin: its name, its version, how many skills and servers the plugin provides in this configuration, and `(disabled)` when the client has turned it off. The last line counts the machine's configurations, skills, servers and plugins, each once however many configurations share it.
 
 In a terminal the names are bold, the block labels cyan, the kind and scope dim, `enabled` green, `(disabled)` yellow and a plugin marker magenta, so the names and states stand out from the paths.
 
