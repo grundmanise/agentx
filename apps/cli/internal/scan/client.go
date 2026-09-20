@@ -76,3 +76,23 @@ func Detect(d home.Dirs) []Client {
 	sort.Slice(detected, func(i, j int) bool { return detected[i].Slug() < detected[j].Slug() })
 	return detected
 }
+
+// UserSkillsDirs are the user-scope skills directories the registered
+// clients read, in registry order and each once. Detection is left out on
+// purpose: these are the paths serve watches, and a client whose
+// configuration appears while serve runs must have its skills directory
+// watched from the sync that first sees it. A directory no detected client
+// reads costs a rescan that finds the inventory unchanged.
+func UserSkillsDirs(d home.Dirs) []string {
+	var dirs []string
+	seen := map[string]bool{}
+	for _, c := range registry {
+		for _, dir := range c.SkillsDirs(d) {
+			if !seen[dir] {
+				seen[dir] = true
+				dirs = append(dirs, dir)
+			}
+		}
+	}
+	return dirs
+}

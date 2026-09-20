@@ -3,7 +3,13 @@ title: "agentx serve"
 description: "Keep watching and get a new snapshot whenever something changes."
 ---
 
-`agentx serve` is what the desktop app runs in the background. It scans the machine once, then rescans whenever the library, a skill inside it or agentx itself changes, and prints the snapshot again only when the inventory changed. You rarely need to run it yourself.
+`agentx serve` is what the desktop app runs in the background. It scans the machine once, then rescans whenever anything it inventories changes, and prints the snapshot again only when the inventory changed. You rarely need to run it yourself.
+
+## What counts as a change
+
+Serve watches agentx itself, the library and every skills directory an agent client reads, including the ones clients keep under their own configuration such as `~/.claude/skills`. An edit inside a skill counts, not only a skill added or removed. Edit a skill with any editor or another tool and the next snapshot shows it.
+
+A change outside the inventory, such as a skill in a directory no installed client reads, causes a rescan that prints nothing.
 
 ## Run it
 
@@ -46,4 +52,6 @@ Only one serve runs per agentx home. Starting a second one exits with code 6 and
 
 If a directory cannot be watched, serve exits with code 6 and an error naming the directory and the cause. On Linux this usually means the inotify watch limit is reached; raise `fs.inotify.max_user_watches`. Serve never polls instead.
 
-On macOS the released binary watches through FSEvents, which handles a library of any size. A macOS binary built without cgo watches through kqueue instead, which needs one open file per watched file and reaches the default limit of 256 with a library of a few dozen skills; raise the limit with `ulimit -n`, or use the released binary.
+On macOS the released binary watches through FSEvents, which handles a library of any size. A macOS binary built without cgo watches through kqueue instead, which needs one open file per watched file and reaches the default limit of 256 with a few dozen skills; raise the limit with `ulimit -n`, or use the released binary.
+
+A skills directory that does not exist yet is not watched. Serve picks it up at the next rescan after it appears.

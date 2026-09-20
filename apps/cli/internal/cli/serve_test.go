@@ -4,10 +4,14 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 )
 
 // serveHarness is a harness with a Codex configuration, which reads the
@@ -21,9 +25,9 @@ func serveHarness(t *testing.T) *harness {
 	return h
 }
 
-// addLibrarySkill builds a skill outside the library and moves it in whole,
-// so the watcher sees one complete skill rather than a directory being filled.
-func (h *harness) addLibrarySkill(t *testing.T, name string) {
+// addSkill builds a skill outside dir and moves it in whole, so the watcher
+// sees one complete skill rather than a directory being filled.
+func (h *harness) addSkill(t *testing.T, dir, name string) {
 	t.Helper()
 	stage := filepath.Join(t.TempDir(), name)
 	if err := os.MkdirAll(stage, 0o755); err != nil {
@@ -32,22 +36,35 @@ func (h *harness) addLibrarySkill(t *testing.T, name string) {
 	if err := os.WriteFile(filepath.Join(stage, "SKILL.md"), []byte(skill(name, "A "+name+" skill")), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Rename(stage, filepath.Join(h.library, name)); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(stage, filepath.Join(dir, name)); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// editLibrarySkill replaces the SKILL.md of a library skill in one rename,
-// so the watcher sees one complete file rather than a truncation and a write.
-func (h *harness) editLibrarySkill(t *testing.T, name, description string) {
+// editSkill replaces the SKILL.md of a skill in dir in one rename, so the
+// watcher sees one complete file rather than a truncation and a write.
+func (h *harness) editSkill(t *testing.T, dir, name, description string) {
 	t.Helper()
 	stage := filepath.Join(t.TempDir(), "SKILL.md")
 	if err := os.WriteFile(stage, []byte(skill(name, description)), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Rename(stage, filepath.Join(h.library, name, "SKILL.md")); err != nil {
+	if err := os.Rename(stage, filepath.Join(dir, name, "SKILL.md")); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func (h *harness) addLibrarySkill(t *testing.T, name string) {
+	t.Helper()
+	h.addSkill(t, h.library, name)
+}
+
+func (h *harness) editLibrarySkill(t *testing.T, name, description string) {
+	t.Helper()
+	h.editSkill(t, h.library, name, description)
 }
 
 func skillDescriptions(e jsonEvent) []string {
@@ -283,6 +300,102 @@ func TestServeWatchesInsideSkillsAddedLater(t *testing.T) {
 	h.editLibrarySkill(t, "commit", "Write a commit message")
 	snap = p.next("snapshot")
 	equal(t, "scan_counter", snap["scan_counter"], float64(3))
+	equal(t, "skills", strings.Join(skillDescriptions(snap), " "), "Write a commit message")
+	equal(t, "exit", p.close(), 0)
+	equal(t, "stderr", p.stderr.String(), "")
+}
+
+// TestWatchedDirsCoverEverySkillsDirectoryOnce pins what serve asks the
+// watcher for: agentx home and the account repo flat, then every tree, each
+// real path once however many clients read it.
+func TestWatchedDirsCoverEverySkillsDirectoryOnce(t *testing.T) {
+	t.Parallel()
+	inv := &invocation{dirs: home.Dirs{
+		User:    "/u",
+		Home:    "/u/.agentx",
+		Library: "/u/.agents/skills",
+		Config:  "/u/.config",
+	}}
+	dirs, trees := inv.watchedDirs()
+	if got, want := dirs[:2], []string{"/u/.agentx", gitx.AccountRepoPath("/u/.agentx")}; !reflect.DeepEqual(got, want) {
+		t.Errorf("flat directories = %v, want %v", got, want)
+	}
+	if got, want := dirs[2:], trees; !reflect.DeepEqual(got, want) {
+		t.Errorf("dirs after the flat ones = %v, want the trees %v", got, want)
+	}
+	if got, want := trees[:3], []string{"/u/.agentx/worktrees", "/u/.agents/skills", "/u/.claude/skills"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("first trees = %v, want %v", got, want)
+	}
+	seen := map[string]bool{}
+	for _, dir := range trees {
+		if seen[dir] {
+			t.Errorf("tree %s is watched twice", dir)
+		}
+		seen[dir] = true
+	}
+	// Cursor reads the Claude Code and Codex directories, and several clients
+	// read the library: each is one tree, not one per client.
+	for _, dir := range []string{"/u/.codex/skills", "/u/.config/opencode/skills"} {
+		if !seen[dir] {
+			t.Errorf("%s is not watched", dir)
+		}
+	}
+}
+
+// TestServeWatchesAClientSkillsDirectory covers a skill an agent client
+// reads from its own directory rather than from the library: the scan reads
+// it, so an edit to it is a change signal like a library edit is.
+func TestServeWatchesAClientSkillsDirectory(t *testing.T) {
+	t.Parallel()
+	h := serveHarness(t)
+	skills := filepath.Join(h.home, ".claude", "skills")
+	h.addSkill(t, skills, "commit")
+	p := h.serve(t, "--json")
+	snap := p.next("snapshot")
+	equal(t, "skills", strings.Join(skillDescriptions(snap), " "), "A commit skill")
+	// Wait until serve is idle: its first scan created the lock file, a
+	// change in agentx home that schedules one more scan.
+	p.send(`{"type":"refresh","request_id":"idle"}`)
+	p.next("refresh_complete")
+
+	// An edit inside the skill directory is a change signal: no refresh is requested.
+	h.editSkill(t, skills, "commit", "Write a commit message")
+	snap = p.next("snapshot")
+	equal(t, "scan_counter", snap["scan_counter"], float64(2))
+	equal(t, "skills", strings.Join(skillDescriptions(snap), " "), "Write a commit message")
+
+	// So is a skill added to that directory. Skill nodes are ordered by
+	// identity, which is content, so the names are compared sorted.
+	h.addSkill(t, skills, "review")
+	snap = p.next("snapshot")
+	equal(t, "scan_counter", snap["scan_counter"], float64(3))
+	names := skillNames(snap)
+	sort.Strings(names)
+	equal(t, "skills", strings.Join(names, " "), "commit review")
+	equal(t, "exit", p.close(), 0)
+	equal(t, "stderr", p.stderr.String(), "")
+}
+
+// TestServeWatchesASkillsDirectoryAClientSharesOnce covers the directories
+// two clients read: Cursor reads the Claude Code directory, and watching it
+// twice would be watching one real path twice.
+func TestServeWatchesASkillsDirectoryAClientSharesOnce(t *testing.T) {
+	t.Parallel()
+	h := serveHarness(t)
+	if err := os.MkdirAll(filepath.Join(h.home, ".cursor"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	skills := filepath.Join(h.home, ".claude", "skills")
+	h.addSkill(t, skills, "commit")
+	p := h.serve(t, "--json")
+	snap := p.next("snapshot")
+	equal(t, "configurations", len(snap["configurations"].([]any)), 3)
+	p.send(`{"type":"refresh","request_id":"idle"}`)
+	p.next("refresh_complete")
+
+	h.editSkill(t, skills, "commit", "Write a commit message")
+	snap = p.next("snapshot")
+	equal(t, "scan_counter", snap["scan_counter"], float64(2))
 	equal(t, "skills", strings.Join(skillDescriptions(snap), " "), "Write a commit message")
 	equal(t, "exit", p.close(), 0)
 	equal(t, "stderr", p.stderr.String(), "")
