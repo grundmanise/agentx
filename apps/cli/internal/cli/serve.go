@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 
 	"github.com/spf13/cobra"
 
@@ -77,11 +78,19 @@ func newServeCommand(inv *invocation) *cobra.Command {
 
 // watchedDirs are the directories a change signal can come from, most
 // important first: agentx home holds the version file every mutation
-// rewrites; the account repo, the worktrees and the library hold content.
-// The last two are trees: an edit anywhere inside a skill is a signal too.
+// rewrites; the account repo, the worktrees, the library and every agent
+// client's user-scope skills directory hold content. Everything but agentx
+// home and the account repo is a tree: an edit anywhere inside a skill is a
+// signal too, wherever the scan reads that skill from. A skills directory a
+// client shares with another, and the library itself, are watched once.
 func (inv *invocation) watchedDirs() (dirs, trees []string) {
 	h := inv.dirs.Home
 	trees = []string{filepath.Join(h, "worktrees"), inv.dirs.Library}
+	for _, dir := range scan.UserSkillsDirs(inv.dirs) {
+		if !slices.Contains(trees, dir) {
+			trees = append(trees, dir)
+		}
+	}
 	return append([]string{h, gitx.AccountRepoPath(h)}, trees...), trees
 }
 
