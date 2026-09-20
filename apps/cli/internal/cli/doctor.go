@@ -97,11 +97,18 @@ func (d *doctor) print() {
 		if len(t.rows) > 0 {
 			t.add(c("", plain))
 		}
-		t.add(c(out.paint(heading, section.title), plain))
+		title := out.paint(heading, section.title)
+		var body [][]cell
 		for _, r := range rows {
+			if r.check == "clients" { // the count belongs in the title, not in a row
+				title += "  " + out.paint(muted, r.detail)
+				continue
+			}
 			glyph, st := statusStyle(r.status)
-			t.add(c("  "+out.paint(st, glyph)+" "+r.check, plain), c(r.status, st), c(r.detail, plain))
+			body = append(body, []cell{c("  "+out.paint(st, glyph)+" "+r.check, plain), c(r.status, st), c(r.detail, plain)})
 		}
+		t.add(c(title, plain))
+		t.rows = append(t.rows, body...)
 	}
 	out.render(t, "")
 	out.print("")
@@ -244,10 +251,20 @@ func (d *doctor) run(ctx context.Context) error {
 		d.row("account_repo", "ok", gitDir+" opens", "")
 	}
 
-	if exists(inv.dirs.Library) {
-		d.row("library", "ok", inv.dirs.Library, "")
-	} else {
-		d.row("library", "warn", "missing: "+inv.dirs.Library, "create it with mkdir -p "+inv.dirs.Library)
+	// The first install creates the library; doctor only checks that what
+	// exists is usable.
+	lib := inv.dirs.Library
+	switch info, err := os.Stat(lib); {
+	case errors.Is(err, fs.ErrNotExist):
+		d.row("library", "ok", "not created yet: "+lib+"; the first install creates it", "")
+	case err != nil:
+		d.row("library", "fail", err.Error(), "")
+	case !info.IsDir():
+		d.row("library", "fail", lib+" is not a directory", "move it aside")
+	case unix.Access(lib, unix.W_OK) != nil:
+		d.row("library", "fail", lib+" is not writable", "make "+lib+" writable")
+	default:
+		d.row("library", "ok", lib+" is writable", "")
 	}
 
 	detected := scan.Detect(inv.dirs)

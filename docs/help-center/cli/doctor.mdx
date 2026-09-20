@@ -22,21 +22,24 @@ App
   ✓ mutations                ok    none unfinished: /home/me/.agentx/mutations
   ✓ settings                 ok    defaults: /home/me/.agentx/settings.json is not written yet
   ✓ account_repo             ok    not created yet: /home/me/.agentx/account.git
-  ! library                  warn  missing: /home/me/.agents/skills
+  ✓ library                  ok    not created yet: /home/me/.agents/skills; the first install creates it
 
-Clients
+Clients  2 of 75 registered clients detected
   • client:claude-code       info  Claude Code: /home/me/.claude
   • client:cursor            info  Cursor: /home/me/.cursor
-  • clients                  info  2 of 75 registered clients detected
 
-1 issue
-  ! library  missing: /home/me/.agents/skills
-             hint: create it with mkdir -p /home/me/.agents/skills
+✓ No issues detected
 ```
 
-When every row is `ok` or `info`, the report ends with `✓ No issues detected` instead.
+When a row is `warn` or `fail`, the report ends with an issues block instead, repeating each one with its fix:
 
-The rows are grouped by what they check: `System` is git and the home directory, `App` is agentx's own state, `Clients` is every detected agent configuration and their count. In a terminal the rows are coloured by status: green for `ok`, yellow for `warn`, red for `fail`, blue for `info`. Read the last block first: it repeats every warning and failure with its fix.
+```text
+1 issue
+  ! lock  held by process 4242: /home/me/.agentx/lock
+          hint: wait for it to finish
+```
+
+The rows are grouped by what they check: `System` is git and the home directory, `App` is agentx's own state, `Clients` is every detected agent configuration, with the count in the title. In a terminal the rows are coloured by status: green for `ok`, yellow for `warn`, red for `fail`, blue for `info`. Read the last block first: it repeats every warning and failure with its fix.
 
 ## What it checks
 
@@ -51,7 +54,7 @@ The rows are grouped by what they check: `System` is git and the home directory,
 | `mutations` | No change to agentx home was cut short by a crash. When one was, the detail names its journal; run `agentx scan` to finish it. If that refuses because the file changed meanwhile, restore the file or move the journal aside. Doctor only reports. |
 | `settings` | `settings.json` parses. |
 | `account_repo` | The account repo opens, or does not exist yet. |
-| `library` | The library directory exists. A missing library is a warning, not a failure. |
+| `library` | The library is a writable directory, or does not exist yet. The first install creates it. |
 | `client:<id>` | One row per detected agent configuration, naming the client and its configuration directory. |
 | `clients` | How many of the clients agentx knows are detected. A warning when none is: install an agent client, or check that `HOME` points at the right user. |
 
@@ -73,7 +76,7 @@ agentx --json doctor
 
 ```json
 {"type":"doctor","schema_version":1,"check":"git","status":"ok","detail":"git 2.43.0"}
-{"type":"doctor","schema_version":1,"check":"library","status":"warn","detail":"missing: /home/me/.agents/skills","hint":"create it with mkdir -p /home/me/.agents/skills"}
+{"type":"doctor","schema_version":1,"check":"lock","status":"warn","detail":"held by process 4242: /home/me/.agentx/lock","hint":"wait for it to finish"}
 {"type":"result","schema_version":1,"ok":true}
 ```
 

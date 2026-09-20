@@ -129,9 +129,10 @@ type cell struct {
 func c(text string, st style) cell { return cell{text: text, style: st} }
 
 // table is aligned text: columns padded to their widest cell, two spaces
-// apart, with nothing after the last non-empty cell of a row. It replaces
-// text/tabwriter, which cannot measure painted text, and lipgloss/table,
-// which pads the last cell of a row to its column.
+// apart, with nothing after the last non-empty cell of a row. A row of one
+// cell is a line of its own, such as a title or a blank line, and sets no
+// column width. It replaces text/tabwriter, which cannot measure painted
+// text, and lipgloss/table, which pads the last cell of a row to its column.
 type table struct {
 	rows [][]cell
 }
@@ -161,6 +162,9 @@ func (t *table) sortRows() {
 func (t *table) render(out io.Writer, k ink, indent string) {
 	var widths []int
 	for _, row := range t.rows {
+		if len(row) == 1 {
+			continue
+		}
 		for i, c := range row {
 			if i >= len(widths) {
 				widths = append(widths, 0)

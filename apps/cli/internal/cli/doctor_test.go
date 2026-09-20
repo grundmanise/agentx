@@ -155,7 +155,7 @@ func TestDoctorPassesAndChangesNothing(t *testing.T) {
 	equal(t, "lock.detail", rows["lock"]["detail"], "free: "+filepath.Join(h.agentx, "lock"))
 	contains(t, "settings.detail", rows["settings"]["detail"].(string), "defaults")
 	equal(t, "account_repo.detail", rows["account_repo"]["detail"], "not created yet: "+account)
-	equal(t, "library.detail", rows["library"]["detail"], h.library)
+	equal(t, "library.detail", rows["library"]["detail"], h.library+" is writable")
 	gone(t, "agentx home", h.agentx)
 
 	// With a home and an account repo in place doctor reads both and writes nothing.
@@ -177,9 +177,9 @@ func TestDoctorPassesAndChangesNothing(t *testing.T) {
 		"lock                     ok    free: " + filepath.Join(h.agentx, "lock"),
 		"mutations                ok    none unfinished: " + filepath.Join(h.agentx, "mutations"),
 		"account_repo             ok    " + account + " opens",
-		"library                  ok    " + h.library,
+		"library                  ok    " + h.library + " is writable",
 		"\nApp\n  ✓ lock ",
-		"\nClients\n  ! clients                  warn  0 of " + strconv.Itoa(scan.Registered()) + " registered clients detected\n",
+		"\nClients  0 of " + strconv.Itoa(scan.Registered()) + " registered clients detected\n\n1 issue\n",
 		"\n1 issue\n  ! clients  0 of " + strconv.Itoa(scan.Registered()) + " registered clients detected\n",
 		"hint: install an agent client or check HOME\n",
 	} {
@@ -221,10 +221,8 @@ func TestDoctorReportsDetectedClients(t *testing.T) {
 	out = h.run("doctor")
 	equal(t, "exit", out.exit, 0)
 	for _, line := range []string{
-		"\nClients\n  • client:claude-code       info  Claude Code: " + claude + "\n",
-		"  • client:cursor            info  Cursor: " + cursor + "\n",
-		"  • clients                  info  " + summary + "\n",
-		"\n✓ No issues detected\n",
+		"\nClients  " + summary + "\n  • client:claude-code       info  Claude Code: " + claude + "\n",
+		"  • client:cursor            info  Cursor: " + cursor + "\n\n✓ No issues detected\n",
 	} {
 		contains(t, "stdout", out.stdout, line)
 	}
@@ -353,7 +351,9 @@ func TestDoctorReportsCorruptSettings(t *testing.T) {
 	equal(t, "result.ok", events[len(events)-1]["ok"], true)
 }
 
-func TestDoctorMissingLibraryIsWarning(t *testing.T) {
+// A missing library is not an issue: the first install creates it. A path
+// that exists but cannot serve as the library is.
+func TestDoctorLibraryStates(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	if err := os.Remove(h.library); err != nil {
@@ -364,13 +364,25 @@ func TestDoctorMissingLibraryIsWarning(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	events := h.events(out.stdout)
 	rows, _ := doctorRows(t, events)
-	equal(t, "library.status", rows["library"]["status"], "warn")
-	equal(t, "library.detail", rows["library"]["detail"], "missing: "+h.library)
-	contains(t, "library.hint", rows["library"]["hint"].(string), h.library)
+	equal(t, "library.status", rows["library"]["status"], "ok")
+	equal(t, "library.detail", rows["library"]["detail"], "not created yet: "+h.library+"; the first install creates it")
+	if _, ok := rows["library"]["hint"]; ok {
+		t.Errorf("library.hint = %v, want none", rows["library"]["hint"])
+	}
 	equal(t, "result.ok", events[len(events)-1]["ok"], true)
 	if _, err := os.Stat(h.library); !os.IsNotExist(err) {
 		t.Errorf("doctor created the library: %v", err)
 	}
+
+	if err := os.WriteFile(h.library, []byte("not a directory"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out = h.run("--json", "doctor")
+	equal(t, "exit", out.exit, 0)
+	rows, _ = doctorRows(t, h.events(out.stdout))
+	equal(t, "library.status", rows["library"]["status"], "fail")
+	equal(t, "library.detail", rows["library"]["detail"], h.library+" is not a directory")
+	equal(t, "library.hint", rows["library"]["hint"], "move it aside")
 }
 
 func TestDoctorUnusableAccountRepoExits8(t *testing.T) {

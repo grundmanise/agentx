@@ -397,7 +397,7 @@ In the serve child every git call additionally has `GIT_TERMINAL_PROMPT=0`, `-o 
 | `mutations` | `ok`, `warn`, `fail` | no [mutation journal](#mutation-journal) is unfinished; a warning names the count and the oldest journal, and the hint says how to recover; doctor recovers nothing itself; `fail` when the directory cannot be read |
 | `settings` | `ok`, `fail` | `settings.json` parses, or does not exist yet; the detail and hint name the path |
 | `account_repo` | `ok`, `fail` | the account repo opens, or does not exist yet |
-| `library` | `ok`, `warn` | the library directory exists; a missing library is a warning, not a failure |
+| `library` | `ok`, `fail` | the library is a writable directory, or does not exist yet; the first install creates it |
 | `client:<slug>` | `info` | one row per detected agent configuration, sorted by slug; the detail is `<name>: <configuration directory>` |
 | `clients` | `info`, `warn` | `<n> of <m> registered clients detected`, where `m` is the size of the client registry; `warn` with a hint when nothing is detected |
 
@@ -410,7 +410,7 @@ In the serve child every git call additionally has `GIT_TERMINAL_PROMPT=0`, `-o 
 | `detail` | string | what was found, naming the version, path or error involved |
 | `hint` | string | how to fix it; absent when there is nothing to suggest |
 
-Without `--json` the rows print in three titled sections, `System` (`git`, `merge_tree`, `relative_worktree_paths`, `isolated_commit`, `home`), `App` (`lock`, `mutations`, `settings`, `account_repo`, `library`) and `Clients` (every `client:<slug>` row, then `clients`), each row indented as `<glyph> <check>  <status>  <detail>`, the glyph being `✓` for `ok`, `!` for `warn`, `✗` for `fail` and `•` for `info`, with the columns aligned across sections. After the sections, a blank line and either `✓ No issues detected` or an `<n> issues` block (`1 issue`) listing every `warn` and `fail` row again as `<glyph> <check>  <detail>`, with its `hint` on the next line as `hint: <hint>` aligned under the detail. Exit code 2 when git is missing or too old; the run stops after the `git` row, since nothing else can be checked. Exit code 8 when the account repo is unusable, after every row. Otherwise 0, warnings included. The `result` event carries `ok: false` exactly when the exit code is non-zero.
+Without `--json` the rows print in three titled sections, `System` (`git`, `merge_tree`, `relative_worktree_paths`, `isolated_commit`, `home`), `App` (`lock`, `mutations`, `settings`, `account_repo`, `library`) and `Clients` (every `client:<slug>` row; the `clients` detail is shown after the section title rather than as a row), each row indented as `<glyph> <check>  <status>  <detail>`, the glyph being `✓` for `ok`, `!` for `warn`, `✗` for `fail` and `•` for `info`, with the columns aligned across sections. After the sections, a blank line and either `✓ No issues detected` or an `<n> issues` block (`1 issue`) listing every `warn` and `fail` row again as `<glyph> <check>  <detail>`, with its `hint` on the next line as `hint: <hint>` aligned under the detail. Exit code 2 when git is missing or too old; the run stops after the `git` row, since nothing else can be checked. Exit code 8 when the account repo is unusable, after every row. Otherwise 0, warnings included. The `result` event carries `ok: false` exactly when the exit code is non-zero.
 
 ## Account repo
 

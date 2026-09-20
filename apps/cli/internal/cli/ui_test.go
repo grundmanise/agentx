@@ -120,10 +120,11 @@ func TestTableAlignsPaintedCells(t *testing.T) {
 	tb.add(c("\x1b[1mab\x1b[0m", plain), c("x", plain), c("end", plain))
 	tb.add(c("abcd", plain), c("", plain), c("", plain))
 	tb.add(c("", plain), c("", plain), c("note", plain))
+	tb.add(c("a title wider than any column", plain))
 	var plainOut, painted bytes.Buffer
 	tb.render(&plainOut, ink{}, "> ")
 	tb.render(&painted, colorOn.resolve(&painted, nil), "> ")
-	equal(t, "plain", plainOut.String(), "> \x1b[1mab\x1b[0m    x  end\n> abcd\n>          note\n")
+	equal(t, "plain", plainOut.String(), "> \x1b[1mab\x1b[0m    x  end\n> abcd\n>          note\n> a title wider than any column\n")
 	equal(t, "painted equals plain: cells carry their own escapes", painted.String(), plainOut.String())
 
 	styled := &table{}
