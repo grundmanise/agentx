@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"maps"
 	"mime"
 	"net/http"
@@ -45,37 +46,133 @@ type Result struct {
 	Items     []Item
 }
 
+// The reasons a handshake fails, for the hint that goes with the warning.
+const (
+	ReasonUnauthorized = "unauthorized" // the server refused the request for want of credentials
+	ReasonUnreachable  = "unreachable"  // nothing answers at the URL
+	ReasonNotFound     = "not_found"    // the command does not exist
+	ReasonTimeout      = "timeout"      // the budget ran out
+	ReasonFailed       = "failed"       // the server started or answered, but not as MCP asks
+)
+
+// reasoned is a failure whose reason is known where it happens.
+type reasoned struct {
+	reason string
+	error
+}
+
+func (e *reasoned) Unwrap() error { return e.error }
+
+// httpError is an HTTP response outside 2xx, with the JSON-RPC error its
+// body carries, if any.
+type httpError struct {
+	code   int
+	status string
+	rpc    *rpcError
+}
+
+func (e *httpError) Error() string {
+	if e.rpc != nil {
+		return "HTTP " + e.status + ": " + e.rpc.Error()
+	}
+	return "HTTP " + e.status
+}
+
+// refused reads the error of a response outside 2xx and closes its body.
+func refused(resp *http.Response) *httpError {
+	defer resp.Body.Close()
+	e := &httpError{code: resp.StatusCode, status: resp.Status}
+	var m message
+	if b, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10)); err == nil && json.Unmarshal(b, &m) == nil {
+		e.rpc = m.Error
+	}
+	return e
+}
+
+// Reason classifies the error of a handshake as one of the reasons above.
+func Reason(err error) string {
+	var r *reasoned
+	var h *httpError
+	switch {
+	case errors.As(err, &r):
+		return r.reason
+	case errors.As(err, &h):
+		switch h.code {
+		case http.StatusUnauthorized, http.StatusForbidden:
+			return ReasonUnauthorized
+		case http.StatusNotFound, http.StatusGone:
+			if h.rpc == nil { // with one, an MCP server answered
+				return ReasonUnreachable
+			}
+		}
+		return ReasonFailed
+	case errors.Is(err, context.DeadlineExceeded):
+		return ReasonTimeout
+	case errors.Is(err, exec.ErrNotFound), errors.Is(err, fs.ErrNotExist):
+		return ReasonNotFound
+	}
+	return ReasonFailed
+}
+
+// Hint is what the user can do about a handshake of s that failed for
+// reason. It names no value from the declaration.
+func Hint(reason string, s Server) string {
+	switch reason {
+	case ReasonUnauthorized:
+		if s.bearerVar != "" {
+			return "the server refused the bearer token; set " + s.bearerVar + " in the environment agentx runs in, or renew the token it holds"
+		}
+		if len(s.HeaderKeys) > 0 {
+			return "the server refused the declared headers; renew the key or token they carry"
+		}
+		return "the server wants a sign-in; agentx sends only the headers a declaration sets and cannot use the sign-in an agent client holds, so declare a header with an API key to have the tools listed"
+	case ReasonUnreachable:
+		return "start the server or check the URL in the declaration, and the proxy settings if the server is remote"
+	case ReasonNotFound:
+		return "check the command in the declaration; a bare name is looked up on the PATH of agentx, and a relative path resolves against the declared cwd, else the directory agentx runs in"
+	case ReasonTimeout:
+		return "the server may be slow to start; raise the budget with AGENTX_HANDSHAKE_TIMEOUT, such as 30s"
+	}
+	return "run the server's command or request its URL by hand to see what it answers"
+}
+
 // Handshake starts or connects to s, lists what it exposes and returns the
-// items with their signature. A stdio server runs with env plus its declared
-// environment; a streamable-http server receives its declared headers, with
-// a Codex env_http_headers value taken from env. ctx bounds the whole
+// items with their signature. The declared values are expanded from env as
+// the client that declares them does. A stdio server runs with env plus its
+// declared environment; a remote server receives the headers of
+// requestHeaders. A
+// streamable-http server that refuses the opening POST with 400, 404 or 405
+// is tried once more on the legacy HTTP+SSE transport at the same URL, as
+// the protocol's backwards compatibility asks. ctx bounds the whole
 // exchange; a deadline that passes is ctx.Err(). An error never carries a
 // value from the declaration.
 func Handshake(ctx context.Context, s Server, env map[string]string, clientVersion string) (Result, error) {
+	s = s.expanded(env)
 	var c conn
+	var err error
 	switch s.Transport {
 	case "stdio":
-		var err error
-		if c, err = startStdio(ctx, s, env); err != nil {
-			return Result{}, err
-		}
-	case "streamable-http":
-		c = newHTTP(s, env)
+		c, err = startStdio(ctx, s, env)
+	case "sse":
+		c, err = openSSE(ctx, s.URL, requestHeaders(s, env))
 	default:
-		return Result{}, errors.New("legacy sse transport is not handshaken")
+		c = newHTTP(s.URL, requestHeaders(s, env))
 	}
-	defer c.close()
+	if err != nil {
+		return Result{}, err
+	}
+	defer func() { c.close() }()
 
-	var init struct {
-		ProtocolVersion string                     `json:"protocolVersion"`
-		Capabilities    map[string]json.RawMessage `json:"capabilities"`
+	init, err := initialize(ctx, c, clientVersion)
+	if h, ok := c.(*httpConn); ok && legacy(err) {
+		// The original error stands when the URL opens no event stream.
+		if sse, serr := openSSE(ctx, h.url, h.headers); serr == nil {
+			c.close()
+			c = sse
+			init, err = initialize(ctx, c, clientVersion)
+		}
 	}
-	params := map[string]any{
-		"protocolVersion": protocolVersion,
-		"capabilities":    map[string]any{},
-		"clientInfo":      map[string]any{"name": "agentx", "version": clientVersion},
-	}
-	if err := c.call(ctx, "initialize", params, &init); err != nil {
+	if err != nil {
 		return Result{}, err
 	}
 	c.initialized(init.ProtocolVersion)
@@ -94,6 +191,33 @@ func Handshake(ctx context.Context, s Server, env map[string]string, clientVersi
 		items = append(items, found...)
 	}
 	return signature(items), nil
+}
+
+// initializeResult is the part of the initialize result a handshake reads.
+type initializeResult struct {
+	ProtocolVersion string                     `json:"protocolVersion"`
+	Capabilities    map[string]json.RawMessage `json:"capabilities"`
+}
+
+// initialize sends the initialize request.
+func initialize(ctx context.Context, c conn, clientVersion string) (initializeResult, error) {
+	var init initializeResult
+	params := map[string]any{
+		"protocolVersion": protocolVersion,
+		"capabilities":    map[string]any{},
+		"clientInfo":      map[string]any{"name": "agentx", "version": clientVersion},
+	}
+	err := c.call(ctx, "initialize", params, &init)
+	return init, err
+}
+
+// legacy is whether err is how a server on the legacy HTTP+SSE transport
+// refuses the POST that opens a streamable HTTP session: 400, 404 or 405
+// without a JSON-RPC error, which is how a current server refuses a method.
+func legacy(err error) bool {
+	var h *httpError
+	return errors.As(err, &h) && h.rpc == nil &&
+		(h.code == http.StatusBadRequest || h.code == http.StatusNotFound || h.code == http.StatusMethodNotAllowed)
 }
 
 // signature sorts items by kind, name and serialisation and computes the
@@ -285,11 +409,13 @@ type stdioConn struct {
 	next   int64
 }
 
-// startStdio starts the server. The command is looked up on the PATH of the
+// startStdio starts the server in its declared working directory, else in
+// the one agentx runs in. A bare command is looked up on the PATH of the
 // agentx process, as any subprocess is.
 func startStdio(ctx context.Context, s Server, env map[string]string) (*stdioConn, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	cmd := exec.CommandContext(ctx, s.Command, s.Args...)
+	cmd.Dir = s.cwd // a relative command resolves against it
 	merged := maps.Clone(env)
 	maps.Copy(merged, s.env)
 	cmd.Env = []string{} // nil would inherit the process environment
@@ -402,16 +528,28 @@ type httpConn struct {
 	next    int64
 }
 
-func newHTTP(s Server, env map[string]string) *httpConn {
-	headers := maps.Clone(s.headers)
+// requestHeaders are the headers a remote server receives: the declared
+// ones, a Codex env_http_headers value from env, and, for a Codex
+// bearer_token_env_var that env sets, Authorization with that bearer token.
+func requestHeaders(s Server, env map[string]string) map[string]string {
+	headers := map[string]string{}
+	maps.Copy(headers, s.headers)
 	for name, variable := range s.envHeaders {
 		if v, ok := env[variable]; ok {
 			headers[name] = v
 		}
 	}
-	// The default transport takes its proxy from the environment of the agentx
-	// process (HTTP_PROXY, HTTPS_PROXY, NO_PROXY), as any HTTP client does.
-	return &httpConn{client: &http.Client{}, url: s.URL, headers: headers}
+	if v, ok := env[s.bearerVar]; ok && s.bearerVar != "" {
+		headers["Authorization"] = "Bearer " + v
+	}
+	return headers
+}
+
+// newHTTP is a streamable HTTP endpoint. The default transport takes its
+// proxy from the environment of the agentx process (HTTP_PROXY,
+// HTTPS_PROXY, NO_PROXY), as any HTTP client does.
+func newHTTP(url string, headers map[string]string) *httpConn {
+	return &httpConn{client: &http.Client{}, url: url, headers: headers}
 }
 
 func (c *httpConn) post(ctx context.Context, m message) (*http.Response, error) {
@@ -431,11 +569,10 @@ func (c *httpConn) post(ctx context.Context, m message) (*http.Response, error) 
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		return nil, errors.New(errText(err))
+		return nil, &reasoned{ReasonUnreachable, errors.New(errText(err))}
 	}
 	if resp.StatusCode/100 != 2 {
-		resp.Body.Close()
-		return nil, errors.New("HTTP " + resp.Status)
+		return nil, refused(resp)
 	}
 	if sid := resp.Header.Get("Mcp-Session-Id"); sid != "" {
 		c.session = sid
@@ -480,7 +617,7 @@ func (c *httpConn) call(ctx context.Context, method string, params any, out any)
 		sc := bufio.NewScanner(body)
 		sc.Buffer(make([]byte, 64<<10), maxMessage)
 		for {
-			data, ok := event(sc)
+			_, data, ok := event(sc)
 			if !ok {
 				break
 			}
@@ -519,26 +656,36 @@ func (c *httpConn) call(ctx context.Context, method string, params any, out any)
 }
 
 // event reads server-sent events up to the next one with data and returns
-// that data; false at the end of the stream. An event without data, such as
-// the one a server sends first to hand out an event id, is skipped.
-func event(sc *bufio.Scanner) ([]byte, bool) {
+// its name, "message" when it has none, and its data; false at the end of
+// the stream or past maxMessage. An event without data, such as the one a
+// server sends first to hand out an event id, is skipped.
+func event(sc *bufio.Scanner) (string, []byte, bool) {
+	var name string
 	var data []byte
 	for sc.Scan() {
 		line := sc.Bytes()
 		if len(line) == 0 {
 			if len(data) > 0 {
-				return data, true
+				break
 			}
+			name = ""
 			continue
 		}
 		if rest, ok := bytes.CutPrefix(line, []byte("data:")); ok {
 			if len(data) > 0 {
 				data = append(data, '\n')
 			}
-			data = append(data, bytes.TrimPrefix(rest, []byte(" "))...)
+			if data = append(data, bytes.TrimPrefix(rest, []byte(" "))...); len(data) > maxMessage {
+				return "", nil, false
+			}
+		} else if rest, ok := bytes.CutPrefix(line, []byte("event:")); ok {
+			name = string(bytes.TrimPrefix(rest, []byte(" ")))
 		}
 	}
-	return data, len(data) > 0
+	if name == "" {
+		name = "message"
+	}
+	return name, data, len(data) > 0
 }
 
 func (c *httpConn) notify(ctx context.Context, method string) error {

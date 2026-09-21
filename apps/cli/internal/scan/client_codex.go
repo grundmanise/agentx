@@ -133,6 +133,12 @@ func codexPlugin(name, marketplace, dir string, warn func(string)) InstalledPlug
 	}
 	p.Skills = manifestSkills(m, manifest, dir, false, warn)
 	p.Servers = MCPConfig{Format: mcp.CodexJSON}
+	if strings.HasPrefix(m.Schema, "https://agent-plugins.org/schemas/") {
+		// An Agent Plugins bundle: ${PLUGIN_ROOT} stands for dir, and a
+		// server that names no cwd runs there.
+		p.Servers.Vars = map[string]string{"PLUGIN_ROOT": dir}
+		p.Servers.RunInRoot = true
+	}
 	p.Servers.Path, p.Servers.Data = manifestServers(m, manifest, dir, false, warn, ".mcp.json", "mcp.json")
 	return p
 }

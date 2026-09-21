@@ -27,7 +27,7 @@ func (cursor) ProjectSkillsDirs() []string {
 	return []string{".cursor/skills", ".claude/skills", ".codex/skills", ".agents/skills"}
 }
 func (c cursor) MCPConfigs(d home.Dirs) []MCPConfig {
-	return []MCPConfig{{Path: filepath.Join(c.ConfigDir(d), "mcp.json"), Format: mcp.JSON}}
+	return []MCPConfig{{Path: filepath.Join(c.ConfigDir(d), "mcp.json"), Format: mcp.CursorJSON}}
 }
 
 // Plugins are the user-local plugins, one per directory under plugins/local
@@ -103,7 +103,7 @@ func cursorPlugin(name, marketplace, version, dir string, warn func(string)) Ins
 		Path:        dir,
 		Skills:      manifestSkills(m, manifest, dir, true, warn),
 		Servers: MCPConfig{
-			Format: mcp.JSON,
+			Format: mcp.CursorJSON,
 			Vars:   map[string]string{"CURSOR_PLUGIN_ROOT": dir, "CLAUDE_PLUGIN_ROOT": dir},
 		},
 	}

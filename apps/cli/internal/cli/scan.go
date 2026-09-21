@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
+	"github.com/grundmanise/agentx/apps/cli/internal/mcp"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 )
 
@@ -132,7 +134,7 @@ func (inv *invocation) scan(ctx context.Context, wait time.Duration, project str
 		}
 	}
 	if handshake {
-		sc.Handshake(ctx, scan.HandshakeOptions{Env: inv.env, Timeout: timeout, Version: cliVersion})
+		sc.Handshake(ctx, scan.HandshakeOptions{Env: inv.env, Timeout: timeout, Version: cliVersion, Debug: inv.out.debugf})
 	}
 	snap, fresh := sc.Snapshot()
 	if len(fresh) > 0 {
@@ -174,7 +176,8 @@ func (inv *invocation) detectedConfiguration(slug string) error {
 
 // printSnapshot writes the human inventory: one summary line counting the
 // machine, then one section per configuration with its skills, servers and
-// plugins as labelled blocks. Warnings go to stderr.
+// plugins as labelled blocks. Warnings go to stderr, followed by one hint per
+// kind of handshake failure.
 func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 	out := inv.out
 	// Counts per configuration and, keyed by configuration and plugin name,
@@ -198,7 +201,8 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 			block(skills, o.Configuration).add(c(s.Name, heading), c(o.Kind, muted), c(o.Scope, muted), c(path, plain))
 		}
 	}
-	servers := map[string]*table{} // name, transport, command line or URL, what a handshake found, (disabled)
+	servers := map[string]*table{} // name, transport, command line or URL, what a handshake found, why it failed, (disabled)
+	var hints []string             // one per kind of handshake failure, in the order met
 	for _, s := range snap.MCPServers {
 		for _, o := range s.Occurrences {
 			nServers[o.Configuration]++
@@ -215,6 +219,12 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 			cells := []cell{c(s.Name, heading), c(o.Transport, muted), c(what, plain)}
 			if n := len(s.Tools); n > 0 {
 				cells = append(cells, c(plural(n, "tool"), noteStyle))
+			}
+			if e := o.HandshakeErr; e != nil {
+				cells = append(cells, c(handshakeLabels[e.Reason], warnStyle))
+				if h := handshakeLabels[e.Reason] + ": " + e.Hint; !slices.Contains(hints, h) {
+					hints = append(hints, h)
+				}
 			}
 			if o.Enabled != nil && !*o.Enabled {
 				cells = append(cells, c("(disabled)", warnStyle))
@@ -273,6 +283,18 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 	for _, w := range snap.Warnings {
 		out.warn(w)
 	}
+	for _, h := range hints {
+		out.hint(h)
+	}
+}
+
+// handshakeLabels say on a server's row why its handshake failed.
+var handshakeLabels = map[string]string{
+	mcp.ReasonUnauthorized: "needs sign-in",
+	mcp.ReasonUnreachable:  "unreachable",
+	mcp.ReasonNotFound:     "command not found",
+	mcp.ReasonTimeout:      "timed out",
+	mcp.ReasonFailed:       "handshake failed",
 }
 
 // counts joins the non-zero counts of pairs of count and noun, so that a

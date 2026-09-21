@@ -793,7 +793,8 @@ func TestScanMCPServers(t *testing.T) {
 			}
 			switch node["name"] {
 			case "figma":
-				if got := occ["header_keys"]; !reflect.DeepEqual(got, []any{"X-Env", "X-Figma-Region"}) {
+				// bearer_token_env_var sets Authorization.
+				if got := occ["header_keys"]; !reflect.DeepEqual(got, []any{"Authorization", "X-Env", "X-Figma-Region"}) {
 					t.Errorf("figma header_keys = %v", got)
 				}
 			case "sentry":
@@ -876,9 +877,10 @@ func TestScanPlugins(t *testing.T) {
 	}
 
 	serverRows, nodes := servers(t, snap)
+	// ${extensionPath} stands for the extension's directory.
 	wantServers := []string{
 		"formatter-db stdio claude-code npx -y @acme/formatter-mcp",
-		"scanner stdio gemini-cli node ${extensionPath}/server.js",
+		"scanner stdio gemini-cli node " + filepath.Join(h.home, ".gemini/extensions/security/server.js"),
 	}
 	if !reflect.DeepEqual(serverRows, wantServers) {
 		t.Errorf("server occurrences = %q, want %q", serverRows, wantServers)
@@ -959,8 +961,9 @@ func TestScanCodexPlugins(t *testing.T) {
 	for _, s := range snap["mcp_servers"].([]any) {
 		node := s.(map[string]any)
 		occ := node["occurrences"].([]any)[0].(map[string]any)
-		if _, ok := occ["enabled"]; ok != (node["name"] == "alpha-web") {
-			t.Errorf("%s occurrence enabled = %v, want it only on alpha-web", node["name"], occ["enabled"])
+		// alpha-web is turned off by its overlay, agent-srv with its plugin.
+		if _, ok := occ["enabled"]; ok != (node["name"] == "alpha-web" || node["name"] == "agent-srv") {
+			t.Errorf("%s occurrence enabled = %v, want it only on alpha-web and agent-srv", node["name"], occ["enabled"])
 		}
 		switch node["name"] {
 		case "agent-srv":
@@ -1012,7 +1015,7 @@ func TestScanCodexPlugins(t *testing.T) {
 	contains(t, "beta line", beta, "(disabled)")
 	contains(t, "alpha-web line", alphaWeb, "(plugin alpha)")
 	contains(t, "alpha-web line", alphaWeb, "(disabled)")
-	equal(t, "disabled markers", strings.Count(out.stdout, "(disabled)"), 2)
+	equal(t, "disabled markers", strings.Count(out.stdout, "(disabled)"), 3)
 	equal(t, "secrets in fixture", len(secrets(f)), 3)
 	noSecrets(t, h, f)
 }

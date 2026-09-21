@@ -3,6 +3,8 @@ package scan
 import (
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/mcp"
@@ -19,7 +21,32 @@ func (c geminiCLI) SkillsDirs(d home.Dirs) []string {
 func (geminiCLI) ProjectSkillsDirs() []string { return []string{".gemini/skills", ".agents/skills"} }
 
 func (c geminiCLI) MCPConfigs(d home.Dirs) []MCPConfig {
-	return []MCPConfig{{Path: filepath.Join(c.ConfigDir(d), "settings.json"), Format: mcp.GeminiJSON}}
+	return []MCPConfig{{Path: filepath.Join(c.ConfigDir(d), "settings.json"), Format: mcp.GeminiJSON, Disabled: c.disabled(d)}}
+}
+
+// disabled names the servers Gemini CLI does not start: those settings.json
+// lists under mcp.excluded or leaves out of a non-empty mcp.allowed, and
+// those `gemini mcp disable` recorded in mcp-server-enablement.json by
+// lowercased name. A file that cannot be read turns nothing off.
+func (c geminiCLI) disabled(d home.Dirs) func(string) bool {
+	var settings struct {
+		MCP struct {
+			Allowed  []string `json:"allowed"`
+			Excluded []string `json:"excluded"`
+		} `json:"mcp"`
+	}
+	var enablement map[string]struct {
+		Enabled *bool `json:"enabled"`
+	}
+	readQuiet(filepath.Join(c.ConfigDir(d), "settings.json"), &settings)
+	readQuiet(filepath.Join(c.ConfigDir(d), "mcp-server-enablement.json"), &enablement)
+	return func(name string) bool {
+		if e, ok := enablement[strings.ToLower(name)]; ok && e.Enabled != nil && !*e.Enabled {
+			return true
+		}
+		allowed := settings.MCP.Allowed
+		return slices.Contains(settings.MCP.Excluded, name) || len(allowed) > 0 && !slices.Contains(allowed, name)
+	}
 }
 
 // Plugins are Gemini's extensions: every ~/.gemini/extensions/<dir> holding a
@@ -59,7 +86,12 @@ func (c geminiCLI) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 			Version:     ext.Version,
 			Path:        dir,
 			Skills:      []string{filepath.Join(dir, "skills")},
-			Servers:     MCPConfig{Path: manifest, Format: mcp.GeminiJSON},
+			Servers: MCPConfig{
+				Path:     manifest,
+				Format:   mcp.GeminiJSON,
+				Vars:     map[string]string{"extensionPath": dir, "/": string(filepath.Separator), "pathSeparator": string(filepath.Separator)},
+				Disabled: c.disabled(d),
+			},
 		}
 		if p.Name == "" {
 			p.Name = e.Name()

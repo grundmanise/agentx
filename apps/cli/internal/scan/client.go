@@ -42,11 +42,17 @@ type Client interface {
 // MCPConfig is one source of MCP server declarations: a file, or, with
 // Data set, content already read from Path (a manifest that declares its
 // servers inline). Vars are expanded in the declarations as `${<name>}`.
+// Root is what a relative cwd resolves against, the plugin's directory for
+// a plugin's servers; with RunInRoot, a server without cwd runs there too.
+// Disabled, when set, names the servers the client has turned off.
 type MCPConfig struct {
-	Path   string
-	Format mcp.Format
-	Data   []byte
-	Vars   map[string]string
+	Path      string
+	Format    mcp.Format
+	Data      []byte
+	Vars      map[string]string
+	Root      string
+	RunInRoot bool
+	Disabled  func(name string) bool
 }
 
 // InstalledPlugin is one plugin bundle found on disk. Its skills are the

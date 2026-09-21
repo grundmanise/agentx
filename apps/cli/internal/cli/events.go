@@ -104,6 +104,14 @@ func (w *writer) done(msg string) {
 	w.print(w.paint(okStyle, glyphOK), " ", msg)
 }
 
+// hint says on stderr what to do about the warnings above it; in JSON mode
+// the snapshot carries the hints.
+func (w *writer) hint(msg string) {
+	if !w.json {
+		fmt.Fprintf(w.stderr, "%s %s\n", w.err().paint(warnStyle, "hint:"), msg)
+	}
+}
+
 // warn logs at warn level.
 func (w *writer) warn(msg string) {
 	if w.json {

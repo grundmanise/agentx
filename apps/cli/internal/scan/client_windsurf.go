@@ -17,6 +17,6 @@ func (c windsurf) SkillsDirs(d home.Dirs) []string {
 }
 func (windsurf) ProjectSkillsDirs() []string { return []string{".windsurf/skills"} }
 func (c windsurf) MCPConfigs(d home.Dirs) []MCPConfig {
-	return []MCPConfig{{Path: filepath.Join(c.ConfigDir(d), "mcp_config.json"), Format: mcp.JSON}}
+	return []MCPConfig{{Path: filepath.Join(c.ConfigDir(d), "mcp_config.json"), Format: mcp.WindsurfJSON}}
 }
 func (windsurf) Plugins(home.Dirs, func(string)) []InstalledPlugin { return nil }

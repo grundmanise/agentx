@@ -83,18 +83,26 @@ type Server struct {
 // ServerOccurrence is one declaration of a server in one configuration file.
 // Environment and header values are never recorded, only their names.
 type ServerOccurrence struct {
-	ID            string   `json:"id"`
-	Configuration string   `json:"configuration"`
-	ConfigFile    string   `json:"config_file"`
-	Command       string   `json:"command"`
-	Args          []string `json:"args"`
-	EnvKeys       []string `json:"env_keys"`
-	URL           string   `json:"url"`
-	HeaderKeys    []string `json:"header_keys"`
-	Transport     string   `json:"transport"`
-	Handshake     bool     `json:"handshake"` // whether this scan handshook the server
-	Plugin        string   `json:"plugin,omitempty"`
-	Enabled       *bool    `json:"enabled,omitempty"` // false only when the client records the server as turned off
+	ID            string          `json:"id"`
+	Configuration string          `json:"configuration"`
+	ConfigFile    string          `json:"config_file"`
+	Command       string          `json:"command"`
+	Args          []string        `json:"args"`
+	EnvKeys       []string        `json:"env_keys"`
+	URL           string          `json:"url"`
+	HeaderKeys    []string        `json:"header_keys"`
+	Transport     string          `json:"transport"`
+	Handshake     bool            `json:"handshake"` // whether this scan handshook the server
+	HandshakeErr  *HandshakeError `json:"handshake_error,omitempty"`
+	Plugin        string          `json:"plugin,omitempty"`
+	Enabled       *bool           `json:"enabled,omitempty"` // false only when the client records the server as turned off
+}
+
+// HandshakeError is why this scan's handshake of a declaration failed.
+type HandshakeError struct {
+	Reason  string `json:"reason"` // one of the mcp reasons
+	Message string `json:"message"`
+	Hint    string `json:"hint"`
 }
 
 // Plugin is one plugin bundle installed in one configuration, in one version.
@@ -163,7 +171,7 @@ func Read(o Options) *Scan {
 			}
 		}
 		for _, cfg := range c.MCPConfigs(o.Dirs) {
-			b.addServers(conf, cfg, "", "", nil)
+			b.addServers(conf, cfg, "", "", nil, false)
 		}
 		for _, p := range c.Plugins(o.Dirs, b.warn) {
 			b.addPlugin(conf, p)

@@ -70,7 +70,11 @@ func (c claudeCode) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 				Version:     r.Version,
 				Path:        r.InstallPath,
 				Skills:      []string{filepath.Join(r.InstallPath, "skills")},
-				Servers:     MCPConfig{Path: filepath.Join(r.InstallPath, ".mcp.json"), Format: mcp.JSON},
+				Servers: MCPConfig{
+					Path:   filepath.Join(r.InstallPath, ".mcp.json"),
+					Format: mcp.JSON,
+					Vars:   map[string]string{"CLAUDE_PLUGIN_ROOT": r.InstallPath},
+				},
 			}
 			if p.Version == "" {
 				var m pluginManifest
