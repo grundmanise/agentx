@@ -149,6 +149,16 @@ var fixtures = map[string]fixture{
 			".claude/skills/nameless/SKILL.md":       "---\ndescription: No name here\n---\n",
 		},
 	},
+	// The frontmatter block is YAML: every scalar form it allows reaches the
+	// description, and a nested block contributes nothing.
+	"frontmatter-scalars": {
+		files: map[string]string{
+			".claude/skills/continued/SKILL.md": "---\nname: continued\ndescription:\n  A description continued on\n  the lines below its key\n---\n",
+			".claude/skills/folded/SKILL.md":    "---\nname: folded\ndescription: >-\n  A folded description\n  joined with spaces\n---\n",
+			".claude/skills/literal/SKILL.md":   "---\nname: literal\ndescription: |\n  first line\n  second line\n---\n",
+			".claude/skills/nested/SKILL.md":    "---\nname: nested\ndescription: A skill with a nested block\nmetadata:\n  author: someone\n  version: \"3.0.0\"\n---\n",
+		},
+	},
 	"nested-symlink": {
 		files: map[string]string{
 			".claude/skills/docs/SKILL.md":         skill("docs", "Read the docs"),
@@ -462,7 +472,7 @@ func TestScanWarnings(t *testing.T) {
 		{"broken-symlink", []string{"~/.claude/skills/gone: broken symlink, skipped"}},
 		{"broken-symlinks", []string{"~/.claude/skills: 2 broken symlinks (gone, lost), skipped"}},
 		{"unparsable-frontmatter", []string{
-			"~/.claude/skills/broken/SKILL.md: unparsable frontmatter at line 3, using the directory name",
+			"~/.claude/skills/broken/SKILL.md: unparsable frontmatter at line 3: non-map value is specified, using the directory name",
 			"~/.claude/skills/nameless/SKILL.md: frontmatter has no name, using the directory name",
 			"~/.claude/skills/no-frontmatter/SKILL.md: no frontmatter, using the directory name",
 			"~/.claude/skills/unclosed/SKILL.md: unparsable frontmatter, the --- block is not closed, using the directory name",
