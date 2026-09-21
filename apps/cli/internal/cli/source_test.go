@@ -475,7 +475,10 @@ func TestSourceListAndRemove(t *testing.T) {
 	equal(t, "1.url", events[1]["url"], a.url)
 	equal(t, "1.pin", events[1]["pin"], "v1")
 	equal(t, "1.commit", events[1]["commit"], v1)
-	fetched := events[1]["last_fetched"].(string)
+	// Each source carries its own fetch time: two adds a second apart must
+	// not be asserted against one timestamp.
+	bFetched := events[0]["last_fetched"].(string)
+	aFetched := events[1]["last_fetched"].(string)
 
 	out = h.run("source", "list")
 	equal(t, "exit", out.exit, 0)
@@ -483,10 +486,10 @@ func TestSourceListAndRemove(t *testing.T) {
 	if len(lines) != 3 || lines[0] != "2 sources" {
 		t.Fatalf("source list printed:\n%s", out.stdout)
 	}
-	if got, want := strings.Fields(lines[1]), []string{b.url, "(unpinned)", bHead[:7], fetched, bID}; !reflect.DeepEqual(got, want) {
+	if got, want := strings.Fields(lines[1]), []string{b.url, "(unpinned)", bHead[:7], bFetched, bID}; !reflect.DeepEqual(got, want) {
 		t.Errorf("row 1 = %q, want %q", got, want)
 	}
-	if got, want := strings.Fields(lines[2]), []string{a.url, "v1", v1[:7], fetched, aID}; !reflect.DeepEqual(got, want) {
+	if got, want := strings.Fields(lines[2]), []string{a.url, "v1", v1[:7], aFetched, aID}; !reflect.DeepEqual(got, want) {
 		t.Errorf("row 2 = %q, want %q", got, want)
 	}
 	contains(t, "stdout", out.stdout, "  "+b.url+"  ")
