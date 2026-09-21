@@ -27,6 +27,12 @@ func ServeLockPath(dir string) string { return filepath.Join(dir, "serve.lock") 
 // leaves the version file alone.
 func Mutate(dir string, fn func() error) error { return mutate(dir, true, fn) }
 
+// MutateQuiet is Mutate without the change signal, for a step that nothing
+// watching agentx home needs to see because the mutation that completes the
+// command follows it. It still serialises against every other mutation, so
+// two commands cannot write the same file at once.
+func MutateQuiet(dir string, fn func() error) error { return mutate(dir, false, fn) }
+
 // mutate takes the exclusive lock, recovers the unfinished journals of
 // earlier mutations, runs fn and, with bump, rewrites the version file.
 func mutate(dir string, bump bool, fn func() error) error {

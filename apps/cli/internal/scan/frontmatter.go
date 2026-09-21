@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/goccy/go-yaml"
 )
@@ -31,6 +32,9 @@ func parseFrontmatter(text string) (frontmatter, error) {
 	if err != nil {
 		return fm, err
 	}
+	if err := bounded(block); err != nil {
+		return fm, err
+	}
 	var fields map[string]any
 	if err := yaml.Unmarshal([]byte(block), &fields); err != nil {
 		return fm, unparsable(err)
@@ -53,6 +57,32 @@ func frontmatterBlock(text string) (string, error) {
 		}
 	}
 	return "", errors.New("unparsable frontmatter, the --- block is not closed")
+}
+
+// What agentx will hand to the YAML parser. A SKILL.md comes from any
+// repository a user adds, so its frontmatter is untrusted input, and the
+// parser builds its whole tree before parsing it: a block that nests far
+// enough costs memory faster than it costs bytes, and exhausting memory
+// ends the process outright rather than returning an error agentx could
+// report. These bounds are orders of magnitude above every published skill
+// measured, whose blocks run to a few hundred bytes and open at most a
+// handful of collections.
+const (
+	maxBlockBytes = 64 << 10
+	maxFlowOpens  = 256
+)
+
+// bounded refuses a block agentx will not parse, so that the reason reaches
+// the user as a warning and the skill is named after its directory, rather
+// than the parser taking the process down with it.
+func bounded(block string) error {
+	if len(block) > maxBlockBytes {
+		return fmt.Errorf("unparsable frontmatter: the --- block is %d bytes, more than the %d agentx reads", len(block), maxBlockBytes)
+	}
+	if opens := strings.Count(block, "[") + strings.Count(block, "{"); opens > maxFlowOpens {
+		return fmt.Errorf("unparsable frontmatter: the --- block opens %d lists or mappings, more than the %d agentx reads", opens, maxFlowOpens)
+	}
+	return nil
 }
 
 // scalar renders one frontmatter value. A string is taken as it is, a number
@@ -80,10 +110,28 @@ func unparsable(err error) error {
 	reason = strings.TrimSpace(reason)
 	if m := yamlPosition.FindStringSubmatch(reason); m != nil {
 		if line, convErr := strconv.Atoi(m[1]); convErr == nil {
-			return fmt.Errorf("unparsable frontmatter at line %d: %s", line+1, reason[len(m[0]):])
+			return fmt.Errorf("unparsable frontmatter at line %d: %s", line+1, clip(reason[len(m[0]):]))
 		}
 	}
-	return fmt.Errorf("unparsable frontmatter: %s", reason)
+	return fmt.Errorf("unparsable frontmatter: %s", clip(reason))
+}
+
+// clip makes a go-yaml message fit in a warning. The library quotes the
+// text it choked on, which comes from the file and so can be any length and
+// carry anything, including the control characters that drive a terminal.
+func clip(reason string) string {
+	var b strings.Builder
+	for _, r := range reason {
+		if b.Len() >= 120 {
+			b.WriteString("…")
+			break
+		}
+		if unicode.IsControl(r) {
+			r = ' '
+		}
+		b.WriteRune(r)
+	}
+	return strings.TrimSpace(b.String())
 }
 
 // SkillFrontmatter reads the name and description of a SKILL.md. An

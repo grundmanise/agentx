@@ -72,35 +72,57 @@ var githubPages = map[string]bool{
 func Parse(input string) (Source, error) {
 	var s Source
 	raw := strings.TrimSpace(input)
+	// Every message below names what was given, and what was given may carry
+	// a token, so each one names the redacted form instead.
+	safe := redact(raw)
 	if raw == "" {
 		return s, fmt.Errorf("%w: empty", ErrForm)
 	}
 	raw, fragment, hasFragment := strings.Cut(raw, "#")
 	if hasFragment {
 		if fragment == "" || !validRef(fragment) {
-			return s, fmt.Errorf("%w: %q is not a ref", ErrForm, "#"+fragment)
+			return s, fmt.Errorf("%w: %s does not end in a ref git accepts", ErrForm, safe)
 		}
 		s.Ref = fragment
 	}
 
 	switch {
 	case strings.Contains(raw, "://"):
-		if err := s.fromURL(raw); err != nil {
+		if err := s.fromURL(raw, safe); err != nil {
 			return Source{}, err
 		}
 	case scpLike.MatchString(raw):
 		m := scpLike.FindStringSubmatch(raw)
-		if err := s.fromURL("ssh://" + m[1] + "@" + m[2] + "/" + strings.TrimPrefix(m[3], "/")); err != nil {
+		if err := s.fromURL("ssh://"+m[1]+"@"+m[2]+"/"+strings.TrimPrefix(m[3], "/"), safe); err != nil {
 			return Source{}, err
 		}
 	case shorthand.MatchString(raw):
-		if err := s.fromURL("https://github.com/" + raw); err != nil {
+		if err := s.fromURL("https://github.com/"+raw, safe); err != nil {
 			return Source{}, err
 		}
 	default:
-		return s, fmt.Errorf("%w: %q", ErrForm, input)
+		return s, fmt.Errorf("%w: %s", ErrForm, safe)
 	}
 	return s, nil
+}
+
+// redact replaces the userinfo of an input with ***, so that a password or
+// token someone put in a URL never reaches an error message, a log line, an
+// event or a terminal. It is for display only; parsing reads the original.
+func redact(input string) string {
+	prefix, rest := "", input
+	if i := strings.Index(input, "://"); i >= 0 {
+		prefix, rest = input[:i+3], input[i+3:]
+	}
+	authority := rest
+	if i := strings.Index(rest, "/"); i >= 0 {
+		authority = rest[:i]
+	}
+	at := strings.LastIndex(authority, "@")
+	if at < 0 {
+		return input
+	}
+	return prefix + "***@" + rest[at+1:]
 }
 
 // validRef accepts the refs a pin can be: what git check-ref-format allows
@@ -116,10 +138,16 @@ func validRef(ref string) bool {
 
 // fromURL fills s from a URL with a scheme. The tree ref of a GitHub or
 // GitLab URL becomes the pin unless a fragment already named one.
-func (s *Source) fromURL(raw string) error {
+func (s *Source) fromURL(raw, display string) error {
 	u, err := url.Parse(raw)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrForm, err)
+		// A url.Error repeats the whole URL, credential included; its inner
+		// error is the reason alone.
+		var uerr *url.Error
+		if errors.As(err, &uerr) {
+			err = uerr.Err
+		}
+		return fmt.Errorf("%w: %v: %s", ErrForm, err, display)
 	}
 	scheme := strings.ToLower(u.Scheme)
 	switch scheme {
@@ -143,11 +171,11 @@ func (s *Source) fromURL(raw string) error {
 		host = ""
 	}
 	if scheme != "file" && host == "" {
-		return fmt.Errorf("%w: no host in %q", ErrForm, raw)
+		return fmt.Errorf("%w: no host in %s", ErrForm, display)
 	}
 	segments := splitPath(u.Path)
 	if len(segments) == 0 {
-		return fmt.Errorf("%w: no repository path in %q", ErrForm, raw)
+		return fmt.Errorf("%w: no repository path in %s", ErrForm, display)
 	}
 	for _, seg := range segments {
 		if seg == "." || seg == ".." {
@@ -196,7 +224,7 @@ func (s *Source) fromURL(raw string) error {
 			}
 		}
 		if len(repo) == 0 {
-			return fmt.Errorf("%w: no repository path in %q", ErrForm, raw)
+			return fmt.Errorf("%w: no repository path in %s", ErrForm, display)
 		}
 	}
 	s.Subpath = strings.Join(rest, "/")
@@ -207,7 +235,7 @@ func (s *Source) fromURL(raw string) error {
 	}
 	last := strings.TrimSuffix(repo[len(repo)-1], ".git")
 	if last == "" {
-		return fmt.Errorf("%w: no repository name in %q", ErrForm, raw)
+		return fmt.Errorf("%w: no repository name in %s", ErrForm, display)
 	}
 	repo[len(repo)-1] = last
 	if u.User != nil {

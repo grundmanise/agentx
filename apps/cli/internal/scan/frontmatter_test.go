@@ -1,6 +1,10 @@
 package scan
 
-import "testing"
+import (
+	"strings"
+	"testing"
+	"time"
+)
 
 func TestParseFrontmatter(t *testing.T) {
 	t.Parallel()
@@ -122,5 +126,99 @@ func TestParseFrontmatter(t *testing.T) {
 				t.Errorf("description = %q, want %q", description, tt.wantDesc)
 			}
 		})
+	}
+}
+
+// TestFrontmatterBounds pins the bounds that keep a hostile SKILL.md from
+// taking the process down. The parser builds its whole tree before it can
+// report anything, and a deeply nested block costs memory far faster than
+// it costs bytes: without the bound, the block below ended the process with
+// a runtime out-of-memory that no recover can catch.
+func TestFrontmatterBounds(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		text     string
+		wantErr  string
+		wantName string
+		wantDesc string
+	}{
+		{
+			// Small enough to pass the byte bound, deep enough that the
+			// parser would allocate for it without the second bound.
+			name:    "nested past the bound",
+			text:    "---\nname: evil\ndescription: " + strings.Repeat("[", 300) + strings.Repeat("]", 300) + "\n---\n",
+			wantErr: "unparsable frontmatter: the --- block opens",
+		},
+		{
+			name:    "longer than the bound",
+			text:    "---\nname: evil\ndescription: d\n" + strings.Repeat("k: v\n", 20_000) + "---\n",
+			wantErr: "unparsable frontmatter: the --- block is",
+		},
+		{
+			// What ended the process before the bounds existed: 200 KB of
+			// brackets, which the parser turned into gigabytes.
+			name:    "the block that ended the process",
+			text:    "---\nname: evil\ndescription: " + strings.Repeat("[", 100_000) + strings.Repeat("]", 100_000) + "\n---\n",
+			wantErr: "unparsable frontmatter: the --- block is",
+		},
+		{
+			name:     "a list at the bound still parses",
+			text:     "---\nname: fine\ndescription: d\nallowed-tools: [Read, Write, Bash]\n---\n",
+			wantName: "fine",
+			wantDesc: "d",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			done := make(chan struct{})
+			var name, description string
+			var err error
+			go func() {
+				defer close(done)
+				name, description, err = SkillFrontmatter(tt.text)
+			}()
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("parsing did not finish within 5s")
+			}
+			if tt.wantErr == "" {
+				if err != nil {
+					t.Fatalf("SkillFrontmatter = %v", err)
+				}
+				if name != tt.wantName || description != tt.wantDesc {
+					t.Errorf("= %q, %q; want %q, %q", name, description, tt.wantName, tt.wantDesc)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("SkillFrontmatter = %q, %q; want an error", name, description)
+			}
+			if got := err.Error(); !strings.HasPrefix(got, tt.wantErr) {
+				t.Errorf("error = %q, want it to start with %q", got, tt.wantErr)
+			}
+			if name != "" || description != "" {
+				t.Errorf("a refused block yielded %q, %q", name, description)
+			}
+		})
+	}
+}
+
+// TestClipBoundsTheReason keeps a go-yaml message that quotes the file from
+// reaching a warning at the file's own length, or with the control
+// characters that drive a terminal.
+func TestClipBoundsTheReason(t *testing.T) {
+	t.Parallel()
+	_, _, err := SkillFrontmatter("---\nname: a\ndescription: *" + strings.Repeat("z", 60_000) + "\n---\n")
+	if err == nil {
+		t.Fatal("an undefined alias parsed")
+	}
+	if len(err.Error()) > 200 {
+		t.Errorf("warning is %d bytes long:\n%.200s…", len(err.Error()), err)
+	}
+	if strings.ContainsAny(err.Error(), "\x1b\x00\r\n\t") {
+		t.Errorf("warning carries a control character: %q", err)
 	}
 }

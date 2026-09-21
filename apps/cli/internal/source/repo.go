@@ -26,10 +26,11 @@ func Ref(id string) string { return RefPrefix + id }
 
 // Errors a fetch or a listing can report; the CLI maps them to exit codes.
 var (
-	ErrUnreachable = errors.New("cannot fetch the source")     // network, authentication or not a repository
-	ErrRefNotFound = errors.New("ref not found in the source") // the pin names no branch, tag or commit
-	ErrNotFetched  = errors.New("source not fetched")          // the account repo holds no ref for it
-	ErrNoSubpath   = errors.New("subpath not in the source")   // the subpath is not a directory at the fetched commit
+	ErrUnreachable = errors.New("cannot fetch the source")          // network, authentication or not a repository
+	ErrRefNotFound = errors.New("ref not found in the source")      // the pin names no branch, tag or commit
+	ErrNotFetched  = errors.New("source not fetched")               // the account repo holds no ref for it
+	ErrNoSubpath   = errors.New("subpath not in the source")        // the subpath is not a directory at the fetched commit
+	ErrIncomplete  = errors.New("the fetched source is incomplete") // an object the listing needs is not in the account repo
 )
 
 // Skill is one installable skill of a source at its fetched commit.
@@ -41,9 +42,12 @@ type Skill struct {
 }
 
 // Listing is what a source holds at its fetched commit under a subpath.
+// Previous is the commit the source ref held before this fetch, empty when
+// it held none and when the listing came from List.
 type Listing struct {
-	Commit string
-	Skills []Skill // sorted by subpath
+	Commit   string
+	Previous string
+	Skills   []Skill // sorted by subpath
 }
 
 // Configure writes the source's remote into the account repo: its
@@ -79,6 +83,7 @@ func Configure(ctx context.Context, r *gitx.Runner, gitDir string, s Source) err
 func Fetch(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listing, error) {
 	id := s.ID()
 	name := RemoteName(id)
+	previous, _ := r.Isolated(ctx, gitDir, "rev-parse", "--verify", "--quiet", Ref(id)+"^{commit}")
 	fetchArgs := []string{"fetch", "--quiet", "--no-tags", "--no-write-fetch-head", "--recurse-submodules=no", "--no-show-forced-updates"}
 	if _, err := r.User(ctx, gitDir, append(fetchArgs, "--filter=blob:none", name)...); err != nil {
 		if strings.Contains(err.Error(), "couldn't find remote ref") {
@@ -87,26 +92,40 @@ func Fetch(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listin
 		return Listing{}, fmt.Errorf("%w: %v", ErrUnreachable, err)
 	}
 	commit, err := r.Isolated(ctx, gitDir, "rev-parse", "--verify", "--quiet", Ref(id)+"^{commit}")
-	if err != nil {
-		return Listing{}, fmt.Errorf("%w: %v", ErrUnreachable, err)
+	if err != nil || commit == "" {
+		// The fetch landed, so this is the ref itself: a pin that names a
+		// tag pointing at something other than a commit, never a network or
+		// credential problem.
+		return Listing{}, fmt.Errorf("%w: the fetched ref does not name a commit: %v", ErrRefNotFound, err)
 	}
-	entries, err := skillEntries(ctx, r, gitDir, commit, s.Subpath)
+	// The SKILL.md blobs of the whole repository are fetched, not only those
+	// under this command's subpath. A subpath scopes a listing and is never
+	// stored, so a later listing of another part of the source, or of the
+	// whole of it, must find every blob it needs already here: nothing after
+	// an add reads the network.
+	all, err := skillEntries(ctx, r, gitDir, commit, "", false)
 	if err != nil {
 		return Listing{}, err
 	}
-	if len(entries) > 0 {
-		if err := fetchBlobs(ctx, r, gitDir, name, entries); err != nil {
+	if len(all) > 0 {
+		if err := fetchBlobs(ctx, r, gitDir, name, all); err != nil {
 			// Filtered, but single objects are refused: take everything once.
 			if _, err := r.User(ctx, gitDir, append(fetchArgs, "--refetch", "--no-filter", name)...); err != nil {
 				return Listing{}, fmt.Errorf("%w: %v", ErrUnreachable, err)
 			}
 		}
 	}
+	var entries []skillEntry
+	if s.Subpath == "" {
+		entries = filterSkipped(all)
+	} else if entries, err = skillEntries(ctx, r, gitDir, commit, s.Subpath, true); err != nil {
+		return Listing{}, err
+	}
 	skills, err := readSkills(ctx, r, gitDir, s.URL, entries)
 	if err != nil {
 		return Listing{}, err
 	}
-	return Listing{Commit: commit, Skills: skills}, nil
+	return Listing{Commit: commit, Previous: previous, Skills: skills}, nil
 }
 
 // List builds the listing of an already fetched source from the account
@@ -116,7 +135,7 @@ func List(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listing
 	if err != nil || commit == "" {
 		return Listing{}, fmt.Errorf("%w: %s", ErrNotFetched, s.URL)
 	}
-	entries, err := skillEntries(ctx, r, gitDir, commit, s.Subpath)
+	entries, err := skillEntries(ctx, r, gitDir, commit, s.Subpath, true)
 	if err != nil {
 		return Listing{}, err
 	}
@@ -125,6 +144,17 @@ func List(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listing
 		return Listing{}, err
 	}
 	return Listing{Commit: commit, Skills: skills}, nil
+}
+
+// Present reports whether the account repo holds a remote or a ref for the
+// source with id, which it can do without a settings entry when an add was
+// cut short.
+func Present(ctx context.Context, r *gitx.Runner, gitDir, id string) bool {
+	if _, err := r.Isolated(ctx, gitDir, "config", "--get", "remote."+RemoteName(id)+".url"); err == nil {
+		return true
+	}
+	out, err := r.Isolated(ctx, gitDir, "rev-parse", "--verify", "--quiet", Ref(id))
+	return err == nil && out != ""
 }
 
 // Remove deletes the source's remote and ref from the account repo. The
@@ -167,9 +197,12 @@ type skillEntry struct {
 }
 
 // skillEntries walks the tree under subpath at commit, tree objects only,
-// and returns every directory holding a SKILL.md, skipping hidden
-// directories and node_modules below the subpath.
-func skillEntries(ctx context.Context, r *gitx.Runner, gitDir, commit, subpath string) ([]skillEntry, error) {
+// and returns every directory holding a SKILL.md. With skip, hidden
+// directories and node_modules below the subpath are left out, which is what
+// a listing shows; without it every one is returned, which is what the blob
+// fetch needs so that a later listing of a directory named outright still
+// reads from the account repo alone.
+func skillEntries(ctx context.Context, r *gitx.Runner, gitDir, commit, subpath string, skip bool) ([]skillEntry, error) {
 	treeish := commit + "^{tree}"
 	if subpath != "" {
 		treeish = commit + ":" + subpath
@@ -205,7 +238,7 @@ func skillEntries(ctx context.Context, r *gitx.Runner, gitDir, commit, subpath s
 			if dir == "." {
 				dir = ""
 			}
-			if skipped(dir) {
+			if skip && skipped(dir) {
 				continue
 			}
 			entries = append(entries, skillEntry{dir: path.Join(subpath, dir), blob: oid, tree: trees[dir]})
@@ -213,6 +246,18 @@ func skillEntries(ctx context.Context, r *gitx.Runner, gitDir, commit, subpath s
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].dir < entries[j].dir })
 	return entries, nil
+}
+
+// filterSkipped drops the entries a listing does not show, for the listing
+// of a whole source built from the entries the blob fetch collected.
+func filterSkipped(entries []skillEntry) []skillEntry {
+	kept := make([]skillEntry, 0, len(entries))
+	for _, e := range entries {
+		if !skipped(e.dir) {
+			kept = append(kept, e)
+		}
+	}
+	return kept
 }
 
 // skipped reports whether a directory below the subpath is hidden or
@@ -252,7 +297,7 @@ func readSkills(ctx context.Context, r *gitx.Runner, gitDir, canonical string, e
 	}
 	out, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(ids.String()), "cat-file", "--batch")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %v", ErrIncomplete, err)
 	}
 	blobs, err := parseBatch(out)
 	if err != nil {
@@ -261,7 +306,7 @@ func readSkills(ctx context.Context, r *gitx.Runner, gitDir, canonical string, e
 	for _, e := range entries {
 		content, ok := blobs[e.blob]
 		if !ok {
-			return nil, fmt.Errorf("git cat-file: blob %s of %s/SKILL.md is missing", e.blob, e.dir)
+			return nil, fmt.Errorf("%w: %s/SKILL.md is not in the account repo", ErrIncomplete, e.dir)
 		}
 		name, description, _ := scan.SkillFrontmatter(content) // an unusable frontmatter names the skill after its directory
 		if name == "" {

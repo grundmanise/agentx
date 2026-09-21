@@ -4,11 +4,14 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
@@ -128,7 +131,7 @@ func anyOrNil(s string) any {
 func TestSourceAddFetchesBloblessAndSkillFilesInOneBatch(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	s, _, head := h.standardSource(true)
+	s, v1, head := h.standardSource(true)
 	id := source.ID(s.url)
 
 	out := h.run("--verbose", "source", "add", s.url)
@@ -190,7 +193,7 @@ func TestSourceAddFetchesBloblessAndSkillFilesInOneBatch(t *testing.T) {
 	// Adding again re-fetches and keeps one entry; the confirmation says so.
 	out = h.run("--verbose", "source", "add", s.url+"#v1")
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "✓ fetched "+s.url+" pinned to v1 at ")
+	contains(t, "stdout", out.stdout, "✓ re-fetched "+s.url+" pinned to v1, now at "+v1[:7]+", was "+head[:7])
 	equal(t, "fetches", fetches(out.stderr), 2)
 	equal(t, "refspec", h.accountGit("config", "--get", "remote.src-"+id+".fetch"), "+v1:refs/agentx/sources/"+id)
 	file = readSettingsFile(t, h)
@@ -444,7 +447,7 @@ func TestSourceAddErrors(t *testing.T) {
 		{"missing ref", s.url + "#nope", 5, "not_found", `has no ref "nope"`, "pin a branch, tag or commit"},
 		{"missing subpath", s.url + "/nope", 5, "not_found", `subpath not in the source: "nope"`, "directory"},
 		{"bad form", "https://github.com/owner/repo/blob/main/SKILL.md", 1, "usage", "not a source URL", "owner/repo"},
-		{"empty ref", "owner/repo#", 1, "usage", "not a ref", ""},
+		{"empty ref", "owner/repo#", 1, "usage", "does not end in a ref", ""},
 		{"two refs", "https://github.com/owner/repo/tree/main/x#dev", 1, "usage", "the URL names ref", ""},
 		{"scheme", "ftp://example.com/repo", 1, "usage", "unsupported scheme", ""},
 	}
@@ -527,4 +530,201 @@ func TestSourceHelpAndUsage(t *testing.T) {
 	equal(t, "error.code", h.events(out.stdout)[0]["code"], "usage")
 	out = h.run("--json", "source", "add")
 	equal(t, "exit", out.exit, 1)
+}
+
+// TestSourceAddNeverEchoesACredential covers every refusal that names what
+// it was given: a token in the URL must not reach stdout, stderr or an
+// event, whichever way the input is wrong.
+func TestSourceAddNeverEchoesACredential(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	const secret = "ghp_S3CRETT0KEN"
+	for _, arg := range []string{
+		"https://user:" + secret + "@github.com",
+		"https://" + secret + "@github.com/owner",
+		"https://user:" + secret + "@host:notaport/owner/repo",
+		"https://user:" + secret + "@github.com/owner/repo/blob/main/SKILL.md",
+		"https://user:" + secret + "@github.com/owner/repo#",
+		"https://user:" + secret + "@github.com/owner/../repo",
+		"ftp://user:" + secret + "@example.com/repo",
+		"user:" + secret + "@example.com/owner/repo",
+		"https://u:p#" + secret + "@github.com/owner/repo",
+	} {
+		t.Run(arg, func(t *testing.T) {
+			out := h.run(append([]string{"--json", "source", "add"}, arg)...)
+			if out.exit == 0 {
+				t.Fatalf("exit 0 for %q", arg)
+			}
+			if strings.Contains(out.stdout, secret) || strings.Contains(out.stderr, secret) {
+				t.Errorf("the token reached the output:\nstdout: %s\nstderr: %s", out.stdout, out.stderr)
+			}
+			events := h.events(out.stdout)
+			if len(events) == 0 || events[0]["type"] != "error" {
+				t.Fatalf("events = %v", events)
+			}
+			// A message either leaves the input out or names it redacted;
+			// what it may never do is repeat the userinfo it was given.
+			if msg := events[0]["message"].(string); strings.Contains(msg, "@") {
+				contains(t, "error.message", msg, "***@")
+			}
+		})
+	}
+}
+
+// TestSourceSkillsReadsEveryPartOfTheSourceOffline pins what a subpath on
+// the add does not do: it scopes that listing only. Every later listing,
+// whether wider, narrower or by id, is answered from the account repo, so
+// none of them may need the network or fail.
+func TestSourceSkillsReadsEveryPartOfTheSourceOffline(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	s := h.newSourceRepo("wide", true) // a server that really filters
+	s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "n\n"})
+	s.skill("skills/beta", "beta", "The second skill", nil)
+	s.skill("tools/gamma", "gamma", "Outside skills", nil)
+	s.skill(".hidden/secret", "secret", "Named outright", nil)
+	s.commit("skills")
+	id := source.ID(s.url)
+
+	out := h.run("--verbose", "source", "add", s.url+"/skills/alpha")
+	equal(t, "exit", out.exit, 0)
+	contains(t, "stdout", out.stdout, "1 skill under skills/alpha")
+	adds := fetches(out.stderr)
+
+	// Every listing below must spawn no fetch at all: the add brought every
+	// SKILL.md of the source, not only the one under its subpath.
+	for _, tt := range []struct {
+		arg   string
+		count int
+	}{
+		{id, 3},
+		{s.url, 3},
+		{s.url + "/skills", 2},
+		{s.url + "/tools", 1},
+		{s.url + "/skills/beta", 1},
+		{s.url + "/.hidden", 1}, // skipped in a wider listing, listed when named
+	} {
+		out := h.run("--verbose", "--json", "source", "skills", tt.arg)
+		equal(t, "exit "+tt.arg, out.exit, 0)
+		_, skills := sourceEvents(t, h.events(out.stdout))
+		equal(t, "skills in "+tt.arg, len(skills), tt.count)
+		if n := fetches(out.stderr); n != 0 {
+			t.Errorf("source skills %s ran %d git fetches; it must read the account repo alone", tt.arg, n)
+		}
+	}
+	equal(t, "fetches during the add", adds, 2)
+}
+
+// TestSourceRemoveKeepsTheEntryWhenGitFails and the orphan it can clean up:
+// the settings entry is the only thing that names a source, so it may not be
+// dropped while the remote is still there.
+func TestSourceRemoveKeepsTheEntryWhenGitFails(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	s, _, _ := h.standardSource(true)
+	equal(t, "add", h.run("source", "add", s.url).exit, 0)
+	id := source.ID(s.url)
+
+	// git cannot write the account repo's config while this lock file exists.
+	lock := filepath.Join(h.agentx, "account.git", "config.lock")
+	if err := os.WriteFile(lock, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out := h.run("--json", "source", "remove", s.url)
+	if out.exit == 0 {
+		t.Fatal("remove reported success while git could not write")
+	}
+	equal(t, "error.code", h.events(out.stdout)[0]["code"], "account_repo")
+	if sources := readSettingsFile(t, h)["sources"].([]any); len(sources) != 1 {
+		t.Fatalf("the entry was dropped while the remote remained: %v", sources)
+	}
+
+	// With git writable again the same command finishes the job.
+	if err := os.Remove(lock); err != nil {
+		t.Fatal(err)
+	}
+	equal(t, "remove", h.run("source", "remove", s.url).exit, 0)
+	equal(t, "sources", len(readSettingsFile(t, h)["sources"].([]any)), 0)
+	equal(t, "refs", h.accountGit("for-each-ref", "refs/agentx/sources/"), "")
+
+	// An orphan the other way round: git state with no entry, which only
+	// remove can reach.
+	equal(t, "add", h.run("source", "add", s.url).exit, 0)
+	err := home.Mutate(h.agentx, func() error {
+		settings, err := home.LoadSettings(h.agentx)
+		if err != nil {
+			return err
+		}
+		settings.RemoveSource(s.url)
+		return home.SaveSettings(h.agentx, settings)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out = h.run("source", "remove", id)
+	equal(t, "orphan remove exit", out.exit, 0)
+	equal(t, "refs", h.accountGit("for-each-ref", "refs/agentx/sources/"), "")
+	if config := h.accountGit("config", "--list", "--local"); strings.Contains(config, "src-"+id) {
+		t.Errorf("the orphaned remote is still configured:\n%s", config)
+	}
+}
+
+// TestConcurrentSourceAdds proves two adds cannot leave a half-written
+// remote behind: git config fails rather than waiting for its own lock, so
+// the write is serialised by agentx's lock instead.
+func TestConcurrentSourceAdds(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	const n = 6
+	repos := make([]*sourceRepo, n)
+	for i := range repos {
+		repos[i] = h.newSourceRepo("p"+strconv.Itoa(i), true)
+		repos[i].skill("one", "one", "One", nil)
+		repos[i].commit("one")
+	}
+	outs := make([]outcome, n)
+	var wg sync.WaitGroup
+	for i := range repos {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			outs[i] = h.run("--json", "source", "add", repos[i].url)
+		}()
+	}
+	wg.Wait()
+
+	added := 0
+	for i, out := range outs {
+		switch out.exit {
+		case 0:
+			added++
+		case 7: // another add held the lock, which is the documented answer
+		default:
+			t.Errorf("source add %s: exit %d\n%s%s", repos[i].url, out.exit, out.stdout, out.stderr)
+		}
+	}
+	if added == 0 {
+		t.Fatal("no add succeeded")
+	}
+	// Every remote that exists is complete, and every one has its entry.
+	config := h.accountGit("config", "--list", "--local")
+	entries := map[string]bool{}
+	for _, raw := range readSettingsFile(t, h)["sources"].([]any) {
+		entries[source.ID(raw.(map[string]any)["url"].(string))] = true
+	}
+	for _, r := range repos {
+		id := source.ID(r.url)
+		if !strings.Contains(config, "remote.src-"+id+".url") {
+			continue
+		}
+		for _, key := range []string{"fetch", "tagopt", "promisor", "partialclonefilter"} {
+			if !strings.Contains(config, "remote.src-"+id+"."+key) {
+				t.Errorf("remote src-%s is missing %s:\n%s", id, key, config)
+			}
+		}
+		if !entries[id] {
+			t.Errorf("remote src-%s has no settings entry", id)
+		}
+	}
+	equal(t, "entries", len(entries), added)
 }

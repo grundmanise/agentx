@@ -24,8 +24,9 @@ type sourceEvent struct {
 	Pin         string `json:"pin,omitempty"`
 	Subpath     string `json:"subpath,omitempty"` // the scope of this listing, not stored
 	LastFetched string `json:"last_fetched,omitempty"`
-	Commit      string `json:"commit,omitempty"` // the fetched commit; absent when the account repo holds no ref
-	Skills      *int   `json:"skills,omitempty"` // how many skills the listing found; only after a listing
+	Commit      string `json:"commit,omitempty"`          // the fetched commit; absent when the account repo holds no ref
+	Previous    string `json:"previous_commit,omitempty"` // what the ref held before this fetch, when the fetch moved it
+	Skills      *int   `json:"skills,omitempty"`          // how many skills the listing found; only after a listing
 }
 
 // sourceSkillEvent is one installable skill of a source.
@@ -104,18 +105,23 @@ func (inv *invocation) sourceAdd(ctx context.Context, arg string) error {
 	if err != nil {
 		return accountRepoFailure(err)
 	}
-	// The network runs outside the lock, so that a slow fetch never blocks a
-	// scan; git serialises the ref and config writes on its own.
-	if err := source.Configure(ctx, inv.git, gitDir, src); err != nil {
-		return err
+	// The remote is written under the lock: git config does not wait for its
+	// own lock file, it fails, so two adds at once would otherwise leave a
+	// remote half written. The fetch that follows runs outside the lock, so
+	// that the network never blocks a scan.
+	if err := home.MutateQuiet(inv.dirs.Home, func() error {
+		return source.Configure(ctx, inv.git, gitDir, src)
+	}); err != nil {
+		return accountRepoFailure(err)
 	}
 	listing, err := source.Fetch(ctx, inv.git, gitDir, src)
 	if err != nil {
-		if existing < 0 { // nothing of a source that was never added is kept
-			_ = source.Remove(ctx, inv.git, gitDir, src.ID())
-		} else { // the remote follows the pin the settings still hold
-			_ = source.Configure(ctx, inv.git, gitDir, source.Source{URL: src.URL, Ref: before.Sources[existing].Pin})
-		}
+		_ = home.MutateQuiet(inv.dirs.Home, func() error {
+			if existing < 0 { // nothing of a source that was never added is kept
+				return source.Remove(ctx, inv.git, gitDir, src.ID())
+			} // else the remote goes back to the pin the settings still hold
+			return source.Configure(ctx, inv.git, gitDir, source.Source{URL: src.URL, Ref: before.Sources[existing].Pin})
+		})
 		return sourceFailure(err, src)
 	}
 	entry := home.Source{URL: src.URL, Pin: src.Ref, LastFetched: time.Now().UTC().Format(time.RFC3339)}
@@ -136,14 +142,31 @@ func (inv *invocation) sourceAdd(ctx context.Context, arg string) error {
 		return err
 	}
 	n := len(listing.Skills)
-	inv.out.emit(sourceEvent{event: newEvent("source"), ID: src.ID(), URL: src.URL, Alias: entry.Alias, Pin: src.Ref, Subpath: src.Subpath,
-		LastFetched: entry.LastFetched, Commit: listing.Commit, Skills: &n})
-	verb := "added"
-	if !added {
-		verb = "fetched"
+	moved := ""
+	if listing.Previous != "" && listing.Previous != listing.Commit {
+		moved = listing.Previous
 	}
-	inv.out.done(verb + " " + inv.out.paint(heading, src.URL) + pinned(inv.out, src.Ref) + " at " + short(listing.Commit) + ": " + inv.out.paint(noteStyle, plural(n, "skill")) + under(inv.out, src.Subpath))
+	inv.out.emit(sourceEvent{event: newEvent("source"), ID: src.ID(), URL: src.URL, Alias: entry.Alias, Pin: src.Ref, Subpath: src.Subpath,
+		LastFetched: entry.LastFetched, Commit: listing.Commit, Previous: moved, Skills: &n})
+	inv.out.done(inv.addLine(added, src, listing) + ": " + inv.out.paint(noteStyle, plural(n, "skill")) + under(inv.out, src.Subpath))
 	return nil
+}
+
+// addLine is the confirmation of source add. A first add says what was
+// added; a repeat says what moved, since that is the only thing the command
+// can tell the reader that they did not already know.
+func (inv *invocation) addLine(added bool, src source.Source, listing source.Listing) string {
+	name := inv.out.paint(heading, src.URL) + pinned(inv.out, src.Ref)
+	if added {
+		return "added " + name + " at " + short(listing.Commit)
+	}
+	if listing.Previous == listing.Commit {
+		return "re-fetched " + name + ", already at " + short(listing.Commit)
+	}
+	if listing.Previous == "" {
+		return "re-fetched " + name + ", now at " + short(listing.Commit)
+	}
+	return "re-fetched " + name + ", now at " + short(listing.Commit) + ", was " + short(listing.Previous)
 }
 
 // sourceList reports every source in the settings with its fetched commit.
@@ -224,36 +247,68 @@ func (inv *invocation) sourceSkills(ctx context.Context, arg string) error {
 	return nil
 }
 
-// sourceRemove deletes the settings entry, the remote and the ref.
+// sourceRemove deletes the remote, the ref and the settings entry. The git
+// state goes first: if it failed after the entry was gone, nothing would
+// name the source any more and its remote would be unreachable for good.
 func (inv *invocation) sourceRemove(ctx context.Context, arg string) error {
-	src, _, err := inv.findSource(arg)
+	id, url, err := inv.sourceToRemove(ctx, arg)
 	if err != nil {
 		return err
 	}
 	err = home.Mutate(inv.dirs.Home, func() error {
-		s, err := inv.loadSettings()
-		if err != nil {
-			return err
-		}
-		s.RemoveSource(src.URL)
-		if err := home.SaveSettings(inv.dirs.Home, s); err != nil {
-			return err
-		}
 		gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
 		if err != nil {
 			return accountRepoFailure(err)
 		}
-		if !exists {
-			return nil
+		if exists {
+			if err := source.Remove(ctx, inv.git, gitDir, id); err != nil {
+				return accountRepoFailure(err)
+			}
 		}
-		return source.Remove(ctx, inv.git, gitDir, src.ID())
+		s, err := inv.loadSettings()
+		if err != nil {
+			return err
+		}
+		s.RemoveSource(url)
+		return home.SaveSettings(inv.dirs.Home, s)
 	})
 	if err != nil {
 		return err
 	}
-	inv.out.emit(sourceEvent{event: newEvent("source"), ID: src.ID(), URL: src.URL})
-	inv.out.done("removed " + inv.out.paint(heading, src.URL))
+	inv.out.emit(sourceEvent{event: newEvent("source"), ID: id, URL: url})
+	what := url
+	if what == "" {
+		what = id
+	}
+	inv.out.done("removed " + inv.out.paint(heading, what))
 	return nil
+}
+
+// sourceToRemove resolves what remove was asked to delete: the settings
+// entry when there is one, else whatever the account repo still holds under
+// that id, since an add cut short before its settings write leaves a remote
+// and a ref that only remove can clean up.
+func (inv *invocation) sourceToRemove(ctx context.Context, arg string) (id, url string, err error) {
+	src, entry, findErr := inv.findSource(arg)
+	if findErr == nil {
+		return source.ID(entry.URL), entry.URL, nil
+	}
+	if !errors.Is(findErr, errNotAdded) {
+		return "", "", findErr
+	}
+	if source.IsID(arg) {
+		id = arg
+	} else {
+		id, url = src.ID(), src.URL
+	}
+	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	if err != nil {
+		return "", "", accountRepoFailure(err)
+	}
+	if exists && source.Present(ctx, inv.git, gitDir, id) {
+		return id, url, nil
+	}
+	return "", "", findErr
 }
 
 // findSource resolves a source id or URL to its settings entry. An id must
@@ -270,7 +325,7 @@ func (inv *invocation) findSource(arg string) (source.Source, home.Source, error
 				return source.Source{URL: entry.URL}, entry, nil
 			}
 		}
-		return source.Source{}, home.Source{}, fail(exitNotFound, "no source with id "+arg, "run 'agentx source list' to see the sources")
+		return source.Source{}, home.Source{}, fail(exitNotFound, "no source with id "+arg, "run 'agentx source list' to see the sources").(*failure).wrap(errNotAdded)
 	}
 	src, err := inv.parseSource(arg)
 	if err != nil {
@@ -279,15 +334,25 @@ func (inv *invocation) findSource(arg string) (source.Source, home.Source, error
 	if i := s.FindSource(src.URL); i >= 0 {
 		return src, s.Sources[i], nil
 	}
-	return src, home.Source{}, fail(exitNotFound, "no source "+src.URL, "run 'agentx source add "+src.URL+"' to add it")
+	return src, home.Source{}, fail(exitNotFound, "no source "+src.URL, "run 'agentx source add "+src.URL+"' to add it").(*failure).wrap(errNotAdded)
 }
+
+// errNotAdded marks the refusal of a source that has no settings entry, so
+// that remove can still reach what the account repo holds under its id.
+var errNotAdded = errors.New("not added")
 
 // sourceFailure maps a source package error to the exit code table.
 func sourceFailure(err error, src source.Source) error {
 	msg := err.Error()
 	switch {
 	case errors.Is(err, source.ErrRefNotFound):
-		return fail(exitNotFound, fmt.Sprintf("%s has no ref %q: %s", src.URL, src.Ref, trimGit(msg)), "pin a branch, tag or commit that exists in the source")
+		what := fmt.Sprintf("%s has no ref %q", src.URL, src.Ref)
+		if src.Ref == "" {
+			what = src.URL + " has no branch to follow"
+		}
+		return fail(exitNotFound, what+": "+trimGit(msg), "pin a branch, tag or commit that exists in the source")
+	case errors.Is(err, source.ErrIncomplete):
+		return fail(exitNotFound, fmt.Sprintf("%s: %s", src.URL, msg), "run 'agentx source add "+src.URL+"' to fetch it again")
 	case errors.Is(err, source.ErrNoSubpath):
 		return fail(exitNotFound, fmt.Sprintf("%s: %s", src.URL, msg), "name a directory of the repository")
 	case errors.Is(err, source.ErrNotFetched):
@@ -299,7 +364,8 @@ func sourceFailure(err error, src source.Source) error {
 		}
 		return fail(exitSource, fmt.Sprintf("%s: %s", src.URL, trimGit(msg)), hint)
 	}
-	return err
+	// What is left is the account repo's own git failing on a local read.
+	return accountRepoFailure(err)
 }
 
 // trimGit keeps the first line of a git error after the source package's

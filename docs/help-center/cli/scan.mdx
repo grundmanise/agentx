@@ -124,6 +124,8 @@ Names the configuration that changed. The whole machine is scanned either way, s
 
 The `---` block at the top of a `SKILL.md` is read as YAML, so `name` and `description` are picked up however they are written: on one line, quoted, as a `|` or `>-` block, or continued on the indented lines under the key. A `metadata:` block or any other nested key is ignored.
 
+A frontmatter block far larger or more deeply nested than any real skill is refused unread, so a repository cannot make a scan run out of memory.
+
 A broken symlink, a `SKILL.md` whose block is not valid YAML or a symlink that points outside its skill does not stop the scan. Each one is reported on stderr as `warning: ...` and the skill is skipped or named after its directory. Several broken symlinks in one skills directory are reported as one warning that names the directory and lists the links:
 
 ```
