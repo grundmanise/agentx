@@ -49,6 +49,14 @@ func firstFile(dir string, names ...string) string {
 // readJSON decodes path into v and reports whether it could. A missing file
 // is silently false; anything else is a warning naming the path, never the
 // content.
+// readQuiet decodes the JSON file at path into v, leaving v as it is when
+// the file is missing or cannot be read.
+func readQuiet(path string, v any) {
+	if b, err := os.ReadFile(path); err == nil {
+		_ = json.Unmarshal(b, v)
+	}
+}
+
 func readJSON(path string, v any, warn func(string)) bool {
 	b, err := os.ReadFile(path)
 	if err != nil {

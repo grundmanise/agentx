@@ -83,13 +83,39 @@ agentx scan --handshake
     stripe    streamable-http  https://mcp.stripe.com        9 tools
 ```
 
-Starts or connects to every MCP server and records the tools, prompts and resources it exposes. Each server gets ten seconds. A local server runs with the environment variables its declaration sets; a remote server receives its declared headers. Neither is ever printed.
+Starts or connects to every MCP server and records the tools, prompts and resources it exposes. Each server gets ten seconds. agentx runs each server the way the client that declares it does:
+
+- A local server starts in its declared `cwd`, with the environment variables its declaration sets. A relative `cwd` resolves against the plugin's directory for a plugin's server, else against the directory you run agentx in.
+- Placeholders such as `${API_KEY}` are filled in from your environment, in the syntax of the client that declares the server: `${VAR}` for Claude Code, `${env:VAR}` for Cursor and Windsurf, `$VAR` or `${VAR}` for Gemini CLI and Copilot CLI. The inventory shows the declaration as written. Credentials Claude Code never sends to a remote server, such as `AWS_SECRET_ACCESS_KEY`, agentx doesn't send either, nor any `ANTHROPIC_*` or `CLAUDE_*` variable. Run with `--verbose` to see which variables were withheld.
+- A remote server receives its declared headers at its declared URL. agentx never tries another URL. For Codex, `env_http_headers` and `bearer_token_env_var` are read from your environment.
+- A server on the legacy `sse` transport is handshaken over SSE. A streamable HTTP server that refuses the opening request with 400, 404 or 405, and no MCP error, is tried once more over SSE at the same URL.
+- A server you turned off in its client, shown with `(disabled)`, is never started. agentx reads this from Codex (`enabled = false`), Gemini CLI (`mcp.excluded`, `mcp.allowed` and `gemini mcp disable`) and Copilot CLI (`/mcp disable`). Claude Code, Cursor and Windsurf keep it outside the files agentx reads.
+
+No environment value or header is ever printed.
 
 What a server exposed becomes its signature. Two servers with the same command or address but different tools get different signatures, so the inventory tells them apart; the same server declared in two clients with the same tools stays one server. In JSON output the node carries the `signature`, when it was taken as `signature_at`, and the `tools` list.
 
 The signatures are kept in `handshakes.json` in agentx home. A later scan without `--handshake` shows them until the next handshake replaces them; each occurrence's `handshake` field says whether that scan handshook the server itself.
 
-A server that does not start, exits early, answers badly or does not answer within ten seconds is reported as a warning and keeps its previous signature. Servers on the legacy `sse` transport are skipped with a warning. The scan still succeeds.
+### Fix a failed handshake
+
+A server that fails its handshake shows no tool count. Its row says why, a warning names its file, and a hint says what to do. The server keeps its previous signature and the scan still succeeds.
+
+```text
+  servers:
+    notion   streamable-http  https://mcp.notion.com/mcp  needs sign-in
+    browser  streamable-http  http://127.0.0.1:9010/mcp   unreachable
+```
+
+| Row says | What to do |
+|---|---|
+| `needs sign-in` | The server answered 401 or 403. agentx sends only the headers the declaration sets. It cannot use the sign-in your agent client holds, so a server you sign in to through the browser always lands here. Declare a header with an API key to list its tools, or renew the key if one is declared. For Codex's `bearer_token_env_var`, set that variable in the shell you run agentx from. |
+| `unreachable` | Start the server, or check the URL and your proxy settings. |
+| `command not found` | Check the command in the declaration. A bare name is looked up on your `PATH`. A relative path resolves against the declared `cwd`, else against the directory you run agentx in. |
+| `timed out` | Raise the budget, for example `AGENTX_HANDSHAKE_TIMEOUT=30s agentx scan --handshake`. |
+| `handshake failed` | The server exited or answered badly. Run its command or request its URL by hand. |
+
+In JSON output the occurrence carries `handshake_error` with `reason`, `message` and `hint`.
 
 ## Read the plugins
 

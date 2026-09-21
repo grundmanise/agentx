@@ -24,14 +24,16 @@ type declaration struct {
 	owner    string // that plugin's physical id, for the provides edge
 	disabled bool   // the client records the server as turned off
 	fresh    *mcp.Result
-	at       string // when fresh was taken, RFC 3339
+	failed   *HandshakeError // why this scan's handshake failed, if it did
+	at       string          // when fresh was taken, RFC 3339
 }
 
 // addServers records every server declared in cfg inside conf, owned by
-// plugin when the source belongs to one, marking those named in disabled.
-// A missing file declares nothing; an unreadable or malformed one is a
+// plugin when the source belongs to one, marking as disabled those named in
+// disabled or by cfg, those whose declaration turns them off, and all of
+// them when off. A missing file declares nothing; an unreadable or malformed one is a
 // warning.
-func (s *Scan) addServers(conf Configuration, cfg MCPConfig, plugin, owner string, disabled []string) {
+func (s *Scan) addServers(conf Configuration, cfg MCPConfig, plugin, owner string, disabled []string, off bool) {
 	data := cfg.Data
 	if data == nil {
 		var err error
@@ -49,6 +51,7 @@ func (s *Scan) addServers(conf Configuration, cfg MCPConfig, plugin, owner strin
 	}
 	for _, server := range declared {
 		server.Expand(cfg.Vars)
+		server.SetRoot(cfg.Root, cfg.RunInRoot)
 		s.declared = append(s.declared, &declaration{
 			conf:     conf,
 			file:     cfg.Path,
@@ -56,7 +59,7 @@ func (s *Scan) addServers(conf Configuration, cfg MCPConfig, plugin, owner strin
 			logical:  s.serverLogicalID(server),
 			plugin:   plugin,
 			owner:    owner,
-			disabled: slices.Contains(disabled, server.Name),
+			disabled: off || server.Disabled || slices.Contains(disabled, server.Name) || cfg.Disabled != nil && cfg.Disabled(server.Name),
 		})
 	}
 }
@@ -110,6 +113,7 @@ func (s *Scan) composeServers() map[string]home.Handshake {
 			HeaderKeys:    d.server.HeaderKeys,
 			Transport:     d.server.Transport,
 			Handshake:     d.fresh != nil,
+			HandshakeErr:  d.failed,
 			Plugin:        d.plugin,
 		}
 		if d.disabled {
@@ -167,5 +171,8 @@ func (s *Scan) addPlugin(conf Configuration, p InstalledPlugin) {
 			s.edge(node.PhysicalID, skill.PhysicalID)
 		}
 	}
-	s.addServers(conf, p.Servers, p.Name, node.PhysicalID, p.DisabledServers)
+	if p.Servers.Root == "" {
+		p.Servers.Root = p.Path
+	}
+	s.addServers(conf, p.Servers, p.Name, node.PhysicalID, p.DisabledServers, p.Enabled != nil && !*p.Enabled)
 }

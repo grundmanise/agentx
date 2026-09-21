@@ -24,25 +24,40 @@ type Server struct {
 	URL        string
 	HeaderKeys []string // sorted header names
 	Transport  string   // stdio, sse or streamable-http
+	Disabled   bool     // the declaration turns the server off
 
 	env        map[string]string // the declared environment, for the handshake only
 	headers    map[string]string // the declared headers, for the handshake only
 	envHeaders map[string]string // header name to the environment variable holding its value (Codex env_http_headers)
+	bearerVar  string            // the variable holding a bearer token (Codex bearer_token_env_var)
+	cwd        string            // the working directory of a stdio server, as declared
+	root       string            // what a relative cwd resolves against, see SetRoot
+	inRoot     bool              // a server without cwd runs in root
+	format     Format            // whose placeholder syntax the values use, see expanded
 }
 
-// Format is the shape of a configuration file.
+// Format is the shape of a configuration file and the conventions of the
+// client that reads it.
 type Format int
 
 const (
-	// JSON is `{"mcpServers": {<name>: {...}}}`: command, args and env for a
-	// local server; url or serverUrl and headers for a remote one; type or
-	// transport "sse" marks an SSE endpoint, any other URL is streamable HTTP.
+	// JSON is `{"mcpServers": {<name>: {...}}}`: command, args, env and cwd
+	// for a local server; url or serverUrl and headers for a remote one; type
+	// or transport "sse" marks an SSE endpoint, any other URL is streamable
+	// HTTP. Values use Claude Code's placeholders.
 	JSON Format = iota
+	// CursorJSON is JSON with Cursor's placeholders.
+	CursorJSON
+	// WindsurfJSON is JSON with Windsurf's placeholders.
+	WindsurfJSON
+	// CopilotJSON is JSON with Copilot CLI's placeholders.
+	CopilotJSON
 	// GeminiJSON is JSON where url is an SSE endpoint and httpUrl a
 	// streamable HTTP one.
 	GeminiJSON
-	// CodexTOML is `[mcp_servers.<name>]` tables: command, args and env for a
-	// local server; url, http_headers and env_http_headers for a remote one.
+	// CodexTOML is `[mcp_servers.<name>]` tables: command, args, env and cwd
+	// for a local server; url, http_headers, env_http_headers and
+	// bearer_token_env_var for a remote one; enabled = false turns one off.
 	CodexTOML
 	// CodexJSON is a Codex plugin's server file: the CodexTOML fields as JSON,
 	// under `mcpServers` or as a bare map of name to declaration.
@@ -95,6 +110,7 @@ func Parse(f Format, data []byte) ([]Server, error) {
 
 func server(f Format, name string, e map[string]any) Server {
 	s := Server{
+		format:  f,
 		Name:    name,
 		Command: str(e["command"]),
 		Args:    strs(e["args"]),
@@ -106,12 +122,18 @@ func server(f Format, name string, e map[string]any) Server {
 		kind = str(e["transport"])
 	}
 	sse := strings.EqualFold(kind, "sse")
+	s.cwd = str(e["cwd"])
 	if f == CodexTOML || f == CodexJSON {
 		s.URL = str(e["url"])
 		s.HeaderKeys = append(keys(e["http_headers"]), keys(e["env_http_headers"])...)
-		sort.Strings(s.HeaderKeys)
 		s.headers = values(e["http_headers"])
 		s.envHeaders = values(e["env_http_headers"])
+		if s.bearerVar = str(e["bearer_token_env_var"]); s.bearerVar != "" && !slices.Contains(s.HeaderKeys, "Authorization") {
+			s.HeaderKeys = append(s.HeaderKeys, "Authorization")
+		}
+		sort.Strings(s.HeaderKeys)
+		enabled, set := e["enabled"].(bool)
+		s.Disabled = set && !enabled
 	} else {
 		s.URL = str(e["httpUrl"])
 		if s.URL == "" {
@@ -135,9 +157,18 @@ func server(f Format, name string, e map[string]any) Server {
 	return s
 }
 
+// SetRoot sets what a relative working directory resolves against once its
+// placeholders are expanded, the plugin's directory for a plugin's server;
+// without a root it resolves against the directory agentx runs in, as a
+// client resolves it against its own. With inRoot, a server that declares
+// no working directory runs in root.
+func (s *Server) SetRoot(root string, inRoot bool) {
+	s.root, s.inRoot = root, inRoot && root != ""
+}
+
 // Expand replaces `${<name>}` for every name in vars in the command, the
-// arguments and the environment values, for a declaration that refers to
-// where its plugin lives.
+// arguments, the environment values and the working directory, for a
+// declaration that refers to where its plugin lives.
 func (s *Server) Expand(vars map[string]string) {
 	var pairs []string
 	for k, v := range vars {
@@ -151,6 +182,7 @@ func (s *Server) Expand(vars map[string]string) {
 	for k, v := range s.env {
 		s.env[k] = r.Replace(v)
 	}
+	s.cwd = r.Replace(s.cwd)
 }
 
 func str(v any) string {
