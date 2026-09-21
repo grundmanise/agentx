@@ -110,7 +110,7 @@ Every run emits exactly one `result` as its last stdout event, after any `error`
 
 `snapshot`, emitted by `agentx scan`, is described under [Snapshot](#snapshot).
 
-`configuration`, `skill`, `mcp_server` and `plugin` are node types carried inside `snapshot`; no command emits them as events of their own (`source_skill` is not the `skill` node). `doctor` is described under [Doctor](#doctor) and `refresh_complete` under [Serve](#serve). The types `progress`, `reconcile`, `search`, `drift`, `update_available` and `conflict` are named for later commands and not emitted yet; `operation` and `fleet` are reserved and never emitted.
+`configuration`, `skill`, `mcp_server` and `plugin` are node types carried inside `snapshot`; no command emits them as events of their own (`source_skill` is not the `skill` node). `doctor` is described under [Doctor](#doctor), and `refresh_complete` and `search` under [Serve](#serve). The types `progress`, `reconcile`, `drift`, `update_available` and `conflict` are named for later commands and not emitted yet; `operation` and `fleet` are reserved and never emitted.
 
 ## Exit codes
 
@@ -485,7 +485,7 @@ Without `--json`: `source add` prints `✓ added <url> at <short commit>: <n> sk
 
 ## Serve
 
-`agentx serve --json` is the long-running child the desktop app holds open. It scans once on start, emits that snapshot, then rescans when the machine changes and emits the snapshot again only when the inventory changed. It runs until its stdin closes or its context is cancelled, then emits `result` and exits 0. Without `--json` it prints one line per event: `snapshot <counter>: <n> configurations, <n> skills`, `refresh <request_id>: ok, snapshot <counter>` or `refresh <request_id>: failed: <error>`.
+`agentx serve --json` is the long-running child the desktop app holds open. It scans once on start, emits that snapshot, then rescans when the machine changes and emits the snapshot again only when the inventory changed. It runs until its stdin closes or its context is cancelled, then emits `result` and exits 0. Without `--json` it prints one line per event: `snapshot <counter>: <n> configurations, <n> skills`, `refresh <request_id>: ok, snapshot <counter>`, `refresh <request_id>: failed: <error>` or `search <request_id>: <n> results` (`1 result`).
 
 One serve child per agentx home: on start it takes an exclusive advisory `flock` on `serve.lock` in agentx home and holds it until it exits. A second `agentx serve` for the same home, `--once` included, exits at once with code 6 and a hint naming `serve.lock`. This lock is distinct from `lock`: serve never blocks a mutating command.
 
@@ -495,7 +495,9 @@ Scans: every scan holds the shared `flock` on `lock` over its local reads, like 
 
 Change signals: serve watches, in this order, agentx home (where every mutating command rewrites `version` last), `account.git`, `worktrees`, the library and every user-scope skills directory a registered client reads, and then every directory below each of those trees, so an edit inside a skill is a signal too, wherever the scan reads that skill from. The skills directories come from the whole registry, not from the detected clients alone, so a client whose configuration appears while serve runs is covered by the sync that first sees its directory; a directory no detected client reads costs a rescan that finds the inventory unchanged and emits nothing. Directories are watched on their real paths after resolving symlinks, and a real path reached twice, as a library symlink to a fork worktree is, as the library itself is for every client that reads it directly, and as the Claude Code directory is for Cursor, is watched once. Hidden directories and `node_modules` are skipped, as in discovery. Before every rescan the watches are brought in line with the directories that exist then: one that appeared, or did not exist at start, is watched from then on and one that disappeared is not. How the watching is done depends on the platform. On macOS, built with cgo as the release binary is, one FSEvents stream covers every watched directory and everything below the trees, at no cost per file, plus every directory a symlink below a tree leads out of it, since FSEvents does not follow symlinks; a change is a signal when it happens in a directory the rules above cover. Everywhere else, and on macOS built without cgo, each directory gets its own non-recursive watch: one inotify watch on Linux, where a library of a few hundred skills and the client directories beside it stay within the default limit, and on macOS without cgo one kqueue descriptor per directory and per file in it, which meets the default limit of 256 open files early. A placement that is a symlink into the library resolves to a path already watched and costs nothing; a placement that is a copy is watched on its own. Events are debounced: a rescan runs 100 ms after the last event, or 500 ms after the first event of a burst, whichever comes first. Watching is a precondition of serve: when the watcher cannot be created, or a directory cannot be watched at start or later, serve ends with exit code 6 and an `error` event whose message names the directory and the cause, after any snapshot already emitted; the hint names the limit to raise. Serve never rescans on a timer.
 
-Stdin carries requests, one JSON object per line. The one request is `{"type": "refresh", "request_id": "<unique id>"}`. A refresh is satisfied only by a scan that begins after the request was received; a scan already in progress cannot satisfy it, and every request received before the next scan begins shares that scan. After the scan, a changed snapshot is emitted first, then one `refresh_complete` per request. A line that is not a JSON object, a request without a known `type`, or a refresh without a `request_id` is answered with an `error` event with code `usage` on stdout, and serve keeps running; under serve an `error` event therefore does not announce the end of the run. Blank lines are ignored.
+Stdin carries requests, one JSON object per line: `refresh` and `search`. A line that is not a JSON object, a request without a known `type`, a refresh without a `request_id`, or a search without a `request_id` or without a `query` is answered with an `error` event with code `usage` on stdout, and serve keeps running; under serve an `error` event therefore does not announce the end of the run. Blank lines are ignored.
+
+`{"type": "refresh", "request_id": "<unique id>"}` asks for a scan. A refresh is satisfied only by a scan that begins after the request was received; a scan already in progress cannot satisfy it, and every request received before the next scan begins shares that scan. After the scan, a changed snapshot is emitted first, then one `refresh_complete` per request.
 
 `refresh_complete`:
 
@@ -508,5 +510,20 @@ Stdin carries requests, one JSON object per line. The one request is `{"type": "
 | `error` | string | why the scan failed; present only when `ok` is `false` |
 
 A failed rescan is also reported as a `log` warning; the last snapshot stays in force and serve keeps running. A failed initial scan ends serve with the error's exit code.
+
+`{"type": "search", "request_id": "<unique id>", "query": "<text>"}` searches the skills of every source in [machine settings](#machine-settings), so that the app never filters a listing itself. It is answered with one `search` event:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `request_id` | string | the id from the request |
+| `instance_id` | string | this serve process's instance id |
+| `query` | string | the text from the request |
+| `results` | array | one object per matching skill: `source`, `subpath`, `name`, `description` and `tree`; empty when nothing matched |
+
+A skill matches when its name or its description contains the query, compared case-insensitively. Results are sorted by source canonical URL, then name, then subpath. `source` is the canonical URL rather than the source id that `source_skill` carries: a search spans every source, and the URL is what names one to a person and what an install takes. `subpath`, `name`, `description` and `tree` are the skill as `source skills` lists it, `subpath` being `""` for a skill at the repository root.
+
+Serve answers from the source index it holds in memory: one skill list per source in the settings, built from that source's ref `refs/agentx/sources/<id>` in the account repo exactly as `agentx source skills` builds its listing, over the whole source rather than a subpath, since a subpath scopes one listing and is never stored. The index is built after the initial scan and rebuilt after every later one, each time after that scan's snapshot has gone out and before its `refresh_complete` events, so that a snapshot never waits for it. Building it reads the settings under the shared `lock`, as a scan does, and reads the sources and the commits their refs hold in one `for-each-ref`; when those are as they were the index stands unchanged and nothing else runs, so a rescan that follows a change elsewhere on the machine costs one git process and a machine with no source costs none. This is how a source added, fetched again or removed reaches the index: each of those is a mutation of agentx home, whose change signal schedules the scan, and a refresh acknowledged after it is answered from the new index. A source whose ref the account repo does not hold, and one it cannot list whole, contribute no skills and are one `log` warning per build.
+
+A search takes no lock, runs no git process and makes no network call. It is answered from the index as it stands, while a scan is in progress, without waiting for it, so a search sent after a refresh can be answered before that refresh's `refresh_complete`.
 
 `agentx serve --once` takes the serve lock, runs the initial scan, emits its snapshot and exits 0 with exactly the events `snapshot` and `result`. It watches nothing and reads no requests.
