@@ -9,6 +9,8 @@ import (
 	"unicode"
 
 	"github.com/goccy/go-yaml"
+	"github.com/goccy/go-yaml/ast"
+	"github.com/goccy/go-yaml/parser"
 )
 
 // frontmatter is what the --- block at the top of SKILL.md says about a skill.
@@ -39,8 +41,8 @@ func parseFrontmatter(text string) (frontmatter, error) {
 	if err := yaml.Unmarshal([]byte(block), &fields); err != nil {
 		return fm, unparsable(err)
 	}
-	fm.name = scalar(fields["name"])
-	fm.description = scalar(fields["description"])
+	fm.name = value(block, fields, "name")
+	fm.description = value(block, fields, "description")
 	return fm, nil
 }
 
@@ -85,17 +87,62 @@ func bounded(block string) error {
 	return nil
 }
 
-// scalar renders one frontmatter value. A string is taken as it is, a number
-// or a boolean written without quotes is rendered as it was read, and a
-// mapping, a sequence or a missing key contributes nothing.
-func scalar(value any) string {
-	switch v := value.(type) {
+// value renders one frontmatter key. A string is taken as the parser
+// decoded it, so quoting, folding and a value continued on the lines below
+// its key all work. A number or a boolean written without quotes is taken
+// as the file writes it instead, not as the decoder rendered it: these two
+// strings are the first fields of the content hash, which is a skill's
+// version identity across machines, so it has to carry what the file says.
+// Decoding and re-rendering would hash `007` as `7`, `1.50` as `1.5` and
+// `True` as `true`, and would give two files that differ one hash. A
+// mapping, a sequence, a null and a missing key contribute nothing.
+func value(block string, fields map[string]any, key string) string {
+	switch v := fields[key].(type) {
+	case nil:
+		return ""
 	case string:
 		return strings.TrimSpace(v)
 	case bool, int, int64, uint64, float32, float64:
-		return fmt.Sprint(v)
+		if raw, ok := rawScalar(block, key); ok {
+			return raw
+		}
+		return fmt.Sprint(v) // unreachable in practice: the block already parsed
 	}
 	return ""
+}
+
+// rawScalar returns the text a top-level key's value has in the file, and
+// whether that value is one of the scalars worth reading that way. A
+// literal or folded block is deliberately not one of them: its token is the
+// indicator rather than the text, and the decoded string is what belongs in
+// the hash.
+func rawScalar(block, key string) (string, bool) {
+	file, err := parser.ParseBytes([]byte(block), 0)
+	if err != nil {
+		return "", false
+	}
+	for _, doc := range file.Docs {
+		var pairs []*ast.MappingValueNode
+		switch body := doc.Body.(type) {
+		case *ast.MappingNode:
+			pairs = body.Values
+		case *ast.MappingValueNode:
+			pairs = []*ast.MappingValueNode{body}
+		}
+		for _, pair := range pairs {
+			if pair.Key == nil || pair.Key.GetToken() == nil || pair.Key.GetToken().Value != key {
+				continue
+			}
+			switch pair.Value.(type) {
+			case *ast.IntegerNode, *ast.FloatNode, *ast.BoolNode, *ast.InfinityNode, *ast.NanNode:
+				if tok := pair.Value.GetToken(); tok != nil {
+					return tok.Value, true
+				}
+			}
+			return "", false
+		}
+	}
+	return "", false
 }
 
 // yamlPosition is the [line:column] a go-yaml error starts with.

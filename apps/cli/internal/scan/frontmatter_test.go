@@ -51,8 +51,35 @@ func TestParseFrontmatter(t *testing.T) {
 			wantName: "a", wantDesc: "",
 		},
 		{
+			// A number, a boolean or anything else unquoted is hashed as the
+			// file writes it, never as a decoder would render it back: these
+			// two strings are the skill's version identity.
 			name: "number without quotes", text: "---\nname: a\ndescription: 123\n---\n",
 			wantName: "a", wantDesc: "123",
+		},
+		{
+			name: "trailing zero is kept", text: "---\nname: a\ndescription: 1.50\n---\n",
+			wantName: "a", wantDesc: "1.50",
+		},
+		{
+			name: "leading zeros are kept", text: "---\nname: 007\ndescription: d\n---\n",
+			wantName: "007", wantDesc: "d",
+		},
+		{
+			name: "hexadecimal is kept as written", text: "---\nname: a\ndescription: 0x1F\n---\n",
+			wantName: "a", wantDesc: "0x1F",
+		},
+		{
+			name: "boolean case is kept", text: "---\nname: a\ndescription: True\n---\n",
+			wantName: "a", wantDesc: "True",
+		},
+		{
+			name: "infinity is kept as written", text: "---\nname: a\ndescription: .inf\n---\n",
+			wantName: "a", wantDesc: ".inf",
+		},
+		{
+			name: "null contributes nothing", text: "---\nname: a\ndescription: ~\n---\n",
+			wantName: "a", wantDesc: "",
 		},
 		{
 			name: "comments and blank lines", text: "---\n# what this is\n\nname: a\n\ndescription: d\n---\n",
