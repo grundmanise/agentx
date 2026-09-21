@@ -174,3 +174,60 @@ func (h *harness) rewrite(s *sourceRepo, canonical ...string) {
 		h.t.Fatal(err)
 	}
 }
+
+// annotatedTag puts an annotated tag on the current commit, so the source
+// ref fetched from it names a tag object rather than the commit itself.
+func (s *sourceRepo) annotatedTag(name, message string) {
+	s.t.Helper()
+	s.run("tag", "--annotate", "--message", message, name)
+}
+
+// refuseObjectFetch puts a git wrapper alone on the harness PATH that hands
+// every invocation to the real git except one: a fetch carrying --stdin,
+// the by-object-id batch that fills in the SKILL.md blobs of a partial
+// clone. That one it fails the way a server refusing a want for an
+// unadvertised object does, which is what drives the --refetch --no-filter
+// fallback of source.Fetch.
+//
+// No bare repository can be configured to behave this way. git's
+// upload-pack turns on allow-any-sha1-in-want whenever
+// uploadpack.allowFilter is set — a partial clone would be unusable
+// otherwise — and setting uploadpack.allowAnySHA1InWant,
+// allowReachableSHA1InWant and allowTipSHA1InWant to false does not take it
+// back. A server that serves a filtered fetch therefore always serves
+// single objects too, so the refusal has to come from the wrapper.
+func refuseObjectFetch(t *testing.T, h *harness) {
+	t.Helper()
+	real, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stubGit(t, h, `#!/bin/sh
+sub= ; stdin=
+for arg in "$@"; do
+	case "$arg" in
+	fetch) sub=fetch ;;
+	--stdin) stdin=1 ;;
+	esac
+done
+if [ "$sub" = fetch ] && [ -n "$stdin" ]; then
+	while read -r _; do :; done   # drain the object ids: PATH holds git alone, so no cat
+	echo "error: Server does not allow request for unadvertised object" >&2
+	exit 128
+fi
+exec `+real+` "$@"
+`)
+}
+
+// missingObjects counts the objects of ref that the account repo does not
+// hold, which rev-list prints with a leading question mark.
+func (h *harness) missingObjects(ref string) int {
+	h.t.Helper()
+	n := 0
+	for _, line := range strings.Split(h.accountGit("rev-list", "--objects", "--missing=print", ref), "\n") {
+		if strings.HasPrefix(line, "?") {
+			n++
+		}
+	}
+	return n
+}

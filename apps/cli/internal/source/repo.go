@@ -109,7 +109,12 @@ func Fetch(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listin
 	}
 	if len(all) > 0 {
 		if err := fetchBlobs(ctx, r, gitDir, name, all); err != nil {
-			// Filtered, but single objects are refused: take everything once.
+			// Filtered, but single objects are refused: take everything
+			// once. No stock git server does this, since
+			// uploadpack.allowFilter implies allow-any-sha1-in-want and
+			// setting allowAnySHA1InWant false does not take it back, so
+			// this is a hosting service's own policy layer, or a ref that
+			// moved and was reclaimed between the two fetches.
 			if _, err := r.User(ctx, gitDir, append(fetchArgs, "--refetch", "--no-filter", name)...); err != nil {
 				return Listing{}, fmt.Errorf("%w: %v", ErrUnreachable, err)
 			}

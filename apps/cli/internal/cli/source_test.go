@@ -227,6 +227,120 @@ func TestSourceAddFallsBackToFullFetch(t *testing.T) {
 	equal(t, "skills", len(skills), 2)
 }
 
+// TestSourceAddRefetchesWhenTheServerRefusesSingleObjects covers the last
+// resort of source.Fetch. The server here really filters, so the first
+// fetch lands the commit and its trees with every blob missing; the
+// by-object-id batch that should fill the SKILL.md blobs in is refused, the
+// way a server that serves a filtered fetch but no want for an
+// unadvertised object refuses it. Only the --refetch --no-filter fetch can
+// complete the add, and everything the source holds must be present once it
+// has, so that no later listing reads the network.
+func TestSourceAddRefetchesWhenTheServerRefusesSingleObjects(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	s, _, head := h.standardSource(true) // uploadpack.allowFilter: the filter is honoured, the blobs stay behind
+	id := source.ID(s.url)
+	refuseObjectFetch(t, h)
+
+	out := h.run("--verbose", "source", "add", s.url+"/skills")
+	equal(t, "exit", out.exit, 0)
+	contains(t, "stdout", out.stdout, "✓ added "+s.url+" at "+head[:7]+": 2 skills under skills")
+	// Three fetches: the filtered one, the refused batch, the full re-fetch.
+	equal(t, "fetches", fetches(out.stderr), 3)
+	contains(t, "stderr", out.stderr, "--no-show-forced-updates --refetch --no-filter src-"+id)
+
+	// The re-fetch took everything, although the remote is still a promisor
+	// with a blob:none filter, so the account repo is whole.
+	equal(t, "ref", h.accountGit("rev-parse", "refs/agentx/sources/"+id), head)
+	equal(t, "missing objects", h.missingObjects("refs/agentx/sources/"+id), 0)
+
+	// The listing the add printed is the real one, and every later listing
+	// is answered from the account repo alone.
+	out = h.run("--verbose", "--json", "source", "skills", id)
+	equal(t, "exit", out.exit, 0)
+	src, skills := sourceEvents(t, h.events(out.stdout))
+	equal(t, "commit", src["commit"], head)
+	equal(t, "skills", len(skills), 2)
+	equal(t, "skills[0]", skills[0]["name"], "alpha")
+	equal(t, "skills[1]", skills[1]["name"], "beta")
+	if n := fetches(out.stderr); n != 0 {
+		t.Errorf("source skills ran %d git fetches; it must read the account repo alone", n)
+	}
+}
+
+// TestSourceAddPeelsAnAnnotatedTagPin: a pin naming an annotated tag puts
+// the tag object itself on the source ref. Both the add and the list must
+// report the commit it peels to, never the tag's own id.
+func TestSourceAddPeelsAnAnnotatedTagPin(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	s := h.newSourceRepo("annotated", true)
+	s.skill("skills/alpha", "alpha", "The first skill", nil)
+	head := s.commit("one")
+	s.annotatedTag("v2", "release two")
+	id := source.ID(s.url)
+
+	out := h.run("--json", "source", "add", s.url+"#v2")
+	equal(t, "exit", out.exit, 0)
+	src, _ := sourceEvents(t, h.events(out.stdout))
+	equal(t, "commit", src["commit"], head)
+	equal(t, "skills", src["skills"], float64(1))
+
+	// The ref holds the tag object, so the peel is the code's own doing.
+	ref := h.accountGit("rev-parse", "refs/agentx/sources/"+id)
+	equal(t, "ref type", h.accountGit("cat-file", "-t", ref), "tag")
+	if ref == head {
+		t.Fatalf("the source ref is the commit itself; the test no longer covers peeling")
+	}
+
+	events := h.events(h.run("--json", "source", "list").stdout)
+	equal(t, "list commit", events[0]["commit"], head)
+	equal(t, "list pin", events[0]["pin"], "v2")
+
+	out = h.run("--json", "source", "skills", id)
+	equal(t, "exit", out.exit, 0)
+	src, skills := sourceEvents(t, h.events(out.stdout))
+	equal(t, "skills commit", src["commit"], head)
+	equal(t, "skills", len(skills), 1)
+}
+
+// TestSourceAddKeepsAnAliasOnReAdd: nothing writes alias yet, but it is a
+// second URL mapped onto the canonical one, and a re-add rewrites the whole
+// entry. The alias must be carried across, not dropped.
+func TestSourceAddKeepsAnAliasOnReAdd(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	s, v1, _ := h.standardSource(true)
+	equal(t, "add", h.run("source", "add", s.url).exit, 0)
+
+	const alias = "https://github.com/owner/repo"
+	err := home.Mutate(h.agentx, func() error {
+		settings, err := home.LoadSettings(h.agentx)
+		if err != nil {
+			return err
+		}
+		entry := settings.Sources[settings.FindSource(s.url)]
+		entry.Alias = alias
+		settings.SetSource(entry)
+		return home.SaveSettings(h.agentx, settings)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out := h.run("--json", "source", "add", s.url+"#v1")
+	equal(t, "exit", out.exit, 0)
+	src, _ := sourceEvents(t, h.events(out.stdout))
+	equal(t, "alias", src["alias"], alias)
+	equal(t, "commit", src["commit"], v1)
+	entry := readSettingsFile(t, h)["sources"].([]any)[0].(map[string]any)
+	equal(t, "settings alias", entry["alias"], alias)
+	equal(t, "settings pin", entry["pin"], "v1")
+
+	// The listing carries it too.
+	equal(t, "list alias", h.events(h.run("--json", "source", "list").stdout)[0]["alias"], alias)
+}
+
 func TestSourceSkills(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
