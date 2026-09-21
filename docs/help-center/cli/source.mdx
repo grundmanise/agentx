@@ -1,0 +1,115 @@
+---
+title: "agentx source"
+description: "Add the git repositories you install skills from, list their skills, and remove them."
+---
+
+A source is a git repository that holds one or more skills. Add it by URL once; agentx fetches it into its own store and lists the skills inside, so you can pick what to install.
+
+## Add a source
+
+```sh
+agentx source add anthropics/skills
+```
+
+```text
+✓ added https://github.com/anthropics/skills at 3f2a9c1: 12 skills
+```
+
+Paste the URL in whatever form you have:
+
+| Form | Example |
+|---|---|
+| GitHub shorthand | `owner/repo`, `owner/repo/skills` |
+| GitHub URL | `https://github.com/owner/repo`, `https://github.com/owner/repo/tree/main/skills` |
+| GitLab URL | `https://gitlab.com/group/repo`, `https://gitlab.com/group/repo/-/tree/main/skills` |
+| SSH | `git@github.com:owner/repo.git`, `ssh://git@github.com/owner/repo` |
+| Any git server | `https://git.example.com/team/repo.git/skills` |
+| Local repository | `file:///srv/skills.git` |
+
+Add `#<ref>` to pin the source to a branch, a tag or a commit, for example `owner/repo#v2` or `git@github.com:owner/repo.git#release`. Without a pin the source follows the repository's default branch. A `tree` URL pins the branch it names.
+
+A path after the repository, such as `owner/repo/skills`, scopes the listing to that directory. On a server other than GitHub, end the repository name with `.git` so agentx knows where the repository ends and the path begins.
+
+Adding a source you already have fetches it again and sets the pin to what you typed this time. The confirmation then tells you what moved:
+
+```text
+✓ re-fetched https://github.com/anthropics/skills, now at 9c1d0ab, was 3f2a9c1: 12 skills
+✓ re-fetched https://github.com/anthropics/skills, already at 9c1d0ab: 12 skills
+```
+
+### Credentials
+
+The fetch runs with your own git, so the credential helper, SSH key and URL rewrites you use in a terminal apply here too. A private repository you can already clone just works.
+
+Never put a token in the URL. agentx drops it before the URL is used anywhere, and never repeats it back to you, not even in an error. For an SSH URL the `git@` part is the address rather than a credential, so it is kept and only a password is dropped. If the fetch then fails, store the credential in a git credential helper instead:
+
+```sh
+git config --global credential.helper store
+```
+
+### What is fetched
+
+agentx fetches only the commits and directory trees of one branch, no tags and no file contents, then the `SKILL.md` file of every skill in the repository in one round trip. Those come down whatever path you added, so listing any part of the source afterwards needs no network. A source the size of a monorepo costs a few megabytes, not a clone. A git server that cannot serve such a partial fetch gets a full one instead; nothing changes for you.
+
+## List your sources
+
+```sh
+agentx source list
+```
+
+```text
+2 sources
+  https://github.com/anthropics/skills  (unpinned)  3f2a9c1  2026-09-20T10:00:00Z  1c9d0b7e4a2f6d38
+  https://github.com/me/skills          v2          8b1e0f4  2026-09-19T18:30:00Z  7a3b5c9e1f2d4a60
+```
+
+Each row shows the canonical URL, the pin, the fetched commit, when it was last fetched and the source id. The id is accepted wherever a URL is.
+
+## List the skills of a source
+
+```sh
+agentx source skills anthropics/skills
+```
+
+```text
+12 skills in https://github.com/anthropics/skills at 3f2a9c1
+  docx            skills/docx            Create and edit Word documents
+  pdf             skills/pdf             Read, merge and fill PDF files
+  ...
+```
+
+Every directory with a `SKILL.md` is a skill. Hidden directories and `node_modules` are skipped. Give a path to see one part of the repository, for example `anthropics/skills/skills/pdf`, or the source id instead of the URL. The command reads what the last `source add` fetched and never touches the network, whichever part of the source you ask for.
+
+## Remove a source
+
+```sh
+agentx source remove anthropics/skills
+```
+
+```text
+✓ removed https://github.com/anthropics/skills
+```
+
+The source and everything fetched from it leave this machine. Skills you installed from it stay as they are. Add the source again to fetch it anew.
+
+## Script it
+
+Add `--json` to get a `source` event per source, and from `source skills` a `source_skill` event per skill:
+
+```sh
+agentx --json source skills anthropics/skills
+```
+
+```json
+{"type":"source","schema_version":1,"id":"1c9d0b7e4a2f6d38","url":"https://github.com/anthropics/skills","last_fetched":"2026-09-20T10:00:00Z","commit":"3f2a9c1e...","skills":12}
+{"type":"source_skill","schema_version":1,"source":"1c9d0b7e4a2f6d38","subpath":"skills/docx","name":"docx","description":"Create and edit Word documents","tree":"9a8b7c6d..."}
+{"type":"result","schema_version":1,"ok":true}
+```
+
+## Exit codes
+
+- `1`: the URL is not one of the accepted forms, or the pin and the tree URL name different refs.
+- `3`: the source cannot be reached, is not a git repository, or needs credentials git does not have. The hint names the fix.
+- `5`: the pinned ref or the path does not exist in the source, or the source is not on this machine.
+- `7`: another agentx command is running. Retry when it finishes.
+- `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.

@@ -32,9 +32,14 @@ type failure struct {
 	status  status
 	message string
 	hint    string
+	cause   error // what a caller matches with errors.Is, when it has to
 }
 
 func (f *failure) Error() string { return f.message }
+func (f *failure) Unwrap() error { return f.cause }
+
+// wrap records the cause a caller may match on and returns f.
+func (f *failure) wrap(cause error) *failure { f.cause = cause; return f }
 
 func fail(st status, message, hint string) error {
 	return &failure{status: st, message: message, hint: hint}

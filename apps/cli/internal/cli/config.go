@@ -223,9 +223,18 @@ func (inv *invocation) settingRows(s home.Settings) []settingRow {
 		{"auto_push", strconv.FormatBool(s.AutoPush)},
 		{"accept_operations", strconv.FormatBool(s.AcceptOperations)},
 		{"disabled_configurations", strings.Join(s.DisabledConfigurations, ", ")},
-		{"sources", compact(s.Sources)},
+		{"sources", compactValue(s.Sources)},
 		{"copy_mode", compact(s.CopyMode)},
 	}
+}
+
+// compactValue renders v as compact JSON.
+func compactValue(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }
 
 func compact(raw json.RawMessage) string {
