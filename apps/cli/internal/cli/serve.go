@@ -13,6 +13,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 	"github.com/grundmanise/agentx/apps/cli/internal/serve"
+	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
 type refreshCompleteEvent struct {
@@ -22,6 +23,18 @@ type refreshCompleteEvent struct {
 	OK          bool   `json:"ok"`
 	ScanCounter int    `json:"scan_counter,omitempty"` // absent when the scan failed: no freshness is claimed
 	Error       string `json:"error,omitempty"`
+}
+
+// searchEvent answers one search request: every skill of every source
+// whose name or description matches, each naming its source by the
+// canonical URL, which is what source list prints and what an install
+// takes.
+type searchEvent struct {
+	event
+	RequestID  string         `json:"request_id"`
+	InstanceID string         `json:"instance_id"`
+	Query      string         `json:"query"`
+	Results    []source.Match `json:"results"` // empty, never absent, when nothing matched
 }
 
 func newServeCommand(inv *invocation) *cobra.Command {
@@ -39,9 +52,11 @@ func newServeCommand(inv *invocation) *cobra.Command {
 				return err
 			}
 			defer lock.Close()
+			inv.instanceID() // fixed here, before two goroutines report it
 			dirs, trees := inv.watchedDirs()
 			err = serve.Run(cmd.Context(), serve.Options{
 				Scan:  func(ctx context.Context) (scan.Snapshot, error) { return inv.scan(ctx, 0, "", false) },
+				Index: inv.sourceIndex,
 				Watch: dirs,
 				Trees: trees,
 				Once:  once,
@@ -60,6 +75,10 @@ func newServeCommand(inv *invocation) *cobra.Command {
 						inv.out.print(inv.out.paint(heading, "refresh "+id), ": ", inv.out.paint(okStyle, "ok"), fmt.Sprintf(", snapshot %d", counter))
 					}
 					inv.out.emit(ev)
+				},
+				Search: func(id, query string, results []source.Match) {
+					inv.out.emit(searchEvent{event: newEvent("search"), RequestID: id, InstanceID: inv.instanceID(), Query: query, Results: results})
+					inv.out.print(inv.out.paint(heading, "search "+id), ": ", plural(len(results), "result"))
 				},
 				BadRequest: func(message, hint string) {
 					inv.out.fail(&failure{status: exitUsage, message: message, hint: hint})
@@ -92,6 +111,28 @@ func (inv *invocation) watchedDirs() (dirs, trees []string) {
 		}
 	}
 	return append([]string{h, gitx.AccountRepoPath(h)}, trees...), trees
+}
+
+// sourceIndex builds the index serve answers searches from: the sources of
+// the machine settings, each listed from its ref in the account repo. The
+// settings are read under the shared lock, as a scan reads them, so a
+// source being added or removed is never seen half written; the listing
+// itself reads objects, which no mutation rewrites. A search reads the
+// index this returns and takes no lock at all.
+func (inv *invocation) sourceIndex(ctx context.Context, prev *source.Index) (idx *source.Index, warnings []string, err error) {
+	err = home.ReadLocked(ctx, inv.dirs.Home, func() error {
+		s, err := inv.loadSettings()
+		if err != nil {
+			return err
+		}
+		urls := make([]string, 0, len(s.Sources))
+		for _, src := range s.Sources {
+			urls = append(urls, src.URL)
+		}
+		idx, warnings, err = source.BuildIndex(ctx, inv.git, gitx.AccountRepoPath(inv.dirs.Home), urls, prev)
+		return err
+	})
+	return idx, warnings, err
 }
 
 func plural(n int, noun string) string {

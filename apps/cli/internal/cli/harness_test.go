@@ -199,6 +199,23 @@ func (p *serveProc) next(typ string) jsonEvent {
 	return nil
 }
 
+// line reads the next stdout line, which must be want: the text output of
+// one event, where next reads the JSON one.
+func (p *serveProc) line(want string) {
+	p.t.Helper()
+	select {
+	case line, ok := <-p.lines:
+		if !ok {
+			p.t.Fatalf("serve ended before the line %q", want)
+		}
+		if line != want {
+			p.t.Errorf("line = %q, want %q", line, want)
+		}
+	case <-time.After(serveDeadline):
+		p.t.Fatalf("no line %q within %s", want, serveDeadline)
+	}
+}
+
 // close ends stdin and returns the exit code once Run returned.
 func (p *serveProc) close() int {
 	p.t.Helper()

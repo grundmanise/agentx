@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 )
 
 // schemaVersion is the output schema every event carries. Bump it when an
@@ -45,6 +46,10 @@ type resultEvent struct {
 //
 // Human text is painted per stream: a stream that is a terminal gets colour
 // unless NO_COLOR or --color says otherwise, a pipe gets the same text bare.
+//
+// Serve answers searches from the goroutine that reads its stdin while the
+// loop reports scans from its own, so every write of one event or one line
+// is made under mu and lands whole.
 type writer struct {
 	stdout  io.Writer
 	stderr  io.Writer
@@ -52,7 +57,9 @@ type writer struct {
 	json    bool
 	verbose bool
 	color   string // the --color flag: on, off, or empty when left out
-	outInk  *ink   // decided on first use, once the flags are parsed
+	mu      sync.Mutex
+	inkMu   sync.Mutex
+	outInk  *ink // decided on first use, once the flags are parsed
 	errInk  *ink
 }
 
@@ -61,6 +68,8 @@ func (w *writer) out() ink { return w.inkFor(&w.outInk, w.stdout) }
 func (w *writer) err() ink { return w.inkFor(&w.errInk, w.stderr) }
 
 func (w *writer) inkFor(cached **ink, stream io.Writer) ink {
+	w.inkMu.Lock()
+	defer w.inkMu.Unlock()
 	if *cached == nil {
 		k := colorMode(w.color).resolve(stream, w.env)
 		*cached = &k
@@ -86,7 +95,7 @@ func (w *writer) print(parts ...string) {
 		b.WriteString(p)
 	}
 	b.WriteByte('\n')
-	_, _ = io.WriteString(w.stdout, b.String())
+	w.write(w.stdout, b.String())
 }
 
 // paint styles s for stdout.
@@ -108,7 +117,7 @@ func (w *writer) done(msg string) {
 // the snapshot carries the hints.
 func (w *writer) hint(msg string) {
 	if !w.json {
-		fmt.Fprintf(w.stderr, "%s %s\n", w.err().paint(warnStyle, "hint:"), msg)
+		w.write(w.stderr, fmt.Sprintf("%s %s\n", w.err().paint(warnStyle, "hint:"), msg))
 	}
 }
 
@@ -118,7 +127,7 @@ func (w *writer) warn(msg string) {
 		w.line(w.stderr, logEvent{event: newEvent("log"), Level: "warn", Message: msg})
 		return
 	}
-	fmt.Fprintf(w.stderr, "%s %s\n", w.err().paint(warnStyle, "warning:"), msg)
+	w.write(w.stderr, fmt.Sprintf("%s %s\n", w.err().paint(warnStyle, "warning:"), msg))
 }
 
 // debugf logs at debug level, shown only with --verbose.
@@ -131,7 +140,7 @@ func (w *writer) debugf(format string, args ...any) {
 		w.line(w.stderr, logEvent{event: newEvent("log"), Level: "debug", Message: msg})
 		return
 	}
-	fmt.Fprintf(w.stderr, "%s %s\n", w.err().paint(muted, "debug:"), msg)
+	w.write(w.stderr, fmt.Sprintf("%s %s\n", w.err().paint(muted, "debug:"), msg))
 }
 
 func (w *writer) fail(f *failure) {
@@ -140,10 +149,11 @@ func (w *writer) fail(f *failure) {
 		return
 	}
 	k := w.err()
-	fmt.Fprintf(w.stderr, "%s %s\n", k.paint(failStyle, "error:"), f.message)
+	text := fmt.Sprintf("%s %s\n", k.paint(failStyle, "error:"), f.message)
 	if f.hint != "" {
-		fmt.Fprintf(w.stderr, "%s %s\n", k.paint(warnStyle, "hint:"), f.hint)
+		text += fmt.Sprintf("%s %s\n", k.paint(warnStyle, "hint:"), f.hint)
 	}
+	w.write(w.stderr, text)
 }
 
 // result terminates the event stream; it is emitted exactly once per run.
@@ -156,5 +166,13 @@ func (w *writer) line(out io.Writer, ev any) {
 	if err != nil {
 		panic(err) // events are plain structs; marshalling cannot fail
 	}
-	_, _ = out.Write(append(b, '\n')) // stdout errors surface through the exit code, not per event
+	w.write(out, string(b)+"\n")
+}
+
+// write puts text on out in one write under the lock; a failed write
+// surfaces through the exit code, not per line.
+func (w *writer) write(out io.Writer, text string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	_, _ = io.WriteString(out, text)
 }

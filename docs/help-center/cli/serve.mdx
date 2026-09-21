@@ -36,6 +36,32 @@ Write one JSON line to its stdin:
 
 Serve scans again and answers with a `refresh_complete` line carrying your `request_id` and the counter of the current snapshot. If the inventory changed, the new snapshot line comes first. A line serve does not understand gets an `error` line; serve keeps running.
 
+Serve takes two requests: `refresh`, and `search` below.
+
+## Search your sources
+
+Write one JSON line to its stdin:
+
+```json
+{"type": "search", "request_id": "any unique id", "query": "commit"}
+```
+
+Serve answers with a `search` line carrying your `request_id`, the `query` and `results`: every skill of every source you added whose name or description contains the query, ignoring case. Each result names the `source` it is in by URL, the skill's `subpath` in that repository, its `name`, its `description` and the `tree` id of the skill directory. Results are sorted by source, then name. Nothing matching is an empty `results` array.
+
+Pass a result's `source` and `subpath` to an install to take that skill.
+
+Serve answers from memory, so a search is immediate: it reaches neither git nor the network, and it does not wait for a scan in progress. It lists the skills of each source when it starts and again whenever you add, re-fetch or remove one, so results follow `agentx source add` and `agentx source remove` on their own.
+
+A source you have not fetched has no skills to search, and serve says so once as a warning. Run `agentx source add <url>` to fetch it.
+
+A search without a `request_id` or without a `query` gets an `error` line; serve keeps running.
+
+Without `--json` serve prints one line per answer:
+
+```text
+search 1: 3 results
+```
+
 ## Run one pass
 
 ```sh
