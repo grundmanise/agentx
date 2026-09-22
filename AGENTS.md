@@ -15,3 +15,17 @@ Single-context: `CONTEXT.md` at the root, ADRs in `docs/adr/`, specs in `docs/sp
 ## Help center
 
 Mintlify is used for the user-facing documentation. Keep the Help Center up to date. Whenever there's a new feature or a change in functionality, update the relevant user-facing documentation in `docs/help-center`. Keep the language clear, structured, and concise. Use an imperative tone.
+
+## PRs and commits
+
+### Titles
+
+PR and commit titles should follow the conventional commit format. We squash merge PRs, so the first commit message becomes the PR title.
+
+### Descriptions
+
+PR and commit descriptions should use an imperative style and provide a clear, concise summary of the changes made. They should focus on how the changes affect end users – what changed and why – rather than on how it was implemented, unless that’s essential for understanding the changes.
+
+### Writing style
+
+- Never use em dashes (`—`); instead, use en dashes (`–`) or hyphens (`-`).
