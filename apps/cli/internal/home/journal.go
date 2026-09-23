@@ -269,13 +269,18 @@ func replaceFile(dir, path string, data []byte) error {
 // Retained content is discarded last, once every live path holds its new
 // state.
 //
-// The refs of a journal go first and together: they are the record of what
-// this machine accepted, they depend on no path, and a batch of them is one
-// transaction, so a run stopped anywhere leaves either every branch or none
-// and the paths behind them to recover.
+// The refs of a journal go together, and first when the journal creates or
+// moves them: they are the record of what this machine accepted, they
+// depend on no path, and a batch of them is one transaction, so a run
+// stopped anywhere leaves either every branch or none and the paths behind
+// them to recover. A journal whose ref steps only delete runs them last
+// instead; see refsGoLast.
 func apply(journalPath string, j journal, u RefUpdater) error {
-	if _, err := applyRefs(j.Steps, u); err != nil {
-		return err
+	last := refsGoLast(j.Steps)
+	if !last {
+		if _, err := applyRefs(j.Steps, u); err != nil {
+			return err
+		}
 	}
 	for _, s := range j.Steps {
 		if s.Kind == stepRef {
@@ -288,6 +293,11 @@ func apply(journalPath string, j journal, u RefUpdater) error {
 	for _, r := range j.Replace {
 		if err := renameSynced(r.Staged, r.Path); err != nil {
 			return unfinished(journalPath, step{Kind: "replace", Path: r.Path}, err)
+		}
+	}
+	if last {
+		if _, err := applyRefs(j.Steps, u); err != nil {
+			return err
 		}
 	}
 	j.Progress = "applied"
@@ -320,6 +330,12 @@ func unfinished(journalPath string, s step, err error) error {
 // is there already, and reports whether it changed anything. A live state
 // that is neither Old nor New was changed by something else and is left
 // alone. Ref steps are applied by applyRefs, all of them at once.
+//
+// That comparison is load-bearing for a remove step above all: every other
+// step writes something, while remove deletes, so a remove step applied to
+// a path that changed since the journal was written destroys whatever the
+// user put there and nothing holds a copy of it.
+// TestRecoveryRefusesARemovalWhoseTargetChanged is the guard on it.
 func applyStep(s step, u RefUpdater) (bool, error) {
 	if s.Kind == stepRef {
 		return applyRefs([]step{s}, u)
@@ -329,6 +345,16 @@ func applyStep(s step, u RefUpdater) (bool, error) {
 		return false, err
 	}
 	if live == s.New {
+		// The step has nothing left to do, so whatever it staged will never
+		// be renamed into place. It sits beside the live path, and once the
+		// journal is gone nothing names it: only a later install into that
+		// same client directory sweeps staging directories, and a removal
+		// never does. Two configurations that share one skills directory
+		// plan exactly this — two publishes of one path, the second of them
+		// already done — so the leak is an ordinary run's, not a crash's.
+		if s.Staged != "" {
+			os.RemoveAll(s.Staged)
+		}
 		return false, nil
 	}
 	if live != s.Old {
@@ -358,6 +384,37 @@ func applyStep(s step, u RefUpdater) (bool, error) {
 		return true, renameSynced(s.Path, s.Retained)
 	}
 	return false, fmt.Errorf("%w: unknown step %q in a mutation journal", ErrRecovery, s.Kind)
+}
+
+// refsGoLast reports whether this journal's ref steps run after its path
+// steps rather than before them. They do when every one of them deletes.
+//
+// A ref a journal creates or moves is recoverable: the journal holds the
+// value, the step is safe to repeat, and a later command finishes it. A ref
+// a journal deletes is not. Once it is gone the only record of the commit
+// it pointed at is the journal itself — and the journal is exactly what a
+// refusal invites the user to move aside to keep what is on disk. Deleting
+// first would mean that taking that offer after a removal stopped half way
+// left the skill's directory in the library with no branch for it: a
+// managed skill turned unmanaged, permanently, which is what mutation
+// safety forbids making of half-applied state.
+//
+// So deletions go last, when everything that could still refuse has not. A
+// journal that both creates and deletes refs keeps them first and together,
+// since they are one transaction and must not be split; no command writes
+// such a journal today.
+func refsGoLast(steps []step) bool {
+	deletes := false
+	for _, s := range steps {
+		if s.Kind != stepRef {
+			continue
+		}
+		if s.New != "" {
+			return false
+		}
+		deletes = true
+	}
+	return deletes
 }
 
 // applyRefs moves every lineage ref of a journal with its expected old
@@ -511,6 +568,11 @@ func IsDir(state string) bool { return strings.HasPrefix(state, dirOf) }
 // a link is the user's own, and where it leads is beside the point.
 func IsLink(state string) bool { return strings.HasPrefix(state, linkTo) }
 
+// LinkTarget is where a state says the symlink points, and false when the
+// state is not a symlink. It is the link as it was written, relative or
+// absolute, which is what a report about it should name.
+func LinkTarget(state string) (string, bool) { return strings.CutPrefix(state, linkTo) }
+
 // IsDangling reports whether path is a symlink that resolves to nothing,
 // which is what a placement into a fork worktree that is gone looks like.
 func IsDangling(path string) bool {
@@ -596,9 +658,14 @@ func recoverJournal(dir, journalPath string, u RefUpdater) error {
 	if err := json.Unmarshal(b, &j); err != nil || len(j.Replace)+len(j.Steps) == 0 {
 		return fmt.Errorf("%w: %s is not a mutation journal", ErrRecovery, journalPath)
 	}
-	resumed, err := applyRefs(j.Steps, u)
-	if err != nil {
-		return err
+	last := refsGoLast(j.Steps)
+	var resumed bool
+	if !last {
+		moved, err := applyRefs(j.Steps, u)
+		if err != nil {
+			return err
+		}
+		resumed = moved
 	}
 	for _, s := range j.Steps {
 		if s.Kind == stepRef {
@@ -657,6 +724,13 @@ func recoverJournal(dir, journalPath string, u RefUpdater) error {
 	}
 	for _, r := range j.Replace {
 		os.Remove(r.Staged) // left behind when the live file already held the new content
+	}
+	if last {
+		moved, err := applyRefs(j.Steps, u)
+		if err != nil {
+			return err
+		}
+		resumed = resumed || moved
 	}
 	discardRetained(j, u)
 	if resumed {

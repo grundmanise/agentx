@@ -121,7 +121,7 @@ func TestStagedContentIsCheckedAgainstTheVersion(t *testing.T) {
 
 	// The version's own hash goes through and the files land.
 	good := filepath.Join(root, "good")
-	if err := inv.writeStaged(good, &imported{name: "alpha", files: files, hash: version}); err != nil {
+	if err := inv.stageCopy(good, (&imported{name: "alpha", files: files, hash: version}).placeable()); err != nil {
 		t.Fatalf("the version's own content hash was refused: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(good, "scripts", "run.sh")); err != nil {
@@ -131,7 +131,7 @@ func TestStagedContentIsCheckedAgainstTheVersion(t *testing.T) {
 	// Any other hash does not, and the refusal names both hashes so that a
 	// reader can see which version was expected.
 	bad := filepath.Join(root, "bad")
-	err := inv.writeStaged(bad, &imported{name: "alpha", files: files, hash: strings.Repeat("0", 64)})
+	err := inv.stageCopy(bad, (&imported{name: "alpha", files: files, hash: strings.Repeat("0", 64)}).placeable())
 	if err == nil {
 		t.Fatal("a staged directory whose content hash is not the version's was accepted")
 	}

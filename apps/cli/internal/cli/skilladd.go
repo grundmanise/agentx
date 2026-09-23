@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -12,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/sys/unix"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
@@ -786,45 +784,6 @@ func skillNamesHint(listing source.Listing) string {
 	return "name one with --skill, or take them all with --all: " + strings.Join(names, ", ")
 }
 
-// placeTarget is one configuration an install places the skill in.
-type placeTarget struct {
-	id           string
-	dir          string // the client's own skills directory
-	readsLibrary bool   // the library entry is the placement; a symlink would list the skill twice
-}
-
-// placementTargets are the configurations the install places into: every
-// enabled one, or exactly those --to names, whatever their enabled state,
-// since naming one is asking for it.
-func (inv *invocation) placementTargets(to []string) ([]placeTarget, error) {
-	s, err := inv.loadSettings()
-	if err != nil {
-		return nil, err
-	}
-	detected := scan.Detect(inv.dirs)
-	var targets []placeTarget
-	for _, c := range detected {
-		t := placeTarget{id: c.Slug(), dir: scan.PlacementDir(c, inv.dirs), readsLibrary: scan.ReadsLibrary(c, inv.dirs)}
-		if t.dir == "" && !t.readsLibrary {
-			continue // a client the registry gives no skills directory has nowhere to place into
-		}
-		if len(to) > 0 {
-			if !containsString(to, t.id) {
-				continue
-			}
-		} else if containsString(s.DisabledConfigurations, t.id) {
-			continue
-		}
-		targets = append(targets, t)
-	}
-	for _, id := range to {
-		if !hasTarget(targets, id) {
-			return nil, inv.detectedConfiguration(id)
-		}
-	}
-	return targets, nil
-}
-
 func containsString(list []string, s string) bool {
 	for _, v := range list {
 		if v == s {
@@ -834,24 +793,13 @@ func containsString(list []string, s string) bool {
 	return false
 }
 
-func hasTarget(targets []placeTarget, id string) bool {
-	for _, t := range targets {
-		if t.id == id {
-			return true
-		}
-	}
-	return false
-}
-
 // installed is what the mutation did to one skill, for the report that
-// follows it.
+// follows it: the version, whether the library already held it, and the
+// placements the install made, which are the placements any command makes.
 type installed struct {
-	v         *imported
-	adopted   bool          // the library already held this version
-	placed    []placeTarget // the configurations that now see the skill
-	copies    []string      // the configurations that hold a copy
-	adoptions []string      // the placement paths that were a directory of this version
-	skipped   []string      // the placement paths something else holds
+	v       *imported
+	adopted bool // the library already held this version
+	placements
 }
 
 // install publishes the library directories, the import branches and the
@@ -879,9 +827,16 @@ func (inv *invocation) install(ctx context.Context, b *batch, gitDir string, ver
 		if err != nil {
 			return accountRepoFailure(err)
 		}
+		// The copy modes the settings record decide what each placement is,
+		// so they are read before any is planned, and the run's own copies
+		// go into the same write.
+		edit, err := inv.beginSettings()
+		if err != nil {
+			return err
+		}
 		m := home.NewMutation(inv.dirs.Home)
 		for _, v := range versions {
-			done, f, err := inv.stageSkill(m, gitDir, v, records, targets, asCopy)
+			done, f, err := inv.stageSkill(m, gitDir, v, records, targets, asCopy, edit.copiesOf(v.name))
 			switch {
 			case err != nil:
 				m.Discard()
@@ -896,7 +851,7 @@ func (inv *invocation) install(ctx context.Context, b *batch, gitDir string, ver
 			m.Discard()                // nothing live changed and no journal exists
 			return errNothingInstalled // and nothing changed, so nothing is signalled either
 		}
-		if err := inv.stageCopyMode(m, dones); err != nil {
+		if err := inv.stageCopyMode(m, edit, dones); err != nil {
 			m.Discard()
 			return err
 		}
@@ -912,7 +867,7 @@ func (inv *invocation) install(ctx context.Context, b *batch, gitDir string, ver
 		return nil, false, nil // every skill was refused; the caller answers for them
 	}
 	if err != nil {
-		return nil, journaled, installFailure(err)
+		return nil, journaled, mutationFailure(err)
 	}
 	b.done = dones
 	return dones, journaled, nil
@@ -929,7 +884,7 @@ var errNothingInstalled = errors.New("no skill of the run could be installed")
 // account repo holds, so that a skill the run gives up on leaves no step of
 // its own in the journal: a branch without its library directory would be a
 // version this machine claims to hold and does not.
-func (inv *invocation) stageSkill(m *home.Mutation, gitDir string, v *imported, records map[string]lineage.Record, targets []placeTarget, asCopy bool) (*installed, *failure, error) {
+func (inv *invocation) stageSkill(m *home.Mutation, gitDir string, v *imported, records map[string]lineage.Record, targets []placeTarget, asCopy bool, recordedCopies []string) (*installed, *failure, error) {
 	libPath := inv.libraryPath(v.name)
 	state, err := home.State(libPath)
 	if err != nil {
@@ -952,7 +907,7 @@ func (inv *invocation) stageSkill(m *home.Mutation, gitDir string, v *imported, 
 			m.Remove(libPath, state)
 		}
 		staged := m.Sibling(libPath, "staged")
-		if err := inv.writeStaged(staged, v); err != nil {
+		if err := inv.stageCopy(staged, v.placeable()); err != nil {
 			return nil, nil, libraryFailure(inv.dirs.Library, err)
 		}
 		fingerprint, err := home.Fingerprint(staged)
@@ -964,7 +919,7 @@ func (inv *invocation) stageSkill(m *home.Mutation, gitDir string, v *imported, 
 	for _, t := range targets {
 		// A placement this machine cannot make is skipped and counted, not
 		// a failure of the skill: stagePlacement decides that itself.
-		inv.stagePlacement(m, v, t, libPath, asCopy, done)
+		inv.stagePlacement(m, v.placeable(), t, libPath, asCopy, recordedCopies, &done.placements)
 	}
 	return done, nil, nil
 }
@@ -1025,175 +980,33 @@ func refPlan(v *imported, records map[string]lineage.Record, libPath string) (cr
 		"remove "+libPath+" and the branch "+lineage.ManagedRef(v.name)+", then install again")
 }
 
-// stagePlacement plans one configuration's placement. A configuration whose
-// client reads the library needs none: the library entry is the placement,
-// and a second entry would make that client list the skill twice.
-//
-// A placement this machine cannot make — a skills directory owned by
-// somebody else, one on a read-only mount, one macOS has not granted
-// access to, a path that is a file rather than a directory — is skipped
-// with a warning and counted in the result, exactly as a path something
-// else holds is. One client agentx cannot reach is not a reason to leave
-// the library, the branch and every other placement undone, and an install
-// that aborted here would leave a journal no later command could finish.
-func (inv *invocation) stagePlacement(m *home.Mutation, v *imported, t placeTarget, libPath string, asCopy bool, done *installed) {
-	if t.readsLibrary {
-		done.placed = append(done.placed, t)
-		return
-	}
-	placePath := filepath.Join(t.dir, v.name)
-	state, err := home.State(placePath)
-	if err != nil {
-		inv.skipPlacement(done, t, placePath, err)
-		return
-	}
-	var displace, adopt bool
-	switch {
-	case home.IsAbsent(state):
-	case sameTarget(placePath, libPath):
-		// A symlink at the library directory, dangling until this install
-		// publishes it or not: the placement is already what it should be,
-		// unless copies were asked for, and a link holds nothing to keep.
-		if !asCopy {
-			done.placed = append(done.placed, t)
-			return
-		}
-		displace = true
-	case home.IsDir(state) && contentHashAt(placePath) == v.hash:
-		// A real directory holding exactly this version: nothing of the
-		// user's is lost by replacing it, and with --copy it is the copy.
-		// A symlink somewhere else is not adopted however it reads: it is
-		// the user's link to the user's directory, and agentx unlinking it
-		// would decide for them where their skill lives.
-		if asCopy {
-			done.placed = append(done.placed, t)
-			done.copies = append(done.copies, t.id)
-			return
-		}
-		displace, adopt = true, true
-	default:
-		// A link is refused for being a link and not for where it leads: it
-		// may well point at this very version, and saying it is not this
-		// skill would be untrue and would send the user looking at the
-		// wrong thing. Anything else is refused for what it holds.
-		what := " is not this skill and was left as it is"
-		if home.IsLink(state) {
-			what = " is a link of your own and was left as it is"
-		}
-		done.skipped = append(done.skipped, placePath)
-		inv.out.warn(placePath + what + "; no placement was made for " + t.id)
-		return
-	}
-	// Everything that can fail runs before the first step of this placement
-	// is recorded, so that a placement that cannot be made leaves neither a
-	// step in the journal nor content on disk.
-	staged, fingerprint, err := inv.placementContent(m, v, t, placePath, asCopy)
-	if err != nil {
-		inv.skipPlacement(done, t, placePath, err)
-		return
-	}
-	if displace {
-		m.Remove(placePath, state)
-		if adopt {
-			done.adoptions = append(done.adoptions, placePath)
-		}
-	}
-	if asCopy {
-		m.Publish(placePath, staged, fingerprint)
-		done.copies = append(done.copies, t.id)
-	} else {
-		m.Link(placePath, libPath)
-	}
-	done.placed = append(done.placed, t)
-}
-
-// placementContent prepares on disk what one placement needs: a directory
-// to hold it, which the install creates when it is missing, and for --copy
-// the staged copy itself, read back the way a scan reads it. The directory
-// is checked for being writable rather than only for existing, since the
-// symlink a placement usually is writes nothing until the journal runs it,
-// and a directory agentx cannot write would otherwise be found out only
-// then, with the journal already on disk.
-func (inv *invocation) placementContent(m *home.Mutation, v *imported, t placeTarget, placePath string, asCopy bool) (staged, fingerprint string, err error) {
-	if err := os.MkdirAll(t.dir, 0o755); err != nil {
-		return "", "", err
-	}
-	if err := unix.Access(t.dir, unix.W_OK|unix.X_OK); err != nil {
-		return "", "", &fs.PathError{Op: "access", Path: t.dir, Err: err}
-	}
-	if !asCopy {
-		return "", "", nil
-	}
-	staged = m.Sibling(placePath, "staged")
-	if err := inv.writeStaged(staged, v); err != nil {
-		os.RemoveAll(staged)
-		return "", "", err
-	}
-	if fingerprint, err = home.Fingerprint(staged); err != nil {
-		os.RemoveAll(staged)
-		return "", "", err
-	}
-	return staged, fingerprint, nil
-}
-
-// skipPlacement leaves one configuration without a placement and says why,
-// counting it where the contract counts a placement path something else
-// holds: the run still succeeds and the result says how many were skipped.
-func (inv *invocation) skipPlacement(done *installed, t placeTarget, placePath string, err error) {
-	done.skipped = append(done.skipped, placePath)
-	inv.out.warn("cannot place " + placePath + ": " + err.Error() + "; no placement was made for " + t.id)
-}
-
 // stageCopyMode records in the machine settings which configurations hold a
 // copy of which skill, in one write for the whole run however many skills
 // it installed.
-func (inv *invocation) stageCopyMode(m *home.Mutation, dones []*installed) error {
-	copied := false
+func (inv *invocation) stageCopyMode(m *home.Mutation, edit *settingsEdit, dones []*installed) error {
 	for _, done := range dones {
-		copied = copied || len(done.copies) > 0
+		edit.addCopies(done.v.name, done.copies)
 	}
-	if !copied {
-		return nil
-	}
-	s, err := inv.loadSettings()
-	if err != nil {
-		return err
-	}
-	modes, err := s.CopyModes()
-	if err != nil {
-		return fail(exitInternal, "parse "+home.SettingsPath(inv.dirs.Home)+": copy_mode must map skill names to configuration ids", "fix copy_mode in the settings file")
-	}
-	for _, done := range dones {
-		for _, id := range done.copies {
-			if !containsString(modes[done.v.name], id) {
-				modes[done.v.name] = append(modes[done.v.name], id)
-			}
-		}
-		sort.Strings(modes[done.v.name])
-	}
-	if err := s.SetCopyModes(modes); err != nil {
-		return err
-	}
-	b, err := home.MarshalSettings(s)
-	if err != nil {
-		return err
-	}
-	return m.ReplaceFile(home.SettingsPath(inv.dirs.Home), b)
+	return edit.stage(m, inv.dirs.Home)
 }
 
-// writeStaged lays the version out at a hidden directory beside the one it
-// will become, then reads it back the way a scan does: a directory whose
-// content hash is not the version's never gets published.
-func (inv *invocation) writeStaged(staged string, v *imported) error {
-	if err := os.MkdirAll(staged, 0o755); err != nil {
-		return err
-	}
+// placeable is the version an install places: its library name, its content
+// hash and the files it imported, which is what a copy placement of this
+// run is laid out from. The library directory is published by the same
+// mutation, so it is not there to copy from yet.
+func (v *imported) placeable() placeable {
+	return placeable{name: v.name, hash: v.hash, stage: v.writeFiles}
+}
+
+// writeFiles lays the imported files out under dest with the modes the
+// library directory gets.
+func (v *imported) writeFiles(dest string) error {
 	for _, f := range v.files {
-		full := filepath.Join(staged, filepath.FromSlash(f.path))
+		full := filepath.Join(dest, filepath.FromSlash(f.path))
 		// usable refused such a path already; nothing is written
 		// outside the staging directory whatever reaches this far.
-		if rel, err := filepath.Rel(staged, full); err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return fmt.Errorf("%q is not a path inside %s", f.path, staged)
+		if rel, err := filepath.Rel(dest, full); err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("%q is not a path inside %s", f.path, dest)
 		}
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			return err
@@ -1205,12 +1018,6 @@ func (inv *invocation) writeStaged(staged string, v *imported) error {
 		if err := writeSynced(full, []byte(f.body), mode); err != nil {
 			return err
 		}
-	}
-	if err := home.SyncTree(staged); err != nil {
-		return err
-	}
-	if hash, _ := scan.ContentHashAt(staged); hash != v.hash {
-		return fmt.Errorf("the staged copy of %s hashes to %s, not %s", v.name, hash, v.hash)
 	}
 	return nil
 }
@@ -1249,29 +1056,6 @@ func sweepStaged(dir string) {
 	}
 }
 
-// sameTarget reports whether the symlink at path names the library
-// directory, whether or not it resolves: a placement made before the
-// library held the skill dangles until the install publishes it, and is
-// still the placement the install would make.
-func sameTarget(path, libPath string) bool {
-	link, err := os.Readlink(path)
-	if err != nil {
-		return false
-	}
-	if !filepath.IsAbs(link) {
-		link = filepath.Join(filepath.Dir(path), link)
-	}
-	if filepath.Clean(link) == filepath.Clean(libPath) {
-		return true
-	}
-	a, err := filepath.EvalSymlinks(path)
-	if err != nil {
-		return false
-	}
-	b, err := filepath.EvalSymlinks(libPath)
-	return err == nil && a == b
-}
-
 // contentHashAt is the content hash of the skill at path, empty when there
 // is no skill there.
 func contentHashAt(path string) string {
@@ -1296,9 +1080,10 @@ func (inv *invocation) intoWorktrees(path string) bool {
 	return strings.HasPrefix(filepath.Clean(link), worktrees+string(filepath.Separator))
 }
 
-// installFailure keeps the refusals of the install as they are and maps a
-// journal that could not be finished to the recovery exit code.
-func installFailure(err error) error {
+// mutationFailure keeps the refusals of a mutating skill command as they
+// are and maps a journal that could not be finished to the recovery exit
+// code. Installing, placing and removing all answer through it.
+func mutationFailure(err error) error {
 	var f *failure
 	switch {
 	case errors.As(err, &f):
@@ -1349,7 +1134,7 @@ func (inv *invocation) reportInstalled(ctx context.Context, b *batch, dones []*i
 		}
 		places := inv.placements(snap, lib, modes)
 		rec := lineage.Record{Name: done.v.name, Kind: lineage.KindManaged, Ref: lineage.ManagedRef(done.v.name), Commit: done.v.commit, Import: done.v.imp, HasImport: true}
-		ev := skillFromLibrary(lib, rec, true, filterPlacements(places, done))
+		ev := skillFromLibrary(lib, rec, true, filterPlacements(places, targetIDs(done.placed)))
 		inv.out.emit(ev)
 		inv.printInstalled(done, ev)
 	}
@@ -1407,22 +1192,6 @@ func fetchedAt(v *imported) string {
 	return ", source fetched " + v.fetched
 }
 
-// filterPlacements keeps the placements of the configurations this install
-// covered, which is what a targeted rescan reports on; the library entry of
-// a client that reads the library is one of them.
-func filterPlacements(places []placementEvent, done *installed) []placementEvent {
-	kept := []placementEvent{}
-	for _, p := range places {
-		for _, t := range done.placed {
-			if p.Configuration == t.id {
-				kept = append(kept, p)
-				break
-			}
-		}
-	}
-	return kept
-}
-
 // librarySkills reads the library once, by name. One read covers a whole
 // run: reading it names every directory and content-hashes each one, which
 // is work that belongs to the library and not to the skills a run installed.
@@ -1433,6 +1202,18 @@ func librarySkills(library string) map[string]scan.LibrarySkill {
 		byName[s.Name] = s
 	}
 	return byName
+}
+
+// librarySkill reads one directory of the library, for the commands that
+// work on a single name and have no batch to amortise a whole read over.
+func librarySkill(library, name string) (scan.LibrarySkill, bool) {
+	skills, _ := readLibrary(library)
+	for _, s := range skills {
+		if s.Name == name {
+			return s, true
+		}
+	}
+	return scan.LibrarySkill{}, false
 }
 
 // printInstalled writes the confirmation of one skill and one row per
@@ -1449,15 +1230,7 @@ func (inv *invocation) printInstalled(done *installed, ev librarySkillEvent) {
 		line += ", " + out.paint(warnStyle, plural(n, "placement")+" skipped")
 	}
 	out.done(line)
-	t := &table{}
-	for _, p := range ev.Placements {
-		path := p.Path
-		if p.Kind == modeSymlink {
-			path += out.paint(muted, " -> "+inv.libraryPath(v.name))
-		}
-		t.add(c("  "+p.Configuration, label), c(p.Mode, muted), c(path, plain))
-	}
-	out.render(t, "")
+	inv.printPlacementRows(v.name, ev.Placements)
 	if len(done.adoptions) > 0 {
 		out.print("  ", out.paint(muted, "adopted "+strings.Join(done.adoptions, ", ")))
 	}

@@ -1,6 +1,6 @@
 ---
 title: "agentx skill"
-description: "Install skills from a source into your library, place them in every agent client, and see what you have."
+description: "Install skills from a source into your library, place them in your agent clients, remove them again, and see what you have."
 ---
 
 Your library is one directory, `~/.agents/skills`, that holds every skill agentx manages for you. Installing a skill puts it there once and links it into each agent client, so every client sees the same files and an update reaches all of them at once.
@@ -81,14 +81,14 @@ agentx skill add anthropics/skills --skill pdf --to claude-code --to cursor
 agentx skill add anthropics/skills --skill pdf --copy
 ```
 
-Use `--copy` for a client that cannot follow a symlink. agentx remembers which configurations hold a copy and keeps them that way.
+Use `--copy` for a client that cannot follow a symlink. agentx remembers which configurations hold a copy and keeps them that way: installing the skill again, `agentx skill place` and `agentx config enable --place-all` give those configurations a copy even without `--copy`.
 
 ### What happens to what is already there
 
 - A library directory holding exactly this version is adopted: agentx records where it came from and changes nothing on disk.
 - A library directory holding anything else stops that skill with exit code 6. Remove it, or keep it and install under another name later. In a run of several skills only that skill is stopped.
 - A placement that already points at the library is left alone.
-- A placement that is a real directory holding exactly this version is replaced by a link and reported as adopted.
+- A placement that is a real directory holding exactly this version is replaced by a link and reported as adopted. A copy agentx placed there itself stays a copy and is not reported as adopted.
 - A placement that is a link somewhere else is left alone, even if what it points at holds the same files: where your skill lives is your choice.
 - Anything else in the way is left untouched, with a warning naming the path.
 - A client skills directory agentx cannot write — one owned by somebody else, one on a read-only mount, or one macOS has not granted access to — is skipped with a warning. The rest of the install still happens, and the summary counts the placements it skipped.
@@ -100,6 +100,116 @@ If two commands try to install the same name at once, one of them wins and the o
 ### What is left out of the import
 
 A skill directory holds regular files and directories. Anything else — a symlink or a git submodule inside the skill — is left out, with a warning naming it. The library directory then differs from the upstream one, and what agentx records as the installed version is what it actually installed.
+
+## Place a skill you already have
+
+Put a skill the library already holds into another client:
+
+```sh
+agentx skill place pdf --to cursor
+```
+
+```text
+✓ placed pdf in 1 configuration
+  cursor  symlink  ~/.cursor/skills/pdf -> ~/.agents/skills/pdf
+```
+
+Name each client with `--to`, once for each. Add `--copy` for a client that cannot follow a symlink; agentx remembers the choice, as it does for `agentx skill add --copy`. To turn a recorded copy back into a symlink, take it away with `agentx skill remove pdf --from cursor`, then place the skill again with `agentx skill place pdf --to cursor`.
+
+This is the second half of `agentx skill add` on its own, so everything that command does about what is already at the path applies here too: a link that already points at the library is left alone, a directory holding exactly this version is adopted, and anything else is left where it is with a warning.
+
+An adopted directory becomes one agentx will delete when you remove the skill, so the run names every path it adopted. This holds with `--copy` too, where agentx writes nothing and only records the choice.
+
+Codex and Gemini CLI read the library directly. Placing into them makes no second entry — they already see the skill.
+
+## Remove a skill
+
+From one client:
+
+```sh
+agentx skill remove pdf --from cursor
+```
+
+```text
+✓ removed pdf from cursor: 1 placement
+  cursor  symlink  ~/.cursor/skills/pdf
+```
+
+From the machine altogether:
+
+```sh
+agentx skill remove pdf
+```
+
+```text
+✓ removed pdf from the library: 3 placements
+  claude-code  symlink  ~/.claude/skills/pdf
+  cursor       copy     ~/.cursor/skills/pdf
+  codex        library  ~/.agents/skills/pdf
+  deleted ~/.agents/skills/pdf and refs/heads/managed/pdf
+```
+
+Without `--from`, agentx takes away every placement, the library directory, the record of where the skill came from and what the settings remembered about it. With `--from`, only those clients' placements go; the library keeps the skill.
+
+### What agentx will and will not delete
+
+agentx deletes a placement only when it made it:
+
+- a symlink pointing at the library directory, and
+- a copy agentx placed and recorded.
+
+Everything else is left exactly where it is and named in the output:
+
+- a directory you made by hand,
+- a link of yours pointing somewhere else, even when following it ends up in the library,
+- a directory holding the same version that agentx never recorded as a copy,
+- a file.
+
+agentx decides by the name a link holds, never by where following it leads, so a link of yours is yours whatever it resolves to:
+
+```text
+warning: ~/.cursor/skills/pdf is a directory agentx did not place there and was left as it is; cursor still sees it
+warning: ~/.claude/skills/pdf points at ~/mylinks/pdf, not at ~/.agents/skills/pdf and was left as it is; claude-code still sees it
+✓ removed pdf from the library: 2 placements
+  ...
+```
+
+A copy agentx recorded is removed as you asked, even when it no longer holds the library's version of the skill. agentx warns and names the path rather than letting the content go quietly:
+
+```text
+warning: ~/.cursor/skills/pdf did not hold the library's version of pdf; removing the copy took what was there with it
+```
+
+Take a copy of anything you want to keep before removing it.
+
+### Clients that read the library
+
+Codex and Gemini CLI read `~/.agents/skills` directly, so there is no placement of their own to remove:
+
+```sh
+agentx skill remove pdf --from codex
+```
+
+```text
+error: codex reads the library directly, so pdf has no placement of its own to remove there
+hint: the library entry ~/.agents/skills/pdf is what codex sees: stop codex reading the library in its own settings, or take the entry away from every client that reads it with 'agentx skill remove pdf'
+```
+
+Use the client's own settings to stop it reading the library, or remove the skill everywhere with `agentx skill remove pdf`.
+
+### After a removal
+
+A client may still see a skill through another client's directory — Cursor reads Claude Code's skills directory, for instance. agentx rescans and reports what the client sees now, so the output tells you whether the skill is really gone from it.
+
+Removing a skill from the machine warns for every client that still sees it afterwards, naming the path:
+
+```text
+warning: codex still sees pdf at ~/.codex/skills/pdf, which agentx did not place there
+```
+
+Codex and Gemini CLI read the library, so removing the library entry is all agentx can do for them. A directory of their own under the same name stays, and the warning says where it is.
+
+Removing a fork is not this command; it has its own, and `agentx skill remove <fork>` stops with exit code 6. You can still take a fork's placements away with `--from`.
 
 ## List your skills
 
@@ -133,7 +243,7 @@ agentx --json skill list
 {"type":"result","schema_version":1,"ok":true}
 ```
 
-`skill add` emits a `source` event for the source it installed from, whose `last_fetched` says when it was fetched, then a `progress` event per step per skill (`blobs`, `import` and `install`), then one for the `rescan` at the end, then one `library_skill` event per skill it installed, then `result` with a one-line summary. `total` counts the steps the run planned; a skill it has to skip takes its remaining steps out of that count, so the run always ends on its total.
+`skill place` and `skill remove --from` emit one `library_skill` event too, whose placements are what the rescan found in the clients the command named; `skill remove` without `--from` emits none, the skill being gone. `skill add` emits a `source` event for the source it installed from, whose `last_fetched` says when it was fetched, then a `progress` event per step per skill (`blobs`, `import` and `install`), then one for the `rescan` at the end, then one `library_skill` event per skill it installed, then `result` with a one-line summary. `total` counts the steps the run planned; a skill it has to skip takes its remaining steps out of that count, so the run always ends on its total.
 
 The event carries two content hashes, and each name means one thing everywhere agentx uses it: `base_hash` is the version the skill was installed at, and `content_hash` is what the library directory holds now. `state` is `current` while the two agree.
 
@@ -143,10 +253,10 @@ Every install writes one commit per skill in the account repo in agentx home: th
 
 ## Exit codes
 
-- `1`: the command line names no skill to install, the flags contradict each other (`--all` with `--skill`, `--except` without `--all`, or `--except` leaving nothing), or it names the source with another branch or tag than its pin.
+- `1`: the command line names no skill to install, the flags contradict each other (`--all` with `--skill`, `--except` without `--all`, or `--except` leaving nothing), it names the source with another branch or tag than its pin, or `skill place` was given no `--to`.
 - `3`: the source, or the files of the skill, could not be fetched.
-- `5`: a source id names no source on this machine, the source did not serve a skill's files, the path or a skill named by `--skill` or `--except` does not exist in the source, or `--to` names a configuration that is not detected.
-- `6`: the library already holds a different skill under that name, the name is already managed at another version, the skill's name cannot be both a directory and a git branch, the skill holds a file whose path would put it outside the skill's directory, agentx cannot use your library directory, or an interrupted change has to be resolved before anything else can run. The message names what to restore; if you would rather keep what is there, move the named file in `~/.agentx/mutations` aside. In a run of several skills, `6` is also the code when the skills that were skipped disagree about why: a run whose failures all have one cause exits with that cause, so a batch that skipped two skills the source did not serve exits `5`.
+- `5`: a source id names no source on this machine, the source did not serve a skill's files, the path or a skill named by `--skill` or `--except` does not exist in the source, or `--to` or `--from` names a configuration that is not detected. For `skill place` and `skill remove`, also a name the library does not hold as a skill.
+- `6`: the library already holds a different skill under that name, the name is already managed at another version, the skill's name cannot be both a directory and a git branch, the skill holds a file whose path would put it outside the skill's directory, agentx cannot use your library directory, or an interrupted change has to be resolved before anything else can run. The message names what to restore; if you would rather keep what is there, move the named file in `~/.agentx/mutations` aside. For `skill remove`, it is also `--from` naming a client that reads the library directly, and removing a name that is a fork. In a run of several skills, `6` is also the code when the skills that were skipped disagree about why: a run whose failures all have one cause exits with that cause, so a batch that skipped two skills the source did not serve exits `5`.
 - `7`: another agentx command is running. Retry when it finishes.
 - `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.
-- `10`: agentx could not read its own settings file, or hit an error it has no better answer for. Run `agentx doctor`.
+- `10`: agentx could not read its own settings file, the library still held the skill after `skill remove` took it away, or agentx hit an error it has no better answer for. Run `agentx doctor`.

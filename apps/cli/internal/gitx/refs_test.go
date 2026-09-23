@@ -107,6 +107,70 @@ func TestRefsUpdateWithAnExpectedOldValue(t *testing.T) {
 	}
 }
 
+// TestRefsDeleteWithAnExpectedOldValue is the mechanism a removal takes a
+// skill's import branch and candidate ref away with: an empty new value is
+// a deletion, and it carries the value the ref is expected to hold, so a
+// branch something else moved is refused rather than dropped.
+func TestRefsDeleteWithAnExpectedOldValue(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	ctx := context.Background()
+	gitDir := filepath.Join(t.TempDir(), "account.git")
+	env := map[string]string{"PATH": os.Getenv("PATH"), "HOME": t.TempDir()}
+	r := New(env, false, func(string, ...any) {})
+	if _, err := r.Isolated(ctx, gitDir, "init", "--bare", "--quiet", gitDir); err != nil {
+		t.Fatal(err)
+	}
+	empty, err := r.Isolated(ctx, gitDir, "hash-object", "-t", "tree", "-w", "--stdin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := r.IsolatedAt(ctx, gitDir, "1700000000 +0000", "commit-tree", empty, "-m", "one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := r.IsolatedAt(ctx, gitDir, "1700000001 +0000", "commit-tree", empty, "-m", "two")
+	if err != nil {
+		t.Fatal(err)
+	}
+	refs := r.Refs(ctx)
+	const branch = "refs/heads/managed/alpha"
+	const candidate = "refs/agentx/candidate/alpha"
+	value := func(name string) string {
+		t.Helper()
+		values, err := refs.RefValues(gitDir, []string{name})
+		if err != nil {
+			t.Fatalf("reading %s: %v", name, err)
+		}
+		return values[name]
+	}
+	create := []home.RefUpdate{{Ref: branch, New: first, Old: ""}, {Ref: candidate, New: second, Old: ""}}
+	if err := refs.UpdateRefs(gitDir, create); err != nil {
+		t.Fatalf("creating the refs: %v", err)
+	}
+	// A deletion whose expected old value is wrong is refused, and the whole
+	// batch with it: a removal never drops a branch that moved under it.
+	wrong := []home.RefUpdate{{Ref: branch, New: "", Old: first}, {Ref: candidate, New: "", Old: first}}
+	if err := refs.UpdateRefs(gitDir, wrong); err == nil {
+		t.Error("a deletion of a ref that holds another value went through")
+	}
+	if got := value(branch); got != first {
+		t.Errorf("the refused batch deleted %s anyway (now %q)", branch, got)
+	}
+	// The values they hold delete both in one transaction.
+	right := []home.RefUpdate{{Ref: branch, New: "", Old: first}, {Ref: candidate, New: "", Old: second}}
+	if err := refs.UpdateRefs(gitDir, right); err != nil {
+		t.Fatalf("deleting the refs: %v", err)
+	}
+	for _, name := range []string{branch, candidate} {
+		if got := value(name); got != "" {
+			t.Errorf("%s is still at %q", name, got)
+		}
+	}
+}
+
 // TestIsolatedAllRunsReadsAtOnce checks the bounded way a command runs the
 // reads that do not depend on each other: every answer comes back, in the
 // order the calls were given, and a failure is reported without losing the

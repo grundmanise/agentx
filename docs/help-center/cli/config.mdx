@@ -31,7 +31,7 @@ An empty setting shows as `(none)`. In a terminal the keys are cyan and `true` i
 | `accept_operations` | Whether the machine executes operations queued for it. |
 | `disabled_configurations` | The agent configurations left out of placements by default. Every other detected configuration is enabled. |
 | `sources` | The sources skills are installed from, managed with [`agentx source`](/cli/source). |
-| `copy_mode` | The skills placed as a copy instead of a symlink, per configuration. Written by `agentx skill add --copy`. |
+| `copy_mode` | The skills placed as a copy instead of a symlink, per configuration. Written by `agentx skill add --copy` and `agentx skill place --copy`, and cleared by `agentx skill remove`. |
 
 ## Get one setting
 
@@ -69,6 +69,42 @@ agentx config enable windsurf
 ```
 
 Every agent configuration `agentx scan` detects is enabled from the start. Disable one to leave it out of placements by default; enable it to put it back. Use the id shown in parentheses by `agentx scan`. An id that is not detected exits with code 5 and lists the detected ids. Disabling a configuration does not stop its client from reading the library.
+
+Enabling only decides where later installs go. To fill a newly enabled client with what you already have, add `--place-all`:
+
+```sh
+agentx config enable cursor --place-all
+```
+
+```text
+✓ cursor is now enabled
+✓ placed 2 skills in cursor
+  pdf    symlink  ~/.cursor/skills/pdf -> ~/.agents/skills/pdf
+  xlsx   symlink  ~/.cursor/skills/xlsx -> ~/.agents/skills/xlsx
+```
+
+Each skill is placed as a symlink, except in a configuration where agentx already keeps a copy of it: that one gets a copy again, as with [`agentx skill place`](/cli/skill).
+
+The setting and every placement it implies are one change, written down before anything on disk moves. A run interrupted part way is finished by the next agentx command rather than undone.
+
+A placement agentx cannot make does not fail the run. If something you put there yourself is already at one of the paths, or agentx cannot write the client's skills directory, it leaves that path alone and names it, places the rest, and still succeeds — so the client can end up enabled with part of the library in it:
+
+```text
+warning: ~/.cursor/skills/pdf is not this skill and was left as it is; no placement was made for cursor
+✓ cursor is now enabled
+✓ placed 1 skill in cursor, 1 placement skipped
+```
+
+`--place-all` belongs to `enable`; `agentx config disable --place-all` exits with code 1. Place skills one at a time with [`agentx skill place`](/cli/skill).
+
+A client that reads the library directly, such as Codex, already sees every library skill, so `--place-all` makes no entry of its own for it and says so:
+
+```text
+✓ codex is now enabled
+✓ codex reads the library and already sees 2 skills; nothing was placed
+  pdf   library  ~/.agents/skills/pdf
+  xlsx  library  ~/.agents/skills/xlsx
+```
 
 ## Script it
 

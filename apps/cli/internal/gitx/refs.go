@@ -70,7 +70,11 @@ func (x refs) RefValues(gitDir string, names []string) (map[string]string, error
 // transaction: a batch either moves every ref or none, so a journal is
 // never left with half its branches written. An empty old value is written
 // as the empty string, which is git's way of requiring the ref not to exist
-// and is the same for a repository written with sha1 or with sha256.
+// and is the same for a repository written with sha1 or with sha256. An
+// empty new value is a deletion, which a removal records for the import
+// branch and the candidate ref of the skill it takes away; it too carries
+// its expected old value, so a branch that moved since the journal was
+// written is refused rather than dropped.
 //
 // The updates are wrapped in start and commit. Without them git commits
 // whatever prefix of the stream it managed to read when the input ends, so
@@ -78,6 +82,8 @@ func (x refs) RefValues(gitDir string, names []string) (map[string]string, error
 // written and the rest not, the one thing the transaction is here to
 // prevent. With them a stream that does not reach its commit changes
 // nothing, the way the import's fast-import protects itself with --done.
+// A removal's deletions ride in that same transaction, so a refused
+// deletion takes the whole batch with it.
 func (x refs) UpdateRefs(gitDir string, updates []home.RefUpdate) error {
 	if len(updates) == 0 {
 		return nil
@@ -85,6 +91,18 @@ func (x refs) UpdateRefs(gitDir string, updates []home.RefUpdate) error {
 	var b strings.Builder
 	b.WriteString("start\n")
 	for _, u := range updates {
+		if u.New == "" {
+			// git refuses a zero old value on a delete, so a deletion whose
+			// expected old value is empty is written without one; a journal
+			// never records that, since a ref that holds nothing is already
+			// where the step leaves it.
+			line := "delete " + u.Ref
+			if u.Old != "" {
+				line += " " + u.Old
+			}
+			b.WriteString(line + "\n")
+			continue
+		}
 		old := u.Old
 		if old == "" {
 			old = `""`

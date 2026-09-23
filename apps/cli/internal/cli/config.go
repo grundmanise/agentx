@@ -96,15 +96,22 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 
 // newEnableCommand builds config enable or config disable: both edit the
 // disabled_configurations list, and the configuration must be detected.
+// Enabling takes --place-all, which also places every skill the library
+// holds into the configuration; without it, enabling only decides where
+// future installs go.
 func newEnableCommand(inv *invocation, use, short string) *cobra.Command {
 	disable := use == "disable"
-	return &cobra.Command{
+	var placeAll bool
+	cmd := &cobra.Command{
 		Use:   use + " <configuration>",
 		Short: short,
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := inv.detectedConfiguration(args[0]); err != nil {
 				return err
+			}
+			if placeAll {
+				return inv.enableAndPlaceAll(cmd.Context(), args[0])
 			}
 			var s home.Settings
 			err := home.Mutate(inv.dirs.Home, inv.refs(cmd.Context()), func() error {
@@ -123,14 +130,23 @@ func newEnableCommand(inv *invocation, use, short string) *cobra.Command {
 				return err
 			}
 			inv.emitSettings(s)
-			if disable {
-				inv.out.done(inv.out.paint(label, args[0]) + " is now " + inv.out.paint(warnStyle, "disabled"))
-			} else {
-				inv.out.done(inv.out.paint(label, args[0]) + " is now " + inv.out.paint(okStyle, "enabled"))
-			}
+			inv.printEnabled(args[0], !disable)
 			return nil
 		},
 	}
+	if !disable {
+		cmd.Flags().BoolVar(&placeAll, "place-all", false, "also place every skill the library holds into the configuration")
+	}
+	return cmd
+}
+
+// printEnabled writes the one confirmation line of config enable or disable.
+func (inv *invocation) printEnabled(id string, enabled bool) {
+	state := inv.out.paint(warnStyle, "disabled")
+	if enabled {
+		state = inv.out.paint(okStyle, "enabled")
+	}
+	inv.out.done(inv.out.paint(label, id) + " is now " + state)
 }
 
 // settingSetter validates value for key before any lock is taken and returns

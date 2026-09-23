@@ -16,6 +16,15 @@ const (
 	ForkPrefix    = "refs/heads/skills/"
 )
 
+// CandidatePrefix is where an update candidate of a skill waits until it is
+// accepted or dropped. A later spec writes these; removal deletes the one
+// of the skill it takes away, so that nothing of the skill is left under
+// refs/agentx.
+const CandidatePrefix = "refs/agentx/candidate/"
+
+// CandidateRef is the update candidate of the skill called name.
+func CandidateRef(name string) string { return CandidatePrefix + name }
+
 // The kinds a skill of the library is listed with.
 const (
 	KindManaged   = "managed"

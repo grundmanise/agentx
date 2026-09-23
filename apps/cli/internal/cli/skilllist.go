@@ -1,12 +1,6 @@
 package cli
 
-import (
-	"context"
-
-	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
-	"github.com/grundmanise/agentx/apps/cli/internal/home"
-	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
-)
+import "context"
 
 // skillList reports the skills of the library: what each one is, where it
 // came from and where it is seen from. The lineage comes from the branches
@@ -18,24 +12,9 @@ func (inv *invocation) skillList(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	records := map[string]lineage.Record{}
-	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
-	if err != nil {
-		return accountRepoFailure(err)
-	}
-	if exists {
-		if records, err = lineage.List(ctx, inv.git, gitDir); err != nil {
-			return accountRepoFailure(err)
-		}
-	}
-	s, err := inv.loadSettings()
+	sc, err := inv.skillContext(ctx)
 	if err != nil {
 		return err
-	}
-	modes, err := s.CopyModes()
-	if err != nil {
-		return fail(exitInternal, "parse "+home.SettingsPath(inv.dirs.Home)+": copy_mode must map skill names to configuration ids",
-			"fix copy_mode in the settings file")
 	}
 	skills, warnings := readLibrary(inv.dirs.Library)
 	out := inv.out
@@ -49,8 +28,7 @@ func (inv *invocation) skillList(ctx context.Context) error {
 	out.print(out.paint(heading, plural(len(skills), "skill")))
 	t := &table{}
 	for _, lib := range skills {
-		rec, managed := records[lib.Name]
-		ev := skillFromLibrary(lib, rec, managed, inv.placements(snap, lib, modes))
+		ev := sc.librarySkillEventFor(inv, snap, lib, nil) // every placement, not only a command's own
 		out.emit(ev)
 		t.add(row(out, ev)...)
 	}

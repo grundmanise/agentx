@@ -58,12 +58,14 @@ const (
 func newSkillCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "skill",
-		Short:       "Install the skills of a source and list what the library holds",
+		Short:       "Install, place and remove skills, and list what the library holds",
 		Annotations: map[string]string{annotationGroup: "true"},
 		Args:        cobra.NoArgs,
 		RunE:        needSubcommand(inv, "no skill command given", "run 'agentx skill --help' to list commands"),
 	}
 	cmd.AddCommand(newSkillAddCommand(inv))
+	cmd.AddCommand(newSkillPlaceCommand(inv))
+	cmd.AddCommand(newSkillRemoveCommand(inv))
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List the skills in the library with their upstream and placements",

@@ -105,21 +105,21 @@ func TestSkillAddRefusesAnEntryThatClimbsOut(t *testing.T) {
 	equal(t, "exit of the other skill", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
 }
 
-// TestWriteStagedStaysInside is the second line of defence: whatever path
+// TestStageCopyStaysInside is the second line of defence: whatever path
 // reaches the staging write, nothing lands outside the staging directory.
-func TestWriteStagedStaysInside(t *testing.T) {
+func TestStageCopyStaysInside(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	staged := filepath.Join(root, "library", ".agentx-staged-1-1")
 	for _, p := range []string{"../../pwned.txt", "../pwned.txt", ".."} {
 		v := &imported{name: "evil", files: []treeFile{{path: p, mode: source.FileMode, body: "pwned\n"}}}
-		if err := (&invocation{}).writeStaged(staged, v); err == nil {
-			t.Errorf("writeStaged wrote %q", p)
+		if err := (&invocation{}).stageCopy(staged, v.placeable()); err == nil {
+			t.Errorf("stageCopy wrote %q", p)
 		}
 	}
 	for _, p := range []string{filepath.Join(root, "pwned.txt"), filepath.Join(root, "library", "pwned.txt")} {
 		if _, err := os.Lstat(p); err == nil {
-			t.Errorf("writeStaged wrote %s", p)
+			t.Errorf("stageCopy wrote %s", p)
 		}
 	}
 }
