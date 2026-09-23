@@ -131,6 +131,7 @@ func newRoot(inv *invocation) *cobra.Command {
 	root.AddCommand(newMachineCommand(inv))
 	root.AddCommand(newSourceCommand(inv))
 	root.AddCommand(newSkillCommand(inv))
+	root.AddCommand(newAdoptCommand(inv))
 	root.AddCommand(newScanCommand(inv))
 	root.AddCommand(newDoctorCommand(inv))
 	root.AddCommand(newServeCommand(inv))

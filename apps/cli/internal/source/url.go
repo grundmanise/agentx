@@ -84,7 +84,7 @@ func Parse(input string) (Source, error) {
 	}
 	raw, fragment, hasFragment := strings.Cut(raw, "#")
 	if hasFragment {
-		if fragment == "" || !validRef(fragment) {
+		if fragment == "" || !ValidRef(fragment) {
 			return s, fmt.Errorf("%w: %s does not end in a ref git accepts", ErrForm, safe)
 		}
 		s.Ref = fragment
@@ -129,13 +129,14 @@ func redact(input string) string {
 	return prefix + "***@" + rest[at+1:]
 }
 
-// validRef accepts the refs a pin can be: the names git check-ref-format
+// ValidRef accepts the refs a pin can be: the names git check-ref-format
 // allows for a one-level branch or tag, plus a commit id. A ref git refuses
 // is a usage error; accepting it here would defer it to a fetch error with
 // an unrelated hint about credential helpers, so the rules are git's own,
 // neither wider nor narrower: a commit id, release/1.x and a unicode name
-// are all refs git allows.
-func validRef(ref string) bool {
+// are all refs git allows. It is also what a command that hands a ref of
+// someone else's choosing to git checks first, a leading dash included.
+func ValidRef(ref string) bool {
 	if ref == "" || ref == "@" {
 		return false
 	}
@@ -344,7 +345,7 @@ func (s *Source) fromURL(raw, display string) error {
 // treeRef records the ref of a tree URL, which a fragment overrides only
 // when both name the same ref.
 func (s *Source) treeRef(ref string) error {
-	if !validRef(ref) {
+	if !ValidRef(ref) {
 		return fmt.Errorf("%w: the URL names ref %q, which git does not accept", ErrForm, ref)
 	}
 	if s.Ref != "" && s.Ref != ref {

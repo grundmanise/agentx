@@ -137,7 +137,7 @@ func Parse(message string) (Import, error) {
 	}
 	if i.Path == trailerRootPath {
 		i.Path = ""
-	} else if clean := path.Clean(i.Path); clean != i.Path || strings.HasPrefix(i.Path, "/") || strings.HasPrefix(i.Path, "../") || i.Path == ".." {
+	} else if !ValidPath(i.Path) {
 		return Import{}, fmt.Errorf("%w: %s %q is not a directory of the source", ErrTrailer, TrailerPath, i.Path)
 	}
 	if !objectID.MatchString(i.Commit) {
@@ -147,6 +147,25 @@ func Parse(message string) (Import, error) {
 		return Import{}, fmt.Errorf("%w: %s %q is not a content hash", ErrTrailer, TrailerHash, i.Hash)
 	}
 	return i, nil
+}
+
+// ValidPath reports whether p is a directory of a repository, "" being its
+// root: the subpath an import commit records, and the subpath another
+// tool's lock file names. A path that is not already clean, that is
+// absolute, that walks out of the repository or that carries a control
+// character is none. The last of those is what keeps a subpath one line of
+// a commit message and one line of git's batch input, neither of which a
+// reader could split back.
+func ValidPath(p string) bool {
+	switch {
+	case p == "":
+		return true
+	case p == "." || p == "..", strings.HasPrefix(p, "/"), strings.HasPrefix(p, "../"):
+		return false
+	case path.Clean(p) != p:
+		return false
+	}
+	return strings.IndexFunc(p, func(r rune) bool { return r < 0x20 || r == 0x7f }) < 0
 }
 
 // trailerBlock is the last paragraph of a commit message, which is where

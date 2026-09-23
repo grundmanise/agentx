@@ -321,6 +321,59 @@ func Present(ctx context.Context, r *gitx.Runner, gitDir, id string) bool {
 	return err == nil && out != ""
 }
 
+// ResolveRef asks the source itself what one of its refs names. It is the
+// only way to reach a branch or a tag of a source: a fetch writes one ref
+// for the whole source and carries --no-tags, so the names a repository
+// publishes live nowhere in the account repo, whatever it has fetched.
+//
+// It is one ls-remote over the remote already configured for the source, so
+// the URL rewrites, credential helpers and SSH configuration of the user
+// apply as they do to every fetch, and the URL itself never reaches a
+// command line where a credential in it could be read. Nothing is written
+// and no object is brought: what comes back is an id, which the caller
+// looks for in the history it has.
+//
+// A name that is both a branch and a tag resolves to the tag and an
+// annotated tag to the commit it peels to, which is git's own resolution
+// order. A ref the source does not publish is the empty string and no
+// error: it is an answer about the source, not a failure to reach it.
+func ResolveRef(ctx context.Context, r *gitx.Runner, gitDir string, s Source, ref string) (string, error) {
+	if !ValidRef(ref) {
+		return "", fmt.Errorf("%w: %q", ErrRefNotFound, ref)
+	}
+	names := []string{"refs/tags/" + ref, "refs/heads/" + ref}
+	if strings.HasPrefix(ref, "refs/") {
+		names = []string{ref}
+	}
+	// A pattern matches the tail of a ref name, so the peeled id of an
+	// annotated tag has to be asked for by name: refs/tags/v1 does not match
+	// refs/tags/v1^{}.
+	patterns := make([]string, 0, 2*len(names))
+	for _, name := range names {
+		patterns = append(patterns, name, name+"^{}")
+	}
+	out, err := r.User(ctx, gitDir, append([]string{"ls-remote", "--quiet", RemoteName(s.ID())}, patterns...)...)
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", ErrUnreachable, err)
+	}
+	found := map[string]string{}
+	for _, line := range strings.Split(out, "\n") {
+		if id, name, ok := strings.Cut(line, "\t"); ok {
+			found[strings.TrimSpace(name)] = strings.TrimSpace(id)
+		}
+	}
+	for _, name := range names {
+		// The peeled id first: the commit an annotated tag names is a
+		// version, and the tag object itself is not.
+		for _, key := range []string{name + "^{}", name} {
+			if id := found[key]; id != "" {
+				return id, nil
+			}
+		}
+	}
+	return "", nil
+}
+
 // Remove deletes the source's remote and ref from the account repo, and the
 // staging ref a fetch killed mid-flight can leave behind, so that removing a
 // source leaves nothing of it under refs/agentx. The objects stay until

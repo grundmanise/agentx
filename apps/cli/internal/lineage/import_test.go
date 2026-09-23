@@ -178,3 +178,35 @@ func TestParseRefusesAFifthTrailer(t *testing.T) {
 		t.Errorf("parse refused a message carrying a trailer that is not agentx's: %v", err)
 	}
 }
+
+// TestValidPath is what may be a subpath of a source, which is both the
+// path an import commit records and the path another tool's lock file
+// names. A path that is not a directory of the repository, or that could
+// not be written on one line of a commit message or read back from one line
+// of git's batch input, is none.
+func TestValidPath(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		path string
+		want bool
+	}{
+		{"", true},
+		{"skills/alpha", true},
+		{"a", true},
+		{".", false},
+		{"..", false},
+		{"../etc", false},
+		{"/etc", false},
+		{"./skills", false},
+		{"skills/", false},
+		{"skills//alpha", false},
+		{"skills/../../etc", false},
+		{"skills/al\npha", false},
+		{"skills/al\tpha", false},
+		{"skills/al\x00pha", false},
+	} {
+		if got := ValidPath(c.path); got != c.want {
+			t.Errorf("ValidPath(%q) = %v, want %v", c.path, got, c.want)
+		}
+	}
+}

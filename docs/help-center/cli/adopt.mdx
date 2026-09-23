@@ -1,0 +1,147 @@
+---
+title: "agentx adopt"
+description: "Take over the skills the vercel skills CLI installed, so agentx knows where each one came from — without reinstalling and without touching your files."
+---
+
+The vercel skills CLI installs into the same library agentx uses, `~/.agents/skills`, and records what it installed in a lock file. `agentx adopt` reads that file and takes those skills over: each one keeps its directory exactly as it is and gains an upstream, so agentx can tell your edits from the version you installed.
+
+agentx only ever reads the lock file. It is never written, not on a successful run and not on a failed one.
+
+## See what can be adopted
+
+```sh
+agentx adopt
+```
+
+```text
+3 skills of the vercel skills lock file in the library
+  pdf      candidate  https://github.com/anthropics/skills/skills/pdf   its source is not added yet; adopting adds and fetches it
+  xlsx     managed    https://github.com/anthropics/skills/skills/xlsx  agentx already manages it
+  scraper  refused    (none)                                            scraper names no source agentx can read
+Adopt them with agentx adopt --all.
+```
+
+Run with no flags to look first. It writes nothing at all: no lock is taken, no repository is created, no network call is made.
+
+| State | What it means |
+|---|---|
+| `candidate` | agentx can adopt it |
+| `managed` | agentx already knows this skill; there is nothing to do |
+| `refused` | it cannot be adopted, and the row says why |
+
+## Adopt them
+
+```sh
+agentx adopt --all
+```
+
+```text
+✓ added https://github.com/anthropics/skills at 3f2a9c1: 12 skills
+✓ adopted pdf from https://github.com/anthropics/skills under skills/pdf at 9c1d0ab
+  base 4e7b21c: the version the lock file recorded, found in the source; the directory differs from it, so what differs is a local modification
+```
+
+Name single skills instead with `--skill`, once for each:
+
+```sh
+agentx adopt --skill pdf --skill xlsx
+```
+
+Adopting adds any source you do not have yet, exactly as [`agentx source add`](/cli/source) would, and pins it to the branch or tag the lock file recorded. Then it records the version each skill was installed at and points that skill's import branch at it.
+
+A source holds one pin, so when its skills were installed from different refs agentx takes the first in name order and warns you:
+
+```text
+warning: https://github.com/anthropics/skills was installed at more than one ref (v1.2.0, main); it is added pinned to v1.2.0. Add it at another ref with 'agentx source add https://github.com/anthropics/skills#<ref>' and adopt again
+```
+
+Skills installed from the other refs are looked for in the history of the pinned one. Add the source yourself first if you want another pin.
+
+Afterwards the skills are ordinary managed skills:
+
+```sh
+agentx skill list
+```
+
+```text
+1 skill
+  pdf  managed  modified  https://github.com/anthropics/skills/skills/pdf  4 placements
+```
+
+## What is recorded as the base
+
+The base is the upstream version you installed, not the files on your disk. That distinction is the whole point: with it, an edit of yours stays an edit, and a later update or revert knows what came from upstream and what came from you.
+
+agentx establishes the version in one of these ways, and never guesses. Each is tried in turn, and a skill is left unmanaged only when none of them reaches a version:
+
+1. **The folder hash in the lock file.** It is the id of a directory in the source, so agentx looks that directory up in the source itself, at the version you fetched and back through the history of that skill. Finding it proves the content, because a git id names one set of bytes and nothing else. This works even when the skill has since been deleted from the source: its version is in the history, which is exactly where agentx looks. Some installs record a hash of their own instead, which names nothing in the source; agentx then moves on to the next way.
+2. **Your directory already is the current version.** If the files match the source exactly, they are an upstream version rather than an edit of one, and agentx records that version.
+3. **You name it yourself**, with `--base`.
+
+Whichever way finds the version, the commit recorded is the one at which the skill's directory took that content, never the one you happen to have fetched or named with `--base`. It is the commit an install of that version records too, so two machines that adopt the same install, or one that adopts it and one that installs it, write the same import commit, whenever each of them last fetched the source.
+
+Your directory is never changed, whichever way the version was found. If it differs from the base, agentx says so and `agentx skill list` shows the skill as `modified`.
+
+## When the version cannot be established
+
+```text
+warning: pdf: the version pdf was installed at cannot be established: no version of skills/pdf in https://github.com/anthropics/skills at 3f2a9c1, or in the 500 commits of it behind that, has the folder hash ~/.agents/.skill-lock.json recorded, and the directory is not the version https://github.com/anthropics/skills at 3f2a9c1 holds
+error: 1 of 3 skills could not be adopted: ...
+hint: leave it unmanaged, or name the version it came from with 'agentx adopt --skill pdf --base <commit, branch or tag>'
+```
+
+The message names every way agentx tried, because the skill is left unmanaged only when all of them come up empty. Usually that means the lock file's folder hash finds nothing in the source — it records no hash, or a hash of its own — **and** your directory no longer matches the source, because you edited it.
+
+agentx leaves the skill alone. It stays in your library and keeps working; it is simply unmanaged, and every other skill of the run is still adopted. It does **not** record your edited files as if they had come from upstream: that would turn your changes into upstream content, and nothing afterwards could separate the two again.
+
+You have two ways on.
+
+### Choose the base yourself
+
+If you know which version you installed, name it:
+
+```sh
+agentx adopt --skill pdf --base v1.2.0
+```
+
+```text
+✓ adopted pdf from https://github.com/anthropics/skills under skills/pdf at 7d40a19
+  base 1b9e05f: the version named with --base; the directory differs from it, so what differs is a local modification
+```
+
+`--base` takes a commit id, a branch or a tag of the source, and it takes one `--skill`. A branch or a tag is resolved against the source itself, so name the version the way the repository publishes it; `git ls-remote <url>` lists what it has. The version it records is still read from the source; what it changes is which version you call your starting point. Your directory is left as it is, and the difference from that base becomes your local modification.
+
+A version that is not in the history the source follows is refused: a version of another repository is not a version of this one, and neither is a branch or a tag of this one that your pin does not reach. Add the source at the ref you want first:
+
+```sh
+agentx source add https://github.com/anthropics/skills#main
+```
+
+### Keep it as your own
+
+If the directory is really yours now rather than a copy of someone else's skill, fork it. A fork keeps your content with a history of its own, and agentx never pretends it came from upstream.
+
+## What is refused, and why
+
+| Reason | What to do |
+|---|---|
+| The library entry is a symlink, or holds no `SKILL.md` | agentx manages real skill directories; leave it as it is |
+| The name is already a fork on this machine | the fork has a history of its own; nothing to adopt |
+| The entry names no source agentx can fetch | install it with [`agentx skill add`](/cli/skill) from a git source instead |
+| The entry names a path that is not inside a repository | fix the entry, or install the skill instead |
+| Its source cannot be fetched | check the URL and your credentials, then run again |
+
+One bad entry never costs the others: the rest of the run is adopted, and the failures are named at the end.
+
+## Where the lock file is read
+
+agentx reads both places that tool uses:
+
+- `$XDG_STATE_HOME/skills/.skill-lock.json`, or `~/.local/state/skills/.skill-lock.json` when that variable is unset
+- `~/.agents/.skill-lock.json`
+
+If both exist and disagree about a skill, the one that tool would write now wins, and agentx warns you naming both files.
+
+A lock file that is not readable JSON, or that holds no `skills` object, stops the command rather than being treated as empty — you asked to adopt what it holds, so agentx will not tell you it holds nothing. Fix it or move it aside; agentx will not write it for you.
+
+Inside the file, one bad entry never costs the others. An entry is skipped only when it is not an object or names no source; a single field written as the wrong kind of value is dropped with a warning naming it, and the entry is read without it.

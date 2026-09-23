@@ -187,22 +187,21 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 // batch is one run of agentx skill add: how many steps it planned, how many
 // it has reported, what it installed and the skills it had to give up on.
 type batch struct {
+	refusals
 	inv      *invocation
 	selected int
 	current  int
 	total    int
-	broken   []brokenSkill
 	done     []*installed // the skills that landed, in the order they were installed
 }
 
-// brokenSkill is one skill of a batch that could not be installed, and why.
-type brokenSkill struct {
-	subject string
-	fail    *failure
-}
-
 func newBatch(inv *invocation, selected int) *batch {
-	return &batch{inv: inv, selected: selected, total: stepsPerSkill*selected + 1}
+	return &batch{
+		refusals: refusals{verb: "installed", mixed: "run 'agentx skill list' to see what the library holds, then install the rest one at a time"},
+		inv:      inv,
+		selected: selected,
+		total:    stepsPerSkill*selected + 1,
+	}
 }
 
 // step reports one finished step of one skill.
@@ -216,7 +215,7 @@ func (b *batch) step(phase, subject string) {
 // naming the skill when there are others it does not apply to.
 func (b *batch) drop(subject string, remaining int, f *failure) {
 	b.total -= remaining
-	b.broken = append(b.broken, brokenSkill{subject: subject, fail: f})
+	b.add(subject, f)
 	if b.selected > 1 {
 		b.inv.out.warn(subject + ": " + f.message)
 	}
@@ -232,35 +231,9 @@ func (b *batch) abandon() error {
 	return nil // a typed nil would be an error the caller cannot see through
 }
 
-// failure is how a run with broken skills answers. One skill that failed
-// and nothing installed answers exactly as installing that one skill would,
-// which is what a run of one skill is; anything else names every skill that
-// failed and answers with the code they agree on, exit code 6 standing for
-// a batch whose causes disagree, the way exit code 3 does for a fetch.
-func (b *batch) failure() *failure {
-	switch {
-	case len(b.broken) == 0:
-		return nil
-	case len(b.broken) == 1 && len(b.done) == 0:
-		return b.broken[0].fail
-	}
-	status, hint := b.broken[0].fail.status, b.broken[0].fail.hint
-	reasons := make([]string, 0, len(b.broken))
-	for _, s := range b.broken {
-		if s.fail.status != status {
-			status = exitRefused
-		}
-		if s.fail.hint != hint {
-			hint = "run 'agentx skill list' to see what the library holds, then install the rest one at a time"
-		}
-		reasons = append(reasons, s.subject+": "+s.fail.message)
-	}
-	return &failure{
-		status:  status,
-		message: fmt.Sprintf("%d of %s could not be installed: %s", len(b.broken), plural(b.selected, "skill"), strings.Join(reasons, "; ")),
-		hint:    hint,
-	}
-}
+// failure is how a run with broken skills answers, which every run over
+// several skills answers the same way; see refusals.
+func (b *batch) failure() *failure { return b.refusals.failure(b.selected, len(b.done)) }
 
 // imported is one upstream version read out of the account repo, in
 // memory: the skill as the source lists it, its files and the coordinates
@@ -393,52 +366,102 @@ type upstream struct {
 // That commit, not the tip, is what the import commit records and takes
 // its dates from, so that a commit elsewhere in the source, or a fetch at
 // another time, leaves the import commit of an unchanged skill as it was.
+func upstreamReads(tip string, subpaths []string) [][]string {
+	return upstreamReadsAt(tip, atTip(tip, subpaths))
+}
+
+// upstreamReadsAt are the reads that find the upstream commit of each
+// subpath as seen from the commit named with it, which is tip or a commit
+// reachable from it: the last commit reachable from that commit that
+// touched the subpath, and that commit itself for the root.
 //
-// The skills below the root cost one walk of the source's history
-// together, however many they are, and each gets the commit
-// "git log -1 --no-renames <tip> -- :(literal)<subpath>" names for it alone,
-// under git's default history simplification: a merge that took the
+// The subpaths below the root cost one walk of the source's history from
+// tip together, however many they are and whichever commits they are seen
+// from, and each gets the commit
+// "git log -1 --no-renames <commit> -- :(literal)<subpath>" names for it
+// alone, under git's default history simplification: a merge that took the
 // skill's directory from one of its parents is not a change, and the walk
 // follows that parent to the commit that changed it. So which skills a run
-// selected never changes the commit of one of them. A skill at the root is
-// one read of the tip.
-func upstreamReads(tip string, subpaths []string) [][]string {
-	var below []string
-	root := false
-	for _, p := range subpaths {
-		if p == "" {
-			root = true
+// selected never changes the commit of one of them. The root costs one read
+// of the commits it is seen from.
+func upstreamReadsAt(tip string, at []treeRequest) [][]string {
+	var below, roots []string
+	seen := map[treeRequest]bool{}
+	for _, r := range at {
+		// A subpath is walked once whichever commits it is seen from, and
+		// the root is read once at each of its commits.
+		key := treeRequest{subpath: r.subpath}
+		if r.subpath == "" {
+			key = treeRequest{commit: r.commit}
+		}
+		if seen[key] {
 			continue
 		}
-		below = append(below, p)
+		seen[key] = true
+		if r.subpath == "" {
+			roots = append(roots, r.commit)
+		} else {
+			below = append(below, r.subpath)
+		}
 	}
 	var reads [][]string
 	if len(below) > 0 {
 		reads = append(reads, historyRead(tip, below))
 	}
-	if root {
-		reads = append(reads, []string{"log", "-1", "--format=%x00%H %ct", tip})
+	if len(roots) > 0 {
+		reads = append(reads, append([]string{"log", "--no-walk", "--format=%x00%H %ct"}, roots...))
 	}
 	return reads
 }
 
+// atTip asks for the upstream of every subpath as seen from tip itself.
+func atTip(tip string, subpaths []string) []treeRequest {
+	at := make([]treeRequest, len(subpaths))
+	for i, p := range subpaths {
+		at[i] = treeRequest{commit: tip, subpath: p}
+	}
+	return at
+}
+
 // upstreams reads what upstreamReads printed into the upstream of every
-// subpath: git's last change of it replayed on the walk, and the tip for
-// the root.
+// subpath, and fails for a subpath no commit of the walk touched.
 func upstreams(tip string, subpaths []string, out []string) (map[string]upstream, error) {
-	found := make(map[string]upstream, len(subpaths))
-	add := func(p, commit, epoch string) error {
+	found, err := foundUpstreams(tip, atTip(tip, subpaths), out)
+	if err != nil {
+		return nil, err
+	}
+	ups := make(map[string]upstream, len(subpaths))
+	for _, p := range subpaths {
+		up, ok := found[treeRequest{commit: tip, subpath: p}]
+		if !ok {
+			return nil, fmt.Errorf("no commit of %s touches %s", short(tip), p)
+		}
+		ups[p] = up
+	}
+	return ups, nil
+}
+
+// foundUpstreams reads what upstreamReadsAt printed into the upstream of
+// every request it can: git's last change of the subpath replayed on the
+// walk from the request's commit, and that commit for the root. A subpath
+// whose tree holds no entry at all, which no commit ever lists, is left out.
+func foundUpstreams(tip string, at []treeRequest, out []string) (map[treeRequest]upstream, error) {
+	found := make(map[treeRequest]upstream, len(at))
+	add := func(r treeRequest, commit, epoch string) error {
 		when, err := lineage.UpstreamDate(epoch)
 		if err != nil {
 			return err
 		}
-		found[p] = upstream{commit: commit, when: when}
+		found[r] = upstream{commit: commit, when: when}
 		return nil
 	}
 	var below []string
-	for _, p := range subpaths {
-		if p != "" {
-			below = append(below, p)
+	root := false
+	for _, r := range at {
+		if r.subpath == "" {
+			root = true
+		} else {
+			below = append(below, r.subpath)
 		}
 	}
 	if len(below) > 0 {
@@ -446,24 +469,36 @@ func upstreams(tip string, subpaths []string, out []string) (map[string]upstream
 		if err != nil {
 			return nil, err
 		}
-		for _, p := range below {
-			if commit, ok := h.lastChange(tip, p); ok {
-				if err := add(p, commit, h.commits[commit].epoch); err != nil {
+		for _, r := range at {
+			if r.subpath == "" {
+				continue
+			}
+			if commit, ok := h.lastChange(r.commit, r.subpath); ok {
+				if err := add(r, commit, h.commits[commit].epoch); err != nil {
 					return nil, err
 				}
 			}
 		}
 		out = out[1:]
 	}
-	if len(below) < len(subpaths) {
-		commit, epoch, _ := strings.Cut(strings.Trim(out[0], "\x00\n"), " ")
-		if err := add("", commit, epoch); err != nil {
-			return nil, err
+	if root {
+		epochs := map[string]string{}
+		for _, record := range strings.Split(out[0], "\x00") {
+			if commit, epoch, ok := strings.Cut(strings.TrimSpace(record), " "); ok {
+				epochs[commit] = epoch
+			}
 		}
-	}
-	for _, p := range subpaths {
-		if _, ok := found[p]; !ok {
-			return nil, fmt.Errorf("no commit of %s touches %s", short(tip), p)
+		for _, r := range at {
+			if r.subpath != "" {
+				continue
+			}
+			epoch, ok := epochs[r.commit]
+			if !ok {
+				return nil, fmt.Errorf("the account repo does not date the commit %s", r.commit)
+			}
+			if err := add(r, r.commit, epoch); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return found, nil

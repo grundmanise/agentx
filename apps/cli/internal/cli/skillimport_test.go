@@ -546,4 +546,21 @@ func TestUpstreamsAttributesEachSubpath(t *testing.T) {
 	if _, err := upstreams(merge, []string{"skills/gamma"}, []string{walk}); err == nil {
 		t.Error("a subpath no commit touches has an upstream")
 	}
+
+	// The same walk answers for a commit behind the tip, the way an
+	// adoption asks from the commit its version was found at.
+	behind := []treeRequest{{commit: c3, subpath: "skills/beta"}, {commit: side, subpath: "skills/beta"}, {commit: c2, subpath: ""}}
+	equal(t, "the reads from behind the tip", len(upstreamReadsAt(merge, behind)), 2)
+	roots := "\x00" + c2 + " 1720000000\n"
+	found, err := foundUpstreams(merge, behind, []string{walk, roots})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for r, want := range map[treeRequest]upstream{
+		behind[0]: {commit: c1, when: "1710000000 +0000"},
+		behind[1]: {commit: side, when: "1725000000 +0000"},
+		behind[2]: {commit: c2, when: "1720000000 +0000"},
+	} {
+		equal(t, "the upstream of "+r.subpath+" from "+short(r.commit), found[r], want)
+	}
 }

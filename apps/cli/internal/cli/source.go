@@ -125,7 +125,8 @@ func leftBehind(cause error, src source.Source) error {
 	return f
 }
 
-// sourceAdd fetches the source and records it in the settings.
+// sourceAdd fetches the source its argument names and records it in the
+// settings.
 func (inv *invocation) sourceAdd(ctx context.Context, arg string) error {
 	src, err := inv.parseSource(arg)
 	if err != nil {

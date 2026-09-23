@@ -140,7 +140,14 @@ func (s *sourceRepo) executable(path string) {
 }
 
 // tree is the tree id of path at the current commit.
-func (s *sourceRepo) tree(path string) string { s.t.Helper(); return s.run("rev-parse", "HEAD:"+path) }
+func (s *sourceRepo) tree(path string) string { s.t.Helper(); return s.treeAt("HEAD", path) }
+
+// treeAt is the tree id of path at rev, which is the id a forge reports as
+// the folder hash of a skill directory at that version.
+func (s *sourceRepo) treeAt(rev, path string) string {
+	s.t.Helper()
+	return s.run("rev-parse", rev+":"+path)
+}
 
 // standardSource is the source most tests use: two skills under skills/,
 // tagged v1, then a second commit that changes one of them.

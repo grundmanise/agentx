@@ -9,7 +9,7 @@
     "groups": [
       {
         "group": "CLI",
-        "pages": ["index", "cli/scan", "cli/source", "cli/skill", "cli/version", "cli/doctor", "cli/config", "cli/machine", "cli/output", "cli/serve"]
+        "pages": ["index", "cli/scan", "cli/source", "cli/skill", "cli/adopt", "cli/version", "cli/doctor", "cli/config", "cli/machine", "cli/output", "cli/serve"]
       }
     ]
   }
