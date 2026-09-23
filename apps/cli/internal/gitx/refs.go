@@ -31,22 +31,68 @@ type refs struct {
 	ctx context.Context
 }
 
-// RefValue reads what ref holds through for-each-ref rather than rev-parse,
-// which cannot tell a missing ref from a failure: for-each-ref prints
-// nothing and succeeds when the ref does not exist.
-func (x refs) RefValue(gitDir, ref string) (string, error) {
-	out, err := x.r.Isolated(x.ctx, gitDir, "for-each-ref", "--format=%(objectname)", ref)
-	if err != nil {
-		return "", fmt.Errorf("%w: %w", ErrAccountRepo, err)
+// RefValues reads what every ref holds in one for-each-ref rather than in
+// one rev-parse each: an install of thirty skills reads thirty branches and
+// must not cost thirty git processes. for-each-ref is also the only read
+// that can tell a missing ref from a failure, printing nothing and
+// succeeding when the ref does not exist, where rev-parse --verify --quiet
+// exits non-zero for both.
+//
+// A ref name given as a pattern also matches the refs below it, so only the
+// names asked for are kept: refs/heads/managed/a must not answer for
+// refs/heads/managed/a/b.
+func (x refs) RefValues(gitDir string, names []string) (map[string]string, error) {
+	values := map[string]string{}
+	if len(names) == 0 {
+		return values, nil
 	}
-	return strings.TrimSpace(out), nil
+	args := append([]string{"for-each-ref", "--format=%(refname)%00%(objectname)"}, names...)
+	out, err := x.r.Isolated(x.ctx, gitDir, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrAccountRepo, err)
+	}
+	wanted := make(map[string]bool, len(names))
+	for _, name := range names {
+		wanted[name] = true
+	}
+	for _, line := range strings.Split(out, "\n") {
+		ref, id, ok := strings.Cut(strings.TrimSpace(line), "\x00")
+		if ok && wanted[ref] {
+			values[ref] = id
+		}
+	}
+	return values, nil
 }
 
-// UpdateRef points ref at newValue with its expected old value, so that two
-// commands cannot both create it. An empty oldValue is git's way of
-// requiring the ref not to exist.
-func (x refs) UpdateRef(gitDir, ref, newValue, oldValue string) error {
-	if _, err := x.r.Isolated(x.ctx, gitDir, "update-ref", ref, newValue, oldValue); err != nil {
+// UpdateRefs points every ref at its new value with its expected old value,
+// so that two commands cannot both claim one name. They go in one
+// update-ref --stdin, which is one git process for a whole install and one
+// transaction: a batch either moves every ref or none, so a journal is
+// never left with half its branches written. An empty old value is written
+// as the empty string, which is git's way of requiring the ref not to exist
+// and is the same for a repository written with sha1 or with sha256.
+//
+// The updates are wrapped in start and commit. Without them git commits
+// whatever prefix of the stream it managed to read when the input ends, so
+// a writer that died part way through would leave some of the batch's refs
+// written and the rest not, the one thing the transaction is here to
+// prevent. With them a stream that does not reach its commit changes
+// nothing, the way the import's fast-import protects itself with --done.
+func (x refs) UpdateRefs(gitDir string, updates []home.RefUpdate) error {
+	if len(updates) == 0 {
+		return nil
+	}
+	var b strings.Builder
+	b.WriteString("start\n")
+	for _, u := range updates {
+		old := u.Old
+		if old == "" {
+			old = `""`
+		}
+		b.WriteString("update " + u.Ref + " " + u.New + " " + old + "\n")
+	}
+	b.WriteString("commit\n")
+	if _, err := x.r.IsolatedInput(x.ctx, gitDir, strings.NewReader(b.String()), "update-ref", "--stdin"); err != nil {
 		return fmt.Errorf("%w: %w", ErrAccountRepo, err)
 	}
 	return nil

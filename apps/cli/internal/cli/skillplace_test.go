@@ -234,7 +234,7 @@ func TestSkillAddNamesTheSkillToInstall(t *testing.T) {
 	h, s := installHarness(t)
 	many := h.run("skill", "add", s.url)
 	equal(t, "exit", many.exit, 1)
-	contains(t, "stderr", many.stderr, "name one with --skill: alpha, beta")
+	contains(t, "stderr", many.stderr, "name one with --skill, or take them all with --all: alpha, beta")
 
 	none := h.run("skill", "add", s.url, "--skill", "gamma")
 	equal(t, "exit", none.exit, 5)
@@ -274,7 +274,7 @@ func TestSkillAddMatchesTheNameInAnyCase(t *testing.T) {
 	byDir := o.run("skill", "add", r.url, "--skill", "on-disk")
 	equal(t, "exit of the directory name", byDir.exit, 5)
 	contains(t, "stderr", byDir.stderr, `has no skill called "on-disk"`)
-	contains(t, "stderr", byDir.stderr, "name one with --skill: fancy, nameless")
+	contains(t, "stderr", byDir.stderr, "fancy, nameless")
 
 	equal(t, "exit of the frontmatter name", o.run("skill", "add", r.url, "--skill", "Fancy").exit, 0)
 	if _, err := os.Stat(filepath.Join(o.library, "fancy", "SKILL.md")); err != nil {
@@ -348,9 +348,9 @@ func TestSkillAddRefusesAUsageErrorBeforeTheSource(t *testing.T) {
 	settings := filepath.Join(h.agentx, "settings.json")
 	before, errBefore := os.ReadFile(settings)
 
-	out := h.run("skill", "add", s.url, "--skill", "alpha", "--skill", "beta")
+	out := h.run("skill", "add", s.url, "--all", "--skill", "alpha")
 	equal(t, "exit", out.exit, 1)
-	contains(t, "stderr", out.stderr, "installs one skill at a time")
+	contains(t, "stderr", out.stderr, "--all and --skill cannot both be given")
 	if strings.Contains(out.stdout, "added") {
 		t.Errorf("a usage error added the source:\n%s", out.stdout)
 	}
@@ -468,5 +468,61 @@ func copyTree(t *testing.T, from, to string) {
 		if err := os.WriteFile(dst, b, info.Mode().Perm()); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+// TestSkillAddSkipsAForeignSymlink leaves a placement that is a symlink
+// somewhere other than the library where it is, even when what it points at
+// holds exactly this version: it is the user's link to the user's
+// directory, and unlinking it would decide for them where their skill
+// lives. Only a real directory of this version is adopted.
+// Both placement modes are covered: a copy replaces what is in its way
+// wherever a symlink would only be pointed elsewhere, so --copy is the
+// mode with something to lose, and it was the untested half.
+func TestSkillAddSkipsAForeignSymlink(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []struct{ name, flag string }{{"symlink", ""}, {"copy", "--copy"}} {
+		t.Run(mode.name, func(t *testing.T) {
+			h, s := installHarness(t)
+			// A directory of exactly this version, somewhere of the user's
+			// own, with the placement path a symlink to it.
+			other := newHarness(t)
+			other.build(t, fixture{dirs: []string{".claude"}})
+			other.mustRun("source", "add", s.url)
+			other.mustRun("skill", "add", s.url, "--skill", "alpha")
+			mine := filepath.Join(h.home, "my-skills", "alpha")
+			copyTree(t, filepath.Join(other.library, "alpha"), mine)
+			place := filepath.Join(h.home, ".claude", "skills", "alpha")
+			if err := os.MkdirAll(filepath.Dir(place), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(mine, place); err != nil {
+				t.Fatal(err)
+			}
+
+			args := []string{"--json", "skill", "add", s.url, "--skill", "alpha"}
+			if mode.flag != "" {
+				args = append(args, mode.flag)
+			}
+			out := h.run(args...)
+			equal(t, "exit", out.exit, 0)
+			target, err := os.Readlink(place)
+			if err != nil || target != mine {
+				t.Errorf("the placement is %q: %v", target, err)
+			}
+			// What the link points at is the user's directory and is left
+			// whole: a copy would otherwise write this version over it.
+			if _, err := os.Stat(filepath.Join(mine, "SKILL.md")); err != nil {
+				t.Errorf("the directory the link points at was disturbed: %v", err)
+			}
+			// The warning says the link is the user's own. Saying it "is
+			// not this skill" would be untrue here: it points at exactly
+			// this version.
+			contains(t, "stderr", out.stderr, place+" is a link of your own and was left as it is")
+			contains(t, "the result", out.stdout, "1 placement skipped")
+			if strings.Contains(h.one(out.stdout, "result")["summary"].(string), "adopted") {
+				t.Errorf("a foreign symlink was reported as adopted:\n%s", out.stdout)
+			}
+		})
 	}
 }

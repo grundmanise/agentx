@@ -6,7 +6,6 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
-	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 )
 
 // skillList reports the skills of the library: what each one is, where it
@@ -38,7 +37,7 @@ func (inv *invocation) skillList(ctx context.Context) error {
 		return fail(exitInternal, "parse "+home.SettingsPath(inv.dirs.Home)+": copy_mode must map skill names to configuration ids",
 			"fix copy_mode in the settings file")
 	}
-	skills, warnings := scan.ReadLibrary(inv.dirs.Library)
+	skills, warnings := readLibrary(inv.dirs.Library)
 	out := inv.out
 	if len(skills) == 0 {
 		out.print("No skills in the library. Install one with ", out.paint(label, "agentx skill add <source>"), ".")

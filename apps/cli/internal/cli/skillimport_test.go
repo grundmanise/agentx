@@ -16,7 +16,10 @@ import (
 // at the same commit each time, which is what lets two machines that accept
 // the same upstream version share one object.
 func TestImportCommitIsTheSameEverywhere(t *testing.T) {
-	t.Parallel()
+	// Not parallel, for the reason harness_test.go gives above
+	// suiteParallel: two homes, two sources and a version installed every
+	// way there is make it the heaviest forker in the suite by an order of
+	// magnitude.
 	first, s := installHarness(t)
 	first.env["TZ"] = "UTC"
 	equal(t, "exit", first.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
@@ -299,11 +302,13 @@ func TestImportCommitIgnoresUnrelatedUpstreamCommits(t *testing.T) {
 	}
 }
 
-// TestImportCommitMatchesTheSubpathLiterally installs a skill whose
-// directory name is a pattern git would expand. The upstream commit is
-// the last one that touched that directory, not one that touched another
-// directory the pattern matches: as a pattern, "skills/star*" also matches
-// the files of skills/starry, which moves on after it.
+// TestImportCommitMatchesTheSubpathLiterally installs skills whose
+// directory names git would read as a pattern or as pathspec magic. The
+// upstream commit is the last one that touched that directory and no
+// other: as a pattern, "skills/star*" also matches skills/starry, which
+// moves on after it, and ":(icase)odd" means ODD or odd in any case and
+// never the directory of that name, so without a literal match the walk
+// would not see that skill at all.
 func TestImportCommitMatchesTheSubpathLiterally(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -311,10 +316,234 @@ func TestImportCommitMatchesTheSubpathLiterally(t *testing.T) {
 	s := h.newSourceRepo("patterns", true)
 	s.skill("skills/star*", "star", "Named like a pattern", nil)
 	s.skill("skills/starry", "other", "Matched by the pattern", nil)
-	touched := s.commit("two skills")
+	s.skill(":(icase)odd", "odd", "Named like pathspec magic", nil)
+	touched := s.commit("three skills")
 	s.skill("skills/starry", "other", "Matched by the pattern, revised", nil)
-	s.commit("the other skill moves on")
+	s.skill("ODD", "loud", "Matched by the magic", nil)
+	s.commit("the other skills move on")
 	equal(t, "exit", h.run("source", "add", s.url).exit, 0)
-	equal(t, "exit", h.run("skill", "add", s.url, "--skill", "star").exit, 0)
-	contains(t, "the import commit", h.accountGit("cat-file", "commit", "refs/heads/managed/star"), "Agentx-Upstream-Commit: "+touched)
+	// One at a time: a walk over "skills/star*" as a pattern would also
+	// print the tree of ":(icase)odd", which git cannot rule out for a
+	// pattern.
+	for _, name := range []string{"star", "odd"} {
+		equal(t, name+": exit", h.run("skill", "add", s.url, "--skill", name).exit, 0)
+		contains(t, name+": the import commit", h.accountGit("cat-file", "commit", "refs/heads/managed/"+name), "Agentx-Upstream-Commit: "+touched)
+	}
+}
+
+// TestBulkImportCommitsDoNotDependOnTheFetchedTip installs a whole source
+// on two machines that fetched it at different commits, the later one past
+// a commit and a merge that touch none of its skills. Every skill gets the
+// same import commit on both, recorded at the last commit that touched it,
+// and a skill installed on its own gets the one it got in the bulk install.
+func TestBulkImportCommitsDoNotDependOnTheFetchedTip(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.build(t, fixture{dirs: []string{".claude"}})
+	s := h.newSourceRepo("drift", true)
+	for _, name := range []string{"alpha", "beta", "gamma"} {
+		s.skill("skills/"+name, name, "The "+name+" skill", map[string]string{"notes.md": name + " notes\n"})
+	}
+	first := s.commitAt("three skills", "1700000000 +0000")
+	s.skill("skills/gamma", "gamma", "The gamma skill, revised", nil)
+	gamma := s.commitAt("gamma moves on", "1710000000 +0000")
+	s.write("README.md", "# skills\n")
+	s.commitAt("a readme", "1720000000 +0000")
+	equal(t, "exit of source add", h.run("source", "add", s.url).exit, 0)
+	equal(t, "exit of skill add --all", h.run("skill", "add", s.url, "--all").exit, 0)
+	want := map[string]string{}
+	for name, upstream := range map[string]string{"alpha": first, "beta": first, "gamma": gamma} {
+		want[name] = h.accountGit("rev-parse", "refs/heads/managed/"+name)
+		contains(t, name+"'s import commit", h.accountGit("cat-file", "commit", want[name]), "Agentx-Upstream-Commit: "+upstream)
+	}
+
+	// The source moves on without touching a skill: a commit on its branch,
+	// and a merge of a side branch whose first parent is that commit.
+	s.write("README.md", "# skills, revised\n")
+	main := s.commitAt("the readme moves on", "1730000000 +0000")
+	s.write("docs/side.md", "side work\n")
+	s.run("add", "--all")
+	tree := s.run("write-tree")
+	side := s.run("commit-tree", tree, "-p", first, "-m", "side work")
+	merge := s.run("commit-tree", tree, "-p", main, "-p", side, "-m", "merge the side work")
+	s.run("update-ref", "refs/heads/main", merge)
+
+	later := newHarness(t)
+	later.build(t, fixture{dirs: []string{".claude"}})
+	equal(t, "exit of the later source add", later.run("source", "add", s.url).exit, 0)
+	equal(t, "the later fetch", later.accountGit("rev-parse", "refs/agentx/sources/"+source.ID(s.url)), merge)
+	equal(t, "exit of the later skill add --all", later.run("skill", "add", s.url, "--all").exit, 0)
+	one := newHarness(t)
+	one.build(t, fixture{dirs: []string{".claude"}})
+	equal(t, "exit of the single install", one.run("skill", "add", s.url, "--skill", "gamma").exit, 0)
+	for name, head := range want {
+		if got := later.accountGit("rev-parse", "refs/heads/managed/"+name); got != head {
+			t.Errorf("%s: the import branch is at %s in a home that fetched %s, %s in one that fetched before it", name, got, short(merge), head)
+		}
+	}
+	equal(t, "gamma installed on its own", one.accountGit("rev-parse", "refs/heads/managed/gamma"), want["gamma"])
+}
+
+// TestUpstreamCommitIsTheOneGitLogNames installs a whole source whose
+// history merges a change back onto work that predates it, and gives every
+// skill the commit "git log -1 --no-renames <tip> -- :(literal)<subpath>"
+// names for it alone. A merge that took a skill from its second parent is
+// not that skill's change: a machine that fetched the change and one that
+// fetched the merge get the same import commit. A merge that combined both
+// sides of a skill is its change, and a skill one side changed and took
+// back was last changed by taking it back.
+func TestUpstreamCommitIsTheOneGitLogNames(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.build(t, fixture{dirs: []string{".claude"}})
+	s := h.newSourceRepo("merges", true)
+	names := []string{"alpha", "beta", "gamma", "delta"}
+	for _, name := range names {
+		s.skill("skills/"+name, name, "The "+name+" skill", map[string]string{"notes.md": name + " notes\n"})
+	}
+	base := s.commit("four skills")
+	commitTree := func(message string, parents ...string) string {
+		s.run("add", "--all")
+		args := []string{"commit-tree", s.run("write-tree"), "-m", message}
+		for _, p := range parents {
+			args = append(args, "-p", p)
+		}
+		return s.run(args...)
+	}
+
+	// The work the merge's first parent holds, all of it older than the
+	// change to alpha: a readme, gamma's notes, and delta changed and taken
+	// back.
+	s.write("README.md", "# merges\n")
+	s.write("skills/gamma/notes.md", "gamma notes, revised\n")
+	s.write("skills/delta/notes.md", "delta notes, for a while\n")
+	early := commitTree("a readme, gamma's notes and delta", base)
+	s.write("skills/delta/notes.md", "delta notes\n")
+	back := commitTree("take delta back", early)
+
+	// The change, on a line of its own: alpha and gamma's description.
+	if err := os.Remove(filepath.Join(s.work, "README.md")); err != nil {
+		t.Fatal(err)
+	}
+	s.write("skills/gamma/notes.md", "gamma notes\n")
+	s.skill("skills/alpha", "alpha", "The alpha skill, revised", nil)
+	s.skill("skills/gamma", "gamma", "The gamma skill, revised", nil)
+	change := commitTree("alpha and gamma move on", base)
+	s.run("update-ref", "refs/heads/main", change)
+	first := newHarness(t)
+	first.build(t, fixture{dirs: []string{".claude"}})
+	equal(t, "exit of the first source add", first.run("source", "add", s.url).exit, 0)
+	equal(t, "exit of the first skill add --all", first.run("skill", "add", s.url, "--all").exit, 0)
+
+	// The change merged back onto the older work, which is the merge's
+	// first parent.
+	s.write("README.md", "# merges\n")
+	s.write("skills/gamma/notes.md", "gamma notes, revised\n")
+	merge := commitTree("merge the change back", back, change)
+	s.run("update-ref", "refs/heads/main", merge)
+	equal(t, "exit of source add", h.run("source", "add", s.url).exit, 0)
+	equal(t, "the fetch", h.accountGit("rev-parse", "refs/agentx/sources/"+source.ID(s.url)), merge)
+	equal(t, "exit of skill add --all", h.run("skill", "add", s.url, "--all").exit, 0)
+
+	for name, want := range map[string]string{"alpha": change, "beta": base, "gamma": merge, "delta": back} {
+		reference := s.run("log", "-1", "--no-renames", "--format=%H", merge, "--", ":(literal)skills/"+name)
+		equal(t, name+": git log -1", reference, want)
+		contains(t, name+"'s import commit", h.accountGit("cat-file", "commit", "refs/heads/managed/"+name), "Agentx-Upstream-Commit: "+reference)
+	}
+	for _, name := range []string{"alpha", "beta"} {
+		equal(t, name+" fetched at the change and at the merge", h.accountGit("rev-parse", "refs/heads/managed/"+name), first.accountGit("rev-parse", "refs/heads/managed/"+name))
+	}
+}
+
+// TestUpstreamWalkReadsNoBlob installs a skill whose history renames one of
+// its files with a change. Finding the upstream commit compares trees
+// alone: the blob the file had before the rename is never asked of the
+// source, which a blobless account repo would have to fetch for it, or
+// fail, to tell whether the two files are similar.
+func TestUpstreamWalkReadsNoBlob(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.build(t, fixture{dirs: []string{".claude"}})
+	s := h.newSourceRepo("renames", true)
+	long := strings.Repeat("a line the rename keeps\n", 40)
+	s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": long})
+	before := s.commit("alpha with notes")
+	old := s.run("rev-parse", before+":skills/alpha/notes.md")
+	if err := os.Remove(filepath.Join(s.work, "skills", "alpha", "notes.md")); err != nil {
+		t.Fatal(err)
+	}
+	s.write("skills/alpha/guide.md", long+"and one more\n")
+	renamed := s.commit("rename the notes, with a change")
+	equal(t, "exit of source add", h.run("source", "add", s.url).exit, 0)
+	equal(t, "exit of skill add", h.run("skill", "add", s.url).exit, 0)
+	contains(t, "the import commit", h.accountGit("cat-file", "commit", "refs/heads/managed/alpha"), "Agentx-Upstream-Commit: "+renamed)
+	if strings.Contains(h.accountGit("cat-file", "--batch-all-objects", "--batch-check=%(objectname)"), old) {
+		t.Errorf("the blob notes.md had before the rename, %s, was fetched into the account repo", short(old))
+	}
+}
+
+// TestUpstreamOfASkillAtTheRootIsTheTip installs a skill at the root of a
+// source together with one below it. The root skill's upstream commit is
+// the tip, since every commit touches the repository; the other one's is
+// the last commit that touched its own directory.
+func TestUpstreamOfASkillAtTheRootIsTheTip(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.build(t, fixture{dirs: []string{".claude"}})
+	s := h.newSourceRepo("mixed", true)
+	s.skill(".", "top", "A skill at the root", nil)
+	s.skill("skills/inner", "inner", "A skill below it", nil)
+	first := s.commit("two skills")
+	s.write("README.md", "# mixed\n")
+	tip := s.commit("a readme")
+	equal(t, "exit of source add", h.run("source", "add", s.url).exit, 0)
+	equal(t, "exit of skill add --all", h.run("skill", "add", s.url, "--all").exit, 0)
+	contains(t, "the root skill's import commit", h.accountGit("cat-file", "commit", "refs/heads/managed/top"), "Agentx-Upstream-Commit: "+tip)
+	contains(t, "the inner skill's import commit", h.accountGit("cat-file", "commit", "refs/heads/managed/inner"), "Agentx-Upstream-Commit: "+first)
+}
+
+// TestUpstreamsAttributesEachSubpath reads a history walk as git prints it
+// and gives every subpath the commit git log -1 names for it alone: a merge
+// that took the subpath from its second parent sends the walk down that
+// parent, a directory whose name another one starts with is not the
+// subpath, and a path is the source's own bytes, a newline included.
+func TestUpstreamsAttributesEachSubpath(t *testing.T) {
+	t.Parallel()
+	id := func(c string) string { return strings.Repeat(c, 40) }
+	c1, c2, c3, side, merge := id("1"), id("2"), id("3"), id("5"), id("9")
+	zero := id("0")
+	record := func(commit, epoch string, parents []string, entries ...string) string {
+		r := "\x00" + strings.Join(append([]string{commit, epoch}, parents...), " ") + "\x00"
+		for i := 0; i < len(entries); i += 2 {
+			status := ":" + entries[i]
+			if i == 0 {
+				status = "\n" + status
+			}
+			r += status + "\x00" + entries[i+1] + "\x00"
+		}
+		return r
+	}
+	tree := func(old, new string) string { return "040000 040000 " + old + " " + new + " M" }
+	added := func(new string) string { return "000000 040000 " + zero + " " + new + " A" }
+	walk := record(merge, "1740000000", []string{c3, side}, tree(id("b"), id("c")), "skills/beta") +
+		record(c3, "1730000000", []string{c2}, tree(id("d"), id("e")), "skills/alphabet") +
+		record(side, "1725000000", []string{c1}, tree(id("b"), id("c")), "skills/beta") +
+		record(c2, "1720000000", []string{c1}, tree(id("a"), id("f")), "skills/alpha", tree(id("6"), id("7")), "skills/new\nline", added(id("d")), "skills/alphabet") +
+		record(c1, "1710000000", nil, added(id("a")), "skills/alpha", added(id("b")), "skills/beta", added(id("6")), "skills/new\nline")
+	root := "\x00" + merge + " 1740000000\n"
+	got, err := upstreams(merge, []string{"skills/alpha", "", "skills/beta", "skills/new\nline"}, []string{walk, root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for p, want := range map[string]upstream{
+		"skills/alpha":     {commit: c2, when: "1720000000 +0000"},
+		"skills/beta":      {commit: side, when: "1725000000 +0000"},
+		"skills/new\nline": {commit: c2, when: "1720000000 +0000"},
+		"":                 {commit: merge, when: "1740000000 +0000"},
+	} {
+		equal(t, "the upstream of "+p, got[p], want)
+	}
+	if _, err := upstreams(merge, []string{"skills/gamma"}, []string{walk}); err == nil {
+		t.Error("a subpath no commit touches has an upstream")
+	}
 }

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -317,7 +318,7 @@ func TestSourceAddKeepsAnAliasOnReAdd(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	s, v1, head := h.standardSource(true)
-	equal(t, "add", h.run("source", "add", s.url).exit, 0)
+	h.mustRun("source", "add", s.url)
 
 	const alias = "https://github.com/owner/repo"
 	err := home.Mutate(h.agentx, nil, func() error {
@@ -325,7 +326,11 @@ func TestSourceAddKeepsAnAliasOnReAdd(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		entry := settings.Sources[settings.FindSource(s.url)]
+		at := settings.FindSource(s.url)
+		if at < 0 {
+			return fmt.Errorf("the settings hold no entry for %s", s.url)
+		}
+		entry := settings.Sources[at]
 		entry.Alias = alias
 		settings.SetSource(entry)
 		return home.SaveSettings(h.agentx, settings)

@@ -22,18 +22,26 @@ import (
 func stubGit(t *testing.T, h *harness, script string) {
 	t.Helper()
 	dir := t.TempDir()
-	path := filepath.Join(dir, "git")
+	writeShim(t, filepath.Join(dir, "git"), script)
+	h.env["PATH"] = dir
+}
+
+// writeShim writes an executable a test is about to run and waits until it
+// can be run. The suite forks in parallel with itself and a fork duplicates
+// the write descriptor of a file being written, so a shim written here can
+// be refused with ETXTBSY until the child that inherited that descriptor
+// execs. The command under test would report that as a git it cannot run.
+func writeShim(t *testing.T, path, script string) {
+	t.Helper()
 	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	for {
-		err := exec.Command(path, "--version").Run()
-		if !errors.Is(err, syscall.ETXTBSY) {
-			break
+		if err := exec.Command(path, "--version").Run(); !errors.Is(err, syscall.ETXTBSY) {
+			return
 		}
 		runtime.Gosched()
 	}
-	h.env["PATH"] = dir
 }
 
 func versionStub(version string) string {

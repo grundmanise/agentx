@@ -107,6 +107,23 @@ func TestUpstreamDateIsEpochWithoutAnOffset(t *testing.T) {
 			t.Errorf("UpstreamDate accepted %q", bad)
 		}
 	}
+	// An epoch beyond what git stores is refused rather than carried into a
+	// commit. fast-import takes any run of digits, so nothing downstream
+	// would refuse it, and the commit would be dated where no reader can
+	// put it; commit-tree, which writes the same commit for everything the
+	// two both accept, refuses it outright.
+	for _, wide := range []string{"9223372036854775808", strings.Repeat("9", 40)} {
+		if _, err := UpstreamDate(wide); err == nil {
+			t.Errorf("UpstreamDate accepted %q, which is not a time git stores", wide)
+		}
+	}
+	// What git does write is taken, to the second before the overflow and
+	// past the 32 bits commit-tree stops at.
+	for _, ok := range []string{"0", "4294967296", "100000000000", "9223372036854775807"} {
+		if _, err := UpstreamDate(ok); err != nil {
+			t.Errorf("UpstreamDate refused %q: %v", ok, err)
+		}
+	}
 }
 
 // TestParseReadsTheTrailerBlockAlone keeps Parse to the last paragraph of a

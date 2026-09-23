@@ -77,6 +77,14 @@ const (
 	dirOf  = "dir:"
 )
 
+// RefUpdate is one ref a journal moves: to New, and only from Old, which
+// is empty for a ref that must not exist yet.
+type RefUpdate struct {
+	Ref string
+	New string
+	Old string
+}
+
 // Warner hears about what a mutation or a recovery kept and could not give
 // back. The journal has no streams of its own, so a command that wants to
 // tell its user implements it on the RefUpdater it hands over; one that
@@ -96,12 +104,17 @@ func warn(u RefUpdater, message string) {
 // itself, so every command that mutates agentx home passes one; recovery
 // needs it for the same steps and refuses a journal it cannot finish
 // without one.
+//
+// Both methods take every ref of one repository at once, because a journal
+// holds one ref per skill and an install of thirty skills may not cost
+// thirty git processes.
 type RefUpdater interface {
-	// RefValue is the object id ref holds in gitDir, empty when it holds none.
-	RefValue(gitDir, ref string) (string, error)
-	// UpdateRef points ref at newValue, requiring it to hold oldValue now;
-	// an empty oldValue requires the ref not to exist.
-	UpdateRef(gitDir, ref, newValue, oldValue string) error
+	// RefValues are the object ids the named refs hold in gitDir, a ref
+	// that holds none being absent from the map.
+	RefValues(gitDir string, refs []string) (map[string]string, error)
+	// UpdateRefs points every ref at its new value, requiring it to hold its
+	// old value now, and applies the whole batch or none of it.
+	UpdateRefs(gitDir string, updates []RefUpdate) error
 }
 
 // Mutation collects one command's changes into one journal: the state files
@@ -114,6 +127,9 @@ type Mutation struct {
 	id     string
 	j      journal
 	staged int // how many staged paths were handed out, so each one is its own
+	// journaled says the journal reached the disk, which is the line
+	// between a failure that leaves nothing and one recovery has to finish.
+	journaled bool
 }
 
 // NewMutation starts a mutation of agentx home dir. Call it under the
@@ -200,8 +216,17 @@ func (m *Mutation) Apply(u RefUpdater) error {
 		m.Discard() // no journal, so nothing would ever recover this content
 		return err
 	}
+	m.journaled = true
 	return apply(path, m.j, u)
 }
+
+// Journaled reports whether this mutation's journal reached the disk. It is
+// what tells a caller whose work recovery would need (an install's staging
+// refs, which hold the commits the journal's ref steps name) whether it
+// may take that work away when the run fails. Before the journal exists
+// there is nothing to recover and nothing to keep; after it exists there is
+// both, whether or not the apply that followed succeeded.
+func (m *Mutation) Journaled() bool { return m.journaled }
 
 // Discard removes what the mutation staged, for a command that refuses
 // after staging and before Apply: no journal names that content, so the
@@ -239,11 +264,23 @@ func replaceFile(dir, path string, data []byte) error {
 	return m.Apply(nil) // a file replacement has no ref step
 }
 
-// apply runs the steps in order and then renames every staged file over its
-// live path, marks the journal applied and removes it. Retained content is
-// discarded last, once every live path holds its new state.
+// apply moves the refs, runs the path steps in order and then renames every
+// staged file over its live path, marks the journal applied and removes it.
+// Retained content is discarded last, once every live path holds its new
+// state.
+//
+// The refs of a journal go first and together: they are the record of what
+// this machine accepted, they depend on no path, and a batch of them is one
+// transaction, so a run stopped anywhere leaves either every branch or none
+// and the paths behind them to recover.
 func apply(journalPath string, j journal, u RefUpdater) error {
+	if _, err := applyRefs(j.Steps, u); err != nil {
+		return err
+	}
 	for _, s := range j.Steps {
+		if s.Kind == stepRef {
+			continue
+		}
 		if _, err := applyStep(s, u); err != nil {
 			return unfinished(journalPath, s, err)
 		}
@@ -279,12 +316,13 @@ func unfinished(journalPath string, s step, err error) error {
 		ErrRecovery, s.Kind, journalPath, s.Path, err)
 }
 
-// applyStep brings one step's live state to New, doing nothing when it is
-// there already, and reports whether it changed anything. A live state that
-// is neither Old nor New was changed by something else and is left alone.
+// applyStep brings one path step's live state to New, doing nothing when it
+// is there already, and reports whether it changed anything. A live state
+// that is neither Old nor New was changed by something else and is left
+// alone. Ref steps are applied by applyRefs, all of them at once.
 func applyStep(s step, u RefUpdater) (bool, error) {
 	if s.Kind == stepRef {
-		return applyRef(s, u)
+		return applyRefs([]step{s}, u)
 	}
 	live, err := liveState(s.Path)
 	if err != nil {
@@ -322,24 +360,61 @@ func applyStep(s step, u RefUpdater) (bool, error) {
 	return false, fmt.Errorf("%w: unknown step %q in a mutation journal", ErrRecovery, s.Kind)
 }
 
-// applyRef moves a lineage ref with its expected old value, so that two
-// commands cannot both create it. A ref that already holds the new value is
-// done; one that holds neither value is left alone.
-func applyRef(s step, u RefUpdater) (bool, error) {
-	if u == nil {
-		return false, fmt.Errorf("%w: %s in %s needs git to finish; run a command that uses the account repo", ErrRecovery, s.Ref, s.GitDir)
+// applyRefs moves every lineage ref of a journal with its expected old
+// value, so that two commands cannot both create one. A ref that already
+// holds the new value is done; one that holds neither value is left alone
+// and refuses the recovery. What is left to do is read in one call per
+// repository and applied in one, so that a journal of thirty skills is two
+// git processes and one transaction rather than sixty processes and thirty
+// chances to stop halfway.
+func applyRefs(steps []step, u RefUpdater) (bool, error) {
+	byDir := map[string][]step{}
+	var dirs []string // the repositories in the order the journal names them
+	for _, s := range steps {
+		if s.Kind != stepRef {
+			continue
+		}
+		if _, seen := byDir[s.GitDir]; !seen {
+			dirs = append(dirs, s.GitDir)
+		}
+		byDir[s.GitDir] = append(byDir[s.GitDir], s)
 	}
-	live, err := u.RefValue(s.GitDir, s.Ref)
-	if err != nil {
-		return false, err
-	}
-	if live == s.New {
+	if len(dirs) == 0 {
 		return false, nil
 	}
-	if live != s.Old {
-		return false, fmt.Errorf("%w: %s holds neither what the mutation expected nor what it was to become", ErrRecovery, s.Ref)
+	if u == nil {
+		first := byDir[dirs[0]][0]
+		return false, fmt.Errorf("%w: %s in %s needs git to finish; run a command that uses the account repo", ErrRecovery, first.Ref, first.GitDir)
 	}
-	return true, u.UpdateRef(s.GitDir, s.Ref, s.New, s.Old)
+	moved := false
+	for _, dir := range dirs {
+		refs := make([]string, 0, len(byDir[dir]))
+		for _, s := range byDir[dir] {
+			refs = append(refs, s.Ref)
+		}
+		live, err := u.RefValues(dir, refs)
+		if err != nil {
+			return moved, err
+		}
+		var updates []RefUpdate
+		for _, s := range byDir[dir] {
+			switch have := live[s.Ref]; {
+			case have == s.New: // done already, by this run or an earlier one
+			case have != s.Old:
+				return moved, fmt.Errorf("%w: %s holds neither what the mutation expected nor what it was to become", ErrRecovery, s.Ref)
+			default:
+				updates = append(updates, RefUpdate{Ref: s.Ref, New: s.New, Old: s.Old})
+			}
+		}
+		if len(updates) == 0 {
+			continue
+		}
+		if err := u.UpdateRefs(dir, updates); err != nil {
+			return moved, err
+		}
+		moved = true
+	}
+	return moved, nil
 }
 
 // liveState renders what path holds now, in the words the journal records:
@@ -431,6 +506,11 @@ func IsAbsent(state string) bool { return state == absent }
 // IsDir reports whether a state says the path is a real directory.
 func IsDir(state string) bool { return strings.HasPrefix(state, dirOf) }
 
+// IsLink reports whether a state says the path is a symlink, wherever it
+// points. What it points at says nothing about whether it may be replaced:
+// a link is the user's own, and where it leads is beside the point.
+func IsLink(state string) bool { return strings.HasPrefix(state, linkTo) }
+
 // IsDangling reports whether path is a symlink that resolves to nothing,
 // which is what a placement into a fork worktree that is gone looks like.
 func IsDangling(path string) bool {
@@ -516,9 +596,15 @@ func recoverJournal(dir, journalPath string, u RefUpdater) error {
 	if err := json.Unmarshal(b, &j); err != nil || len(j.Replace)+len(j.Steps) == 0 {
 		return fmt.Errorf("%w: %s is not a mutation journal", ErrRecovery, journalPath)
 	}
-	resumed := false
+	resumed, err := applyRefs(j.Steps, u)
+	if err != nil {
+		return err
+	}
 	for _, s := range j.Steps {
-		if s.Kind != stepRef && s.Staged != "" {
+		if s.Kind == stepRef {
+			continue
+		}
+		if s.Staged != "" {
 			if _, err := os.Lstat(s.Staged); err != nil {
 				// The staged directory is gone, so the step can only be
 				// finished if the live path already holds it.

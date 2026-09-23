@@ -696,7 +696,9 @@ func TestConfigEnableDisable(t *testing.T) {
 
 // TestScanSpawnBudget puts a counting git on PATH and scans a 100-skill library.
 func TestScanSpawnBudget(t *testing.T) {
-	t.Parallel()
+	// Not parallel, for the reason harness_test.go gives above
+	// suiteParallel: it counts the processes a scan spawns and times it,
+	// and it writes a shim it then execs.
 	h := newHarness(t)
 	f := fixture{dirs: []string{".codex", ".gemini", ".cursor"}, files: map[string]string{}, links: map[string]string{}}
 	for i := 0; i < 100; i++ {
@@ -716,9 +718,8 @@ func TestScanSpawnBudget(t *testing.T) {
 	if err != nil {
 		t.Skip("git not on PATH")
 	}
-	if err := os.WriteFile(filepath.Join(bin, "git"), []byte("#!/bin/sh\necho \"$@\" >> "+counter+"\nexec "+real+" \"$@\"\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	writeShim(t, filepath.Join(bin, "git"), "#!/bin/sh\necho \"$@\" >> "+counter+"\nexec "+real+" \"$@\"\n")
+	_ = os.Remove(counter) // the --version that cleared ETXTBSY is not one of the scan's
 	h.env["PATH"] = bin + string(os.PathListSeparator) + os.Getenv("PATH")
 
 	start := time.Now()

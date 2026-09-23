@@ -42,5 +42,11 @@ func (f *failure) Unwrap() error { return f.cause }
 func (f *failure) wrap(cause error) *failure { f.cause = cause; return f }
 
 func fail(st status, message, hint string) error {
+	return refuse(st, message, hint)
+}
+
+// refuse is fail for a caller that holds on to the failure rather than
+// returning it at once, such as a batch collecting what it could not do.
+func refuse(st status, message, hint string) *failure {
 	return &failure{status: st, message: message, hint: hint}
 }

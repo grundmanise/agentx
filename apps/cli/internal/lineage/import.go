@@ -5,11 +5,14 @@ package lineage
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"path"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
@@ -176,101 +179,200 @@ type Version struct {
 	When    string // the upstream committer time as "<epoch> +0000"
 }
 
-// Write writes the import commit of v into gitDir and returns its id. The
-// tree is written over the objects the source already put in the repository:
-// the skill's own tree is reused whole unless an entry that is neither a
-// regular file nor a directory has to be left out, and only the directories
-// above such an entry are written anew. The commit is parentless, carries
-// the fixed agentx identity and the upstream committer time as epoch
-// seconds with +0000, so its id depends on nothing but the version and its
-// coordinates.
-func Write(ctx context.Context, r *gitx.Runner, gitDir string, v Version) (string, error) {
-	tree, err := writeTree(ctx, r, gitDir, v)
-	if err != nil {
-		return "", err
-	}
-	return r.IsolatedAt(ctx, gitDir, v.When, "commit-tree", tree, "-m", v.Import.Message())
+// ImportingPrefix is where the commits of a run wait between the
+// fast-import that writes them and the mutation journal that points the
+// import branches at them: one staging ref per skill, under a namespace of
+// this run's own, so that the objects stay reachable while the journal is
+// written and two runs never share a ref. The refs are dropped when the run
+// ends; a run that is killed leaves them, and they hold nothing but objects
+// the account repo would keep anyway.
+const ImportingPrefix = "refs/agentx/importing/"
+
+// ImportingRef is the staging ref of the nth version of run.
+func ImportingRef(run string, n int) string {
+	return fmt.Sprintf("%s%s/%d", ImportingPrefix, run, n)
 }
 
-// writeTree builds the import tree: one entry, the upstream directory, and
-// under it the skill's regular files. A skill whose tree holds only regular
-// files and directories, which is nearly every skill, reuses that tree whole
-// and costs one mktree; only the directories above an entry that has to be
-// left out are written anew, deepest first, one mktree per level.
-func writeTree(ctx context.Context, r *gitx.Runner, gitDir string, v Version) (string, error) {
-	root, err := skillTree(ctx, r, gitDir, v)
-	if err != nil {
-		return "", err
-	}
-	if root == "" {
-		return "", fmt.Errorf("%w: the skill has no regular file to import", ErrTrailer)
-	}
-	return mktree(ctx, r, gitDir, []string{entryLine(source.DirMode, root, v.Dir)})
+// NewRun names one run's staging namespace.
+func NewRun() string {
+	var id [8]byte
+	_, _ = rand.Read(id[:])
+	return hex.EncodeToString(id[:])
 }
 
-// skillTree is the tree of the skill directory as the import holds it: the
-// tree the source stores when every entry below it is a regular file or a
-// directory, and otherwise a tree written without the entries an import
-// leaves out. An empty result means every entry was left out.
-func skillTree(ctx context.Context, r *gitx.Runner, gitDir string, v Version) (string, error) {
-	children := map[string][]source.TreeEntry{}
-	byDepth := map[int][]string{}
+// WriteAll writes the import commit of every version into gitDir, through
+// one fast-import whatever the count, and returns their ids in the order
+// the versions were given. Each commit points at a tree this call has
+// already written or the source already held, is parentless, carries the
+// fixed agentx identity and the upstream committer time as epoch seconds
+// with +0000, and so depends on nothing but the version and its
+// coordinates: a skill installed alone and the same skill installed in a
+// batch of thirty end at the same commit.
+//
+// fast-import is fed the tree rather than the files: the commit's tree is
+// exactly the one writeTrees built, set with a filemodify of the tree root,
+// so that nothing about how a batch is streamed can reach the commit id.
+// The ids come back through get-mark rather than a marks file, which costs
+// no temporary file and keeps the whole import to one git process.
+func WriteAll(ctx context.Context, r *gitx.Runner, gitDir, run string, versions []Version) ([]string, error) {
+	if len(versions) == 0 {
+		return nil, nil
+	}
+	trees, err := writeTrees(ctx, r, gitDir, versions)
+	if err != nil {
+		return nil, err
+	}
+	var b strings.Builder
+	for i, v := range versions {
+		msg := v.Import.Message()
+		fmt.Fprintf(&b, "commit %s\nmark :%d\n", ImportingRef(run, i), i+1)
+		fmt.Fprintf(&b, "author %s %s\ncommitter %s %s\n", gitx.Identity, v.When, gitx.Identity, v.When)
+		// The count is bytes and not characters, and the message is written
+		// as it stands: a commit-tree of the same message ends in the same
+		// newline, and one byte either way is another commit id.
+		fmt.Fprintf(&b, "data %d\n%s", len(msg), msg)
+		// An empty path is fast-import's way of replacing the tree root, so
+		// the commit takes the tree whole instead of having it assembled.
+		fmt.Fprintf(&b, "M %s %s \n\n", source.DirMode, trees[i])
+	}
+	for i := range versions {
+		fmt.Fprintf(&b, "get-mark :%d\n", i+1)
+	}
+	b.WriteString("done\n")
+	out, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(b.String()), "fast-import", "--quiet", "--done")
+	if err != nil {
+		return nil, err
+	}
+	ids := strings.Fields(out)
+	if len(ids) != len(versions) {
+		return nil, fmt.Errorf("git fast-import wrote %d commits for %d versions", len(ids), len(versions))
+	}
+	return ids, nil
+}
+
+// DropImporting removes the staging refs of run, in one transaction. It is
+// cleanup: the refs hold commits the import branches now hold too, and a
+// deletion of a ref that is not there succeeds.
+func DropImporting(ctx context.Context, r *gitx.Runner, gitDir, run string, n int) error {
+	if n == 0 {
+		return nil
+	}
+	var b strings.Builder
+	for i := range n {
+		b.WriteString("delete " + ImportingRef(run, i) + "\n")
+	}
+	_, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(b.String()), "update-ref", "--stdin")
+	return err
+}
+
+// writeTrees builds the import tree of every version: one entry, the
+// upstream directory, and under it the skill's regular files. A skill whose
+// tree holds only regular files and directories, which is nearly every
+// skill, reuses that tree whole; only the directories above an entry that
+// has to be left out are written anew, deepest first. Every version is
+// written together, one mktree per level of the deepest of them and one for
+// their roots, so that a batch of thirty skills costs the tree writes of
+// one.
+func writeTrees(ctx context.Context, r *gitx.Runner, gitDir string, versions []Version) ([]string, error) {
+	plans := make([]*treePlan, len(versions))
 	maxDepth := 0
-	ids := map[string]string{"": v.Tree}
+	for i, v := range versions {
+		plans[i] = newTreePlan(v)
+		maxDepth = max(maxDepth, plans[i].maxDepth)
+	}
+	// A directory is written once every directory below it is, so the levels
+	// go deepest first and every version's level is written in the same pass.
+	for depth := maxDepth; depth >= 0; depth-- {
+		var defs []string
+		var at []plannedDir // what each definition writes, in the same order
+		for _, p := range plans {
+			for _, dir := range p.level(depth) {
+				lines := entryLines(dir, p.children, p.ids)
+				p.rewritten[dir] = true
+				if len(lines) == 0 {
+					p.ids[dir] = "" // every entry left out: the directory goes with them
+					continue
+				}
+				at = append(at, plannedDir{plan: p, dir: dir})
+				defs = append(defs, treeInput(lines))
+			}
+		}
+		written, err := mktree(ctx, r, gitDir, defs)
+		if err != nil {
+			return nil, err
+		}
+		for i, d := range at {
+			d.plan.ids[d.dir] = written[i]
+		}
+	}
+	defs := make([]string, 0, len(versions))
+	for i, v := range versions {
+		root := plans[i].ids[""]
+		if root == "" {
+			// Unreachable through an install: HasFileToImport answers the
+			// same question per skill, before the run stages anything.
+			return nil, fmt.Errorf("%w: %s has no regular file to import", ErrTrailer, v.Dir)
+		}
+		defs = append(defs, treeInput([]string{entryLine(source.DirMode, root, v.Dir)}))
+	}
+	return mktree(ctx, r, gitDir, defs)
+}
+
+// treePlan is one version's tree rewrite: what each directory holds, which
+// directories sit at which depth, and the id each has ended at.
+type treePlan struct {
+	children  map[string][]source.TreeEntry
+	byDepth   map[int][]string
+	ids       map[string]string
+	rewritten map[string]bool
+	maxDepth  int
+}
+
+// plannedDir names one directory of one version, for reading the ids of a
+// level's mktree back where they belong.
+type plannedDir struct {
+	plan *treePlan
+	dir  string
+}
+
+func newTreePlan(v Version) *treePlan {
+	p := &treePlan{
+		children:  map[string][]source.TreeEntry{},
+		byDepth:   map[int][]string{},
+		ids:       map[string]string{"": v.Tree},
+		rewritten: map[string]bool{},
+	}
 	for _, e := range v.Entries {
 		parent := path.Dir(e.Path)
 		if parent == "." {
 			parent = ""
 		}
-		children[parent] = append(children[parent], e)
+		p.children[parent] = append(p.children[parent], e)
 		if e.Mode == source.DirMode {
-			ids[e.Path] = e.OID
+			p.ids[e.Path] = e.OID
 			depth := strings.Count(e.Path, "/") + 1
-			byDepth[depth] = append(byDepth[depth], e.Path)
-			maxDepth = max(maxDepth, depth)
+			p.byDepth[depth] = append(p.byDepth[depth], e.Path)
+			p.maxDepth = max(p.maxDepth, depth)
 		}
 	}
-	rewritten := map[string]bool{}
-	for depth := maxDepth; depth >= 0; depth-- {
-		dirs := byDepth[depth]
-		if depth == 0 {
-			dirs = []string{""}
-		}
-		sort.Strings(dirs)
-		var level []string // the directories written at this level, in order
-		var defs []string  // one mktree definition each
-		for _, dir := range dirs {
-			if !needsWriting(dir, children, rewritten) {
-				continue
-			}
-			lines := entryLines(dir, children, ids)
-			rewritten[dir] = true
-			if len(lines) == 0 {
-				ids[dir] = "" // every entry left out: the directory goes with them
-				continue
-			}
-			level = append(level, dir)
-			defs = append(defs, treeInput(lines))
-		}
-		if len(defs) == 0 {
-			continue
-		}
-		// The trees of one level are written in one batch, each definition
-		// a run of NUL-terminated records and the boundary between two of
-		// them an empty record.
-		out, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(strings.Join(defs, "\x00")), "mktree", "-z", "--batch")
-		if err != nil {
-			return "", err
-		}
-		written := strings.Fields(out)
-		if len(written) != len(defs) {
-			return "", fmt.Errorf("git mktree wrote %d trees for %d directories", len(written), len(defs))
-		}
-		for i, dir := range level {
-			ids[dir] = written[i]
+	return p
+}
+
+// level names the directories of this version at depth that have to be
+// written anew, in a fixed order.
+func (p *treePlan) level(depth int) []string {
+	dirs := p.byDepth[depth]
+	if depth == 0 {
+		dirs = []string{""}
+	}
+	sort.Strings(dirs)
+	var needed []string
+	for _, dir := range dirs {
+		if needsWriting(dir, p.children, p.rewritten) {
+			needed = append(needed, dir)
 		}
 	}
-	return ids[""], nil
+	return needed
 }
 
 // entryLines are the mktree lines of one directory: its regular files as
@@ -308,12 +410,26 @@ func needsWriting(dir string, children map[string][]source.TreeEntry, rewritten 
 	return false
 }
 
-// mktree writes one tree from its entries. Its answer comes back as git
-// wrote it, one id and a newline whether or not the input was terminated
-// with NUL, so it is trimmed before it names an object.
-func mktree(ctx context.Context, r *gitx.Runner, gitDir string, lines []string) (string, error) {
-	out, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(treeInput(lines)), "mktree", "-z")
-	return strings.TrimSpace(out), err
+// mktree writes the trees defs defines, one definition per tree, in one git
+// process, and returns their ids in the same order. Every definition is a
+// run of NUL-terminated records, so the boundary between two of them is an
+// empty record and joining them with one more NUL is what separates them.
+// It is the only place a tree is written: one writer means one place where
+// the records are framed, and framing them any other way silently renames
+// a file.
+func mktree(ctx context.Context, r *gitx.Runner, gitDir string, defs []string) ([]string, error) {
+	if len(defs) == 0 {
+		return nil, nil
+	}
+	out, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(strings.Join(defs, "\x00")), "mktree", "-z", "--batch")
+	if err != nil {
+		return nil, err
+	}
+	written := strings.Fields(out)
+	if len(written) != len(defs) {
+		return nil, fmt.Errorf("git mktree wrote %d trees for %d directories", len(written), len(defs))
+	}
+	return written, nil
 }
 
 // treeInput is the mktree input of one tree: every record terminated with
@@ -341,6 +457,25 @@ func entryLine(mode, oid, name string) string {
 	return mode + " " + typ + " " + oid + "\t" + name
 }
 
+// HasFileToImport reports whether a skill's tree holds anything an import
+// tree can carry: one regular file, at any depth. A directory of nothing
+// but symlinks and submodules has none, and an import of it would be a
+// commit with an empty tree.
+//
+// It is one predicate on purpose. writeTrees discovers the same thing, by
+// finding nothing left to put in the root tree, but by then it can only
+// fail the whole run, where the contract says a skill that cannot be
+// installed costs only itself. So the caller asks this first and refuses
+// that one skill, and the two cannot drift apart into two conditions.
+func HasFileToImport(entries []source.TreeEntry) bool {
+	for _, e := range entries {
+		if source.IsFileMode(e.Mode) {
+			return true
+		}
+	}
+	return false
+}
+
 // Dropped names the entries of a skill's tree an import leaves out: a
 // symlink or a submodule, which the import tree, holding regular files
 // alone, has no room for. The caller warns about each one, since the
@@ -360,9 +495,17 @@ func Dropped(entries []source.TreeEntry) []string {
 // git prints them, into the date an import commit carries: the same seconds
 // with a zero offset, so that the commit id does not depend on the time zone
 // of the machine that wrote it or of the one that made the upstream commit.
+//
+// It is what git could have written and nothing wider: a run of digits that
+// does not fit a signed 64-bit integer is not a committer time git stores,
+// and fast-import, unlike commit-tree, would take it and write a commit
+// dated somewhere no reader can put it.
 func UpstreamDate(epoch string) (string, error) {
 	if epoch == "" || strings.TrimLeft(epoch, "0123456789") != "" {
 		return "", fmt.Errorf("%w: %q is not a committer time", ErrTrailer, epoch)
+	}
+	if _, err := strconv.ParseInt(epoch, 10, 64); err != nil {
+		return "", fmt.Errorf("%w: %q is not a committer time git could have written", ErrTrailer, epoch)
 	}
 	return epoch + " +0000", nil
 }

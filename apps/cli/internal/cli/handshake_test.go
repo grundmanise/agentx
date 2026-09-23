@@ -28,6 +28,7 @@ var (
 // TestMain builds the fixture server once per test run. Tests that need it
 // skip when go is not on PATH.
 func TestMain(m *testing.M) {
+	capParallel()
 	os.Exit(func() int {
 		if _, err := exec.LookPath("go"); err != nil {
 			mcpServerErr = err

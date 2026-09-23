@@ -5,13 +5,60 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"flag"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 )
+
+// The suite drives every command in this one process, which nothing else
+// does: a real agentx run is a process of its own, and the only thing two
+// of them share is the home they name. Here they also share a process, and
+// so they share file descriptors. An flock belongs to an open file
+// description, fork duplicates it and only exec drops it again, so from the
+// fork of any child in this binary until that child execs, every lock every
+// other test holds is held by one process more. The lock answers a held
+// lock after 50 ms, which the contract fixes, and a test that forks
+// hundreds of git processes can push an unrelated test's next command past
+// it. The failure then reads "another agentx command holds the lock" in a
+// test that is not about locking at all. The same inheritance makes a shim
+// a test has just written fail to exec with ETXTBSY, which is why
+// writeShim waits for that to clear.
+//
+// So the suite bounds what runs beside what, rather than the lock waiting
+// longer. Two rules, and any package that drives commands in-process can
+// take both:
+//
+//   - suiteParallel bounds how many tests run at once, whatever -parallel
+//     and the machine say, so a sixteen-core runner does not run four times
+//     as much of this at once as a four-core laptop and CI does not behave
+//     differently from a desk.
+//   - a test that forks far more than the rest, or that measures what a run
+//     costs, does not call t.Parallel() at all. go test runs every test
+//     that has not asked to be parallel before it resumes the ones that
+//     have, one after another, so such a test has the suite to itself
+//     without anything having to be locked. Locking it instead deadlocks:
+//     a parallel test holds what it took until after its parallel subtests
+//     have run, and those subtests need the slots the tests waiting on it
+//     are holding.
+const suiteParallel = 4
+
+// capParallel lowers -parallel to suiteParallel. It never raises it: a run
+// that asks for less than the suite bounds meant it.
+func capParallel() {
+	flag.Parse()
+	f := flag.Lookup("test.parallel")
+	if f == nil {
+		return
+	}
+	if n, err := strconv.Atoi(f.Value.String()); err == nil && n > suiteParallel {
+		_ = f.Value.Set(strconv.Itoa(suiteParallel))
+	}
+}
 
 // harness drives Run against a temporary home. Every test goes through it;
 // no test touches the real home or reads the process environment.
@@ -69,6 +116,21 @@ func (h *harness) run(args ...string) outcome {
 	var stdout, stderr bytes.Buffer
 	exit := Run(context.Background(), args, h.env, strings.NewReader(""), &stdout, &stderr)
 	return outcome{exit: exit, stdout: stdout.String(), stderr: stderr.String()}
+}
+
+// mustRun runs a command the rest of the test has no meaning without and
+// fails on the spot when it does not work. A setup step checked with equal
+// only reports; the test then runs on and indexes what the failed command
+// did not write, and the panic that follows, an index out of range on an
+// empty list, is what gets reported instead of the exit code that explains
+// everything.
+func (h *harness) mustRun(args ...string) outcome {
+	h.t.Helper()
+	out := h.run(args...)
+	if out.exit != 0 {
+		h.t.Fatalf("agentx %s: exit %d\n%s%s", strings.Join(args, " "), out.exit, out.stdout, out.stderr)
+	}
+	return out
 }
 
 // runDeadline bounds a run started with start. It is longer than

@@ -24,6 +24,16 @@ var ErrMissing = errors.New("git not found in PATH")
 // every machine.
 const FixedDate = "946684800 +0000"
 
+// The author and committer of every commit agentx writes. A stream that
+// names them itself, as fast-import does, writes Identity, which is the
+// same two fields in one git identity line: a commit must come out the same
+// whichever of the two writes it.
+const (
+	IdentityName  = "agentx"
+	IdentityEmail = "agentx@localhost"
+	Identity      = IdentityName + " <" + IdentityEmail + ">"
+)
+
 // Runner runs git. Every call names its git directory explicitly and builds
 // the child environment from the environment map it was given; nothing is
 // inherited from the process.
@@ -272,8 +282,8 @@ func (r *Runner) childEnv(isolated bool, dates string) []string {
 			when = dates
 		}
 		for _, who := range []string{"AUTHOR", "COMMITTER"} {
-			env["GIT_"+who+"_NAME"] = "agentx"
-			env["GIT_"+who+"_EMAIL"] = "agentx@localhost"
+			env["GIT_"+who+"_NAME"] = IdentityName
+			env["GIT_"+who+"_EMAIL"] = IdentityEmail
 			env["GIT_"+who+"_DATE"] = when
 		}
 	}

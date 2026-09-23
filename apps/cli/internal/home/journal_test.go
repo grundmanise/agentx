@@ -13,14 +13,28 @@ import (
 // exercised without git.
 type refs map[string]string
 
-func (r refs) RefValue(gitDir, ref string) (string, error) { return r[gitDir+" "+ref], nil }
-
-func (r refs) UpdateRef(gitDir, ref, newValue, oldValue string) error {
-	key := gitDir + " " + ref
-	if r[key] != oldValue {
-		return errors.New("the ref moved under us")
+func (r refs) RefValues(gitDir string, names []string) (map[string]string, error) {
+	values := map[string]string{}
+	for _, name := range names {
+		if value := r[gitDir+" "+name]; value != "" {
+			values[name] = value
+		}
 	}
-	r[key] = newValue
+	return values, nil
+}
+
+// UpdateRefs applies the whole batch or none of it, as git's own
+// transaction does: every expected old value is checked before the first
+// ref moves.
+func (r refs) UpdateRefs(gitDir string, updates []RefUpdate) error {
+	for _, u := range updates {
+		if r[gitDir+" "+u.Ref] != u.Old {
+			return errors.New("the ref moved under us")
+		}
+	}
+	for _, u := range updates {
+		r[gitDir+" "+u.Ref] = u.New
+	}
 	return nil
 }
 
@@ -55,8 +69,8 @@ func (m *Mutation) stopAfter(n int, u RefUpdater) error {
 
 func (m *Mutation) steps() int { return len(m.j.Steps) }
 
-// install is the shape of a one-skill install: the import branch, the
-// library directory and one symlink placement, with the settings file
+// install is the shape of an install: one import branch, one library
+// directory and one symlink placement per skill, with the settings file
 // written beside them.
 type install struct {
 	dir      string // agentx home
@@ -84,47 +98,54 @@ func newInstall(t *testing.T) (install, refs) {
 	return in, refs{}
 }
 
-// plan builds the mutation of one install over the content given.
-func (in install) plan(t *testing.T, content string) *Mutation {
+// plan builds the mutation of an install of the skills named: one ref, one
+// library directory and one placement each, in the order the contract gives
+// them, and the one settings write that ends the run. A batch install is
+// one journal of this shape and not one journal per skill.
+func (in install) plan(t *testing.T, content string, names ...string) *Mutation {
 	t.Helper()
 	m := NewMutation(in.dir)
-	lib := filepath.Join(in.library, "alpha")
-	staged := m.Sibling(lib, "staged")
-	if err := os.MkdirAll(staged, 0o755); err != nil {
-		t.Fatal(err)
+	for _, name := range names {
+		lib := filepath.Join(in.library, name)
+		staged := m.Sibling(lib, "staged")
+		if err := os.MkdirAll(staged, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(staged, "SKILL.md"), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		fingerprint, err := Fingerprint(staged)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The order is the one skill add records and the contract
+		// prescribes: the ref, the library directory, the placements, then
+		// the settings write. A plan in any other order would exercise a
+		// journal the product never writes.
+		m.Ref(in.gitDir, "refs/heads/managed/"+name, "", "c0ffee-"+name)
+		m.Publish(lib, staged, fingerprint)
+		m.Link(filepath.Join(in.place, name), lib)
 	}
-	if err := os.WriteFile(filepath.Join(staged, "SKILL.md"), []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	fingerprint, err := Fingerprint(staged)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// The order is the one skill add records and the contract prescribes:
-	// the ref, the library directory, the placements, then the settings
-	// write. A plan in any other order would exercise a journal the product
-	// never writes.
-	m.Ref(in.gitDir, "refs/heads/managed/alpha", "", "c0ffee")
-	m.Publish(lib, staged, fingerprint)
-	m.Link(filepath.Join(in.place, "alpha"), lib)
 	if err := m.ReplaceFile(in.settings, []byte(`{"copy_mode":{}}`+"\n")); err != nil {
 		t.Fatal(err)
 	}
 	return m
 }
 
-// done reports whether the install is fully in place.
-func (in install) done(t *testing.T, u refs) []string {
+// done reports whether the install is fully in place, skill by skill.
+func (in install) done(t *testing.T, u refs, names ...string) []string {
 	t.Helper()
 	var missing []string
-	if u[in.gitDir+" refs/heads/managed/alpha"] != "c0ffee" {
-		missing = append(missing, "the import branch")
-	}
-	if b, err := os.ReadFile(filepath.Join(in.library, "alpha", "SKILL.md")); err != nil || len(b) == 0 {
-		missing = append(missing, "the library directory")
-	}
-	if target, err := os.Readlink(filepath.Join(in.place, "alpha")); err != nil || target != filepath.Join(in.library, "alpha") {
-		missing = append(missing, "the placement")
+	for _, name := range names {
+		if u[in.gitDir+" refs/heads/managed/"+name] != "c0ffee-"+name {
+			missing = append(missing, "the import branch of "+name)
+		}
+		if b, err := os.ReadFile(filepath.Join(in.library, name, "SKILL.md")); err != nil || len(b) == 0 {
+			missing = append(missing, "the library directory of "+name)
+		}
+		if target, err := os.Readlink(filepath.Join(in.place, name)); err != nil || target != filepath.Join(in.library, name) {
+			missing = append(missing, "the placement of "+name)
+		}
 	}
 	if _, err := os.Stat(in.settings); err != nil {
 		missing = append(missing, "the settings file")
@@ -135,6 +156,11 @@ func (in install) done(t *testing.T, u refs) []string {
 	return missing
 }
 
+// batch is the install TestInstallRecoversFromEveryBoundary stops in: three
+// skills, so that the boundaries it kills at fall in the middle of a batch
+// and not only at its ends.
+var batch = []string{"alpha", "beta", "gamma"}
+
 // TestInstallRecoversFromEveryBoundary stops an install after each step it
 // records, which is where a process killed at a durable boundary leaves it,
 // and checks that recovery finishes exactly what is left. Recovery is then
@@ -144,29 +170,133 @@ func TestInstallRecoversFromEveryBoundary(t *testing.T) {
 	total := 0
 	{
 		in, _ := newInstall(t)
-		total = in.plan(t, "one\n").steps()
+		total = in.plan(t, "one\n", batch...).steps()
 	}
 	for stop := 0; stop <= total; stop++ {
 		t.Run(fmt.Sprintf("after %d steps", stop), func(t *testing.T) {
 			t.Parallel()
 			in, u := newInstall(t)
-			m := in.plan(t, "one\n")
+			m := in.plan(t, "one\n", batch...)
 			if err := m.stopAfter(stop, u); err != nil {
 				t.Fatalf("stopping after %d steps: %v", stop, err)
 			}
 			if err := recoverJournals(in.dir, u); err != nil {
 				t.Fatalf("recovery after %d steps: %v", stop, err)
 			}
-			if missing := in.done(t, u); len(missing) > 0 {
+			if missing := in.done(t, u, batch...); len(missing) > 0 {
 				t.Errorf("after recovery from step %d, %s", stop, strings.Join(missing, ", "))
 			}
 			if err := recoverJournals(in.dir, u); err != nil {
 				t.Errorf("recovery run again: %v", err)
 			}
-			if missing := in.done(t, u); len(missing) > 0 {
+			if missing := in.done(t, u, batch...); len(missing) > 0 {
 				t.Errorf("recovery run again undid %s", strings.Join(missing, ", "))
 			}
 		})
+	}
+}
+
+// TestBatchRefsMoveTogether checks the transaction a journal's refs are
+// applied in: a batch whose second ref is claimed by something else moves
+// none of them, so that recovery finds the branches either all written or
+// all absent rather than a run's skills split between the two.
+func TestBatchRefsMoveTogether(t *testing.T) {
+	t.Parallel()
+	in, u := newInstall(t)
+	u[in.gitDir+" refs/heads/managed/beta"] = "someone else"
+	m := in.plan(t, "one\n", batch...)
+	err := m.Apply(u)
+	if !errors.Is(err, ErrRecovery) {
+		t.Fatalf("apply = %v, want it refused", err)
+	}
+	for _, name := range []string{"alpha", "gamma"} {
+		if value := u[in.gitDir+" refs/heads/managed/"+name]; value != "" {
+			t.Errorf("%s was written to %q although the batch was refused", name, value)
+		}
+	}
+}
+
+// racingRefs lets something else claim one of the refs between the read of
+// their values and the write, which is the race the expected old value is
+// there for. Every ref of the batch then passes the check applyRefs makes
+// before it builds the updates, so the refusal can only come from the
+// transaction itself.
+type racingRefs struct {
+	refs
+	gitDir string
+	claim  string // the ref a third party takes once the values are read
+}
+
+func (r racingRefs) RefValues(gitDir string, names []string) (map[string]string, error) {
+	values, err := r.refs.RefValues(gitDir, names)
+	r.refs[r.gitDir+" "+r.claim] = "someone else"
+	return values, err
+}
+
+// TestBatchRefsMoveInOneTransaction is what the check above cannot see: a
+// batch every ref of which looked free when the journal read them, one of
+// which is claimed before the update lands. The refusal comes from the
+// transaction, so it is the transaction that has to move all three refs or
+// none of them; a journal that updated one ref at a time would have
+// written the first before it reached the one that was taken.
+func TestBatchRefsMoveInOneTransaction(t *testing.T) {
+	t.Parallel()
+	in, u := newInstall(t)
+	m := in.plan(t, "one\n", batch...)
+	racing := racingRefs{refs: u, gitDir: in.gitDir, claim: "refs/heads/managed/beta"}
+	if err := m.Apply(racing); err == nil {
+		t.Fatal("apply = nil, want the transaction refused")
+	}
+	for _, name := range batch {
+		value := u[in.gitDir+" refs/heads/managed/"+name]
+		if name == "beta" {
+			if value != "someone else" {
+				t.Errorf("beta = %q, want the value the other command wrote", value)
+			}
+			continue
+		}
+		if value != "" {
+			t.Errorf("%s was written to %q although the transaction was refused", name, value)
+		}
+	}
+}
+
+// TestJournaledIsTrueOnlyOnceTheJournalIsOnDisk is the line between a
+// failure that leaves nothing behind and one recovery has to finish. The
+// caller reads it to decide whether it may take away the staging refs
+// holding this run's commits: before the journal exists nothing would ever
+// recover them, so keeping them would leak them into the account repo for
+// good, and after it exists recovery needs them.
+func TestJournaledIsTrueOnlyOnceTheJournalIsOnDisk(t *testing.T) {
+	t.Parallel()
+	in, u := newInstall(t)
+	m := in.plan(t, "one\n", "alpha")
+	if m.Journaled() {
+		t.Error("a mutation that has not been applied reads as journaled")
+	}
+	// A file where the mutations directory belongs: the journal cannot be
+	// written, and what the mutation staged goes with it.
+	if err := os.RemoveAll(MutationsDir(in.dir)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(MutationsDir(in.dir), []byte("not a directory\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Apply(u); err == nil {
+		t.Fatal("apply = nil, want the journal write refused")
+	}
+	if m.Journaled() {
+		t.Error("a mutation whose journal could not be written reads as journaled")
+	}
+
+	// And the other way round, with a directory to write into.
+	again, v := newInstall(t)
+	n := again.plan(t, "one\n", "alpha")
+	if err := n.Apply(v); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if !n.Journaled() {
+		t.Error("a mutation that was applied reads as not journaled")
 	}
 }
 
@@ -176,7 +306,7 @@ func TestInstallRecoversFromEveryBoundary(t *testing.T) {
 func TestRecoveryRefusesContentThatChanged(t *testing.T) {
 	t.Parallel()
 	in, u := newInstall(t)
-	m := in.plan(t, "one\n")
+	m := in.plan(t, "one\n", "alpha")
 	if err := m.stopAfter(1, u); err != nil { // the branch is written, the library is not
 		t.Fatal(err)
 	}
@@ -335,7 +465,7 @@ func TestRemoveKeepsAndNamesRetainedContentThatChanged(t *testing.T) {
 func TestRecoveryNamesTheLivePathThatChangedAfterAPublish(t *testing.T) {
 	t.Parallel()
 	in, u := newInstall(t)
-	m := in.plan(t, "one\n")
+	m := in.plan(t, "one\n", "alpha")
 	if err := m.stopAfter(2, u); err != nil { // the ref is written and the library is published
 		t.Fatal(err)
 	}

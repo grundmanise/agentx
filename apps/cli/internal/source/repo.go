@@ -184,7 +184,7 @@ func Fetch(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listin
 	defer func() {
 		_, _ = r.Isolated(context.WithoutCancel(ctx), gitDir, "update-ref", "-d", staging)
 	}()
-	if _, err := r.User(ctx, gitDir, append(fetchArgs, "--filter=blob:none", name, refspec)...); err != nil {
+	if _, err := r.User(ctx, gitDir, append(fetchArgs, noRefmap, "--filter=blob:none", name, refspec)...); err != nil {
 		if strings.Contains(err.Error(), "couldn't find remote ref") {
 			return Listing{}, fmt.Errorf("%w: %v", ErrRefNotFound, err)
 		}
@@ -214,7 +214,7 @@ func Fetch(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listin
 			// setting allowAnySHA1InWant false does not take it back, so
 			// this is a hosting service's own policy layer, or a ref that
 			// moved and was reclaimed between the two fetches.
-			if _, err := r.User(ctx, gitDir, append(fetchArgs, "--refetch", "--no-filter", name, refspec)...); err != nil {
+			if _, err := r.User(ctx, gitDir, append(fetchArgs, noRefmap, "--refetch", "--no-filter", name, refspec)...); err != nil {
 				return Listing{}, fmt.Errorf("%w: %v", ErrUnreachable, err)
 			}
 		}
@@ -434,12 +434,12 @@ func CheckPath(p string) error {
 }
 
 // MissingArgs are the arguments of the read that lists the objects under
-// tree the account repo does not hold, which is how an install learns what
+// the trees the account repo does not hold, which is how an install learns what
 // to fetch without asking git for an object that is not there: a read of a
 // missing object in a partial clone either reaches for the network or
 // fails, and every local read forbids the lazy fetch.
-func MissingArgs(tree string) []string {
-	return []string{"rev-list", "--objects", "--missing=print", "--no-object-names", tree}
+func MissingArgs(trees ...string) []string {
+	return append([]string{"rev-list", "--objects", "--missing=print", "--no-object-names"}, trees...)
 }
 
 // ParseMissing reads the output of the rev-list MissingArgs names: the
@@ -486,6 +486,8 @@ func FetchObjects(ctx context.Context, r *gitx.Runner, gitDir string, s Source, 
 	if err := fetchIDs(ctx, r, gitDir, remote, ids); err == nil {
 		return nil
 	}
+	// No refspec: the fallback takes the whole remote as remote.<name>.fetch
+	// configures it, so --refmap= would be refused rather than ignored.
 	args := append(baseFetchArgs(), "--refetch", "--no-filter", remote)
 	if _, err := r.User(ctx, gitDir, args...); err != nil {
 		return fmt.Errorf("%w: %v", ErrUnreachable, err)
@@ -571,13 +573,20 @@ func skipped(dir string) bool {
 }
 
 // baseFetchArgs are the flags every fetch of a source carries: quiet, no
-// tags, no FETCH_HEAD, no submodules, no forced-update report, and no
-// refmap, so that a fetch writes the ref its own refspec names and never
-// the one remote.<name>.fetch configures, which git would otherwise update
-// opportunistically alongside it.
+// tags, no FETCH_HEAD, no submodules and no forced-update report. --refmap=
+// is not among them: git refuses it outright unless the same command line
+// carries a refspec, so it belongs at the call sites that give one and
+// nowhere else.
 func baseFetchArgs() []string {
-	return []string{"fetch", "--quiet", "--no-tags", "--no-write-fetch-head", "--recurse-submodules=no", "--no-show-forced-updates", "--refmap="}
+	return []string{"fetch", "--quiet", "--no-tags", "--no-write-fetch-head", "--recurse-submodules=no", "--no-show-forced-updates"}
 }
+
+// noRefmap goes with a command-line refspec and only with one: it makes
+// that refspec the only one, so that the fetch writes the ref it names and
+// never the one remote.<name>.fetch configures, which git would otherwise
+// update opportunistically alongside it. Given without a refspec git dies
+// with "--refmap option is only meaningful with command-line refspec(s)".
+const noRefmap = "--refmap="
 
 // fetchBlobs fetches the SKILL.md blobs of entries from the remote in one
 // batch, by object id, the way git itself fills a partial clone.
@@ -599,7 +608,7 @@ func fetchIDs(ctx context.Context, r *gitx.Runner, gitDir, remote string, ids []
 	// fetch names objects rather than refs and updates none, so there is no
 	// forced update for git to work out and none to suppress.
 	_, err := r.UserInput(ctx, gitDir, strings.NewReader(b.String()), "-c", "fetch.negotiationAlgorithm=noop",
-		"fetch", "--quiet", "--no-tags", "--no-write-fetch-head", "--recurse-submodules=no", "--refmap=", "--filter=blob:none", "--stdin", remote)
+		"fetch", "--quiet", "--no-tags", "--no-write-fetch-head", "--recurse-submodules=no", noRefmap, "--filter=blob:none", "--stdin", remote)
 	return err
 }
 

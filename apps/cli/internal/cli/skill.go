@@ -79,16 +79,27 @@ func newSkillCommand(inv *invocation) *cobra.Command {
 // offered, so a name agentx cannot use is a refusal and not a guess.
 var libraryName = regexp.MustCompile(`^[^./\\\x00][^/\\\x00]*$`)
 
-// usableName reports whether both the library and the account repo can hold
-// the skill under name: a directory of the library, and one level of the
-// import branch refs/heads/managed/<name>. Both are checked here, before
-// anything is written, because a name only one of them accepts would be
-// found out in the middle of the mutation — the journal already on disk and
-// the ref step failing — after which every command would recover that
-// journal and fail the same way. The name comes out of a source's SKILL.md,
-// so it is checked and not trusted, and renaming on install is not offered.
-func usableName(name string) bool {
-	return libraryName.MatchString(name) && !strings.ContainsAny(name, "\n\r") && refComponent(name)
+// nameRefusal says why the skill cannot be held under name, in the words
+// of the thing that cannot hold it, and "" when it can. Both are checked
+// here, before anything is written, because a name only one of them accepts
+// would be found out in the middle of the mutation (the journal already on
+// disk and the ref step failing), after which every command would recover
+// that journal and fail the same way. The name comes out of a source's
+// SKILL.md, so it is checked and not trusted, and renaming on install is
+// not offered.
+//
+// The two are not one refusal: a POSIX directory happily holds "who?" or
+// "a b", so telling the user their library cannot would be untrue and would
+// send them looking in the wrong place. What refuses those is the branch
+// the account repo has to record the version on.
+func nameRefusal(name string) string {
+	switch {
+	case !libraryName.MatchString(name), strings.ContainsAny(name, "\n\r"):
+		return "is not a name the library can hold as a directory"
+	case !refComponent(name):
+		return "is not a name the account repo can hold as an import branch"
+	}
+	return ""
 }
 
 // refComponent reports whether git accepts name as one level of a ref name,
