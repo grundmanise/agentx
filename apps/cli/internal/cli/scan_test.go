@@ -811,6 +811,11 @@ func TestScanListsTheLibrary(t *testing.T) {
 	}
 }
 
+// accountRepoWarning ends the one warning a snapshot carries when git
+// cannot read the account repo: the library is left out, and the reader is
+// sent to doctor and to the repo, whose error the warning begins with.
+const accountRepoWarning = "; the library is not listed, run 'agentx doctor' and check the account repo it names"
+
 // TestScanListsNoLibraryWhenTheAccountRepoCannotBeRead breaks the account
 // repo under a managed skill. Neither scan nor serve reads it for anything
 // in the snapshot but the library's lineage, so each still inventories the
@@ -830,8 +835,8 @@ func TestScanListsNoLibraryWhenTheAccountRepoCannotBeRead(t *testing.T) {
 	equal(t, "skills", strings.Join(skillNames(snap), " "), "alpha")
 	equal(t, "library", len(snap["library"].([]any)), 0)
 	warnings := snap["warnings"].([]any)
-	if len(warnings) != 1 || !strings.Contains(warnings[0].(string), account) || !strings.Contains(warnings[0].(string), "run 'agentx doctor'") {
-		t.Errorf("warnings = %q, want one naming %s and agentx doctor", warnings, account)
+	if len(warnings) != 1 || !strings.Contains(warnings[0].(string), account) || !strings.HasSuffix(warnings[0].(string), accountRepoWarning) {
+		t.Errorf("warnings = %q, want one naming %s and ending %q", warnings, account, accountRepoWarning)
 	}
 
 	served := h.serveOnce("--json")
@@ -851,6 +856,36 @@ func TestScanListsNoLibraryWhenTheAccountRepoCannotBeRead(t *testing.T) {
 	list := h.run("--json", "skill", "list")
 	equal(t, "skill list exit", list.exit, 8)
 	equal(t, "skill list code", h.one(list.stdout, "error")["code"], "account_repo")
+}
+
+// TestScanWarnsOfABranchDoctorDoesNotRead breaks the account repo in a way
+// doctor does not see: the commit a managed skill's import branch points at
+// is gone. The repo still opens, which is what doctor's account_repo row
+// asks of it, and only reading the branches fails. So the snapshot's
+// warning carries git's error, which says what is wrong, and sends the
+// reader to the repo it names as well as to doctor, which on its own would
+// answer that the repo is fine.
+func TestScanWarnsOfABranchDoctorDoesNotRead(t *testing.T) {
+	t.Parallel()
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	account := gitx.AccountRepoPath(h.agentx)
+	tip := strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/managed/alpha"))
+	object := filepath.Join(account, "objects", tip[:2], tip[2:])
+	if err := os.Rename(object, object+".gone"); err != nil {
+		t.Fatalf("the import commit is not a loose object: %v", err)
+	}
+
+	snap := h.snapshot(t)
+	equal(t, "library", len(snap["library"].([]any)), 0)
+	warnings := snap["warnings"].([]any)
+	if len(warnings) != 1 || !strings.Contains(warnings[0].(string), account) ||
+		!strings.Contains(warnings[0].(string), "missing object") || !strings.HasSuffix(warnings[0].(string), accountRepoWarning) {
+		t.Errorf("warnings = %q, want one naming %s and the missing object, ending %q", warnings, account, accountRepoWarning)
+	}
+	equal(t, "skill list exit", h.run("skill", "list").exit, 8)
+	rows, _ := doctorRows(t, h.events(h.run("--json", "doctor").stdout))
+	equal(t, "doctor's account_repo row", rows["account_repo"]["status"], "ok")
 }
 
 // secrets lists every distinctive secret value a fixture's config files hold,

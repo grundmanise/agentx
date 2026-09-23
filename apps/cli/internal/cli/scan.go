@@ -93,12 +93,15 @@ func (inv *invocation) scan(ctx context.Context, wait time.Duration, project str
 // git for them and cannot fail on the account repo.
 //
 // An account repo git cannot read costs the snapshot its library and
-// nothing else. The library is listed empty and one warning names the
-// account repo and sends the reader to agentx doctor, while the
-// configurations, the skills, the servers and the plugins the scan read
-// stand: neither agentx scan nor a serve reads the account repo for any of
-// them, and a serve whose every scan failed on it would leave the desktop
-// app with no inventory at all. Listing the library without its lineage
+// nothing else. The library is listed empty and one warning carries git's
+// error and sends the reader to agentx doctor and to the account repo it
+// names, while the configurations, the skills, the servers and the plugins
+// the scan read stand: neither agentx scan nor a serve reads the account
+// repo for any of them, and a serve whose every scan failed on it would
+// leave the desktop app with no inventory at all. The warning names the
+// repo as well as doctor because git's error is the diagnosis: doctor
+// checks that the repo opens, and a repo that opens can still hold a
+// branch whose commit is gone. Listing the library without its lineage
 // instead would call every managed skill unmanaged, which is not true.
 // skill list, which exists to report the lineage, still fails on it.
 func (inv *invocation) snapshot(ctx context.Context, wait time.Duration, project string, handshake bool) (scan.Snapshot, error) {
@@ -174,7 +177,7 @@ func (inv *invocation) inventory(ctx context.Context, wait time.Duration, projec
 			case errors.As(err, &f) && f.status == exitAccountRepo && ctx.Err() == nil && !inv.git.StoppedChild():
 				// The account repo's own answer, and not a stop that killed
 				// the git reading it: that is the run's to answer for.
-				sc.Warn(f.message + "; the library is not listed, run 'agentx doctor'")
+				sc.Warn(f.message + "; the library is not listed, run 'agentx doctor' and check the account repo it names")
 			default:
 				return err
 			}
