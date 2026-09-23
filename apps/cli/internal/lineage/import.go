@@ -149,6 +149,11 @@ func Parse(message string) (Import, error) {
 	return i, nil
 }
 
+// IsObjectID reports whether s has the shape of a git object id, sha1 or
+// sha256, which is what a reader outside this package checks a commit it
+// was handed with.
+func IsObjectID(s string) bool { return objectID.MatchString(s) }
+
 // ValidPath reports whether p is a directory of a repository, "" being its
 // root: the subpath an import commit records, and the subpath another
 // tool's lock file names. A path that is not already clean, that is

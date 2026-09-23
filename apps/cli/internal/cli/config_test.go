@@ -5,7 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 )
 
 func readSettingsFile(t *testing.T, h *harness) map[string]any {
@@ -205,5 +208,62 @@ func TestUnreadableSettingsExit10(t *testing.T) {
 	contains(t, "stderr", out.stderr, path)
 	if _, err := os.Stat(filepath.Join(h.agentx, "version")); !os.IsNotExist(err) {
 		t.Errorf("a failed write bumped the version file: %v", err)
+	}
+}
+
+// TestLabelIsOneRuleForEveryRouteToIt: config set label, machine rename
+// and the label an import restores are held to one rule, so that a
+// settings file agentx wrote is one an import restores byte for byte and a
+// label agentx would refuse to write cannot arrive by the other door. The
+// bound is the part config set label could not reach on its own: its
+// argument is bounded by ARG_MAX, and a document's label is not.
+func TestLabelIsOneRuleForEveryRouteToIt(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.build(t, fixture{dirs: []string{".claude"}})
+	for _, tc := range []struct{ name, label, says string }{
+		{"empty", "", "one non-empty line"},
+		{"blank", "   ", "one non-empty line"},
+		{"two lines", "one\ntwo", "no control character"},
+		{"a carriage return", "one\rtwo", "no control character"},
+		{"an escape sequence", "\x1b[31mred\x1b[0m", "no control character"},
+		{"a tab", "one\ttwo", "no control character"},
+		{"longer than the bound", strings.Repeat("l", labelLimit+1), "at most 256 bytes"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, args := range [][]string{
+				{"config", "set", "label", tc.label},
+				{"machine", "rename", tc.label},
+			} {
+				out := h.run(args...)
+				equal(t, strings.Join(args[:2], " ")+" exit", out.exit, 1)
+				contains(t, "stderr", out.stderr, tc.says)
+			}
+		})
+	}
+	// The bound itself is reachable, so it bounds rather than forbids.
+	equal(t, "at the bound", h.run("config", "set", "label", strings.Repeat("l", labelLimit)).exit, 0)
+}
+
+// TestConfigurationIDAcceptsEveryRegisteredSlug: the shape an import holds
+// a configuration id to has to be one every client agentx knows satisfies,
+// or importing a settings file written on a machine with that client would
+// be refused.
+func TestConfigurationIDAcceptsEveryRegisteredSlug(t *testing.T) {
+	t.Parallel()
+	slugs := scan.Slugs()
+	if len(slugs) != scan.Registered() {
+		t.Fatalf("Slugs gave %d of %d registered clients", len(slugs), scan.Registered())
+	}
+	for _, slug := range slugs {
+		if !configurationID(slug) {
+			t.Errorf("configurationID(%q) is false, and it is a registered client", slug)
+		}
+	}
+	for _, bad := range []string{"", "Cursor", "cursor ", "cur sor", "-cursor", "cursor-", "cur--sor",
+		"\x1b[31mcursor", "cursor\n", strings.Repeat("a", configurationIDLimit+1)} {
+		if configurationID(bad) {
+			t.Errorf("configurationID(%q) is true, and it names no configuration", bad)
+		}
 	}
 }

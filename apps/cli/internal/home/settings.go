@@ -109,6 +109,16 @@ func LoadSettings(dir string) (Settings, error) {
 			return s, fmt.Errorf("parse %s: %w", path, err)
 		}
 	}
+	Normalise(&s)
+	return s, nil
+}
+
+// Normalise gives the settings the shape agentx writes: a list that is
+// empty rather than absent, and a copy_mode that is an object. A file
+// agentx wrote has it already; a settings object that came from somewhere
+// else, as an import's does, is brought to it before it is written, so that
+// every settings file on disk reads the same way.
+func Normalise(s *Settings) {
 	if s.DisabledConfigurations == nil {
 		s.DisabledConfigurations = []string{}
 	}
@@ -118,7 +128,6 @@ func LoadSettings(dir string) (Settings, error) {
 	if s.CopyMode == nil {
 		s.CopyMode = json.RawMessage("{}")
 	}
-	return s, nil
 }
 
 // MarshalSettings is the bytes of the settings file, for a mutation that

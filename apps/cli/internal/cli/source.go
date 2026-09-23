@@ -330,12 +330,16 @@ func (inv *invocation) sourceSkills(ctx context.Context, arg string) error {
 	if err != nil {
 		return accountRepoFailure(err)
 	}
+	// Refused as not fetched, the source is named with the pin the settings
+	// hold, which a bare URL argument leaves out.
+	pinned := src
+	pinned.Ref = entry.Pin
 	if !exists {
-		return sourceFailure(fmt.Errorf("%w: %s", source.ErrNotFetched, src.URL), src)
+		return sourceFailure(fmt.Errorf("%w: %s", source.ErrNotFetched, src.URL), pinned)
 	}
 	listing, err := source.List(ctx, inv.git, gitDir, src)
 	if err != nil {
-		return sourceFailure(err, src)
+		return sourceFailure(err, pinned)
 	}
 	out := inv.out
 	n := len(listing.Skills)
@@ -482,7 +486,10 @@ func sourceFailure(err error, src source.Source) error {
 	case errors.Is(err, source.ErrNoSubpath):
 		return fail(exitNotFound, fmt.Sprintf("%s: %s", src.URL, msg), "name a directory of the repository")
 	case errors.Is(err, source.ErrNotFetched):
-		return fail(exitNotFound, msg, "run 'agentx source add "+src.URL+"' to fetch it")
+		// The source is in the settings, which an import leaves without
+		// anything fetched, and src.Ref is the pin they hold. source add
+		// writes the pin its argument names, so the bare URL would unpin it.
+		return fail(exitNotFound, msg, "run 'agentx source add "+sourceAddArg(src.URL, src.Ref)+"' to fetch it")
 	case errors.Is(err, source.ErrUnreachable):
 		hint := "check the URL and that you can reach it; a private repository needs a git credential helper (git config credential.helper) or an SSH key"
 		if src.Stripped {

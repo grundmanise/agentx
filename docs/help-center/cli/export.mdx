@@ -1,0 +1,122 @@
+---
+title: "agentx export and import"
+description: "Copy one machine's settings to another, with a list of the skills to bring back."
+---
+
+Export writes your settings and a list of your skills to a file. Import restores the settings on another machine and tells you what that machine can bring back on its own.
+
+An export holds no skill content. It records where each skill came from, never what is in it. Content comes back from your account repo, or from installing the skill again.
+
+## Export this machine
+
+```sh
+agentx export ~/agentx-export.json
+```
+
+```text
+✓ exported the settings and 12 lineage records to ~/agentx-export.json
+  the export holds no skill content: the account repo and 'agentx skill add' restore that
+```
+
+The file holds:
+
+| Part | What it is |
+|---|---|
+| `settings` | Your [settings](/cli/config) exactly as the file holds them: label, sources, disabled configurations, copy modes. |
+| `skills` | One record per skill agentx manages: its name, whether it is managed or a fork, the source and directory it came from, the base version it was installed at, and whether this machine placed it anywhere. |
+| `machine` | The id and label of the machine you exported from. |
+
+The file is readable by you alone, because it holds your settings. Treat it as you treat `settings.json`.
+
+agentx refuses to overwrite a file that is already there. Pass `--force` to replace it:
+
+```sh
+agentx export ~/agentx-export.json --force
+```
+
+A path that names a directory is refused whether or not you pass `--force`: give the path of the file to write.
+
+Two exports of an unchanged machine are the same file, byte for byte.
+
+## Import onto another machine
+
+```sh
+agentx import ~/agentx-export.json
+```
+
+```text
+Replace the settings in ~/.agentx/settings.json with those of my-laptop from ~/agentx-export.json? [y/N] y
+✓ imported the settings of my-laptop from ~/agentx-export.json
+3 skills in the export: 1 in the account repo, 1 missing, 1 at a different version
+  pdf     managed  present    https://github.com/example/skills/skills/pdf
+  xlsx    managed  missing    https://github.com/example/skills/skills/xlsx
+  review  fork     different  https://github.com/example/skills/skills/review
+  only the settings were written: add each source again, then install a missing skill with 'agentx skill add <source>'
+    agentx source add https://github.com/example/skills#release
+```
+
+Import writes your settings and nothing else. It creates no account repo, fetches nothing, installs nothing and places nothing.
+
+Your source list comes back with its pins, but no source is fetched. Before you install anything from a source, run the `agentx source add` line import prints for it, which it prints even when the export lists no skills. For a pinned source that line is `agentx source add <url>#<pin>`: `agentx source add <url>` alone unpins the source.
+
+When the URL or the pin holds anything but letters, digits and `._/:@%+=,#-`, import puts it in single quotes, so the line runs as printed in a POSIX shell such as bash or zsh. The export file supplies both, and quoting keeps a `$`, `&` or quote in them from running as a command.
+
+The listing says what this machine's account repo has of each skill:
+
+| State | Meaning |
+|---|---|
+| `present` | The account repo holds that skill at that version. Place it with [`agentx skill place`](/cli/skill) when the library still holds the skill; when it does not, install it again with [`agentx skill add`](/cli/skill). |
+| `missing` | The account repo has no branch for it. Add its source with [`agentx source add`](/cli/source), then install it again with [`agentx skill add`](/cli/skill). |
+| `different` | The account repo holds that name at another version, or as a fork where the export had a managed skill. |
+
+## Confirm without a terminal
+
+Import replaces settings, so it asks first. Pass `--yes` to answer in advance:
+
+```sh
+agentx import ~/agentx-export.json --yes
+```
+
+Use `--yes` in scripts and wherever there is no terminal. Without it, and without a terminal to ask at, import exits with code 6 and changes nothing. Answering anything but `y` or `yes` does the same.
+
+## Move to a new machine
+
+1. On the old machine, run `agentx export ~/agentx-export.json`.
+2. Copy the file to the new machine.
+3. On the new machine, run `agentx import ~/agentx-export.json`.
+4. Run each `agentx source add` line the import printed, exactly as printed. It names the pin of a pinned source, `<url>#<pin>`, and `agentx source list` shows the pins too.
+5. Install what the listing calls missing with `agentx skill add <source>`.
+
+Import restores the settings and nothing else, so the sources it lists are not yet on the new machine. Until you add one again, `agentx source fetch` and `agentx skill add` exit with code 5, say the source was not fetched and name the same `agentx source add` line, pin included, so following that hint keeps the pin too.
+
+## Script it
+
+Add `--json` to get events instead of text. Import needs `--yes` in JSON mode, since it cannot ask.
+
+```sh
+agentx --json export ~/agentx-export.json
+```
+
+```json
+{"type":"export","schema_version":1,"path":"/home/me/agentx-export.json","skills":12}
+{"type":"result","schema_version":1,"ok":true,"summary":"exported the settings and 12 lineage records to /home/me/agentx-export.json"}
+```
+
+```sh
+agentx --json import ~/agentx-export.json --yes
+```
+
+The run emits a `settings` event with the settings it wrote, then one `import_skill` event per record with its `state`, then `result`.
+
+A record names a version and never carries one. Its `base_hash` is the version the skill was installed at, the same field under the same name that `agentx skill list` reports. An export holds no `content_hash`: that name always means what a machine holds right now, and an export reads no library directory.
+
+## When an import is refused
+
+| Exit code | Cause |
+|---|---|
+| 5 | The file is not there. |
+| 6 | The file is not an agentx export, is truncated, is larger than 8 MiB, is of a schema version this agentx does not read, carries a field it does not know, or holds settings it would not write. |
+| 6 | The settings hold something agentx never writes: a URL with a token in it, in either `url` or `alias`; a pin that is not a ref git accepts; a label with a control character in it or longer than 256 bytes; a source or a configuration listed twice; a list out of order. |
+| 6 | You answered no, or there was no terminal to ask at and `--yes` was not given. |
+
+A refused import changes nothing: your settings stay exactly as they were.

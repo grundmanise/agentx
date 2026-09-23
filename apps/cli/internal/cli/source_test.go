@@ -830,7 +830,7 @@ func TestSourceTellsALocalGitFailureFromAnUnfetchedSource(t *testing.T) {
 	events := h.events(out.stdout)
 	equal(t, "error.code", events[0]["code"], "not_found")
 	contains(t, "error.message", events[0]["message"].(string), "source not fetched")
-	contains(t, "error.hint", events[0]["hint"].(string), "agentx source add "+s.url)
+	contains(t, "error.hint", events[0]["hint"].(string), "agentx source add "+sourceAddArg(s.url, ""))
 	equal(t, "list exit", h.run("source", "list").exit, 0) // the settings entry is still there
 
 	// A packed-refs file git refuses to parse. rev-parse

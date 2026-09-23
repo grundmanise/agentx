@@ -658,7 +658,7 @@ func TestSourceFetchNamesASourceItHasNothingOf(t *testing.T) {
 	equal(t, "exit", out.exit, 5)
 	e := lastError(t, h.events(out.stdout))
 	equal(t, "code", e["code"], "not_found")
-	contains(t, "hint", e["hint"].(string), "agentx source add "+s.url)
+	contains(t, "hint", e["hint"].(string), "agentx source add "+sourceAddArg(s.url, ""))
 	contains(t, "warning", out.stderr, s.url)
 	for _, leak := range []string{source.RemoteName(id), "credential"} {
 		if strings.Contains(out.stderr+out.stdout, leak) {

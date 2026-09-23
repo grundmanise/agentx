@@ -135,6 +135,8 @@ func newRoot(inv *invocation) *cobra.Command {
 	root.AddCommand(newScanCommand(inv))
 	root.AddCommand(newDoctorCommand(inv))
 	root.AddCommand(newServeCommand(inv))
+	root.AddCommand(newExportCommand(inv))
+	root.AddCommand(newImportCommand(inv))
 	return root
 }
 

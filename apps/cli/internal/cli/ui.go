@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
@@ -114,8 +115,11 @@ func painter(out io.Writer) *lipgloss.Renderer {
 	return r
 }
 
-func isTerminal(out io.Writer) bool {
-	f, ok := out.(*os.File)
+// isTerminal reports whether a stream is a terminal. It takes any stream,
+// since a prompt has to know it of standard input as colour does of an
+// output stream.
+func isTerminal(stream any) bool {
+	f, ok := stream.(*os.File)
 	return ok && term.IsTerminal(int(f.Fd()))
 }
 
@@ -155,6 +159,23 @@ func sanitised(text string) string {
 		b.WriteRune(r)
 	}
 	return b.String()
+}
+
+// clipped bounds a value an export or a source supplies before it is put
+// into a message. agentx writes a word where a document may hold a
+// megabyte, and a refusal that quoted the whole of one would be no easier
+// to read than the file. The cut is on a rune boundary, so what is left is
+// still text.
+func clipped(value string) string {
+	const limit = 60
+	if len(value) <= limit {
+		return value
+	}
+	cut := limit
+	for cut > 0 && !utf8.RuneStart(value[cut]) {
+		cut--
+	}
+	return value[:cut] + "…"
 }
 
 // cell is one table cell: the text and the style it is painted in. Widths

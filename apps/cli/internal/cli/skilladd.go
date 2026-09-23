@@ -116,12 +116,18 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 			return err
 		}
 	}
+	// A source the settings hold and this machine has not fetched, which is
+	// what an import leaves, is refused with a source add to run, and that
+	// line names the pin the settings hold: a bare URL argument leaves it
+	// out, and source add writes the pin its argument names.
+	pinned := src
+	pinned.Ref = entry.Pin
 	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
 		return accountRepoFailure(err)
 	}
 	if !exists {
-		return sourceFailure(fmt.Errorf("%w: %s", source.ErrNotFetched, src.URL), src)
+		return sourceFailure(fmt.Errorf("%w: %s", source.ErrNotFetched, src.URL), pinned)
 	}
 	if !add && !fetch {
 		// The pin the settings hold decides the commit, resolved in the
@@ -130,7 +136,7 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 		// copy. The event says when that clone was fetched, as the one of a
 		// fetch does.
 		if listing, err = source.List(ctx, inv.git, gitDir, src); err != nil {
-			return sourceFailure(err, src)
+			return sourceFailure(err, pinned)
 		}
 		n := len(listing.Skills)
 		inv.out.emit(sourceEvent{event: newEvent("source"), ID: src.ID(), URL: src.URL, Alias: entry.Alias, Pin: entry.Pin, Subpath: src.Subpath,

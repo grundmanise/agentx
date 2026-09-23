@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/spf13/cobra"
 
@@ -178,11 +180,53 @@ func parseBool(key, value string) (bool, error) {
 	return b, nil
 }
 
+// labelLimit bounds the machine label. A label is the name of a computer
+// for a person to read: it is printed by config list, carried in every
+// settings event and in every export, and shown beside the machine
+// wherever the desktop app lists it. Nothing needs more than this, and
+// without a bound a settings file can be made megabytes long — not through
+// config set label, whose argument ARG_MAX bounds, but through an import,
+// whose label comes out of a file.
+const labelLimit = 256
+
+// validLabel is the rule every route to the label is held to: config set
+// label, machine rename and the label an import restores. One rule, one
+// gate, whoever chose the bytes.
+//
+// No control character: the label is printed, put into the question
+// another machine's import asks, and handed to the desktop app, and while
+// the user choosing an escape sequence about their own machine is their
+// business, an import moves that choice to whoever wrote the document —
+// which is the reasoning the contract already applies to a source URL.
+// Keeping the rule here rather than at the import keeps the settings file
+// agentx wrote one an import restores byte for byte.
 func validLabel(label string) error {
-	if strings.TrimSpace(label) == "" || strings.ContainsAny(label, "\r\n") {
-		return fail(exitUsage, "the label must be one non-empty line", "")
+	if strings.TrimSpace(label) == "" || strings.IndexFunc(label, unicode.IsControl) >= 0 {
+		return fail(exitUsage, "the label must be one non-empty line with no control character in it", "")
+	}
+	if len(label) > labelLimit {
+		return fail(exitUsage, fmt.Sprintf("the label must be at most %d bytes, and this one is %d", labelLimit, len(label)), "")
 	}
 	return nil
+}
+
+// configurationIDPattern is the shape of a configuration id: the slug of a
+// client the registry knows, lowercase letters and digits in
+// hyphen-separated parts, such as claude-code. Every registered slug has
+// it, which a test holds the registry to.
+var configurationIDPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+
+// configurationIDLimit bounds one, far above the longest slug there is.
+const configurationIDLimit = 64
+
+// configurationID reports whether id could name a configuration. What is
+// checked is the shape and not membership of this build's registry: a
+// settings file written where a newer agentx knows a client this one does
+// not names a configuration that is real there, and it is not agentx's to
+// drop. The shape is what keeps an escape sequence or a paragraph of text
+// out of a list config list prints and skill place reads.
+func configurationID(id string) bool {
+	return len(id) <= configurationIDLimit && configurationIDPattern.MatchString(id)
 }
 
 // loadSettings reads the settings file, turning an unreadable file into exit 10.

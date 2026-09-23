@@ -98,6 +98,16 @@ func (w *writer) print(parts ...string) {
 	w.write(w.stdout, b.String())
 }
 
+// prompt writes a question to stdout without a newline, so the answer is
+// typed after it; it does nothing in JSON mode, where nothing but events
+// may reach stdout. Only a command that has decided a person is there to
+// answer calls it.
+func (w *writer) prompt(text string) {
+	if !w.json {
+		w.write(w.stdout, text)
+	}
+}
+
 // paint styles s for stdout.
 func (w *writer) paint(st style, s string) string { return w.out().paint(st, s) }
 

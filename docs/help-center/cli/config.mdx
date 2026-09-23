@@ -52,7 +52,7 @@ agentx config set auto_push true
 ✓ label is now work laptop
 ```
 
-Set `label`, `auto_push` or `accept_operations`. The booleans take `true` or `false`. Any other value, an unknown key, or a key this command cannot change exits with code 1.
+Set `label`, `auto_push` or `accept_operations`. The booleans take `true` or `false`. A label is one non-empty line of at most 256 bytes with no control character in it. Any other value, an unknown key, or a key this command cannot change exits with code 1.
 
 The write is atomic: the file is replaced whole, or not at all. If another agentx command is running, the command exits with code 7 at once; retry when it finishes.
 
