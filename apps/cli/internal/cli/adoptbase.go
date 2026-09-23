@@ -510,6 +510,9 @@ func (inv *invocation) fillAdoption(c *candidate, listed []source.TreeEntry, bod
 		entries: listed,
 		when:    c.base.when,
 		dropped: lineage.Dropped(listed),
+		// The same two steps an install builds a version's lineage in: the
+		// coordinates now, the content hash with the files.
+		imp: lineage.Import{Source: c.src.URL, Path: c.subpath(), Commit: c.base.commit},
 	}
 	if f := inv.usable(v, map[string]string{}, c.src); f != nil {
 		return f
@@ -522,7 +525,6 @@ func (inv *invocation) fillAdoption(c *candidate, listed []source.TreeEntry, bod
 		// source has, so nothing establishes the one it was installed at.
 		return c.noVersion()
 	}
-	v.imp = lineage.Import{Source: c.src.URL, Path: c.subpath(), Commit: c.base.commit, Hash: v.hash}
 	for _, d := range v.dropped {
 		inv.out.warn(path.Join(c.subpath(), d) + " is not a regular file and is left out of the import")
 	}

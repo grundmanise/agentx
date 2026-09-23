@@ -204,9 +204,92 @@ func TestValidPath(t *testing.T) {
 		{"skills/al\npha", false},
 		{"skills/al\tpha", false},
 		{"skills/al\x00pha", false},
+		// A directory a source may perfectly well hold, and a value no
+		// trailer can carry back: the reader trims the whitespace around a
+		// trailer's value, so the line these were written on would be read
+		// as another directory of the same source.
+		{" skills", false},
+		{"skills ", false},
+		{"skills/alpha\u00a0", false},
+		{"skills/al pha", true},
 	} {
 		if got := ValidPath(c.path); got != c.want {
 			t.Errorf("ValidPath(%q) = %v, want %v", c.path, got, c.want)
 		}
+	}
+}
+
+// TestUnrecordableIsParseItself holds the write side of an import commit to
+// the read side: what agentx would record has to be what a reader reads
+// back, coordinate for coordinate. A version whose lineage fails this
+// installs with no lineage at all, or with lineage naming another
+// directory, and says nothing about it either way.
+func TestUnrecordableIsParseItself(t *testing.T) {
+	t.Parallel()
+	const url = "https://github.com/example/skills"
+	for _, c := range []struct {
+		name string
+		imp  Import
+		want bool // the lineage is recordable
+	}{
+		{"a version of a subdirectory", Import{Source: url, Path: "skills/pdf", Commit: commitID, Hash: hashID}, true},
+		{"a version of the repository root", Import{Source: url, Path: "", Commit: commitID, Hash: hashID}, true},
+		{"a directory carrying an escape", Import{Source: url, Path: "na\x1b[31msty", Commit: commitID, Hash: hashID}, false},
+		{"a directory carrying a newline", Import{Source: url, Path: "tools/od\nd", Commit: commitID, Hash: hashID}, false},
+		{"a directory opening with a space", Import{Source: url, Path: " pdf", Commit: commitID, Hash: hashID}, false},
+		{"a directory closing with a space", Import{Source: url, Path: "pdf ", Commit: commitID, Hash: hashID}, false},
+		{"a directory spelled as the root is", Import{Source: url, Path: ".", Commit: commitID, Hash: hashID}, false},
+		{"a source that is not canonical", Import{Source: url + ".git", Path: "pdf", Commit: commitID, Hash: hashID}, false},
+		{"a source carrying a subpath", Import{Source: url + "/tree/main/pdf", Path: "pdf", Commit: commitID, Hash: hashID}, false},
+		{"an upstream commit that is abbreviated", Import{Source: url, Path: "pdf", Commit: commitID[:12], Hash: hashID}, false},
+		{"a content hash that is not one", Import{Source: url, Path: "pdf", Commit: commitID, Hash: "not a hash"}, false},
+		{"no content hash at all", Import{Source: url, Path: "pdf", Commit: commitID}, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			why := Unrecordable(c.imp)
+			if (why == "") != c.want {
+				t.Fatalf("Unrecordable(%#v) = %q, want recordable %v", c.imp, why, c.want)
+			}
+			if !c.want {
+				// The reason is the reader's own, so it names the trailer
+				// at fault and never repeats an escape a terminal obeys.
+				if !strings.Contains(why, "Agentx-") {
+					t.Errorf("the reason %q names no trailer", why)
+				}
+				if strings.ContainsAny(why, "\x1b\n\t") {
+					t.Errorf("the reason %q carries a control character", why)
+				}
+				return
+			}
+			got, err := Parse(c.imp.Message())
+			if err != nil || got != c.imp {
+				t.Errorf("recordable lineage read back as %#v: %v", got, err)
+			}
+		})
+	}
+}
+
+// TestUnrecordableRefusesWhatParseReadsBackAsAnother is the case a
+// predicate over one coordinate cannot answer: the trailers are written
+// and read back whole, so what is refused is a value no line of a message
+// carries, not a value the coordinate itself is wrong in. A subpath padded
+// with a space is a directory git holds and ValidPath, given the trimmed
+// value a reader hands it, would accept.
+func TestUnrecordableRefusesWhatParseReadsBackAsAnother(t *testing.T) {
+	t.Parallel()
+	padded := Import{Source: "https://github.com/example/skills", Path: "pdf ", Commit: commitID, Hash: hashID}
+	if !ValidPath(strings.TrimSpace(padded.Path)) {
+		t.Fatal("the trimmed path is not the one a reader would accept")
+	}
+	read, err := Parse(padded.Message())
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if read.Path == padded.Path {
+		t.Fatal("the padded path read back unchanged")
+	}
+	if why := Unrecordable(padded); why == "" {
+		t.Fatal("a padded subpath is recordable, so an install would write lineage naming another directory")
 	}
 }

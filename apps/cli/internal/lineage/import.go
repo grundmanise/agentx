@@ -154,20 +154,62 @@ func Parse(message string) (Import, error) {
 // was handed with.
 func IsObjectID(s string) bool { return objectID.MatchString(s) }
 
+// Unrecordable reports why an import commit carrying i would not be read
+// back as the lineage i is, and "" when it would be. It is the write side
+// of Parse, and it is Parse itself that answers, on the message the commit
+// would carry, so that the two sides of an import commit cannot drift
+// apart.
+//
+// They have to agree, because lineage a reader refuses is lineage the
+// import commit no longer provides: the skill installs, then lists as
+// managed with no source, no subpath, no upstream commit and no state, and
+// nothing can update or revert it again. Lineage a reader reads back as
+// something else is worse still, the skill being credited to a directory
+// it did not come from. Neither is reported to anyone, which is why the
+// answer is to refuse the version rather than to record it.
+//
+// A predicate per coordinate is not enough on its own, and this is why a
+// whole message is written and read instead: a trailer is one line and its
+// value is that line with the surrounding whitespace trimmed off, so what
+// makes a coordinate unrecordable is not a property of the coordinate
+// alone but of the message it would sit in.
+func Unrecordable(i Import) string {
+	got, err := Parse(i.Message())
+	if err != nil {
+		return strings.TrimPrefix(err.Error(), ErrTrailer.Error()+": ")
+	}
+	for _, t := range []struct{ name, wrote, read string }{
+		{TrailerSource, i.Source, got.Source},
+		{TrailerPath, i.Path, got.Path},
+		{TrailerCommit, i.Commit, got.Commit},
+		{TrailerHash, i.Hash, got.Hash},
+	} {
+		if t.wrote != t.read {
+			return fmt.Sprintf("%s %q would be read back as %q", t.name, t.wrote, t.read)
+		}
+	}
+	return ""
+}
+
 // ValidPath reports whether p is a directory of a repository, "" being its
 // root: the subpath an import commit records, and the subpath another
 // tool's lock file names. A path that is not already clean, that is
-// absolute, that walks out of the repository or that carries a control
-// character is none. The last of those is what keeps a subpath one line of
-// a commit message and one line of git's batch input, neither of which a
-// reader could split back.
+// absolute, that walks out of the repository, that carries a control
+// character or that a trailer would not carry back unchanged is none. The
+// last two are what keep a subpath one line of a commit message and one
+// line of git's batch input, neither of which a reader could split back,
+// and what keep the line it is read back from the directory it named: a
+// trailer's value is its line with the surrounding whitespace trimmed off,
+// so a directory whose name begins or ends in a space, which a source may
+// perfectly well hold, would be read back as a different directory of that
+// same source.
 func ValidPath(p string) bool {
 	switch {
 	case p == "":
 		return true
 	case p == "." || p == "..", strings.HasPrefix(p, "/"), strings.HasPrefix(p, "../"):
 		return false
-	case path.Clean(p) != p:
+	case path.Clean(p) != p, strings.TrimSpace(p) != p:
 		return false
 	}
 	return strings.IndexFunc(p, func(r rune) bool { return r < 0x20 || r == 0x7f }) < 0

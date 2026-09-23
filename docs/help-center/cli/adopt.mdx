@@ -128,7 +128,7 @@ If the directory is really yours now rather than a copy of someone else's skill,
 | The library entry is a symlink, or holds no `SKILL.md` | agentx manages real skill directories; leave it as it is |
 | The name is already a fork on this machine | the fork has a history of its own; nothing to adopt |
 | The entry names no source agentx can fetch | install it with [`agentx skill add`](/cli/skill) from a git source instead |
-| The entry names a path that is not inside a repository | fix the entry, or install the skill instead |
+| The entry names a path that is not inside a repository, or one agentx cannot record: a path carrying a control character, or opening or closing with a space | fix the entry, or install the skill instead |
 | Its source cannot be fetched | check the URL and your credentials, then run again |
 
 One bad entry never costs the others: the rest of the run is adopted, and the failures are named at the end.

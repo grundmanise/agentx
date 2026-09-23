@@ -367,9 +367,10 @@ func badCopyMode(s home.Settings) string {
 // validRecords refuses a listing that is not one the account repo could
 // have produced: a name no branch of the library namespace can carry, a
 // kind that is neither, a commit that is not an object id, or lineage that
-// the trailer reader would not accept. The trailers are checked by that
-// reader itself, on the message an import commit would carry, so a record
-// this command accepts is exactly a record a branch could hold.
+// the trailer reader would not accept. The trailers are checked by the
+// gate every import commit passes before it is written, which is that
+// reader itself on the message the commit would carry, so a record this
+// command accepts is exactly a record a branch could hold.
 func validRecords(path string, skills []exportSkill) error {
 	refuse := func(why string) error {
 		return fail(exitRefused, path+" lists a skill agentx cannot read: "+sanitised(why),
@@ -398,8 +399,7 @@ func validRecords(path string, skills []exportSkill) error {
 		if rec.Subpath != nil {
 			subpath = *rec.Subpath
 		}
-		want := lineage.Import{Source: rec.Source, Path: subpath, Commit: rec.UpstreamCommit, Hash: rec.BaseHash}
-		if got, err := lineage.Parse(want.Message()); err != nil || got != want {
+		if lineage.Unrecordable(lineage.Import{Source: rec.Source, Path: subpath, Commit: rec.UpstreamCommit, Hash: rec.BaseHash}) != "" {
 			return refuse(rec.Name + " does not carry the lineage of one upstream version")
 		}
 	}

@@ -164,24 +164,27 @@ func TestSkillAddWritesTheImportCommit(t *testing.T) {
 }
 
 // TestSkillAddSanitisesTheDirectoryItNames installs a skill from a
-// directory the source named with an escape sequence in it, under a name
+// directory the source named with a control sequence in it, under a name
 // its frontmatter spells with a C1 control, which a library directory and
 // an import branch can both hold. The line that confirms the install names
 // both, and a source chose both, so they are sanitised there as source
-// skills and skill list sanitise them.
+// skills and skill list sanitise them. The directory's sequence opens with
+// the C1 CSI rather than ESC: a directory holding a C0 control is refused
+// at install, since the import commit cannot record it, while a C1 control
+// is recorded and read back as it is, and a terminal obeys it all the same.
 func TestSkillAddSanitisesTheDirectoryItNames(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	s := h.newSourceRepo("evil", true)
 	const name = "pl\u009bain"
-	s.write(filepath.Join("na\x1b[31msty", "SKILL.md"), "---\nname: "+yamlQuoted(name)+"\ndescription: A plain skill\n---\n\n# plain\n")
+	s.write(filepath.Join("na\u009b31msty", "SKILL.md"), "---\nname: "+yamlQuoted(name)+"\ndescription: A plain skill\n---\n\n# plain\n")
 	s.commit("skills")
 	equal(t, "source add", h.run("source", "add", s.url).exit, 0)
 
 	out := h.run("skill", "add", s.url, "--skill", name)
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "✓ installed pl ain from "+s.url+" under na [31msty at ")
+	contains(t, "stdout", out.stdout, "✓ installed pl ain from "+s.url+" under na 31msty at ")
 	for _, r := range out.stdout {
 		if unicode.IsControl(r) && r != '\n' {
 			t.Fatalf("a control character reached the output: %q in\n%q", r, out.stdout)

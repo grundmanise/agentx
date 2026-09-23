@@ -248,7 +248,11 @@ func (inv *invocation) judge(c *candidate, dir bool, records map[string]lineage.
 		src.Stripped = false
 	}
 	if !lineage.ValidPath(c.entry.Subpath) {
-		c.refuse(refuse(exitRefused, fmt.Sprintf("%s names %q, which is not a directory of %s", c.entry.File, sanitised(c.entry.Subpath), src.URL),
+		// Quoted and not sanitised: a directory a trailer cannot carry is
+		// one padded with spaces as often as one holding a control
+		// character, and turning either into a space would name a
+		// directory the lock file does not.
+		c.refuse(refuse(exitRefused, fmt.Sprintf("%s names %q, which is not a directory of %s", c.entry.File, c.entry.Subpath, src.URL),
 			"fix the entry in the lock file, or install the skill with 'agentx skill add'"))
 		return
 	}

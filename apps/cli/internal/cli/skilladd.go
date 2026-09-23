@@ -311,7 +311,12 @@ func (inv *invocation) readVersions(ctx context.Context, b *batch, gitDir string
 	var kept []*imported
 	for _, sk := range skills {
 		entries := entriesUnder(listed, sk.Subpath)
-		v := &imported{skill: sk, name: sk.Name, dir: upstreamDir(src, sk), entries: entries, when: ups[sk.Subpath].when, dropped: lineage.Dropped(entries)}
+		// The lineage is put together in two steps, as it is known in two:
+		// the coordinates come off the listing and the history walk, and are
+		// what usable holds to the reader's rule, and the content hash
+		// arrives with the files.
+		v := &imported{skill: sk, name: sk.Name, dir: upstreamDir(src, sk), entries: entries, when: ups[sk.Subpath].when, dropped: lineage.Dropped(entries),
+			imp: lineage.Import{Source: src.URL, Path: sk.Subpath, Commit: ups[sk.Subpath].commit}}
 		if f := inv.usable(v, taken, src); f != nil {
 			b.drop(v.name, stepsPerSkill, f)
 			continue
@@ -332,7 +337,6 @@ func (inv *invocation) readVersions(ctx context.Context, b *batch, gitDir string
 			b.drop(v.name, stepsPerSkill, f)
 			continue
 		}
-		v.imp = lineage.Import{Source: src.URL, Path: v.skill.Subpath, Commit: ups[v.skill.Subpath].commit, Hash: v.hash}
 		for _, d := range v.dropped {
 			inv.out.warn(path.Join(v.skill.Subpath, d) + " is not a regular file and is left out of the import")
 		}
@@ -512,11 +516,27 @@ func foundUpstreams(tip string, at []treeRequest, out []string) (map[treeRequest
 }
 
 // usable refuses a skill the machine cannot hold before anything is read
-// for it: a name the library or the account repo cannot take, an entry
-// whose path would lay it out outside the skill's directory, a directory
-// with no regular file in it at all, and a name another skill of this same
-// batch has already claimed.
+// for it: a name the library or the account repo cannot take, a directory
+// the import commit cannot record, an entry whose path would lay it out
+// outside the skill's directory, a directory with no regular file in it at
+// all, and a name another skill of this same batch has already claimed.
 func (inv *invocation) usable(v *imported, taken map[string]string, src source.Source) *failure {
+	if why := nameRefusal(v.name); why != "" {
+		return refuse(exitRefused, fmt.Sprintf("%q %s", v.name, why),
+			"a name cannot be empty or hidden, or carry a separator, a space or any of ~^:?*[; fix it in the skill's SKILL.md frontmatter upstream, or install another skill")
+	}
+	// The directory is checked with the reader's own rule, and before the
+	// version is read, for the reason the name is: an import commit
+	// records it on one line of a trailer, and one the reader would refuse
+	// or read back as another directory would be written all the same and
+	// found out only on the next listing, by which time the skill is
+	// installed and has no lineage left to update or revert it by. It is
+	// checked before the entries under it, so that a refusal of one of
+	// those names a directory it can print as it is.
+	if !lineage.ValidPath(v.skill.Subpath) {
+		return refuse(exitRefused, fmt.Sprintf("%s comes from %q, which is not a directory the account repo can record", v.name, v.skill.Subpath),
+			"the import commit that records where a skill came from carries the directory on one line of a trailer, so it can hold no control character and no surrounding space; rename the directory upstream, or install another skill")
+	}
 	// Every path is checked before any of it is read or written: an entry
 	// is laid out below a staging directory by its path, and one that
 	// climbs out of it would be written wherever it points.
@@ -525,10 +545,6 @@ func (inv *invocation) usable(v *imported, taken map[string]string, src source.S
 			return refuse(exitRefused, fmt.Sprintf("the skill %q in %s%s holds an entry agentx will not lay out: %q", v.skill.Name, src.URL, underPath(v.skill.Subpath), e.Path),
 				"an empty, absolute, '.', '..' or '.git' path, a backslash or a NUL could be written outside the skill's directory; install another skill of the source")
 		}
-	}
-	if why := nameRefusal(v.name); why != "" {
-		return refuse(exitRefused, fmt.Sprintf("%q %s", v.name, why),
-			"a name cannot be empty or hidden, or carry a separator, a space or any of ~^:?*[; fix it in the skill's SKILL.md frontmatter upstream, or install another skill")
 	}
 	if where, ok := taken[v.name]; ok {
 		return refuse(exitRefused, fmt.Sprintf("%s is also the name of the skill under %s, which this run installs", v.name, where),
@@ -544,9 +560,10 @@ func (inv *invocation) usable(v *imported, taken map[string]string, src source.S
 		"the skill directory holds only symlinks or submodules, which an import leaves out")
 }
 
-// fill puts the file bodies of one version in place and computes its
-// content hash, over the same byte sequence a scan hashes a directory with,
-// so that the library directory and the hash agree once it is written.
+// fill puts the file bodies of one version in place, computes its content
+// hash, over the same byte sequence a scan hashes a directory with, so
+// that the library directory and the hash agree once it is written, and
+// completes the lineage the import commit will carry.
 func (v *imported) fill(bodies map[string]string, url string) *failure {
 	var files []scan.File
 	for _, e := range v.entries {
@@ -574,6 +591,22 @@ func (v *imported) fill(bodies map[string]string, url string) *failure {
 		}
 	}
 	v.hash = scan.ContentHash(name, description, files)
+	v.imp.Hash = v.hash
+	// The one gate every import commit passes, whichever command writes it,
+	// and the whole of it rather than one coordinate: an import commit no
+	// reader accepts is a skill installed with its lineage severed, and
+	// nothing would say so.
+	//
+	// It answers for the three coordinates agentx writes itself, the
+	// directory being refused by the caller already, before the version is
+	// read. Those three leave no room for a version to be at fault, so
+	// this is exit code 10 and not a refusal: reaching it means agentx
+	// wrote a canonical URL, an object id or a content hash that is none,
+	// which is its own bug and not one of the source's.
+	if why := lineage.Unrecordable(v.imp); why != "" {
+		return refuse(exitInternal, v.name+" cannot be recorded as the version it came from: "+why,
+			"agentx wrote lineage it could not read back; run 'agentx doctor' and report this")
+	}
 	return nil
 }
 

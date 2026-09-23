@@ -63,6 +63,15 @@ warning: xlsx: the library already holds xlsx at ~/.agents/skills
 error: 1 of 3 skills could not be installed: xlsx: the library already holds xlsx at ~/.agents/skills
 ```
 
+agentx also refuses a skill whose directory in the source carries a control character, or opens or closes with a space:
+
+```text
+error: pdf comes from " skills/pdf", which is not a directory the account repo can record
+hint: the import commit that records where a skill came from carries the directory on one line of a trailer, so it can hold no control character and no surrounding space; rename the directory upstream, or install another skill
+```
+
+agentx records where a skill came from on one line of its commit. A directory name that does not fit on one line would be read back as a different directory, or as none at all, leaving a skill you could never update or revert. Ask the source to rename the directory, or install a different skill.
+
 Codex and Gemini CLI read the library directly, so they get no link of their own: the library entry is what they see. Every other client gets a symlink into the library.
 
 ### Choose where it goes
@@ -256,7 +265,7 @@ Every install writes one commit per skill in the account repo in agentx home: th
 - `1`: the command line names no skill to install, the flags contradict each other (`--all` with `--skill`, `--except` without `--all`, or `--except` leaving nothing), it names the source with another branch or tag than its pin, or `skill place` was given no `--to`.
 - `3`: the source, or the files of the skill, could not be fetched.
 - `5`: a source id names no source on this machine, the source did not serve a skill's files, the path or a skill named by `--skill` or `--except` does not exist in the source, or `--to` or `--from` names a configuration that is not detected. For `skill place` and `skill remove`, also a name the library does not hold as a skill.
-- `6`: the library already holds a different skill under that name, the name is already managed at another version, the skill's name cannot be both a directory and a git branch, the skill holds a file whose path would put it outside the skill's directory, agentx cannot use your library directory, or an interrupted change has to be resolved before anything else can run. The message names what to restore; if you would rather keep what is there, move the named file in `~/.agentx/mutations` aside. For `skill remove`, it is also `--from` naming a client that reads the library directly, and removing a name that is a fork. In a run of several skills, `6` is also the code when the skills that were skipped disagree about why: a run whose failures all have one cause exits with that cause, so a batch that skipped two skills the source did not serve exits `5`.
+- `6`: the library already holds a different skill under that name, the name is already managed at another version, the skill's name cannot be both a directory and a git branch, the skill's directory in the source is not one agentx can record, the skill holds a file whose path would put it outside the skill's directory, agentx cannot use your library directory, or an interrupted change has to be resolved before anything else can run. The message names what to restore; if you would rather keep what is there, move the named file in `~/.agentx/mutations` aside. For `skill remove`, it is also `--from` naming a client that reads the library directly, and removing a name that is a fork. In a run of several skills, `6` is also the code when the skills that were skipped disagree about why: a run whose failures all have one cause exits with that cause, so a batch that skipped two skills the source did not serve exits `5`.
 - `7`: another agentx command is running. Retry when it finishes.
 - `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.
 - `10`: agentx could not read its own settings file, the library still held the skill after `skill remove` took it away, or agentx hit an error it has no better answer for. Run `agentx doctor`.

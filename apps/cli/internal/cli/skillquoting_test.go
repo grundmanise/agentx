@@ -59,9 +59,19 @@ func quotingCases() []quotingCase {
 		dir:   `tools/"odd"dir`,
 		skill: "oddir",
 	}, {
-		name:  "a newline in the directory name",
-		dir:   "tools/od\nd",
-		skill: "newlinedir",
+		// A directory below the skill whose name holds a newline, with a
+		// symlink to force the rewrite, so the name goes through mktree as
+		// one record of a level rather than travelling with a reused tree.
+		// The skill's own directory cannot be the one holding it: the
+		// subpath is recorded on one line of an import commit trailer, and
+		// a directory a trailer cannot carry back is refused at install,
+		// which TestInstallRefusesASubpathItCannotRecord covers.
+		name:    "a newline in a directory below the skill",
+		dir:     "tools/newlinesub",
+		skill:   "newlinesub",
+		files:   map[string]string{"su\nb/x.md": "x\n"},
+		links:   map[string]string{"su\nb/link": "x.md"},
+		rewrite: true,
 	}, {
 		// Two directories rewritten at one level, so their names travel
 		// through the batch protocol rather than through one mktree.
