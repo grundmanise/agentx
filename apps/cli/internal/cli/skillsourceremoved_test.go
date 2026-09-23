@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
@@ -47,6 +49,13 @@ func (h *harness) snapshotLibrary(name string) map[string]any {
 	return nil
 }
 
+// removedHint is the hint a command that names a removed source by its id
+// gives: the command that adds the source again, its URL quoted for a
+// shell as import quotes the lines it prints.
+func removedHint(url string) string {
+	return "run 'agentx source add " + sourceAddArg(url, "") + "' to add it again"
+}
+
 // drift is the drift a library entry carries, "" when it carries none.
 func drift(entry map[string]any) string {
 	list, ok := entry["drift"].([]any)
@@ -66,7 +75,9 @@ func drift(entry map[string]any) string {
 // an install from that source by id is refused with the command that
 // brings the source back; and running that command gives back the listing
 // the machine had before the removal, byte for byte, with the skill, its
-// import branch and its placements never touched.
+// import branch and its placements never touched. Following the hint lets
+// the refused install through: the source is fetched again, and a skill it
+// holds installs as it would have before the removal.
 func TestSourceRemovedIsReportedAndClearedByAddingTheSourceAgain(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -115,14 +126,17 @@ func TestSourceRemovedIsReportedAndClearedByAddingTheSourceAgain(t *testing.T) {
 	// command that adds the source again rather than a listing it is gone
 	// from.
 	id := source.ID(s.url)
-	refused := h.run("--json", "skill", "add", id, "--skill", "alpha")
+	refused := h.run("--json", "skill", "add", id, "--skill", "beta")
 	equal(t, "exit", refused.exit, 5)
 	e := h.one(refused.stdout, "error")
 	equal(t, "code", e["code"], "not_found")
 	contains(t, "message", e["message"].(string), s.url)
-	equal(t, "hint", e["hint"], "run 'agentx source add "+s.url+"' to add it again")
+	equal(t, "hint", e["hint"], removedHint(s.url))
 	if got := h.accountGit("rev-parse", "refs/heads/managed/alpha"); got != branch {
 		t.Errorf("the refused install moved the import branch from %s to %s", branch, got)
+	}
+	if _, err := h.accountGitErr("rev-parse", "--verify", "refs/heads/managed/beta"); err == nil {
+		t.Error("the refused install wrote an import branch for beta")
 	}
 
 	// Adding the source again clears the state and changes nothing else:
@@ -138,6 +152,110 @@ func TestSourceRemovedIsReportedAndClearedByAddingTheSourceAgain(t *testing.T) {
 	}
 	if got := drift(h.snapshotLibrary("alpha")); got != "" {
 		t.Errorf("the snapshot still carries drift %q after the source was added again", got)
+	}
+
+	// The install the hint was given for now goes through.
+	again := h.run("--json", "skill", "add", id, "--skill", "beta")
+	equal(t, "exit after adding the source again", again.exit, 0)
+	equal(t, "beta's add event drift", drift(h.librarySkill(again.stdout, "beta")), "")
+	h.accountGit("rev-parse", "--verify", "refs/heads/managed/beta")
+	list := h.mustRun("--json", "skill", "list").stdout
+	for _, name := range []string{"alpha", "beta"} {
+		if got := drift(h.librarySkill(list, name)); got != "" {
+			t.Errorf("%s carries drift %q once the source is back", name, got)
+		}
+	}
+	equal(t, "alpha's import branch after the install", h.accountGit("rev-parse", "refs/heads/managed/alpha"), branch)
+}
+
+// TestSourceRemovedIsReadFromTheSettings takes the source entry out of the
+// settings and puts it back behind agentx's back, with no source command
+// at all: the remote and the ref stay, and nothing but the entry changes.
+// The state follows the entry both ways, so it is read from the settings
+// on every read, and nothing that records it, in agentx home or in the
+// account repo, is what a command that changes the settings has to keep.
+func TestSourceRemovedIsReadFromTheSettings(t *testing.T) {
+	t.Parallel()
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	beforeJSON := h.mustRun("--json", "skill", "list").stdout
+	before := h.librarySkill(beforeJSON, "alpha")
+	equal(t, "snapshot drift before", drift(h.snapshotLibrary("alpha")), "")
+	settings, err := home.LoadSettings(h.agentx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry := settings.Sources[settings.FindSource(s.url)]
+	editSettings := func(edit func(*home.Settings)) {
+		t.Helper()
+		err := home.Mutate(h.agentx, nil, func() error {
+			st, err := home.LoadSettings(h.agentx)
+			if err != nil {
+				return err
+			}
+			edit(&st)
+			return home.SaveSettings(h.agentx, st)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	editSettings(func(st *home.Settings) { st.RemoveSource(s.url) })
+	refs := h.accountGit("for-each-ref")
+	contains(t, "account repo refs", refs, source.Ref(source.ID(s.url)))
+	entries := entriesOf(t, h.agentx)
+
+	after := h.librarySkill(h.mustRun("--json", "skill", "list").stdout, "alpha")
+	equal(t, "drift", drift(after), "source removed")
+	for _, field := range coordinates {
+		equal(t, field, after[field], before[field])
+	}
+	equal(t, "snapshot drift", drift(h.snapshotLibrary("alpha")), "source removed")
+	refused := h.run("--json", "skill", "add", source.ID(s.url), "--skill", "beta")
+	equal(t, "refused exit", refused.exit, 5)
+	equal(t, "refused hint", h.one(refused.stdout, "error")["hint"], removedHint(s.url))
+
+	// Reading the state wrote nothing for it, anywhere.
+	equal(t, "account repo refs after the reads", h.accountGit("for-each-ref"), refs)
+	if got := entriesOf(t, h.agentx); !reflect.DeepEqual(got, entries) {
+		t.Errorf("agentx home after the reads = %v, want %v", got, entries)
+	}
+
+	editSettings(func(st *home.Settings) { st.SetSource(entry) })
+	if got := h.mustRun("--json", "skill", "list").stdout; got != beforeJSON {
+		t.Errorf("the JSON listing differs once the entry is back:\nbefore:\n%safter:\n%s", beforeJSON, got)
+	}
+	equal(t, "snapshot drift once the entry is back", drift(h.snapshotLibrary("alpha")), "")
+}
+
+// TestImportedSettingsDecideSourceRemoved imports settings that do not hold
+// the source a managed skill came from, as the settings of another machine
+// may not, and then settings that do. Import writes nothing but the
+// settings, so the first leaves the skill source removed although no
+// source was removed here, and the second clears it although it fetches
+// nothing: an entry whose ref the account repo does not hold is a source
+// not fetched, not a source removed.
+func TestImportedSettingsDecideSourceRemoved(t *testing.T) {
+	t.Parallel()
+	_, elsewhere := plainExport(t)
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	beforeJSON := h.mustRun("--json", "skill", "list").stdout
+	here := h.exportPath("here.json")
+	h.mustRun("export", here)
+
+	h.mustRun("import", elsewhere, "--yes")
+	equal(t, "drift under settings without the source", drift(h.librarySkill(h.mustRun("--json", "skill", "list").stdout, "alpha")), "source removed")
+	equal(t, "snapshot drift", drift(h.snapshotLibrary("alpha")), "source removed")
+
+	h.mustRun("source", "remove", s.url) // takes the ref the import left behind, and no entry
+	h.mustRun("import", here, "--yes")
+	if _, err := h.accountGitErr("rev-parse", "--verify", source.Ref(source.ID(s.url))); err == nil {
+		t.Fatal("the account repo holds the source ref; the test proves nothing")
+	}
+	if got := h.mustRun("--json", "skill", "list").stdout; got != beforeJSON {
+		t.Errorf("the JSON listing differs once the settings hold the source again:\nbefore:\n%safter:\n%s", beforeJSON, got)
 	}
 }
 
@@ -192,6 +310,7 @@ func TestInstallByURLAddsARemovedSourceBack(t *testing.T) {
 
 	out := h.mustRun("--json", "skill", "add", s.url, "--skill", "beta")
 	equal(t, "added source", h.one(out.stdout, "source")["url"], s.url)
+	equal(t, "beta's add event drift", drift(h.librarySkill(out.stdout, "beta")), "")
 	list := h.mustRun("--json", "skill", "list").stdout
 	for _, name := range []string{"alpha", "beta"} {
 		if got := drift(h.librarySkill(list, name)); got != "" {
@@ -223,7 +342,8 @@ func TestSourceAddAtAnotherPinClearsSourceRemoved(t *testing.T) {
 // TestSourceCommandsNameARemovedSource covers the other commands that take
 // a source by id. Each refuses an id no source entry has as it always has,
 // and for one that a managed skill still records, names the command that
-// adds it again; an id nothing records keeps the hint to list the sources.
+// adds it again; an id nothing records keeps the hint to list the sources,
+// and a URL no entry has keeps the hint to add it.
 func TestSourceCommandsNameARemovedSource(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -238,12 +358,152 @@ func TestSourceCommandsNameARemovedSource(t *testing.T) {
 	} {
 		out := h.run(append([]string{"--json"}, args...)...)
 		equal(t, strings.Join(args, " ")+" exit", out.exit, 5)
-		equal(t, strings.Join(args, " ")+" hint", h.one(out.stdout, "error")["hint"], "run 'agentx source add "+s.url+"' to add it again")
+		equal(t, strings.Join(args, " ")+" hint", h.one(out.stdout, "error")["hint"], removedHint(s.url))
 	}
 
-	unknown := h.run("--json", "source", "skills", "0123456789abcdef")
-	equal(t, "exit", unknown.exit, 5)
-	equal(t, "hint", h.one(unknown.stdout, "error")["hint"], "run 'agentx source list' to see the sources")
+	never := "file://" + filepath.Join(filepath.Dir(h.home), "never.git")
+	for _, c := range []struct {
+		args []string
+		hint string
+	}{
+		{[]string{"source", "skills", "0123456789abcdef"}, "run 'agentx source list' to see the sources"},
+		{[]string{"source", "fetch", "0123456789abcdef"}, "run 'agentx source list' to see the sources"},
+		{[]string{"source", "skills", never}, "run 'agentx source add " + never + "' to add it"},
+		{[]string{"source", "fetch", never}, "run 'agentx source add " + never + "' to add it"},
+	} {
+		out := h.run(append([]string{"--json"}, c.args...)...)
+		equal(t, strings.Join(c.args, " ")+" exit", out.exit, 5)
+		equal(t, strings.Join(c.args, " ")+" hint", h.one(out.stdout, "error")["hint"], c.hint)
+	}
+}
+
+// TestRemovedSourceHintIsQuotedForAShell removes a source whose URL holds a
+// character a shell acts on. The hint is a line to paste, so the URL in it
+// is quoted as the lines import prints are, and pasting it adds that source
+// and runs nothing else.
+func TestRemovedSourceHintIsQuotedForAShell(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.build(t, fixture{dirs: []string{".claude"}})
+	s := h.newSourceRepo("a&b", true)
+	s.skill("skills/alpha", "alpha", "The first skill", nil)
+	s.commit("one skill")
+	// The URL and the id as agentx has them: the canonical URL escapes
+	// some characters of a path, and the id is the hash of that URL.
+	added := h.one(h.mustRun("--json", "source", "add", s.url).stdout, "source")
+	url, id := added["url"].(string), added["id"].(string)
+	h.mustRun("skill", "add", url, "--skill", "alpha")
+	h.mustRun("source", "remove", url)
+
+	out := h.run("--json", "skill", "add", id, "--skill", "alpha")
+	equal(t, "exit", out.exit, 5)
+	hint := h.one(out.stdout, "error")["hint"].(string)
+	equal(t, "hint", hint, removedHint(url))
+	contains(t, "hint", hint, "'"+url+"'")
+}
+
+// TestAForkDoesNotNameARemovedSource moves a skill's lineage into the fork
+// namespace before its source is removed. The source that matters to a
+// fork is the account remote it is published to, not the upstream it
+// merges later versions from, so only a managed skill's lineage turns the
+// refusal of an id into the command that adds the source again.
+func TestAForkDoesNotNameARemovedSource(t *testing.T) {
+	t.Parallel()
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.accountGit("update-ref", "refs/heads/skills/alpha", h.accountGit("rev-parse", "refs/heads/managed/alpha"))
+	h.accountGit("update-ref", "-d", "refs/heads/managed/alpha")
+	h.mustRun("source", "remove", s.url)
+
+	out := h.run("--json", "source", "skills", source.ID(s.url))
+	equal(t, "exit", out.exit, 5)
+	e := h.one(out.stdout, "error")
+	equal(t, "hint", e["hint"], "run 'agentx source list' to see the sources")
+	if strings.Contains(e["message"].(string), s.url) {
+		t.Errorf("the refusal names the fork's upstream: %s", e["message"])
+	}
+}
+
+// TestUnreadableLineageLeavesTheRefusalOfAnId breaks the refs of the
+// account repo after a source whose skill still records it was removed.
+// The lineage is read for the hint alone, and the command was not asked
+// about the account repo, so the refusal is what it is without the
+// lineage: exit code 5 and the hint to list the sources, not exit code 8.
+func TestUnreadableLineageLeavesTheRefusalOfAnId(t *testing.T) {
+	t.Parallel()
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("source", "remove", s.url)
+	// rev-parse --is-bare-repository still succeeds on this, so the check
+	// of the account repo passes and the lineage read is what fails.
+	writeFile(t, filepath.Join(gitx.AccountRepoPath(h.agentx), "packed-refs"), "this is not a packed-refs line\n")
+	if _, err := h.accountGitErr("for-each-ref", "refs/heads/"); err == nil {
+		t.Fatal("the account repo is still readable; the test proves nothing")
+	}
+
+	out := h.run("--json", "source", "skills", source.ID(s.url))
+	equal(t, "exit", out.exit, 5)
+	e := h.one(out.stdout, "error")
+	equal(t, "code", e["code"], "not_found")
+	equal(t, "hint", e["hint"], "run 'agentx source list' to see the sources")
+}
+
+// TestPlacementEventsCarryTheDrift places a skill and takes it out of one
+// configuration, before its source is removed and after. Every command
+// that reports on a library skill reports the same object skill list does,
+// so each event carries the drift the skill is in, and none when it is in
+// none, with the coordinates as they were.
+func TestPlacementEventsCarryTheDrift(t *testing.T) {
+	t.Parallel()
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	before := h.librarySkill(h.mustRun("--json", "skill", "list").stdout, "alpha")
+	report := func(want string) {
+		t.Helper()
+		for _, args := range [][]string{
+			{"skill", "remove", "alpha", "--from", "cursor"},
+			{"skill", "place", "alpha", "--to", "cursor"},
+		} {
+			what := strings.Join(args, " ")
+			ev := h.librarySkill(h.mustRun(append([]string{"--json"}, args...)...).stdout, "alpha")
+			equal(t, what+" drift", drift(ev), want)
+			for _, field := range coordinates {
+				equal(t, what+" "+field, ev[field], before[field])
+			}
+		}
+	}
+	report("")
+	h.mustRun("source", "remove", s.url)
+	report("source removed")
+}
+
+// TestAdoptingFromARemovedSourceClearsSourceRemoved adopts a skill the
+// vercel skills CLI installed from a source this machine removed. Adopting
+// adds the source again as source add would, so the managed skill already
+// installed from it is no longer source removed, and nothing else of it
+// changes.
+func TestAdoptingFromARemovedSourceClearsSourceRemoved(t *testing.T) {
+	t.Parallel()
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	before := h.librarySkill(h.mustRun("--json", "skill", "list").stdout, "alpha")
+	branch := h.accountGit("rev-parse", "refs/heads/managed/alpha")
+	h.mustRun("source", "remove", s.url)
+	equal(t, "drift after the removal", drift(h.librarySkill(h.mustRun("--json", "skill", "list").stdout, "alpha")), "source removed")
+
+	vercelInstall(t, h, s, "skills/beta", "beta")
+	h.writeLock(h.lockPath(), map[string]lockEntry{"beta": {
+		Source: "owner/repo", SourceType: "github", SourceURL: s.url,
+		SkillPath: "skills/beta", SkillFolderHash: s.tree("skills/beta"),
+	}})
+	h.mustRun("adopt", "--skill", "beta")
+
+	list := h.mustRun("--json", "skill", "list").stdout
+	if after := h.librarySkill(list, "alpha"); !reflect.DeepEqual(after, before) {
+		t.Errorf("alpha after the adoption = %v, want %v", after, before)
+	}
+	equal(t, "beta's drift", drift(h.librarySkill(list, "beta")), "")
+	equal(t, "alpha's import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), branch)
 }
 
 // runBesideServe runs a mutation while a serve of the same home is running.

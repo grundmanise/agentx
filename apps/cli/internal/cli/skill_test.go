@@ -104,6 +104,7 @@ func TestSkillAddPlacesTheSkillEverywhere(t *testing.T) {
 	equal(t, "source", ev["source"], s.url)
 	equal(t, "subpath", ev["subpath"], "skills/alpha")
 	equal(t, "state", ev["state"], "current")
+	equal(t, "drift", drift(ev), "")
 	places := ev["placements"].([]any)
 	var got []string
 	for _, p := range places {
