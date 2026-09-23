@@ -138,6 +138,18 @@ var fixtures = map[string]fixture{
 			".claude/skills/lost": ".agents/skills/missing",
 		},
 	},
+	// No client here reads the library, so a warning about a directory of
+	// it can only come from the scan's own read of the library, the one
+	// the snapshot's library entries are built from.
+	"library-broken-symlink": {
+		files: map[string]string{
+			".claude/skills/commit/SKILL.md": skill("commit", "Write a commit message"),
+			".agents/skills/real/SKILL.md":   skill("real", "A library skill"),
+		},
+		links: map[string]string{
+			".agents/skills/dangling": ".agents/skills/missing",
+		},
+	},
 	"library-read-by-codex": {
 		dirs: []string{".codex", ".gemini", ".cursor"},
 		files: map[string]string{
@@ -503,6 +515,7 @@ func TestScanWarnings(t *testing.T) {
 	}{
 		{"broken-symlink", []string{"~/.claude/skills/gone: broken symlink, skipped"}},
 		{"broken-symlinks", []string{"~/.claude/skills: 2 broken symlinks (gone, lost), skipped"}},
+		{"library-broken-symlink", []string{"~/.agents/skills/dangling: broken symlink, skipped"}},
 		{"unparsable-frontmatter", []string{
 			"~/.claude/skills/broken/SKILL.md: unparsable frontmatter at line 3: non-map value is specified, using the directory name",
 			"~/.claude/skills/nameless/SKILL.md: frontmatter has no name, using the directory name",
