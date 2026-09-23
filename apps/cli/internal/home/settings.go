@@ -61,6 +61,38 @@ func (s *Settings) RemoveSource(url string) {
 	}
 }
 
+// CopyModes reads copy_mode: the configurations that hold a copy of a
+// skill instead of a symlink, by the skill's library directory name.
+func (s Settings) CopyModes() (map[string][]string, error) {
+	modes := map[string][]string{}
+	if len(s.CopyMode) == 0 {
+		return modes, nil
+	}
+	if err := json.Unmarshal(s.CopyMode, &modes); err != nil {
+		return nil, err
+	}
+	if modes == nil {
+		modes = map[string][]string{}
+	}
+	return modes, nil
+}
+
+// SetCopyModes replaces copy_mode. A skill with no copy anywhere leaves no
+// entry behind, so the file says what is rather than what once was.
+func (s *Settings) SetCopyModes(modes map[string][]string) error {
+	for name, configs := range modes {
+		if len(configs) == 0 {
+			delete(modes, name)
+		}
+	}
+	b, err := json.Marshal(modes)
+	if err != nil {
+		return err
+	}
+	s.CopyMode = b
+	return nil
+}
+
 func SettingsPath(dir string) string { return filepath.Join(dir, "settings.json") }
 
 // LoadSettings reads the settings file whole. A missing file means defaults.
@@ -89,11 +121,21 @@ func LoadSettings(dir string) (Settings, error) {
 	return s, nil
 }
 
+// MarshalSettings is the bytes of the settings file, for a mutation that
+// writes it beside other changes of its own.
+func MarshalSettings(s Settings) ([]byte, error) {
+	b, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append(b, '\n'), nil
+}
+
 // SaveSettings replaces the settings file as a journaled mutation. Call it inside Mutate.
 func SaveSettings(dir string, s Settings) error {
-	b, err := json.MarshalIndent(s, "", "  ")
+	b, err := MarshalSettings(s)
 	if err != nil {
 		return err
 	}
-	return replaceFile(dir, SettingsPath(dir), append(b, '\n'))
+	return replaceFile(dir, SettingsPath(dir), b)
 }

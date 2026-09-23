@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"context"
+
 	"github.com/spf13/cobra"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
@@ -19,7 +21,7 @@ func newMachineCommand(inv *invocation) *cobra.Command {
 		Short: "Print the machine id, label and how the id was derived",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			m, err := inv.machine()
+			m, err := inv.machine(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -36,7 +38,7 @@ func newMachineCommand(inv *invocation) *cobra.Command {
 			if err := validLabel(args[0]); err != nil {
 				return err
 			}
-			m, err := inv.mutateMachine(func() error {
+			m, err := inv.mutateMachine(cmd.Context(), func() error {
 				s, err := inv.loadSettings()
 				if err != nil {
 					return err
@@ -56,7 +58,7 @@ func newMachineCommand(inv *invocation) *cobra.Command {
 		Short: "Replace the machine id with a new random one",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			m, err := inv.mutateMachine(func() error {
+			m, err := inv.mutateMachine(cmd.Context(), func() error {
 				_, err := home.ResetMachineID(inv.dirs.Home)
 				return err
 			})
@@ -71,11 +73,11 @@ func newMachineCommand(inv *invocation) *cobra.Command {
 }
 
 // mutateMachine runs fn as a mutation and then reports the machine as it now is.
-func (inv *invocation) mutateMachine(fn func() error) (machineEvent, error) {
-	if err := home.Mutate(inv.dirs.Home, fn); err != nil {
+func (inv *invocation) mutateMachine(ctx context.Context, fn func() error) (machineEvent, error) {
+	if err := home.Mutate(inv.dirs.Home, inv.refs(ctx), fn); err != nil {
 		return machineEvent{}, err
 	}
-	m, err := inv.machine()
+	m, err := inv.machine(ctx)
 	if err != nil {
 		return machineEvent{}, err
 	}
@@ -92,12 +94,12 @@ func (inv *invocation) printMachine(m machineEvent) {
 	inv.out.render(t, "")
 }
 
-func (inv *invocation) machine() (machineEvent, error) {
+func (inv *invocation) machine(ctx context.Context) (machineEvent, error) {
 	s, err := inv.loadSettings()
 	if err != nil {
 		return machineEvent{}, err
 	}
-	id, derivation, err := home.MachineID(inv.dirs.Home, inv.env)
+	id, derivation, err := home.MachineID(inv.dirs.Home, inv.env, inv.refs(ctx))
 	if err != nil {
 		return machineEvent{}, err
 	}

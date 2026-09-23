@@ -115,6 +115,30 @@ func (s *sourceRepo) commit(message string) string {
 
 func (s *sourceRepo) tag(name string) { s.t.Helper(); s.run("tag", name) }
 
+// commitAt commits the work tree with an author and committer time of its
+// own. Every other fixture commit is made through the isolated environment,
+// which fixes the same date agentx falls back to, so a test that wants to
+// tell the upstream's committer time from that fallback has to set one.
+func (s *sourceRepo) commitAt(message, when string) string {
+	s.t.Helper()
+	s.run("add", "--all")
+	_, err := s.git.IsolatedAt(context.Background(), s.gitDir, when,
+		"--work-tree="+s.work, "commit", "--quiet", "--allow-empty", "--message", message)
+	if err != nil {
+		s.t.Fatalf("git commit: %v", err)
+	}
+	return s.run("rev-parse", "HEAD")
+}
+
+// executable marks a file of the work tree executable, so that the source
+// holds it with mode 100755.
+func (s *sourceRepo) executable(path string) {
+	s.t.Helper()
+	if err := os.Chmod(filepath.Join(s.work, path), 0o755); err != nil {
+		s.t.Fatal(err)
+	}
+}
+
 // tree is the tree id of path at the current commit.
 func (s *sourceRepo) tree(path string) string { s.t.Helper(); return s.run("rev-parse", "HEAD:"+path) }
 

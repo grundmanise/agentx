@@ -306,6 +306,13 @@ func (s *Source) fromURL(raw, display string) error {
 		}
 	}
 	s.Subpath = strings.Join(rest, "/")
+	// A segment is checked for . and .. before it is decoded into the
+	// subpath, so skills%2F..%2F.. reaches here as skills/../..; the
+	// subpath is held to the rule of a tree entry, which git would
+	// otherwise resolve through a source's own .. entries.
+	if s.Subpath != "" && CheckPath(s.Subpath) != nil {
+		return fmt.Errorf("%w: the path %q inside the repository is not one agentx reads", ErrForm, s.Subpath)
+	}
 	if scheme == "file" {
 		// A path on disk is taken as it is: a .git directory is named so.
 		s.URL = "file://" + host + "/" + joinPath(repo)

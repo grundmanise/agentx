@@ -344,6 +344,13 @@ func TestSourceFetchAllWithoutSources(t *testing.T) {
 // returned reads the log and gives the peak and the total.
 func gatedGit(t *testing.T, h *harness, want int) func() (peak, total int) {
 	t.Helper()
+	return gatedGitOn(t, h, want, `*" fetch "*`)
+}
+
+// gatedGitOn is gatedGit over the calls a shell case pattern matches, for a
+// command whose parallel calls are reads rather than fetches.
+func gatedGitOn(t *testing.T, h *harness, want int, pattern string) func() (peak, total int) {
+	t.Helper()
 	requireGit(t)
 	real, err := exec.LookPath("git")
 	if err != nil {
@@ -360,7 +367,7 @@ func gatedGit(t *testing.T, h *harness, want int) func() (peak, total int) {
 PATH=%s
 printf '+' >> %s
 case " $* " in
-*" fetch "*)
+%s)
 	: > %s/$$
 	i=0
 	while [ "$(ls %s | wc -l)" -lt %d ] && [ "$i" -lt 200 ]; do
@@ -373,7 +380,7 @@ esac
 status=$?
 printf '-' >> %s
 exit $status
-`, os.Getenv("PATH"), log, gate, gate, want, real, log))
+`, os.Getenv("PATH"), log, pattern, gate, gate, want, real, log))
 	_ = os.Remove(log) // the --version stubGit runs to clear ETXTBSY is not one of them
 	return func() (peak, total int) {
 		marks, err := os.ReadFile(log)

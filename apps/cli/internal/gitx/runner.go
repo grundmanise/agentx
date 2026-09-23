@@ -13,10 +13,16 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // ErrMissing is returned when no git executable is found in PATH.
 var ErrMissing = errors.New("git not found in PATH")
+
+// FixedDate is the author and committer date of every isolated call that
+// does not name one, so that a commit agentx writes has the same id on
+// every machine.
+const FixedDate = "946684800 +0000"
 
 // Runner runs git. Every call names its git directory explicitly and builds
 // the child environment from the environment map it was given; nothing is
@@ -52,7 +58,7 @@ func (r *Runner) Version(ctx context.Context) (Version, error) {
 	if r.version != nil {
 		return *r.version, nil
 	}
-	out, err := r.run(ctx, false, nil, "--version")
+	out, err := r.run(ctx, call{}, "--version")
 	if err != nil {
 		return Version{}, err
 	}
@@ -96,7 +102,17 @@ func parseVersion(out string) (Version, error) {
 // use it so that ids match on every machine. It returns stdout without its
 // trailing newline.
 func (r *Runner) Isolated(ctx context.Context, gitDir string, args ...string) (string, error) {
-	out, err := r.run(ctx, true, nil, isolatedArgs(gitDir, args)...)
+	out, err := r.run(ctx, call{isolated: true}, isolatedArgs(gitDir, args)...)
+	return strings.TrimRight(out, "\n"), err
+}
+
+// IsolatedAt is Isolated with the author and committer dates of this one
+// call set to when, an epoch with an offset such as "1700000000 +0000".
+// An import commit takes the upstream committer's time this way, so that
+// the commit is a pure function of the version it holds; everything else
+// the isolated environment fixes still holds.
+func (r *Runner) IsolatedAt(ctx context.Context, gitDir, when string, args ...string) (string, error) {
+	out, err := r.run(ctx, call{isolated: true, dates: when}, isolatedArgs(gitDir, args)...)
 	return strings.TrimRight(out, "\n"), err
 }
 
@@ -104,7 +120,44 @@ func (r *Runner) Isolated(ctx context.Context, gitDir string, args ...string) (s
 // read object ids from it. It returns stdout as is, since a batch of
 // objects ends how it ends.
 func (r *Runner) IsolatedInput(ctx context.Context, gitDir string, stdin io.Reader, args ...string) (string, error) {
-	return r.run(ctx, true, stdin, isolatedArgs(gitDir, args)...)
+	return r.run(ctx, call{isolated: true, stdin: stdin}, isolatedArgs(gitDir, args)...)
+}
+
+// Workers is how many git processes agentx runs at once. A read is mostly
+// the cost of starting git and reading its answer, so a few in flight hide
+// each other's latency, while the bound keeps a command from spawning a
+// process per thing it reads. It is the count the fetches of a source and
+// the handshakes of a scan use, for the same reason.
+const Workers = 4
+
+// IsolatedAll runs calls, which must be independent read-only isolated
+// calls against gitDir, at most Workers at a time, and returns their
+// outputs in the order the calls were given: the work is parallel, what a
+// caller reads from it is not. The first failing call by that order is the
+// error, and every call still runs, so one failure leaves no goroutine
+// behind. Runner keeps no state per call, so the processes share nothing
+// but the repository, which they only read.
+func (r *Runner) IsolatedAll(ctx context.Context, gitDir string, calls [][]string) ([]string, error) {
+	out := make([]string, len(calls))
+	errs := make([]error, len(calls))
+	slots := make(chan struct{}, Workers)
+	var wg sync.WaitGroup
+	for i, args := range calls {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			slots <- struct{}{}
+			defer func() { <-slots }()
+			out[i], errs[i] = r.Isolated(ctx, gitDir, args...)
+		}()
+	}
+	wg.Wait()
+	for _, err := range errs {
+		if err != nil {
+			return out, err
+		}
+	}
+	return out, nil
 }
 
 func isolatedArgs(gitDir string, args []string) []string {
@@ -120,27 +173,35 @@ func isolatedArgs(gitDir string, args []string) []string {
 // credential helpers, SSH configuration and URL rewrites apply. Network
 // commands use it. It returns stdout without its trailing newline.
 func (r *Runner) User(ctx context.Context, gitDir string, args ...string) (string, error) {
-	out, err := r.run(ctx, false, nil, append([]string{"--git-dir=" + gitDir}, args...)...)
+	out, err := r.run(ctx, call{}, append([]string{"--git-dir=" + gitDir}, args...)...)
 	return strings.TrimRight(out, "\n"), err
 }
 
 // UserInput is User with stdin fed to git.
 func (r *Runner) UserInput(ctx context.Context, gitDir string, stdin io.Reader, args ...string) (string, error) {
-	return r.run(ctx, false, stdin, append([]string{"--git-dir=" + gitDir}, args...)...)
+	return r.run(ctx, call{stdin: stdin}, append([]string{"--git-dir=" + gitDir}, args...)...)
 }
 
-// run executes git with args; isolated false is the user's own environment,
-// in which credential helpers, SSH configuration and URL rewrites apply.
-// stdout is returned as is.
-func (r *Runner) run(ctx context.Context, isolated bool, stdin io.Reader, args ...string) (string, error) {
+// call is what one git process needs besides its arguments: the
+// environment to build, the dates to fix in it and what to feed its stdin.
+type call struct {
+	isolated bool
+	dates    string // GIT_AUTHOR_DATE and GIT_COMMITTER_DATE, isolated only; the fixed date stands when empty
+	stdin    io.Reader
+}
+
+// run executes git with args; a call that is not isolated runs in the
+// user's own environment, in which credential helpers, SSH configuration
+// and URL rewrites apply. stdout is returned as is.
+func (r *Runner) run(ctx context.Context, c call, args ...string) (string, error) {
 	git, err := r.lookPath()
 	if err != nil {
 		return "", err
 	}
 	r.logf("git %s", strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, git, args...)
-	cmd.Env = r.childEnv(isolated)
-	cmd.Stdin = stdin
+	cmd.Env = r.childEnv(c.isolated, c.dates)
+	cmd.Stdin = c.stdin
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -192,8 +253,9 @@ func (r *Runner) lookPath() (string, error) {
 // fixes configuration, author and committer, and forbids the lazy fetch of
 // a missing object (git 2.45 and newer honour the variable), since it never
 // touches the network; the user environment is the map as is. Under serve,
-// both fail instead of prompting.
-func (r *Runner) childEnv(isolated bool) []string {
+// both fail instead of prompting. dates, when it is not empty, replaces the
+// fixed author and committer dates for this one process.
+func (r *Runner) childEnv(isolated bool, dates string) []string {
 	env := make(map[string]string, len(r.env)+12)
 	for k, v := range r.env {
 		if isolated && strings.HasPrefix(k, "GIT_") {
@@ -205,10 +267,14 @@ func (r *Runner) childEnv(isolated bool) []string {
 		env["GIT_CONFIG_GLOBAL"] = os.DevNull
 		env["GIT_CONFIG_NOSYSTEM"] = "1"
 		env["GIT_NO_LAZY_FETCH"] = "1"
+		when := FixedDate
+		if dates != "" {
+			when = dates
+		}
 		for _, who := range []string{"AUTHOR", "COMMITTER"} {
 			env["GIT_"+who+"_NAME"] = "agentx"
 			env["GIT_"+who+"_EMAIL"] = "agentx@localhost"
-			env["GIT_"+who+"_DATE"] = "946684800 +0000"
+			env["GIT_"+who+"_DATE"] = when
 		}
 	}
 	if r.serve {

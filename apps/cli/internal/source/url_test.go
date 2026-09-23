@@ -187,6 +187,13 @@ func TestParseRejects(t *testing.T) {
 		"ssh://::/0", "https://[:]/team/repo", "http://%25/team/repo", "https://a%20b/team/repo",
 		"0/..git", "https://github.com/owner/..git", "https://git.example.com/team/..git/skills",
 		"0/.git.git", "https://github.com/owner/.git.git",
+		// A subpath is held to the rule of a tree entry once decoded: a
+		// segment that decodes to hold a slash cannot carry . or .. past
+		// the per-segment check, nor a .git component or a backslash.
+		"file:///srv/hostile.git/skills%2Fevil%2F..%2F..", "https://github.com/owner/repo/skills%2F..",
+		"https://github.com/owner/repo/tree/main/a%2F.%2Fb", "https://git.example.com/team/r.git/.git",
+		"https://git.example.com/team/r.git/x/.GIT/y", "https://github.com/owner/repo/a%2F%2Fb",
+		"https://github.com/owner/repo/a%5Cb", "https://github.com/owner/repo/a%00b",
 		// A ref in a tree URL is a ref like any other.
 		"https://github.com/owner/repo/tree/-x/skills",
 		"https://gitlab.com/group/repo/-/tree/a.lock/skills",

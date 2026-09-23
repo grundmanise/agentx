@@ -24,14 +24,19 @@ func ServeLockPath(dir string) string { return filepath.Join(dir, "serve.lock") 
 
 // Mutate runs fn while holding the lock of agentx home dir, then rewrites the
 // version file as the change signal and releases the lock. A failing fn
-// leaves the version file alone.
-func Mutate(dir string, fn func() error) error { return mutate(dir, quick(dir), true, fn) }
+// leaves the version file alone. u finishes the ref steps of an unfinished
+// journal of an earlier install; every command that can run git passes one.
+func Mutate(dir string, u RefUpdater, fn func() error) error {
+	return mutate(dir, u, quick(dir), true, fn)
+}
 
 // MutateQuiet is Mutate without the change signal, for a step that nothing
 // watching agentx home needs to see because the mutation that completes the
 // command follows it. It still serialises against every other mutation, so
 // two commands cannot write the same file at once.
-func MutateQuiet(dir string, fn func() error) error { return mutate(dir, quick(dir), false, fn) }
+func MutateQuiet(dir string, u RefUpdater, fn func() error) error {
+	return mutate(dir, u, quick(dir), false, fn)
+}
 
 // MutateQuietWaiting is MutateQuiet for a mutation that may not give up:
 // one command taking back what an earlier hold of the lock already wrote.
@@ -41,8 +46,8 @@ func MutateQuiet(dir string, fn func() error) error { return mutate(dir, quick(d
 // place. Everything else is MutateQuiet: the same journal recovery, and no
 // change signal, since taking a change back leaves agentx home as the last
 // signalled version already describes it.
-func MutateQuietWaiting(ctx context.Context, dir string, fn func() error) error {
-	return mutate(dir, func() (*os.File, error) { return waitLock(ctx, dir, syscall.LOCK_EX) }, false, fn)
+func MutateQuietWaiting(ctx context.Context, dir string, u RefUpdater, fn func() error) error {
+	return mutate(dir, u, func() (*os.File, error) { return waitLock(ctx, dir, syscall.LOCK_EX) }, false, fn)
 }
 
 // acquire takes the exclusive lock of agentx home, either way a mutation
@@ -54,13 +59,13 @@ func quick(dir string) acquire { return func() (*os.File, error) { return takeLo
 // mutate takes the exclusive lock the way take asks for it, recovers the
 // unfinished journals of earlier mutations, runs fn and, with bump,
 // rewrites the version file.
-func mutate(dir string, take acquire, bump bool, fn func() error) error {
+func mutate(dir string, u RefUpdater, take acquire, bump bool, fn func() error) error {
 	lock, err := take()
 	if err != nil {
 		return err
 	}
 	defer lock.Close() // closing releases the flock
-	if err := recoverJournals(dir); err != nil {
+	if err := recoverJournals(dir, u); err != nil {
 		return err
 	}
 	if err := fn(); err != nil {

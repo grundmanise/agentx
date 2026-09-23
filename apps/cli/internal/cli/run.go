@@ -23,7 +23,27 @@ type invocation struct {
 	git      *gitx.Runner
 	instance string // the instance_id snapshots carry, fixed once per run
 	parsed   bool   // set once cobra has parsed the command line; errors after that are agentx's own
+	summary  string // what the result event says about a run that succeeded
 }
+
+// refs is what the mutation journal needs to apply and recover the lineage
+// ref steps of an install: the command's own git runner, bound to its
+// context, with the command's warning channel attached. Every mutating
+// command passes one, so that a journal left by an interrupted install is
+// finished by whichever command comes next, and so that content a recovery
+// kept and could not give back is named to whoever ran that command.
+func (inv *invocation) refs(ctx context.Context) home.RefUpdater {
+	return journalRefs{RefUpdater: inv.git.Refs(ctx), out: inv.out}
+}
+
+// journalRefs is the ref updater plus the command's stderr: the journal has
+// no streams of its own.
+type journalRefs struct {
+	home.RefUpdater
+	out *writer
+}
+
+func (j journalRefs) Warn(message string) { j.out.warn(message) }
 
 // Run executes one agentx invocation and returns its exit code. It reads
 // nothing from the process: the environment comes from env and every stream
@@ -110,6 +130,7 @@ func newRoot(inv *invocation) *cobra.Command {
 	root.AddCommand(newConfigCommand(inv))
 	root.AddCommand(newMachineCommand(inv))
 	root.AddCommand(newSourceCommand(inv))
+	root.AddCommand(newSkillCommand(inv))
 	root.AddCommand(newScanCommand(inv))
 	root.AddCommand(newDoctorCommand(inv))
 	root.AddCommand(newServeCommand(inv))
@@ -131,7 +152,7 @@ func needSubcommand(inv *invocation, message, hint string) func(*cobra.Command, 
 func finish(inv *invocation, err error) int {
 	out := inv.out
 	if err == nil {
-		out.result(true, "")
+		out.result(true, inv.summary)
 		return exitOK.exit
 	}
 	var f *failure
@@ -141,6 +162,11 @@ func finish(inv *invocation, err error) int {
 		f = &failure{status: exitLocked, message: err.Error(), hint: "wait for the command holding " + home.LockPath(inv.dirs.Home) + " to finish, then retry"}
 	case errors.Is(err, home.ErrRecovery):
 		f = &failure{status: exitRefused, message: err.Error(), hint: "restore the file to let the change finish, or move the journal aside to keep the file as it is"}
+	case errors.Is(err, gitx.ErrAccountRepo):
+		// A journal's ref step reaches the account repo long after the
+		// command that wrote the journal is gone, so any command can be the
+		// one that finds it unusable, and the table calls that 8.
+		f = &failure{status: exitAccountRepo, message: err.Error(), hint: "run 'agentx doctor' and check the account repo it names"}
 	case inv.parsed:
 		f = &failure{status: exitInternal, message: err.Error()}
 	default:

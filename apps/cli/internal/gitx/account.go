@@ -44,7 +44,7 @@ func OpenAccountRepo(ctx context.Context, r *Runner, homeDir string) (gitDir str
 	if err != nil || exists {
 		return gitDir, false, err
 	}
-	err = home.Mutate(homeDir, func() error {
+	err = home.Mutate(homeDir, r.Refs(ctx), func() error {
 		if _, err := os.Stat(gitDir); err == nil {
 			return nil // created meanwhile by another command
 		}

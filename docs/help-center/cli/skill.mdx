@@ -1,0 +1,122 @@
+---
+title: "agentx skill"
+description: "Install a skill from a source into your library, place it in every agent client, and see what you have."
+---
+
+Your library is one directory, `~/.agents/skills`, that holds every skill agentx manages for you. Installing a skill puts it there once and links it into each agent client, so every client sees the same files and an update reaches all of them at once.
+
+## Install a skill
+
+```sh
+agentx skill add anthropics/skills --skill pdf
+```
+
+```text
+✓ added https://github.com/anthropics/skills at 8c41d07: 17 skills
+✓ installed pdf from https://github.com/anthropics/skills under skills/pdf at 3f2a9c1, source fetched 2026-09-22T10:00:00Z: 4 placements
+  claude-code  symlink  ~/.claude/skills/pdf -> ~/.agents/skills/pdf
+  codex        library  ~/.agents/skills/pdf
+  cursor       symlink  ~/.cursor/skills/pdf -> ~/.agents/skills/pdf
+  gemini-cli   library  ~/.agents/skills/pdf
+```
+
+If the source is not on this machine yet, `skill add` adds it first, as [`agentx source add`](/cli/source) would, and the source stays added even if the install then fails. Name the source by its URL for this: a source id only works for a source you already added.
+
+A source you already added is not fetched again. The install reads what that source last fetched, so it never surprises you with a version you have not seen, and the result says when that fetch was. Add `--fetch` to fetch the source again first, or run `agentx source fetch`:
+
+```sh
+agentx skill add anthropics/skills --skill pdf --fetch
+```
+
+To install from another branch or tag than the one the source is pinned to, change the pin with `agentx source add <url>#<ref>` first.
+
+Name the skill with `--skill` when the source holds more than one. `--skill` matches the `name` in the skill's `SKILL.md` frontmatter in any case, or its directory name when the frontmatter has no name, as the vercel skills CLI does. If a path already narrows it to a single skill, leave `--skill` out:
+
+```sh
+agentx skill add anthropics/skills/skills/pdf
+```
+
+Codex and Gemini CLI read the library directly, so they get no link of their own: the library entry is what they see. Every other client gets a symlink into the library.
+
+### Choose where it goes
+
+By default a skill is placed in every enabled configuration. Name the ones you want instead:
+
+```sh
+agentx skill add anthropics/skills --skill pdf --to claude-code --to cursor
+```
+
+`--to` replaces the default targets for that install, including configurations you have disabled with `agentx config disable`.
+
+### Copy instead of link
+
+```sh
+agentx skill add anthropics/skills --skill pdf --copy
+```
+
+Use `--copy` for a client that cannot follow a symlink. agentx remembers which configurations hold a copy and keeps them that way.
+
+### What happens to what is already there
+
+- A library directory holding exactly this version is adopted: agentx records where it came from and changes nothing on disk.
+- A library directory holding anything else stops the install with exit code 6. Remove it, or keep it and install under another name later.
+- A placement that already points at the library is left alone.
+- A placement that is a directory holding exactly this version is replaced by a link and reported as adopted.
+- Anything else in the way is left untouched, with a warning naming the path.
+- A client skills directory agentx cannot write — one owned by somebody else, one on a read-only mount, or one macOS has not granted access to — is skipped with a warning. The rest of the install still happens, and the summary counts the placements it skipped.
+
+Your files are never overwritten by an install.
+
+### What is left out of the import
+
+A skill directory holds regular files and directories. Anything else — a symlink or a git submodule inside the skill — is left out, with a warning naming it. The library directory then differs from the upstream one, and what agentx records as the installed version is what it actually installed.
+
+## List your skills
+
+```sh
+agentx skill list
+```
+
+```text
+2 skills
+  pdf   managed    current  https://github.com/anthropics/skills/skills/pdf  4 placements
+  notes unmanaged  -        (none)                                           1 placement
+```
+
+Each row shows the skill, what agentx knows about it, how it stands against the version it was installed at, where it came from and how many placements it has.
+
+- `managed`: installed by agentx, with an upstream and a version it can compare against.
+- `fork`: a skill of your own in the account repo.
+- `unmanaged`: a directory in the library agentx did not install. It is inventoried and otherwise left alone.
+- `current` or `modified`: whether the directory still holds the version it was installed at.
+
+## Script it
+
+Add `--json` to get one `library_skill` event per skill:
+
+```sh
+agentx --json skill list
+```
+
+```json
+{"type":"library_skill","schema_version":1,"name":"pdf","kind":"managed","source":"https://github.com/anthropics/skills","subpath":"skills/pdf","upstream_commit":"3f2a9c1e...","base_hash":"9a8b7c6d...","content_hash":"9a8b7c6d...","state":"current","placements":[{"configuration":"claude-code","path":"/home/me/.claude/skills/pdf","mode":"symlink","kind":"symlink"}]}
+{"type":"result","schema_version":1,"ok":true}
+```
+
+`skill add` emits a `source` event for the source it installed from, whose `last_fetched` says when it was fetched, then a `progress` event per step, then the same `library_skill` event for what it installed, then `result` with a one-line summary.
+
+The event carries two content hashes, and each name means one thing everywhere agentx uses it: `base_hash` is the version the skill was installed at, and `content_hash` is what the library directory holds now. `state` is `current` while the two agree.
+
+## Where it is recorded
+
+Every install writes one commit in the account repo in agentx home: the version's files, the source it came from, the last upstream commit that changed the skill and its content hash. That commit is the same on every machine that installs the same version, however recently each one fetched the source, so your machines agree on what "the version you have" means without sending anything anywhere.
+
+## Exit codes
+
+- `1`: the command line names no skill to install, or names more than one, or names the source with another branch or tag than its pin.
+- `3`: the source, or the files of the skill, could not be fetched.
+- `5`: a source id names no source on this machine, the path or skill does not exist in the source, or `--to` names a configuration that is not detected.
+- `6`: the library already holds a different skill under that name, the name is already managed at another version, the skill's name cannot be both a directory and a git branch, the skill holds a file whose path would put it outside the skill's directory, agentx cannot use your library directory, or an interrupted change has to be resolved before anything else can run. The message names what to restore; if you would rather keep what is there, move the named file in `~/.agentx/mutations` aside.
+- `7`: another agentx command is running. Retry when it finishes.
+- `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.
+- `10`: agentx could not read its own settings file, or hit an error it has no better answer for. Run `agentx doctor`.

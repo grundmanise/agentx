@@ -1,6 +1,7 @@
 package home
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 )
@@ -36,7 +37,25 @@ func renameSynced(from, to string) error {
 	if err := os.Rename(from, to); err != nil {
 		return err
 	}
-	d, err := os.Open(filepath.Dir(to))
+	return syncDir(filepath.Dir(to))
+}
+
+// SyncTree flushes every directory of a staged tree, so that the names it
+// holds are as durable as the bytes in its files before the rename that
+// publishes it.
+func SyncTree(root string) error {
+	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || !d.IsDir() {
+			return err
+		}
+		return syncDir(path)
+	})
+}
+
+// syncDir fsyncs a directory, so that a name created or removed in it
+// survives a crash.
+func syncDir(dir string) error {
+	d, err := os.Open(dir)
 	if err != nil {
 		return err
 	}

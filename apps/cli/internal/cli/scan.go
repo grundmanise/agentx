@@ -88,7 +88,7 @@ func (inv *invocation) scan(ctx context.Context, wait time.Duration, project str
 		}
 		project = abs
 	}
-	machineID, _, err := home.MachineID(inv.dirs.Home, inv.env)
+	machineID, _, err := home.MachineID(inv.dirs.Home, inv.env, inv.refs(ctx))
 	if err != nil {
 		return scan.Snapshot{}, err
 	}
@@ -127,7 +127,7 @@ func (inv *invocation) scan(ctx context.Context, wait time.Duration, project str
 		})
 		if err == nil && len(journals) > 0 {
 			inv.out.debugf("recovering %s", strings.Join(journals, ", "))
-			err = home.Recover(lockCtx, inv.dirs.Home)
+			err = home.Recover(lockCtx, inv.dirs.Home, inv.refs(ctx))
 		}
 		if err != nil {
 			return scan.Snapshot{}, err
@@ -138,7 +138,7 @@ func (inv *invocation) scan(ctx context.Context, wait time.Duration, project str
 	}
 	snap, fresh := sc.Snapshot()
 	if len(fresh) > 0 {
-		if err := home.SaveHandshakes(inv.dirs.Home, fresh); err != nil {
+		if err := home.SaveHandshakes(inv.dirs.Home, inv.refs(ctx), fresh); err != nil {
 			return scan.Snapshot{}, err
 		}
 	}

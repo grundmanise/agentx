@@ -3,7 +3,7 @@ title: "agentx source"
 description: "Add the git repositories you install skills from, fetch them again, list their skills, and remove them."
 ---
 
-A source is a git repository that holds one or more skills. Add it by URL once; agentx fetches it into its own store and lists the skills inside, so you can pick what to install.
+A source is a git repository that holds one or more skills. Add it by URL once; agentx fetches it into its own store and lists the skills inside, so you can pick what to install. [`agentx skill add`](/cli/skill) adds the source itself when you install from a URL you have not added yet.
 
 ## Add a source
 
@@ -28,7 +28,7 @@ Paste the URL in whatever form you have:
 
 Add `#<ref>` to pin the source to a branch, a tag or a commit, for example `owner/repo#v2` or `git@github.com:owner/repo.git#release`. Without a pin the source follows the repository's default branch. A `tree` URL pins the branch it names.
 
-A path after the repository, such as `owner/repo/skills`, scopes the listing to that directory. On a server other than GitHub, end the repository name with `.git` so agentx knows where the repository ends and the path begins.
+A path after the repository, such as `owner/repo/skills`, scopes the listing to that directory. On a server other than GitHub, end the repository name with `.git` so agentx knows where the repository ends and the path begins. The path must name a directory by its plain names: `.`, `..` and `.git` are refused, however they are written.
 
 Adding a source you already have fetches it again and sets the pin to what you typed this time. The confirmation then tells you what moved:
 

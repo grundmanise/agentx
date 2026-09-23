@@ -131,14 +131,25 @@ func (inv *invocation) sourceAdd(ctx context.Context, arg string) error {
 	if err != nil {
 		return err
 	}
+	_, _, err = inv.addSource(ctx, src)
+	return err
+}
+
+// addSource is source add once its argument is parsed: it writes the
+// source's remote, fetches it, records it in the settings as a mutation of
+// its own and confirms it, then returns the listing of the fetch and the
+// entry it wrote. skill add runs it too, for a source this machine does not
+// have yet and for --fetch, so that the source is fetched once and the
+// install reads the listing that fetch built.
+func (inv *invocation) addSource(ctx context.Context, src source.Source) (listing source.Listing, entry home.Source, err error) {
 	before, err := inv.loadSettings()
 	if err != nil {
-		return err
+		return listing, entry, err
 	}
 	existing := before.FindSource(src.URL)
 	gitDir, _, err := gitx.OpenAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return accountRepoFailure(err)
+		return listing, entry, accountRepoFailure(err)
 	}
 	remote := source.RemoteName(src.ID())
 	// revert takes back the remote this add is about to write, for a run
@@ -173,23 +184,23 @@ func (inv *invocation) sourceAdd(ctx context.Context, arg string) error {
 		inv.out.debugf("taking back the remote %s of %s: %v", remote, src.URL, cause)
 		waiting, cancel := context.WithTimeout(ctx, takeBackWait)
 		defer cancel()
-		return left(cause, home.MutateQuietWaiting(waiting, inv.dirs.Home, revert))
+		return left(cause, home.MutateQuietWaiting(waiting, inv.dirs.Home, inv.refs(ctx), revert))
 	}
 	// The remote is written under the lock: git config does not wait for its
 	// own lock file, it fails, so two adds at once would otherwise leave a
 	// remote half written. The fetch that follows runs outside the lock, so
 	// that the network never blocks a scan. This hold may give up: a run
 	// that loses it has written nothing and has nothing to take back.
-	if err := home.MutateQuiet(inv.dirs.Home, func() error {
+	if err := home.MutateQuiet(inv.dirs.Home, inv.refs(ctx), func() error {
 		return source.Configure(ctx, inv.git, gitDir, src)
 	}); err != nil {
-		return accountRepoFailure(err)
+		return listing, entry, accountRepoFailure(err)
 	}
-	listing, err := source.Fetch(ctx, inv.git, gitDir, src)
+	listing, err = source.Fetch(ctx, inv.git, gitDir, src)
 	if err != nil {
-		return takeBack(sourceFailure(err, src))
+		return listing, entry, takeBack(sourceFailure(err, src))
 	}
-	entry := home.Source{URL: src.URL, Pin: src.Ref, LastFetched: time.Now().UTC().Format(time.RFC3339)}
+	entry = home.Source{URL: src.URL, Pin: src.Ref, LastFetched: time.Now().UTC().Format(time.RFC3339)}
 	// The remote went in under an earlier hold of the lock. Left behind by
 	// a run that gets no further, it is a remote for a source the machine
 	// does not know about, and since `source fetch` and `source skills`
@@ -208,7 +219,7 @@ func (inv *invocation) sourceAdd(ctx context.Context, arg string) error {
 	// earlier mutation's recovery refused first — has a remote left to take
 	// back out here, and that one has to wait for the lock to do it.
 	added, settled := true, false
-	err = home.Mutate(inv.dirs.Home, func() error {
+	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		settled = true
 		s, err := inv.loadSettings()
 		if err != nil {
@@ -226,15 +237,15 @@ func (inv *invocation) sourceAdd(ctx context.Context, arg string) error {
 	})
 	if err != nil {
 		if !settled {
-			return takeBack(err)
+			return listing, entry, takeBack(err)
 		}
-		return err
+		return listing, entry, err
 	}
 	n := len(listing.Skills)
 	inv.out.emit(sourceEvent{event: newEvent("source"), ID: src.ID(), URL: src.URL, Alias: entry.Alias, Pin: src.Ref, Subpath: src.Subpath,
 		LastFetched: entry.LastFetched, Commit: listing.Commit, Previous: movedFrom(listing), Skills: &n})
 	inv.out.done(inv.addLine(added, src, listing) + ": " + inv.out.paint(noteStyle, plural(n, "skill")) + under(inv.out, src.Subpath))
-	return nil
+	return listing, entry, nil
 }
 
 // movedFrom is the previous_commit an event carries: what the source ref
@@ -356,7 +367,7 @@ func (inv *invocation) sourceRemove(ctx context.Context, arg string) error {
 	if err != nil {
 		return err
 	}
-	err = home.Mutate(inv.dirs.Home, func() error {
+	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
 		if err != nil {
 			return accountRepoFailure(err)

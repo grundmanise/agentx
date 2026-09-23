@@ -80,7 +80,7 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 	// settings do not name. The refspecs are read in one git process and
 	// only one that disagrees is written, which changes no pin: the pin is
 	// what the settings say, and only source add sets it.
-	if err := home.MutateQuiet(inv.dirs.Home, func() error { return inv.alignRemotes(ctx, gitDir, targets) }); err != nil {
+	if err := home.MutateQuiet(inv.dirs.Home, inv.refs(ctx), func() error { return inv.alignRemotes(ctx, gitDir, targets) }); err != nil {
 		return accountRepoFailure(err)
 	}
 	srcs := make([]source.Source, len(targets))
@@ -148,7 +148,7 @@ func (inv *invocation) reportFetched(ctx context.Context, gitDir string, targets
 		// they are now: a source removed while this run fetched is not
 		// written back, and drops out of the report with it, so that
 		// nothing says a source is present and fresh once it is gone.
-		if err := home.Mutate(inv.dirs.Home, func() error {
+		if err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 			s, err := inv.loadSettings()
 			if err != nil {
 				return err

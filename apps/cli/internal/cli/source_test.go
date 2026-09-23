@@ -320,7 +320,7 @@ func TestSourceAddKeepsAnAliasOnReAdd(t *testing.T) {
 	equal(t, "add", h.run("source", "add", s.url).exit, 0)
 
 	const alias = "https://github.com/owner/repo"
-	err := home.Mutate(h.agentx, func() error {
+	err := home.Mutate(h.agentx, nil, func() error {
 		settings, err := home.LoadSettings(h.agentx)
 		if err != nil {
 			return err
@@ -784,7 +784,7 @@ func TestSourceRemoveKeepsTheEntryWhenGitFails(t *testing.T) {
 	// An orphan the other way round: git state with no entry, which only
 	// remove can reach.
 	equal(t, "add", h.run("source", "add", s.url).exit, 0)
-	err := home.Mutate(h.agentx, func() error {
+	err := home.Mutate(h.agentx, nil, func() error {
 		settings, err := home.LoadSettings(h.agentx)
 		if err != nil {
 			return err

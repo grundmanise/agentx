@@ -27,8 +27,9 @@ func machinePath(dir string) string { return filepath.Join(dir, "machine.json") 
 // MachineID returns this machine's id and how it was derived. A stored random
 // id wins over a platform id; without either, a random id is generated once,
 // under the lock, and stored. Set AGENTX_PLATFORM_ID in env to fix the
-// platform id, or to empty to declare that there is none.
-func MachineID(dir string, env map[string]string) (id, derivation string, err error) {
+// platform id, or to empty to declare that there is none. u is what the
+// lock's recovery needs for the ref steps of an unfinished install.
+func MachineID(dir string, env map[string]string, u RefUpdater) (id, derivation string, err error) {
 	if id, err := storedMachineID(dir); id != "" || err != nil {
 		return id, derivedRandom, err
 	}
@@ -37,7 +38,7 @@ func MachineID(dir string, env map[string]string) (id, derivation string, err er
 		fmt.Fprintf(mac, "%s\n%d", pid, os.Getuid())
 		return hex.EncodeToString(mac.Sum(nil))[:32], derivedPlatform, nil
 	}
-	err = mutate(dir, quick(dir), false, func() error { // the file is derived state: no version bump
+	err = mutate(dir, u, quick(dir), false, func() error { // the file is derived state: no version bump
 		if id, err = storedMachineID(dir); id != "" || err != nil { // stored meanwhile by another command
 			return err
 		}

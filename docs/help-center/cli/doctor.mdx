@@ -51,7 +51,7 @@ The rows are grouped by what they check: `System` is git and the home directory,
 | `lock` | No other agentx command holds the lock. When one does, the detail names its process id. |
 | `mutations` | No change to agentx home was cut short by a crash. When one was, the detail names its journal; run `agentx scan` to finish it. If that refuses because the file changed meanwhile, restore the file or move the journal aside. Doctor only reports. |
 | `settings` | `settings.json` is valid. |
-| `account_repo` | The account repo opens, or does not exist yet. The first `agentx source add` creates it. |
+| `account_repo` | The account repo opens, or does not exist yet. The first `agentx source add`, or `agentx skill add` of a source not added yet, creates it. |
 | `library` | The library is a writable directory, or does not exist yet. The first install creates it. |
 | `client:<id>` | One row per detected agent configuration, naming the client and its configuration directory. |
 | `clients` | How many of the clients agentx knows are detected. A warning when none is: install an agent client, or check that `HOME` points at the right user. |

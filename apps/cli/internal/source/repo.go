@@ -42,6 +42,7 @@ var (
 	ErrNotFetched  = errors.New("source not fetched")               // the account repo holds no ref for it
 	ErrNoSubpath   = errors.New("subpath not in the source")        // the subpath is not a directory at the fetched commit
 	ErrIncomplete  = errors.New("the fetched source is incomplete") // an object the listing needs is not in the account repo
+	ErrUnsafePath  = errors.New("unsafe path in the source")        // a tree entry that could be laid out outside its directory
 )
 
 // Skill is one installable skill of a source at its fetched commit.
@@ -172,7 +173,7 @@ func Fetch(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listin
 	// pin while fetching another. --refmap= is what makes the refspec here
 	// the only one, since a refspec on the command line does not replace
 	// the configured one — git also updates that one opportunistically.
-	fetchArgs := []string{"fetch", "--quiet", "--no-tags", "--no-write-fetch-head", "--recurse-submodules=no", "--no-show-forced-updates", "--refmap="}
+	fetchArgs := baseFetchArgs()
 	refspec := Refspec(s)
 	// The staging ref belongs to this fetch and goes with it, whether it
 	// finished or failed, so a failure leaves no ref behind and the objects
@@ -357,6 +358,141 @@ func Commits(ctx context.Context, r *gitx.Runner, gitDir string) (map[string]str
 	return commits, nil
 }
 
+// TreeEntry is one entry of a tree in the account repo: its path below the
+// tree read, its mode as git writes it (100644 and 100755 for a file,
+// 040000 for a directory, 120000 for a symlink, 160000 for a submodule) and
+// its object id.
+type TreeEntry struct {
+	Path string
+	Mode string
+	OID  string
+}
+
+// The tree entry modes agentx reads: the two a regular file has and the
+// one a directory has. A symlink (120000) and a submodule (160000) are
+// neither, and a skill is imported without them.
+const (
+	FileMode       = "100644"
+	ExecutableMode = "100755"
+	DirMode        = "040000"
+)
+
+// IsFileMode reports whether an entry of a tree is a regular file.
+func IsFileMode(mode string) bool { return mode == FileMode || mode == ExecutableMode }
+
+// TreeArgs are the arguments ReadTree runs, for a caller that runs this
+// read beside another independent one.
+func TreeArgs(tree string) []string { return []string{"ls-tree", "-r", "-t", "-z", tree} }
+
+// ReadTree lists every entry below tree, directories included, in one
+// ls-tree. The entries come back in git's own order, which is bytewise by
+// path within each directory.
+func ReadTree(ctx context.Context, r *gitx.Runner, gitDir, tree string) ([]TreeEntry, error) {
+	out, err := r.Isolated(ctx, gitDir, TreeArgs(tree)...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTree(out)
+}
+
+// ParseTree reads the output of the ls-tree TreeArgs names.
+func ParseTree(out string) ([]TreeEntry, error) {
+	var entries []TreeEntry
+	for _, line := range strings.Split(out, "\x00") {
+		if line == "" {
+			continue
+		}
+		meta, name, ok := strings.Cut(line, "\t")
+		fields := strings.Fields(meta)
+		if !ok || len(fields) != 3 {
+			return nil, fmt.Errorf("git ls-tree: cannot parse %q", line)
+		}
+		entries = append(entries, TreeEntry{Path: name, Mode: fields[0], OID: fields[2]})
+	}
+	return entries, nil
+}
+
+// CheckPath refuses a tree entry path, as ParseTree returns it, that could
+// be laid out outside the directory it is read below, or inside git's own:
+// an empty or absolute path, one holding a backslash or a NUL, or one with
+// an empty, ".", ".." or ".git" component, the last in any case. git never
+// writes such an entry into a tree it checks out, but a source is any
+// repository a user adds and a fetch does not check what it receives, so
+// the names are the source's own bytes until this says otherwise. Every
+// other name, one git would quote included, is carried through unchanged.
+func CheckPath(p string) error {
+	bad := p == "" || strings.HasPrefix(p, "/") || strings.ContainsAny(p, "\\\x00")
+	for _, seg := range strings.Split(p, "/") {
+		if seg == "" || seg == "." || seg == ".." || strings.EqualFold(seg, ".git") {
+			bad = true
+		}
+	}
+	if bad {
+		return fmt.Errorf("%w: %q", ErrUnsafePath, p)
+	}
+	return nil
+}
+
+// MissingArgs are the arguments of the read that lists the objects under
+// tree the account repo does not hold, which is how an install learns what
+// to fetch without asking git for an object that is not there: a read of a
+// missing object in a partial clone either reaches for the network or
+// fails, and every local read forbids the lazy fetch.
+func MissingArgs(tree string) []string {
+	return []string{"rev-list", "--objects", "--missing=print", "--no-object-names", tree}
+}
+
+// ParseMissing reads the output of the rev-list MissingArgs names: the
+// objects that are missing are the lines marked with a question mark.
+func ParseMissing(out string) []string {
+	var missing []string
+	for _, line := range strings.Split(out, "\n") {
+		if id, ok := strings.CutPrefix(strings.TrimSpace(line), "?"); ok && id != "" {
+			missing = append(missing, id)
+		}
+	}
+	return missing
+}
+
+// ReadBlobs reads the blobs with ids from the account repo in one cat-file
+// batch and returns their content by id. An id the repository does not hold
+// is left out rather than fetched: every local read forbids the lazy fetch
+// of a missing object.
+func ReadBlobs(ctx context.Context, r *gitx.Runner, gitDir string, ids []string) (map[string]string, error) {
+	if len(ids) == 0 {
+		return map[string]string{}, nil
+	}
+	var b strings.Builder
+	for _, id := range ids {
+		b.WriteString(id + "\n")
+	}
+	out, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(b.String()), "cat-file", "--batch")
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrIncomplete, err)
+	}
+	return parseBatch(out)
+}
+
+// FetchObjects fetches the objects with ids from the source's remote in one
+// batch, by object id on git's standard input, the way git itself fills a
+// partial clone. A server that serves a filtered fetch but refuses single
+// objects gets one full fetch instead, which is the same fallback a listing
+// makes.
+func FetchObjects(ctx context.Context, r *gitx.Runner, gitDir string, s Source, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	remote := RemoteName(s.ID())
+	if err := fetchIDs(ctx, r, gitDir, remote, ids); err == nil {
+		return nil
+	}
+	args := append(baseFetchArgs(), "--refetch", "--no-filter", remote)
+	if _, err := r.User(ctx, gitDir, args...); err != nil {
+		return fmt.Errorf("%w: %v", ErrUnreachable, err)
+	}
+	return nil
+}
+
 // skillEntry is one SKILL.md found in the fetched tree.
 type skillEntry struct {
 	dir  string // the skill directory from the repository root
@@ -382,34 +518,29 @@ func skillEntries(ctx context.Context, r *gitx.Runner, gitDir, commit, subpath s
 	if typ, err := r.Isolated(ctx, gitDir, "cat-file", "-t", root); err != nil || typ != "tree" {
 		return nil, fmt.Errorf("%w: %q is not a directory", ErrNoSubpath, subpath)
 	}
-	out, err := r.Isolated(ctx, gitDir, "ls-tree", "-r", "-t", "-z", root)
+	listed, err := ReadTree(ctx, r, gitDir, root)
 	if err != nil {
 		return nil, err
 	}
 	trees := map[string]string{"": root}
 	var entries []skillEntry
-	for _, line := range strings.Split(out, "\x00") {
-		if line == "" {
-			continue
-		}
-		meta, name, ok := strings.Cut(line, "\t")
-		fields := strings.Fields(meta)
-		if !ok || len(fields) != 3 {
-			return nil, fmt.Errorf("git ls-tree: cannot parse %q", line)
-		}
-		mode, typ, oid := fields[0], fields[1], fields[2]
+	for _, e := range listed {
 		switch {
-		case typ == "tree":
-			trees[name] = oid
-		case typ == "blob" && path.Base(name) == "SKILL.md" && (mode == "100644" || mode == "100755"):
-			dir := path.Dir(name)
+		case CheckPath(e.Path) != nil:
+			// Not a directory a skill can be in: a SKILL.md below it would be
+			// listed under a subpath that names another directory once cleaned.
+			// An install reads the skill's own tree and refuses such an entry.
+		case e.Mode == DirMode:
+			trees[e.Path] = e.OID
+		case path.Base(e.Path) == "SKILL.md" && IsFileMode(e.Mode):
+			dir := path.Dir(e.Path)
 			if dir == "." {
 				dir = ""
 			}
 			if skip && skipped(dir) {
 				continue
 			}
-			entries = append(entries, skillEntry{dir: path.Join(subpath, dir), blob: oid, tree: trees[dir]})
+			entries = append(entries, skillEntry{dir: path.Join(subpath, dir), blob: e.OID, tree: trees[dir]})
 		}
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].dir < entries[j].dir })
@@ -439,18 +570,35 @@ func skipped(dir string) bool {
 	return false
 }
 
+// baseFetchArgs are the flags every fetch of a source carries: quiet, no
+// tags, no FETCH_HEAD, no submodules, no forced-update report, and no
+// refmap, so that a fetch writes the ref its own refspec names and never
+// the one remote.<name>.fetch configures, which git would otherwise update
+// opportunistically alongside it.
+func baseFetchArgs() []string {
+	return []string{"fetch", "--quiet", "--no-tags", "--no-write-fetch-head", "--recurse-submodules=no", "--no-show-forced-updates", "--refmap="}
+}
+
 // fetchBlobs fetches the SKILL.md blobs of entries from the remote in one
 // batch, by object id, the way git itself fills a partial clone.
 func fetchBlobs(ctx context.Context, r *gitx.Runner, gitDir, remote string, entries []skillEntry) error {
-	var ids strings.Builder
-	for _, e := range entries {
-		ids.WriteString(e.blob + "\n")
+	ids := make([]string, len(entries))
+	for i, e := range entries {
+		ids[i] = e.blob
+	}
+	return fetchIDs(ctx, r, gitDir, remote, ids)
+}
+
+// fetchIDs asks the remote for the objects with ids in one batch.
+func fetchIDs(ctx context.Context, r *gitx.Runner, gitDir, remote string, ids []string) error {
+	var b strings.Builder
+	for _, id := range ids {
+		b.WriteString(id + "\n")
 	}
 	// The flags are the ref fetch's, without --no-show-forced-updates: this
 	// fetch names objects rather than refs and updates none, so there is no
 	// forced update for git to work out and none to suppress.
-	_, err := r.UserInput(ctx, gitDir, strings.NewReader(ids.String()),
-		"-c", "fetch.negotiationAlgorithm=noop",
+	_, err := r.UserInput(ctx, gitDir, strings.NewReader(b.String()), "-c", "fetch.negotiationAlgorithm=noop",
 		"fetch", "--quiet", "--no-tags", "--no-write-fetch-head", "--recurse-submodules=no", "--refmap=", "--filter=blob:none", "--stdin", remote)
 	return err
 }
@@ -491,15 +639,11 @@ func readSkills(ctx context.Context, r *gitx.Runner, gitDir, canonical string, e
 	if len(entries) == 0 {
 		return skills, nil
 	}
-	var ids strings.Builder
-	for _, e := range entries {
-		ids.WriteString(e.blob + "\n")
+	ids := make([]string, len(entries))
+	for i, e := range entries {
+		ids[i] = e.blob
 	}
-	out, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(ids.String()), "cat-file", "--batch")
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrIncomplete, err)
-	}
-	blobs, err := parseBatch(out)
+	blobs, err := ReadBlobs(ctx, r, gitDir, ids)
 	if err != nil {
 		return nil, err
 	}

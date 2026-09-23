@@ -27,32 +27,68 @@ func id(typ string, parts ...string) string {
 // documented in the CLI contract. root is the skill directory with every
 // symlink resolved.
 func contentHash(root string, fm frontmatter, warn func(string)) string {
-	h := sha256.New()
-	h.Write([]byte(fm.name))
-	h.Write([]byte{0})
-	h.Write([]byte(fm.description))
-	h.Write([]byte{0})
+	h := newContentHasher(fm.name, fm.description)
 	w := &walker{root: root, warn: warn}
 	w.walk(root, "", []string{root})
 	sort.Slice(w.files, func(i, j int) bool { return w.files[i].rel < w.files[j].rel })
 	for _, f := range w.files {
-		hashFile(h, f.rel, f.real, warn)
+		b, err := os.ReadFile(f.real)
+		if err != nil {
+			warn(err.Error() + ", skipped")
+			continue
+		}
+		h.file(f.rel, b)
 	}
-	return hex.EncodeToString(h.Sum(nil))
+	return h.sum()
 }
 
-func hashFile(h hash.Hash, rel, real string, warn func(string)) {
-	b, err := os.ReadFile(real)
-	if err != nil {
-		warn(err.Error() + ", skipped")
-		return
-	}
-	h.Write([]byte(rel))
-	h.Write([]byte{0})
-	h.Write([]byte(strconv.Itoa(len(b))))
-	h.Write([]byte{0})
-	h.Write(b)
+// File is one regular file of a skill read from somewhere other than the
+// filesystem, today a tree in the account repo: its path relative to the
+// skill directory with / as the separator, and its bytes.
+type File struct {
+	Path    string
+	Content string
 }
+
+// ContentHash is the content hash of a skill whose files are already in
+// hand, for an install that reads a version out of git and never lays it
+// out on disk first. It is the same hash contentHash computes over a
+// directory: the same name, description and files give the same hex.
+func ContentHash(name, description string, files []File) string {
+	sorted := append([]File(nil), files...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Path < sorted[j].Path })
+	h := newContentHasher(name, description)
+	for _, f := range sorted {
+		h.file(f.Path, []byte(f.Content))
+	}
+	return h.sum()
+}
+
+// contentHasher writes the byte sequence the CLI contract defines. Both the
+// walk of a directory and the read of a tree feed it, so the two cannot
+// drift apart.
+type contentHasher struct{ h hash.Hash }
+
+func newContentHasher(name, description string) *contentHasher {
+	h := sha256.New()
+	h.Write([]byte(name))
+	h.Write([]byte{0})
+	h.Write([]byte(description))
+	h.Write([]byte{0})
+	return &contentHasher{h: h}
+}
+
+// file adds one regular file: its relative path, its length in decimal and
+// its bytes. Modes and times never contribute.
+func (c *contentHasher) file(rel string, b []byte) {
+	c.h.Write([]byte(rel))
+	c.h.Write([]byte{0})
+	c.h.Write([]byte(strconv.Itoa(len(b))))
+	c.h.Write([]byte{0})
+	c.h.Write(b)
+}
+
+func (c *contentHasher) sum() string { return hex.EncodeToString(c.h.Sum(nil)) }
 
 type walker struct {
 	root  string

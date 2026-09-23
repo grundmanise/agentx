@@ -73,7 +73,7 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 				return err
 			}
 			var s home.Settings
-			err = home.Mutate(inv.dirs.Home, func() error {
+			err = home.Mutate(inv.dirs.Home, inv.refs(cmd.Context()), func() error {
 				var err error
 				if s, err = inv.loadSettings(); err != nil {
 					return err
@@ -107,7 +107,7 @@ func newEnableCommand(inv *invocation, use, short string) *cobra.Command {
 				return err
 			}
 			var s home.Settings
-			err := home.Mutate(inv.dirs.Home, func() error {
+			err := home.Mutate(inv.dirs.Home, inv.refs(cmd.Context()), func() error {
 				var err error
 				if s, err = inv.loadSettings(); err != nil {
 					return err

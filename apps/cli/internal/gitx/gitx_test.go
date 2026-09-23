@@ -78,7 +78,7 @@ func TestEnvironments(t *testing.T) {
 		[]string{"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_NO_LAZY_FETCH=1", "AGENTX_LEAK=from the process", "GIT_ASKPASS=/bin/false"})
 
 	serve := New(env, true, logf)
-	out, err = serve.run(ctx, false, nil, "fetch")
+	out, err = serve.run(ctx, call{}, "fetch")
 	if err != nil {
 		t.Fatal(err)
 	}

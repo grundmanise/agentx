@@ -10,9 +10,9 @@ import (
 // Fetchers is how many sources are fetched at once. A fetch is mostly
 // network wait, so a few in flight hide the latency of the others, while
 // the bound keeps a machine with many sources from spawning a git process
-// per source at the same time. It is the count the handshakes of a scan
-// use, for the same reason.
-const Fetchers = 4
+// per source at the same time. It is the bound every git runner keeps, and
+// the count the handshakes of a scan use, for the same reason.
+const Fetchers = gitx.Workers
 
 // Result is what fetching one source produced: its listing, or the error
 // that stopped it. Source is the source it was asked for, so a caller can
