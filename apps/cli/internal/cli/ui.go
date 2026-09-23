@@ -123,23 +123,36 @@ func isTerminal(stream any) bool {
 	return ok && term.IsTerminal(int(f.Fd()))
 }
 
-// sanitised is text agentx did not write — a skill's name and description,
-// which the repository a source was added from supplies — made fit to
-// print. Every control character becomes a space, runs of spaces become one
-// and the leading and trailing ones are dropped. A newline therefore cannot
-// break the one row per item a listing prints, a tab cannot disturb a
-// column, a carriage return cannot overwrite the line already printed, and
-// no escape sequence reaches the terminal, whatever --color says.
+// sanitised is text agentx did not write made fit to print: a skill's name
+// and description, which the repository a source was added from supplies;
+// the name of a directory in the library or under a client's configuration,
+// which whoever made the directory chose; a command line or URL a
+// configuration file declares; and whatever agentx relays of what something
+// else said, such as the stderr of a git it ran, which carries the messages
+// a server sent it. Every control character becomes a space, runs of spaces
+// become one and the leading and trailing ones are dropped. A newline
+// therefore cannot break the one row per item a listing prints, a tab
+// cannot disturb a column, a carriage return cannot overwrite the line
+// already printed, and no escape sequence reaches the terminal, whatever
+// --color says. A control character is what unicode.IsControl calls one:
+// the C0 controls, DEL and the C1 controls, 65 characters and nothing above
+// U+00FF, so a format character such as a zero-width joiner passes through,
+// being what several writing systems are spelled with. A path takes
+// quotedPath instead, being text a reader copies.
 //
 // Nothing is parsed. agentx does not recognise an escape sequence and strip
 // it whole: a parser that misjudged one sequence's end would let the rest
 // of it through, while a rule that admits no control character at all
 // cannot. What a sequence leaves behind once its ESC is a space, the "[31m"
 // of a red, prints as the ordinary text it is, which also shows the reader
-// that the source tried. It is applied before anything is painted, so that
-// stripping the SGR sequences agentx adds still gives the exact text a pipe
-// receives. JSON output is not sanitised: its values are escaped already,
-// so a consumer reads what the source wrote.
+// that the source tried.
+//
+// Where it is applied is the writer's decision for a line on stderr and the
+// caller's for a cell on stdout, for the reason the writer gives. Either
+// way it happens before anything is painted, so that stripping the SGR
+// sequences agentx adds still gives the exact text a pipe receives. JSON
+// output is not sanitised: its values are escaped already, so a consumer
+// reads what the source wrote.
 func sanitised(text string) string {
 	var b strings.Builder
 	b.Grow(len(text))
@@ -159,6 +172,77 @@ func sanitised(text string) string {
 		b.WriteRune(r)
 	}
 	return b.String()
+}
+
+// quotedPath is sanitised for a path: text agentx did not write that the
+// reader may want to copy. Turning a control character into a space, which
+// is right for a name or a description, would hand back a path that does
+// not exist and say nothing about why, so a path that carries one is quoted
+// instead, the way git quotes a path under core.quotePath: the whole of it
+// in double quotes, a C escape for the bytes that have one, an octal escape
+// for the rest, and a backslash before a double quote or a backslash of its
+// own. What is printed is then one field, unambiguous and reversible, in a
+// convention a reader already knows from git status. A path that carries no
+// control character is printed as it is, non-ASCII included, which is git
+// with core.quotePath off: the rule here is about the characters a terminal
+// obeys, and escaping a CJK path helps nobody reading one.
+func quotedPath(path string) string {
+	for i := 0; i < len(path); i++ {
+		if controlAt(path, i) > 0 {
+			return gitQuoted(path)
+		}
+	}
+	return path
+}
+
+// gitQuoted is the quoting quotedPath applies, applied whatever the path
+// holds.
+func gitQuoted(path string) string {
+	var b strings.Builder
+	b.Grow(len(path) + 2)
+	b.WriteByte('"')
+	for i := 0; i < len(path); i++ {
+		esc, n := cEscapes[path[i]], controlAt(path, i)
+		switch {
+		case n == 1 && esc != "":
+			b.WriteString(esc)
+		case n > 0:
+			for _, o := range []byte(path[i : i+n]) {
+				b.WriteByte('\\')
+				b.WriteByte('0' + o>>6)
+				b.WriteByte('0' + o>>3&7)
+				b.WriteByte('0' + o&7)
+			}
+			i += n - 1
+		case path[i] == '"', path[i] == '\\':
+			b.WriteByte('\\')
+			b.WriteByte(path[i])
+		default:
+			b.WriteByte(path[i])
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
+}
+
+// cEscapes are the control characters git's quoting gives a letter of its
+// own; every other one is written in octal.
+var cEscapes = map[byte]string{'\a': `\a`, '\b': `\b`, '\t': `\t`, '\n': `\n`, '\v': `\v`, '\f': `\f`, '\r': `\r`}
+
+// controlAt is how many bytes of the control character path[i:] starts
+// with, and 0 when it starts with none. It is the rule sanitised applies
+// read byte by byte, so that the two cover the same characters: a C0
+// control and DEL are one byte, and a C1 control, which a terminal obeys as
+// readily, is the two bytes of its UTF-8. Reading bytes rather than runes
+// keeps a path that is not valid UTF-8, which a file name may be, whole.
+func controlAt(path string, i int) int {
+	switch b := path[i]; {
+	case b < 0x20, b == 0x7f:
+		return 1
+	case b == 0xc2 && i+1 < len(path) && path[i+1] >= 0x80 && path[i+1] <= 0x9f:
+		return 2
+	}
+	return 0
 }
 
 // clipped bounds a value an export or a source supplies before it is put

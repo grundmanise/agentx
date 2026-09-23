@@ -421,3 +421,62 @@ func TestSkillRemoveHandlesAPlacementThatIsNotThere(t *testing.T) {
 	}
 	equal(t, "journals left behind", journalCount(t, h), 0)
 }
+
+// TestSkillRemoveSanitisesTheNameAndQuotesThePaths removes a skill whose
+// name holds control characters: a library directory whoever made it named
+// across two lines and with an escape sequence in it, and a skill a source
+// named with a C1 control, which an import branch can hold. The name on the
+// line that confirms the removal is sanitised, and so is the import branch,
+// which carries it; the paths of the rows and of the line naming what was
+// deleted carry it too, so they are quoted as skill place quotes its rows:
+// every line stays one line, and each path still names what was on disk.
+func TestSkillRemoveSanitisesTheNameAndQuotesThePaths(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		what    string
+		install func(*testing.T, *harness, string)
+		name    string
+		shown   string
+		quoted  string
+		branch  string
+	}{
+		{
+			what: "a library directory",
+			install: func(t *testing.T, h *harness, name string) {
+				dir := filepath.Join(h.library, name)
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: mine\ndescription: made here\n---\n\nmine\n")
+				equal(t, "place", h.run("skill", "place", name, "--to", "cursor").exit, 0)
+			},
+			name: "two\nrows \x1b[31mRED\x1b[0m", shown: "two rows [31mRED [0m", quoted: `two\nrows \033[31mRED\033[0m"`,
+		},
+		{
+			what: "a skill a source named",
+			install: func(t *testing.T, h *harness, name string) {
+				s := h.newSourceRepo("odd", true)
+				s.write(filepath.Join("skills", "odd", "SKILL.md"), "---\nname: "+yamlQuoted(name)+"\ndescription: An odd skill\n---\n\n# odd\n")
+				s.commit("an odd skill")
+				equal(t, "add", h.run("skill", "add", s.url, "--skill", name, "--to", "cursor").exit, 0)
+			},
+			name: "re\u009bmove", shown: "re move", quoted: `re\302\233move"`, branch: " and refs/heads/managed/re move",
+		},
+	} {
+		t.Run(tt.what, func(t *testing.T) {
+			t.Parallel()
+			h, _ := placementHarness(t)
+			tt.install(t, h, tt.name)
+
+			out := h.run("skill", "remove", tt.name)
+			equal(t, "exit", out.exit, 0)
+			placement := `"` + filepath.Join(h.home, ".cursor", "skills") + string(filepath.Separator) + tt.quoted
+			library := `"` + h.library + string(filepath.Separator) + tt.quoted
+			equal(t, "stdout", out.stdout, "✓ removed "+tt.shown+" from the library: 3 placements\n"+
+				"  cursor      symlink  "+placement+"\n"+
+				"  codex       library  "+library+"\n"+
+				"  gemini-cli  library  "+library+"\n"+
+				"  deleted "+library+tt.branch+"\n")
+		})
+	}
+}

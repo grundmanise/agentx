@@ -814,6 +814,22 @@ func underPath(subpath string) string {
 	return " under " + subpath
 }
 
+// underShown is underPath for a line on stdout. The subpath is the
+// source's, so it is sanitised, as skill list prints an upstream; a subpath
+// that sanitising leaves empty, a directory named with nothing but control
+// characters and spaces, is quoted the way a path is instead, since leaving
+// it out would read as the root of the source.
+func underShown(subpath string) string {
+	if subpath == "" {
+		return ""
+	}
+	shown := sanitised(subpath)
+	if shown == "" {
+		shown = gitQuoted(subpath)
+	}
+	return " under " + shown
+}
+
 func skillNamesHint(listing source.Listing) string {
 	names := make([]string, 0, len(listing.Skills))
 	for _, sk := range listing.Skills {
@@ -1262,21 +1278,21 @@ func librarySkill(library, name string) (scan.LibrarySkill, bool) {
 }
 
 // printInstalled writes the confirmation of one skill and one row per
-// placement.
+// placement. The name and the directory the skill was read from are the
+// source's, so both are sanitised, as source skills and skill list print
+// them.
 func (inv *invocation) printInstalled(done *installed, ev librarySkillEvent) {
 	out, v := inv.out, done.v
 	what := "installed"
 	if done.adopted {
 		what = "adopted"
 	}
-	line := what + " " + out.paint(heading, v.name) + " from " + out.paint(heading, v.imp.Source) + underPath(v.imp.Path) +
+	line := what + " " + out.paint(heading, sanitised(v.name)) + " from " + out.paint(heading, v.imp.Source) + underShown(v.imp.Path) +
 		" at " + short(v.imp.Commit) + out.paint(muted, fetchedAt(v)) + ": " + out.paint(noteStyle, plural(len(ev.Placements), "placement"))
 	if n := len(done.skipped); n > 0 {
 		line += ", " + out.paint(warnStyle, plural(n, "placement")+" skipped")
 	}
 	out.done(line)
 	inv.printPlacementRows(v.name, ev.Placements)
-	if len(done.adoptions) > 0 {
-		out.print("  ", out.paint(muted, "adopted "+strings.Join(done.adoptions, ", ")))
-	}
+	inv.printAdoptions(done.adoptions)
 }

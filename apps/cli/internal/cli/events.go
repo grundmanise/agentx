@@ -47,6 +47,18 @@ type resultEvent struct {
 // Human text is painted per stream: a stream that is a terminal gets colour
 // unless NO_COLOR or --color says otherwise, a pipe gets the same text bare.
 //
+// Every human line this writer puts on stderr (a warning, a hint, an error
+// and its hint, a debug line) is sanitised here rather than by whoever
+// built it. A message is plain text by the time it arrives: agentx paints
+// the level prefix and nothing else, so there is no escape sequence of its
+// own to lose, and one rule at the one exit covers the callers that relay
+// what a source, a git or a configuration file said, including the ones not
+// written yet. Stdout is the other way round: a table cell may already
+// carry the SGR it was painted with, which this writer could not tell from
+// a source's, so a cell is sanitised where it is built, before it is
+// painted. Neither applies in JSON mode, where an event carries what was
+// read and the encoder escapes it.
+//
 // Serve answers searches from the goroutine that reads its stdin while the
 // loop reports scans from its own, so every write of one event or one line
 // is made under mu and lands whole.
@@ -127,7 +139,7 @@ func (w *writer) done(msg string) {
 // the snapshot carries the hints.
 func (w *writer) hint(msg string) {
 	if !w.json {
-		w.write(w.stderr, fmt.Sprintf("%s %s\n", w.err().paint(warnStyle, "hint:"), msg))
+		w.write(w.stderr, fmt.Sprintf("%s %s\n", w.err().paint(warnStyle, "hint:"), sanitised(msg)))
 	}
 }
 
@@ -137,7 +149,7 @@ func (w *writer) warn(msg string) {
 		w.line(w.stderr, logEvent{event: newEvent("log"), Level: "warn", Message: msg})
 		return
 	}
-	w.write(w.stderr, fmt.Sprintf("%s %s\n", w.err().paint(warnStyle, "warning:"), msg))
+	w.write(w.stderr, fmt.Sprintf("%s %s\n", w.err().paint(warnStyle, "warning:"), sanitised(msg)))
 }
 
 // debugf logs at debug level, shown only with --verbose.
@@ -150,7 +162,7 @@ func (w *writer) debugf(format string, args ...any) {
 		w.line(w.stderr, logEvent{event: newEvent("log"), Level: "debug", Message: msg})
 		return
 	}
-	w.write(w.stderr, fmt.Sprintf("%s %s\n", w.err().paint(muted, "debug:"), msg))
+	w.write(w.stderr, fmt.Sprintf("%s %s\n", w.err().paint(muted, "debug:"), sanitised(msg)))
 }
 
 func (w *writer) fail(f *failure) {
@@ -159,9 +171,9 @@ func (w *writer) fail(f *failure) {
 		return
 	}
 	k := w.err()
-	text := fmt.Sprintf("%s %s\n", k.paint(failStyle, "error:"), f.message)
+	text := fmt.Sprintf("%s %s\n", k.paint(failStyle, "error:"), sanitised(f.message))
 	if f.hint != "" {
-		text += fmt.Sprintf("%s %s\n", k.paint(warnStyle, "hint:"), f.hint)
+		text += fmt.Sprintf("%s %s\n", k.paint(warnStyle, "hint:"), sanitised(f.hint))
 	}
 	w.write(w.stderr, text)
 }

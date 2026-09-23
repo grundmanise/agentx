@@ -191,9 +191,14 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 			if o.Plugin != "" {
 				pluginSkills[o.Configuration+"\x00"+o.Plugin]++
 			}
-			path := o.Path
+			// A placement's path carries the names of the directories it
+			// runs through, which a skill, a plugin or a source chose, so
+			// it is text agentx did not write. It is quoted rather than
+			// sanitised: a path is there to be copied, and a space where a
+			// control character was names nothing on disk.
+			path := quotedPath(o.Path)
 			if o.Kind == "symlink" {
-				path += out.paint(muted, " -> "+o.ResolvedPath)
+				path += out.paint(muted, " -> "+quotedPath(o.ResolvedPath))
 			}
 			if o.Plugin != "" {
 				path += "  " + out.paint(tagStyle, "(plugin "+sanitised(o.Plugin)+")")
@@ -212,9 +217,14 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 			if o.Plugin != "" {
 				pluginServers[o.Configuration+"\x00"+o.Plugin]++
 			}
-			what := o.URL
+			// The URL, the command and its arguments are a declaration in
+			// a configuration file, which a plugin or anything else that
+			// writes one supplies. The command line is sanitised rather
+			// than quoted: joining the arguments with spaces has already
+			// made it something to read rather than something to run.
+			what := sanitised(o.URL)
 			if o.Command != "" {
-				what = strings.Join(append([]string{o.Command}, o.Args...), " ")
+				what = sanitised(strings.Join(append([]string{o.Command}, o.Args...), " "))
 			}
 			if o.Plugin != "" {
 				what += "  " + out.paint(tagStyle, "(plugin "+sanitised(o.Plugin)+")")

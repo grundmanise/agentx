@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode"
 )
 
 // TestSkillListReportsManagedAndUnmanaged lists every directory of the
@@ -128,4 +129,51 @@ func TestSkillListSpawnsOneGitProcess(t *testing.T) {
 		}
 	}
 	equal(t, "for-each-ref calls", refs, 1)
+}
+
+// TestSkillListSanitisesTheNameAndTheUpstream covers a library directory
+// whose name carries what a terminal obeys. The library is a plain
+// directory of this machine that anything may write into, and the name of
+// an unmanaged skill is that directory's own, so it is text agentx did not
+// write. Left raw, a directory named across two lines prints one skill as
+// two rows: the one row per item the contract promises, broken by whoever
+// made the directory.
+func TestSkillListSanitisesTheNameAndTheUpstream(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	const raw = "two\nrows \x1b[31mRED\x1b[0m"
+	dir := filepath.Join(h.library, raw)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: mine\ndescription: made here\n---\n\nmine\n")
+
+	out := h.run("skill", "list")
+	equal(t, "exit", out.exit, 0)
+	equal(t, "stdout", out.stdout, "1 skill\n  two rows [31mRED [0m  unmanaged  -  (none)  0 placements\n")
+	if lines := strings.Count(out.stdout, "\n"); lines != 2 {
+		t.Errorf("one skill printed on %d rows:\n%q", lines-1, out.stdout)
+	}
+	for _, r := range out.stdout {
+		if unicode.IsControl(r) && r != '\n' {
+			t.Fatalf("a control character reached the listing: %q in\n%q", r, out.stdout)
+		}
+	}
+
+	// The event carries the directory name as it is, the way JSON carries
+	// every value agentx did not write.
+	events := h.run("--json", "skill", "list")
+	equal(t, "exit", events.exit, 0)
+	equal(t, "name", h.eventsOfType(events.stdout, "library_skill")[0]["name"], raw)
+
+	// The upstream is the row's other value a source has a hand in: the URL
+	// a source was added from and one of its directories. Neither can carry
+	// a control character today (a URL that does is not a source URL, and
+	// lineage.ValidPath refuses a subpath that does, so such an import
+	// commit is not read back at all), so the row is held to the rule here,
+	// where the cell is built, rather than through a source that cannot
+	// reach it.
+	subpath := "na\x1b[31msty"
+	cells := row(&writer{}, librarySkillEvent{Name: "alpha", Source: "file:///s", Subpath: &subpath})
+	equal(t, "upstream", cells[3].text, "file:///s/na [31msty")
 }

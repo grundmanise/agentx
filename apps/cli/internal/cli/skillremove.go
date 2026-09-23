@@ -354,13 +354,16 @@ func (inv *invocation) warnStillSeen(snap scan.Snapshot, plan removalPlan, cover
 func (plan removalPlan) removedPlacements() int { return len(plan.deleted) + len(plan.library) }
 
 // printRemoved writes the confirmation and one row per placement removed.
+// The name is a library directory's, which whoever made it chose, so it is
+// sanitised, and the paths, which carry it, are quoted, as skill place
+// prints its rows.
 func (inv *invocation) printRemoved(plan removalPlan) {
 	out := inv.out
 	where := "the library"
 	if !plan.whole {
 		where = strings.Join(plan.from, ", ")
 	}
-	line := "removed " + out.paint(heading, plan.name) + " from " + out.paint(heading, where) + ": " +
+	line := "removed " + out.paint(heading, sanitised(plan.name)) + " from " + out.paint(heading, where) + ": " +
 		out.paint(noteStyle, plural(plan.removedPlacements(), "placement"))
 	if n := len(plan.kept); n > 0 {
 		line += ", " + out.paint(warnStyle, plural(n, "placement")+" left in place")
@@ -368,16 +371,16 @@ func (inv *invocation) printRemoved(plan removalPlan) {
 	out.done(line)
 	t := &table{}
 	for _, s := range plan.deleted {
-		t.add(c("  "+s.id, label), c(s.mode, muted), c(s.path, plain))
+		t.add(c("  "+s.id, label), c(s.mode, muted), c(quotedPath(s.path), plain))
 	}
 	for _, id := range plan.library {
-		t.add(c("  "+id, label), c(modeLibrary, muted), c(inv.libraryPath(plan.name), plain))
+		t.add(c("  "+id, label), c(modeLibrary, muted), c(quotedPath(inv.libraryPath(plan.name)), plain))
 	}
 	out.render(t, "")
 	if plan.whole {
-		gone := inv.libraryPath(plan.name)
+		gone := quotedPath(inv.libraryPath(plan.name))
 		if plan.managed != "" {
-			gone += " and " + lineage.ManagedRef(plan.name)
+			gone += " and " + sanitised(lineage.ManagedRef(plan.name))
 		}
 		out.print("  ", out.paint(muted, "deleted "+gone))
 	}

@@ -218,3 +218,31 @@ func TestSkillPlaceRefusesWhatItCannotFind(t *testing.T) {
 	equal(t, "exit", nowhere.exit, 5)
 	contains(t, "stderr", nowhere.stderr, "detected configurations:")
 }
+
+// TestSkillPlaceQuotesThePathsOfItsRows places a library directory whoever
+// made it named across two lines and with an escape sequence in it, where
+// Cursor already holds a copy of it, so the placement adopts that copy.
+// The name on the line that confirms the placement is sanitised, and the
+// paths of its row and of the line naming what it adopted carry the name,
+// so they are quoted: every line stays one line, and each path still names
+// a directory on disk.
+func TestSkillPlaceQuotesThePathsOfItsRows(t *testing.T) {
+	t.Parallel()
+	h, _ := placementHarness(t)
+	const raw = "two\nrows \x1b[31mRED\x1b[0m"
+	dir := filepath.Join(h.library, raw)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: mine\ndescription: made here\n---\n\nmine\n")
+	copyTree(t, dir, filepath.Join(h.home, ".cursor", "skills", raw))
+
+	out := h.run("skill", "place", raw, "--to", "cursor")
+	equal(t, "exit", out.exit, 0)
+	const quoted = `two\nrows \033[31mRED\033[0m"`
+	placement := `"` + filepath.Join(h.home, ".cursor", "skills") + string(filepath.Separator) + quoted
+	library := `"` + h.library + string(filepath.Separator) + quoted
+	equal(t, "stdout", out.stdout, "✓ placed two rows [31mRED [0m in 1 configuration\n"+
+		"  cursor  symlink  "+placement+" -> "+library+"\n"+
+		"  adopted "+placement+"\n")
+}

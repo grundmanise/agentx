@@ -563,7 +563,7 @@ func (inv *invocation) reportAdopted(run *adoptRun, covered []*candidate, nothin
 		}
 		v := c.imported
 		inv.out.done("adopted " + inv.out.paint(heading, sanitised(c.entry.Name)) + " from " + inv.out.paint(heading, v.imp.Source) +
-			underPath(v.imp.Path) + " at " + short(v.imp.Commit))
+			underShown(v.imp.Path) + " at " + short(v.imp.Commit))
 		inv.out.print("  ", inv.out.paint(muted, c.baseLine()))
 	}
 	if nothing != "" {

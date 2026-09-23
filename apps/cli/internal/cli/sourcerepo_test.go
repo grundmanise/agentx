@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
+	"unicode"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 )
@@ -103,6 +105,51 @@ func (s *sourceRepo) skill(dir, name, description string, extra map[string]strin
 	for path, content := range extra {
 		s.write(filepath.Join(dir, path), content)
 	}
+}
+
+// nastyName and nastyDescription are what a third-party repository can put
+// in a skill's frontmatter and a terminal would obey: an ESC opening an SGR
+// sequence and another opening an OSC that sets the window title, the BEL
+// that ends it, a CR that would overwrite the line already printed, an LF
+// that would make one skill two rows, and a tab that would disturb a
+// column. Nothing trails: the frontmatter reader strips the whitespace at
+// the end of a scalar, so a value ending in one of these would not reach
+// agentx and a test could not hold it to the file.
+const (
+	nastyName        = "na\tsty \x07\x1b[31mRED\x1b[0m"
+	nastyDescription = "first line\r\nsecond line \x1b]0;pwned\x07 and \t tab"
+)
+
+// nastySkill writes a SKILL.md at dir whose frontmatter carries nastyName
+// and nastyDescription byte for byte: the scalars are double quoted and
+// every control character is written as the YAML escape that decodes back
+// to it. What agentx reads out of the file is therefore the two constants,
+// so a test comparing an event against them is comparing it against the
+// file.
+func (s *sourceRepo) nastySkill(dir string) {
+	s.t.Helper()
+	s.write(filepath.Join(dir, "SKILL.md"),
+		"---\nname: "+yamlQuoted(nastyName)+"\ndescription: "+yamlQuoted(nastyDescription)+"\n---\n\n# nasty\n")
+}
+
+// yamlQuoted is value as a YAML double-quoted scalar, every control
+// character written as the \xNN escape YAML decodes back to that byte.
+func yamlQuoted(value string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range value {
+		switch {
+		case r == '"' || r == '\\':
+			b.WriteByte('\\')
+			b.WriteRune(r)
+		case unicode.IsControl(r):
+			fmt.Fprintf(&b, `\x%02x`, r) // every control character is below U+0100
+		default:
+			b.WriteRune(r)
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
 }
 
 // commit commits the work tree and returns the commit id.
@@ -249,6 +296,32 @@ if [ "$sub" = fetch ] && [ -n "$stdin" ]; then
 	echo "error: Server does not allow request for unadvertised object" >&2
 	exit 128
 fi
+exec `+real+` "$@"
+`)
+}
+
+// hostileRemote puts a git wrapper alone on the harness PATH that answers
+// every fetch the way a hostile server can: with a sideband "remote:"
+// message carrying escape sequences. git relays those to its own stderr
+// byte for byte, which is CVE-2024-52005; the secure-by-default fix is
+// deferred to git v3.0, so this is what every git in the field does today.
+// No local repository can be made to send them, the sideband coming from
+// the server's own upload-pack, so the message has to come from the
+// wrapper.
+func hostileRemote(t *testing.T, h *harness) {
+	t.Helper()
+	real, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stubGit(t, h, `#!/bin/sh
+for arg in "$@"; do
+	case "$arg" in
+	fetch)
+		printf 'remote: \033[2K\033]0;pwned\007hello from the server\n' >&2
+		exit 128 ;;
+	esac
+done
 exec `+real+` "$@"
 `)
 }

@@ -42,6 +42,14 @@ func (inv *invocation) skillList(ctx context.Context) error {
 // row is one line of the human listing: the name, what agentx knows it as,
 // how it stands against its base version, where it came from and how many
 // placements it has.
+//
+// The name and the upstream are sanitised: the name of an unmanaged skill
+// is the library directory's own, which whoever put it there chose, a
+// managed one's came from the source, and the subpath is a directory of the
+// source's repository. Without that a directory named across two lines
+// would print one skill as two rows. The state, the kind and the count are
+// agentx's own words and are printed as they are. The event above carries
+// all of them as they were read.
 func row(out *writer, ev librarySkillEvent) []cell {
 	state := c(ev.State, okStyle)
 	if ev.State == stateModified {
@@ -56,10 +64,10 @@ func row(out *writer, ev librarySkillEvent) []cell {
 		if ev.Subpath != nil && *ev.Subpath != "" {
 			where += "/" + *ev.Subpath
 		}
-		upstream = c(where, plain)
+		upstream = c(sanitised(where), plain)
 	}
 	return []cell{
-		c("  "+ev.Name, heading),
+		c("  "+sanitised(ev.Name), heading),
 		c(ev.Kind, muted),
 		state,
 		upstream,

@@ -854,15 +854,6 @@ func TestSourceTellsALocalGitFailureFromAnUnfetchedSource(t *testing.T) {
 	}
 }
 
-// nastySkill is a SKILL.md whose frontmatter carries what a third-party
-// repository can put there and a terminal would obey: a newline, a tab, a
-// carriage return and SGR sequences. The block is double quoted, so YAML
-// decodes the escapes and the values reach agentx as those characters.
-const nastySkill = "---\n" +
-	`name: "na\tsty"` + "\n" +
-	`description: "first line\nsecond line \x1b[31mRED\x1b[0m and \t tab\r"` + "\n" +
-	"---\n\n# nasty\n"
-
 // TestSourceSkillsSanitisesUntrustedText covers a source that writes
 // control characters into the text a listing prints. The rows stay rows,
 // nothing drives the terminal, and the event carries what the source wrote.
@@ -870,7 +861,7 @@ func TestSourceSkillsSanitisesUntrustedText(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	s := h.newSourceRepo("evil", true)
-	s.write("nasty/SKILL.md", nastySkill)
+	s.nastySkill("nasty")
 	s.skill("plain", "plain", "A plain skill", nil)
 	head := s.commit("skills")
 	equal(t, "exit", h.run("source", "add", s.url).exit, 0)
@@ -881,16 +872,16 @@ func TestSourceSkillsSanitisesUntrustedText(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	_, skills := sourceEvents(t, h.events(out.stdout))
 	equal(t, "skills", len(skills), 2)
-	equal(t, "raw name", skills[0]["name"], "na\tsty")
-	equal(t, "raw description", skills[0]["description"], "first line\nsecond line \x1b[31mRED\x1b[0m and \t tab")
+	equal(t, "raw name", skills[0]["name"], nastyName)
+	equal(t, "raw description", skills[0]["description"], nastyDescription)
 
 	// The text listing is one row per skill, two spaces of indent, and no
 	// control character anywhere.
 	out = h.run("source", "skills", s.url)
 	equal(t, "exit", out.exit, 0)
 	equal(t, "stdout", out.stdout, "2 skills in "+s.url+" at "+head[:7]+"\n"+
-		"  na sty  nasty  first line second line [31mRED [0m and tab\n"+
-		"  plain   plain  A plain skill\n")
+		"  na sty [31mRED [0m  nasty  first line second line ]0;pwned and tab\n"+
+		"  plain               plain  A plain skill\n")
 	for _, r := range out.stdout {
 		if unicode.IsControl(r) && r != '\n' {
 			t.Fatalf("a control character reached the listing: %q in\n%q", r, out.stdout)
@@ -904,6 +895,71 @@ func TestSourceSkillsSanitisesUntrustedText(t *testing.T) {
 	if got := escapes.ReplaceAllString(painted.stdout, ""); got != out.stdout {
 		t.Errorf("painted output, escapes stripped, differs from plain:\n%q\n%q", got, out.stdout)
 	}
+}
+
+// TestSourceAddSanitisesWhatTheRemoteSays covers first contact with an
+// unknown repository. git relays a server's sideband messages, the
+// "remote:" lines, to its own stderr as they arrive, agentx keeps the first
+// line of that as the cause of the refusal, and the refusal is printed.
+// CVE-2024-52005 is exactly that path: escape sequences in a sideband
+// message drive the terminal of whoever ran the fetch. It matters most
+// here, because 'source add <url>' is the command run before the user has
+// seen anything of the repository and decided whether to trust it.
+func TestSourceAddSanitisesWhatTheRemoteSays(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	hostileRemote(t, h)
+
+	out := h.run("source", "add", "file:///nowhere.git")
+	equal(t, "exit", out.exit, 3)
+	// Defanged and still legible: what the server said is printed as the
+	// ordinary text it is, which also shows that it tried.
+	contains(t, "stderr", out.stderr, "git fetch: remote: [2K ]0;pwned hello from the server")
+	for _, r := range out.stderr {
+		if unicode.IsControl(r) && r != '\n' {
+			t.Fatalf("a control character reached the terminal: %q in\n%q", r, out.stderr)
+		}
+	}
+
+	// The event carries what the server sent, escaped by JSON: the rule is
+	// the terminal's, not the consumer's.
+	events := h.run("--json", "source", "add", "file:///nowhere.git")
+	equal(t, "exit", events.exit, 3)
+	message, _ := lastError(t, h.events(events.stdout))["message"].(string)
+	contains(t, "error.message", message, "remote: \x1b[2K\x1b]0;pwned\ahello from the server")
+}
+
+// TestSourceSkillEventIsTheFrontmatterItself pins the boundary the whole
+// sanitising rule stands on. Once a source is fetched, its files are on
+// this machine, and the UI learns the state of those files from the JSON
+// events alone: a source_skill event therefore carries the frontmatter byte
+// for byte. Sanitising a value on its way into an event would leave the UI
+// showing something the file on disk does not say, and until this test
+// nothing in the suite would have failed for it.
+func TestSourceSkillEventIsTheFrontmatterItself(t *testing.T) {
+	t.Parallel()
+	// The fixture is worth exactly what it carries, so it is checked first:
+	// an escape, a carriage return, a newline and a bell.
+	for _, char := range []struct {
+		name string
+		r    rune
+	}{{"ESC", 0x1b}, {"CR", '\r'}, {"LF", '\n'}, {"BEL", 0x07}} {
+		if !strings.ContainsRune(nastyName+nastyDescription, char.r) {
+			t.Fatalf("the frontmatter fixture carries no %s", char.name)
+		}
+	}
+	h := newHarness(t)
+	s := h.newSourceRepo("verbatim", true)
+	s.nastySkill("nasty")
+	s.commit("one skill")
+	equal(t, "exit", h.run("source", "add", s.url).exit, 0)
+
+	out := h.run("--json", "source", "skills", s.url)
+	equal(t, "exit", out.exit, 0)
+	_, skills := sourceEvents(t, h.events(out.stdout))
+	equal(t, "skills", len(skills), 1)
+	equal(t, "name", skills[0]["name"], nastyName)
+	equal(t, "description", skills[0]["description"], nastyDescription)
 }
 
 func TestConcurrentSourceAdds(t *testing.T) {

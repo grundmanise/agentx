@@ -2,9 +2,12 @@ package cli
 
 import (
 	"bytes"
+	"encoding/json"
 	"reflect"
 	"regexp"
+	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -191,4 +194,95 @@ func TestHelpSections(t *testing.T) {
 	contains(t, "stdout", out.stdout, "\x1b[1mFlags:\x1b[0m\n")
 	contains(t, "stdout", out.stdout, "\x1b[36m    --handshake\x1b[0m")
 	contains(t, "stdout", out.stdout, "\x1b[36m    --project string\x1b[0m")
+}
+
+// TestQuotedPath pins the rule for a path, which is the rule sanitised
+// applies to prose made lossless: a path that carries a control character
+// is quoted whole, the way git quotes one, and anything else is printed as
+// it is.
+func TestQuotedPath(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		path string
+		want string
+	}{
+		{"an ordinary path is untouched", "/home/u/.agents/skills/commit", "/home/u/.agents/skills/commit"},
+		{"a path beyond ASCII is untouched", "/home/u/skills/日本語", "/home/u/skills/日本語"},
+		{"a double quote alone does not quote a path", `/home/u/a"b`, `/home/u/a"b`},
+		{"an escape quotes the path, in octal", "/s/na\x1b[31msty", `"/s/na\033[31msty"`},
+		{"a newline has a letter of its own", "/s/two\nrows", `"/s/two\nrows"`},
+		{"so have a bell, a tab and a carriage return", "/s/a\ab\tc\rd", `"/s/a\ab\tc\rd"`},
+		{"a quote and a backslash are escaped in a quoted path", "/s/a\"b\\c\x1b", `"/s/a\"b\\c\033"`},
+		{"a C1 control is quoted byte by byte", "/s/a\u009bb", `"/s/a\302\233b"`},
+		{"a path that is not UTF-8 is kept whole", "/s/a\xffb\nc", "\"/s/a\xffb\\nc\""},
+		{"empty stays empty", "", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := quotedPath(tt.path); got != tt.want {
+				t.Errorf("quotedPath(%q) = %q, want %q", tt.path, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestUnderShown pins how a line on stdout names the directory of a source
+// a skill was read from: sanitised, as the source chose it, and quoted the
+// way a path is when sanitising would leave nothing, so that the line never
+// reads as if the skill sat at the root of the source.
+func TestUnderShown(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		subpath string
+		want    string
+	}{
+		{"the root names no directory", "", ""},
+		{"an ordinary subpath is untouched", "skills/alpha", " under skills/alpha"},
+		{"a control character becomes a space", "skills/al\u009bpha", " under skills/al pha"},
+		{"nothing but a control character is quoted", "\u009b", ` under "\302\233"`},
+		{"nothing but spaces is quoted too", "  ", ` under "  "`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := underShown(tt.subpath); got != tt.want {
+				t.Errorf("underShown(%q) = %q, want %q", tt.subpath, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestStderrIsSanitisedByTheWriter pins where the rule is applied for the
+// lines agentx puts on stderr: at the writer, once, rather than at each of
+// the callers that relay what a git, a source or a configuration file said.
+// A message is plain text by then (agentx paints the level prefix and
+// nothing else), so there is no escape sequence of its own to lose, and the
+// callers not yet written are covered too. JSON mode carries the message as
+// it was read.
+func TestStderrIsSanitisedByTheWriter(t *testing.T) {
+	t.Parallel()
+	const raw = "remote: \x1b[2K\x1b]0;pwned\ahello\nfrom the server"
+	var text bytes.Buffer
+	w := &writer{stderr: &text, verbose: true}
+	w.warn(raw)
+	w.hint(raw)
+	w.debugf("git stderr: %s", raw)
+	w.fail(&failure{status: exitSource, message: raw, hint: raw})
+	for _, r := range text.String() {
+		if unicode.IsControl(r) && r != '\n' {
+			t.Fatalf("a control character reached the terminal: %q in\n%q", r, text.String())
+		}
+	}
+	equal(t, "lines", strings.Count(text.String(), "\n"), 5) // warn, hint, debug, error, its hint
+	contains(t, "stderr", text.String(), "warning: remote: [2K ]0;pwned hello from the server\n")
+
+	var events bytes.Buffer
+	j := &writer{stderr: &events, json: true, verbose: true}
+	j.warn(raw)
+	var ev logEvent
+	if err := json.Unmarshal(events.Bytes(), &ev); err != nil {
+		t.Fatal(err)
+	}
+	equal(t, "log.message", ev.Message, raw)
 }

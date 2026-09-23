@@ -539,31 +539,46 @@ func placeSummary(name string, done placements) string {
 }
 
 // printPlaced writes the confirmation of one placement run and one row per
-// placement the rescan found.
+// placement the rescan found. The name is a library directory's, which
+// whoever made it chose, so it is sanitised as skill list prints it.
 func (inv *invocation) printPlaced(lib scan.LibrarySkill, done placements, ev librarySkillEvent) {
 	out := inv.out
 	// The configurations placed into, not the rows the rescan found: a
 	// client that reads another client's skills directory, as Cursor reads
 	// Claude Code's, sees the skill by more paths than were placed.
-	line := "placed " + out.paint(heading, lib.Name) + " in " + out.paint(noteStyle, plural(len(done.placed), "configuration"))
+	line := "placed " + out.paint(heading, sanitised(lib.Name)) + " in " + out.paint(noteStyle, plural(len(done.placed), "configuration"))
 	if n := len(done.skipped); n > 0 {
 		line += ", " + out.paint(warnStyle, plural(n, "placement")+" skipped")
 	}
 	out.done(line)
 	inv.printPlacementRows(lib.Name, ev.Placements)
-	if len(done.adoptions) > 0 {
-		out.print("  ", out.paint(muted, "adopted "+strings.Join(done.adoptions, ", ")))
+	inv.printAdoptions(done.adoptions)
+}
+
+// printAdoptions writes the line that names the directories a run adopted
+// as placements, when it adopted any. Each path carries the skill's name,
+// so it is quoted as the rows above it are.
+func (inv *invocation) printAdoptions(adoptions []string) {
+	if len(adoptions) == 0 {
+		return
 	}
+	paths := make([]string, len(adoptions))
+	for i, p := range adoptions {
+		paths[i] = quotedPath(p)
+	}
+	inv.out.print("  ", inv.out.paint(muted, "adopted "+strings.Join(paths, ", ")))
 }
 
 // printPlacementRows writes one indented row per placement, a symlink
-// ending in the library directory it points at.
+// ending in the library directory it points at. Both paths carry the
+// skill's name, so they are quoted the way config enable --place-all and
+// scan quote a placement's path.
 func (inv *invocation) printPlacementRows(name string, places []placementEvent) {
 	t := &table{}
 	for _, p := range places {
-		path := p.Path
+		path := quotedPath(p.Path)
 		if p.Kind == modeSymlink {
-			path += inv.out.paint(muted, " -> "+inv.libraryPath(name))
+			path += inv.out.paint(muted, " -> "+quotedPath(inv.libraryPath(name)))
 		}
 		t.add(c("  "+p.Configuration, label), c(p.Mode, muted), c(path, plain))
 	}

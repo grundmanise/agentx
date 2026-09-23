@@ -104,12 +104,15 @@ func (inv *invocation) reportPlacedAll(ctx context.Context, id string, names []s
 			// Cursor reads Claude Code's, has more paths than placements made.
 			placed++
 		}
+		// The name is the library directory's own, which whoever put it
+		// there chose, and both paths carry it, so the name is sanitised
+		// and the paths quoted, the way skill list and scan print them.
 		for _, p := range ev.Placements {
-			path := p.Path
+			path := quotedPath(p.Path)
 			if p.Kind == modeSymlink {
-				path += inv.out.paint(muted, " -> "+inv.libraryPath(lib.Name))
+				path += inv.out.paint(muted, " -> "+quotedPath(inv.libraryPath(lib.Name)))
 			}
-			t.add(c("  "+lib.Name, heading), c(p.Mode, muted), c(path, plain))
+			t.add(c("  "+sanitised(lib.Name), heading), c(p.Mode, muted), c(path, plain))
 		}
 	}
 	// A client that reads the library already sees every library skill, so

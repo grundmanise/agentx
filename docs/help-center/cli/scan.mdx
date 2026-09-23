@@ -47,6 +47,8 @@ Then, when the configuration declares MCP servers, a `servers:` block with one l
 
 In a terminal the names are bold, the block labels cyan, the kind and scope dim, `enabled` green, `(disabled)` yellow and a plugin marker magenta, so the names and states stand out from the paths.
 
+A skill's name and a server's command line come from files agentx did not write, so they are printed with control characters replaced by spaces, and a path holding one is printed in quotes with escapes. See [Output and exit codes](/cli/output). Read the values as they are on disk with `--json`.
+
 A configuration is detected when its configuration directory exists, such as `~/.claude` for Claude Code or `~/.cursor` for Cursor.
 
 ## Read the kind

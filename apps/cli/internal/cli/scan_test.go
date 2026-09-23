@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"syscall"
@@ -1157,4 +1158,63 @@ func TestScanCursorPlugins(t *testing.T) {
 	}
 	equal(t, "secrets in fixture", len(secrets(f)), 3)
 	noSecrets(t, h, f)
+}
+
+// TestScanQuotesPathsAndSanitisesDeclarations covers the values of the
+// inventory that a skill, a plugin or a configuration file supplies rather
+// than agentx: the path a placement is at, the path a symlink resolves to,
+// the command line or URL of a server declaration, and the warnings a scan
+// ends with. A directory name is chosen by whoever made the directory and a
+// declaration by whoever wrote the file, so none of them is agentx's own
+// text. The two are printed by different rules: a path is quoted, being
+// something to copy, and a declaration is sanitised, being something to
+// read.
+func TestScanQuotesPathsAndSanitisesDeclarations(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.build(t, fixture{
+		files: map[string]string{
+			".claude/skills/na\x1b[31msty/SKILL.md":  skill("nasty", "A skill in a directory named to be obeyed"),
+			".agents/skills/li\x1b[2Kbrary/SKILL.md": skill("linked", "A library skill a placement points at"),
+			".claude.json":                           `{"mcpServers": {"evil": {"command": "\u001b[2Kecho", "args": ["\u001b]0;pwned\u0007"]}}}`,
+		},
+		links: map[string]string{
+			".claude/skills/linked":      ".agents/skills/li\x1b[2Kbrary",
+			".claude/skills/go\x1b[2Kne": ".agents/skills/missing",
+		},
+	})
+
+	out := h.run("scan")
+	equal(t, "exit", out.exit, 0)
+	stdout := h.portable(out.stdout)
+	// The path of the placement and the path the symlink resolves to are
+	// quoted whole, so what is printed still names the directory on disk.
+	contains(t, "stdout", stdout, `"~/.claude/skills/na\033[31msty"`)
+	// Only what needs quoting is quoted: the placement's own path carries
+	// nothing a terminal obeys and is printed as it is.
+	contains(t, "stdout", stdout, `~/.claude/skills/linked -> "~/.agents/skills/li\033[2Kbrary"`)
+	// The command line is sanitised: joining the arguments with spaces has
+	// already made it something to read rather than something to run.
+	contains(t, "stdout", stdout, "evil  stdio  [2Kecho ]0;pwned")
+	// A warning names a path it read, so it carries the same text.
+	contains(t, "stderr", h.portable(out.stderr), "broken symlink, skipped")
+	for _, stream := range []struct{ name, text string }{{"stdout", out.stdout}, {"stderr", out.stderr}} {
+		for _, r := range stream.text {
+			if unicode.IsControl(r) && r != '\n' {
+				t.Fatalf("a control character reached %s: %q in\n%q", stream.name, r, stream.text)
+			}
+		}
+	}
+
+	// The snapshot carries every one of them as it was read.
+	skills := h.snapshot(t)["skills"].([]any)
+	var paths []string
+	for _, s := range skills {
+		for _, o := range s.(map[string]any)["occurrences"].([]any) {
+			paths = append(paths, h.portable(o.(map[string]any)["path"].(string)))
+		}
+	}
+	if !slices.Contains(paths, "~/.claude/skills/na\x1b[31msty") {
+		t.Errorf("the snapshot does not carry the path as it is: %q", paths)
+	}
 }

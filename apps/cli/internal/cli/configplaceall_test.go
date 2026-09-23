@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode"
 )
 
 // TestConfigEnablePlaceAllPlacesEveryLibrarySkill puts the whole library
@@ -113,6 +114,38 @@ func TestConfigEnablePlaceAllIntoAClientThatReadsTheLibrary(t *testing.T) {
 	equal(t, "exit", again.exit, 0)
 	contains(t, "the output", again.stdout, "codex reads the library and already sees 1 skill; nothing was placed")
 	contains(t, "the row", again.stdout, "alpha")
+}
+
+// TestConfigEnablePlaceAllSanitisesTheNameAndQuotesThePaths places a
+// library directory whoever made it named across two lines and with an
+// escape sequence in it. The run places it like any other skill, and its
+// row stays one row: the name is sanitised and the two paths, which carry
+// the name, are quoted, so that they still name the directories on disk.
+func TestConfigEnablePlaceAllSanitisesTheNameAndQuotesThePaths(t *testing.T) {
+	t.Parallel()
+	h, _ := placementHarness(t)
+	equal(t, "disable", h.run("config", "disable", "cursor").exit, 0)
+	const raw = "two\nrows \x1b[31mRED\x1b[0m"
+	dir := filepath.Join(h.library, raw)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: mine\ndescription: made here\n---\n\nmine\n")
+
+	out := h.run("config", "enable", "cursor", "--place-all")
+	equal(t, "exit", out.exit, 0)
+	const quoted = `two\nrows \033[31mRED\033[0m"`
+	placement := `"` + filepath.Join(h.home, ".cursor", "skills") + string(filepath.Separator) + quoted
+	library := `"` + h.library + string(filepath.Separator) + quoted
+	contains(t, "stdout", out.stdout, "\n  two rows [31mRED [0m  symlink  "+placement+" -> "+library+"\n")
+	if lines := strings.Count(out.stdout, "\n"); lines != 3 {
+		t.Errorf("one skill printed on %d rows:\n%q", lines-2, out.stdout)
+	}
+	for _, r := range out.stdout {
+		if unicode.IsControl(r) && r != '\n' {
+			t.Fatalf("a control character reached the output: %q in\n%q", r, out.stdout)
+		}
+	}
 }
 
 // TestConfigDisableTakesNoPlaceAll: the flag belongs to enable alone.

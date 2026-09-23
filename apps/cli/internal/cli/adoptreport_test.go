@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode"
 )
 
 // TestAdoptSaysWhichRefItPinnedTheSourceTo: two entries of one source
@@ -87,5 +88,39 @@ func TestAdoptReportsWhatTheDirectoryHoldsWhenItChangesUnderTheLock(t *testing.T
 	}
 	if _, reported := ev["modified"]; reported {
 		t.Errorf("a refused entry reports whether it is modified: %v", ev)
+	}
+}
+
+// TestAdoptSanitisesTheDirectoryItNames adopts two skills whose lock file
+// entries name source directories with a C1 control in them, which the
+// check on a lock file's subpath lets through. The line that confirms each
+// adoption names that directory, and the lock file chose it, so it is
+// sanitised there as the preview sanitises it; a directory named with
+// nothing else is quoted instead, so that the line still says it is one.
+func TestAdoptSanitisesTheDirectoryItNames(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.build(t, fixture{dirs: []string{".claude"}})
+	s := h.newSourceRepo("skills", true)
+	s.skill("skills/al\u009bpha", "alpha", "The first skill", nil)
+	s.skill("\u009b", "beta", "The second skill", nil)
+	v1 := s.commit("two skills")
+	vercelInstall(t, h, s, "skills/al\u009bpha", "alpha")
+	vercelInstall(t, h, s, "\u009b", "beta")
+	h.writeLock(h.lockPath(), map[string]lockEntry{
+		"alpha": {Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/al\u009bpha/SKILL.md",
+			SkillFolderHash: s.tree("skills/al\u009bpha")},
+		"beta": {Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "\u009b/SKILL.md",
+			SkillFolderHash: s.tree("\u009b")},
+	})
+
+	out := h.run("adopt", "--all")
+	equal(t, "exit", out.exit, 0)
+	contains(t, "stdout", out.stdout, "✓ adopted alpha from "+s.url+" under skills/al pha at "+short(v1)+"\n")
+	contains(t, "stdout", out.stdout, "✓ adopted beta from "+s.url+` under "\302\233" at `+short(v1)+"\n")
+	for _, r := range out.stdout {
+		if unicode.IsControl(r) && r != '\n' {
+			t.Fatalf("a control character reached the output: %q in\n%q", r, out.stdout)
+		}
 	}
 }
