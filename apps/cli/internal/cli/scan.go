@@ -71,9 +71,11 @@ const lockWait = time.Second
 // lock is recovered under the exclusive one, and the reads start over: no
 // inventory is composed from half-applied state.
 //
-// Its snapshot lists no library: this is the rescan a command runs to see
-// what its own change did, and each of those reads the lineage it reports
-// on itself, once. The snapshot a scan or serve emits is snapshot's.
+// Its snapshot lists no library: it is the scan a command runs for the
+// placements it reports, after its own change for a mutation such as skill
+// add or skill remove, and on its own for a read-only command such as skill
+// list or export. Each of those commands takes the lineage it needs itself,
+// once, if it needs any. The snapshot a scan or serve emits is snapshot's.
 func (inv *invocation) scan(ctx context.Context, wait time.Duration, project string, handshake bool) (scan.Snapshot, error) {
 	return inv.inventory(ctx, wait, project, handshake, false)
 }
