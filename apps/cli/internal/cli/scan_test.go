@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 	"unicode"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden snapshot files from the current output")
@@ -778,6 +780,64 @@ func TestScanListsTheLibrary(t *testing.T) {
 		}
 	}
 	equal(t, "for-each-ref calls", refs, 1)
+
+	// Without --json nothing prints the library, so a text scan and a text
+	// serve read none of its lineage: the startup gate's --version is the
+	// one git either spawns, and neither can fail on the account repo.
+	for what, run := range map[string]func() outcome{
+		"scan":         func() outcome { return h.run("scan") },
+		"serve --once": func() outcome { return h.serveOnce() },
+	} {
+		before := len(calls())
+		equal(t, what+" exit", run().exit, 0)
+		for _, call := range calls()[before:] {
+			if !strings.Contains(call, "--version") {
+				t.Errorf("%s ran git %s", what, call)
+			}
+		}
+	}
+}
+
+// TestScanListsNoLibraryWhenTheAccountRepoCannotBeRead breaks the account
+// repo under a managed skill. Neither scan nor serve reads it for anything
+// but the library's lineage, so each still inventories the machine and
+// exits 0: the library is listed empty, rather than with every skill in it
+// called unmanaged, and one warning names the account repo and the command
+// that looks into it. skill list, which is there to report the lineage,
+// still refuses.
+func TestScanListsNoLibraryWhenTheAccountRepoCannotBeRead(t *testing.T) {
+	t.Parallel()
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	account := gitx.AccountRepoPath(h.agentx)
+	writeFile(t, filepath.Join(account, "HEAD"), "garbage\n")
+
+	snap := h.snapshot(t)
+	equal(t, "configurations", len(snap["configurations"].([]any)), 4)
+	equal(t, "skills", strings.Join(skillNames(snap), " "), "alpha")
+	equal(t, "library", len(snap["library"].([]any)), 0)
+	warnings := snap["warnings"].([]any)
+	if len(warnings) != 1 || !strings.Contains(warnings[0].(string), account) || !strings.Contains(warnings[0].(string), "run 'agentx doctor'") {
+		t.Errorf("warnings = %q, want one naming %s and agentx doctor", warnings, account)
+	}
+
+	served := h.serveOnce("--json")
+	equal(t, "serve exit", served.exit, 0)
+	if fromServe := h.one(served.stdout, "snapshot"); !reflect.DeepEqual(fromServe, snap) {
+		t.Errorf("serve --once and scan disagree:\nserve: %v\nscan:  %v", fromServe, snap)
+	}
+
+	// A text scan reads no lineage, so it has nothing to warn about.
+	text := h.run("scan")
+	equal(t, "text exit", text.exit, 0)
+	contains(t, "text scan", text.stdout, "4 configurations, 1 skill, 0 servers, 0 plugins detected")
+	if strings.Contains(text.stderr, account) {
+		t.Errorf("a text scan read the account repo:\n%s", text.stderr)
+	}
+
+	list := h.run("--json", "skill", "list")
+	equal(t, "skill list exit", list.exit, 8)
+	equal(t, "skill list code", h.one(list.stdout, "error")["code"], "account_repo")
 }
 
 // secrets lists every distinctive secret value a fixture's config files hold,

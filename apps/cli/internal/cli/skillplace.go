@@ -497,6 +497,9 @@ func (sc skillContext) librarySkillEventFor(inv *invocation, snap scan.Snapshot,
 
 // lineageRecords are the branches of the account repo by skill name, empty
 // when this machine has no account repo yet: a listing never creates one.
+// Either failure names the account repo, as the check of it does, since
+// what git says of refs it cannot read need not, and the hint and a scan's
+// warning both send the reader to that repo.
 func (inv *invocation) lineageRecords(ctx context.Context) (map[string]lineage.Record, error) {
 	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
@@ -507,7 +510,7 @@ func (inv *invocation) lineageRecords(ctx context.Context) (map[string]lineage.R
 	}
 	records, err := lineage.List(ctx, inv.git, gitDir)
 	if err != nil {
-		return nil, accountRepoFailure(err)
+		return nil, accountRepoFailure(fmt.Errorf("account repo %s: %w", gitDir, err))
 	}
 	return records, nil
 }

@@ -170,4 +170,6 @@ Add `--json` to get one `snapshot` event with the machine, every configuration, 
 agentx --json scan
 ```
 
+If agentx cannot read its account repo, the scan still lists everything else, but `library` is empty and a warning names the repo. Run `agentx doctor` to see what is wrong with it.
+
 Every node carries a stable identity, and two scans of an unchanged machine are byte-identical apart from `instance_id`. Set `AGENTX_INSTANCE_ID` to fix that too.

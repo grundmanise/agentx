@@ -242,6 +242,12 @@ type Scan struct {
 // could not be read in it is one of the scan's warnings.
 func (s *Scan) Library() []LibrarySkill { return s.library }
 
+// Warn adds a warning of the caller's own to the snapshot, for something it
+// reads beside the scan, under the same lock, and could not. It is sorted in
+// with the scan's own warnings when Snapshot composes them and, like them,
+// never fails the scan.
+func (s *Scan) Warn(message string) { s.warn(message) }
+
 // Snapshot composes the inventory, once per Scan, and returns it with the
 // handshakes this scan took, by server logical id, for the handshakes file.
 func (s *Scan) Snapshot() (Snapshot, map[string]home.Handshake) {

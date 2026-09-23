@@ -425,6 +425,60 @@ func TestServeSurvivesARemovedSkillDirectory(t *testing.T) {
 	equal(t, "stderr", p.stderr.String(), "")
 }
 
+// TestServeKeepsServingWhenTheAccountRepoCannotBeRead breaks the account
+// repo under a running serve and repairs it. The scan in between still
+// succeeds, with the library listed empty and a warning saying why, so the
+// desktop app keeps the rest of its inventory; the first scan after the
+// repair gives the library back.
+func TestServeKeepsServingWhenTheAccountRepoCannotBeRead(t *testing.T) {
+	t.Parallel()
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	account := gitx.AccountRepoPath(h.agentx)
+	head := filepath.Join(account, "HEAD")
+	healthy, err := os.ReadFile(head)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Each HEAD is renamed into place, so no scan reads one half written.
+	setHead := func(content string) {
+		t.Helper()
+		writeFile(t, head+".new", content)
+		if err := os.Rename(head+".new", head); err != nil {
+			t.Fatal(err)
+		}
+	}
+	p := h.serve(t, "--json")
+	first := p.next("snapshot")
+	equal(t, "library at start", len(first["library"].([]any)), 1)
+	p.send(`{"type":"refresh","request_id":"idle"}`)
+	p.next("refresh_complete")
+
+	setHead("garbage\n")
+	p.send(`{"type":"refresh","request_id":"broken"}`)
+	broken := p.next("snapshot")
+	equal(t, "library while broken", len(broken["library"].([]any)), 0)
+	equal(t, "skills while broken", strings.Join(skillNames(broken), " "), "alpha")
+	warnings := broken["warnings"].([]any)
+	if len(warnings) != 1 || !strings.Contains(warnings[0].(string), account) {
+		t.Errorf("warnings = %q, want one naming %s", warnings, account)
+	}
+	e := p.next("refresh_complete")
+	equal(t, "request_id", e["request_id"], "broken")
+	equal(t, "ok", e["ok"], true)
+
+	setHead(string(healthy))
+	p.send(`{"type":"refresh","request_id":"repaired"}`)
+	repaired := p.next("snapshot")
+	if !reflect.DeepEqual(repaired["library"], first["library"]) {
+		t.Errorf("library after the repair = %v, want %v", repaired["library"], first["library"])
+	}
+	equal(t, "warnings after the repair", len(repaired["warnings"].([]any)), 0)
+	e = p.next("refresh_complete")
+	equal(t, "ok after the repair", e["ok"], true)
+	equal(t, "exit", p.close(), 0)
+}
+
 func TestServeEndsOnStdinEOF(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)

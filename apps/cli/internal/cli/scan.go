@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -84,11 +85,27 @@ func (inv *invocation) scan(ctx context.Context, wait time.Duration, project str
 // snapshot never pairs a library directory with lineage from either side
 // of a mutation; and a snapshot carries drift, which the desktop app takes
 // from the snapshot alone.
+//
+// The library's directories are read either way, so that a scan warns
+// about the same things with and without --json. Its lineage is read only
+// for a snapshot emitted as JSON, the one output that lists the entries:
+// without --json nothing prints them, so a text scan runs no git for them
+// and cannot fail on the account repo.
+//
+// An account repo git cannot read costs the snapshot its library and
+// nothing else. The library is listed empty and one warning names the
+// account repo and sends the reader to agentx doctor, while the
+// configurations, the skills, the servers and the plugins the scan read
+// stand: neither agentx scan nor a serve reads the account repo for any of
+// them, and a serve whose every scan failed on it would leave the desktop
+// app with no inventory at all. Listing the library without its lineage
+// instead would call every managed skill unmanaged, which is not true.
+// skill list, which exists to report the lineage, still fails on it.
 func (inv *invocation) snapshot(ctx context.Context, wait time.Duration, project string, handshake bool) (scan.Snapshot, error) {
 	return inv.inventory(ctx, wait, project, handshake, true)
 }
 
-// inventory is scan and snapshot, the library listed when library says so.
+// inventory is scan and snapshot, the library read when library says so.
 func (inv *invocation) inventory(ctx context.Context, wait time.Duration, project string, handshake, library bool) (scan.Snapshot, error) {
 	timeout := handshakeTimeout
 	if v := inv.env["AGENTX_HANDSHAKE_TIMEOUT"]; handshake && v != "" {
@@ -118,8 +135,9 @@ func (inv *invocation) inventory(ctx context.Context, wait time.Duration, projec
 		lockCtx, cancel = context.WithTimeout(ctx, wait)
 		defer cancel()
 	}
+	listed := library && inv.out.json // whether the snapshot's library entries are built and emitted
 	var sc *scan.Scan
-	var listing skillContext // what the library entries are built from, read with the rest
+	var listing *skillContext // what the library entries are built from, read with the rest; nil lists none
 	for sc == nil {
 		var journals []string
 		err = home.ReadLocked(lockCtx, inv.dirs.Home, func() error {
@@ -145,12 +163,22 @@ func (inv *invocation) inventory(ctx context.Context, wait time.Duration, projec
 				CopyMode:   copyMode,
 				Library:    library,
 			})
-			if !library {
+			if !listed {
 				return nil
 			}
 			records, err := inv.lineageRecords(ctx)
-			listing = skillContext{records: records, modes: copyMode, sources: sourceURLs(s)}
-			return err
+			var f *failure
+			switch {
+			case err == nil:
+				listing = &skillContext{records: records, modes: copyMode, sources: sourceURLs(s)}
+			case errors.As(err, &f) && f.status == exitAccountRepo && ctx.Err() == nil && !inv.git.StoppedChild():
+				// The account repo's own answer, and not a stop that killed
+				// the git reading it: that is the run's to answer for.
+				sc.Warn(f.message + "; the library is not listed, run 'agentx doctor'")
+			default:
+				return err
+			}
+			return nil
 		})
 		if err == nil && len(journals) > 0 {
 			inv.out.debugf("recovering %s", strings.Join(journals, ", "))
@@ -164,8 +192,10 @@ func (inv *invocation) inventory(ctx context.Context, wait time.Duration, projec
 		sc.Handshake(ctx, scan.HandshakeOptions{Env: inv.env, Timeout: timeout, Version: cliVersion, Debug: inv.out.debugf})
 	}
 	snap, fresh := sc.Snapshot()
-	for _, lib := range sc.Library() {
-		snap.Library = append(snap.Library, listing.librarySkillEventFor(inv, snap, lib, nil).LibraryEntry)
+	if listing != nil {
+		for _, lib := range sc.Library() {
+			snap.Library = append(snap.Library, listing.librarySkillEventFor(inv, snap, lib, nil).LibraryEntry)
+		}
 	}
 	if len(fresh) > 0 {
 		if err := home.SaveHandshakes(inv.dirs.Home, inv.refs(ctx), fresh); err != nil {
