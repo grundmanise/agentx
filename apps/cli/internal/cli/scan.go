@@ -87,10 +87,10 @@ func (inv *invocation) scan(ctx context.Context, wait time.Duration, project str
 // from the snapshot alone.
 //
 // The library's directories are read either way, so that a scan warns
-// about the same things with and without --json. Its lineage is read only
-// for a snapshot emitted as JSON, the one output that lists the entries:
-// without --json nothing prints them, so a text scan runs no git for them
-// and cannot fail on the account repo.
+// about the same library directories with and without --json. Its lineage
+// is read only for a snapshot emitted as JSON, the one output that lists
+// the entries: without --json nothing prints them, so a text scan runs no
+// git for them and cannot fail on the account repo.
 //
 // An account repo git cannot read costs the snapshot its library and
 // nothing else. The library is listed empty and one warning names the

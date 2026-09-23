@@ -813,11 +813,11 @@ func TestScanListsTheLibrary(t *testing.T) {
 
 // TestScanListsNoLibraryWhenTheAccountRepoCannotBeRead breaks the account
 // repo under a managed skill. Neither scan nor serve reads it for anything
-// but the library's lineage, so each still inventories the machine and
-// exits 0: the library is listed empty, rather than with every skill in it
-// called unmanaged, and one warning names the account repo and the command
-// that looks into it. skill list, which is there to report the lineage,
-// still refuses.
+// in the snapshot but the library's lineage, so each still inventories the
+// machine and exits 0: the library is listed empty, rather than with every
+// skill in it called unmanaged, and one warning names the account repo and
+// the command that looks into it. skill list, which is there to report the
+// lineage, still refuses.
 func TestScanListsNoLibraryWhenTheAccountRepoCannotBeRead(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
