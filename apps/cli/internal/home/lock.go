@@ -25,18 +25,37 @@ func ServeLockPath(dir string) string { return filepath.Join(dir, "serve.lock") 
 // Mutate runs fn while holding the lock of agentx home dir, then rewrites the
 // version file as the change signal and releases the lock. A failing fn
 // leaves the version file alone.
-func Mutate(dir string, fn func() error) error { return mutate(dir, true, fn) }
+func Mutate(dir string, fn func() error) error { return mutate(dir, quick(dir), true, fn) }
 
 // MutateQuiet is Mutate without the change signal, for a step that nothing
 // watching agentx home needs to see because the mutation that completes the
 // command follows it. It still serialises against every other mutation, so
 // two commands cannot write the same file at once.
-func MutateQuiet(dir string, fn func() error) error { return mutate(dir, false, fn) }
+func MutateQuiet(dir string, fn func() error) error { return mutate(dir, quick(dir), false, fn) }
 
-// mutate takes the exclusive lock, recovers the unfinished journals of
-// earlier mutations, runs fn and, with bump, rewrites the version file.
-func mutate(dir string, bump bool, fn func() error) error {
-	lock, err := takeLock(dir)
+// MutateQuietWaiting is MutateQuiet for a mutation that may not give up:
+// one command taking back what an earlier hold of the lock already wrote.
+// It waits for a held lock until ctx is done rather than reporting it held,
+// because the lock is exactly what such a command needs to clean up after
+// itself, and losing it is often what made the command fail in the first
+// place. Everything else is MutateQuiet: the same journal recovery, and no
+// change signal, since taking a change back leaves agentx home as the last
+// signalled version already describes it.
+func MutateQuietWaiting(ctx context.Context, dir string, fn func() error) error {
+	return mutate(dir, func() (*os.File, error) { return waitLock(ctx, dir, syscall.LOCK_EX) }, false, fn)
+}
+
+// acquire takes the exclusive lock of agentx home, either way a mutation
+// can ask for it: without waiting, or waiting for the holder.
+type acquire func() (*os.File, error)
+
+func quick(dir string) acquire { return func() (*os.File, error) { return takeLock(dir) } }
+
+// mutate takes the exclusive lock the way take asks for it, recovers the
+// unfinished journals of earlier mutations, runs fn and, with bump,
+// rewrites the version file.
+func mutate(dir string, take acquire, bump bool, fn func() error) error {
+	lock, err := take()
 	if err != nil {
 		return err
 	}
@@ -104,8 +123,9 @@ const (
 	lockRetry    = 10 * time.Millisecond
 )
 
-// waitLock takes the advisory lock how (shared for a scan's reads, exclusive
-// for recovery), retrying every 50 ms while it is held, until ctx is done.
+// waitLock takes the advisory lock how (shared for a scan's reads,
+// exclusive for recovery and for a take-back), retrying every 50 ms while
+// it is held, until ctx is done.
 func waitLock(ctx context.Context, dir string, how int) (*os.File, error) {
 	if err := createHome(dir); err != nil {
 		return nil, err

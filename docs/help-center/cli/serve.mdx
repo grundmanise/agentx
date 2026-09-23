@@ -50,7 +50,7 @@ Serve answers with a `search` line carrying your `request_id`, the `query` and `
 
 Pass a result's `source` and `subpath` to an install to take that skill.
 
-Serve answers from memory, so a search is immediate: it reaches neither git nor the network, and it does not wait for a scan in progress. It lists the skills of each source when it starts and again whenever you add, re-fetch or remove one, so results follow `agentx source add` and `agentx source remove` on their own.
+Serve answers from memory, so a search is immediate: it reaches neither git nor the network, and it does not wait for a scan in progress. It lists the skills of each source when it starts and again whenever you add, re-fetch or remove one, so results follow `agentx source add`, `agentx source fetch` and `agentx source remove` on their own.
 
 A source you have not fetched has no skills to search, and serve says so once as a warning. Run `agentx source add <url>` to fetch it.
 

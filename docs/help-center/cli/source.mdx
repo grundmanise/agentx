@@ -1,6 +1,6 @@
 ---
 title: "agentx source"
-description: "Add the git repositories you install skills from, list their skills, and remove them."
+description: "Add the git repositories you install skills from, fetch them again, list their skills, and remove them."
 ---
 
 A source is a git repository that holds one or more skills. Add it by URL once; agentx fetches it into its own store and lists the skills inside, so you can pick what to install.
@@ -50,6 +50,57 @@ git config --global credential.helper store
 ### What is fetched
 
 agentx fetches only the commits and directory trees of one branch, no tags and no file contents, then the `SKILL.md` file of every skill in the repository in one round trip. Those come down whatever path you added, so listing any part of the source afterwards needs no network. A source the size of a monorepo costs a few megabytes, not a clone. A git server that cannot serve such a partial fetch gets a full one instead; nothing changes for you.
+
+A fetch lands whole or not at all. agentx fills its copy in two round trips and moves the source to the new commit only once everything has arrived, so a fetch that fails, whether from a dropped connection, a Ctrl-C or a machine that goes down, leaves the source exactly as it was. Listing and searching keep working at the last version that arrived complete. Fetch again to pick it up.
+
+### A failed add leaves nothing behind
+
+An add undoes itself when it cannot finish. agentx registers the repository with its own git store before it fetches, and takes that registration back if the fetch fails or if the source cannot be recorded. A source is on this machine whole or not at all, so `source list` never hides one.
+
+Taking it back needs the same lock every agentx command takes, so an add that fails while another command is running waits a few seconds for that command. If the other command outlasts the wait, the add names what it left:
+
+```text
+error: another agentx command holds the lock; the remote src-1c9d0b7e4a2f6d38 was left in the account repo and no source names it
+hint: run 'agentx source add https://github.com/anthropics/skills' to add the source and take the remote with it, or 'agentx source remove 1c9d0b7e4a2f6d38' to clear it
+```
+
+Run either command in the hint. Adding the source again finishes the job; removing it by id clears the leftover.
+
+## Fetch a source again
+
+```sh
+agentx source fetch anthropics/skills
+```
+
+```text
+✓ re-fetched https://github.com/anthropics/skills, now at 9c1d0ab, was 3f2a9c1: 13 skills
+```
+
+A fetch updates what agentx knows about a source: the commit it holds and the skills inside it. Run it when you want to see what changed upstream. Nothing else refreshes a source you have not installed anything from yet.
+
+Name several sources to fetch them together, by URL or by id, or fetch every source on this machine:
+
+```sh
+agentx source fetch anthropics/skills 7a3b5c9e1f2d4a60
+agentx source fetch --all
+```
+
+Sources are fetched in parallel, a few at a time, and each one gets a line that says what moved:
+
+```text
+✓ re-fetched https://github.com/anthropics/skills, now at 9c1d0ab, was 3f2a9c1: 13 skills
+✓ re-fetched https://github.com/me/skills, already at 8b1e0f4: 4 skills
+```
+
+A source that fails is a warning naming it and does not stop the others. Every source that did fetch is recorded, and the command then fails, naming the ones that did not. Its exit code is the one they agree on, which is the code you would get fetching that source on its own, or `3` when they failed for different reasons.
+
+A fetch keeps the pin the source has. To change it, add the source again with the ref you want:
+
+```sh
+agentx source add anthropics/skills#v2
+```
+
+A path in the URL is ignored here: a fetch always covers the whole source.
 
 ## List your sources
 
@@ -106,10 +157,19 @@ agentx --json source skills anthropics/skills
 {"type":"result","schema_version":1,"ok":true}
 ```
 
+`source fetch` emits one `progress` event per source as that source finishes, then one `source` event per source that fetched, in the order you named them. A `source` event carries `previous_commit` when the fetch moved the source, so a script can tell a real change from a no-op:
+
+```json
+{"type":"progress","schema_version":1,"phase":"fetch","subject":"https://github.com/anthropics/skills","current":1,"total":2}
+{"type":"source","schema_version":1,"id":"1c9d0b7e4a2f6d38","url":"https://github.com/anthropics/skills","last_fetched":"2026-09-21T09:00:00Z","commit":"9c1d0ab...","previous_commit":"3f2a9c1...","skills":13}
+```
+
 ## Exit codes
 
-- `1`: the URL is not one of the accepted forms, or the pin and the tree URL name different refs.
-- `3`: the source cannot be reached, is not a git repository, or needs credentials git does not have. The hint names the fix.
-- `5`: the pinned ref or the path does not exist in the source, or the source is not on this machine.
-- `7`: another agentx command is running. Retry when it finishes.
+- `1`: the URL is not one of the accepted forms, the pin and the tree URL name different refs, or `source fetch` was given neither a source nor `--all`.
+- `3`: the source cannot be reached, is not a git repository, or needs credentials git does not have. The hint names the fix. From `source fetch` over several sources, it also means they failed for different reasons; read the warnings.
+- `5`: the pinned ref or the path does not exist in the source, the source is not on this machine, or what this machine holds of it is incomplete.
+- `7`: another agentx command is running. Retry when it finishes. An add that could not take its own half-done work back says what it left and how to clear it.
 - `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.
+
+Each code means the same thing from every `source` command: fetching one source answers exactly as adding or listing it would.

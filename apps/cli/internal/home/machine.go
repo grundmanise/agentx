@@ -37,7 +37,7 @@ func MachineID(dir string, env map[string]string) (id, derivation string, err er
 		fmt.Fprintf(mac, "%s\n%d", pid, os.Getuid())
 		return hex.EncodeToString(mac.Sum(nil))[:32], derivedPlatform, nil
 	}
-	err = mutate(dir, false, func() error { // the file is derived state: no version bump
+	err = mutate(dir, quick(dir), false, func() error { // the file is derived state: no version bump
 		if id, err = storedMachineID(dir); id != "" || err != nil { // stored meanwhile by another command
 			return err
 		}

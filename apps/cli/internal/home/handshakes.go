@@ -52,7 +52,7 @@ func LoadHandshakes(dir string) (map[string]Handshake, error) {
 // journaled mutation. The file is derived state, so the version file is not
 // touched: no other command needs to rescan for it.
 func SaveHandshakes(dir string, fresh map[string]Handshake) error {
-	return mutate(dir, false, func() error {
+	return mutate(dir, quick(dir), false, func() error {
 		stored, err := LoadHandshakes(dir)
 		if err != nil {
 			stored = map[string]Handshake{} // an unreadable file is replaced

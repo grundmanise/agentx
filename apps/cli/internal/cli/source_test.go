@@ -139,10 +139,12 @@ func TestSourceAddFetchesBloblessAndSkillFilesInOneBatch(t *testing.T) {
 	equal(t, "stdout", out.stdout, "✓ added "+s.url+" at "+head[:7]+": 2 skills\n")
 	equal(t, "fetches", fetches(out.stderr), 2)
 
-	// The remote: promisor, blob:none, no tags, one refspec onto the source ref.
+	// The remote: promisor, blob:none, no tags, and one refspec recording
+	// the pin, onto the staging ref rather than the source ref, since the
+	// source ref is published by a fetch that is whole and never fetched into.
 	for key, want := range map[string]string{
 		"url":                s.url,
-		"fetch":              "+HEAD:refs/agentx/sources/" + id,
+		"fetch":              "+HEAD:" + source.StagingRef(id),
 		"tagopt":             "--no-tags",
 		"promisor":           "true",
 		"partialclonefilter": "blob:none",
@@ -195,7 +197,7 @@ func TestSourceAddFetchesBloblessAndSkillFilesInOneBatch(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "✓ re-fetched "+s.url+" pinned to v1, now at "+v1[:7]+", was "+head[:7])
 	equal(t, "fetches", fetches(out.stderr), 2)
-	equal(t, "refspec", h.accountGit("config", "--get", "remote.src-"+id+".fetch"), "+v1:refs/agentx/sources/"+id)
+	equal(t, "refspec", h.accountGit("config", "--get", "remote.src-"+id+".fetch"), "+v1:"+source.StagingRef(id))
 	file = readSettingsFile(t, h)
 	sources = file["sources"].([]any)
 	if len(sources) != 1 {
@@ -247,7 +249,9 @@ func TestSourceAddRefetchesWhenTheServerRefusesSingleObjects(t *testing.T) {
 	contains(t, "stdout", out.stdout, "✓ added "+s.url+" at "+head[:7]+": 2 skills under skills")
 	// Three fetches: the filtered one, the refused batch, the full re-fetch.
 	equal(t, "fetches", fetches(out.stderr), 3)
-	contains(t, "stderr", out.stderr, "--no-show-forced-updates --refetch --no-filter src-"+id)
+	// The full re-fetch lands on the staging ref like the blobless one: the
+	// source ref moves only once every blob is here.
+	contains(t, "stderr", out.stderr, "--no-show-forced-updates --refmap= --refetch --no-filter src-"+id+" +HEAD:"+source.StagingRef(id))
 
 	// The re-fetch took everything, although the remote is still a promisor
 	// with a blob:none filter, so the account repo is whole.
@@ -310,7 +314,7 @@ func TestSourceAddPeelsAnAnnotatedTagPin(t *testing.T) {
 func TestSourceAddKeepsAnAliasOnReAdd(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	s, v1, _ := h.standardSource(true)
+	s, v1, head := h.standardSource(true)
 	equal(t, "add", h.run("source", "add", s.url).exit, 0)
 
 	const alias = "https://github.com/owner/repo"
@@ -333,12 +337,23 @@ func TestSourceAddKeepsAnAliasOnReAdd(t *testing.T) {
 	src, _ := sourceEvents(t, h.events(out.stdout))
 	equal(t, "alias", src["alias"], alias)
 	equal(t, "commit", src["commit"], v1)
+	// The pin took the ref back to v1, which is a move like any other.
+	equal(t, "previous_commit", src["previous_commit"], head)
 	entry := readSettingsFile(t, h)["sources"].([]any)[0].(map[string]any)
 	equal(t, "settings alias", entry["alias"], alias)
 	equal(t, "settings pin", entry["pin"], "v1")
 
-	// The listing carries it too.
+	// The listing carries it too, and so does a fetch, which rewrites the
+	// entry's last_fetched and nothing else.
 	equal(t, "list alias", h.events(h.run("--json", "source", "list").stdout)[0]["alias"], alias)
+	fetched, _ := sourceEvents(t, h.events(h.run("--json", "source", "fetch", s.url).stdout))
+	equal(t, "fetch alias", fetched["alias"], alias)
+	equal(t, "fetch pin", fetched["pin"], "v1")
+	equal(t, "fetch commit", fetched["commit"], v1)
+	equal(t, "fetch previous_commit", fetched["previous_commit"], nil)
+	entry = readSettingsFile(t, h)["sources"].([]any)[0].(map[string]any)
+	equal(t, "settings alias after the fetch", entry["alias"], alias)
+	equal(t, "settings pin after the fetch", entry["pin"], "v1")
 }
 
 func TestSourceSkills(t *testing.T) {
@@ -597,7 +612,7 @@ func TestSourceAddErrors(t *testing.T) {
 	equal(t, "exit", h.run("source", "add", s.url).exit, 0)
 	equal(t, "exit", h.run("--json", "source", "add", s.url+"#nope").exit, 5)
 	equal(t, "ref kept", h.accountGit("rev-parse", "refs/agentx/sources/"+source.ID(s.url)), s.run("rev-parse", "HEAD"))
-	equal(t, "refspec kept", h.accountGit("config", "--get", "remote.src-"+source.ID(s.url)+".fetch"), "+HEAD:refs/agentx/sources/"+source.ID(s.url))
+	equal(t, "refspec kept", h.accountGit("config", "--get", "remote.src-"+source.ID(s.url)+".fetch"), "+HEAD:"+source.StagingRef(source.ID(s.url)))
 	equal(t, "sources", len(readSettingsFile(t, h)["sources"].([]any)), 1)
 	equal(t, "exit", h.run("--json", "source", "skills", s.url).exit, 0)
 	out := h.run("source", "add", missing.url)
@@ -621,7 +636,7 @@ func TestSourceCommandsRespectTheLock(t *testing.T) {
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
 		t.Fatal(err)
 	}
-	for _, args := range [][]string{{"source", "add", s.url}, {"source", "remove", s.url}} {
+	for _, args := range [][]string{{"source", "add", s.url}, {"source", "fetch", "--all"}, {"source", "remove", s.url}} {
 		out := h.run(append([]string{"--json"}, args...)...)
 		equal(t, "exit", out.exit, 7)
 		equal(t, "error.code", h.events(out.stdout)[0]["code"], "locked")
@@ -639,7 +654,7 @@ func TestSourceHelpAndUsage(t *testing.T) {
 	h := newHarness(t)
 	out := h.run("source")
 	equal(t, "exit", out.exit, 0)
-	for _, sub := range []string{"add", "list", "skills", "remove"} {
+	for _, sub := range []string{"add", "fetch", "list", "skills", "remove"} {
 		contains(t, "stdout", out.stdout, sub)
 	}
 	out = h.run("--json", "source")
@@ -844,4 +859,250 @@ func TestConcurrentSourceAdds(t *testing.T) {
 		}
 	}
 	equal(t, "entries", len(entries), added)
+}
+
+// gateFailedFetch holds open the blobless fetch that brings a source's
+// commit and then refuses the SKILL.md batch behind it, and the
+// --refetch --no-filter fallback behind that, the way failObjectFetch does.
+// A run parked at the gate has written its remote and is about to lose its
+// fetch, which is where a test can take the lock the take-back will need.
+func gateFailedFetch(t *testing.T, h *harness) (arm func() (reached, release func())) {
+	t.Helper()
+	return gateGit(t, h, `sub= ; stdin= ; refetch=
+for arg in "$@"; do
+	case "$arg" in
+	fetch) sub=fetch ;;
+	--stdin) stdin=1 ;;
+	--refetch) refetch=1 ;;
+	esac
+done
+if [ "$sub" = fetch ] && { [ -n "$stdin" ] || [ -n "$refetch" ]; }; then
+	if [ -n "$stdin" ]; then
+		while read -r _; do :; done   # drain the object ids: PATH holds git alone, so no cat
+	fi
+	echo "error: Server does not allow request for unadvertised object" >&2
+	exit 128
+fi
+[ "$sub" = fetch ] && gate=1`)
+}
+
+// sourceAddTakeBack is the log line a run writes when it starts taking its
+// remote back, which it cannot write before the hold of the lock that would
+// have recorded the source has failed. A test watching for it knows the
+// run is past that point without sleeping for it.
+func sourceAddTakeBack(id string) string { return "taking back the remote " + source.RemoteName(id) }
+
+// TestSourceAddTakesBackItsRemoteWhenTheLockIsHeld is the invariant
+// TestConcurrentSourceAdds asserts, forced instead of raced: a remote
+// exists in the account repo only because a settings entry names it, or
+// because an add is in flight for it. `source add` writes the remote under
+// one hold of the lock and the settings entry under a second, with the
+// fetch outside both; a run that loses the second hold has written a remote
+// nothing will ever name again, since `source fetch` and `source skills`
+// both answer from the settings. It must take the remote back, and to do
+// that it must wait for the lock rather than give up on it.
+//
+// Nothing here is raced or retried. The gate parks the run inside one git
+// of its fetch, which is after the remote is written and before the entry
+// is; the lock is taken from the test while the run is parked; and it is
+// held on past the point where the run said it is taking the remote back,
+// which the run cannot say before the second hold has failed. Both failure
+// paths into the take-back are covered: the fetch that fails and the
+// settings write that cannot be made.
+func TestSourceAddTakesBackItsRemoteWhenTheLockIsHeld(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name string
+		gate func(*testing.T, *harness) func() (reached, release func())
+		exit int
+	}{
+		// The fetch fails with the remote written: the run has nothing to
+		// record and must leave nothing behind.
+		{"the fetch fails", gateFailedFetch, 3},
+		// The fetch lands and the settings write loses the lock, which is
+		// the race TestConcurrentSourceAdds runs into on a busy machine.
+		{"the settings write loses the lock", gatePublish, 7},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			h := newHarness(t)
+			s := h.newSourceRepo("skills", true)
+			s.skill("skills/alpha", "alpha", "The first skill", nil)
+			s.commit("first version")
+			id := source.ID(s.url)
+
+			reached, release := tt.gate(t, h)()
+			p := h.start(sourceAddTakeBack(id), "--verbose", "source", "add", s.url)
+			reached() // the remote is written and the entry is not
+			unlock := holdLock(t, h)
+			release() // the run runs on into the hold it will lose
+			p.await() // it lost it and has started taking the remote back
+			// Holding the lock on past that point is what makes this test
+			// discriminate at all, and it is the one duration here: an
+			// acquisition that gives up is defined by a duration, so
+			// nothing but elapsed time tells it from one that waits. An
+			// earlier version that released the lock as soon as await
+			// returned passed against a take-back that gives up, because
+			// such a take-back still has 50 ms to try and an immediate
+			// release hands it the lock inside them. A tenth of
+			// takeBackWait is ten times that budget, so one that gives up
+			// has given up before the release, and it is a tenth of the
+			// bound, so one that waits still has nine tenths left. Do not
+			// shorten it to make the test quicker.
+			time.Sleep(takeBackWait / 10)
+			unlock()
+
+			out := p.wait()
+			equal(t, "exit", out.exit, tt.exit)
+			// The remote being gone is the invariant, and assertNoSource
+			// below is what proves it. This says which way it was lost when
+			// it is not, naming the acquisition that gave up rather than
+			// leaving a reader to work back from an orphaned ref.
+			if strings.Contains(out.stderr, "could not be taken back") {
+				t.Errorf("the take-back gave up on the lock instead of waiting for it:\n%s", out.stderr)
+			}
+			assertNoSource(t, h, id, out)
+		})
+	}
+}
+
+// TestSourceAddReportsTheRemoteItCouldNotTakeBack covers the one case the
+// bounded wait cannot answer: the lock stays held for longer than the run
+// may wait. The remote is then left behind, and a remote no source names is
+// the bug, so the run says so rather than exiting on the lost lock alone.
+// It keeps the exit code of what stopped it — a lost lock is still 7 — and
+// names the remote and the repair. The repair is then run, since a hint
+// that does not work is worse than none: adding the source again rewrites
+// the remote and writes the entry, which is the state this run failed to
+// reach.
+func TestSourceAddReportsTheRemoteItCouldNotTakeBack(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	s := h.newSourceRepo("skills", true)
+	s.skill("skills/alpha", "alpha", "The first skill", nil)
+	head := s.commit("first version")
+	id := source.ID(s.url)
+
+	reached, release := gatePublish(t, h)()
+	p := h.start(sourceAddTakeBack(id), "--json", "--verbose", "source", "add", s.url)
+	reached()
+	unlock := holdLock(t, h)
+	release()
+	p.await() // the settings write lost the lock; the take-back will lose it too
+
+	out := p.wait()
+	equal(t, "exit", out.exit, 7)
+	e := lastError(t, h.events(out.stdout))
+	equal(t, "error.code", e["code"], "locked")
+	contains(t, "error.message", e["message"].(string), source.RemoteName(id)+" was left in the account repo")
+	contains(t, "error.hint", e["hint"].(string), "agentx source add "+s.url)
+	contains(t, "error.hint", e["hint"].(string), "agentx source remove "+id)
+	contains(t, "the remote is still configured", h.accountGit("config", "--list", "--local"), "remote."+source.RemoteName(id)+".url")
+
+	// The hint is true: adding the source again finishes the job.
+	unlock()
+	equal(t, "add again", h.run("source", "add", s.url).exit, 0)
+	equal(t, "ref", h.accountGit("rev-parse", source.Ref(id)), head)
+	settings, err := home.LoadSettings(h.agentx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if i := settings.FindSource(s.url); i < 0 {
+		t.Errorf("the repaired add wrote no settings entry: %+v", settings.Sources)
+	}
+}
+
+// assertNoSource checks that nothing of a source is left on the machine:
+// no remote, no ref and no settings entry. A remote without an entry is
+// what `source add` may never leave behind.
+func assertNoSource(t *testing.T, h *harness, id string, out outcome) {
+	t.Helper()
+	if config := h.accountGit("config", "--list", "--local"); strings.Contains(config, source.RemoteName(id)) {
+		t.Errorf("the remote of the failed add is still configured:\n%s\nrun stderr:\n%s", config, out.stderr)
+	}
+	equal(t, "refs under refs/agentx", h.agentxRefs(), "")
+	settings, err := home.LoadSettings(h.agentx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	equal(t, "settings sources", len(settings.Sources), 0)
+}
+
+// TestSourceAddKeepsTheRefWhenTheBlobsDoNotArrive is the other half of what
+// a staged fetch is for. The commit reaches the account repo and its
+// SKILL.md blobs never do, so the fetch fails; the source ref must still
+// name the commit the last complete fetch left, or `source list` would
+// report a commit no listing ever succeeded at, `source skills` would exit
+// 5 and serve would drop the source from its search until the next
+// successful add.
+func TestSourceAddKeepsTheRefWhenTheBlobsDoNotArrive(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	s := h.newSourceRepo("skills", true) // a server that really filters
+	s.skill("skills/alpha", "alpha", "The first skill", nil)
+	first := s.commit("first version")
+	equal(t, "add", h.run("source", "add", s.url).exit, 0)
+	id := source.ID(s.url)
+	s.skill("skills/beta", "beta", "The second skill", nil)
+	s.commit("second version")
+
+	for _, tt := range []struct {
+		name string
+		stub func(*testing.T, *harness)
+		exit int
+	}{
+		// The batch is refused and so is the full re-fetch behind it.
+		{"the batch and the re-fetch fail", func(t *testing.T, h *harness) { failObjectFetch(t, h) }, 3},
+		// The batch is answered and brings nothing, which no server does;
+		// the blobs are checked before the ref moves, so it is caught here.
+		{"the batch brings nothing", dropObjectFetch, 5},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.stub(t, h)
+			equal(t, "exit", h.run("source", "add", s.url).exit, tt.exit)
+
+			// Nothing of the failed fetch is published, and nothing of it is
+			// left behind either.
+			equal(t, "ref", h.accountGit("rev-parse", source.Ref(id)), first)
+			equal(t, "refs under refs/agentx", h.agentxRefs(), source.Ref(id))
+
+			// Every reader still reads the source whole, at that commit.
+			out := h.run("--json", "source", "skills", s.url)
+			equal(t, "source skills exit", out.exit, 0)
+			src, skills := sourceEvents(t, h.events(out.stdout))
+			equal(t, "commit", src["commit"], first)
+			equal(t, "skills", len(skills), 1)
+			contains(t, "source list", h.run("source", "list").stdout, first[:7])
+		})
+	}
+}
+
+// TestSourceFetchReclaimsAStaleStagingRef covers what a fetch killed
+// between its two steps leaves behind. The staging ref is the one thing a
+// crash can leak; nothing reads it, the next fetch of the source overwrites
+// it and drops it, and a removal takes it with the source ref, so nothing
+// of a killed fetch outlives the source.
+func TestSourceFetchReclaimsAStaleStagingRef(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	s := h.newSourceRepo("skills", true)
+	s.skill("skills/alpha", "alpha", "The first skill", nil)
+	head := s.commit("first version")
+	equal(t, "add", h.run("source", "add", s.url).exit, 0)
+	id := source.ID(s.url)
+	stale := source.StagingRef(id)
+
+	// What a fetch killed after its first step leaves: a ref on a commit
+	// whose blobs may not be here.
+	h.accountGit("update-ref", stale, head)
+	out := h.run("--json", "source", "list")
+	equal(t, "exit", out.exit, 0)
+	contains(t, "source list", out.stdout, head)
+
+	equal(t, "fetch", h.run("source", "fetch", s.url).exit, 0)
+	equal(t, "refs after the fetch", h.agentxRefs(), source.Ref(id))
+
+	h.accountGit("update-ref", stale, head)
+	equal(t, "remove", h.run("source", "remove", s.url).exit, 0)
+	equal(t, "refs after the removal", h.agentxRefs(), "")
 }

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -68,6 +69,89 @@ func (h *harness) run(args ...string) outcome {
 	var stdout, stderr bytes.Buffer
 	exit := Run(context.Background(), args, h.env, strings.NewReader(""), &stdout, &stderr)
 	return outcome{exit: exit, stdout: stdout.String(), stderr: stderr.String()}
+}
+
+// runDeadline bounds a run started with start. It is longer than
+// serveDeadline because such a run may be deliberately waiting rather than
+// hanging: a take-back waits for the agentx lock for seconds on purpose.
+const runDeadline = 30 * time.Second
+
+// runProc is one command running in a goroutine, so that a test can act
+// while it is still going. Its stderr is watched for a line as the run
+// writes it, which is how a test reaches a point of a run that has no other
+// signal: await returns once the line is out, wait once Run returned.
+// Nothing here sleeps.
+type runProc struct {
+	t      *testing.T
+	done   chan struct{}
+	exit   int          // read only after done
+	stdout bytes.Buffer // read only after done
+	log    *logWatch
+}
+
+// logWatch is the stderr of a runProc: every write is kept, and the first
+// one that completes want closes hit.
+type logWatch struct {
+	mu   sync.Mutex
+	buf  bytes.Buffer
+	want string
+	hit  chan struct{}
+	seen bool
+}
+
+func (w *logWatch) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	n, err := w.buf.Write(p)
+	if !w.seen && w.want != "" && strings.Contains(w.buf.String(), w.want) {
+		w.seen = true
+		close(w.hit)
+	}
+	return n, err
+}
+
+func (w *logWatch) text() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.buf.String()
+}
+
+// start runs args against the harness home in a goroutine, watching stderr
+// for watch as the run writes it. Every start is waited for when the test
+// ends, so no run outlives it.
+func (h *harness) start(watch string, args ...string) *runProc {
+	h.t.Helper()
+	p := &runProc{t: h.t, done: make(chan struct{}), log: &logWatch{want: watch, hit: make(chan struct{})}}
+	go func() {
+		p.exit = Run(context.Background(), args, h.env, strings.NewReader(""), &p.stdout, p.log)
+		close(p.done)
+	}()
+	h.t.Cleanup(func() { p.wait() })
+	return p
+}
+
+// await blocks until the run wrote the watched line; a run that ended
+// without it fails the test, rather than leaving the test to time out.
+func (p *runProc) await() {
+	p.t.Helper()
+	select {
+	case <-p.log.hit:
+	case <-p.done:
+		p.t.Fatalf("the run ended without writing %q:\n%s", p.log.want, p.log.text())
+	case <-time.After(runDeadline):
+		p.t.Fatalf("no %q within %s:\n%s", p.log.want, runDeadline, p.log.text())
+	}
+}
+
+// wait returns the outcome once Run returned.
+func (p *runProc) wait() outcome {
+	p.t.Helper()
+	select {
+	case <-p.done:
+	case <-time.After(runDeadline):
+		p.t.Fatalf("the run did not end within %s:\n%s", runDeadline, p.log.text())
+	}
+	return outcome{exit: p.exit, stdout: p.stdout.String(), stderr: p.log.text()}
 }
 
 type jsonEvent map[string]any

@@ -196,6 +196,12 @@ func TestServeSearchIsEmptyWithoutSources(t *testing.T) {
 // TestServeReindexesWhenSourcesChange covers the change signal: a source
 // added, fetched again or removed while serve runs is a mutation of agentx
 // home, and the scan it schedules rebuilds the index.
+//
+// It reads a source that a command elsewhere is fetching, so what it sees
+// depends on when the rebuild lands inside that fetch. That it always sees
+// a whole source is not this test's to prove — it would only ever prove
+// that the timing did not bite today; TestSourceRefNeverShowsAnIncompleteFetch
+// drives the same window deliberately and proves it.
 func TestServeReindexesWhenSourcesChange(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
@@ -227,10 +233,22 @@ func TestServeReindexesWhenSourcesChange(t *testing.T) {
 		t.Errorf("results after the re-fetch = %q, want %q", got, want)
 	}
 
+	// A source fetch moves the ref and bumps the version file like an add,
+	// so the index follows it without the source being added again.
+	s.skill("hotfix", "hotfix", "Commit a hotfix", nil)
+	s.commit("third")
+	equal(t, "exit", h.run("source", "fetch", s.url).exit, 0)
+	p.send(`{"type":"refresh","request_id":"refetched"}`)
+	p.next("refresh_complete")
+	want = []string{s.url + " commit commit", s.url + " hotfix hotfix", s.url + " release release"}
+	if got := p.search("s3", "commit"); !reflect.DeepEqual(got, want) {
+		t.Errorf("results after the fetch = %q, want %q", got, want)
+	}
+
 	equal(t, "exit", h.run("source", "remove", s.url).exit, 0)
 	p.send(`{"type":"refresh","request_id":"removed"}`)
 	p.next("refresh_complete")
-	if got := p.search("s3", "commit"); len(got) != 0 {
+	if got := p.search("s4", "commit"); len(got) != 0 {
 		t.Errorf("results after the removal = %q", got)
 	}
 	equal(t, "exit", p.close(), 0)
@@ -274,4 +292,66 @@ func TestServePrintsSearchLines(t *testing.T) {
 	p.send(`{"type":"search","request_id":"s2","query":"deploy"}`)
 	p.line("search s2: 1 result")
 	equal(t, "exit", p.close(), 0)
+}
+
+// TestSourceRefNeverShowsAnIncompleteFetch drives the window a fetch used to
+// leave open. source.Fetch reaches the source over two fetches: the first
+// brings the commit and its trees without blobs, the second the SKILL.md
+// blobs in one batch. While the blob batch is held open here, every reader
+// of the account repo — the serve child rebuilding its source index, a
+// concurrent `source skills`, `source list` — must still see the commit the
+// last complete fetch left, never the new one with its blobs missing, which
+// lists no skill and warns.
+func TestSourceRefNeverShowsAnIncompleteFetch(t *testing.T) {
+	t.Parallel()
+	h := serveHarness(t)
+	arm := gateObjectFetch(t, h) // before serve starts: the runner reads PATH on every call
+	s := h.newSourceRepo("skills", true)
+	s.skill("commit", "commit", "Write a commit message", nil)
+	s.commit("first")
+	equal(t, "add", h.run("source", "add", s.url).exit, 0)
+	id := source.ID(s.url)
+	first := h.accountGit("rev-parse", source.Ref(id))
+
+	p := h.serve(t, "--json")
+	p.next("snapshot")
+	whole := []string{s.url + " commit commit"}
+	if got := p.search("s0", "commit"); !reflect.DeepEqual(got, whole) {
+		t.Fatalf("results before the fetch = %q, want %q", got, whole)
+	}
+
+	// A second commit, fetched with the blob batch held open.
+	s.skill("release", "release", "Cut a release commit", nil)
+	second := s.commit("second")
+	reached, release := arm()
+	done := make(chan outcome, 1)
+	go func() { done <- h.run("source", "add", s.url) }()
+	reached()
+
+	// Mid-fetch. The source ref still names the commit whose blobs are all
+	// here, so a rebuild of the index now lists that commit's skills whole.
+	equal(t, "ref during the fetch", h.accountGit("rev-parse", source.Ref(id)), first)
+	p.send(`{"type":"refresh","request_id":"mid"}`)
+	p.next("refresh_complete")
+	if got := p.search("s1", "commit"); !reflect.DeepEqual(got, whole) {
+		t.Errorf("results during the fetch = %q, want %q", got, whole)
+	}
+	out := h.run("--json", "source", "skills", s.url)
+	equal(t, "source skills during the fetch", out.exit, 0)
+	src, skills := sourceEvents(t, h.events(out.stdout))
+	equal(t, "commit during the fetch", src["commit"], first)
+	equal(t, "skills during the fetch", len(skills), 1)
+
+	// The fetch finishes, and only then does the ref move.
+	release()
+	equal(t, "exit", (<-done).exit, 0)
+	equal(t, "ref after the fetch", h.accountGit("rev-parse", source.Ref(id)), second)
+	p.send(`{"type":"refresh","request_id":"after"}`)
+	p.next("refresh_complete")
+	want := []string{s.url + " commit commit", s.url + " release release"}
+	if got := p.search("s2", "commit"); !reflect.DeepEqual(got, want) {
+		t.Errorf("results after the fetch = %q, want %q", got, want)
+	}
+	equal(t, "exit", p.close(), 0)
+	equal(t, "stderr", p.stderr.String(), "")
 }

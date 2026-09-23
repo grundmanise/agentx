@@ -62,6 +62,33 @@ func listDir(t *testing.T, dir string) string {
 	return strings.Join(names, " ")
 }
 
+// holdLock takes the exclusive agentx lock from the test itself, the way
+// another command holds it: the file descriptor is the test's own, so a
+// command under test contends with it exactly as it would with a second
+// process. The returned release frees it, and is called again when the test
+// ends whether or not the test called it.
+func holdLock(t *testing.T, h *harness) (release func()) {
+	t.Helper()
+	f, err := os.OpenFile(filepath.Join(h.agentx, "lock"), os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatal(err)
+	}
+	var once sync.Once
+	release = func() {
+		once.Do(func() {
+			if err := syscall.Flock(int(f.Fd()), syscall.LOCK_UN); err != nil {
+				t.Error(err)
+			}
+			f.Close()
+		})
+	}
+	t.Cleanup(release)
+	return release
+}
+
 func TestHeldLockExits7(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)

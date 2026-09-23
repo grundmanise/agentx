@@ -42,7 +42,7 @@ type sourceSkillEvent struct {
 func newSourceCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "source",
-		Short:       "Add, list and remove the sources skills are installed from",
+		Short:       "Add, fetch, list and remove the sources skills are installed from",
 		Annotations: map[string]string{annotationGroup: "true"},
 		Args:        cobra.NoArgs,
 		RunE:        needSubcommand(inv, "no source command given", "run 'agentx source --help' to list commands"),
@@ -56,6 +56,7 @@ func newSourceCommand(inv *invocation) *cobra.Command {
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error { return inv.sourceAdd(cmd.Context(), args[0]) },
 	})
+	cmd.AddCommand(newSourceFetchCommand(inv))
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List the sources of this machine",
@@ -90,6 +91,40 @@ func (inv *invocation) parseSource(arg string) (source.Source, error) {
 	return src, nil
 }
 
+// takeBackWait bounds how long an add waits for the lock to take back the
+// remote it wrote. Waiting at all is not optional: the run is undoing a
+// write of its own, and giving up would leave a remote no source names.
+// Waiting forever is not an option either, since the command is handed
+// context.Background() and a lost lock would become a hang. Five seconds is
+// generous for what it waits on: every competing holder is another agentx
+// mutation, each holding the lock for one git config write or one settings
+// write, so the bound covers a long queue of them and still ends the run.
+const takeBackWait = 5 * time.Second
+
+// leftBehind is the refusal of a run that wrote the remote of a source,
+// could not record the source and could not take the remote back either. A
+// remote the settings do not name is not a source: `source fetch` and
+// `source skills` both answer from the settings, so nothing would ever
+// name it again. The run keeps the exit code of whatever stopped it — a
+// lost lock is still exit 7 — and says what stayed behind and how to clear
+// it: adding the source again rewrites the remote and records it, which is
+// the state this run failed to reach, and removing it by id takes it away.
+func leftBehind(cause error, src source.Source) error {
+	f := &failure{status: exitInternal, cause: cause}
+	var already *failure
+	switch {
+	case errors.As(cause, &already):
+		f.status = already.status
+	case errors.Is(cause, home.ErrLocked):
+		f.status = exitLocked
+	case errors.Is(cause, home.ErrRecovery):
+		f.status = exitRefused
+	}
+	f.message = cause.Error() + "; the remote " + source.RemoteName(src.ID()) + " was left in the account repo and no source names it"
+	f.hint = "run 'agentx source add " + src.URL + "' to add the source and take the remote with it, or 'agentx source remove " + src.ID() + "' to clear it"
+	return f
+}
+
 // sourceAdd fetches the source and records it in the settings.
 func (inv *invocation) sourceAdd(ctx context.Context, arg string) error {
 	src, err := inv.parseSource(arg)
@@ -105,10 +140,46 @@ func (inv *invocation) sourceAdd(ctx context.Context, arg string) error {
 	if err != nil {
 		return accountRepoFailure(err)
 	}
+	remote := source.RemoteName(src.ID())
+	// revert takes back the remote this add is about to write, for a run
+	// that gets no further: a source that was not there before goes
+	// altogether, ref and all, and one that was goes back to the pin the
+	// settings still hold, which is what they will still say when the next
+	// command reads them. It writes the git config of the account repo, so
+	// every caller holds the lock while it runs.
+	revert := func() error {
+		if existing < 0 { // nothing of a source that was never added is kept
+			return source.Remove(ctx, inv.git, gitDir, src.ID())
+		} // else the remote goes back to the pin the settings still hold
+		return source.Configure(ctx, inv.git, gitDir, source.Source{URL: src.URL, Ref: before.Sources[existing].Pin})
+	}
+	// left answers for a take-back: cause, the failure that stopped the
+	// run, when the remote went back, and the refusal that names what stayed
+	// behind when it did not.
+	left := func(cause, err error) error {
+		if err == nil {
+			return cause
+		}
+		inv.out.debugf("the remote %s could not be taken back: %v", remote, err)
+		return leftBehind(cause, src)
+	}
+	// takeBack reverts under a lock this run is not holding, for a failure
+	// that leaves the remote written and nothing naming it. It waits for
+	// the lock rather than giving up on it: the run is cleaning up after
+	// itself, and what it has to win is the very lock whose loss can be
+	// what made it fail. The wait is bounded because the caller hands this
+	// command context.Background().
+	takeBack := func(cause error) error {
+		inv.out.debugf("taking back the remote %s of %s: %v", remote, src.URL, cause)
+		waiting, cancel := context.WithTimeout(ctx, takeBackWait)
+		defer cancel()
+		return left(cause, home.MutateQuietWaiting(waiting, inv.dirs.Home, revert))
+	}
 	// The remote is written under the lock: git config does not wait for its
 	// own lock file, it fails, so two adds at once would otherwise leave a
 	// remote half written. The fetch that follows runs outside the lock, so
-	// that the network never blocks a scan.
+	// that the network never blocks a scan. This hold may give up: a run
+	// that loses it has written nothing and has nothing to take back.
 	if err := home.MutateQuiet(inv.dirs.Home, func() error {
 		return source.Configure(ctx, inv.git, gitDir, src)
 	}); err != nil {
@@ -116,43 +187,69 @@ func (inv *invocation) sourceAdd(ctx context.Context, arg string) error {
 	}
 	listing, err := source.Fetch(ctx, inv.git, gitDir, src)
 	if err != nil {
-		_ = home.MutateQuiet(inv.dirs.Home, func() error {
-			if existing < 0 { // nothing of a source that was never added is kept
-				return source.Remove(ctx, inv.git, gitDir, src.ID())
-			} // else the remote goes back to the pin the settings still hold
-			return source.Configure(ctx, inv.git, gitDir, source.Source{URL: src.URL, Ref: before.Sources[existing].Pin})
-		})
-		return sourceFailure(err, src)
+		return takeBack(sourceFailure(err, src))
 	}
 	entry := home.Source{URL: src.URL, Pin: src.Ref, LastFetched: time.Now().UTC().Format(time.RFC3339)}
-	added := true
+	// The remote went in under an earlier hold of the lock. Left behind by
+	// a run that gets no further, it is a remote for a source the machine
+	// does not know about, and since `source fetch` and `source skills`
+	// both answer from the settings, nothing would ever name it again or
+	// clean it up. A refusal cleans up after itself, as a failed fetch
+	// already does.
+	//
+	// settled says the body below ran, so what becomes of the remote is
+	// decided already: either the entry is written and the remote belongs
+	// to it, or the body took the remote back under the lock it was holding
+	// anyway. Taking it back there rather than afterwards is what makes the
+	// cleanup free, since the lock this run has is the lock it would
+	// otherwise have to wait for.
+	//
+	// Only a run whose body never ran — the lock was never won, or an
+	// earlier mutation's recovery refused first — has a remote left to take
+	// back out here, and that one has to wait for the lock to do it.
+	added, settled := true, false
 	err = home.Mutate(inv.dirs.Home, func() error {
+		settled = true
 		s, err := inv.loadSettings()
 		if err != nil {
-			return err
+			return left(err, revert())
 		}
 		if i := s.FindSource(src.URL); i >= 0 {
 			added = false
 			entry.Alias = s.Sources[i].Alias // unused so far; carried, never dropped
 		}
 		s.SetSource(entry)
-		return home.SaveSettings(inv.dirs.Home, s)
+		if err := home.SaveSettings(inv.dirs.Home, s); err != nil {
+			return left(err, revert())
+		}
+		return nil
 	})
 	if err != nil {
+		if !settled {
+			return takeBack(err)
+		}
 		return err
 	}
 	n := len(listing.Skills)
-	moved := ""
-	if listing.Previous != "" && listing.Previous != listing.Commit {
-		moved = listing.Previous
-	}
 	inv.out.emit(sourceEvent{event: newEvent("source"), ID: src.ID(), URL: src.URL, Alias: entry.Alias, Pin: src.Ref, Subpath: src.Subpath,
-		LastFetched: entry.LastFetched, Commit: listing.Commit, Previous: moved, Skills: &n})
+		LastFetched: entry.LastFetched, Commit: listing.Commit, Previous: movedFrom(listing), Skills: &n})
 	inv.out.done(inv.addLine(added, src, listing) + ": " + inv.out.paint(noteStyle, plural(n, "skill")) + under(inv.out, src.Subpath))
 	return nil
 }
 
-// addLine is the confirmation of source add. A first add says what was
+// movedFrom is the previous_commit an event carries: what the source ref
+// held before this fetch, and nothing when the fetch left it where it was
+// or when the ref held nothing before, so that a caller can tell a real
+// change from a no-op by the field's presence alone.
+func movedFrom(listing source.Listing) string {
+	if listing.Previous == "" || listing.Previous == listing.Commit {
+		return ""
+	}
+	return listing.Previous
+}
+
+// addLine is the confirmation of source add, and of every source of a
+// source fetch, which is a repeat by definition. A first add says what was
 // added; a repeat says what moved, since that is the only thing the command
 // can tell the reader that they did not already know.
 func (inv *invocation) addLine(added bool, src source.Source, listing source.Listing) string {
@@ -215,7 +312,7 @@ func (inv *invocation) sourceSkills(ctx context.Context, arg string) error {
 		return err
 	}
 	if src.Ref != "" && src.Ref != entry.Pin {
-		return fail(exitUsage, fmt.Sprintf("%s is pinned to %q, not %q", src.URL, entry.Pin, src.Ref), "run 'agentx source add "+src.URL+"#"+src.Ref+"' to change the pin")
+		return pinMismatch(src, entry)
 	}
 	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
@@ -341,6 +438,15 @@ func (inv *invocation) findSource(arg string) (source.Source, home.Source, error
 // that remove can still reach what the account repo holds under its id.
 var errNotAdded = errors.New("not added")
 
+// pinMismatch refuses an argument whose #ref is not the pin the settings
+// hold. Listing and fetching both answer for the stored pin, so naming
+// another ref asks for something the command does not do; changing a pin
+// is what source add is for.
+func pinMismatch(src source.Source, entry home.Source) error {
+	return fail(exitUsage, fmt.Sprintf("%s is pinned to %q, not %q", src.URL, entry.Pin, src.Ref),
+		"run 'agentx source add "+src.URL+"#"+src.Ref+"' to change the pin")
+}
+
 // sourceFailure maps a source package error to the exit code table.
 func sourceFailure(err error, src source.Source) error {
 	msg := err.Error()
@@ -352,7 +458,11 @@ func sourceFailure(err error, src source.Source) error {
 		}
 		return fail(exitNotFound, what+": "+trimGit(msg), "pin a branch, tag or commit that exists in the source")
 	case errors.Is(err, source.ErrIncomplete):
-		return fail(exitNotFound, fmt.Sprintf("%s: %s", src.URL, msg), "run 'agentx source add "+src.URL+"' to fetch it again")
+		// source fetch, not source add: the source is already on this
+		// machine with its pin, and fetching it again is what fills in what
+		// is missing. An add would also rewrite the pin to whatever this
+		// argument happened to say.
+		return fail(exitNotFound, fmt.Sprintf("%s: %s", src.URL, msg), "run 'agentx source fetch "+src.URL+"' to fetch it again")
 	case errors.Is(err, source.ErrNoSubpath):
 		return fail(exitNotFound, fmt.Sprintf("%s: %s", src.URL, msg), "name a directory of the repository")
 	case errors.Is(err, source.ErrNotFetched):
