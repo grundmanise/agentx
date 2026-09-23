@@ -448,11 +448,12 @@ func TestUnreadableLineageLeavesTheRefusalOfAnId(t *testing.T) {
 	equal(t, "hint", e["hint"], "run 'agentx source list' to see the sources")
 }
 
-// TestPlacementEventsCarryTheDrift places a skill and takes it out of one
-// configuration, before its source is removed and after. Every command
-// that reports on a library skill reports the same object skill list does,
-// so each event carries the drift the skill is in, and none when it is in
-// none, with the coordinates as they were.
+// TestPlacementEventsCarryTheDrift places a skill, takes it out of one
+// configuration and enables that configuration with the whole library,
+// before its source is removed and after. Every command that reports on a
+// library skill reports the same object skill list does, so each event
+// carries the drift the skill is in, and none when it is in none, with the
+// coordinates as they were.
 func TestPlacementEventsCarryTheDrift(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -470,6 +471,15 @@ func TestPlacementEventsCarryTheDrift(t *testing.T) {
 			for _, field := range coordinates {
 				equal(t, what+" "+field, ev[field], before[field])
 			}
+		}
+		// Enabling a configuration with --place-all reports every library
+		// skill, alpha among them, which is already placed there and so is
+		// left as it is and reported all the same.
+		h.mustRun("config", "disable", "cursor")
+		ev := h.librarySkill(h.mustRun("--json", "config", "enable", "cursor", "--place-all").stdout, "alpha")
+		equal(t, "config enable --place-all drift", drift(ev), want)
+		for _, field := range coordinates {
+			equal(t, "config enable --place-all "+field, ev[field], before[field])
 		}
 	}
 	report("")
