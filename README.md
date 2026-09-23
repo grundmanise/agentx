@@ -99,8 +99,8 @@ Other agents support skills management only at this time.
 | `check` | `fmt-check lint tidy-check build test` |
 
 `golangci-lint` needs no install: its version is pinned in `apps/cli/.golangci-lint-version`, and
-`make lint` builds that release into the build cache on first use through `go run`. CI installs the
-same version.
+`make lint` builds that release into the build cache on first use through `go run`, locally and in
+CI alike.
 
 Commands are [cobra](https://github.com/spf13/cobra) commands; the tree is built in
 `apps/cli/internal/cli/run.go`, and every test drives `cli.Run` against a temporary home.

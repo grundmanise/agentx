@@ -1,7 +1,7 @@
-# Local checks, identical to .github/workflows/ci.yml. Run `make check` before pushing.
+# The checks CI runs: .github/workflows/ci.yml calls these targets. Run `make check` before pushing.
 
 CLI = apps/cli
-# Pinned in one place; CI reads the same file through the golangci-lint action.
+# Pinned in one place.
 GOLANGCI_LINT_VERSION = $(shell cat $(CLI)/.golangci-lint-version)
 # Static on Linux; cgo on macOS, where the serve watcher uses FSEvents.
 CGO_ENABLED ?= $(if $(filter Darwin,$(shell uname -s)),1,0)
