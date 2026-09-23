@@ -37,7 +37,7 @@ func newScanCommand(inv *invocation) *cobra.Command {
 					return err
 				}
 			}
-			snap, err := inv.scan(cmd.Context(), lockWait, project, handshake)
+			snap, err := inv.snapshot(cmd.Context(), lockWait, project, handshake)
 			if err != nil {
 				return err
 			}
@@ -69,7 +69,27 @@ const lockWait = time.Second
 // the exclusive lock. An unfinished mutation journal found under the shared
 // lock is recovered under the exclusive one, and the reads start over: no
 // inventory is composed from half-applied state.
+//
+// Its snapshot lists no library: this is the rescan a command runs to see
+// what its own change did, and each of those reads the lineage it reports
+// on itself, once. The snapshot a scan or serve emits is snapshot's.
 func (inv *invocation) scan(ctx context.Context, wait time.Duration, project string, handshake bool) (scan.Snapshot, error) {
+	return inv.inventory(ctx, wait, project, handshake, false)
+}
+
+// snapshot is the scan whose snapshot is emitted, by agentx scan and by
+// every scan of agentx serve: the scan above, with the library listed as
+// agentx skill list lists it. The lineage it takes is read under the same
+// shared lock as the settings and the filesystem, in one for-each-ref, so a
+// snapshot never pairs a library directory with lineage from either side
+// of a mutation; and a snapshot carries drift, which the desktop app takes
+// from the snapshot alone.
+func (inv *invocation) snapshot(ctx context.Context, wait time.Duration, project string, handshake bool) (scan.Snapshot, error) {
+	return inv.inventory(ctx, wait, project, handshake, true)
+}
+
+// inventory is scan and snapshot, the library listed when library says so.
+func (inv *invocation) inventory(ctx context.Context, wait time.Duration, project string, handshake, library bool) (scan.Snapshot, error) {
 	timeout := handshakeTimeout
 	if v := inv.env["AGENTX_HANDSHAKE_TIMEOUT"]; handshake && v != "" {
 		d, err := time.ParseDuration(v)
@@ -99,6 +119,7 @@ func (inv *invocation) scan(ctx context.Context, wait time.Duration, project str
 		defer cancel()
 	}
 	var sc *scan.Scan
+	var listing skillContext // what the library entries are built from, read with the rest
 	for sc == nil {
 		var journals []string
 		err = home.ReadLocked(lockCtx, inv.dirs.Home, func() error {
@@ -122,8 +143,14 @@ func (inv *invocation) scan(ctx context.Context, wait time.Duration, project str
 				Project:    project,
 				Disabled:   s.DisabledConfigurations,
 				CopyMode:   copyMode,
+				Library:    library,
 			})
-			return nil
+			if !library {
+				return nil
+			}
+			records, err := inv.lineageRecords(ctx)
+			listing = skillContext{records: records, modes: copyMode, sources: sourceURLs(s)}
+			return err
 		})
 		if err == nil && len(journals) > 0 {
 			inv.out.debugf("recovering %s", strings.Join(journals, ", "))
@@ -137,6 +164,9 @@ func (inv *invocation) scan(ctx context.Context, wait time.Duration, project str
 		sc.Handshake(ctx, scan.HandshakeOptions{Env: inv.env, Timeout: timeout, Version: cliVersion, Debug: inv.out.debugf})
 	}
 	snap, fresh := sc.Snapshot()
+	for _, lib := range sc.Library() {
+		snap.Library = append(snap.Library, listing.librarySkillEventFor(inv, snap, lib, nil).LibraryEntry)
+	}
 	if len(fresh) > 0 {
 		if err := home.SaveHandshakes(inv.dirs.Home, inv.refs(ctx), fresh); err != nil {
 			return scan.Snapshot{}, err

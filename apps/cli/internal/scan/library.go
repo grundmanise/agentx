@@ -23,6 +23,14 @@ type LibrarySkill struct {
 // install included, is not a skill.
 func ReadLibrary(dir string) ([]LibrarySkill, []string) {
 	s := newScanner()
+	skills := s.librarySkills(dir)
+	return skills, s.sortedWarnings()
+}
+
+// librarySkills lists the skills of the library at dir, sorted by name,
+// through this scanner, so that a directory it listed already, as a scan
+// lists the library for every client that reads it, is not read again.
+func (s *scanner) librarySkills(dir string) []LibrarySkill {
 	var skills []LibrarySkill
 	for _, p := range s.skillsIn(dir) {
 		skills = append(skills, LibrarySkill{
@@ -33,7 +41,7 @@ func ReadLibrary(dir string) ([]LibrarySkill, []string) {
 		})
 	}
 	sort.Slice(skills, func(i, j int) bool { return skills[i].Name < skills[j].Name })
-	return skills, s.sortedWarnings()
+	return skills
 }
 
 // ContentHashAt is the content hash of the skill directory at dir, read the

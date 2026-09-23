@@ -72,6 +72,10 @@ A skill whose upstream and base version agentx knows, so it can be updated and r
 A managed skill whose subpath no longer exists in its source. Kept as it is, never updated, shown with this state.
 _Avoid_: orphaned, dead
 
+**Source-removed skill**:
+A managed skill whose source is no longer added on this machine: the canonical URL its lineage records names no source in machine settings. Kept as it is, coordinates and placements included, and shown with this state until the source is added again. Derived on every read, never recorded.
+_Avoid_: orphaned, detached
+
 **Unmanaged skill**:
 A skill found on disk whose upstream agentx cannot determine. Inventoried, never updated or reverted.
 

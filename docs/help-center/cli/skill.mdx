@@ -20,7 +20,12 @@ agentx skill add anthropics/skills --skill pdf
   gemini-cli   library  ~/.agents/skills/pdf
 ```
 
-If the source is not on this machine yet, `skill add` adds it first, as [`agentx source add`](/cli/source) would, and the source stays added even if the install then fails. Name the source by its URL for this: a source id only works for a source you already added.
+If the source is not on this machine yet, `skill add` adds it first, as [`agentx source add`](/cli/source) would, and the source stays added even if the install then fails. Name the source by its URL for this: a source id only works for a source you already added. If you removed the source and a skill installed from it is still in your library, installing by its id tells you the command that adds it again:
+
+```text
+error: no source with id 1c9d0b7e4a2f6d38: https://github.com/anthropics/skills was removed, and the skills installed from it still name it
+hint: run 'agentx source add https://github.com/anthropics/skills' to add it again
+```
 
 A source you already added is not fetched again. The install reads what that source last fetched, so it never surprises you with a version you have not seen, and the result says when that fetch was. Add `--fetch` to fetch the source again first, or run `agentx source fetch`:
 
@@ -227,9 +232,10 @@ agentx skill list
 ```
 
 ```text
-2 skills
-  pdf   managed    current  https://github.com/anthropics/skills/skills/pdf  4 placements
-  notes unmanaged  -        (none)                                           1 placement
+3 skills
+  docx   managed    modified, source removed  https://github.com/me/skills/docx                1 placement
+  pdf    managed    current                   https://github.com/anthropics/skills/skills/pdf  4 placements
+  notes  unmanaged  -                         (none)                                           1 placement
 ```
 
 Each row shows the skill, what agentx knows about it, how it stands against the version it was installed at, where it came from and how many placements it has.
@@ -238,6 +244,19 @@ Each row shows the skill, what agentx knows about it, how it stands against the 
 - `fork`: a skill of your own in the account repo.
 - `unmanaged`: a directory in the library agentx did not install. It is inventoried and otherwise left alone.
 - `current` or `modified`: whether the directory still holds the version it was installed at.
+- `source removed`: the source the skill came from is no longer added on this machine. The skill keeps working, stays where it is and keeps its record of where it came from. Add the source again to clear it: see below.
+
+A skill can be in more than one state at once, so the row names each of them: `modified, source removed` is a skill you edited whose source you then removed.
+
+### Bring back a removed source
+
+A managed skill whose source you removed shows `source removed` until you add that source again:
+
+```sh
+agentx source add https://github.com/me/skills
+```
+
+That clears the state and changes nothing else: the skill, its record and its placements stay exactly as they were. It works with any pin, since a source is identified by its URL. Installing another skill from the source by its URL adds the source again too.
 
 ## Script it
 
@@ -256,6 +275,14 @@ agentx --json skill list
 
 The event carries two content hashes, and each name means one thing everywhere agentx uses it: `base_hash` is the version the skill was installed at, and `content_hash` is what the library directory holds now. `state` is `current` while the two agree.
 
+`drift` lists every other way a managed skill has drifted, beside its `state`, and is absent when there is none. Today its one value is `source removed`:
+
+```json
+{"type":"library_skill","schema_version":1,"name":"docx","kind":"managed","source":"https://github.com/me/skills","subpath":"docx","upstream_commit":"8b1e0f4a...","base_hash":"5e4d3c2b...","content_hash":"0f9e8d7c...","state":"modified","drift":["source removed"],"placements":[...]}
+```
+
+Read `drift` as a list: more values will join it, and a skill can be in several at once. The snapshot of [`agentx scan`](/cli/scan) and [`agentx serve`](/cli/serve) lists every library skill the same way, under `library`.
+
 ## Where it is recorded
 
 Every install writes one commit per skill in the account repo in agentx home: the version's files, the source it came from, the last upstream commit that changed the skill and its content hash. That commit is the same on every machine that installs the same version, however recently each one fetched the source, so your machines agree on what "the version you have" means without sending anything anywhere. A skill installed on its own and the same skill installed as part of a bulk install get the same commit.
@@ -264,7 +291,7 @@ Every install writes one commit per skill in the account repo in agentx home: th
 
 - `1`: the command line names no skill to install, the flags contradict each other (`--all` with `--skill`, `--except` without `--all`, or `--except` leaving nothing), it names the source with another branch or tag than its pin, or `skill place` was given no `--to`.
 - `3`: the source, or the files of the skill, could not be fetched.
-- `5`: a source id names no source on this machine, the source did not serve a skill's files, the path or a skill named by `--skill` or `--except` does not exist in the source, or `--to` or `--from` names a configuration that is not detected. For `skill place` and `skill remove`, also a name the library does not hold as a skill.
+- `5`: a source id names no source on this machine (for a source you removed, the hint names the `agentx source add` command that brings it back), the source did not serve a skill's files, the path or a skill named by `--skill` or `--except` does not exist in the source, or `--to` or `--from` names a configuration that is not detected. For `skill place` and `skill remove`, also a name the library does not hold as a skill.
 - `6`: the library already holds a different skill under that name, the name is already managed at another version, the skill's name cannot be both a directory and a git branch, the skill's directory in the source is not one agentx can record, the skill holds a file whose path would put it outside the skill's directory, agentx cannot use your library directory, or an interrupted change has to be resolved before anything else can run. The message names what to restore; if you would rather keep what is there, move the named file in `~/.agentx/mutations` aside. For `skill remove`, it is also `--from` naming a client that reads the library directly, and removing a name that is a fork. In a run of several skills, `6` is also the code when the skills that were skipped disagree about why: a run whose failures all have one cause exits with that cause, so a batch that skipped two skills the source did not serve exits `5`.
 - `7`: another agentx command is running. Retry when it finishes.
 - `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.

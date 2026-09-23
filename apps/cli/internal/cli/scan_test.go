@@ -732,11 +732,52 @@ func TestScanSpawnBudget(t *testing.T) {
 	for _, s := range snap["skills"].([]any) {
 		equal(t, "occurrences per skill", len(s.(map[string]any)["occurrences"].([]any)), 4) // claude-code, codex, cursor, gemini-cli
 	}
-	// The startup gate runs `git --version` once; the scan itself spawns nothing.
+	// The startup gate runs `git --version` once; the scan itself spawns
+	// nothing, this machine having no account repo to read lineage from.
 	b, _ := os.ReadFile(counter)
 	if got := strings.TrimSpace(string(b)); got != "--version" {
 		t.Errorf("git spawned with:\n%s\nwant exactly one --version", b)
 	}
+}
+
+// TestScanListsTheLibrary is the library in the snapshot: every skill of
+// it as skill list lists it, lineage, state and placements alike, since the
+// snapshot is what the desktop app shows and a one-shot listing may not
+// tell a script anything else. The lineage costs the scan one for-each-ref
+// after the check of the account repo, however many skills the library
+// holds.
+func TestScanListsTheLibrary(t *testing.T) {
+	t.Parallel()
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--skill", "beta")
+	byHand := filepath.Join(h.library, "mine")
+	if err := os.MkdirAll(byHand, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(byHand, "SKILL.md"), skill("mine", "made here"))
+	var listed []any
+	for _, e := range h.eventsOfType(h.mustRun("--json", "skill", "list").stdout, "library_skill") {
+		delete(e, "type")
+		delete(e, "schema_version")
+		listed = append(listed, map[string]any(e))
+	}
+
+	calls := countingGit(t, h)
+	snap := h.snapshot(t)
+	if got := snap["library"].([]any); !reflect.DeepEqual(got, listed) {
+		t.Errorf("the snapshot's library differs from skill list:\nsnapshot:   %v\nskill list: %v", got, listed)
+	}
+	refs := 0
+	for _, call := range calls() {
+		switch {
+		case strings.Contains(call, "for-each-ref"):
+			refs++
+		case strings.Contains(call, "--version"), strings.Contains(call, "rev-parse --is-bare-repository"):
+		default:
+			t.Errorf("scan ran git %s", call)
+		}
+	}
+	equal(t, "for-each-ref calls", refs, 1)
 }
 
 // secrets lists every distinctive secret value a fixture's config files hold,

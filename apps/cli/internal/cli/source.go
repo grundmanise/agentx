@@ -12,6 +12,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/interrupt"
+	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
@@ -330,7 +331,7 @@ func (inv *invocation) sourceList(ctx context.Context) error {
 // sourceSkills lists the skills of a fetched source under the subpath of
 // the argument, from the account repo alone.
 func (inv *invocation) sourceSkills(ctx context.Context, arg string) error {
-	src, entry, err := inv.findSource(arg)
+	src, entry, err := inv.findSource(ctx, arg)
 	if err != nil {
 		return err
 	}
@@ -417,7 +418,7 @@ func (inv *invocation) sourceRemove(ctx context.Context, arg string) error {
 // that id, since an add cut short before its settings write leaves a remote
 // and a ref that only remove can clean up.
 func (inv *invocation) sourceToRemove(ctx context.Context, arg string) (id, url string, err error) {
-	src, entry, findErr := inv.findSource(arg)
+	src, entry, findErr := inv.findSource(ctx, arg)
 	if findErr == nil {
 		return source.ID(entry.URL), entry.URL, nil
 	}
@@ -442,7 +443,7 @@ func (inv *invocation) sourceToRemove(ctx context.Context, arg string) (id, url 
 // findSource resolves a source id or URL to its settings entry. An id must
 // match an entry; a URL is parsed and may carry a subpath. Neither being
 // known is exit 5.
-func (inv *invocation) findSource(arg string) (source.Source, home.Source, error) {
+func (inv *invocation) findSource(ctx context.Context, arg string) (source.Source, home.Source, error) {
 	s, err := inv.loadSettings()
 	if err != nil {
 		return source.Source{}, home.Source{}, err
@@ -453,7 +454,7 @@ func (inv *invocation) findSource(arg string) (source.Source, home.Source, error
 				return source.Source{URL: entry.URL}, entry, nil
 			}
 		}
-		return source.Source{}, home.Source{}, fail(exitNotFound, "no source with id "+arg, "run 'agentx source list' to see the sources").(*failure).wrap(errNotAdded)
+		return source.Source{}, home.Source{}, inv.unknownID(ctx, arg)
 	}
 	src, err := inv.parseSource(arg)
 	if err != nil {
@@ -468,6 +469,40 @@ func (inv *invocation) findSource(arg string) (source.Source, home.Source, error
 // errNotAdded marks the refusal of a source that has no settings entry, so
 // that remove can still reach what the account repo holds under its id.
 var errNotAdded = errors.New("not added")
+
+// unknownID refuses an id no source entry of the settings has. An id is a
+// hash, so it names no URL that could be fetched, and the hint is to list
+// the sources, with one exception: a source this machine removed while a
+// managed skill still records it. Its URL is in that skill's lineage, which
+// knows the id too, so the refusal names the one command that brings the
+// source back rather than a listing that no longer shows it. The lineage is
+// read on this path alone, once, and a repo that cannot be read leaves the
+// refusal as it would be without one: the answer is exit 5 either way, and
+// the account repo is not what the command was asked about.
+func (inv *invocation) unknownID(ctx context.Context, id string) error {
+	if url := inv.removedSource(ctx, id); url != "" {
+		return fail(exitNotFound, "no source with id "+id+": "+url+" was removed, and the skills installed from it still name it",
+			"run 'agentx source add "+sourceAddArg(url, "")+"' to add it again").(*failure).wrap(errNotAdded)
+	}
+	return fail(exitNotFound, "no source with id "+id, "run 'agentx source list' to see the sources").(*failure).wrap(errNotAdded)
+}
+
+// removedSource is the canonical URL a managed skill's lineage records for
+// the source id, or "" when none does. The id is the hash of the URL, so
+// every skill that records it records that one URL.
+func (inv *invocation) removedSource(ctx context.Context, id string) string {
+	records, err := inv.lineageRecords(ctx)
+	if err != nil {
+		inv.out.debugf("reading the lineage for source %s: %v", id, err)
+		return ""
+	}
+	for _, rec := range records {
+		if rec.Kind == lineage.KindManaged && rec.HasImport && source.ID(rec.Import.Source) == id {
+			return rec.Import.Source
+		}
+	}
+	return ""
+}
 
 // pinMismatch refuses an argument whose #ref is not the pin the settings
 // hold. Listing and fetching both answer for the stored pin, so naming

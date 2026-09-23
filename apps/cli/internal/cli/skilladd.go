@@ -84,7 +84,7 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 	if err := sel.check(); err != nil {
 		return err
 	}
-	src, entry, err := inv.findSource(arg)
+	src, entry, err := inv.findSource(ctx, arg)
 	add := false
 	switch {
 	case err == nil:
@@ -1216,6 +1216,7 @@ func (inv *invocation) reportInstalled(ctx context.Context, b *batch, dones []*i
 	if err != nil {
 		modes = map[string][]string{}
 	}
+	sources := sourceURLs(s)
 	// The library is read once for the whole run. Reading it content-hashes
 	// every directory it holds, so reading it per installed skill costs a
 	// batch of n skills n hashes of the whole library: a run of forty was
@@ -1228,7 +1229,7 @@ func (inv *invocation) reportInstalled(ctx context.Context, b *batch, dones []*i
 		}
 		places := inv.placements(snap, lib, modes)
 		rec := lineage.Record{Name: done.v.name, Kind: lineage.KindManaged, Ref: lineage.ManagedRef(done.v.name), Commit: done.v.commit, Import: done.v.imp, HasImport: true}
-		ev := skillFromLibrary(lib, rec, true, filterPlacements(places, targetIDs(done.placed)))
+		ev := skillFromLibrary(lib, rec, true, sources, filterPlacements(places, targetIDs(done.placed)))
 		inv.out.emit(ev)
 		inv.printInstalled(done, ev)
 	}
