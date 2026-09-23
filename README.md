@@ -100,7 +100,7 @@ Other agents support skills management only at this time.
 
 `golangci-lint` needs no install: its version is pinned in `apps/cli/.golangci-lint-version`, and
 `make lint` builds that release into the build cache on first use through `go run`, locally and in
-CI alike.
+CI alike. The build uses the Go version `apps/cli/go.mod` specifies.
 
 Commands are [cobra](https://github.com/spf13/cobra) commands; the tree is built in
 `apps/cli/internal/cli/run.go`, and every test drives `cli.Run` against a temporary home.
