@@ -13,6 +13,7 @@ import (
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
+	"github.com/grundmanise/agentx/apps/cli/internal/interrupt"
 )
 
 // invocation is what every command shares for one run.
@@ -32,8 +33,15 @@ type invocation struct {
 // command passes one, so that a journal left by an interrupted install is
 // finished by whichever command comes next, and so that content a recovery
 // kept and could not give back is named to whoever ran that command.
+//
+// The context is the command's with the stop signals taken off it. A ref
+// step runs only once its journal is on disk, so a stop that cancelled it
+// would leave a half-applied journal for the next command and save nothing;
+// the mutation finishes instead and the run stops after it. Every other
+// call of the command keeps the cancellation, so a stop before the journal
+// exists still gives up at once and leaves nothing behind.
 func (inv *invocation) refs(ctx context.Context) home.RefUpdater {
-	return journalRefs{RefUpdater: inv.git.Refs(ctx), out: inv.out}
+	return journalRefs{RefUpdater: inv.git.Refs(interrupt.Uninterruptible(ctx)), out: inv.out}
 }
 
 // journalRefs is the ref updater plus the command's stderr: the journal has
@@ -44,6 +52,17 @@ type journalRefs struct {
 }
 
 func (j journalRefs) Warn(message string) { j.out.warn(message) }
+
+// Main is Run for a real process: it watches the stop signals first, so
+// that a Ctrl-C or a SIGTERM ends the run through its own error path
+// instead of killing it where it stands. It is the one seam that reads the
+// process, which is why it is not Run: a test drives Run with a context of
+// its own and never touches the signals of the test binary.
+func Main(args []string, env map[string]string, stdin io.Reader, stdout, stderr io.Writer) int {
+	ctx, stop := interrupt.Watch(context.Background())
+	defer stop()
+	return Run(ctx, args, env, stdin, stdout, stderr)
+}
 
 // Run executes one agentx invocation and returns its exit code. It reads
 // nothing from the process: the environment comes from env and every stream
@@ -69,7 +88,7 @@ func Run(ctx context.Context, args []string, env map[string]string, stdin io.Rea
 	} else {
 		root.SetOut(stdout)
 	}
-	return finish(inv, root.ExecuteContext(ctx))
+	return finish(ctx, inv, root.ExecuteContext(ctx))
 }
 
 // colorFromArgs returns the value of --color on the command line, as
@@ -152,11 +171,32 @@ func needSubcommand(inv *invocation, message, hint string) func(*cobra.Command, 
 }
 
 // finish reports err, emits the terminating result and maps err to an exit code.
-func finish(inv *invocation, err error) int {
+func finish(ctx context.Context, inv *invocation, err error) int {
 	out := inv.out
 	if err == nil {
+		// A stop that arrived after the last thing the command had to do
+		// changed nothing, so the run answers for what it did: the whole of
+		// it. Serve is the command this is written for — it ends on a
+		// cancelled context by design and exits 0.
 		out.result(true, inv.summary)
 		return exitOK.exit
+	}
+	// A terminal signals the whole foreground process group, so the git the
+	// run was waiting on dies of the same Ctrl-C and its error can reach
+	// here before the signal does. A run that saw that happen waits a
+	// moment for the signal rather than answering for the git it killed;
+	// one that did not never waits at all.
+	stopped := interrupt.Interrupted(ctx)
+	if !stopped && inv.git != nil && inv.git.StoppedChild() {
+		stopped = interrupt.Settle(ctx)
+	}
+	if stopped {
+		// Every error of a run that was asked to stop is suspect: the git
+		// child of the call in flight was killed, so what comes back says
+		// how it died rather than what was wrong with it. The stop is the
+		// honest answer, and the error it stands in for is a debug line.
+		out.debugf("the run was interrupted while it reported: %v", err)
+		err = interruptedFailure()
 	}
 	var f *failure
 	switch {

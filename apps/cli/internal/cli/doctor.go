@@ -55,7 +55,7 @@ var doctorSections = []struct {
 	checks []string
 }{
 	{"System", []string{"git", "fork_merges", "commit_identity", "home"}},
-	{"App", []string{"lock", "mutations", "settings", "account_repo", "library"}},
+	{"App", []string{"lock", "mutations", "settings", "account_repo", "source_remotes", "staged_imports", "library"}},
 	{"Clients", nil}, // client:<id> and clients
 }
 
@@ -244,6 +244,10 @@ func (d *doctor) run(ctx context.Context) error {
 		d.row("account_repo", "ok", "not created yet: "+gitDir, "")
 	default:
 		d.row("account_repo", "ok", gitDir+" opens", "")
+		// Both of these read the account repo, so they follow the row that
+		// says it can be read and are left out when it cannot.
+		d.sourceRemotes(ctx, gitDir)
+		d.stagedImports(ctx, gitDir)
 	}
 
 	// The first install creates the library; doctor only checks that what

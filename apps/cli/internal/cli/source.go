@@ -11,6 +11,7 @@ import (
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
+	"github.com/grundmanise/agentx/apps/cli/internal/interrupt"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
@@ -159,11 +160,19 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 	// settings still hold, which is what they will still say when the next
 	// command reads them. It writes the git config of the account repo, so
 	// every caller holds the lock while it runs.
+	//
+	// undo is the command's context with the stop signals taken off it. A
+	// take-back is work the run has already committed to, so a Ctrl-C may
+	// not be what leaves the remote behind for good — that is the very
+	// thing the take-back exists to prevent, and giving up here would make
+	// a stop the one way to reach the state this whole path removes.
+	// Everything else the run does keeps the cancellation and stops at once.
+	undo := interrupt.Uninterruptible(ctx)
 	revert := func() error {
 		if existing < 0 { // nothing of a source that was never added is kept
-			return source.Remove(ctx, inv.git, gitDir, src.ID())
+			return source.Remove(undo, inv.git, gitDir, src.ID())
 		} // else the remote goes back to the pin the settings still hold
-		return source.Configure(ctx, inv.git, gitDir, source.Source{URL: src.URL, Ref: before.Sources[existing].Pin})
+		return source.Configure(undo, inv.git, gitDir, source.Source{URL: src.URL, Ref: before.Sources[existing].Pin})
 	}
 	// left answers for a take-back: cause, the failure that stopped the
 	// run, when the remote went back, and the refusal that names what stayed
@@ -179,11 +188,13 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 	// that leaves the remote written and nothing naming it. It waits for
 	// the lock rather than giving up on it: the run is cleaning up after
 	// itself, and what it has to win is the very lock whose loss can be
-	// what made it fail. The wait is bounded because the caller hands this
-	// command context.Background().
+	// what made it fail. The wait is bounded because nothing else would end
+	// it: undo carries no cancellation, deliberately, since a stop that
+	// shortened this wait would leave behind the very remote it is here to
+	// take back. A run that will not stop still answers a second signal.
 	takeBack := func(cause error) error {
 		inv.out.debugf("taking back the remote %s of %s: %v", remote, src.URL, cause)
-		waiting, cancel := context.WithTimeout(ctx, takeBackWait)
+		waiting, cancel := context.WithTimeout(undo, takeBackWait)
 		defer cancel()
 		return left(cause, home.MutateQuietWaiting(waiting, inv.dirs.Home, inv.refs(ctx), revert))
 	}

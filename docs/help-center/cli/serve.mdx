@@ -17,7 +17,7 @@ A change outside the inventory, such as a skill in a directory no installed clie
 agentx serve --json
 ```
 
-The first line is the whole snapshot. Every later snapshot line means the inventory changed; a change that leaves the inventory as it was prints nothing. Close the process's stdin, or interrupt it, to stop it.
+The first line is the whole snapshot. Every later snapshot line means the inventory changed; a change that leaves the inventory as it was prints nothing. Close the process's stdin, or press Ctrl-C, to stop it. Either way serve prints its `result` and exits `0`.
 
 Without `--json` it prints one line per event instead:
 

@@ -22,8 +22,9 @@ var ErrAccountRepo = errors.New("the account repo is unusable")
 // journal cannot run git itself, so every command that mutates agentx home
 // hands it one of these.
 //
-// It carries the context of the command it was made for: one command, one
-// context, and a ref step outlives neither.
+// It carries the context of the command it was made for, with the stop
+// signals taken off it: one command, one context, and a ref step outlives
+// only the Ctrl-C that a journal already on disk has nothing to gain from.
 func (r *Runner) Refs(ctx context.Context) home.RefUpdater { return refs{r: r, ctx: ctx} }
 
 type refs struct {

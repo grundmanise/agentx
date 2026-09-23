@@ -57,7 +57,25 @@ A failed command prints `error: ...` and, when there is a fix, `hint: ...` on st
 | 6 | `refused` | A collision or an unmet precondition. |
 | 7 | `locked` | Another agentx command is running. Retry when it finishes. |
 | 8 | `account_repo` | The account repo is unusable. |
+| 9 | `interrupted` | You stopped the run with Ctrl-C, or something sent it a `SIGTERM`. |
 | 10 | `internal` | An internal error. The message names the file or command involved. |
+
+## Stop a run
+
+Press Ctrl-C, or send `SIGTERM`, to stop a run. agentx stops the git command it is waiting on, prints `error: interrupted` with a hint, and exits `9`:
+
+```text
+error: interrupted
+hint: run the command again; 'agentx doctor' names anything the stop left behind
+```
+
+A change that had already started is finished before the run stops, and one that had not started leaves nothing behind. The exception is a stop sent to the whole process group agentx runs in, most commonly Ctrl-C in a terminal. Such a stop also reaches the git command agentx is running, so a change caught while it was being written to the account repo can stop part way. That is safe: agentx writes down what it is about to do before it does it, the next agentx command finishes or rolls it back, and `agentx doctor` tells you one is waiting. Run the command again when you are ready.
+
+Press Ctrl-C a second time to kill the run outright. That is safe for the same reason: the next agentx command finishes or rolls back what the killed run left, and `agentx doctor` shows whether anything is waiting.
+
+A run that had already finished everything you asked for exits `0`: the signal arrived too late to change the outcome, and agentx reports what it did.
+
+Run agentx in the background from a script and Ctrl-C in that terminal leaves it alone, exactly as it leaves every other background job alone.
 
 ## Directories
 

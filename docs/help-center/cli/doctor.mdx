@@ -38,7 +38,7 @@ When a row is `warn` or `fail`, the report ends with an issues block instead, re
           hint: wait for it to finish
 ```
 
-The rows are grouped by what they check: `System` is git and the home directory, `App` is agentx's own state, `Clients` is every detected agent configuration, with the count in the title. In a terminal the rows are coloured by status: green for `ok`, yellow for `warn`, red for `fail`, blue for `info`. Read the last block first: it repeats every warning and failure with its fix.
+The `source_remotes` and `staged_imports` rows appear only once the account repo exists; on a fresh machine there is nothing to read. The rows are grouped by what they check: `System` is git and the home directory, `App` is agentx's own state, `Clients` is every detected agent configuration, with the count in the title. In a terminal the rows are coloured by status: green for `ok`, yellow for `warn`, red for `fail`, blue for `info`. Read the last block first: it repeats every warning and failure with its fix.
 
 ## What it checks
 
@@ -52,6 +52,8 @@ The rows are grouped by what they check: `System` is git and the home directory,
 | `mutations` | No change to agentx home was cut short by a crash. When one was, the detail names its journal; run `agentx scan` to finish it. If that refuses because the file changed meanwhile, restore the file or move the journal aside. Doctor only reports. |
 | `settings` | `settings.json` is valid. |
 | `account_repo` | The account repo opens, or does not exist yet. The first `agentx source add`, or `agentx skill add` of a source not added yet, creates it. |
+| `source_remotes` | Every source remote in the account repo belongs to a source your settings list. An add that fails clears its own remote, so this row names one only when a run was killed outright or its cleanup was refused. Run `agentx source add` with the URL the row names to add the source and take the remote with it, or `agentx source remove <id>` to clear it. A remote whose URL agentx would not have written, one carrying a token for instance, is named by its source id instead, so the URL is never printed. |
+| `staged_imports` | No import is left staged. An install killed between writing its commits and publishing them leaves refs under `refs/agentx/importing/`, which hold on to the objects they name. Remove each with the `git update-ref -d` command in the hint, while no agentx command is running. |
 | `library` | The library is a writable directory, or does not exist yet. The first install creates it. |
 | `client:<id>` | One row per detected agent configuration, naming the client and its configuration directory. |
 | `clients` | How many of the clients agentx knows are detected. A warning when none is: install an agent client, or check that `HOME` points at the right user. |
@@ -62,6 +64,7 @@ Each row is `ok`, `warn`, `fail` or `info`, marked `✓`, `!`, `✗` or `•`. E
 
 - `2`: git is missing or older than 2.40. The hint names the fix; on Ubuntu 22.04, which ships git 2.34, install a newer git or upgrade the distribution. Every other command except `version` refuses to run until git is fixed.
 - `8`: `account.git` in agentx home exists but is not a repository git can read. Check the directory, or move it aside.
+- `9`: you stopped the run with Ctrl-C. See [Output and exit codes](/cli/output).
 - `0`: everything else, warnings included.
 
 ## Script it

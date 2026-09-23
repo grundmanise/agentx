@@ -208,8 +208,13 @@ type Version struct {
 // import branches at them: one staging ref per skill, under a namespace of
 // this run's own, so that the objects stay reachable while the journal is
 // written and two runs never share a ref. The refs are dropped when the run
-// ends; a run that is killed leaves them, and they hold nothing but objects
-// the account repo would keep anyway.
+// ends, on a context a stop signal does not reach, so only a run that was
+// killed leaves them. Those are what `agentx doctor` reports as
+// `staged_imports`: an import commit no branch holds is reachable from
+// nothing else, and once the source it came from is removed its trees and
+// blobs are pinned by that ref alone. Nothing sweeps them, because the
+// staging refs of a run that is still fetching look exactly the same and no
+// lock is held while either exists.
 const ImportingPrefix = "refs/agentx/importing/"
 
 // ImportingRef is the staging ref of the nth version of run.

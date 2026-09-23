@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"os"
 	"strings"
 
@@ -15,5 +14,5 @@ func main() {
 			env[k] = v
 		}
 	}
-	os.Exit(cli.Run(context.Background(), os.Args[1:], env, os.Stdin, os.Stdout, os.Stderr))
+	os.Exit(cli.Main(os.Args[1:], env, os.Stdin, os.Stdout, os.Stderr))
 }

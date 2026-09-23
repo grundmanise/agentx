@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
+	"github.com/grundmanise/agentx/apps/cli/internal/interrupt"
 )
 
 // AccountRepoPath is the git directory of the account repo in agentx home.
@@ -44,7 +45,11 @@ func OpenAccountRepo(ctx context.Context, r *Runner, homeDir string) (gitDir str
 	if err != nil || exists {
 		return gitDir, false, err
 	}
-	err = home.Mutate(homeDir, r.Refs(ctx), func() error {
+	// The recovery this Mutate runs before its own work finishes the journal
+	// of an earlier command, whose ref steps a stop may not cut in half; the
+	// creation itself keeps the command's context and gives up on a stop
+	// like anything else, leaving the temporary directory behind it.
+	err = home.Mutate(homeDir, r.Refs(interrupt.Uninterruptible(ctx)), func() error {
 		if _, err := os.Stat(gitDir); err == nil {
 			return nil // created meanwhile by another command
 		}

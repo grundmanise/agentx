@@ -14,6 +14,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"syscall"
+	"time"
 )
 
 // ErrMissing is returned when no git executable is found in PATH.
@@ -42,6 +45,12 @@ type Runner struct {
 	serve   bool // the serve child: git must fail instead of prompting
 	logf    func(format string, args ...any)
 	version *Version // cached after the first Version call
+	// stopped records that a stop signal killed one of this runner's git
+	// children without agentx having cancelled it, which is what a terminal
+	// does: Ctrl-C goes to the whole foreground process group. It is the
+	// run's evidence that a signal is on its way to the run itself. Calls
+	// run in parallel, so it is atomic.
+	stopped atomic.Bool
 }
 
 // New returns a runner over env. Under serve every git call has terminal
@@ -215,11 +224,32 @@ func (r *Runner) run(ctx context.Context, c call, args ...string) (string, error
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+	// A cancelled context kills git, but git's own children — the transport
+	// of a fetch, the ssh it starts — hold the pipes agentx reads its output
+	// through, and waiting for those to close is waiting for a network call
+	// nobody is reading any more. WaitDelay closes them instead, so that a
+	// run stopped during a fetch ends now rather than when the far end times
+	// out. It never truncates the output of a git that finished: by then the
+	// process has exited and only a child it left behind can still hold a
+	// pipe open.
+	cmd.WaitDelay = waitDelay
 	err = cmd.Run()
 	if stderr.Len() > 0 {
 		r.logf("git stderr: %s", strings.TrimRight(stderr.String(), "\n"))
 	}
 	if err != nil {
+		if ctx.Err() != nil {
+			// The child was killed because the run is stopping, so its own
+			// report — "signal: killed" — says nothing true about git.
+			return "", fmt.Errorf("git %s: interrupted", subcommand(args))
+		}
+		if stoppedBySignal(err) {
+			// Nothing here cancelled it, so the signal came from outside:
+			// a terminal signalling the whole foreground process group,
+			// which is about to signal this process too. Recording it lets
+			// the run answer for the stop rather than for the git it killed.
+			r.stopped.Store(true)
+		}
 		detail := strings.TrimSpace(stderr.String())
 		if detail == "" {
 			detail = err.Error()
@@ -227,6 +257,35 @@ func (r *Runner) run(ctx context.Context, c call, args ...string) (string, error
 		return "", fmt.Errorf("git %s: %s", subcommand(args), detail)
 	}
 	return stdout.String(), nil
+}
+
+// waitDelay is how long a git that has been killed, or has exited leaving a
+// child of its own behind, may keep agentx waiting on its pipes.
+const waitDelay = 2 * time.Second
+
+// StoppedChild reports whether a stop signal killed one of this runner's
+// git children that agentx did not cancel. A run reads it when it is
+// failing, to tell a git that died of the user's Ctrl-C from one that
+// failed on its own.
+func (r *Runner) StoppedChild() bool { return r.stopped.Load() }
+
+// stoppedBySignal reports whether the child was killed by a signal that
+// asks a process to stop. Any other death, a crash included, is git's own
+// answer and is reported as it stands.
+func stoppedBySignal(err error) bool {
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		return false
+	}
+	status, ok := exitErr.Sys().(syscall.WaitStatus)
+	if !ok || !status.Signaled() {
+		return false
+	}
+	switch status.Signal() {
+	case syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP:
+		return true
+	}
+	return false
 }
 
 // subcommand is the first argument that is not a global option, so an error
