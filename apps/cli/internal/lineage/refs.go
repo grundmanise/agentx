@@ -58,7 +58,9 @@ type Record struct {
 // copying it.
 //
 // Nothing here reads the source refs: the lineage of a skill is what its own
-// branch says, so removing a source changes no listing.
+// branch says, so deleting a source ref changes no lineage. Whether the
+// source a managed skill names is still added is a question for the
+// settings, which the caller reads; it is never recorded here.
 func List(ctx context.Context, r *gitx.Runner, gitDir string) (map[string]Record, error) {
 	const recordEnd = "\x01"
 	out, err := r.Isolated(ctx, gitDir,
