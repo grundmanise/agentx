@@ -156,7 +156,7 @@ Add the source again to fetch it anew and clear the state:
 agentx source add anthropics/skills
 ```
 
-Nothing else changes: the skills, their records and their placements are exactly as they were before you removed the source. Any pin works, since a source is identified by its URL. Installing a skill from the source by its URL adds it again too.
+Nothing else changes: the skills, their records and their placements are exactly as they were before you removed the source. Any pin works, since a source is identified by its URL. Installing a skill from the source by its URL, or adopting one with [`agentx adopt`](/cli/adopt), adds it again too.
 
 A command that names the removed source by its id cannot fetch it, since an id is not a URL. While a skill still records the source, the command tells you what to run instead:
 
