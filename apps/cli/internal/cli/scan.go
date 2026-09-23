@@ -196,9 +196,12 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 				path += out.paint(muted, " -> "+o.ResolvedPath)
 			}
 			if o.Plugin != "" {
-				path += "  " + out.paint(tagStyle, "(plugin "+o.Plugin+")")
+				path += "  " + out.paint(tagStyle, "(plugin "+sanitised(o.Plugin)+")")
 			}
-			block(skills, o.Configuration).add(c(s.Name, heading), c(o.Kind, muted), c(o.Scope, muted), c(path, plain))
+			// A skill's name is its SKILL.md frontmatter, which whoever
+			// wrote the skill controls, so it is sanitised like every other
+			// text agentx did not write.
+			block(skills, o.Configuration).add(c(sanitised(s.Name), heading), c(o.Kind, muted), c(o.Scope, muted), c(path, plain))
 		}
 	}
 	servers := map[string]*table{} // name, transport, command line or URL, what a handshake found, why it failed, (disabled)
@@ -214,9 +217,9 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 				what = strings.Join(append([]string{o.Command}, o.Args...), " ")
 			}
 			if o.Plugin != "" {
-				what += "  " + out.paint(tagStyle, "(plugin "+o.Plugin+")")
+				what += "  " + out.paint(tagStyle, "(plugin "+sanitised(o.Plugin)+")")
 			}
-			cells := []cell{c(s.Name, heading), c(o.Transport, muted), c(what, plain)}
+			cells := []cell{c(sanitised(s.Name), heading), c(o.Transport, muted), c(what, plain)}
 			if n := len(s.Tools); n > 0 {
 				cells = append(cells, c(plural(n, "tool"), noteStyle))
 			}
@@ -235,7 +238,7 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 	plugins := map[string]*table{} // name, version, what it provides, (disabled)
 	for _, p := range snap.Plugins {
 		nPlugins[p.Configuration]++
-		cells := []cell{c(p.Name, heading), c(p.Version, plain)}
+		cells := []cell{c(sanitised(p.Name), heading), c(sanitised(p.Version), plain)}
 		if provides := counts(pluginSkills[p.Configuration+"\x00"+p.Name], "skill", pluginServers[p.Configuration+"\x00"+p.Name], "server"); provides != "" {
 			cells = append(cells, c(provides, noteStyle))
 		}

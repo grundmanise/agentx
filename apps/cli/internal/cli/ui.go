@@ -5,6 +5,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
@@ -116,6 +117,44 @@ func painter(out io.Writer) *lipgloss.Renderer {
 func isTerminal(out io.Writer) bool {
 	f, ok := out.(*os.File)
 	return ok && term.IsTerminal(int(f.Fd()))
+}
+
+// sanitised is text agentx did not write — a skill's name and description,
+// which the repository a source was added from supplies — made fit to
+// print. Every control character becomes a space, runs of spaces become one
+// and the leading and trailing ones are dropped. A newline therefore cannot
+// break the one row per item a listing prints, a tab cannot disturb a
+// column, a carriage return cannot overwrite the line already printed, and
+// no escape sequence reaches the terminal, whatever --color says.
+//
+// Nothing is parsed. agentx does not recognise an escape sequence and strip
+// it whole: a parser that misjudged one sequence's end would let the rest
+// of it through, while a rule that admits no control character at all
+// cannot. What a sequence leaves behind once its ESC is a space, the "[31m"
+// of a red, prints as the ordinary text it is, which also shows the reader
+// that the source tried. It is applied before anything is painted, so that
+// stripping the SGR sequences agentx adds still gives the exact text a pipe
+// receives. JSON output is not sanitised: its values are escaped already,
+// so a consumer reads what the source wrote.
+func sanitised(text string) string {
+	var b strings.Builder
+	b.Grow(len(text))
+	space := true // as if a space had just been written, so a leading one is dropped
+	for _, r := range text {
+		if unicode.IsControl(r) {
+			r = ' '
+		}
+		if r == ' ' {
+			space = true
+			continue // written only if a character follows, which drops the trailing ones
+		}
+		if space && b.Len() > 0 {
+			b.WriteByte(' ')
+		}
+		space = false
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // cell is one table cell: the text and the style it is painted in. Widths

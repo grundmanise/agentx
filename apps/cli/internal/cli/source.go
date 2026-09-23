@@ -277,7 +277,7 @@ func (inv *invocation) sourceList(ctx context.Context) error {
 		return accountRepoFailure(err)
 	} else if exists {
 		if commits, err = source.Commits(ctx, inv.git, gitDir); err != nil {
-			return err
+			return accountRepoFailure(err) // a local git failure in a source command is exit code 8, hint and all
 		}
 	}
 	out := inv.out
@@ -338,7 +338,11 @@ func (inv *invocation) sourceSkills(ctx context.Context, arg string) error {
 		if subpath == "" {
 			subpath = "."
 		}
-		t.add(c("  "+sk.Name, label), c(subpath, muted), c(sk.Description, plain))
+		// The name, the description and the directory names the subpath is
+		// built from all come from the source's own repository: sanitised,
+		// so that a row stays a row and no escape sequence reaches the
+		// terminal. The event above carries them as the source wrote them.
+		t.add(c("  "+sanitised(sk.Name), label), c(sanitised(subpath), muted), c(sanitised(sk.Description), plain))
 	}
 	out.render(t, "")
 	return nil

@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
+	"unicode"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden snapshot files from the current output")
@@ -461,6 +462,34 @@ func TestScanSymlinkChainAndLibrary(t *testing.T) {
 
 	out := h.run("scan")
 	contains(t, "stdout", out.stdout, "commit  symlink  user  "+filepath.Join(h.home, ".cursor/skills/commit")+" -> "+filepath.Join(h.home, ".agents/skills/commit"))
+}
+
+// TestScanSanitisesUntrustedNames covers a skill whose frontmatter names it
+// with the characters a terminal obeys. A SKILL.md comes from wherever the
+// skill did, so the text inventory prints the name as Streams prescribes,
+// while the snapshot event carries it as the file wrote it.
+func TestScanSanitisesUntrustedNames(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	const raw = "na\tsty \x1b[31mRED\x1b[0m"
+	h.build(t, fixture{files: map[string]string{
+		".claude/skills/nasty/SKILL.md": "---\n" + `name: "na\tsty \x1b[31mRED\x1b[0m"` + "\n" + `description: "two\nlines"` + "\n---\n",
+	}})
+
+	skills := h.snapshot(t)["skills"].([]any)
+	if len(skills) != 1 {
+		t.Fatalf("skills = %v, want one", skills)
+	}
+	equal(t, "raw name", skills[0].(map[string]any)["name"], raw)
+
+	out := h.run("scan")
+	equal(t, "exit", out.exit, 0)
+	contains(t, "stdout", out.stdout, "na sty [31mRED [0m  directory  user  ")
+	for _, r := range out.stdout {
+		if unicode.IsControl(r) && r != '\n' {
+			t.Fatalf("a control character reached the inventory: %q in\n%q", r, out.stdout)
+		}
+	}
 }
 
 func TestScanWarnings(t *testing.T) {

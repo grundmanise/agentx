@@ -11,6 +11,8 @@ Without `--json`, every command prints aligned text for you to read. Tables pad 
 ✓ label is now work laptop
 ```
 
+Text that comes from somewhere else — the name and description a source writes for its skills, for instance — is cleaned before it is printed: tabs, newlines and other control characters become spaces, so one skill stays one row and nothing a repository puts in a description can drive your terminal. Read the value exactly as it was written with `--json`, which escapes it instead.
+
 ## Colour
 
 Text output is coloured when it goes to a terminal. Each colour means one thing everywhere: green for ok and enabled, yellow for a warning, a hint and disabled, red for a failure and an error, blue for information, cyan for a key or a flag name, and dim for secondary detail.

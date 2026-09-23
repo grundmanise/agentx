@@ -114,6 +114,39 @@ func TestColorRejectsUnknownMode(t *testing.T) {
 	equal(t, "error.code", events[0]["code"], "usage")
 }
 
+// TestSanitisedText pins the rule Streams states for text agentx did not
+// write: every control character becomes a space, runs of spaces become
+// one, and the leading and trailing ones are dropped.
+func TestSanitisedText(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		text string
+		want string
+	}{
+		{"plain text is untouched", "A plain skill", "A plain skill"},
+		{"a newline joins the lines", "first line\nsecond line", "first line second line"},
+		{"a tab cannot disturb a column", "before\tafter", "before after"},
+		{"a lone carriage return cannot overwrite the line", "shown\rhidden", "shown hidden"},
+		{"a CRLF is one space", "first\r\nsecond", "first second"},
+		{"an SGR sequence loses its escape", "\x1b[31mRED\x1b[0m", "[31mRED [0m"},
+		{"an OSC hyperlink loses its escapes", "\x1b]8;;http://evil\x07text", "]8;;http://evil text"},
+		{"a NUL and a DEL are spaces", "a\x00b\x7fc", "a b c"},
+		{"a C1 control is a space", "a\u009bb", "a b"},
+		{"spaces are collapsed and trimmed", "  wide   gap  ", "wide gap"},
+		{"nothing but control characters is nothing", "\n\t\r", ""},
+		{"empty stays empty", "", ""},
+		{"text beyond ASCII is kept", "café — naïve 日本語", "café — naïve 日本語"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := sanitised(tt.text); got != tt.want {
+				t.Errorf("sanitised(%q) = %q, want %q", tt.text, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestTableAlignsPaintedCells(t *testing.T) {
 	t.Parallel()
 	tb := &table{}

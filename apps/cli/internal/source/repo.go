@@ -272,8 +272,20 @@ func staged(ctx context.Context, r *gitx.Runner, gitDir, ref string) (object, co
 // List builds the listing of an already fetched source from the account
 // repo alone: no network.
 func List(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listing, error) {
-	commit, err := r.Isolated(ctx, gitDir, "rev-parse", "--verify", "--quiet", Ref(s.ID())+"^{commit}")
-	if err != nil || commit == "" {
+	// The ref is read with for-each-ref rather than with rev-parse --verify
+	// --quiet, which exits non-zero both for a ref that is not there and for
+	// a repository git cannot read and so cannot tell the two apart. The
+	// difference is what the reader is told: a source that was never fetched
+	// is exit code 5 with a hint to add it, while an account repo git cannot
+	// read is exit code 8, and a listing that reported the second as the
+	// first would send the reader to a command that fails differently again.
+	// for-each-ref prints nothing and succeeds for an absent ref, and fails
+	// only when git could not read the refs at all.
+	_, commit, err := staged(ctx, r, gitDir, Ref(s.ID()))
+	if err != nil {
+		return Listing{}, err // the account repo itself, not a source that was never fetched
+	}
+	if commit == "" {
 		return Listing{}, fmt.Errorf("%w: %s", ErrNotFetched, s.URL)
 	}
 	entries, err := skillEntries(ctx, r, gitDir, commit, s.Subpath, true)
@@ -434,6 +446,9 @@ func fetchBlobs(ctx context.Context, r *gitx.Runner, gitDir, remote string, entr
 	for _, e := range entries {
 		ids.WriteString(e.blob + "\n")
 	}
+	// The flags are the ref fetch's, without --no-show-forced-updates: this
+	// fetch names objects rather than refs and updates none, so there is no
+	// forced update for git to work out and none to suppress.
 	_, err := r.UserInput(ctx, gitDir, strings.NewReader(ids.String()),
 		"-c", "fetch.negotiationAlgorithm=noop",
 		"fetch", "--quiet", "--no-tags", "--no-write-fetch-head", "--recurse-submodules=no", "--refmap=", "--filter=blob:none", "--stdin", remote)

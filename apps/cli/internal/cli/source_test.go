@@ -10,7 +10,9 @@ import (
 	"syscall"
 	"testing"
 	"time"
+	"unicode"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
@@ -804,6 +806,101 @@ func TestSourceRemoveKeepsTheEntryWhenGitFails(t *testing.T) {
 // TestConcurrentSourceAdds proves two adds cannot leave a half-written
 // remote behind: git config fails rather than waiting for its own lock, so
 // the write is serialised by agentx's lock instead.
+// TestSourceTellsALocalGitFailureFromAnUnfetchedSource covers the two ways
+// a listing can find nothing: an account repo git cannot read, which is
+// exit code 8 in every source command, and a source the account repo holds
+// no ref for, which stays exit code 5. Reporting the first as the second
+// sends the reader to `source add`, which fails differently again.
+func TestSourceTellsALocalGitFailureFromAnUnfetchedSource(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	s, _, _ := h.standardSource(true)
+	equal(t, "exit", h.run("source", "add", s.url).exit, 0)
+	id := source.ID(s.url)
+
+	// The ref alone is gone: the source was never fetched on this machine.
+	h.accountGit("update-ref", "-d", source.Ref(id))
+	out := h.run("--json", "source", "skills", s.url)
+	equal(t, "exit", out.exit, 5)
+	events := h.events(out.stdout)
+	equal(t, "error.code", events[0]["code"], "not_found")
+	contains(t, "error.message", events[0]["message"].(string), "source not fetched")
+	contains(t, "error.hint", events[0]["hint"].(string), "agentx source add "+s.url)
+	equal(t, "list exit", h.run("source", "list").exit, 0) // the settings entry is still there
+
+	// A packed-refs file git refuses to parse. rev-parse
+	// --is-bare-repository still succeeds, so the account repo check passes
+	// and each command meets the failure where it reads the refs.
+	packed := filepath.Join(gitx.AccountRepoPath(h.agentx), "packed-refs")
+	if err := os.WriteFile(packed, []byte("this is not a packed-refs line\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.accountGitErr("for-each-ref", "refs/agentx/sources/"); err == nil {
+		t.Fatal("the account repo is still readable; the test proves nothing")
+	}
+	for _, args := range [][]string{{"source", "list"}, {"source", "skills", s.url}} {
+		what := strings.Join(args, " ")
+		out := h.run(append([]string{"--json"}, args...)...)
+		equal(t, "exit of "+what, out.exit, 8)
+		events := h.events(out.stdout)
+		equal(t, "error.code of "+what, events[0]["code"], "account_repo")
+		hint, _ := events[0]["hint"].(string) // an account repo failure always carries one
+		contains(t, "error.hint of "+what, hint, "agentx doctor")
+	}
+}
+
+// nastySkill is a SKILL.md whose frontmatter carries what a third-party
+// repository can put there and a terminal would obey: a newline, a tab, a
+// carriage return and SGR sequences. The block is double quoted, so YAML
+// decodes the escapes and the values reach agentx as those characters.
+const nastySkill = "---\n" +
+	`name: "na\tsty"` + "\n" +
+	`description: "first line\nsecond line \x1b[31mRED\x1b[0m and \t tab\r"` + "\n" +
+	"---\n\n# nasty\n"
+
+// TestSourceSkillsSanitisesUntrustedText covers a source that writes
+// control characters into the text a listing prints. The rows stay rows,
+// nothing drives the terminal, and the event carries what the source wrote.
+func TestSourceSkillsSanitisesUntrustedText(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	s := h.newSourceRepo("evil", true)
+	s.write("nasty/SKILL.md", nastySkill)
+	s.skill("plain", "plain", "A plain skill", nil)
+	head := s.commit("skills")
+	equal(t, "exit", h.run("source", "add", s.url).exit, 0)
+
+	// The event is the source's own text: JSON escapes it, so a consumer
+	// reads what the repository wrote.
+	out := h.run("--json", "source", "skills", s.url)
+	equal(t, "exit", out.exit, 0)
+	_, skills := sourceEvents(t, h.events(out.stdout))
+	equal(t, "skills", len(skills), 2)
+	equal(t, "raw name", skills[0]["name"], "na\tsty")
+	equal(t, "raw description", skills[0]["description"], "first line\nsecond line \x1b[31mRED\x1b[0m and \t tab")
+
+	// The text listing is one row per skill, two spaces of indent, and no
+	// control character anywhere.
+	out = h.run("source", "skills", s.url)
+	equal(t, "exit", out.exit, 0)
+	equal(t, "stdout", out.stdout, "2 skills in "+s.url+" at "+head[:7]+"\n"+
+		"  na sty  nasty  first line second line [31mRED [0m and tab\n"+
+		"  plain   plain  A plain skill\n")
+	for _, r := range out.stdout {
+		if unicode.IsControl(r) && r != '\n' {
+			t.Fatalf("a control character reached the listing: %q in\n%q", r, out.stdout)
+		}
+	}
+
+	// Painting still changes nothing but the sequences agentx adds: the
+	// injected ones are gone before anything is painted, so stripping gives
+	// the text a pipe receives, which is what Streams promises.
+	painted := h.run("--color=on", "source", "skills", s.url)
+	if got := escapes.ReplaceAllString(painted.stdout, ""); got != out.stdout {
+		t.Errorf("painted output, escapes stripped, differs from plain:\n%q\n%q", got, out.stdout)
+	}
+}
+
 func TestConcurrentSourceAdds(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)

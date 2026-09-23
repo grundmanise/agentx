@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
@@ -138,6 +139,121 @@ func accountRepo(t *testing.T) (*gitx.Runner, string) {
 		t.Fatal(err)
 	}
 	return r, gitDir
+}
+
+// countingAccountRepo is accountRepo whose runner counts the git processes
+// it starts, so a test can hold BuildIndex to the one for-each-ref a
+// rebuild that finds nothing changed is allowed. The runner logs one line
+// per process and one more for a child's stderr; only the first has this
+// format.
+func countingAccountRepo(t *testing.T) (*gitx.Runner, string, func() int) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed; the source tests need it")
+	}
+	var mu sync.Mutex
+	started := 0
+	r := gitx.New(map[string]string{"PATH": os.Getenv("PATH"), "HOME": t.TempDir()}, false, func(format string, _ ...any) {
+		if format != "git %s" {
+			return
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		started++
+	})
+	gitDir, _, err := gitx.OpenAccountRepo(context.Background(), r, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r, gitDir, func() int { mu.Lock(); defer mu.Unlock(); return started }
+}
+
+// TestBuildIndexListsASourceItCouldNotListAgain covers a build that met a
+// source the account repo could not answer for. That answer belongs to the
+// moment, not to the commit, so it is not remembered: the next build lists
+// the source again and its skills come back without its ref having moved.
+// A build that could list everything is still remembered whole, so a
+// rebuild with nothing changed costs the one for-each-ref and no more.
+func TestBuildIndexListsASourceItCouldNotListAgain(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	git, gitDir, started := countingAccountRepo(t)
+	ctx := context.Background()
+
+	r := newRepo(t, root, "alpha")
+	r.run("config", "uploadpack.allowFilter", "true") // a server that really filters
+	r.skill("commit", "commit", "Write a commit message")
+	commit := r.commit()
+	urls := []string{r.url}
+
+	// A source ref at a commit whose SKILL.md blobs are not here. A fetch no
+	// longer leaves this behind: it stages until it is whole, and the source
+	// ref is published last. What is left is everything outside that path —
+	// a killed process, objects reclaimed while the ref stands, another
+	// writer of the account repo — so the state is planted here rather than
+	// fetched into being, since the point of the index is to recover from it
+	// however it arose. The source repository is then moved aside, so that
+	// no git old enough to ignore GIT_NO_LAZY_FETCH can fill the blobs in
+	// behind the test's back.
+	src := source.Source{URL: r.url}
+	if err := source.Configure(ctx, git, gitDir, src); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := git.User(ctx, gitDir, "fetch", "--quiet", "--no-tags", "--filter=blob:none", source.RemoteName(src.ID())); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := git.Isolated(ctx, gitDir, "update-ref", source.Ref(src.ID()), commit); err != nil {
+		t.Fatal(err)
+	}
+	aside := r.gitDir + ".aside"
+	if err := os.Rename(r.gitDir, aside); err != nil {
+		t.Fatal(err)
+	}
+
+	idx, warnings, err := source.BuildIndex(ctx, git, gitDir, urls, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(warnings) != 1 || !strings.Contains(warnings[0], "the fetched source is incomplete") {
+		t.Fatalf("warnings = %q, want one naming an incomplete source", warnings)
+	}
+	if got := idx.Search("commit"); len(got) != 0 {
+		t.Fatalf("results while the source cannot be listed = %#v, want none", got)
+	}
+
+	// The blobs arrive. The ref does not move: only the skills the account
+	// repo can now read are new.
+	if err := os.Rename(aside, r.gitDir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := source.Fetch(ctx, git, gitDir, src); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := git.Isolated(ctx, gitDir, "rev-parse", source.Ref(src.ID())); err != nil || got != commit {
+		t.Fatalf("the source ref = %q, %v; want the commit %q it already held", got, err, commit)
+	}
+	next, warnings, err := source.BuildIndex(ctx, git, gitDir, urls, idx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(warnings) != 0 {
+		t.Errorf("warnings after the blobs arrived = %q, want none", warnings)
+	}
+	want := []source.Match{{Source: r.url, Subpath: "commit", Name: "commit", Description: "Write a commit message", Tree: r.tree("commit")}}
+	if got := next.Search("commit"); !reflect.DeepEqual(got, want) {
+		t.Fatalf("results after the blobs arrived = %#v\nwant %#v", got, want)
+	}
+
+	// Everything listed, so the build is remembered whole: the rebuild that
+	// follows reads the refs and stops there.
+	before := started()
+	again, warnings, err := source.BuildIndex(ctx, git, gitDir, urls, next)
+	if err != nil || again != next || warnings != nil {
+		t.Errorf("BuildIndex with an unchanged prev = %p, %v, %v; want prev %p and no warnings", again, warnings, err, next)
+	}
+	if got := started() - before; got != 1 {
+		t.Errorf("a rebuild with nothing changed started %d git processes, want 1: the for-each-ref", got)
+	}
 }
 
 func TestBuildIndexListsEverySkillOfEverySource(t *testing.T) {

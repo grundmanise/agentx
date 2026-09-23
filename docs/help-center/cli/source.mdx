@@ -129,7 +129,7 @@ agentx source skills anthropics/skills
   ...
 ```
 
-Every directory with a `SKILL.md` is a skill. Hidden directories and `node_modules` are skipped. Give a path to see one part of the repository, for example `anthropics/skills/skills/pdf`, or the source id instead of the URL. The command reads what the last `source add` fetched and never touches the network, whichever part of the source you ask for.
+Every directory with a `SKILL.md` is a skill. Hidden directories and `node_modules` are skipped. Names and descriptions come from the repository, so agentx prints them with control characters replaced by spaces, keeping one skill to a row; `--json` gives you the value as it was written. Give a path to see one part of the repository, for example `anthropics/skills/skills/pdf`, or the source id instead of the URL. The command reads what the last `source add` fetched and never touches the network, whichever part of the source you ask for.
 
 ## Remove a source
 
