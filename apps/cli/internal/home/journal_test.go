@@ -514,7 +514,7 @@ func (in install) removed(t *testing.T, u refs, name string) []string {
 // once everything that could still refuse has not.
 //
 // With them first, a refusal left the skill's directory in the library and
-// no branch for it — which is a managed skill silently turned unmanaged,
+// no branch for it, which is a managed skill silently turned unmanaged,
 // permanently, the one thing mutation safety says not to make of
 // half-applied state.
 func TestRemovalKeepsItsRefsWhenAPathStepRefuses(t *testing.T) {
@@ -585,7 +585,7 @@ func TestRemovalRecoversFromEveryBoundary(t *testing.T) {
 // path step replaces. So a remove step whose live path no longer holds what
 // the journal captured is the one place where applying a step that is out
 // of date destroys something nothing else has a copy of, and the check that
-// stops it — live != s.Old — has to be tested for a remove step by name,
+// stops it – live != s.Old – has to be tested for a remove step by name,
 // not only for the publish of a state file.
 //
 // Relaxing it just for removals ("live != s.Old && s.Kind != stepRemove")
@@ -673,7 +673,7 @@ func TestRemovalKeepsRetainedContentThatChanged(t *testing.T) {
 // TestRemoveKeepsAndNamesRetainedContentThatChanged is the other half of
 // retention: locks coordinate agentx commands, not editors, so the content
 // a removal displaced can change while the mutation is unfinished. It is
-// then the user's own and is kept — and named, since nothing else ever
+// then the user's own and is kept, and named, since nothing else ever
 // mentions it: the sweep of the next install covers staging directories
 // alone, so an unnamed retained directory stays hidden in a client's skills
 // directory for good.

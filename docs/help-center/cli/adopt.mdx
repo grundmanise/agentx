@@ -1,6 +1,6 @@
 ---
 title: "agentx adopt"
-description: "Take over the skills the vercel skills CLI installed, so agentx knows where each one came from — without reinstalling and without touching your files."
+description: "Take over the skills the vercel skills CLI installed, so agentx knows where each one came from, without reinstalling and without touching your files."
 ---
 
 The vercel skills CLI installs into the same library agentx uses, `~/.agents/skills`, and records what it installed in a lock file. `agentx adopt` reads that file and takes those skills over: each one keeps its directory exactly as it is and gains an upstream, so agentx can tell your edits from the version you installed.
@@ -90,7 +90,7 @@ error: 1 of 3 skills could not be adopted: ...
 hint: leave it unmanaged, or name the version it came from with 'agentx adopt --skill pdf --base <commit, branch or tag>'
 ```
 
-The message names every way agentx tried, because the skill is left unmanaged only when all of them come up empty. Usually that means the lock file's folder hash finds nothing in the source — it records no hash, or a hash of its own — **and** your directory no longer matches the source, because you edited it.
+The message names every way agentx tried, because the skill is left unmanaged only when all of them come up empty. Usually that means the lock file's folder hash finds nothing in the source – it records no hash, or a hash of its own – **and** your directory no longer matches the source, because you edited it.
 
 agentx leaves the skill alone. It stays in your library and keeps working; it is simply unmanaged, and every other skill of the run is still adopted. It does **not** record your edited files as if they had come from upstream: that would turn your changes into upstream content, and nothing afterwards could separate the two again.
 
@@ -148,6 +148,6 @@ agentx reads both places that tool uses:
 
 If both exist and disagree about a skill, the one that tool would write now wins, and agentx warns you naming both files.
 
-A lock file that is not readable JSON, or that holds no `skills` object, stops the command rather than being treated as empty — you asked to adopt what it holds, so agentx will not tell you it holds nothing. Fix it or move it aside; agentx will not write it for you.
+A lock file that is not readable JSON, or that holds no `skills` object, stops the command rather than being treated as empty: you asked to adopt what it holds, so agentx will not tell you it holds nothing. Fix it or move it aside; agentx will not write it for you.
 
 Inside the file, one bad entry never costs the others. An entry is skipped only when it is not an object or names no source; a single field written as the wrong kind of value is dropped with a warning naming it, and the entry is read without it.

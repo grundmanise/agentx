@@ -176,7 +176,7 @@ func finish(ctx context.Context, inv *invocation, err error) int {
 	if err == nil {
 		// A stop that arrived after the last thing the command had to do
 		// changed nothing, so the run answers for what it did: the whole of
-		// it. Serve is the command this is written for — it ends on a
+		// it. Serve is the command this is written for: it ends on a
 		// cancelled context by design and exits 0.
 		out.result(true, inv.summary)
 		return exitOK.exit

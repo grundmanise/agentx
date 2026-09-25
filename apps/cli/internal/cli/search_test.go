@@ -202,7 +202,7 @@ func TestServeSearchIsEmptyWithoutSources(t *testing.T) {
 //
 // It reads a source that a command elsewhere is fetching, so what it sees
 // depends on when the rebuild lands inside that fetch. That it always sees
-// a whole source is not this test's to prove — it would only ever prove
+// a whole source is not this test's to prove: it would only ever prove
 // that the timing did not bite today; TestSourceRefNeverShowsAnIncompleteFetch
 // drives the same window deliberately and proves it.
 func TestServeReindexesWhenSourcesChange(t *testing.T) {
@@ -301,8 +301,8 @@ func TestServePrintsSearchLines(t *testing.T) {
 // leave open. source.Fetch reaches the source over two fetches: the first
 // brings the commit and its trees without blobs, the second the SKILL.md
 // blobs in one batch. While the blob batch is held open here, every reader
-// of the account repo — the serve child rebuilding its source index, a
-// concurrent `source skills`, `source list` — must still see the commit the
+// of the account repo – the serve child rebuilding its source index, a
+// concurrent `source skills`, `source list` – must still see the commit the
 // last complete fetch left, never the new one with its blobs missing, which
 // lists no skill and warns.
 func TestSourceRefNeverShowsAnIncompleteFetch(t *testing.T) {

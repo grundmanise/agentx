@@ -233,9 +233,9 @@ func (inv *invocation) noLibrarySkill(name string) error {
 // removal would then trust about whatever the user put at that path. A copy
 // there that does not hold this version is kept and skipped, see keepCopy.
 //
-// A placement this machine cannot make — a skills directory owned by
+// A placement this machine cannot make – a skills directory owned by
 // somebody else, one on a read-only mount, one macOS has not granted
-// access to, a path that is a file rather than a directory — is skipped
+// access to, a path that is a file rather than a directory – is skipped
 // with a warning and counted in the result, exactly as a path something
 // else holds is. One client agentx cannot reach is not a reason to leave
 // the library, the branch and every other placement undone, and a run that

@@ -272,8 +272,8 @@ func (s *sourceRepo) annotatedTag(name, message string) {
 //
 // No bare repository can be configured to behave this way. git's
 // upload-pack turns on allow-any-sha1-in-want whenever
-// uploadpack.allowFilter is set — a partial clone would be unusable
-// otherwise — and setting uploadpack.allowAnySHA1InWant,
+// uploadpack.allowFilter is set – a partial clone would be unusable
+// otherwise – and setting uploadpack.allowAnySHA1InWant,
 // allowReachableSHA1InWant and allowTipSHA1InWant to false does not take it
 // back. A server that serves a filtered fetch therefore always serves
 // single objects too, so the refusal has to come from the wrapper.

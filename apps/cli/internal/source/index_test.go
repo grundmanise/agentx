@@ -188,9 +188,9 @@ func TestBuildIndexListsASourceItCouldNotListAgain(t *testing.T) {
 
 	// A source ref at a commit whose SKILL.md blobs are not here. A fetch no
 	// longer leaves this behind: it stages until it is whole, and the source
-	// ref is published last. What is left is everything outside that path —
+	// ref is published last. What is left is everything outside that path –
 	// a killed process, objects reclaimed while the ref stands, another
-	// writer of the account repo — so the state is planted here rather than
+	// writer of the account repo – so the state is planted here rather than
 	// fetched into being, since the point of the index is to recover from it
 	// however it arose. The source repository is then moved aside, so that
 	// no git old enough to ignore GIT_NO_LAZY_FETCH can fill the blobs in

@@ -98,7 +98,7 @@ func TestSkillAddRecoversFromAKilledRun(t *testing.T) {
 	// the contract prescribes. Were the library published first, a process
 	// stopped here would leave a real skill directory that no lineage
 	// branch names, and the next scan would read it as a new unmanaged
-	// skill — which is what the mutation safety spec forbids.
+	// skill, which is what the mutation safety spec forbids.
 	if _, err := os.Stat(filepath.Join(h.library, "alpha")); err == nil {
 		t.Errorf("the library was published before the ref was written")
 	}

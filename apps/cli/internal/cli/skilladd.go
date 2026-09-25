@@ -748,7 +748,7 @@ func (inv *invocation) writeImports(ctx context.Context, b *batch, gitDir, run s
 
 // dropImporting takes this run's staging refs away again. It is cleanup:
 // the commits they held are on the import branches by now, and a failure to
-// remove them costs nothing but a ref no command reads — which is why it
+// remove them costs nothing but a ref no command reads, which is why it
 // runs on a context a stop signal does not reach. Giving up here would
 // leave behind exactly the refs `agentx doctor` has a row for, for a run
 // that had already decided what to do with them.

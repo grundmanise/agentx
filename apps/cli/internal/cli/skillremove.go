@@ -574,7 +574,7 @@ func (inv *invocation) reportRemoved(ctx context.Context, plan removalPlan, targ
 // library entry alone: the removal never looks at a directory of that
 // client's own, since it deletes only what agentx placed. A leftover
 // directory there leaves the client seeing the skill a second after the run
-// said it did not — and a whole removal emits no skill event, so nothing
+// said it did not, and a whole removal emits no skill event, so nothing
 // else would ever correct the claim.
 //
 // A placement the run already reported as left in place is not named twice:

@@ -1128,7 +1128,7 @@ func TestSourceAddTakesBackItsRemoteWhenTheLockIsHeld(t *testing.T) {
 // bounded wait cannot answer: the lock stays held for longer than the run
 // may wait. The remote is then left behind, and a remote no source names is
 // the bug, so the run says so rather than exiting on the lost lock alone.
-// It keeps the exit code of what stopped it — a lost lock is still 7 — and
+// It keeps the exit code of what stopped it – a lost lock is still 7 – and
 // names the remote and the repair. The repair is then run, since a hint
 // that does not work is worse than none: adding the source again rewrites
 // the remote and writes the entry, which is the state this run failed to

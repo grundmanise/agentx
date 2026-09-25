@@ -198,8 +198,8 @@ func notAnExport(path, why string) error {
 //
 // Every field is checked, and not only the ones a command would notice.
 // An import is the one route by which a string somebody else chose reaches
-// the settings file, so a field nothing else in the CLI ever writes — the
-// source `alias` is one — has this gate and no other in front of it, and
+// the settings file, so a field nothing else in the CLI ever writes – the
+// source `alias` is one – has this gate and no other in front of it, and
 // the rule that guards the normal path has to guard this one too. The
 // source URLs are why that matters beyond the schema: a URL carrying a
 // user or a token never reaches the settings by any other route, and an
@@ -241,8 +241,8 @@ func badLabel(s home.Settings) string {
 
 // badDisabledConfigurations: config disable writes a detected
 // configuration id and keeps the list sorted. Membership of the registry
-// is not what is checked — a document written on a machine with a client
-// this build has no entry for names a configuration that is real there —
+// is not what is checked – a document written on a machine with a client
+// this build has no entry for names a configuration that is real there –
 // but the shape and the order are.
 func badDisabledConfigurations(s home.Settings) string {
 	seen := map[string]bool{}
@@ -325,7 +325,7 @@ func fetchTime(v string) bool {
 // badCopyMode checks what copy_mode says and how it is spelled. agentx
 // writes it by marshalling the map it holds, so the object is sorted by
 // key, holds no key twice and holds no skill whose list of configurations
-// is empty — SetCopyModes drops that entry rather than writing it. A
+// is empty: SetCopyModes drops that entry rather than writing it. A
 // document that spells it otherwise, JSON null included, says something
 // the settings file agentx writes cannot say, and copy_mode is kept as raw
 // JSON precisely so that a write does not lose it: what is imported is

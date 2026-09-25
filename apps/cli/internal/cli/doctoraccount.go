@@ -15,7 +15,7 @@ import (
 // doctor takes no lock, so it cannot tell a run that is working from one
 // that died. A remote is a settings write away from being named again, and
 // a staging ref of a run still fetching looks exactly like one of a run
-// that was killed — the run id says nothing about which, and no lock is
+// that was killed: the run id says nothing about which, and no lock is
 // held while either exists. A sweep would therefore have to guess, and a
 // wrong guess takes the objects a live install is about to publish out from
 // under it. Naming the state costs nothing and is always true.
@@ -30,7 +30,7 @@ import (
 // run killed outright, and a take-back an unrecoverable journal refused.
 // The hint gives the two repairs the add itself gives when its take-back
 // fails, in the same words, so the user hears one story whichever of the
-// two told it. The other direction — an entry whose remote is gone — needs
+// two told it. The other direction, an entry whose remote is gone, needs
 // no row: every command that uses the remote names it as missing, and
 // `source fetch` writes it back.
 func (d *doctor) sourceRemotes(ctx context.Context, gitDir string) {
