@@ -223,7 +223,7 @@ func TestAdoptedSkillIsTheSameImportAnInstallWrites(t *testing.T) {
 // other half of the rule: with nothing to establish the version the
 // directory came from, agentx records nothing rather than recording what is
 // on disk as if it had come from upstream. The skill stays unmanaged and
-// the run says what the two explicit ways out are.
+// the hint names --base as the one explicit way on.
 //
 // The directory is edited in every case, which is what makes the last route
 // fail too: the same directory unedited is adopted whatever the folder hash
@@ -258,7 +258,8 @@ func TestAdoptLeavesASkillUnmanagedWhenItsVersionCannotBeEstablished(t *testing.
 			contains(t, "the reason", reason, "cannot be established")
 			contains(t, "the route the folder hash took", reason, c.tried)
 			contains(t, "the route the directory took", reason, "the directory is not the version")
-			contains(t, "the error hint", lastError(t, h.events(out.stdout))["hint"].(string), "--base")
+			equal(t, "the error hint", lastError(t, h.events(out.stdout))["hint"],
+				"leave it unmanaged, or name the version it came from with 'agentx adopt --skill alpha --base <commit, branch or tag>'")
 			// Unmanaged is what a listing must still call it.
 			list := h.run("--json", "skill", "list")
 			equal(t, "kind", h.one(list.stdout, "library_skill")["kind"], "unmanaged")

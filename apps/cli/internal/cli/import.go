@@ -532,12 +532,13 @@ func sourceAddArg(url, pin string) string {
 const shellSafe = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._/:@%+=,#-"
 
 // shellWord makes text a line tells the user to run into the one word a
-// POSIX shell reads back as that text. The text comes from an export, and
-// a URL and a pin agentx accepts may still hold $, &, ; or a quote, so
-// pasted bare it could run a command of its own or hand agentx another
-// argument. Text of safe characters alone prints as it is; anything else is
-// single quoted, the one quoting in which nothing is special, with each
-// single quote it holds closed, escaped and reopened.
+// POSIX shell reads back as that text. The text comes from an export or
+// from the name of a library directory, and a URL, a pin and a name agentx
+// accepts may still hold $, &, ; or a quote, so pasted bare it could run a
+// command of its own or hand agentx another argument. Text of safe
+// characters alone prints as it is; anything else is single quoted, the one
+// quoting in which nothing is special, with each single quote it holds
+// closed, escaped and reopened.
 func shellWord(text string) string {
 	if text != "" && text[0] != '#' && strings.IndexFunc(text, func(r rune) bool { return !strings.ContainsRune(shellSafe, r) }) < 0 {
 		return text

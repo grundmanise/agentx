@@ -269,20 +269,32 @@ func TestStderrIsSanitisedByTheWriter(t *testing.T) {
 	w.hint(raw)
 	w.debugf("git stderr: %s", raw)
 	w.fail(&failure{status: exitSource, message: raw, hint: raw})
+	w.warnWith(raw, raw)
 	for _, r := range text.String() {
 		if unicode.IsControl(r) && r != '\n' {
 			t.Fatalf("a control character reached the terminal: %q in\n%q", r, text.String())
 		}
 	}
-	equal(t, "lines", strings.Count(text.String(), "\n"), 5) // warn, hint, debug, error, its hint
+	equal(t, "lines", strings.Count(text.String(), "\n"), 7) // warn, hint, debug, error, its hint, a warning and the line under it
 	contains(t, "stderr", text.String(), "warning: remote: [2K ]0;pwned hello from the server\n")
+	contains(t, "stderr", text.String(), "warning: remote: [2K ]0;pwned hello from the server\n  remote: [2K ]0;pwned hello from the server\n")
 
 	var events bytes.Buffer
 	j := &writer{stderr: &events, json: true, verbose: true}
 	j.warn(raw)
-	var ev logEvent
-	if err := json.Unmarshal(events.Bytes(), &ev); err != nil {
-		t.Fatal(err)
+	j.warnWith(raw, raw)
+	var messages []string
+	for _, line := range strings.Split(strings.TrimSuffix(events.String(), "\n"), "\n") {
+		var ev logEvent
+		if err := json.Unmarshal([]byte(line), &ev); err != nil {
+			t.Fatal(err)
+		}
+		equal(t, "log.level", ev.Level, "warn")
+		messages = append(messages, ev.Message)
 	}
-	equal(t, "log.message", ev.Message, raw)
+	if len(messages) != 2 {
+		t.Fatalf("%d log events, want 2:\n%s", len(messages), events.String())
+	}
+	equal(t, "log.message", messages[0], raw)
+	equal(t, "the message of a warning with a line under it", messages[1], raw+"; "+raw)
 }

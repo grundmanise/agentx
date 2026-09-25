@@ -295,13 +295,15 @@ func TestSkillRemoveDropsTheCopyModeOfWhatItRemoved(t *testing.T) {
 
 // TestSkillRemoveSaysACopyWasNotTheLibraryVersion: a copy agentx recorded
 // is removed as asked whatever it holds, and the run says what went rather
-// than letting it go quietly.
+// than letting it go quietly, worded like the warning for a copy a placement
+// leaves unchanged. It says so whichever removal deletes the copy: from
+// that configuration, from the universal clients, or off the machine.
 //
 // What it says is only what agentx can see. Nothing records how the
-// directory came to differ from the library's version — the user may have
+// directory came to differ from the library's version: the user may have
 // edited the copy, replaced it with something of another project, or had a
-// directory of their own adopted there that was never a copy agentx wrote —
-// so the warning claims no history, and the second case proves it: a
+// directory of their own adopted there that was never a copy agentx wrote.
+// So the warning claims no history, and the second case proves it: a
 // directory holding somebody else's README is not "a copy you edited".
 func TestSkillRemoveSaysACopyWasNotTheLibraryVersion(t *testing.T) {
 	t.Parallel()
@@ -325,23 +327,49 @@ func TestSkillRemoveSaysACopyWasNotTheLibraryVersion(t *testing.T) {
 			writeFile(t, filepath.Join(place, "README.md"), "# another project\n")
 		},
 	}} {
-		t.Run(c.what, func(t *testing.T) {
-			t.Parallel()
-			h, s := placementHarness(t)
-			equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "cursor", "--copy").exit, 0)
-			place := filepath.Join(h.home, ".cursor", "skills", "alpha")
-			c.build(t, place)
+		for _, r := range []struct {
+			what string
+			from []string
+			json bool
+		}{
+			{what: "from cursor", from: []string{"--from", "cursor"}},
+			{what: "from cursor with --json", from: []string{"--from", "cursor"}, json: true},
+			{what: "from universal with --json", from: []string{"--from", "universal"}, json: true},
+			{what: "off the machine", from: nil},
+		} {
+			t.Run(c.what+" "+r.what, func(t *testing.T) {
+				t.Parallel()
+				h, s := placementHarness(t)
+				equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "cursor", "--copy").exit, 0)
+				place := filepath.Join(h.home, ".cursor", "skills", "alpha")
+				c.build(t, place)
 
-			out := h.run("skill", "remove", "alpha", "--from", "cursor")
-			equal(t, "exit", out.exit, 0)
-			nothingAt(t, "the copy", place)
-			contains(t, "stderr", out.stderr, place+" did not hold the library's version of alpha")
-			contains(t, "stderr", out.stderr, "removing the copy took what was there with it")
-			if strings.Contains(out.stderr, "edited") {
-				t.Errorf("the warning claims a history agentx has no record of:\n%s", out.stderr)
-			}
-		})
+				args := append([]string{"skill", "remove", "alpha"}, r.from...)
+				if r.json {
+					args = append(args, "--json")
+				}
+				out := h.run(args...)
+				equal(t, "exit", out.exit, 0)
+				nothingAt(t, "the copy", place)
+				warning := removedCopyWarning(place, "alpha")
+				if r.json {
+					equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), warning)
+				} else {
+					equal(t, "stderr", out.stderr, "warning: "+warning+"\n")
+				}
+				if strings.Contains(out.stderr, "edited") {
+					t.Errorf("the warning claims a history agentx has no record of:\n%s", out.stderr)
+				}
+			})
+		}
 	}
+}
+
+// removedCopyWarning is the warning a removal gives for Cursor's copy of
+// name at place when that copy did not hold the library's version: the
+// message of its log event, and the text line after "warning: ".
+func removedCopyWarning(place, name string) string {
+	return "cursor's copy of " + name + " was different from the library; removing it deleted those changes (" + place + ")"
 }
 
 // TestSkillRemoveRefusesWhatItCannotFind answers for a skill the library

@@ -116,6 +116,7 @@ Use `--copy` for a client that cannot follow a symlink. agentx remembers which c
 - A library directory holding anything else stops that skill with exit code 6. Remove it, or keep it and install under another name later. In a run of several skills only that skill is stopped.
 - A placement that already points at the library is left alone.
 - A placement that is a real directory holding exactly this version is replaced by a link and reported as adopted. A copy agentx placed there itself stays a copy and is not reported as adopted.
+- A copy agentx placed that is different from the library is kept exactly as it is and skipped, with a warning. See [A copy that differs from the library](#a-copy-that-differs-from-the-library).
 - A placement that is a link somewhere else is left alone, even if what it points at holds the same files: where your skill lives is your choice.
 - Anything else in the way is left untouched, with a warning naming the path.
 - A client skills directory agentx cannot write — one owned by somebody else, one on a read-only mount, or one macOS has not granted access to — is skipped with a warning. The rest of the install still happens, and the summary counts the placements it skipped.
@@ -123,6 +124,23 @@ Use `--copy` for a client that cannot follow a symlink. agentx remembers which c
 Your files are never overwritten by an install.
 
 If two commands try to install the same name at once, one of them wins and the other is refused. The one that loses leaves nothing behind: no half-written directory, and nothing for the next command to clean up.
+
+### A copy that differs from the library
+
+A copy agentx placed stops matching the library when you edit the copy or when the skill in the library changes. `agentx skill place` and `agentx config enable --place-all` keep that copy exactly as it is and skip it, with a warning:
+
+```text
+warning: cursor's copy of pdf is different from the library, so it was left unchanged (~/.cursor/skills/pdf)
+  to replace it with the library version: agentx skill remove pdf --from cursor && agentx skill place pdf --to cursor --copy
+```
+
+Installing the skill again keeps and skips a copy you edited the same way, with the same warning. When the skill in the library changed, the install stops with exit code 6 before it reaches the copy, as described in [What happens to what is already there](#what-happens-to-what-is-already-there).
+
+The summary counts the copy as a skipped placement. agentx does not record what a copy held when it placed it, so the warning does not say which side changed.
+
+To replace the copy with the library version, run the commands on the second line of the warning. Removing the copy deletes what it holds, so save anything you want to keep first. `--copy` makes the new placement a copy again, as agentx had recorded for that client. For a skill whose name starts with `-`, the commands put the name last, after `--`, for example `agentx skill remove --from cursor -- -pdf`.
+
+With `--json`, the warning is one `log` event whose `message` holds both lines, joined by `; `.
 
 ### What is left out of the import
 
@@ -151,6 +169,15 @@ This is the second half of `agentx skill add` on its own, so everything that com
 An adopted directory becomes one agentx will delete when you remove the skill, so the run names every path it adopted. This holds with `--copy` too, where agentx writes nothing and only records the choice.
 
 A universal client, such as Codex or Gemini CLI, reads the library directly. Placing into one makes no second entry: it already sees the skill, and the last line names every universal client whichever clients you place into.
+
+Use `skill place`, not `skill add`, for a skill that is already in your library. `skill add` installs from a source, so given the name of a library skill it stops with exit code 1 and names the command to run instead:
+
+```text
+error: pdf is already in the library; skill add installs a skill from a source
+hint: to place it in more clients, run 'agentx skill place pdf --to cursor'
+```
+
+The hint keeps the `--to` and `--copy` you gave. Without `--to`, it shows `--to <configuration>`: replace that with the client you want. A source always comes first: a source URL, `owner/repo` or a source id installs from that source, even when a skill in your library has the same name.
 
 ## Remove a skill
 
@@ -215,10 +242,10 @@ warning: ~/.cursor/skills/pdf is a directory agentx did not place there and was 
 
 Here `~/mylinks/pdf` points at the library entry, so once the removal deletes that entry your link stays but no longer leads to the skill, and the warning says so. A link of yours that does not lead through anything the removal deletes keeps working, and the warning says which client still sees the skill.
 
-A copy agentx recorded is removed as you asked, even when it no longer holds the library's version of the skill. agentx warns and names the path rather than letting the content go quietly:
+A copy agentx recorded is removed as you asked, even when it no longer holds the library's version of the skill. agentx warns, naming whose copy it was and its path, rather than letting the content go quietly:
 
 ```text
-warning: ~/.cursor/skills/pdf did not hold the library's version of pdf; removing the copy took what was there with it
+warning: cursor's copy of pdf was different from the library; removing it deleted those changes (~/.cursor/skills/pdf)
 ```
 
 Take a copy of anything you want to keep before removing it.
@@ -320,7 +347,7 @@ Every install writes one commit per skill in the account repo in agentx home: th
 
 ## Exit codes
 
-- `1`: the command line names no skill to install, the flags contradict each other (`--all` with `--skill`, `--except` without `--all`, `--except` leaving nothing, or `--from universal` with a client that is not universal), it names the source with another branch or tag than its pin, or `skill place` was given no `--to`.
+- `1`: the command line names no skill to install, the flags contradict each other (`--all` with `--skill`, `--except` without `--all`, `--except` leaving nothing, or `--from universal` with a client that is not universal), it names the source with another branch or tag than its pin, `skill add` is given something that is not a source (for example, the name of a skill the library already holds), or `skill place` was given no `--to`.
 - `3`: the source, or the files of the skill, could not be fetched.
 - `5`: a source id names no source on this machine (for a source you removed, the hint names the `agentx source add` command that brings it back), the source did not serve a skill's files, the path or a skill named by `--skill` or `--except` does not exist in the source, or `--to` or `--from` names a configuration that is not detected. For `skill place` and `skill remove`, also a name the library does not hold as a skill.
 - `6`: the library already holds a different skill under that name, the name is already managed at another version, the skill's name cannot be both a directory and a git branch, the skill's directory in the source is not one agentx can record, the skill holds a file whose path would put it outside the skill's directory, agentx cannot use your library directory, or an interrupted change has to be resolved before anything else can run. The message names what to restore; if you would rather keep what is there, move the named file in `~/.agentx/mutations` aside. For `skill remove`, it is also `--from` naming a universal client, one that reads the library directly, even next to `--from universal`, and removing a name that is a fork. In a run of several skills, `6` is also the code when the skills that were skipped disagree about why: a run whose failures all have one cause exits with that cause, so a batch that skipped two skills the source did not serve exits `5`.

@@ -100,6 +100,20 @@ warning: ~/.cursor/skills/pdf is not this skill and was left as it is; no placem
 
 Here Cursor does not see pdf at all, so pdf has no row. If agentx left Cursor's path alone and Cursor still sees the skill through another client's skills directory, as it sees a skill Claude Code holds, the skill's row shows that path instead, so the output still tells you Cursor has the skill.
 
+A copy agentx keeps for the client is skipped the same way when it is different from the library, for instance because you edited it. It stays exactly as it is, and the line under the warning names the commands that replace it with the library version:
+
+```text
+warning: cursor's copy of pdf is different from the library, so it was left unchanged (~/.cursor/skills/pdf)
+  to replace it with the library version: agentx skill remove pdf --from cursor && agentx skill place pdf --to cursor --copy
+✓ cursor is now enabled
+✓ placed 1 skill in cursor, 1 placement skipped
+  xlsx  symlink  ~/.cursor/skills/xlsx -> ~/.agents/skills/xlsx
+```
+
+The kept copy is not the library's pdf, so pdf has no row here either. If Cursor also sees pdf through another client's skills directory, pdf's row shows that path, as above.
+
+See [A copy that differs from the library](/cli/skill#a-copy-that-differs-from-the-library).
+
 `--place-all` belongs to `enable`; `agentx config disable --place-all` exits with code 1. Place skills one at a time with [`agentx skill place`](/cli/skill).
 
 A client that reads the library directly, such as Codex, already sees every library skill, so `--place-all` makes no entry of its own for it and says so:

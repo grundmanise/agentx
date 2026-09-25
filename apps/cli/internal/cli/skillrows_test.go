@@ -161,3 +161,56 @@ func TestPlacingShowsWhereAClientStillSeesASkillItCouldNotPlace(t *testing.T) {
 		t.Errorf("--place-all does not end with the row of the path Cursor sees alpha through:\n%s", all.stdout)
 	}
 }
+
+// TestPlacingShowsWhereAClientSeesASkillBesideACopyItKept: a copy copy_mode
+// records for Cursor that is different from the library is kept and
+// skipped, and the rescan does not find it as the skill, since it does not
+// hold the library's version, so Cursor has nothing of the skill at its own
+// place. Where Claude Code holds the skill, Cursor still sees it through
+// Claude Code's skills directory, and that path is Cursor's one row, as for
+// a directory of the user's, after skill place and after config enable
+// --place-all. Where no other client holds it, Cursor has no row at all.
+func TestPlacingShowsWhereAClientSeesASkillBesideACopyItKept(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		what   string
+		claude bool
+	}{
+		{"Claude Code holds the skill", true},
+		{"no other client holds the skill", false},
+	} {
+		t.Run(c.what, func(t *testing.T) {
+			t.Parallel()
+			h, s := universalHarness(t, ".cursor")
+			h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "cursor", "--copy")
+			if c.claude {
+				h.mustRun("skill", "place", "alpha", "--to", "claude-code")
+			}
+			kept := filepath.Join(h.home, ".cursor", "skills", "alpha")
+			editCopy(t, kept)
+			warning, _ := keptCopyLines(kept, "alpha", "agentx skill remove alpha --from cursor", "agentx skill place alpha --to cursor --copy")
+			var cursorRow, alphaRow string
+			if c.claude {
+				row := "copy  " + filepath.Join(h.home, ".claude", "skills", "alpha") + " -> " + filepath.Join(h.library, "alpha") + "\n"
+				cursorRow, alphaRow = "  cursor  "+row, "  alpha  "+row
+			}
+
+			out := h.mustRun("skill", "place", "alpha", "--to", "cursor")
+			contains(t, "stderr", out.stderr, warning)
+			equal(t, "stdout", out.stdout, "✓ placed alpha in 0 configurations, 1 placement skipped\n"+
+				cursorRow+
+				"  always available to universal clients: codex, gemini-cli\n")
+
+			h.mustRun("config", "disable", "cursor")
+			all := h.mustRun("config", "enable", "cursor", "--place-all")
+			contains(t, "stderr of --place-all", all.stderr, warning)
+			seen := "0 skills"
+			if c.claude {
+				seen = "1 skill"
+			}
+			equal(t, "stdout of --place-all", all.stdout, "✓ cursor is now enabled\n"+
+				"✓ placed "+seen+" in cursor, 1 placement skipped\n"+
+				alphaRow)
+		})
+	}
+}

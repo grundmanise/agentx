@@ -94,7 +94,7 @@ The message names every way agentx tried, because the skill is left unmanaged on
 
 agentx leaves the skill alone. It stays in your library and keeps working; it is simply unmanaged, and every other skill of the run is still adopted. It does **not** record your edited files as if they had come from upstream: that would turn your changes into upstream content, and nothing afterwards could separate the two again.
 
-You have two ways on.
+Name its base yourself with `--base`, the one way to adopt it anyway, or leave it unmanaged.
 
 ### Choose the base yourself
 
@@ -117,9 +117,15 @@ A version that is not in the history the source follows is refused: a version of
 agentx source add https://github.com/anthropics/skills#main
 ```
 
-### Keep it as your own
+### Leave it unmanaged
 
-If the directory is really yours now rather than a copy of someone else's skill, fork it. A fork keeps your content with a history of its own, and agentx never pretends it came from upstream.
+If you do not know the version, leave the skill as it is. It stays in your library and keeps its placements, so every client that saw it still does, and `agentx skill list` shows it as `unmanaged`. agentx keeps it in the inventory but never updates or reverts it.
+
+To adopt it later, name its base:
+
+```sh
+agentx adopt --skill pdf --base <commit, branch or tag>
+```
 
 ## What is refused, and why
 

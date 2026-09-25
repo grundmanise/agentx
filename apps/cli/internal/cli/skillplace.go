@@ -61,7 +61,7 @@ type placements struct {
 	placed    []placeTarget // the configurations that now see the skill
 	copies    []string      // the configurations that hold a copy
 	adoptions []string      // the placement paths that were a directory of this version
-	skipped   []string      // the placement paths something else holds
+	skipped   []string      // the placement paths the run left without a placement
 }
 
 // placeable is what a placement is made of: the name the skill is placed
@@ -230,7 +230,8 @@ func (inv *invocation) noLibrarySkill(name string) error {
 // skill, gets a copy whether or not this command was asked for one: its
 // client may not follow a symlink, and turning agentx's own copy into a
 // link would leave copy_mode naming a copy that is not there, which a
-// removal would then trust about whatever the user put at that path.
+// removal would then trust about whatever the user put at that path. A copy
+// there that does not hold this version is kept and skipped, see keepCopy.
 //
 // A placement this machine cannot make — a skills directory owned by
 // somebody else, one on a read-only mount, one macOS has not granted
@@ -287,6 +288,11 @@ func (inv *invocation) stagePlacement(m *home.Mutation, p placeable, t placeTarg
 			return
 		}
 		displace, adopt = true, true
+	case recorded && home.IsDir(state):
+		// agentx's own copy, which does not hold this version: it is
+		// kept, since replacing it would take what it holds with it.
+		inv.keepCopy(done, t, placePath, p.name)
+		return
 	default:
 		// A link is refused for being a link and not for where it leads: it
 		// may well resolve to this very version, and saying it is not this
@@ -350,6 +356,38 @@ func (inv *invocation) placementContent(m *home.Mutation, p placeable, t placeTa
 		return "", "", err
 	}
 	return staged, fingerprint, nil
+}
+
+// keepCopy skips a copy copy_mode records for the configuration whose
+// content is not the version being placed, and says whose copy it is and
+// how to replace it with the library version: remove the copy, which a
+// removal deletes as agentx's own, and place a copy again, since copy_mode
+// recorded one for a client that may not follow a symlink.
+//
+// It says the copy is different from the library and never why. Nothing
+// records what a copy held when it was placed, so an edit of the copy, a
+// change to the library directory since and a copy_mode entry imported
+// from another machine all look the same from here.
+//
+// The two commands are one line under the warning, joined by && so they can
+// be pasted as they are. A log event carries no hint, so in JSON mode that
+// line is part of the message, where a script finds it as a person reading
+// the text does.
+func (inv *invocation) keepCopy(done *placements, t placeTarget, placePath, name string) {
+	done.skipped = append(done.skipped, placePath)
+	inv.out.warnWith(t.id+"'s copy of "+name+" is different from the library, so it was left unchanged ("+placePath+")",
+		"to replace it with the library version: "+skillCommand("remove", name, "--from", t.id)+" && "+skillCommand("place", name, "--to", t.id, "--copy"))
+}
+
+// skillCommand is the agentx skill command a line tells the user to run on
+// the skill called name, the name quoted for a shell. A name that starts
+// with a dash comes last, after the flags and "--", since agentx would
+// otherwise read it as a flag of its own and refuse the command.
+func skillCommand(verb, name string, flags ...string) string {
+	if strings.HasPrefix(name, "-") {
+		return "agentx skill " + verb + " " + strings.Join(flags, " ") + " -- " + shellWord(name)
+	}
+	return "agentx skill " + verb + " " + shellWord(name) + " " + strings.Join(flags, " ")
 }
 
 // skipPlacement leaves one configuration without a placement and says why,
@@ -635,7 +673,10 @@ func (inv *invocation) printAdoptions(adoptions []string) {
 // on every configuration they were asked for, one whose placement was
 // skipped included, and that one can still see the skill through another
 // client's skills directory: its row says so, below the warning that says
-// why nothing was placed. An install reports only on the configurations it
+// why nothing was placed. A copy keepCopy left is one of those: it does not
+// hold the library's version, so the rescan does not find it as the skill,
+// and nothing of the skill is at that configuration's own place. An
+// install reports only on the configurations it
 // placed into, each of which the rescan finds holding the placement at its
 // own place, so there this is no more than a safety net for a path that
 // something changed between the mutation and the rescan.

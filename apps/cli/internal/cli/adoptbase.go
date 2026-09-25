@@ -306,8 +306,9 @@ func (inv *invocation) upstreamCommits(ctx context.Context, run *adoptRun, gitDi
 // noVersion is the refusal of a candidate every route left without a base.
 // It says what each route tried, in the order they were tried, since the
 // skill is left unmanaged because nothing established a version for it and
-// not because one particular lookup missed. The two ways on are the ones
-// the contract names: choose the version, or fork the directory.
+// not because one particular lookup missed. The hint names the one
+// explicit way on the contract names, --base, which chooses the version;
+// without it the skill stays unmanaged. Adoption offers no diff and no fork.
 func (c *candidate) noVersion() *failure {
 	where := c.src.URL + " at " + short(c.tip)
 	var byHash, byDirectory string

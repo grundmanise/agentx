@@ -48,6 +48,8 @@ Parse each line on its own. Read the exit code before trusting the output.
 
 Logs go to stderr, never to stdout. Add `--verbose` to see debug lines, such as which agentx home and library the command used. With `--json`, log lines are JSON objects too.
 
+Some warnings put what to do on a second line, indented under the warning. With `--json`, such a warning is still one `log` event, and its `message` holds both lines joined by `; `.
+
 ## Errors
 
 A failed command prints `error: ...` and, when there is a fix, `hint: ...` on stderr. With `--json` it emits an `error` event with `code`, `message` and `hint` instead, followed by a `result` with `ok: false`.

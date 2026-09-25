@@ -6,7 +6,7 @@ Status: accepted. Applies to commands that change lineage refs, worktrees, libra
 
 Record the actual previously installed upstream version as the base. Keep the adopted directory's current content; differences from that base remain local modifications. Never import edited local content as if it came from upstream.
 
-If the prior base cannot be established, leave the directory unmanaged. Offer an explicit base selection with a diff, or creation of a fork. Neither choice silently replaces the directory with the latest upstream version.
+If the prior base cannot be established, leave the directory unmanaged. Offer an explicit base selection as the one way to adopt it anyway. It never silently replaces the directory with the latest upstream version.
 
 ## Mutation and recovery
 

@@ -430,16 +430,17 @@ func (inv *invocation) planRemoval(t placeTarget, name, libPath, libHash string,
 		// before it goes with the copy, which is what removing a copy
 		// means, so the run says that it went.
 		//
-		// What it says is what agentx can see: that the directory no longer
-		// holds the library's version. How it came to differ is not
-		// recorded anywhere — the user may have edited the copy, replaced
-		// it with something of another project, or had a directory of their
-		// own adopted here that was never a copy agentx wrote — so the
-		// warning does not claim a history it has no record of.
+		// What it says is what agentx can see: whose copy it was, and that
+		// it was different from the library, worded like the warning for a
+		// copy a placement leaves unchanged. How it came to differ is not
+		// recorded anywhere: the user may have edited the copy, replaced it
+		// with something of another project, or had a directory of their own
+		// adopted here that was never a copy agentx wrote. So the warning
+		// does not claim a history it has no record of.
 		step.mode, step.state = modeCopy, state
 		if libHash != "" && contentHashAt(path) != libHash {
-			inv.out.warn(path + " did not hold the library's version of " + name +
-				"; removing the copy took what was there with it")
+			inv.out.warn(t.id + "'s copy of " + name +
+				" was different from the library; removing it deleted those changes (" + path + ")")
 		}
 	default:
 		step.why = inv.whyKept(path, state, libPath, t.id, name, gone)
