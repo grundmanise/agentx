@@ -31,7 +31,7 @@ Single-context repo:
 
 ## Public and private docs
 
-`agentx-private` repo holds the PRD, business decisions, private specs (e.g. asset-graph spec), vendor choices, pricing and sync-engine internals. Never link to it, quote it or paraphrase its contents from `CONTEXT.md`, anything else under `docs/`, or a GitHub issue. If a public doc needs a decision that lives there, state the decision in product terms without the vendor or the price.
+This repository is public. Internal planning lives in the private `agentx-private` repository. Never link to, quote or paraphrase it, and never cite its issue, spec or requirement numbers, in `CONTEXT.md`, anything else under `docs/`, code, commit messages, PR text, branch names or a GitHub issue. If a public doc needs a decision made there, state the decision in product terms, without vendors or prices.
 
 ## Use the glossary's vocabulary
 
