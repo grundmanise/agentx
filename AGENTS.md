@@ -34,5 +34,5 @@ PR and commit descriptions should use an imperative style and provide a clear, c
 
 This repository is public. See `docs/agents/domain.md` for what must never appear in it.
 
-- Never add Claude Code session links (`claude.ai/code/session_…`) to commits or PRs: no `Claude-Session` trailer in commit messages and no session URL in PR titles, descriptions or comments.
+- Never add links to agent sessions (from any coding agent or harness) to commits or PRs.
 - Name branches after the change in product terms, such as `feat/source-removed-drift`, never after internal ticket, spec or requirement numbers. Write commit messages and PR text the same way.
