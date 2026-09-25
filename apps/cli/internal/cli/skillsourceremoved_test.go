@@ -516,18 +516,24 @@ func TestAdoptingFromARemovedSourceClearsSourceRemoved(t *testing.T) {
 	equal(t, "alpha's import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), branch)
 }
 
-// runBesideServe runs a mutation while a serve of the same home is running.
+// besideServe runs a mutation while a serve of the same home is running.
 // Every scan of serve holds the shared lock over its reads, and a mutation
 // that finds the lock held gives up after 50 ms, as the contract has it, so
 // a mutation that lands on a scan is refused with exit 7 and run again, as
-// its user would run it again.
-func (h *harness) runBesideServe(args ...string) {
-	h.t.Helper()
+// its user would run it again. It fails nothing itself, so a test can run
+// it off its own goroutine.
+func (h *harness) besideServe(args ...string) outcome {
 	out := h.run(args...)
 	for start := time.Now(); out.exit == 7 && time.Since(start) < serveDeadline; out = h.run(args...) {
 		time.Sleep(10 * time.Millisecond)
 	}
-	if out.exit != 0 {
+	return out
+}
+
+// runBesideServe is besideServe for a mutation that has to succeed.
+func (h *harness) runBesideServe(args ...string) {
+	h.t.Helper()
+	if out := h.besideServe(args...); out.exit != 0 {
 		h.t.Fatalf("agentx %s: exit %d\n%s%s", strings.Join(args, " "), out.exit, out.stdout, out.stderr)
 	}
 }
