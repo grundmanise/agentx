@@ -128,6 +128,15 @@ func (s *scanner) pluginSkills(dir string) []placement {
 	return []placement{{path: dir, resolved: resolved, symlink: symlink, info: s.skill(resolved)}}
 }
 
+// hashSkill is the one way a scanner content-hashes a skill directory, so
+// what a scan costs in hashing is one thing a test can count. Hashing reads
+// every file a skill holds, and that is the cost a scan pays once per real
+// directory however many ways it reaches it: a library skill is reached
+// through every client that reads the library, through each placement that
+// links to it and through the scan's own read of the library, and every way
+// after the first is answered from the cache skill keeps.
+var hashSkill = contentHash
+
 // skill reads and hashes the skill at real path dir, once.
 func (s *scanner) skill(dir string) *skillInfo {
 	if info, ok := s.skills[dir]; ok {
@@ -145,7 +154,7 @@ func (s *scanner) skill(dir string) *skillInfo {
 	info := &skillInfo{
 		name:        fm.name,
 		description: fm.description,
-		contentHash: contentHash(dir, fm, s.warn),
+		contentHash: hashSkill(dir, fm, s.warn),
 	}
 	if info.name == "" {
 		info.name = filepath.Base(dir)

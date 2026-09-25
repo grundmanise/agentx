@@ -47,7 +47,7 @@ Name single skills instead with `--skill`, once for each:
 agentx adopt --skill pdf --skill xlsx
 ```
 
-Adopting adds any source you do not have yet, exactly as [`agentx source add`](/cli/source) would, and pins it to the branch or tag the lock file recorded. Then it records the version each skill was installed at and points that skill's import branch at it.
+Adopting adds any source you do not have yet, exactly as [`agentx source add`](/cli/source) would, and pins it to the branch or tag the lock file recorded. Then it records the version each skill was installed at and points that skill's import branch at it. A source you removed comes back this way too, and the skills you installed from it no longer show `source removed`.
 
 A source holds one pin, so when its skills were installed from different refs agentx takes the first in name order and warns you:
 

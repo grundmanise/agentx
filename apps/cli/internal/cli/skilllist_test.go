@@ -50,26 +50,33 @@ func TestSkillListReportsManagedAndUnmanaged(t *testing.T) {
 }
 
 // TestSkillListReadsLineageFromTheBranchesAlone is the criterion that keeps
-// the listing independent of the sources: every source ref goes, and the
-// listing does not change by one byte.
+// the listing independent of what was fetched: every source ref goes, and
+// the listing does not change by one byte, in text or in JSON. The sources
+// stay in the settings, which is what an import leaves too: a source this
+// machine has and holds no fetch of is not a source removed.
 func TestSkillListReadsLineageFromTheBranchesAlone(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	equal(t, "exit", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
-	before := h.run("--json", "skill", "list")
-	equal(t, "exit", before.exit, 0)
+	beforeJSON := h.mustRun("--json", "skill", "list")
+	beforeText := h.mustRun("skill", "list")
 
-	// Every source ref and the source itself go.
-	equal(t, "exit", h.run("source", "remove", s.url).exit, 0)
+	// Every source ref goes, with plain git, behind agentx's back.
 	for _, ref := range strings.Split(h.accountGit("for-each-ref", "--format=%(refname)", "refs/agentx/sources/"), "\n") {
 		if ref != "" {
-			t.Fatalf("the source ref %s is still there", ref)
+			h.accountGit("update-ref", "-d", ref)
 		}
 	}
-	after := h.run("--json", "skill", "list")
-	equal(t, "exit", after.exit, 0)
-	if after.stdout != before.stdout {
-		t.Errorf("the listing changed when the sources went:\nbefore:\n%safter:\n%s", before.stdout, after.stdout)
+	if refs := h.accountGit("for-each-ref", "refs/agentx/sources/"); refs != "" {
+		t.Fatalf("source refs are still there:\n%s", refs)
+	}
+	for _, c := range []struct{ what, before, after string }{
+		{"JSON", beforeJSON.stdout, h.mustRun("--json", "skill", "list").stdout},
+		{"text", beforeText.stdout, h.mustRun("skill", "list").stdout},
+	} {
+		if c.after != c.before {
+			t.Errorf("the %s listing changed when the source refs went:\nbefore:\n%safter:\n%s", c.what, c.before, c.after)
+		}
 	}
 }
 

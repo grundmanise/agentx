@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -37,7 +38,7 @@ func newScanCommand(inv *invocation) *cobra.Command {
 					return err
 				}
 			}
-			snap, err := inv.scan(cmd.Context(), lockWait, project, handshake)
+			snap, err := inv.snapshot(cmd.Context(), lockWait, project, handshake)
 			if err != nil {
 				return err
 			}
@@ -69,7 +70,48 @@ const lockWait = time.Second
 // the exclusive lock. An unfinished mutation journal found under the shared
 // lock is recovered under the exclusive one, and the reads start over: no
 // inventory is composed from half-applied state.
+//
+// Its snapshot lists no library: it is the scan a command runs for the
+// placements it reports, after its own change for a mutation such as skill
+// add or skill remove, and on its own for a read-only command such as skill
+// list or export. Each of those commands takes the lineage it needs itself,
+// once, if it needs any. The snapshot a scan or serve emits is snapshot's.
 func (inv *invocation) scan(ctx context.Context, wait time.Duration, project string, handshake bool) (scan.Snapshot, error) {
+	return inv.inventory(ctx, wait, project, handshake, false)
+}
+
+// snapshot is the scan whose snapshot is emitted, by agentx scan and by
+// every scan of agentx serve: the scan above, with the library listed as
+// agentx skill list lists it. The lineage it takes is read under the same
+// shared lock as the settings and the filesystem, in one for-each-ref, so a
+// snapshot never pairs a library directory with lineage from either side
+// of a mutation; and a snapshot carries drift, which the desktop app takes
+// from the snapshot alone.
+//
+// The library's directories are read either way, so that a scan warns
+// about the same library directories with and without --json. Its lineage
+// is read only for a snapshot emitted as JSON, the one output that lists
+// the entries: without --json nothing prints them, so a text scan runs no
+// git for them and cannot fail on the account repo.
+//
+// An account repo git cannot read costs the snapshot its library and
+// nothing else. The library is listed empty and one warning carries git's
+// error and sends the reader to agentx doctor and to the account repo it
+// names, while the configurations, the skills, the servers and the plugins
+// the scan read stand: neither agentx scan nor a serve reads the account
+// repo for any of them, and a serve whose every scan failed on it would
+// leave the desktop app with no inventory at all. The warning names the
+// repo as well as doctor because git's error is the diagnosis: doctor
+// checks that the repo opens, and a repo that opens can still hold a
+// branch whose commit is gone. Listing the library without its lineage
+// instead would call every managed skill unmanaged, which is not true.
+// skill list, which exists to report the lineage, still fails on it.
+func (inv *invocation) snapshot(ctx context.Context, wait time.Duration, project string, handshake bool) (scan.Snapshot, error) {
+	return inv.inventory(ctx, wait, project, handshake, true)
+}
+
+// inventory is scan and snapshot, the library read when library says so.
+func (inv *invocation) inventory(ctx context.Context, wait time.Duration, project string, handshake, library bool) (scan.Snapshot, error) {
 	timeout := handshakeTimeout
 	if v := inv.env["AGENTX_HANDSHAKE_TIMEOUT"]; handshake && v != "" {
 		d, err := time.ParseDuration(v)
@@ -98,7 +140,9 @@ func (inv *invocation) scan(ctx context.Context, wait time.Duration, project str
 		lockCtx, cancel = context.WithTimeout(ctx, wait)
 		defer cancel()
 	}
+	listed := library && inv.out.json // whether the snapshot's library entries are built and emitted
 	var sc *scan.Scan
+	var listing *skillContext // what the library entries are built from, read with the rest; nil lists none
 	for sc == nil {
 		var journals []string
 		err = home.ReadLocked(lockCtx, inv.dirs.Home, func() error {
@@ -122,7 +166,23 @@ func (inv *invocation) scan(ctx context.Context, wait time.Duration, project str
 				Project:    project,
 				Disabled:   s.DisabledConfigurations,
 				CopyMode:   copyMode,
+				Library:    library,
 			})
+			if !listed {
+				return nil
+			}
+			records, err := inv.lineageRecords(ctx)
+			var f *failure
+			switch {
+			case err == nil:
+				listing = &skillContext{records: records, modes: copyMode, sources: sourceURLs(s)}
+			case errors.As(err, &f) && f.status == exitAccountRepo && ctx.Err() == nil && !inv.git.StoppedChild():
+				// The account repo's own answer, and not a stop that killed
+				// the git reading it: that is the run's to answer for.
+				sc.Warn(f.message + "; the library is not listed, run 'agentx doctor' and check the account repo it names")
+			default:
+				return err
+			}
 			return nil
 		})
 		if err == nil && len(journals) > 0 {
@@ -137,6 +197,11 @@ func (inv *invocation) scan(ctx context.Context, wait time.Duration, project str
 		sc.Handshake(ctx, scan.HandshakeOptions{Env: inv.env, Timeout: timeout, Version: cliVersion, Debug: inv.out.debugf})
 	}
 	snap, fresh := sc.Snapshot()
+	if listing != nil {
+		for _, lib := range sc.Library() {
+			snap.Library = append(snap.Library, listing.librarySkillEventFor(inv, snap, lib, nil).LibraryEntry)
+		}
+	}
 	if len(fresh) > 0 {
 		if err := home.SaveHandshakes(inv.dirs.Home, inv.refs(ctx), fresh); err != nil {
 			return scan.Snapshot{}, err

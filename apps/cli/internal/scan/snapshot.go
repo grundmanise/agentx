@@ -18,6 +18,7 @@ type Options struct {
 	Project    string              // absolute project root; empty scans user scope only
 	Disabled   []string            // configuration ids the user disabled
 	CopyMode   map[string][]string // skill directory name to the configuration ids holding a copy
+	Library    bool                // also list the library's own directories, for a snapshot that reports them
 }
 
 // Snapshot is the inventory of one machine, the snapshot event without its envelope.
@@ -27,6 +28,7 @@ type Snapshot struct {
 	Machine        Machine         `json:"machine"`
 	Configurations []Configuration `json:"configurations"`
 	Skills         []Skill         `json:"skills"`
+	Library        []LibraryEntry  `json:"library"` // filled in by the caller, which reads the lineage
 	MCPServers     []Server        `json:"mcp_servers"`
 	Plugins        []Plugin        `json:"plugins"`
 	Edges          []Edge          `json:"edges"`
@@ -66,6 +68,36 @@ type Occurrence struct {
 	Kind          string `json:"kind"` // symlink, copy or directory
 	Scope         string `json:"scope"`
 	Plugin        string `json:"plugin,omitempty"` // the plugin the placement belongs to
+}
+
+// LibraryEntry is one skill directory of the library as agentx reports it:
+// what it is called, what agentx knows it as, where it came from, how it
+// stands against the version it came from and where it is seen from. It is
+// what the library_skill event carries and what a snapshot lists under
+// library, one shape in both, so that the desktop app reading snapshots and
+// a script reading skill list are told the same thing about a skill. A skill
+// node is something else: one content version found anywhere on the
+// machine, which knows nothing of lineage.
+type LibraryEntry struct {
+	Name           string             `json:"name"`
+	Kind           string             `json:"kind"`              // managed, fork or unmanaged
+	Source         string             `json:"source,omitempty"`  // the canonical URL of the upstream
+	Subpath        *string            `json:"subpath,omitempty"` // the directory in the source, "" for its root
+	UpstreamCommit string             `json:"upstream_commit,omitempty"`
+	BaseHash       string             `json:"base_hash,omitempty"` // the content hash of the base version
+	ContentHash    string             `json:"content_hash"`        // what the library holds now
+	State          string             `json:"state,omitempty"`     // current or modified, for a managed skill
+	Drift          []string           `json:"drift,omitempty"`     // the drift states beside state, for a managed skill
+	Placements     []LibraryPlacement `json:"placements"`
+}
+
+// LibraryPlacement is one way a configuration sees a library skill: mode is
+// what agentx keeps for it, kind is what is on disk now.
+type LibraryPlacement struct {
+	Configuration string `json:"configuration"`
+	Path          string `json:"path"`
+	Mode          string `json:"mode"` // symlink, copy or library
+	Kind          string `json:"kind"` // symlink, copy, directory or library
 }
 
 // Server is one MCP server in one signature version; the same server
@@ -139,6 +171,7 @@ func Read(o Options) *Scan {
 			Machine:        Machine{ID: o.MachineID, Label: o.Label},
 			Configurations: []Configuration{},
 			Skills:         []Skill{},
+			Library:        []LibraryEntry{},
 			MCPServers:     []Server{},
 			Plugins:        []Plugin{},
 			Edges:          []Edge{},
@@ -177,6 +210,9 @@ func Read(o Options) *Scan {
 			b.addPlugin(conf, p)
 		}
 	}
+	if o.Library {
+		b.library = b.librarySkills(o.Dirs.Library)
+	}
 	var err error
 	if b.stored, err = home.LoadHandshakes(o.Dirs.Home); err != nil {
 		b.warn(err.Error() + ", ignored")
@@ -194,8 +230,23 @@ type Scan struct {
 	seen     map[string]bool    // occurrence and edge ids already recorded
 	declared []*declaration
 	stored   map[string]home.Handshake // from the handshakes file, by logical id
+	library  []LibrarySkill            // the library's own directories, read only when Options.Library asks
 	snap     Snapshot
 }
+
+// Library is the skills the library held when Read ran, sorted by name, or
+// nothing when Options.Library did not ask for them. They are read by the
+// scan's own reads, under the lock Read runs under and through the same
+// cache: a library a client reads directly is listed once and each of its
+// skills hashed once, however many times the scan comes across it, and what
+// could not be read in it is one of the scan's warnings.
+func (s *Scan) Library() []LibrarySkill { return s.library }
+
+// Warn adds a warning of the caller's own to the snapshot, for something it
+// reads beside the scan, under the same lock, and could not. It is sorted in
+// with the scan's own warnings when Snapshot composes them and, like them,
+// never fails the scan.
+func (s *Scan) Warn(message string) { s.warn(message) }
 
 // Snapshot composes the inventory, once per Scan, and returns it with the
 // handshakes this scan took, by server logical id, for the handshakes file.

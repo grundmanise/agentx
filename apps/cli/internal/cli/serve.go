@@ -55,7 +55,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 			inv.instanceID() // fixed here, before two goroutines report it
 			dirs, trees := inv.watchedDirs()
 			err = serve.Run(cmd.Context(), serve.Options{
-				Scan:  func(ctx context.Context) (scan.Snapshot, error) { return inv.scan(ctx, 0, "", false) },
+				Scan:  func(ctx context.Context) (scan.Snapshot, error) { return inv.snapshot(ctx, 0, "", false) },
 				Index: inv.sourceIndex,
 				Watch: dirs,
 				Trees: trees,

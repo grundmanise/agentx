@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 )
@@ -16,28 +17,16 @@ import (
 // it came from and where it can be seen from. It is named for the library
 // so that nothing has to tell it apart from the skill node of a snapshot,
 // which is one content version found anywhere on the machine, or from a
-// sourceSkillEvent, which is one installable skill of a source.
+// sourceSkillEvent, which is one installable skill of a source. Its fields
+// are the library entry a snapshot lists, so the two always say the same.
 type librarySkillEvent struct {
 	event
-	Name           string           `json:"name"`
-	Kind           string           `json:"kind"`              // managed, fork or unmanaged
-	Source         string           `json:"source,omitempty"`  // the canonical URL of the upstream
-	Subpath        *string          `json:"subpath,omitempty"` // the directory in the source, "" for its root
-	UpstreamCommit string           `json:"upstream_commit,omitempty"`
-	BaseHash       string           `json:"base_hash,omitempty"` // the content hash of the base version
-	ContentHash    string           `json:"content_hash"`        // what the library holds now
-	State          string           `json:"state,omitempty"`     // current or modified, for a managed skill
-	Placements     []placementEvent `json:"placements"`
+	scan.LibraryEntry
 }
 
 // placementEvent is one way a configuration sees the skill: mode is what
 // agentx keeps for it, kind is what is on disk now.
-type placementEvent struct {
-	Configuration string `json:"configuration"`
-	Path          string `json:"path"`
-	Mode          string `json:"mode"` // symlink, copy or library
-	Kind          string `json:"kind"` // symlink, copy, directory or library
-}
+type placementEvent = scan.LibraryPlacement
 
 // The placement modes and the kind of a placement that is the library entry
 // itself, for a client that reads the library as its own skills directory.
@@ -54,6 +43,18 @@ const (
 	stateCurrent  = "current"
 	stateModified = "modified"
 )
+
+// driftSourceRemoved is the drift state of a managed skill whose source
+// this machine no longer has: the canonical URL its lineage names is the
+// url of no source entry in the machine settings. It sits beside the
+// state rather than in it, because the two answer different questions and
+// both can be true at once: a skill edited by hand whose source was then
+// removed is modified and source removed, and saying only one of them
+// would hide the other. The drift states still to come (an upstream that
+// dropped the skill, a placement that is not what the settings record, a
+// configuration the skill is missing from) can each hold together with
+// this one too, which is why drift is a list and state stays one word.
+const driftSourceRemoved = "source removed"
 
 func newSkillCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
@@ -199,9 +200,20 @@ func sortPlacements(p []placementEvent) {
 }
 
 // skillFromLibrary builds the event of one library skill from its lineage
-// record and the placements a scan found.
-func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, places []placementEvent) librarySkillEvent {
-	ev := librarySkillEvent{event: newEvent("library_skill"), Name: lib.Name, Kind: lineage.KindUnmanaged, ContentHash: lib.ContentHash, Placements: places}
+// record, the canonical URLs of the sources the settings hold and the
+// placements a scan found.
+//
+// Every state is derived here, on every read, and nothing is ever written
+// for one: the lineage says where the skill came from and the settings say
+// which sources this machine has, so removing a source and adding it back
+// each change what the next read says, and nothing else. What decides that
+// a source is gone is its settings entry and not its ref in the account
+// repo: an entry whose ref is missing is a source this machine still has
+// and has not fetched, which is what an import leaves.
+func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, sources map[string]bool, places []placementEvent) librarySkillEvent {
+	ev := librarySkillEvent{event: newEvent("library_skill"), LibraryEntry: scan.LibraryEntry{
+		Name: lib.Name, Kind: lineage.KindUnmanaged, ContentHash: lib.ContentHash, Placements: places,
+	}}
 	if !ok {
 		return ev
 	}
@@ -218,6 +230,25 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, places
 		if lib.ContentHash != rec.Import.Hash {
 			ev.State = stateModified
 		}
+		// The coordinates stay as the lineage has them: they are still where
+		// the skill came from, and they are what adding the source again
+		// needs. A fork is not judged this way, since the source that
+		// matters to a fork is the account remote it is published to, and
+		// its third-party upstream is only where later versions are merged
+		// in from.
+		if !sources[rec.Import.Source] {
+			ev.Drift = []string{driftSourceRemoved}
+		}
 	}
 	return ev
+}
+
+// sourceURLs are the canonical URLs of the sources the settings hold, the
+// one thing a library skill's drift is judged against besides its lineage.
+func sourceURLs(s home.Settings) map[string]bool {
+	urls := make(map[string]bool, len(s.Sources))
+	for _, src := range s.Sources {
+		urls[src.URL] = true
+	}
+	return urls
 }

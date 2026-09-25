@@ -15,6 +15,8 @@ import (
 	"testing"
 	"time"
 	"unicode"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden snapshot files from the current output")
@@ -134,6 +136,18 @@ var fixtures = map[string]fixture{
 		links: map[string]string{
 			".claude/skills/gone": ".agents/skills/missing",
 			".claude/skills/lost": ".agents/skills/missing",
+		},
+	},
+	// No client here reads the library, so a warning about a directory of
+	// it can only come from the scan's own read of the library, the one
+	// the snapshot's library entries are built from.
+	"library-broken-symlink": {
+		files: map[string]string{
+			".claude/skills/commit/SKILL.md": skill("commit", "Write a commit message"),
+			".agents/skills/real/SKILL.md":   skill("real", "A library skill"),
+		},
+		links: map[string]string{
+			".agents/skills/dangling": ".agents/skills/missing",
 		},
 	},
 	"library-read-by-codex": {
@@ -501,6 +515,7 @@ func TestScanWarnings(t *testing.T) {
 	}{
 		{"broken-symlink", []string{"~/.claude/skills/gone: broken symlink, skipped"}},
 		{"broken-symlinks", []string{"~/.claude/skills: 2 broken symlinks (gone, lost), skipped"}},
+		{"library-broken-symlink", []string{"~/.agents/skills/dangling: broken symlink, skipped"}},
 		{"unparsable-frontmatter", []string{
 			"~/.claude/skills/broken/SKILL.md: unparsable frontmatter at line 3: non-map value is specified, using the directory name",
 			"~/.claude/skills/nameless/SKILL.md: frontmatter has no name, using the directory name",
@@ -732,11 +747,145 @@ func TestScanSpawnBudget(t *testing.T) {
 	for _, s := range snap["skills"].([]any) {
 		equal(t, "occurrences per skill", len(s.(map[string]any)["occurrences"].([]any)), 4) // claude-code, codex, cursor, gemini-cli
 	}
-	// The startup gate runs `git --version` once; the scan itself spawns nothing.
+	// The startup gate runs `git --version` once; the scan itself spawns
+	// nothing, this machine having no account repo to read lineage from.
 	b, _ := os.ReadFile(counter)
 	if got := strings.TrimSpace(string(b)); got != "--version" {
 		t.Errorf("git spawned with:\n%s\nwant exactly one --version", b)
 	}
+}
+
+// TestScanListsTheLibrary is the library in the snapshot: every skill of
+// it as skill list lists it, lineage, state and placements alike, since the
+// snapshot is what the desktop app shows and a one-shot listing may not
+// tell a script anything else. The lineage costs the scan one for-each-ref
+// after the check of the account repo, however many skills the library
+// holds.
+func TestScanListsTheLibrary(t *testing.T) {
+	t.Parallel()
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--skill", "beta")
+	byHand := filepath.Join(h.library, "mine")
+	if err := os.MkdirAll(byHand, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(byHand, "SKILL.md"), skill("mine", "made here"))
+	var listed []any
+	for _, e := range h.eventsOfType(h.mustRun("--json", "skill", "list").stdout, "library_skill") {
+		delete(e, "type")
+		delete(e, "schema_version")
+		listed = append(listed, map[string]any(e))
+	}
+
+	calls := countingGit(t, h)
+	snap := h.snapshot(t)
+	if got := snap["library"].([]any); !reflect.DeepEqual(got, listed) {
+		t.Errorf("the snapshot's library differs from skill list:\nsnapshot:   %v\nskill list: %v", got, listed)
+	}
+	refs := 0
+	for _, call := range calls() {
+		switch {
+		case strings.Contains(call, "for-each-ref"):
+			refs++
+		case strings.Contains(call, "--version"), strings.Contains(call, "rev-parse --is-bare-repository"):
+		default:
+			t.Errorf("scan ran git %s", call)
+		}
+	}
+	equal(t, "for-each-ref calls", refs, 1)
+
+	// Without --json nothing prints the library, so a text scan and a text
+	// serve read none of its lineage: the startup gate's --version is the
+	// one git either spawns, and neither can fail on the account repo.
+	for what, run := range map[string]func() outcome{
+		"scan":         func() outcome { return h.run("scan") },
+		"serve --once": func() outcome { return h.serveOnce() },
+	} {
+		before := len(calls())
+		equal(t, what+" exit", run().exit, 0)
+		for _, call := range calls()[before:] {
+			if !strings.Contains(call, "--version") {
+				t.Errorf("%s ran git %s", what, call)
+			}
+		}
+	}
+}
+
+// accountRepoWarning ends the one warning a snapshot carries when git
+// cannot read the account repo: the library is left out, and the reader is
+// sent to doctor and to the repo, whose error the warning begins with.
+const accountRepoWarning = "; the library is not listed, run 'agentx doctor' and check the account repo it names"
+
+// TestScanListsNoLibraryWhenTheAccountRepoCannotBeRead breaks the account
+// repo under a managed skill. Neither scan nor serve reads it for anything
+// in the snapshot but the library's lineage, so each still inventories the
+// machine and exits 0: the library is listed empty, rather than with every
+// skill in it called unmanaged, and one warning names the account repo and
+// the command that looks into it. skill list, which is there to report the
+// lineage, still refuses.
+func TestScanListsNoLibraryWhenTheAccountRepoCannotBeRead(t *testing.T) {
+	t.Parallel()
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	account := gitx.AccountRepoPath(h.agentx)
+	writeFile(t, filepath.Join(account, "HEAD"), "garbage\n")
+
+	snap := h.snapshot(t)
+	equal(t, "configurations", len(snap["configurations"].([]any)), 4)
+	equal(t, "skills", strings.Join(skillNames(snap), " "), "alpha")
+	equal(t, "library", len(snap["library"].([]any)), 0)
+	warnings := snap["warnings"].([]any)
+	if len(warnings) != 1 || !strings.Contains(warnings[0].(string), account) || !strings.HasSuffix(warnings[0].(string), accountRepoWarning) {
+		t.Errorf("warnings = %q, want one naming %s and ending %q", warnings, account, accountRepoWarning)
+	}
+
+	served := h.serveOnce("--json")
+	equal(t, "serve exit", served.exit, 0)
+	if fromServe := h.one(served.stdout, "snapshot"); !reflect.DeepEqual(fromServe, snap) {
+		t.Errorf("serve --once and scan disagree:\nserve: %v\nscan:  %v", fromServe, snap)
+	}
+
+	// A text scan reads no lineage, so it has nothing to warn about.
+	text := h.run("scan")
+	equal(t, "text exit", text.exit, 0)
+	contains(t, "text scan", text.stdout, "4 configurations, 1 skill, 0 servers, 0 plugins detected")
+	if strings.Contains(text.stderr, account) {
+		t.Errorf("a text scan read the account repo:\n%s", text.stderr)
+	}
+
+	list := h.run("--json", "skill", "list")
+	equal(t, "skill list exit", list.exit, 8)
+	equal(t, "skill list code", h.one(list.stdout, "error")["code"], "account_repo")
+}
+
+// TestScanWarnsOfABranchDoctorDoesNotRead breaks the account repo in a way
+// doctor does not see: the commit a managed skill's import branch points at
+// is gone. The repo still opens, which is what doctor's account_repo row
+// asks of it, and only reading the branches fails. So the snapshot's
+// warning carries git's error, which says what is wrong, and sends the
+// reader to the repo it names as well as to doctor, which on its own would
+// answer that the repo is fine.
+func TestScanWarnsOfABranchDoctorDoesNotRead(t *testing.T) {
+	t.Parallel()
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	account := gitx.AccountRepoPath(h.agentx)
+	tip := strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/managed/alpha"))
+	object := filepath.Join(account, "objects", tip[:2], tip[2:])
+	if err := os.Rename(object, object+".gone"); err != nil {
+		t.Fatalf("the import commit is not a loose object: %v", err)
+	}
+
+	snap := h.snapshot(t)
+	equal(t, "library", len(snap["library"].([]any)), 0)
+	warnings := snap["warnings"].([]any)
+	if len(warnings) != 1 || !strings.Contains(warnings[0].(string), account) ||
+		!strings.Contains(warnings[0].(string), "missing object") || !strings.HasSuffix(warnings[0].(string), accountRepoWarning) {
+		t.Errorf("warnings = %q, want one naming %s and the missing object, ending %q", warnings, account, accountRepoWarning)
+	}
+	equal(t, "skill list exit", h.run("skill", "list").exit, 8)
+	rows, _ := doctorRows(t, h.events(h.run("--json", "doctor").stdout))
+	equal(t, "doctor's account_repo row", rows["account_repo"]["status"], "ok")
 }
 
 // secrets lists every distinctive secret value a fixture's config files hold,

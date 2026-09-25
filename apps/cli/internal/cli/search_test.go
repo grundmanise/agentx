@@ -218,7 +218,7 @@ func TestServeReindexesWhenSourcesChange(t *testing.T) {
 	s := h.newSourceRepo("skills", true)
 	s.skill("commit", "commit", "Write a commit message", nil)
 	s.commit("first")
-	equal(t, "exit", h.run("source", "add", s.url).exit, 0)
+	h.runBesideServe("source", "add", s.url)
 	// A refresh is satisfied by a scan begun after it, which follows the add.
 	p.send(`{"type":"refresh","request_id":"added"}`)
 	p.next("refresh_complete")
@@ -228,7 +228,7 @@ func TestServeReindexesWhenSourcesChange(t *testing.T) {
 
 	s.skill("release", "release", "Cut a release commit", nil)
 	s.commit("second")
-	equal(t, "exit", h.run("source", "add", s.url).exit, 0)
+	h.runBesideServe("source", "add", s.url)
 	p.send(`{"type":"refresh","request_id":"fetched"}`)
 	p.next("refresh_complete")
 	want := []string{s.url + " commit commit", s.url + " release release"}
@@ -240,7 +240,7 @@ func TestServeReindexesWhenSourcesChange(t *testing.T) {
 	// so the index follows it without the source being added again.
 	s.skill("hotfix", "hotfix", "Commit a hotfix", nil)
 	s.commit("third")
-	equal(t, "exit", h.run("source", "fetch", s.url).exit, 0)
+	h.runBesideServe("source", "fetch", s.url)
 	p.send(`{"type":"refresh","request_id":"refetched"}`)
 	p.next("refresh_complete")
 	want = []string{s.url + " commit commit", s.url + " hotfix hotfix", s.url + " release release"}
@@ -248,7 +248,7 @@ func TestServeReindexesWhenSourcesChange(t *testing.T) {
 		t.Errorf("results after the fetch = %q, want %q", got, want)
 	}
 
-	equal(t, "exit", h.run("source", "remove", s.url).exit, 0)
+	h.runBesideServe("source", "remove", s.url)
 	p.send(`{"type":"refresh","request_id":"removed"}`)
 	p.next("refresh_complete")
 	if got := p.search("s4", "commit"); len(got) != 0 {
@@ -328,7 +328,7 @@ func TestSourceRefNeverShowsAnIncompleteFetch(t *testing.T) {
 	second := s.commit("second")
 	reached, release := arm()
 	done := make(chan outcome, 1)
-	go func() { done <- h.run("source", "add", s.url) }()
+	go func() { done <- h.besideServe("source", "add", s.url) }()
 	reached()
 
 	// Mid-fetch. The source ref still names the commit whose blobs are all

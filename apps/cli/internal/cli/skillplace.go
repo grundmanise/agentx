@@ -456,12 +456,13 @@ func (inv *invocation) reportPlaced(ctx context.Context, name string, targets []
 }
 
 // skillContext is what a report about library skills reads once: the
-// lineage branches of the account repo and the copy modes of the settings.
-// Reading them per skill would cost a git process per skill, which a run
-// over the whole library may not.
+// lineage branches of the account repo, and the copy modes and the sources
+// of the settings. Reading them per skill would cost a git process per
+// skill, which a run over the whole library may not.
 type skillContext struct {
 	records map[string]lineage.Record
 	modes   map[string][]string
+	sources map[string]bool // the canonical URL of every source the settings hold
 }
 
 func (inv *invocation) skillContext(ctx context.Context) (skillContext, error) {
@@ -478,7 +479,7 @@ func (inv *invocation) skillContext(ctx context.Context) (skillContext, error) {
 		return skillContext{}, fail(exitInternal, "parse "+home.SettingsPath(inv.dirs.Home)+": copy_mode must map skill names to configuration ids",
 			"fix copy_mode in the settings file")
 	}
-	return skillContext{records: records, modes: modes}, nil
+	return skillContext{records: records, modes: modes, sources: sourceURLs(s)}, nil
 }
 
 // librarySkillEventFor builds the library_skill event of one library directory from the
@@ -491,11 +492,14 @@ func (sc skillContext) librarySkillEventFor(inv *invocation, snap scan.Snapshot,
 		places = filterPlacements(places, covered)
 	}
 	rec, managed := sc.records[lib.Name]
-	return skillFromLibrary(lib, rec, managed, places)
+	return skillFromLibrary(lib, rec, managed, sc.sources, places)
 }
 
 // lineageRecords are the branches of the account repo by skill name, empty
 // when this machine has no account repo yet: a listing never creates one.
+// Either failure names the account repo, as the check of it does, since
+// what git says of refs it cannot read need not, and the hint and a scan's
+// warning both send the reader to that repo.
 func (inv *invocation) lineageRecords(ctx context.Context) (map[string]lineage.Record, error) {
 	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
@@ -506,7 +510,7 @@ func (inv *invocation) lineageRecords(ctx context.Context) (map[string]lineage.R
 	}
 	records, err := lineage.List(ctx, inv.git, gitDir)
 	if err != nil {
-		return nil, accountRepoFailure(err)
+		return nil, accountRepoFailure(fmt.Errorf("account repo %s: %w", gitDir, err))
 	}
 	return records, nil
 }

@@ -164,10 +164,12 @@ Delete the listed links to clear the warning.
 
 ## Script it
 
-Add `--json` to get one `snapshot` event with the machine, every configuration, every skill, MCP server and plugin with its occurrences, the edges between them and the warnings:
+Add `--json` to get one `snapshot` event with the machine, every configuration, every skill, MCP server and plugin with its occurrences, the edges between them and the warnings. It also lists the skills of your library under `library`, each as [`agentx skill list`](/cli/skill) reports it: what agentx knows it as, where it came from, whether it was edited since, whether its source is still added (`source removed` when it is not) and its placements.
 
 ```sh
 agentx --json scan
 ```
+
+If agentx cannot read its account repo, the scan still lists everything else, but `library` is empty and a warning names the repo and gives git's error. Read that error, run `agentx doctor`, and check the account repo the warning names: doctor does not catch every way a repo can break.
 
 Every node carries a stable identity, and two scans of an unchanged machine are byte-identical apart from `instance_id`. Set `AGENTX_INSTANCE_ID` to fix that too.

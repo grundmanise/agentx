@@ -141,7 +141,29 @@ agentx source remove anthropics/skills
 ✓ removed https://github.com/anthropics/skills
 ```
 
-The source and everything fetched from it leave this machine. Skills you installed from it stay as they are. Add the source again to fetch it anew.
+The source and everything fetched from it leave this machine. Skills you installed from it stay as they are, in your library and in your clients, and keep their record of where they came from.
+
+`agentx skill list` shows each of those skills as `source removed`, and the snapshot the desktop app reads says the same:
+
+```text
+1 skill
+  pdf  managed  current, source removed  https://github.com/anthropics/skills/skills/pdf  4 placements
+```
+
+Add the source again to fetch it anew and clear the state:
+
+```sh
+agentx source add anthropics/skills
+```
+
+Nothing else changes: the skills, their records and their placements are exactly as they were before you removed the source. Any pin works, since a source is identified by its URL. Installing a skill from the source by its URL, or adopting one with [`agentx adopt`](/cli/adopt), adds it again too.
+
+A command that names the removed source by its id cannot fetch it, since an id is not a URL. While a skill still records the source, the command tells you what to run instead:
+
+```text
+error: no source with id 1c9d0b7e4a2f6d38: https://github.com/anthropics/skills was removed, and the skills installed from it still name it
+hint: run 'agentx source add https://github.com/anthropics/skills' to add it again
+```
 
 ## Script it
 
@@ -168,7 +190,7 @@ agentx --json source skills anthropics/skills
 
 - `1`: the URL is not one of the accepted forms, the pin and the tree URL name different refs, or `source fetch` was given neither a source nor `--all`.
 - `3`: the source cannot be reached, is not a git repository, or needs credentials git does not have. The hint names the fix. From `source fetch` over several sources, it also means they failed for different reasons; read the warnings.
-- `5`: the pinned ref or the path does not exist in the source, the source is not on this machine, or what this machine holds of it is incomplete.
+- `5`: the pinned ref or the path does not exist in the source, the source is not on this machine, or what this machine holds of it is incomplete. For an id of a source you removed, the hint names the `agentx source add` command that brings it back.
 - `7`: another agentx command is running. Retry when it finishes. An add that could not take its own half-done work back says what it left and how to clear it.
 - `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.
 

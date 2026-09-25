@@ -53,7 +53,7 @@ func newSourceFetchCommand(inv *invocation) *cobra.Command {
 // write. It is the manual refresh of a source no skill was installed from,
 // which nothing else updates.
 func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool) error {
-	targets, err := inv.sourcesToFetch(args, all)
+	targets, err := inv.sourcesToFetch(ctx, args, all)
 	if err != nil {
 		return err
 	}
@@ -272,7 +272,7 @@ func fetchFailure(res source.Result) (message, hint string) {
 // argument against the settings, or every source of the machine with
 // --all. Each source is resolved before anything is fetched, so an
 // argument that names none refuses the run before it touches the network.
-func (inv *invocation) sourcesToFetch(args []string, all bool) ([]fetchTarget, error) {
+func (inv *invocation) sourcesToFetch(ctx context.Context, args []string, all bool) ([]fetchTarget, error) {
 	switch {
 	case all && len(args) > 0:
 		return nil, fail(exitUsage, "source fetch takes sources or --all, not both",
@@ -295,7 +295,7 @@ func (inv *invocation) sourcesToFetch(args []string, all bool) ([]fetchTarget, e
 	var targets []fetchTarget
 	seen := map[string]bool{}
 	for _, arg := range args {
-		src, entry, err := inv.findSource(arg)
+		src, entry, err := inv.findSource(ctx, arg)
 		if err != nil {
 			return nil, err
 		}
