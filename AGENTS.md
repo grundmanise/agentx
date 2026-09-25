@@ -24,7 +24,11 @@ PR and commit titles should follow the conventional commit format. We squash mer
 
 ### Descriptions
 
-PR and commit descriptions should use an imperative style and provide a clear, concise summary of the changes made. They should focus on how the changes affect end users – what changed and why – rather than on how it was implemented, unless that’s essential for understanding the changes.
+PR and commit descriptions should use an imperative style and provide a clear, concise summary of the changes made. They should focus on how the changes affect end users – what changed and why – rather than on how it was implemented, unless that’s essential for understanding the changes. Never add links to agent sessions to commits or PRs.
+
+### Branches
+
+- Name branches after the change in product terms, such as `feat/source-removed-drift`.
 
 ### Writing style
 
@@ -33,6 +37,3 @@ PR and commit descriptions should use an imperative style and provide a clear, c
 ### Public repository
 
 This repository is public. See `docs/agents/domain.md` for what must never appear in it.
-
-- Never add links to agent sessions (from any coding agent or harness) to commits or PRs.
-- Name branches after the change in product terms, such as `feat/source-removed-drift`, never after internal ticket, spec or requirement numbers. Write commit messages and PR text the same way.
