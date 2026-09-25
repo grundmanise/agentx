@@ -30,6 +30,10 @@ PR and commit descriptions should use an imperative style and provide a clear, c
 
 - Name branches after the change in product terms, such as `feat/source-removed-drift`.
 
+### Visual evidence
+
+PRs that change functionality should include visual evidence of the change in the description: a screenshot, a video recording, or, if only the CLI has changed, the relevant CLI output.
+
 ### Writing style
 
 - Never use em dashes (`—`); instead, use en dashes (`–`) or hyphens (`-`).
