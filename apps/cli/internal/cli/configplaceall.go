@@ -65,16 +65,16 @@ func (inv *invocation) enableAndPlaceAll(ctx context.Context, id string) error {
 		return mutationFailure(err)
 	}
 	inv.emitSettings(s)
-	// placementTargets refuses an id it cannot place into, so the run has
-	// exactly the one configuration it named by the time it reports.
-	readsLibrary := len(targets) > 0 && targets[0].readsLibrary
-	return inv.reportPlacedAll(ctx, id, names, done, readsLibrary)
+	return inv.reportPlacedAll(ctx, id, targets, names, done)
 }
 
 // reportPlacedAll reads the configuration this command touched again and
 // reports every library skill as it now sees it, one skill event each, in
 // the order the library lists them.
-func (inv *invocation) reportPlacedAll(ctx context.Context, id string, names []string, done placements, readsLibrary bool) error {
+func (inv *invocation) reportPlacedAll(ctx context.Context, id string, targets []placeTarget, names []string, done placements) error {
+	// placementTargets refuses an id it cannot place into, so the run has
+	// exactly the one configuration it named by the time it reports.
+	readsLibrary := len(targets) > 0 && targets[0].readsLibrary
 	total := len(names) + 1
 	for i, name := range names {
 		inv.progress(phasePlace, name, i+1, total)
@@ -104,10 +104,13 @@ func (inv *invocation) reportPlacedAll(ctx context.Context, id string, names []s
 			// Cursor reads Claude Code's, has more paths than placements made.
 			placed++
 		}
-		// The name is the library directory's own, which whoever put it
-		// there chose, and both paths carry it, so the name is sanitised
-		// and the paths quoted, the way skill list and scan print them.
-		for _, p := range ev.Placements {
+		// One row per skill, its placement at this configuration's own
+		// place, as skill add and skill place print theirs; the event above
+		// carries every path the rescan found. The name is the library
+		// directory's own, which whoever put it there chose, and both paths
+		// carry it, so the name is sanitised and the paths quoted, the way
+		// skill list and scan print them.
+		for _, p := range inv.ownPlacements(lib.Name, targets, ev.Placements) {
 			path := quotedPath(p.Path)
 			if p.Kind == modeSymlink {
 				path += inv.out.paint(muted, " -> "+quotedPath(inv.libraryPath(lib.Name)))

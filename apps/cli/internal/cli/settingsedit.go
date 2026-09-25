@@ -26,12 +26,23 @@ func (inv *invocation) beginSettings() (*settingsEdit, error) {
 	if err != nil {
 		return nil, err
 	}
+	modes, err := inv.copyModes(s)
+	if err != nil {
+		return nil, err
+	}
+	return &settingsEdit{s: s, modes: modes}, nil
+}
+
+// copyModes reads copy_mode out of settings already loaded, skill name to
+// the configurations that hold a copy of it, turning an entry of another
+// shape into exit 10 as an unreadable settings file is.
+func (inv *invocation) copyModes(s home.Settings) (map[string][]string, error) {
 	modes, err := s.CopyModes()
 	if err != nil {
 		return nil, fail(exitInternal, "parse "+home.SettingsPath(inv.dirs.Home)+": copy_mode must map skill names to configuration ids",
 			"fix copy_mode in the settings file")
 	}
-	return &settingsEdit{s: s, modes: modes}, nil
+	return modes, nil
 }
 
 // addCopies records that the named configurations hold a copy of the skill

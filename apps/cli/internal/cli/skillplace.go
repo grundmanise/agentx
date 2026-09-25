@@ -43,6 +43,18 @@ type placeTarget struct {
 	readsLibrary bool   // the library entry is the placement; a symlink would list the skill twice
 }
 
+// ownPlace is where this configuration's placement of the skill called name
+// is: the library entry for a client that reads the library, which is its
+// placement, and the skill's directory in the client's own skills directory
+// for any other. A path the client sees the skill through in another
+// client's skills directory is that other client's placement, not this one.
+func (t placeTarget) ownPlace(library, name string) string {
+	if t.readsLibrary {
+		return filepath.Join(library, name)
+	}
+	return filepath.Join(t.dir, name)
+}
+
 // placements is what a command did about one skill's placements, for the
 // report that follows the mutation.
 type placements struct {
@@ -234,7 +246,7 @@ func (inv *invocation) stagePlacement(m *home.Mutation, p placeable, t placeTarg
 	}
 	recorded := containsString(recordedCopies, t.id)
 	asCopy = asCopy || recorded
-	placePath := filepath.Join(t.dir, p.name)
+	placePath := t.ownPlace(inv.dirs.Library, p.name)
 	state, err := home.State(placePath)
 	if err != nil {
 		inv.skipPlacement(done, t, placePath, err)
@@ -450,8 +462,8 @@ func (inv *invocation) reportPlaced(ctx context.Context, name string, targets []
 	}
 	ev := sc.librarySkillEventFor(inv, snap, lib, targetIDs(targets))
 	inv.out.emit(ev)
-	inv.printPlaced(lib, done, ev)
-	inv.summary = placeSummary(name, done)
+	inv.printPlaced(lib, targets, done, ev)
+	inv.summary = placeSummary(name, done) + universalClause(ev.Universal)
 	return nil
 }
 
@@ -474,10 +486,9 @@ func (inv *invocation) skillContext(ctx context.Context) (skillContext, error) {
 	if err != nil {
 		return skillContext{}, err
 	}
-	modes, err := s.CopyModes()
+	modes, err := inv.copyModes(s)
 	if err != nil {
-		return skillContext{}, fail(exitInternal, "parse "+home.SettingsPath(inv.dirs.Home)+": copy_mode must map skill names to configuration ids",
-			"fix copy_mode in the settings file")
+		return skillContext{}, err
 	}
 	return skillContext{records: records, modes: modes, sources: sourceURLs(s)}, nil
 }
@@ -485,14 +496,16 @@ func (inv *invocation) skillContext(ctx context.Context) (skillContext, error) {
 // librarySkillEventFor builds the library_skill event of one library directory from the
 // lineage the account repo holds and the placements the rescan found in the
 // configurations the command covered. A nil covered reports every placement,
-// which is what a listing of the whole library does.
+// which is what a listing of the whole library does. The universal clients
+// are every one the rescan detected, covered or not: they see the skill
+// through the library whatever the command covered.
 func (sc skillContext) librarySkillEventFor(inv *invocation, snap scan.Snapshot, lib scan.LibrarySkill, covered []string) librarySkillEvent {
 	places := inv.placements(snap, lib, sc.modes)
 	if covered != nil {
 		places = filterPlacements(places, covered)
 	}
 	rec, managed := sc.records[lib.Name]
-	return skillFromLibrary(lib, rec, managed, sc.sources, places)
+	return skillFromLibrary(lib, rec, managed, sc.sources, places, universalClients(snap))
 }
 
 // lineageRecords are the branches of the account repo by skill name, empty
@@ -543,20 +556,53 @@ func placeSummary(name string, done placements) string {
 }
 
 // printPlaced writes the confirmation of one placement run and one row per
-// placement the rescan found. The name is a library directory's, which
-// whoever made it chose, so it is sanitised as skill list prints it.
-func (inv *invocation) printPlaced(lib scan.LibrarySkill, done placements, ev librarySkillEvent) {
+// configuration it covered, as ownPlacements picks them out of what the
+// rescan found. The name is a library directory's, which whoever made it
+// chose, so it is sanitised as skill list prints it.
+func (inv *invocation) printPlaced(lib scan.LibrarySkill, targets []placeTarget, done placements, ev librarySkillEvent) {
 	out := inv.out
-	// The configurations placed into, not the rows the rescan found: a
-	// client that reads another client's skills directory, as Cursor reads
-	// Claude Code's, sees the skill by more paths than were placed.
+	// The configurations placed into, not the rows: a configuration whose
+	// placement was skipped is not counted, yet still has a row when it sees
+	// the skill through another client's skills directory, as Cursor reads
+	// Claude Code's.
 	line := "placed " + out.paint(heading, sanitised(lib.Name)) + " in " + out.paint(noteStyle, plural(len(done.placed), "configuration"))
 	if n := len(done.skipped); n > 0 {
 		line += ", " + out.paint(warnStyle, plural(n, "placement")+" skipped")
 	}
 	out.done(line)
-	inv.printPlacementRows(lib.Name, ev.Placements)
+	inv.printPlacementRows(lib.Name, inv.ownPlacements(lib.Name, targets, ev.Placements))
 	inv.printAdoptions(done.adoptions)
+	inv.printUniversal(ev.Universal)
+}
+
+// availableToUniversal is how a command that placed a skill names the
+// universal clients: every one detected, whether or not the command placed
+// into it, since it sees the skill through the library whatever the command
+// was told. "Always" is the point of the line: neither --to nor a disabled
+// configuration keeps the skill from a client that reads the library. The
+// list comes last, so the commas that separate the ids cannot be read as
+// the ones that separate the clauses of a summary.
+const availableToUniversal = "always available to universal clients: "
+
+// printUniversal writes the line that names the universal clients, when the
+// machine has any. They are named even when the rows above show one of
+// them, so the line always answers the same question: who has this skill
+// whatever the placements.
+func (inv *invocation) printUniversal(ids []string) {
+	if len(ids) == 0 {
+		return
+	}
+	inv.out.print("  ", inv.out.paint(muted, availableToUniversal+strings.Join(ids, ", ")))
+}
+
+// universalClause is what the result event of a command that placed a
+// skill adds about the universal clients, the same words the text output
+// ends with, and nothing when the machine has none.
+func universalClause(ids []string) string {
+	if len(ids) == 0 {
+		return ""
+	}
+	return "; " + availableToUniversal + strings.Join(ids, ", ")
 }
 
 // printAdoptions writes the line that names the directories a run adopted
@@ -571,6 +617,46 @@ func (inv *invocation) printAdoptions(adoptions []string) {
 		paths[i] = quotedPath(p)
 	}
 	inv.out.print("  ", inv.out.paint(muted, "adopted "+strings.Join(paths, ", ")))
+}
+
+// ownPlacements are the placements the text of a command that placed a
+// skill shows: one per configuration it covered, the one at that
+// configuration's own place. The rescan finds more than that. A client that
+// reads another client's skills directory, as Cursor reads Claude Code's,
+// sees the skill through that client's placement as well as its own, and
+// printing both under it would give one client two rows for one placement.
+// That path is the other client's placement and is shown as that client's
+// row. The library_skill event is left as the rescan found it, every path
+// included, for whoever wants each way a client sees the skill.
+//
+// A configuration with nothing of the skill at its own place keeps every
+// row the rescan found for it, so that a client that sees the skill is
+// never left without one. skill place and config enable --place-all report
+// on every configuration they were asked for, one whose placement was
+// skipped included, and that one can still see the skill through another
+// client's skills directory: its row says so, below the warning that says
+// why nothing was placed. An install reports only on the configurations it
+// placed into, each of which the rescan finds holding the placement at its
+// own place, so there this is no more than a safety net for a path that
+// something changed between the mutation and the rescan.
+func (inv *invocation) ownPlacements(name string, targets []placeTarget, places []placementEvent) []placementEvent {
+	own := make(map[string]string, len(targets))
+	for _, t := range targets {
+		own[t.id] = t.ownPlace(inv.dirs.Library, name)
+	}
+	atOwn := map[string]bool{} // the configurations the rescan found at their own place
+	for _, p := range places {
+		if p.Path == own[p.Configuration] {
+			atOwn[p.Configuration] = true
+		}
+	}
+	rows := []placementEvent{}
+	for _, p := range places {
+		if !atOwn[p.Configuration] || p.Path == own[p.Configuration] {
+			rows = append(rows, p)
+		}
+	}
+	return rows
 }
 
 // printPlacementRows writes one indented row per placement, a symlink

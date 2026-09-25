@@ -79,9 +79,11 @@ agentx config enable cursor --place-all
 ```text
 ✓ cursor is now enabled
 ✓ placed 2 skills in cursor
-  pdf    symlink  ~/.cursor/skills/pdf -> ~/.agents/skills/pdf
-  xlsx   symlink  ~/.cursor/skills/xlsx -> ~/.agents/skills/xlsx
+  pdf   symlink  ~/.cursor/skills/pdf -> ~/.agents/skills/pdf
+  xlsx  symlink  ~/.cursor/skills/xlsx -> ~/.agents/skills/xlsx
 ```
+
+Each skill placed gets one row: its placement in Cursor's own skills directory. A skill Claude Code also holds is one row too, although Cursor reads Claude Code's skills directory as well; `--json` lists both paths.
 
 Each skill is placed as a symlink, except in a configuration where agentx already keeps a copy of it: that one gets a copy again, as with [`agentx skill place`](/cli/skill).
 
@@ -93,7 +95,10 @@ A placement agentx cannot make does not fail the run. If something you put there
 warning: ~/.cursor/skills/pdf is not this skill and was left as it is; no placement was made for cursor
 ✓ cursor is now enabled
 ✓ placed 1 skill in cursor, 1 placement skipped
+  xlsx  symlink  ~/.cursor/skills/xlsx -> ~/.agents/skills/xlsx
 ```
+
+Here Cursor does not see pdf at all, so pdf has no row. If agentx left Cursor's path alone and Cursor still sees the skill through another client's skills directory, as it sees a skill Claude Code holds, the skill's row shows that path instead, so the output still tells you Cursor has the skill.
 
 `--place-all` belongs to `enable`; `agentx config disable --place-all` exits with code 1. Place skills one at a time with [`agentx skill place`](/cli/skill).
 

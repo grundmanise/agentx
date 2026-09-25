@@ -61,7 +61,7 @@ A configuration is detected when its configuration directory exists, such as `~/
 
 ## See who reads what
 
-A client can read other clients' directories. Cursor reads `~/.claude/skills` and `~/.codex/skills` next to its own `~/.cursor/skills`, so a skill you put in the Claude Code directory appears under Cursor too. Codex and Gemini CLI read the library at `~/.agents/skills` directly, so every library skill appears under them without any link in their own directories.
+A client can read other clients' directories. Cursor reads `~/.claude/skills` and `~/.codex/skills` next to its own `~/.cursor/skills`, so a skill you put in the Claude Code directory appears under Cursor too. Some clients, such as Codex and Gemini CLI, read the library at `~/.agents/skills` directly, so every library skill appears under them without any link in their own directories.
 
 ## Read the servers
 
@@ -164,7 +164,7 @@ Delete the listed links to clear the warning.
 
 ## Script it
 
-Add `--json` to get one `snapshot` event with the machine, every configuration, every skill, MCP server and plugin with its occurrences, the edges between them and the warnings. It also lists the skills of your library under `library`, each as [`agentx skill list`](/cli/skill) reports it: what agentx knows it as, where it came from, whether it was edited since, whether its source is still added (`source removed` when it is not) and its placements.
+Add `--json` to get one `snapshot` event with the machine, every configuration, every skill, MCP server and plugin with its occurrences, the edges between them and the warnings. It also lists the skills of your library under `library`, each as [`agentx skill list`](/cli/skill) reports it: what agentx knows it as, where it came from, whether it was edited since, whether its source is still added (`source removed` when it is not), its placements and the universal clients that see it whatever its placements.
 
 ```sh
 agentx --json scan

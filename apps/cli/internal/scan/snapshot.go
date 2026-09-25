@@ -89,6 +89,7 @@ type LibraryEntry struct {
 	State          string             `json:"state,omitempty"`     // current or modified, for a managed skill
 	Drift          []string           `json:"drift,omitempty"`     // the drift states beside state, for a managed skill
 	Placements     []LibraryPlacement `json:"placements"`
+	Universal      []string           `json:"universal"` // every detected universal client, which sees the skill whatever its placements
 }
 
 // LibraryPlacement is one way a configuration sees a library skill: mode is

@@ -252,40 +252,6 @@ func TestSkillRemoveLeavesAFileAndAHandMadeDirectory(t *testing.T) {
 	contains(t, "the result", out.stdout, "2 placements left in place")
 }
 
-// TestSkillRemoveRefusesAUniversalLibraryOccurrence: for a client that
-// reads the library there is no placement to delete, the library entry is
-// the occurrence, and taking it away would take the skill from every other
-// client that reads it. The request is refused and nothing is touched.
-func TestSkillRemoveRefusesAUniversalLibraryOccurrence(t *testing.T) {
-	t.Parallel()
-	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
-	before := mutationVersion(t, h)
-
-	out := h.run("skill", "remove", "alpha", "--from", "codex")
-	equal(t, "exit", out.exit, 6)
-	contains(t, "stderr", out.stderr, "codex reads the library directly")
-	contains(t, "the hint", out.stderr, "agentx skill remove alpha")
-	contains(t, "the hint", out.stderr, filepath.Join(h.library, "alpha"))
-
-	// Nothing moved: not the library, not one placement, not the counter.
-	if _, err := os.Stat(filepath.Join(h.library, "alpha", "SKILL.md")); err != nil {
-		t.Errorf("a refused removal touched the library: %v", err)
-	}
-	if _, ok := isSymlink(t, filepath.Join(h.home, ".claude", "skills", "alpha")); !ok {
-		t.Error("a refused removal took a placement away")
-	}
-	equal(t, "mutations", mutationVersion(t, h), before)
-
-	// Naming it among several configurations refuses the whole request, so
-	// that a run cannot half-do what it cannot do at all.
-	both := h.run("skill", "remove", "alpha", "--from", "cursor", "--from", "gemini-cli")
-	equal(t, "exit", both.exit, 6)
-	if _, ok := isSymlink(t, filepath.Join(h.home, ".cursor", "skills", "alpha")); !ok {
-		t.Error("a refused removal took the other configuration's placement away")
-	}
-}
-
 // TestSkillRemoveRefusesAFork leaves a fork's branch and library entry
 // alone: removing a fork is its own command. Its placements can still be
 // taken away one configuration at a time.

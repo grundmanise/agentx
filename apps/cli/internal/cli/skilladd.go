@@ -1222,6 +1222,10 @@ func (inv *invocation) reportInstalled(ctx context.Context, b *batch, dones []*i
 	// batch of n skills n hashes of the whole library: a run of forty was
 	// measured a third slower than one read.
 	library := librarySkills(inv.dirs.Library)
+	// Every universal client sees every skill of the run through the
+	// library, whatever the targets were, so the run names them all, the
+	// disabled ones and those --to left out included.
+	universal := universalClients(snap)
 	for _, done := range dones {
 		lib, found := library[done.v.name]
 		if !found {
@@ -1229,11 +1233,11 @@ func (inv *invocation) reportInstalled(ctx context.Context, b *batch, dones []*i
 		}
 		places := inv.placements(snap, lib, modes)
 		rec := lineage.Record{Name: done.v.name, Kind: lineage.KindManaged, Ref: lineage.ManagedRef(done.v.name), Commit: done.v.commit, Import: done.v.imp, HasImport: true}
-		ev := skillFromLibrary(lib, rec, true, sources, filterPlacements(places, targetIDs(done.placed)))
+		ev := skillFromLibrary(lib, rec, true, sources, filterPlacements(places, targetIDs(done.placed)), universal)
 		inv.out.emit(ev)
 		inv.printInstalled(done, ev)
 	}
-	inv.summary = installSummary(dones)
+	inv.summary = installSummary(dones) + universalClause(universal)
 	return nil
 }
 
@@ -1312,21 +1316,25 @@ func librarySkill(library, name string) (scan.LibrarySkill, bool) {
 }
 
 // printInstalled writes the confirmation of one skill and one row per
-// placement. The name and the directory the skill was read from are the
-// source's, so both are sanitised, as source skills and skill list print
-// them.
+// configuration the install placed into, as ownPlacements picks them out of
+// what the rescan found. The line counts those rows, so that it and the
+// rows below it agree. The name and the directory the skill was read from
+// are the source's, so both are sanitised, as source skills and skill list
+// print them.
 func (inv *invocation) printInstalled(done *installed, ev librarySkillEvent) {
 	out, v := inv.out, done.v
+	rows := inv.ownPlacements(v.name, done.placed, ev.Placements)
 	what := "installed"
 	if done.adopted {
 		what = "adopted"
 	}
 	line := what + " " + out.paint(heading, sanitised(v.name)) + " from " + out.paint(heading, v.imp.Source) + underShown(v.imp.Path) +
-		" at " + short(v.imp.Commit) + out.paint(muted, fetchedAt(v)) + ": " + out.paint(noteStyle, plural(len(ev.Placements), "placement"))
+		" at " + short(v.imp.Commit) + out.paint(muted, fetchedAt(v)) + ": " + out.paint(noteStyle, plural(len(rows), "placement"))
 	if n := len(done.skipped); n > 0 {
 		line += ", " + out.paint(warnStyle, plural(n, "placement")+" skipped")
 	}
 	out.done(line)
-	inv.printPlacementRows(v.name, ev.Placements)
+	inv.printPlacementRows(v.name, rows)
 	inv.printAdoptions(done.adoptions)
+	inv.printUniversal(ev.Universal)
 }

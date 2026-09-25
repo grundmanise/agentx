@@ -165,6 +165,8 @@ error: no source with id 1c9d0b7e4a2f6d38: https://github.com/anthropics/skills 
 hint: run 'agentx source add https://github.com/anthropics/skills' to add it again
 ```
 
+Once you take the last of those skills off the machine, with [`agentx skill remove <name>`](/cli/skill) or its `--from universal` form, nothing on this machine records the source's URL any more, and the id is refused like any other. Add the source again by its URL.
+
 ## Script it
 
 Add `--json` to get a `source` event per source, and from `source skills` a `source_skill` event per skill:

@@ -47,7 +47,8 @@ func (inv *invocation) skillList(ctx context.Context) error {
 
 // row is one line of the human listing: the name, what agentx knows it as,
 // how it stands against its base version and whatever else it has drifted
-// by, where it came from and how many placements it has.
+// by, where it came from and how many placements it has, one per
+// configuration that sees it.
 //
 // The name and the upstream are sanitised: the name of an unmanaged skill
 // is the library directory's own, which whoever put it there chose, a
@@ -82,6 +83,21 @@ func row(out *writer, ev librarySkillEvent) []cell {
 		c(ev.Kind, muted),
 		state,
 		upstream,
-		c(plural(len(ev.Placements), "placement"), noteStyle),
+		c(plural(placedIn(ev.Placements), "placement"), noteStyle),
 	}
+}
+
+// placedIn counts the configurations among the placements, each once
+// however many paths it sees the skill through. Cursor reads Claude Code's
+// skills directory as well as its own, so a skill placed in both is seen
+// by Cursor twice, and counting paths would give Cursor a placement nobody
+// made for it. Counted this way the column agrees with the rows an install
+// prints, one per configuration, and the event above still carries every
+// path.
+func placedIn(places []placementEvent) int {
+	ids := map[string]bool{}
+	for _, p := range places {
+		ids[p.Configuration] = true
+	}
+	return len(ids)
 }

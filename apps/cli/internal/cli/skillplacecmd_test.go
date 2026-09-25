@@ -244,5 +244,6 @@ func TestSkillPlaceQuotesThePathsOfItsRows(t *testing.T) {
 	library := `"` + h.library + string(filepath.Separator) + quoted
 	equal(t, "stdout", out.stdout, "✓ placed two rows [31mRED [0m in 1 configuration\n"+
 		"  cursor  symlink  "+placement+" -> "+library+"\n"+
-		"  adopted "+placement+"\n")
+		"  adopted "+placement+"\n"+
+		"  always available to universal clients: codex, gemini-cli\n")
 }

@@ -132,8 +132,12 @@ One machine's canonical directory for skills managed by agentx at ~/.agents/skil
 _Avoid_: store, cache, vault
 
 **Placement**:
-The path inside one agent configuration's skills directory through which that client sees a library skill. The library itself for an agent client that reads the universal location; otherwise a symlink by default or a copy when needed.
+The path inside one agent configuration's skills directory through which that client sees a library skill. The library itself for a universal client; otherwise a symlink by default or a copy when needed.
 _Avoid_: install, link, copy
+
+**Universal client**:
+An agent client that reads the library as one of its own skills directories, such as Codex and Gemini CLI. It sees every library skill whether or not its agent configuration is enabled and whatever the placements, since the library entry is its placement. A skill leaves it only by leaving the library, which takes the skill from every agent client.
+_Avoid_: library client, library reader
 
 **Base version**:
 The upstream content a skill was installed, forked or last updated from, named by its content hash. The recorded upstream version used to distinguish local edits from upstream changes. Always an import commit in the account repo that every machine reproduces identically: the tip of a managed skill's import branch, or the last imported version on a fork's branch.

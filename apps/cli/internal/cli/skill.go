@@ -199,9 +199,27 @@ func sortPlacements(p []placementEvent) {
 	})
 }
 
+// universalClients are the configurations of the scan whose client reads the
+// library as one of its own skills directories, reads_library in the
+// snapshot, sorted by id as the snapshot sorts them. Every one of them sees
+// every skill of the library, enabled or not and whatever --to named, since
+// the library entry is its placement: no command that places a skill can
+// keep it from them, and a command that places one says who they are. A
+// client that is not installed sees nothing and is not named, and a machine
+// with none names none.
+func universalClients(snap scan.Snapshot) []string {
+	ids := []string{}
+	for _, c := range snap.Configurations {
+		if c.ReadsLibrary {
+			ids = append(ids, c.ID)
+		}
+	}
+	return ids
+}
+
 // skillFromLibrary builds the event of one library skill from its lineage
-// record, the canonical URLs of the sources the settings hold and the
-// placements a scan found.
+// record, the canonical URLs of the sources the settings hold, the
+// placements a scan found and the universal clients that scan detected.
 //
 // Every state is derived here, on every read, and nothing is ever written
 // for one: the lineage says where the skill came from and the settings say
@@ -210,9 +228,9 @@ func sortPlacements(p []placementEvent) {
 // a source is gone is its settings entry and not its ref in the account
 // repo: an entry whose ref is missing is a source this machine still has
 // and has not fetched, which is what an import leaves.
-func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, sources map[string]bool, places []placementEvent) librarySkillEvent {
+func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, sources map[string]bool, places []placementEvent, universal []string) librarySkillEvent {
 	ev := librarySkillEvent{event: newEvent("library_skill"), LibraryEntry: scan.LibraryEntry{
-		Name: lib.Name, Kind: lineage.KindUnmanaged, ContentHash: lib.ContentHash, Placements: places,
+		Name: lib.Name, Kind: lineage.KindUnmanaged, ContentHash: lib.ContentHash, Placements: places, Universal: universal,
 	}}
 	if !ok {
 		return ev

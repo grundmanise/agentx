@@ -96,7 +96,8 @@ func TestSkillAddPlacesTheSkillEverywhere(t *testing.T) {
 	if fetched == "" {
 		t.Error("the source event does not say when the source was fetched")
 	}
-	equal(t, "summary", result["summary"], "installed alpha from "+s.url+" under skills/alpha in 4 configurations, source fetched "+fetched)
+	equal(t, "summary", result["summary"], "installed alpha from "+s.url+" under skills/alpha in 4 configurations, source fetched "+fetched+
+		"; always available to universal clients: codex, gemini-cli")
 
 	ev := h.one(out.stdout, "library_skill")
 	equal(t, "name", ev["name"], "alpha")
@@ -105,6 +106,7 @@ func TestSkillAddPlacesTheSkillEverywhere(t *testing.T) {
 	equal(t, "subpath", ev["subpath"], "skills/alpha")
 	equal(t, "state", ev["state"], "current")
 	equal(t, "drift", drift(ev), "")
+	equal(t, "universal", universalOf(t, ev), "codex,gemini-cli")
 	places := ev["placements"].([]any)
 	var got []string
 	for _, p := range places {

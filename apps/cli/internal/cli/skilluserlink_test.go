@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -75,7 +76,39 @@ func TestSkillRemoveLeavesALinkThatOnlyResolvesIntoTheLibrary(t *testing.T) {
 	stillTheirs(t, "after a removal", place, target)
 	contains(t, "the warning", out.stderr, place)
 	contains(t, "the warning", out.stderr, "points at "+target+", not at ")
+	// The library keeps the skill, so the link still leads to it.
+	contains(t, "the warning", out.stderr, "and was left as it is; claude-code still sees it")
 	contains(t, "the result", out.stdout, "removed alpha from claude-code: 0 placements, 1 placement left in place")
+}
+
+// TestSkillRemoveSaysALinkThroughARemovedPlacementLeadsNowhere: a link of
+// the user's is left however it resolves, but what the removal says of it
+// follows where it leads. Here it leads through Cursor's placement, which
+// the same removal deletes, so the link stays and no longer leads to the
+// skill, and the warning says that rather than that Claude Code still sees
+// it.
+func TestSkillRemoveSaysALinkThroughARemovedPlacementLeadsNowhere(t *testing.T) {
+	t.Parallel()
+	h, s := placementHarness(t)
+	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "cursor").exit, 0)
+	through := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	place := filepath.Join(h.home, ".claude", "skills", "alpha")
+	if err := os.MkdirAll(filepath.Dir(place), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(through, place); err != nil {
+		t.Fatal(err)
+	}
+
+	out := h.run("skill", "remove", "alpha", "--from", "claude-code", "--from", "cursor")
+	equal(t, "exit", out.exit, 0)
+	nothingAt(t, "the cursor placement", through)
+	stillTheirs(t, "after a removal", place, through)
+	contains(t, "the warning", out.stderr, place+" points at "+through+", not at ")
+	contains(t, "the warning", out.stderr, "and was left as it is; it no longer leads to alpha\n")
+	if strings.Contains(out.stderr, "still sees it") {
+		t.Errorf("the removal says a client still sees alpha through a link it left leading nowhere:\n%s", out.stderr)
+	}
 }
 
 // TestSkillPlaceLeavesALinkThatOnlyResolvesIntoTheLibrary is the other side

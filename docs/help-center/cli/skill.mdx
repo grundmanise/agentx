@@ -18,7 +18,10 @@ agentx skill add anthropics/skills --skill pdf
   codex        library  ~/.agents/skills/pdf
   cursor       symlink  ~/.cursor/skills/pdf -> ~/.agents/skills/pdf
   gemini-cli   library  ~/.agents/skills/pdf
+  always available to universal clients: codex, gemini-cli
 ```
+
+Each row is one client's placement: the link or copy in its own skills directory, or the library entry itself for a client that reads the library. Cursor also reads Claude Code's skills directory, so it sees the skill there too; that path is Claude Code's row. `--json` lists every path each client sees the skill through.
 
 If the source is not on this machine yet, `skill add` adds it first, as [`agentx source add`](/cli/source) would, and the source stays added even if the install then fails. Name the source by its URL for this: a source id only works for a source you already added. If you removed the source and a skill installed from it is still in your library, installing by its id tells you the command that adds it again:
 
@@ -77,7 +80,17 @@ hint: the import commit that records where a skill came from carries the directo
 
 agentx records where a skill came from on one line of its commit. A directory name that does not fit on one line would be read back as a different directory, or as none at all, leaving a skill you could never update or revert. Ask the source to rename the directory, or install a different skill.
 
-Codex and Gemini CLI read the library directly, so they get no link of their own: the library entry is what they see. Every other client gets a symlink into the library.
+### Clients that see every skill
+
+Some clients, such as Codex and Gemini CLI, read the library directly. They are universal clients: they get no link of their own, because the library entry is what they see. Every other client gets a symlink in its own skills directory, pointing at the library.
+
+A universal client sees every skill in your library, even when you disabled it with `agentx config disable` or left it out of `--to`. Each install ends with a line naming every universal client installed on this machine, since the skill is always available to them whatever you chose:
+
+```text
+  always available to universal clients: codex, gemini-cli
+```
+
+The line is left out when no universal client is installed. To take a skill away from the universal clients, remove it from the library, see [Clients that read the library](#clients-that-read-the-library).
 
 ### Choose where it goes
 
@@ -87,7 +100,7 @@ By default a skill is placed in every enabled configuration. Name the ones you w
 agentx skill add anthropics/skills --skill pdf --to claude-code --to cursor
 ```
 
-`--to` replaces the default targets for that install, including configurations you have disabled with `agentx config disable`.
+`--to` replaces the default targets for that install, including configurations you have disabled with `agentx config disable`. It decides which clients get a placement; the universal clients see the skill whatever it names.
 
 ### Copy instead of link
 
@@ -126,7 +139,10 @@ agentx skill place pdf --to cursor
 ```text
 ✓ placed pdf in 1 configuration
   cursor  symlink  ~/.cursor/skills/pdf -> ~/.agents/skills/pdf
+  always available to universal clients: codex, gemini-cli
 ```
+
+The first line counts the configurations you placed into. Each client you named gets one row, its own placement, as after an install. If agentx left a client's path alone and that client still sees the skill through another client's skills directory, its row shows that path instead, so the output still tells you the client has the skill.
 
 Name each client with `--to`, once for each. Add `--copy` for a client that cannot follow a symlink; agentx remembers the choice, as it does for `agentx skill add --copy`. To turn a recorded copy back into a symlink, take it away with `agentx skill remove pdf --from cursor`, then place the skill again with `agentx skill place pdf --to cursor`.
 
@@ -134,7 +150,7 @@ This is the second half of `agentx skill add` on its own, so everything that com
 
 An adopted directory becomes one agentx will delete when you remove the skill, so the run names every path it adopted. This holds with `--copy` too, where agentx writes nothing and only records the choice.
 
-Codex and Gemini CLI read the library directly. Placing into them makes no second entry — they already see the skill.
+A universal client, such as Codex or Gemini CLI, reads the library directly. Placing into one makes no second entry: it already sees the skill, and the last line names every universal client whichever clients you place into.
 
 ## Remove a skill
 
@@ -156,14 +172,23 @@ agentx skill remove pdf
 ```
 
 ```text
-✓ removed pdf from the library: 3 placements
+✓ removed pdf from the library: 4 placements
   claude-code  symlink  ~/.claude/skills/pdf
   cursor       copy     ~/.cursor/skills/pdf
   codex        library  ~/.agents/skills/pdf
+  gemini-cli   library  ~/.agents/skills/pdf
   deleted ~/.agents/skills/pdf and refs/heads/managed/pdf
 ```
 
-Without `--from`, agentx takes away every placement, the library directory, the record of where the skill came from and what the settings remembered about it. With `--from`, only those clients' placements go; the library keeps the skill.
+Without `--from`, agentx takes away every placement, the library directory, the record of where the skill came from and what the settings remembered about it. With `--from <client>`, only those clients' placements go; the library keeps the skill.
+
+From every client, by name:
+
+```sh
+agentx skill remove pdf --from universal
+```
+
+This is the same removal as leaving `--from` out, with the same output. A universal client reads the library entry itself, so removing a skill from the universal clients means removing it from the library, which takes it from every client. Give `--from universal` on its own. Next to a client that is not universal it stops with exit code 1 and removes nothing; next to a universal client it is refused as that client is, see [Clients that read the library](#clients-that-read-the-library).
 
 ### What agentx will and will not delete
 
@@ -182,11 +207,13 @@ Everything else is left exactly where it is and named in the output:
 agentx decides by the name a link holds, never by where following it leads, so a link of yours is yours whatever it resolves to:
 
 ```text
+warning: ~/.claude/skills/pdf points at ~/mylinks/pdf, not at ~/.agents/skills/pdf and was left as it is; it no longer leads to pdf
 warning: ~/.cursor/skills/pdf is a directory agentx did not place there and was left as it is; cursor still sees it
-warning: ~/.claude/skills/pdf points at ~/mylinks/pdf, not at ~/.agents/skills/pdf and was left as it is; claude-code still sees it
-✓ removed pdf from the library: 2 placements
+✓ removed pdf from the library: 2 placements, 2 placements left in place
   ...
 ```
+
+Here `~/mylinks/pdf` points at the library entry, so once the removal deletes that entry your link stays but no longer leads to the skill, and the warning says so. A link of yours that does not lead through anything the removal deletes keeps working, and the warning says which client still sees the skill.
 
 A copy agentx recorded is removed as you asked, even when it no longer holds the library's version of the skill. agentx warns and names the path rather than letting the content go quietly:
 
@@ -198,18 +225,18 @@ Take a copy of anything you want to keep before removing it.
 
 ### Clients that read the library
 
-Codex and Gemini CLI read `~/.agents/skills` directly, so there is no placement of their own to remove:
+Universal clients, such as Codex and Gemini CLI, read `~/.agents/skills` directly, so there is no placement of their own to remove. A skill leaves every universal client at once or none of them:
 
 ```sh
 agentx skill remove pdf --from codex
 ```
 
 ```text
-error: codex reads the library directly, so pdf has no placement of its own to remove there
-hint: the library entry ~/.agents/skills/pdf is what codex sees: stop codex reading the library in its own settings, or take the entry away from every client that reads it with 'agentx skill remove pdf'
+error: codex reads the library directly, so pdf cannot be removed from it alone
+hint: take pdf off the machine with 'agentx skill remove pdf --from universal', which removes it from claude-code, codex, cursor, gemini-cli
 ```
 
-Use the client's own settings to stop it reading the library, or remove the skill everywhere with `agentx skill remove pdf`.
+agentx refuses before it changes anything, also when `--from` names other clients as well, `universal` included, and also when the universal client is disabled. The hint lists every client that sees the skill through the library or through a link or copy agentx would delete, including one that reads another client's skills directory, as Cursor reads Claude Code's. It also lists a client whose link of yours ends up in the library: the removal leaves your link, but the link no longer leads anywhere. A directory of your own is not counted: the removal leaves it. Run the command in the hint to remove the skill everywhere, or keep the skill.
 
 ### After a removal
 
@@ -221,9 +248,9 @@ Removing a skill from the machine warns for every client that still sees it afte
 warning: codex still sees pdf at ~/.codex/skills/pdf, which agentx did not place there
 ```
 
-Codex and Gemini CLI read the library, so removing the library entry is all agentx can do for them. A directory of their own under the same name stays, and the warning says where it is.
+Universal clients, such as Codex and Gemini CLI, read the library, so removing the library entry is all agentx can do for them. A directory of their own under the same name stays, and the warning says where it is.
 
-Removing a fork is not this command; it has its own, and `agentx skill remove <fork>` stops with exit code 6. You can still take a fork's placements away with `--from`.
+Removing a fork is not this command; it has its own, and `agentx skill remove <fork>` stops with exit code 6, with or without `--from universal`. You can still take a fork's placements away with `--from <client>`. The universal clients keep seeing a fork until the fork itself is removed, so `--from` naming one is refused with a hint that says so rather than offering `--from universal`.
 
 ## List your skills
 
@@ -233,12 +260,12 @@ agentx skill list
 
 ```text
 3 skills
-  docx   managed    modified, source removed  https://github.com/me/skills/docx                1 placement
-  notes  unmanaged  -                         (none)                                           1 placement
+  docx   managed    modified, source removed  https://github.com/me/skills/docx                2 placements
+  notes  unmanaged  -                         (none)                                           2 placements
   pdf    managed    current                   https://github.com/anthropics/skills/skills/pdf  4 placements
 ```
 
-Each row shows the skill, what agentx knows about it, how it stands against the version it was installed at, where it came from and how many placements it has.
+Each row shows the skill, what agentx knows about it, how it stands against the version it was installed at, where it came from and how many placements it has, one per client that sees it.
 
 - `managed`: installed by agentx, with an upstream and a version it can compare against.
 - `fork`: a skill of your own in the account repo.
@@ -267,18 +294,22 @@ agentx --json skill list
 ```
 
 ```json
-{"type":"library_skill","schema_version":1,"name":"pdf","kind":"managed","source":"https://github.com/anthropics/skills","subpath":"skills/pdf","upstream_commit":"3f2a9c1e...","base_hash":"9a8b7c6d...","content_hash":"9a8b7c6d...","state":"current","placements":[{"configuration":"claude-code","path":"/home/me/.claude/skills/pdf","mode":"symlink","kind":"symlink"}]}
+{"type":"library_skill","schema_version":1,"name":"pdf","kind":"managed","source":"https://github.com/anthropics/skills","subpath":"skills/pdf","upstream_commit":"3f2a9c1e...","base_hash":"9a8b7c6d...","content_hash":"9a8b7c6d...","state":"current","placements":[{"configuration":"claude-code","path":"/home/me/.claude/skills/pdf","mode":"symlink","kind":"symlink"},{"configuration":"codex","path":"/home/me/.agents/skills/pdf","mode":"library","kind":"library"},{"configuration":"cursor","path":"/home/me/.claude/skills/pdf","mode":"symlink","kind":"symlink"},{"configuration":"cursor","path":"/home/me/.cursor/skills/pdf","mode":"symlink","kind":"symlink"},{"configuration":"gemini-cli","path":"/home/me/.agents/skills/pdf","mode":"library","kind":"library"}],"universal":["codex","gemini-cli"]}
 {"type":"result","schema_version":1,"ok":true}
 ```
 
-`skill place` and `skill remove --from` emit one `library_skill` event too, whose placements are what the rescan found in the clients the command named; `skill remove` without `--from` emits none, the skill being gone. `skill add` emits a `source` event for the source it installed from, whose `last_fetched` says when it was fetched, then a `progress` event per step per skill (`blobs`, `import` and `install`), then one for the `rescan` at the end, then one `library_skill` event per skill it installed, then `result` with a one-line summary. `total` counts the steps the run planned; a skill it has to skip takes its remaining steps out of that count, so the run always ends on its total.
+`placements` lists every path each client sees the skill through, so Cursor, which also reads Claude Code's skills directory, appears twice. The text of `skill list` counts Cursor once, and that of `skill add` and `skill place` shows one row per client.
+
+`skill place` and `skill remove --from <client>` emit one `library_skill` event too, whose placements are what the rescan found in the clients the command named; `skill remove` without `--from`, or with `--from universal`, emits none, the skill being gone. `skill add` emits a `source` event for the source it installed from, whose `last_fetched` says when it was fetched, then a `progress` event per step per skill (`blobs`, `import` and `install`), then one for the `rescan` at the end, then one `library_skill` event per skill it installed, then `result` with a one-line summary. `total` counts the steps the run planned; a skill it has to skip takes its remaining steps out of that count, so the run always ends on its total.
+
+`universal` lists every universal client on this machine, whether or not the command placed into it, and is `[]` when none is installed. `skill add` and `skill place` end their `result` summary with the same `always available to universal clients:` words as their text.
 
 The event carries two content hashes, and each name means one thing everywhere agentx uses it: `base_hash` is the version the skill was installed at, and `content_hash` is what the library directory holds now. `state` is `current` while the two agree.
 
 `drift` lists every other way a managed skill has drifted, beside its `state`, and is absent when there is none. Today its one value is `source removed`:
 
 ```json
-{"type":"library_skill","schema_version":1,"name":"docx","kind":"managed","source":"https://github.com/me/skills","subpath":"docx","upstream_commit":"8b1e0f4a...","base_hash":"5e4d3c2b...","content_hash":"0f9e8d7c...","state":"modified","drift":["source removed"],"placements":[...]}
+{"type":"library_skill","schema_version":1,"name":"docx","kind":"managed","source":"https://github.com/me/skills","subpath":"docx","upstream_commit":"8b1e0f4a...","base_hash":"5e4d3c2b...","content_hash":"0f9e8d7c...","state":"modified","drift":["source removed"],"placements":[...],"universal":["codex","gemini-cli"]}
 ```
 
 Read `drift` as a list: more values will join it, and a skill can be in several at once. The snapshot of [`agentx scan`](/cli/scan) and [`agentx serve`](/cli/serve) lists every library skill the same way, under `library`.
@@ -289,10 +320,10 @@ Every install writes one commit per skill in the account repo in agentx home: th
 
 ## Exit codes
 
-- `1`: the command line names no skill to install, the flags contradict each other (`--all` with `--skill`, `--except` without `--all`, or `--except` leaving nothing), it names the source with another branch or tag than its pin, or `skill place` was given no `--to`.
+- `1`: the command line names no skill to install, the flags contradict each other (`--all` with `--skill`, `--except` without `--all`, `--except` leaving nothing, or `--from universal` with a client that is not universal), it names the source with another branch or tag than its pin, or `skill place` was given no `--to`.
 - `3`: the source, or the files of the skill, could not be fetched.
 - `5`: a source id names no source on this machine (for a source you removed, the hint names the `agentx source add` command that brings it back), the source did not serve a skill's files, the path or a skill named by `--skill` or `--except` does not exist in the source, or `--to` or `--from` names a configuration that is not detected. For `skill place` and `skill remove`, also a name the library does not hold as a skill.
-- `6`: the library already holds a different skill under that name, the name is already managed at another version, the skill's name cannot be both a directory and a git branch, the skill's directory in the source is not one agentx can record, the skill holds a file whose path would put it outside the skill's directory, agentx cannot use your library directory, or an interrupted change has to be resolved before anything else can run. The message names what to restore; if you would rather keep what is there, move the named file in `~/.agentx/mutations` aside. For `skill remove`, it is also `--from` naming a client that reads the library directly, and removing a name that is a fork. In a run of several skills, `6` is also the code when the skills that were skipped disagree about why: a run whose failures all have one cause exits with that cause, so a batch that skipped two skills the source did not serve exits `5`.
+- `6`: the library already holds a different skill under that name, the name is already managed at another version, the skill's name cannot be both a directory and a git branch, the skill's directory in the source is not one agentx can record, the skill holds a file whose path would put it outside the skill's directory, agentx cannot use your library directory, or an interrupted change has to be resolved before anything else can run. The message names what to restore; if you would rather keep what is there, move the named file in `~/.agentx/mutations` aside. For `skill remove`, it is also `--from` naming a universal client, one that reads the library directly, even next to `--from universal`, and removing a name that is a fork. In a run of several skills, `6` is also the code when the skills that were skipped disagree about why: a run whose failures all have one cause exits with that cause, so a batch that skipped two skills the source did not serve exits `5`.
 - `7`: another agentx command is running. Retry when it finishes.
 - `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.
 - `10`: agentx could not read its own settings file, the library still held the skill after `skill remove` took it away, or agentx hit an error it has no better answer for. Run `agentx doctor`.
