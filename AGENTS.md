@@ -29,3 +29,10 @@ PR and commit descriptions should use an imperative style and provide a clear, c
 ### Writing style
 
 - Never use em dashes (`—`); instead, use en dashes (`–`) or hyphens (`-`).
+
+### Public repository
+
+This repository is public. See `docs/agents/domain.md` for what must never appear in it.
+
+- Never add Claude Code session links (`claude.ai/code/session_…`) to commits or PRs: no `Claude-Session` trailer in commit messages and no session URL in PR titles, descriptions or comments.
+- Name branches after the change in product terms, such as `feat/source-removed-drift`, never after internal ticket, spec or requirement numbers. Write commit messages and PR text the same way.
