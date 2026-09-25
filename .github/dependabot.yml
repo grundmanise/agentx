@@ -1,0 +1,23 @@
+# Dependabot version updates. See the documentation for all configuration options:
+# https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  # Go modules of the CLI.
+  - package-ecosystem: "gomod"
+    directory: "/apps/cli"
+    schedule:
+      interval: "weekly"
+    # Conventional commit titles, such as "chore(deps): bump ...".
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  # Actions used by the workflows in .github/workflows.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
