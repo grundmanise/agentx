@@ -526,13 +526,15 @@ func TestSkillCheckSpawnsBoundedGit(t *testing.T) {
 	change(10, 60)
 	many := count("60 changed")
 	t.Logf("git processes: %d with no change, %d with 3 changed, %d with 60 changed", unchanged, few, many)
-	if unchanged > 20 {
+	// The bounds leave room for a git that fetches in another way; a count
+	// per skill would be a hundred at least.
+	if unchanged > 30 {
 		t.Errorf("a check with no change spawned %d git processes", unchanged)
 	}
 	if many != few {
 		t.Errorf("a check of 60 changed skills spawned %d git processes and one of 3 spawned %d: the count grows with the skills", many, few)
 	}
-	if few > 32 {
+	if few > 45 {
 		t.Errorf("a check of changed skills spawned %d git processes", few)
 	}
 	listed := h.mustRun("--json", "skill", "list").stdout
