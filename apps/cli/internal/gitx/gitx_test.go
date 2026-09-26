@@ -181,3 +181,39 @@ func TestOpenAccountRepoCreatesOnceWithAgentxConfig(t *testing.T) {
 		t.Errorf("CheckAccountRepo after creation = %v, %v", exists, err)
 	}
 }
+
+// TestIsolatedStatusAnswersWithTheExitStatus: a git that exits with a
+// status up to the bound the caller names answers with it and with what it
+// wrote, as merge-tree does for a merge that conflicts; one that exits
+// above it, or that is killed, is an error as any failure of Isolated is.
+func TestIsolatedStatusAnswersWithTheExitStatus(t *testing.T) {
+	dir := t.TempDir()
+	script := "#!/bin/sh\nfor last; do :; done\necho written\nif [ \"$last\" = kill ]; then kill -9 $$; fi\nexit $last\n"
+	if err := os.WriteFile(filepath.Join(dir, "git"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	r := New(map[string]string{"PATH": dir}, false, func(string, ...any) {})
+	ctx := context.Background()
+	for _, c := range []struct {
+		exit   string
+		status int
+		fails  bool
+	}{
+		{exit: "0"},
+		{exit: "1", status: 1},
+		{exit: "2", status: 2},
+		{exit: "3", fails: true},
+		{exit: "kill", fails: true},
+	} {
+		out, status, err := r.IsolatedStatus(ctx, "/repo.git", 2, "merge-file", c.exit)
+		switch {
+		case c.fails && err == nil:
+			t.Errorf("exit %s: no error, status %d", c.exit, status)
+		case c.fails:
+		case err != nil:
+			t.Errorf("exit %s: %v", c.exit, err)
+		case status != c.status || out != "written\n":
+			t.Errorf("exit %s: status %d and %q, want %d and %q", c.exit, status, out, c.status, "written\n")
+		}
+	}
+}

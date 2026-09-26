@@ -84,11 +84,12 @@ type LibraryEntry struct {
 	Source         string             `json:"source,omitempty"`  // the canonical URL of the upstream
 	Subpath        *string            `json:"subpath,omitempty"` // the directory in the source, "" for its root
 	UpstreamCommit string             `json:"upstream_commit,omitempty"`
-	BaseHash       string             `json:"base_hash,omitempty"` // the content hash of the base version
-	ContentHash    string             `json:"content_hash"`        // what the library holds now
-	State          string             `json:"state,omitempty"`     // current or modified, for a managed skill
-	Drift          []string           `json:"drift,omitempty"`     // the drift states beside state, for a managed skill
-	Candidate      *LibraryCandidate  `json:"candidate,omitempty"` // the update the last check found, for a managed skill
+	BaseHash       string             `json:"base_hash,omitempty"`     // the content hash of the base version
+	ContentHash    string             `json:"content_hash"`            // what the library holds now
+	State          string             `json:"state,omitempty"`         // current or modified, for a managed skill
+	Drift          []string           `json:"drift,omitempty"`         // the drift states beside state, for a managed skill
+	Candidate      *LibraryCandidate  `json:"candidate,omitempty"`     // the update the last check found, for a managed skill
+	PendingMerge   *LibraryPending    `json:"pending_merge,omitempty"` // the merge an update left pending, for a managed skill
 	Placements     []LibraryPlacement `json:"placements"`
 	Universal      []string           `json:"universal"` // every detected universal client, which sees the skill whatever its placements
 }
@@ -99,6 +100,14 @@ type LibraryEntry struct {
 type LibraryCandidate struct {
 	UpstreamCommit string `json:"upstream_commit"`
 	ContentHash    string `json:"content_hash"`
+}
+
+// LibraryPending is the merge an update of a managed skill left pending,
+// its edits and its update conflicting: how many of its files are not
+// resolved yet, as the pending merge commit counts them, and nil when the
+// commit is not one agentx wrote and does not say.
+type LibraryPending struct {
+	Unresolved *int `json:"unresolved,omitempty"`
 }
 
 // LibraryPlacement is one way a configuration sees a library skill: mode is

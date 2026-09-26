@@ -142,6 +142,17 @@ func (r *Runner) IsolatedInput(ctx context.Context, gitDir string, stdin io.Read
 	return r.run(ctx, call{isolated: true, stdin: stdin}, isolatedArgs(gitDir, args)...)
 }
 
+// IsolatedStatus is Isolated for a git whose exit status is part of its
+// answer: merge-tree exits 1 for a merge that conflicts and merge-file
+// with the number of conflicts it wrote, each having written the whole of
+// its result to stdout first. An exit status from 1 to upTo is returned
+// with stdout as is and no error; any other failure is an error as it is
+// for Isolated, a status above upTo included, which is git's own way of
+// saying it could not do the work at all.
+func (r *Runner) IsolatedStatus(ctx context.Context, gitDir string, upTo int, args ...string) (string, int, error) {
+	return r.runStatus(ctx, call{isolated: true}, upTo, isolatedArgs(gitDir, args)...)
+}
+
 // Workers is how many git processes agentx runs at once. A read is mostly
 // the cost of starting git and reading its answer, so a few in flight hide
 // each other's latency, while the bound keeps a command from spawning a
@@ -213,9 +224,18 @@ type call struct {
 // user's own environment, in which credential helpers, SSH configuration
 // and URL rewrites apply. stdout is returned as is.
 func (r *Runner) run(ctx context.Context, c call, args ...string) (string, error) {
+	out, _, err := r.runStatus(ctx, c, 0, args...)
+	return out, err
+}
+
+// runStatus is run that answers an exit status from 1 to upTo with stdout
+// and that status rather than with an error, for a git that exits non-zero
+// to say what it found. A git killed by a signal has no such status and is
+// an error whatever upTo is.
+func (r *Runner) runStatus(ctx context.Context, c call, upTo int, args ...string) (string, int, error) {
 	git, err := r.lookPath()
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	r.logf("git %s", strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, git, args...)
@@ -241,7 +261,11 @@ func (r *Runner) run(ctx context.Context, c call, args ...string) (string, error
 		if ctx.Err() != nil {
 			// The child was killed because the run is stopping, so its own
 			// report, "signal: killed", says nothing true about git.
-			return "", fmt.Errorf("git %s: interrupted", subcommand(args))
+			return "", 0, fmt.Errorf("git %s: interrupted", subcommand(args))
+		}
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() >= 1 && exitErr.ExitCode() <= upTo {
+			return stdout.String(), exitErr.ExitCode(), nil
 		}
 		if stoppedBySignal(err) {
 			// Nothing here cancelled it, so the signal came from outside:
@@ -254,9 +278,9 @@ func (r *Runner) run(ctx context.Context, c call, args ...string) (string, error
 		if detail == "" {
 			detail = err.Error()
 		}
-		return "", fmt.Errorf("git %s: %s", subcommand(args), detail)
+		return "", 0, fmt.Errorf("git %s: %s", subcommand(args), detail)
 	}
-	return stdout.String(), nil
+	return stdout.String(), 0, nil
 }
 
 // waitDelay is how long a git that has been killed, or has exited leaving a

@@ -101,11 +101,17 @@ func ReadBase(ctx context.Context, r *gitx.Runner, gitDir string, rec Record) (B
 	if !rec.HasImport {
 		return Base{}, fmt.Errorf("%w: %s carries no lineage", ErrTrailer, rec.Ref)
 	}
-	entries, err := source.ReadTree(ctx, r, gitDir, rec.Commit)
+	return readVersion(ctx, r, gitDir, rec.Commit, rec.Import.Dir(), rec.Ref)
+}
+
+// readVersion reads the version of a skill a tree of the account repo holds
+// under the upstream directory dir, the tree's one entry, as ReadBase says.
+// what names the tree in an error.
+func readVersion(ctx context.Context, r *gitx.Runner, gitDir, treeish, dir, what string) (Base, error) {
+	entries, err := source.ReadTree(ctx, r, gitDir, treeish)
 	if err != nil {
 		return Base{}, err
 	}
-	dir := rec.Import.Dir()
 	var base Base
 	for _, e := range entries {
 		switch rest, below := strings.CutPrefix(e.Path, dir+"/"); {
@@ -115,11 +121,11 @@ func ReadBase(ctx context.Context, r *gitx.Runner, gitDir string, rec Record) (B
 			e.Path = rest
 			base.Entries = append(base.Entries, e)
 		default:
-			return Base{}, fmt.Errorf("%w: %s holds %q beside %s", ErrTrailer, rec.Ref, e.Path, dir)
+			return Base{}, fmt.Errorf("%w: %s holds %q beside %s", ErrTrailer, what, e.Path, dir)
 		}
 	}
 	if base.Tree == "" {
-		return Base{}, fmt.Errorf("%w: %s holds no directory %s", ErrTrailer, rec.Ref, dir)
+		return Base{}, fmt.Errorf("%w: %s holds no directory %s", ErrTrailer, what, dir)
 	}
 	return base, nil
 }
@@ -140,16 +146,28 @@ func WriteDir(ctx context.Context, r *gitx.Runner, gitDir, root string, tree tre
 	if len(tree.Dirs) == 0 {
 		return treeid.EmptyTree, nil
 	}
+	return writeDir(ctx, r, gitDir, root, tree, "")
+}
+
+// writeDir is WriteDir for a directory that records something, with the
+// tree wrapped in one more, holding it under the name wrap, written in the
+// same mktree when wrap is not "", and the id of that tree returned
+// instead: the shape of an import tree, which a merge compares a library
+// directory in.
+func writeDir(ctx context.Context, r *gitx.Runner, gitDir, root string, tree treeid.Tree, wrap string) (string, error) {
 	if err := writeBlobs(ctx, r, gitDir, root, tree.Blobs); err != nil {
 		return "", err
 	}
-	defs := make([]string, len(tree.Dirs))
+	defs := make([]string, len(tree.Dirs), len(tree.Dirs)+1)
 	for i, d := range tree.Dirs {
 		lines := make([]string, len(d.Entries))
 		for j, e := range d.Entries {
 			lines[j] = entryLine(e.Mode, e.OID, e.Name)
 		}
 		defs[i] = treeInput(lines)
+	}
+	if wrap != "" {
+		defs = append(defs, treeInput([]string{entryLine(source.DirMode, tree.ID, wrap)}))
 	}
 	written, err := mktree(ctx, r, gitDir, defs)
 	if err != nil {
@@ -160,7 +178,13 @@ func WriteDir(ctx context.Context, r *gitx.Runner, gitDir, root string, tree tre
 			return "", fmt.Errorf("%w: git wrote the directory %q as %s, not %s", ErrChanged, d.Path, written[i], d.ID)
 		}
 	}
-	return tree.ID, nil
+	if wrap == "" {
+		return tree.ID, nil
+	}
+	if want := treeid.Wrap(wrap, tree.ID); written[len(written)-1] != want {
+		return "", fmt.Errorf("git wrote the tree around %s as %s, not %s", wrap, written[len(written)-1], want)
+	}
+	return written[len(written)-1], nil
 }
 
 // ErrChanged is the error of a directory that changed while it was written.

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"unicode"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
@@ -143,15 +144,16 @@ func TestSkillListSpawnsOneGitProcess(t *testing.T) {
 
 // TestSkillListSpawnsOneGitProcessWhateverTheDrift holds the budget above
 // for skills that differ every way drift reads: one edited, a file of it
-// made executable too, and with an update a check pinned, one whose link
-// became a real directory in one configuration and whose placement is gone
-// from another, and whose upstream no longer holds it, and a skill of the
-// user's own beside them, and a managed branch whose library directory is
-// gone and whose commit carries no lineage, which a warning names with
-// <source> for the source it cannot name. Whether a skill is modified,
-// displaced, missing or gone is read in process, and its candidate and its
-// upstream-removed marker come with the lineage, so the listing still runs
-// one for-each-ref, and so does the snapshot.
+// made executable too, with an update a check pinned and a merge an update
+// left pending, one whose link became a real directory in one
+// configuration and whose placement is gone from another, and whose
+// upstream no longer holds it, and a skill of the user's own beside them,
+// and a managed branch whose library directory is gone and whose commit
+// carries no lineage, which a warning names with <source> for the source
+// it cannot name. Whether a skill is modified, displaced, missing or gone
+// is read in process, and its candidate, its upstream-removed marker and
+// its pending merge come with the lineage, so the listing still runs one
+// for-each-ref, and so does the snapshot.
 func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -171,10 +173,16 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	candidate := strings.TrimSpace(h.accountGit("commit-tree", "refs/heads/managed/alpha^{tree}", "-p", "refs/heads/managed/alpha", "-m", message))
 	h.accountGit("update-ref", "refs/agentx/candidate/alpha", candidate)
 	h.accountGit("update-ref", "refs/agentx/upstream-removed/beta", "refs/agentx/sources/"+source.ID(s.url))
+	// A pending merge is a commit of its own too, whose message counts the
+	// files it has left to resolve.
+	tip := h.ref(lineage.ManagedRef("alpha"))
+	pending := lineage.Merge{Base: tip, Mine: tip, Theirs: candidate}.Message("alpha", 2)
+	h.accountGit("update-ref", lineage.MergeRef("alpha"), h.accountGit("commit-tree", "refs/heads/managed/alpha^{tree}", "-p", tip, "-p", candidate, "-m", pending))
 	equal(t, "alpha's state", h.listed("alpha")["state"], stateModified)
 	if h.listed("alpha")["candidate"] == nil {
 		t.Error("alpha carries no candidate")
 	}
+	equal(t, "alpha's pending merge", fmt.Sprint(h.listed("alpha")["pending_merge"]), "map[unresolved:2]")
 	equal(t, "beta's drift", drift(h.listed("beta")), "displaced,missing,upstream removed")
 
 	calls := countingGit(t, h)
@@ -194,7 +202,9 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	}
 	ghost := "ghost is managed in the account repo but the library holds no skill directory for it;" +
 		" run 'agentx skill add <source> --skill ghost' to install it again, or 'agentx skill remove ghost' to stop managing it"
-	equal(t, "skill list's warning", h.mustRun("skill", "list").stderr, "warning: "+ghost+"\n")
+	list := h.mustRun("skill", "list")
+	equal(t, "skill list's warning", list.stderr, "warning: "+ghost+"\n")
+	contains(t, "skill list", list.stdout, "modified, update available, merge pending (2 unresolved)")
 	count("skill list", calls())
 	before := len(calls())
 	snap := h.snapshot(t)

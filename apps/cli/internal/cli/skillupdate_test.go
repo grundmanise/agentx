@@ -153,93 +153,138 @@ func sameEvent(t *testing.T, what string, got, want jsonEvent) {
 	equal(t, what, strip(got), strip(want))
 }
 
-// mixedHarness is a source of four skills, all installed from its first
+// mixedHarness is a source of five skills, all installed from its first
 // commit and symlinked into Claude Code, and a second commit after which a
 // check finds: an update for alpha, which nobody edited; an update for
-// beta, which the test then edits in the library; gamma gone from the
-// source; and delta as it was.
+// beta, which the test then edits in the library where the update changes
+// it too; an update for epsilon, which the test edits in a file the update
+// leaves alone; gamma gone from the source; and delta as it was.
 func mixedHarness(t *testing.T) (h *harness, s *sourceRepo, first, second string) {
 	t.Helper()
 	h = newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	s = h.newSourceRepo("skills", true)
-	for _, name := range []string{"alpha", "beta", "gamma", "delta"} {
-		s.skill("skills/"+name, name, "The skill "+name, map[string]string{"notes.md": name + " notes\n"})
+	for _, name := range []string{"alpha", "beta", "gamma", "delta", "epsilon"} {
+		s.skill("skills/"+name, name, "The skill "+name, map[string]string{"notes.md": name + " notes\n", "usage.md": name + " usage\n"})
 	}
 	first = s.commit("first version")
 	h.mustRun("source", "add", s.url)
 	h.mustRun("skill", "add", s.url, "--all")
 	s.write("skills/alpha/notes.md", "alpha notes, revised\n")
 	s.write("skills/beta/notes.md", "beta notes, revised\n")
+	s.write("skills/epsilon/notes.md", "epsilon notes, revised\n")
 	s.run("rm", "-r", "--quiet", "skills/gamma")
 	second = s.commit("second version")
 	h.mustRun("skill", "check")
 	editLibrary(t, h, "beta", "notes.md", "beta notes, edited here\n")
+	editLibrary(t, h, "epsilon", "usage.md", "epsilon usage, edited here\n")
 	return h, s, first, second
 }
 
-// TestSkillUpdateAllUpdatesEveryUnmodifiedSkill runs update --all over a
-// mix: the unmodified skill with an update is updated; the modified one is
-// skipped with a warning that says why and what to do, and keeps its
-// candidate and its edit; the upstream-removed skill and the one with no
-// update are not touched. Skipping a modified skill is no failure, so the
-// run exits 0, and the text says what it did in one line and a row.
-func TestSkillUpdateAllUpdatesEveryUnmodifiedSkill(t *testing.T) {
+// TestSkillUpdateAllMergesEditsAndLeavesConflictsPending runs update --all
+// over a mix: the unmodified skill with an update is updated; the modified
+// one whose edit the update leaves alone is merged, keeping the edit on the
+// new version and staying modified; the modified one whose edit conflicts
+// is left as it was, with a merge pending and a conflict event, and costs
+// the run exit code 4 as a refusal of its own would; the upstream-removed
+// skill and the one with no update are not touched. A second run, with
+// only the conflicting skill left to update, is answered as that skill on
+// its own: the merge pending blocks it.
+func TestSkillUpdateAllMergesEditsAndLeavesConflictsPending(t *testing.T) {
 	t.Parallel()
-	h, _, first, second := mixedHarness(t)
-	betaCandidate := h.ref(lineage.CandidateRef("beta"))
+	h, _, _, second := mixedHarness(t)
+	betaCandidate, betaTip := h.ref(lineage.CandidateRef("beta")), h.ref(lineage.ManagedRef("beta"))
+	epsilonCandidate := h.ref(lineage.CandidateRef("epsilon"))
 	gammaMarker := h.ref(lineage.UpstreamRemovedRef("gamma"))
 	deltaTip := h.ref(lineage.ManagedRef("delta"))
-	betaTip := h.ref(lineage.ManagedRef("beta"))
 	gammaTree := libraryTree(t, filepath.Join(h.library, "gamma"))
-	if betaCandidate == "" || gammaMarker == "" {
-		t.Fatalf("the check left beta's candidate %q and gamma's marker %q", betaCandidate, gammaMarker)
+	if betaCandidate == "" || epsilonCandidate == "" || gammaMarker == "" {
+		t.Fatalf("the check left beta's candidate %q, epsilon's %q and gamma's marker %q", betaCandidate, epsilonCandidate, gammaMarker)
 	}
 
 	out := h.run("--json", "skill", "update", "--all")
-	equal(t, "exit", out.exit, 0)
+	equal(t, "exit", out.exit, 4)
 	events := h.eventsOfType(out.stdout, "library_skill")
-	if len(events) != 1 || events[0]["name"] != "alpha" {
-		t.Fatalf("library_skill events %v, want alpha's alone", events)
+	if len(events) != 2 || events[0]["name"] != "alpha" || events[1]["name"] != "epsilon" {
+		t.Fatalf("library_skill events %v, want alpha's and epsilon's", events)
 	}
 	equal(t, "alpha's state", events[0]["state"], stateCurrent)
 	equal(t, "alpha's upstream_commit", events[0]["upstream_commit"], second)
+	equal(t, "epsilon's state", events[1]["state"], stateModified)
+	equal(t, "epsilon's upstream_commit", events[1]["upstream_commit"], second)
 	equal(t, "alpha's placements", strings.Join(placementsOf(t, events[0]), "|"), "claude-code symlink symlink")
 	sameEvent(t, "alpha's library_skill and skill list's", events[0], h.listed("alpha"))
-	equal(t, "summary", h.one(out.stdout, "result")["summary"], "updated 1 skill, 1 modified skill skipped")
-	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"),
-		"beta was edited since it was installed, so it was not updated: merging a modified skill with its update is not supported yet;"+
-			" run 'agentx skill diff beta' to see the edits, or 'agentx skill revert beta' to discard them and update it")
+	sameEvent(t, "epsilon's library_skill and skill list's", events[1], h.listed("epsilon"))
+	conflict := h.one(out.stdout, "conflict")
+	equal(t, "the conflict's skill", conflict["name"], "beta")
+	equal(t, "the conflict's files", conflictFiles(conflict), "notes.md:1")
+	refusal := "beta conflicts with its update in 1 file, so the merge is pending and the library directory was left as it is"
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "beta: "+refusal)
+	e := h.one(out.stdout, "error")
+	equal(t, "code", e["code"], "pending_merge")
+	equal(t, "message", e["message"], "1 of 3 skills could not be updated: beta: "+refusal)
+	equal(t, "hint", e["hint"], "run 'agentx skill resolve beta' to resolve the conflicts, or 'agentx skill resolve beta --abort' to give the merge up")
 	equal(t, "alpha's notes", fileBody(t, filepath.Join(h.library, "alpha", "notes.md")), "alpha notes, revised\n")
 	equal(t, "alpha's candidate", h.ref(lineage.CandidateRef("alpha")), "")
+	equal(t, "epsilon's notes", fileBody(t, filepath.Join(h.library, "epsilon", "notes.md")), "epsilon notes, revised\n")
+	equal(t, "epsilon's usage", fileBody(t, filepath.Join(h.library, "epsilon", "usage.md")), "epsilon usage, edited here\n")
+	equal(t, "epsilon's branch", h.ref(lineage.ManagedRef("epsilon")), epsilonCandidate)
+	equal(t, "epsilon's candidate", h.ref(lineage.CandidateRef("epsilon")), "")
 	equal(t, "beta's notes", fileBody(t, filepath.Join(h.library, "beta", "notes.md")), "beta notes, edited here\n")
 	equal(t, "beta's candidate", h.ref(lineage.CandidateRef("beta")), betaCandidate)
 	equal(t, "beta's branch", h.ref(lineage.ManagedRef("beta")), betaTip)
+	equal(t, "beta's pending merge", h.accountGit("rev-parse", lineage.MergeRef("beta")+"^@"), conflict["mine"].(string)+"\n"+betaCandidate)
 	equal(t, "gamma's marker", h.ref(lineage.UpstreamRemovedRef("gamma")), gammaMarker)
 	sameTree(t, "gamma's library directory", libraryTree(t, filepath.Join(h.library, "gamma")), gammaTree)
 	equal(t, "delta's branch", h.ref(lineage.ManagedRef("delta")), deltaTip)
+	equal(t, "journals", journalCount(t, h), 0)
 
-	// Once more, in text: nothing is left to update but beta, which is
-	// skipped again.
-	h.mustRun("skill", "revert", "beta")
-	text := h.mustRun("skill", "update", "--all")
-	equal(t, "the text", text.stdout, "✓ updated 1 skill\n  beta  "+first[:7]+" -> "+second[:7]+"\n")
-	equal(t, "beta's notes after the revert and update", fileBody(t, filepath.Join(h.library, "beta", "notes.md")), "beta notes, revised\n")
-	nothing := h.mustRun("skill", "update", "--all")
-	equal(t, "the text of a run with nothing to update", nothing.stdout,
-		"Nothing to update: no managed skill has an update as of the last update check. Run agentx skill check to look again.\n")
+	again := h.run("--json", "skill", "update", "--all")
+	equal(t, "exit of the second run", again.exit, 4)
+	e = h.one(again.stdout, "error")
+	equal(t, "message of the second run", e["message"], "beta has a merge with its update pending, so it cannot be updated until the merge is resolved or given up")
+	equal(t, "hint of the second run", e["hint"], "run 'agentx skill resolve beta --abort' to give the merge up; the library directory stays as it is")
+	if got := h.eventsOfType(again.stdout, "conflict"); len(got) != 0 {
+		t.Errorf("the second run reported conflicts again: %v", got)
+	}
+	equal(t, "beta's candidate after the second run", h.ref(lineage.CandidateRef("beta")), betaCandidate)
 }
 
-// TestSkillUpdateAllSkipsOnlyModifiedSkills: a run whose every skill with
-// an update is modified updates nothing and says so, and still exits 0.
-func TestSkillUpdateAllSkipsOnlyModifiedSkills(t *testing.T) {
+// TestSkillUpdateAllTextOfAMixedRun is the text of the run above: one line
+// for what was updated, a row for each skill, the merged one saying so,
+// then the conflicts of the skill left pending, and the error that names
+// it.
+func TestSkillUpdateAllTextOfAMixedRun(t *testing.T) {
+	t.Parallel()
+	h, _, first, second := mixedHarness(t)
+	out := h.run("skill", "update", "--all")
+	equal(t, "exit", out.exit, 4)
+	moved := first[:7] + " -> " + second[:7]
+	equal(t, "stdout", out.stdout, "✓ updated 2 skills, 1 edited skill merged cleanly\n"+
+		"  alpha    "+moved+"\n"+
+		"  epsilon  "+moved+"  edits merged cleanly\n"+
+		"beta conflicts with its update from "+first[:7]+" to "+second[:7]+" in 1 file\n"+
+		"notes.md:1\n<<<<<<< mine\nbeta notes, edited here\n||||||| base\nbeta notes\n=======\nbeta notes, revised\n>>>>>>> theirs\n")
+	contains(t, "stderr", out.stderr, "error: 1 of 3 skills could not be updated: beta: beta conflicts with its update in 1 file")
+}
+
+// TestSkillUpdateAllWithOnlyAConflict: a run whose one skill with an
+// update conflicts updates nothing, and is answered as that skill on its
+// own would be: its conflicts, and exit code 4 with no warning before it.
+func TestSkillUpdateAllWithOnlyAConflict(t *testing.T) {
 	t.Parallel()
 	h, _, _, _ := mixedHarness(t)
 	h.mustRun("skill", "update", "alpha")
-	out := h.run("skill", "update", "--all")
-	equal(t, "exit", out.exit, 0)
-	equal(t, "the text", out.stdout, "no skill was updated, 1 modified skill skipped\n")
-	contains(t, "the warning", out.stderr, "warning: beta was edited since it was installed, so it was not updated")
+	h.mustRun("skill", "update", "epsilon")
+	out := h.run("--json", "skill", "update", "--all")
+	equal(t, "exit", out.exit, 4)
+	equal(t, "the conflict's skill", h.one(out.stdout, "conflict")["name"], "beta")
+	equal(t, "message", h.one(out.stdout, "error")["message"],
+		"beta conflicts with its update in 1 file, so the merge is pending and the library directory was left as it is")
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "")
+	if got := h.eventsOfType(out.stdout, "library_skill"); len(got) != 0 {
+		t.Errorf("a run that updated nothing reported %v", got)
+	}
 }
 
 // otherSourceHarness is updateHarness with a second source holding gamma,
@@ -549,13 +594,14 @@ func lineagelessCandidate(t *testing.T, h *harness, s *sourceRepo) {
 // TestSkillUpdateRefusesInOrder is every skill update refuses, one name at
 // a time, each with its code, its message and its hint, and each where the
 // order of the checks puts it: an import branch agentx cannot read before
-// a removed source, a removed source before an upstream that no longer
+// a merge pending, a merge pending before a removed source, whether or not
+// there is an update, a removed source before an upstream that no longer
 // holds the skill, and both before whether there is an update at all,
-// which comes before whether the library entry is a symlink, that before
-// whether the skill holds something git cannot record, and that before
-// whether it was edited. A skill with no update, or with a candidate whose
-// lineage agentx cannot read, is nothing to do and exits 0. None of them
-// changes a ref, the library or a placement, or leaves a journal.
+// which comes before whether the library entry is a symlink, and that
+// before whether the skill holds something git cannot record. A skill with
+// no update, or with a candidate whose lineage agentx cannot read, is
+// nothing to do and exits 0. None of them changes a ref, the library or a
+// placement, or leaves a journal.
 func TestSkillUpdateRefusesInOrder(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
@@ -677,13 +723,28 @@ func TestSkillUpdateRefusesInOrder(t *testing.T) {
 			hint:    "an update would discard it with no record of it anywhere; move it out of the skill, then run 'agentx skill update alpha' again",
 		},
 		{
-			name: "an edited skill with an update", skill: "alpha", exit: 6,
+			name: "a skill with a merge pending", skill: "alpha", exit: 4,
+			setup:   pendingMerge,
+			message: "alpha has a merge with its update pending, so it cannot be updated until the merge is resolved or given up",
+			hint:    "run 'agentx skill resolve alpha --abort' to give the merge up; the library directory stays as it is",
+		},
+		{
+			name: "a skill with a merge pending whose source was removed", skill: "alpha", exit: 4,
 			setup: func(t *testing.T, h *harness, s *sourceRepo) {
-				checked(t, h, s)
-				editLibrary(t, h, "alpha", "notes.md", "alpha notes, edited\n")
+				pendingMerge(t, h, s)
+				h.mustRun("source", "remove", s.url)
 			},
-			message: "alpha was edited since it was installed, and merging a modified skill with its update is not supported yet",
-			hint:    "run 'agentx skill diff alpha' to see the edits, or 'agentx skill revert alpha' to discard them and then 'agentx skill update alpha'",
+			message: "alpha has a merge with its update pending, so it cannot be updated until the merge is resolved or given up",
+			hint:    "run 'agentx skill resolve alpha --abort' to give the merge up; the library directory stays as it is",
+		},
+		{
+			name: "a skill with a merge pending and no update left", skill: "alpha", exit: 4,
+			setup: func(t *testing.T, h *harness, s *sourceRepo) {
+				pendingMerge(t, h, s)
+				h.accountGit("update-ref", "-d", lineage.CandidateRef("alpha"))
+			},
+			message: "alpha has a merge with its update pending, so it cannot be updated until the merge is resolved or given up",
+			hint:    "run 'agentx skill resolve alpha --abort' to give the merge up; the library directory stays as it is",
 		},
 		{
 			name: "a skill whose library entry is a symlink", skill: "alpha", exit: 6,
@@ -752,8 +813,9 @@ func TestSkillUpdateRefusesInOrder(t *testing.T) {
 // update reads the candidate's version, after the skill was judged and
 // before the lock is taken: an edit of the library directory, a check that
 // moves or drops the candidate, a branch moved by another command, a fork
-// of the name made meanwhile, a check that finds the source no longer holds
-// the skill, and the source removed from this machine. The update then
+// of the name made meanwhile, a merge another update of the skill left
+// pending, a check that finds the source no longer holds the skill, and the
+// source removed from this machine. The update then
 // refuses under the lock, before it writes a journal, and loses nothing:
 // the edit is there, every ref holds what the other writer wrote, nothing
 // is left beside the library or a copy, and the version file is not bumped
@@ -783,7 +845,17 @@ func TestSkillUpdateRefusesWhatChangedBeforeTheLock(t *testing.T) {
 			},
 			branch: "tip", candidate: "candidate", notes: edited,
 			message: "alpha changed while it was being updated, so nothing was changed",
-			hint:    "run 'agentx skill diff alpha' to see the change; a skill edited since it was installed is not updated",
+			hint:    "run 'agentx skill update alpha' again to update it as it is now",
+		},
+		{
+			name: "another update of the skill leaves a merge pending",
+			change: func(_ *testing.T, _ *harness, _ *sourceRepo, git, other string) string {
+				return git + ` update-ref ` + lineage.MergeRef("alpha") + ` ` + other
+			},
+			exit:   4,
+			branch: "tip", candidate: "candidate", notes: "alpha notes\n",
+			message: "alpha has a merge with its update pending, so it cannot be updated until the merge is resolved or given up",
+			hint:    "run 'agentx skill resolve alpha --abort' to give the merge up; the library directory stays as it is",
 		},
 		{
 			name: "a check moves the candidate",
@@ -1005,7 +1077,7 @@ exec `+real+` "$@"
 	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "alpha: "+refusal)
 	e := h.one(out.stdout, "error")
 	equal(t, "message", e["message"], "1 of 2 skills could not be updated: alpha: "+refusal)
-	equal(t, "hint", e["hint"], "run 'agentx skill diff alpha' to see the change; a skill edited since it was installed is not updated")
+	equal(t, "hint", e["hint"], "run 'agentx skill update alpha' again to update it as it is now")
 	var updated []string
 	for _, ev := range h.eventsOfType(out.stdout, "library_skill") {
 		updated = append(updated, ev["name"].(string))

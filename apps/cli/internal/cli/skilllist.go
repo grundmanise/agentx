@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"strconv"
 	"strings"
 )
 
@@ -70,15 +71,24 @@ func (inv *invocation) skillList(ctx context.Context) error {
 // in full, so that neither hides the other.
 //
 // An update the last check found is said last in the same cell, as update
-// available: it is no drift, but it is how the skill stands against its
-// upstream, which is what the cell is about.
+// available, and a merge an update left pending after it, as merge pending
+// with the files it has left to resolve: neither is drift, but both are
+// how the skill stands against its upstream, which is what the cell is
+// about.
 func row(out *writer, ev librarySkillEvent) []cell {
 	words := append([]string{ev.State}, ev.Drift...)
 	if ev.Candidate != nil {
 		words = append(words, updateAvailable)
 	}
+	if p := ev.PendingMerge; p != nil {
+		pending := mergePending
+		if p.Unresolved != nil {
+			pending += " (" + strconv.Itoa(*p.Unresolved) + " unresolved)"
+		}
+		words = append(words, pending)
+	}
 	state := c(strings.Join(words, ", "), okStyle)
-	if ev.State == stateModified || len(ev.Drift) > 0 || ev.Candidate != nil {
+	if ev.State == stateModified || len(ev.Drift) > 0 || ev.Candidate != nil || ev.PendingMerge != nil {
 		state.style = warnStyle
 	}
 	if ev.State == "" {

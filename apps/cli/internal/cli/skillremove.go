@@ -125,6 +125,12 @@ func (inv *invocation) skillRemove(ctx context.Context, name string, from []stri
 			if whole && values[lineage.ForkRef(name)] != "" {
 				return forkOutOfScope(name)
 			}
+			// A merge an update left pending holds the library directory
+			// and the import branch the removal would take away; taking
+			// one placement away leaves both, and is not refused.
+			if whole && values[lineage.MergeRef(name)] != "" {
+				return pendingMergeRefusal(name, "removed")
+			}
 			refs = values
 		}
 		edit, err := inv.beginSettings()
@@ -250,6 +256,9 @@ func (inv *invocation) removeAbsent(ctx context.Context, name string, from []str
 	if commit == "" || refs[lineage.ForkRef(name)] != "" {
 		return inv.noLibrarySkill(name)
 	}
+	if refs[lineage.MergeRef(name)] != "" {
+		return pendingMergeRefusal(name, "removed")
+	}
 	for _, id := range from {
 		if id != fromUniversal {
 			return fail(exitRefused, fmt.Sprintf("the library holds no skill directory for %s, so it cannot be removed from %s alone", name, id),
@@ -274,6 +283,9 @@ func (inv *invocation) removeAbsent(ctx context.Context, name string, from []str
 		}
 		if values[lineage.ManagedRef(name)] != commit || values[lineage.ForkRef(name)] != "" {
 			return moved
+		}
+		if values[lineage.MergeRef(name)] != "" {
+			return pendingMergeRefusal(name, "removed")
 		}
 		// The base version a copy is judged against: the tree and the
 		// trailers of the commit the branch holds, read for that commit.
@@ -553,13 +565,13 @@ func canonicalPath(path string) string {
 	}
 }
 
-// lineageRefs reads the import branch, the fork branch, the candidate ref
-// and the upstream-removed marker of one skill in one git process, so that
-// a removal knows what it has to take away and what it must refuse before
-// it plans anything.
+// lineageRefs reads the import branch, the fork branch, the candidate ref,
+// the upstream-removed marker and the merge ref of one skill in one git
+// process, so that a removal knows what it has to take away and what it
+// must refuse before it plans anything.
 func (inv *invocation) lineageRefs(ctx context.Context, gitDir, name string) (map[string]string, error) {
 	values, err := inv.git.Refs(ctx).RefValues(gitDir,
-		[]string{lineage.ManagedRef(name), lineage.ForkRef(name), lineage.CandidateRef(name), lineage.UpstreamRemovedRef(name)})
+		[]string{lineage.ManagedRef(name), lineage.ForkRef(name), lineage.CandidateRef(name), lineage.UpstreamRemovedRef(name), lineage.MergeRef(name)})
 	if err != nil {
 		return nil, accountRepoFailure(err)
 	}
