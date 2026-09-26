@@ -67,6 +67,10 @@ var (
 	ErrUnsafePath  = errors.New("unsafe path in the source")        // a tree entry that could be laid out outside its directory
 )
 
+// NotFetched is ErrNotFetched naming the source at url, the one way a
+// source the account repo holds no ref for is reported.
+func NotFetched(url string) error { return fmt.Errorf("%w: %s", ErrNotFetched, url) }
+
 // Skill is one installable skill of a source at its fetched commit.
 type Skill struct {
 	Subpath     string // the skill directory from the repository root, "" for the root
@@ -325,7 +329,7 @@ func List(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listing
 		return Listing{}, err // the account repo itself, not a source that was never fetched
 	}
 	if commit == "" {
-		return Listing{}, fmt.Errorf("%w: %s", ErrNotFetched, s.URL)
+		return Listing{}, NotFetched(s.URL)
 	}
 	entries, err := skillEntries(ctx, r, gitDir, commit, s.Subpath, true)
 	if err != nil {

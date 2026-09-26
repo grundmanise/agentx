@@ -122,7 +122,12 @@ type removedSkill struct {
 // checkReport is what one update check found and did, for skill check to
 // print and for the serve child to emit.
 type checkReport struct {
-	idle      bool            // nothing to fetch: no managed skill comes from a source this machine has, no source at all for the serve child, or every one the check set out to fetch was removed while it ran; a serve child whose settings name sources it has no account repo for is not idle, each of them being a failure
+	// idle is a check with nothing to fetch: no managed skill comes from a
+	// source this machine has, no source at all for the serve child, or
+	// every one the check set out to fetch was removed while it ran. A serve
+	// child whose settings name sources it has no account repo for is not
+	// idle, each of them being a failure.
+	idle      bool
 	refreshed map[string]bool // the sources that were fetched and that the settings still hold, by canonical URL
 	checked   int             // the managed skills the check recorded a verdict for
 	updates   []updateAvailableEvent
@@ -299,7 +304,7 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool) (checkRep
 		// about once. Nothing is fetched or written, and no git is run.
 		for _, entry := range s.Sources {
 			t := target(entry)
-			res := source.Result{Source: t.src, Err: fmt.Errorf("%w: %s", source.ErrNotFetched, t.src.URL)}
+			res := source.Result{Source: t.src, Err: source.NotFetched(t.src.URL)}
 			rep.failures = append(rep.failures, checkFailure{source: entry.URL, fetch: true, f: fetchRefused(res)})
 		}
 		return rep, nil

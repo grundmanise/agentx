@@ -67,7 +67,7 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 		return accountRepoFailure(err)
 	}
 	if !exists { // settings name sources the account repo has nothing of
-		return sourceFailure(fmt.Errorf("%w: %s", source.ErrNotFetched, targets[0].src.URL), targets[0].src)
+		return sourceFailure(source.NotFetched(targets[0].src.URL), targets[0].src)
 	}
 	results, err := inv.fetchSources(ctx, gitDir, targets, false, true)
 	if err != nil {
@@ -124,7 +124,7 @@ func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets 
 	// that failed is checked, so a run that works spawns nothing for it.
 	for i, res := range results {
 		if res.Err != nil && !source.Configured(ctx, inv.git, gitDir, res.Source.ID()) {
-			results[i].Err = fmt.Errorf("%w: %s", source.ErrNotFetched, res.Source.URL)
+			results[i].Err = source.NotFetched(res.Source.URL)
 		}
 	}
 	return results, nil

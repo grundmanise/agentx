@@ -263,11 +263,12 @@ func contains(t *testing.T, what, text, sub string) {
 }
 
 // serveProc is one `agentx serve` run in a goroutine, driven through pipes.
-// Every wait is on a channel or a pipe read, never a sleep: send writes a
-// request line, next reads the next stdout event, close ends stdin and
-// cancelRun ends the context; both return the exit code once Run returned.
-// stderr can be read while serve runs, which is how a test waits for a log
-// line that no stdout event announces.
+// Every wait on stdout is a channel or a pipe read, never a sleep: send
+// writes a request line, next reads the next stdout event, close ends stdin
+// and cancelRun ends the context; both return the exit code once Run
+// returned. stderr can be read while serve runs: what serve does on its
+// timer and logs there has no stdout event to wait for, so a test polls for
+// it with awaitTrue.
 type serveProc struct {
 	t      *testing.T
 	stdin  *os.File

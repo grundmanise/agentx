@@ -213,6 +213,50 @@ func TestServeWarnsOnceAboutASourceItCannotFetch(t *testing.T) {
 	}
 }
 
+// TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves runs serve with
+// the check interval shortened on a machine with two sources, the second
+// left as a removal cut short leaves it, its remote and ref gone, while a
+// commit lands in the first twice over. Each check that moves the first
+// source's ref writes, and the rescan that write sets off rebuilds the
+// source index, but the second source is no different from one rebuild to
+// the next: the index warns once that it has not been fetched, and the
+// checks warn once that they could not fetch it.
+func TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.build(t, fixture{dirs: []string{".claude"}})
+	one, two := h.fetchSources(t)
+	h.accountGit("remote", "remove", source.RemoteName(source.ID(two.url)))
+	h.accountGit("update-ref", "-d", source.Ref(source.ID(two.url)))
+
+	h.env["AGENTX_CHECK_INTERVAL"] = "100ms"
+	p := h.serve(t, "--json")
+	p.next("snapshot")
+	searches := 0
+	for _, name := range []string{"delta", "epsilon"} {
+		one.skill("skills/"+name, name, "A skill added upstream", nil)
+		one.commit(name)
+		// The rebuild that finds the skill logs its warnings before a
+		// search can be answered from it.
+		want := []string{one.url + " skills/" + name + " " + name}
+		awaitTrue(t, fmt.Sprintf("a search after one moved finds %q", want), func() bool {
+			searches++
+			return reflect.DeepEqual(p.search(fmt.Sprintf("s%d", searches), name), want)
+		})
+	}
+	equal(t, "exit", p.close(), 0)
+
+	warned := warnings(h, p.stderr.String())
+	slices.Sort(warned)
+	want := []string{
+		"source " + two.url + " has not been fetched, its skills cannot be searched",
+		"update check: source not fetched: " + two.url,
+	}
+	if !slices.Equal(warned, want) {
+		t.Errorf("the warnings = %q, want one from the index and one from the checks: %q", warned, want)
+	}
+}
+
 // TestServeRefreshSpawnsBoundedGit counts the git processes serve spawns
 // per check on its timer, on a machine with a hundred managed skills from
 // one source and a second source nothing was installed from: each check
@@ -321,10 +365,10 @@ func TestServeRefreshesNothingWithoutASource(t *testing.T) {
 // TestServeWarnsOnceAboutSourcesAnImportBrought runs serve with the check
 // interval shortened on a machine whose settings name two sources because
 // an import wrote them, and which has fetched nothing, so has no account
-// repo to fetch into until source add creates one. No check runs a git
-// fetch, creates the account repo or writes anything, but the first warns
-// about each source as not fetched, as source fetch refuses it, and the
-// checks after it log the same line at debug level. skill check, which
+// repo to fetch into until source add creates one. No check runs git,
+// creates the account repo or writes anything, but the first warns about
+// each source as not fetched, as source fetch refuses it, and the checks
+// after it log the same line at debug level. skill check, which
 // checks only the sources a managed skill came from, still has nothing to
 // check there.
 //
@@ -353,12 +397,18 @@ func TestServeWarnsOnceAboutSourcesAnImportBrought(t *testing.T) {
 	h.env["AGENTX_CHECK_INTERVAL"] = "100ms"
 	p := h.serve(t, "--json", "--verbose")
 	p.next("snapshot")
+	// The scan and the source index it rebuilds have run their git by the
+	// time a refresh is acknowledged; the checks run none.
+	p.send(`{"type":"refresh","request_id":"settled"}`)
+	p.until("settled")
+	n := len(calls())
 	var want []string
 	for _, s := range []*sourceRepo{one, two} {
 		line := "update check: source not fetched: " + s.url
 		p.awaitLogged("debug", line, 2) // two checks after the one at launch
 		want = append(want, line)
 	}
+	later := calls()[n:]
 	equal(t, "exit", p.close(), 0)
 
 	warned := p.logged("warn", "update check: ")
@@ -366,6 +416,9 @@ func TestServeWarnsOnceAboutSourcesAnImportBrought(t *testing.T) {
 	slices.Sort(want)
 	if !slices.Equal(warned, want) {
 		t.Errorf("the check warnings = %q, want one per source: %q", warned, want)
+	}
+	if len(later) > 0 {
+		t.Errorf("the checks of a machine with no account repo spawned git:\n%s", strings.Join(later, "\n"))
 	}
 	for _, call := range calls() {
 		if slices.Contains(strings.Fields(call), "fetch") {
