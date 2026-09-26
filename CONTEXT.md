@@ -116,7 +116,7 @@ An explicit user action that pushes one fork's or greenfield skill's branch from
 _Avoid_: sync, share, upload
 
 **Update check**:
-Fetching the sources the managed skills came from and comparing each skill's base version with what its source holds now, by tree id. It records what it found and never applies anything: a newer version becomes the skill's update candidate. Run by hand, and by the desktop app on launch and on a timer.
+Fetching the sources the managed skills came from and comparing each skill's base version with what its source holds now, by tree id. It records what it found and never applies anything: a newer version becomes the skill's update candidate. Run by hand, and by the desktop app on launch and on a timer, where the same pass also fetches every other added source, so that browsing and search see what the sources hold now.
 _Avoid_: sync, poll
 
 **Update candidate**:
