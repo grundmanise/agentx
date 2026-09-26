@@ -93,7 +93,8 @@ func trailer(t *testing.T, h *harness, commit, key string) string {
 // changes nothing merges cleanly. The import branch moves to the candidate
 // and the candidate goes, as for any update; the library directory holds
 // the new version with the edits on top of it, every file the update
-// added, deleted or made executable included, so the skill stays
+// added, deleted or made executable included, and a directory of the
+// user's whose own ignore file names everything in it, so the skill stays
 // modified, and skill diff shows the edits and nothing else. Of the two
 // copies, the one that still held the version installed is refreshed with
 // the merged library, and the one edited where it is kept with its
@@ -109,9 +110,13 @@ func TestSkillUpdateMergesANonOverlappingEdit(t *testing.T) {
 	skillMD := fileBody(t, filepath.Join(lib, "SKILL.md")) + "\nA line of my own.\n"
 	editLibrary(t, h, "alpha", "SKILL.md", skillMD)
 	editLibrary(t, h, "alpha", "mine.md", "a file of my own\n")
+	private := filepath.Join(lib, "private")
+	writeFile(t, mkdirs(t, private, ".gitignore"), "*\n")
+	writeFile(t, filepath.Join(private, "notes.md"), "notes git would ignore\n")
 	second := newVersion(t, s)
 	want := secondTree(t, s)
 	want["SKILL.md"], want["mine.md"] = skillMD, "a file of my own\n"
+	want[filepath.Join("private", ".gitignore")], want[filepath.Join("private", "notes.md")] = "*\n", "notes git would ignore\n"
 	h.mustRun("skill", "check")
 	tip, candidate := h.ref(lineage.ManagedRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
 
@@ -148,7 +153,7 @@ func TestSkillUpdateMergesANonOverlappingEdit(t *testing.T) {
 	for _, d := range h.eventsOfType(h.mustRun("--json", "skill", "diff", "alpha").stdout, "diff") {
 		diffs = append(diffs, d["path"].(string)+" "+d["status"].(string))
 	}
-	equal(t, "what skill diff shows", strings.Join(diffs, ", "), "SKILL.md modified, mine.md added")
+	equal(t, "what skill diff shows", strings.Join(diffs, ", "), "SKILL.md modified, mine.md added, private/.gitignore added, private/notes.md added")
 }
 
 // TestSkillUpdateLeavesAConflictPending: an edit the update overlaps
