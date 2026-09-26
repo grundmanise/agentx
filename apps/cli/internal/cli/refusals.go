@@ -19,11 +19,12 @@ type brokenSkill struct {
 // takes the exit code they agree on, exit code 6 standing for a run whose
 // causes disagree, the way exit code 3 does for a fetch of several sources.
 //
-// Installing and adopting both answer this way, and differ only in the word
-// for what did not happen and in the hint a run of mixed causes ends with.
+// Installing, adopting and updating all answer this way, and differ only in
+// the word for what did not happen and in the hint a run of mixed causes
+// ends with.
 type refusals struct {
 	broken []brokenSkill
-	verb   string // what the skills could not be: installed, adopted
+	verb   string // what the skills could not be: installed, adopted, updated
 	mixed  string // the hint of a run whose causes disagree
 }
 

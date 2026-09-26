@@ -528,13 +528,19 @@ func (r *updateRun) report(ctx context.Context) error {
 	if !r.all {
 		u := r.applied[0]
 		moved := " from " + short(u.rec.Import.Commit) + " to " + short(u.next.Import.Commit)
-		plain, painted := u.copiesNote(out)
+		plain, painted := copiesNote(out, len(u.done.copies), len(u.done.skipped))
 		inv.summary = "updated " + u.name + moved + plain
 		out.done("updated " + out.paint(heading, sanitised(u.name)) + moved + painted)
 		return nil
 	}
-	inv.summary = "updated " + plural(len(r.applied), "skill")
-	line := inv.summary
+	refreshed, skipped := 0, 0
+	for _, u := range r.applied {
+		refreshed += len(u.done.copies)
+		skipped += len(u.done.skipped)
+	}
+	note, painted := copiesNote(out, refreshed, skipped)
+	inv.summary = "updated " + plural(len(r.applied), "skill") + note
+	line := "updated " + plural(len(r.applied), "skill") + painted
 	if n := len(r.edited); n > 0 {
 		inv.summary += ", " + plural(n, "modified skill") + " skipped"
 		line += ", " + out.paint(warnStyle, plural(n, "modified skill")+" skipped")
@@ -542,30 +548,27 @@ func (r *updateRun) report(ctx context.Context) error {
 	out.done(line)
 	t := &table{}
 	for _, u := range r.applied {
-		var notes []string
-		if n := len(u.done.copies); n > 0 {
-			notes = append(notes, plural(n, "copy placement")+" refreshed")
-		}
-		if n := len(u.done.skipped); n > 0 {
-			notes = append(notes, plural(n, "placement")+" skipped")
-		}
-		t.add(c(sanitised(u.name), heading), c(short(u.rec.Import.Commit)+" -> "+short(u.next.Import.Commit), plain), c(strings.Join(notes, ", "), noteStyle))
+		notes, _ := copiesNote(out, len(u.done.copies), len(u.done.skipped))
+		t.add(c(sanitised(u.name), heading), c(short(u.rec.Import.Commit)+" -> "+short(u.next.Import.Commit), plain), c(strings.TrimPrefix(notes, ", "), noteStyle))
 	}
 	out.render(t, "  ")
 	return nil
 }
 
-// copiesNote is what one skill's update did to its copies, as its line and
-// its result say it: how many were refreshed and how many were skipped,
-// each after a comma, or nothing when neither.
-func (u *updating) copiesNote(out *writer) (plain, painted string) {
-	if n := len(u.done.copies); n > 0 {
-		plain += ", " + plural(n, "copy placement") + " refreshed"
-		painted += ", " + out.paint(noteStyle, plural(n, "copy placement")+" refreshed")
+// copiesNote is what an update did to copy placements, as its line and its
+// result say it, whether of one skill or added up over a run of several:
+// how many were refreshed and how many were skipped, each after a comma,
+// or nothing when neither.
+func copiesNote(out *writer, refreshed, skipped int) (plain, painted string) {
+	if refreshed > 0 {
+		note := plural(refreshed, "copy placement") + " refreshed"
+		plain += ", " + note
+		painted += ", " + out.paint(noteStyle, note)
 	}
-	if n := len(u.done.skipped); n > 0 {
-		plain += ", " + plural(n, "placement") + " skipped"
-		painted += ", " + out.paint(warnStyle, plural(n, "placement")+" skipped")
+	if skipped > 0 {
+		note := plural(skipped, "placement") + " skipped"
+		plain += ", " + note
+		painted += ", " + out.paint(warnStyle, note)
 	}
 	return plain, painted
 }

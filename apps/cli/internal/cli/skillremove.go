@@ -149,10 +149,10 @@ func (inv *invocation) skillRemove(ctx context.Context, name string, from []stri
 			}
 			m.Remove(libPath, state)
 			// Both carry the value they hold now, so a branch something
-			// else moved is refused rather than dropped. A journal whose
-			// ref steps only delete applies them last, after the library
-			// directory and every placement, so a removal that cannot
-			// finish still has the skill's lineage to answer with.
+			// else moved is refused rather than dropped. The journal
+			// deletes refs last, after the library directory and every
+			// placement, so a removal that cannot finish still has the
+			// skill's lineage to answer with.
 			if commit := refs[lineage.ManagedRef(name)]; commit != "" {
 				plan.managed = commit
 				m.Ref(gitDir, lineage.ManagedRef(name), commit, "")

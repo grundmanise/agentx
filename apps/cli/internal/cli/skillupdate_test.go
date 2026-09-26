@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
@@ -268,6 +269,81 @@ func TestSkillUpdateAllReportsEachRefusalAndGoesOn(t *testing.T) {
 	equal(t, "hint", e["hint"], "run 'agentx skill list' to see which skills have an update, then update the rest one at a time")
 }
 
+// TestSkillUpdateAllRefreshesEachSkillsCopies runs update --all over two
+// skills with an update, each with a copy in Claude Code and in Cursor, and
+// beta's Cursor copy edited in place. Every copy that held the version
+// replaced is refreshed, beta's own as much as alpha's, and the edited one
+// is kept byte for byte with the warning for a kept copy. The result adds
+// up what the run did to copies over every skill, and in text each row says
+// what the update of its skill did.
+func TestSkillUpdateAllRefreshesEachSkillsCopies(t *testing.T) {
+	t.Parallel()
+	for _, json := range []bool{false, true} {
+		name := "text"
+		if json {
+			name = "json"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			h, s, first := updateHarness(t)
+			claude := filepath.Join(h.home, ".claude", "skills")
+			cursor := filepath.Join(h.home, ".cursor", "skills")
+			betaCursor := filepath.Join(cursor, "beta")
+			editCopy(t, betaCursor)
+			edited := libraryTree(t, betaCursor)
+			s.write("skills/beta/notes.md", "beta notes, revised\n")
+			second := newVersion(t, s)
+			alphaWant := secondTree(t, s)
+			betaWant := libraryTree(t, filepath.Join(s.work, "skills", "beta"))
+			h.mustRun("skill", "check")
+			candidates := map[string]string{}
+			for _, name := range []string{"alpha", "beta"} {
+				if candidates[name] = h.ref(lineage.CandidateRef(name)); candidates[name] == "" {
+					t.Fatalf("the check pinned no candidate for %s", name)
+				}
+			}
+
+			args := []string{"skill", "update", "--all"}
+			if json {
+				args = append([]string{"--json"}, args...)
+			}
+			out := h.mustRun(args...)
+			for name, candidate := range candidates {
+				equal(t, name+"'s import branch", h.ref(lineage.ManagedRef(name)), candidate)
+				equal(t, name+"'s candidate", h.ref(lineage.CandidateRef(name)), "")
+			}
+			sameTree(t, "alpha's library directory", libraryTree(t, filepath.Join(h.library, "alpha")), alphaWant)
+			sameTree(t, "alpha's claude copy", libraryTree(t, filepath.Join(claude, "alpha")), alphaWant)
+			sameTree(t, "alpha's cursor copy", libraryTree(t, filepath.Join(cursor, "alpha")), alphaWant)
+			sameTree(t, "beta's library directory", libraryTree(t, filepath.Join(h.library, "beta")), betaWant)
+			sameTree(t, "beta's claude copy", libraryTree(t, filepath.Join(claude, "beta")), betaWant)
+			sameTree(t, "beta's cursor copy", libraryTree(t, betaCursor), edited)
+			for _, dir := range []string{h.library, claude, cursor} {
+				equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
+			}
+			equal(t, "journals", journalCount(t, h), 0)
+
+			kept := keptCopyWarning(betaCursor, "beta", "agentx skill remove beta --from cursor", "agentx skill place beta --to cursor --copy")
+			if json {
+				equal(t, "summary", h.one(out.stdout, "result")["summary"], "updated 2 skills, 3 copy placements refreshed, 1 placement skipped")
+				equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), kept)
+				var updated []string
+				for _, ev := range h.eventsOfType(out.stdout, "library_skill") {
+					updated = append(updated, ev["name"].(string))
+				}
+				equal(t, "updated", strings.Join(updated, ", "), "alpha, beta")
+				return
+			}
+			warning, wayOn := keptCopyLines(betaCursor, "beta", "agentx skill remove beta --from cursor", "agentx skill place beta --to cursor --copy")
+			equal(t, "stderr", out.stderr, "warning: "+warning+"\n  "+wayOn+"\n")
+			moved := first[:7] + " -> " + second[:7]
+			equal(t, "the text", out.stdout, "✓ updated 2 skills, 3 copy placements refreshed, 1 placement skipped\n"+
+				"  alpha  "+moved+"  2 copy placements refreshed\n"+
+				"  beta   "+moved+"  1 copy placement refreshed, 1 placement skipped\n")
+		})
+	}
+}
+
 // TestSkillUpdateUsage: a name and --all are the two forms, and one of them
 // is needed.
 func TestSkillUpdateUsage(t *testing.T) {
@@ -452,29 +528,35 @@ func TestSkillUpdateRefusesInOrder(t *testing.T) {
 // is what it read when it began. A git wrapper changes one input while the
 // update reads the candidate's version, after the skill was judged and
 // before the lock is taken: an edit of the library directory, a check that
-// moves or drops the candidate, and a branch moved by another command. The
-// update then refuses under the lock, before it writes a journal, and
-// loses nothing: the edit is there, every ref holds what the other writer
-// wrote, and nothing is left beside the library or a copy.
+// moves or drops the candidate, a branch moved by another command, a fork
+// of the name made meanwhile, a check that finds the source no longer holds
+// the skill, and the source removed from this machine. The update then
+// refuses under the lock, before it writes a journal, and loses nothing:
+// the edit is there, every ref holds what the other writer wrote, nothing
+// is left beside the library or a copy, and the version file is not bumped
+// for a run that changed nothing.
 func TestSkillUpdateRefusesWhatChangedBeforeTheLock(t *testing.T) {
 	t.Parallel()
 	edited := "an edit made meanwhile\n"
 	for _, c := range []struct {
 		name string
-		// change is the shell line the wrapper runs, given the library,
-		// the real git with the account repo, and the commit beta's
-		// branch holds, which stands for a commit another writer wrote
-		change func(lib, git, other string) string
-		// branch and candidate are what alpha's import branch and
-		// candidate hold afterwards: "tip", "candidate", "other" or ""
-		branch, candidate string
-		notes             string // what alpha's notes.md holds afterwards
-		message, hint     string
+		// change is the shell line the wrapper runs, given the real git
+		// with the account repo, and the commit beta's branch holds, which
+		// stands for a commit another writer wrote
+		change func(t *testing.T, h *harness, s *sourceRepo, git, other string) string
+		exit   int // 6 when left out
+		// branch, candidate, fork and marker are what alpha's import
+		// branch, candidate, fork branch and upstream-removed marker hold
+		// afterwards: "tip", "candidate", "other" or ""
+		branch, candidate, fork, marker string
+		notes                           string // what alpha's notes.md holds afterwards
+		// message and hint, in which %URL% is the source's URL
+		message, hint string
 	}{
 		{
 			name: "the library directory is edited",
-			change: func(lib, _, _ string) string {
-				return `printf 'an edit made meanwhile\n' > ` + shellWord(filepath.Join(lib, "notes.md"))
+			change: func(_ *testing.T, h *harness, _ *sourceRepo, _, _ string) string {
+				return `printf 'an edit made meanwhile\n' > ` + shellWord(filepath.Join(h.library, "alpha", "notes.md"))
 			},
 			branch: "tip", candidate: "candidate", notes: edited,
 			message: "alpha changed while it was being updated, so nothing was changed",
@@ -482,7 +564,7 @@ func TestSkillUpdateRefusesWhatChangedBeforeTheLock(t *testing.T) {
 		},
 		{
 			name: "a check moves the candidate",
-			change: func(_, git, other string) string {
+			change: func(_ *testing.T, _ *harness, _ *sourceRepo, git, other string) string {
 				return git + ` update-ref ` + lineage.CandidateRef("alpha") + ` ` + other
 			},
 			branch: "tip", candidate: "other", notes: "alpha notes\n",
@@ -490,20 +572,68 @@ func TestSkillUpdateRefusesWhatChangedBeforeTheLock(t *testing.T) {
 			hint:    "run 'agentx skill update alpha' again to apply the update the last check found",
 		},
 		{
-			name:   "a check drops the candidate",
-			change: func(_, git, _ string) string { return git + ` update-ref -d ` + lineage.CandidateRef("alpha") },
+			name: "a check drops the candidate",
+			change: func(_ *testing.T, _ *harness, _ *sourceRepo, git, _ string) string {
+				return git + ` update-ref -d ` + lineage.CandidateRef("alpha")
+			},
 			branch: "tip", candidate: "", notes: "alpha notes\n",
 			message: "the update candidate refs/agentx/candidate/alpha moved while alpha was being updated, so nothing was changed",
 			hint:    "run 'agentx skill update alpha' again to apply the update the last check found",
 		},
 		{
 			name: "the import branch moves",
-			change: func(_, git, other string) string {
+			change: func(_ *testing.T, _ *harness, _ *sourceRepo, git, other string) string {
 				return git + ` update-ref ` + lineage.ManagedRef("alpha") + ` ` + other
 			},
 			branch: "other", candidate: "candidate", notes: "alpha notes\n",
 			message: "the import branch refs/heads/managed/alpha moved while alpha was being updated, so nothing was changed",
 			hint:    "run 'agentx skill update alpha' again",
+		},
+		{
+			name: "a fork of the name appears",
+			change: func(_ *testing.T, _ *harness, _ *sourceRepo, git, other string) string {
+				return git + ` update-ref ` + lineage.ForkRef("alpha") + ` ` + other
+			},
+			branch: "tip", candidate: "candidate", fork: "other", notes: "alpha notes\n",
+			message: "the import branch refs/heads/managed/alpha moved while alpha was being updated, so nothing was changed",
+			hint:    "run 'agentx skill update alpha' again",
+		},
+		{
+			// A check that marks a skill upstream removed also deletes its
+			// candidate; the marker is what the update answers for.
+			name: "a check finds the source no longer holds the skill",
+			change: func(_ *testing.T, _ *harness, _ *sourceRepo, git, other string) string {
+				return git + ` update-ref ` + lineage.UpstreamRemovedRef("alpha") + ` ` + other + ` && ` +
+					git + ` update-ref -d ` + lineage.CandidateRef("alpha")
+			},
+			branch: "tip", candidate: "", marker: "other", notes: "alpha notes\n",
+			message: "the last update check found that the source of alpha no longer holds it, so it is kept as it is and never updated",
+			hint:    "run 'agentx skill check' once the source holds it again, or 'agentx skill remove alpha' to remove it",
+		},
+		{
+			name: "the source is removed",
+			change: func(t *testing.T, h *harness, s *sourceRepo, _, _ string) string {
+				settings, err := home.LoadSettings(h.agentx)
+				if err != nil {
+					t.Fatal(err)
+				}
+				settings.RemoveSource(s.url)
+				b, err := home.MarshalSettings(settings)
+				if err != nil {
+					t.Fatal(err)
+				}
+				without := filepath.Join(t.TempDir(), "settings.json")
+				writeFile(t, without, string(b))
+				cp, err := exec.LookPath("cp")
+				if err != nil {
+					t.Fatal(err)
+				}
+				return cp + " " + shellWord(without) + " " + shellWord(home.SettingsPath(h.agentx))
+			},
+			exit:   5,
+			branch: "tip", candidate: "candidate", notes: "alpha notes\n",
+			message: "alpha was installed from %URL%, which was removed from this machine, so it is not updated",
+			hint:    "run 'agentx source add %URL%' to add it again",
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -519,23 +649,33 @@ func TestSkillUpdateRefusesWhatChangedBeforeTheLock(t *testing.T) {
 				t.Fatal(err)
 			}
 			git := real + " --git-dir=" + shellWord(gitx.AccountRepoPath(h.agentx))
+			change := c.change(t, h, s, git, held["other"])
+			before := mutationVersion(t, h)
 			stubGit(t, h, `#!/bin/sh
 case " $* " in
-*" ls-tree "*) `+c.change(filepath.Join(h.library, "alpha"), git, held["other"])+` || exit 1 ;;
+*" ls-tree "*) `+change+` || exit 1 ;;
 esac
 exec `+real+` "$@"
 `)
 			out := h.run("--json", "skill", "update", "alpha")
-			equal(t, "exit", out.exit, 6)
+			exit := c.exit
+			if exit == 0 {
+				exit = 6
+			}
+			equal(t, "exit", out.exit, exit)
+			expand := strings.NewReplacer("%URL%", s.url).Replace
 			e := h.one(out.stdout, "error")
-			equal(t, "message", e["message"], c.message)
-			equal(t, "hint", e["hint"], c.hint)
+			equal(t, "message", e["message"], expand(c.message))
+			equal(t, "hint", e["hint"], expand(c.hint))
 			equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), held[c.branch])
 			equal(t, "the candidate", h.ref(lineage.CandidateRef("alpha")), held[c.candidate])
+			equal(t, "the fork branch", h.ref(lineage.ForkRef("alpha")), held[c.fork])
+			equal(t, "the upstream-removed marker", h.ref(lineage.UpstreamRemovedRef("alpha")), held[c.marker])
 			equal(t, "alpha's notes", fileBody(t, filepath.Join(h.library, "alpha", "notes.md")), c.notes)
 			nothingAt(t, "new.md", filepath.Join(h.library, "alpha", "new.md"))
 			equal(t, "claude's notes", fileBody(t, filepath.Join(h.home, ".claude", "skills", "alpha", "notes.md")), "alpha notes\n")
 			equal(t, "journals", journalCount(t, h), 0)
+			equal(t, "mutations", mutationVersion(t, h), before)
 			for _, dir := range []string{h.library, filepath.Join(h.home, ".claude", "skills"), filepath.Join(h.home, ".cursor", "skills")} {
 				equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 			}
@@ -785,6 +925,52 @@ func TestSkillUpdateStoppedBeforeItsJournalChangesNothing(t *testing.T) {
 
 	h.mustRun("skill", "update", "alpha")
 	equal(t, "the import branch after the next update", h.ref(lineage.ManagedRef("alpha")), candidate)
+}
+
+// TestSkillUpdateSweepsStagingAKilledUpdateLeft stands in for an update
+// killed after it staged the new version beside the library directory and
+// a refreshed copy beside each copy placement, and before its journal was
+// written: nothing names any of them, so the next update sweeps them all
+// before it stages anything, and leaves nothing beside the library or a
+// copy. A run over every skill sweeps the client directories two skills
+// share once, before either stages its copy there, so that no sweep takes
+// a copy the run itself staged a moment earlier.
+func TestSkillUpdateSweepsStagingAKilledUpdateLeft(t *testing.T) {
+	t.Parallel()
+	for _, args := range [][]string{{"skill", "update", "alpha"}, {"skill", "update", "--all"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			t.Parallel()
+			h, s, _ := updateHarness(t)
+			s.write("skills/beta/notes.md", "beta notes, revised\n")
+			checked(t, h, s)
+			candidate := h.ref(lineage.CandidateRef("alpha"))
+			claude := filepath.Join(h.home, ".claude", "skills")
+			cursor := filepath.Join(h.home, ".cursor", "skills")
+			for i, dir := range []string{h.library, claude, cursor} {
+				staged := filepath.Join(dir, fmt.Sprintf(".agentx-staged-deadbeef-%d", i+1))
+				writeFile(t, mkdirs(t, staged, "SKILL.md"), skill("alpha", "a version nothing names"))
+			}
+
+			out := h.run(args...)
+			if out.exit != 0 {
+				t.Fatalf("update: exit %d\n%s", out.exit, out.stderr)
+			}
+			for _, dir := range []string{h.library, claude, cursor} {
+				equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
+			}
+			equal(t, "journals", journalCount(t, h), 0)
+			equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), candidate)
+			want := secondTree(t, s)
+			for _, dir := range []string{h.library, claude, cursor} {
+				sameTree(t, "alpha in "+dir, libraryTree(t, filepath.Join(dir, "alpha")), want)
+			}
+			if args[2] == "--all" {
+				for _, dir := range []string{h.library, claude, cursor} {
+					equal(t, "beta's notes in "+dir, fileBody(t, filepath.Join(dir, "beta", "notes.md")), "beta notes, revised\n")
+				}
+			}
+		})
+	}
 }
 
 // TestSkillUpdateStoppedInItsJournalIsRecovered stops an update the way a
