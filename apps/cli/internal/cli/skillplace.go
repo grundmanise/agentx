@@ -515,49 +515,6 @@ func isLibraryDirectory(path, libPath string) bool {
 	return err == nil && os.SameFile(place, lib)
 }
 
-// holdsLibraryDirectory names the entry of the library whose directory the
-// real directory at path is, or holds somewhere beneath it: what a library
-// entry made a symlink into a client's skill directory, or to a directory
-// inside one, leaves there. Removing path would take that skill's content
-// with it, whichever skill it is, so no repair replaces such a directory.
-//
-// Only a symlinked entry is followed: a real entry is a directory of the
-// library, which no client's skill directory holds. Each directory it leads
-// to is walked up to the root and compared with path as files, not as
-// paths, as isLibraryDirectory compares them, so no spelling of either
-// hides it. Anything that cannot be read is not held.
-func holdsLibraryDirectory(path, library string) (string, bool) {
-	place, err := os.Lstat(path)
-	if err != nil || !place.IsDir() {
-		return "", false
-	}
-	entries, err := os.ReadDir(library)
-	if err != nil {
-		return "", false
-	}
-	for _, e := range entries {
-		if e.Type()&os.ModeSymlink == 0 {
-			continue
-		}
-		entry := filepath.Join(library, e.Name())
-		dir, err := filepath.EvalSymlinks(entry)
-		if err != nil {
-			continue
-		}
-		for {
-			if info, err := os.Stat(dir); err == nil && os.SameFile(place, info) {
-				return entry, true
-			}
-			parent := filepath.Dir(dir)
-			if parent == dir {
-				break
-			}
-			dir = parent
-		}
-	}
-	return "", false
-}
-
 // reportPlaced reads the configurations this command covered again and
 // reports the skill as the machine now has it, the way an install does: the
 // placements in the event are what the rescan found, not what the command
