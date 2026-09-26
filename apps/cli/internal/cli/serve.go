@@ -282,15 +282,21 @@ func (sf sourceFailures) report(out *writer, rep checkReport) {
 }
 
 // failureCause is what tells one cause of a failed fetch from another: the
-// message as a person reads it, less how long git tried to connect, which
-// it reports for an unreachable host and which differs on every attempt.
+// message as a person reads it, less what differs on every attempt with the
+// same cause, which only keys the memory and is never shown.
 func failureCause(message string) string {
-	return elapsed.ReplaceAllString(sanitised(message), " after a while")
+	return perAttempt.ReplaceAllString(sanitised(message), "")
 }
 
-// elapsed is the time a connection took to fail, in the words git relays
-// from curl: "after 2034 ms", "after 300001 milliseconds".
-var elapsed = regexp.MustCompile(` after [0-9]+ (ms|milliseconds)\b`)
+// perAttempt is what a failed fetch reports that differs from one attempt
+// to the next, in the words git relays from curl and ssh: how long a
+// connection took to fail ("after 2034 ms", "after 300001 milliseconds"),
+// how many bytes came before it did ("with 0 out of 0 bytes received",
+// "with 1234 bytes remaining to read"), and which address of the host
+// answered ("Connection closed by 140.82.121.4 port 22").
+var perAttempt = regexp.MustCompile(` after [0-9]+ (ms|milliseconds)\b` +
+	`| with [0-9]+ (out of [0-9]+ )?bytes (received|remaining to read)\b` +
+	`| by [0-9A-Fa-f.:]+ port [0-9]+\b`)
 
 // watchedDirs are the directories a change signal can come from, most
 // important first: agentx home holds the version file every mutation

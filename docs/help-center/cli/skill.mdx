@@ -30,7 +30,7 @@ error: no source with id 1c9d0b7e4a2f6d38: https://github.com/anthropics/skills 
 hint: run 'agentx source add https://github.com/anthropics/skills' to add it again
 ```
 
-A source you already added is not fetched again. The install reads what that source last fetched, so it never surprises you with a version you have not seen, and the result says when that fetch was. Add `--fetch` to fetch the source again first, or run `agentx source fetch`:
+A source you already added is not fetched again. The install reads what that source last fetched, whether you fetched it or the [desktop app's background process](/cli/serve#update-checks) did, and the result says when that fetch was. Add `--fetch` to fetch the source again first, or run `agentx source fetch`:
 
 ```sh
 agentx skill add anthropics/skills --skill pdf --fetch
