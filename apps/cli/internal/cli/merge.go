@@ -168,7 +168,7 @@ func mergeVersions(ctx context.Context, r *gitx.Runner, gitDir, dir string, m li
 			// still conflicts in what else merge-tree decided about it,
 			// its mode say, and conflicts whole.
 			if len(f.Hunks) == 0 {
-				f.why = "changed here and by the update"
+				f.Hunks, f.why = []conflictHunk{}, "changed here and by the update"
 			}
 		}
 		res.files = append(res.files, f)
@@ -199,9 +199,16 @@ func conflictOf(path string, versions map[string]staged, bodies map[string]strin
 			f.Binary = true
 		}
 	}
+	// A rename that conflicts, a file moved to two places say, lists each
+	// path with the stages of the sides that have a file there, and no
+	// base where the file was not before.
 	switch {
+	case f.Mine == nil && f.Theirs != nil && f.Base == nil:
+		f.why = "moved here by the update, and moved or deleted here"
 	case f.Mine == nil && f.Theirs != nil:
 		f.why = "deleted here, changed by the update"
+	case f.Theirs == nil && f.Mine != nil && f.Base == nil:
+		f.why = "moved here, and moved or deleted by the update"
 	case f.Theirs == nil && f.Mine != nil:
 		f.why = "changed here, deleted by the update"
 	case f.Mine == nil || f.Theirs == nil:

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -260,9 +261,10 @@ func TestSkillUpdateLeavesAConflictPending(t *testing.T) {
 // with markers longer than any of them; a file added on both sides, whose
 // base is empty; a file the update deletes and the library changed, and
 // one the library deleted and the update changed, each conflicting whole
-// with the missing side null; a binary file changed on both sides, whole
-// and binary; and a file with no newline at its end, whose hunk ends as
-// the file does. Every path is relative to the skill's directory, which
+// with the missing side null; a file moved to one place in the library and
+// to another by the update, each of the three paths whole; a binary file
+// changed on both sides, whole and binary; and a file with no newline at
+// its end, whose hunk ends as the file does. Every path is relative to the skill's directory, which
 // the upstream calls otherwise. The text shows every hunk under its file
 // and number, and says of each whole file how it conflicts.
 func TestSkillUpdateConflictsOfEveryKind(t *testing.T) {
@@ -278,6 +280,7 @@ func TestSkillUpdateConflictsOfEveryKind(t *testing.T) {
 		"kept.md":    "kept\n",
 		"logo.bin":   "\x00base",
 		"tail.md":    "x\ny",
+		"moved.md":   "1\n2\n3\n4\n5\n6\n7\n8\n",
 	})
 	first := s.commit("first version")
 	h.mustRun("skill", "add", s.url)
@@ -288,6 +291,7 @@ func TestSkillUpdateConflictsOfEveryKind(t *testing.T) {
 	s.write("skills/kinds-dir/kept.md", "kept, upstream\n")
 	s.write("skills/kinds-dir/logo.bin", "\x00upstream")
 	s.write("skills/kinds-dir/tail.md", "x\ny, upstream")
+	s.run("mv", "skills/kinds-dir/moved.md", "skills/kinds-dir/moved-upstream.md")
 	second := s.commit("second version")
 	h.mustRun("skill", "check")
 	lib := filepath.Join(h.library, "kinds")
@@ -298,12 +302,16 @@ func TestSkillUpdateConflictsOfEveryKind(t *testing.T) {
 	remove(t, filepath.Join(lib, "kept.md"))
 	editLibrary(t, h, "kinds", "logo.bin", "\x00mine")
 	editLibrary(t, h, "kinds", "tail.md", "x\ny, mine")
+	if err := os.Rename(filepath.Join(lib, "moved.md"), filepath.Join(lib, "moved-here.md")); err != nil {
+		t.Fatal(err)
+	}
 	library := onDisk(t, h.library)
 
 	out := h.run("--json", "skill", "update", "kinds")
 	equal(t, "exit", out.exit, 4)
 	ev := h.one(out.stdout, "conflict")
-	equal(t, "files", conflictFiles(ev), "both.md:1,gone.md:whole,kept.md:whole,logo.bin:binary,markers.md:1,notes.md:1,tail.md:1")
+	equal(t, "files", conflictFiles(ev),
+		"both.md:1,gone.md:whole,kept.md:whole,logo.bin:binary,markers.md:1,moved-here.md:whole,moved-upstream.md:whole,moved.md:whole,notes.md:1,tail.md:1")
 	equal(t, "notes.md", hunkOf(t, ev, "notes.md", 1), "two, mine\n|two\n|two, upstream\n")
 	equal(t, "markers.md", hunkOf(t, ev, "markers.md", 1), "c, mine\n|c\n|c, upstream\n")
 	equal(t, "both.md", hunkOf(t, ev, "both.md", 1), "added here\n||added upstream\n")
@@ -317,6 +325,9 @@ func TestSkillUpdateConflictsOfEveryKind(t *testing.T) {
 		{path: "gone.md", base: true, mine: true},
 		{path: "kept.md", base: true, theirs: true},
 		{path: "logo.bin", base: true, mine: true, theirs: true, binary: true},
+		{path: "moved-here.md", mine: true},
+		{path: "moved-upstream.md", theirs: true},
+		{path: "moved.md", base: true},
 	} {
 		f := fileOf(t, ev, c.path)
 		for _, side := range []struct {
@@ -330,23 +341,26 @@ func TestSkillUpdateConflictsOfEveryKind(t *testing.T) {
 		equal(t, c.path+": binary", f["binary"], c.binary)
 	}
 	equal(t, "the library", onDisk(t, h.library), library)
-	equal(t, "the merge ref's unresolved files", h.accountGit("log", "-1", "--format=%s", lineage.MergeRef("kinds")), "pending merge of kinds: 7 files unresolved")
-	equal(t, "pending_merge", fmt.Sprint(h.listed("kinds")["pending_merge"]), "map[unresolved:7]")
+	equal(t, "the merge ref's unresolved files", h.accountGit("log", "-1", "--format=%s", lineage.MergeRef("kinds")), "pending merge of kinds: 10 files unresolved")
+	equal(t, "pending_merge", fmt.Sprint(h.listed("kinds")["pending_merge"]), "map[unresolved:10]")
 
 	// The same conflicts in text, from a machine that has not merged yet.
 	h.accountGit("update-ref", "-d", lineage.MergeRef("kinds"))
 	text := h.run("skill", "update", "kinds")
 	equal(t, "exit in text", text.exit, 4)
-	equal(t, "the text", text.stdout, "kinds conflicts with its update from "+first[:7]+" to "+second[:7]+" in 7 files\n"+
+	equal(t, "the text", text.stdout, "kinds conflicts with its update from "+first[:7]+" to "+second[:7]+" in 10 files\n"+
 		"both.md:1\n<<<<<<< mine\nadded here\n||||||| base\n=======\nadded upstream\n>>>>>>> theirs\n"+
 		"gone.md: changed here, deleted by the update\n"+
 		"kept.md: deleted here, changed by the update\n"+
 		"logo.bin: binary, changed here and by the update\n"+
 		"markers.md:1\n<<<<<<< mine\nc, mine\n||||||| base\nc\n=======\nc, upstream\n>>>>>>> theirs\n"+
+		"moved-here.md: moved here, and moved or deleted by the update\n"+
+		"moved-upstream.md: moved here by the update, and moved or deleted here\n"+
+		"moved.md: moved or deleted on both sides\n"+
 		"notes.md:1\n<<<<<<< mine\ntwo, mine\n||||||| base\ntwo\n=======\ntwo, upstream\n>>>>>>> theirs\n"+
 		"tail.md:1\n<<<<<<< mine\ny, mine\n||||||| base\ny\n=======\ny, upstream\n>>>>>>> theirs\n")
 	equal(t, "stderr in text", text.stderr,
-		"error: kinds conflicts with its update in 7 files, so the merge is pending and the library directory was left as it is\n"+
+		"error: kinds conflicts with its update in 10 files, so the merge is pending and the library directory was left as it is\n"+
 			"hint: run 'agentx skill resolve kinds' to resolve the conflicts, or 'agentx skill resolve kinds --abort' to give the merge up\n")
 }
 

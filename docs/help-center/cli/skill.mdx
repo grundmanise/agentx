@@ -641,7 +641,7 @@ error: docx conflicts with its update in 2 files, so the merge is pending and th
 hint: run 'agentx skill resolve docx' to resolve the conflicts, or 'agentx skill resolve docx --abort' to give the merge up
 ```
 
-A file you changed and the update deleted, or the other way round, and a binary file both sides changed, conflict as a whole file, and the line says how.
+A file you changed and the update deleted, or the other way round, a file you and the update moved to different places, and a binary file both sides changed, conflict as a whole file, and the line says how.
 
 The merge stays pending until it is resolved or given up, across restarts, and `agentx skill list` shows it as `merge pending (2 unresolved)`. Meanwhile:
 
