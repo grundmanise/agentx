@@ -508,6 +508,12 @@ func liveState(path string) (string, error) {
 // followed, so nothing outside the directory contributes. This is not the
 // content hash of the CLI contract, which names a version of a skill; it
 // names the bytes on disk, SKILL.md frontmatter and all.
+//
+// A file is executable when its owner may execute it, the one mode bit git
+// records, so that two directories whose trees differ never share a
+// fingerprint: a journal that replaces a directory tells what it replaced
+// from what replaces it by fingerprint, and a mode git sees while this did
+// not would make recovery take a replacement not yet made for one made.
 func Fingerprint(path string) (string, error) {
 	h := sha256.New()
 	err := filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
@@ -537,7 +543,7 @@ func Fingerprint(path string) (string, error) {
 				return err
 			}
 			mode := "f"
-			if info, err := d.Info(); err == nil && info.Mode()&0o111 != 0 {
+			if info, err := d.Info(); err == nil && info.Mode()&0o100 != 0 {
 				mode = "x"
 			}
 			fmt.Fprintf(h, "%s\x00%s%d\x00", rel, mode, len(b))

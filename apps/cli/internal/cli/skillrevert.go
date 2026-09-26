@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -102,10 +103,21 @@ func (inv *invocation) skillRevert(ctx context.Context, name string) error {
 			return fail(exitRefused, name+" changed while it was being reverted, so nothing was discarded",
 				"run '"+skillCommand("diff", name)+"' to see the change, then revert again to discard it too")
 		}
-		sweepStaged(inv.dirs.Library)
+		// A revert killed before its journal was written left what it staged
+		// with nothing to name it: beside the library directory, and beside
+		// each copy it was refreshing. All of it is swept before anything is
+		// staged, since a sweep of a directory two configurations share would
+		// take a sibling this plan staged a moment earlier.
 		edit, err := inv.beginSettings()
 		if err != nil {
 			return err
+		}
+		recorded := edit.copiesOf(name)
+		sweepStaged(inv.dirs.Library)
+		for _, t := range inv.detectedTargets() {
+			if !t.readsLibrary && slices.Contains(recorded, t.id) {
+				sweepStaged(t.dir)
+			}
 		}
 		done = placements{}
 		m := home.NewMutation(inv.dirs.Home)
@@ -121,7 +133,7 @@ func (inv *invocation) skillRevert(ctx context.Context, name string) error {
 		m.Ref(gitDir, lineage.ManagedRef(name), rec.Commit, rec.Commit)
 		m.Remove(libPath, captured)
 		m.Publish(libPath, staged, fingerprint)
-		inv.refreshCopies(m, name, base.Tree, []string{edited.ID}, staged, edit.copiesOf(name), &done)
+		inv.refreshCopies(m, name, base.Tree, []string{edited.ID}, staged, recorded, &done)
 		return m.Apply(inv.refs(ctx))
 	})
 	if err != nil {

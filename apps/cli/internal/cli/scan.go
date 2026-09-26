@@ -185,7 +185,7 @@ func (inv *invocation) inventory(ctx context.Context, wait time.Duration, projec
 				// A managed skill the library no longer holds has no entry
 				// and so no drift; the warnings are how the desktop app
 				// learns that it is gone.
-				for _, w := range read.absentWarnings(sc.Library()) {
+				for _, w := range read.absentWarnings(inv, sc.Library()) {
 					sc.Warn(w)
 				}
 			case errors.As(err, &f) && f.status == exitAccountRepo && ctx.Err() == nil && !inv.git.StoppedChild():

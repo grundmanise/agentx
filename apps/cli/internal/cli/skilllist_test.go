@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -136,6 +137,56 @@ func TestSkillListSpawnsOneGitProcess(t *testing.T) {
 		}
 	}
 	equal(t, "for-each-ref calls", refs, 1)
+}
+
+// TestSkillListSpawnsOneGitProcessWhateverTheDrift holds the budget above
+// for skills that differ every way drift reads: one edited, a file of it
+// made executable too, one whose link became a real directory in one
+// configuration and whose placement is gone from another, and a skill of
+// the user's own beside them. Whether a skill is modified, displaced or
+// missing is read in process, so the listing still runs one for-each-ref,
+// and so does the snapshot.
+func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
+	t.Parallel()
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--skill", "beta")
+	writeFile(t, filepath.Join(h.library, "alpha", "SKILL.md"), skill("alpha", "Edited in the library"))
+	chmod(t, filepath.Join(h.library, "alpha", "notes.md"), 0o755)
+	claude := filepath.Join(h.home, ".claude", "skills", "beta")
+	remove(t, claude)
+	copyTree(t, filepath.Join(h.library, "beta"), claude)
+	remove(t, filepath.Join(h.home, ".cursor", "skills", "beta"))
+	writeFile(t, mkdirs(t, filepath.Join(h.library, "mine"), "SKILL.md"), skill("mine", "A skill of my own"))
+	equal(t, "alpha's state", h.listed("alpha")["state"], stateModified)
+	equal(t, "beta's drift", drift(h.listed("beta")), "displaced,missing")
+
+	calls := countingGit(t, h)
+	count := func(what string, calls []string) {
+		t.Helper()
+		refs := 0
+		for _, call := range calls {
+			switch {
+			case strings.Contains(call, "for-each-ref"):
+				refs++
+			case strings.Contains(call, "--version"), strings.Contains(call, "rev-parse --is-bare-repository"):
+			default:
+				t.Errorf("%s ran git %s", what, call)
+			}
+		}
+		equal(t, what+": for-each-ref calls", refs, 1)
+	}
+	h.mustRun("skill", "list")
+	count("skill list", calls())
+	before := len(calls())
+	snap := h.snapshot(t)
+	count("the snapshot", calls()[before:])
+	states := map[string]string{}
+	for _, e := range snap["library"].([]any) {
+		entry := e.(map[string]any)
+		states[entry["name"].(string)] = fmt.Sprint(entry["state"]) + " " + drift(entry)
+	}
+	equal(t, "alpha in the snapshot", states["alpha"], stateModified+" ")
+	equal(t, "beta in the snapshot", states["beta"], stateCurrent+" displaced,missing")
 }
 
 // TestSkillListSanitisesTheNameAndTheUpstream covers a library directory

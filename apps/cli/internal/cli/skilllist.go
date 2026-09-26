@@ -28,7 +28,7 @@ func (inv *invocation) skillList(ctx context.Context) error {
 		return err
 	}
 	skills, warnings := readLibrary(inv.dirs.Library)
-	warnings = append(warnings, sc.absentWarnings(skills)...)
+	warnings = append(warnings, sc.absentWarnings(inv, skills)...)
 	out := inv.out
 	if len(skills) == 0 {
 		out.print("No skills in the library. Install one with ", out.paint(label, "agentx skill add <source>"), ".")

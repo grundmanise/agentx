@@ -1023,7 +1023,7 @@ func (inv *invocation) stageSkill(m *home.Mutation, gitDir string, v *imported, 
 	if f != nil {
 		return nil, f, nil
 	}
-	ref, f := refPlan(v, records, libPath)
+	ref, f := refPlan(v, records, libPath, home.IsAbsent(state))
 	if f != nil {
 		return nil, f, nil
 	}
@@ -1094,7 +1094,14 @@ func (inv *invocation) libraryPlan(v *imported, libPath, state string) (libraryA
 // value of empty, so that two commands cannot both claim the name. A branch
 // already at this commit is the same version installed again; one at
 // another commit is a version this command does not replace.
-func refPlan(v *imported, records map[string]lineage.Record, libPath string) (create bool, f *failure) {
+//
+// absent says the library path holds nothing: the branch is all that is
+// left of the skill, its directory having been deleted outside agentx, and
+// the source has moved past the version the branch names, since otherwise
+// this would be that version again. skill remove takes such a branch away,
+// so the hint names it rather than a directory that is not there and a ref
+// to delete by hand.
+func refPlan(v *imported, records map[string]lineage.Record, libPath string, absent bool) (create bool, f *failure) {
 	rec, ok := records[v.name]
 	switch {
 	case !ok:
@@ -1104,6 +1111,9 @@ func refPlan(v *imported, records map[string]lineage.Record, libPath string) (cr
 			"install the skill under another name, or remove the fork first")
 	case rec.Commit == v.commit: // the same version again: nothing to move
 		return false, nil
+	case absent:
+		return false, refuse(exitRefused, fmt.Sprintf("%s is already managed at another version, which the library no longer holds", v.name),
+			"run '"+skillCommand("remove", v.name)+"' to stop managing that version, then install again to get the version the source holds now")
 	}
 	return false, refuse(exitRefused, fmt.Sprintf("%s is already managed at another version", v.name),
 		"remove "+libPath+" and the branch "+lineage.ManagedRef(v.name)+", then install again")

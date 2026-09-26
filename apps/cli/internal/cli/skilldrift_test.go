@@ -194,6 +194,66 @@ func TestACopyIsDisplacedByALinkAndNeverMissing(t *testing.T) {
 	equal(t, "the library's link where a copy is recorded", drift(h.listed("alpha")), "displaced")
 }
 
+// TestASharedPlaceIsJudgedOnce: Zencoder and Zenflow read one skills
+// directory, so a copy placed for either of them is the copy both read.
+// It is not displaced for the one copy_mode does not name, whichever of
+// the two that is and whether the copy was placed at install or later, and
+// the skill is not missing from either. The library's own link there is
+// displaced for the copy either records, and a real directory there is
+// displaced when neither records one.
+func TestASharedPlaceIsJudgedOnce(t *testing.T) {
+	t.Parallel()
+	setup := func(t *testing.T, add ...string) (*harness, string) {
+		t.Helper()
+		h := newHarness(t)
+		h.build(t, fixture{dirs: []string{".claude", ".zencoder"}})
+		s, _, _ := h.standardSource(true)
+		h.mustRun("source", "add", s.url)
+		h.mustRun(append([]string{"skill", "add", s.url, "--skill", "alpha"}, add...)...)
+		return h, filepath.Join(h.home, ".zencoder", "skills", "alpha")
+	}
+	expect := func(t *testing.T, h *harness, what, want, text string) {
+		t.Helper()
+		equal(t, what, drift(h.listed("alpha")), want)
+		equal(t, what+" in the snapshot", drift(h.snapshotLibrary("alpha")), want)
+		contains(t, what+" in skill list", h.mustRun("skill", "list").stdout, "alpha  managed  "+text+"  file://")
+	}
+
+	t.Run("a copy placed for one of them", func(t *testing.T) {
+		t.Parallel()
+		h, place := setup(t, "--to", "claude-code")
+		h.mustRun("skill", "place", "alpha", "--to", "zencoder", "--copy")
+		equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "zencoder")
+		expect(t, h, "a copy for zencoder alone", "", "current")
+
+		remove(t, place)
+		link(t, filepath.Join(h.library, "alpha"), place)
+		expect(t, h, "the library's link where zencoder records a copy", "displaced", "current, displaced")
+	})
+
+	t.Run("a copy installed for one of them", func(t *testing.T) {
+		t.Parallel()
+		h, place := setup(t, "--to", "zenflow", "--copy")
+		equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "zenflow")
+		expect(t, h, "a copy for zenflow alone", "missing", "current, missing")
+
+		remove(t, place)
+		link(t, filepath.Join(h.library, "alpha"), place)
+		expect(t, h, "the library's link where zenflow records a copy", "displaced,missing", "current, displaced, missing")
+	})
+
+	t.Run("a directory where neither records a copy", func(t *testing.T) {
+		t.Parallel()
+		h, place := setup(t, "--to", "zencoder")
+		equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "")
+		expect(t, h, "the library's link", "missing", "current, missing")
+
+		remove(t, place)
+		copyTree(t, filepath.Join(h.library, "alpha"), place)
+		expect(t, h, "a directory where the link was", "displaced,missing", "current, displaced, missing")
+	})
+}
+
 // TestAnUnmanagedSkillHasNoStateAndNoDrift: a library directory with no
 // branch is inventoried as it is, placed nowhere or not.
 func TestAnUnmanagedSkillHasNoStateAndNoDrift(t *testing.T) {
@@ -422,8 +482,9 @@ func TestAdoptionAndListingAgreeOnModified(t *testing.T) {
 // whose library directory was deleted outside agentx has no library entry,
 // so no state and no drift, and is named in one warning instead, by skill
 // list and in the snapshot's warnings alike, with the install that lays
-// the directory out again. Leaving the library is no drift transition:
-// serve says it through the snapshot and its warning.
+// the directory out again and the removal that stops managing it. Leaving
+// the library is no drift transition: serve says it through the snapshot
+// and its warning.
 func TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -435,7 +496,7 @@ func TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning(t *testing.T) {
 
 	remove(t, filepath.Join(h.library, "alpha"))
 	want := "alpha is managed in the account repo but the library holds no skill directory for it; run 'agentx skill add " +
-		shellWord(s.url) + " --skill alpha' to install it again"
+		shellWord(s.url) + " --skill alpha' to install it again, or 'agentx skill remove alpha' to stop managing it"
 	p.send(`{"type":"refresh","request_id":"gone"}`)
 	var snap jsonEvent
 	for _, e := range p.until("gone") {
@@ -475,4 +536,33 @@ func TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning(t *testing.T) {
 	out = h.mustRun("--json", "skill", "list")
 	equal(t, "state after installing it again", h.librarySkill(out.stdout, "alpha")["state"], stateCurrent)
 	equal(t, "warnings after installing it again", strings.Join(warnings(h, out.stderr), "\n"), "")
+}
+
+// TestAManagedSkillWithoutItsSKILLmdNamesTheDirectory: a library directory
+// that lost its SKILL.md is not the skill, and an install refuses to write
+// over it, so the warning says to move it aside first, in skill list and
+// in the snapshot alike. Doing what it says installs the skill again.
+func TestAManagedSkillWithoutItsSKILLmdNamesTheDirectory(t *testing.T) {
+	t.Parallel()
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	lib := filepath.Join(h.library, "alpha")
+	remove(t, filepath.Join(lib, "SKILL.md"))
+	want := "alpha is managed in the account repo but " + lib + " holds no SKILL.md; move " + lib + " aside, then run 'agentx skill add " +
+		shellWord(s.url) + " --skill alpha' to install it again, or run 'agentx skill remove alpha' to stop managing it"
+	equal(t, "skill list's warnings", strings.Join(warnings(h, h.mustRun("--json", "skill", "list").stderr), "\n"), want)
+	out := h.serveOnce("--json")
+	var named []string
+	for _, w := range h.one(out.stdout, "snapshot")["warnings"].([]any) {
+		if strings.Contains(w.(string), "alpha is managed") {
+			named = append(named, w.(string))
+		}
+	}
+	equal(t, "the snapshot's warnings about alpha", strings.Join(named, "\n"), want)
+
+	remove(t, lib)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	listed := h.mustRun("--json", "skill", "list")
+	equal(t, "state after installing it again", h.librarySkill(listed.stdout, "alpha")["state"], stateCurrent)
+	equal(t, "warnings after installing it again", strings.Join(warnings(h, listed.stderr), "\n"), "")
 }

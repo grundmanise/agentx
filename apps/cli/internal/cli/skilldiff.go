@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/spf13/cobra"
 
@@ -159,16 +160,37 @@ func (inv *invocation) reportDiff(name, against string, files []fileDiff, unreco
 // does, so a file that is not UTF-8 text prints as the bytes it holds
 // rather than with a replacement character for each byte UTF-8 does not
 // take.
+//
+// One such byte is not printed as it is: a byte from 0x80 to 0x9F that is
+// no part of a UTF-8 character, which a terminal set to 8-bit controls
+// reads as a C1 control, 0x9B being the one-byte form of the escape that
+// starts a sequence. It becomes a space too. A UTF-8 character is copied
+// whole, so a byte in that range that continues one, as the second byte
+// of "é" does, is never taken for a control.
 func patchLine(line string) string {
 	var b strings.Builder
 	b.Grow(len(line))
-	for i := 0; i < len(line); i++ {
+	for i := 0; i < len(line); {
 		if n := controlAt(line, i); n > 0 && line[i] != '\t' {
 			b.WriteByte(' ')
-			i += n - 1
+			i += n
+			continue
+		}
+		if c := line[i]; c >= utf8.RuneSelf {
+			if r, size := utf8.DecodeRuneInString(line[i:]); r != utf8.RuneError || size > 1 {
+				b.WriteString(line[i : i+size])
+				i += size
+				continue
+			}
+			if c <= 0x9f {
+				c = ' '
+			}
+			b.WriteByte(c)
+			i++
 			continue
 		}
 		b.WriteByte(line[i])
+		i++
 	}
 	return b.String()
 }

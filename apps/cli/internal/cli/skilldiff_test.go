@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -125,6 +126,27 @@ func TestSkillDiffPrintsBytesThatAreNotUTF8(t *testing.T) {
 	diff := h.one(h.mustRun("--json", "skill", "diff", "pdf").stdout, "diff")
 	equal(t, "the path", diff["path"], "caf\ufffd.md")
 	equal(t, "the status", diff["status"], "added")
+}
+
+// TestPatchLineLetsNoControlThrough: a byte from 0x80 to 0x9F on its own,
+// which a terminal set to 8-bit controls obeys as a C1 control, 0x9B as
+// the escape that starts a sequence, is a space like every other control;
+// the same byte continuing a UTF-8 character is part of that character,
+// and a byte past 0x9F that UTF-8 does not take is printed as it is.
+func TestPatchLineLetsNoControlThrough(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ line, want string }{
+		{"A \x9b2J line", "A  2J line"},
+		{"\x85next \x80\x9f", " next   "},
+		{"\t\x1b[31m red\x7f", "\t [31m red "},
+		{"a C1 \xc2\x9b in UTF-8", "a C1   in UTF-8"},
+		{"caf\xe9 in Latin-1", "caf\xe9 in Latin-1"},
+		{"\u00d0 \u20ac \u4e00 \u00e9", "\u00d0 \u20ac \u4e00 \u00e9"},
+		{"cut \xe9\x9b short", "cut \xe9  short"},
+		{"cut \xe4\xb8", "cut \xe4\xb8"},
+	} {
+		equal(t, fmt.Sprintf("patchLine(%q)", tc.line), patchLine(tc.line), tc.want)
+	}
 }
 
 // TestSkillDiffNamesWhatGitCannotRecord: a repository nested in the skill

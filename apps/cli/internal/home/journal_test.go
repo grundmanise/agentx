@@ -394,7 +394,10 @@ func TestRemoveRetainsWhatItDisplaces(t *testing.T) {
 }
 
 // TestFingerprintFollowsTheContent tells two directories apart by what they
-// hold, links and modes included, and never by where they are.
+// hold, links and modes included, and never by where they are. A mode is
+// the owner's exec bit, the one git records: two directories git records
+// as different trees never share a fingerprint, and a group or other exec
+// bit git does not record changes nothing.
 func TestFingerprintFollowsTheContent(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -404,6 +407,9 @@ func TestFingerprintFollowsTheContent(t *testing.T) {
 			t.Fatal(err)
 		}
 		if err := os.WriteFile(filepath.Join(dir, "sub", "a"), []byte("content\n"), mode); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(filepath.Join(dir, "sub", "a"), mode); err != nil { // past the umask
 			t.Fatal(err)
 		}
 		if link != "" {
@@ -421,8 +427,15 @@ func TestFingerprintFollowsTheContent(t *testing.T) {
 	if other := build("two", 0o644, ""); other != same {
 		t.Errorf("two directories with the same content hash differently")
 	}
-	if executable := build("three", 0o755, ""); executable == same {
+	executable := build("three", 0o755, "")
+	if executable == same {
 		t.Errorf("a mode change went unnoticed")
+	}
+	if others := build("five", 0o655, ""); others == executable {
+		t.Errorf("a file its owner may no longer execute hashes as an executable one")
+	}
+	if group := build("six", 0o654, ""); group != same {
+		t.Errorf("a group exec bit git does not record changed the fingerprint")
 	}
 	if linked := build("four", 0o644, "sub/a"); linked == same {
 		t.Errorf("a symlink went unnoticed")

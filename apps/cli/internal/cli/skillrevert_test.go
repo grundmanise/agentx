@@ -196,6 +196,32 @@ func TestSkillRevertJudgesASharedCopyOnce(t *testing.T) {
 	}
 }
 
+// TestSkillRevertSweepsStagingAKilledRevertLeft stands in for a revert
+// killed after it staged the base beside the library directory and a
+// refreshed copy beside a copy placement, and before its journal was
+// written: nothing names either directory, so the next revert sweeps both
+// before it stages anything, and leaves nothing beside the library or a
+// copy.
+func TestSkillRevertSweepsStagingAKilledRevertLeft(t *testing.T) {
+	t.Parallel()
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--copy")
+	editLibrary(t, h, "alpha", "notes.md", "alpha notes, edited in the library\n")
+	claude := filepath.Join(h.home, ".claude", "skills")
+	cursor := filepath.Join(h.home, ".cursor", "skills")
+	writeFile(t, mkdirs(t, filepath.Join(cursor, ".agentx-staged-deadbeef-2"), "SKILL.md"), skill("alpha", "a refreshed copy nothing names"))
+	writeFile(t, mkdirs(t, filepath.Join(h.library, ".agentx-staged-deadbeef-1"), "SKILL.md"), skill("alpha", "a base nothing names"))
+
+	out := h.run("skill", "revert", "alpha")
+	if out.exit != 0 {
+		t.Fatalf("revert: exit %d\n%s", out.exit, out.stderr)
+	}
+	for _, dir := range []string{h.library, claude, cursor} {
+		equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
+	}
+	equal(t, "journals", journalCount(t, h), 0)
+}
+
 // TestSkillRevertRefusesWhatGitCannotRecord: a repository nested in the
 // skill would be discarded with no record of it anywhere, so the revert
 // refuses and changes nothing.
