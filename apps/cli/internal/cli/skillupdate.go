@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/spf13/cobra"
 
@@ -86,8 +88,9 @@ type updating struct {
 }
 
 // updateRun is one run of agentx skill update, for one name or for --all:
-// the skills it applies an update to, those it skipped as modified and
-// those it gave up on, each reported on its own while the run goes on.
+// the skills it applies an update to, those it skipped because their
+// source was removed and those it gave up on, each reported on its own
+// while the run goes on.
 type updateRun struct {
 	refusals
 	inv        *invocation
@@ -108,10 +111,10 @@ type updateRun struct {
 //
 // A skill whose source was removed from this machine is skipped by a run
 // over every skill instead, whether that was found before the lock or
-// under it, as a modified skill is: removing a source is the user's own
-// choice, and the update a check found for the skill stays for as long as
-// the source is gone, so counting it would fail every later run over every
-// skill too. The warning says so and how to add the source again.
+// under it: removing a source is the user's own choice, and the update a
+// check found for the skill stays for as long as the source is gone, so
+// counting it would fail every later run over every skill too. The warning
+// says so and how to add the source again.
 func (r *updateRun) drop(name string, f *failure) {
 	if r.all && errors.Is(f, errSourceRemoved) {
 		r.sourceless = append(r.sourceless, name)
@@ -426,10 +429,11 @@ func (r *updateRun) read(ctx context.Context) error {
 // candidate's, and the skill keeps its edits on the new base. The copies
 // agentx could have placed are then the ones holding the library directory
 // as it was or the base version, since a copy placed before the edits holds
-// the base. A merge that conflicts is committed as the skill's pending
-// merge commit, its parents mine and the candidate and its trailers naming
-// the three versions, and nothing is laid out: the mutation only points
-// the merge ref at it.
+// the base. A clean merge the library's file system cannot hold is refused
+// instead, see caseClashRefusal. A merge that conflicts is committed as the
+// skill's pending merge commit, its parents mine and the candidate and its
+// trailers naming the three versions, and nothing is laid out: the
+// mutation only points the merge ref at it.
 //
 // A directory that holds exactly the base version's files, which reads as
 // modified only because an earlier agentx stored that version in a form git
@@ -479,8 +483,110 @@ func (r *updateRun) merge(ctx context.Context, u *updating) *failure {
 	if err != nil {
 		return failureOf(accountRepoFailure(err))
 	}
+	if f := caseClashRefusal(u, merged, root); f != nil {
+		return f
+	}
 	u.base, u.placed = merged, []string{u.held, base.ID()}
 	return nil
+}
+
+// caseClashRefusal refuses a clean merge that holds two paths differing in
+// case alone when the file system of the library directory at root cannot
+// keep them apart, as macOS and Windows by default cannot. git compares
+// paths byte for byte, so a file the user added and one the update added,
+// readme.md and README.md say, merge cleanly, into a version that laid out
+// there would be one file and not the version merged. It is refused before
+// the lock, for its skill alone, and names the path of the two the library
+// directory holds as the one to rename; the update holds the other. A pair
+// the update itself holds both of has nothing in the library to rename,
+// and is only laid out once its source tells them apart.
+func caseClashRefusal(u *updating, merged lineage.Base, root string) *failure {
+	a, b, ok := caseClash(merged.Entries)
+	if !ok {
+		return nil
+	}
+	held := map[string]bool{}
+	for _, d := range u.tree.Dirs {
+		held[d.Path] = true
+	}
+	for _, blob := range u.tree.Blobs {
+		held[blob.Path] = true
+	}
+	if (held[a] && held[b]) || !foldsCase(root, u.tree) {
+		return nil // the file system keeps them apart
+	}
+	message := fmt.Sprintf("the update of %s merged with its edits holds both %s and %s, which this file system cannot keep apart, so nothing was changed",
+		u.name, quotedPath(a), quotedPath(b))
+	mine := a
+	if held[b] {
+		mine = b
+	}
+	if !held[mine] {
+		return refuse(exitRefused, message,
+			"the update itself holds both: once its source tells them apart, run 'agentx skill check', then '"+skillCommand("update", u.name)+"'")
+	}
+	return refuse(exitRefused, message,
+		"rename "+quotedPath(mine)+" in "+quotedPath(u.libPath)+", then run '"+skillCommand("update", u.name)+"' again")
+}
+
+// caseClash finds two paths of a version, directories included, that
+// differ in case alone, the first such pair in the order given. A
+// directory is listed before what it holds, so two directories whose names
+// differ in case clash as themselves, before any file below them does.
+func caseClash(entries []source.TreeEntry) (a, b string, ok bool) {
+	seen := map[string]string{}
+	for _, e := range entries {
+		key := foldedCase(e.Path)
+		if other, found := seen[key]; found {
+			return other, e.Path, true
+		}
+		seen[key] = e.Path
+	}
+	return "", "", false
+}
+
+// foldedCase is path with every letter replaced by the least of the
+// letters Unicode folds it together with, so that two paths strings.EqualFold
+// holds equal are the same string.
+func foldedCase(path string) string {
+	return strings.Map(func(r rune) rune {
+		least := r
+		for f := unicode.SimpleFold(r); f != r; f = unicode.SimpleFold(f) {
+			least = min(least, f)
+		}
+		return least
+	}, path)
+}
+
+// foldsCase reports whether the file system of the directory at root, read
+// as tree, finds a path whatever the case it is spelled in: whether a file
+// the directory holds is found again, as the same file, with the case of
+// every letter of its path swapped. A directory with no such path to try
+// is judged by its operating system instead: macOS and Windows fold case
+// by default.
+func foldsCase(root string, tree treeid.Tree) bool {
+	held := map[string]bool{}
+	for _, b := range tree.Blobs {
+		held[b.Path] = true
+	}
+	for _, b := range tree.Blobs {
+		swapped := strings.Map(func(r rune) rune {
+			if unicode.IsUpper(r) {
+				return unicode.ToLower(r)
+			}
+			return unicode.ToUpper(r)
+		}, b.Path)
+		if swapped == b.Path || held[swapped] {
+			continue
+		}
+		info, err := os.Lstat(filepath.Join(root, filepath.FromSlash(b.Path)))
+		if err != nil {
+			continue
+		}
+		other, err := os.Lstat(filepath.Join(root, filepath.FromSlash(swapped)))
+		return err == nil && os.SameFile(info, other)
+	}
+	return runtime.GOOS == "darwin" || runtime.GOOS == "windows"
 }
 
 // skillFileBlob is the blob of the SKILL.md a version holds, the one file
@@ -517,8 +623,9 @@ func upstreamNameOf(u *updating, bodies map[string]string) string {
 // apply reads every skill's inputs again under the lock and applies the
 // update of each one they still hold as one journaled mutation. A skill
 // whose import branch, candidate, merge ref, source or library directory
-// changed since it was judged is dropped on its own and the others go on;
-// a run whose every skill was dropped here writes no journal. A skill whose
+// changed since it was judged is dropped on its own and the others go on,
+// as is one whose version could not be laid out; a run whose every skill
+// was dropped here writes no journal. A skill whose
 // merge conflicts gets one step, the creation of its merge ref, which must
 // not exist yet; everything else of it is left as it is.
 func (r *updateRun) apply(ctx context.Context) error {
@@ -567,18 +674,23 @@ func (r *updateRun) apply(ctx context.Context) error {
 				}
 			}
 		}
+		// stageUpdate records no step of a skill until its version is laid
+		// out, and removes what it laid out when that fails, so a skill it
+		// fails for is dropped with nothing of it in the mutation.
 		m := home.NewMutation(inv.dirs.Home)
 		for _, u := range live {
 			if u.pending != "" {
 				m.Ref(r.gitDir, lineage.MergeRef(u.name), "", u.pending)
+			} else if err := inv.stageUpdate(m, r.gitDir, u, r.bodies, edit.copiesOf(u.name)); err != nil {
+				r.drop(u.name, failureOf(err))
 				continue
 			}
-			if err := inv.stageUpdate(m, r.gitDir, u, r.bodies, edit.copiesOf(u.name)); err != nil {
-				m.Discard()
-				return err
-			}
+			staged = append(staged, u)
 		}
-		staged = live
+		if len(staged) == 0 {
+			m.Discard()
+			return errNothingApplied
+		}
 		return m.Apply(inv.refs(ctx))
 	})
 	switch {

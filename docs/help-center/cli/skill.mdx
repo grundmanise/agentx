@@ -662,6 +662,7 @@ With `--all`, a skill whose edits conflict is left with its merge pending and th
 - A skill whose record in the account repo agentx cannot read stops with exit code 6. Run `agentx doctor` and check the account repo it names.
 - A skill whose library directory is a symlink to a directory of your own stops with exit code 6, even if you edited that directory: an update replaces the library directory, so it would remove your link. Replace the link with the directory it points to, then update again. With `--all` this skill is counted as not updated.
 - A skill that holds something git cannot record, such as a repository nested in it, stops with exit code 6 and names it: an update would discard it with no record of it anywhere. Move it out of the skill, then update again. With `--all` this skill is counted as not updated.
+- On a file system that ignores case, as macOS and Windows do by default, a skill whose merged version would hold two paths that differ only in case, such as a `readme.md` you added and a `README.md` the update adds, stops with exit code 6 and changes nothing: the two would overwrite each other. Rename your file, then update again.
 
 With `--all`, a skill that is not updated does not stop the others: agentx names it and still updates the rest, then exits with the code those skills share, or 6 when they differ. A skill whose source you removed is skipped rather than counted, so it leaves the exit code at 0.
 

@@ -47,8 +47,9 @@ type Merge struct {
 }
 
 // PendingMerge is what a merge ref holds: the pending merge commit and,
-// when its message is one agentx writes, the three versions it merges and
-// how many of its files are not resolved yet.
+// when its message is one agentx writes, the three versions it merges,
+// which resolving the merge reads back to merge them again, and how many
+// of its files are not resolved yet, which a listing shows.
 type PendingMerge struct {
 	Commit     string
 	Merge      Merge

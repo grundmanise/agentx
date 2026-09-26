@@ -212,11 +212,21 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	states := map[string]string{}
 	for _, e := range snap["library"].([]any) {
 		entry := e.(map[string]any)
-		states[entry["name"].(string)] = fmt.Sprint(entry["state"]) + " " + drift(entry)
+		states[entry["name"].(string)] = fmt.Sprint(entry["state"]) + " " + drift(entry) + " " + fmt.Sprint(entry["pending_merge"])
 	}
-	equal(t, "alpha in the snapshot", states["alpha"], stateModified+" ")
-	equal(t, "beta in the snapshot", states["beta"], stateCurrent+" displaced,missing,upstream removed")
+	equal(t, "alpha in the snapshot", states["alpha"], stateModified+"  map[unresolved:2]")
+	equal(t, "beta in the snapshot", states["beta"], stateCurrent+" displaced,missing,upstream removed <nil>")
 	contains(t, "the snapshot's warnings", fmt.Sprint(snap["warnings"]), ghost)
+
+	// A merge ref at a commit agentx did not write is a merge pending all
+	// the same, with no count of what is left to resolve.
+	h.accountGit("update-ref", lineage.MergeRef("alpha"), h.accountGit("commit-tree", "refs/heads/managed/alpha^{tree}", "-p", tip, "-m", "a merge of my own"))
+	equal(t, "alpha's pending merge of a plain message", fmt.Sprint(h.listed("alpha")["pending_merge"]), "map[]")
+	list = h.mustRun("skill", "list")
+	contains(t, "skill list of a plain message", list.stdout, "modified, update available, merge pending ")
+	if strings.Contains(list.stdout, "unresolved") {
+		t.Errorf("skill list counts what a plain message does not:\n%s", list.stdout)
+	}
 }
 
 // TestSkillListSanitisesTheNameAndTheUpstream covers a library directory

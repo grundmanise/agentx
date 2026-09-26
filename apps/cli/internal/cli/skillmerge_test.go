@@ -156,6 +156,67 @@ func TestSkillUpdateMergesANonOverlappingEdit(t *testing.T) {
 	equal(t, "what skill diff shows", strings.Join(diffs, ", "), "SKILL.md modified, mine.md added, private/.gitignore added, private/notes.md added")
 }
 
+// TestSkillUpdateOfAMergeWhosePathsDifferInCase: git merges paths byte for
+// byte, so readme.md, a file the user added to alpha, and README.md, one
+// its update adds, merge cleanly. A library that tells paths apart by case
+// takes both. One that does not, as macOS's by default does not, cannot
+// hold the version merged: the update of alpha refuses before the lock
+// with exit code 6, naming the user's file as the one to rename, and
+// changes nothing, and update --all updates beta, which nobody edited, all
+// the same.
+func TestSkillUpdateOfAMergeWhosePathsDifferInCase(t *testing.T) {
+	t.Parallel()
+	h, s, _ := updateHarness(t)
+	lib := filepath.Join(h.library, "alpha")
+	editLibrary(t, h, "alpha", "readme.md", "my own readme\n")
+	s.write("skills/alpha-dir/README.md", "the upstream readme\n")
+	s.write("skills/beta/notes.md", "beta notes, revised\n")
+	checked(t, h, s)
+	tip, candidate := h.ref(lineage.ManagedRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
+	betaCandidate := h.ref(lineage.CandidateRef("beta"))
+
+	if !foldsCaseAt(t, filepath.Join(lib, "SKILL.md")) {
+		h.mustRun("skill", "update", "alpha")
+		equal(t, "readme.md", fileBody(t, filepath.Join(lib, "readme.md")), "my own readme\n")
+		equal(t, "README.md", fileBody(t, filepath.Join(lib, "README.md")), "the upstream readme\n")
+		equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), candidate)
+		equal(t, "state", h.listed("alpha")["state"], stateModified)
+		return
+	}
+	library := onDisk(t, h.library)
+	before := mutationVersion(t, h)
+	refusal := "the update of alpha merged with its edits holds both README.md and readme.md, which this file system cannot keep apart, so nothing was changed"
+	hint := "rename readme.md in " + lib + ", then run 'agentx skill update alpha' again"
+
+	out := h.run("--json", "skill", "update", "alpha")
+	equal(t, "exit", out.exit, 6)
+	e := h.one(out.stdout, "error")
+	equal(t, "code", e["code"], "refused")
+	equal(t, "message", e["message"], refusal)
+	equal(t, "hint", e["hint"], hint)
+	equal(t, "the library", onDisk(t, h.library), library)
+	equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), tip)
+	equal(t, "the candidate", h.ref(lineage.CandidateRef("alpha")), candidate)
+	equal(t, "journals", journalCount(t, h), 0)
+	equal(t, "mutations", mutationVersion(t, h), before)
+
+	all := h.run("--json", "skill", "update", "--all")
+	equal(t, "exit of --all", all.exit, 6)
+	events := h.eventsOfType(all.stdout, "library_skill")
+	if len(events) != 1 || events[0]["name"] != "beta" {
+		t.Fatalf("library_skill events %v, want beta's", events)
+	}
+	equal(t, "warnings of --all", strings.Join(warnings(h, all.stderr), "\n"), "alpha: "+refusal)
+	e = h.one(all.stdout, "error")
+	equal(t, "message of --all", e["message"], "1 of 2 skills could not be updated: alpha: "+refusal)
+	equal(t, "hint of --all", e["hint"], hint)
+	equal(t, "beta's notes", fileBody(t, filepath.Join(h.library, "beta", "notes.md")), "beta notes, revised\n")
+	equal(t, "beta's branch", h.ref(lineage.ManagedRef("beta")), betaCandidate)
+	equal(t, "alpha's readme", fileBody(t, filepath.Join(lib, "readme.md")), "my own readme\n")
+	equal(t, "alpha's branch", h.ref(lineage.ManagedRef("alpha")), tip)
+	equal(t, "alpha's candidate", h.ref(lineage.CandidateRef("alpha")), candidate)
+}
+
 // TestSkillUpdateLeavesAConflictPending: an edit the update overlaps
 // conflicts. The update exits 4 and changes nothing agents read: the
 // library directory and every copy are byte for byte as they were, and the
@@ -707,8 +768,10 @@ func TestSkillUpdateConflictRecoversAtEveryBoundary(t *testing.T) {
 // TestSkillUpdateRefusesAMergeWhoseLibraryChangedBeforeTheLock: what a
 // merge merged is the library directory as the update read it. An edit
 // made after that directory was committed as mine, while git merges it and
-// before the lock, is found under the lock, and one made while the
-// directory is written into the account repo is found by the write; either
+// before the lock, is found under the lock. One made while the directory
+// is written into the account repo is found by the write, before git
+// merges anything, whether the file edited is one the base version holds
+// too or the user's own, which the account repo holds nothing of. Either
 // way the update refuses with exit code 6, whether its merge was clean or
 // conflicted: no journal, no merge left pending, the edit where it was
 // made, the import branch and the candidate as they were, and the version
@@ -722,6 +785,7 @@ func TestSkillUpdateRefusesAMergeWhoseLibraryChangedBeforeTheLock(t *testing.T) 
 		{name: "a clean merge", file: "mine.md", content: "a file of my own\n", during: "merge-tree", changed: "usage.md"},
 		{name: "a merge that conflicts", file: "notes.md", content: editedNotes, during: "merge-tree", changed: "usage.md"},
 		{name: "a directory edited while it is written", file: "mine.md", content: "a file of my own\n", during: "hash-object", changed: "SKILL.md"},
+		{name: "a file of the user's edited while it is written", file: "mine.md", content: "a file of my own\n", during: "hash-object", changed: "mine.md"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -731,7 +795,11 @@ func TestSkillUpdateRefusesAMergeWhoseLibraryChangedBeforeTheLock(t *testing.T) 
 			tip, candidate := h.ref(lineage.ManagedRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
 			before := mutationVersion(t, h)
 			usage := filepath.Join(h.library, "alpha", c.changed)
+			calls := filepath.Join(t.TempDir(), "calls")
 			stubGit(t, h, `#!/bin/sh
+case " $* " in
+*" merge-tree "*) echo merge-tree >> `+shellWord(calls)+` ;;
+esac
 case " $* " in
 *" `+c.during+` "*) printf 'an edit made meanwhile\n' > `+shellWord(usage)+` || exit 1 ;;
 esac
@@ -746,7 +814,12 @@ exec `+realGit(t)+` "$@"
 				t.Errorf("a refused update reported %v", got)
 			}
 			equal(t, "the edit made meanwhile", fileBody(t, usage), "an edit made meanwhile\n")
-			equal(t, "the edit made before", fileBody(t, filepath.Join(h.library, "alpha", c.file)), c.content)
+			if c.file != c.changed {
+				equal(t, "the edit made before", fileBody(t, filepath.Join(h.library, "alpha", c.file)), c.content)
+			}
+			if b, err := os.ReadFile(calls); c.during == "hash-object" && err == nil && len(b) > 0 {
+				t.Errorf("the write did not refuse: git merged %q", b)
+			}
 			equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), tip)
 			equal(t, "the candidate", h.ref(lineage.CandidateRef("alpha")), candidate)
 			equal(t, "the merge ref", h.ref(lineage.MergeRef("alpha")), "")
