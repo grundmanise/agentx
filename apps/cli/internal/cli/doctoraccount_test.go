@@ -12,7 +12,7 @@ import (
 
 // TestDoctorReadsTheAccountRepoOnlyWhenItOpens: the two account-repo rows
 // follow the row that says the repo can be read, and are left out of a run
-// on a machine that has no account repo yet — there is nothing to say about
+// on a machine that has no account repo yet – there is nothing to say about
 // a repository that does not exist.
 func TestDoctorReadsTheAccountRepoOnlyWhenItOpens(t *testing.T) {
 	t.Parallel()
@@ -48,7 +48,7 @@ func TestDoctorReadsTheAccountRepoOnlyWhenItOpens(t *testing.T) {
 // between the two holds of the lock that `source add` takes leaves behind:
 // the remote is written and the settings entry is not. An add that fails
 // takes its own remote back, so only a run killed outright, or one whose
-// take-back an unrecoverable journal refused, reaches this row — and then
+// take-back an unrecoverable journal refused, reaches this row, and then
 // doctor is the only thing that ever names it, since `source fetch` and
 // `source skills` both answer from the settings. It reports and does not
 // repair: doctor takes no lock, so it cannot tell a remote a run is writing

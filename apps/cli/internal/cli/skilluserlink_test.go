@@ -10,10 +10,10 @@ import (
 // A link of the user's that resolves into the library is the one placement
 // no command may touch. It reads as the library's content and hashes as the
 // library's version, so every cheap test for "is this ours" says yes; only
-// what the link names says no. The contract says it twice — a removal
+// what the link names says no. The contract says it twice – a removal
 // leaves "a symlink of theirs pointing somewhere else however it resolves"
 // alone, and a placement skips "a symlink somewhere other than the library
-// included however its target reads" — and the help center sells it as the
+// included however its target reads" – and the help center sells it as the
 // central safety promise of the command.
 //
 // These tests are the guard on that. Each one puts the user's own link at

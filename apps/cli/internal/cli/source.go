@@ -107,8 +107,8 @@ const takeBackWait = 5 * time.Second
 // could not record the source and could not take the remote back either. A
 // remote the settings do not name is not a source: `source fetch` and
 // `source skills` both answer from the settings, so nothing would ever
-// name it again. The run keeps the exit code of whatever stopped it — a
-// lost lock is still exit 7 — and says what stayed behind and how to clear
+// name it again. The run keeps the exit code of whatever stopped it – a
+// lost lock is still exit 7 – and says what stayed behind and how to clear
 // it: adding the source again rewrites the remote and records it, which is
 // the state this run failed to reach, and removing it by id takes it away.
 func leftBehind(cause error, src source.Source) error {
@@ -164,7 +164,7 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 	//
 	// undo is the command's context with the stop signals taken off it. A
 	// take-back is work the run has already committed to, so a Ctrl-C may
-	// not be what leaves the remote behind for good — that is the very
+	// not be what leaves the remote behind for good: that is the very
 	// thing the take-back exists to prevent, and giving up here would make
 	// a stop the one way to reach the state this whole path removes.
 	// Everything else the run does keeps the cancellation and stops at once.
@@ -228,8 +228,8 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 	// cleanup free, since the lock this run has is the lock it would
 	// otherwise have to wait for.
 	//
-	// Only a run whose body never ran — the lock was never won, or an
-	// earlier mutation's recovery refused first — has a remote left to take
+	// Only a run whose body never ran – the lock was never won, or an
+	// earlier mutation's recovery refused first – has a remote left to take
 	// back out here, and that one has to wait for the lock to do it.
 	added, settled := true, false
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {

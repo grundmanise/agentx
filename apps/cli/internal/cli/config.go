@@ -184,7 +184,7 @@ func parseBool(key, value string) (bool, error) {
 // for a person to read: it is printed by config list, carried in every
 // settings event and in every export, and shown beside the machine
 // wherever the desktop app lists it. Nothing needs more than this, and
-// without a bound a settings file can be made megabytes long — not through
+// without a bound a settings file can be made megabytes long: not through
 // config set label, whose argument ARG_MAX bounds, but through an import,
 // whose label comes out of a file.
 const labelLimit = 256
@@ -196,7 +196,7 @@ const labelLimit = 256
 // No control character: the label is printed, put into the question
 // another machine's import asks, and handed to the desktop app, and while
 // the user choosing an escape sequence about their own machine is their
-// business, an import moves that choice to whoever wrote the document —
+// business, an import moves that choice to whoever wrote the document,
 // which is the reasoning the contract already applies to a source URL.
 // Keeping the rule here rather than at the import keeps the settings file
 // agentx wrote one an import restores byte for byte.

@@ -19,7 +19,7 @@ const RefPrefix = "refs/agentx/sources/"
 
 // StagingRefPrefix is where a fetch in flight holds the commit it is still
 // filling in, one ref per source id. A fetch reaches a source over two
-// network round trips — the commit and its trees, then the SKILL.md blobs —
+// network round trips – the commit and its trees, then the SKILL.md blobs –
 // and between them there is a commit the account repo can read whose blobs
 // are not here yet. Staging keeps that commit off RefPrefix until it is
 // whole, so nothing that reads a source ref can see a half fetched one.
@@ -158,9 +158,9 @@ func Remotes(ctx context.Context, r *gitx.Runner, gitDir string) map[string]Remo
 // is moved onto the fetched object in one update-ref at the end, once every
 // SKILL.md blob of the new commit is in the account repo. A fetch that
 // fails anywhere therefore leaves the source ref exactly where the last
-// complete fetch left it, and no reader of a source ref — the serve child
+// complete fetch left it, and no reader of a source ref – the serve child
 // rebuilding its index, a concurrent listing, the next command after a
-// crash — ever sees a commit whose skills cannot be listed.
+// crash – ever sees a commit whose skills cannot be listed.
 func Fetch(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listing, error) {
 	id := s.ID()
 	name := RemoteName(id)
@@ -172,7 +172,7 @@ func Fetch(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listin
 	// settings do not name, and a fetch that followed it would report one
 	// pin while fetching another. --refmap= is what makes the refspec here
 	// the only one, since a refspec on the command line does not replace
-	// the configured one — git also updates that one opportunistically.
+	// the configured one: git also updates that one opportunistically.
 	fetchArgs := baseFetchArgs()
 	refspec := Refspec(s)
 	// The staging ref belongs to this fetch and goes with it, whether it

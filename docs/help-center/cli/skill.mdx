@@ -119,7 +119,7 @@ Use `--copy` for a client that cannot follow a symlink. agentx remembers which c
 - A copy agentx placed that is different from the library is kept exactly as it is and skipped, with a warning. See [A copy that differs from the library](#a-copy-that-differs-from-the-library).
 - A placement that is a link somewhere else is left alone, even if what it points at holds the same files: where your skill lives is your choice.
 - Anything else in the way is left untouched, with a warning naming the path.
-- A client skills directory agentx cannot write — one owned by somebody else, one on a read-only mount, or one macOS has not granted access to — is skipped with a warning. The rest of the install still happens, and the summary counts the placements it skipped.
+- A client skills directory agentx cannot write – one owned by somebody else, one on a read-only mount, or one macOS has not granted access to – is skipped with a warning. The rest of the install still happens, and the summary counts the placements it skipped.
 
 Your files are never overwritten by an install.
 
@@ -144,7 +144,7 @@ With `--json`, the warning is one `log` event whose `message` holds both lines, 
 
 ### What is left out of the import
 
-A skill directory holds regular files and directories. Anything else — a symlink or a git submodule inside the skill — is left out, with a warning naming it. The library directory then differs from the upstream one, and what agentx records as the installed version is what it actually installed.
+A skill directory holds regular files and directories. Anything else – a symlink or a git submodule inside the skill – is left out, with a warning naming it. The library directory then differs from the upstream one, and what agentx records as the installed version is what it actually installed.
 
 ## Place a skill you already have
 
@@ -267,7 +267,7 @@ agentx refuses before it changes anything, also when `--from` names other client
 
 ### After a removal
 
-A client may still see a skill through another client's directory — Cursor reads Claude Code's skills directory, for instance. agentx rescans and reports what the client sees now, so the output tells you whether the skill is really gone from it.
+A client may still see a skill through another client's directory: Cursor reads Claude Code's skills directory, for instance. agentx rescans and reports what the client sees now, so the output tells you whether the skill is really gone from it.
 
 Removing a skill from the machine warns for every client that still sees it afterwards, naming the path:
 

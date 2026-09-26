@@ -84,7 +84,7 @@ func Settle(ctx context.Context) bool {
 // stop may not leave half done: the ref steps of a mutation journal, and of
 // the recovery a later command runs before its own work. Those reach git
 // after the journal that describes them is on disk, where giving up costs
-// the next command a recovery and gains nothing — the journal is already
+// the next command a recovery and gains nothing: the journal is already
 // written, so the cheapest way out is through. A run that is stopping
 // before its journal exists still gives up at once, since every other call
 // keeps the cancellation.

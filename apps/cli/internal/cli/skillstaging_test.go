@@ -16,7 +16,7 @@ import (
 // has already staged content and checks that nothing of it is left. Only
 // the journal ever names a staging directory, so one a refusal leaves
 // behind is removed by the sweep of the next install into that same
-// directory and by nothing else — and a copy staged in a client directory
+// directory and by nothing else, and a copy staged in a client directory
 // that no later install targets again is never removed at all.
 func TestARefusedInstallLeavesNoStagingDirectory(t *testing.T) {
 	t.Parallel()
@@ -25,7 +25,7 @@ func TestARefusedInstallLeavesNoStagingDirectory(t *testing.T) {
 		h, s := installHarness(t)
 		// copy_mode that is not a map of names to configuration ids: the
 		// settings file parses, so the install runs, and the write that
-		// records the copies is the last thing to refuse — after every
+		// records the copies is the last thing to refuse, after every
 		// placement has staged its copy.
 		spoilCopyMode(t, h)
 
@@ -143,7 +143,7 @@ func TestStagedContentIsCheckedAgainstTheVersion(t *testing.T) {
 // a frontmatter name agentx cannot use. A name is two things at once: a
 // directory of the library and one level of refs/heads/managed/<name>. A
 // name only one of them accepts would be found out halfway through the
-// mutation, with the journal already on disk and the ref step failing — and
+// mutation, with the journal already on disk and the ref step failing, and
 // from then on every command would recover that journal and fail the same
 // way. The name comes out of a source's SKILL.md, so it is checked and not
 // trusted.

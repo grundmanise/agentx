@@ -310,9 +310,9 @@ func apply(journalPath string, j journal, u RefUpdater) error {
 
 // unfinished says what a step that could not be applied leaves behind. The
 // journal is on disk by now, so every later command recovers it before its
-// own work and would hit the same failure: a raw input or output message —
+// own work and would hit the same failure: a raw input or output message –
 // an unwritable client directory, a read-only mount, a path something else
-// took — would then be every command's answer, with nothing in it for the
+// took – would then be every command's answer, with nothing in it for the
 // reader to do. It becomes a recovery instead, naming the path and the
 // journal, which the exit code table calls a refusal and whose hint says
 // how to get out of it. A live path that holds what the mutation did not
@@ -350,8 +350,8 @@ func applyStep(s step, u RefUpdater) (bool, error) {
 		// journal is gone nothing names it: only a later install into that
 		// same client directory sweeps staging directories, and a removal
 		// never does. Two configurations that share one skills directory
-		// plan exactly this — two publishes of one path, the second of them
-		// already done — so the leak is an ordinary run's, not a crash's.
+		// plan exactly this – two publishes of one path, the second of them
+		// already done – so the leak is an ordinary run's, not a crash's.
 		if s.Staged != "" {
 			os.RemoveAll(s.Staged)
 		}
@@ -392,7 +392,7 @@ func applyStep(s step, u RefUpdater) (bool, error) {
 // A ref a journal creates or moves is recoverable: the journal holds the
 // value, the step is safe to repeat, and a later command finishes it. A ref
 // a journal deletes is not. Once it is gone the only record of the commit
-// it pointed at is the journal itself — and the journal is exactly what a
+// it pointed at is the journal itself, and the journal is exactly what a
 // refusal invites the user to move aside to keep what is on disk. Deleting
 // first would mean that taking that offer after a removal stopped half way
 // left the skill's directory in the library with no branch for it: a
@@ -745,7 +745,7 @@ func recoverJournal(dir, journalPath string, u RefUpdater) error {
 // path holds its new state. It is dropped only when it still hashes to what
 // the journal captured: locks coordinate agentx commands, not editors, and
 // content that changed under us is kept and named, since it is the user's
-// and nothing else will ever mention it — the sweep of the next install
+// and nothing else will ever mention it – the sweep of the next install
 // covers staging directories alone, by design.
 func discardRetained(j journal, u RefUpdater) {
 	for _, s := range j.Steps {

@@ -89,7 +89,7 @@ Each skill is placed as a symlink, except in a configuration where agentx alread
 
 The setting and every placement it implies are one change, written down before anything on disk moves. A run interrupted part way is finished by the next agentx command rather than undone.
 
-A placement agentx cannot make does not fail the run. If something you put there yourself is already at one of the paths, or agentx cannot write the client's skills directory, it leaves that path alone and names it, places the rest, and still succeeds — so the client can end up enabled with part of the library in it:
+A placement agentx cannot make does not fail the run. If something you put there yourself is already at one of the paths, or agentx cannot write the client's skills directory, it leaves that path alone and names it, places the rest, and still succeeds, so the client can end up enabled with part of the library in it:
 
 ```text
 warning: ~/.cursor/skills/pdf is not this skill and was left as it is; no placement was made for cursor

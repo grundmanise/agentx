@@ -254,7 +254,7 @@ func TestExportRefusesAPathItCannotWrite(t *testing.T) {
 // per skill, whose name is one library directory, but the two lineage
 // namespaces are shared with the account remote, so a fetch or a stray
 // push can put refs/heads/skills/nested/deeper there. Exporting it wrote a
-// record this very CLI's reader refuses — and the reader refuses the whole
+// record this very CLI's reader refuses, and the reader refuses the whole
 // document, so one stray branch cost the settings restore too. The branch
 // is left out and said out loud instead.
 func TestExportLeavesOutABranchTheLibraryCannotHold(t *testing.T) {

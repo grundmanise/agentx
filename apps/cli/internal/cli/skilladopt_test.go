@@ -8,7 +8,7 @@ import (
 // TestPlaceAdoptsADirectoryOfThisVersionAndSaysSo covers the one placement
 // that changes whose a directory is without writing a byte: the path
 // already holds a real directory of exactly this version, so agentx keeps
-// it and from then on treats it as a placement of its own — which means a
+// it and from then on treats it as a placement of its own, which means a
 // later removal deletes it, with whatever the user has since put inside.
 //
 // That is an adoption whichever way the placement was asked for. With

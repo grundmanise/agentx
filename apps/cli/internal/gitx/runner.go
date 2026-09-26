@@ -224,8 +224,8 @@ func (r *Runner) run(ctx context.Context, c call, args ...string) (string, error
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	// A cancelled context kills git, but git's own children — the transport
-	// of a fetch, the ssh it starts — hold the pipes agentx reads its output
+	// A cancelled context kills git, but git's own children – the transport
+	// of a fetch, the ssh it starts – hold the pipes agentx reads its output
 	// through, and waiting for those to close is waiting for a network call
 	// nobody is reading any more. WaitDelay closes them instead, so that a
 	// run stopped during a fetch ends now rather than when the far end times
@@ -240,7 +240,7 @@ func (r *Runner) run(ctx context.Context, c call, args ...string) (string, error
 	if err != nil {
 		if ctx.Err() != nil {
 			// The child was killed because the run is stopping, so its own
-			// report — "signal: killed" — says nothing true about git.
+			// report, "signal: killed", says nothing true about git.
 			return "", fmt.Errorf("git %s: interrupted", subcommand(args))
 		}
 		if stoppedBySignal(err) {
