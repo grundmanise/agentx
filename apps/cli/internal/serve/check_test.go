@@ -73,7 +73,15 @@ func TestTheCheckRunsOffTheLoopAndNeverOverlaps(t *testing.T) {
 		})
 	}()
 
-	// Twenty ticks go by while the first check holds on.
+	// The first check starts, and twenty ticks go by while it holds on.
+	deadline := time.After(10 * time.Second)
+	for started.Load() < 1 {
+		select {
+		case <-deadline:
+			t.Fatal("no first check")
+		case <-time.After(time.Millisecond):
+		}
+	}
 	time.Sleep(100 * time.Millisecond)
 	if n := started.Load(); n != 1 {
 		t.Fatalf("%d checks started while the first one ran, want 1", n)
@@ -98,7 +106,7 @@ func TestTheCheckRunsOffTheLoopAndNeverOverlaps(t *testing.T) {
 	}
 
 	// A third check starts and holds on until serve stops, which stops it.
-	deadline := time.After(10 * time.Second)
+	deadline = time.After(10 * time.Second)
 	for started.Load() < 3 {
 		select {
 		case <-deadline:
@@ -122,5 +130,61 @@ func TestTheCheckRunsOffTheLoopAndNeverOverlaps(t *testing.T) {
 	}
 	if n := overlapped.Load(); n != 0 {
 		t.Errorf("checks overlapped %d times", n)
+	}
+}
+
+// TestTheFirstCheckStartsAtLaunchNotOnTheFirstTick drives Run on an
+// interval no test waits out: a check that starts at all is the one serve
+// starts at launch, once the initial snapshot is out, and not one the
+// first tick would start.
+func TestTheFirstCheckStartsAtLaunchNotOnTheFirstTick(t *testing.T) {
+	t.Parallel()
+	stdinR, stdinW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stdinW.Close()
+	defer stdinR.Close()
+
+	var snapshots atomic.Int32
+	started := make(chan int32, 1) // the snapshots out when the check started
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- Run(ctx, Options{
+			Scan:            func(context.Context) (scan.Snapshot, error) { return scan.Snapshot{}, nil },
+			Stdin:           stdinR,
+			Snapshot:        func(scan.Snapshot) { snapshots.Add(1) },
+			RefreshComplete: func(string, int, error) {},
+			BadRequest:      func(string, string) {},
+			Warn:            func(string) {},
+			CheckEvery:      time.Hour,
+			Check: func(context.Context) func() {
+				select {
+				case started <- snapshots.Load():
+				default:
+				}
+				return nil
+			},
+		})
+	}()
+
+	select {
+	case n := <-started:
+		if n == 0 {
+			t.Error("the check started before the initial snapshot was out")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("no check started at launch")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("Run returned %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Run did not return")
 	}
 }

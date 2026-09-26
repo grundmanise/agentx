@@ -107,7 +107,8 @@ const checkInterval = 30 * time.Minute
 
 // checkEvery is the interval of the update check: checkInterval, or the
 // duration AGENTX_CHECK_INTERVAL names, which is read as
-// AGENTX_HANDSHAKE_TIMEOUT is and refused the same way when it is none.
+// AGENTX_HANDSHAKE_TIMEOUT is and refused the same way when it is not a
+// positive one.
 func (inv *invocation) checkEvery() (time.Duration, error) {
 	v := inv.env["AGENTX_CHECK_INTERVAL"]
 	if v == "" {
@@ -115,7 +116,7 @@ func (inv *invocation) checkEvery() (time.Duration, error) {
 	}
 	d, err := time.ParseDuration(v)
 	if err != nil || d <= 0 {
-		return 0, fail(exitUsage, "AGENTX_CHECK_INTERVAL "+v+" is not a duration", "set it like 30m or 90s, or unset it")
+		return 0, fail(exitUsage, "AGENTX_CHECK_INTERVAL "+v+" is not a positive duration", "set it like 30m or 90s, or unset it")
 	}
 	return d, nil
 }

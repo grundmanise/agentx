@@ -88,8 +88,12 @@ func TestSkillCheckReportsAnUpdateAndPinsIt(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	before := mutationVersion(t, h)
 	out := h.run("--json", "skill", "check")
 	equal(t, "exit", out.exit, 3)
+	// One write for the candidate and last_fetched, which bumps the version
+	// file once: that bump is what makes a serve rescan.
+	equal(t, "mutations", mutationVersion(t, h), before+1)
 	progress := h.eventsOfType(out.stdout, "progress")
 	equal(t, "progress events", len(progress), 2)
 	for _, p := range progress {
@@ -153,6 +157,136 @@ func TestSkillCheckReportsAnUpdateAndPinsIt(t *testing.T) {
 	if entry := h.snapshotLibrary("alpha"); entry["candidate"] == nil {
 		t.Errorf("the snapshot's entry carries no candidate: %v", entry)
 	}
+}
+
+// TestSkillCheckLeavesAnUnreachableSourcesSkillsAsTheyAre: a source that
+// cannot be fetched says nothing about what it holds now, so the candidate
+// and the upstream-removed marker its skills got from the last check stay
+// as they are, and so do the settings: a check whose every fetch failed
+// writes nothing at all, not even last_fetched, and bumps no version.
+func TestSkillCheckLeavesAnUnreachableSourcesSkillsAsTheyAre(t *testing.T) {
+	t.Parallel()
+	h, s, _ := checkHarness(t)
+	s.skill("skills/alpha", "alpha", "The first skill, revised", nil)
+	s.run("rm", "-r", "--quiet", "skills/beta")
+	second := s.commit("alpha revised, beta removed")
+	h.mustRun("skill", "check")
+	candidate, marker := h.ref(lineage.CandidateRef("alpha")), h.ref(lineage.UpstreamRemovedRef("beta"))
+	if candidate == "" || marker == "" {
+		t.Fatalf("candidate %q and marker %q before the source went", candidate, marker)
+	}
+	settings := string(readFile(t, filepath.Join(h.agentx, "settings.json")))
+
+	s.skill("skills/alpha", "alpha", "The first skill, revised again", nil)
+	s.skill("skills/beta", "beta", "The second skill, back", nil)
+	s.commit("alpha revised again, beta back")
+	if err := os.Rename(s.gitDir, s.gitDir+".gone"); err != nil {
+		t.Fatal(err)
+	}
+	before := mutationVersion(t, h)
+	out := h.run("--json", "skill", "check")
+	equal(t, "exit", out.exit, 3)
+	contains(t, "error", h.one(out.stdout, "error")["message"].(string), "not checked: alpha, beta")
+	if got := h.eventsOfType(out.stdout, "update_available"); len(got) != 0 {
+		t.Errorf("update_available events from a source that could not be fetched: %v", got)
+	}
+	equal(t, "alpha's candidate", h.ref(lineage.CandidateRef("alpha")), candidate)
+	equal(t, "beta's marker", h.ref(lineage.UpstreamRemovedRef("beta")), marker)
+	equal(t, "the settings", string(readFile(t, filepath.Join(h.agentx, "settings.json"))), settings)
+	equal(t, "mutations", mutationVersion(t, h), before)
+	equal(t, "beta's drift", drift(h.listed("beta")), "upstream removed")
+	cand, ok := h.listed("alpha")["candidate"].(map[string]any)
+	if !ok {
+		t.Fatal("alpha lost its candidate")
+	}
+	equal(t, "alpha's candidate upstream commit", cand["upstream_commit"], second)
+}
+
+// TestSkillCheckWithSeveralFailures ends a check that could not check
+// several things the way a fetch of several sources ends: every failure is
+// a warning, the refusal names each one and says the warnings do, and the
+// exit code is the one they all agree on, or the source-level one when
+// they do not. What could be checked is pinned all the same.
+func TestSkillCheckWithSeveralFailures(t *testing.T) {
+	t.Parallel()
+	// withOther is checkHarness plus a second source, other, holding gamma,
+	// installed from it.
+	withOther := func(t *testing.T) (*harness, *sourceRepo, *sourceRepo) {
+		h, s, _ := checkHarness(t)
+		other := h.newSourceRepo("other", true)
+		other.skill("gamma", "gamma", "A skill of the other source", nil)
+		other.commit("gamma")
+		h.mustRun("skill", "add", other.url)
+		return h, s, other
+	}
+	unreachable := func(t *testing.T, s *sourceRepo) {
+		if err := os.Rename(s.gitDir, s.gitDir+".gone"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.Run("a source and a skill", func(t *testing.T) {
+		t.Parallel()
+		h, s, other := withOther(t)
+		s.write("skills/alpha/we\\ird.md", "a backslash in a name\n")
+		s.skill("skills/beta", "beta", "The second skill, revised", nil)
+		s.commit("alpha breaks, beta moves on")
+		unreachable(t, other)
+		out := h.run("--json", "skill", "check")
+		equal(t, "exit", out.exit, 3)
+		e := h.one(out.stdout, "error")
+		equal(t, "code", e["code"], "source")
+		message := e["message"].(string)
+		contains(t, "message", message, other.url+" (gamma)")
+		contains(t, "message", message, "alpha")
+		equal(t, "hint", e["hint"], "the warnings name each failure; "+refusalHint(exitSource))
+		warned := warnings(h, out.stderr)
+		equal(t, "warnings", len(warned), 2)
+		var source, skill bool
+		for _, w := range warned {
+			source = source || strings.Contains(w, other.url) && strings.Contains(w, "not checked: gamma")
+			skill = skill || strings.HasPrefix(w, "alpha: ")
+		}
+		if !source || !skill {
+			t.Errorf("the warnings do not name the source and the skill: %q", warned)
+		}
+		equal(t, "beta's candidate", h.ref(lineage.CandidateRef("beta")), h.updateOf(out.stdout, "beta")["candidate"])
+	})
+
+	t.Run("two skills", func(t *testing.T) {
+		t.Parallel()
+		h, s, _ := checkHarness(t)
+		for _, name := range []string{"alpha", "beta"} {
+			s.write("skills/"+name+"/we\\ird.md", "a backslash in a name\n")
+		}
+		s.commit("both break")
+		out := h.run("--json", "skill", "check")
+		equal(t, "exit", out.exit, 6)
+		e := h.one(out.stdout, "error")
+		equal(t, "code", e["code"], "refused")
+		equal(t, "message", e["message"], "could not check alpha, beta")
+		equal(t, "hint", e["hint"], "the warnings name each failure")
+		equal(t, "warnings", len(warnings(h, out.stderr)), 2)
+	})
+
+	t.Run("two sources", func(t *testing.T) {
+		t.Parallel()
+		h, s, other := withOther(t)
+		unreachable(t, s)
+		unreachable(t, other)
+		out := h.run("--json", "skill", "check")
+		equal(t, "exit", out.exit, 3)
+		e := h.one(out.stdout, "error")
+		equal(t, "code", e["code"], "source")
+		message := e["message"].(string)
+		if !strings.HasPrefix(message, "could not check ") {
+			t.Errorf("message = %q", message)
+		}
+		contains(t, "message", message, s.url+" (alpha, beta)")
+		contains(t, "message", message, other.url+" (gamma)")
+		equal(t, "hint", e["hint"], "the warnings name each failure; "+refusalHint(exitSource))
+		equal(t, "warnings", len(warnings(h, out.stderr)), 2)
+	})
 }
 
 // TestSkillCheckReadsTheUpstreamDirectory covers the two skills whose
@@ -373,6 +507,136 @@ func TestSkillCheckSkipsARemovedSource(t *testing.T) {
 	equal(t, "the marker", h.ref(lineage.UpstreamRemovedRef("beta")), marker)
 	equal(t, "alpha's drift", drift(h.listed("alpha")), "source removed")
 	equal(t, "beta's drift", drift(h.listed("beta")), "source removed,upstream removed")
+}
+
+// gateImport holds the fast-import that writes a run's import commits. In
+// an update check that is the point between the comparison and the locked
+// write that records it: the check has decided everything from the lineage
+// it read before the network, and has told nobody yet.
+func gateImport(t *testing.T, h *harness) (arm func() (reached, release func())) {
+	t.Helper()
+	return gateGit(t, h, `for arg in "$@"; do
+	case "$arg" in
+	fast-import) gate=1 ;;
+	esac
+done`)
+}
+
+// gateSourcePublish is gatePublish for one source alone: it holds the
+// update-ref that puts a fetch of that source on its ref, and lets the
+// fetches of every other source of the run by.
+func gateSourcePublish(t *testing.T, h *harness, url string) (arm func() (reached, release func())) {
+	t.Helper()
+	return gateGit(t, h, `case " $* " in
+*" update-ref `+source.Ref(source.ID(url))+` "*) gate=1 ;;
+esac`)
+}
+
+// TestSkillCheckRecordsNothingForWhatChangedMidRun holds a check that found
+// updates for alpha and beta after it read the lineage and before it
+// writes, changes what it read, and lets it go on. The write reads the
+// lineage and the settings again under the lock, and records nothing for a
+// skill that is gone, whose branch moved or whose source was removed
+// meanwhile: no candidate, no marker, no update_available and no count in
+// the summary. The skill nothing happened to is recorded all the same, so
+// that a check that recorded nothing at all could not pass.
+func TestSkillCheckRecordsNothingForWhatChangedMidRun(t *testing.T) {
+	t.Parallel()
+	// revised commits a newer version of every skill named.
+	revised := func(s *sourceRepo, names ...string) {
+		for _, name := range names {
+			s.skill("skills/"+name, name, "Revised mid-run", nil)
+		}
+		s.commit("revised: " + strings.Join(names, ", "))
+	}
+	// held runs a check parked at the gate arm opens, runs meanwhile while
+	// it is, and returns the check's outcome once it is let go.
+	held := func(h *harness, arm func() (reached, release func()), meanwhile func()) outcome {
+		reached, release := arm()
+		done := make(chan outcome, 1)
+		go func() { done <- h.run("--json", "skill", "check") }()
+		reached()
+		meanwhile()
+		release()
+		return <-done
+	}
+	// nothingFor fails the test when the check recorded anything for name.
+	nothingFor := func(t *testing.T, h *harness, out outcome, name string) {
+		t.Helper()
+		for _, e := range h.eventsOfType(out.stdout, "update_available") {
+			if e["name"] == name {
+				t.Errorf("an update_available for %s: %v", name, e)
+			}
+		}
+		equal(t, name+"'s candidate", h.ref(lineage.CandidateRef(name)), "")
+		equal(t, name+"'s marker", h.ref(lineage.UpstreamRemovedRef(name)), "")
+	}
+
+	t.Run("the skill is removed", func(t *testing.T) {
+		t.Parallel()
+		h, s, _ := checkHarness(t)
+		revised(s, "alpha", "beta")
+		arm := gateImport(t, h)
+		out := held(h, arm, func() { equal(t, "remove", h.run("skill", "remove", "alpha").exit, 0) })
+		equal(t, "exit", out.exit, 0)
+		nothingFor(t, h, out, "alpha")
+		equal(t, "beta's candidate", h.ref(lineage.CandidateRef("beta")), h.updateOf(out.stdout, "beta")["candidate"])
+		equal(t, "summary", h.one(out.stdout, "result")["summary"], "checked 1 skill from 1 source: 1 update available")
+	})
+
+	t.Run("the branch moves", func(t *testing.T) {
+		t.Parallel()
+		h, s, _ := checkHarness(t)
+		revised(s, "alpha")
+		h.mustRun("skill", "check")
+		tip, pinned := h.ref(lineage.ManagedRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
+		if pinned == "" {
+			t.Fatal("no candidate for alpha before the run")
+		}
+		revised(s, "alpha", "beta")
+		arm := gateImport(t, h)
+		before := mutationVersion(t, h)
+		// An update of alpha lands while the check is held: the branch moves
+		// to the version the last check pinned, and the candidate goes.
+		out := held(h, arm, func() {
+			h.accountGit("update-ref", lineage.ManagedRef("alpha"), pinned, tip)
+			h.accountGit("update-ref", "-d", lineage.CandidateRef("alpha"), pinned)
+		})
+		equal(t, "exit", out.exit, 0)
+		nothingFor(t, h, out, "alpha")
+		equal(t, "alpha's branch", h.ref(lineage.ManagedRef("alpha")), pinned)
+		equal(t, "beta's candidate", h.ref(lineage.CandidateRef("beta")), h.updateOf(out.stdout, "beta")["candidate"])
+		equal(t, "summary", h.one(out.stdout, "result")["summary"], "checked 1 skill from 1 source: 1 update available")
+		// The write still carries last_fetched, in one mutation.
+		equal(t, "mutations", mutationVersion(t, h), before+1)
+	})
+
+	t.Run("the source is removed", func(t *testing.T) {
+		t.Parallel()
+		h, s, _ := checkHarness(t)
+		other := h.newSourceRepo("other", true)
+		other.skill("skills/gamma", "gamma", "A skill of the other source", nil)
+		other.commit("gamma")
+		h.mustRun("skill", "add", other.url)
+		revised(s, "alpha", "beta")
+		revised(other, "gamma")
+		// The fetch of s is held after its network and before it publishes
+		// its ref, so the ref is published after the removal took it away.
+		arm := gateSourcePublish(t, h, s.url)
+		out := held(h, arm, func() { equal(t, "source remove", h.run("source", "remove", s.url).exit, 0) })
+		equal(t, "exit", out.exit, 0)
+		nothingFor(t, h, out, "alpha")
+		nothingFor(t, h, out, "beta")
+		gamma := h.updateOf(out.stdout, "gamma")["candidate"]
+		equal(t, "gamma's candidate", h.ref(lineage.CandidateRef("gamma")), gamma)
+		contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), "checked 1 skill from ")
+		// Nothing of the removed source is left: the write took its ref away
+		// again, and last_fetched did not bring its entry back.
+		equal(t, "refs under refs/agentx", h.agentxRefs(), lineage.CandidateRef("gamma")+"\n"+source.Ref(source.ID(other.url)))
+		sources := readSettingsFile(t, h)["sources"].([]any)
+		equal(t, "sources", len(sources), 1)
+		equal(t, "the source left", sources[0].(map[string]any)["url"], other.url)
+	})
 }
 
 // TestSkillCheckIgnoresWhatAnImportLeavesOut: an import leaves a symlink
@@ -687,16 +951,94 @@ func TestServeChecksForUpdates(t *testing.T) {
 	equal(t, "exit", p.close(), 0)
 }
 
-// TestServeRefusesABadCheckInterval: the interval is a duration or nothing.
+// TestServeChecksAtLaunch runs serve on an interval no test waits out: the
+// update it announces comes from the check serve runs at launch, not from
+// one on the timer.
+func TestServeChecksAtLaunch(t *testing.T) {
+	t.Parallel()
+	h, s, _ := checkHarness(t)
+	s.skill("skills/alpha", "alpha", "The first skill, revised", nil)
+	second := s.commit("second version")
+	h.env["AGENTX_CHECK_INTERVAL"] = "1h"
+	p := h.serve(t, "--json")
+	p.next("snapshot")
+	update, _ := p.nextUpdate(func(e jsonEvent) bool { return e["candidate_upstream_commit"] == second })
+	equal(t, "name", update["name"], "alpha")
+	equal(t, "the candidate", h.ref(lineage.CandidateRef("alpha")), update["candidate"])
+	equal(t, "exit", p.close(), 0)
+}
+
+// TestServeCheckWaitsForTheLock holds the lock over several ticks of the
+// check once the first check is done: a check that meets it waits for it
+// rather than failing, so no tick warns, and the check that gets the lock
+// once it is free pins the version the source moved to meanwhile.
+func TestServeCheckWaitsForTheLock(t *testing.T) {
+	t.Parallel()
+	h, s, _ := checkHarness(t)
+	s.skill("skills/alpha", "alpha", "The first skill, revised", nil)
+	second := s.commit("second version")
+	h.env["AGENTX_CHECK_INTERVAL"] = "200ms"
+	p := h.serve(t, "--json")
+	p.next("snapshot")
+	p.nextUpdate(func(e jsonEvent) bool { return e["candidate_upstream_commit"] == second })
+
+	release := holdLock(t, h)
+	s.skill("skills/alpha", "alpha", "The first skill, revised again", nil)
+	third := s.commit("third version")
+	// Only widens the window in which ticks meet the lock: what is asserted
+	// does not depend on how many of them do.
+	time.Sleep(time.Second)
+	release()
+	update, _ := p.nextUpdate(func(e jsonEvent) bool { return e["candidate_upstream_commit"] == third })
+	equal(t, "the candidate", h.ref(lineage.CandidateRef("alpha")), update["candidate"])
+	equal(t, "exit", p.close(), 0)
+	for _, w := range warnings(h, p.stderr.String()) {
+		if strings.HasPrefix(w, "update check:") {
+			t.Errorf("a check warned: %s", w)
+		}
+	}
+}
+
+// TestServeChecksNothingWithoutAManagedSkill: on a machine with a source
+// and no managed skill from it, the last snapshot says there is nothing to
+// check, and the ticks of the check spawn no git at all.
+func TestServeChecksNothingWithoutAManagedSkill(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.build(t, fixture{dirs: []string{".claude"}})
+	s := h.newSourceRepo("skills", true)
+	s.skill("alpha", "alpha", "Never installed", nil)
+	s.commit("alpha")
+	h.mustRun("source", "add", s.url)
+	calls := countingGit(t, h)
+	h.env["AGENTX_CHECK_INTERVAL"] = "50ms"
+	p := h.serve(t, "--json")
+	p.next("snapshot")
+	// The scan and the source index it rebuilds have run their git by the
+	// time a refresh is acknowledged.
+	p.send(`{"type":"refresh","request_id":"settled"}`)
+	p.until("settled")
+	n := len(calls())
+	time.Sleep(500 * time.Millisecond) // ten ticks
+	if later := calls()[n:]; len(later) > 0 {
+		t.Errorf("the ticks of a check with nothing to check spawned git:\n%s", strings.Join(later, "\n"))
+	}
+	equal(t, "exit", p.close(), 0)
+}
+
+// TestServeRefusesABadCheckInterval: the interval is a positive duration
+// or nothing.
 func TestServeRefusesABadCheckInterval(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
-	h.env["AGENTX_CHECK_INTERVAL"] = "soon"
-	out := h.run("--json", "serve")
-	equal(t, "exit", out.exit, 1)
-	e := h.one(out.stdout, "error")
-	equal(t, "code", e["code"], "usage")
-	equal(t, "message", e["message"], "AGENTX_CHECK_INTERVAL soon is not a duration")
+	for _, v := range []string{"soon", "0s", "-5m"} {
+		h.env["AGENTX_CHECK_INTERVAL"] = v
+		out := h.run("--json", "serve")
+		equal(t, v+": exit", out.exit, 1)
+		e := h.one(out.stdout, "error")
+		equal(t, v+": code", e["code"], "usage")
+		equal(t, v+": message", e["message"], "AGENTX_CHECK_INTERVAL "+v+" is not a positive duration")
+	}
 	equal(t, "serve --once ignores it", h.serveOnce("--json").exit, 0)
 }
 

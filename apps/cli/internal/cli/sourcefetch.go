@@ -313,11 +313,19 @@ func refusalHint(st status) string {
 // exit code table would give it on its own, so that a warning names the
 // same cause an add would have failed with, credential-free.
 func fetchFailure(res source.Result) (message, hint string) {
+	f := fetchRefused(res)
+	return f.message, f.hint
+}
+
+// fetchRefused is fetchFailure as the refusal the fetch of that source
+// alone would end with, its exit code included: the source-level one for
+// an error the exit code table does not map.
+func fetchRefused(res source.Result) *failure {
 	var f *failure
 	if !errors.As(sourceFailure(res.Err, res.Source), &f) {
-		return res.Source.URL + ": " + res.Err.Error(), ""
+		return refuse(exitSource, res.Source.URL+": "+res.Err.Error(), "")
 	}
-	message = f.message
+	message := f.message
 	if !strings.Contains(message, res.Source.URL) {
 		// A local git failure is mapped by the exit code table alone, which
 		// knows no URL. In a run over several sources a warning that names
@@ -325,7 +333,7 @@ func fetchFailure(res source.Result) (message, hint string) {
 		// promises that the warnings name each failure.
 		message = res.Source.URL + ": " + message
 	}
-	return message, f.hint
+	return refuse(f.status, message, f.hint)
 }
 
 // sourcesToFetch resolves the command line to the sources to fetch: every

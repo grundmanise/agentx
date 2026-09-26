@@ -50,7 +50,7 @@ Only managed skills from a source you have added are checked, so a machine witho
 
 Checks run in the background: scans and requests are answered while a check waits on the network, and a check still running when the next one is due is not started twice. A source that cannot be reached is a warning starting `update check:`, and serve keeps running.
 
-To check more or less often, set `AGENTX_CHECK_INTERVAL` to a duration such as `10m` or `2h` before starting serve. Serve refuses to start with exit code 1 when it is not a duration.
+To check more or less often, set `AGENTX_CHECK_INTERVAL` to a duration such as `10m` or `2h` before starting serve. Serve refuses to start with exit code 1 when it is not a positive duration.
 
 Without `--json` serve prints one line per update:
 

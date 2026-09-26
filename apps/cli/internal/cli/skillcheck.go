@@ -290,15 +290,10 @@ func (inv *invocation) checkUpdates(ctx context.Context, wait, progress bool) (c
 	for _, res := range results {
 		recs := bySource[res.Source.URL]
 		if res.Err != nil {
-			// The message and hint the fetch of that source alone would
-			// fail with, and its exit code; a lock or a recovery is no one
-			// source's, and fetchSources has refused those already.
-			message, hint := fetchFailure(res)
-			st := exitSource
-			if f := (*failure)(nil); errors.As(sourceFailure(res.Err, res.Source), &f) {
-				st = f.status
-			}
-			run.failures = append(run.failures, checkFailure{source: res.Source.URL, skills: skillNamesOf(recs), f: refuse(st, message, hint)})
+			// What the fetch of that source alone would fail with; a lock or
+			// a recovery is no one source's, and fetchSources has refused
+			// those already.
+			run.failures = append(run.failures, checkFailure{source: res.Source.URL, skills: skillNamesOf(recs), f: fetchRefused(res)})
 			continue
 		}
 		fetched[res.Source.URL] = true
@@ -556,11 +551,6 @@ func (c *checkRun) writeCandidates(ctx context.Context, run string) error {
 	return nil
 }
 
-// errNothingRecorded ends the locked write of a check that has nothing to
-// write after all, so that the lock is released without the version file
-// being rewritten.
-var errNothingRecorded = errors.New("the update check has nothing to record")
-
 // recordCheck writes what the check found in one mutation under the lock,
 // the only hold of it after the network, and returns the lineage as the
 // mutation left it, the sources the settings hold, and the skills whose
@@ -630,16 +620,10 @@ func (inv *invocation) recordCheck(ctx context.Context, gitDir string, wait bool
 			}
 			live[fd.name] = rec
 		}
-		if m.Empty() {
-			return errNothingRecorded
-		}
 		applied := m.Apply(inv.refs(ctx))
 		journaled = m.Journaled()
 		return applied
 	})
-	if errors.Is(err, errNothingRecorded) {
-		err = nil
-	}
 	if err != nil {
 		return nil, nil, nil, journaled, mutationFailure(err)
 	}
