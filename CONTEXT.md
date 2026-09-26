@@ -136,11 +136,11 @@ The path inside one agent configuration's skills directory through which that cl
 _Avoid_: install, link, copy
 
 **Displaced placement**:
-A placement whose kind on disk is not the one agentx keeps for it: a real directory where a symlink is kept, or the symlink to the library directory where machine settings record a copy. Reported as drift, never repaired on its own.
+A placement whose kind on disk is not the one agentx keeps for it: a real directory where a symlink is kept, or the symlink to the library directory where machine settings record a copy. Reported as drift and never repaired on its own: a repair puts it back when the user asks, and replaces a directory whose content differs from the library only once the user chooses which of the two survives.
 _Avoid_: broken link, overwritten
 
 **Missing placement**:
-A placement a managed skill lacks in an enabled configuration: nothing is at that configuration's own placement path, whether the skill was never placed there or the placement went. Reported as drift, for information only. A universal client and a disabled configuration never have one.
+A placement a managed skill lacks in an enabled configuration: nothing is at that configuration's own placement path, whether the skill was never placed there or the placement went. Reported as drift, for information only; a repair places it again when the user asks. A universal client and a disabled configuration never have one.
 _Avoid_: unplaced, orphaned
 
 **Universal client**:
