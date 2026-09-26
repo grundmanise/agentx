@@ -78,10 +78,81 @@ func (sc skillContext) observationOf(inv *invocation, lib scan.LibrarySkill) obs
 }
 
 // placementDrift is what the configurations' own places say about a managed
-// skill. Only an enabled configuration with a skills directory of its own is
-// asked: a universal client's placement is the library entry itself, which
-// the skill cannot be missing from while it is in the library, and a
-// disabled configuration is one the user chose not to place into.
+// skill: the drift word of every place drift asks about, see ownPlaces and
+// ownPlace.drift, each once, sorted.
+//
+// The rule is literal: a skill placed with --to, or taken out of one
+// configuration with --from, is missing from every other enabled one, which
+// is what the word is there to say. It is information and never a failure.
+func (sc skillContext) placementDrift(inv *invocation, lib scan.LibrarySkill) []string {
+	var drift []string
+	for _, p := range ownPlaces(sc.targets, inv.dirs.Library, lib.Name, sc.disabled, sc.modes[lib.Name]) {
+		if !p.asked() {
+			continue
+		}
+		if word := p.drift(lib.Path); word != "" && !slices.Contains(drift, word) {
+			drift = append(drift, word)
+		}
+	}
+	sort.Strings(drift)
+	return drift
+}
+
+// ownPlace is one path a skill's placements are made at, and every
+// configuration whose own place it is. A universal client has none: its
+// placement is the library entry itself, which the skill cannot be missing
+// from while it is in the library.
+type ownPlace struct {
+	path    string
+	targets []placeTarget // the configurations whose own place it is, in detection order
+	enabled []string      // the ids of those of them the settings do not disable
+	copied  bool          // copy_mode records a copy for one of them, so the place is to hold a copy
+}
+
+// asked reports whether drift asks what the place holds: whether one of
+// the configurations whose own place it is is enabled.
+func (p ownPlace) asked() bool { return len(p.enabled) > 0 }
+
+// ownPlaces are the places of the skill called name, one per path, in the
+// order the configurations were detected, judged against the configurations
+// the settings disable and the ones copy_mode records a copy of the skill
+// for. Drift reads them, and a repair puts back what drift finds there.
+//
+// Only an enabled configuration is asked about: a disabled one is one the
+// user chose not to place into. A path two configurations share, as
+// Zencoder and Zenflow share one skills directory, is one place and is
+// judged once, as refreshCopies plans it once: it is asked about when
+// either configuration is enabled, and it is to hold a copy when copy_mode
+// records one for either of them, since a copy placed for one is the copy
+// the other reads. Judged for each configuration on its own, the copy
+// agentx placed for one would read as a directory displacing the other's
+// link.
+func ownPlaces(targets []placeTarget, library, name string, disabled, copies []string) []ownPlace {
+	var places []ownPlace
+	at := map[string]int{}
+	for _, t := range targets {
+		if t.readsLibrary {
+			continue
+		}
+		path := t.ownPlace(library, name)
+		i, seen := at[path]
+		if !seen {
+			i = len(places)
+			at[path] = i
+			places = append(places, ownPlace{path: path})
+		}
+		p := &places[i]
+		p.targets = append(p.targets, t)
+		if !slices.Contains(disabled, t.id) {
+			p.enabled = append(p.enabled, t.id)
+		}
+		p.copied = p.copied || slices.Contains(copies, t.id)
+	}
+	return places
+}
+
+// drift is what the place holds now, in the words of drift, the library
+// directory being libPath:
 //
 //   - Nothing at the place is missing: the configuration does not see the
 //     skill through a placement of its own.
@@ -91,63 +162,24 @@ func (sc skillContext) observationOf(inv *invocation, lib scan.LibrarySkill) obs
 //     still the copy and earns nothing here; see keepCopy.
 //   - A link of the user's to somewhere else, and anything else at the
 //     place, is theirs: the place is taken, so the skill is not missing,
-//     and nothing agentx keeps was displaced.
-//
-// A path two configurations share, as Zencoder and Zenflow share one
-// skills directory, is one place and is judged once, as refreshCopies
-// plans it once: it is asked about when either configuration is enabled,
-// and it is to hold a copy when copy_mode records one for either of them,
-// since a copy placed for one is the copy the other reads. Judged for each
-// configuration on its own, the copy agentx placed for one would read as a
-// directory displacing the other's link.
-//
-// The rule is literal: a skill placed with --to, or taken out of one
-// configuration with --from, is missing from every other enabled one, which
-// is what the word is there to say. It is information and never a failure.
-func (sc skillContext) placementDrift(inv *invocation, lib scan.LibrarySkill) []string {
-	copies := sc.modes[lib.Name]
-	var places []string // in the order the configurations were detected
-	asked := map[string]bool{}
-	copied := map[string]bool{}
-	for _, t := range sc.targets {
-		if t.readsLibrary {
-			continue
+//     and nothing agentx keeps was displaced. It earns "".
+func (p ownPlace) drift(libPath string) string {
+	info, err := os.Lstat(p.path)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return driftMissing
+	case err != nil:
+		// A place this machine cannot read says nothing either way.
+	case info.Mode()&os.ModeSymlink != 0:
+		if p.copied && sameTarget(p.path, libPath) {
+			return driftDisplaced
 		}
-		place := t.ownPlace(inv.dirs.Library, lib.Name)
-		if _, seen := asked[place]; !seen {
-			places = append(places, place)
-		}
-		asked[place] = asked[place] || !slices.Contains(sc.disabled, t.id)
-		copied[place] = copied[place] || slices.Contains(copies, t.id)
-	}
-	var drift []string
-	add := func(word string) {
-		if !slices.Contains(drift, word) {
-			drift = append(drift, word)
+	case info.IsDir():
+		if !p.copied {
+			return driftDisplaced
 		}
 	}
-	for _, place := range places {
-		if !asked[place] {
-			continue
-		}
-		info, err := os.Lstat(place)
-		switch {
-		case errors.Is(err, fs.ErrNotExist):
-			add(driftMissing)
-		case err != nil:
-			// A place this machine cannot read says nothing either way.
-		case info.Mode()&os.ModeSymlink != 0:
-			if copied[place] && sameTarget(place, lib.Path) {
-				add(driftDisplaced)
-			}
-		case info.IsDir():
-			if !copied[place] {
-				add(driftDisplaced)
-			}
-		}
-	}
-	sort.Strings(drift)
-	return drift
+	return ""
 }
 
 // driftOf is the drift list of a managed skill: the states of its
@@ -202,22 +234,30 @@ func (sc skillContext) absentManaged(libs []scan.LibrarySkill) []string {
 func (sc skillContext) absentWarnings(inv *invocation, libs []scan.LibrarySkill) []string {
 	var warnings []string
 	for _, name := range sc.absentManaged(libs) {
-		from := "<source>"
-		if rec := sc.records[name]; rec.HasImport {
-			from = shellWord(rec.Import.Source)
-		}
-		add := "'agentx skill add " + from + " --skill " + shellWord(name) + "'"
-		remove := "'" + skillCommand("remove", name) + "'"
-		libPath := quotedPath(inv.libraryPath(name))
-		if _, err := os.Lstat(inv.libraryPath(name)); err == nil {
-			warnings = append(warnings, name+" is managed in the account repo but "+libPath+" holds no SKILL.md;"+
-				" move "+libPath+" aside, then run "+add+" to install it again, or run "+remove+" to stop managing it")
-			continue
-		}
-		warnings = append(warnings, name+" is managed in the account repo but the library holds no skill directory for it;"+
-			" run "+add+" to install it again, or "+remove+" to stop managing it")
+		what, wayOut := sc.absentNotice(inv, name)
+		warnings = append(warnings, what+"; "+wayOut)
 	}
 	return warnings
+}
+
+// absentNotice is what is said of one managed skill the library no longer
+// holds, as absentWarnings says it: what is wrong, and the two ways out. A
+// command that cannot work on such a skill refuses with the same words,
+// the ways out as its hint.
+func (sc skillContext) absentNotice(inv *invocation, name string) (what, wayOut string) {
+	from := "<source>"
+	if rec := sc.records[name]; rec.HasImport {
+		from = shellWord(rec.Import.Source)
+	}
+	add := "'agentx skill add " + from + " --skill " + shellWord(name) + "'"
+	remove := "'" + skillCommand("remove", name) + "'"
+	libPath := quotedPath(inv.libraryPath(name))
+	if _, err := os.Lstat(inv.libraryPath(name)); err == nil {
+		return name + " is managed in the account repo but " + libPath + " holds no SKILL.md",
+			"move " + libPath + " aside, then run " + add + " to install it again, or run " + remove + " to stop managing it"
+	}
+	return name + " is managed in the account repo but the library holds no skill directory for it",
+		"run " + add + " to install it again, or " + remove + " to stop managing it"
 }
 
 // holdsVersion reports whether the directory at path holds exactly the

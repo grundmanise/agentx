@@ -106,15 +106,17 @@ func (inv *invocation) skipRefresh(done *placements, place string, err error) {
 	inv.out.warn("cannot refresh " + place + ": " + err.Error() + "; the copy was left as it is")
 }
 
-// stageRefresh lays the new content of one copy out beside it, from the
-// library directory staged for the same mutation, and reads it back as git
-// would record it: a copy that is not the version being placed never gets
-// published.
-func stageRefresh(m *home.Mutation, place, staged, target string) (string, string, error) {
+// stageRefresh lays the new content of the directory at place out beside
+// it, copied from the directory at from, and reads it back as git would
+// record it: content whose tree is not target never gets published. The
+// new content of a copy is copied from the library directory staged for
+// the same mutation; the new library directory of a repair that keeps a
+// displaced directory's content is copied from that directory.
+func stageRefresh(m *home.Mutation, place, from, target string) (string, string, error) {
 	fresh := m.Sibling(place, "staged")
 	err := os.MkdirAll(fresh, 0o755)
 	if err == nil {
-		err = copyTreeTo(staged, fresh)
+		err = copyTreeTo(from, fresh)
 	}
 	if err == nil {
 		err = home.SyncTree(fresh)
