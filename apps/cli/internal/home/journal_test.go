@@ -52,8 +52,9 @@ func (w warned) Warn(message string) { *w.messages = append(*w.messages, message
 // stopAfter writes the journal and applies the first n steps, which is what
 // a process killed at a durable boundary leaves behind: the journal on disk
 // and the live state somewhere in the middle of it. The steps are taken in
-// the order apply takes them, ref deletions last, so the states this walks
-// through are the states a killed process really leaves.
+// the order apply takes them, ref creations and moves first and ref
+// deletions last, so the states this walks through are the states a killed
+// process really leaves.
 func (m *Mutation) stopAfter(n int, u RefUpdater) error {
 	m.j.Progress = "staged"
 	if err := writeJournal(m.journalPath(), m.j); err != nil {
@@ -70,23 +71,17 @@ func (m *Mutation) stopAfter(n int, u RefUpdater) error {
 	return nil
 }
 
-// applyOrder is the journal's steps in the order apply runs them.
+// applyOrder is the journal's steps in the order apply runs them: the refs
+// it creates and moves, its path steps, then the refs it deletes.
 func (m *Mutation) applyOrder() []step {
-	if !refsGoLast(m.j.Steps) {
-		return m.j.Steps
-	}
-	ordered := make([]step, 0, len(m.j.Steps))
+	early, late := refPhases(m.j.Steps)
+	ordered := append([]step{}, early...)
 	for _, s := range m.j.Steps {
 		if s.Kind != stepRef {
 			ordered = append(ordered, s)
 		}
 	}
-	for _, s := range m.j.Steps {
-		if s.Kind == stepRef {
-			ordered = append(ordered, s)
-		}
-	}
-	return ordered
+	return append(ordered, late...)
 }
 
 func (m *Mutation) steps() int { return len(m.j.Steps) }
@@ -855,5 +850,211 @@ func TestReplacementRecoversFromEveryBoundary(t *testing.T) {
 				t.Errorf("the journal is still there after %d steps: %v", stop, left)
 			}
 		})
+	}
+}
+
+// newUpdate is a machine with one managed skill whose last update check
+// pinned a candidate: its import branch, the candidate ref, the library
+// directory holding the version the branch names, and a copy placement
+// holding the same. It is the state agentx skill update starts from.
+func newUpdate(t *testing.T, name string) (install, refs) {
+	t.Helper()
+	in, u := newInstall(t)
+	u[in.gitDir+" refs/heads/managed/"+name] = "c0ffee-" + name
+	u[in.gitDir+" refs/agentx/candidate/"+name] = "cand-" + name
+	for _, dir := range []string{filepath.Join(in.library, name), in.copyPlace(name)} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("one\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return in, u
+}
+
+// updateOf plans the update of one skill in the order agentx skill update
+// records it: the import branch moved from the version the library holds
+// to the candidate, the library directory and then the copy placement each
+// taken out of the way and filled with the candidate's version, and the
+// candidate ref deleted.
+func (in install) updateOf(t *testing.T, name, content string) *Mutation {
+	t.Helper()
+	m := NewMutation(in.dir)
+	m.Ref(in.gitDir, "refs/heads/managed/"+name, "c0ffee-"+name, "cand-"+name)
+	for _, live := range []string{filepath.Join(in.library, name), in.copyPlace(name)} {
+		old, err := State(live)
+		if err != nil {
+			t.Fatal(err)
+		}
+		staged := m.Sibling(live, "staged")
+		if err := os.MkdirAll(staged, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(staged, "SKILL.md"), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		fingerprint, err := Fingerprint(staged)
+		if err != nil {
+			t.Fatal(err)
+		}
+		m.Remove(live, old)
+		m.Publish(live, staged, fingerprint)
+	}
+	m.Ref(in.gitDir, "refs/agentx/candidate/"+name, "cand-"+name, "")
+	return m
+}
+
+// updated reports what of the update of the skill is not in place.
+func (in install) updated(t *testing.T, u refs, name, content string) []string {
+	t.Helper()
+	var missing []string
+	if u[in.gitDir+" refs/heads/managed/"+name] != "cand-"+name {
+		missing = append(missing, "the import branch at the candidate")
+	}
+	if u[in.gitDir+" refs/agentx/candidate/"+name] != "" {
+		missing = append(missing, "the deletion of the candidate ref")
+	}
+	for _, dir := range []string{filepath.Join(in.library, name), in.copyPlace(name)} {
+		if b, err := os.ReadFile(filepath.Join(dir, "SKILL.md")); err != nil || string(b) != content {
+			missing = append(missing, "the new content of "+dir)
+		}
+		entries, err := os.ReadDir(filepath.Dir(dir))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(entries) != 1 {
+			missing = append(missing, "an empty "+filepath.Dir(dir)+" beside "+filepath.Base(dir))
+		}
+	}
+	if journals, _ := Journals(in.dir); len(journals) > 0 {
+		missing = append(missing, "the removal of the journal")
+	}
+	return missing
+}
+
+// TestUpdateRecoversFromEveryBoundary stops an update after each step it
+// records, in the order apply takes them, and checks that recovery
+// finishes exactly what is left: the branch at the candidate, the library
+// directory and the copy holding the new version, nothing retained beside
+// them, and the candidate ref gone. Recovery is then run a second time,
+// which must repeat nothing.
+func TestUpdateRecoversFromEveryBoundary(t *testing.T) {
+	t.Parallel()
+	total := 0
+	{
+		in, _ := newUpdate(t, "alpha")
+		total = in.updateOf(t, "alpha", "two\n").steps()
+	}
+	for stop := 0; stop <= total; stop++ {
+		t.Run(fmt.Sprintf("after %d steps", stop), func(t *testing.T) {
+			t.Parallel()
+			in, u := newUpdate(t, "alpha")
+			m := in.updateOf(t, "alpha", "two\n")
+			if err := m.stopAfter(stop, u); err != nil {
+				t.Fatalf("stopping after %d steps: %v", stop, err)
+			}
+			for run := range 2 {
+				if err := recoverJournals(in.dir, u); err != nil {
+					t.Fatalf("recovery %d after %d steps: %v", run+1, stop, err)
+				}
+				if missing := in.updated(t, u, "alpha", "two\n"); len(missing) > 0 {
+					t.Errorf("recovery %d after %d steps: missing %s", run+1, stop, strings.Join(missing, ", "))
+				}
+			}
+		})
+	}
+}
+
+// orderedRefs records, at each transaction of a journal's refs, what the
+// library directory of the skill holds and whether the settings file was
+// written, so that a test can tell when each phase of refs ran against
+// the paths around it.
+type orderedRefs struct {
+	refs
+	lib, settings string
+	seen          *[]string
+}
+
+func (o orderedRefs) UpdateRefs(gitDir string, updates []RefUpdate) error {
+	b, _ := os.ReadFile(filepath.Join(o.lib, "SKILL.md"))
+	_, err := os.Stat(o.settings)
+	var names []string
+	for _, update := range updates {
+		verb := "move"
+		if update.New == "" {
+			verb = "delete"
+		}
+		names = append(names, verb+" "+update.Ref)
+	}
+	*o.seen = append(*o.seen, fmt.Sprintf("%s with the library holding %q and settings written %t", strings.Join(names, ", "), b, err == nil))
+	return o.refs.UpdateRefs(gitDir, updates)
+}
+
+// TestRefsMoveBeforeAndDeleteAfterThePaths is the order a journal that both
+// moves and deletes refs applies them in, as an update's does: the move of
+// the import branch is one transaction before any path step, and the
+// deletion of the candidate is another after every path step and the
+// state files.
+func TestRefsMoveBeforeAndDeleteAfterThePaths(t *testing.T) {
+	t.Parallel()
+	in, u := newUpdate(t, "alpha")
+	m := in.updateOf(t, "alpha", "two\n")
+	if err := m.ReplaceFile(in.settings, []byte("{}\n")); err != nil {
+		t.Fatal(err)
+	}
+	var seen []string
+	if err := m.Apply(orderedRefs{refs: u, lib: filepath.Join(in.library, "alpha"), settings: in.settings, seen: &seen}); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	want := []string{
+		`move refs/heads/managed/alpha with the library holding "one\n" and settings written false`,
+		`delete refs/agentx/candidate/alpha with the library holding "two\n" and settings written true`,
+	}
+	if strings.Join(seen, "\n") != strings.Join(want, "\n") {
+		t.Errorf("the ref transactions ran as\n%s\nwant\n%s", strings.Join(seen, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// TestUpdateKeepsItsCandidateWhenTheRemoveRefuses is why an update deletes
+// its candidate last. The library directory changes between the plan and
+// the apply, so the remove that would take it out of the way refuses: the
+// directory keeps the edit, the candidate ref still names the version the
+// update was applying, and the journal waits. The branch was moved before
+// the paths, as every move is. Once the directory holds what the update
+// captured again, recovery finishes it.
+func TestUpdateKeepsItsCandidateWhenTheRemoveRefuses(t *testing.T) {
+	t.Parallel()
+	in, u := newUpdate(t, "alpha")
+	m := in.updateOf(t, "alpha", "two\n")
+	skill := filepath.Join(in.library, "alpha", "SKILL.md")
+	if err := os.WriteFile(skill, []byte("edited meanwhile\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := m.Apply(u); !errors.Is(err, ErrRecovery) {
+		t.Fatalf("apply = %v, want it refused", err)
+	}
+	if got := u[in.gitDir+" refs/agentx/candidate/alpha"]; got != "cand-alpha" {
+		t.Errorf("the candidate ref holds %q after a refused update, want cand-alpha", got)
+	}
+	if got := u[in.gitDir+" refs/heads/managed/alpha"]; got != "cand-alpha" {
+		t.Errorf("the import branch holds %q, want it moved before the paths", got)
+	}
+	if b, err := os.ReadFile(skill); err != nil || string(b) != "edited meanwhile\n" {
+		t.Errorf("the library directory holds %q, %v, want the edit kept", b, err)
+	}
+	if left, _ := Journals(in.dir); len(left) != 1 {
+		t.Fatalf("%d journals left, want the refused one kept", len(left))
+	}
+
+	if err := os.WriteFile(skill, []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := recoverJournals(in.dir, u); err != nil {
+		t.Fatalf("recovery once the directory was restored: %v", err)
+	}
+	if missing := in.updated(t, u, "alpha", "two\n"); len(missing) > 0 {
+		t.Errorf("after recovery, missing %s", strings.Join(missing, ", "))
 	}
 }

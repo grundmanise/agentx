@@ -81,7 +81,7 @@ const updateAvailable = "update available"
 func newSkillCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "skill",
-		Short:       "Install, place, compare, revert, repair and remove skills, check them for updates, and list what the library holds",
+		Short:       "Install, place, compare, revert, repair, update and remove skills, check them for updates, and list what the library holds",
 		Annotations: map[string]string{annotationGroup: "true"},
 		Args:        cobra.NoArgs,
 		RunE:        needSubcommand(inv, "no skill command given", "run 'agentx skill --help' to list commands"),
@@ -93,6 +93,7 @@ func newSkillCommand(inv *invocation) *cobra.Command {
 	cmd.AddCommand(newSkillRevertCommand(inv))
 	cmd.AddCommand(newSkillRepairCommand(inv))
 	cmd.AddCommand(newSkillCheckCommand(inv))
+	cmd.AddCommand(newSkillUpdateCommand(inv))
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List the skills in the library with their upstream and placements",

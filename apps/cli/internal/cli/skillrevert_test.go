@@ -489,6 +489,15 @@ exec %GIT% "$@"
 // the journal directory, and which kills the revert where it chooses.
 func killedRevertBy(t *testing.T, h *harness, name, script string) string {
 	t.Helper()
+	return killedChild(t, h, "TestRevertChildProcess", revertChildEnv, name, script)
+}
+
+// killedChild runs the child process test, which reads the skill it works
+// on from the variable env, under a git wrapper whose body is script, as
+// killedRevertBy says, and returns what the child printed once the wrapper
+// killed it. The harness PATH is left as it was when the child is gone.
+func killedChild(t *testing.T, h *harness, test, env, name, script string) string {
+	t.Helper()
 	real, err := exec.LookPath("git")
 	if err != nil {
 		t.Fatal(err)
@@ -496,14 +505,14 @@ func killedRevertBy(t *testing.T, h *harness, name, script string) string {
 	path := h.env["PATH"]
 	defer func() { h.env["PATH"] = path }()
 	stubGit(t, h, "#!/bin/sh"+strings.NewReplacer("%MUTATIONS%", shellWord(filepath.Join(h.agentx, "mutations")), "%GIT%", real).Replace(script))
-	child := exec.Command(os.Args[0], "-test.run=^TestRevertChildProcess$", "-test.v")
-	child.Env = append(os.Environ(), revertChildEnv+"="+name)
+	child := exec.Command(os.Args[0], "-test.run=^"+test+"$", "-test.v")
+	child.Env = append(os.Environ(), env+"="+name)
 	for k, v := range h.env {
 		child.Env = append(child.Env, k+"="+v)
 	}
 	out, err := child.CombinedOutput()
 	if err == nil {
-		t.Fatalf("the revert was not killed:\n%s", out)
+		t.Fatalf("the child was not killed:\n%s", out)
 	}
 	return string(out)
 }
@@ -512,6 +521,8 @@ func killedRevertBy(t *testing.T, h *harness, name, script string) string {
 type journalStep struct {
 	Kind     string `json:"kind"`
 	Path     string `json:"path"`
+	Ref      string `json:"ref"`
+	Old      string `json:"old"`
 	New      string `json:"new"`
 	Staged   string `json:"staged"`
 	Retained string `json:"retained"`
