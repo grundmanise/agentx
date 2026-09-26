@@ -95,7 +95,7 @@ func (inv *invocation) skillDiff(ctx context.Context, name string) error {
 		return accountRepoFailure(err)
 	}
 	var files []fileDiff
-	if tree.ID != base.Tree {
+	if tree.ID != base.ID() {
 		written, err := lineage.WriteDir(ctx, inv.git, gitDir, lib.ResolvedPath, tree)
 		if errors.Is(err, lineage.ErrChanged) {
 			return fail(exitRefused, fmt.Sprintf("%s changed while agentx read it: %v", name, err), "run the command again")

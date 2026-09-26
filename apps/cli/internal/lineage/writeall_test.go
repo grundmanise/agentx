@@ -2,15 +2,18 @@ package lineage
 
 import (
 	"context"
+	"encoding/hex"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
+	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
 // TestWriteAllMatchesCommitTree is the guarantee the batch rests on: the
@@ -229,4 +232,95 @@ func requireGit(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not installed; the import tests need it")
 	}
+}
+
+// TestWriteTreesWritesCanonicalModes imports a version whose source stores
+// its trees in forms git reads but no longer writes: a file of mode 100664,
+// which ls-tree reads back as 100644, and a directory whose mode is padded
+// with a zero. Reused whole, such a tree would keep an id no directory on
+// disk could ever be compared equal to; the import tree is instead the one
+// the same files get from a git of today, which is what a library directory
+// holding them is compared with.
+func TestWriteTreesWritesCanonicalModes(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+	ctx := context.Background()
+	r, gitDir := newRepo(t)
+	blob := func(content string) string {
+		oid, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(content), "hash-object", "-t", "blob", "-w", "--stdin")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.TrimSpace(oid)
+	}
+	skill, notes, deep := blob("---\nname: alpha\n---\n"), blob("notes\n"), blob("deep\n")
+	// The canonical form: what update-index and write-tree make of the files.
+	canonical := skillTree(t, ctx, r, gitDir, map[string]string{
+		"SKILL.md": "---\nname: alpha\n---\n", "notes.md": "notes\n", "sub/deep.md": "deep\n",
+	}, "")
+
+	mktree := func(lines ...string) string {
+		out, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(strings.Join(lines, "\n")+"\n"), "mktree")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.TrimSpace(out)
+	}
+	sub := mktree("100664 blob " + deep + "\tdeep.md")
+	// mktree writes a directory's mode as 40000 whatever it is given, so the
+	// padded one is written byte for byte.
+	raw, err := hex.DecodeString(sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := "100644 SKILL.md\x00" + string(mustHex(t, skill)) + "100664 notes.md\x00" + string(mustHex(t, notes)) + "040000 sub\x00" + string(raw)
+	out, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(body), "hash-object", "-t", "tree", "--literally", "-w", "--stdin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := strings.TrimSpace(out)
+	if legacy == canonical.tree {
+		t.Fatal("the legacy tree has the canonical id; the fixture proves nothing")
+	}
+	entries, err := source.ReadTree(ctx, r, gitDir, legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// ls-tree lists both with the same modes: only the ids of the trees
+	// holding them differ.
+	listed := func(entries []source.TreeEntry) []string {
+		var lines []string
+		for _, e := range entries {
+			line := e.Mode + " " + e.Path
+			if e.Mode != source.DirMode {
+				line += " " + e.OID
+			}
+			lines = append(lines, line)
+		}
+		return lines
+	}
+	if got, want := listed(entries), listed(canonical.entries); !reflect.DeepEqual(got, want) {
+		t.Fatalf("ls-tree reads the legacy tree as\n%v\nnot as the canonical\n%v", got, want)
+	}
+
+	v := Version{
+		Import: Import{Source: "https://github.com/example/skills", Path: "skills/alpha", Commit: commitID, Hash: hashID},
+		Dir:    "alpha", Tree: legacy, Entries: entries, When: "1700000000 +0000",
+	}
+	roots, err := writeTrees(ctx, r, gitDir, []Version{v})
+	if err != nil {
+		t.Fatalf("writing the tree: %v", err)
+	}
+	if want := treeid.Wrap("alpha", canonical.tree); roots[0] != want {
+		t.Errorf("the import tree is %s, want %s: the skill under its canonical tree %s", roots[0], want, canonical.tree)
+	}
+}
+
+func mustHex(t *testing.T, id string) []byte {
+	t.Helper()
+	raw, err := hex.DecodeString(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
 }

@@ -140,7 +140,7 @@ A placement whose kind on disk is not the one agentx keeps for it: a real direct
 _Avoid_: broken link, overwritten
 
 **Missing placement**:
-An enabled configuration that holds nothing of a managed skill at its own placement path, whether the skill was never placed there or the placement went. Reported as drift, for information only. A universal client and a disabled configuration never have one.
+A placement a managed skill lacks in an enabled configuration: nothing is at that configuration's own placement path, whether the skill was never placed there or the placement went. Reported as drift, for information only. A universal client and a disabled configuration never have one.
 _Avoid_: unplaced, orphaned
 
 **Universal client**:

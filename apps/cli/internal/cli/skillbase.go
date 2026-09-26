@@ -66,7 +66,7 @@ func (inv *invocation) readLibraryTree(lib string) (treeid.Tree, error) {
 func baseBlobs(base lineage.Base) []string {
 	var ids []string
 	for _, e := range base.Entries {
-		if source.IsFileMode(e.Mode) || e.Mode == treeid.SymlinkMode {
+		if source.IsFileMode(e.Mode) || e.Mode == source.SymlinkMode {
 			ids = append(ids, e.OID)
 		}
 	}
@@ -103,7 +103,7 @@ func materialise(dest string, base lineage.Base, bodies map[string]string) error
 			return err
 		}
 		switch {
-		case e.Mode == treeid.SymlinkMode:
+		case e.Mode == source.SymlinkMode:
 			if err := os.Symlink(body, full); err != nil {
 				return err
 			}

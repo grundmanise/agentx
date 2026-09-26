@@ -135,6 +135,48 @@ func TestSkillRevertRefreshesOnlyUnchangedCopies(t *testing.T) {
 	}
 }
 
+// TestSkillRevertSkipsACopyItCannotRead: a copy placement this machine
+// cannot read whole can be judged neither unchanged nor edited, so it is
+// left as it is, counted as skipped and named with the cause, and the
+// revert of the library still lands.
+func TestSkillRevertSkipsACopyItCannotRead(t *testing.T) {
+	t.Parallel()
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a directory whatever its mode")
+	}
+	h, s := placementHarness(t)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--copy")
+	lib := filepath.Join(h.library, "alpha")
+	base := libraryTree(t, lib)
+	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	editLibrary(t, h, "alpha", "notes.md", "alpha notes, edited in the library\n")
+	scripts := filepath.Join(cursor, "scripts")
+	chmod(t, scripts, 0)
+	t.Cleanup(func() { _ = os.Chmod(scripts, 0o755) }) // so the temporary home can be removed
+
+	out := h.run("--json", "skill", "revert", "alpha")
+	chmod(t, scripts, 0o755)
+	if out.exit != 0 {
+		t.Fatalf("revert: exit %d\n%s", out.exit, out.stderr)
+	}
+	sameTree(t, "the library directory", libraryTree(t, lib), base)
+	sameTree(t, "cursor's copy", libraryTree(t, cursor), base)
+	var skipped []string
+	for _, w := range warnings(h, out.stderr) {
+		if strings.HasPrefix(w, "cannot refresh ") {
+			skipped = append(skipped, w)
+		}
+	}
+	if len(skipped) != 1 || !strings.HasPrefix(skipped[0], "cannot refresh "+cursor+": ") || !strings.HasSuffix(skipped[0], "; the copy was left as it is") {
+		t.Errorf("the warnings for a copy that cannot be refreshed = %q, want one naming %s", skipped, cursor)
+	}
+	contains(t, "the result", h.one(out.stdout, "result")["summary"].(string), ", 1 placement skipped")
+	equal(t, "journals", journalCount(t, h), 0)
+	for _, dir := range []string{h.library, filepath.Dir(cursor)} {
+		equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
+	}
+}
+
 // TestSkillRevertJudgesASharedCopyOnce reverts a skill whose copy two
 // configurations share: Zencoder and Zenflow both read ~/.zencoder/skills,
 // and copy_mode records a copy for each of them. The one copy is judged
@@ -239,6 +281,47 @@ func TestSkillRevertRefusesWhatGitCannotRecord(t *testing.T) {
 	equal(t, "message", e["message"], "pdf holds "+nested+", which git cannot record")
 	sameTree(t, "the library directory", libraryTree(t, lib), before)
 	equal(t, "journals", journalCount(t, h), 0)
+}
+
+// TestSkillRevertRefusesALibraryEntryThatIsASymlink: a library entry the
+// user made a symlink to a directory of their own leads to the files they
+// edit. A revert replaces the entry, so it would drop the link and leave
+// every edit where the link led; it refuses instead and discards nothing,
+// and the link still leads where it did.
+func TestSkillRevertRefusesALibraryEntryThatIsASymlink(t *testing.T) {
+	t.Parallel()
+	h, _ := driftHarness(t)
+	lib := filepath.Join(h.library, "pdf")
+	dev := filepath.Join(h.home, "dev-pdf")
+	if err := os.Rename(lib, dev); err != nil {
+		t.Fatal(err)
+	}
+	link(t, dev, lib)
+	writeFile(t, filepath.Join(dev, "a.md"), "edited\n")
+	equal(t, "state", h.listed("pdf")["state"], stateModified)
+
+	out := h.run("--json", "skill", "revert", "pdf")
+	equal(t, "exit", out.exit, 6)
+	e := h.one(out.stdout, "error")
+	equal(t, "message", e["message"], lib+" is a symlink to "+dev+
+		"; a revert replaces the library directory and would drop the link without touching the files it leads to")
+	equal(t, "hint", e["hint"], "replace the link with the directory it points to, then run 'agentx skill revert pdf' again,"+
+		" or put the files back by hand: 'agentx skill diff pdf' shows what differs")
+	target, err := os.Readlink(lib)
+	if err != nil {
+		t.Fatalf("the library entry is no longer a link: %v", err)
+	}
+	equal(t, "where the link leads", target, dev)
+	equal(t, "a.md", fileBody(t, filepath.Join(dev, "a.md")), "edited\n")
+	equal(t, "journals", journalCount(t, h), 0)
+	equal(t, "what is left beside the library", strings.Join(hiddenEntries(t, h.library), " "), "")
+
+	// A link whose directory holds the base has nothing to revert.
+	writeFile(t, filepath.Join(dev, "a.md"), "the same bytes\n")
+	contains(t, "a revert of a current skill", h.mustRun("skill", "revert", "pdf").stdout, "nothing was reverted")
+	if _, err := os.Readlink(lib); err != nil {
+		t.Errorf("the library entry is no longer a link: %v", err)
+	}
 }
 
 // TestSkillRevertGuardsAnEditMadeWhileItRuns: what a revert discards is

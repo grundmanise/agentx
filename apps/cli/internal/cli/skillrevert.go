@@ -75,6 +75,16 @@ func (inv *invocation) skillRevert(ctx context.Context, name string) error {
 	if rec.Current(edited) {
 		return inv.reportReverted(ctx, name, against, nil)
 	}
+	// A library entry that is a symlink leads to the directory the user
+	// edits, which is not the library's to replace: the mutation replaces
+	// the entry itself, so it would drop the link, leave every edit where
+	// the link led, and report the skill as reverted. Laying the base out
+	// where the link leads instead would stage and sweep in a directory
+	// outside the library, perhaps one another tool keeps.
+	if target, isLink := home.LinkTarget(captured); isLink {
+		return fail(exitRefused, fmt.Sprintf("%s is a symlink to %s; a revert replaces the library directory and would drop the link without touching the files it leads to", quotedPath(libPath), quotedPath(target)),
+			"replace the link with the directory it points to, then run '"+skillCommand("revert", name)+"' again, or put the files back by hand: '"+skillCommand("diff", name)+"' shows what differs")
+	}
 	base, err := lineage.ReadBase(ctx, inv.git, gitDir, rec)
 	if err != nil {
 		return accountRepoFailure(err)
@@ -83,6 +93,7 @@ func (inv *invocation) skillRevert(ctx context.Context, name string) error {
 	if err != nil {
 		return accountRepoFailure(err)
 	}
+	target := base.ID() // the tree the base has laid out on disk
 	var done placements
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		// Every input is read again under the lock: the branch the base came
@@ -122,7 +133,7 @@ func (inv *invocation) skillRevert(ctx context.Context, name string) error {
 		done = placements{}
 		m := home.NewMutation(inv.dirs.Home)
 		staged := m.Sibling(libPath, "staged")
-		fingerprint, err := stageBase(staged, base, bodies)
+		fingerprint, err := stageBase(staged, base, target, bodies)
 		if err != nil {
 			os.RemoveAll(staged)
 			return libraryFailure(inv.dirs.Library, err)
@@ -133,7 +144,7 @@ func (inv *invocation) skillRevert(ctx context.Context, name string) error {
 		m.Ref(gitDir, lineage.ManagedRef(name), rec.Commit, rec.Commit)
 		m.Remove(libPath, captured)
 		m.Publish(libPath, staged, fingerprint)
-		inv.refreshCopies(m, name, base.Tree, []string{edited.ID}, staged, recorded, &done)
+		inv.refreshCopies(m, name, target, []string{edited.ID}, staged, recorded, &done)
 		return m.Apply(inv.refs(ctx))
 	})
 	if err != nil {
@@ -143,9 +154,10 @@ func (inv *invocation) skillRevert(ctx context.Context, name string) error {
 }
 
 // stageBase lays the base version out at staged and reads it back as git
-// would record it: a directory that is not the base version never gets
-// published. It returns the fingerprint the publish step expects.
-func stageBase(staged string, base lineage.Base, bodies map[string]string) (string, error) {
+// would record it: a directory that is not the base version, whose tree is
+// target, never gets published. It returns the fingerprint the publish
+// step expects.
+func stageBase(staged string, base lineage.Base, target string, bodies map[string]string) (string, error) {
 	if err := materialise(staged, base, bodies); err != nil {
 		return "", err
 	}
@@ -156,8 +168,8 @@ func stageBase(staged string, base lineage.Base, bodies map[string]string) (stri
 	if err != nil {
 		return "", err
 	}
-	if tree.ID != base.Tree {
-		return "", fmt.Errorf("the base version staged at %s holds tree %s, not %s", staged, tree.ID, base.Tree)
+	if tree.ID != target {
+		return "", fmt.Errorf("the base version staged at %s holds tree %s, not %s", staged, tree.ID, target)
 	}
 	return home.Fingerprint(staged)
 }

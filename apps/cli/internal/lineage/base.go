@@ -57,6 +57,18 @@ type Base struct {
 	Entries []source.TreeEntry
 }
 
+// ID is the id git gives the base version's directory as it writes a tree
+// today, computed in process from the entries. For a base an import writes
+// now it is Tree itself, since every import tree is written that way. A
+// base an earlier import reused whole from a source that stores a mode git
+// no longer writes, such as 100664, keeps an id of its own in Tree, while
+// the directory laid out from it, like any directory on disk, has this one.
+// So a command that lays the base out holds what it laid out to ID, and a
+// diff, which git reads with canonical modes, compares with Tree.
+func (b Base) ID() string {
+	return newTreePlan(Version{Tree: b.Tree, Entries: b.Entries}).ids[""]
+}
+
 // ReadBase reads the base version of a managed skill out of its import
 // commit in one ls-tree: the commit's one entry, the upstream directory,
 // and everything below it with that directory's name taken off, so that

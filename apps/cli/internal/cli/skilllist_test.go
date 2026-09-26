@@ -143,9 +143,11 @@ func TestSkillListSpawnsOneGitProcess(t *testing.T) {
 // for skills that differ every way drift reads: one edited, a file of it
 // made executable too, one whose link became a real directory in one
 // configuration and whose placement is gone from another, and a skill of
-// the user's own beside them. Whether a skill is modified, displaced or
-// missing is read in process, so the listing still runs one for-each-ref,
-// and so does the snapshot.
+// the user's own beside them, and a managed branch whose library directory
+// is gone and whose commit carries no lineage, which a warning names with
+// <source> for the source it cannot name. Whether a skill is modified,
+// displaced, missing or gone is read in process, so the listing still runs
+// one for-each-ref, and so does the snapshot.
 func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -157,6 +159,7 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	copyTree(t, filepath.Join(h.library, "beta"), claude)
 	remove(t, filepath.Join(h.home, ".cursor", "skills", "beta"))
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "mine"), "SKILL.md"), skill("mine", "A skill of my own"))
+	h.accountGit("update-ref", "refs/heads/managed/ghost", h.accountGit("commit-tree", "refs/heads/managed/beta^{tree}", "-m", "no lineage"))
 	equal(t, "alpha's state", h.listed("alpha")["state"], stateModified)
 	equal(t, "beta's drift", drift(h.listed("beta")), "displaced,missing")
 
@@ -175,7 +178,9 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 		}
 		equal(t, what+": for-each-ref calls", refs, 1)
 	}
-	h.mustRun("skill", "list")
+	ghost := "ghost is managed in the account repo but the library holds no skill directory for it;" +
+		" run 'agentx skill add <source> --skill ghost' to install it again, or 'agentx skill remove ghost' to stop managing it"
+	equal(t, "skill list's warning", h.mustRun("skill", "list").stderr, "warning: "+ghost+"\n")
 	count("skill list", calls())
 	before := len(calls())
 	snap := h.snapshot(t)
@@ -187,6 +192,7 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	}
 	equal(t, "alpha in the snapshot", states["alpha"], stateModified+" ")
 	equal(t, "beta in the snapshot", states["beta"], stateCurrent+" displaced,missing")
+	contains(t, "the snapshot's warnings", fmt.Sprint(snap["warnings"]), ghost)
 }
 
 // TestSkillListSanitisesTheNameAndTheUpstream covers a library directory
