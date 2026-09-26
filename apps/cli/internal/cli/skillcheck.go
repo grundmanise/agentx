@@ -94,15 +94,21 @@ type finding struct {
 type checkFailure struct {
 	source string   // the canonical URL of the source, the one the skill came from for a skill's failure
 	skill  bool     // the failure is the one skill's that skills names, not its source's
-	skills []string // the skills left unchecked, by name
+	fetch  bool     // the source could not be fetched at all, which the serve child reports once per cause
+	skills []string // the skills left unchecked, by name; none for a source no managed skill came from
 	f      *failure
 }
 
 // warning is the line a failure is reported with, naming what it left
-// unchecked: the source and its skills, or the skill.
+// unchecked: the source and its skills, or the skill. A source no managed
+// skill came from, which only the serve child fetches, leaves no skill
+// unchecked and is named alone.
 func (cf checkFailure) warning() string {
-	if cf.skill {
+	switch {
+	case cf.skill:
 		return cf.skills[0] + ": " + cf.f.message
+	case len(cf.skills) == 0:
+		return cf.f.message
 	}
 	return cf.f.message + "; not checked: " + strings.Join(cf.skills, ", ")
 }
@@ -116,13 +122,13 @@ type removedSkill struct {
 // checkReport is what one update check found and did, for skill check to
 // print and for the serve child to emit.
 type checkReport struct {
-	idle     bool // no managed skill comes from a source this machine has, or every one the check set out to fetch was removed while it ran
-	fetched  int  // the sources that were fetched and that the settings still hold
-	checked  int  // the managed skills the check recorded a verdict for
-	updates  []updateAvailableEvent
-	removed  []removedSkill
-	failures []checkFailure
-	notes    []string // what a candidate the check moved leaves out or calls otherwise
+	idle      bool            // nothing to fetch: no managed skill comes from a source this machine has, no source at all for the serve child, or every one the check set out to fetch was removed while it ran
+	refreshed map[string]bool // the sources that were fetched and that the settings still hold, by canonical URL
+	checked   int             // the managed skills the check recorded a verdict for
+	updates   []updateAvailableEvent
+	removed   []removedSkill
+	failures  []checkFailure
+	notes     []string // what a candidate the check moved leaves out or calls otherwise
 }
 
 // skillCheck is agentx skill check: the update check, printed, and every
@@ -130,7 +136,7 @@ type checkReport struct {
 // several sources answers with. What it could check is reported and pinned
 // all the same.
 func (inv *invocation) skillCheck(ctx context.Context) error {
-	rep, err := inv.checkUpdates(ctx, false, true)
+	rep, err := inv.checkUpdates(ctx, false)
 	if err != nil {
 		return err
 	}
@@ -160,7 +166,7 @@ func (inv *invocation) skillCheck(ctx context.Context) error {
 // summary is the line that says what the check found, the one its text
 // output starts with.
 func (rep checkReport) summary() string {
-	line := fmt.Sprintf("checked %s from %s: ", plural(rep.checked, "skill"), plural(rep.fetched, "source"))
+	line := fmt.Sprintf("checked %s from %s: ", plural(rep.checked, "skill"), plural(len(rep.refreshed), "source"))
 	switch n := len(rep.updates); n {
 	case 0:
 		line += "no update available"
@@ -182,7 +188,7 @@ func (rep checkReport) summary() string {
 // warnings alone.
 func (inv *invocation) printCheck(rep checkReport) {
 	out := inv.out
-	if rep.fetched > 0 || len(rep.failures) == 0 {
+	if len(rep.refreshed) > 0 || len(rep.failures) == 0 {
 		out.done(rep.summary())
 	}
 	for _, ev := range rep.updates {
@@ -249,9 +255,15 @@ func checkRefusal(failures []checkFailure) error {
 // skill's base version with what its source holds now by tree id, writes
 // the import commit of every newer version outside the lock, then records
 // what it found in one mutation: the candidate and upstream-removed refs
-// and last_fetched. Nothing is applied to the library. wait takes the lock
-// as the serve child does, and progress reports a progress event per
-// source.
+// and last_fetched. Nothing is applied to the library.
+//
+// serving is the serve child's check, which differs in three ways. It
+// fetches every source of the settings, a source no skill was installed
+// from included, so that each tick refreshes them all in this one pass,
+// each fetched once, and the source index serve answers searches from
+// follows them. It takes the lock as the serve child does, waiting for a
+// holder. And it reports no progress, where skill check reports a progress
+// event per source.
 //
 // A source the settings no longer hold is not fetched and its skills are
 // left as they are, candidate and marker included: nothing names it to
@@ -259,13 +271,13 @@ func checkRefusal(failures []checkFailure) error {
 // not be fetched, and a skill whose newer version cannot be imported, are
 // failures in the report and cost nothing else: every other source is still
 // fetched, compared and recorded.
-func (inv *invocation) checkUpdates(ctx context.Context, wait, progress bool) (checkReport, error) {
+func (inv *invocation) checkUpdates(ctx context.Context, serving bool) (checkReport, error) {
 	var rep checkReport
 	s, err := inv.loadSettings()
 	if err != nil {
 		return rep, err
 	}
-	if len(s.Sources) == 0 { // nothing can be checked, and nothing is spawned to find that out
+	if len(s.Sources) == 0 { // nothing can be checked or refreshed, and nothing is spawned to find that out
 		rep.idle = true
 		return rep, nil
 	}
@@ -284,7 +296,7 @@ func (inv *invocation) checkUpdates(ctx context.Context, wait, progress bool) (c
 	bySource := inv.checkable(records, s)
 	var targets []fetchTarget
 	for _, entry := range s.Sources {
-		if len(bySource[entry.URL]) > 0 {
+		if serving || len(bySource[entry.URL]) > 0 {
 			targets = append(targets, target(entry))
 		}
 	}
@@ -292,19 +304,19 @@ func (inv *invocation) checkUpdates(ctx context.Context, wait, progress bool) (c
 		rep.idle = true
 		return rep, nil
 	}
-	results, err := inv.fetchSources(ctx, gitDir, targets, wait, progress)
+	results, err := inv.fetchSources(ctx, gitDir, targets, serving, !serving)
 	if err != nil {
 		return rep, err
 	}
 	run := &checkRun{inv: inv, gitDir: gitDir, owners: map[*imported][]lineage.Record{}}
 	fetched := map[string]bool{}
 	for _, res := range results {
-		recs := bySource[res.Source.URL]
+		recs := bySource[res.Source.URL] // none for a source only the serve child fetches
 		if res.Err != nil {
 			// What the fetch of that source alone would fail with; a lock or
 			// a recovery is no one source's, and fetchSources has refused
 			// those already.
-			run.failures = append(run.failures, checkFailure{source: res.Source.URL, skills: skillNamesOf(recs), f: fetchRefused(res)})
+			run.failures = append(run.failures, checkFailure{source: res.Source.URL, fetch: true, skills: skillNamesOf(recs), f: fetchRefused(res)})
 			continue
 		}
 		fetched[res.Source.URL] = true
@@ -314,7 +326,7 @@ func (inv *invocation) checkUpdates(ctx context.Context, wait, progress bool) (c
 	if err := run.writeCandidates(ctx, importing); err != nil {
 		return rep, err
 	}
-	live, added, moved, journaled, err := inv.recordCheck(ctx, gitDir, wait, run.findings, fetched, records)
+	live, added, moved, journaled, err := inv.recordCheck(ctx, gitDir, serving, run.findings, fetched, records)
 	if !journaled || err == nil {
 		// Recovery of a journal that could not be finished needs the
 		// commits the staging refs hold; otherwise they are what the
@@ -328,9 +340,10 @@ func (inv *invocation) checkUpdates(ctx context.Context, wait, progress bool) (c
 	// neither is a fetch or a read of it that failed: the removal takes the
 	// source's remote and staging refs away, which is often what made it
 	// fail, and the check leaves the skills of a removed source alone.
+	rep.refreshed = map[string]bool{}
 	for url := range fetched {
 		if added[url] {
-			rep.fetched++
+			rep.refreshed[url] = true
 		}
 	}
 	for _, cf := range run.failures {
@@ -338,7 +351,7 @@ func (inv *invocation) checkUpdates(ctx context.Context, wait, progress bool) (c
 			rep.failures = append(rep.failures, cf)
 		}
 	}
-	if rep.fetched == 0 && len(rep.failures) == 0 { // every source it set out to check was removed meanwhile
+	if len(rep.refreshed) == 0 && len(rep.failures) == 0 { // every source it set out to check was removed meanwhile
 		rep.idle = true
 		return rep, nil
 	}

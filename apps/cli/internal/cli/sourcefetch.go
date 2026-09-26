@@ -51,7 +51,8 @@ func newSourceFetchCommand(inv *invocation) *cobra.Command {
 // sourceFetch re-fetches the named sources, or every one of them, in
 // parallel and outside the lock, then records what moved in one settings
 // write. It is the manual refresh of a source no skill was installed from,
-// which nothing else updates.
+// which skill check does not fetch and the serve child fetches only on the
+// timer of its update check.
 func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool) error {
 	targets, err := inv.sourcesToFetch(ctx, args, all)
 	if err != nil {

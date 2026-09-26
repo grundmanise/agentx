@@ -266,14 +266,35 @@ func contains(t *testing.T, what, text, sub string) {
 // Every wait is on a channel or a pipe read, never a sleep: send writes a
 // request line, next reads the next stdout event, close ends stdin and
 // cancelRun ends the context; both return the exit code once Run returned.
+// stderr can be read while serve runs, which is how a test waits for a log
+// line that no stdout event announces.
 type serveProc struct {
 	t      *testing.T
 	stdin  *os.File
 	lines  chan string
 	done   chan struct{} // closed once Run returned
 	exit   int           // read only after done
-	stderr bytes.Buffer  // read only after done
+	stderr lockedBuffer
 	cancel context.CancelFunc
+}
+
+// lockedBuffer is a bytes.Buffer that one goroutine can write while another
+// reads it.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
 
 const serveDeadline = 10 * time.Second
