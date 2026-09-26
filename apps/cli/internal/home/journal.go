@@ -628,7 +628,7 @@ func Recover(ctx context.Context, dir string, u RefUpdater) error {
 	if err != nil {
 		return err
 	}
-	defer lock.Close()
+	defer Unlock(lock)
 	return recoverJournals(dir, u)
 }
 

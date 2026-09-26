@@ -44,28 +44,33 @@ import (
 // to remove nor what it was to become, and would stop the mutation part
 // way through, and a second warning would count one copy twice. So is a
 // path two configurations spell differently, one of their skills
-// directories a symlink to the other's: paths are told apart by
-// canonicalPath. Each configuration whose copy is refreshed is still
+// directories a symlink to the other's, the link's own spelling in another
+// case included: paths are told apart as placeKey tells them, as drift
+// tells places apart. Each configuration whose copy is refreshed is still
 // named, as a placement names each configuration it placed into.
 //
 // Every copy removed carries the fingerprint it held when it was judged,
 // so a copy edited between this plan and the step that removes it stops
 // the mutation rather than being discarded.
 func (inv *invocation) refreshCopies(m *home.Mutation, name, target string, placed []string, placedBytes, staged string, recorded []string, done *placements) {
-	refreshed := map[string]bool{} // by canonicalPath, every path judged, true when its copy is refreshed
+	type judged struct {
+		key   placeKey
+		fresh bool // its copy is refreshed
+	}
+	var seen []judged // every path judged
 	for _, t := range inv.detectedTargets() {
 		if t.readsLibrary || !slices.Contains(recorded, t.id) {
 			continue
 		}
 		place := t.ownPlace(inv.dirs.Library, name)
-		key := canonicalPath(place)
-		if fresh, judged := refreshed[key]; judged {
-			if fresh {
+		key := keyOf(place)
+		if i := slices.IndexFunc(seen, func(j judged) bool { return j.key.is(key) }); i >= 0 {
+			if seen[i].fresh {
 				done.copies = append(done.copies, t.id)
 			}
 			continue
 		}
-		refreshed[key] = inv.refreshCopy(m, t, place, name, target, placed, placedBytes, staged, done)
+		seen = append(seen, judged{key, inv.refreshCopy(m, t, place, name, target, placed, placedBytes, staged, done)})
 	}
 }
 
