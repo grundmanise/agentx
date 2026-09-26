@@ -69,7 +69,7 @@ _Avoid_: origin, parent, remote
 A skill whose upstream and base version agentx knows, so it can be updated and reverted. Its base version is the import commit on its import branch.
 
 **Upstream-removed skill**:
-A managed skill whose subpath no longer exists in its source. Kept as it is, never updated, shown with this state.
+A managed skill whose subpath no longer holds a skill in its source, as the last update check found it: no directory there, or one without a SKILL.md. Kept as it is, never updated, shown with this state until a check finds it in the source again.
 _Avoid_: orphaned, dead
 
 **Source-removed skill**:
@@ -114,6 +114,14 @@ _Avoid_: cloud, server, origin
 **Publish**:
 An explicit user action that pushes one fork's or greenfield skill's branch from the account repo to the account remote. After publishing it is an upstream like any other and reaches other machines through install and update. Local commits happen on their own; publishing does not.
 _Avoid_: sync, share, upload
+
+**Update check**:
+Fetching the sources the managed skills came from and comparing each skill's base version with what its source holds now, by tree id. It records what it found and never applies anything: a newer version becomes the skill's update candidate. Run by hand, and by the desktop app on launch and on a timer.
+_Avoid_: sync, poll
+
+**Update candidate**:
+The import commit of the newer upstream version an update check found for a managed skill, pinned in the account repo until the user takes the update or a later check finds another version or none. The same commit an install of that version writes.
+_Avoid_: pending update, available version
 
 **Modified skill**:
 A managed skill whose on-disk content no longer matches its base version because it was edited outside agentx, by hand or by any other tool. Decided by comparing the library directory's git tree with the base version's, so a changed file mode or symlink counts as an edit. Shown as drift, local to one machine, never synced. Can be reverted or converted to a fork.

@@ -38,6 +38,26 @@ With `--json`, serve also tells you when a skill in your library changes state. 
 
 A `drift` line is a notification: the snapshot before it already holds the skill as it now is. The first snapshot, and a skill that is new in the library or gone from it, bring no `drift` line. If a managed skill's directory is deleted from the library, the snapshot's `warnings` names the skill, with the commands that install it again or stop managing it; see [A skill whose library directory is gone](/cli/skill#a-skill-whose-library-directory-is-gone).
 
+## Update checks
+
+Serve checks your managed skills for updates as [`agentx skill check`](/cli/skill#check-for-updates) does: once when it starts, right after the first snapshot, and then every thirty minutes. With `--json`, each check prints one `update_available` line per skill that has an update, the same event `skill check` prints, with serve's `instance_id` added:
+
+```json
+{"type":"update_available","schema_version":1,"instance_id":"...","name":"pdf","kind":"managed","source":"https://github.com/anthropics/skills","subpath":"skills/pdf",...,"files":[{"path":"SKILL.md","status":"modified"}]}
+```
+
+Only managed skills from a source you have added are checked, so a machine without any has nothing to check and serve fetches nothing. Every check lists every available update again, so the lines repeat until you take an update. A check records what it found, so the snapshot that follows shows each skill's `candidate` and any `upstream removed` state. Nothing is ever applied.
+
+Checks run in the background: scans and requests are answered while a check waits on the network, and a check still running when the next one is due is not started twice. A source that cannot be reached is a warning starting `update check:`, and serve keeps running.
+
+To check more or less often, set `AGENTX_CHECK_INTERVAL` to a duration such as `10m` or `2h` before starting serve. Serve refuses to start with exit code 1 when it is not a duration.
+
+Without `--json` serve prints one line per update:
+
+```text
+update pdf: 3f2a9c1 -> 8b1e0f4, 2 files
+```
+
 ## Ask for a fresh snapshot
 
 Write one JSON line to its stdin:
@@ -80,7 +100,7 @@ search 1: 3 results
 agentx serve --once --json
 ```
 
-Scans once, prints the snapshot and exits. It shows what the app receives on start; for an inventory to read, `agentx scan` prints the same snapshot. With nothing to compare against, it prints no `drift` line.
+Scans once, prints the snapshot and exits. It shows what the app receives on start; for an inventory to read, `agentx scan` prints the same snapshot. With nothing to compare against, it prints no `drift` line, and it runs no update check.
 
 ## One serve per home
 

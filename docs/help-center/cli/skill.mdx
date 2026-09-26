@@ -1,6 +1,6 @@
 ---
 title: "agentx skill"
-description: "Install skills from a source into your library, place them in your agent clients, see and revert what you changed, repair their placements, remove them again, and see what you have."
+description: "Install skills from a source into your library, place them in your agent clients, see and revert what you changed, repair their placements, check for updates, remove them again, and see what you have."
 ---
 
 Your library is one directory, `~/.agents/skills`, that holds every skill agentx manages for you. Installing a skill puts it there once and links it into each agent client, so every client sees the same files and an update reaches all of them at once.
@@ -323,6 +323,8 @@ Each row shows the skill, what agentx knows about it, how it stands against the 
 - `displaced`: a client that should see the skill through a link from its own skills directory has a real directory there instead, which is what an installer that copies over links leaves. For a client you placed a copy in, it is the other way round: a link to the library where the copy should be. Put it back with [`agentx skill repair <name>`](#repair-placements).
 - `missing`: an enabled client has nothing of the skill in its own skills directory, because you placed the skill with `--to`, removed it with `--from`, or the placement was deleted. Place it in one client with `agentx skill place <name> --to <client>`, or in every client it is missing from with [`agentx skill repair <name>`](#repair-placements). Universal clients and disabled clients are never missing a skill.
 - `source removed`: the source the skill came from is no longer added on this machine. The skill keeps working, stays where it is and keeps its record of where it came from. Add the source again to clear it: see below.
+- `upstream removed`: the last [update check](#check-for-updates) found the skill gone from its source. The skill stays as it is and is never updated. The next check that finds it back in the source clears the state.
+- `update available`: the last update check found a newer version of the skill in its source. Nothing changed in your library; read the update with `agentx skill diff <name> --upstream`.
 
 A skill can be in more than one state at once, so the row names each of them: `modified, source removed` is a skill you edited whose source you then removed. `displaced` and `missing` are information only: they never make a command fail.
 
@@ -499,6 +501,76 @@ hint: make ~/.cursor/skills a directory outside ~/.claude/skills/pdf, then run '
 
 If a directory your library reaches cannot be read, or the links in your library lead to more than 100,000 files and directories, for example a link to your home directory, agentx cannot check them all, so `skill repair` stops with exit code 6 and changes nothing. Replace the link it names with the files it leads to, then repair again.
 
+## Check for updates
+
+Look for newer versions of the skills you installed:
+
+```sh
+agentx skill check
+```
+
+```text
+✓ checked 3 skills from 2 sources: 1 update available
+  pdf  update available  3f2a9c1 -> 8b1e0f4  2 files
+    modified  SKILL.md
+    added     forms.md
+Read an update with agentx skill diff <name> --upstream.
+```
+
+agentx fetches every source your managed skills came from, once each and a few at a time, with your own git, so the credential helper, SSH key and URL rewrites you use in a terminal apply. It then compares each skill with what its source holds now and lists every skill that has a newer version, with the files that version changes. Paths are relative to the skill's directory.
+
+Nothing is applied. Your library, your clients and your edits stay exactly as they were. agentx records the newer version it found so that you can read it, and so that `agentx skill list` shows `update available` for the skill:
+
+```text
+1 skill
+  pdf  managed  current, update available  https://github.com/anthropics/skills/skills/pdf  4 placements
+```
+
+Run the check again whenever you like. It lists every update available, including the ones an earlier check found, and a newer version upstream replaces the one found before. A change that does not reach your library, such as a symlink in the source, which agentx never installs, is not an update. If a newer version gives the skill another name, the check says so; the skill keeps the name you installed it under.
+
+The [desktop app's background process](/cli/serve#update-checks) runs the same check when it starts and every thirty minutes.
+
+### Read an update
+
+Show what an update changes, file by file:
+
+```sh
+agentx skill diff pdf --upstream
+```
+
+```text
+the update of pdf at 8b1e0f4 differs from its base version at 3f2a9c1 in 2 files
+diff --git a/SKILL.md b/SKILL.md
+...
+```
+
+The diff compares the version you installed with the version the last check found. It leaves out your own edits, which `agentx skill diff pdf` shows, and it needs no network. If no check has found an update for the skill, the command stops with exit code 6 and tells you to run `agentx skill check`.
+
+### A skill its source no longer holds
+
+If a skill's directory is deleted from its source, or loses its `SKILL.md`, the check says so:
+
+```text
+✓ checked 3 skills from 2 sources: no update available, 1 upstream removed
+  docx  upstream removed  https://github.com/me/skills/docx at 8b1e0f4
+```
+
+The skill stays in your library as it is, shows `upstream removed` in `agentx skill list` and is never updated. If the source brings it back, the next check clears the state.
+
+### When a source cannot be reached
+
+A source that cannot be fetched is one warning that names it, the reason and the skills it left unchecked:
+
+```text
+warning: https://github.com/me/skills: git fetch: fatal: could not read from remote repository; not checked: docx
+```
+
+The check goes on with every other source and records what it finds, then exits with the code for that failure, `3` for a source it cannot reach. Updates found earlier for the skills of that source are kept.
+
+### Sources you removed
+
+The check skips the skills of a source you removed with `agentx source remove`: it does not fetch the source and keeps what an earlier check found for them. Add the source again to check them.
+
 ## Script it
 
 Add `--json` to get one `library_skill` event per skill:
@@ -520,7 +592,7 @@ agentx --json skill list
 
 The event carries two content hashes, and each name means one thing everywhere agentx uses it: `base_hash` is the version the skill was installed at, and `content_hash` is what the library directory holds now. `state` compares the files themselves, their permissions and symlinks included, so a skill whose only change is a file made executable is `modified` while its two hashes still agree.
 
-`drift` lists every other way a managed skill has drifted, beside its `state`, and is absent when there is none. Its values are `displaced`, `missing` and `source removed`:
+`drift` lists every other way a managed skill has drifted, beside its `state`, and is absent when there is none. Its values are `displaced`, `missing`, `source removed` and `upstream removed`:
 
 ```json
 {"type":"library_skill","schema_version":1,"name":"docx","kind":"managed","source":"https://github.com/me/skills","subpath":"docx","upstream_commit":"8b1e0f4a...","base_hash":"5e4d3c2b...","content_hash":"0f9e8d7c...","state":"modified","drift":["source removed"],"placements":[...],"universal":["codex","gemini-cli"]}
@@ -538,6 +610,20 @@ Read `drift` as a list: more values will join it, and a skill can be in several 
 
 `skill revert` and `skill repair` emit one `library_skill` event for the skill, with every placement, as `skill list` does. The `result` summary of `skill repair` counts the clients it repaired, as in `repaired pdf in 2 configurations`, and ends with `; the library now holds what <path> held` after `--keep-placement` or `; discarded what <path>, ... held` after `--keep-library`, naming every directory it discarded.
 
+A skill with an update carries `candidate`, the newer version the last check found, by its `upstream_commit` and `content_hash`:
+
+```json
+{"type":"library_skill","schema_version":1,"name":"pdf","kind":"managed",...,"state":"current","candidate":{"upstream_commit":"8b1e0f4a...","content_hash":"4c3b2a19..."},"placements":[...],"universal":["codex","gemini-cli"]}
+```
+
+`skill check` emits a `progress` event per source it fetched, then one `update_available` event per skill with an update, sorted by name, then `result`:
+
+```json
+{"type":"update_available","schema_version":1,"name":"pdf","kind":"managed","source":"https://github.com/anthropics/skills","subpath":"skills/pdf","base_hash":"9a8b7c6d...","upstream_commit":"3f2a9c1e...","candidate":"5e1f0a2b...","candidate_hash":"4c3b2a19...","candidate_upstream_commit":"8b1e0f4a...","files":[{"path":"SKILL.md","status":"modified"},{"path":"forms.md","status":"added"}]}
+```
+
+`upstream_commit` and `base_hash` are the version you have, `candidate_upstream_commit` and `candidate_hash` the newer one, and `candidate` the commit agentx recorded for it, the one installing that version would write. `files` lists what the update changes, in the words of `skill diff`. `upstream_name` appears when the newer version names the skill otherwise; the skill keeps its name. `skill diff --upstream` emits one `diff` event per file.
+
 ## Where it is recorded
 
 Every install writes one commit per skill in the account repo in agentx home: the version's files, the source it came from, the last upstream commit that changed the skill and its content hash. That commit is the same on every machine that installs the same version, however recently each one fetched the source, so your machines agree on what "the version you have" means without sending anything anywhere. A skill installed on its own and the same skill installed as part of a bulk install get the same commit.
@@ -545,9 +631,9 @@ Every install writes one commit per skill in the account repo in agentx home: th
 ## Exit codes
 
 - `1`: the command line names no skill to install, the flags contradict each other (`--all` with `--skill`, `--except` without `--all`, `--except` leaving nothing, or `--from universal` with a client that is not universal), it names the source with another branch or tag than its pin, `skill add` is given something that is not a source (for example, the name of a skill the library already holds), `skill place` was given no `--to`, or `skill repair` was given both `--keep-library` and `--keep-placement`.
-- `3`: the source, or the files of the skill, could not be fetched.
-- `5`: a source id names no source on this machine (for a source you removed, the hint names the `agentx source add` command that brings it back), the source did not serve a skill's files, the path or a skill named by `--skill` or `--except` does not exist in the source, or `--to` or `--from` names a configuration that is not detected. For `skill place`, `skill diff`, `skill revert` and `skill repair`, also a name the library does not hold as a skill; for `skill remove`, a name that is neither a skill of the library nor a managed skill whose library directory is gone.
-- `6`: the library already holds a different skill under that name, the name is already managed at another version, the skill's name cannot be both a directory and a git branch, the skill's directory in the source is not one agentx can record, the skill holds a file whose path would put it outside the skill's directory, agentx cannot use your library directory, or an interrupted change has to be resolved before anything else can run. The message names what to restore; if you would rather keep what is there, move the named file in `~/.agentx/mutations` aside. For `skill remove`, it is also `--from` naming a universal client, one that reads the library directly, even next to `--from universal`, removing a name that is a fork, and `--from <client>` for a skill whose library directory is gone. For `skill diff` and `skill revert`, it is a skill agentx did not install or a fork, which have no base version, or a managed skill whose import branch records no version agentx can read; for `skill diff`, also a file that changed while agentx read it; for `skill revert`, also a skill that changed while it was being reverted, a skill whose installed version another command changed meanwhile, a skill that holds something git cannot record, or a skill whose library directory is a symlink. For `skill repair`, it is a skill agentx did not install, a fork, a managed skill whose library directory is gone or whose import branch records no version agentx can read, a displaced directory that differs from the library when neither `--keep-library` nor `--keep-placement` is given, a skill or placement that changed while it was being repaired, a client's directory that lies inside the library or inside another client's directory the repair replaces, a displaced directory that a link your library reaches leads into, through or to a directory above, a directory your library reaches that agentx cannot read, links in your library that lead to too many files to check, and, for `--keep-placement`, directories that differ from each other, a library directory that is a symlink, a directory with no `SKILL.md`, holding something git cannot record, or holding a link into or through what the repair replaces, a link your library reaches that leads into what the repair replaces, or a copy placement inside the library or inside the directory it keeps. In a run of several skills, `6` is also the code when the skills that were skipped disagree about why: a run whose failures all have one cause exits with that cause, so a batch that skipped two skills the source did not serve exits `5`.
+- `3`: the source, or the files of the skill, could not be fetched. For `skill check`, also a run whose sources and skills failed for different reasons.
+- `5`: a source id names no source on this machine (for a source you removed, the hint names the `agentx source add` command that brings it back), the source did not serve a skill's files, the path or a skill named by `--skill` or `--except` does not exist in the source, or `--to` or `--from` names a configuration that is not detected. For `skill place`, `skill diff`, `skill revert` and `skill repair`, also a name the library does not hold as a skill; for `skill remove`, a name that is neither a skill of the library nor a managed skill whose library directory is gone. For `skill check`, also a source added on this machine that it has never fetched, such as one `agentx import` brought back; `agentx source add` fetches it.
+- `6`: the library already holds a different skill under that name, the name is already managed at another version, the skill's name cannot be both a directory and a git branch, the skill's directory in the source is not one agentx can record, the skill holds a file whose path would put it outside the skill's directory, agentx cannot use your library directory, or an interrupted change has to be resolved before anything else can run. The message names what to restore; if you would rather keep what is there, move the named file in `~/.agentx/mutations` aside. For `skill remove`, it is also `--from` naming a universal client, one that reads the library directly, even next to `--from universal`, removing a name that is a fork, and `--from <client>` for a skill whose library directory is gone. For `skill diff` and `skill revert`, it is a skill agentx did not install or a fork, which have no base version, or a managed skill whose import branch records no version agentx can read; for `skill diff --upstream`, also a skill no check has found an update for; for `skill check`, a newer version agentx will not install, for the reasons `skill add` refuses one; for `skill diff`, also a file that changed while agentx read it; for `skill revert`, also a skill that changed while it was being reverted, a skill whose installed version another command changed meanwhile, a skill that holds something git cannot record, or a skill whose library directory is a symlink. For `skill repair`, it is a skill agentx did not install, a fork, a managed skill whose library directory is gone or whose import branch records no version agentx can read, a displaced directory that differs from the library when neither `--keep-library` nor `--keep-placement` is given, a skill or placement that changed while it was being repaired, a client's directory that lies inside the library or inside another client's directory the repair replaces, a displaced directory that a link your library reaches leads into, through or to a directory above, a directory your library reaches that agentx cannot read, links in your library that lead to too many files to check, and, for `--keep-placement`, directories that differ from each other, a library directory that is a symlink, a directory with no `SKILL.md`, holding something git cannot record, or holding a link into or through what the repair replaces, a link your library reaches that leads into what the repair replaces, or a copy placement inside the library or inside the directory it keeps. In a run of several skills, `6` is also the code when the skills that were skipped disagree about why: a run whose failures all have one cause exits with that cause, so a batch that skipped two skills the source did not serve exits `5`.
 - `7`: another agentx command is running. Retry when it finishes.
 - `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.
 - `10`: agentx could not read its own settings file, the library still held the skill after `skill remove` took it away, or agentx hit an error it has no better answer for. Run `agentx doctor`.
