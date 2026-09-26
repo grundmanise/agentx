@@ -675,37 +675,55 @@ func TestSkillRepairKeepPlacementCopiesTheExecBitGitRecords(t *testing.T) {
 
 // TestSkillRepairRefreshesALinkedCopyOnce: Cursor's skills directory made a
 // symlink to Claude Code's makes the copies copy_mode records for the two
-// one directory spelled two ways. --keep-placement refreshes it once and
-// counts it for both configurations: refreshed twice, the second removal
-// would find the first one's copy there and stop the mutation part way.
+// one directory spelled two ways, and on a disk that ignores case so does
+// a link that spells Claude Code's directory in another case.
+// --keep-placement refreshes it once and counts it for both
+// configurations: refreshed twice, the second removal would find the
+// first one's copy there and stop the mutation part way.
 func TestSkillRepairRefreshesALinkedCopyOnce(t *testing.T) {
 	t.Parallel()
-	h, s := placementHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code", "--to", "cursor", "--copy")
-	h.mustRun("skill", "place", "alpha", "--to", "windsurf")
-	lib := filepath.Join(h.library, "alpha")
-	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
-	windsurf := filepath.Join(h.home, ".codeium", "windsurf", "skills", "alpha")
-	remove(t, filepath.Dir(cursor))
-	link(t, filepath.Dir(claude), filepath.Dir(cursor))
-	displace(t, lib, windsurf, true)
-	kept := libraryTree(t, windsurf)
+	for _, c := range []struct {
+		name      string
+		otherCase bool
+	}{{"spelled the same", false}, {"spelled in another case", true}} {
+		otherCase := c.otherCase
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			if otherCase {
+				ignoresCase(t)
+			}
+			h, s := placementHarness(t)
+			h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code", "--to", "cursor", "--copy")
+			h.mustRun("skill", "place", "alpha", "--to", "windsurf")
+			lib := filepath.Join(h.library, "alpha")
+			claude := filepath.Join(h.home, ".claude", "skills", "alpha")
+			cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
+			windsurf := filepath.Join(h.home, ".codeium", "windsurf", "skills", "alpha")
+			skills := filepath.Dir(claude)
+			if otherCase {
+				skills = filepath.Join(inAnotherCase(filepath.Join(h.home, ".claude")), "skills")
+			}
+			remove(t, filepath.Dir(cursor))
+			link(t, skills, filepath.Dir(cursor))
+			displace(t, lib, windsurf, true)
+			kept := libraryTree(t, windsurf)
 
-	out := h.run("--json", "skill", "repair", "alpha", "--keep-placement")
-	if out.exit != 0 {
-		t.Fatalf("repair: exit %d\n%s", out.exit, out.stderr)
+			out := h.run("--json", "skill", "repair", "alpha", "--keep-placement")
+			if out.exit != 0 {
+				t.Fatalf("repair: exit %d\n%s", out.exit, out.stderr)
+			}
+			sameTree(t, "the library directory", libraryTree(t, lib), kept)
+			sameTree(t, "the copy both read", libraryTree(t, claude), kept)
+			linksToLibrary(t, "windsurf's placement", windsurf, lib)
+			equal(t, "summary", h.one(out.stdout, "result")["summary"],
+				"repaired alpha in 2 configurations, 2 copy placements refreshed; the library now holds what "+windsurf+" held")
+			equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "")
+			ev := h.one(out.stdout, "library_skill")
+			equal(t, "state", ev["state"], stateModified)
+			equal(t, "drift", drift(ev), "")
+			cleanAfterRepair(t, h, h.library, filepath.Dir(claude), filepath.Dir(windsurf))
+		})
 	}
-	sameTree(t, "the library directory", libraryTree(t, lib), kept)
-	sameTree(t, "the copy both read", libraryTree(t, claude), kept)
-	linksToLibrary(t, "windsurf's placement", windsurf, lib)
-	equal(t, "summary", h.one(out.stdout, "result")["summary"],
-		"repaired alpha in 2 configurations, 2 copy placements refreshed; the library now holds what "+windsurf+" held")
-	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "")
-	ev := h.one(out.stdout, "library_skill")
-	equal(t, "state", ev["state"], stateModified)
-	equal(t, "drift", drift(ev), "")
-	cleanAfterRepair(t, h, h.library, filepath.Dir(claude), filepath.Dir(windsurf))
 }
 
 // TestSkillRepairKeepFlagsAreExclusive: each flag keeps one of the two
@@ -1329,9 +1347,10 @@ func TestSkillRepairRefusesAPathThatOverlapsTheLibrary(t *testing.T) {
 // the library; repaired first, it would change what the outer directory
 // was judged to hold. A place the repair does not write goes with the
 // outer directory all the same, whatever it holds: a copy of this skill,
-// edited or not, and the skills directory holding another skill's copy.
-// The repair refuses each whatever it is told to keep, names both paths
-// and changes nothing.
+// edited or not, and the skills directory holding another skill's copy,
+// a disabled client's included, which a repair never places into but
+// still must not delete. The repair refuses each whatever it is told to
+// keep, names both paths and changes nothing.
 func TestSkillRepairRefusesAPlaceInsideAnother(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
@@ -1390,6 +1409,23 @@ func TestSkillRepairRefusesAPlaceInsideAnother(t *testing.T) {
 				t.Fatal(err)
 			}
 			link(t, vendor, skills)
+			return filepath.Join(vendor, "beta", "mine.md")
+		}},
+		{"a disabled client's skills directory inside the directory", func(t *testing.T, h *harness, lib, claude, cursor string) string {
+			// Cursor is disabled, so repair never places into it, but its
+			// skills directory, beta's edited copy in it, is still inside
+			// Claude Code's displaced directory.
+			writeFile(t, mkdirs(t, filepath.Join(h.library, "beta"), "SKILL.md"), skill("beta", "A skill of my own"))
+			h.mustRun("skill", "place", "beta", "--to", "cursor", "--copy")
+			skills := filepath.Dir(cursor)
+			writeFile(t, filepath.Join(skills, "beta", "mine.md"), "a file of my own, in Cursor's copy of beta\n")
+			displace(t, lib, claude, true)
+			vendor := filepath.Join(claude, "vendor")
+			if err := os.Rename(skills, vendor); err != nil {
+				t.Fatal(err)
+			}
+			link(t, vendor, skills)
+			h.mustRun("config", "disable", "cursor")
 			return filepath.Join(vendor, "beta", "mine.md")
 		}},
 	} {
@@ -1715,6 +1751,144 @@ func TestSkillRepairJudgesALinkedSkillsDirectoryOnce(t *testing.T) {
 			equal(t, "state", ev["state"], c.state)
 			equal(t, "drift after the repair", drift(ev), "")
 			cleanAfterRepair(t, h, h.library, filepath.Dir(claude))
+		})
+	}
+}
+
+// ignoresCase skips the test unless the disk its temporary directories are
+// on ignores case, as a Mac's does by default: a file made as a is found as
+// A.
+func ignoresCase(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "a"), "")
+	if _, err := os.Lstat(filepath.Join(dir, "A")); err != nil {
+		t.Skip("the disk tells case apart")
+	}
+}
+
+// inAnotherCase is path with its last element in upper case, which a disk
+// that ignores case finds as path itself.
+func inAnotherCase(path string) string {
+	return filepath.Join(filepath.Dir(path), strings.ToUpper(filepath.Base(path)))
+}
+
+// TestPlaceKeyTellsOnePlaceInTwoSpellings: two spellings of one place are
+// one place, whether anything is at it yet or not, and the same name in
+// another directory, or another name in the same one, is not. Here the
+// second spelling goes through a symlink above the place's directory,
+// which canonicalPath would resolve, standing in for the spelling in
+// another case a disk that ignores case leaves as a link writes it.
+func TestPlaceKeyTellsOnePlaceInTwoSpellings(t *testing.T) {
+	t.Parallel()
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	skills := filepath.Join(root, "real", "skills")
+	other := filepath.Join(root, "other", "skills")
+	for _, dir := range []string{skills, other} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	link(t, filepath.Join(root, "real"), filepath.Join(root, "alias"))
+	place, spelled := filepath.Join(skills, "pdf"), filepath.Join(root, "alias", "skills", "pdf")
+	for _, at := range []string{"nothing", "a directory"} {
+		if at == "a directory" {
+			if err := os.Mkdir(place, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		equal(t, "two spellings of the place holding "+at, keyAt(place).is(keyAt(spelled)), true)
+		equal(t, "the same name in another directory, the place holding "+at, keyAt(place).is(keyAt(filepath.Join(other, "pdf"))), false)
+		equal(t, "another name in the same directory, the place holding "+at, keyAt(place).is(keyAt(filepath.Join(skills, "docx"))), false)
+	}
+	// Where the directory cannot be read, only the spelling tells.
+	gone := filepath.Join(root, "gone", "skills", "pdf")
+	equal(t, "a place in no directory, spelled the same", keyAt(gone).is(keyAt(gone)), true)
+	equal(t, "a place in no directory, spelled otherwise", keyAt(gone).is(keyAt(filepath.Join(root, "gone", "skills2", "pdf"))), false)
+	equal(t, "the spelling keyOf resolves", keyOf(spelled).real, place)
+}
+
+// TestSkillRepairJudgesAPlaceSpelledInAnotherCaseOnce: on a disk that
+// ignores case, Cursor's skills directory made a symlink to
+// ~/.CLAUDE/skills is Claude Code's ~/.claude/skills, though the link
+// spells it in another case and the two resolve to two spellings. The two
+// places are one: drift judges it once, and a repair puts one symlink
+// there and reports it for both configurations, whether Claude Code's
+// directory displaced the placement with the library's content or the
+// placement is missing.
+func TestSkillRepairJudgesAPlaceSpelledInAnotherCaseOnce(t *testing.T) {
+	t.Parallel()
+	ignoresCase(t)
+	for _, c := range []struct {
+		drift, action string
+		arrange       func(t *testing.T, lib, claude string)
+	}{
+		{"displaced", "relinked", func(t *testing.T, lib, claude string) { displace(t, lib, claude, false) }},
+		{"missing", "placed", func(t *testing.T, _, claude string) { remove(t, claude) }},
+	} {
+		t.Run(c.drift, func(t *testing.T) {
+			t.Parallel()
+			h, lib, claude, cursor := repairHarness(t)
+			remove(t, filepath.Dir(cursor))
+			link(t, filepath.Join(inAnotherCase(filepath.Join(h.home, ".claude")), "skills"), filepath.Dir(cursor))
+			c.arrange(t, lib, claude)
+			targets := []placeTarget{{id: "claude-code", dir: filepath.Dir(claude)}, {id: "cursor", dir: filepath.Dir(cursor)}}
+			equal(t, "places", len(ownPlaces(targets, h.library, "alpha", nil, nil)), 1)
+			equal(t, "drift before the repair", drift(h.listed("alpha")), c.drift)
+
+			equal(t, "the text", h.mustRun("skill", "repair", "alpha").stdout, "✓ repaired alpha in 2 configurations\n"+
+				"  claude-code  "+c.action+"  symlink  "+claude+" -> "+lib+"\n"+
+				"  cursor       "+c.action+"  symlink  "+cursor+" -> "+lib+"\n")
+			linksToLibrary(t, "the placement both read", claude, lib)
+			equal(t, "drift after the repair", drift(h.listed("alpha")), "")
+			cleanAfterRepair(t, h, h.library, filepath.Dir(claude))
+		})
+	}
+}
+
+// TestSkillRepairRefusesAnOverlapSpelledInAnotherCase: on a disk that
+// ignores case, a link can spell the library, or a client's directory, in
+// another case than the repair names it, and the spellings alone would
+// hide that the two overlap. The paths are compared as files as well, so
+// every repair refuses as it does where the spellings agree, names the
+// paths as the repair names them and changes nothing.
+func TestSkillRepairRefusesAnOverlapSpelledInAnotherCase(t *testing.T) {
+	t.Parallel()
+	ignoresCase(t)
+	for _, c := range []struct {
+		name string
+		// arrange sets the machine up and returns the message of the
+		// refusal and a file the repair must keep.
+		arrange func(t *testing.T, h *harness, lib, claude, cursor string) (message, kept string)
+	}{
+		{"a missing place inside the library", func(t *testing.T, h *harness, _, _, cursor string) (string, string) {
+			kept := mkdirs(t, filepath.Join(h.library, "beta"), "SKILL.md")
+			writeFile(t, kept, skill("beta", "A skill of my own"))
+			skills := filepath.Dir(cursor)
+			remove(t, skills)
+			link(t, filepath.Join(inAnotherCase(h.library), "beta"), skills)
+			return libraryOverlap(cursor, "lies inside", h.library), kept
+		}},
+		{"another skill's entry linked to the displaced directory", func(t *testing.T, h *harness, lib, claude, _ string) (string, string) {
+			displace(t, lib, claude, true)
+			beta := filepath.Join(h.library, "beta")
+			link(t, filepath.Join(inAnotherCase(filepath.Join(h.home, ".claude")), "skills", "alpha"), beta)
+			return entryOverlap(claude, "is", claude, beta), filepath.Join(claude, "mine.md")
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			h, lib, claude, cursor := repairHarness(t)
+			message, kept := c.arrange(t, h, lib, claude, cursor)
+			if drift(h.listed("alpha")) == "" {
+				t.Fatal("alpha has no drift to repair")
+			}
+			content := fileBody(t, kept)
+			refusesUntouched(t, h, everyFlag, message, overlapHint)
+			equal(t, "what the repair keeps", fileBody(t, kept), content)
 		})
 	}
 }

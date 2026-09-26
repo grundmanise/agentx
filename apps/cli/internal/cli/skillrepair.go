@@ -440,11 +440,12 @@ func (plan repairPlan) refusal(name string, choice repairChoice) error {
 }
 
 // touchedPath is a path a repair changes, as the plan names it and where it
-// really is, every symlink on the way to it resolved, see canonicalPath.
+// really is, every symlink on the way to it resolved, see placeKey.
 // library marks the library directory that --keep-placement replaces.
 type touchedPath struct {
-	path, real string
-	library    bool
+	path string
+	placeKey
+	library bool
 }
 
 // touched are the paths the plan changes as chosen, each once however many
@@ -457,14 +458,16 @@ type touchedPath struct {
 func (plan repairPlan) touched(choice repairChoice) (paths []touchedPath, replaces bool) {
 	libraryReplaced := choice == choosePlacement && len(plan.differing()) > 0
 	if libraryReplaced {
-		paths = append(paths, touchedPath{plan.lib.Path, canonicalPath(plan.lib.Path), true})
+		paths = append(paths, touchedPath{plan.lib.Path, keyOf(plan.lib.Path), true})
 	}
 	// A place is never merged into the library directory: one that is it
-	// has to be found inside the library, see overlap.
+	// has to be found inside the library, see overlap. Two that are one
+	// place, as drift tells places apart, are one path, which the repair
+	// changes once.
 	add := func(path string) {
-		real := canonicalPath(path)
-		if !slices.ContainsFunc(paths, func(t touchedPath) bool { return !t.library && samePath(t.real, real) }) {
-			paths = append(paths, touchedPath{path: path, real: real})
+		key := keyOf(path)
+		if !slices.ContainsFunc(paths, func(t touchedPath) bool { return !t.library && t.is(key) }) {
+			paths = append(paths, touchedPath{path: path, placeKey: key})
 		}
 	}
 	for _, p := range plan.places {
@@ -552,9 +555,9 @@ func (plan repairPlan) overlap(choice repairChoice) error {
 	// Every touched path comes first, so a pair holds one of them.
 	all := slices.Clone(touched)
 	for _, s := range plan.sites {
-		real := canonicalPath(s)
-		if !slices.ContainsFunc(all, func(t touchedPath) bool { return samePath(t.real, real) }) {
-			all = append(all, touchedPath{path: s, real: real})
+		key := keyOf(s)
+		if !slices.ContainsFunc(all, func(t touchedPath) bool { return t.is(key) }) {
+			all = append(all, touchedPath{path: s, placeKey: key})
 		}
 	}
 	for i, a := range touched {
