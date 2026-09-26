@@ -539,10 +539,12 @@ func TestSkillRepairKeepPlacementRefusals(t *testing.T) {
 // directory or a copy placement, both replaced as well, one whose route
 // only passes through the library on its way elsewhere, even back into the
 // directory: copied, it would pass through the library's new content,
-// where what it passed through is gone, and one inside a directory outside
+// where what it passed through is gone, one inside a directory outside
 // that a link of the directory leads to, which the copied link still
-// leads to. The repair refuses each, however the link is spelled, and
-// changes nothing.
+// leads to, and one that enters a displaced directory, another or the
+// kept one, by name and leaves it by "..": once that directory is the
+// library's symlink, its ".." is the library's parent. The repair refuses
+// each, however the link is spelled, and changes nothing.
 func TestSkillRepairKeepPlacementRefusesALinkIntoWhatItReplaces(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
@@ -594,6 +596,17 @@ func TestSkillRepairKeepPlacementRefusesALinkIntoWhatItReplaces(t *testing.T) {
 			link(t, filepath.Join(lib, "scripts"), mkdirs(t, outside, "y"))
 			return outside, lib
 		}, "", filepath.Join("ext", "y")},
+		{"a link through another displaced directory and out by '..'", "ref", func(t *testing.T, h *harness, lib, _, cursor string) (string, string) {
+			// Once Cursor's directory is the library's symlink, its ".."
+			// is the library's parent, and the link leads nowhere.
+			displace(t, lib, cursor, false)
+			writeFile(t, mkdirs(t, filepath.Join(h.home, ".cursor", "vendor"), "x.md"), "notes kept outside the skill\n")
+			return cursor + "/../../vendor", cursor
+		}, "", ""},
+		{"an absolute link through the directory itself and out by '..'", "ref", func(t *testing.T, h *harness, _, claude, _ string) (string, string) {
+			writeFile(t, mkdirs(t, filepath.Join(h.home, ".claude", "vendor"), "x.md"), "notes kept outside the skill\n")
+			return claude + "/../../vendor", claude
+		}, "", ""},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -645,10 +658,12 @@ func TestSkillRepairKeepPlacementRefusesALinkIntoWhatItReplaces(t *testing.T) {
 	}
 }
 
-// TestSkillRepairKeepPlacementKeepsALinkThatLeadsElsewhere: a link in the
-// kept directory that leads outside everything the repair replaces, or to
-// a file of the directory itself, loses nothing once copied into the
-// library, so the repair keeps it as the link it is.
+// TestSkillRepairKeepPlacementKeepsALinkThatLeadsElsewhere: an absolute
+// link in the kept directory that leads outside everything the repair
+// replaces, a sibling in the client's skills directory among them, and a
+// relative one to a file of the directory itself, even spelled out of it
+// and in again by its name, lose nothing once copied into the library, so
+// the repair keeps each as the link it is.
 func TestSkillRepairKeepPlacementKeepsALinkThatLeadsElsewhere(t *testing.T) {
 	t.Parallel()
 	h, lib, claude, _ := repairHarness(t)
@@ -658,13 +673,92 @@ func TestSkillRepairKeepPlacementKeepsALinkThatLeadsElsewhere(t *testing.T) {
 	link(t, outside, filepath.Join(claude, "shared.md"))
 	link(t, filepath.Join("scripts", "run.sh"), filepath.Join(claude, "run"))
 
+	sibling := filepath.Join(filepath.Dir(claude), "shared-notes")
+	writeFile(t, mkdirs(t, sibling, "x.md"), "notes beside the skill\n")
+	link(t, sibling, filepath.Join(claude, "sibling"))
+	again := filepath.Join("..", "alpha", "mine.md")
+	link(t, again, filepath.Join(claude, "again.md"))
+
 	out := h.mustRun("--json", "skill", "repair", "alpha", "--keep-placement")
 	linksToLibrary(t, "claude's placement", claude, lib)
 	linksToLibrary(t, "the library's shared.md", filepath.Join(lib, "shared.md"), outside)
 	linksToLibrary(t, "the library's run", filepath.Join(lib, "run"), filepath.Join("scripts", "run.sh"))
+	linksToLibrary(t, "the library's sibling", filepath.Join(lib, "sibling"), sibling)
+	linksToLibrary(t, "the library's again.md", filepath.Join(lib, "again.md"), again)
 	equal(t, "what shared.md leads to", fileBody(t, filepath.Join(lib, "shared.md")), "notes kept outside the skill\n")
 	equal(t, "what run leads to", fileBody(t, filepath.Join(lib, "run")), "#!/bin/sh\n")
+	equal(t, "what sibling leads to", fileBody(t, filepath.Join(claude, "sibling", "x.md")), "notes beside the skill\n")
+	equal(t, "what again.md leads to", fileBody(t, filepath.Join(claude, "again.md")), "a file of my own\n")
 	equal(t, "state", h.one(out.stdout, "library_skill")["state"], stateModified)
+	cleanAfterRepair(t, h, h.library, filepath.Dir(claude))
+}
+
+// TestSkillRepairKeepPlacementRefusesARelativeLinkOutOfIt: the kept
+// directory is copied into the library link for link, each link's target
+// as it is spelled, so a relative link that leads out of the directory
+// would lead from the library instead, to nothing or to another skill of
+// the same name, and the client reading the library's symlink would lose
+// what it reached through it. --keep-placement refuses it and changes
+// nothing, the directory, the library and what the link leads to kept as
+// they were; --keep-library, which copies nothing, repairs the skill.
+func TestSkillRepairKeepPlacementRefusesARelativeLinkOutOfIt(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name, link, target string
+	}{
+		{"a sibling in the client's skills directory", "notes", filepath.Join("..", "notes-of-mine")},
+		{"from a directory inside it", filepath.Join("scripts", "notes"), filepath.Join("..", "..", "notes-of-mine")},
+		{"out and in again under another name", "notes", filepath.Join("..", "notes-of-mine", "..", "notes-of-mine")},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			h, lib, claude, _ := repairHarness(t)
+			displace(t, lib, claude, true)
+			notes := filepath.Join(filepath.Dir(claude), "notes-of-mine", "n.md")
+			writeFile(t, mkdirs(t, filepath.Dir(notes), "n.md"), "my notes\n")
+			link(t, c.target, filepath.Join(claude, c.link))
+			equal(t, "what the link leads to", fileBody(t, filepath.Join(claude, c.link, "n.md")), "my notes\n")
+			home, library, kept := onDisk(t, h.home), onDisk(t, h.library), onDisk(t, claude)
+			version := mutationVersion(t, h)
+
+			out := h.run("--json", "skill", "repair", "alpha", "--keep-placement")
+			equal(t, "exit", out.exit, 6)
+			e := h.one(out.stdout, "error")
+			equal(t, "message", e["message"], c.link+" in "+claude+" is a relative symlink that leads out of it, "+
+				"and copied into the library it would lead elsewhere, so its content cannot become the library's")
+			equal(t, "hint", e["hint"], "make the link "+c.link+" absolute or replace it with the files it leads to, then run "+
+				"'agentx skill repair alpha --keep-placement' again, or keep the library's content with 'agentx skill repair alpha --keep-library'")
+			equal(t, "the home directory", onDisk(t, h.home), home)
+			equal(t, "the library", onDisk(t, h.library), library)
+			equal(t, "the displaced directory", onDisk(t, claude), kept)
+			equal(t, "no mutation", mutationVersion(t, h), version)
+			cleanAfterRepair(t, h, h.library, filepath.Dir(claude))
+
+			h.mustRun("skill", "repair", "alpha", "--keep-library")
+			linksToLibrary(t, "claude's placement", claude, lib)
+			equal(t, "the library after --keep-library", onDisk(t, h.library), library)
+			equal(t, "what the link led to after --keep-library", fileBody(t, notes), "my notes\n")
+		})
+	}
+}
+
+// TestSkillRepairKeepPlacementIgnoresALibraryLinkOutOfTheLibraryDirectory:
+// a library link that enters alpha's library directory by name and leaves
+// it by ".." does not pass through it once --keep-placement replaced it:
+// the library directory is a real directory again, whose ".." is where it
+// was, and the link still leads where it did.
+func TestSkillRepairKeepPlacementIgnoresALibraryLinkOutOfTheLibraryDirectory(t *testing.T) {
+	t.Parallel()
+	h, lib, claude, _ := repairHarness(t)
+	displace(t, lib, claude, true)
+	writeFile(t, mkdirs(t, filepath.Join(h.library, "gamma"), "SKILL.md"), skill("gamma", "A skill of my own"))
+	delta := filepath.Join(h.library, "delta")
+	link(t, lib+"/../gamma", delta)
+
+	h.mustRun("skill", "repair", "alpha", "--keep-placement")
+	linksToLibrary(t, "claude's placement", claude, lib)
+	equal(t, "what delta leads to", fileBody(t, filepath.Join(delta, "SKILL.md")), skill("gamma", "A skill of my own"))
+	equal(t, "alpha's state", h.listed("alpha")["state"], stateModified)
 	cleanAfterRepair(t, h, h.library, filepath.Dir(claude))
 }
 
@@ -1021,8 +1115,8 @@ func heldRefusal(place, link string) (string, string) {
 // TestSkillRepairRefusesADirectoryALibraryLinkLeadsInto: every repair of a
 // displaced directory removes it and puts the symlink in its place, so a
 // symlink the library reaches that leads into the directory, or through it
-// on its way elsewhere, or to a directory above it, would lose what it
-// leads to: a library entry, a link deep inside another skill's directory,
+// on its way elsewhere, entering it by name and leaving it by "..", or to
+// a directory above it, would lose what it leads to: a library entry, a link deep inside another skill's directory,
 // one inside alpha's own, or one inside a directory outside the library
 // that such a link leads to. So would a directory that lies inside the
 // library, as a client's skills directory made a symlink into a skill's
@@ -1094,6 +1188,24 @@ func TestSkillRepairRefusesADirectoryALibraryLinkLeadsInto(t *testing.T) {
 			link(t, real, filepath.Join(claude, "beta-link"))
 			beta := filepath.Join(h.library, "beta")
 			link(t, filepath.Join(claude, "beta-link"), beta)
+			message, hint := heldRefusal(claude, beta)
+			return claude, message, hint
+		}, false, false},
+		{"an entry whose route leaves a directory holding the library's content by '..'", func(t *testing.T, h *harness, lib, claude string) (string, string, string) {
+			// Once the directory is the library's symlink, its ".." is the
+			// library's parent, and beta leads nowhere.
+			displace(t, lib, claude, false)
+			writeFile(t, mkdirs(t, filepath.Join(h.home, ".claude", "vendor-beta"), "SKILL.md"), skill("beta", "A skill of my own"))
+			beta := filepath.Join(h.library, "beta")
+			link(t, claude+"/../../vendor-beta", beta)
+			message, hint := heldRefusal(claude, beta)
+			return claude, message, hint
+		}, false, false},
+		{"an entry whose route leaves a directory that differs by '..'", func(t *testing.T, h *harness, lib, claude string) (string, string, string) {
+			displace(t, lib, claude, true)
+			writeFile(t, mkdirs(t, filepath.Join(h.home, ".claude", "vendor-beta"), "SKILL.md"), skill("beta", "A skill of my own"))
+			beta := filepath.Join(h.library, "beta")
+			link(t, claude+"/scripts/../../../vendor-beta", beta)
 			message, hint := heldRefusal(claude, beta)
 			return claude, message, hint
 		}, false, false},
@@ -1313,10 +1425,14 @@ func TestSkillRepairKeepPlacementRefusesToReplaceWhatALibraryLinkLeadsInto(t *te
 // symlink the inner place resolves into the library, and repairing it
 // would delete or overwrite the library's own content; repaired first, it
 // would change what the outer directory was judged to hold, and the
-// outer one's removal would stop the mutation part way. A copy
-// --keep-placement refreshes is written the same way, and so is a missing
-// place inside the library. The repair refuses each whatever it is told
-// to keep, changes nothing and leaves no journal behind.
+// outer one's removal would stop the mutation part way. A place the repair
+// does not write goes with the outer directory all the same, whatever it
+// holds: a copy of this skill, edited or not, and another skill's copy in
+// that client's skills directory. A copy --keep-placement refreshes is
+// written the same way, and so is a missing place inside the library, or
+// inside what a link of the library leads to, and the library's own
+// symlink where a copy belongs there. The repair refuses each whatever it
+// is told to keep, changes nothing and leaves no journal behind.
 func TestSkillRepairRefusesAPlaceInsideWhatItReplaces(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
@@ -1335,7 +1451,7 @@ func TestSkillRepairRefusesAPlaceInsideWhatItReplaces(t *testing.T) {
 			skills := filepath.Dir(cursor)
 			remove(t, skills)
 			link(t, filepath.Join(claude, "sub"), skills)
-			return cursor + " lies inside " + claude + ", which the repair replaces too, so nothing was repaired",
+			return cursor + " lies inside " + claude + ", which the repair replaces, so nothing was repaired",
 				"make " + skills + " a directory outside " + claude + ", then run 'agentx skill repair alpha' again", kept
 		}, []string{"", "--keep-library", "--keep-placement"}},
 		{"a copy inside the directory --keep-placement keeps", func(t *testing.T, h *harness, lib, claude, cursor string) (string, string, string) {
@@ -1348,9 +1464,94 @@ func TestSkillRepairRefusesAPlaceInsideWhatItReplaces(t *testing.T) {
 			skills := filepath.Dir(cursor)
 			remove(t, skills)
 			link(t, filepath.Join(claude, "scripts"), skills)
-			return cursor + " lies inside " + claude + ", which the repair replaces too, so nothing was repaired",
+			return cursor + " lies inside " + claude + ", which the repair replaces, so nothing was repaired",
 				"make " + skills + " a directory outside " + claude + ", then run 'agentx skill repair alpha' again", filepath.Join(lib, "scripts", "run.sh")
-		}, []string{"--keep-placement"}},
+		}, []string{"", "--keep-library", "--keep-placement"}},
+		{"an edited copy inside the directory", func(t *testing.T, h *harness, lib, claude, cursor string) (string, string, string) {
+			remove(t, cursor)
+			h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
+			writeFile(t, filepath.Join(cursor, "mine.md"), "a file of my own, in Cursor's copy\n")
+			displace(t, lib, claude, true)
+			moved := filepath.Join(claude, "scripts", "alpha")
+			if err := os.Rename(cursor, moved); err != nil {
+				t.Fatal(err)
+			}
+			skills := filepath.Dir(cursor)
+			remove(t, skills)
+			link(t, filepath.Join(claude, "scripts"), skills)
+			return cursor + " lies inside " + claude + ", which the repair replaces, so nothing was repaired",
+				"make " + skills + " a directory outside " + claude + ", then run 'agentx skill repair alpha' again", filepath.Join(moved, "mine.md")
+		}, []string{"", "--keep-library", "--keep-placement"}},
+		{"another skill's edited copy in a skills directory inside the directory", func(t *testing.T, h *harness, lib, claude, cursor string) (string, string, string) {
+			// Nothing of alpha's is wrong in Cursor, but Cursor's whole
+			// skills directory, beta's copy in it, is inside Claude Code's
+			// displaced directory.
+			writeFile(t, mkdirs(t, filepath.Join(h.library, "beta"), "SKILL.md"), skill("beta", "A skill of my own"))
+			h.mustRun("skill", "place", "beta", "--to", "cursor", "--copy")
+			skills := filepath.Dir(cursor)
+			writeFile(t, filepath.Join(skills, "beta", "mine.md"), "a file of my own, in Cursor's copy of beta\n")
+			displace(t, lib, claude, true)
+			vendor := filepath.Join(claude, "vendor")
+			if err := os.Rename(skills, vendor); err != nil {
+				t.Fatal(err)
+			}
+			link(t, vendor, skills)
+			return cursor + " lies inside " + claude + ", which the repair replaces, so nothing was repaired",
+				"make " + skills + " a directory outside " + claude + ", then run 'agentx skill repair alpha' again", filepath.Join(vendor, "beta", "mine.md")
+		}, []string{"", "--keep-library", "--keep-placement"}},
+		{"a missing place inside what a link of the library leads to", func(t *testing.T, h *harness, _, _, cursor string) (string, string, string) {
+			dev := filepath.Join(h.home, "dev", "beta")
+			kept := mkdirs(t, dev, "SKILL.md")
+			writeFile(t, kept, skill("beta", "A skill of my own"))
+			beta := filepath.Join(h.library, "beta")
+			link(t, dev, beta)
+			skills := filepath.Dir(cursor)
+			remove(t, skills)
+			link(t, dev, skills)
+			message, hint := writtenRefusal(cursor, beta)
+			return message, hint, kept
+		}, []string{"", "--keep-library", "--keep-placement"}},
+		{"a missing place inside what a link of the library leads to, reached through that link", func(t *testing.T, h *harness, _, _, cursor string) (string, string, string) {
+			dev := filepath.Join(h.home, "dev", "beta")
+			kept := mkdirs(t, dev, "SKILL.md")
+			writeFile(t, kept, skill("beta", "A skill of my own"))
+			beta := filepath.Join(h.library, "beta")
+			link(t, dev, beta)
+			skills := filepath.Dir(cursor)
+			remove(t, skills)
+			link(t, beta, skills)
+			message, hint := writtenRefusal(cursor, beta)
+			return message, hint, kept
+		}, []string{"", "--keep-library", "--keep-placement"}},
+		{"a missing copy inside what a link of the library leads to", func(t *testing.T, h *harness, _, _, cursor string) (string, string, string) {
+			remove(t, cursor)
+			h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
+			dev := filepath.Join(h.home, "dev", "beta")
+			kept := mkdirs(t, dev, "SKILL.md")
+			writeFile(t, kept, skill("beta", "A skill of my own"))
+			beta := filepath.Join(h.library, "beta")
+			link(t, dev, beta)
+			skills := filepath.Dir(cursor)
+			remove(t, skills)
+			link(t, dev, skills)
+			message, hint := writtenRefusal(cursor, beta)
+			return message, hint, kept
+		}, []string{"", "--keep-library", "--keep-placement"}},
+		{"the library's symlink where a copy belongs, inside what a link of the library leads to", func(t *testing.T, h *harness, lib, _, cursor string) (string, string, string) {
+			remove(t, cursor)
+			h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
+			dev := filepath.Join(h.home, "dev", "beta")
+			kept := mkdirs(t, dev, "SKILL.md")
+			writeFile(t, kept, skill("beta", "A skill of my own"))
+			link(t, lib, filepath.Join(dev, "alpha"))
+			beta := filepath.Join(h.library, "beta")
+			link(t, dev, beta)
+			skills := filepath.Dir(cursor)
+			remove(t, skills)
+			link(t, dev, skills)
+			message, hint := writtenRefusal(cursor, beta)
+			return message, hint, kept
+		}, []string{"", "--keep-library", "--keep-placement"}},
 		{"a missing place inside the library", func(t *testing.T, h *harness, _, _, cursor string) (string, string, string) {
 			beta := filepath.Join(h.library, "beta")
 			kept := mkdirs(t, beta, "SKILL.md")
@@ -1391,6 +1592,32 @@ func TestSkillRepairRefusesAPlaceInsideWhatItReplaces(t *testing.T) {
 			h.mustRun("skill", "list")
 		})
 	}
+}
+
+// writtenRefusal is the message and hint of a repair that refuses to write
+// the place at place because it lies inside what the link of the library
+// leads to.
+func writtenRefusal(place, link string) (string, string) {
+	return place + " lies inside what the link " + link + " in the library leads to, and placing the skill there would change what the library holds, so nothing was repaired",
+		"replace the link " + link + " with the files it leads to, or make " + filepath.Dir(place) + " a directory outside it, then run 'agentx skill repair alpha' again"
+}
+
+// TestSkillRepairPlacesBesideWhatALibraryLinkLeadsTo: a link of the
+// library that leads to a directory no place lies in is no reason to
+// refuse a missing placement elsewhere, and the repair makes it.
+func TestSkillRepairPlacesBesideWhatALibraryLinkLeadsTo(t *testing.T) {
+	t.Parallel()
+	h, lib, _, cursor := repairHarness(t)
+	dev := filepath.Join(h.home, "dev", "beta")
+	writeFile(t, mkdirs(t, dev, "SKILL.md"), skill("beta", "A skill of my own"))
+	link(t, dev, filepath.Join(h.library, "beta"))
+	remove(t, cursor)
+	equal(t, "drift before the repair", drift(h.listed("alpha")), "missing")
+
+	h.mustRun("skill", "repair", "alpha")
+	linksToLibrary(t, "cursor's placement", cursor, lib)
+	equal(t, "drift after the repair", drift(h.listed("alpha")), "")
+	cleanAfterRepair(t, h, h.library, filepath.Dir(cursor))
 }
 
 // TestSkillRepairFollowsEveryLinkOnce: the links the library reaches are
@@ -1460,14 +1687,20 @@ func TestSkillRepairRefusesALibraryThatReachesTooFar(t *testing.T) {
 
 // TestSkillRepairRefusesWhatItCannotFollow: a directory this machine cannot
 // read, reached through a link of the library or of the directory
-// --keep-placement keeps, cannot be shown not to lead into what the repair
-// replaces. The library's refuses every repair that removes a directory,
-// and the kept directory's refuses --keep-placement, whose content it
-// would become; --keep-library does not copy it and still lands.
+// --keep-placement keeps, or inside the library itself, cannot be shown
+// not to lead into what the repair replaces. The library's refuses every
+// repair that writes a place, naming the directory and, where a link led
+// there, the link, and the kept directory's refuses --keep-placement,
+// whose content it would become; --keep-library does not copy it and
+// still lands.
 func TestSkillRepairRefusesWhatItCannotFollow(t *testing.T) {
 	t.Parallel()
 	if os.Geteuid() == 0 {
 		t.Skip("root reads a directory whatever its mode")
+	}
+	cannotFollow := func(library, dir string) string {
+		return "the links in the library " + library + " cannot all be followed, so it cannot be shown that none of them leads into what the repair replaces, " +
+			"and nothing was repaired: open " + dir + ": permission denied"
 	}
 	t.Run("through a link of the library", func(t *testing.T) {
 		t.Parallel()
@@ -1475,14 +1708,18 @@ func TestSkillRepairRefusesWhatItCannotFollow(t *testing.T) {
 		displace(t, lib, claude, true)
 		dev := filepath.Join(h.home, "dev", "beta")
 		writeFile(t, mkdirs(t, dev, "SKILL.md"), skill("beta", "A skill of my own"))
-		link(t, dev, filepath.Join(h.library, "beta"))
+		beta := filepath.Join(h.library, "beta")
+		link(t, dev, beta)
 		chmod(t, dev, 0)
 		t.Cleanup(func() { _ = os.Chmod(dev, 0o755) }) // so the temporary home can be removed
 		version := mutationVersion(t, h)
 		for _, flag := range []string{"--keep-library", "--keep-placement"} {
 			out := h.run("--json", "skill", "repair", "alpha", flag)
 			equal(t, "exit "+flag, out.exit, 6)
-			contains(t, "message "+flag, h.one(out.stdout, "error")["message"].(string), dev)
+			e := h.one(out.stdout, "error")
+			equal(t, "message "+flag, e["message"], cannotFollow(h.library, dev))
+			equal(t, "hint "+flag, e["hint"], "make the directory it names readable, or replace the link "+beta+
+				" with the files it leads to, then run 'agentx skill repair alpha' again")
 		}
 		chmod(t, dev, 0o755)
 		if _, ok := isSymlink(t, claude); ok {
@@ -1490,6 +1727,31 @@ func TestSkillRepairRefusesWhatItCannotFollow(t *testing.T) {
 		}
 		equal(t, "no mutation", mutationVersion(t, h), version)
 		cleanAfterRepair(t, h, h.library, filepath.Dir(claude))
+	})
+	t.Run("inside another skill's library directory", func(t *testing.T) {
+		t.Parallel()
+		h, lib, _, cursor := repairHarness(t)
+		remove(t, cursor)
+		private := filepath.Join(h.library, "beta", "private")
+		writeFile(t, mkdirs(t, filepath.Join(h.library, "beta"), "SKILL.md"), skill("beta", "A skill of my own"))
+		writeFile(t, mkdirs(t, private, "x.md"), "a file of beta's own\n")
+		chmod(t, private, 0)
+		t.Cleanup(func() { _ = os.Chmod(private, 0o755) })
+		version := mutationVersion(t, h)
+		out := h.run("--json", "skill", "repair", "alpha")
+		equal(t, "exit", out.exit, 6)
+		e := h.one(out.stdout, "error")
+		equal(t, "message", e["message"], cannotFollow(h.library, private))
+		equal(t, "hint", e["hint"], "make the directory it names readable, then run 'agentx skill repair alpha' again")
+		if _, err := os.Lstat(cursor); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("cursor's missing placement was made: %v", err)
+		}
+		equal(t, "no mutation", mutationVersion(t, h), version)
+
+		chmod(t, private, 0o755)
+		h.mustRun("skill", "repair", "alpha")
+		linksToLibrary(t, "cursor's placement", cursor, lib)
+		cleanAfterRepair(t, h, h.library, filepath.Dir(cursor))
 	})
 	t.Run("through a link of the kept directory", func(t *testing.T) {
 		t.Parallel()

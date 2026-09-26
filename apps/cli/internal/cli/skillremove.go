@@ -536,17 +536,25 @@ func leadsInto(path string, gone map[string]bool) bool {
 	return false
 }
 
-// canonicalPath is path with every link in its parent directories resolved
-// and its last element kept as it is, so that two spellings of one entry
-// compare equal while the entry, which may itself be a link, is still the
-// one named. A parent that does not resolve leaves path as it is, cleaned.
+// canonicalPath is where the entry at path really is: every link in its
+// parent directories resolved and its last element kept as it is, so that
+// two spellings of one entry compare equal while the entry, which may
+// itself be a link, is still the one named. Where the directory it sits in
+// cannot be resolved, as one a dangling link names cannot, it is resolved
+// as far up as it can be and the rest kept as it is spelled.
 func canonicalPath(path string) string {
 	path = filepath.Clean(path)
-	dir, err := filepath.EvalSymlinks(filepath.Dir(path))
-	if err != nil {
-		return path
+	dir, rest := filepath.Dir(path), filepath.Base(path)
+	for {
+		if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+			return filepath.Join(resolved, rest)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return path
+		}
+		dir, rest = parent, filepath.Join(filepath.Base(dir), rest)
 	}
-	return filepath.Join(dir, filepath.Base(path))
 }
 
 // lineageRefs reads the import branch, the fork branch and the candidate

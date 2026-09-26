@@ -30,13 +30,16 @@ func newSkillRepairCommand(inv *invocation) *cobra.Command {
 			"recorded is replaced by a copy. A real directory where the symlink belongs is\n" +
 			"replaced by the symlink when it holds the library's content; when it holds\n" +
 			"anything else, choose what survives: --keep-library discards the directory,\n" +
-			"--keep-placement makes its content the library's. A directory that differs\n" +
-			"from the library is never deleted without one of them. One that lies inside\n" +
-			"the library or inside another directory the repair replaces is never replaced\n" +
-			"at all, and neither is one that a symlink the library reaches leads into,\n" +
-			"through or to a directory above, except by --keep-placement when that link is\n" +
-			"inside the skill's own library directory. The library reaches every link in\n" +
-			"it, and every link in a directory one of those leads to, wherever that is.\n\n" +
+			"--keep-placement makes its content the library's, unless it holds a relative\n" +
+			"symlink that leads out of it. A directory that differs from the library is\n" +
+			"never deleted without one of them. One that lies inside the library is never\n" +
+			"replaced at all, and neither is one that a symlink the library reaches leads\n" +
+			"into, through or to a directory above, except by --keep-placement when that\n" +
+			"link is inside the skill's own library directory. The library reaches every\n" +
+			"link in it, and every link in a directory one of those leads to, wherever\n" +
+			"that is. Nothing is placed inside the library or inside a directory such a\n" +
+			"link leads to, and nothing is repaired while a client's skills directory, or\n" +
+			"any placement in it, lies inside a directory the repair replaces.\n\n" +
 			"To place the skill in one more client, run 'agentx skill place <name> --to <configuration>'.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -95,7 +98,10 @@ type repairPlace struct {
 	hasLibrary bool   // the library lies inside the directory
 	linksInto  string // a symlink the directory reaches, relative to it, that leads into a path the repair replaces, see linkIntoReplaced
 	leadsInto  string // the path the repair replaces that linksInto leads into
+	leaves     string // a relative symlink in the directory, relative to it, that leads out of it, see leavingLink
 	linksErr   string // why the links the directory reaches could not all be followed, "" when they could
+	writes     string // a symlink the library reaches, outside the skill's own library directory, that leads to a directory the place lies in, see linkAbove
+	ownWrites  string // one inside the skill's own library directory, which only --keep-placement replaces
 	err        error  // what kept this machine from reading the place
 }
 
@@ -114,6 +120,16 @@ func (p repairPlace) heldBy(libraryReplaced bool) string {
 	return p.ownHolds
 }
 
+// writtenBy is the symlink of the library that placing the skill at the
+// place would change what it leads to, "" when there is none, a link
+// inside the skill's own library directory counting as in heldBy.
+func (p repairPlace) writtenBy(libraryReplaced bool) string {
+	if p.writes != "" || libraryReplaced {
+		return p.writes
+	}
+	return p.ownWrites
+}
+
 // repairPlan is everything a repair judged, read once before the lock and
 // again under it, where the two have to agree: the library entry, what the
 // library directory holds, and every place drift finds missing or
@@ -126,6 +142,7 @@ type repairPlan struct {
 	libBytes  string      // what the library directory holds byte for byte, read only when git cannot record all of it
 	copies    []string    // the configurations copy_mode records a copy of the skill for
 	copyPaths []string    // where those copies are, each a path --keep-placement may refresh
+	sites     []string    // every detected configuration's own place of the skill, enabled or not, but a universal client's
 	places    []repairPlace
 	heldLink  string  // a symlink the library reaches, outside the skill's own library directory, that leads into or through a path --keep-placement replaces
 	heldPath  string  // the path heldLink leads into: the library directory or one of copyPaths
@@ -374,23 +391,32 @@ func (inv *invocation) planRepair(lib scan.LibrarySkill, targets []placeTarget, 
 	// --keep-placement replaces, the library directory, another displaced
 	// directory or a copy copy_mode records, would lead once copied into
 	// the library's new content, often to itself, and what it led to would
-	// be discarded with the rest; see refusal.
+	// be discarded with the rest, and a relative one that leads out of it
+	// would lead elsewhere from the library; see refusal.
 	for _, t := range targets {
-		if !t.readsLibrary && slices.Contains(copies, t.id) {
-			plan.copyPaths = append(plan.copyPaths, t.ownPlace(inv.dirs.Library, lib.Name))
+		if t.readsLibrary {
+			continue
+		}
+		place := t.ownPlace(inv.dirs.Library, lib.Name)
+		plan.sites = append(plan.sites, place)
+		if slices.Contains(copies, t.id) {
+			plan.copyPaths = append(plan.copyPaths, place)
 		}
 	}
-	replaced := append([]string{lib.Path}, plan.copyPaths...)
+	var linked []string
 	for _, place := range plan.places {
 		if place.removed() {
-			replaced = append(replaced, place.path)
+			linked = append(linked, place.path)
 		}
 	}
 	for i, place := range plan.places {
 		if place.removed() && !place.same {
 			p := &plan.places[i]
 			var err error
-			if p.linksInto, p.leadsInto, err = linkIntoReplaced(place.path, replaced); err != nil {
+			if p.linksInto, p.leadsInto, err = linkIntoReplaced(place.path, append([]string{lib.Path}, plan.copyPaths...), linked); err != nil {
+				p.linksErr = err.Error()
+			}
+			if p.leaves, err = leavingLink(place.path, lib.Name); err != nil && p.linksErr == "" {
 				p.linksErr = err.Error()
 			}
 		}
@@ -403,15 +429,20 @@ func (inv *invocation) planRepair(lib scan.LibrarySkill, targets []placeTarget, 
 
 // guardRepair reads what the library reaches in the paths the plan would
 // write, and fills it in: for each place, whether it lies inside the
-// library, and for each place the repair removes, whether it holds the
-// library and the symlink the library reaches whose route leads into or
-// through it, one outside the skill's own library directory in holds and
-// one inside it in ownHolds; in heldLink and heldPath, the symlink outside
-// the skill's own library directory whose route leads into or through a
-// path --keep-placement replaces, the library directory or a copy it may
-// refresh; in nested and nestedAll, a path the repair writes that lies
-// inside another path it replaces; and in copyIn, a copy --keep-placement
-// may refresh that lies inside the library.
+// library; for each place the repair removes, whether it holds the library
+// and the symlink the library reaches whose route leads into or through
+// it, one outside the skill's own library directory in holds and one
+// inside it in ownHolds; for each place it writes without removing it,
+// missing or the library's own symlink where a copy belongs, the symlink
+// the library reaches that leads to a directory the place lies in, in
+// writes and ownWrites the same way; in heldLink and heldPath, the symlink
+// outside the skill's own library directory whose route leads into or
+// through a path --keep-placement replaces, the library directory or a copy
+// it may refresh; in nested, a configuration's own place, whatever it
+// holds, that lies inside a directory the repair removes, and in nestedAll,
+// a path --keep-placement writes that lies inside another path it
+// replaces; and in copyIn, a copy --keep-placement may refresh that lies
+// inside the library.
 //
 // Every symlink the library reaches counts, see libraryLinks: an entry, one
 // deep inside a skill's directory, this skill's or another's, or one inside
@@ -419,12 +450,14 @@ func (inv *invocation) planRepair(lib scan.LibrarySkill, targets []placeTarget, 
 // directory one of them leads into, or through on its way elsewhere, or a
 // directory beneath the one it leads to, deletes what the library reaches
 // through it, which neither the library's content nor the directory's is,
-// whatever the flags chose. A plan that removes no directory reads no link,
-// and one whose links lead to more than limit files and directories
-// outside the library is refused, since what they reach cannot be shown not
-// to lead into what the repair removes.
+// whatever the flags chose, and placing the skill in a directory one of
+// them leads to changes what the library holds there. A plan that writes
+// no place reads no link, and one whose links lead to more than limit files
+// and directories outside the library, or to a directory this machine
+// cannot read, is refused, since what they reach cannot be shown not to
+// lead into what the repair writes.
 func guardRepair(plan *repairPlan, limit int) error {
-	var written []string // every place the repair writes, as the journal names it
+	var written, removed []string // every place the repair writes, and those it removes, as the journal names them
 	for i := range plan.places {
 		p := &plan.places[i]
 		if p.err != nil {
@@ -433,25 +466,41 @@ func guardRepair(plan *repairPlan, limit int) error {
 		written = append(written, p.path)
 		p.inLibrary, p.hasLibrary = libraryOverlap(p.path, plan.library)
 		p.hasLibrary = p.hasLibrary && p.removed()
+		if p.removed() {
+			removed = append(removed, p.path)
+		}
 	}
-	plan.nested = nestedPath(written)
-	plan.nestedAll = nestedPath(append(append(written, plan.lib.Path), plan.copyPaths...))
+	// Every configuration's own place counts, not only those the repair
+	// writes: whatever lies inside a directory the repair removes, a copy
+	// of this skill or another's, a link or a directory of the user's,
+	// goes with it.
+	plan.nested = nestedPath(slices.Concat(written, plan.sites), removed)
+	all := slices.Concat(written, []string{plan.lib.Path}, plan.copyPaths)
+	plan.nestedAll = nestedPath(all, all)
 	for _, c := range plan.copyPaths {
 		if inside, _ := libraryOverlap(c, plan.library); inside {
 			plan.copyIn = c
 			break
 		}
 	}
-	if !slices.ContainsFunc(plan.places, repairPlace.removed) {
+	if len(written) == 0 {
 		return nil
 	}
 	links, err := libraryLinks(plan.library, limit)
 	var far *reachLimitError
-	if errors.As(err, &far) {
+	var unread *reachReadError
+	switch {
+	case errors.As(err, &far):
 		return fail(exitRefused, fmt.Sprintf("the links in the library %s lead to more than %d files and directories, too many to show that none of them leads into what the repair replaces, so nothing was repaired", quotedPath(plan.library), far.limit),
 			"replace the link "+quotedPath(far.link)+" with the files it leads to, or make it lead to a smaller directory, then run '"+skillCommand("repair", plan.lib.Name)+"' again")
-	}
-	if err != nil {
+	case errors.As(err, &unread):
+		again := "run '" + skillCommand("repair", plan.lib.Name) + "' again"
+		hint := "make the directory it names readable, then " + again
+		if unread.link != "" {
+			hint = "make the directory it names readable, or replace the link " + quotedPath(unread.link) + " with the files it leads to, then " + again
+		}
+		return fail(exitRefused, fmt.Sprintf("the links in the library %s cannot all be followed, so it cannot be shown that none of them leads into what the repair replaces, and nothing was repaired: %s", quotedPath(plan.library), unread.Error()), hint)
+	case err != nil:
 		return libraryFailure(plan.library, err)
 	}
 	library, err := filepath.EvalSymlinks(plan.library)
@@ -461,13 +510,16 @@ func guardRepair(plan *repairPlan, limit int) error {
 	own, others := splitLinks(links, plan.lib.Path)
 	for i := range plan.places {
 		p := &plan.places[i]
-		if !p.removed() {
-			continue
+		switch {
+		case p.err != nil:
+		case p.removed():
+			p.holds, _ = linkThrough(others, []string{p.path}, library, true)
+			p.ownHolds, _ = linkThrough(own, []string{p.path}, library, true)
+		default:
+			p.writes, p.ownWrites = linkAbove(others, p.path), linkAbove(own, p.path)
 		}
-		p.holds, _ = linkThrough(others, []string{p.path}, library)
-		p.ownHolds, _ = linkThrough(own, []string{p.path}, library)
 	}
-	plan.heldLink, plan.heldPath = linkThrough(others, append([]string{plan.lib.Path}, plan.copyPaths...), library)
+	plan.heldLink, plan.heldPath = linkThrough(others, append([]string{plan.lib.Path}, plan.copyPaths...), library, false)
 	return nil
 }
 
@@ -478,18 +530,21 @@ const maxHops = 255
 // route follows the symlink at path one link at a time, as the system
 // resolves it, and returns every place it passes through: the link at path
 // first, then where each link on the way sits, and last the file or
-// directory it ends at, each a path with no symlink in it. A link that
-// leads nowhere, to a name that does not exist or round in circles, has no
-// route, and ok is false.
+// directory it ends at, each a path with no symlink in it. In upFrom it
+// returns every real directory the walk leaves by a "..", which a route
+// passes through as surely: once that directory is a symlink, the system
+// takes its ".." from where the symlink leads, and the route ends
+// elsewhere. A link that leads nowhere, to a name that does not exist or
+// round in circles, has no route, and ok is false.
 //
 // The target is walked a name at a time rather than resolved whole, since
 // resolving hides the links on the way: lib/out/x, with lib/out a link
 // elsewhere, never reaches lib once resolved. A ".." goes up from where the
 // walk has got to, as the system takes it, not from the name before it.
-func route(path string) (stops []string, ok bool) {
+func route(path string) (stops, upFrom []string, ok bool) {
 	dir, err := filepath.EvalSymlinks(filepath.Dir(path))
 	if err != nil {
-		return nil, false
+		return nil, nil, false
 	}
 	link := filepath.Join(dir, filepath.Base(path))
 	stops = []string{link}
@@ -498,7 +553,7 @@ func route(path string) (stops []string, ok bool) {
 	for hops := 0; link != ""; hops++ {
 		target, err := os.Readlink(link)
 		if err != nil || hops == maxHops {
-			return nil, false
+			return nil, nil, false
 		}
 		if filepath.IsAbs(target) {
 			dir = string(filepath.Separator)
@@ -509,12 +564,13 @@ func route(path string) (stops []string, ok bool) {
 			name := names[0]
 			names = names[1:]
 			if !isDir {
-				return nil, false // a name after a file, as a/file/x is
+				return nil, nil, false // a name after a file, as a/file/x is
 			}
 			switch name {
 			case "", ".":
 				continue
 			case "..":
+				upFrom = append(upFrom, dir)
 				dir = filepath.Dir(dir)
 				continue
 			}
@@ -522,7 +578,7 @@ func route(path string) (stops []string, ok bool) {
 			info, err := os.Lstat(next)
 			switch {
 			case err != nil:
-				return nil, false
+				return nil, nil, false
 			case info.Mode()&os.ModeSymlink != 0:
 				link = next // read from the directory it sits in, which is dir
 				stops = append(stops, next)
@@ -531,7 +587,7 @@ func route(path string) (stops []string, ok bool) {
 			}
 		}
 	}
-	return append(stops, dir), true
+	return append(stops, dir), upFrom, true
 }
 
 // within is the index of the first of roots that the file or directory at
@@ -571,48 +627,27 @@ func statAll(paths []string) ([]string, []os.FileInfo) {
 	return found, infos
 }
 
-// realPath is where the entry at path really is: every symlink before its
-// last name resolved and the last name kept, since that entry is what a
-// repair replaces, not what it may lead to. Where the directory it sits in
-// cannot be resolved, as one a dangling link names cannot, it is resolved
-// as far up as it can be and the rest kept as it is spelled.
-func realPath(path string) string {
-	path = filepath.Clean(path)
-	dir, rest := filepath.Dir(path), filepath.Base(path)
-	for {
-		if resolved, err := filepath.EvalSymlinks(dir); err == nil {
-			return filepath.Join(resolved, rest)
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return path
-		}
-		dir, rest = parent, filepath.Join(filepath.Base(dir), rest)
-	}
-}
-
-// nestedPath is the first of paths that lies inside another of them, and
-// that other one, each as given; a nesting of "" and "" when none does.
-// Each is taken where it really is, see realPath, and compared as a file,
-// see within, so no spelling hides it: a client's skills directory made a
+// nestedPath is the first of inner that lies inside one of outer, and that
+// one, each as given; a nesting of "" and "" when none does. Each is taken
+// where it really is, see canonicalPath, and compared as a file, see
+// within, so no spelling hides it: a client's skills directory made a
 // symlink into another client's skill directory puts its place inside that
 // one. A journal applies each step to a path as it resolves then, so once
 // the outer one is replaced the inner one resolves into what replaced it,
 // the library, and until then writing the inner one changes what the outer
-// one was judged to hold. Two paths that are one are not nested.
-func nestedPath(paths []string) nesting {
-	reals := make([]string, len(paths))
+// one was judged to hold. Only a directory can be an outer one, and a path
+// is not inside itself, nor is a directory's parent inside it.
+func nestedPath(inner, outer []string) nesting {
 	var dirs []os.FileInfo
-	var of []int // the index in paths of each of dirs
-	for i, p := range paths {
-		reals[i] = realPath(p)
-		if info, err := os.Lstat(reals[i]); err == nil && info.IsDir() {
+	var of []int // the index in outer of each of dirs
+	for i, p := range outer {
+		if info, err := os.Lstat(canonicalPath(p)); err == nil && info.IsDir() {
 			dirs, of = append(dirs, info), append(of, i)
 		}
 	}
-	for i, r := range reals {
-		if n := within(filepath.Dir(r), dirs); n >= 0 && of[n] != i {
-			return nesting{paths[i], paths[of[n]]}
+	for _, p := range inner {
+		if n := within(filepath.Dir(canonicalPath(p)), dirs); n >= 0 {
+			return nesting{p, outer[of[n]]}
 		}
 	}
 	return nesting{}
@@ -622,9 +657,10 @@ func nestedPath(paths []string) nesting {
 // one, or a link inside a directory outside the library that such a link
 // leads to, and the route it takes.
 type libraryLink struct {
-	path  string   // where it sits, named through the library, as the walk reached it, see reach
-	in    string   // the directory it sits in, with no symlink in it
-	route []string // every place it passes through after itself, see route
+	path   string   // where it sits, named through the library, as the walk reached it, see reach
+	in     string   // the directory it sits in, with no symlink in it
+	route  []string // every place it passes through after itself, see route
+	upFrom []string // every real directory its route leaves by "..", see route
 }
 
 // maxReached is how many files and directories a walk visits through the
@@ -644,6 +680,17 @@ func (e *reachLimitError) Error() string {
 	return fmt.Sprintf("%s leads to more than %d files and directories", e.link, e.limit)
 }
 
+// reachReadError is a directory a walk could not read, and the link, as the
+// walk names it, that led it there: "" for a directory of where the walk
+// started, which no link led to.
+type reachReadError struct {
+	link string
+	err  error
+}
+
+func (e *reachReadError) Error() string { return e.err.Error() }
+func (e *reachReadError) Unwrap() error { return e.err }
+
 // reach is every symlink in the real directory root, and in every directory
 // a symlink found on the way leads to, wherever that is, each with its
 // route: a link inside a directory another link leads to is reached as
@@ -655,8 +702,8 @@ func (e *reachLimitError) Error() string {
 // round in circles or not, and one inside a directory already walked is
 // not walked again. A link that leads nowhere reaches nothing and is left
 // out, and so is a directory of root that skip names. A directory this
-// machine cannot read is an error, and so is a walk that visits more than
-// limit files and directories through links, a reachLimitError: past
+// machine cannot read is a reachReadError, and a walk that visits more than
+// limit files and directories through links is a reachLimitError: past
 // either, what it reaches cannot be shown not to lead anywhere.
 func reach(root, name string, limit int, skip func(path string, d fs.DirEntry) bool) ([]libraryLink, error) {
 	info, err := os.Stat(root)
@@ -692,7 +739,7 @@ func reach(root, name string, limit int, skip func(path string, d fs.DirEntry) b
 			if d.Type()&os.ModeSymlink == 0 {
 				return nil
 			}
-			stops, ok := route(path)
+			stops, upFrom, ok := route(path)
 			if !ok {
 				return nil
 			}
@@ -700,7 +747,7 @@ func reach(root, name string, limit int, skip func(path string, d fs.DirEntry) b
 			if err != nil {
 				return err
 			}
-			l := libraryLink{path: filepath.Join(at.name, rel), in: filepath.Dir(path), route: stops[1:]}
+			l := libraryLink{path: filepath.Join(at.name, rel), in: filepath.Dir(path), route: stops[1:], upFrom: upFrom}
 			links = append(links, l)
 			end := stops[len(stops)-1]
 			if info, err := os.Lstat(end); err == nil && info.IsDir() && within(end, walked) < 0 {
@@ -709,8 +756,15 @@ func reach(root, name string, limit int, skip func(path string, d fs.DirEntry) b
 			}
 			return nil
 		})
-		if err != nil {
+		var far *reachLimitError
+		switch {
+		case err == nil:
+		case errors.As(err, &far):
 			return nil, err
+		case i == 0:
+			return nil, &reachReadError{err: err}
+		default:
+			return nil, &reachReadError{link: at.name, err: err}
 		}
 	}
 	return links, nil
@@ -757,17 +811,22 @@ func splitLinks(links []libraryLink, libPath string) (own, others []libraryLink)
 // what the link leads to, cut its route part way to wherever it ends, or
 // take part of the directory it leads to. Every place the route passes
 // through, each link on the way and where it ends up, is walked up to the
-// root, see within. A path inside the library, whose real directory is
-// library, is left to the first two: the library holds it whatever a link
-// above it leads to, and a repair that replaces it was told to. A link that
-// sits inside one of paths itself goes with it and takes nothing from
-// anywhere else.
-func linkThrough(links []libraryLink, paths []string, library string) (string, string) {
+// root, see within. With toLinks, paths are directories the repair makes
+// symlinks, and a route that leaves one of them, or a directory beneath
+// one, by ".." passes through it too: from the symlink, ".." leads
+// wherever the symlink does, so the route would end elsewhere. A path
+// that is a real directory again afterwards, as the library directory and
+// a copy are, keeps its "..". A path inside the library, whose real
+// directory is library, is left to the first two: the library holds it
+// whatever a link above it leads to, and a repair that replaces it was
+// told to. A link that sits inside one of paths itself goes with it and
+// takes nothing from anywhere else.
+func linkThrough(links []libraryLink, paths []string, library string, toLinks bool) (string, string) {
 	paths, roots := statAll(paths)
 	var outside []string // the real path of each of paths outside the library, "" for one inside it
 	if lib, err := os.Stat(library); err == nil {
 		for _, p := range paths {
-			real := realPath(p)
+			real := canonicalPath(p)
 			if within(real, []os.FileInfo{lib}) >= 0 {
 				real = ""
 			}
@@ -783,11 +842,28 @@ func linkThrough(links []libraryLink, paths []string, library string) (string, s
 				return l.path, paths[i]
 			}
 		}
+		if toLinks {
+			if i := upThrough(l, roots); i >= 0 {
+				return l.path, paths[i]
+			}
+		}
 		if i := beneath(l.route[len(l.route)-1], outside); i >= 0 {
 			return l.path, paths[i]
 		}
 	}
 	return "", ""
+}
+
+// upThrough is the index of the first of roots that the route of l leaves
+// by "..", from it or from a directory beneath it, see route; -1 when it
+// leaves none of them that way.
+func upThrough(l libraryLink, roots []os.FileInfo) int {
+	for _, at := range l.upFrom {
+		if i := within(at, roots); i >= 0 {
+			return i
+		}
+	}
+	return -1
 }
 
 // beneath is the index of the first of paths, each with no symlink in it
@@ -806,17 +882,32 @@ func beneath(dir string, paths []string) int {
 	return -1
 }
 
+// linkAbove names the first of links whose route ends at a directory the
+// place at path lies in, at any depth, "" when none does: placing the skill
+// there changes what the library holds through that link. The place is
+// taken where it really is, see canonicalPath, and need not exist yet.
+func linkAbove(links []libraryLink, path string) string {
+	place := canonicalPath(path)
+	for _, l := range links {
+		end, err := os.Lstat(l.route[len(l.route)-1])
+		if err == nil && end.IsDir() && within(place, []os.FileInfo{end}) >= 0 {
+			return l.path
+		}
+	}
+	return ""
+}
+
 // libraryOverlap reports whether the place at path lies inside the library,
 // as a client's skills directory made a symlink into a skill's directory
 // leaves it, and whether the library lies inside it. Repairing it would
 // change what the library holds there, or delete the library, either way.
-// The place is taken where it really is, see realPath, whatever it holds.
+// The place is taken where it really is, see canonicalPath, whatever it holds.
 func libraryOverlap(path, library string) (inside, holds bool) {
 	root, err := filepath.EvalSymlinks(library)
 	if err != nil {
 		return false, false
 	}
-	place := realPath(path)
+	place := canonicalPath(path)
 	_, rootInfo := statAll([]string{root})
 	inside = within(place, rootInfo) == 0
 	if info, err := os.Lstat(place); err == nil && info.IsDir() {
@@ -827,20 +918,30 @@ func libraryOverlap(path, library string) (inside, holds bool) {
 
 // linkIntoReplaced names the first symlink the real directory dir reaches,
 // see reach, as a path relative to it, whose route leads into one of
-// replaced, or ends at a directory above one of them, and the one of
-// replaced it does; "" and "" when none does. A link is followed on the
-// machine as it stands, link by link from where it sits, see route, and so
-// is every link in a directory outside dir that one of its links leads to,
-// since copied into the library, such a link still leads there. Every
-// place a route passes through, each link on the way and where it ends up,
-// is compared with replaced, see within, so no spelling hides it: a link
-// that leads through the library directory and out again, even back into
-// dir, leads through the library's new content once copied into it, where
-// what it passed through is gone. A link that ends up inside dir itself
-// without passing through a replaced path is its own content and nothing
-// replaced, and one that does not resolve leads nowhere. What reach cannot
-// follow is an error.
-func linkIntoReplaced(dir string, replaced []string) (string, string, error) {
+// replaced or linked, or ends at a directory above one of them, and the
+// path it does; "" and "" when none does. replaced are the paths the
+// repair replaces with a real directory again, the library directory and
+// the copies it refreshes, and linked those it replaces with a symlink,
+// every displaced directory it removes. A link is followed on the machine
+// as it stands, link by link from where it sits, see route, and so is
+// every link in a directory outside dir that one of its links leads to: an
+// absolute link copied into the library still leads where it did, and so
+// does a link that stays where it is. A relative link in dir that leads
+// out of it would lead elsewhere from the library, which leavingLink
+// finds, and one that stays in it leads within the copy as it does here.
+// Every place a route passes through, each link on the way and where it
+// ends up, is compared with replaced and linked, see within, so no
+// spelling hides it: a link that leads through the library directory and
+// out again, even back into dir, leads through the library's new content
+// once copied into it, where what it passed through is gone. A route that
+// leaves one of linked, or a directory beneath it, by ".." passes through
+// it as well, see route, and so does one that leaves dir itself that way,
+// but a relative link in dir, which leavingLink judges: dir becomes a
+// symlink too, and ".." from a symlink leads wherever the symlink does. A
+// link that ends up inside dir itself without passing through any of them
+// is its own content and nothing replaced, and one that does not resolve
+// leads nowhere. What reach cannot follow is an error.
+func linkIntoReplaced(dir string, replaced, linked []string) (string, string, error) {
 	real, err := filepath.EvalSymlinks(dir)
 	if err != nil {
 		return "", "", nil // a directory this machine cannot read failed the tree read already
@@ -851,10 +952,18 @@ func linkIntoReplaced(dir string, replaced []string) (string, string, error) {
 	}
 	var others, outside []string
 	var roots []os.FileInfo
-	for _, r := range replaced {
+	var up []int // the index in roots of each of linked, the paths a ".." out of changes
+	for i, r := range slices.Concat(replaced, linked) {
 		if info, err := os.Stat(r); err == nil && !os.SameFile(info, self) {
-			others, roots, outside = append(others, r), append(roots, info), append(outside, realPath(r))
+			if i >= len(replaced) {
+				up = append(up, len(roots))
+			}
+			others, roots, outside = append(others, r), append(roots, info), append(outside, canonicalPath(r))
 		}
+	}
+	upRoots := make([]os.FileInfo, len(up))
+	for i, n := range up {
+		upRoots[i] = roots[n]
 	}
 	links, err := reach(real, "", maxReached, nil)
 	if err != nil {
@@ -874,6 +983,12 @@ func linkIntoReplaced(dir string, replaced []string) (string, string, error) {
 				return l.path, others[n], nil
 			}
 		}
+		if n := upThrough(l, upRoots); n >= 0 {
+			return l.path, others[up[n]], nil
+		}
+		if leavesSelf(l, self) {
+			return l.path, dir, nil
+		}
 		if n := beneath(l.route[len(l.route)-1], outside); n >= 0 {
 			return l.path, others[n], nil
 		}
@@ -881,17 +996,74 @@ func linkIntoReplaced(dir string, replaced []string) (string, string, error) {
 	return "", "", nil
 }
 
+// leavesSelf reports whether the route of l, a link the real directory
+// self reaches, leaves self itself by "..", see route. A relative link
+// inside self is left to leavingLink, which judges it by its spelling, as
+// the library's copy of it is spelled: ../<name>/x leaves self and comes
+// back, and leads to the same file from the library.
+func leavesSelf(l libraryLink, self os.FileInfo) bool {
+	if within(l.in, []os.FileInfo{self}) >= 0 {
+		target, err := os.Readlink(filepath.Join(l.in, filepath.Base(l.path)))
+		if err != nil || !filepath.IsAbs(target) {
+			return false
+		}
+	}
+	return slices.ContainsFunc(l.upFrom, func(at string) bool {
+		info, err := os.Lstat(at)
+		return err == nil && os.SameFile(info, self)
+	})
+}
+
+// leavingLink names the first symlink in the directory dir, as a path
+// relative to it, whose target is relative and leads out of it, "" when
+// none does. The directory is copied into the library as name, link for
+// link, so such a link would lead from there instead, to something else or
+// to nothing. Only the links dir holds count, found without following any:
+// a link in a directory outside that one of them leads to stays where it
+// is. A target is taken as spelled, from the directory its link sits in:
+// every directory on the way to the link is a real one, so its ".." is
+// where the spelling says, and a target that leaves and comes back in by
+// name, as ../<name>/x does, stays, since that is the directory itself here
+// and its copy in the library.
+func leavingLink(dir, name string) (string, error) {
+	real, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return "", nil // a directory this machine cannot read failed the tree read already
+	}
+	var found string
+	err = filepath.WalkDir(real, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.Type()&os.ModeSymlink == 0 {
+			return err
+		}
+		target, err := os.Readlink(path)
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(real, path)
+		if err != nil || filepath.IsAbs(target) {
+			return err
+		}
+		lands := filepath.Join(name, filepath.Dir(rel), target) // cleaned
+		if lands == name || strings.HasPrefix(lands, name+string(filepath.Separator)) {
+			return nil
+		}
+		found = rel
+		return fs.SkipAll
+	})
+	return found, err
+}
+
 // signature is everything the plan was judged from, as one string: two
 // reads of the machine that give the same signature would be repaired the
 // same way.
 func (plan repairPlan) signature() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s\x00%s\x00%d\x00%s\x00%s\x00%s\x00%s\x00%s\x00%v\x00%v\x00%s\n", plan.libState, plan.libTree.ID, len(plan.libTree.Unrecordable), plan.libBytes,
-		strings.Join(plan.copies, ","), strings.Join(plan.copyPaths, ","), plan.heldLink, plan.heldPath, plan.nested, plan.nestedAll, plan.copyIn)
+	fmt.Fprintf(&b, "%s\x00%s\x00%d\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s\x00%v\x00%v\x00%s\n", plan.libState, plan.libTree.ID, len(plan.libTree.Unrecordable), plan.libBytes,
+		strings.Join(plan.copies, ","), strings.Join(plan.copyPaths, ","), strings.Join(plan.sites, ","), plan.heldLink, plan.heldPath, plan.nested, plan.nestedAll, plan.copyIn)
 	for _, p := range plan.places {
-		fmt.Fprintf(&b, "%s\x00%s\x00%s\x00%s\x00%t\x00%t\x00%t\x00%s\x00%s\x00%t\x00%t\x00%s\x00%s\x00%s\x00%t\x00%t\x00%s\x00%s\n",
-			p.path, p.word, p.state, p.tree, p.recordable, p.skill, p.same, p.holds, p.ownHolds, p.inLibrary, p.hasLibrary, p.linksInto, p.leadsInto, p.linksErr,
-			p.copied, p.err != nil, strings.Join(p.enabled, ","), strings.Join(p.paths, ","))
+		fmt.Fprintf(&b, "%s\x00%s\x00%s\x00%s\x00%t\x00%t\x00%t\x00%s\x00%s\x00%t\x00%t\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s\x00%t\x00%t\x00%s\x00%s\n",
+			p.path, p.word, p.state, p.tree, p.recordable, p.skill, p.same, p.holds, p.ownHolds, p.inLibrary, p.hasLibrary, p.linksInto, p.leadsInto, p.leaves, p.linksErr,
+			p.writes, p.ownWrites, p.copied, p.err != nil, strings.Join(p.enabled, ","), strings.Join(p.paths, ","))
 	}
 	return b.String()
 }
@@ -915,23 +1087,29 @@ func (plan repairPlan) differing() []repairPlace {
 // in libState among them, is part of the signature that read has to give
 // again, so a library entry made a symlink meanwhile refuses the run there.
 //
-// A place that lies inside another place the repair replaces is refused
-// whatever the flags, and with --keep-placement so is one inside the
-// library directory or a copy it refreshes, or a copy inside a place: the
-// journal would write the inner one into what replaced the outer one, the
-// library, or change the outer one before removing it. Every repair of a
-// directory removes it and puts the symlink in its place, so a displaced
-// directory that lies inside the library, or holds what a symlink the
-// library reaches leads to or through, is refused whatever the flags:
-// removing it would delete what the library holds there. So is a missing
-// place inside the library, since placing the skill there writes into it.
-// A link inside the skill's own library directory is the one exception,
-// with --keep-placement, which replaces that directory, link and all. With
+// Any configuration's own place that lies inside a directory the repair
+// removes is refused whatever the flags, whatever the place holds, and
+// with --keep-placement so is a place or a copy inside the library
+// directory or a copy it refreshes, or a copy inside a place: the journal
+// would write the inner one into what replaced the outer one, the library,
+// or change the outer one before removing it, and what the client keeps
+// there, a copy of this skill or another's, would go with the outer one.
+// Every repair of a directory removes it and puts the symlink in its
+// place, so a displaced directory that lies inside the library, or holds
+// what a symlink the library reaches leads to or through, is refused
+// whatever the flags: removing it would delete what the library holds
+// there. So is a place the repair writes without removing it, missing or
+// the library's own symlink where a copy belongs, that lies inside the
+// library or inside a directory a symlink the library reaches leads to,
+// since placing the skill there writes into what the library holds. A link
+// inside the skill's own library directory is the one exception, with
+// --keep-placement, which replaces that directory, link and all. With
 // --keep-placement, so is a directory reaching a link into a path the
 // repair replaces, since its content, copied into the library, would lose
-// what the link leads to, a library reaching a link into what the repair
-// replaces, the library directory or a copy it refreshes, and a copy it
-// refreshes inside the library.
+// what the link leads to, a directory holding a relative link that leads
+// out of it, which would lead elsewhere from the library, a library
+// reaching a link into what the repair replaces, the library directory or
+// a copy it refreshes, and a copy it refreshes inside the library.
 func (plan repairPlan) refusal(name string, choice repairChoice) error {
 	differ := plan.differing()
 	keepLibrary := "'" + skillCommand("repair", name, "--keep-library") + "'"
@@ -939,11 +1117,11 @@ func (plan repairPlan) refusal(name string, choice repairChoice) error {
 	again := "run '" + skillCommand("repair", name) + "' again"
 	libraryReplaced := choice == choosePlacement && len(differ) > 0
 	nested := plan.nested
-	if libraryReplaced {
+	if libraryReplaced && plan.nestedAll.inner != "" {
 		nested = plan.nestedAll
 	}
 	if nested.inner != "" {
-		return fail(exitRefused, fmt.Sprintf("%s lies inside %s, which the repair replaces too, so nothing was repaired", quotedPath(nested.inner), quotedPath(nested.outer)),
+		return fail(exitRefused, fmt.Sprintf("%s lies inside %s, which the repair replaces, so nothing was repaired", quotedPath(nested.inner), quotedPath(nested.outer)),
 			"make "+quotedPath(filepath.Dir(nested.inner))+" a directory outside "+quotedPath(nested.outer)+", then "+again)
 	}
 	_, libraryLinked := home.LinkTarget(plan.libState)
@@ -955,6 +1133,10 @@ func (plan repairPlan) refusal(name string, choice repairChoice) error {
 		case p.inLibrary:
 			return fail(exitRefused, fmt.Sprintf("%s lies inside the library %s, and replacing it would delete what the library holds there, so nothing was repaired", quotedPath(p.path), quotedPath(plan.library)),
 				"make "+quotedPath(filepath.Dir(p.path))+" a directory outside the library, then "+again)
+		case p.writtenBy(libraryReplaced) != "":
+			through := p.writtenBy(libraryReplaced)
+			return fail(exitRefused, fmt.Sprintf("%s lies inside what the link %s in the library leads to, and placing the skill there would change what the library holds, so nothing was repaired", quotedPath(p.path), quotedPath(through)),
+				"replace the link "+quotedPath(through)+" with the files it leads to, or make "+quotedPath(filepath.Dir(p.path))+" a directory outside it, then "+again)
 		case p.hasLibrary:
 			return fail(exitRefused, fmt.Sprintf("%s holds the library %s, and replacing it would delete the library, so nothing was repaired", quotedPath(p.path), quotedPath(plan.library)),
 				"move the library out of "+quotedPath(p.path)+", then "+again)
@@ -1007,6 +1189,10 @@ func (plan repairPlan) refusal(name string, choice repairChoice) error {
 			if p.linksInto != "" {
 				return fail(exitRefused, fmt.Sprintf("%s in %s is a symlink into %s, which keeping the placement replaces, so its content cannot become the library's", quotedPath(p.linksInto), quotedPath(p.path), quotedPath(p.leadsInto)),
 					"replace the link "+quotedPath(p.linksInto)+" with the files it leads to, then run "+keepPlacement+" again, or keep the library's content with "+keepLibrary)
+			}
+			if p.leaves != "" {
+				return fail(exitRefused, fmt.Sprintf("%s in %s is a relative symlink that leads out of it, and copied into the library it would lead elsewhere, so its content cannot become the library's", quotedPath(p.leaves), quotedPath(p.path)),
+					"make the link "+quotedPath(p.leaves)+" absolute or replace it with the files it leads to, then run "+keepPlacement+" again, or keep the library's content with "+keepLibrary)
 			}
 		}
 		if plan.copyIn != "" {
