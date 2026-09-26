@@ -14,6 +14,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
+	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
 func newSkillRemoveCommand(inv *invocation) *cobra.Command {
@@ -30,7 +31,9 @@ func newSkillRemoveCommand(inv *invocation) *cobra.Command {
 			"client.\n\n" +
 			"A placement is deleted only when it is a symlink into the library or a copy this\n" +
 			"machine recorded. Anything else at a placement path is left where it is and\n" +
-			"named in the output: agentx never removes what it did not create.",
+			"named in the output: agentx never removes what it did not create.\n\n" +
+			"A managed skill whose library directory was deleted outside agentx can still be\n" +
+			"removed without --from: its import branch and the placements agentx made go.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return inv.skillRemove(cmd.Context(), args[0], from)
@@ -71,6 +74,7 @@ type removalPlan struct {
 	library []string // the configurations that saw the skill through the library entry
 	managed string   // the commit the import branch held; empty when there was none
 	dropped []string // the configurations taken out of copy_mode
+	absent  bool     // the library held no directory for the skill, only its import branch was left
 }
 
 // skillRemove takes a skill out of the configurations --from names, or off
@@ -88,7 +92,7 @@ type removalPlan struct {
 // nothing else.
 func (inv *invocation) skillRemove(ctx context.Context, name string, from []string) error {
 	if _, ok := librarySkill(inv.dirs.Library, name); !ok {
-		return inv.noLibrarySkill(name)
+		return inv.removeAbsent(ctx, name, from)
 	}
 	targets, whole, err := inv.removalTargets(ctx, name, from)
 	if err != nil {
@@ -108,7 +112,10 @@ func (inv *invocation) skillRemove(ctx context.Context, name string, from []stri
 		if !ok {
 			return inv.noLibrarySkill(name)
 		}
-		libHash := lib.ContentHash
+		judge := copyJudge{against: "the library"}
+		if libHash := lib.ContentHash; libHash != "" {
+			judge.differs = func(path string) bool { return contentHashAt(path) != libHash }
+		}
 		refs := map[string]string{}
 		if hasRepo {
 			values, err := inv.lineageRefs(ctx, gitDir, name)
@@ -130,30 +137,9 @@ func (inv *invocation) skillRemove(ctx context.Context, name string, from []stri
 		// warning for a link it leaves can say whether that link still leads
 		// anywhere, whichever target the link leads through.
 		gone := removalDeletes(targets, name, libPath, edit.copiesOf(name), whole)
-		for _, t := range targets {
-			if t.readsLibrary {
-				// There is no placement to delete: the library entry is the
-				// occurrence. Removing the entry takes it away from this
-				// client too, which is why --from refused this configuration.
-				plan.library = append(plan.library, t.id)
-				continue
-			}
-			step, err := inv.planRemoval(t, name, libPath, libHash, edit.copiesOf(name), gone)
-			if err != nil {
-				m.Discard()
-				return err
-			}
-			switch {
-			case step.state == "" && step.why == "": // nothing there at all
-				plan.dropped = append(plan.dropped, t.id)
-			case step.why != "":
-				plan.kept = append(plan.kept, step)
-				inv.out.warn(step.why)
-			default:
-				plan.deleted = append(plan.deleted, step)
-				plan.dropped = append(plan.dropped, t.id)
-				m.Remove(step.path, step.state)
-			}
+		if err := inv.stageRemovals(m, &plan, targets, libPath, judge, edit.copiesOf(name), gone); err != nil {
+			m.Discard()
+			return err
 		}
 		if whole {
 			state, err := home.State(libPath)
@@ -178,6 +164,180 @@ func (inv *invocation) skillRemove(ctx context.Context, name string, from []stri
 		} else {
 			edit.dropCopies(name, plan.dropped)
 		}
+		if err := edit.stage(m, inv.dirs.Home); err != nil {
+			m.Discard()
+			return err
+		}
+		return m.Apply(inv.refs(ctx))
+	})
+	if err != nil {
+		return mutationFailure(err)
+	}
+	return inv.reportRemoved(ctx, plan, targets)
+}
+
+// stageRemovals plans, into m, what the removal does at the placement of
+// each of targets, as planRemoval decides it, and records each step in
+// plan. A client that reads the library has no placement to delete: the
+// library entry is the occurrence, and removing the entry takes the skill
+// from that client too, which is why --from refused this configuration.
+// When the library holds no entry for the skill, such a client saw nothing
+// and is not named.
+func (inv *invocation) stageRemovals(m *home.Mutation, plan *removalPlan, targets []placeTarget, libPath string, judge copyJudge, copies []string, gone map[string]bool) error {
+	for _, t := range targets {
+		if t.readsLibrary {
+			if !plan.absent {
+				plan.library = append(plan.library, t.id)
+			}
+			continue
+		}
+		step, err := inv.planRemoval(t, plan.name, libPath, judge, copies, gone)
+		if err != nil {
+			return err
+		}
+		switch {
+		case step.state == "" && step.why == "": // nothing there at all
+			plan.dropped = append(plan.dropped, t.id)
+		case step.why != "":
+			plan.kept = append(plan.kept, step)
+			inv.out.warn(step.why)
+		default:
+			plan.deleted = append(plan.deleted, step)
+			plan.dropped = append(plan.dropped, t.id)
+			m.Remove(step.path, step.state)
+		}
+	}
+	return nil
+}
+
+// removeAbsent takes off the machine a managed skill the library no longer
+// holds: its directory was deleted, or lost its SKILL.md, outside agentx,
+// and its import branch is what is left of it, with whatever placements
+// still lead to where the directory was. A listing warns about such a
+// skill until it is installed again or removed, and an install cannot
+// always lay it out again, since it installs the version the source holds
+// now and refuses while the branch names another. This removal always can.
+//
+// It is the removal that takes the skill off the machine with nothing in
+// the library to delete: the branch goes, carrying the commit it was read
+// at, the copy modes go, and each placement goes by the rule every removal
+// deletes by, a link into the library, dangling now, or a copy this machine
+// recorded, anything else being left and named. So is whatever is still at
+// the library path: it holds no SKILL.md, so it is not the skill, and
+// agentx does not delete what it cannot tell apart from the user's own.
+//
+// A recorded copy is often the last of the skill left on the machine, and
+// it may hold the user's changes. With no library to compare it with, it
+// is compared with the base version the branch names, as git would record
+// the two, and a copy that is anything else is deleted with the warning a
+// removal gives a copy that differs, naming the base version instead of
+// the library.
+//
+// --from naming a configuration is refused: with no library entry there is
+// no skill for one configuration to keep while another loses it. A name
+// that has no import branch, or is a fork, is not in the library at all.
+func (inv *invocation) removeAbsent(ctx context.Context, name string, from []string) error {
+	gitDir, hasRepo, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	if err != nil {
+		return accountRepoFailure(err)
+	}
+	if !hasRepo {
+		return inv.noLibrarySkill(name)
+	}
+	refs, err := inv.lineageRefs(ctx, gitDir, name)
+	if err != nil {
+		return err
+	}
+	commit := refs[lineage.ManagedRef(name)]
+	if commit == "" || refs[lineage.ForkRef(name)] != "" {
+		return inv.noLibrarySkill(name)
+	}
+	for _, id := range from {
+		if id != fromUniversal {
+			return fail(exitRefused, fmt.Sprintf("the library holds no skill directory for %s, so it cannot be removed from %s alone", name, id),
+				"take what is left of it off the machine with '"+skillCommand("remove", name)+"'")
+		}
+	}
+	targets := inv.detectedTargets()
+	plan := removalPlan{name: name, whole: true, absent: true, from: targetIDs(targets)}
+	libPath := inv.libraryPath(name)
+	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
+		// Both inputs are read again under the lock: the library still holds
+		// no skill of the name, and the branch is where it was read.
+		if _, ok := librarySkill(inv.dirs.Library, name); ok {
+			return fail(exitRefused, "the library came to hold "+name+" while it was being removed, so nothing was removed",
+				"run '"+skillCommand("remove", name)+"' again to remove the skill it holds now")
+		}
+		moved := fail(exitRefused, "the import branch "+lineage.ManagedRef(name)+" moved while "+name+" was being removed, so nothing was removed",
+			"run '"+skillCommand("remove", name)+"' again")
+		values, err := inv.lineageRefs(ctx, gitDir, name)
+		if err != nil {
+			return err
+		}
+		if values[lineage.ManagedRef(name)] != commit || values[lineage.ForkRef(name)] != "" {
+			return moved
+		}
+		// The base version a copy is judged against: the tree and the
+		// trailers of the commit the branch holds, read for that commit.
+		records, err := lineage.List(ctx, inv.git, gitDir)
+		if err != nil {
+			return accountRepoFailure(err)
+		}
+		rec := records[name]
+		if rec.Kind != lineage.KindManaged || rec.Commit != commit {
+			return moved
+		}
+		judge := copyJudge{against: "its base version"}
+		if !rec.HasImport {
+			// A commit that carries no lineage agentx can read names no base
+			// version to hold a copy to, as no library directory is current
+			// against it, so every copy it deletes may hold the user's
+			// changes and goes with the warning.
+			judge.differs = func(string) bool { return true }
+		} else {
+			// A branch an earlier agentx stored in a form git no longer
+			// writes is current against no directory, so a copy that is not
+			// current is held to the base's files as well, read once and
+			// only for such a copy.
+			var base *lineage.Base
+			judge.differs = func(path string) bool {
+				tree, err := treeid.Read(path)
+				if err != nil {
+					return true
+				}
+				if rec.Current(tree) {
+					return false
+				}
+				if base == nil {
+					read, err := lineage.ReadBase(ctx, inv.git, gitDir, rec)
+					if err != nil {
+						return true
+					}
+					base = &read
+				}
+				return !base.HeldBy(tree)
+			}
+		}
+		edit, err := inv.beginSettings()
+		if err != nil {
+			return err
+		}
+		m := home.NewMutation(inv.dirs.Home)
+		plan.deleted, plan.kept, plan.library, plan.dropped = nil, nil, nil, nil
+		gone := removalDeletes(targets, name, libPath, edit.copiesOf(name), false)
+		if err := inv.stageRemovals(m, &plan, targets, libPath, judge, edit.copiesOf(name), gone); err != nil {
+			m.Discard()
+			return err
+		}
+		if state, err := home.State(libPath); err == nil && !home.IsAbsent(state) {
+			inv.out.warn(quotedPath(libPath) + " holds no skill and was left as it is; move it aside before installing " + name + " again")
+		}
+		plan.managed = commit
+		m.Ref(gitDir, lineage.ManagedRef(name), commit, "")
+		if candidate := values[lineage.CandidateRef(name)]; candidate != "" {
+			m.Ref(gitDir, lineage.CandidateRef(name), candidate, "")
+		}
+		edit.dropSkill(name)
 		if err := edit.stage(m, inv.dirs.Home); err != nil {
 			m.Discard()
 			return err
@@ -401,6 +561,17 @@ func (inv *invocation) lineageRefs(ctx context.Context, gitDir, name string) (ma
 	return values, nil
 }
 
+// copyJudge is how a removal tells whether a recorded copy it deletes held
+// something else than agentx would have placed, which the run then says
+// went with it: against names what the copy is compared with, in the words
+// of the warning, and differs reports whether the copy at a path holds
+// anything else. A nil differs has nothing to compare with and says
+// nothing.
+type copyJudge struct {
+	against string
+	differs func(path string) bool
+}
+
 // planRemoval decides what the removal does at one configuration's
 // placement path. This is the rule of the whole command: a symlink that
 // names the library directory goes, a real directory this machine recorded
@@ -408,7 +579,7 @@ func (inv *invocation) lineageRefs(ctx context.Context, gitDir, name string) (ma
 // so. A path holding nothing is neither, and the step it returns carries
 // neither a state nor a reason. gone is every path the removal deletes, as
 // removalDeletes finds them, which the line for a link it leaves turns on.
-func (inv *invocation) planRemoval(t placeTarget, name, libPath, libHash string, copies []string, gone map[string]bool) (removalStep, error) {
+func (inv *invocation) planRemoval(t placeTarget, name, libPath string, judge copyJudge, copies []string, gone map[string]bool) (removalStep, error) {
 	path := filepath.Join(t.dir, name)
 	state, err := home.State(path)
 	if err != nil {
@@ -431,16 +602,18 @@ func (inv *invocation) planRemoval(t placeTarget, name, libPath, libHash string,
 		// means, so the run says that it went.
 		//
 		// What it says is what agentx can see: whose copy it was, and that
-		// it was different from the library, worded like the warning for a
-		// copy a placement leaves unchanged. How it came to differ is not
-		// recorded anywhere: the user may have edited the copy, replaced it
-		// with something of another project, or had a directory of their own
-		// adopted here that was never a copy agentx wrote. So the warning
-		// does not claim a history it has no record of.
+		// it was different from the library, or from the base version when
+		// the library holds no directory for the skill, worded like the
+		// warning for a copy a placement leaves unchanged. How it came to
+		// differ is not recorded anywhere: the user may have edited the
+		// copy, replaced it with something of another project, or had a
+		// directory of their own adopted here that was never a copy agentx
+		// wrote. So the warning does not claim a history it has no record
+		// of.
 		step.mode, step.state = modeCopy, state
-		if libHash != "" && contentHashAt(path) != libHash {
+		if judge.differs != nil && judge.differs(path) {
 			inv.out.warn(t.id + "'s copy of " + name +
-				" was different from the library; removing it deleted those changes (" + path + ")")
+				" was different from " + judge.against + "; removing it deleted those changes (" + path + ")")
 		}
 	default:
 		step.why = inv.whyKept(path, state, libPath, t.id, name, gone)
@@ -613,11 +786,14 @@ func (plan removalPlan) removedPlacements() int { return len(plan.deleted) + len
 // prints its rows.
 func (inv *invocation) printRemoved(plan removalPlan) {
 	out := inv.out
-	where := "the library"
-	if !plan.whole {
-		where = strings.Join(plan.from, ", ")
+	where := " from " + out.paint(heading, "the library")
+	switch {
+	case plan.absent:
+		where = ", which the library no longer held"
+	case !plan.whole:
+		where = " from " + out.paint(heading, strings.Join(plan.from, ", "))
 	}
-	line := "removed " + out.paint(heading, sanitised(plan.name)) + " from " + out.paint(heading, where) + ": " +
+	line := "removed " + out.paint(heading, sanitised(plan.name)) + where + ": " +
 		out.paint(noteStyle, plural(plan.removedPlacements(), "placement"))
 	if n := len(plan.kept); n > 0 {
 		line += ", " + out.paint(warnStyle, plural(n, "placement")+" left in place")
@@ -632,11 +808,14 @@ func (inv *invocation) printRemoved(plan removalPlan) {
 	}
 	out.render(t, "")
 	if plan.whole {
-		gone := quotedPath(inv.libraryPath(plan.name))
-		if plan.managed != "" {
-			gone += " and " + sanitised(lineage.ManagedRef(plan.name))
+		var gone []string
+		if !plan.absent {
+			gone = append(gone, quotedPath(inv.libraryPath(plan.name)))
 		}
-		out.print("  ", out.paint(muted, "deleted "+gone))
+		if plan.managed != "" {
+			gone = append(gone, sanitised(lineage.ManagedRef(plan.name)))
+		}
+		out.print("  ", out.paint(muted, "deleted "+strings.Join(gone, " and ")))
 	}
 }
 
@@ -645,6 +824,8 @@ func removeSummary(plan removalPlan) string {
 	n := plural(plan.removedPlacements(), "placement")
 	var summary string
 	switch {
+	case plan.absent:
+		summary = "removed " + plan.name + ", which the library no longer held: its import branch and " + n
 	case plan.whole && plan.managed != "":
 		summary = "removed " + plan.name + " from the library, " + n + " and its import branch"
 	case plan.whole:

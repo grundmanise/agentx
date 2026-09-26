@@ -39,21 +39,24 @@ func ManagedRef(name string) string { return ManagedPrefix + name }
 func ForkRef(name string) string { return ForkPrefix + name }
 
 // Record is what the account repo holds for one skill name: the branch, the
-// commit it points at and, when that commit carries them, the four lineage
-// trailers. A fork's tip carries the trailers of the last upstream version
-// merged into it, and may carry none at all.
+// commit it points at, that commit's tree and, when that commit carries
+// them, the four lineage trailers. A fork's tip carries the trailers of the
+// last upstream version merged into it, and may carry none at all.
 type Record struct {
 	Name      string
 	Kind      string // managed or fork
 	Ref       string
 	Commit    string
+	Tree      string // the root tree of that commit: for an import commit, the upstream directory as its one entry
 	Import    Import
 	HasImport bool
 }
 
 // List reads every lineage branch of the account repo in one for-each-ref
-// over both namespaces, trailers and all, and returns them by skill name. A
-// managed branch wins over a fork of the same name, which cannot happen
+// over both namespaces, trees and trailers and all, and returns them by
+// skill name. The tree is what tells a managed skill's library directory
+// from its base version without another git process: see Record.Current.
+// A managed branch wins over a fork of the same name, which cannot happen
 // while a rename into the fork namespace moves the branch rather than
 // copying it.
 //
@@ -64,7 +67,7 @@ type Record struct {
 func List(ctx context.Context, r *gitx.Runner, gitDir string) (map[string]Record, error) {
 	const recordEnd = "\x01"
 	out, err := r.Isolated(ctx, gitDir,
-		"for-each-ref", "--format=%(refname)%00%(objectname)%00%(contents)"+recordEnd,
+		"for-each-ref", "--format=%(refname)%00%(objectname)%00%(tree)%00%(contents)"+recordEnd,
 		ManagedPrefix, ForkPrefix)
 	if err != nil {
 		return nil, err
@@ -75,11 +78,11 @@ func List(ctx context.Context, r *gitx.Runner, gitDir string) (map[string]Record
 		if strings.TrimSpace(entry) == "" {
 			continue
 		}
-		fields := strings.SplitN(entry, "\x00", 3)
-		if len(fields) != 3 {
+		fields := strings.SplitN(entry, "\x00", 4)
+		if len(fields) != 4 {
 			continue
 		}
-		rec := Record{Ref: fields[0], Commit: fields[1]}
+		rec := Record{Ref: fields[0], Commit: fields[1], Tree: fields[2]}
 		switch {
 		case strings.HasPrefix(rec.Ref, ManagedPrefix):
 			rec.Name, rec.Kind = strings.TrimPrefix(rec.Ref, ManagedPrefix), KindManaged
@@ -88,7 +91,7 @@ func List(ctx context.Context, r *gitx.Runner, gitDir string) (map[string]Record
 		default:
 			continue
 		}
-		if imported, err := Parse(fields[2]); err == nil {
+		if imported, err := Parse(fields[3]); err == nil {
 			rec.Import, rec.HasImport = imported, true
 		}
 		if have, ok := records[rec.Name]; !ok || have.Kind == KindFork && rec.Kind == KindManaged {

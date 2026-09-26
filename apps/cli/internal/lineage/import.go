@@ -17,6 +17,7 @@ import (
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
+	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
 // The trailers of an import commit. There are four and no more: an import
@@ -272,26 +273,26 @@ func NewRun() string {
 }
 
 // WriteAll writes the import commit of every version into gitDir, through
-// one fast-import whatever the count, and returns their ids in the order
-// the versions were given. Each commit points at a tree this call has
-// already written or the source already held, is parentless, carries the
-// fixed agentx identity and the upstream committer time as epoch seconds
-// with +0000, and so depends on nothing but the version and its
-// coordinates: a skill installed alone and the same skill installed in a
-// batch of thirty end at the same commit.
+// one fast-import whatever the count, and returns their ids, and the ids of
+// the trees they hold, in the order the versions were given. Each commit
+// points at a tree this call has already written or the source already
+// held, is parentless, carries the fixed agentx identity and the upstream
+// committer time as epoch seconds with +0000, and so depends on nothing but
+// the version and its coordinates: a skill installed alone and the same
+// skill installed in a batch of thirty end at the same commit.
 //
 // fast-import is fed the tree rather than the files: the commit's tree is
 // exactly the one writeTrees built, set with a filemodify of the tree root,
 // so that nothing about how a batch is streamed can reach the commit id.
 // The ids come back through get-mark rather than a marks file, which costs
 // no temporary file and keeps the whole import to one git process.
-func WriteAll(ctx context.Context, r *gitx.Runner, gitDir, run string, versions []Version) ([]string, error) {
+func WriteAll(ctx context.Context, r *gitx.Runner, gitDir, run string, versions []Version) (commits, trees []string, err error) {
 	if len(versions) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
-	trees, err := writeTrees(ctx, r, gitDir, versions)
+	trees, err = writeTrees(ctx, r, gitDir, versions)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var b strings.Builder
 	for i, v := range versions {
@@ -312,13 +313,53 @@ func WriteAll(ctx context.Context, r *gitx.Runner, gitDir, run string, versions 
 	b.WriteString("done\n")
 	out, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(b.String()), "fast-import", "--quiet", "--done")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	ids := strings.Fields(out)
 	if len(ids) != len(versions) {
-		return nil, fmt.Errorf("git fast-import wrote %d commits for %d versions", len(ids), len(versions))
+		return nil, nil, fmt.Errorf("git fast-import wrote %d commits for %d versions", len(ids), len(versions))
 	}
-	return ids, nil
+	return ids, trees, nil
+}
+
+// Rewrite writes the import commit of the version rec records once more,
+// as an import writes one today, onto the first staging ref of run: the
+// same trailers and message, the same dates, and the tree base gets from
+// a git of today. It is for a branch whose commit fails Canonical, which
+// an earlier agentx wrote over a source's own tree, legacy modes and all:
+// no directory on disk is ever current against that commit, while the one
+// this returns is the commit an install of the same version writes now,
+// on this machine or any other.
+//
+// The date is read off the commit rec names, which carries the upstream
+// commit's committer time as every import commit does, and is held to the
+// rule an install holds that time to.
+func Rewrite(ctx context.Context, r *gitx.Runner, gitDir, run string, rec Record, base Base) (string, error) {
+	if !rec.HasImport {
+		return "", fmt.Errorf("%w: %s carries no lineage", ErrTrailer, rec.Ref)
+	}
+	out, err := r.Isolated(ctx, gitDir, "log", "-1", "--format=%ct", rec.Commit)
+	if err != nil {
+		return "", err
+	}
+	when, err := UpstreamDate(strings.TrimSpace(out))
+	if err != nil {
+		return "", err
+	}
+	dir := rec.Import.Dir()
+	commits, trees, err := WriteAll(ctx, r, gitDir, run, []Version{{
+		Import: rec.Import, Dir: dir, Tree: base.Tree, Entries: base.Entries, When: when,
+	}})
+	if err != nil {
+		return "", err
+	}
+	// An import holds regular files alone, so a base holding anything
+	// else was not written by one, and the commit written now would hold
+	// another version than the one a revert lays out.
+	if want := treeid.Wrap(dir, base.ID()); trees[0] != want {
+		return "", fmt.Errorf("%w: %s holds entries no import writes", ErrTrailer, rec.Ref)
+	}
+	return commits[0], nil
 }
 
 // DropImporting removes the staging refs of run, in one transaction. It is
@@ -337,18 +378,29 @@ func DropImporting(ctx context.Context, r *gitx.Runner, gitDir, run string, n in
 }
 
 // writeTrees builds the import tree of every version: one entry, the
-// upstream directory, and under it the skill's regular files. A skill whose
-// tree holds only regular files and directories, which is nearly every
-// skill, reuses that tree whole; only the directories above an entry that
-// has to be left out are written anew, deepest first. Every version is
-// written together, one mktree per level of the deepest of them and one for
-// their roots, so that a batch of thirty skills costs the tree writes of
-// one.
+// upstream directory, and under it the skill's regular files, every tree
+// exactly as git writes one today. A directory the source already stores
+// that way, which is nearly every directory of nearly every skill, is
+// reused whole. The rest are written anew, deepest first: a directory that
+// holds an entry an import leaves out, one above a directory written anew,
+// and one the source stores in a form git reads but no longer writes, such
+// as a file of mode 100664 or a directory mode padded with a zero. git
+// reads such a mode back as the canonical one, so a listing of the tree
+// shows nothing amiss, but the tree keeps an id of its own, and no
+// directory on disk, whose id is computed with canonical modes, could ever
+// be compared equal to it.
+//
+// So the id every directory ends at is known before anything is written,
+// computed in process the way treeid computes a directory's, and every id
+// git answers with is held to it: the tree an import commit holds is the
+// tree Holds compares a library directory with. Every version is written
+// together, one mktree per level of the deepest of them and one for their
+// roots, so that a batch of thirty skills costs the tree writes of one.
 func writeTrees(ctx context.Context, r *gitx.Runner, gitDir string, versions []Version) ([]string, error) {
 	plans := make([]*treePlan, len(versions))
 	maxDepth := 0
 	for i, v := range versions {
-		plans[i] = newTreePlan(v)
+		plans[i] = planTrees(v, false)
 		maxDepth = max(maxDepth, plans[i].maxDepth)
 	}
 	// A directory is written once every directory below it is, so the levels
@@ -358,14 +410,8 @@ func writeTrees(ctx context.Context, r *gitx.Runner, gitDir string, versions []V
 		var at []plannedDir // what each definition writes, in the same order
 		for _, p := range plans {
 			for _, dir := range p.level(depth) {
-				lines := entryLines(dir, p.children, p.ids)
-				p.rewritten[dir] = true
-				if len(lines) == 0 {
-					p.ids[dir] = "" // every entry left out: the directory goes with them
-					continue
-				}
 				at = append(at, plannedDir{plan: p, dir: dir})
-				defs = append(defs, treeInput(lines))
+				defs = append(defs, treeInput(entryLines(p.entries[dir])))
 			}
 		}
 		written, err := mktree(ctx, r, gitDir, defs)
@@ -373,7 +419,9 @@ func writeTrees(ctx context.Context, r *gitx.Runner, gitDir string, versions []V
 			return nil, err
 		}
 		for i, d := range at {
-			d.plan.ids[d.dir] = written[i]
+			if want := d.plan.ids[d.dir]; written[i] != want {
+				return nil, fmt.Errorf("git wrote the directory %q of %s as %s, not %s", d.dir, d.plan.dir, written[i], want)
+			}
 		}
 	}
 	defs := make([]string, 0, len(versions))
@@ -386,99 +434,120 @@ func writeTrees(ctx context.Context, r *gitx.Runner, gitDir string, versions []V
 		}
 		defs = append(defs, treeInput([]string{entryLine(source.DirMode, root, v.Dir)}))
 	}
-	return mktree(ctx, r, gitDir, defs)
+	roots, err := mktree(ctx, r, gitDir, defs)
+	if err != nil {
+		return nil, err
+	}
+	for i, v := range versions {
+		if want := treeid.Wrap(v.Dir, plans[i].ids[""]); roots[i] != want {
+			return nil, fmt.Errorf("git wrote the import tree of %s as %s, not %s", v.Dir, roots[i], want)
+		}
+	}
+	return roots, nil
 }
 
-// treePlan is one version's tree rewrite: what each directory holds, which
-// directories sit at which depth, and the id each has ended at.
+// treePlan is one version's import tree: what each directory holds once an
+// import has left out what it leaves out, the id each directory ends at,
+// the id the source stores it under, and which directories sit at which
+// depth.
 type treePlan struct {
-	children  map[string][]source.TreeEntry
-	byDepth   map[int][]string
-	ids       map[string]string
-	rewritten map[string]bool
-	maxDepth  int
+	dir      string                    // the upstream directory, for an error to name
+	entries  map[string][]treeid.Entry // by directory, "" the skill's own, in git's order
+	ids      map[string]string         // the id each directory ends at; "" for one left with nothing
+	stored   map[string]string         // the id the source stores each directory under
+	byDepth  map[int][]string
+	maxDepth int
 }
 
-// plannedDir names one directory of one version, for reading the ids of a
-// level's mktree back where they belong.
+// plannedDir names one directory of one version, for holding the ids of a
+// level's mktree to the ones the plan computed.
 type plannedDir struct {
 	plan *treePlan
 	dir  string
 }
 
-func newTreePlan(v Version) *treePlan {
+// planTrees reads the entries of one version into its directories and
+// computes, deepest first, the id each one ends at: its regular files as
+// git lists them, which is with their canonical modes, and the directories
+// below it at the ids they end at, one left with nothing left out. links
+// keeps the symlinks too, which an import leaves out and a version laid
+// out on disk holds.
+func planTrees(v Version, links bool) *treePlan {
 	p := &treePlan{
-		children:  map[string][]source.TreeEntry{},
-		byDepth:   map[int][]string{},
-		ids:       map[string]string{"": v.Tree},
-		rewritten: map[string]bool{},
+		dir:     v.Dir,
+		entries: map[string][]treeid.Entry{},
+		ids:     map[string]string{},
+		stored:  map[string]string{"": v.Tree},
+		byDepth: map[int][]string{},
 	}
+	files := map[string][]treeid.Entry{}
+	subdirs := map[string][]string{}
 	for _, e := range v.Entries {
 		parent := path.Dir(e.Path)
 		if parent == "." {
 			parent = ""
 		}
-		p.children[parent] = append(p.children[parent], e)
-		if e.Mode == source.DirMode {
-			p.ids[e.Path] = e.OID
+		switch {
+		case e.Mode == source.DirMode:
+			p.stored[e.Path] = e.OID
+			subdirs[parent] = append(subdirs[parent], e.Path)
 			depth := strings.Count(e.Path, "/") + 1
 			p.byDepth[depth] = append(p.byDepth[depth], e.Path)
 			p.maxDepth = max(p.maxDepth, depth)
+		case source.IsFileMode(e.Mode), links && e.Mode == source.SymlinkMode:
+			files[parent] = append(files[parent], treeid.Entry{Name: path.Base(e.Path), Mode: e.Mode, OID: e.OID})
+		}
+	}
+	for depth := p.maxDepth; depth >= 0; depth-- {
+		for _, dir := range p.dirsAt(depth) {
+			entries := files[dir]
+			for _, sub := range subdirs[dir] {
+				if id := p.ids[sub]; id != "" {
+					entries = append(entries, treeid.Entry{Name: path.Base(sub), Mode: source.DirMode, OID: id})
+				}
+			}
+			if len(entries) == 0 {
+				p.ids[dir] = "" // every entry left out: the directory goes with them
+				continue
+			}
+			treeid.Sort(entries)
+			p.entries[dir] = entries
+			p.ids[dir] = treeid.TreeID(entries)
 		}
 	}
 	return p
 }
 
-// level names the directories of this version at depth that have to be
-// written anew, in a fixed order.
-func (p *treePlan) level(depth int) []string {
-	dirs := p.byDepth[depth]
+// dirsAt names the directories of this version at depth, in a fixed order.
+func (p *treePlan) dirsAt(depth int) []string {
 	if depth == 0 {
-		dirs = []string{""}
+		return []string{""}
 	}
+	dirs := p.byDepth[depth]
 	sort.Strings(dirs)
+	return dirs
+}
+
+// level names the directories of this version at depth that have to be
+// written anew: every one whose id is not the one the source stores it
+// under, and that is left with anything at all.
+func (p *treePlan) level(depth int) []string {
 	var needed []string
-	for _, dir := range dirs {
-		if needsWriting(dir, p.children, p.rewritten) {
+	for _, dir := range p.dirsAt(depth) {
+		if id := p.ids[dir]; id != "" && id != p.stored[dir] {
 			needed = append(needed, dir)
 		}
 	}
 	return needed
 }
 
-// entryLines are the mktree lines of one directory: its regular files as
-// they are, and the directories below it at the id they ended up with, an
-// emptied one left out.
-func entryLines(dir string, children map[string][]source.TreeEntry, ids map[string]string) []string {
-	var lines []string
-	for _, e := range children[dir] {
-		switch {
-		case e.Mode == source.DirMode:
-			if id := ids[e.Path]; id != "" {
-				lines = append(lines, entryLine(source.DirMode, id, path.Base(e.Path)))
-			}
-		case source.IsFileMode(e.Mode):
-			lines = append(lines, entryLine(e.Mode, e.OID, path.Base(e.Path)))
-		}
+// entryLines are the mktree lines of one directory's entries.
+func entryLines(entries []treeid.Entry) []string {
+	lines := make([]string, len(entries))
+	for i, e := range entries {
+		lines[i] = entryLine(e.Mode, e.OID, e.Name)
 	}
 	return lines
-}
-
-// needsWriting reports whether dir has to be written anew: it does when one
-// of its entries is neither a regular file nor a directory, which an import
-// leaves out, or when a directory below it was written anew.
-func needsWriting(dir string, children map[string][]source.TreeEntry, rewritten map[string]bool) bool {
-	for _, e := range children[dir] {
-		switch {
-		case e.Mode == source.DirMode:
-			if rewritten[e.Path] {
-				return true
-			}
-		case !source.IsFileMode(e.Mode):
-			return true
-		}
-	}
-	return false
 }
 
 // mktree writes the trees defs defines, one definition per tree, in one git

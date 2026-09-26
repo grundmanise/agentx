@@ -453,7 +453,8 @@ func TestUnreadableLineageLeavesTheRefusalOfAnId(t *testing.T) {
 // before its source is removed and after. Every command that reports on a
 // library skill reports the same object skill list does, so each event
 // carries the drift the skill is in, and none when it is in none, with the
-// coordinates as they were.
+// coordinates as they were. Taking the skill out of an enabled
+// configuration leaves it missing there until it is placed again.
 func TestPlacementEventsCarryTheDrift(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -461,13 +462,16 @@ func TestPlacementEventsCarryTheDrift(t *testing.T) {
 	before := h.librarySkill(h.mustRun("--json", "skill", "list").stdout, "alpha")
 	report := func(want string) {
 		t.Helper()
-		for _, args := range [][]string{
-			{"skill", "remove", "alpha", "--from", "cursor"},
-			{"skill", "place", "alpha", "--to", "cursor"},
+		for _, c := range []struct {
+			args  []string
+			drift []string
+		}{
+			{[]string{"skill", "remove", "alpha", "--from", "cursor"}, []string{"missing", want}},
+			{[]string{"skill", "place", "alpha", "--to", "cursor"}, []string{want}},
 		} {
-			what := strings.Join(args, " ")
-			ev := h.librarySkill(h.mustRun(append([]string{"--json"}, args...)...).stdout, "alpha")
-			equal(t, what+" drift", drift(ev), want)
+			what := strings.Join(c.args, " ")
+			ev := h.librarySkill(h.mustRun(append([]string{"--json"}, c.args...)...).stdout, "alpha")
+			equal(t, what+" drift", drift(ev), strings.Trim(strings.Join(c.drift, ","), ","))
 			for _, field := range coordinates {
 				equal(t, what+" "+field, ev[field], before[field])
 			}
@@ -512,7 +516,9 @@ func TestAdoptingFromARemovedSourceClearsSourceRemoved(t *testing.T) {
 	if after := h.librarySkill(list, "alpha"); !reflect.DeepEqual(after, before) {
 		t.Errorf("alpha after the adoption = %v, want %v", after, before)
 	}
-	equal(t, "beta's drift", drift(h.librarySkill(list, "beta")), "")
+	// The other tool placed beta in no client of its own, so it is missing
+	// from the enabled ones; its source is added.
+	equal(t, "beta's drift", drift(h.librarySkill(list, "beta")), "missing")
 	equal(t, "alpha's import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), branch)
 }
 
@@ -541,7 +547,8 @@ func (h *harness) runBesideServe(args ...string) {
 // TestServeSnapshotFollowsTheSource runs serve while the source goes and
 // comes back. Each is a mutation of agentx home, and the snapshot that
 // follows it is a changed one, since the library it lists changed: serve
-// emits it without being asked, and the desktop app applies it.
+// emits it without being asked, and the desktop app applies it. The drift
+// of the skill changed with it, so a drift event follows each snapshot.
 func TestServeSnapshotFollowsTheSource(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -565,6 +572,9 @@ func TestServeSnapshotFollowsTheSource(t *testing.T) {
 	for _, field := range coordinates {
 		equal(t, field, removed[field], first[field])
 	}
+	d := p.next("drift")
+	equal(t, "drift after the removal", words(d["drift"]), "source removed")
+	equal(t, "the drift before it", words(d["previous_drift"]), "")
 	equal(t, "request_id", p.next("refresh_complete")["request_id"], "removed")
 
 	h.runBesideServe("source", "add", s.url)
@@ -572,6 +582,9 @@ func TestServeSnapshotFollowsTheSource(t *testing.T) {
 	if again := libraryOf(p.next("snapshot")); !reflect.DeepEqual(again, first) {
 		t.Errorf("the library entry after the source came back = %v, want %v", again, first)
 	}
+	d = p.next("drift")
+	equal(t, "drift after the source came back", words(d["drift"]), "")
+	equal(t, "the drift before it", words(d["previous_drift"]), "source removed")
 	equal(t, "request_id", p.next("refresh_complete")["request_id"], "added")
 	equal(t, "exit", p.close(), 0)
 }

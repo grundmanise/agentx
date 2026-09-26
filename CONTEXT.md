@@ -116,7 +116,7 @@ An explicit user action that pushes one fork's or greenfield skill's branch from
 _Avoid_: sync, share, upload
 
 **Modified skill**:
-A managed skill whose on-disk content no longer matches its base version because it was edited by hand outside agentx. Shown as drift, local to one machine, never synced. Can be reverted or converted to a fork.
+A managed skill whose on-disk content no longer matches its base version because it was edited outside agentx, by hand or by any other tool. Decided by comparing the library directory's git tree with the base version's, so a changed file mode or symlink counts as an edit. Shown as drift, local to one machine, never synced. Can be reverted or converted to a fork.
 _Avoid_: dirty, drifted, changed
 
 **Lineage record**:
@@ -134,6 +134,14 @@ _Avoid_: store, cache, vault
 **Placement**:
 The path inside one agent configuration's skills directory through which that client sees a library skill. The library itself for a universal client; otherwise a symlink by default or a copy when needed.
 _Avoid_: install, link, copy
+
+**Displaced placement**:
+A placement whose kind on disk is not the one agentx keeps for it: a real directory where a symlink is kept, or the symlink to the library directory where machine settings record a copy. Reported as drift, never repaired on its own.
+_Avoid_: broken link, overwritten
+
+**Missing placement**:
+A placement a managed skill lacks in an enabled configuration: nothing is at that configuration's own placement path, whether the skill was never placed there or the placement went. Reported as drift, for information only. A universal client and a disabled configuration never have one.
+_Avoid_: unplaced, orphaned
 
 **Universal client**:
 An agent client that reads the library as one of its own skills directories, such as Codex and Gemini CLI. It sees every library skill whether or not its agent configuration is enabled and whatever the placements, since the library entry is its placement. A skill leaves it only by leaving the library, which takes the skill from every agent client.

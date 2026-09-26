@@ -80,7 +80,7 @@ agentx establishes the version in one of these ways, and never guesses. Each is 
 
 Whichever way finds the version, the commit recorded is the one at which the skill's directory took that content, never the one you happen to have fetched or named with `--base`. It is the commit an install of that version records too, so two machines that adopt the same install, or one that adopts it and one that installs it, write the same import commit, whenever each of them last fetched the source.
 
-Your directory is never changed, whichever way the version was found. If it differs from the base, agentx says so and `agentx skill list` shows the skill as `modified`.
+Your directory is never changed, whichever way the version was found. If it differs from the base, agentx says so and `agentx skill list` shows the skill as `modified`. See what differs with [`agentx skill diff <name>`](/cli/skill#see-what-you-changed), and discard it with [`agentx skill revert <name>`](/cli/skill#revert-a-skill).
 
 ## When the version cannot be established
 

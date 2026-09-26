@@ -11,6 +11,7 @@ import (
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
+	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
 // RefPrefix is where the last fetched state of every source lives in the
@@ -421,13 +422,15 @@ type TreeEntry struct {
 	OID  string
 }
 
-// The tree entry modes agentx reads: the two a regular file has and the
-// one a directory has. A symlink (120000) and a submodule (160000) are
-// neither, and a skill is imported without them.
+// The tree entry modes agentx reads, as treeid computes them: the two a
+// regular file has, the one a symlink has and the one a directory has. An
+// import carries regular files alone, leaving a symlink and a submodule
+// (160000) out; a directory on disk holds symlinks all the same.
 const (
-	FileMode       = "100644"
-	ExecutableMode = "100755"
-	DirMode        = "040000"
+	FileMode       = treeid.FileMode
+	ExecutableMode = treeid.ExecutableMode
+	SymlinkMode    = treeid.SymlinkMode
+	DirMode        = treeid.DirMode
 )
 
 // IsFileMode reports whether an entry of a tree is a regular file.

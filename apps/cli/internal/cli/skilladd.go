@@ -294,6 +294,7 @@ type imported struct {
 	fetched string   // when the source was last fetched, as the settings record it
 	imp     lineage.Import
 	commit  string // the import commit, once written
+	tree    string // the tree of that commit, the upstream directory alone
 }
 
 // treeFile is one regular file of the version with its bytes and the mode
@@ -735,12 +736,12 @@ func (inv *invocation) writeImports(ctx context.Context, b *batch, gitDir, run s
 	for i, v := range versions {
 		list[i] = v.version()
 	}
-	commits, err := lineage.WriteAll(ctx, inv.git, gitDir, run, list)
+	commits, trees, err := lineage.WriteAll(ctx, inv.git, gitDir, run, list)
 	if err != nil {
 		return accountRepoFailure(err)
 	}
 	for i, v := range versions {
-		v.commit = commits[i]
+		v.commit, v.tree = commits[i], trees[i]
 		b.step(phaseImport, v.name)
 	}
 	return nil
@@ -763,10 +764,7 @@ func (inv *invocation) dropImporting(ctx context.Context, gitDir, run string, n 
 // skill at the root, which is what the source listing calls it too. It is
 // not the library directory name, which the frontmatter decides.
 func upstreamDir(src source.Source, sk source.Skill) string {
-	if sk.Subpath == "" {
-		return source.RepoName(src.URL)
-	}
-	return path.Base(sk.Subpath)
+	return lineage.UpstreamDir(src.URL, sk.Subpath)
 }
 
 // check refuses a selection whose flags contradict each other. The two
@@ -1025,13 +1023,13 @@ func (inv *invocation) stageSkill(m *home.Mutation, gitDir string, v *imported, 
 	if f != nil {
 		return nil, f, nil
 	}
-	ref, f := refPlan(v, records, libPath)
+	from, write, f := refPlan(v, records, libPath, home.IsAbsent(state))
 	if f != nil {
 		return nil, f, nil
 	}
 	done := &installed{v: v, adopted: lib.adopt}
-	if ref {
-		m.Ref(gitDir, lineage.ManagedRef(v.name), "", v.commit)
+	if write {
+		m.Ref(gitDir, lineage.ManagedRef(v.name), from, v.commit)
 	}
 	if !lib.adopt {
 		if lib.displace {
@@ -1093,21 +1091,43 @@ func (inv *invocation) libraryPlan(v *imported, libPath, state string) (libraryA
 }
 
 // refPlan decides the import branch, which is created with an expected old
-// value of empty, so that two commands cannot both claim the name. A branch
-// already at this commit is the same version installed again; one at
-// another commit is a version this command does not replace.
-func refPlan(v *imported, records map[string]lineage.Record, libPath string) (create bool, f *failure) {
+// value of empty, so that two commands cannot both claim the name. write
+// says whether the branch is written at all, and from is the value it is
+// expected to hold when it is. A branch already at this commit is the same
+// version installed again; one at another commit is a version this command
+// does not replace.
+//
+// The same version is the same four trailers, not the same commit: an
+// earlier agentx wrote the import commit of a source that stores a mode git
+// no longer writes over that source's own tree, which no directory on disk
+// is current against, and the commit an install writes now holds the same
+// version as git writes it today. Such a branch is moved to that commit,
+// from the one it holds, so installing the version again is what puts it
+// right, and two machines that installed it end at one commit again.
+//
+// absent says the library path holds nothing: the branch is all that is
+// left of the skill, its directory having been deleted outside agentx, and
+// the source has moved past the version the branch names, since otherwise
+// this would be that version again. skill remove takes such a branch away,
+// so the hint names it rather than a directory that is not there and a ref
+// to delete by hand.
+func refPlan(v *imported, records map[string]lineage.Record, libPath string, absent bool) (from string, write bool, f *failure) {
 	rec, ok := records[v.name]
 	switch {
 	case !ok:
-		return true, nil
+		return "", true, nil
 	case rec.Kind == lineage.KindFork:
-		return false, refuse(exitRefused, fmt.Sprintf("%s is a fork on this machine", v.name),
+		return "", false, refuse(exitRefused, fmt.Sprintf("%s is a fork on this machine", v.name),
 			"install the skill under another name, or remove the fork first")
 	case rec.Commit == v.commit: // the same version again: nothing to move
-		return false, nil
+		return "", false, nil
+	case rec.HasImport && rec.Import == v.imp: // the same version, stored in an older form
+		return rec.Commit, true, nil
+	case absent:
+		return "", false, refuse(exitRefused, fmt.Sprintf("%s is already managed at another version, which the library no longer holds", v.name),
+			"run '"+skillCommand("remove", v.name)+"' to stop managing that version, then install again to get the version the source holds now")
 	}
-	return false, refuse(exitRefused, fmt.Sprintf("%s is already managed at another version", v.name),
+	return "", false, refuse(exitRefused, fmt.Sprintf("%s is already managed at another version", v.name),
 		"remove "+libPath+" and the branch "+lineage.ManagedRef(v.name)+", then install again")
 }
 
@@ -1253,7 +1273,8 @@ func (inv *invocation) reportInstalled(ctx context.Context, b *batch, dones []*i
 	if err != nil {
 		modes = map[string][]string{}
 	}
-	sources := sourceURLs(s)
+	// The lineage is what the run just wrote, so it is not read again.
+	sc := newSkillContext(inv, map[string]lineage.Record{}, s, modes)
 	// The library is read once for the whole run. Reading it content-hashes
 	// every directory it holds, so reading it per installed skill costs a
 	// batch of n skills n hashes of the whole library: a run of forty was
@@ -1268,9 +1289,9 @@ func (inv *invocation) reportInstalled(ctx context.Context, b *batch, dones []*i
 		if !found {
 			return fail(exitInternal, "the library holds no "+done.v.name+" after installing it", "run 'agentx doctor' and check the library it names")
 		}
-		places := inv.placements(snap, lib, modes)
-		rec := lineage.Record{Name: done.v.name, Kind: lineage.KindManaged, Ref: lineage.ManagedRef(done.v.name), Commit: done.v.commit, Import: done.v.imp, HasImport: true}
-		ev := skillFromLibrary(lib, rec, true, sources, filterPlacements(places, targetIDs(done.placed)), universal)
+		sc.records[done.v.name] = lineage.Record{Name: done.v.name, Kind: lineage.KindManaged, Ref: lineage.ManagedRef(done.v.name),
+			Commit: done.v.commit, Tree: done.v.tree, Import: done.v.imp, HasImport: true}
+		ev := sc.librarySkillEventFor(inv, snap, lib, targetIDs(done.placed))
 		inv.out.emit(ev)
 		inv.printInstalled(done, ev)
 	}
