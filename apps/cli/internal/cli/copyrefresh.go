@@ -147,3 +147,22 @@ func stageRefresh(m *home.Mutation, place, from, target string) (string, string,
 	}
 	return fresh, fingerprint, nil
 }
+
+// copiesNote is what a command did to copy placements, as its line and its
+// result say it, whether of one skill or added up over a run of several
+// updates: how many were refreshed and how many were skipped, each after a
+// comma, or nothing when neither. A revert, a repair and an update all say
+// it this way.
+func copiesNote(out *writer, refreshed, skipped int) (plain, painted string) {
+	if refreshed > 0 {
+		note := plural(refreshed, "copy placement") + " refreshed"
+		plain += ", " + note
+		painted += ", " + out.paint(noteStyle, note)
+	}
+	if skipped > 0 {
+		note := plural(skipped, "placement") + " skipped"
+		plain += ", " + note
+		painted += ", " + out.paint(warnStyle, note)
+	}
+	return plain, painted
+}

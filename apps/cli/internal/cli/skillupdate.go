@@ -96,9 +96,10 @@ type updateRun struct {
 	applied    []*updating       // the skills whose update the mutation applied, by name
 }
 
-// drop gives up on one skill. A run over every skill says so in a warning
-// naming it and goes on with the rest; the error and the result name every
-// skill it gave up on, see refusals.
+// drop gives up on one skill. A run over every skill goes on with the rest,
+// with a warning naming the skill when there are others it does not apply
+// to; the error and the result name every skill it gave up on, see
+// refusals.
 //
 // A skill whose source was removed from this machine is skipped by a run
 // over every skill instead, whether that was found before the lock or
@@ -167,8 +168,9 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 	// library still holds the version replaced, or holds no directory once
 	// that was retained, and the run would answer for a machine halfway
 	// through its own change. The lock is taken for it only when there is
-	// a journal to finish, and the version file is not rewritten, as the
-	// recovery a scan runs does not rewrite it.
+	// a journal to finish, and nothing is written beyond what the recovery
+	// writes, its own bump of the version file included, as for the
+	// recovery a scan runs.
 	switch journals, err := home.Journals(inv.dirs.Home); {
 	case err != nil:
 		return mutationFailure(err)
@@ -277,10 +279,11 @@ const mergeNotYet = "merging a modified skill with its update is not supported y
 // removed from this machine, which is exit code 5 as installing from it
 // is; a skill the last update check found its source no longer holds,
 // which is kept as it is and never updated; and, having found an update
-// for it, a skill that holds something git cannot record, which the update
-// would discard with no record of it and which a revert refuses too, one
-// that was edited since it was installed, and one whose library entry is a
-// symlink. A skill with no update is neither: u and f are then both nil.
+// for it, a skill whose library entry is a symlink, whatever it leads to,
+// one that holds something git cannot record, which the update would
+// discard with no record of it and which a revert refuses too, and one
+// that was edited since it was installed. A skill with no update is
+// neither: u and f are then both nil.
 func (inv *invocation) judgeUpdate(name string, rec lineage.Record, managed bool, lib scan.LibrarySkill, held bool, sources map[string]bool) (*updating, *failure) {
 	again := "run '" + skillCommand("update", name) + "' again"
 	switch {
@@ -313,6 +316,15 @@ func (inv *invocation) judgeUpdate(name string, rec lineage.Record, managed bool
 	if err != nil {
 		return nil, failureOf(libraryFailure(inv.dirs.Library, err))
 	}
+	// A library entry that is a symlink leads to a directory of the user's.
+	// The update replaces the entry itself, so it would drop the link and
+	// leave the directory it led to as it was, whatever that holds: the
+	// link is what is refused, before what it leads to is judged, since a
+	// revert of an edit there refuses the link too.
+	if target, isLink := home.LinkTarget(captured); isLink {
+		return nil, refuse(exitRefused, fmt.Sprintf("%s is a symlink to %s; an update replaces the library directory and would drop the link without touching the files it leads to", quotedPath(libPath), quotedPath(target)),
+			"replace the link with the directory it points to, then "+again)
+	}
 	tree, err := inv.readLibraryTree(lib.Path)
 	if err != nil {
 		return nil, failureOf(err)
@@ -324,13 +336,6 @@ func (inv *invocation) judgeUpdate(name string, rec lineage.Record, managed bool
 		return nil, refuse(exitRefused, name+" was edited since it was installed, and "+mergeNotYet,
 			"run '"+skillCommand("diff", name)+"' to see the edits, or '"+skillCommand("revert", name)+"' to discard them and then '"+
 				skillCommand("update", name)+"'").wrap(errEdited)
-	}
-	// A library entry that is a symlink leads to a directory of the user's.
-	// The update replaces the entry itself, so it would drop the link and
-	// leave the directory it led to as it was.
-	if target, isLink := home.LinkTarget(captured); isLink {
-		return nil, refuse(exitRefused, fmt.Sprintf("%s is a symlink to %s; an update replaces the library directory and would drop the link without touching the files it leads to", quotedPath(libPath), quotedPath(target)),
-			"replace the link with the directory it points to, then "+again)
 	}
 	return &updating{name: name, rec: rec, next: next, libPath: libPath, captured: captured, held: tree.ID}, nil
 }
@@ -477,23 +482,24 @@ func (r *updateRun) apply(ctx context.Context) error {
 // recheckUpdate reads again, under the lock, everything the update of one
 // skill replaces or depends on, and refuses the skill when any of it is no
 // longer what judgeUpdate read: the import branch, which a fork of the name
-// would supersede; the upstream-removed marker and the candidate, which a
-// check may have written meanwhile; the settings entry of the source; and
+// would supersede; the settings entry of the source; the upstream-removed
+// marker and the candidate, which a check may have written meanwhile; and
 // the library directory, whose content an edit made since it was captured
-// would otherwise be replaced unseen.
+// would otherwise be replaced unseen. A removed source is answered for
+// before the marker, in the order judgeUpdate answers for them.
 func (inv *invocation) recheckUpdate(u *updating, values map[string]string, sources map[string]bool) *failure {
 	name := u.name
 	again := "run '" + skillCommand("update", name) + "' again"
 	switch {
 	case values[lineage.ManagedRef(name)] != u.rec.Commit || values[lineage.ForkRef(name)] != "":
 		return refuse(exitRefused, "the import branch "+lineage.ManagedRef(name)+" moved while "+name+" was being updated, so nothing was changed", again)
+	case !sources[u.rec.Import.Source]:
+		return removedSourceRefusal(name, u.rec.Import.Source)
 	case values[lineage.UpstreamRemovedRef(name)] != "":
 		return upstreamRemovedRefusal(name)
 	case values[lineage.CandidateRef(name)] != u.next.Commit:
 		return refuse(exitRefused, "the update candidate "+lineage.CandidateRef(name)+" moved while "+name+" was being updated, so nothing was changed",
 			again+" to apply the update the last check found")
-	case !sources[u.rec.Import.Source]:
-		return removedSourceRefusal(name, u.rec.Import.Source)
 	}
 	live, err := home.State(u.libPath)
 	if err != nil {
@@ -602,25 +608,6 @@ func (r *updateRun) skippedNote(out *writer) (plain, painted string) {
 		notes = append(notes, fmt.Sprintf("%d skills from removed sources skipped", n))
 	}
 	for _, note := range notes {
-		plain += ", " + note
-		painted += ", " + out.paint(warnStyle, note)
-	}
-	return plain, painted
-}
-
-// copiesNote is what a command did to copy placements, as its line and its
-// result say it, whether of one skill or added up over a run of several
-// updates: how many were refreshed and how many were skipped, each after a
-// comma, or nothing when neither. A revert, a repair and an update all say
-// it this way.
-func copiesNote(out *writer, refreshed, skipped int) (plain, painted string) {
-	if refreshed > 0 {
-		note := plural(refreshed, "copy placement") + " refreshed"
-		plain += ", " + note
-		painted += ", " + out.paint(noteStyle, note)
-	}
-	if skipped > 0 {
-		note := plural(skipped, "placement") + " skipped"
 		plain += ", " + note
 		painted += ", " + out.paint(warnStyle, note)
 	}

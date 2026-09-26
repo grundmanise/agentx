@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -944,8 +945,11 @@ func (in install) updated(t *testing.T, u refs, name, content string) []string {
 // records, in the order apply takes them, and checks that recovery
 // finishes exactly what is left: the branch at the candidate, the library
 // directory and the copy holding the new version, nothing retained beside
-// them, and the candidate ref gone. Recovery is then run a second time,
-// which must repeat nothing.
+// them, and the candidate ref gone. A recovery that had anything left to
+// do bumps the version file once, one whose only step left is the
+// deletion of the candidate ref included, since that is a change a watcher
+// has not seen. Recovery is then run a second time, which must repeat
+// nothing, the bump included.
 func TestUpdateRecoversFromEveryBoundary(t *testing.T) {
 	t.Parallel()
 	total := 0
@@ -961,6 +965,7 @@ func TestUpdateRecoversFromEveryBoundary(t *testing.T) {
 			if err := m.stopAfter(stop, u); err != nil {
 				t.Fatalf("stopping after %d steps: %v", stop, err)
 			}
+			bumped := version(t, in.dir) + 1
 			for run := range 2 {
 				if err := recoverJournals(in.dir, u); err != nil {
 					t.Fatalf("recovery %d after %d steps: %v", run+1, stop, err)
@@ -968,9 +973,27 @@ func TestUpdateRecoversFromEveryBoundary(t *testing.T) {
 				if missing := in.updated(t, u, "alpha", "two\n"); len(missing) > 0 {
 					t.Errorf("recovery %d after %d steps: missing %s", run+1, stop, strings.Join(missing, ", "))
 				}
+				if got := version(t, in.dir); stop < total && got != bumped {
+					t.Errorf("recovery %d after %d steps left the version at %d, want %d", run+1, stop, got, bumped)
+				}
 			}
 		})
 	}
+}
+
+// version is the counter in the version file of agentx home at dir, 0
+// when there is none, as bumpVersion reads it.
+func version(t *testing.T, dir string) int {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(dir, "version"))
+	if err != nil {
+		return 0
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil {
+		t.Fatalf("version file is not a number: %q", b)
+	}
+	return n
 }
 
 // orderedRefs records, at each transaction of a journal's refs, what the

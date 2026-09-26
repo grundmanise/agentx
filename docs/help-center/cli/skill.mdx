@@ -627,7 +627,7 @@ Only what the skill held when you ran the command is replaced. If the skill chan
 - A skill agentx did not install, and a fork, have no update to apply: exit code 6.
 - A skill whose library directory is gone stops with exit code 6. Install it again with `agentx skill add <source> --skill <name>`, or stop managing it with `agentx skill remove <name>`.
 - A skill whose record in the account repo agentx cannot read stops with exit code 6. Run `agentx doctor` and check the account repo it names.
-- A skill whose library directory is a symlink to a directory of your own stops with exit code 6: an update replaces the library directory, so it would remove your link. Replace the link with the directory it points to, then update again.
+- A skill whose library directory is a symlink to a directory of your own stops with exit code 6, even if you edited that directory: an update replaces the library directory, so it would remove your link. Replace the link with the directory it points to, then update again. With `--all` this skill is counted as not updated.
 - A skill that holds something git cannot record, such as a repository nested in it, stops with exit code 6 and names it: an update would discard it with no record of it anywhere. Move it out of the skill, then update again. With `--all` this skill is not skipped like a skill you edited but counted as not updated.
 
 With `--all`, a skill that is not updated does not stop the others: agentx names it and still updates the rest, then exits with the code those skills share, or 6 when they differ. A skill you edited and a skill whose source you removed are skipped rather than counted, so they leave the exit code at 0.
