@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -324,6 +325,72 @@ exec %GIT% "$@"
 				equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 			}
 			equal(t, "state", h.listed("nc")["state"], stateCurrent)
+		})
+	}
+}
+
+// TestARefusedRevertOfAnOlderBranchLeavesNoStagingRef: a revert over a
+// branch stored in an older form writes the commit an install writes today
+// before it takes the lock, held by a staging ref of its own. A git wrapper
+// moves the branch, makes a fork of the name, or edits the library while
+// the revert reads the base version, and the revert refuses under the
+// lock, before it writes a journal. Nothing names the staging ref then, so
+// the revert drops it: no ref is left under refs/agentx/importing/, the
+// branch holds what it held or what the other writer wrote, and the edit
+// is still there.
+func TestARefusedRevertOfAnOlderBranchLeavesNoStagingRef(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name string
+		ref  string // the ref the wrapper writes; none edits the library instead
+		fork bool   // the ref written is a fork of the name, at the commit the branch holds
+	}{
+		{name: "the branch moves", ref: "refs/heads/managed/nc"},
+		{name: "a fork appears", ref: "refs/heads/skills/nc", fork: true},
+		{name: "the library changes"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			h, s, _ := legacyHarness(t)
+			file := filepath.Join(h.library, "nc", "a.md")
+			writeFile(t, file, "an edit\n")
+			legacy, _ := h.storeInOlderForm(t, s)
+			real, err := exec.LookPath("git")
+			if err != nil {
+				t.Fatal(err)
+			}
+			repo := gitx.AccountRepoPath(h.agentx)
+			branch, edit := legacy, "an edit\n"
+			action := `printf 'an edit made meanwhile\n' > ` + shellWord(file)
+			message := "nc changed while it was being reverted, so nothing was discarded"
+			if c.ref != "" {
+				written := legacy
+				if !c.fork {
+					written = h.accountGit("commit-tree", legacy+"^{tree}", "-p", legacy, "-m", "moved")
+					branch = written
+				}
+				action = real + ` --git-dir=` + shellWord(repo) + ` update-ref ` + c.ref + ` ` + written + ` || exit 1`
+				message = "the import branch refs/heads/managed/nc moved while nc was being reverted, so nothing was discarded"
+			} else {
+				edit = "an edit made meanwhile\n"
+			}
+			stubGit(t, h, `#!/bin/sh
+case " $* " in
+*" ls-tree "*) `+action+` ;;
+esac
+exec `+real+` "$@"
+`)
+			out := h.run("--json", "skill", "revert", "nc")
+			equal(t, "exit", out.exit, 6)
+			equal(t, "message", h.one(out.stdout, "error")["message"], message)
+			equal(t, "a.md", fileBody(t, file), edit)
+			equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/nc"), branch)
+			if c.fork {
+				equal(t, "the fork written meanwhile", h.accountGit("rev-parse", c.ref), legacy)
+			}
+			equal(t, "journals", journalCount(t, h), 0)
+			equal(t, "what is left beside the library", strings.Join(hiddenEntries(t, h.library), " "), "")
+			equal(t, "the staging refs left", h.accountGit("for-each-ref", "refs/agentx/importing/"), "")
 		})
 	}
 }

@@ -288,7 +288,13 @@ func (inv *invocation) removeAbsent(ctx context.Context, name string, from []str
 			return moved
 		}
 		judge := copyJudge{against: "its base version"}
-		if rec.HasImport {
+		if !rec.HasImport {
+			// A commit that carries no lineage agentx can read names no base
+			// version to hold a copy to, as no library directory is current
+			// against it, so every copy it deletes may hold the user's
+			// changes and goes with the warning.
+			judge.differs = func(string) bool { return true }
+		} else {
 			// A branch an earlier agentx stored in a form git no longer
 			// writes is current against no directory, so a copy that is not
 			// current is held to the base's files as well, read once and

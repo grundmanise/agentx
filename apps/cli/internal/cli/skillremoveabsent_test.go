@@ -90,6 +90,30 @@ func TestSkillRemoveOfAnAbsentSkillSaysAnEditedCopyWent(t *testing.T) {
 	equal(t, "summary", h.one(out.stdout, "result")["summary"], "removed alpha, which the library no longer held: its import branch and 2 placements")
 }
 
+// TestSkillRemoveOfAnAbsentSkillWithNoLineageSaysEveryCopyWent: an import
+// branch whose commit carries no lineage agentx can read names no base
+// version to compare a recorded copy with, so the removal cannot tell a
+// copy holding the user's changes from one that does not: a copy it
+// deletes, even one holding the files it was placed with, goes with the
+// warning, never silently.
+func TestSkillRemoveOfAnAbsentSkillWithNoLineageSaysEveryCopyWent(t *testing.T) {
+	t.Parallel()
+	h, claude, cursor := absentHarness(t)
+	h.accountGit("update-ref", "refs/heads/managed/alpha", h.accountGit("commit-tree", "refs/heads/managed/alpha^{tree}", "-m", "no lineage"))
+
+	out := h.run("--json", "skill", "remove", "alpha")
+	if out.exit != 0 {
+		t.Fatalf("remove: exit %d\n%s", out.exit, out.stderr)
+	}
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"),
+		"cursor's copy of alpha was different from its base version; removing it deleted those changes ("+cursor+")")
+	nothingAt(t, "claude-code's link", claude)
+	nothingAt(t, "cursor's copy", cursor)
+	equal(t, "the import branch", refValue(t, h, "refs/heads/managed/alpha"), "")
+	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "")
+	equal(t, "journals", journalCount(t, h), 0)
+}
+
 // TestSkillRemoveOfAnAbsentSkillRefusesWhatChangedUnderTheLock: what a
 // removal of a skill the library no longer holds takes away is decided by
 // what it read before the lock, and it reads both inputs again under it. A

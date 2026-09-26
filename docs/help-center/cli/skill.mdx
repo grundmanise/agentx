@@ -292,7 +292,7 @@ agentx skill remove pdf
   deleted refs/heads/managed/pdf
 ```
 
-agentx deletes the record of where the skill came from and the placements it made, by the same rules as any removal, and takes the skill out of the settings. A copy placement may be the last copy of the skill on your machine: if it differs from the version the skill was installed at, agentx still removes it and warns you that your changes went with it, as in `cursor's copy of pdf was different from its base version; removing it deleted those changes`. Copy anything you want to keep out of it first. If a directory without a `SKILL.md` is still in the library under that name, agentx leaves it where it is and says so. `--from <client>` is refused with exit code 6 for such a skill: with nothing in the library, there is no skill for one client to keep. Leave `--from` out.
+agentx deletes the record of where the skill came from and the placements it made, by the same rules as any removal, and takes the skill out of the settings. A copy placement may be the last copy of the skill on your machine: if it differs from the version the skill was installed at, or agentx cannot tell which version that was, agentx still removes it and warns you that your changes went with it, as in `cursor's copy of pdf was different from its base version; removing it deleted those changes`. Copy anything you want to keep out of it first. If a directory without a `SKILL.md` is still in the library under that name, agentx leaves it where it is and says so. `--from <client>` is refused with exit code 6 for such a skill: with nothing in the library, there is no skill for one client to keep. Leave `--from` out.
 
 ### Forks
 
@@ -381,7 +381,7 @@ An earlier version of agentx could store a skill from a source that uses an old 
 pdf differs from its base version at 3f2a9c1 only in how the account repo stores it; run 'agentx skill revert pdf' to store it as git writes it today, which changes no file
 ```
 
-Run `agentx skill revert pdf`, or install the same version again with `agentx skill add`. Either one stores the version again without touching your files, and the skill shows as `current`.
+Run `agentx skill revert pdf`. It stores the version again without touching your files, and the skill shows as `current`. While the source still holds that version, installing it again with `agentx skill add` does the same.
 
 A skill agentx did not install, and a fork, have no base version to compare with, so `skill diff` stops with exit code 6.
 
