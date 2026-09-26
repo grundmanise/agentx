@@ -46,9 +46,9 @@ Serve checks your managed skills for updates as [`agentx skill check`](/cli/skil
 {"type":"update_available","schema_version":1,"instance_id":"...","name":"pdf","kind":"managed","source":"https://github.com/anthropics/skills","subpath":"skills/pdf",...,"files":[{"path":"SKILL.md","status":"modified"}]}
 ```
 
-Only managed skills from a source you have added are checked, so a machine without any has nothing to check and serve fetches nothing. Every check lists every available update again, so the lines repeat on every check while the update is available. A skill a check could not check is an `update check:` warning instead, and the snapshot still shows its `candidate`. A check records what it found, so the snapshot that follows shows each skill's `candidate` and any `upstream removed` state. Nothing is ever applied.
+Only managed skills from a source you have added are checked, so a machine without any has nothing to check and serve fetches nothing. Every check lists every available update again, so the lines repeat on every check while the update is available. A source that cannot be reached, or a skill a check could not check, is a warning starting `update check:` instead; serve keeps running, and the snapshot still shows each such skill's `candidate`. The other `update check:` warnings say what an update leaves out or renames, or that a whole check failed. A check records what it found, so the snapshot that follows shows each skill's `candidate` and any `upstream removed` state. Nothing is ever applied.
 
-Checks run in the background: scans and requests are answered while a check waits on the network, and a check still running when the next one is due is not started twice. A source that cannot be reached is a warning starting `update check:`, and serve keeps running.
+Checks run in the background: scans and requests are answered while a check waits on the network, and a check still running when the next one is due is not started twice.
 
 To check more or less often, set `AGENTX_CHECK_INTERVAL` to a duration such as `10m` or `2h` before starting serve. Serve refuses to start with exit code 1 when it is not a positive duration.
 

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1246,7 +1247,8 @@ func TestSourceAddKeepsTheRefWhenTheBlobsDoNotArrive(t *testing.T) {
 // a killed fetch's ref stays until the source goes; the ref the configured
 // refspec names, where an older agentx staged every fetch, goes with the
 // next fetch as it always has. A removal takes both with the source ref,
-// so nothing of a killed fetch outlives the source.
+// so nothing of a killed fetch outlives the source, and nothing of another
+// source's: the staging refs of its fetches, which may be running, stay.
 func TestSourceFetchReclaimsAStaleStagingRef(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -1269,7 +1271,26 @@ func TestSourceFetchReclaimsAStaleStagingRef(t *testing.T) {
 	equal(t, "fetch", h.run("source", "fetch", s.url).exit, 0)
 	equal(t, "refs after the fetch", h.agentxRefs(), killed+"\n"+source.Ref(id))
 
+	// Another source's fetches, one of them in flight on the same run as
+	// the killed one, are that source's: the removal leaves every one of
+	// their staging refs where it is.
+	other := h.newSourceRepo("other", true)
+	other.skill("gamma", "gamma", "A skill of the other source", nil)
+	otherHead := other.commit("gamma")
+	equal(t, "add the other source", h.run("source", "add", other.url).exit, 0)
+	otherID := source.ID(other.url)
+	kept := []string{
+		source.StagingRef(otherID),
+		source.StagingRefPrefix + "fedcba9876543210/" + otherID,
+		source.StagingRefPrefix + "0123456789abcdef/" + otherID,
+	}
+	for _, ref := range kept {
+		h.accountGit("update-ref", ref, otherHead)
+	}
+
 	h.accountGit("update-ref", legacy, head)
 	equal(t, "remove", h.run("source", "remove", s.url).exit, 0)
-	equal(t, "refs after the removal", h.agentxRefs(), "")
+	kept = append(kept, source.Ref(otherID))
+	sort.Strings(kept)
+	equal(t, "refs after the removal", h.agentxRefs(), strings.Join(kept, "\n"))
 }

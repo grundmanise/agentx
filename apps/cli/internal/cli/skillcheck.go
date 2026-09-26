@@ -26,9 +26,10 @@ func newSkillCheckCommand(inv *invocation) *cobra.Command {
 	return &cobra.Command{
 		Use:   "check",
 		Short: "Look for newer upstream versions of the managed skills",
-		Long: "Fetch every source a managed skill came from and report which skills have a newer\n" +
-			"upstream version, with the files each one changes. Nothing is applied: read an\n" +
-			"update with 'agentx skill diff <name> --upstream'.",
+		Long: "Fetch every added source a managed skill came from and report which skills have a\n" +
+			"newer upstream version, with the files each one changes; skills from a source you\n" +
+			"removed are skipped. Nothing is applied: read an update with\n" +
+			"'agentx skill diff <name> --upstream'.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error { return inv.skillCheck(cmd.Context()) },
 	}
