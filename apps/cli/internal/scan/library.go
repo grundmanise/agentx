@@ -71,8 +71,10 @@ func PlacementDir(c Client, d home.Dirs) string {
 }
 
 // ReadsLibrary reports whether the client reads the library as one of its
-// own skills directories, in which case the library entry is the placement
-// and a second entry would make that client list the skill twice.
+// own skills directories, or through one that leads to it by a symlink,
+// either way round, see readsLibrary, in which case the library entry is
+// the placement and a second entry would make that client list the skill
+// twice.
 func ReadsLibrary(c Client, d home.Dirs) bool {
 	return readsLibrary(c.SkillsDirs(d), d.Library)
 }

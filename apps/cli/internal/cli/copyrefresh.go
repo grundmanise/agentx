@@ -36,27 +36,30 @@ import (
 // skills directory, is judged and planned once: a second remove of it
 // would find the first one's publish there, which is neither what it was
 // to remove nor what it was to become, and would stop the mutation part
-// way through, and a second warning would count one copy twice. Each
-// configuration whose copy is refreshed is still named, as a placement
-// names each configuration it placed into.
+// way through, and a second warning would count one copy twice. So is a
+// path two configurations spell differently, one of their skills
+// directories a symlink to the other's: paths are told apart by
+// canonicalPath. Each configuration whose copy is refreshed is still
+// named, as a placement names each configuration it placed into.
 //
 // Every copy removed carries the fingerprint it held when it was judged,
 // so a copy edited between this plan and the step that removes it stops
 // the mutation rather than being discarded.
 func (inv *invocation) refreshCopies(m *home.Mutation, name, target string, placed []string, staged string, recorded []string, done *placements) {
-	refreshed := map[string]bool{} // by path, every path judged, true when its copy is refreshed
+	refreshed := map[string]bool{} // by canonicalPath, every path judged, true when its copy is refreshed
 	for _, t := range inv.detectedTargets() {
 		if t.readsLibrary || !slices.Contains(recorded, t.id) {
 			continue
 		}
 		place := t.ownPlace(inv.dirs.Library, name)
-		if fresh, judged := refreshed[place]; judged {
+		key := canonicalPath(place)
+		if fresh, judged := refreshed[key]; judged {
 			if fresh {
 				done.copies = append(done.copies, t.id)
 			}
 			continue
 		}
-		refreshed[place] = inv.refreshCopy(m, t, place, name, target, placed, staged, done)
+		refreshed[key] = inv.refreshCopy(m, t, place, name, target, placed, staged, done)
 	}
 }
 

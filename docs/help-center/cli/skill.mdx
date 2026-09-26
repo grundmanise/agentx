@@ -82,7 +82,7 @@ agentx records where a skill came from on one line of its commit. A directory na
 
 ### Clients that see every skill
 
-Some clients, such as Codex and Gemini CLI, read the library directly. They are universal clients: they get no link of their own, because the library entry is what they see. So is any client whose skills directory you made a symlink to the library, or the library a symlink to it: both are one directory. Every other client gets a symlink in its own skills directory, pointing at the library.
+Some clients, such as Codex and Gemini CLI, read the library directly. They are universal clients: they get no link of their own, because the library entry is what they see. So is any client whose skills directory you made a symlink to the library, or the library a symlink to it: both are one directory. A client that reads such a directory is universal too: Cursor reads Claude Code's skills directory, so once `~/.claude/skills` is a symlink to the library, Cursor reads the library as well. Every other client gets a symlink in its own skills directory, pointing at the library.
 
 A universal client sees every skill in your library, even when you disabled it with `agentx config disable` or left it out of `--to`. Each install ends with a line naming every universal client installed on this machine, since the skill is always available to them whatever you chose:
 
@@ -265,6 +265,8 @@ hint: take pdf off the machine with 'agentx skill remove pdf --from universal', 
 
 agentx refuses before it changes anything, also when `--from` names other clients as well, `universal` included, and also when the universal client is disabled. The hint lists every client that sees the skill through the library or through a link or copy agentx would delete, including one that reads another client's skills directory, as Cursor reads Claude Code's. It also lists a client whose link of yours ends up in the library: the removal leaves your link, but the link no longer leads anywhere. A directory of your own is not counted: the removal leaves it. Run the command in the hint to remove the skill everywhere, or keep the skill.
 
+A client that is universal because it reads a skills directory linked to the library is refused the same way, even when a link in its own skills directory is still there. With `~/.claude/skills` a symlink to the library, Cursor reads the library through it, so `agentx skill remove pdf --from cursor` stops with exit code 6, `cursor reads the library directly, so pdf cannot be removed from it alone`, and leaves `~/.cursor/skills/pdf` where it is. Delete that link yourself if you no longer want it, or take the skill off the machine with `--from universal`.
+
 ### After a removal
 
 A client may still see a skill through another client's directory: Cursor reads Claude Code's skills directory, for instance. agentx rescans and reports what the client sees now, so the output tells you whether the skill is really gone from it.
@@ -438,7 +440,7 @@ Each row is one client and what agentx did there:
 - `relinked`: the client had a real directory where the link belongs, so agentx replaced it with the link.
 - `copied`: the client had a link to the library where you placed a copy, so agentx replaced it with a copy.
 
-Only what `skill list` flags is repaired. A link of your own to another directory, a copy you edited, and clients you disabled are left as they are. To place the skill in one more client, use [`agentx skill place <name> --to <client>`](#place-a-skill-you-already-have) instead.
+Only what `skill list` flags is repaired. A link of your own to another directory, a copy you edited, and clients you disabled are left as they are. So is a client's directory that the library entry itself is a symlink to, for example `~/.agents/skills/pdf` linked to `~/.claude/skills/pdf`: that directory is the library's own content, so `skill list` flags nothing there and `skill repair` never replaces it. To place the skill in one more client, use [`agentx skill place <name> --to <client>`](#place-a-skill-you-already-have) instead.
 
 ### When the directory differs from the library
 

@@ -194,7 +194,8 @@ func (inv *invocation) skillRepair(ctx context.Context, name string, choice repa
 		if err != nil {
 			return err
 		}
-		live, err := inv.planRepair(now, inv.detectedTargets(), edit.s.DisabledConfigurations, edit.copiesOf(name))
+		targets := inv.detectedTargets()
+		live, err := inv.planRepair(now, targets, edit.s.DisabledConfigurations, edit.copiesOf(name))
 		if err != nil {
 			return err
 		}
@@ -210,7 +211,7 @@ func (inv *invocation) skillRepair(ctx context.Context, name string, choice repa
 		}
 		if choice == choosePlacement {
 			sweepStaged(inv.dirs.Library)
-			for _, t := range inv.detectedTargets() {
+			for _, t := range targets {
 				if !t.readsLibrary && slices.Contains(live.copies, t.id) {
 					sweepStaged(t.dir)
 				}
@@ -270,12 +271,15 @@ func (inv *invocation) repairRecord(sc skillContext, name string) (scan.LibraryS
 // copy_mode records a copy for. A place that holds the placement agentx
 // keeps, or anything that is no drift, is not in the plan.
 //
-// Nor is a place that is the library directory itself, which a skills
+// Nor is a place that is the library directory itself: one a skills
 // directory made a symlink to the library, or the library made one to a
-// skills directory, makes of it: the client reads the library, and
-// replacing that directory with the symlink would replace the library with
-// a link to itself. Detection counts such a client as reading the library,
-// see scan.ReadsLibrary, so this only stands guard.
+// skills directory, makes of it, and one the library entry, itself a
+// symlink into a client's skills directory, leads to. The client reads the
+// library there, and replacing that directory with the symlink would
+// replace the skill's only content with a link to itself. Detection counts
+// a client of the first two as reading the library, see scan.ReadsLibrary,
+// and drift finds nothing at the third, see isLibraryDirectory, so this
+// only stands guard.
 //
 // A directory holds what the library directory holds when git would record
 // the two the same way. A tree leaves out what git cannot record, a nested
@@ -301,7 +305,7 @@ func (inv *invocation) planRepair(lib scan.LibrarySkill, targets []placeTarget, 
 	}
 	library := canonicalPath(lib.Path)
 	for _, p := range ownPlaces(targets, inv.dirs.Library, lib.Name, disabled, copies) {
-		if !p.asked() || canonicalPath(p.path) == library {
+		if !p.asked() || canonicalPath(p.path) == library || isLibraryDirectory(p.path, lib.Path) {
 			continue
 		}
 		word := p.drift(lib.Path)
@@ -331,8 +335,8 @@ func (plan repairPlan) signature() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\x00%s\x00%d\x00%s\x00%s\n", plan.libState, plan.libTree.ID, len(plan.libTree.Unrecordable), plan.libBytes, strings.Join(plan.copies, ","))
 	for _, p := range plan.places {
-		fmt.Fprintf(&b, "%s\x00%s\x00%s\x00%s\x00%t\x00%t\x00%t\x00%t\x00%t\x00%s\n",
-			p.path, p.word, p.state, p.tree, p.recordable, p.skill, p.same, p.copied, p.err != nil, strings.Join(p.enabled, ","))
+		fmt.Fprintf(&b, "%s\x00%s\x00%s\x00%s\x00%t\x00%t\x00%t\x00%t\x00%t\x00%s\x00%s\n",
+			p.path, p.word, p.state, p.tree, p.recordable, p.skill, p.same, p.copied, p.err != nil, strings.Join(p.enabled, ","), strings.Join(p.paths, ","))
 	}
 	return b.String()
 }
@@ -450,6 +454,13 @@ func (inv *invocation) stageRepairPlace(m *home.Mutation, p placeable, place rep
 		if !place.same && choice == chooseNone {
 			return // refused before the lock; never planned
 		}
+		if isLibraryDirectory(place.path, libPath) {
+			// The library's own directory, which planRepair never plans:
+			// removing it would take the skill's only content with it.
+			done.skipped = append(done.skipped, place.path)
+			inv.out.warn(place.path + " is the directory the library entry " + libPath + " leads to; it was left as it is")
+			return
+		}
 		// Only the symlink is written, and it is written where the directory
 		// was, so what can fail is the directory it sits in: checked now,
 		// before a step of this place is recorded, as a placement checks it.
@@ -508,10 +519,13 @@ func (p repairPlace) representative(copies []string) placeTarget {
 }
 
 // put records that the place was put back, action saying how, with one
-// row for each enabled configuration whose own place it is.
+// row for each enabled configuration whose own place it is, at the path
+// that configuration names it by.
 func (d *repaired) put(place repairPlace, action, mode string) {
-	for _, id := range place.enabled {
-		d.rows = append(d.rows, repairRow{id: id, action: action, mode: mode, path: place.path})
+	for i, t := range place.targets {
+		if slices.Contains(place.enabled, t.id) {
+			d.rows = append(d.rows, repairRow{id: t.id, action: action, mode: mode, path: place.paths[i]})
+		}
 	}
 }
 

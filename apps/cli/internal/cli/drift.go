@@ -103,8 +103,9 @@ func (sc skillContext) placementDrift(inv *invocation, lib scan.LibrarySkill) []
 // placement is the library entry itself, which the skill cannot be missing
 // from while it is in the library.
 type placeSite struct {
-	path    string
+	path    string        // the place, as the first of targets names it
 	targets []placeTarget // the configurations whose own place it is, in detection order
+	paths   []string      // the place as each of targets names it, in the same order
 	enabled []string      // the ids of those of them the settings do not disable
 	copied  bool          // copy_mode records a copy for one of them, so the place is to hold a copy
 }
@@ -126,7 +127,11 @@ func (p placeSite) asked() bool { return len(p.enabled) > 0 }
 // records one for either of them, since a copy placed for one is the copy
 // the other reads. Judged for each configuration on its own, the copy
 // agentx placed for one would read as a directory displacing the other's
-// link.
+// link, and a repair would plan the one path twice, the second step
+// finding the first one's work there and stopping the mutation part way.
+// So is a path two configurations spell differently, one of their skills
+// directories a symlink to the other's: places are told apart by
+// canonicalPath, and each configuration keeps its own spelling in paths.
 func ownPlaces(targets []placeTarget, library, name string, disabled, copies []string) []placeSite {
 	var places []placeSite
 	at := map[string]int{}
@@ -135,14 +140,16 @@ func ownPlaces(targets []placeTarget, library, name string, disabled, copies []s
 			continue
 		}
 		path := t.ownPlace(library, name)
-		i, seen := at[path]
+		key := canonicalPath(path)
+		i, seen := at[key]
 		if !seen {
 			i = len(places)
-			at[path] = i
+			at[key] = i
 			places = append(places, placeSite{path: path})
 		}
 		p := &places[i]
 		p.targets = append(p.targets, t)
+		p.paths = append(p.paths, path)
 		if !slices.Contains(disabled, t.id) {
 			p.enabled = append(p.enabled, t.id)
 		}
@@ -160,6 +167,10 @@ func ownPlaces(targets []placeTarget, library, name string, disabled, copies []s
 //     so is the library's own link where copy_mode records a copy: the kind
 //     on disk is not the mode agentx keeps. A copy whose content differs is
 //     still the copy and earns nothing here; see keepCopy.
+//   - The library directory itself, which a library entry made a symlink
+//     to the place leaves there, is what the client reads: the library,
+//     not a directory displacing a placement. It earns "", and a repair
+//     never plans it; see isLibraryDirectory.
 //   - A link of the user's to somewhere else, and anything else at the
 //     place, is theirs: the place is taken, so the skill is not missing,
 //     and nothing agentx keeps was displaced. It earns "".
@@ -175,7 +186,7 @@ func (p placeSite) drift(libPath string) string {
 			return driftDisplaced
 		}
 	case info.IsDir():
-		if !p.copied {
+		if !p.copied && !isLibraryDirectory(p.path, libPath) {
 			return driftDisplaced
 		}
 	}

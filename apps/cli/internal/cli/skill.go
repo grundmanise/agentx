@@ -146,6 +146,7 @@ func (inv *invocation) libraryPath(name string) string {
 // machine are byte-identical.
 func (inv *invocation) placements(snap scan.Snapshot, lib scan.LibrarySkill, copyMode map[string][]string) []placementEvent {
 	found := []placementEvent{}
+	atLibrary := libraryEntryOf(lib, inv.dirs.Library)
 	for _, node := range snap.Skills {
 		for _, o := range node.Occurrences {
 			if o.Plugin != "" || o.Scope != "user" {
@@ -157,11 +158,12 @@ func (inv *invocation) placements(snap scan.Snapshot, lib scan.LibrarySkill, cop
 			default:
 				continue
 			}
+			entry := atLibrary(o)
 			found = append(found, placementEvent{
 				Configuration: o.Configuration,
 				Path:          o.Path,
-				Mode:          placementMode(o, lib, copyMode, inv.dirs.Library),
-				Kind:          placementKind(o, inv.dirs.Library),
+				Mode:          placementMode(o, lib, copyMode, entry),
+				Kind:          placementKind(o, entry),
 			})
 		}
 	}
@@ -170,10 +172,11 @@ func (inv *invocation) placements(snap scan.Snapshot, lib scan.LibrarySkill, cop
 }
 
 // placementMode is what agentx keeps for this configuration: the library
-// entry for a client that reads the library, a copy where the settings
-// record one, a symlink otherwise.
-func placementMode(o scan.Occurrence, lib scan.LibrarySkill, copyMode map[string][]string, library string) string {
-	if inLibrary(o, library) {
+// entry for a client that reads the library, entry saying the occurrence is
+// that entry, see libraryEntryOf, a copy where the settings record one, a
+// symlink otherwise.
+func placementMode(o scan.Occurrence, lib scan.LibrarySkill, copyMode map[string][]string, entry bool) string {
+	if entry {
 		return modeLibrary
 	}
 	for _, id := range copyMode[lib.Name] {
@@ -186,17 +189,52 @@ func placementMode(o scan.Occurrence, lib scan.LibrarySkill, copyMode map[string
 
 // placementKind is what the placement is on disk: the scan's own kinds, and
 // the library entry itself for a client that reads the library directly.
-func placementKind(o scan.Occurrence, library string) string {
-	if inLibrary(o, library) {
+func placementKind(o scan.Occurrence, entry bool) string {
+	if entry {
 		return modeLibrary
 	}
 	return o.Kind
 }
 
-// inLibrary reports whether the occurrence is the library entry itself,
-// which is the placement of every client that reads the library directly.
-func inLibrary(o scan.Occurrence, library string) bool {
-	return filepath.Dir(o.Path) == filepath.Clean(library)
+// libraryEntryOf is the test of whether an occurrence of lib is the
+// library entry itself, which is the placement of every client that reads
+// the library directly: an entry of the library directory, named by its
+// path or by a skills directory that leads to the library through a
+// symlink, either way round, as scan.ReadsLibrary counts such a client, or
+// the real directory the library entry, itself a symlink into a client's
+// skills directory, leads to, see isLibraryDirectory. A symlink elsewhere
+// that leads to the library entry is a placement of its own, agentx's or
+// the user's, and stays one. The library and each skills directory are
+// resolved once for every occurrence the test is asked about, so a listing
+// pays for it once per skill, and it runs no git.
+func libraryEntryOf(lib scan.LibrarySkill, library string) func(scan.Occurrence) bool {
+	library = filepath.Clean(library)
+	real, err := filepath.EvalSymlinks(library)
+	if err != nil {
+		real = ""
+	}
+	resolved := map[string]string{}
+	return func(o scan.Occurrence) bool {
+		dir := filepath.Dir(o.Path)
+		switch {
+		case dir == library:
+			return true
+		case o.Kind != modeSymlink && o.ResolvedPath == lib.ResolvedPath:
+			// A real directory that resolves to the library directory is
+			// that directory, whichever way it was reached.
+			return true
+		case real == "":
+			return false
+		}
+		r, ok := resolved[dir]
+		if !ok {
+			if r, err = filepath.EvalSymlinks(dir); err != nil {
+				r = ""
+			}
+			resolved[dir] = r
+		}
+		return r == real
+	}
 }
 
 // sortPlacements orders placements by configuration and then path, so that

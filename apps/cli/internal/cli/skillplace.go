@@ -266,6 +266,14 @@ func (inv *invocation) stagePlacement(m *home.Mutation, p placeable, t placeTarg
 			return
 		}
 		displace = true
+	case home.IsDir(state) && isLibraryDirectory(placePath, libPath):
+		// The library directory itself, which the library entry, a symlink
+		// to this path, leads to: the client already reads the library's
+		// own content here, as a client that reads the library does, so
+		// there is nothing to place and nothing a copy would add. Adopting
+		// it would replace the skill's only content with a link to itself.
+		done.placed = append(done.placed, t)
+		return
 	case home.IsDir(state) && contentHashAt(placePath) == p.hash:
 		// A real directory holding exactly this version: nothing of the
 		// user's is lost by replacing it, and with --copy it is the copy.
@@ -452,7 +460,7 @@ func copyTreeTo(src, dest string) error {
 				return err
 			}
 			mode := os.FileMode(0o644)
-			if info, err := d.Info(); err == nil && info.Mode()&0o111 != 0 {
+			if info, err := d.Info(); err == nil && info.Mode()&0o100 != 0 { // the bit git records, see treeid
 				mode = 0o755
 			}
 			return writeSynced(target, b, mode)
@@ -483,6 +491,28 @@ func sameTarget(path, libPath string) bool {
 		link = filepath.Join(filepath.Dir(path), link)
 	}
 	return filepath.Clean(link) == filepath.Clean(libPath)
+}
+
+// isLibraryDirectory reports whether path is a real directory, not a link,
+// that is the very directory the library entry libPath leads to: what a
+// library entry made a symlink to a client's skill directory leaves at that
+// client's place, and what a skills directory reached through a link into
+// the library holds. The client reads the library's own directory there,
+// so it is no placement of its own: replacing it with the library's symlink
+// would replace the skill's only content with a link to itself, and taking
+// it for a copy would hand it to a removal. The two are compared as files,
+// not as paths, so no spelling of either, through /private/var, a symlinked
+// parent or another case, hides it. Anything that cannot be read is not.
+//
+// A link at path is never the library directory, even one that resolves to
+// it: that is a placement, agentx's or the user's, and sameTarget judges it.
+func isLibraryDirectory(path, libPath string) bool {
+	place, err := os.Lstat(path)
+	if err != nil || !place.IsDir() {
+		return false
+	}
+	lib, err := os.Stat(libPath)
+	return err == nil && os.SameFile(place, lib)
 }
 
 // reportPlaced reads the configurations this command covered again and
