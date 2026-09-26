@@ -272,8 +272,9 @@ func NewRun() string {
 }
 
 // WriteAll writes the import commit of every version into gitDir, through
-// one fast-import whatever the count, and returns their ids in the order
-// the versions were given. Each commit points at a tree this call has
+// one fast-import whatever the count, and returns their ids, and the ids of
+// the trees they hold, in the order the versions were given. Each commit
+// points at a tree this call has
 // already written or the source already held, is parentless, carries the
 // fixed agentx identity and the upstream committer time as epoch seconds
 // with +0000, and so depends on nothing but the version and its
@@ -285,13 +286,13 @@ func NewRun() string {
 // so that nothing about how a batch is streamed can reach the commit id.
 // The ids come back through get-mark rather than a marks file, which costs
 // no temporary file and keeps the whole import to one git process.
-func WriteAll(ctx context.Context, r *gitx.Runner, gitDir, run string, versions []Version) ([]string, error) {
+func WriteAll(ctx context.Context, r *gitx.Runner, gitDir, run string, versions []Version) (commits, trees []string, err error) {
 	if len(versions) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
-	trees, err := writeTrees(ctx, r, gitDir, versions)
+	trees, err = writeTrees(ctx, r, gitDir, versions)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var b strings.Builder
 	for i, v := range versions {
@@ -312,13 +313,13 @@ func WriteAll(ctx context.Context, r *gitx.Runner, gitDir, run string, versions 
 	b.WriteString("done\n")
 	out, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(b.String()), "fast-import", "--quiet", "--done")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	ids := strings.Fields(out)
 	if len(ids) != len(versions) {
-		return nil, fmt.Errorf("git fast-import wrote %d commits for %d versions", len(ids), len(versions))
+		return nil, nil, fmt.Errorf("git fast-import wrote %d commits for %d versions", len(ids), len(versions))
 	}
-	return ids, nil
+	return ids, trees, nil
 }
 
 // DropImporting removes the staging refs of run, in one transaction. It is

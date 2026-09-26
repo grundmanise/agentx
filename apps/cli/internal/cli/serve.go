@@ -37,6 +37,66 @@ type searchEvent struct {
 	Results    []source.Match `json:"results"` // empty, never absent, when nothing matched
 }
 
+// driftEvent says that one skill of the library is no longer in the state
+// the last snapshot showed it in: its state, its drift, or both changed
+// between two snapshots of one serve process. It is a notification and
+// nothing more: the snapshot before it carries the skill as it now is, and
+// is what a consumer applies. It names the snapshot it follows by instance
+// and counter, so that a consumer that ignores a snapshot ignores its drift
+// events with it.
+type driftEvent struct {
+	event
+	InstanceID    string   `json:"instance_id"`
+	ScanCounter   int      `json:"scan_counter"`
+	Name          string   `json:"name"`
+	Kind          string   `json:"kind"`
+	State         string   `json:"state,omitempty"`
+	Drift         []string `json:"drift"` // [] when none
+	PreviousState string   `json:"previous_state,omitempty"`
+	PreviousDrift []string `json:"previous_drift"` // [] when none
+}
+
+// driftTransitions are the drift events of one snapshot against the library
+// of the snapshot before it, one per skill in both whose state or drift
+// changed, in the library's order, which is by name. Nothing is a
+// transition against no snapshot at all: the first snapshot of a serve is
+// where every state starts, not a change of one. A skill that arrives or
+// leaves the library is not one either: the snapshot says so itself.
+func driftTransitions(prev map[string]scan.LibraryEntry, snap scan.Snapshot) []driftEvent {
+	if prev == nil {
+		return nil
+	}
+	var events []driftEvent
+	for _, e := range snap.Library {
+		p, ok := prev[e.Name]
+		if !ok || p.State == e.State && slices.Equal(p.Drift, e.Drift) {
+			continue
+		}
+		events = append(events, driftEvent{
+			event: newEvent("drift"), InstanceID: snap.InstanceID, ScanCounter: snap.ScanCounter,
+			Name: e.Name, Kind: e.Kind, State: e.State, Drift: nonNil(e.Drift),
+			PreviousState: p.State, PreviousDrift: nonNil(p.Drift),
+		})
+	}
+	return events
+}
+
+// libraryByName indexes a snapshot's library for the next comparison.
+func libraryByName(entries []scan.LibraryEntry) map[string]scan.LibraryEntry {
+	byName := make(map[string]scan.LibraryEntry, len(entries))
+	for _, e := range entries {
+		byName[e.Name] = e
+	}
+	return byName
+}
+
+func nonNil(words []string) []string {
+	if words == nil {
+		return []string{}
+	}
+	return words
+}
+
 func newServeCommand(inv *invocation) *cobra.Command {
 	var once bool
 	cmd := &cobra.Command{
@@ -54,6 +114,10 @@ func newServeCommand(inv *invocation) *cobra.Command {
 			defer lock.Close()
 			inv.instanceID() // fixed here, before two goroutines report it
 			dirs, trees := inv.watchedDirs()
+			// The library of the last snapshot emitted, which the next one's
+			// drift is told against. Snapshots are reported from the loop's
+			// goroutine alone, so nothing else touches it.
+			var library map[string]scan.LibraryEntry
 			err = serve.Run(cmd.Context(), serve.Options{
 				Scan:  func(ctx context.Context) (scan.Snapshot, error) { return inv.snapshot(ctx, 0, "", false) },
 				Index: inv.sourceIndex,
@@ -65,6 +129,10 @@ func newServeCommand(inv *invocation) *cobra.Command {
 					inv.out.emit(snapshotEvent{event: newEvent("snapshot"), Snapshot: snap})
 					inv.out.print(inv.out.paint(heading, fmt.Sprintf("snapshot %d", snap.ScanCounter)), ": ",
 						plural(len(snap.Configurations), "configuration"), ", ", plural(len(snap.Skills), "skill"))
+					for _, ev := range driftTransitions(library, snap) {
+						inv.out.emit(ev)
+					}
+					library = libraryByName(snap.Library)
 				},
 				RefreshComplete: func(id string, counter int, err error) {
 					ev := refreshCompleteEvent{event: newEvent("refresh_complete"), RequestID: id, InstanceID: inv.instanceID(), OK: err == nil, ScanCounter: counter}

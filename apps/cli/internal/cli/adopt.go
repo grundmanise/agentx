@@ -712,12 +712,12 @@ func (inv *invocation) writeAdoptions(ctx context.Context, run *adoptRun, ready 
 		versions = append(versions, c.imported.version())
 	}
 	runID := lineage.NewRun()
-	commits, err := lineage.WriteAll(ctx, inv.git, gitDir, runID, versions)
+	commits, trees, err := lineage.WriteAll(ctx, inv.git, gitDir, runID, versions)
 	if err != nil {
 		return accountRepoFailure(err)
 	}
 	for i, c := range ready {
-		c.imported.commit = commits[i]
+		c.imported.commit, c.imported.tree = commits[i], trees[i]
 	}
 	journaled := false
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
@@ -798,7 +798,9 @@ func (inv *invocation) stageAdoption(m *home.Mutation, gitDir string, c *candida
 		return refuse(exitRefused, c.path+" changed while it was being adopted",
 			"run 'agentx adopt' again: its base version has to be established from what the directory holds now"), nil
 	}
-	c.hash, c.modified = hash, hash != c.imported.hash
+	// Modified is what skill list will say of the skill: the directory's
+	// tree against the import tree, modes and links included.
+	c.hash, c.modified = hash, !holdsVersion(c.path, c.imported)
 	create, f := refPlan(c.imported, records, c.path)
 	if f != nil {
 		return f, nil

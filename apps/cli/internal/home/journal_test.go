@@ -767,3 +767,80 @@ func retainedIn(t *testing.T, dir string) string {
 	t.Fatalf("nothing was retained in %s", dir)
 	return ""
 }
+
+// replacement is the shape of a revert, and of an install that displaces
+// what the library held: one ref step that moves nothing, then the library
+// directory taken out of the way and filled again with staged content, all
+// at one path.
+func (in install) replacement(t *testing.T, name, content string) *Mutation {
+	t.Helper()
+	lib := filepath.Join(in.library, name)
+	old, err := State(lib)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewMutation(in.dir)
+	staged := m.Sibling(lib, "staged")
+	if err := os.MkdirAll(staged, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(staged, "SKILL.md"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fingerprint, err := Fingerprint(staged)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.Ref(in.gitDir, "refs/heads/managed/"+name, "c0ffee-"+name, "c0ffee-"+name)
+	m.Remove(lib, old)
+	m.Publish(lib, staged, fingerprint)
+	return m
+}
+
+// TestReplacementRecoversFromEveryBoundary stops a replacement of a library
+// directory after each of its steps. A process stopped after the publish
+// leaves the path holding what the publish put there, which is neither what
+// the remove before it expected nor what the remove was to leave, and
+// recovery finishes the journal rather than refusing it: the path moved on
+// past the remove. The content the remove retained is dropped, since it
+// still holds what was captured.
+func TestReplacementRecoversFromEveryBoundary(t *testing.T) {
+	t.Parallel()
+	for stop := 0; stop <= 3; stop++ {
+		t.Run(fmt.Sprintf("after %d steps", stop), func(t *testing.T) {
+			t.Parallel()
+			in, u := newInstall(t)
+			u[in.gitDir+" refs/heads/managed/alpha"] = "c0ffee-alpha"
+			lib := filepath.Join(in.library, "alpha")
+			if err := os.MkdirAll(lib, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(lib, "SKILL.md"), []byte("edited\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			m := in.replacement(t, "alpha", "base\n")
+			if err := m.stopAfter(stop, u); err != nil {
+				t.Fatalf("stopping after %d steps: %v", stop, err)
+			}
+			for run := range 2 {
+				if err := recoverJournals(in.dir, u); err != nil {
+					t.Fatalf("recovery %d after %d steps: %v", run+1, stop, err)
+				}
+				b, err := os.ReadFile(filepath.Join(lib, "SKILL.md"))
+				if err != nil || string(b) != "base\n" {
+					t.Errorf("recovery %d after %d steps: the library holds %q, %v", run+1, stop, b, err)
+				}
+				entries, err := os.ReadDir(in.library)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(entries) != 1 {
+					t.Errorf("recovery %d after %d steps left %d entries in the library, want the directory alone", run+1, stop, len(entries))
+				}
+			}
+			if left, _ := Journals(in.dir); len(left) > 0 {
+				t.Errorf("the journal is still there after %d steps: %v", stop, left)
+			}
+		})
+	}
+}

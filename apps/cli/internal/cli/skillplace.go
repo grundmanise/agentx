@@ -506,13 +506,17 @@ func (inv *invocation) reportPlaced(ctx context.Context, name string, targets []
 }
 
 // skillContext is what a report about library skills reads once: the
-// lineage branches of the account repo, and the copy modes and the sources
-// of the settings. Reading them per skill would cost a git process per
-// skill, which a run over the whole library may not.
+// lineage branches of the account repo, the copy modes, the sources and the
+// disabled configurations of the settings, and the configurations detected.
+// Reading them per skill would cost a git process per skill, which a run
+// over the whole library may not.
 type skillContext struct {
-	records map[string]lineage.Record
-	modes   map[string][]string
-	sources map[string]bool // the canonical URL of every source the settings hold
+	records  map[string]lineage.Record
+	modes    map[string][]string
+	sources  map[string]bool        // the canonical URL of every source the settings hold
+	disabled []string               // the configurations the settings disable
+	targets  []placeTarget          // every detected configuration a placement can be made in
+	observed map[string]observation // read ahead of the report, by skill name; see observeAll
 }
 
 func (inv *invocation) skillContext(ctx context.Context) (skillContext, error) {
@@ -528,7 +532,7 @@ func (inv *invocation) skillContext(ctx context.Context) (skillContext, error) {
 	if err != nil {
 		return skillContext{}, err
 	}
-	return skillContext{records: records, modes: modes, sources: sourceURLs(s)}, nil
+	return newSkillContext(inv, records, s, modes), nil
 }
 
 // librarySkillEventFor builds the library_skill event of one library directory from the
@@ -543,7 +547,7 @@ func (sc skillContext) librarySkillEventFor(inv *invocation, snap scan.Snapshot,
 		places = filterPlacements(places, covered)
 	}
 	rec, managed := sc.records[lib.Name]
-	return skillFromLibrary(lib, rec, managed, sc.sources, places, universalClients(snap))
+	return skillFromLibrary(lib, rec, managed, sc.sources, places, universalClients(snap), sc.observationOf(inv, lib))
 }
 
 // lineageRecords are the branches of the account repo by skill name, empty

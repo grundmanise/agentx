@@ -294,6 +294,7 @@ type imported struct {
 	fetched string   // when the source was last fetched, as the settings record it
 	imp     lineage.Import
 	commit  string // the import commit, once written
+	tree    string // the tree of that commit, the upstream directory alone
 }
 
 // treeFile is one regular file of the version with its bytes and the mode
@@ -735,12 +736,12 @@ func (inv *invocation) writeImports(ctx context.Context, b *batch, gitDir, run s
 	for i, v := range versions {
 		list[i] = v.version()
 	}
-	commits, err := lineage.WriteAll(ctx, inv.git, gitDir, run, list)
+	commits, trees, err := lineage.WriteAll(ctx, inv.git, gitDir, run, list)
 	if err != nil {
 		return accountRepoFailure(err)
 	}
 	for i, v := range versions {
-		v.commit = commits[i]
+		v.commit, v.tree = commits[i], trees[i]
 		b.step(phaseImport, v.name)
 	}
 	return nil
@@ -763,10 +764,7 @@ func (inv *invocation) dropImporting(ctx context.Context, gitDir, run string, n 
 // skill at the root, which is what the source listing calls it too. It is
 // not the library directory name, which the frontmatter decides.
 func upstreamDir(src source.Source, sk source.Skill) string {
-	if sk.Subpath == "" {
-		return source.RepoName(src.URL)
-	}
-	return path.Base(sk.Subpath)
+	return lineage.UpstreamDir(src.URL, sk.Subpath)
 }
 
 // check refuses a selection whose flags contradict each other. The two
@@ -1253,7 +1251,8 @@ func (inv *invocation) reportInstalled(ctx context.Context, b *batch, dones []*i
 	if err != nil {
 		modes = map[string][]string{}
 	}
-	sources := sourceURLs(s)
+	// The lineage is what the run just wrote, so it is not read again.
+	sc := newSkillContext(inv, map[string]lineage.Record{}, s, modes)
 	// The library is read once for the whole run. Reading it content-hashes
 	// every directory it holds, so reading it per installed skill costs a
 	// batch of n skills n hashes of the whole library: a run of forty was
@@ -1268,9 +1267,9 @@ func (inv *invocation) reportInstalled(ctx context.Context, b *batch, dones []*i
 		if !found {
 			return fail(exitInternal, "the library holds no "+done.v.name+" after installing it", "run 'agentx doctor' and check the library it names")
 		}
-		places := inv.placements(snap, lib, modes)
-		rec := lineage.Record{Name: done.v.name, Kind: lineage.KindManaged, Ref: lineage.ManagedRef(done.v.name), Commit: done.v.commit, Import: done.v.imp, HasImport: true}
-		ev := skillFromLibrary(lib, rec, true, sources, filterPlacements(places, targetIDs(done.placed)), universal)
+		sc.records[done.v.name] = lineage.Record{Name: done.v.name, Kind: lineage.KindManaged, Ref: lineage.ManagedRef(done.v.name),
+			Commit: done.v.commit, Tree: done.v.tree, Import: done.v.imp, HasImport: true}
+		ev := sc.librarySkillEventFor(inv, snap, lib, targetIDs(done.placed))
 		inv.out.emit(ev)
 		inv.printInstalled(done, ev)
 	}

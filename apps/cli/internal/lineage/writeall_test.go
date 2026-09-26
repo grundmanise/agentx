@@ -59,7 +59,7 @@ func TestWriteAllMatchesCommitTree(t *testing.T) {
 	}
 
 	run := NewRun()
-	got, err := WriteAll(ctx, r, gitDir, run, versions)
+	got, _, err := WriteAll(ctx, r, gitDir, run, versions)
 	if err != nil {
 		t.Fatalf("write all: %v", err)
 	}
@@ -121,11 +121,11 @@ func TestWriteAllOfOneIsTheSameAsOfMany(t *testing.T) {
 				Dir: "beta", Tree: two.tree, Entries: two.entries, When: "1700000000 +0000"},
 		}
 	}
-	single, err := WriteAll(ctx, alone, aloneDir, NewRun(), build(alone, aloneDir)[:1])
+	single, _, err := WriteAll(ctx, alone, aloneDir, NewRun(), build(alone, aloneDir)[:1])
 	if err != nil {
 		t.Fatalf("writing one: %v", err)
 	}
-	batch, err := WriteAll(ctx, together, togetherDir, NewRun(), build(together, togetherDir))
+	batch, _, err := WriteAll(ctx, together, togetherDir, NewRun(), build(together, togetherDir))
 	if err != nil {
 		t.Fatalf("writing a batch: %v", err)
 	}

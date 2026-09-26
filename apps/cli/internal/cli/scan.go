@@ -175,7 +175,13 @@ func (inv *invocation) inventory(ctx context.Context, wait time.Duration, projec
 			var f *failure
 			switch {
 			case err == nil:
-				listing = &skillContext{records: records, modes: copyMode, sources: sourceURLs(s)}
+				// What the drift is judged from is read here, under the
+				// lock the library was read under, so that an entry never
+				// pairs the library's directory with placements or content
+				// from the other side of a mutation.
+				read := newSkillContext(inv, records, s, copyMode)
+				read.observeAll(inv, sc.Library())
+				listing = &read
 			case errors.As(err, &f) && f.status == exitAccountRepo && ctx.Err() == nil && !inv.git.StoppedChild():
 				// The account repo's own answer, and not a stop that killed
 				// the git reading it: that is the run's to answer for.

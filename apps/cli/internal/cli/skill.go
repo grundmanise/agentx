@@ -39,6 +39,14 @@ const (
 // The two states a managed skill is listed with: its library directory
 // holds the version it was installed at, or it was edited since. Nothing
 // here decides whether an upstream moved, which a later command does.
+//
+// The two are told apart by tree id, the one way agentx compares a
+// directory with a base version: the directory's tree as git would record
+// it, computed in process, against the tree of the import commit. A mode
+// is content to git, so a file made executable, a file swapped for a link
+// to the same bytes and a link added anywhere are edits like any other;
+// the content hash, which reads neither modes nor links, stays the name of
+// a version and decides nothing here.
 const (
 	stateCurrent  = "current"
 	stateModified = "modified"
@@ -50,16 +58,16 @@ const (
 // state rather than in it, because the two answer different questions and
 // both can be true at once: a skill edited by hand whose source was then
 // removed is modified and source removed, and saying only one of them
-// would hide the other. The drift states still to come (an upstream that
-// dropped the skill, a placement that is not what the settings record, a
-// configuration the skill is missing from) can each hold together with
-// this one too, which is why drift is a list and state stays one word.
+// would hide the other. The drift states of the placements, displaced and
+// missing, hold together with this one and with each other too, as will
+// the drift states still to come, which is why drift is a list and state
+// stays one word.
 const driftSourceRemoved = "source removed"
 
 func newSkillCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "skill",
-		Short:       "Install, place and remove skills, and list what the library holds",
+		Short:       "Install, place, compare, revert and remove skills, and list what the library holds",
 		Annotations: map[string]string{annotationGroup: "true"},
 		Args:        cobra.NoArgs,
 		RunE:        needSubcommand(inv, "no skill command given", "run 'agentx skill --help' to list commands"),
@@ -67,6 +75,8 @@ func newSkillCommand(inv *invocation) *cobra.Command {
 	cmd.AddCommand(newSkillAddCommand(inv))
 	cmd.AddCommand(newSkillPlaceCommand(inv))
 	cmd.AddCommand(newSkillRemoveCommand(inv))
+	cmd.AddCommand(newSkillDiffCommand(inv))
+	cmd.AddCommand(newSkillRevertCommand(inv))
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List the skills in the library with their upstream and placements",
@@ -219,7 +229,8 @@ func universalClients(snap scan.Snapshot) []string {
 
 // skillFromLibrary builds the event of one library skill from its lineage
 // record, the canonical URLs of the sources the settings hold, the
-// placements a scan found and the universal clients that scan detected.
+// placements a scan found, the universal clients that scan detected and
+// what was observed of its directory and of its places.
 //
 // Every state is derived here, on every read, and nothing is ever written
 // for one: the lineage says where the skill came from and the settings say
@@ -228,7 +239,7 @@ func universalClients(snap scan.Snapshot) []string {
 // a source is gone is its settings entry and not its ref in the account
 // repo: an entry whose ref is missing is a source this machine still has
 // and has not fetched, which is what an import leaves.
-func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, sources map[string]bool, places []placementEvent, universal []string) librarySkillEvent {
+func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, sources map[string]bool, places []placementEvent, universal []string, obs observation) librarySkillEvent {
 	ev := librarySkillEvent{event: newEvent("library_skill"), LibraryEntry: scan.LibraryEntry{
 		Name: lib.Name, Kind: lineage.KindUnmanaged, ContentHash: lib.ContentHash, Placements: places, Universal: universal,
 	}}
@@ -241,11 +252,13 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 		ev.Source, ev.Subpath, ev.UpstreamCommit, ev.BaseHash = rec.Import.Source, &subpath, rec.Import.Commit, rec.Import.Hash
 	}
 	// A managed skill's base version is the import commit its branch points
-	// at, so the two hashes can be compared; a fork's base is the last
-	// version merged into it, which a later command reads from its history.
+	// at, so the directory's tree can be compared with that commit's; a
+	// fork's base is the last version merged into it, which a later command
+	// reads from its history. A directory that could not be read whole is
+	// not known to hold the base, and is not called current.
 	if rec.Kind == lineage.KindManaged && rec.HasImport {
 		ev.State = stateCurrent
-		if lib.ContentHash != rec.Import.Hash {
+		if !obs.read || !rec.Current(obs.tree) {
 			ev.State = stateModified
 		}
 		// The coordinates stay as the lineage has them: they are still where
@@ -254,9 +267,7 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 		// matters to a fork is the account remote it is published to, and
 		// its third-party upstream is only where later versions are merged
 		// in from.
-		if !sources[rec.Import.Source] {
-			ev.Drift = []string{driftSourceRemoved}
-		}
+		ev.Drift = driftOf(obs, !sources[rec.Import.Source])
 	}
 	return ev
 }

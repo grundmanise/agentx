@@ -667,8 +667,13 @@ func recoverJournal(dir, journalPath string, u RefUpdater) error {
 		}
 		resumed = moved
 	}
-	for _, s := range j.Steps {
+	for i, s := range j.Steps {
 		if s.Kind == stepRef {
+			continue
+		}
+		if done, err := settledLater(j.Steps, i); err != nil {
+			return unfinished(journalPath, s, err)
+		} else if done {
 			continue
 		}
 		if s.Staged != "" {
@@ -739,6 +744,36 @@ func recoverJournal(dir, journalPath string, u RefUpdater) error {
 		}
 	}
 	return os.Remove(journalPath)
+}
+
+// settledLater reports whether the path of the ith step already holds what
+// a later step of the journal leaves there, which makes the ith step and
+// every one between them done. A journal that replaces a directory records
+// two steps at one path, a remove that takes the old content out of the way
+// and a publish or a link that fills the path again, and a process stopped
+// after both leaves the path holding neither what the remove expected nor
+// what it was to become: the remove is not out of date, the path has moved
+// on past it.
+func settledLater(steps []step, i int) (bool, error) {
+	later := false
+	for _, s := range steps[i+1:] {
+		if s.Kind != stepRef && s.Path == steps[i].Path {
+			later = true
+		}
+	}
+	if !later {
+		return false, nil
+	}
+	live, err := liveState(steps[i].Path)
+	if err != nil {
+		return false, err
+	}
+	for _, s := range steps[i+1:] {
+		if s.Kind != stepRef && s.Path == steps[i].Path && s.New == live {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // discardRetained drops the content a removal displaced, once every live
