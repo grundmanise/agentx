@@ -68,7 +68,7 @@ func (inv *invocation) skillRevert(ctx context.Context, name string) error {
 			paths[i] = quotedPath(filepath.Join(libPath, filepath.FromSlash(p)))
 		}
 		return fail(exitRefused, fmt.Sprintf("%s holds %s, which git cannot record", name, strings.Join(paths, ", ")),
-			"a revert would discard it with no record of it anywhere; move it out of the skill, then run '"+nameCommand("revert", name)+"' again")
+			"a revert would discard it with no record of it anywhere; move it out of the skill, then run '"+skillCommand("revert", name)+"' again")
 	}
 	against := "its base version at " + short(rec.Import.Commit)
 	if rec.Current(edited) {
@@ -92,7 +92,7 @@ func (inv *invocation) skillRevert(ctx context.Context, name string) error {
 		}
 		if refs[lineage.ManagedRef(name)] != rec.Commit || refs[lineage.ForkRef(name)] != "" {
 			return fail(exitRefused, "the import branch "+lineage.ManagedRef(name)+" moved while "+name+" was being reverted, so nothing was discarded",
-				"run '"+nameCommand("diff", name)+"' to see the base version now, then revert again")
+				"run '"+skillCommand("diff", name)+"' to see the base version now, then revert again")
 		}
 		live, err := home.State(libPath)
 		if err != nil {
@@ -100,7 +100,7 @@ func (inv *invocation) skillRevert(ctx context.Context, name string) error {
 		}
 		if live != captured {
 			return fail(exitRefused, name+" changed while it was being reverted, so nothing was discarded",
-				"run '"+nameCommand("diff", name)+"' to see the change, then revert again to discard it too")
+				"run '"+skillCommand("diff", name)+"' to see the change, then revert again to discard it too")
 		}
 		sweepStaged(inv.dirs.Library)
 		edit, err := inv.beginSettings()

@@ -182,6 +182,12 @@ func (inv *invocation) inventory(ctx context.Context, wait time.Duration, projec
 				read := newSkillContext(inv, records, s, copyMode)
 				read.observeAll(inv, sc.Library())
 				listing = &read
+				// A managed skill the library no longer holds has no entry
+				// and so no drift; the warnings are how the desktop app
+				// learns that it is gone.
+				for _, w := range read.absentWarnings(sc.Library()) {
+					sc.Warn(w)
+				}
 			case errors.As(err, &f) && f.status == exitAccountRepo && ctx.Err() == nil && !inv.git.StoppedChild():
 				// The account repo's own answer, and not a stop that killed
 				// the git reading it: that is the run's to answer for.

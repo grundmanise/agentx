@@ -274,12 +274,11 @@ func NewRun() string {
 // WriteAll writes the import commit of every version into gitDir, through
 // one fast-import whatever the count, and returns their ids, and the ids of
 // the trees they hold, in the order the versions were given. Each commit
-// points at a tree this call has
-// already written or the source already held, is parentless, carries the
-// fixed agentx identity and the upstream committer time as epoch seconds
-// with +0000, and so depends on nothing but the version and its
-// coordinates: a skill installed alone and the same skill installed in a
-// batch of thirty end at the same commit.
+// points at a tree this call has already written or the source already
+// held, is parentless, carries the fixed agentx identity and the upstream
+// committer time as epoch seconds with +0000, and so depends on nothing but
+// the version and its coordinates: a skill installed alone and the same
+// skill installed in a batch of thirty end at the same commit.
 //
 // fast-import is fed the tree rather than the files: the commit's tree is
 // exactly the one writeTrees built, set with a filemodify of the tree root,

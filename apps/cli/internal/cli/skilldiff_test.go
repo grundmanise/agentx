@@ -2,8 +2,10 @@ package cli
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -99,18 +101,93 @@ func TestSkillDiffKeepsEveryByteButControls(t *testing.T) {
 	contains(t, "the event", patch, "\n+\tindented  twice\x1b[31m red\n")
 }
 
+// TestSkillDiffPrintsBytesThatAreNotUTF8 edits a file into Latin-1, which
+// git diffs as text, beside an escape and a C1 control: the text prints the
+// Latin-1 byte as it is and each control as one space. The event is JSON,
+// whose strings are UTF-8, so there the byte arrives as U+FFFD, and so does
+// the byte of a file name that is not UTF-8, which is tried where the file
+// system takes one: macOS refuses it.
+func TestSkillDiffPrintsBytesThatAreNotUTF8(t *testing.T) {
+	t.Parallel()
+	h, _ := driftHarness(t)
+	lib := filepath.Join(h.library, "pdf")
+	writeFile(t, filepath.Join(lib, "a.md"), "caf\xe9 \x1b[31m \xc2\x9b end\n")
+	text := h.mustRun("skill", "diff", "pdf").stdout
+	contains(t, "the text", text, "\n+caf\xe9  [31m   end\n")
+	patch := h.one(h.mustRun("--json", "skill", "diff", "pdf").stdout, "diff")["patch"].(string)
+	contains(t, "the event", patch, "\n+caf\ufffd \x1b[31m \u009b end\n")
+
+	if runtime.GOOS == "darwin" {
+		return
+	}
+	restore(t, filepath.Join(lib, "a.md"), "the same bytes\n")
+	writeFile(t, filepath.Join(lib, "caf\xe9.md"), "a file of my own\n")
+	diff := h.one(h.mustRun("--json", "skill", "diff", "pdf").stdout, "diff")
+	equal(t, "the path", diff["path"], "caf\ufffd.md")
+	equal(t, "the status", diff["status"], "added")
+}
+
 // TestSkillDiffNamesWhatGitCannotRecord: a repository nested in the skill
-// is left out of the diff with a warning naming it.
+// is left out of the diff with a warning naming it, and the skill does not
+// match its base for it: the listing calls it modified, and the diff says
+// it differs only in what git cannot record, never that it matches. An
+// edit beside it is one file more.
 func TestSkillDiffNamesWhatGitCannotRecord(t *testing.T) {
 	t.Parallel()
 	h, _ := driftHarness(t)
-	nested := filepath.Join(h.library, "pdf", "vendored", ".git")
+	lib := filepath.Join(h.library, "pdf")
+	short := h.accountGit("log", "-1", "--format=%(trailers:key=Agentx-Upstream-Commit,valueonly)", "refs/heads/managed/pdf")[:7]
+	nested := filepath.Join(lib, "vendored", ".git")
 	writeFile(t, mkdirs(t, nested, "HEAD"), "ref: refs/heads/main\n")
 	out := h.mustRun("--json", "skill", "diff", "pdf")
 	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), nested+" cannot be recorded by git and is left out of the diff")
 	if diffs := h.eventsOfType(out.stdout, "diff"); len(diffs) != 0 {
 		t.Errorf("diff events = %v, want none: nothing else changed", diffs)
 	}
+	only := "pdf differs from its base version at " + short + " only in 1 path git cannot record"
+	equal(t, "summary", h.one(out.stdout, "result")["summary"], only)
+	equal(t, "the text", h.mustRun("skill", "diff", "pdf").stdout, only+"\n")
+	equal(t, "the listing's state", h.listed("pdf")["state"], stateModified)
+
+	// A .git at the skill's root is one more such path.
+	writeFile(t, mkdirs(t, filepath.Join(lib, ".git"), "HEAD"), "ref: refs/heads/main\n")
+	writeFile(t, filepath.Join(lib, "a.md"), "an edit\n")
+	out = h.mustRun("--json", "skill", "diff", "pdf")
+	equal(t, "warnings with an edit", len(warnings(h, out.stderr)), 2)
+	equal(t, "diff events with an edit", len(h.eventsOfType(out.stdout, "diff")), 1)
+	equal(t, "summary with an edit", h.one(out.stdout, "result")["summary"],
+		"pdf differs from its base version at "+short+" in 1 file, and 2 paths git cannot record")
+	equal(t, "the listing's state with an edit", h.listed("pdf")["state"], stateModified)
+}
+
+// TestSkillDiffSaysADeletedFileChanged: a file deleted between the read of
+// the directory and git writing it is the directory changing, exit code 6
+// with the hint to run the command again, and not an account repo git
+// cannot use. A git wrapper deletes it as the blobs are written.
+func TestSkillDiffSaysADeletedFileChanged(t *testing.T) {
+	t.Parallel()
+	h, _ := driftHarness(t)
+	file := filepath.Join(h.library, "pdf", "new.md")
+	writeFile(t, file, "a file of my own\n")
+	real, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rm, err := exec.LookPath("rm") // the wrapper's PATH holds nothing but itself
+	if err != nil {
+		t.Fatal(err)
+	}
+	stubGit(t, h, `#!/bin/sh
+case " $* " in
+*" hash-object "*) `+rm+` -f `+shellWord(file)+` ;;
+esac
+exec `+real+` "$@"
+`)
+	out := h.run("--json", "skill", "diff", "pdf")
+	equal(t, "exit", out.exit, 6)
+	e := h.one(out.stdout, "error")
+	contains(t, "message", e["message"].(string), "pdf changed while agentx read it")
+	equal(t, "hint", e["hint"], "run the command again")
 }
 
 // TestSkillDiffAndRevertRefuseWhatHasNoBase: a name the library does not

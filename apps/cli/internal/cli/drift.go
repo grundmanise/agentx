@@ -144,6 +144,48 @@ func driftOf(obs observation, sourceRemoved bool) []string {
 	return drift
 }
 
+// absentManaged are the names of the managed skills whose library
+// directory is not among libs, sorted: an import branch the account repo
+// holds for a skill the library no longer holds, because its directory was
+// deleted, or lost its SKILL.md, outside agentx. Such a skill has no entry
+// to carry a state or a drift: there is no directory to compare with its
+// base, and a configuration cannot be missing what the library does not
+// hold. It is named in a warning instead, see absentWarnings. The branches
+// are the ones the report already read, so this runs no git.
+func (sc skillContext) absentManaged(libs []scan.LibrarySkill) []string {
+	held := make(map[string]bool, len(libs))
+	for _, lib := range libs {
+		held[lib.Name] = true
+	}
+	var names []string
+	for name, rec := range sc.records {
+		if rec.Kind == lineage.KindManaged && !held[name] {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+// absentWarnings are the warnings that name the managed skills the library
+// no longer holds, one per skill, sorted by name, each with the install
+// that lays the directory out again: the import branch is still where it
+// was, so installing the version it names again only writes the directory
+// and places it. skill list prints them and a snapshot carries them, so
+// the user and the desktop app both learn that the skill is gone.
+func (sc skillContext) absentWarnings(libs []scan.LibrarySkill) []string {
+	var warnings []string
+	for _, name := range sc.absentManaged(libs) {
+		from := "<source>"
+		if rec := sc.records[name]; rec.HasImport {
+			from = shellWord(rec.Import.Source)
+		}
+		warnings = append(warnings, name+" is managed in the account repo but the library holds no skill directory for it;"+
+			" run 'agentx skill add "+from+" --skill "+shellWord(name)+"' to install it again")
+	}
+	return warnings
+}
+
 // holdsVersion reports whether the directory at path holds exactly the
 // version v, as git would record the two: false for a directory this
 // machine cannot read whole.

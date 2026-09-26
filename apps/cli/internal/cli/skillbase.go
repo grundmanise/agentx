@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
@@ -44,16 +43,6 @@ func (inv *invocation) managedRecord(ctx context.Context, name, what string) (st
 			"run 'agentx doctor' and check the account repo it names")
 	}
 	return gitDir, rec, nil
-}
-
-// nameCommand is the agentx skill command a hint names for the skill called
-// name, the name quoted for a shell and put after "--" when it starts with
-// a dash, as skillCommand puts it.
-func nameCommand(verb, name string) string {
-	if strings.HasPrefix(name, "-") {
-		return "agentx skill " + verb + " -- " + shellWord(name)
-	}
-	return "agentx skill " + verb + " " + shellWord(name)
 }
 
 // readLibraryTree reads a library skill's directory as git would record it,

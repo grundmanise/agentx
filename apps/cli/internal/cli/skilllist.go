@@ -13,6 +13,11 @@ import (
 // managed skill whose source has no entry in the settings is listed as
 // source removed, which is read from the settings this command reads
 // anyway, never written anywhere.
+//
+// A managed skill whose library directory is gone has no row: there is
+// nothing to list, compare or place. It is named in a warning of its own
+// after the rows, see absentWarnings, so that a branch the account repo
+// still holds is never silently left out.
 func (inv *invocation) skillList(ctx context.Context) error {
 	snap, err := inv.scan(ctx, lockWait, "", false)
 	if err != nil {
@@ -23,6 +28,7 @@ func (inv *invocation) skillList(ctx context.Context) error {
 		return err
 	}
 	skills, warnings := readLibrary(inv.dirs.Library)
+	warnings = append(warnings, sc.absentWarnings(skills)...)
 	out := inv.out
 	if len(skills) == 0 {
 		out.print("No skills in the library. Install one with ", out.paint(label, "agentx skill add <source>"), ".")

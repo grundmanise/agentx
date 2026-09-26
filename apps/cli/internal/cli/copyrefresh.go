@@ -28,48 +28,82 @@ import (
 // A path that holds no copy at all, nothing or a link, has no content of
 // agentx's to refresh and is left as it is; the drift of the skill says
 // what it is. A copy this machine cannot read or cannot stage a new one
-// beside is skipped with a warning, as a placement it cannot make is. The
-// refreshed configurations go into done.copies, the kept and skipped paths
-// into done.skipped.
+// beside is skipped and left as it is, with a warning of its own, see
+// skipRefresh. The refreshed configurations go into done.copies, the kept
+// and skipped paths into done.skipped.
+//
+// A path two configurations share, as Zencoder and Zenflow share one
+// skills directory, is judged and planned once: a second remove of it
+// would find the first one's publish there, which is neither what it was
+// to remove nor what it was to become, and would stop the mutation part
+// way through, and a second warning would count one copy twice. Each
+// configuration whose copy is refreshed is still named, as a placement
+// names each configuration it placed into.
 //
 // Every copy removed carries the fingerprint it held when it was judged,
 // so a copy edited between this plan and the step that removes it stops
 // the mutation rather than being discarded.
 func (inv *invocation) refreshCopies(m *home.Mutation, name, target string, placed []string, staged string, recorded []string, done *placements) {
+	refreshed := map[string]bool{} // by path, every path judged, true when its copy is refreshed
 	for _, t := range inv.detectedTargets() {
 		if t.readsLibrary || !slices.Contains(recorded, t.id) {
 			continue
 		}
 		place := t.ownPlace(inv.dirs.Library, name)
-		state, err := home.State(place)
-		if err != nil {
-			inv.skipPlacement(done, t, place, err)
-			continue
-		}
-		if !home.IsDir(state) {
-			continue
-		}
-		tree, err := treeid.Read(place)
-		if err != nil {
-			inv.skipPlacement(done, t, place, err)
-			continue
-		}
-		clean := len(tree.Unrecordable) == 0
-		switch {
-		case clean && tree.ID == target:
-		case clean && slices.Contains(placed, tree.ID):
-			fresh, fingerprint, err := stageRefresh(m, place, staged, target)
-			if err != nil {
-				inv.skipPlacement(done, t, place, err)
-				continue
+		if fresh, judged := refreshed[place]; judged {
+			if fresh {
+				done.copies = append(done.copies, t.id)
 			}
-			m.Remove(place, state)
-			m.Publish(place, fresh, fingerprint)
-			done.copies = append(done.copies, t.id)
-		default:
-			inv.keepCopy(done, t, place, name)
+			continue
 		}
+		refreshed[place] = inv.refreshCopy(m, t, place, name, target, placed, staged, done)
 	}
+}
+
+// refreshCopy judges and plans the one copy at place, as refreshCopies
+// says, and reports whether it is refreshed.
+func (inv *invocation) refreshCopy(m *home.Mutation, t placeTarget, place, name, target string, placed []string, staged string, done *placements) bool {
+	state, err := home.State(place)
+	if err != nil {
+		inv.skipRefresh(done, place, err)
+		return false
+	}
+	if !home.IsDir(state) {
+		return false
+	}
+	tree, err := treeid.Read(place)
+	if err != nil {
+		inv.skipRefresh(done, place, err)
+		return false
+	}
+	clean := len(tree.Unrecordable) == 0
+	switch {
+	case clean && tree.ID == target:
+		return false
+	case clean && slices.Contains(placed, tree.ID):
+		fresh, fingerprint, err := stageRefresh(m, place, staged, target)
+		if err != nil {
+			inv.skipRefresh(done, place, err)
+			return false
+		}
+		m.Remove(place, state)
+		m.Publish(place, fresh, fingerprint)
+		done.copies = append(done.copies, t.id)
+		return true
+	default:
+		inv.keepCopy(done, t, place, name)
+		return false
+	}
+}
+
+// skipRefresh leaves one copy as it is when this machine cannot read it or
+// cannot stage its new content beside it, and says why, counting it where
+// a skipped placement is counted: the run still succeeds and the result
+// says how many were skipped. Unlike a placement that could not be made,
+// the configuration keeps the copy it had.
+func (inv *invocation) skipRefresh(done *placements, place string, err error) {
+	done.skipped = append(done.skipped, place)
+	inv.out.warn("cannot refresh " + place + ": " + err.Error() + "; the copy was left as it is")
 }
 
 // stageRefresh lays the new content of one copy out beside it, from the

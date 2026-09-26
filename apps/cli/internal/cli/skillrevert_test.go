@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 )
 
 // hiddenEntries are the entries of dir whose names start with .agentx-,
@@ -133,6 +135,67 @@ func TestSkillRevertRefreshesOnlyUnchangedCopies(t *testing.T) {
 	}
 }
 
+// TestSkillRevertJudgesASharedCopyOnce reverts a skill whose copy two
+// configurations share: Zencoder and Zenflow both read ~/.zencoder/skills,
+// and copy_mode records a copy for each of them. The one copy is judged
+// and planned once. Holding what the library held, it is refreshed once
+// and counted for both configurations, as the placement counted it; edited
+// where it is, it is kept byte for byte with one warning and one skip.
+func TestSkillRevertJudgesASharedCopyOnce(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name   string
+		edited bool
+	}{{"a copy of the edited library", false}, {"a copy edited where it is", true}} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			h := newHarness(t)
+			h.build(t, fixture{dirs: []string{".claude", ".zencoder"}})
+			s, _, _ := h.standardSource(true)
+			h.mustRun("source", "add", s.url)
+			h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code")
+			lib := filepath.Join(h.library, "alpha")
+			base := libraryTree(t, lib)
+			editLibrary(t, h, "alpha", "notes.md", "alpha notes, edited in the library\n")
+			shared := filepath.Join(h.home, ".zencoder", "skills")
+			place := filepath.Join(shared, "alpha")
+			h.mustRun("skill", "place", "alpha", "--to", "zencoder", "--to", "zenflow", "--copy")
+			if c.edited {
+				editCopy(t, place)
+			}
+			before := libraryTree(t, place)
+
+			out := h.run("--json", "skill", "revert", "alpha")
+			if out.exit != 0 {
+				t.Fatalf("revert: exit %d\n%s", out.exit, out.stderr)
+			}
+			sameTree(t, "the library directory", libraryTree(t, lib), base)
+			summary := h.one(out.stdout, "result")["summary"].(string)
+			warned := warnings(h, out.stderr)
+			if c.edited {
+				sameTree(t, "the shared copy", libraryTree(t, place), before)
+				equal(t, "warnings", len(warned), 1)
+				contains(t, "the warning", strings.Join(warned, "\n"), "zencoder's copy of alpha is different from the library")
+				contains(t, "the result", summary, ", 1 placement skipped")
+				if strings.Contains(summary, "refreshed") {
+					t.Errorf("the result says a kept copy was refreshed: %s", summary)
+				}
+			} else {
+				sameTree(t, "the shared copy", libraryTree(t, place), base)
+				equal(t, "warnings", strings.Join(warned, "\n"), "")
+				contains(t, "the result", summary, ", 2 copy placements refreshed")
+				if strings.Contains(summary, "skipped") {
+					t.Errorf("the result says a refreshed copy was skipped: %s", summary)
+				}
+			}
+			for _, dir := range []string{h.library, shared} {
+				equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
+			}
+			equal(t, "journals", journalCount(t, h), 0)
+		})
+	}
+}
+
 // TestSkillRevertRefusesWhatGitCannotRecord: a repository nested in the
 // skill would be discarded with no record of it anywhere, so the revert
 // refuses and changes nothing.
@@ -182,6 +245,59 @@ exec `+real+` "$@"
 	equal(t, "a.md", string(b), "an edit made meanwhile\n")
 	equal(t, "journals", journalCount(t, h), 0)
 	equal(t, "what is left beside the library", strings.Join(hiddenEntries(t, h.library), " "), "")
+}
+
+// TestSkillRevertRefusesWhenTheImportBranchMoves: the base a revert lays
+// out is the version the import branch named when the command began. A git
+// wrapper moves the branch, or makes a fork of the name, while the revert
+// reads the base version, after the lineage was read and before the lock
+// is taken. The revert then refuses under the lock, before it writes a
+// journal: the edit is still there, nothing is left beside the library and
+// the ref the other writer wrote stays as it was written.
+func TestSkillRevertRefusesWhenTheImportBranchMoves(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name, ref string
+		moved     bool // the managed branch moves; otherwise a fork of the name appears
+	}{
+		{"the managed branch moves", "refs/heads/managed/pdf", true},
+		{"a fork appears", "refs/heads/skills/pdf", false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			h, _ := driftHarness(t)
+			file := filepath.Join(h.library, "pdf", "a.md")
+			writeFile(t, file, "an edit\n")
+			before := h.accountGit("rev-parse", "refs/heads/managed/pdf")
+			written := before
+			if c.moved {
+				written = h.accountGit("commit-tree", before+"^{tree}", "-p", before, "-m", "moved")
+			}
+			real, err := exec.LookPath("git")
+			if err != nil {
+				t.Fatal(err)
+			}
+			repo := gitx.AccountRepoPath(h.agentx)
+			stubGit(t, h, `#!/bin/sh
+case " $* " in
+*" ls-tree "*) `+real+` --git-dir=`+shellWord(repo)+` update-ref `+c.ref+` `+written+` || exit 1 ;;
+esac
+exec `+real+` "$@"
+`)
+			out := h.run("--json", "skill", "revert", "pdf")
+			equal(t, "exit", out.exit, 6)
+			e := h.one(out.stdout, "error")
+			equal(t, "message", e["message"], "the import branch refs/heads/managed/pdf moved while pdf was being reverted, so nothing was discarded")
+			contains(t, "hint", e["hint"].(string), "agentx skill diff pdf")
+			equal(t, "a.md", fileBody(t, file), "an edit\n")
+			equal(t, "the ref written meanwhile", h.accountGit("rev-parse", c.ref), written)
+			if !c.moved {
+				equal(t, "the managed branch", h.accountGit("rev-parse", "refs/heads/managed/pdf"), before)
+			}
+			equal(t, "journals", journalCount(t, h), 0)
+			equal(t, "what is left beside the library", strings.Join(hiddenEntries(t, h.library), " "), "")
+		})
+	}
 }
 
 // revertChildEnv marks the process TestSkillRevertRecoversAtEveryBoundary

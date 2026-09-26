@@ -36,7 +36,7 @@ With `--json`, serve also tells you when a skill in your library changes state. 
 
 `state` and `drift` are the skill's states now, `previous_state` and `previous_drift` what the snapshot before showed, and `scan_counter` names the snapshot the change is in. Save an edit to a skill that was `current` and the `drift` line follows within a second, right after the snapshot that shows it; later edits to the same skill leave it `modified` and bring no new `drift` line. The states are those of [`agentx skill list`](/cli/skill#list-your-skills).
 
-A `drift` line is a notification: the snapshot before it already holds the skill as it now is. The first snapshot, and a skill that is new in the library or gone from it, bring no `drift` line.
+A `drift` line is a notification: the snapshot before it already holds the skill as it now is. The first snapshot, and a skill that is new in the library or gone from it, bring no `drift` line. If a managed skill's directory is deleted from the library, the snapshot's `warnings` names the skill, with the command that installs it again.
 
 ## Ask for a fresh snapshot
 

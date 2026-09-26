@@ -168,6 +168,17 @@ func writeBlobs(ctx context.Context, r *gitx.Runner, gitDir, root string, blobs 
 	}
 	out, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(b.String()), "hash-object", "-w", "--no-filters", "--stdin-paths")
 	if err != nil {
+		// A file that is gone, or is no longer a file, since the tree was
+		// read is the directory changing, not the account repo failing.
+		for _, blob := range blobs {
+			if blob.Link {
+				continue
+			}
+			info, statErr := os.Lstat(filepath.Join(root, filepath.FromSlash(blob.Path)))
+			if statErr != nil || !info.Mode().IsRegular() {
+				return fmt.Errorf("%w: %q is no longer the file that was read", ErrChanged, blob.Path)
+			}
+		}
 		return err
 	}
 	ids := strings.Fields(out)

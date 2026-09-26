@@ -308,10 +308,10 @@ func words(v any) string {
 
 // TestServeEmitsADriftEventOnEachTransition runs serve while a managed skill
 // goes through every state: edited in an editor, missing a placement,
-// reverted, and left without its branch. Each change is followed by one
-// drift event, after the snapshot that shows it and naming that snapshot,
-// with the state and drift before and after; the first snapshot is where
-// every state starts and is followed by none.
+// displaced from another, reverted, and left without its branch. Each
+// change is followed by one drift event, after the snapshot that shows it
+// and naming that snapshot, with the state and drift before and after; the
+// first snapshot is where every state starts and is followed by none.
 func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -361,21 +361,40 @@ func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 	}
 
 	lib := filepath.Join(h.library, "alpha")
-	expect(change("edited", func() { replaceFile(t, filepath.Join(lib, "notes.md"), "edited in an editor\n") }),
-		"managed", stateModified, "", stateCurrent, "")
+	// An edit saved in an editor reaches serve through the watcher alone:
+	// no refresh is asked for, and the drift follows the snapshot it made.
+	replaceFile(t, filepath.Join(lib, "notes.md"), "edited in an editor\n")
+	snap := p.next("snapshot")
+	edited := p.next("drift")
+	equal(t, "edited: scan_counter", edited["scan_counter"], snap["scan_counter"])
+	expect(edited, "managed", stateModified, "", stateCurrent, "")
+
+	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
 	expect(change("unplaced", func() { remove(t, filepath.Join(h.home, ".cursor", "skills", "alpha")) }),
 		"managed", stateModified, "missing", stateModified, "")
+	expect(change("displaced", func() { remove(t, claude); copyTree(t, lib, claude) }),
+		"managed", stateModified, "displaced,missing", stateModified, "missing")
 	expect(change("reverted", func() { h.runBesideServe("skill", "revert", "alpha") }),
-		"managed", stateCurrent, "missing", stateModified, "missing")
+		"managed", stateCurrent, "displaced,missing", stateModified, "displaced,missing")
 	expect(change("unmanaged", func() { h.accountGit("update-ref", "-d", "refs/heads/managed/alpha") }),
-		"unmanaged", "", "", stateCurrent, "missing")
+		"unmanaged", "", "", stateCurrent, "displaced,missing")
 
 	equal(t, "exit", p.close(), 0)
 	p.next("result")
-	// A single pass has nothing to compare with and emits no drift.
+	// A single pass has nothing to compare with and emits no drift; its
+	// snapshot shows the skill as it now is.
 	out := h.serveOnce("--json")
 	if got := strings.Join(h.types(h.events(out.stdout)), ","); got != "snapshot,result" {
 		t.Errorf("serve --once emitted %s, want snapshot,result", got)
+	}
+	library := h.one(out.stdout, "snapshot")["library"].([]any)
+	if len(library) != 1 {
+		t.Fatalf("the snapshot's library = %v, want alpha alone", library)
+	}
+	entry := library[0].(map[string]any)
+	equal(t, "the snapshot's kind", entry["kind"], "unmanaged")
+	if _, ok := entry["state"]; ok {
+		t.Errorf("an unmanaged skill carries a state in the snapshot: %v", entry["state"])
 	}
 }
 
@@ -397,4 +416,63 @@ func TestAdoptionAndListingAgreeOnModified(t *testing.T) {
 	equal(t, "the listing's state", h.listed("alpha")["state"], stateModified)
 	chmod(t, filepath.Join(h.library, "alpha", "notes.md"), 0o644)
 	equal(t, "the listing's state with the bit put back", h.listed("alpha")["state"], stateCurrent)
+}
+
+// TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning: a managed skill
+// whose library directory was deleted outside agentx has no library entry,
+// so no state and no drift, and is named in one warning instead, by skill
+// list and in the snapshot's warnings alike, with the install that lays
+// the directory out again. Leaving the library is no drift transition:
+// serve says it through the snapshot and its warning.
+func TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning(t *testing.T) {
+	t.Parallel()
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	p := h.serve(t, "--json")
+	p.next("snapshot")
+	p.send(`{"type":"refresh","request_id":"start"}`)
+	equal(t, "the event after the first snapshot", p.next("refresh_complete")["request_id"], "start")
+
+	remove(t, filepath.Join(h.library, "alpha"))
+	want := "alpha is managed in the account repo but the library holds no skill directory for it; run 'agentx skill add " +
+		shellWord(s.url) + " --skill alpha' to install it again"
+	p.send(`{"type":"refresh","request_id":"gone"}`)
+	var snap jsonEvent
+	for _, e := range p.until("gone") {
+		switch e["type"] {
+		case "snapshot":
+			snap = e
+		case "drift":
+			t.Errorf("a drift event for a skill that left the library: %v", e)
+		}
+	}
+	if snap == nil {
+		t.Fatal("no snapshot after the library directory went")
+	}
+	equal(t, "the snapshot's library", len(snap["library"].([]any)), 0)
+	var named []string
+	for _, w := range snap["warnings"].([]any) {
+		if strings.Contains(w.(string), "alpha is managed") {
+			named = append(named, w.(string))
+		}
+	}
+	equal(t, "the snapshot's warnings about alpha", strings.Join(named, "\n"), want)
+	equal(t, "exit", p.close(), 0)
+	p.next("result")
+
+	out := h.mustRun("--json", "skill", "list")
+	if got := h.eventsOfType(out.stdout, "library_skill"); len(got) != 0 {
+		t.Errorf("skill list emitted %v for a skill the library does not hold", got)
+	}
+	equal(t, "skill list's warnings", strings.Join(warnings(h, out.stderr), "\n"), want)
+	text := h.mustRun("skill", "list")
+	equal(t, "the text", text.stdout, "No skills in the library. Install one with agentx skill add <source>.\n")
+	equal(t, "the text warning", text.stderr, "warning: "+want+"\n")
+
+	// The warning is the whole of it: a skill the library holds again is
+	// listed again, and warned about no more.
+	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	out = h.mustRun("--json", "skill", "list")
+	equal(t, "state after installing it again", h.librarySkill(out.stdout, "alpha")["state"], stateCurrent)
+	equal(t, "warnings after installing it again", strings.Join(warnings(h, out.stderr), "\n"), "")
 }

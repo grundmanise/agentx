@@ -59,6 +59,12 @@ type fileDiff struct {
 // compares the two trees: git produces every diff, and the library is only
 // read.
 //
+// Whether the directory matches its base is decided as its state is, by
+// Record.Current and by nothing else, so that the diff never says a skill
+// matches while the listing calls it modified: a directory holding
+// something git cannot record is not the base version, even when every
+// path git can record is.
+//
 // The versions compared are chosen here and diffed by diffTrees, so a
 // comparison of other versions of the same skill is another choice of the
 // two trees and nothing more.
@@ -74,6 +80,11 @@ func (inv *invocation) skillDiff(ctx context.Context, name string) error {
 	tree, err := inv.readLibraryTree(lib.Path)
 	if err != nil {
 		return err
+	}
+	against := "its base version at " + short(rec.Import.Commit)
+	if rec.Current(tree) {
+		inv.reportDiff(name, against, nil, 0)
+		return nil
 	}
 	for _, p := range tree.Unrecordable {
 		inv.out.warn(quotedPath(filepath.Join(lib.Path, filepath.FromSlash(p))) + " cannot be recorded by git and is left out of the diff")
@@ -95,25 +106,41 @@ func (inv *invocation) skillDiff(ctx context.Context, name string) error {
 			return accountRepoFailure(err)
 		}
 	}
-	inv.reportDiff(name, "its base version at "+short(rec.Import.Commit), files)
+	inv.reportDiff(name, against, files, len(tree.Unrecordable))
 	return nil
 }
 
 // reportDiff emits one diff event per file and prints the diffs under one
 // line that says what was compared with what. against names the version
-// the library was compared with.
-func (inv *invocation) reportDiff(name, against string, files []fileDiff) {
+// the library was compared with, and unrecordable is how many paths of the
+// library directory git cannot record, which no diff shows and each of
+// which makes the directory another version all the same: the line counts
+// them, and it says the two match only when there are neither diffs nor
+// such paths.
+func (inv *invocation) reportDiff(name, against string, files []fileDiff, unrecordable int) {
 	out := inv.out
 	for _, f := range files {
 		out.emit(diffEvent{event: newEvent("diff"), Name: name, Path: f.path, Status: f.status, Patch: f.patch})
 	}
-	if len(files) == 0 {
+	var in, painted string // what the line says it differs in, bare and painted
+	switch {
+	case len(files) == 0 && unrecordable == 0:
 		inv.summary = name + " matches " + against
 		out.print(out.paint(heading, sanitised(name)), " matches ", against)
 		return
+	case len(files) == 0:
+		in = "only in " + plural(unrecordable, "path") + " git cannot record"
+		painted = "only in " + out.paint(noteStyle, plural(unrecordable, "path")) + " git cannot record"
+	default:
+		in = "in " + plural(len(files), "file")
+		painted = "in " + out.paint(noteStyle, plural(len(files), "file"))
+		if unrecordable > 0 {
+			in += ", and " + plural(unrecordable, "path") + " git cannot record"
+			painted += ", and " + out.paint(noteStyle, plural(unrecordable, "path")) + " git cannot record"
+		}
 	}
-	inv.summary = fmt.Sprintf("%s differs from %s in %s", name, against, plural(len(files), "file"))
-	out.print(out.paint(heading, sanitised(name)), " differs from ", against, " in ", out.paint(noteStyle, plural(len(files), "file")))
+	inv.summary = name + " differs from " + against + " " + in
+	out.print(out.paint(heading, sanitised(name)), " differs from ", against, " ", painted)
 	for _, f := range files {
 		for _, line := range strings.SplitAfter(f.patch, "\n") {
 			if line != "" {
@@ -128,22 +155,23 @@ func (inv *invocation) reportDiff(name, against string, files []fileDiff) {
 // control character may reach the terminal; but a diff is read for its
 // layout, so where sanitised would fold every run of spaces into one, this
 // keeps every space and every tab and turns each other control character
-// into a space of its own.
+// into a space of its own. It reads bytes rather than runes, as quotedPath
+// does, so a file that is not UTF-8 text prints as the bytes it holds
+// rather than with a replacement character for each byte UTF-8 does not
+// take.
 func patchLine(line string) string {
 	var b strings.Builder
 	b.Grow(len(line))
-	for _, r := range line {
-		if r != '\t' && isControl(r) {
-			r = ' '
+	for i := 0; i < len(line); i++ {
+		if n := controlAt(line, i); n > 0 && line[i] != '\t' {
+			b.WriteByte(' ')
+			i += n - 1
+			continue
 		}
-		b.WriteRune(r)
+		b.WriteByte(line[i])
 	}
 	return b.String()
 }
-
-// isControl is the control characters of the sanitising rule: C0, DEL and
-// C1.
-func isControl(r rune) bool { return r < 0x20 || r >= 0x7f && r <= 0x9f }
 
 // diffTrees is the diff between two trees of the account repo, one entry
 // per file that differs, sorted by path, with the unified diff git writes

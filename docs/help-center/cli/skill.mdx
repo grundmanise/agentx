@@ -304,6 +304,12 @@ Each row shows the skill, what agentx knows about it, how it stands against the 
 
 A skill can be in more than one state at once, so the row names each of them: `modified, source removed` is a skill you edited whose source you then removed. `displaced` and `missing` are information only: they never make a command fail.
 
+If a managed skill's directory is deleted from the library outside agentx, the skill has no row, since there is nothing left to compare or place. `skill list` names it in a warning instead, with the command that installs it again:
+
+```text
+warning: pdf is managed in the account repo but the library holds no skill directory for it; run 'agentx skill add https://github.com/anthropics/skills --skill pdf' to install it again
+```
+
 ### Bring back a removed source
 
 A managed skill whose source you removed shows `source removed` until you add that source again:
@@ -341,9 +347,9 @@ index 0000000..2f1c9e0
 +My own notes.
 ```
 
-There is one diff per file, and every path is relative to the skill's directory. A file you moved shows as one deleted and one added. A skill that holds exactly its base version prints `pdf matches its base version at 3f2a9c1`.
+There is one diff per file, and every path is relative to the skill's directory. A file you moved shows as one deleted and one added. A skill that holds exactly its base version prints `pdf matches its base version at 3f2a9c1`. A file that is not UTF-8 text prints as the bytes it holds.
 
-The diff only reads your library: nothing is written to it, and your agents never see a half-changed skill. agentx compares the files exactly as they are on disk, so no `.gitignore` or other git setting hides a file from the comparison. A repository nested in the skill, or anything else git cannot record, is left out with a warning naming it.
+The diff only reads your library: nothing is written to it, and your agents never see a half-changed skill. agentx compares the files exactly as they are on disk, so no `.gitignore` or other git setting hides a file from the comparison. A repository nested in the skill, or anything else git cannot record, such as a named pipe, is left out with a warning naming it. Such a skill never matches its base version: `skill list` shows it as `modified`, the diff ends with the number of paths git cannot record, as in `pdf differs from its base version at 3f2a9c1 only in 1 path git cannot record`, and `skill revert` refuses it until you move the path out of the skill.
 
 A skill agentx did not install, and a fork, have no base version to compare with, so `skill diff` stops with exit code 6.
 
@@ -361,13 +367,14 @@ agentx skill revert pdf
 
 Reverting discards every change made to the skill since it was installed: files you added are deleted, and files you changed or deleted come back as they were, with their permissions. Run `agentx skill diff` first to see what you are about to discard.
 
-Only what the skill held when you ran the command is discarded. If the skill changes while the revert runs, for example because your editor saves a file, agentx stops with exit code 6 and discards nothing. Run `agentx skill diff` to see the change, then revert again. agentx keeps what it replaces until the revert is complete, so an interrupted revert finishes on the next command and loses nothing.
+Only what the skill held when you ran the command is discarded. If the skill changes while the revert runs, for example because your editor saves a file, or another agentx command changes the version it was installed at, agentx stops with exit code 6 and discards nothing. Run `agentx skill diff` to see the change, then revert again. agentx keeps what it replaces until the revert is complete, so an interrupted revert finishes on the next command and loses nothing.
 
 A copy placement is handled on its own:
 
 - A copy that already holds the installed version is left alone.
 - A copy that holds the changes you are reverting is reverted too.
 - A copy you edited where it is is kept exactly as it is and skipped, with the warning for a [copy that differs from the library](#a-copy-that-differs-from-the-library).
+- A copy agentx cannot read is kept as it is and skipped, with a warning that says why.
 
 A skill that holds a repository of its own, or anything else git cannot record, is not reverted: the revert would delete it with no record of it anywhere. agentx names what it found; move it out of the skill, then revert again.
 
@@ -408,6 +415,8 @@ Read `drift` as a list: more values will join it, and a skill can be in several 
 {"type":"diff","schema_version":1,"name":"pdf","path":"notes.md","status":"added","patch":"diff --git a/notes.md b/notes.md\nnew file mode 100644\n..."}
 ```
 
+`path` and `patch` are JSON strings, which hold UTF-8 only: a byte that is not valid UTF-8, in a file name or in a file that is not UTF-8 text, arrives as `U+FFFD`. Such a patch is for display; the text output prints the bytes as they are.
+
 `skill revert` emits one `library_skill` event for the reverted skill, with every placement, as `skill list` does.
 
 ## Where it is recorded
@@ -419,7 +428,7 @@ Every install writes one commit per skill in the account repo in agentx home: th
 - `1`: the command line names no skill to install, the flags contradict each other (`--all` with `--skill`, `--except` without `--all`, `--except` leaving nothing, or `--from universal` with a client that is not universal), it names the source with another branch or tag than its pin, `skill add` is given something that is not a source (for example, the name of a skill the library already holds), or `skill place` was given no `--to`.
 - `3`: the source, or the files of the skill, could not be fetched.
 - `5`: a source id names no source on this machine (for a source you removed, the hint names the `agentx source add` command that brings it back), the source did not serve a skill's files, the path or a skill named by `--skill` or `--except` does not exist in the source, or `--to` or `--from` names a configuration that is not detected. For `skill place`, `skill remove`, `skill diff` and `skill revert`, also a name the library does not hold as a skill.
-- `6`: the library already holds a different skill under that name, the name is already managed at another version, the skill's name cannot be both a directory and a git branch, the skill's directory in the source is not one agentx can record, the skill holds a file whose path would put it outside the skill's directory, agentx cannot use your library directory, or an interrupted change has to be resolved before anything else can run. The message names what to restore; if you would rather keep what is there, move the named file in `~/.agentx/mutations` aside. For `skill remove`, it is also `--from` naming a universal client, one that reads the library directly, even next to `--from universal`, and removing a name that is a fork. For `skill diff` and `skill revert`, it is a skill agentx did not install or a fork, which have no base version; for `skill revert`, also a skill that changed while it was being reverted, or that holds something git cannot record. In a run of several skills, `6` is also the code when the skills that were skipped disagree about why: a run whose failures all have one cause exits with that cause, so a batch that skipped two skills the source did not serve exits `5`.
+- `6`: the library already holds a different skill under that name, the name is already managed at another version, the skill's name cannot be both a directory and a git branch, the skill's directory in the source is not one agentx can record, the skill holds a file whose path would put it outside the skill's directory, agentx cannot use your library directory, or an interrupted change has to be resolved before anything else can run. The message names what to restore; if you would rather keep what is there, move the named file in `~/.agentx/mutations` aside. For `skill remove`, it is also `--from` naming a universal client, one that reads the library directly, even next to `--from universal`, and removing a name that is a fork. For `skill diff` and `skill revert`, it is a skill agentx did not install or a fork, which have no base version; for `skill diff`, also a file that changed while agentx read it; for `skill revert`, also a skill that changed while it was being reverted, a skill whose installed version another command changed meanwhile, or a skill that holds something git cannot record. In a run of several skills, `6` is also the code when the skills that were skipped disagree about why: a run whose failures all have one cause exits with that cause, so a batch that skipped two skills the source did not serve exits `5`.
 - `7`: another agentx command is running. Retry when it finishes.
 - `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.
 - `10`: agentx could not read its own settings file, the library still held the skill after `skill remove` took it away, or agentx hit an error it has no better answer for. Run `agentx doctor`.

@@ -380,14 +380,18 @@ func (inv *invocation) keepCopy(done *placements, t placeTarget, placePath, name
 }
 
 // skillCommand is the agentx skill command a line tells the user to run on
-// the skill called name, the name quoted for a shell. A name that starts
-// with a dash comes last, after the flags and "--", since agentx would
-// otherwise read it as a flag of its own and refuse the command.
+// the skill called name, the name quoted for a shell and followed by the
+// flags, if any. A name that starts with a dash comes last, after the flags
+// and "--", since agentx would otherwise read it as a flag of its own and
+// refuse the command.
 func skillCommand(verb, name string, flags ...string) string {
+	words := []string{"agentx", "skill", verb}
 	if strings.HasPrefix(name, "-") {
-		return "agentx skill " + verb + " " + strings.Join(flags, " ") + " -- " + shellWord(name)
+		words = append(append(words, flags...), "--", shellWord(name))
+	} else {
+		words = append(append(words, shellWord(name)), flags...)
 	}
-	return "agentx skill " + verb + " " + shellWord(name) + " " + strings.Join(flags, " ")
+	return strings.Join(words, " ")
 }
 
 // skipPlacement leaves one configuration without a placement and says why,

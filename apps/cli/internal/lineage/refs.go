@@ -47,7 +47,7 @@ type Record struct {
 	Kind      string // managed or fork
 	Ref       string
 	Commit    string
-	Tree      string // the commit's root tree: for an import commit, the upstream directory and nothing else
+	Tree      string // the root tree of that commit: for an import commit, the upstream directory as its one entry
 	Import    Import
 	HasImport bool
 }
@@ -55,8 +55,8 @@ type Record struct {
 // List reads every lineage branch of the account repo in one for-each-ref
 // over both namespaces, trees and trailers and all, and returns them by
 // skill name. The tree is what tells a managed skill's library directory
-// from its base version without another git process: see BaseTree. A
-// managed branch wins over a fork of the same name, which cannot happen
+// from its base version without another git process: see Record.Current.
+// A managed branch wins over a fork of the same name, which cannot happen
 // while a rename into the fork namespace moves the branch rather than
 // copying it.
 //
