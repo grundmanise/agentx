@@ -157,9 +157,7 @@ func (inv *invocation) skillRemove(ctx context.Context, name string, from []stri
 				plan.managed = commit
 				m.Ref(gitDir, lineage.ManagedRef(name), commit, "")
 			}
-			if candidate := refs[lineage.CandidateRef(name)]; candidate != "" {
-				m.Ref(gitDir, lineage.CandidateRef(name), candidate, "")
-			}
+			dropCheckRefs(m, gitDir, name, refs)
 			edit.dropSkill(name)
 		} else {
 			edit.dropCopies(name, plan.dropped)
@@ -334,9 +332,7 @@ func (inv *invocation) removeAbsent(ctx context.Context, name string, from []str
 		}
 		plan.managed = commit
 		m.Ref(gitDir, lineage.ManagedRef(name), commit, "")
-		if candidate := values[lineage.CandidateRef(name)]; candidate != "" {
-			m.Ref(gitDir, lineage.CandidateRef(name), candidate, "")
-		}
+		dropCheckRefs(m, gitDir, name, values)
 		edit.dropSkill(name)
 		if err := edit.stage(m, inv.dirs.Home); err != nil {
 			m.Discard()
@@ -549,16 +545,30 @@ func canonicalPath(path string) string {
 	return filepath.Join(dir, filepath.Base(path))
 }
 
-// lineageRefs reads the import branch, the fork branch and the candidate
-// ref of one skill in one git process, so that a removal knows what it has
-// to take away and what it must refuse before it plans anything.
+// lineageRefs reads the import branch, the fork branch, the candidate ref
+// and the upstream-removed marker of one skill in one git process, so that
+// a removal knows what it has to take away and what it must refuse before
+// it plans anything.
 func (inv *invocation) lineageRefs(ctx context.Context, gitDir, name string) (map[string]string, error) {
 	values, err := inv.git.Refs(ctx).RefValues(gitDir,
-		[]string{lineage.ManagedRef(name), lineage.ForkRef(name), lineage.CandidateRef(name)})
+		[]string{lineage.ManagedRef(name), lineage.ForkRef(name), lineage.CandidateRef(name), lineage.UpstreamRemovedRef(name)})
 	if err != nil {
 		return nil, accountRepoFailure(err)
 	}
 	return values, nil
+}
+
+// dropCheckRefs records the deletion of what the update check left for a
+// skill that leaves the machine, its candidate and its upstream-removed
+// marker, each with the value it holds now, so that nothing of the skill is
+// left under refs/agentx and a skill installed under that name later does
+// not inherit either.
+func dropCheckRefs(m *home.Mutation, gitDir, name string, values map[string]string) {
+	for _, ref := range []string{lineage.CandidateRef(name), lineage.UpstreamRemovedRef(name)} {
+		if held := values[ref]; held != "" {
+			m.Ref(gitDir, ref, held, "")
+		}
+	}
 }
 
 // copyJudge is how a removal tells whether a recorded copy it deletes held

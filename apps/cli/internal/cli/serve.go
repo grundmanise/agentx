@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
+	"sync/atomic"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
+	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 	"github.com/grundmanise/agentx/apps/cli/internal/serve"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
@@ -97,6 +100,26 @@ func nonNil(words []string) []string {
 	return words
 }
 
+// checkInterval is how often the serve child runs the update check, the
+// first time once its initial snapshot is out: thirty minutes, or
+// AGENTX_CHECK_INTERVAL, a duration such as 10m, for tests and diagnosis.
+const checkInterval = 30 * time.Minute
+
+// checkEvery is the interval of the update check: checkInterval, or the
+// duration AGENTX_CHECK_INTERVAL names, which is read as
+// AGENTX_HANDSHAKE_TIMEOUT is and refused the same way when it is none.
+func (inv *invocation) checkEvery() (time.Duration, error) {
+	v := inv.env["AGENTX_CHECK_INTERVAL"]
+	if v == "" {
+		return checkInterval, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		return 0, fail(exitUsage, "AGENTX_CHECK_INTERVAL "+v+" is not a duration", "set it like 30m or 90s, or unset it")
+	}
+	return d, nil
+}
+
 func newServeCommand(inv *invocation) *cobra.Command {
 	var once bool
 	cmd := &cobra.Command{
@@ -104,6 +127,13 @@ func newServeCommand(inv *invocation) *cobra.Command {
 		Short: "Watch for changes and stream a snapshot on each one, until stdin closes",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			var every time.Duration // a single pass runs no check, and reads no interval
+			if !once {
+				var err error
+				if every, err = inv.checkEvery(); err != nil {
+					return err
+				}
+			}
 			lock, err := home.TakeServeLock(inv.dirs.Home)
 			if errors.Is(err, home.ErrServing) {
 				return fail(exitRefused, err.Error(), "stop the agentx serve holding "+home.ServeLockPath(inv.dirs.Home)+" first")
@@ -118,6 +148,14 @@ func newServeCommand(inv *invocation) *cobra.Command {
 			// drift is told against. Snapshots are reported from the loop's
 			// goroutine alone, so nothing else touches it.
 			var library map[string]scan.LibraryEntry
+			// Whether an update check has anything to look at, which the
+			// library of the last snapshot says without a git process: a
+			// managed skill whose source the settings hold. A check runs on
+			// a goroutine of its own, hence the atomic. Without --json the
+			// snapshot lists no library, and a check runs whenever the
+			// settings hold a source, which it reads for itself.
+			var checkable atomic.Bool
+			checkable.Store(!inv.out.json)
 			err = serve.Run(cmd.Context(), serve.Options{
 				Scan:  func(ctx context.Context) (scan.Snapshot, error) { return inv.snapshot(ctx, 0, "", false) },
 				Index: inv.sourceIndex,
@@ -125,6 +163,13 @@ func newServeCommand(inv *invocation) *cobra.Command {
 				Trees: trees,
 				Once:  once,
 				Stdin: cmd.InOrStdin(),
+				Check: func(ctx context.Context) func() {
+					if !checkable.Load() {
+						return nil
+					}
+					return inv.serveCheck(ctx)
+				},
+				CheckEvery: every,
 				Snapshot: func(snap scan.Snapshot) {
 					inv.out.emit(snapshotEvent{event: newEvent("snapshot"), Snapshot: snap})
 					inv.out.print(inv.out.paint(heading, fmt.Sprintf("snapshot %d", snap.ScanCounter)), ": ",
@@ -133,6 +178,9 @@ func newServeCommand(inv *invocation) *cobra.Command {
 						inv.out.emit(ev)
 					}
 					library = libraryByName(snap.Library)
+					if inv.out.json {
+						checkable.Store(hasCheckable(snap.Library))
+					}
 				},
 				RefreshComplete: func(id string, counter int, err error) {
 					ev := refreshCompleteEvent{event: newEvent("refresh_complete"), RequestID: id, InstanceID: inv.instanceID(), OK: err == nil, ScanCounter: counter}
@@ -161,6 +209,49 @@ func newServeCommand(inv *invocation) *cobra.Command {
 	}
 	cmd.Flags().BoolVar(&once, "once", false, "scan once, emit the snapshot and exit")
 	return cmd
+}
+
+// serveCheck is the update check of the serve child, run off its loop on
+// the timer: the check skill check runs, waiting for the lock rather than
+// giving up on it, since it runs in the background and a command holding
+// the lock for a moment is no reason to drop what it fetched. It reports
+// nothing as it goes and never ends serve: the report it returns is made on
+// the loop's goroutine and carries one update_available per update, with
+// this process's instance id, and one warning per source or skill it could
+// not check, which serve logs on every check. The rescan its write of the
+// version file sets off brings the candidates and markers it wrote into the
+// next snapshot.
+func (inv *invocation) serveCheck(ctx context.Context) func() {
+	rep, err := inv.checkUpdates(ctx, true, false)
+	return func() {
+		if err != nil {
+			inv.out.warn("update check: " + err.Error())
+			return
+		}
+		for _, cf := range rep.failures {
+			inv.out.warn("update check: " + cf.warning())
+		}
+		for _, note := range rep.notes {
+			inv.out.warn("update check: " + note)
+		}
+		for _, ev := range rep.updates {
+			ev.InstanceID = inv.instanceID()
+			inv.out.emit(ev)
+			inv.out.print(inv.out.paint(heading, "update "+sanitised(ev.Name)), ": ",
+				short(ev.UpstreamCommit), " -> ", short(ev.CandidateUpstreamCommit), ", ", plural(len(ev.Files), "file"))
+		}
+	}
+}
+
+// hasCheckable reports whether a snapshot's library holds a skill an update
+// check looks at: a managed skill whose source the settings still hold.
+func hasCheckable(entries []scan.LibraryEntry) bool {
+	for _, e := range entries {
+		if e.Kind == lineage.KindManaged && e.Source != "" && !slices.Contains(e.Drift, driftSourceRemoved) {
+			return true
+		}
+	}
+	return false
 }
 
 // watchedDirs are the directories a change signal can come from, most

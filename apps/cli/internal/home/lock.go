@@ -45,9 +45,21 @@ func MutateQuiet(dir string, u RefUpdater, fn func() error) error {
 // itself, and losing it is often what made the command fail in the first
 // place. Everything else is MutateQuiet: the same journal recovery, and no
 // change signal, since taking a change back leaves agentx home as the last
-// signalled version already describes it.
+// signalled version already describes it. The update check of the serve
+// child takes its hold before the network this way too, for the reason
+// MutateWaiting gives.
 func MutateQuietWaiting(ctx context.Context, dir string, u RefUpdater, fn func() error) error {
 	return mutate(dir, u, func() (*os.File, error) { return waitLock(ctx, dir, syscall.LOCK_EX) }, false, fn)
+}
+
+// MutateWaiting is Mutate for the update check of the serve child, which
+// runs in the background on a timer: it waits for a held lock until ctx is
+// done rather than giving up, since a command that happens to hold the lock
+// at that moment is no reason to drop what the check fetched, and nobody is
+// there to run it again. Waiting blocks nobody else: every other command
+// still gives up on a lock it finds held rather than queueing behind this.
+func MutateWaiting(ctx context.Context, dir string, u RefUpdater, fn func() error) error {
+	return mutate(dir, u, func() (*os.File, error) { return waitLock(ctx, dir, syscall.LOCK_EX) }, true, fn)
 }
 
 // acquire takes the exclusive lock of agentx home, either way a mutation

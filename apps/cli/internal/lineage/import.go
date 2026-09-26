@@ -246,6 +246,21 @@ type Version struct {
 	When    string // the upstream committer time as "<epoch> +0000"
 }
 
+// ImportTree is the tree the import commit of v holds, computed in process
+// exactly as WriteAll writes it: the upstream directory as its one entry,
+// and under it the version's regular files. Nothing is written, so a check
+// can tell a version that differs from a base version only in what an
+// import leaves out, a symlink or a submodule, from one that differs in what
+// it holds, before it reads a blob. It is "" for a version holding no
+// regular file at all, which no import commit is written for.
+func (v Version) ImportTree() string {
+	root := planTrees(v, false).ids[""]
+	if root == "" {
+		return ""
+	}
+	return treeid.Wrap(v.Dir, root)
+}
+
 // ImportingPrefix is where the commits of a run wait between the
 // fast-import that writes them and the mutation journal that points the
 // import branches at them: one staging ref per skill, under a namespace of

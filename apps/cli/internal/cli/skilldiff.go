@@ -15,18 +15,25 @@ import (
 )
 
 func newSkillDiffCommand(inv *invocation) *cobra.Command {
-	return &cobra.Command{
+	var upstream bool
+	cmd := &cobra.Command{
 		Use:   "diff <name>",
 		Short: "Show how a managed skill differs from the version it was installed at",
 		Long: "Show how the library directory of a managed skill differs from its base version,\n" +
 			"the version it was installed at, as one unified diff per file. Every edit counts,\n" +
 			"whatever tool made it, a file made executable and a file turned into a symlink\n" +
-			"included. Nothing is written to the library.",
+			"included. Nothing is written to the library. With --upstream, show instead what\n" +
+			"the update 'agentx skill check' found changes in the base version.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if upstream {
+				return inv.skillDiffUpstream(cmd.Context(), args[0])
+			}
 			return inv.skillDiff(cmd.Context(), args[0])
 		},
 	}
+	cmd.Flags().BoolVar(&upstream, "upstream", false, "compare the base version with the update the last check found")
+	return cmd
 }
 
 // diffEvent is one file of a skill that differs between two versions, with
@@ -87,8 +94,9 @@ func (inv *invocation) skillDiff(ctx context.Context, name string) error {
 		return err
 	}
 	against := "its base version at " + short(rec.Import.Commit)
+	subject := diffSubject{plain: name, painted: inv.out.paint(heading, sanitised(name))}
 	if rec.Current(tree) {
-		inv.reportDiff(name, against, nil, 0)
+		inv.reportDiff(subject, name, against, nil, 0)
 		return nil
 	}
 	for _, p := range tree.Unrecordable {
@@ -115,18 +123,56 @@ func (inv *invocation) skillDiff(ctx context.Context, name string) error {
 			return accountRepoFailure(err)
 		}
 	}
-	inv.reportDiff(name, against, files, len(tree.Unrecordable))
+	inv.reportDiff(subject, name, against, files, len(tree.Unrecordable))
 	return nil
 }
 
-// reportDiff emits one diff event per file and prints the diffs under one
-// line that says what was compared with what. against names the version
-// the library was compared with, and unrecordable is how many paths of the
-// library directory git cannot record, which no diff shows and each of
-// which makes the directory another version all the same: the line counts
-// them, and it says the two match only when there are neither diffs nor
-// such paths.
-func (inv *invocation) reportDiff(name, against string, files []fileDiff, unrecordable int) {
+// skillDiffUpstream shows what the update the last check found for a
+// managed skill does to its base version: the base's directory against the
+// candidate's, each the upstream directory of its import commit, so that
+// every path is relative to the skill's directory. Both trees are in the
+// account repo already, so this reads nothing else, writes nothing and
+// never reaches the network: the candidate is what the check pinned, not
+// what the source holds now. A skill with no candidate has nothing to show,
+// and the refusal says how to look for an update.
+func (inv *invocation) skillDiffUpstream(ctx context.Context, name string) error {
+	if _, ok := librarySkill(inv.dirs.Library, name); !ok {
+		return inv.noLibrarySkill(name)
+	}
+	gitDir, rec, err := inv.managedRecord(ctx, name, "compare with")
+	if err != nil {
+		return err
+	}
+	c := rec.Candidate
+	if c == nil || !c.HasImport {
+		return fail(exitRefused, "no update of "+name+" is known",
+			"run 'agentx skill check' to look for one; it pins what it finds for this command to show")
+	}
+	files, err := diffTrees(ctx, inv.git, gitDir, rec.Commit+":"+rec.Import.Dir(), c.Commit+":"+c.Import.Dir())
+	if err != nil {
+		return accountRepoFailure(err)
+	}
+	at := " at " + short(c.Import.Commit)
+	subject := diffSubject{plain: "the update of " + name + at, painted: "the update of " + inv.out.paint(heading, sanitised(name)) + at}
+	inv.reportDiff(subject, name, "its base version at "+short(rec.Import.Commit), files, 0)
+	return nil
+}
+
+// diffSubject is what a diff's line says was compared with a base version:
+// the skill's library directory, named by the skill, or its update. plain
+// is the words the result carries, painted the line stdout prints.
+type diffSubject struct {
+	plain, painted string
+}
+
+// reportDiff emits one diff event per file of the skill called name and
+// prints the diffs under one line that says what was compared with what.
+// subject names what was compared, against the version it was compared
+// with, and unrecordable is how many paths of the library directory git
+// cannot record, which no diff shows and each of which makes the directory
+// another version all the same: the line counts them, and it says the two
+// match only when there are neither diffs nor such paths.
+func (inv *invocation) reportDiff(subject diffSubject, name, against string, files []fileDiff, unrecordable int) {
 	out := inv.out
 	for _, f := range files {
 		out.emit(diffEvent{event: newEvent("diff"), Name: name, Path: f.path, Status: f.status, Patch: f.patch})
@@ -134,8 +180,8 @@ func (inv *invocation) reportDiff(name, against string, files []fileDiff, unreco
 	var in, painted string // what the line says it differs in, bare and painted
 	switch {
 	case len(files) == 0 && unrecordable == 0:
-		inv.summary = name + " matches " + against
-		out.print(out.paint(heading, sanitised(name)), " matches ", against)
+		inv.summary = subject.plain + " matches " + against
+		out.print(subject.painted, " matches ", against)
 		return
 	case len(files) == 0:
 		in = "only in " + plural(unrecordable, "path") + " git cannot record"
@@ -148,8 +194,8 @@ func (inv *invocation) reportDiff(name, against string, files []fileDiff, unreco
 			painted += ", and " + out.paint(noteStyle, plural(unrecordable, "path")) + " git cannot record"
 		}
 	}
-	inv.summary = name + " differs from " + against + " " + in
-	out.print(out.paint(heading, sanitised(name)), " differs from ", against, " ", painted)
+	inv.summary = subject.plain + " differs from " + against + " " + in
+	out.print(subject.painted, " differs from ", against, " ", painted)
 	for _, f := range files {
 		for _, line := range strings.SplitAfter(f.patch, "\n") {
 			if line != "" {

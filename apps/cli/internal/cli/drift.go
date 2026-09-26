@@ -194,11 +194,15 @@ func (p placeSite) drift(libPath string) string {
 }
 
 // driftOf is the drift list of a managed skill: the states of its
-// placements and source removed, sorted, or nil when it is in none.
-func driftOf(obs observation, sourceRemoved bool) []string {
+// placements, source removed and upstream removed, sorted, or nil when it
+// is in none.
+func driftOf(obs observation, sourceRemoved, upstreamRemoved bool) []string {
 	drift := append([]string(nil), obs.placed...)
 	if sourceRemoved {
 		drift = append(drift, driftSourceRemoved)
+	}
+	if upstreamRemoved {
+		drift = append(drift, driftUpstreamRemoved)
 	}
 	if len(drift) == 0 {
 		return nil

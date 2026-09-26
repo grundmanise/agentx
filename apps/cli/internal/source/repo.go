@@ -56,11 +56,17 @@ type Skill struct {
 
 // Listing is what a source holds at its fetched commit under a subpath.
 // Previous is the commit the source ref held before this fetch, empty when
-// it held none and when the listing came from List.
+// it held none and when the listing came from List. Trees maps every
+// directory of the whole commit that holds a SKILL.md, the hidden ones and
+// node_modules included, to its tree id: a fetch walks all of them for the
+// blob batch anyway, and an update check reads a managed skill's directory
+// out of it however the skill was named when it was installed. List leaves
+// it nil.
 type Listing struct {
 	Commit   string
 	Previous string
 	Skills   []Skill // sorted by subpath
+	Trees    map[string]string
 }
 
 // Refspec is what remote.src-<id>.fetch holds for the source: its pinned
@@ -229,6 +235,10 @@ func Fetch(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listin
 			return Listing{}, fmt.Errorf("%w: %s/SKILL.md did not arrive with the fetch", ErrIncomplete, dir)
 		}
 	}
+	trees := make(map[string]string, len(all))
+	for _, e := range all {
+		trees[e.dir] = e.tree
+	}
 	var entries []skillEntry
 	if s.Subpath == "" {
 		entries = filterSkipped(all)
@@ -247,7 +257,7 @@ func Fetch(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listin
 	if _, err := r.Isolated(ctx, gitDir, "update-ref", Ref(id), fetched); err != nil {
 		return Listing{}, err
 	}
-	return Listing{Commit: commit, Previous: previous, Skills: skills}, nil
+	return Listing{Commit: commit, Previous: previous, Skills: skills, Trees: trees}, nil
 }
 
 // staged reads what a fetch put on the staging ref in one for-each-ref: the

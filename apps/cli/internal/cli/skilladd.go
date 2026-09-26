@@ -317,7 +317,51 @@ func (v *imported) version() lineage.Version {
 // process per skill: the whole commit is listed once and sliced, and one
 // history walk finds the upstream commit of every selected skill, so a
 // batch of thirty skills reads what one skill reads.
+//
+// It is the import of skill add. skill check reads the versions it writes
+// candidates for through the same two halves, listVersions and
+// fillVersions, so that a candidate is the commit an install of that
+// version writes.
 func (inv *invocation) readVersions(ctx context.Context, b *batch, gitDir string, src source.Source, tip string, skills []source.Skill) ([]*imported, error) {
+	versions, missing, err := inv.listVersions(ctx, gitDir, src, tip, skills)
+	if err != nil {
+		return nil, err
+	}
+	taken := map[string]string{} // library name to the subpath that claimed it
+	var kept []*imported
+	for _, v := range versions {
+		if f := inv.usable(v, taken, src); f != nil {
+			b.drop(v.name, stepsPerSkill, f)
+			continue
+		}
+		taken[v.name] = v.skill.Subpath
+		kept = append(kept, v)
+	}
+	if len(kept) == 0 {
+		return nil, nil
+	}
+	return inv.fillVersions(ctx, gitDir, src, kept, missing, func(v *imported, f *failure) {
+		if f != nil {
+			b.drop(v.name, stepsPerSkill, f)
+			return
+		}
+		for _, d := range v.dropped {
+			inv.out.warn(path.Join(v.skill.Subpath, d) + " is not a regular file and is left out of the import")
+		}
+		b.step(phaseBlobs, v.name)
+	})
+}
+
+// listVersions reads what the version of every skill of skills is made of
+// at tip, in one round of reads that do not depend on each other: what the
+// commit holds, which objects of the skills' trees this machine does not
+// hold yet, and the upstream commit of each skill with its committer time.
+// It returns one version per skill, in the order given, with its entries,
+// the entries an import leaves out, and the lineage the import commit will
+// carry but for the content hash, which arrives with the files; and the ids
+// of the objects that are missing. Nothing is refused here, which is the
+// caller's to decide, and nothing is fetched.
+func (inv *invocation) listVersions(ctx context.Context, gitDir string, src source.Source, tip string, skills []source.Skill) ([]*imported, []string, error) {
 	trees := make([]string, 0, len(skills))
 	seen := map[string]bool{}
 	subpaths := make([]string, 0, len(skills))
@@ -328,58 +372,49 @@ func (inv *invocation) readVersions(ctx context.Context, b *batch, gitDir string
 		}
 		subpaths = append(subpaths, sk.Subpath)
 	}
-	// Reads of the account repo that do not depend on each other: what the
-	// commit holds, which of the selected skills' objects this machine does
-	// not have yet, and the upstream commit of each selected skill with its
-	// committer time.
 	reads := append([][]string{source.TreeArgs(tip), source.MissingArgs(trees...)}, upstreamReads(tip, subpaths)...)
 	out, err := inv.git.IsolatedAll(ctx, gitDir, reads)
 	if err != nil {
-		return nil, accountRepoFailure(err)
+		return nil, nil, accountRepoFailure(err)
 	}
 	listed, err := source.ParseTree(out[0])
 	if err != nil {
-		return nil, accountRepoFailure(err)
+		return nil, nil, accountRepoFailure(err)
 	}
 	ups, err := upstreams(tip, subpaths, out[2:])
 	if err != nil {
-		return nil, accountRepoFailure(err)
+		return nil, nil, accountRepoFailure(err)
 	}
-	taken := map[string]string{} // library name to the subpath that claimed it
-	var kept []*imported
+	versions := make([]*imported, 0, len(skills))
 	for _, sk := range skills {
 		entries := entriesUnder(listed, sk.Subpath)
 		// The lineage is put together in two steps, as it is known in two:
 		// the coordinates come off the listing and the history walk, and are
 		// what usable holds to the reader's rule, and the content hash
 		// arrives with the files.
-		v := &imported{skill: sk, name: sk.Name, dir: upstreamDir(src, sk), entries: entries, when: ups[sk.Subpath].when, dropped: lineage.Dropped(entries),
-			imp: lineage.Import{Source: src.URL, Path: sk.Subpath, Commit: ups[sk.Subpath].commit}}
-		if f := inv.usable(v, taken, src); f != nil {
-			b.drop(v.name, stepsPerSkill, f)
-			continue
-		}
-		taken[v.name] = sk.Subpath
-		kept = append(kept, v)
+		versions = append(versions, &imported{skill: sk, name: sk.Name, dir: upstreamDir(src, sk), entries: entries, when: ups[sk.Subpath].when, dropped: lineage.Dropped(entries),
+			imp: lineage.Import{Source: src.URL, Path: sk.Subpath, Commit: ups[sk.Subpath].commit}})
 	}
-	if len(kept) == 0 {
-		return nil, nil
-	}
-	bodies, err := inv.readBlobs(ctx, gitDir, src, kept, source.ParseMissing(out[1]))
+	return versions, source.ParseMissing(out[1]), nil
+}
+
+// fillVersions reads the files of every version into it, fetching in one
+// batch the blobs missing names that the versions need, and completes each
+// version's lineage with its content hash. each hears about every version
+// in the order given, with the refusal of one that cannot be filled or nil,
+// and the versions that were filled come back in that order.
+func (inv *invocation) fillVersions(ctx context.Context, gitDir string, src source.Source, versions []*imported, missing []string, each func(v *imported, f *failure)) ([]*imported, error) {
+	bodies, err := inv.readBlobs(ctx, gitDir, src, versions, missing)
 	if err != nil {
 		return nil, err
 	}
 	var ready []*imported
-	for _, v := range kept {
-		if f := v.fill(bodies, src.URL); f != nil {
-			b.drop(v.name, stepsPerSkill, f)
-			continue
+	for _, v := range versions {
+		f := v.fill(bodies, src.URL)
+		each(v, f)
+		if f == nil {
+			ready = append(ready, v)
 		}
-		for _, d := range v.dropped {
-			inv.out.warn(path.Join(v.skill.Subpath, d) + " is not a regular file and is left out of the import")
-		}
-		ready = append(ready, v)
-		b.step(phaseBlobs, v.name)
 	}
 	return ready, nil
 }
@@ -563,6 +598,14 @@ func (inv *invocation) usable(v *imported, taken map[string]string, src source.S
 		return refuse(exitRefused, fmt.Sprintf("%q %s", v.name, why),
 			"a name cannot be empty or hidden, or carry a separator, a space or any of ~^:?*[; fix it in the skill's SKILL.md frontmatter upstream, or install another skill")
 	}
+	return inv.importable(v, taken, src)
+}
+
+// importable refuses a version no import commit can be written for, which
+// is usable without the name: an update keeps the name the skill was
+// installed under, whatever the upstream calls it now. taken, when it is
+// not nil, is the names a batch has already claimed.
+func (inv *invocation) importable(v *imported, taken map[string]string, src source.Source) *failure {
 	// The directory is checked with the reader's own rule, and before the
 	// version is read, for the reason the name is: an import commit
 	// records it on one line of a trailer, and one the reader would refuse

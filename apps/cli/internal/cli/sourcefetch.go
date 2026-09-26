@@ -68,28 +68,52 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 	if !exists { // settings name sources the account repo has nothing of
 		return sourceFailure(fmt.Errorf("%w: %s", source.ErrNotFetched, targets[0].src.URL), targets[0].src)
 	}
-	// The lock is taken before the network and released again: an unfinished
-	// mutation journal is recovered, and a run that could not write the
-	// settings at the end refuses now rather than after fetching everything.
-	// The fetches themselves never hold it, so that a slow network cannot
-	// block a scan.
-	//
-	// The remotes are brought back in line with the settings here too. The
-	// settings hold the pin and the remote's refspec is derived from it, so
-	// a run interrupted between the two leaves a remote recording a ref the
-	// settings do not name. The refspecs are read in one git process and
-	// only one that disagrees is written, which changes no pin: the pin is
-	// what the settings say, and only source add sets it.
-	if err := home.MutateQuiet(inv.dirs.Home, inv.refs(ctx), func() error { return inv.alignRemotes(ctx, gitDir, targets) }); err != nil {
-		return accountRepoFailure(err)
+	results, err := inv.fetchSources(ctx, gitDir, targets, false, true)
+	if err != nil {
+		return err
+	}
+	return inv.reportFetched(ctx, gitDir, targets, results)
+}
+
+// fetchSources fetches targets, sources the settings hold, in parallel and
+// outside the lock, and returns one result per target in the order given.
+// It is the one fetch of an added source: source fetch runs it, and so do
+// skill check and the update check of the serve child. What it refuses is
+// what is not one source's to answer for, a lock it could not take or a
+// journal it could not recover; a source that could not be fetched is its
+// result's error, and turning that into a refusal is the caller's, so that
+// the serve child, which never exits for one, runs the same fetch. wait
+// takes the lock as the serve child does, waiting for a holder rather than
+// giving up, and progress reports one progress event per source as its
+// fetch ends.
+//
+// The lock is taken before the network and released again: an unfinished
+// mutation journal is recovered, and a run that could not write the
+// settings at the end refuses now rather than after fetching everything.
+// The fetches themselves never hold it, so that a slow network cannot
+// block a scan.
+//
+// The remotes are brought back in line with the settings here too. The
+// settings hold the pin and the remote's refspec is derived from it, so a
+// run interrupted between the two leaves a remote recording a ref the
+// settings do not name. The refspecs are read in one git process and only
+// one that disagrees is written, which changes no pin: the pin is what the
+// settings say, and only source add sets it.
+func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets []fetchTarget, wait, progress bool) ([]source.Result, error) {
+	if err := inv.holdLock(ctx, wait, false, func() error { return inv.alignRemotes(ctx, gitDir, targets) }); err != nil {
+		return nil, accountRepoFailure(err)
 	}
 	srcs := make([]source.Source, len(targets))
 	for i, t := range targets {
 		srcs[i] = t.src
 	}
-	results := source.FetchAll(ctx, inv.git, gitDir, srcs, func(s source.Source, finished int) {
-		inv.out.emit(progressEvent{event: newEvent("progress"), Phase: "fetch", Subject: s.URL, Current: finished, Total: len(srcs)})
-	})
+	var done func(source.Source, int)
+	if progress {
+		done = func(s source.Source, finished int) {
+			inv.out.emit(progressEvent{event: newEvent("progress"), Phase: "fetch", Subject: s.URL, Current: finished, Total: len(srcs)})
+		}
+	}
+	results := source.FetchAll(ctx, inv.git, gitDir, srcs, done)
 	// A source whose remote the account repo no longer holds, which an
 	// interrupted removal leaves behind, cannot be fetched at all. git
 	// reports that as a repository it cannot find and names the remote,
@@ -102,7 +126,25 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 			results[i].Err = fmt.Errorf("%w: %s", source.ErrNotFetched, res.Source.URL)
 		}
 	}
-	return inv.reportFetched(ctx, gitDir, targets, results)
+	return results, nil
+}
+
+// holdLock runs fn under the exclusive lock of agentx home, the way the
+// command asked for it: signal rewrites the version file afterwards, as the
+// last step of a mutation does, and wait waits for a holder until ctx is
+// done rather than giving up at once, which is the serve child's way and
+// no command's.
+func (inv *invocation) holdLock(ctx context.Context, wait, signal bool, fn func() error) error {
+	u := inv.refs(ctx)
+	switch {
+	case wait && signal:
+		return home.MutateWaiting(ctx, inv.dirs.Home, u, fn)
+	case wait:
+		return home.MutateQuietWaiting(ctx, inv.dirs.Home, u, fn)
+	case signal:
+		return home.Mutate(inv.dirs.Home, u, fn)
+	}
+	return home.MutateQuiet(inv.dirs.Home, u, fn)
 }
 
 // alignRemotes rewrites the fetch refspec of every target whose remote does
@@ -145,33 +187,18 @@ func (inv *invocation) reportFetched(ctx context.Context, gitDir string, targets
 	}
 	if len(fetched) > 0 {
 		// One write for the whole run, under the lock, on the settings as
-		// they are now: a source removed while this run fetched is not
-		// written back, and drops out of the report with it, so that
-		// nothing says a source is present and fresh once it is gone.
+		// they are now; see stampFetched.
 		if err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 			s, err := inv.loadSettings()
 			if err != nil {
 				return err
 			}
-			var removed []string
-			for url := range fetched {
-				if i := s.FindSource(url); i >= 0 {
-					s.Sources[i].LastFetched = now
-				} else {
-					delete(fetched, url)
-					removed = append(removed, url)
-				}
+			m := home.NewMutation(inv.dirs.Home)
+			if err := inv.stampFetched(ctx, m, gitDir, s, fetched, now); err != nil {
+				m.Discard()
+				return err
 			}
-			// A fetch that finished after the removal put the source ref
-			// back, since publishing a whole fetch is the last thing it
-			// does. Take it away again under this same lock, so that a
-			// removal a fetch raced still leaves nothing of the source.
-			for _, url := range removed {
-				if err := source.Remove(ctx, inv.git, gitDir, source.ID(url)); err != nil {
-					return err
-				}
-			}
-			return home.SaveSettings(inv.dirs.Home, s)
+			return m.Apply(inv.refs(ctx))
 		}); err != nil {
 			return err
 		}
@@ -195,6 +222,39 @@ func (inv *invocation) reportFetched(ctx context.Context, gitDir string, targets
 		return nil
 	}
 	return fetchRefusal(failed, len(results))
+}
+
+// stampFetched stages the settings write that ends a fetch run, under the
+// lock the caller holds, on s as the settings are now: last_fetched, now,
+// for every source of fetched, which are the canonical URLs of the sources
+// that fetched. A source removed while the run fetched is not written back,
+// and is taken out of fetched, so that nothing says a source is present and
+// fresh once it is gone. The file is written whatever it holds, as one
+// write of the whole run.
+func (inv *invocation) stampFetched(ctx context.Context, m *home.Mutation, gitDir string, s home.Settings, fetched map[string]bool, now string) error {
+	var removed []string
+	for url := range fetched {
+		if i := s.FindSource(url); i >= 0 {
+			s.Sources[i].LastFetched = now
+		} else {
+			delete(fetched, url)
+			removed = append(removed, url)
+		}
+	}
+	// A fetch that finished after the removal put the source ref back,
+	// since publishing a whole fetch is the last thing it does. Take it
+	// away again under this same lock, so that a removal a fetch raced
+	// still leaves nothing of the source.
+	for _, url := range removed {
+		if err := source.Remove(ctx, inv.git, gitDir, source.ID(url)); err != nil {
+			return err
+		}
+	}
+	b, err := home.MarshalSettings(s)
+	if err != nil {
+		return err
+	}
+	return m.ReplaceFile(home.SettingsPath(inv.dirs.Home), b)
 }
 
 // fetchRefusal is how a run ends when a source it named could not be

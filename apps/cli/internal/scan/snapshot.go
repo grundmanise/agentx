@@ -88,8 +88,17 @@ type LibraryEntry struct {
 	ContentHash    string             `json:"content_hash"`        // what the library holds now
 	State          string             `json:"state,omitempty"`     // current or modified, for a managed skill
 	Drift          []string           `json:"drift,omitempty"`     // the drift states beside state, for a managed skill
+	Candidate      *LibraryCandidate  `json:"candidate,omitempty"` // the update the last check found, for a managed skill
 	Placements     []LibraryPlacement `json:"placements"`
 	Universal      []string           `json:"universal"` // every detected universal client, which sees the skill whatever its placements
+}
+
+// LibraryCandidate is the update the last update check found for a managed
+// skill: the newer upstream version its candidate ref pins, by the upstream
+// commit and the content hash that version's import commit records.
+type LibraryCandidate struct {
+	UpstreamCommit string `json:"upstream_commit"`
+	ContentHash    string `json:"content_hash"`
 }
 
 // LibraryPlacement is one way a configuration sees a library skill: mode is

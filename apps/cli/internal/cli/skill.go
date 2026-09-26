@@ -64,10 +64,24 @@ const (
 // stays one word.
 const driftSourceRemoved = "source removed"
 
+// driftUpstreamRemoved is the drift state of a managed skill whose source,
+// as the last update check fetched it, no longer holds it: no directory at
+// its subpath, or one without a SKILL.md. The check records it as a marker
+// ref, which it alone writes and deletes once the skill is back, so this is
+// read from the lineage like the rest of a skill and never from a source
+// ref. The skill is kept as it is and never updated.
+const driftUpstreamRemoved = "upstream removed"
+
+// updateAvailable is what the skill list row says of a managed skill the
+// last update check pinned a candidate for. It is not a drift state: the
+// skill has not drifted, its upstream moved on, and the event carries it as
+// candidate rather than in drift.
+const updateAvailable = "update available"
+
 func newSkillCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "skill",
-		Short:       "Install, place, compare, revert, repair and remove skills, and list what the library holds",
+		Short:       "Install, place, compare, revert, repair and remove skills, check them for updates, and list what the library holds",
 		Annotations: map[string]string{annotationGroup: "true"},
 		Args:        cobra.NoArgs,
 		RunE:        needSubcommand(inv, "no skill command given", "run 'agentx skill --help' to list commands"),
@@ -78,6 +92,7 @@ func newSkillCommand(inv *invocation) *cobra.Command {
 	cmd.AddCommand(newSkillDiffCommand(inv))
 	cmd.AddCommand(newSkillRevertCommand(inv))
 	cmd.AddCommand(newSkillRepairCommand(inv))
+	cmd.AddCommand(newSkillCheckCommand(inv))
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List the skills in the library with their upstream and placements",
@@ -306,7 +321,13 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 		// matters to a fork is the account remote it is published to, and
 		// its third-party upstream is only where later versions are merged
 		// in from.
-		ev.Drift = driftOf(obs, !sources[rec.Import.Source])
+		ev.Drift = driftOf(obs, !sources[rec.Import.Source], rec.UpstreamRemoved != "")
+		// What the last update check found stays until a check finds
+		// otherwise, whatever the source holds by now: it is read from the
+		// candidate ref, in the for-each-ref that read the lineage.
+		if c := rec.Candidate; c != nil && c.HasImport {
+			ev.Candidate = &scan.LibraryCandidate{UpstreamCommit: c.Import.Commit, ContentHash: c.Import.Hash}
+		}
 	}
 	return ev
 }
