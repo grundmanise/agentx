@@ -1210,11 +1210,18 @@ func sweepStaged(dir string) {
 // contentHashAt is the content hash of the skill at path, empty when there
 // is no skill there.
 func contentHashAt(path string) string {
-	if info, err := os.Stat(filepath.Join(path, "SKILL.md")); err != nil || !info.Mode().IsRegular() {
+	if !holdsSkillFile(path) {
 		return ""
 	}
 	hash, _ := scan.ContentHashAt(path)
 	return hash
+}
+
+// holdsSkillFile reports whether the directory at path holds a SKILL.md
+// that is a file, which is what makes a directory a skill.
+func holdsSkillFile(path string) bool {
+	info, err := os.Stat(filepath.Join(path, "SKILL.md"))
+	return err == nil && info.Mode().IsRegular()
 }
 
 // intoWorktrees reports whether the symlink at path points into the agentx

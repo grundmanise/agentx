@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -84,6 +85,8 @@ type repairPlace struct {
 	skill      bool   // the directory holds a SKILL.md, so it can be a library directory
 	same       bool   // the directory holds exactly what the library directory holds
 	holds      string // the library entry whose directory the directory is or holds, see holdsLibraryDirectory
+	linksInto  string // a symlink in the directory, relative to it, that leads into a path the repair replaces, see linkIntoReplaced
+	leadsInto  string // the path the repair replaces that linksInto leads into
 	err        error  // what kept this machine from reading the place
 }
 
@@ -225,6 +228,7 @@ func (inv *invocation) skillRepair(ctx context.Context, name string, choice repa
 			m.Discard()
 			return err
 		}
+		done.inDetectionOrder(targets)
 		if m.Empty() {
 			return nil // every place was skipped, each with its warning
 		}
@@ -325,12 +329,86 @@ func (inv *invocation) planRepair(lib scan.LibrarySkill, targets []placeTarget, 
 				place.tree, place.recordable = tree.ID, len(tree.Unrecordable) == 0
 				recordable := place.recordable && len(plan.libTree.Unrecordable) == 0
 				place.same = tree.ID == plan.libTree.ID && (recordable || place.state == plan.libBytes)
-				place.skill = contentHashAt(p.path) != ""
+				place.skill = holdsSkillFile(p.path)
 			}
 		}
 		plan.places = append(plan.places, place)
 	}
+	// A directory whose content can become the library's is copied into
+	// the library link for link. A link in it that leads into a path
+	// --keep-placement replaces, the library directory, another displaced
+	// directory or a copy copy_mode records, would lead once copied into
+	// the library's new content, often to itself, and what it led to would
+	// be discarded with the rest; see refusal.
+	replaced := []string{lib.Path}
+	for _, place := range plan.places {
+		if place.err == nil && home.IsDir(place.state) {
+			replaced = append(replaced, place.path)
+		}
+	}
+	for _, t := range targets {
+		if !t.readsLibrary && slices.Contains(copies, t.id) {
+			replaced = append(replaced, t.ownPlace(inv.dirs.Library, lib.Name))
+		}
+	}
+	for i, place := range plan.places {
+		if place.err == nil && home.IsDir(place.state) && !place.same {
+			plan.places[i].linksInto, plan.places[i].leadsInto = linkIntoReplaced(place.path, replaced)
+		}
+	}
 	return plan, nil
+}
+
+// linkIntoReplaced names the first symlink in the real directory dir, as a
+// path relative to it, that leads into one of replaced, and the one of
+// replaced it leads into; "" and "" when none does. A link is followed on
+// the machine as it stands, from where it sits, and where it ends up is
+// walked up to the root and compared with each of replaced as files, not
+// as paths, as isLibraryDirectory compares them, so no spelling hides it.
+// A link that leads somewhere inside dir itself is its own content and
+// nothing replaced, and one that does not resolve leads nowhere.
+func linkIntoReplaced(dir string, replaced []string) (string, string) {
+	self, err := os.Stat(dir)
+	if err != nil {
+		return "", ""
+	}
+	var paths []string
+	var infos []os.FileInfo
+	for _, r := range replaced {
+		if info, err := os.Stat(r); err == nil && !os.SameFile(info, self) {
+			paths, infos = append(paths, r), append(infos, info)
+		}
+	}
+	var link, into string
+	_ = filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.Type()&os.ModeSymlink == 0 {
+			return nil // a directory this machine cannot read failed the tree read already
+		}
+		at, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			return nil
+		}
+		for {
+			if info, err := os.Stat(at); err == nil {
+				if os.SameFile(info, self) {
+					return nil
+				}
+				for i := range infos {
+					if os.SameFile(info, infos[i]) {
+						link, _ = filepath.Rel(dir, path)
+						into = paths[i]
+						return fs.SkipAll
+					}
+				}
+			}
+			parent := filepath.Dir(at)
+			if parent == at {
+				return nil
+			}
+			at = parent
+		}
+	})
+	return link, into
 }
 
 // signature is everything the plan was judged from, as one string: two
@@ -340,8 +418,8 @@ func (plan repairPlan) signature() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\x00%s\x00%d\x00%s\x00%s\n", plan.libState, plan.libTree.ID, len(plan.libTree.Unrecordable), plan.libBytes, strings.Join(plan.copies, ","))
 	for _, p := range plan.places {
-		fmt.Fprintf(&b, "%s\x00%s\x00%s\x00%s\x00%t\x00%t\x00%t\x00%s\x00%t\x00%t\x00%s\x00%s\n",
-			p.path, p.word, p.state, p.tree, p.recordable, p.skill, p.same, p.holds, p.copied, p.err != nil, strings.Join(p.enabled, ","), strings.Join(p.paths, ","))
+		fmt.Fprintf(&b, "%s\x00%s\x00%s\x00%s\x00%t\x00%t\x00%t\x00%s\x00%s\x00%s\x00%t\x00%t\x00%s\x00%s\n",
+			p.path, p.word, p.state, p.tree, p.recordable, p.skill, p.same, p.holds, p.linksInto, p.leadsInto, p.copied, p.err != nil, strings.Join(p.enabled, ","), strings.Join(p.paths, ","))
 	}
 	return b.String()
 }
@@ -368,6 +446,9 @@ func (plan repairPlan) differing() []repairPlace {
 // A displaced directory that holds the directory a library entry leads to
 // is refused whatever the flags: every repair of a directory replaces it
 // with the symlink, and that would delete the skill's content with it.
+// With --keep-placement, so is a directory holding a link into a path the
+// repair replaces: its content, copied into the library, would lose what
+// the link leads to.
 func (plan repairPlan) refusal(name string, choice repairChoice) error {
 	for _, p := range plan.places {
 		if p.holds != "" {
@@ -411,6 +492,10 @@ func (plan repairPlan) refusal(name string, choice repairChoice) error {
 			if p.tree != differ[0].tree {
 				return fail(exitRefused, fmt.Sprintf("--keep-placement keeps the content of one directory, and %s hold different content", strings.Join(paths, ", ")),
 					"move aside every directory but the one to keep, then run "+keepPlacement+" again, or keep the library's content with "+keepLibrary)
+			}
+			if p.linksInto != "" {
+				return fail(exitRefused, fmt.Sprintf("%s in %s is a symlink into %s, which keeping the placement replaces, so its content cannot become the library's", quotedPath(p.linksInto), quotedPath(p.path), quotedPath(p.leadsInto)),
+					"replace the link "+quotedPath(p.linksInto)+" with the files it leads to, then run "+keepPlacement+" again, or keep the library's content with "+keepLibrary)
 			}
 		}
 	}
@@ -541,6 +626,17 @@ func (d *repaired) put(place repairPlace, action, mode string) {
 			d.rows = append(d.rows, repairRow{id: t.id, action: action, mode: mode, path: place.paths[i]})
 		}
 	}
+}
+
+// inDetectionOrder puts the rows in the order the configurations were
+// detected, targets being every detected one: they are recorded place by
+// place, and a place two configurations share records both together.
+func (d *repaired) inDetectionOrder(targets []placeTarget) {
+	at := make(map[string]int, len(targets))
+	for i, t := range targets {
+		at[t.id] = i
+	}
+	slices.SortStableFunc(d.rows, func(a, b repairRow) int { return at[a.id] - at[b.id] })
 }
 
 // reportRepaired reads the machine again and reports the skill as it now

@@ -238,6 +238,42 @@ func TestSkillRevertJudgesASharedCopyOnce(t *testing.T) {
 	}
 }
 
+// TestSkillRevertRefreshesALinkedCopyOnce: Cursor's skills directory made a
+// symlink to Claude Code's makes the copies copy_mode records for the two
+// one directory spelled two ways. The revert refreshes it once and counts
+// it for both configurations: refreshed twice, the second removal would
+// find the first one's copy there and stop the mutation part way.
+func TestSkillRevertRefreshesALinkedCopyOnce(t *testing.T) {
+	t.Parallel()
+	h, s := placementHarness(t)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "windsurf")
+	lib := filepath.Join(h.library, "alpha")
+	base := libraryTree(t, lib)
+	editLibrary(t, h, "alpha", "notes.md", "alpha notes, edited in the library\n")
+	h.mustRun("skill", "place", "alpha", "--to", "claude-code", "--to", "cursor", "--copy")
+	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
+	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	remove(t, filepath.Dir(cursor))
+	link(t, filepath.Dir(claude), filepath.Dir(cursor))
+
+	out := h.run("--json", "skill", "revert", "alpha")
+	if out.exit != 0 {
+		t.Fatalf("revert: exit %d\n%s", out.exit, out.stderr)
+	}
+	sameTree(t, "the library directory", libraryTree(t, lib), base)
+	sameTree(t, "the copy both read", libraryTree(t, claude), base)
+	summary := h.one(out.stdout, "result")["summary"].(string)
+	contains(t, "the result", summary, ", 2 copy placements refreshed")
+	if strings.Contains(summary, "skipped") {
+		t.Errorf("the result says a refreshed copy was skipped: %s", summary)
+	}
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "")
+	equal(t, "journals", journalCount(t, h), 0)
+	for _, dir := range []string{h.library, filepath.Dir(claude)} {
+		equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
+	}
+}
+
 // TestSkillRevertSweepsStagingAKilledRevertLeft stands in for a revert
 // killed after it staged the base beside the library directory and a
 // refreshed copy beside a copy placement, and before its journal was
