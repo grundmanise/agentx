@@ -1122,7 +1122,10 @@ func TestSkillRepairRefusesALibraryEntryThatIsASymlink(t *testing.T) {
 // skills directory linked into the library puts there, one a library
 // entry's link leads into, through or above, the library's symlink where a
 // copy belongs there, and a displaced directory the library was moved
-// into.
+// into. --keep-placement, which also replaces the library directory and
+// refreshes every copy copy_mode records, refuses as well where another
+// skill's entry leads into that directory, or where a copy lies in the
+// library or in what an entry leads to; --keep-library goes ahead there.
 func TestSkillRepairRefusesAPathThatOverlapsTheLibrary(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
@@ -1268,6 +1271,54 @@ func TestSkillRepairRefusesAPathThatOverlapsTheLibrary(t *testing.T) {
 		equal(t, "what beta leads to", fileBody(t, filepath.Join(beta, "SKILL.md")), skill("beta", "A skill of my own"))
 		cleanAfterRepair(t, h, h.library, filepath.Dir(claude))
 	})
+
+	// --keep-placement also refreshes every copy copy_mode records with the
+	// content it keeps, so it refuses where one of them lies inside the
+	// library or inside what a library entry leads to, even a copy nothing
+	// is wrong with; --keep-library refreshes no copy and repairs the
+	// skill, the copy kept as it was.
+	for _, c := range []struct {
+		name string
+		// arrange returns the directory to hold beta and Cursor's skills,
+		// and the message of the refusal.
+		arrange func(t *testing.T, h *harness, cursor string) (dir, message string)
+	}{
+		{"a copy inside the library", func(t *testing.T, h *harness, cursor string) (string, string) {
+			return filepath.Join(h.library, "beta"), libraryOverlap(cursor, "lies inside", h.library)
+		}},
+		{"a copy inside what a library entry leads to", func(t *testing.T, h *harness, cursor string) (string, string) {
+			dev := filepath.Join(h.home, "dev", "beta")
+			beta := filepath.Join(h.library, "beta")
+			link(t, dev, beta)
+			return dev, entryOverlap(cursor, "lies inside", dev, beta)
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			h, lib, claude, cursor := repairHarness(t)
+			remove(t, cursor)
+			h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
+			dir, message := c.arrange(t, h, cursor)
+			writeFile(t, mkdirs(t, dir, "SKILL.md"), skill("beta", "A skill of my own"))
+			copyTree(t, lib, filepath.Join(dir, "alpha"))
+			skills := filepath.Dir(cursor)
+			remove(t, skills)
+			link(t, dir, skills)
+			equal(t, "drift of Cursor's copy", drift(h.listed("alpha")), "")
+			displace(t, lib, claude, true)
+			equal(t, "drift", drift(h.listed("alpha")), "displaced")
+			beta := onDisk(t, dir)
+
+			refusesUntouched(t, h, []string{"--keep-placement"}, message, overlapHint)
+			if _, err := os.Lstat(filepath.Join(dir, "alpha", "mine.md")); !os.IsNotExist(err) {
+				t.Errorf("Cursor's copy was refreshed with the displaced directory's content: %v", err)
+			}
+			h.mustRun("skill", "repair", "alpha", "--keep-library")
+			linksToLibrary(t, "claude's placement", claude, lib)
+			equal(t, "what beta holds", onDisk(t, dir), beta)
+			cleanAfterRepair(t, h, h.library, filepath.Dir(claude), dir)
+		})
+	}
 }
 
 // TestSkillRepairRefusesAPlaceInsideAnother: a client's skills directory
@@ -1364,10 +1415,15 @@ func TestSkillRepairRefusesAPlaceInsideAnother(t *testing.T) {
 // while the library directory holds a symlink at any depth, whatever the
 // flags, --keep-placement included, which would replace the library
 // directory link and all, names the link, points at diff and revert, and
-// changes nothing. A repair that only makes a missing placement removes
-// nothing and goes ahead.
+// changes nothing. A repair that only puts a copy back where the library's
+// symlink stands refuses as well, since it removes that symlink. A repair
+// that only makes a missing placement removes nothing and goes ahead.
 func TestSkillRepairRefusesALibraryDirectoryHoldingASymlink(t *testing.T) {
 	t.Parallel()
+	refusal := func(lib, at string) (message, hint string) {
+		return "the library directory " + lib + " holds the symlink " + at + ", which no version agentx installs holds, so nothing was repaired",
+			"replace the link with the files it leads to, or see what changed with 'agentx skill diff alpha' and go back to the installed version with 'agentx skill revert alpha', then run 'agentx skill repair alpha' again"
+	}
 	for _, c := range []struct {
 		name string
 		// arrange sets the machine up, Claude Code's place holding a
@@ -1425,12 +1481,29 @@ func TestSkillRepairRefusesALibraryDirectoryHoldingASymlink(t *testing.T) {
 			displace(t, lib, claude, true)
 			at := c.arrange(t, h, lib, claude)
 			equal(t, "drift", drift(h.listed("alpha")), "displaced")
-			refusesUntouched(t, h, everyFlag,
-				"the library directory "+lib+" holds the symlink "+at+", which no version agentx installs holds, so nothing was repaired",
-				"replace the link with the files it leads to, or see what changed with 'agentx skill diff alpha' and go back to the installed version with 'agentx skill revert alpha', then run 'agentx skill repair alpha' again")
+			message, hint := refusal(lib, at)
+			refusesUntouched(t, h, everyFlag, message, hint)
 			cleanAfterRepair(t, h, h.library, filepath.Dir(claude))
 		})
 	}
+
+	t.Run("the library's symlink where a copy belongs, alone", func(t *testing.T) {
+		t.Parallel()
+		h, lib, _, cursor := repairHarness(t)
+		remove(t, cursor)
+		h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
+		remove(t, cursor)
+		link(t, lib, cursor)
+		outside := filepath.Join(h.home, "shared-notes.md")
+		writeFile(t, outside, "notes kept outside the skill\n")
+		at := filepath.Join(lib, "shared.md")
+		link(t, outside, at)
+		equal(t, "drift", drift(h.listed("alpha")), "displaced")
+		message, hint := refusal(lib, at)
+		refusesUntouched(t, h, everyFlag, message, hint)
+		linksToLibrary(t, "cursor's placement", cursor, lib)
+		cleanAfterRepair(t, h, h.library, filepath.Dir(cursor))
+	})
 
 	t.Run("a missing placement alone", func(t *testing.T) {
 		t.Parallel()

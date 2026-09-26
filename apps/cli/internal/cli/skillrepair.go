@@ -384,7 +384,7 @@ func (plan repairPlan) signature() string {
 func (plan repairPlan) differing() []repairPlace {
 	var found []repairPlace
 	for _, p := range plan.places {
-		if p.err == nil && home.IsDir(p.state) && !p.same {
+		if p.removed() && !p.same {
 			found = append(found, p)
 		}
 	}
@@ -681,9 +681,10 @@ func samePath(a, b string) bool {
 }
 
 // inside reports whether the real path inner lies beneath the real
-// directory outer, not being it: spelled beneath it, or with a directory
-// on the way up from it that is outer as a file. Neither need exist; a
-// symlink at outer is no directory and holds nothing.
+// directory outer, not being it: spelled beneath it, whatever outer is, or
+// with a directory on the way up from it that is outer as a file, which
+// takes outer to be a real directory, since a symlink there holds nothing.
+// Neither need exist.
 func inside(inner, outer string) bool {
 	if strings.HasPrefix(inner, strings.TrimSuffix(outer, string(filepath.Separator))+string(filepath.Separator)) {
 		return true
