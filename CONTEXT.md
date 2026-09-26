@@ -144,7 +144,7 @@ A placement a managed skill lacks in an enabled configuration: nothing is at tha
 _Avoid_: unplaced, orphaned
 
 **Universal client**:
-An agent client that reads the library as one of its own skills directories, such as Codex and Gemini CLI. It sees every library skill whether or not its agent configuration is enabled and whatever the placements, since the library entry is its placement. A skill leaves it only by leaving the library, which takes the skill from every agent client.
+An agent client that reads the library as one of its own skills directories, such as Codex and Gemini CLI, or whose skills directory is the library through a symlink. It sees every library skill whether or not its agent configuration is enabled and whatever the placements, since the library entry is its placement. A skill leaves it only by leaving the library, which takes the skill from every agent client.
 _Avoid_: library client, library reader
 
 **Base version**:

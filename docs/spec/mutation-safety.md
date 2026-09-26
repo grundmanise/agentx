@@ -20,7 +20,7 @@ Use the machine's mutation lock and a durable local journal at `~/.agentx/mutati
 
 After a crash or cancellation, recover the journal before further mutations or ordinary reconciliation. Inspect actual refs and paths because a process may have stopped after a write but before recording its progress. Resume or roll back only steps whose preconditions still hold. Otherwise report recovery required and retain both versions for resolution. Do not classify half-applied state as a new unmanaged skill or repair it by overwriting content.
 
-An operation spanning multiple directories and refs is recoverable, not globally atomic. Agents may read across a replacement. Conflict markers stay in a scratch copy; unresolved content never replaces the library. An explicitly requested revert or removal may discard the content the user selected, but must still guard against later edits.
+An operation spanning multiple directories and refs is recoverable, not globally atomic. Agents may read across a replacement. Conflict markers stay in a scratch copy; unresolved content never replaces the library. An explicitly requested revert, removal or repair choice (`--keep-library` or `--keep-placement`) may discard the content the user selected, but must still guard against later edits.
 
 ## Verification required by implementations
 

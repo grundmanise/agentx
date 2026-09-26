@@ -2,6 +2,7 @@ package scan
 
 import (
 	"path/filepath"
+	"slices"
 	"sort"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
@@ -73,8 +74,26 @@ func PlacementDir(c Client, d home.Dirs) string {
 // own skills directories, in which case the library entry is the placement
 // and a second entry would make that client list the skill twice.
 func ReadsLibrary(c Client, d home.Dirs) bool {
-	for _, dir := range c.SkillsDirs(d) {
-		if dir == d.Library {
+	return readsLibrary(c.SkillsDirs(d), d.Library)
+}
+
+// readsLibrary reports whether one of dirs is the library directory: named
+// by its path, or leading to the same directory through a symlink, either
+// way round, as a skills directory made a link to the library does. The
+// skill directory in such a skills directory is the library directory
+// itself, so a command that took it for a placement of its own would
+// replace the library with a link to itself. A path that does not resolve
+// is compared as it is written.
+func readsLibrary(dirs []string, library string) bool {
+	if slices.Contains(dirs, library) {
+		return true
+	}
+	real, err := filepath.EvalSymlinks(library)
+	if err != nil {
+		return false
+	}
+	for _, dir := range dirs {
+		if resolved, err := filepath.EvalSymlinks(dir); err == nil && resolved == real {
 			return true
 		}
 	}

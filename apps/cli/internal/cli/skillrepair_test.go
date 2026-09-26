@@ -2,12 +2,15 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 )
 
 // repairHarness is installHarness with alpha installed everywhere: a
@@ -196,6 +199,53 @@ func TestSkillRepairRefusesADirectoryThatDiffers(t *testing.T) {
 	})
 }
 
+// TestSkillRepairComparesWhatGitCannotRecordByteForByte: a library skill
+// holding a repository of its own and a displaced directory copied from it
+// hold the same content, though no tree records the repository. The two
+// are compared byte for byte instead, so the directory is relinked without
+// a flag, as any directory holding the library's content is. A directory
+// whose repository differs is a directory that differs, and the repair
+// refuses.
+func TestSkillRepairComparesWhatGitCannotRecordByteForByte(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name string
+		same bool
+	}{
+		{"the same repository", true},
+		{"a repository that differs", false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			h, lib, claude, _ := repairHarness(t)
+			writeFile(t, mkdirs(t, filepath.Join(lib, "sub", ".git"), "HEAD"), "ref: refs/heads/main\n")
+			displace(t, lib, claude, false)
+			if !c.same {
+				writeFile(t, filepath.Join(claude, "sub", ".git", "HEAD"), "ref: refs/heads/other\n")
+			}
+			held := libraryTree(t, claude)
+
+			out := h.run("--json", "skill", "repair", "alpha")
+			if c.same {
+				equal(t, "exit", out.exit, 0)
+				linksToLibrary(t, "claude's placement", claude, lib)
+				equal(t, "summary", h.one(out.stdout, "result")["summary"], "repaired alpha in 1 configuration")
+				equal(t, "drift after the repair", drift(h.listed("alpha")), "")
+			} else {
+				equal(t, "exit", out.exit, 6)
+				equal(t, "message", h.one(out.stdout, "error")["message"],
+					claude+" is a directory whose content differs from the library's alpha, so nothing was repaired")
+				if _, ok := isSymlink(t, claude); ok {
+					t.Fatal("claude's directory was replaced")
+				}
+				sameTree(t, "claude's directory", libraryTree(t, claude), held)
+			}
+			equal(t, "the library's repository", fileBody(t, filepath.Join(lib, "sub", ".git", "HEAD")), "ref: refs/heads/main\n")
+			cleanAfterRepair(t, h, h.library, filepath.Dir(claude))
+		})
+	}
+}
+
 // TestSkillRepairKeepLibraryDiscardsTheDirectory: --keep-library is the
 // explicit choice to discard a displaced directory that differs. The
 // symlink replaces it, the library is untouched, the skill stays current,
@@ -276,6 +326,41 @@ func TestSkillRepairKeepPlacementMakesItTheLibrary(t *testing.T) {
 	equal(t, "the diff against the base", strings.Join(changed, ", "), "mine.md added, notes.md modified")
 	equal(t, "a second repair", h.mustRun("skill", "repair", "alpha", "--keep-placement").stdout, nothingWasRepaired("alpha"))
 	equal(t, "drift after a second repair", drift(h.listed("alpha")), "")
+}
+
+// TestSkillRepairKeepPlacementRefreshesACopyOfTheBase: copies placed
+// before the library was edited still hold the base version, which is what
+// agentx placed there, so --keep-placement refreshes them with the content
+// kept, as it refreshes a copy of what the library held. A copy edited
+// where it is beside them is still kept byte for byte, and named.
+func TestSkillRepairKeepPlacementRefreshesACopyOfTheBase(t *testing.T) {
+	t.Parallel()
+	h, s := placementHarness(t)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code")
+	h.mustRun("skill", "place", "alpha", "--to", "cursor", "--to", "windsurf", "--to", "github-copilot", "--copy")
+	lib := filepath.Join(h.library, "alpha")
+	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
+	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	windsurf := filepath.Join(h.home, ".codeium", "windsurf", "skills", "alpha")
+	copilot := filepath.Join(h.home, ".copilot", "skills", "alpha")
+	editCopy(t, cursor)
+	edited := libraryTree(t, cursor)
+	writeFile(t, filepath.Join(lib, "lib-edit.md"), "an edit made in the library\n")
+	equal(t, "state before the repair", h.listed("alpha")["state"], stateModified)
+	displace(t, lib, claude, true)
+	kept := libraryTree(t, claude)
+
+	out := h.mustRun("--json", "skill", "repair", "alpha", "--keep-placement")
+	sameTree(t, "the library directory", libraryTree(t, lib), kept)
+	linksToLibrary(t, "claude's placement", claude, lib)
+	sameTree(t, "windsurf's copy of the base", libraryTree(t, windsurf), kept)
+	sameTree(t, "copilot's copy of the base", libraryTree(t, copilot), kept)
+	sameTree(t, "cursor's edited copy", libraryTree(t, cursor), edited)
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"),
+		keptCopyWarning(cursor, "alpha", "agentx skill remove alpha --from cursor", "agentx skill place alpha --to cursor --copy"))
+	equal(t, "summary", h.one(out.stdout, "result")["summary"],
+		"repaired alpha in 1 configuration, 2 copy placements refreshed, 1 placement skipped; the library now holds what "+claude+" held")
+	cleanAfterRepair(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor), filepath.Dir(windsurf), filepath.Dir(copilot))
 }
 
 // TestSkillRepairKeepPlacementText: the text names the directory the
@@ -444,6 +529,89 @@ func TestSkillRepairLeavesWhatIsNotDrift(t *testing.T) {
 	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "")
 }
 
+// TestSkillRepairLeavesTheLibraryAClientReadsThroughALink: a client whose
+// skills directory is a symlink to the library, or the library a symlink
+// to it, reads the library, and the skill's directory there is the library
+// directory itself, not a directory displacing a placement. So does
+// Cursor, which reads Claude Code's skills directory too. Drift names
+// nothing there, and a repair, whatever flag it is given, leaves the
+// library directory as it is, an edit of it included: replacing that
+// directory with the symlink would replace the library with a link to
+// itself. A placement that went missing elsewhere is still put back.
+func TestSkillRepairLeavesTheLibraryAClientReadsThroughALink(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name    string
+		reverse bool // the library is the link, to Claude Code's skills directory
+		edited  bool // the library directory was edited
+	}{
+		{"a skills directory linked to the library", false, false},
+		{"a skills directory linked to an edited library", false, true},
+		{"a library linked to a skills directory", true, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			h, s := placementHarness(t)
+			h.mustRun("skill", "add", s.url, "--skill", "alpha")
+			lib := filepath.Join(h.library, "alpha")
+			skills := filepath.Join(h.home, ".claude", "skills")
+			cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
+			windsurf := filepath.Join(h.home, ".codeium", "windsurf", "skills", "alpha")
+			remove(t, skills)
+			if c.reverse {
+				if err := os.Rename(h.library, skills); err != nil {
+					t.Fatal(err)
+				}
+				link(t, skills, h.library)
+			} else {
+				link(t, h.library, skills)
+			}
+			state := stateCurrent
+			if c.edited {
+				writeFile(t, filepath.Join(lib, "notes.md"), "alpha notes, edited in the library\n")
+				state = stateModified
+			}
+			held := libraryTree(t, lib)
+			ev := h.listed("alpha")
+			equal(t, "drift", drift(ev), "")
+			equal(t, "universal clients", fmt.Sprint(ev["universal"]), "[claude-code codex cursor gemini-cli]")
+			version := mutationVersion(t, h)
+
+			for _, flag := range []string{"", "--keep-library", "--keep-placement"} {
+				args := []string{"skill", "repair", "alpha"}
+				if flag != "" {
+					args = append(args, flag)
+				}
+				equal(t, "a repair "+flag, h.mustRun(args...).stdout, nothingWasRepaired("alpha"))
+			}
+			info, err := os.Lstat(lib)
+			if err != nil || !info.IsDir() {
+				t.Fatalf("the library directory is no longer a directory: %v", err)
+			}
+			sameTree(t, "the library directory", libraryTree(t, lib), held)
+			linksToLibrary(t, "cursor's link", cursor, lib)
+			equal(t, "no mutation", mutationVersion(t, h), version)
+			ev = h.listed("alpha")
+			equal(t, "state after the repairs", ev["state"], state)
+			equal(t, "drift after the repairs", drift(ev), "")
+			cleanAfterRepair(t, h, h.library, skills)
+
+			// Placing the skill in Claude Code names the library entry too.
+			h.mustRun("skill", "place", "alpha", "--to", "claude-code")
+			sameTree(t, "the library directory after a placement", libraryTree(t, lib), held)
+			cleanAfterRepair(t, h, h.library, skills)
+
+			remove(t, windsurf)
+			equal(t, "drift with a placement missing", drift(h.listed("alpha")), "missing")
+			equal(t, "the text", h.mustRun("skill", "repair", "alpha").stdout, "✓ repaired alpha in 1 configuration\n"+
+				"  windsurf  placed  symlink  "+windsurf+" -> "+lib+"\n")
+			linksToLibrary(t, "windsurf's placement", windsurf, lib)
+			sameTree(t, "the library directory after a repair", libraryTree(t, lib), held)
+			cleanAfterRepair(t, h, h.library, skills, filepath.Dir(windsurf))
+		})
+	}
+}
+
 // TestSkillRepairJudgesASharedPlaceOnce: Zencoder and Zenflow read one
 // skills directory, and copy_mode records a copy for Zenflow alone. The
 // copy both read is repaired once, as the copy the settings name, and
@@ -525,13 +693,20 @@ func TestSkillRepairRefusesWhatIsNotAManagedSkill(t *testing.T) {
 
 	t.Run("a fork", func(t *testing.T) {
 		t.Parallel()
-		h, _, _, _ := repairHarness(t)
+		h, lib, claude, cursor := repairHarness(t)
 		commit := h.accountGit("rev-parse", "refs/heads/managed/alpha")
 		h.accountGit("update-ref", "refs/heads/skills/alpha", commit)
 		h.accountGit("update-ref", "-d", "refs/heads/managed/alpha")
+		remove(t, cursor)
+		version := mutationVersion(t, h)
 		out := h.run("--json", "skill", "repair", "alpha")
 		equal(t, "exit", out.exit, 6)
 		equal(t, "message", h.one(out.stdout, "error")["message"], "alpha is a fork on this machine")
+		linksToLibrary(t, "claude's placement", claude, lib)
+		nothingAt(t, "cursor's placement", cursor)
+		equal(t, "the fork", h.accountGit("rev-parse", "refs/heads/skills/alpha"), commit)
+		equal(t, "no mutation", mutationVersion(t, h), version)
+		cleanAfterRepair(t, h, h.library, filepath.Dir(claude))
 	})
 
 	t.Run("a managed skill whose library directory is gone", func(t *testing.T) {
@@ -550,42 +725,125 @@ func TestSkillRepairRefusesWhatIsNotAManagedSkill(t *testing.T) {
 	t.Run("a name the library does not hold", func(t *testing.T) {
 		t.Parallel()
 		h, _ := installHarness(t)
+		version := mutationVersion(t, h)
 		out := h.run("--json", "skill", "repair", "nothing")
 		equal(t, "exit", out.exit, 5)
 		contains(t, "message", h.one(out.stdout, "error")["message"].(string), `the library holds no skill called "nothing"`)
+		equal(t, "no mutation", mutationVersion(t, h), version)
+		equal(t, "journals", journalCount(t, h), 0)
+		nothingAt(t, "the library", h.library)
 	})
 }
 
-// TestSkillRepairRefusesAChangeMadeWhileItRuns: what a repair discards is
-// what the paths held when it judged them. A git wrapper edits the
-// displaced directory once the repair holds the lock, at the read of the
-// import branch; the repair then finds the plan changed, refuses and
-// changes nothing, and the edit is there afterwards.
-func TestSkillRepairRefusesAChangeMadeWhileItRuns(t *testing.T) {
+// TestSkillRepairRefusesWhenItsInputsChange: what a repair discards is
+// what the paths held when it judged them, against the version the import
+// branch named and the settings as they were. A git wrapper changes one of
+// them once the repair holds the lock, at its read of the import branch:
+// the branch moves, a fork of the name appears, the library directory or
+// the displaced directory is edited, or the settings disable the
+// configuration. The repair then refuses before it writes a journal and
+// changes nothing, and the change is there afterwards.
+func TestSkillRepairRefusesWhenItsInputsChange(t *testing.T) {
 	t.Parallel()
-	h, lib, claude, _ := repairHarness(t)
-	displace(t, lib, claude, true)
-	file := filepath.Join(claude, "notes.md")
-	real, err := exec.LookPath("git")
-	if err != nil {
-		t.Fatal(err)
-	}
-	// The ref read under the lock asks for the refs by name, with a format
-	// that ends in the object name; the listing of every branch asks for
-	// trees and trailers too.
-	stubGit(t, h, `#!/bin/sh
+	moved := "the import branch refs/heads/managed/alpha moved while alpha was being repaired, so nothing was changed"
+	changed := "alpha or its placements changed while it was being repaired, so nothing was changed"
+	for _, c := range []struct {
+		name, flag, message string
+		edits               string // the directory the change edits, whose tree is not held to what it was
+		// change is what the wrapper runs, git being the real one, and a
+		// check of what it left once the repair refused.
+		change func(t *testing.T, h *harness, git, lib, claude string) (script string, check func(t *testing.T))
+	}{
+		{"the import branch moves", "--keep-library", moved, "", func(t *testing.T, h *harness, git, _, _ string) (string, func(*testing.T)) {
+			before := h.accountGit("rev-parse", "refs/heads/managed/alpha")
+			written := h.accountGit("commit-tree", before+"^{tree}", "-p", before, "-m", "moved")
+			return accountRepoCommand(h, git, "update-ref", "refs/heads/managed/alpha", written), func(t *testing.T) {
+				equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), written)
+			}
+		}},
+		{"a fork appears", "--keep-library", moved, "", func(t *testing.T, h *harness, git, _, _ string) (string, func(*testing.T)) {
+			before := h.accountGit("rev-parse", "refs/heads/managed/alpha")
+			return accountRepoCommand(h, git, "update-ref", "refs/heads/skills/alpha", before), func(t *testing.T) {
+				equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), before)
+				equal(t, "the fork", h.accountGit("rev-parse", "refs/heads/skills/alpha"), before)
+			}
+		}},
+		{"the library is edited", "--keep-placement", changed, "library", func(t *testing.T, _ *harness, _, lib, _ string) (string, func(*testing.T)) {
+			file := filepath.Join(lib, "notes.md")
+			return "printf 'an edit made meanwhile\\n' > " + shellWord(file), func(t *testing.T) {
+				equal(t, "the library's notes.md", fileBody(t, file), "an edit made meanwhile\n")
+			}
+		}},
+		{"the displaced directory is edited", "--keep-library", changed, "place", func(t *testing.T, _ *harness, _, _, claude string) (string, func(*testing.T)) {
+			file := filepath.Join(claude, "notes.md")
+			return "printf 'an edit made meanwhile\\n' > " + shellWord(file), func(t *testing.T) {
+				equal(t, "the directory's notes.md", fileBody(t, file), "an edit made meanwhile\n")
+			}
+		}},
+		{"the settings change", "--keep-library", changed, "", func(t *testing.T, h *harness, _, _, _ string) (string, func(*testing.T)) {
+			settings := filepath.Join(h.agentx, "settings.json")
+			edited := readSettingsFile(t, h)
+			edited["disabled_configurations"] = []any{"claude-code"}
+			b, err := json.Marshal(edited)
+			if err != nil {
+				t.Fatal(err)
+			}
+			next := filepath.Join(t.TempDir(), "settings.json")
+			writeFile(t, next, string(b))
+			cat, err := exec.LookPath("cat")
+			if err != nil {
+				t.Fatal(err)
+			}
+			return cat + " " + shellWord(next) + " > " + shellWord(settings), func(t *testing.T) {
+				equal(t, "the settings", fileBody(t, settings), string(b))
+			}
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			h, lib, claude, _ := repairHarness(t)
+			displace(t, lib, claude, true)
+			library, place := libraryTree(t, lib), libraryTree(t, claude)
+			version := mutationVersion(t, h)
+			real, err := exec.LookPath("git")
+			if err != nil {
+				t.Fatal(err)
+			}
+			script, check := c.change(t, h, real, lib, claude)
+			// The ref read under the lock asks for the refs by name, with a
+			// format that ends in the object name; the listing of every branch
+			// asks for trees and trailers too.
+			stubGit(t, h, `#!/bin/sh
 case " $* " in
-*"%(objectname) refs/heads/managed/alpha "*) printf 'an edit made meanwhile\n' > `+shellWord(file)+` ;;
+*"%(objectname) refs/heads/managed/alpha "*) `+script+` || exit 1 ;;
 esac
 exec `+real+` "$@"
 `)
-	out := h.run("--json", "skill", "repair", "alpha", "--keep-library")
-	equal(t, "exit", out.exit, 6)
-	e := h.one(out.stdout, "error")
-	equal(t, "message", e["message"], "alpha or its placements changed while it was being repaired, so nothing was changed")
-	equal(t, "hint", e["hint"], "run 'agentx skill repair alpha' again")
-	equal(t, "notes.md", fileBody(t, file), "an edit made meanwhile\n")
-	cleanAfterRepair(t, h, h.library, filepath.Dir(claude))
+			out := h.run("--json", "skill", "repair", "alpha", c.flag)
+			equal(t, "exit", out.exit, 6)
+			e := h.one(out.stdout, "error")
+			equal(t, "message", e["message"], c.message)
+			equal(t, "hint", e["hint"], "run 'agentx skill repair alpha' again")
+			check(t)
+			if _, ok := isSymlink(t, claude); ok {
+				t.Fatal("the displaced directory was replaced")
+			}
+			if c.edits != "place" {
+				sameTree(t, "the displaced directory", libraryTree(t, claude), place)
+			}
+			if c.edits != "library" {
+				sameTree(t, "the library directory", libraryTree(t, lib), library)
+			}
+			equal(t, "no mutation", mutationVersion(t, h), version)
+			cleanAfterRepair(t, h, h.library, filepath.Dir(claude))
+		})
+	}
+}
+
+// accountRepoCommand is the shell command that runs the real git, at git,
+// with args against the account repo of h, as a wrapper runs it.
+func accountRepoCommand(h *harness, git string, args ...string) string {
+	return git + " --git-dir=" + shellWord(gitx.AccountRepoPath(h.agentx)) + " " + strings.Join(args, " ")
 }
 
 // repairChildEnv marks the process TestSkillRepairRecoversAtEveryBoundary
@@ -701,5 +959,115 @@ func TestSkillRepairRecoversAtEveryBoundary(t *testing.T) {
 				equal(t, "drift", drift(ev), "")
 			})
 		}
+	}
+}
+
+// TestSkillRepairRecoversCopiesAtEveryBoundary kills a repair as
+// TestSkillRepairRecoversAtEveryBoundary does, for the steps it takes at
+// copy placements: with --keep-placement a copy holding what the library
+// held is refreshed and a missing copy is made from the content kept, and
+// with --keep-library the library's symlink where copy_mode records a copy
+// is replaced by a copy. The next command recovers each one, and every copy
+// then holds what the library holds.
+func TestSkillRepairRecoversCopiesAtEveryBoundary(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		flag  string
+		kinds string // the journal's steps, as recorded
+	}{
+		{"--keep-placement", "remove, publish, remove, publish, remove, link, publish, ref"},
+		{"--keep-library", "remove, link, remove, publish, ref"},
+	} {
+		pathSteps := strings.Count(c.kinds, ",")
+		for stop := 0; stop <= pathSteps; stop++ {
+			t.Run(fmt.Sprintf("%s after %d steps", c.flag, stop), func(t *testing.T) {
+				t.Parallel()
+				h, s := placementHarness(t)
+				h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code", "--to", "cursor")
+				h.mustRun("skill", "place", "alpha", "--to", "windsurf", "--to", "github-copilot", "--copy")
+				lib := filepath.Join(h.library, "alpha")
+				claude := filepath.Join(h.home, ".claude", "skills", "alpha")
+				windsurf := filepath.Join(h.home, ".codeium", "windsurf", "skills", "alpha")
+				copilot := filepath.Join(h.home, ".copilot", "skills", "alpha")
+				want := libraryTree(t, lib)
+				displace(t, lib, claude, true)
+				if c.flag == "--keep-placement" {
+					want = libraryTree(t, claude)
+					remove(t, copilot)
+				} else {
+					remove(t, windsurf)
+					link(t, lib, windsurf)
+				}
+
+				out := killedRepair(t, h, "alpha", c.flag)
+				steps := readJournal(t, h)
+				var kinds []string
+				for _, s := range steps {
+					kinds = append(kinds, s.Kind)
+				}
+				equal(t, "the journal's steps", strings.Join(kinds, ", "), c.kinds)
+				applySteps(t, steps, stop)
+
+				if got := h.run("config", "set", "label", "recovered"); got.exit != 0 {
+					t.Fatalf("the command after the killed repair: exit %d\n%s\nthe killed run:\n%s", got.exit, got.stderr, out)
+				}
+				sameTree(t, "the library directory", libraryTree(t, lib), want)
+				linksToLibrary(t, "claude's placement", claude, lib)
+				for _, place := range []string{windsurf, copilot} {
+					if _, ok := isSymlink(t, place); ok {
+						t.Errorf("%s is a symlink, want the copy copy_mode records", place)
+					}
+					sameTree(t, "the copy at "+place, libraryTree(t, place), want)
+				}
+				cleanAfterRepair(t, h, h.library, filepath.Dir(claude), filepath.Dir(windsurf), filepath.Dir(copilot))
+				equal(t, "drift", drift(h.listed("alpha")), "")
+			})
+		}
+	}
+}
+
+// TestSkillRepairSweepsStagingAKilledRepairLeft stands in for a repair
+// killed after it staged and before its journal was written: what it
+// staged, beside the library directory, beside a copy placement or beside
+// a place it was putting back, is in directories nothing names. The next
+// repair sweeps them before it stages anything and leaves nothing behind.
+func TestSkillRepairSweepsStagingAKilledRepairLeft(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name string
+		args []string
+	}{
+		{"a displaced directory kept", []string{"--keep-placement"}},
+		{"a missing placement", nil},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			h, s := installHarness(t)
+			h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code")
+			h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
+			lib := filepath.Join(h.library, "alpha")
+			claude := filepath.Join(h.home, ".claude", "skills", "alpha")
+			cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
+			stage := func(dir string, n int) {
+				writeFile(t, mkdirs(t, filepath.Join(dir, fmt.Sprintf(".agentx-staged-deadbeef-%d", n)), "SKILL.md"), skill("alpha", "staged content nothing names"))
+			}
+			dirs := []string{filepath.Dir(claude)}
+			if c.args == nil {
+				remove(t, claude)
+			} else {
+				displace(t, lib, claude, true)
+				stage(h.library, 1)
+				stage(filepath.Dir(cursor), 3)
+				dirs = append(dirs, h.library, filepath.Dir(cursor))
+			}
+			stage(filepath.Dir(claude), 2)
+
+			out := h.run(append([]string{"skill", "repair", "alpha"}, c.args...)...)
+			if out.exit != 0 {
+				t.Fatalf("repair: exit %d\n%s", out.exit, out.stderr)
+			}
+			linksToLibrary(t, "claude's placement", claude, lib)
+			cleanAfterRepair(t, h, dirs...)
+		})
 	}
 }

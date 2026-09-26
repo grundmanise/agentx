@@ -82,7 +82,7 @@ agentx records where a skill came from on one line of its commit. A directory na
 
 ### Clients that see every skill
 
-Some clients, such as Codex and Gemini CLI, read the library directly. They are universal clients: they get no link of their own, because the library entry is what they see. Every other client gets a symlink in its own skills directory, pointing at the library.
+Some clients, such as Codex and Gemini CLI, read the library directly. They are universal clients: they get no link of their own, because the library entry is what they see. So is any client whose skills directory you made a symlink to the library, or the library a symlink to it: both are one directory. Every other client gets a symlink in its own skills directory, pointing at the library.
 
 A universal client sees every skill in your library, even when you disabled it with `agentx config disable` or left it out of `--to`. Each install ends with a line naming every universal client installed on this machine, since the skill is always available to them whatever you chose:
 
@@ -464,9 +464,9 @@ agentx skill repair pdf --keep-placement
   the library now holds what ~/.claude/skills/pdf held
 ```
 
-Give one of the two, not both. With `--keep-placement`, copy placements follow the new library version as they follow a revert: a copy that held the library version is refreshed, and a copy you edited is kept and skipped with a warning.
+Give one of the two, not both. With `--keep-placement`, copy placements follow the new library version as they follow a revert: a copy that held the library version, or the version you installed, is refreshed, and a copy you edited is kept and skipped with a warning.
 
-`--keep-placement` keeps one directory. If two clients hold directories that differ from each other, move aside every one but the directory you want to keep, then repair again. It also stops with exit code 6 if the library entry is a link to a directory of your own, if the directory has no `SKILL.md`, or if it holds a repository of its own.
+`--keep-placement` keeps one directory. If two clients hold directories that differ from each other, move aside every one but the directory you want to keep, then repair again. It also stops with exit code 6 if the library entry is a link to a directory of your own, if the directory has no `SKILL.md`, or if it holds a repository of its own or anything else git cannot record.
 
 Only what the directories held when you ran the command is replaced. If a directory or the library changes while the repair runs, agentx stops with exit code 6 and changes nothing; run the repair again. agentx keeps what it replaces until the repair is complete, so an interrupted repair finishes on the next command and loses nothing.
 

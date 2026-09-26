@@ -79,7 +79,7 @@ func (sc skillContext) observationOf(inv *invocation, lib scan.LibrarySkill) obs
 
 // placementDrift is what the configurations' own places say about a managed
 // skill: the drift word of every place drift asks about, see ownPlaces and
-// ownPlace.drift, each once, sorted.
+// placeSite.drift, each once, sorted.
 //
 // The rule is literal: a skill placed with --to, or taken out of one
 // configuration with --from, is missing from every other enabled one, which
@@ -98,11 +98,11 @@ func (sc skillContext) placementDrift(inv *invocation, lib scan.LibrarySkill) []
 	return drift
 }
 
-// ownPlace is one path a skill's placements are made at, and every
+// placeSite is one path a skill's placements are made at, and every
 // configuration whose own place it is. A universal client has none: its
 // placement is the library entry itself, which the skill cannot be missing
 // from while it is in the library.
-type ownPlace struct {
+type placeSite struct {
 	path    string
 	targets []placeTarget // the configurations whose own place it is, in detection order
 	enabled []string      // the ids of those of them the settings do not disable
@@ -111,7 +111,7 @@ type ownPlace struct {
 
 // asked reports whether drift asks what the place holds: whether one of
 // the configurations whose own place it is is enabled.
-func (p ownPlace) asked() bool { return len(p.enabled) > 0 }
+func (p placeSite) asked() bool { return len(p.enabled) > 0 }
 
 // ownPlaces are the places of the skill called name, one per path, in the
 // order the configurations were detected, judged against the configurations
@@ -127,8 +127,8 @@ func (p ownPlace) asked() bool { return len(p.enabled) > 0 }
 // the other reads. Judged for each configuration on its own, the copy
 // agentx placed for one would read as a directory displacing the other's
 // link.
-func ownPlaces(targets []placeTarget, library, name string, disabled, copies []string) []ownPlace {
-	var places []ownPlace
+func ownPlaces(targets []placeTarget, library, name string, disabled, copies []string) []placeSite {
+	var places []placeSite
 	at := map[string]int{}
 	for _, t := range targets {
 		if t.readsLibrary {
@@ -139,7 +139,7 @@ func ownPlaces(targets []placeTarget, library, name string, disabled, copies []s
 		if !seen {
 			i = len(places)
 			at[path] = i
-			places = append(places, ownPlace{path: path})
+			places = append(places, placeSite{path: path})
 		}
 		p := &places[i]
 		p.targets = append(p.targets, t)
@@ -163,7 +163,7 @@ func ownPlaces(targets []placeTarget, library, name string, disabled, copies []s
 //   - A link of the user's to somewhere else, and anything else at the
 //     place, is theirs: the place is taken, so the skill is not missing,
 //     and nothing agentx keeps was displaced. It earns "".
-func (p ownPlace) drift(libPath string) string {
+func (p placeSite) drift(libPath string) string {
 	info, err := os.Lstat(p.path)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):

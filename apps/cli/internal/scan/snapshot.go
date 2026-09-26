@@ -186,7 +186,7 @@ func Read(o Options) *Scan {
 			Name:         c.Name(),
 			Path:         c.ConfigDir(o.Dirs),
 			Enabled:      !slices.Contains(o.Disabled, c.Slug()),
-			ReadsLibrary: slices.Contains(dirs, o.Dirs.Library),
+			ReadsLibrary: readsLibrary(dirs, o.Dirs.Library),
 		}
 		conf.PhysicalID = id("configuration", o.MachineID, conf.ID, b.portable(conf.Path))
 		conf.LogicalID = conf.PhysicalID

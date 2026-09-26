@@ -75,7 +75,7 @@ const (
 // repairPlace is one place of a skill that drift finds missing or
 // displaced, and what it held when it was judged.
 type repairPlace struct {
-	ownPlace
+	placeSite
 	word       string // missing or displaced
 	state      string // what the path holds, in the words a journal records
 	tree       string // a real directory's tree id, as git would record it
@@ -93,6 +93,7 @@ type repairPlan struct {
 	lib      scan.LibrarySkill
 	libState string      // the library entry, in the words a journal records
 	libTree  treeid.Tree // what the library directory holds, as git would record it
+	libBytes string      // what the library directory holds byte for byte, read only when git cannot record all of it
 	copies   []string    // the configurations copy_mode records a copy of the skill for
 	places   []repairPlace
 }
@@ -158,6 +159,19 @@ func (inv *invocation) skillRepair(ctx context.Context, name string, choice repa
 		return err
 	}
 	gitDir := gitx.AccountRepoPath(inv.dirs.Home)
+	// A repair that makes a displaced directory's content the library's
+	// refreshes every copy that holds what agentx placed there: what the
+	// library directory held, or the base version, which a copy placed
+	// before the library was edited still holds. The base is read here,
+	// before the lock, and the branch it comes from is read again under it.
+	var baseTree string
+	if choice == choosePlacement && len(plan.differing()) > 0 {
+		base, err := lineage.ReadBase(ctx, inv.git, gitDir, rec)
+		if err != nil {
+			return accountRepoFailure(err)
+		}
+		baseTree = base.ID() // the tree the base has laid out on disk, as a copy of it holds it
+	}
 	again := "run '" + skillCommand("repair", name) + "' again"
 	var done repaired
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
@@ -204,7 +218,7 @@ func (inv *invocation) skillRepair(ctx context.Context, name string, choice repa
 		}
 		done = repaired{}
 		m := home.NewMutation(inv.dirs.Home)
-		if err := inv.stageRepair(m, live, choice, &done); err != nil {
+		if err := inv.stageRepair(m, live, choice, baseTree, &done); err != nil {
 			m.Discard()
 			return err
 		}
@@ -255,6 +269,18 @@ func (inv *invocation) repairRecord(sc skillContext, name string) (scan.LibraryS
 // detected configurations, the ones the settings disable and the ones
 // copy_mode records a copy for. A place that holds the placement agentx
 // keeps, or anything that is no drift, is not in the plan.
+//
+// Nor is a place that is the library directory itself, which a skills
+// directory made a symlink to the library, or the library made one to a
+// skills directory, makes of it: the client reads the library, and
+// replacing that directory with the symlink would replace the library with
+// a link to itself. Detection counts such a client as reading the library,
+// see scan.ReadsLibrary, so this only stands guard.
+//
+// A directory holds what the library directory holds when git would record
+// the two the same way. A tree leaves out what git cannot record, a nested
+// repository or a named pipe, so where either holds any of it the two are
+// compared byte for byte instead, as the journal fingerprints them.
 func (inv *invocation) planRepair(lib scan.LibrarySkill, targets []placeTarget, disabled, copies []string) (repairPlan, error) {
 	plan := repairPlan{lib: lib, copies: copies}
 	var err error
@@ -264,21 +290,32 @@ func (inv *invocation) planRepair(lib scan.LibrarySkill, targets []placeTarget, 
 	if plan.libTree, err = inv.readLibraryTree(lib.Path); err != nil {
 		return repairPlan{}, err
 	}
+	if len(plan.libTree.Unrecordable) > 0 {
+		real, err := filepath.EvalSymlinks(lib.Path)
+		if err == nil {
+			plan.libBytes, err = home.State(real)
+		}
+		if err != nil {
+			return repairPlan{}, libraryFailure(inv.dirs.Library, err)
+		}
+	}
+	library := canonicalPath(lib.Path)
 	for _, p := range ownPlaces(targets, inv.dirs.Library, lib.Name, disabled, copies) {
-		if !p.asked() {
+		if !p.asked() || canonicalPath(p.path) == library {
 			continue
 		}
 		word := p.drift(lib.Path)
 		if word == "" {
 			continue
 		}
-		place := repairPlace{ownPlace: p, word: word}
+		place := repairPlace{placeSite: p, word: word}
 		place.state, place.err = home.State(p.path)
 		if place.err == nil && home.IsDir(place.state) {
 			var tree treeid.Tree
 			if tree, place.err = treeid.Read(p.path); place.err == nil {
 				place.tree, place.recordable = tree.ID, len(tree.Unrecordable) == 0
-				place.same = place.recordable && len(plan.libTree.Unrecordable) == 0 && tree.ID == plan.libTree.ID
+				recordable := place.recordable && len(plan.libTree.Unrecordable) == 0
+				place.same = tree.ID == plan.libTree.ID && (recordable || place.state == plan.libBytes)
 				place.skill = contentHashAt(p.path) != ""
 			}
 		}
@@ -292,7 +329,7 @@ func (inv *invocation) planRepair(lib scan.LibrarySkill, targets []placeTarget, 
 // same way.
 func (plan repairPlan) signature() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s\x00%s\x00%d\x00%s\n", plan.libState, plan.libTree.ID, len(plan.libTree.Unrecordable), strings.Join(plan.copies, ","))
+	fmt.Fprintf(&b, "%s\x00%s\x00%d\x00%s\x00%s\n", plan.libState, plan.libTree.ID, len(plan.libTree.Unrecordable), plan.libBytes, strings.Join(plan.copies, ","))
 	for _, p := range plan.places {
 		fmt.Fprintf(&b, "%s\x00%s\x00%s\x00%s\x00%t\x00%t\x00%t\x00%t\x00%t\x00%s\n",
 			p.path, p.word, p.state, p.tree, p.recordable, p.skill, p.same, p.copied, p.err != nil, strings.Join(p.enabled, ","))
@@ -371,8 +408,9 @@ func directoryWord(n int) string {
 // agreed with. With --keep-placement the library directory is replaced
 // first, so every placement made after it holds what the library is to
 // hold, and the copies copy_mode records are refreshed or kept as a revert
-// refreshes or keeps them.
-func (inv *invocation) stageRepair(m *home.Mutation, plan repairPlan, choice repairChoice, done *repaired) error {
+// refreshes or keeps them: a copy holding what the library directory held
+// or the base version, whose tree is base, is agentx's and is refreshed.
+func (inv *invocation) stageRepair(m *home.Mutation, plan repairPlan, choice repairChoice, base string, done *repaired) error {
 	name, libPath := plan.lib.Name, plan.lib.Path
 	p := libraryPlaceable(plan.lib)
 	if differ := plan.differing(); choice == choosePlacement && len(differ) > 0 {
@@ -388,7 +426,7 @@ func (inv *invocation) stageRepair(m *home.Mutation, plan repairPlan, choice rep
 		}
 		m.Remove(libPath, plan.libState)
 		m.Publish(libPath, staged, fingerprint)
-		inv.refreshCopies(m, name, kept.tree, []string{plan.libTree.ID}, staged, plan.copies, &done.refreshed)
+		inv.refreshCopies(m, name, kept.tree, []string{plan.libTree.ID, base}, staged, plan.copies, &done.refreshed)
 		p = placeable{name: name, hash: hash, stage: func(dest string) error { return copyTreeTo(staged, dest) }}
 		done.kept = kept.path
 	}
