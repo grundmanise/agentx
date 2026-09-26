@@ -130,21 +130,22 @@ func (p placeSite) asked() bool { return len(p.enabled) > 0 }
 // link, and a repair would plan the one path twice, the second step
 // finding the first one's work there and stopping the mutation part way.
 // So is a path two configurations spell differently, one of their skills
-// directories a symlink to the other's: places are told apart by
-// canonicalPath, and each configuration keeps its own spelling in paths.
+// directories a symlink to the other's, the link's own spelling in another
+// case included: places are told apart as placeKey tells them, and each
+// configuration keeps its own spelling in paths.
 func ownPlaces(targets []placeTarget, library, name string, disabled, copies []string) []placeSite {
 	var places []placeSite
-	at := map[string]int{}
+	var keys []placeKey // the key of each of places, in the same order
 	for _, t := range targets {
 		if t.readsLibrary {
 			continue
 		}
 		path := t.ownPlace(library, name)
-		key := canonicalPath(path)
-		i, seen := at[key]
-		if !seen {
+		key := keyOf(path)
+		i := slices.IndexFunc(keys, key.is)
+		if i < 0 {
 			i = len(places)
-			at[key] = i
+			keys = append(keys, key)
 			places = append(places, placeSite{path: path})
 		}
 		p := &places[i]
@@ -156,6 +157,42 @@ func ownPlaces(targets []placeTarget, library, name string, disabled, copies []s
 		p.copied = p.copied || slices.Contains(copies, t.id)
 	}
 	return places
+}
+
+// placeKey is how the paths of places are told apart: the path as
+// canonicalPath writes it, and the directory it sits in, read once as a
+// file, nil when it cannot be read. Drift judges each place once by it, a
+// revert or a repair refreshes each copy once, and a repair changes each
+// path once.
+type placeKey struct {
+	real string
+	dir  fs.FileInfo
+}
+
+// keyOf is the placeKey of the entry at path.
+func keyOf(path string) placeKey {
+	return keyAt(canonicalPath(path))
+}
+
+// keyAt is the placeKey of real, a path as canonicalPath writes it.
+func keyAt(real string) placeKey {
+	k := placeKey{real: real}
+	if dir, err := os.Lstat(filepath.Dir(real)); err == nil {
+		k.dir = dir
+	}
+	return k
+}
+
+// is reports whether k and o are one place: spelled the same, or the same
+// name in one directory, that directory compared as a file. canonicalPath
+// spells a directory as the links on the way to it spell it, and on a disk
+// that ignores case two links can spell one directory in two cases, which
+// the spellings alone would take for two places, and a repair would plan
+// the one path twice. The directory is compared, not the entry, so that a
+// place nothing is at yet is found to be one as well.
+func (k placeKey) is(o placeKey) bool {
+	return k.real == o.real ||
+		filepath.Base(k.real) == filepath.Base(o.real) && k.dir != nil && o.dir != nil && os.SameFile(k.dir, o.dir)
 }
 
 // drift is what the place holds now, in the words of drift, the library

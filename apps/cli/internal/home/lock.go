@@ -76,7 +76,7 @@ func mutate(dir string, u RefUpdater, take acquire, bump bool, fn func() error) 
 	if err != nil {
 		return err
 	}
-	defer lock.Close() // closing releases the flock
+	defer Unlock(lock)
 	if err := recoverJournals(dir, u); err != nil {
 		return err
 	}
@@ -98,13 +98,12 @@ func ReadLocked(ctx context.Context, dir string, fn func() error) error {
 	if err != nil {
 		return err
 	}
-	defer lock.Close()
+	defer Unlock(lock)
 	return fn()
 }
 
 // TakeServeLock takes the lock one serve child holds for its lifetime; a
-// second serve for the same home gets ErrServing at once. Close the file to
-// release it.
+// second serve for the same home gets ErrServing at once. Unlock releases it.
 func TakeServeLock(dir string) (*os.File, error) {
 	if err := createHome(dir); err != nil {
 		return nil, err
@@ -117,10 +116,11 @@ func TakeServeLock(dir string) (*os.File, error) {
 }
 
 // takeLock takes the exclusive advisory lock of agentx home; a held lock is
-// ErrLocked after a few quick retries, which cover a lock a child process
-// inherited for the instant between its fork and its exec. It creates agentx
-// home, mutations and ops directories included, on first use, since the
-// lock file lives there.
+// ErrLocked after a few quick retries. A holder that finishes frees the lock
+// at once through Unlock; the retries cover one killed while a child process
+// it had forked was not yet exec'd, which keeps the lock until its exec. It
+// creates agentx home, mutations and ops directories included, on first use,
+// since the lock file lives there.
 func takeLock(dir string) (*os.File, error) {
 	if err := createHome(dir); err != nil {
 		return nil, err
@@ -169,6 +169,16 @@ func createHome(dir string) error {
 	return nil
 }
 
+// Unlock releases the advisory lock f holds and closes f. Closing alone is
+// not enough: a child process another goroutine has forked but not yet
+// exec'd shares f's open file description, and with it the lock, which would
+// stay held until that child execs, long enough under load for the next
+// command to find it held. Releasing through f frees it for every copy.
+func Unlock(f *os.File) {
+	_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN) // closing f still releases it if this fails
+	f.Close()
+}
+
 // flock opens path and takes the advisory lock how on it without waiting; a
 // held lock is ErrLocked.
 func flock(path string, how int) (*os.File, error) {
@@ -212,8 +222,8 @@ func bumpVersion(dir string) error {
 // LockHeld reports whether another command holds the lock, and the pid that
 // command wrote into the lock file. It creates nothing: a lock file that does
 // not exist is free. A held lock is confirmed after the same few quick
-// retries as takeLock, so a child process inheriting the lock for the instant
-// between its fork and its exec is not mistaken for a holder.
+// retries as takeLock, so the instant a killed holder's child keeps the lock
+// is not mistaken for a holder.
 func LockHeld(dir string) (held bool, pid string, err error) {
 	path := LockPath(dir)
 	f, err := os.Open(path)
@@ -223,11 +233,11 @@ func LockHeld(dir string) (held bool, pid string, err error) {
 	if err != nil {
 		return false, "", err
 	}
-	defer f.Close()
+	defer Unlock(f)
 	for attempt := 1; ; attempt++ {
 		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
 		if err == nil {
-			return false, "", nil // closing f releases the lock again
+			return false, "", nil // Unlock releases the lock again
 		}
 		if !errors.Is(err, syscall.EWOULDBLOCK) {
 			return false, "", fmt.Errorf("lock %s: %w", path, err)
