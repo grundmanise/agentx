@@ -21,6 +21,12 @@ import (
 //     version the skill was at), is refreshed: removed, its content
 //     retained beside it until the mutation is verified, and replaced by a
 //     copy of staged, the new library directory laid out for publishing.
+//     A copy holding something git cannot record, a nested repository or a
+//     named pipe, has no tree that says all of it, so it is judged byte for
+//     byte instead, as the journal fingerprints it: it is agentx's when it
+//     holds exactly placedBytes, what the library directory the mutation
+//     replaces holds, and "" when that is not asked, as it is not where the
+//     library holds nothing git cannot record.
 //   - A copy holding anything else was edited where it is and is kept byte
 //     for byte, skipped and named with the warning a placement gives a copy
 //     it keeps, see keepCopy.
@@ -45,7 +51,7 @@ import (
 // Every copy removed carries the fingerprint it held when it was judged,
 // so a copy edited between this plan and the step that removes it stops
 // the mutation rather than being discarded.
-func (inv *invocation) refreshCopies(m *home.Mutation, name, target string, placed []string, staged string, recorded []string, done *placements) {
+func (inv *invocation) refreshCopies(m *home.Mutation, name, target string, placed []string, placedBytes, staged string, recorded []string, done *placements) {
 	refreshed := map[string]bool{} // by canonicalPath, every path judged, true when its copy is refreshed
 	for _, t := range inv.detectedTargets() {
 		if t.readsLibrary || !slices.Contains(recorded, t.id) {
@@ -59,13 +65,13 @@ func (inv *invocation) refreshCopies(m *home.Mutation, name, target string, plac
 			}
 			continue
 		}
-		refreshed[key] = inv.refreshCopy(m, t, place, name, target, placed, staged, done)
+		refreshed[key] = inv.refreshCopy(m, t, place, name, target, placed, placedBytes, staged, done)
 	}
 }
 
 // refreshCopy judges and plans the one copy at place, as refreshCopies
 // says, and reports whether it is refreshed.
-func (inv *invocation) refreshCopy(m *home.Mutation, t placeTarget, place, name, target string, placed []string, staged string, done *placements) bool {
+func (inv *invocation) refreshCopy(m *home.Mutation, t placeTarget, place, name, target string, placed []string, placedBytes, staged string, done *placements) bool {
 	state, err := home.State(place)
 	if err != nil {
 		inv.skipRefresh(done, place, err)
@@ -83,7 +89,7 @@ func (inv *invocation) refreshCopy(m *home.Mutation, t placeTarget, place, name,
 	switch {
 	case clean && tree.ID == target:
 		return false
-	case clean && slices.Contains(placed, tree.ID):
+	case clean && slices.Contains(placed, tree.ID), !clean && placedBytes != "" && state == placedBytes:
 		fresh, fingerprint, err := stageRefresh(m, place, staged, target)
 		if err != nil {
 			inv.skipRefresh(done, place, err)

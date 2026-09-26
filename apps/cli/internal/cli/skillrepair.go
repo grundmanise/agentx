@@ -29,7 +29,8 @@ func newSkillRepairCommand(inv *invocation) *cobra.Command {
 			"replaced by the symlink when it holds the library's content; when it holds\n" +
 			"anything else, choose what survives: --keep-library discards the directory,\n" +
 			"--keep-placement makes its content the library's. A directory that differs\n" +
-			"from the library is never deleted without one of them.\n\n" +
+			"from the library is never deleted without one of them, and one that holds the\n" +
+			"directory a library entry is a symlink to is never replaced at all.\n\n" +
 			"To place the skill in one more client, run 'agentx skill place <name> --to <configuration>'.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -82,6 +83,7 @@ type repairPlace struct {
 	recordable bool   // the directory holds nothing git cannot record
 	skill      bool   // the directory holds a SKILL.md, so it can be a library directory
 	same       bool   // the directory holds exactly what the library directory holds
+	holds      string // the library entry whose directory the directory is or holds, see holdsLibraryDirectory
 	err        error  // what kept this machine from reading the place
 }
 
@@ -279,7 +281,10 @@ func (inv *invocation) repairRecord(sc skillContext, name string) (scan.LibraryS
 // replace the skill's only content with a link to itself. Detection counts
 // a client of the first two as reading the library, see scan.ReadsLibrary,
 // and drift finds nothing at the third, see isLibraryDirectory, so this
-// only stands guard.
+// only stands guard. A displaced directory that holds such a directory
+// deeper down, this skill's or another's, is still planned, and names the
+// entry in holds: the repair refuses it, since replacing it would delete
+// that skill's content, see refusal.
 //
 // A directory holds what the library directory holds when git would record
 // the two the same way. A tree leaves out what git cannot record, a nested
@@ -303,9 +308,8 @@ func (inv *invocation) planRepair(lib scan.LibrarySkill, targets []placeTarget, 
 			return repairPlan{}, libraryFailure(inv.dirs.Library, err)
 		}
 	}
-	library := canonicalPath(lib.Path)
 	for _, p := range ownPlaces(targets, inv.dirs.Library, lib.Name, disabled, copies) {
-		if !p.asked() || canonicalPath(p.path) == library || isLibraryDirectory(p.path, lib.Path) {
+		if !p.asked() || isLibraryDirectory(p.path, lib.Path) {
 			continue
 		}
 		word := p.drift(lib.Path)
@@ -315,6 +319,7 @@ func (inv *invocation) planRepair(lib scan.LibrarySkill, targets []placeTarget, 
 		place := repairPlace{placeSite: p, word: word}
 		place.state, place.err = home.State(p.path)
 		if place.err == nil && home.IsDir(place.state) {
+			place.holds, _ = holdsLibraryDirectory(p.path, inv.dirs.Library)
 			var tree treeid.Tree
 			if tree, place.err = treeid.Read(p.path); place.err == nil {
 				place.tree, place.recordable = tree.ID, len(tree.Unrecordable) == 0
@@ -335,8 +340,8 @@ func (plan repairPlan) signature() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s\x00%s\x00%d\x00%s\x00%s\n", plan.libState, plan.libTree.ID, len(plan.libTree.Unrecordable), plan.libBytes, strings.Join(plan.copies, ","))
 	for _, p := range plan.places {
-		fmt.Fprintf(&b, "%s\x00%s\x00%s\x00%s\x00%t\x00%t\x00%t\x00%t\x00%t\x00%s\x00%s\n",
-			p.path, p.word, p.state, p.tree, p.recordable, p.skill, p.same, p.copied, p.err != nil, strings.Join(p.enabled, ","), strings.Join(p.paths, ","))
+		fmt.Fprintf(&b, "%s\x00%s\x00%s\x00%s\x00%t\x00%t\x00%t\x00%s\x00%t\x00%t\x00%s\x00%s\n",
+			p.path, p.word, p.state, p.tree, p.recordable, p.skill, p.same, p.holds, p.copied, p.err != nil, strings.Join(p.enabled, ","), strings.Join(p.paths, ","))
 	}
 	return b.String()
 }
@@ -355,8 +360,21 @@ func (plan repairPlan) differing() []repairPlace {
 
 // refusal is why the plan cannot be carried out as chosen, nil when it can.
 // It is decided before the lock is taken, from what the first read found,
-// and nothing has been changed when it refuses.
+// and nothing has been changed when it refuses. The read under the lock
+// holds the plan to it: every input a refusal turns on, the library entry
+// in libState among them, is part of the signature that read has to give
+// again, so a library entry made a symlink meanwhile refuses the run there.
+//
+// A displaced directory that holds the directory a library entry leads to
+// is refused whatever the flags: every repair of a directory replaces it
+// with the symlink, and that would delete the skill's content with it.
 func (plan repairPlan) refusal(name string, choice repairChoice) error {
+	for _, p := range plan.places {
+		if p.holds != "" {
+			return fail(exitRefused, fmt.Sprintf("%s holds the directory the library entry %s leads to, and replacing it would delete that skill's content, so nothing was repaired", quotedPath(p.path), quotedPath(p.holds)),
+				"replace the link "+quotedPath(p.holds)+" with the directory it leads to, moving that out of "+quotedPath(p.path)+", then run '"+skillCommand("repair", name)+"' again")
+		}
+	}
 	differ := plan.differing()
 	if len(differ) == 0 {
 		return nil
@@ -365,16 +383,16 @@ func (plan repairPlan) refusal(name string, choice repairChoice) error {
 	for i, p := range differ {
 		paths[i] = quotedPath(p.path)
 	}
-	them, is := "it", "is a directory whose content differs"
+	them, is, their := "it", "is a directory whose content differs", "its"
 	if len(differ) > 1 {
-		them, is = "them", "are directories whose content differs"
+		them, is, their = "them", "are directories whose content differs", "their"
 	}
 	keepLibrary := "'" + skillCommand("repair", name, "--keep-library") + "'"
 	keepPlacement := "'" + skillCommand("repair", name, "--keep-placement") + "'"
 	switch choice {
 	case chooseNone:
 		return fail(exitRefused, fmt.Sprintf("%s %s from the library's %s, so nothing was repaired", strings.Join(paths, ", "), is, name),
-			"to keep the library's content and discard "+them+", run "+keepLibrary+"; to make "+directoryWord(len(differ))+" content the library's, run "+keepPlacement)
+			"to keep the library's content and discard "+them+", run "+keepLibrary+"; to make "+their+" content the library's, run "+keepPlacement)
 	case choosePlacement:
 		libPath := quotedPath(plan.lib.Path)
 		if target, isLink := home.LinkTarget(plan.libState); isLink {
@@ -399,21 +417,15 @@ func (plan repairPlan) refusal(name string, choice repairChoice) error {
 	return nil
 }
 
-// directoryWord is how the hint of a refusal names the content of the
-// directories it names: its own, or theirs.
-func directoryWord(n int) string {
-	if n > 1 {
-		return "their"
-	}
-	return "its"
-}
-
 // stageRepair plans, into m, the whole of a repair plan the lock-time read
 // agreed with. With --keep-placement the library directory is replaced
 // first, so every placement made after it holds what the library is to
 // hold, and the copies copy_mode records are refreshed or kept as a revert
 // refreshes or keeps them: a copy holding what the library directory held
 // or the base version, whose tree is base, is agentx's and is refreshed.
+// Where the library directory holds something git cannot record, a copy
+// placed from it holds that too, and is judged byte for byte against it,
+// as planRepair judges a displaced directory.
 func (inv *invocation) stageRepair(m *home.Mutation, plan repairPlan, choice repairChoice, base string, done *repaired) error {
 	name, libPath := plan.lib.Name, plan.lib.Path
 	p := libraryPlaceable(plan.lib)
@@ -430,7 +442,7 @@ func (inv *invocation) stageRepair(m *home.Mutation, plan repairPlan, choice rep
 		}
 		m.Remove(libPath, plan.libState)
 		m.Publish(libPath, staged, fingerprint)
-		inv.refreshCopies(m, name, kept.tree, []string{plan.libTree.ID, base}, staged, plan.copies, &done.refreshed)
+		inv.refreshCopies(m, name, kept.tree, []string{plan.libTree.ID, base}, plan.libBytes, staged, plan.copies, &done.refreshed)
 		p = placeable{name: name, hash: hash, stage: func(dest string) error { return copyTreeTo(staged, dest) }}
 		done.kept = kept.path
 	}
@@ -454,11 +466,13 @@ func (inv *invocation) stageRepairPlace(m *home.Mutation, p placeable, place rep
 		if !place.same && choice == chooseNone {
 			return // refused before the lock; never planned
 		}
-		if isLibraryDirectory(place.path, libPath) {
-			// The library's own directory, which planRepair never plans:
-			// removing it would take the skill's only content with it.
+		if entry, held := holdsLibraryDirectory(place.path, inv.dirs.Library); held {
+			// Neither read found a library entry leading into the
+			// directory, or the run would have refused. One made a symlink
+			// into it since is found here, and the directory is left:
+			// removing it would take that skill's content with it.
 			done.skipped = append(done.skipped, place.path)
-			inv.out.warn(place.path + " is the directory the library entry " + libPath + " leads to; it was left as it is")
+			inv.out.warn(place.path + " holds the directory the library entry " + entry + " leads to; it was left as it is")
 			return
 		}
 		// Only the symlink is written, and it is written where the directory

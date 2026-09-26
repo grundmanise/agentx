@@ -199,7 +199,7 @@ func (inv *invocation) stageRevert(m *home.Mutation, name, libPath, captured str
 	}
 	m.Remove(libPath, captured)
 	m.Publish(libPath, staged, fingerprint)
-	inv.refreshCopies(m, name, target, []string{edited}, staged, recorded, done)
+	inv.refreshCopies(m, name, target, []string{edited}, "", staged, recorded, done)
 	return nil
 }
 
