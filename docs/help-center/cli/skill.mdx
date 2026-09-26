@@ -590,7 +590,7 @@ agentx --json skill list
 
 `universal` lists every universal client on this machine, whether or not the command placed into it, and is `[]` when none is installed. `skill add` and `skill place` end their `result` summary with the same `always available to universal clients:` words as their text.
 
-The event carries two content hashes, and each name means one thing everywhere agentx uses it: `base_hash` is the version the skill was installed at, and `content_hash` is what the library directory holds now. `state` compares the files themselves, their permissions and symlinks included, so a skill whose only change is a file made executable is `modified` while its two hashes still agree.
+The event carries two content hashes at its top level: `base_hash` is the version the skill was installed at, and `content_hash` is what the library directory holds now. Both names mean the same at the top level of every event and snapshot entry agentx emits; inside `candidate`, described below, `content_hash` names the newer version instead. `state` compares the files themselves, their permissions and symlinks included, so a skill whose only change is a file made executable is `modified` while its two hashes still agree.
 
 `drift` lists every other way a managed skill has drifted, beside its `state`, and is absent when there is none. Its values are `displaced`, `missing`, `source removed` and `upstream removed`:
 
@@ -610,7 +610,7 @@ Read `drift` as a list: more values will join it, and a skill can be in several 
 
 `skill revert` and `skill repair` emit one `library_skill` event for the skill, with every placement, as `skill list` does. The `result` summary of `skill repair` counts the clients it repaired, as in `repaired pdf in 2 configurations`, and ends with `; the library now holds what <path> held` after `--keep-placement` or `; discarded what <path>, ... held` after `--keep-library`, naming every directory it discarded.
 
-A skill with an update carries `candidate`, the newer version the last check found, by its `upstream_commit` and `content_hash`:
+A skill with an update carries `candidate`, the newer version the last check found, by its own `upstream_commit` and `content_hash`. Inside `candidate` both name that newer version, not the version you installed and not what the library holds:
 
 ```json
 {"type":"library_skill","schema_version":1,"name":"pdf","kind":"managed",...,"state":"current","candidate":{"upstream_commit":"8b1e0f4a...","content_hash":"4c3b2a19..."},"placements":[...],"universal":["codex","gemini-cli"]}

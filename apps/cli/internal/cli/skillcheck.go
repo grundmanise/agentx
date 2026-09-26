@@ -70,6 +70,7 @@ const (
 	verdictCurrent verdict = iota // the source holds the base version, as an import would take it
 	verdictUpdate                 // the source holds another version, which the candidate pins
 	verdictRemoved                // the source holds no skill at the skill's subpath
+	verdictPresent                // the source holds the skill, but its newer version was not read or cannot be imported
 )
 
 // finding is one managed skill's verdict, with what the check writes for it
@@ -114,7 +115,7 @@ type removedSkill struct {
 // print and for the serve child to emit.
 type checkReport struct {
 	idle     bool // no managed skill comes from a source this machine has: nothing was fetched
-	fetched  int  // the sources that were fetched
+	fetched  int  // the sources that were fetched and that the settings still hold
 	checked  int  // the managed skills the check recorded a verdict for
 	updates  []updateAvailableEvent
 	removed  []removedSkill
@@ -174,11 +175,12 @@ func (rep checkReport) summary() string {
 
 // printCheck writes the text of a check: the summary, then one line per
 // skill with an update, the files it changes under it, and one line per
-// skill whose upstream removed it. A check that fetched no source has no
-// summary to give, and says so through its warnings alone.
+// skill whose upstream removed it. A check that fetched no source because
+// every fetch failed has no summary to give, and says so through its
+// warnings alone.
 func (inv *invocation) printCheck(rep checkReport) {
 	out := inv.out
-	if rep.fetched > 0 {
+	if rep.fetched > 0 || len(rep.failures) == 0 {
 		out.done(rep.summary())
 	}
 	for _, ev := range rep.updates {
@@ -297,7 +299,6 @@ func (inv *invocation) checkUpdates(ctx context.Context, wait, progress bool) (c
 			continue
 		}
 		fetched[res.Source.URL] = true
-		rep.fetched++
 		run.compare(ctx, res, recs)
 	}
 	importing := lineage.NewRun()
@@ -314,12 +315,20 @@ func (inv *invocation) checkUpdates(ctx context.Context, wait, progress bool) (c
 	if err != nil {
 		return rep, err
 	}
+	for url := range fetched {
+		if added[url] { // a source removed while the check ran is not one it checked
+			rep.fetched++
+		}
+	}
 	rep.failures = run.failures
 	checked := map[string]bool{} // the skills the check recorded a verdict for
 	for _, fd := range run.findings {
 		rec, ok := live[fd.name]
 		if !ok || rec.Commit != fd.tip || !added[fd.source] {
 			continue // the branch moved, or the source went, while the check ran: it recorded nothing for the skill
+		}
+		if fd.verdict == verdictPresent {
+			continue // a failure names the skill as not checked; the write only cleared its marker
 		}
 		checked[fd.name] = true
 		if fd.verdict == verdictRemoved {
@@ -357,9 +366,8 @@ func (inv *invocation) checkUpdates(ctx context.Context, wait, progress bool) (c
 // directory the library holds. One whose source was removed is left as it
 // is, since nothing names its source to fetch; one whose directory is gone
 // has nothing to update, and skill list names it in a warning instead. A
-// fork's base version is the last one merged into it, which its own history
-// holds, and it is a later check's: its record carries the same
-// coordinates, so it takes its place here once its base can be read.
+// fork is not checked: its base version is the last one merged into it,
+// which its own history holds and this check does not read.
 func (inv *invocation) checkable(records map[string]lineage.Record, s home.Settings) map[string][]lineage.Record {
 	added := sourceURLs(s)
 	bySource := map[string][]lineage.Record{}
@@ -445,7 +453,8 @@ func (c *checkRun) compare(ctx context.Context, res source.Result, recs []lineag
 	}
 	// A read that fails leaves every skill it was reading for unchecked,
 	// and the source's other skills stand: their verdicts need nothing it
-	// would have read.
+	// would have read. The source still holds every skill it was reading
+	// for, so none of them is upstream removed any longer.
 	unchecked := func(subpaths []string, err error) {
 		var f *failure
 		if !errors.As(err, &f) {
@@ -453,6 +462,9 @@ func (c *checkRun) compare(ctx context.Context, res source.Result, recs []lineag
 		}
 		var left []string
 		for _, p := range subpaths {
+			for _, rec := range bySubpath[p] {
+				c.found(rec, verdictPresent, nil)
+			}
 			left = append(left, skillNamesOf(bySubpath[p])...)
 		}
 		sort.Strings(left)
@@ -518,10 +530,13 @@ func (c *checkRun) found(rec lineage.Record, v verdict, set func(*finding)) {
 }
 
 // refused records that the newer version of every skill of recs cannot be
-// imported, for the reason f gives. Nothing is recorded for them: a
-// candidate an earlier check pinned stays where it is.
+// imported, for the reason f gives. Nothing about that version is recorded
+// for them, and a candidate an earlier check pinned stays where it is; the
+// source holds each of them all the same, so an upstream-removed marker
+// goes.
 func (c *checkRun) refused(recs []lineage.Record, f *failure) {
 	for _, rec := range recs {
+		c.found(rec, verdictPresent, nil)
 		c.failures = append(c.failures, checkFailure{skills: []string{rec.Name}, f: f})
 	}
 }
@@ -605,6 +620,8 @@ func (inv *invocation) recordCheck(ctx context.Context, gitDir string, wait bool
 				setCandidate = fd.candidate
 			case verdictRemoved:
 				setMarker = fd.marker
+			case verdictPresent: // the candidate stays as it is, whatever else was found for the skill
+				setCandidate = candidate
 			}
 			if candidate != setCandidate {
 				m.Ref(gitDir, lineage.CandidateRef(fd.name), candidate, setCandidate)

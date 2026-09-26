@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -254,7 +255,10 @@ func TestSourceAddRefetchesWhenTheServerRefusesSingleObjects(t *testing.T) {
 	equal(t, "fetches", fetches(out.stderr), 3)
 	// The full re-fetch lands on the staging ref like the blobless one: the
 	// source ref moves only once every blob is here.
-	contains(t, "stderr", out.stderr, "--no-show-forced-updates --refmap= --refetch --no-filter src-"+id+" +HEAD:"+source.StagingRef(id))
+	refetch := regexp.MustCompile(`--no-show-forced-updates --refmap= --refetch --no-filter src-` + id + ` \+HEAD:` + source.StagingRefPrefix + `[0-9a-f]{16}/` + id + `\n`)
+	if !refetch.MatchString(out.stderr) {
+		t.Errorf("stderr has no full re-fetch onto a staging ref of the fetch's own:\n%s", out.stderr)
+	}
 
 	// The re-fetch took everything, although the remote is still a promisor
 	// with a blob:none filter, so the account repo is whole.
@@ -1237,9 +1241,12 @@ func TestSourceAddKeepsTheRefWhenTheBlobsDoNotArrive(t *testing.T) {
 
 // TestSourceFetchReclaimsAStaleStagingRef covers what a fetch killed
 // between its two steps leaves behind. The staging ref is the one thing a
-// crash can leak; nothing reads it, the next fetch of the source overwrites
-// it and drops it, and a removal takes it with the source ref, so nothing
-// of a killed fetch outlives the source.
+// crash can leak, and nothing reads it. Each fetch stages on a ref of its
+// own, which no later fetch can tell from the ref of one still running, so
+// a killed fetch's ref stays until the source goes; the ref the configured
+// refspec names, where an older agentx staged every fetch, goes with the
+// next fetch as it always has. A removal takes both with the source ref,
+// so nothing of a killed fetch outlives the source.
 func TestSourceFetchReclaimsAStaleStagingRef(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -1248,19 +1255,21 @@ func TestSourceFetchReclaimsAStaleStagingRef(t *testing.T) {
 	head := s.commit("first version")
 	equal(t, "add", h.run("source", "add", s.url).exit, 0)
 	id := source.ID(s.url)
-	stale := source.StagingRef(id)
+	legacy := source.StagingRef(id)
+	killed := source.StagingRefPrefix + "0123456789abcdef/" + id
 
 	// What a fetch killed after its first step leaves: a ref on a commit
 	// whose blobs may not be here.
-	h.accountGit("update-ref", stale, head)
+	h.accountGit("update-ref", legacy, head)
+	h.accountGit("update-ref", killed, head)
 	out := h.run("--json", "source", "list")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "source list", out.stdout, head)
 
 	equal(t, "fetch", h.run("source", "fetch", s.url).exit, 0)
-	equal(t, "refs after the fetch", h.agentxRefs(), source.Ref(id))
+	equal(t, "refs after the fetch", h.agentxRefs(), killed+"\n"+source.Ref(id))
 
-	h.accountGit("update-ref", stale, head)
+	h.accountGit("update-ref", legacy, head)
 	equal(t, "remove", h.run("source", "remove", s.url).exit, 0)
 	equal(t, "refs after the removal", h.agentxRefs(), "")
 }

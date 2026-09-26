@@ -120,7 +120,7 @@ Fetching the sources the managed skills came from and comparing each skill's bas
 _Avoid_: sync, poll
 
 **Update candidate**:
-The import commit of the newer upstream version an update check found for a managed skill, pinned in the account repo until the user takes the update or a later check finds another version or none. The same commit an install of that version writes.
+The import commit of the newer upstream version an update check found for a managed skill, pinned in the account repo until a later check finds another version or none, or the skill is removed. The same commit an install of that version writes.
 _Avoid_: pending update, available version
 
 **Modified skill**:

@@ -2,6 +2,8 @@ package source
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"path"
@@ -19,11 +21,11 @@ import (
 const RefPrefix = "refs/agentx/sources/"
 
 // StagingRefPrefix is where a fetch in flight holds the commit it is still
-// filling in, one ref per source id. A fetch reaches a source over two
-// network round trips – the commit and its trees, then the SKILL.md blobs –
-// and between them there is a commit the account repo can read whose blobs
-// are not here yet. Staging keeps that commit off RefPrefix until it is
-// whole, so nothing that reads a source ref can see a half fetched one.
+// filling in, one ref per fetch. A fetch reaches a source over two network
+// round trips – the commit and its trees, then the SKILL.md blobs – and
+// between them there is a commit the account repo can read whose blobs are
+// not here yet. Staging keeps that commit off RefPrefix until it is whole,
+// so nothing that reads a source ref can see a half fetched one.
 const StagingRefPrefix = "refs/agentx/fetching/"
 
 // RemoteName is the account repo remote of the source with id.
@@ -33,8 +35,27 @@ func RemoteName(id string) string { return "src-" + id }
 // source with id.
 func Ref(id string) string { return RefPrefix + id }
 
-// StagingRef is the ref a fetch of the source with id stages on.
+// StagingRef is the ref the configured refspec of the source with id
+// names. Fetch stages on a ref of its own instead; this one is written only
+// by the full fetch FetchObjects falls back to, which takes the remote as
+// configured, and by an older agentx, which staged every fetch there.
+// Nothing reads it.
 func StagingRef(id string) string { return StagingRefPrefix + id }
+
+// stagingRunRef is the ref one fetch of the source with id stages on,
+// under a name of that fetch's own: two commands fetching the same source
+// at once, the serve child's update check and a source fetch among them,
+// never write, read or delete each other's staging ref. The run comes
+// first, since a ref under refs/agentx/fetching/<id>/ could not be written
+// beside the ref an older agentx left at refs/agentx/fetching/<id>.
+func stagingRunRef(run, id string) string { return StagingRefPrefix + run + "/" + id }
+
+// newFetchRun names one fetch's staging ref.
+func newFetchRun() string {
+	var b [8]byte
+	_, _ = rand.Read(b[:])
+	return hex.EncodeToString(b[:])
+}
 
 // Errors a fetch or a listing can report; the CLI maps them to exit codes.
 var (
@@ -76,12 +97,16 @@ type Listing struct {
 // refs/agentx/sources/<id> is written by the update-ref at the end of a
 // fetch and by nothing else: not by a fetch this code did not make, and
 // not by a refspec left behind by an older or interrupted run.
-func Refspec(s Source) string {
+func Refspec(s Source) string { return refspecOnto(s, StagingRef(s.ID())) }
+
+// refspecOnto is the refspec that fetches the source's pinned ref, or the
+// remote HEAD, onto dst.
+func refspecOnto(s Source, dst string) string {
 	src := "HEAD"
 	if s.Ref != "" {
 		src = s.Ref
 	}
-	return "+" + src + ":" + StagingRef(s.ID())
+	return "+" + src + ":" + dst
 }
 
 // Configure writes the source's remote into the account repo: its
@@ -161,7 +186,7 @@ func Remotes(ctx context.Context, r *gitx.Runner, gitDir string) map[string]Remo
 // instead. The remote must be configured.
 //
 // Nothing of this lands on the source ref until all of it has arrived. The
-// two fetches write a staging ref of this source alone, and the source ref
+// two fetches write a staging ref of this fetch alone, and the source ref
 // is moved onto the fetched object in one update-ref at the end, once every
 // SKILL.md blob of the new commit is in the account repo. A fetch that
 // fails anywhere therefore leaves the source ref exactly where the last
@@ -171,7 +196,7 @@ func Remotes(ctx context.Context, r *gitx.Runner, gitDir string) map[string]Remo
 func Fetch(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listing, error) {
 	id := s.ID()
 	name := RemoteName(id)
-	staging := StagingRef(id)
+	staging := stagingRunRef(newFetchRun(), id)
 	previous, _ := r.Isolated(ctx, gitDir, "rev-parse", "--verify", "--quiet", Ref(id)+"^{commit}")
 	// The refspec is built from the pin this call was given, which is the
 	// pin the settings hold, rather than left to remote.<name>.fetch: a
@@ -181,15 +206,17 @@ func Fetch(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listin
 	// the only one, since a refspec on the command line does not replace
 	// the configured one: git also updates that one opportunistically.
 	fetchArgs := baseFetchArgs()
-	refspec := Refspec(s)
+	refspec := refspecOnto(s, staging)
 	// The staging ref belongs to this fetch and goes with it, whether it
 	// finished or failed, so a failure leaves no ref behind and the objects
-	// it brought fall to the next maintenance. Only a crash can leak one,
-	// and the next fetch of the source overwrites it, source remove deletes
-	// it, and nothing reads it in between. The deletion outlives a cancelled
-	// context: it is a local ref write, and leaving the ref is worse.
+	// it brought fall to the next maintenance. Only a crash can leak one:
+	// nothing reads it, and source remove deletes it. The same write drops
+	// the ref the configured refspec names, as a fetch always has, which
+	// nothing reads either. The deletion outlives a cancelled context: it is
+	// a local ref write, and leaving the ref is worse.
 	defer func() {
-		_, _ = r.Isolated(context.WithoutCancel(ctx), gitDir, "update-ref", "-d", staging)
+		drop := "delete " + staging + "\ndelete " + StagingRef(id) + "\n"
+		_, _ = r.IsolatedInput(context.WithoutCancel(ctx), gitDir, strings.NewReader(drop), "update-ref", "--stdin")
 	}()
 	if _, err := r.User(ctx, gitDir, append(fetchArgs, noRefmap, "--filter=blob:none", name, refspec)...); err != nil {
 		if strings.Contains(err.Error(), "couldn't find remote ref") {
@@ -385,20 +412,28 @@ func ResolveRef(ctx context.Context, r *gitx.Runner, gitDir string, s Source, re
 	return "", nil
 }
 
-// Remove deletes the source's remote and ref from the account repo, and the
-// staging ref a fetch killed mid-flight can leave behind, so that removing a
-// source leaves nothing of it under refs/agentx. The objects stay until
-// maintenance reclaims them.
+// Remove deletes the source's remote and ref from the account repo, and
+// every staging ref a fetch of it killed mid-flight can leave behind, so
+// that removing a source leaves nothing of it under refs/agentx. The refs
+// go in one update-ref transaction. The objects stay until maintenance
+// reclaims them.
 func Remove(ctx context.Context, r *gitx.Runner, gitDir, id string) error {
 	if _, err := r.Isolated(ctx, gitDir, "config", "--get", "remote."+RemoteName(id)+".url"); err == nil {
 		if _, err := r.Isolated(ctx, gitDir, "remote", "remove", RemoteName(id)); err != nil {
 			return err
 		}
 	}
-	if _, err := r.Isolated(ctx, gitDir, "update-ref", "-d", StagingRef(id)); err != nil {
+	out, err := r.Isolated(ctx, gitDir, "for-each-ref", "--format=%(refname)", StagingRefPrefix)
+	if err != nil {
 		return err
 	}
-	_, err := r.Isolated(ctx, gitDir, "update-ref", "-d", Ref(id))
+	drop := []string{"delete " + StagingRef(id), "delete " + Ref(id)}
+	for _, ref := range strings.Split(out, "\n") {
+		if ref != StagingRef(id) && strings.HasSuffix(ref, "/"+id) {
+			drop = append(drop, "delete "+ref)
+		}
+	}
+	_, err = r.IsolatedInput(ctx, gitDir, strings.NewReader(strings.Join(drop, "\n")+"\n"), "update-ref", "--stdin")
 	return err
 }
 
