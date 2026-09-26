@@ -256,14 +256,14 @@ func (inv *invocation) removeAbsent(ctx context.Context, name string, from []str
 	if commit == "" || refs[lineage.ForkRef(name)] != "" {
 		return inv.noLibrarySkill(name)
 	}
-	if refs[lineage.MergeRef(name)] != "" {
-		return pendingMergeRefusal(name, "removed")
-	}
 	for _, id := range from {
 		if id != fromUniversal {
 			return fail(exitRefused, fmt.Sprintf("the library holds no skill directory for %s, so it cannot be removed from %s alone", name, id),
 				"take what is left of it off the machine with '"+skillCommand("remove", name)+"'")
 		}
+	}
+	if refs[lineage.MergeRef(name)] != "" {
+		return pendingMergeRefusal(name, "removed")
 	}
 	targets := inv.detectedTargets()
 	plan := removalPlan{name: name, whole: true, absent: true, from: targetIDs(targets)}

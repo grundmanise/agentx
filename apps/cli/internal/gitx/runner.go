@@ -195,6 +195,7 @@ func isolatedArgs(gitDir string, args []string) []string {
 		"-c", "core.autocrlf=false",
 		"-c", "commit.gpgsign=false",
 		"-c", "core.hooksPath=" + os.DevNull,
+		"-c", "core.attributesFile=" + os.DevNull,
 		"--git-dir=" + gitDir,
 	}, args...)
 }
@@ -343,11 +344,16 @@ func (r *Runner) lookPath() (string, error) {
 
 // childEnv builds the environment of one git process from the environment
 // map. The isolated environment drops every GIT_ variable of the user's,
-// fixes configuration, author and committer, and forbids the lazy fetch of
-// a missing object (git 2.45 and newer honour the variable), since it never
-// touches the network; the user environment is the map as is. Under serve,
-// both fail instead of prompting. dates, when it is not empty, replaces the
-// fixed author and committer dates for this one process.
+// fixes configuration, author and committer, reads no attributes of the
+// user's or the system's, so that no merge driver, filter or marker size
+// of theirs changes what git writes (isolatedArgs names no attributes file
+// in place of the one git reads under XDG_CONFIG_HOME when configuration
+// names none, and GIT_ATTR_NOSYSTEM drops the system's), and forbids the
+// lazy fetch of a missing object (git 2.45 and newer honour the variable),
+// since it never touches the network; the user environment is the map as
+// is. Under serve, both fail instead of prompting. dates, when it is not
+// empty, replaces the fixed author and committer dates for this one
+// process.
 func (r *Runner) childEnv(isolated bool, dates string) []string {
 	env := make(map[string]string, len(r.env)+12)
 	for k, v := range r.env {
@@ -359,6 +365,7 @@ func (r *Runner) childEnv(isolated bool, dates string) []string {
 	if isolated {
 		env["GIT_CONFIG_GLOBAL"] = os.DevNull
 		env["GIT_CONFIG_NOSYSTEM"] = "1"
+		env["GIT_ATTR_NOSYSTEM"] = "1"
 		env["GIT_NO_LAZY_FETCH"] = "1"
 		when := FixedDate
 		if dates != "" {

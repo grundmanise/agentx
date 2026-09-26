@@ -508,10 +508,8 @@ func changedWhileUpdating(name string) *failure {
 // otherwise, see upstreamRename.
 func upstreamNameOf(u *updating, bodies map[string]string) string {
 	name := ""
-	for _, e := range u.theirs.Entries {
-		if e.Path == "SKILL.md" && source.IsFileMode(e.Mode) {
-			name, _, _ = scan.SkillFrontmatter(bodies[e.OID])
-		}
+	if ids := skillFileBlob(u.theirs); len(ids) > 0 {
+		name, _, _ = scan.SkillFrontmatter(bodies[ids[0]])
 	}
 	return upstreamRename(u.name, name, u.next.Import.Dir())
 }
@@ -654,11 +652,15 @@ func (inv *invocation) recheckUpdate(u *updating, values map[string]string, sour
 // refreshed with the new one, see refreshCopies; and the candidate ref
 // deleted, with the candidate as its expected old value, which the journal
 // runs after every path step, so that a refusal on the way leaves it in
-// place.
+// place. What the library directory holds unchanged keeps its permissions,
+// see keepPerms.
 func (inv *invocation) stageUpdate(m *home.Mutation, gitDir string, u *updating, bodies map[string]string, recorded []string) error {
 	target := u.base.ID()
 	staged := m.Sibling(u.libPath, "staged")
 	fingerprint, err := stageBase(staged, u.base, target, bodies)
+	if err == nil {
+		err = keepPerms(staged, u)
+	}
 	if err != nil {
 		os.RemoveAll(staged)
 		return libraryFailure(inv.dirs.Library, err)
@@ -669,6 +671,74 @@ func (inv *invocation) stageUpdate(m *home.Mutation, gitDir string, u *updating,
 	m.Publish(u.libPath, staged, fingerprint)
 	inv.refreshCopies(m, u.name, target, u.placed, "", staged, recorded, &u.done)
 	m.Ref(gitDir, lineage.CandidateRef(u.name), u.next.Commit, "")
+	return nil
+}
+
+// keepPerms gives what the update laid out at staged the permissions the
+// library directory gives the same thing: a file the library holds at the
+// same path with the same content, and executable exactly when git records
+// it so, and a directory the library holds at the same path, the skill's
+// own included, both as the library's tree was read, never through a
+// symlink of it. A version is laid out with every file 0644, or 0755, and
+// every directory 0755, so a file of the user's they made private, 0600
+// say, which the update does not change, would otherwise come out of it
+// readable by everyone. The owner's execute bit of a file is never changed,
+// so the tree staged and its fingerprint stay what they were; a file the
+// update changes, and anything agentx could not read back or enter once
+// it was changed, is left as it was laid out. The library directory was
+// read again under the lock, so what it holds is what the update merged or
+// replaced.
+func keepPerms(staged string, u *updating) error {
+	held := map[string]string{}
+	for _, b := range u.tree.Blobs {
+		if !b.Link {
+			held[b.Path] = b.OID
+		}
+	}
+	dirs := map[string]bool{}
+	for _, d := range u.tree.Dirs {
+		dirs[d.Path] = true
+	}
+	keep := func(rel string, dir, executable bool) error {
+		info, err := os.Lstat(filepath.Join(u.libPath, filepath.FromSlash(rel)))
+		if err != nil {
+			return nil
+		}
+		perm := info.Mode().Perm()
+		switch {
+		case dir && (!info.IsDir() || perm&0o700 != 0o700):
+			return nil
+		case !dir && (!info.Mode().IsRegular() || perm&0o400 == 0 || (perm&0o100 != 0) != executable):
+			return nil
+		}
+		f, err := os.Open(filepath.Join(staged, filepath.FromSlash(rel)))
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		if laid, err := f.Stat(); err != nil || laid.Mode().Perm() == perm {
+			return err
+		}
+		if err := f.Chmod(perm); err != nil {
+			return err
+		}
+		return f.Sync()
+	}
+	if err := keep("", true, false); err != nil {
+		return err
+	}
+	for _, e := range u.base.Entries {
+		var err error
+		switch {
+		case e.Mode == source.DirMode && dirs[e.Path]:
+			err = keep(e.Path, true, false)
+		case source.IsFileMode(e.Mode) && held[e.Path] == e.OID:
+			err = keep(e.Path, false, e.Mode == source.ExecutableMode)
+		}
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

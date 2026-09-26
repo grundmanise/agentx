@@ -61,8 +61,8 @@ func TestEnvironments(t *testing.T) {
 	}
 	expect(t, "isolated", out,
 		[]string{
-			"-c core.autocrlf=false -c commit.gpgsign=false -c core.hooksPath=/dev/null --git-dir=/repo.git commit",
-			"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_NO_LAZY_FETCH=1",
+			"-c core.autocrlf=false -c commit.gpgsign=false -c core.hooksPath=/dev/null -c core.attributesFile=/dev/null --git-dir=/repo.git commit",
+			"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_ATTR_NOSYSTEM=1", "GIT_NO_LAZY_FETCH=1",
 			"GIT_AUTHOR_NAME=agentx", "GIT_AUTHOR_EMAIL=agentx@localhost", "GIT_AUTHOR_DATE=946684800 +0000",
 			"GIT_COMMITTER_NAME=agentx", "GIT_COMMITTER_EMAIL=agentx@localhost", "GIT_COMMITTER_DATE=946684800 +0000",
 			"HOME=/home/someone",
@@ -75,7 +75,7 @@ func TestEnvironments(t *testing.T) {
 	}
 	expect(t, "user", out,
 		[]string{"--git-dir=/repo.git fetch origin", "GIT_AUTHOR_NAME=Someone", "GIT_SSH_COMMAND=ssh -i /home/someone/key", "HOME=/home/someone"},
-		[]string{"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_NO_LAZY_FETCH=1", "AGENTX_LEAK=from the process", "GIT_ASKPASS=/bin/false"})
+		[]string{"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_ATTR_NOSYSTEM=1", "GIT_NO_LAZY_FETCH=1", "AGENTX_LEAK=from the process", "GIT_ASKPASS=/bin/false"})
 
 	serve := New(env, true, logf)
 	out, err = serve.run(ctx, call{}, "fetch")
@@ -179,6 +179,35 @@ func TestOpenAccountRepoCreatesOnceWithAgentxConfig(t *testing.T) {
 	}
 	if _, exists, err := CheckAccountRepo(ctx, r, home); err != nil || !exists {
 		t.Errorf("CheckAccountRepo after creation = %v, %v", exists, err)
+	}
+}
+
+// TestIsolatedReadsNoAttributesOfTheUsers: an attributes file of the
+// user's, the one git reads under XDG_CONFIG_HOME when no configuration
+// names one, sets nothing for a path in the isolated environment, where a
+// merge driver it named would decide how files merge; the user's own
+// environment still reads it.
+func TestIsolatedReadsNoAttributesOfTheUsers(t *testing.T) {
+	t.Parallel()
+	config := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(config, "git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(config, "git", "attributes"), []byte("*.md merge=union\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env := map[string]string{"PATH": os.Getenv("PATH"), "HOME": t.TempDir(), "XDG_CONFIG_HOME": config}
+	r := New(env, false, func(string, ...any) {})
+	ctx := context.Background()
+	gitDir := filepath.Join(t.TempDir(), "repo.git")
+	if _, err := r.Isolated(ctx, gitDir, "init", "--bare", "--quiet", gitDir); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := r.Isolated(ctx, gitDir, "check-attr", "merge", "--", "notes.md"); err != nil || got != "notes.md: merge: unspecified" {
+		t.Errorf("isolated check-attr = %q, %v; want the attribute unspecified", got, err)
+	}
+	if got, err := r.User(ctx, gitDir, "check-attr", "merge", "--", "notes.md"); err != nil || got != "notes.md: merge: union" {
+		t.Errorf("user check-attr = %q, %v; want the user's attribute", got, err)
 	}
 }
 
