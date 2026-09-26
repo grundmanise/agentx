@@ -347,7 +347,7 @@ func (inv *invocation) sourceSkills(ctx context.Context, arg string) error {
 	pinned := src
 	pinned.Ref = entry.Pin
 	if !exists {
-		return sourceFailure(fmt.Errorf("%w: %s", source.ErrNotFetched, src.URL), pinned)
+		return sourceFailure(source.NotFetched(src.URL), pinned)
 	}
 	listing, err := source.List(ctx, inv.git, gitDir, src)
 	if err != nil {

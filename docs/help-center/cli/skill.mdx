@@ -30,7 +30,7 @@ error: no source with id 1c9d0b7e4a2f6d38: https://github.com/anthropics/skills 
 hint: run 'agentx source add https://github.com/anthropics/skills' to add it again
 ```
 
-A source you already added is not fetched again. The install reads what that source last fetched, so it never surprises you with a version you have not seen, and the result says when that fetch was. Add `--fetch` to fetch the source again first, or run `agentx source fetch`:
+A source you already added is not fetched again. The install reads what that source last fetched, whether you fetched it or the [desktop app's background process](/cli/serve#update-checks) did, and the result says when that fetch was. Add `--fetch` to fetch the source again first, or run `agentx source fetch`:
 
 ```sh
 agentx skill add anthropics/skills --skill pdf --fetch
@@ -529,7 +529,7 @@ Nothing is applied. Your library, your clients and your edits stay exactly as th
 
 Run the check again whenever you like. It lists every update available, including the ones an earlier check found, except for a skill it could not check this time, which it names in a warning; `agentx skill list` still shows that skill's update. A newer version upstream replaces the one found before. A change that does not reach your library, such as a symlink in the source, which agentx never installs, is not an update. If a newer version gives the skill another name, the check says so; the skill keeps the name you installed it under.
 
-The [desktop app's background process](/cli/serve#update-checks) runs the same check when it starts and every thirty minutes.
+The [desktop app's background process](/cli/serve#update-checks) runs the same check when it starts and every thirty minutes, and fetches every other source you added in the same pass.
 
 ### Read an update
 

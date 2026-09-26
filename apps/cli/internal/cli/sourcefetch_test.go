@@ -22,7 +22,8 @@ const backdated = "2000-01-01T00:00:00Z"
 
 // backdate sets the last_fetched of every source in the settings file to
 // backdated, without going through a mutation: the file is replaced whole,
-// which is what a settings write does anyway.
+// in one rename, which is what a settings write does anyway, so that a
+// serve child reading the settings meanwhile reads one file or the other.
 func backdate(t *testing.T, h *harness) {
 	t.Helper()
 	file := readSettingsFile(t, h)
@@ -33,7 +34,11 @@ func backdate(t *testing.T, h *harness) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(h.agentx, "settings.json"), append(b, '\n'), 0o644); err != nil {
+	path := filepath.Join(h.agentx, "settings.json")
+	if err := os.WriteFile(path+".backdated", append(b, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(path+".backdated", path); err != nil {
 		t.Fatal(err)
 	}
 }

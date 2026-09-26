@@ -4,16 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"path/filepath"
+	"regexp"
 	"slices"
-	"sync/atomic"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
-	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 	"github.com/grundmanise/agentx/apps/cli/internal/serve"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
@@ -149,27 +149,17 @@ func newServeCommand(inv *invocation) *cobra.Command {
 			// drift is told against. Snapshots are reported from the loop's
 			// goroutine alone, so nothing else touches it.
 			var library map[string]scan.LibraryEntry
-			// Whether an update check has anything to look at, which the
-			// library of the last snapshot says without a git process: a
-			// managed skill whose source the settings hold. A check runs on
-			// a goroutine of its own, hence the atomic. Without --json the
-			// snapshot lists no library, and a check runs whenever the
-			// settings hold a source, which it reads for itself.
-			var checkable atomic.Bool
-			checkable.Store(!inv.out.json)
+			// The sources the checks could not fetch, which the report of
+			// each check reads and rewrites on the loop's goroutine.
+			failing := sourceFailures{}
 			err = serve.Run(cmd.Context(), serve.Options{
-				Scan:  func(ctx context.Context) (scan.Snapshot, error) { return inv.snapshot(ctx, 0, "", false) },
-				Index: inv.sourceIndex,
-				Watch: dirs,
-				Trees: trees,
-				Once:  once,
-				Stdin: cmd.InOrStdin(),
-				Check: func(ctx context.Context) func() {
-					if !checkable.Load() {
-						return nil
-					}
-					return inv.serveCheck(ctx)
-				},
+				Scan:       func(ctx context.Context) (scan.Snapshot, error) { return inv.snapshot(ctx, 0, "", false) },
+				Index:      inv.sourceIndex,
+				Watch:      dirs,
+				Trees:      trees,
+				Once:       once,
+				Stdin:      cmd.InOrStdin(),
+				Check:      func(ctx context.Context) func() { return inv.serveCheck(ctx, failing) },
 				CheckEvery: every,
 				Snapshot: func(snap scan.Snapshot) {
 					inv.out.emit(snapshotEvent{event: newEvent("snapshot"), Snapshot: snap})
@@ -179,9 +169,6 @@ func newServeCommand(inv *invocation) *cobra.Command {
 						inv.out.emit(ev)
 					}
 					library = libraryByName(snap.Library)
-					if inv.out.json {
-						checkable.Store(hasCheckable(snap.Library))
-					}
 				},
 				RefreshComplete: func(id string, counter int, err error) {
 					ev := refreshCompleteEvent{event: newEvent("refresh_complete"), RequestID: id, InstanceID: inv.instanceID(), OK: err == nil, ScanCounter: counter}
@@ -212,26 +199,31 @@ func newServeCommand(inv *invocation) *cobra.Command {
 	return cmd
 }
 
-// serveCheck is the update check of the serve child, run off its loop on
-// the timer: the check skill check runs, waiting for the lock rather than
-// giving up on it, since it runs in the background and a command holding
-// the lock for a moment is no reason to drop what it fetched. It reports
-// nothing as it goes and never ends serve: the report it returns is made on
-// the loop's goroutine and carries one update_available per update, with
-// this process's instance id, and one warning per source or skill it could
-// not check, which serve logs on every check. The rescan its write of the
-// version file sets off brings the candidates and markers it wrote into the
-// next snapshot.
-func (inv *invocation) serveCheck(ctx context.Context) func() {
-	rep, err := inv.checkUpdates(ctx, true, false)
+// serveCheck is one tick of the serve child's timer, run off its loop: the
+// update check skill check runs, over every source of the settings rather
+// than only the sources a managed skill came from, so that one pass fetches
+// each source once, whether or not a skill was installed from it, and the
+// source index follows what they hold now. It waits for the lock rather
+// than giving up on it, since it runs in the background and a command
+// holding the lock for a moment is no reason to drop what it fetched. It
+// reports nothing as it goes and never ends serve: the report it returns is
+// made on the loop's goroutine and carries one update_available per update,
+// with this process's instance id, and the warnings of what the check could
+// not check, a source it could not fetch once per cause (see
+// sourceFailures). A machine with no source runs no git at all, and neither
+// does one with no account repo; a source an import wrote stays a source
+// not fetched, account repo or not, until source add adds it. The rescan
+// its write of the version file sets off brings the candidates and markers
+// it wrote into the next snapshot, and every source ref it moved into the
+// source index.
+func (inv *invocation) serveCheck(ctx context.Context, failing sourceFailures) func() {
+	rep, err := inv.checkUpdates(ctx, true)
 	return func() {
 		if err != nil {
 			inv.out.warn("update check: " + err.Error())
 			return
 		}
-		for _, cf := range rep.failures {
-			inv.out.warn("update check: " + cf.warning())
-		}
+		failing.report(inv.out, rep)
 		for _, note := range rep.notes {
 			inv.out.warn("update check: " + note)
 		}
@@ -244,16 +236,68 @@ func (inv *invocation) serveCheck(ctx context.Context) func() {
 	}
 }
 
-// hasCheckable reports whether a snapshot's library holds a skill an update
-// check looks at: a managed skill whose source the settings still hold.
-func hasCheckable(entries []scan.LibraryEntry) bool {
-	for _, e := range entries {
-		if e.Kind == lineage.KindManaged && e.Source != "" && !slices.Contains(e.Drift, driftSourceRemoved) {
-			return true
+// sourceFailures is what the serve child remembers from one check to the
+// next of the sources it could not fetch: by canonical URL, the cause each
+// one last failed with. It lives in the serve process alone, and only the
+// report of a check reads or writes it, on the loop's goroutine, one report
+// at a time.
+type sourceFailures map[string]string
+
+// report logs what a check could not check. A source that could not be
+// fetched is logged on every check but surfaced once: a warning when it
+// starts failing, another only when the cause changes, and a note when it
+// is fetched again, so that a machine that is offline is not warned about
+// the same source on every tick; the checks in between log it at debug
+// level. A source that goes from the settings is forgotten without a note.
+// Everything else a check could not check, a skill's newer version it
+// cannot import or a source it fetched but could not read, is a warning on
+// every check, as it is in skill check.
+func (sf sourceFailures) report(out *writer, rep checkReport) {
+	now := sourceFailures{}
+	for _, cf := range rep.failures {
+		line := "update check: " + cf.warning()
+		if !cf.fetch {
+			out.warn(line)
+			continue
+		}
+		cause := failureCause(cf.f.message)
+		if last, ok := sf[cf.source]; ok && last == cause {
+			out.debugf("%s", line)
+		} else {
+			out.warn(line)
+		}
+		now[cf.source] = cause
+	}
+	var recovered []string
+	for url := range sf {
+		if _, still := now[url]; !still && rep.refreshed[url] {
+			recovered = append(recovered, url)
 		}
 	}
-	return false
+	slices.Sort(recovered)
+	for _, url := range recovered {
+		out.info("update check: " + url + " can be fetched again")
+	}
+	clear(sf)
+	maps.Copy(sf, now)
 }
+
+// failureCause is what tells one cause of a failed fetch from another: the
+// message as a person reads it, less what differs on every attempt with the
+// same cause, which only keys the memory and is never shown.
+func failureCause(message string) string {
+	return perAttempt.ReplaceAllString(sanitised(message), "")
+}
+
+// perAttempt is what a failed fetch reports that differs from one attempt
+// to the next, in the words git relays from curl and ssh: how long a
+// connection took to fail ("after 2034 ms", "after 300001 milliseconds"),
+// how many bytes came before it did ("with 0 out of 0 bytes received",
+// "with 1234 bytes remaining to read"), and which address of the host
+// answered ("Connection closed by 140.82.121.4 port 22").
+var perAttempt = regexp.MustCompile(` after [0-9]+ (ms|milliseconds)\b` +
+	`| with [0-9]+ (out of [0-9]+ )?bytes (received|remaining to read)\b` +
+	`| by [0-9A-Fa-f.:]+ port [0-9]+\b`)
 
 // watchedDirs are the directories a change signal can come from, most
 // important first: agentx home holds the version file every mutation
