@@ -1182,17 +1182,9 @@ func (inv *invocation) reportRepaired(ctx context.Context, name string, done *re
 		out.print(out.paint(heading, sanitised(name)), " has no missing or displaced placement; nothing was repaired")
 		return nil
 	}
-	skipped := len(done.skipped) + len(done.refreshed.skipped)
-	inv.summary = fmt.Sprintf("repaired %s in %s", name, plural(len(done.rows), "configuration"))
-	line := "repaired " + out.paint(heading, sanitised(name)) + " in " + out.paint(noteStyle, plural(len(done.rows), "configuration"))
-	if n := len(done.refreshed.copies); n > 0 {
-		inv.summary += ", " + plural(n, "copy placement") + " refreshed"
-		line += ", " + out.paint(noteStyle, plural(n, "copy placement")+" refreshed")
-	}
-	if skipped > 0 {
-		inv.summary += ", " + plural(skipped, "placement") + " skipped"
-		line += ", " + out.paint(warnStyle, plural(skipped, "placement")+" skipped")
-	}
+	note, painted := copiesNote(out, len(done.refreshed.copies), len(done.skipped)+len(done.refreshed.skipped))
+	inv.summary = fmt.Sprintf("repaired %s in %s", name, plural(len(done.rows), "configuration")) + note
+	line := "repaired " + out.paint(heading, sanitised(name)) + " in " + out.paint(noteStyle, plural(len(done.rows), "configuration")) + painted
 	if done.kept != "" {
 		inv.summary += "; the library now holds what " + done.kept + " held"
 	}

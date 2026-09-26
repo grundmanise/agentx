@@ -242,15 +242,13 @@ func TestSkillUpdateAllSkipsOnlyModifiedSkills(t *testing.T) {
 	contains(t, "the warning", out.stderr, "warning: beta was edited since it was installed, so it was not updated")
 }
 
-// TestSkillUpdateAllReportsEachRefusalAndGoesOn: a run over every skill
-// with an update gives up on each skill that refuses, names it in a
-// warning, and updates the rest. Its exit code is the one the refusals
-// agree on, here the removed source's 5 alone, and 6 once a second
-// refusal disagrees; the error names every skill it gave up on.
-func TestSkillUpdateAllReportsEachRefusalAndGoesOn(t *testing.T) {
-	t.Parallel()
-	h, s, _ := updateHarness(t)
-	other := h.newSourceRepo("other", true)
+// otherSourceHarness is updateHarness with a second source holding gamma,
+// installed too, and a check that found an update for all three skills:
+// alpha's second version, beta revised and gamma revised.
+func otherSourceHarness(t *testing.T) (h *harness, s, other *sourceRepo) {
+	t.Helper()
+	h, s, _ = updateHarness(t)
+	other = h.newSourceRepo("other", true)
 	other.skill("gamma", "gamma", "A skill of the other source", nil)
 	other.commit("gamma")
 	h.mustRun("skill", "add", other.url)
@@ -265,39 +263,117 @@ func TestSkillUpdateAllReportsEachRefusalAndGoesOn(t *testing.T) {
 			t.Fatalf("the check pinned no candidate for %s", name)
 		}
 	}
-	h.mustRun("source", "remove", other.url)
+	return h, s, other
+}
 
-	out := h.run("--json", "skill", "update", "--all")
-	equal(t, "exit", out.exit, 5)
-	gammaRefusal := "gamma was installed from " + other.url + ", which was removed from this machine, so it is not updated"
-	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "gamma: "+gammaRefusal)
-	e := h.one(out.stdout, "error")
-	equal(t, "code", e["code"], "not_found")
-	equal(t, "message", e["message"], "1 of 3 skills could not be updated: gamma: "+gammaRefusal)
-	equal(t, "hint", e["hint"], "run 'agentx source add "+other.url+"' to add it again")
+// updatedNames is the skills a run's library_skill events name, in order.
+func updatedNames(h *harness, stdout string) string {
 	var updated []string
-	for _, ev := range h.eventsOfType(out.stdout, "library_skill") {
+	for _, ev := range h.eventsOfType(stdout, "library_skill") {
 		updated = append(updated, ev["name"].(string))
 	}
-	equal(t, "updated", strings.Join(updated, ", "), "alpha, beta")
-	if h.ref(lineage.CandidateRef("gamma")) == "" {
-		t.Error("gamma's candidate went with a refused update")
-	}
+	return strings.Join(updated, ", ")
+}
 
-	// A second refusal of another kind: delta's library directory is gone.
+// TestSkillUpdateAllSkipsASkillWhoseSourceWasRemoved: a run over every
+// skill skips a skill whose source was removed from this machine, as it
+// skips a modified one. A warning says why and names the command that adds
+// the source again, the other skills are updated, and the run exits 0 with
+// no error: removing a source is the user's own choice, and a check keeps
+// the update it found for the skill for as long as the source is gone, so
+// a failure here would fail every later run too. The skill keeps its
+// version and that update. Updating it by name still refuses with exit
+// code 5, and a later run with nothing else to update skips it again and
+// still exits 0.
+func TestSkillUpdateAllSkipsASkillWhoseSourceWasRemoved(t *testing.T) {
+	t.Parallel()
+	h, _, other := otherSourceHarness(t)
+	gammaTip, gammaCandidate := h.ref(lineage.ManagedRef("gamma")), h.ref(lineage.CandidateRef("gamma"))
+	gammaTree := libraryTree(t, filepath.Join(h.library, "gamma"))
+	h.mustRun("source", "remove", other.url)
+	refusal := "gamma was installed from " + other.url + ", which was removed from this machine, so it is not updated"
+	hint := "run 'agentx source add " + other.url + "' to add it again"
+
+	out := h.run("--json", "skill", "update", "--all")
+	equal(t, "exit", out.exit, 0)
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), refusal+"; "+hint)
+	if got := h.eventsOfType(out.stdout, "error"); len(got) != 0 {
+		t.Errorf("a run that skipped a skill of a removed source failed: %v", got)
+	}
+	equal(t, "summary", h.one(out.stdout, "result")["summary"],
+		"updated 2 skills, 4 copy placements refreshed, 1 skill from a removed source skipped")
+	equal(t, "updated", updatedNames(h, out.stdout), "alpha, beta")
+	equal(t, "beta's notes", fileBody(t, filepath.Join(h.library, "beta", "notes.md")), "beta notes, revised\n")
+	equal(t, "gamma's branch", h.ref(lineage.ManagedRef("gamma")), gammaTip)
+	equal(t, "gamma's candidate", h.ref(lineage.CandidateRef("gamma")), gammaCandidate)
+	sameTree(t, "gamma's library directory", libraryTree(t, filepath.Join(h.library, "gamma")), gammaTree)
+
+	one := h.run("--json", "skill", "update", "gamma")
+	equal(t, "exit of an update of gamma by name", one.exit, 5)
+	e := h.one(one.stdout, "error")
+	equal(t, "code", e["code"], "not_found")
+	equal(t, "message", e["message"], refusal)
+	equal(t, "hint", e["hint"], hint)
+
+	h.mustRun("skill", "check")
+	equal(t, "gamma's candidate after another check", h.ref(lineage.CandidateRef("gamma")), gammaCandidate)
+	again := h.run("skill", "update", "--all")
+	equal(t, "exit of the next run", again.exit, 0)
+	equal(t, "the text of the next run", again.stdout, "no skill was updated, 1 skill from a removed source skipped\n")
+	equal(t, "the warning of the next run", again.stderr, "warning: "+refusal+"\n  "+hint+"\n")
+	equal(t, "gamma's candidate after the next run", h.ref(lineage.CandidateRef("gamma")), gammaCandidate)
+}
+
+// TestSkillUpdateAllReportsEachRefusalAndGoesOn: a run over every skill
+// with an update gives up on each skill that refuses, before the lock or
+// while it reads the version it lays out, names it in a warning, and
+// updates the rest. Here delta's library directory is gone, which is exit
+// code 6, and beta's candidate holds no directory of beta's, which is the
+// account repo's exit code 8; refusals that disagree end the run with 6,
+// the hint of a mixed run and an error naming every skill it gave up on.
+// A skill of a removed source is skipped all the same and is not among
+// them.
+func TestSkillUpdateAllReportsEachRefusalAndGoesOn(t *testing.T) {
+	t.Parallel()
+	h, s, other := otherSourceHarness(t)
+	h.mustRun("skill", "update", "alpha")
 	s.skill("skills/delta", "delta", "The fourth skill", nil)
 	s.commit("delta")
 	h.mustRun("skill", "add", s.url, "--skill", "delta", "--fetch")
+	s.write("skills/alpha-dir/notes.md", "alpha notes, revised again\n")
 	s.skill("skills/delta", "delta", "The fourth skill, revised", nil)
-	s.commit("delta revised")
+	s.commit("alpha and delta revised")
 	h.mustRun("skill", "check")
+	h.mustRun("source", "remove", other.url)
+	for _, name := range []string{"alpha", "beta", "delta", "gamma"} {
+		if h.ref(lineage.CandidateRef(name)) == "" {
+			t.Fatalf("the check pinned no candidate for %s", name)
+		}
+	}
 	remove(t, filepath.Join(h.library, "delta"))
-	mixed := h.run("--json", "skill", "update", "--all")
-	equal(t, "exit of a run whose refusals disagree", mixed.exit, 6)
-	e = h.one(mixed.stdout, "error")
+	// beta's candidate carries its lineage over a tree that holds delta's
+	// directory and not beta's.
+	message := h.accountGit("log", "-1", "--format=%B", lineage.CandidateRef("beta"))
+	elsewhere := h.accountGit("commit-tree", h.accountGit("rev-parse", lineage.ManagedRef("delta")+"^{tree}"), "-m", message)
+	h.accountGit("update-ref", lineage.CandidateRef("beta"), elsewhere)
+	betaTip := h.ref(lineage.ManagedRef("beta"))
+
+	out := h.run("--json", "skill", "update", "--all")
+	equal(t, "exit", out.exit, 6)
+	delta := "delta is managed in the account repo but the library holds no skill directory for it, so there is nothing to update"
+	beta := `not an import commit: refs/heads/managed/beta holds "delta" beside beta`
+	gamma := "gamma was installed from " + other.url + ", which was removed from this machine, so it is not updated; run 'agentx source add " + other.url + "' to add it again"
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), strings.Join([]string{"delta: " + delta, gamma, "beta: " + beta}, "\n"))
+	e := h.one(out.stdout, "error")
 	equal(t, "code", e["code"], "refused")
-	contains(t, "message", e["message"].(string), "2 of 2 skills could not be updated: delta: delta is managed in the account repo but the library holds no skill directory for it, so there is nothing to update; gamma: ")
+	equal(t, "message", e["message"], "2 of 4 skills could not be updated: delta: "+delta+"; beta: "+beta)
 	equal(t, "hint", e["hint"], "run 'agentx skill list' to see which skills have an update, then update the rest one at a time")
+	equal(t, "updated", updatedNames(h, out.stdout), "alpha")
+	equal(t, "alpha's notes", fileBody(t, filepath.Join(h.library, "alpha", "notes.md")), "alpha notes, revised again\n")
+	equal(t, "beta's branch", h.ref(lineage.ManagedRef("beta")), betaTip)
+	equal(t, "beta's candidate", h.ref(lineage.CandidateRef("beta")), elsewhere)
+	equal(t, "beta's notes", fileBody(t, filepath.Join(h.library, "beta", "notes.md")), "beta notes\n")
+	equal(t, "journals", journalCount(t, h), 0)
 }
 
 // TestSkillUpdateAllRefusesASkillGitCannotRecord: in a run over every
@@ -446,14 +522,23 @@ func upstreamRemoved(t *testing.T, h *harness, s *sourceRepo) {
 	h.mustRun("skill", "check")
 }
 
+// withoutLineage points beta's import branch at a commit of the version it
+// holds whose message carries no lineage.
+func withoutLineage(t *testing.T, h *harness, _ *sourceRepo) {
+	t.Helper()
+	tree := h.accountGit("rev-parse", lineage.ManagedRef("beta")+"^{tree}")
+	h.accountGit("update-ref", lineage.ManagedRef("beta"), h.accountGit("commit-tree", tree, "-m", "no lineage"))
+}
+
 // TestSkillUpdateRefusesInOrder is every skill update refuses, one name at
 // a time, each with its code, its message and its hint, and each where the
-// order of the checks puts it: a removed source before an upstream that no
-// longer holds the skill, and both before whether there is an update at
-// all, which comes before whether the skill holds something git cannot
-// record, and that before whether it was edited. A skill with no
-// update is nothing to do and exits 0. None of them changes a ref, the
-// library or a placement, or leaves a journal.
+// order of the checks puts it: an import branch agentx cannot read before
+// a removed source, a removed source before an upstream that no longer
+// holds the skill, and both before whether there is an update at all,
+// which comes before whether the skill holds something git cannot record,
+// and that before whether it was edited. A skill with no update is nothing
+// to do and exits 0. None of them changes a ref, the library or a
+// placement, or leaves a journal.
 func TestSkillUpdateRefusesInOrder(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
@@ -489,6 +574,23 @@ func TestSkillUpdateRefusesInOrder(t *testing.T) {
 			setup:   func(t *testing.T, h *harness, _ *sourceRepo) { remove(t, filepath.Join(h.library, "beta")) },
 			message: "beta is managed in the account repo but the library holds no skill directory for it, so there is nothing to update",
 			hint:    "run 'agentx skill add %URL% --skill beta' to install it again, or 'agentx skill remove beta' to stop managing it",
+		},
+		{
+			name: "a managed skill whose import branch records no version agentx can read", skill: "beta", exit: 6,
+			setup:   withoutLineage,
+			message: "the import branch refs/heads/managed/beta records no version agentx can read",
+			hint:    "run 'agentx doctor' and check the account repo it names",
+		},
+		{
+			// A branch with no lineage names no source, which no settings
+			// entry holds either.
+			name: "a managed skill whose import branch records no version agentx can read, from a removed source", skill: "beta", exit: 6,
+			setup: func(t *testing.T, h *harness, s *sourceRepo) {
+				withoutLineage(t, h, s)
+				h.mustRun("source", "remove", s.url)
+			},
+			message: "the import branch refs/heads/managed/beta records no version agentx can read",
+			hint:    "run 'agentx doctor' and check the account repo it names",
 		},
 		{
 			name: "a skill with an update whose source was removed", skill: "alpha", exit: 5,
@@ -686,22 +788,7 @@ func TestSkillUpdateRefusesWhatChangedBeforeTheLock(t *testing.T) {
 		{
 			name: "the source is removed",
 			change: func(t *testing.T, h *harness, s *sourceRepo, _, _ string) string {
-				settings, err := home.LoadSettings(h.agentx)
-				if err != nil {
-					t.Fatal(err)
-				}
-				settings.RemoveSource(s.url)
-				b, err := home.MarshalSettings(settings)
-				if err != nil {
-					t.Fatal(err)
-				}
-				without := filepath.Join(t.TempDir(), "settings.json")
-				writeFile(t, without, string(b))
-				cp, err := exec.LookPath("cp")
-				if err != nil {
-					t.Fatal(err)
-				}
-				return cp + " " + shellWord(without) + " " + shellWord(home.SettingsPath(h.agentx))
+				return removingSource(t, h, s.url)
 			},
 			exit:   5,
 			branch: "tip", candidate: "candidate", notes: "alpha notes\n",
@@ -754,6 +841,69 @@ exec `+real+` "$@"
 			}
 		})
 	}
+}
+
+// removingSource is a shell line that leaves the settings of h's agentx
+// home without the source at url, as removing it does, for a git wrapper to
+// run while a command is under way.
+func removingSource(t *testing.T, h *harness, url string) string {
+	t.Helper()
+	settings, err := home.LoadSettings(h.agentx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings.RemoveSource(url)
+	b, err := home.MarshalSettings(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	without := filepath.Join(t.TempDir(), "settings.json")
+	writeFile(t, without, string(b))
+	cp, err := exec.LookPath("cp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cp + " " + shellWord(without) + " " + shellWord(home.SettingsPath(h.agentx))
+}
+
+// TestSkillUpdateAllSkipsASkillWhoseSourceIsRemovedBeforeTheLock: a source
+// removed while a run over every skill reads the versions it lays out,
+// after its skills were judged and before the lock, is found under the
+// lock, and its skill is skipped there as it would have been before: the
+// same warning, the other skills updated, no error and exit code 0. The
+// skill keeps its version and its candidate, and nothing of its update is
+// staged or left behind.
+func TestSkillUpdateAllSkipsASkillWhoseSourceIsRemovedBeforeTheLock(t *testing.T) {
+	t.Parallel()
+	h, _, other := otherSourceHarness(t)
+	gammaTip, gammaCandidate := h.ref(lineage.ManagedRef("gamma")), h.ref(lineage.CandidateRef("gamma"))
+	gammaTree := libraryTree(t, filepath.Join(h.library, "gamma"))
+	real, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stubGit(t, h, `#!/bin/sh
+case " $* " in
+*" ls-tree "*) `+removingSource(t, h, other.url)+` || exit 1 ;;
+esac
+exec `+real+` "$@"
+`)
+
+	out := h.run("--json", "skill", "update", "--all")
+	equal(t, "exit", out.exit, 0)
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"),
+		"gamma was installed from "+other.url+", which was removed from this machine, so it is not updated; run 'agentx source add "+other.url+"' to add it again")
+	if got := h.eventsOfType(out.stdout, "error"); len(got) != 0 {
+		t.Errorf("a run that skipped a skill of a removed source failed: %v", got)
+	}
+	equal(t, "summary", h.one(out.stdout, "result")["summary"],
+		"updated 2 skills, 4 copy placements refreshed, 1 skill from a removed source skipped")
+	equal(t, "updated", updatedNames(h, out.stdout), "alpha, beta")
+	equal(t, "gamma's branch", h.ref(lineage.ManagedRef("gamma")), gammaTip)
+	equal(t, "gamma's candidate", h.ref(lineage.CandidateRef("gamma")), gammaCandidate)
+	sameTree(t, "gamma's library directory", libraryTree(t, filepath.Join(h.library, "gamma")), gammaTree)
+	equal(t, "journals", journalCount(t, h), 0)
+	equal(t, "what is left beside the library", strings.Join(hiddenEntries(t, h.library), " "), "")
 }
 
 // TestSkillUpdateAllGoesOnPastASkillThatChangedBeforeTheLock: in a run
@@ -1035,6 +1185,51 @@ func TestSkillUpdateRecoversAtEveryBoundary(t *testing.T) {
 	}
 }
 
+// TestSkillUpdateRunAgainFinishesTheUpdateThatStopped kills an update once
+// its journal is on disk and leaves the machine as a process killed before
+// its first step, after the import branch moved, and after the library
+// directory was retained. Running the update again, by name or with --all,
+// finishes that journal before it judges anything: the import branch the
+// journal moves first would otherwise read as the update applied while
+// the library still held the version replaced, or as a managed skill whose
+// library directory is gone. The run then answers for the machine as the
+// recovery left it, with the update applied and nothing left to update.
+func TestSkillUpdateRunAgainFinishesTheUpdateThatStopped(t *testing.T) {
+	t.Parallel()
+	for _, args := range [][]string{{"skill", "update", "alpha"}, {"skill", "update", "--all"}} {
+		for stop := 0; stop <= 2; stop++ {
+			t.Run(fmt.Sprintf("%s after %d steps", strings.Join(args, " "), stop), func(t *testing.T) {
+				t.Parallel()
+				h, s, _ := updateHarness(t)
+				checked(t, h, s)
+				want := secondTree(t, s)
+				candidate := h.ref(lineage.CandidateRef("alpha"))
+				killedChild(t, h, "TestUpdateChildProcess", updateChildEnv, "alpha", killedUpdateScript)
+				applyUpdateSteps(t, h, readJournal(t, h), stop)
+
+				out := h.run(append([]string{"--json"}, args...)...)
+				equal(t, "exit", out.exit, 0)
+				equal(t, "journals", journalCount(t, h), 0)
+				equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), candidate)
+				equal(t, "the candidate ref", h.ref(lineage.CandidateRef("alpha")), "")
+				sameTree(t, "the library directory", libraryTree(t, filepath.Join(h.library, "alpha")), want)
+				sameTree(t, "claude's copy", libraryTree(t, filepath.Join(h.home, ".claude", "skills", "alpha")), want)
+				sameTree(t, "cursor's copy", libraryTree(t, filepath.Join(h.home, ".cursor", "skills", "alpha")), want)
+				equal(t, "what is left beside the library", strings.Join(hiddenEntries(t, h.library), " "), "")
+				if strings.Contains(out.stdout+out.stderr, "no skill directory") {
+					t.Errorf("the run answered for the library directory the stopped update retained:\n%s%s", out.stdout, out.stderr)
+				}
+				summary := "alpha is up to date as of the last update check; run 'agentx skill check' to look again"
+				if args[2] == "--all" {
+					summary = "nothing to update: no managed skill has an update as of the last update check; run 'agentx skill check' to look again"
+				}
+				equal(t, "summary", h.one(out.stdout, "result")["summary"], summary)
+				equal(t, "state", h.listed("alpha")["state"], stateCurrent)
+			})
+		}
+	}
+}
+
 // TestSkillUpdateStoppedBeforeItsJournalChangesNothing stops an update with
 // SIGTERM while it reads the version it is about to lay out, before the
 // lock and before any journal: the run answers with exit code 9 and leaves
@@ -1190,18 +1385,30 @@ exec `+real+` "$@"
 // TestSkillUpdateKeepsItsCandidateWhenTheLibraryChangesMidway: an update
 // whose library directory changes while it is written keeps the edit, and
 // the candidate ref still names the version being applied, since the
-// journal deletes it last. Restoring the directory lets the next command
-// finish the update.
+// journal deletes it last. Running the update again, the natural retry,
+// stops with the refusal a recovery gives while the edit is there, rather
+// than answering from the moved branch that the skill is up to date.
+// Restoring the directory lets it finish the update.
 func TestSkillUpdateKeepsItsCandidateWhenTheLibraryChangesMidway(t *testing.T) {
 	t.Parallel()
-	h, s, _, notes := editedMidway(t)
+	h, s, candidate, notes := editedMidway(t)
 	want := secondTree(t, s)
 
+	retry := h.run("--json", "skill", "update", "alpha")
+	equal(t, "exit of the retry", retry.exit, 6)
+	contains(t, "the retry's message", h.one(retry.stdout, "error")["message"].(string), "recovery required")
+	equal(t, "journals after the retry", journalCount(t, h), 1)
+	equal(t, "the candidate ref after the retry", h.ref(lineage.CandidateRef("alpha")), candidate)
+	equal(t, "alpha's notes after the retry", fileBody(t, notes), "an edit made midway\n")
+
 	writeFile(t, notes, "alpha notes\n")
-	h.mustRun("config", "set", "label", "recovered")
+	out := h.run("--json", "skill", "update", "alpha")
+	equal(t, "exit", out.exit, 0)
 	equal(t, "journals after recovery", journalCount(t, h), 0)
 	equal(t, "the candidate ref after recovery", h.ref(lineage.CandidateRef("alpha")), "")
 	sameTree(t, "the library directory", libraryTree(t, filepath.Join(h.library, "alpha")), want)
+	equal(t, "summary", h.one(out.stdout, "result")["summary"],
+		"alpha is up to date as of the last update check; run 'agentx skill check' to look again")
 }
 
 // TestSkillUpdateWhoseJournalWasMovedAsideOffersNoUpdate: the user keeps
@@ -1315,6 +1522,51 @@ func TestSkillUpdateRefusesACandidateStoredInAnOlderForm(t *testing.T) {
 
 	h.mustRun("skill", "check")
 	equal(t, "the candidate after a check", h.ref(lineage.CandidateRef("nc")), "")
+}
+
+// TestSkillUpdateAllGoesOnPastACandidateStoredInAnOlderForm: in a run over
+// every skill, a candidate stored in a form agentx does not write is found
+// while the run reads the versions it lays out, before the lock, and costs
+// only its own skill. Its warning names it, the other skill is updated, and
+// the run ends with the account repo's exit code 8 and an error naming it.
+// The refused skill keeps its branch, its candidate and its library
+// directory, and no journal is left.
+func TestSkillUpdateAllGoesOnPastACandidateStoredInAnOlderForm(t *testing.T) {
+	t.Parallel()
+	h, s, _ := legacyHarness(t)
+	// alpha comes from a source of its own, so that nothing is committed
+	// over the legacy source's tree.
+	other := h.newSourceRepo("other", true)
+	other.skill("skills/alpha", "alpha", "A skill with an update", map[string]string{"notes.md": "alpha notes\n"})
+	other.commit("alpha")
+	h.mustRun("skill", "add", other.url, "--skill", "alpha")
+	other.write("skills/alpha/notes.md", "alpha notes, revised\n")
+	other.commit("alpha revised")
+	h.mustRun("skill", "check")
+	alphaCandidate := h.ref(lineage.CandidateRef("alpha"))
+	if alphaCandidate == "" {
+		t.Fatal("the check pinned no candidate for alpha")
+	}
+	legacy, canonical := h.storeInOlderForm(t, s)
+	h.accountGit("update-ref", lineage.ManagedRef("nc"), canonical, legacy)
+	h.accountGit("update-ref", lineage.CandidateRef("nc"), legacy)
+	nc := onDisk(t, filepath.Join(h.library, "nc"))
+
+	out := h.run("--json", "skill", "update", "--all")
+	equal(t, "exit", out.exit, 8)
+	refusal := "the update candidate refs/agentx/candidate/nc stores its version in a form agentx does not write"
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "nc: "+refusal)
+	e := h.one(out.stdout, "error")
+	equal(t, "message", e["message"], "1 of 2 skills could not be updated: nc: "+refusal)
+	equal(t, "hint", e["hint"], "run 'agentx skill check' to pin the update again")
+	equal(t, "updated", updatedNames(h, out.stdout), "alpha")
+	equal(t, "alpha's branch", h.ref(lineage.ManagedRef("alpha")), alphaCandidate)
+	equal(t, "alpha's candidate", h.ref(lineage.CandidateRef("alpha")), "")
+	equal(t, "alpha's notes", fileBody(t, filepath.Join(h.library, "alpha", "notes.md")), "alpha notes, revised\n")
+	equal(t, "nc's branch", h.ref(lineage.ManagedRef("nc")), canonical)
+	equal(t, "nc's candidate", h.ref(lineage.CandidateRef("nc")), legacy)
+	equal(t, "nc's library directory", onDisk(t, filepath.Join(h.library, "nc")), nc)
+	equal(t, "journals", journalCount(t, h), 0)
 }
 
 // TestSkillUpdateOfAnAdoptedSkill: a skill another tool installed and

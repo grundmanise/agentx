@@ -55,8 +55,13 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 // was installed, which a run over every skill skips rather than counts.
 var errEdited = errors.New("edited")
 
+// errSourceRemoved marks the refusal of a managed skill whose source was
+// removed from this machine, which a run over every skill skips rather than
+// counts, see updateRun.drop.
+var errSourceRemoved = errors.New("source removed")
+
 // errNothingApplied ends the hold of the lock of a run whose every skill
-// was refused under it, so that the version file is not bumped for a
+// was dropped under it, so that the version file is not bumped for a
 // mutation that changed nothing. It never leaves the run.
 var errNothingApplied = errors.New("nothing applied")
 
@@ -80,20 +85,33 @@ type updating struct {
 // those it gave up on, each reported on its own while the run goes on.
 type updateRun struct {
 	refusals
-	inv      *invocation
-	gitDir   string
-	all      bool
-	selected int               // the skills the run set out to update
-	edited   []string          // the skills --all skipped as modified, by name
-	ready    []*updating       // the skills judged ready to update, by name
-	bodies   map[string]string // what the files of every version staged hold, by blob id
-	applied  []*updating       // the skills whose update the mutation applied, by name
+	inv        *invocation
+	gitDir     string
+	all        bool
+	selected   int               // the skills the run set out to update
+	edited     []string          // the skills --all skipped as modified, by name
+	sourceless []string          // the skills --all skipped because their source was removed, by name
+	ready      []*updating       // the skills judged ready to update, by name
+	bodies     map[string]string // what the files of every version staged hold, by blob id
+	applied    []*updating       // the skills whose update the mutation applied, by name
 }
 
-// refuse gives up on one skill. A run over every skill says so in a
-// warning naming it and goes on with the rest; the error and the result
-// name every skill it gave up on, see refusals.
-func (r *updateRun) refuse(name string, f *failure) {
+// drop gives up on one skill. A run over every skill says so in a warning
+// naming it and goes on with the rest; the error and the result name every
+// skill it gave up on, see refusals.
+//
+// A skill whose source was removed from this machine is skipped by a run
+// over every skill instead, whether that was found before the lock or
+// under it, as a modified skill is: removing a source is the user's own
+// choice, and the update a check found for the skill stays for as long as
+// the source is gone, so counting it would fail every later run over every
+// skill too. The warning says so and how to add the source again.
+func (r *updateRun) drop(name string, f *failure) {
+	if r.all && errors.Is(f, errSourceRemoved) {
+		r.sourceless = append(r.sourceless, name)
+		r.inv.out.warnWith(f.message, f.hint)
+		return
+	}
 	r.add(name, f)
 	if r.all && r.selected > 1 {
 		r.inv.out.warn(name + ": " + f.message)
@@ -129,7 +147,9 @@ func (r *updateRun) failure() error {
 //
 // A modified skill is refused, and skipped with a warning by --all: its
 // update would have to merge the edit into the newer version, which is not
-// offered yet, and replacing it would discard the edit.
+// offered yet, and replacing it would discard the edit. A skill whose
+// source was removed from this machine is refused too, and skipped with a
+// warning by --all, see updateRun.drop.
 func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 	r := &updateRun{
 		refusals: refusals{verb: "updated", mixed: "run 'agentx skill list' to see which skills have an update, then update the rest one at a time"},
@@ -141,6 +161,23 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 		return accountRepoFailure(err)
 	}
 	r.gitDir = gitDir
+	// An unfinished journal is finished before anything is read. A stopped
+	// update's journal moves the import branch to the candidate first, so
+	// until it is finished the skill reads as already updated while the
+	// library still holds the version replaced, or holds no directory once
+	// that was retained, and the run would answer for a machine halfway
+	// through its own change. The lock is taken for it only when there is
+	// a journal to finish, and the version file is not rewritten, as the
+	// recovery a scan runs does not rewrite it.
+	switch journals, err := home.Journals(inv.dirs.Home); {
+	case err != nil:
+		return mutationFailure(err)
+	case len(journals) > 0:
+		inv.out.debugf("recovering %s", strings.Join(journals, ", "))
+		if err := home.MutateQuiet(inv.dirs.Home, inv.refs(ctx), func() error { return nil }); err != nil {
+			return mutationFailure(err)
+		}
+	}
 	records := map[string]lineage.Record{}
 	if exists {
 		if records, err = lineage.List(ctx, inv.git, gitDir); err != nil {
@@ -172,7 +209,7 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 			inv.out.warnWith(n+" was edited since it was installed, so it was not updated: "+mergeNotYet,
 				"run '"+skillCommand("diff", n)+"' to see the edits, or '"+skillCommand("revert", n)+"' to discard them and update it")
 		case f != nil:
-			r.refuse(n, f)
+			r.drop(n, f)
 		case u == nil: // a name the last check found no update for, which only a run of one name asks about
 			inv.summary = n + " is up to date as of the last update check; run 'agentx skill check' to look again"
 			inv.out.print(inv.out.paint(heading, sanitised(n)), " is up to date as of the last update check; run ",
@@ -195,7 +232,8 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 			return err
 		}
 	} else if r.all && len(r.broken) == 0 {
-		inv.summary = "no skill was updated, " + plural(len(r.edited), "modified skill") + " skipped"
+		skips, _ := r.skippedNote(inv.out)
+		inv.summary = "no skill was updated" + skips
 		inv.out.print(inv.summary)
 	}
 	return r.failure()
@@ -300,10 +338,11 @@ func (inv *invocation) judgeUpdate(name string, rec lineage.Record, managed bool
 // removedSourceRefusal refuses a skill whose source is gone from this
 // machine, in the words the refusal of that source's id uses, and with the
 // command that adds it again: the update the last check found for the
-// skill stays, and applies once the source is back.
+// skill stays, and applies once the source is back. A run over every skill
+// skips the skill with the same words, see updateRun.drop.
 func removedSourceRefusal(name, url string) *failure {
 	return refuse(exitNotFound, name+" was installed from "+url+", which was removed from this machine, so it is not updated",
-		"run 'agentx source add "+sourceAddArg(url, "")+"' to add it again")
+		"run 'agentx source add "+sourceAddArg(url, "")+"' to add it again").wrap(errSourceRemoved)
 }
 
 // upstreamRemovedRefusal refuses a skill the last update check found its
@@ -325,11 +364,11 @@ func (r *updateRun) read(ctx context.Context) error {
 	for _, u := range r.ready {
 		base, err := lineage.ReadBase(ctx, r.inv.git, r.gitDir, u.next)
 		if err != nil {
-			r.refuse(u.name, failureOf(accountRepoFailure(err)))
+			r.drop(u.name, failureOf(accountRepoFailure(err)))
 			continue
 		}
 		if !u.next.Canonical(base) {
-			r.refuse(u.name, refuse(exitAccountRepo, "the update candidate "+lineage.CandidateRef(u.name)+" stores its version in a form agentx does not write",
+			r.drop(u.name, refuse(exitAccountRepo, "the update candidate "+lineage.CandidateRef(u.name)+" stores its version in a form agentx does not write",
 				"run 'agentx skill check' to pin the update again"))
 			continue
 		}
@@ -353,10 +392,8 @@ func (r *updateRun) read(ctx context.Context) error {
 }
 
 // upstreamNameOf is the name an install of the candidate's version would
-// give the skill, its SKILL.md's frontmatter name or else the upstream's
-// own directory name, when it is not the skill's library name, and ""
-// otherwise. The skill keeps its library name, branch and placements
-// through an update, and the SKILL.md is never rewritten.
+// give the skill, when it is not the skill's library name, and ""
+// otherwise, see upstreamRename.
 func upstreamNameOf(u *updating, bodies map[string]string) string {
 	name := ""
 	for _, e := range u.base.Entries {
@@ -364,20 +401,14 @@ func upstreamNameOf(u *updating, bodies map[string]string) string {
 			name, _, _ = scan.SkillFrontmatter(bodies[e.OID])
 		}
 	}
-	if name == "" {
-		name = u.next.Import.Dir()
-	}
-	if name == u.name {
-		return ""
-	}
-	return name
+	return upstreamRename(u.name, name, u.next.Import.Dir())
 }
 
 // apply reads every skill's inputs again under the lock and applies the
 // update of each one they still hold as one journaled mutation. A skill
 // whose import branch, candidate, source or library directory changed since
-// it was judged is refused on its own and the others go on; a run whose
-// every skill was refused here writes no journal.
+// it was judged is dropped on its own and the others go on; a run whose
+// every skill was dropped here writes no journal.
 func (r *updateRun) apply(ctx context.Context) error {
 	inv := r.inv
 	var refs []string
@@ -398,7 +429,7 @@ func (r *updateRun) apply(ctx context.Context) error {
 		var live []*updating
 		for _, u := range r.ready {
 			if f := inv.recheckUpdate(u, values, sources); f != nil {
-				r.refuse(u.name, f)
+				r.drop(u.name, f)
 				continue
 			}
 			live = append(live, u)
@@ -519,7 +550,7 @@ func (r *updateRun) report(ctx context.Context) error {
 	libs := librarySkills(inv.dirs.Library)
 	for _, u := range r.applied {
 		if u.upstreamName != "" {
-			inv.out.warn(fmt.Sprintf("%s: the update names the skill %q; updating it keeps the name %s", u.name, u.upstreamName, u.name))
+			inv.out.warn(renameWarning(u.name, u.upstreamName))
 		}
 	}
 	for _, u := range r.applied {
@@ -544,13 +575,9 @@ func (r *updateRun) report(ctx context.Context) error {
 		skipped += len(u.done.skipped)
 	}
 	note, painted := copiesNote(out, refreshed, skipped)
-	inv.summary = "updated " + plural(len(r.applied), "skill") + note
-	line := "updated " + plural(len(r.applied), "skill") + painted
-	if n := len(r.edited); n > 0 {
-		inv.summary += ", " + plural(n, "modified skill") + " skipped"
-		line += ", " + out.paint(warnStyle, plural(n, "modified skill")+" skipped")
-	}
-	out.done(line)
+	skips, paintedSkips := r.skippedNote(out)
+	inv.summary = "updated " + plural(len(r.applied), "skill") + note + skips
+	out.done("updated " + plural(len(r.applied), "skill") + painted + paintedSkips)
 	t := &table{}
 	for _, u := range r.applied {
 		notes, _ := copiesNote(out, len(u.done.copies), len(u.done.skipped))
@@ -560,10 +587,32 @@ func (r *updateRun) report(ctx context.Context) error {
 	return nil
 }
 
-// copiesNote is what an update did to copy placements, as its line and its
-// result say it, whether of one skill or added up over a run of several:
-// how many were refreshed and how many were skipped, each after a comma,
-// or nothing when neither.
+// skippedNote is what a run over every skill skipped, as its line and its
+// result say it: how many modified skills and how many skills whose source
+// was removed, each after a comma, or nothing when neither.
+func (r *updateRun) skippedNote(out *writer) (plain, painted string) {
+	var notes []string
+	if n := len(r.edited); n > 0 {
+		notes = append(notes, plural(n, "modified skill")+" skipped")
+	}
+	switch n := len(r.sourceless); {
+	case n == 1:
+		notes = append(notes, "1 skill from a removed source skipped")
+	case n > 1:
+		notes = append(notes, fmt.Sprintf("%d skills from removed sources skipped", n))
+	}
+	for _, note := range notes {
+		plain += ", " + note
+		painted += ", " + out.paint(warnStyle, note)
+	}
+	return plain, painted
+}
+
+// copiesNote is what a command did to copy placements, as its line and its
+// result say it, whether of one skill or added up over a run of several
+// updates: how many were refreshed and how many were skipped, each after a
+// comma, or nothing when neither. A revert, a repair and an update all say
+// it this way.
 func copiesNote(out *writer, refreshed, skipped int) (plain, painted string) {
 	if refreshed > 0 {
 		note := plural(refreshed, "copy placement") + " refreshed"

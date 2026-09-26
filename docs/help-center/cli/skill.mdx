@@ -618,17 +618,19 @@ warning: docx was edited since it was installed, so it was not updated: merging 
 
 Run `agentx skill diff docx` to see your changes. To take the update instead, revert the skill with `agentx skill revert docx`, then update it.
 
-Only what the skill held when you ran the command is replaced. If the skill changes before the update starts to write, for example because your editor saves a file or a check finds another version, agentx stops with exit code 6 and changes nothing. Run the command again. If a file of the skill changes while the update is being written, agentx stops with exit code 6, keeps your change and says that recovery is required: restore the file it names to let the next command finish the update. To keep your change instead, move the named file in `~/.agentx/mutations` aside; the skill then shows as modified against the new version, with no update available. agentx keeps what it replaces until the update is complete, so an interrupted update finishes on the next command and loses nothing.
+Only what the skill held when you ran the command is replaced. If the skill changes before the update starts to write, for example because your editor saves a file or a check finds another version, agentx stops with exit code 6 and changes nothing. Run the command again. If a file of the skill changes while the update is being written, agentx stops with exit code 6, keeps your change and says that recovery is required: restore the file it names to let the next command finish the update. To keep your change instead, move the named file in `~/.agentx/mutations` aside; the skill then shows as modified against the new version, with no update available. agentx keeps what it replaces until the update is complete, so an interrupted update finishes on the next command, running the update again included, and loses nothing.
 
 ### When a skill is not updated
 
-- A skill whose source you removed stops with exit code 5, and the hint names the `agentx source add` command that brings the source back. The update found earlier is kept.
+- `agentx skill update <name>` of a skill whose source you removed stops with exit code 5, and the hint names the `agentx source add` command that brings the source back. With `--all`, the skill is skipped with a warning that names the same command, and the run does not fail. Either way, the update found earlier is kept.
 - A skill its source no longer holds, shown as `upstream removed`, is kept as it is and never updated: exit code 6.
 - A skill agentx did not install, and a fork, have no update to apply: exit code 6.
+- A skill whose library directory is gone stops with exit code 6. Install it again with `agentx skill add <source> --skill <name>`, or stop managing it with `agentx skill remove <name>`.
+- A skill whose record in the account repo agentx cannot read stops with exit code 6. Run `agentx doctor` and check the account repo it names.
 - A skill whose library directory is a symlink to a directory of your own stops with exit code 6: an update replaces the library directory, so it would remove your link. Replace the link with the directory it points to, then update again.
 - A skill that holds something git cannot record, such as a repository nested in it, stops with exit code 6 and names it: an update would discard it with no record of it anywhere. Move it out of the skill, then update again. With `--all` this skill is not skipped like a skill you edited but counted as not updated.
 
-With `--all`, a skill that is not updated does not stop the others: agentx names it and still updates the rest, then exits with the code those skills share, or 6 when they differ.
+With `--all`, a skill that is not updated does not stop the others: agentx names it and still updates the rest, then exits with the code those skills share, or 6 when they differ. A skill you edited and a skill whose source you removed are skipped rather than counted, so they leave the exit code at 0.
 
 ## Script it
 
@@ -683,7 +685,7 @@ A skill with an update carries `candidate`, the newer version the last check fou
 
 `upstream_commit` and `base_hash` are the version you have, `candidate_upstream_commit` and `candidate_hash` the newer one, and `candidate` the commit agentx recorded for it, the one installing that version would write. `files` lists what the update changes, in the words of `skill diff`. `upstream_name` appears when the newer version names the skill otherwise; the skill keeps its name. `skill diff --upstream` emits one `diff` event per file.
 
-`skill update` emits one `library_skill` event per skill it updated, sorted by name, with every placement, as `skill list` does. The updated skill has no `candidate`, and its `upstream_commit` and `base_hash` now name the version it was updated to. The `result` summary says what the run did, as in `updated pdf from 3f2a9c1 to 8b1e0f4, 1 copy placement refreshed`, or with `--all`, `updated 2 skills, 1 copy placement refreshed, 1 modified skill skipped`, which adds up what the update did to the copies of every skill.
+`skill update` emits one `library_skill` event per skill it updated, sorted by name, with every placement, as `skill list` does. The updated skill has no `candidate`, and its `upstream_commit` and `base_hash` now name the version it was updated to. The `result` summary says what the run did, as in `updated pdf from 3f2a9c1 to 8b1e0f4, 1 copy placement refreshed`, or with `--all`, `updated 2 skills, 1 copy placement refreshed, 1 modified skill skipped`, which adds up what the update did to the copies of every skill and ends with the skills it skipped, `1 skill from a removed source skipped` included.
 
 ## Where it is recorded
 

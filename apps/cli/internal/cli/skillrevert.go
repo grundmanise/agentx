@@ -257,17 +257,9 @@ func (inv *invocation) reportReverted(ctx context.Context, name, against string,
 		out.done(out.paint(heading, sanitised(name)) + " already matches " + against + stored)
 		return nil
 	}
-	inv.summary = "reverted " + name + " to " + against
-	line := "reverted " + out.paint(heading, sanitised(name)) + " to " + against
-	if n := len(done.copies); n > 0 {
-		inv.summary += ", " + plural(n, "copy placement") + " refreshed"
-		line += ", " + out.paint(noteStyle, plural(n, "copy placement")+" refreshed")
-	}
-	if n := len(done.skipped); n > 0 {
-		inv.summary += ", " + plural(n, "placement") + " skipped"
-		line += ", " + out.paint(warnStyle, plural(n, "placement")+" skipped")
-	}
-	out.done(line)
+	note, painted := copiesNote(out, len(done.copies), len(done.skipped))
+	inv.summary = "reverted " + name + " to " + against + note
+	out.done("reverted " + out.paint(heading, sanitised(name)) + " to " + against + painted)
 	return nil
 }
 
