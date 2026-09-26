@@ -364,7 +364,8 @@ func (inv *invocation) checkUpdates(ctx context.Context, wait, progress bool) (c
 	rep.checked = len(checked)
 	var announced []lineage.Record
 	for name := range checked {
-		if rec := live[name]; rec.Candidate != nil && rec.Candidate.HasImport {
+		rec := live[name]
+		if _, ok := rec.AtCandidate(); ok {
 			announced = append(announced, rec)
 		}
 	}

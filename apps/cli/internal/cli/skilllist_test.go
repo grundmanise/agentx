@@ -164,7 +164,12 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	remove(t, filepath.Join(h.home, ".cursor", "skills", "beta"))
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "mine"), "SKILL.md"), skill("mine", "A skill of my own"))
 	h.accountGit("update-ref", "refs/heads/managed/ghost", h.accountGit("commit-tree", "refs/heads/managed/beta^{tree}", "-m", "no lineage"))
-	h.accountGit("update-ref", "refs/agentx/candidate/alpha", "refs/heads/managed/alpha")
+	// A candidate is a commit of its own, as a check pins it: here alpha's
+	// version again, with its lineage, on top of the branch. One the branch
+	// already holds is no update, and lists as none.
+	message := h.accountGit("log", "-1", "--format=%B", "refs/heads/managed/alpha")
+	candidate := strings.TrimSpace(h.accountGit("commit-tree", "refs/heads/managed/alpha^{tree}", "-p", "refs/heads/managed/alpha", "-m", message))
+	h.accountGit("update-ref", "refs/agentx/candidate/alpha", candidate)
 	h.accountGit("update-ref", "refs/agentx/upstream-removed/beta", "refs/agentx/sources/"+source.ID(s.url))
 	equal(t, "alpha's state", h.listed("alpha")["state"], stateModified)
 	if h.listed("alpha")["candidate"] == nil {

@@ -632,6 +632,13 @@ func TestRecoveryRefusesARemovalWhoseTargetChanged(t *testing.T) {
 	if left, _ := Journals(in.dir); len(left) != 1 {
 		t.Errorf("%d journals left, want the refused one kept for the user to decide on", len(left))
 	}
+	// The removal's refs only delete, and recovery deletes them after the
+	// path steps as apply does, so the refused one still has them.
+	for ref, want := range map[string]string{"refs/heads/managed/alpha": "c0ffee-alpha", "refs/agentx/candidate/alpha": "cand-alpha"} {
+		if got := u[in.gitDir+" "+ref]; got != want {
+			t.Errorf("%s holds %q after a refused recovery, want %s", ref, got, want)
+		}
+	}
 }
 
 // TestRemovalKeepsRetainedContentThatChanged is the rule that matters most
@@ -1056,5 +1063,57 @@ func TestUpdateKeepsItsCandidateWhenTheRemoveRefuses(t *testing.T) {
 	}
 	if missing := in.updated(t, u, "alpha", "two\n"); len(missing) > 0 {
 		t.Errorf("after recovery, missing %s", strings.Join(missing, ", "))
+	}
+}
+
+// TestUpdateRecoveryKeepsItsCandidateWhenTheRemoveRefuses is the same rule
+// for the recovery of an update that stopped once its journal was on disk,
+// before or after the move of its branch: the library directory is edited
+// before the next command recovers it, so the remove refuses there too.
+// Recovery takes the refs in the two phases apply does, so the branch is
+// moved and the candidate ref still names the version being applied, the
+// directory keeps the edit, and the journal waits. Recovery run once the
+// directory holds what the update captured again finishes it.
+func TestUpdateRecoveryKeepsItsCandidateWhenTheRemoveRefuses(t *testing.T) {
+	t.Parallel()
+	for _, stop := range []int{0, 1} {
+		t.Run(fmt.Sprintf("after %d steps", stop), func(t *testing.T) {
+			t.Parallel()
+			in, u := newUpdate(t, "alpha")
+			m := in.updateOf(t, "alpha", "two\n")
+			if err := m.stopAfter(stop, u); err != nil {
+				t.Fatalf("stopping after %d steps: %v", stop, err)
+			}
+			skill := filepath.Join(in.library, "alpha", "SKILL.md")
+			if err := os.WriteFile(skill, []byte("edited meanwhile\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := recoverJournals(in.dir, u); !errors.Is(err, ErrRecovery) {
+				t.Fatalf("recovery = %v, want it refused", err)
+			}
+			if got := u[in.gitDir+" refs/agentx/candidate/alpha"]; got != "cand-alpha" {
+				t.Errorf("the candidate ref holds %q after a refused recovery, want cand-alpha", got)
+			}
+			if got := u[in.gitDir+" refs/heads/managed/alpha"]; got != "cand-alpha" {
+				t.Errorf("the import branch holds %q, want it moved before the paths", got)
+			}
+			if b, err := os.ReadFile(skill); err != nil || string(b) != "edited meanwhile\n" {
+				t.Errorf("the library directory holds %q, %v, want the edit kept", b, err)
+			}
+			if left, _ := Journals(in.dir); len(left) != 1 {
+				t.Fatalf("%d journals left, want the refused one kept", len(left))
+			}
+
+			if err := os.WriteFile(skill, []byte("one\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := recoverJournals(in.dir, u); err != nil {
+				t.Fatalf("recovery once the directory was restored: %v", err)
+			}
+			if missing := in.updated(t, u, "alpha", "two\n"); len(missing) > 0 {
+				t.Errorf("after recovery, missing %s", strings.Join(missing, ", "))
+			}
+		})
 	}
 }

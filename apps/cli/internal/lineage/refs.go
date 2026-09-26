@@ -84,11 +84,19 @@ type Candidate struct {
 // import branch at the candidate's import commit, with the tree and the
 // lineage that commit carries, and nothing a check found left over. It is
 // what the version an update lays out is read from, as ReadBase reads a
-// branch's. ok is false when there is no candidate whose lineage agentx
-// can read.
+// branch's, and whether the skill has an update at all, for every command
+// that shows or applies one.
+//
+// ok is false when there is no candidate whose lineage agentx can read, and
+// when the candidate is the commit the import branch already holds. That is
+// what an update leaves that moved the branch and stopped before it deleted
+// the candidate, once its journal was moved aside to keep what the library
+// directory held: the version is the skill's base already, so it is no
+// update. The ref stays until the next check deletes it, reading
+// CandidateCommit for the value it expects there.
 func (rec Record) AtCandidate() (Record, bool) {
 	c := rec.Candidate
-	if c == nil || !c.HasImport {
+	if c == nil || !c.HasImport || c.Commit == rec.Commit {
 		return Record{}, false
 	}
 	return Record{Name: rec.Name, Kind: rec.Kind, Ref: rec.Ref, Commit: c.Commit, Tree: c.Tree, Import: c.Import, HasImport: true}, true

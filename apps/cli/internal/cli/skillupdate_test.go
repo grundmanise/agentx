@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -106,6 +107,12 @@ func TestSkillUpdateReplacesAnUnmodifiedSkill(t *testing.T) {
 	if _, ok := ev["candidate"]; ok {
 		t.Errorf("the updated skill still carries a candidate: %v", ev["candidate"])
 	}
+	// The event is the rescan after the update: the refreshed copy, which
+	// Cursor sees through Claude Code's directory too, and not Cursor's own
+	// edited copy, which no longer holds what the library does.
+	equal(t, "placements", strings.Join(placementsOf(t, ev), "|"), "claude-code copy copy|cursor copy copy")
+	equal(t, "placement paths", strings.Join(pathsOf(t, ev), "|"), "claude-code "+claude+"|cursor "+claude)
+	equal(t, "drift", drift(ev), "")
 	for _, dir := range []string{h.library, filepath.Dir(claude), filepath.Dir(cursor)} {
 		equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 	}
@@ -114,6 +121,7 @@ func TestSkillUpdateReplacesAnUnmodifiedSkill(t *testing.T) {
 	listed := h.listed("alpha")
 	equal(t, "state after the update", listed["state"], stateCurrent)
 	equal(t, "upstream_commit after the update", listed["upstream_commit"], second)
+	sameEvent(t, "the update's library_skill and skill list's", ev, listed)
 	if strings.Contains(h.mustRun("skill", "list").stdout, updateAvailable) {
 		t.Error("skill list still shows an update after it was applied")
 	}
@@ -122,6 +130,27 @@ func TestSkillUpdateReplacesAnUnmodifiedSkill(t *testing.T) {
 		t.Errorf("a check right after the update found %d updates: %v", len(got), got)
 	}
 	equal(t, "the candidate ref after a check", h.ref(lineage.CandidateRef("alpha")), "")
+}
+
+// sameEvent fails the test unless two events say the same, whatever
+// their type: an update's library_skill and skill list's, say, which both
+// come from a scan of the machine as it is.
+func sameEvent(t *testing.T, what string, got, want jsonEvent) {
+	t.Helper()
+	strip := func(ev jsonEvent) string {
+		c := jsonEvent{}
+		for k, v := range ev {
+			if k != "type" && k != "schema_version" {
+				c[k] = v
+			}
+		}
+		b, err := json.Marshal(c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	equal(t, what, strip(got), strip(want))
 }
 
 // mixedHarness is a source of four skills, all installed from its first
@@ -175,6 +204,8 @@ func TestSkillUpdateAllUpdatesEveryUnmodifiedSkill(t *testing.T) {
 	}
 	equal(t, "alpha's state", events[0]["state"], stateCurrent)
 	equal(t, "alpha's upstream_commit", events[0]["upstream_commit"], second)
+	equal(t, "alpha's placements", strings.Join(placementsOf(t, events[0]), "|"), "claude-code symlink symlink")
+	sameEvent(t, "alpha's library_skill and skill list's", events[0], h.listed("alpha"))
 	equal(t, "summary", h.one(out.stdout, "result")["summary"], "updated 1 skill, 1 modified skill skipped")
 	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"),
 		"beta was edited since it was installed, so it was not updated: merging a modified skill with its update is not supported yet;"+
@@ -267,6 +298,37 @@ func TestSkillUpdateAllReportsEachRefusalAndGoesOn(t *testing.T) {
 	equal(t, "code", e["code"], "refused")
 	contains(t, "message", e["message"].(string), "2 of 2 skills could not be updated: delta: delta is managed in the account repo but the library holds no skill directory for it, so there is nothing to update; gamma: ")
 	equal(t, "hint", e["hint"], "run 'agentx skill list' to see which skills have an update, then update the rest one at a time")
+}
+
+// TestSkillUpdateAllRefusesASkillGitCannotRecord: in a run over every
+// skill, a skill that holds something git cannot record is not skipped as
+// a modified skill is but refused, since what an update would discard
+// there has no record anywhere: the warning and the error name the path,
+// and the other skill is updated.
+func TestSkillUpdateAllRefusesASkillGitCannotRecord(t *testing.T) {
+	t.Parallel()
+	h, s, _ := updateHarness(t)
+	newVersion(t, s)
+	s.write("skills/beta/notes.md", "beta notes, revised\n")
+	s.commit("beta revised")
+	h.mustRun("skill", "check")
+	nested := filepath.Join(h.library, "alpha", "vendored", ".git")
+	writeFile(t, mkdirs(t, nested, "HEAD"), "ref: refs/heads/main\n")
+	alphaCandidate := h.ref(lineage.CandidateRef("alpha"))
+
+	out := h.run("--json", "skill", "update", "--all")
+	equal(t, "exit", out.exit, 6)
+	refusal := "alpha holds " + nested + ", which git cannot record"
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "alpha: "+refusal)
+	equal(t, "message", h.one(out.stdout, "error")["message"], "1 of 2 skills could not be updated: alpha: "+refusal)
+	var updated []string
+	for _, ev := range h.eventsOfType(out.stdout, "library_skill") {
+		updated = append(updated, ev["name"].(string))
+	}
+	equal(t, "updated", strings.Join(updated, ", "), "beta")
+	equal(t, "alpha's candidate", h.ref(lineage.CandidateRef("alpha")), alphaCandidate)
+	equal(t, "alpha's nested repository", fileBody(t, filepath.Join(nested, "HEAD")), "ref: refs/heads/main\n")
+	equal(t, "beta's notes", fileBody(t, filepath.Join(h.library, "beta", "notes.md")), "beta notes, revised\n")
 }
 
 // TestSkillUpdateAllRefreshesEachSkillsCopies runs update --all over two
@@ -388,7 +450,8 @@ func upstreamRemoved(t *testing.T, h *harness, s *sourceRepo) {
 // a time, each with its code, its message and its hint, and each where the
 // order of the checks puts it: a removed source before an upstream that no
 // longer holds the skill, and both before whether there is an update at
-// all, which comes before whether the skill was edited. A skill with no
+// all, which comes before whether the skill holds something git cannot
+// record, and that before whether it was edited. A skill with no
 // update is nothing to do and exits 0. None of them changes a ref, the
 // library or a placement, or leaves a journal.
 func TestSkillUpdateRefusesInOrder(t *testing.T) {
@@ -470,6 +533,16 @@ func TestSkillUpdateRefusesInOrder(t *testing.T) {
 				editLibrary(t, h, "alpha", "notes.md", "alpha notes, edited\n")
 			},
 			message: "alpha is up to date as of the last update check; run 'agentx skill check' to look again",
+		},
+		{
+			name: "a skill with an update that holds what git cannot record", skill: "alpha", exit: 6,
+			setup: func(t *testing.T, h *harness, s *sourceRepo) {
+				checked(t, h, s)
+				writeFile(t, mkdirs(t, filepath.Join(h.library, "alpha", "vendored", ".git"), "HEAD"), "ref: refs/heads/main\n")
+				editLibrary(t, h, "alpha", "notes.md", "alpha notes, edited\n")
+			},
+			message: "alpha holds %LIB%/alpha/vendored/.git, which git cannot record",
+			hint:    "an update would discard it with no record of it anywhere; move it out of the skill, then run 'agentx skill update alpha' again",
 		},
 		{
 			name: "an edited skill with an update", skill: "alpha", exit: 6,
@@ -680,6 +753,72 @@ exec `+real+` "$@"
 				equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 			}
 		})
+	}
+}
+
+// TestSkillUpdateAllGoesOnPastASkillThatChangedBeforeTheLock: in a run
+// over every skill, one skill whose library directory is edited while the
+// run reads the versions it lays out is refused under the lock on its own.
+// Its warning names it, the other skill is updated all the same, copies
+// and all, and the run ends with the refusal's exit code and an error
+// naming it. The refused skill keeps its edit, its branch and its
+// candidate, and nothing of its update is staged or left behind.
+func TestSkillUpdateAllGoesOnPastASkillThatChangedBeforeTheLock(t *testing.T) {
+	t.Parallel()
+	h, s, _ := updateHarness(t)
+	newVersion(t, s)
+	s.write("skills/beta/notes.md", "beta notes, revised\n")
+	s.commit("beta revised")
+	h.mustRun("skill", "check")
+	alphaTip, alphaCandidate := h.ref(lineage.ManagedRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
+	betaCandidate := h.ref(lineage.CandidateRef("beta"))
+	if alphaCandidate == "" || betaCandidate == "" {
+		t.Fatalf("the check pinned candidates %q and %q", alphaCandidate, betaCandidate)
+	}
+	before := mutationVersion(t, h)
+	real, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	notes := filepath.Join(h.library, "alpha", "notes.md")
+	stubGit(t, h, `#!/bin/sh
+case " $* " in
+*" ls-tree "*) printf 'an edit made meanwhile\n' > `+shellWord(notes)+` || exit 1 ;;
+esac
+exec `+real+` "$@"
+`)
+
+	out := h.run("--json", "skill", "update", "--all")
+	equal(t, "exit", out.exit, 6)
+	refusal := "alpha changed while it was being updated, so nothing was changed"
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "alpha: "+refusal)
+	e := h.one(out.stdout, "error")
+	equal(t, "message", e["message"], "1 of 2 skills could not be updated: alpha: "+refusal)
+	equal(t, "hint", e["hint"], "run 'agentx skill diff alpha' to see the change; a skill edited since it was installed is not updated")
+	var updated []string
+	for _, ev := range h.eventsOfType(out.stdout, "library_skill") {
+		updated = append(updated, ev["name"].(string))
+	}
+	equal(t, "updated", strings.Join(updated, ", "), "beta")
+
+	claude := filepath.Join(h.home, ".claude", "skills")
+	cursor := filepath.Join(h.home, ".cursor", "skills")
+	equal(t, "beta's import branch", h.ref(lineage.ManagedRef("beta")), betaCandidate)
+	equal(t, "beta's candidate", h.ref(lineage.CandidateRef("beta")), "")
+	for _, dir := range []string{h.library, claude, cursor} {
+		equal(t, "beta's notes in "+dir, fileBody(t, filepath.Join(dir, "beta", "notes.md")), "beta notes, revised\n")
+	}
+	equal(t, "alpha's import branch", h.ref(lineage.ManagedRef("alpha")), alphaTip)
+	equal(t, "alpha's candidate", h.ref(lineage.CandidateRef("alpha")), alphaCandidate)
+	equal(t, "alpha's notes", fileBody(t, notes), "an edit made meanwhile\n")
+	nothingAt(t, "alpha's new.md", filepath.Join(h.library, "alpha", "new.md"))
+	for _, dir := range []string{claude, cursor} {
+		equal(t, "alpha's notes in "+dir, fileBody(t, filepath.Join(dir, "alpha", "notes.md")), "alpha notes\n")
+	}
+	equal(t, "journals", journalCount(t, h), 0)
+	equal(t, "mutations", mutationVersion(t, h), before+1)
+	for _, dir := range []string{h.library, claude, cursor} {
+		equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 	}
 }
 
@@ -1007,20 +1146,17 @@ func TestSkillUpdateStoppedInItsJournalIsRecovered(t *testing.T) {
 	equal(t, "what is left beside the library", strings.Join(hiddenEntries(t, h.library), " "), "")
 }
 
-// TestSkillUpdateKeepsItsCandidateWhenTheLibraryChangesMidway: the library
-// directory is edited after the journal is on disk, as the import branch
-// moves. The step that would take the directory out of the way finds
-// something it did not capture and refuses, so the directory keeps the
-// edit, the candidate ref still names the version being applied, since the
-// journal deletes it last, and the journal waits for the user. Restoring
-// the directory lets the next command finish the update.
-func TestSkillUpdateKeepsItsCandidateWhenTheLibraryChangesMidway(t *testing.T) {
-	t.Parallel()
-	h, s, _ := updateHarness(t)
+// editedMidway runs an update of alpha whose library directory is edited
+// after the journal is on disk, as the import branch moves. The step that
+// would take the directory out of the way finds something it did not
+// capture and refuses, and the journal waits for the user. It returns the
+// candidate the update was applying and the path of alpha's notes.md.
+func editedMidway(t *testing.T) (h *harness, s *sourceRepo, candidate, notes string) {
+	t.Helper()
+	h, s, _ = updateHarness(t)
 	checked(t, h, s)
-	want := secondTree(t, s)
-	candidate := h.ref(lineage.CandidateRef("alpha"))
-	notes := filepath.Join(h.library, "alpha", "notes.md")
+	candidate = h.ref(lineage.CandidateRef("alpha"))
+	notes = filepath.Join(h.library, "alpha", "notes.md")
 	real, err := exec.LookPath("git")
 	if err != nil {
 		t.Fatal(err)
@@ -1046,6 +1182,103 @@ exec `+real+` "$@"
 	equal(t, "the candidate ref", h.ref(lineage.CandidateRef("alpha")), candidate)
 	equal(t, "the import branch, moved before the paths", h.ref(lineage.ManagedRef("alpha")), candidate)
 	equal(t, "alpha's notes", fileBody(t, notes), "an edit made midway\n")
+	nothingAt(t, "new.md", filepath.Join(h.library, "alpha", "new.md"))
+	equal(t, "journals", journalCount(t, h), 1)
+	return h, s, candidate, notes
+}
+
+// TestSkillUpdateKeepsItsCandidateWhenTheLibraryChangesMidway: an update
+// whose library directory changes while it is written keeps the edit, and
+// the candidate ref still names the version being applied, since the
+// journal deletes it last. Restoring the directory lets the next command
+// finish the update.
+func TestSkillUpdateKeepsItsCandidateWhenTheLibraryChangesMidway(t *testing.T) {
+	t.Parallel()
+	h, s, _, notes := editedMidway(t)
+	want := secondTree(t, s)
+
+	writeFile(t, notes, "alpha notes\n")
+	h.mustRun("config", "set", "label", "recovered")
+	equal(t, "journals after recovery", journalCount(t, h), 0)
+	equal(t, "the candidate ref after recovery", h.ref(lineage.CandidateRef("alpha")), "")
+	sameTree(t, "the library directory", libraryTree(t, filepath.Join(h.library, "alpha")), want)
+}
+
+// TestSkillUpdateWhoseJournalWasMovedAsideOffersNoUpdate: the user keeps
+// the edit made midway by moving the waiting journal aside. The import
+// branch already holds the new version and the candidate ref still names
+// it, which is no update: skill list shows the skill modified against the
+// new version with no update available, skill diff --upstream knows of no
+// update, skill update says the skill is up to date rather than sending
+// the user to a revert that would discard the edit, and update --all has
+// nothing to do. The next check deletes the leftover ref and announces
+// nothing.
+func TestSkillUpdateWhoseJournalWasMovedAsideOffersNoUpdate(t *testing.T) {
+	t.Parallel()
+	h, _, candidate, notes := editedMidway(t)
+	journals, err := filepath.Glob(filepath.Join(h.agentx, "mutations", "*.json"))
+	if err != nil || len(journals) != 1 {
+		t.Fatalf("journals %v, %v", journals, err)
+	}
+	if err := os.Rename(journals[0], filepath.Join(t.TempDir(), "kept.json")); err != nil {
+		t.Fatal(err)
+	}
+
+	listed := h.listed("alpha")
+	equal(t, "state", listed["state"], stateModified)
+	if _, ok := listed["candidate"]; ok {
+		t.Errorf("the skill lists a candidate its branch already holds: %v", listed["candidate"])
+	}
+	if list := h.mustRun("skill", "list").stdout; strings.Contains(list, updateAvailable) {
+		t.Errorf("skill list offers an update the branch already holds:\n%s", list)
+	}
+	diff := h.run("--json", "skill", "diff", "alpha", "--upstream")
+	equal(t, "exit of skill diff --upstream", diff.exit, 6)
+	equal(t, "skill diff --upstream", h.one(diff.stdout, "error")["message"], "no update of alpha is known")
+	update := h.run("--json", "skill", "update", "alpha")
+	equal(t, "exit of skill update", update.exit, 0)
+	equal(t, "skill update", h.one(update.stdout, "result")["summary"],
+		"alpha is up to date as of the last update check; run 'agentx skill check' to look again")
+	all := h.mustRun("skill", "update", "--all")
+	contains(t, "skill update --all", all.stdout, "Nothing to update")
+	equal(t, "alpha's notes", fileBody(t, notes), "an edit made midway\n")
+	equal(t, "the candidate ref before a check", h.ref(lineage.CandidateRef("alpha")), candidate)
+
+	check := h.mustRun("--json", "skill", "check")
+	if got := h.eventsOfType(check.stdout, "update_available"); len(got) != 0 {
+		t.Errorf("the check announced %v", got)
+	}
+	equal(t, "the candidate ref after a check", h.ref(lineage.CandidateRef("alpha")), "")
+	equal(t, "the import branch after a check", h.ref(lineage.ManagedRef("alpha")), candidate)
+	equal(t, "state after a check", h.listed("alpha")["state"], stateModified)
+}
+
+// TestSkillUpdateRecoveryKeepsItsCandidateWhenTheLibraryChanged kills an
+// update once its journal is on disk, and the library directory is edited
+// before the next command. That command's recovery moves the branch, finds
+// the directory holding something the update did not capture, and refuses:
+// the command stops with the refusal a recovery gives, the directory keeps
+// the edit, and the candidate ref, read back with plain git, still names
+// the version being applied, since recovery deletes it after the paths as
+// the update does. Restoring the directory lets the next command finish.
+func TestSkillUpdateRecoveryKeepsItsCandidateWhenTheLibraryChanged(t *testing.T) {
+	t.Parallel()
+	h, s, _ := updateHarness(t)
+	checked(t, h, s)
+	want := secondTree(t, s)
+	tip, candidate := h.ref(lineage.ManagedRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
+	killedChild(t, h, "TestUpdateChildProcess", updateChildEnv, "alpha", killedUpdateScript)
+	equal(t, "the import branch when the update was killed", h.ref(lineage.ManagedRef("alpha")), tip)
+	equal(t, "journals the killed update left", journalCount(t, h), 1)
+	notes := filepath.Join(h.library, "alpha", "notes.md")
+	writeFile(t, notes, "an edit made after the update stopped\n")
+
+	out := h.run("--json", "config", "set", "label", "recovered")
+	equal(t, "exit", out.exit, 6)
+	contains(t, "message", h.one(out.stdout, "error")["message"].(string), "recovery required")
+	equal(t, "the candidate ref", h.ref(lineage.CandidateRef("alpha")), candidate)
+	equal(t, "the import branch, moved before the paths", h.ref(lineage.ManagedRef("alpha")), candidate)
+	equal(t, "alpha's notes", fileBody(t, notes), "an edit made after the update stopped\n")
 	nothingAt(t, "new.md", filepath.Join(h.library, "alpha", "new.md"))
 	equal(t, "journals", journalCount(t, h), 1)
 

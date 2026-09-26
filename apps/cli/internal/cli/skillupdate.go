@@ -203,9 +203,10 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 
 // selection is the skills a run sets out to update, in name order, with
 // what the library holds of each: the one name it was given, or with --all
-// every managed skill whose candidate agentx can read. A skill with no
-// candidate has nothing to update, an upstream-removed one included, since
-// the check that marks a skill deletes its candidate.
+// every managed skill with an update, a candidate agentx can read that its
+// branch does not already hold (see lineage.Record.AtCandidate). A skill
+// with no candidate has nothing to update, an upstream-removed one
+// included, since the check that marks a skill deletes its candidate.
 func (r *updateRun) selection(name string, records map[string]lineage.Record) ([]string, map[string]scan.LibrarySkill) {
 	libs := map[string]scan.LibrarySkill{}
 	if !r.all {
@@ -238,9 +239,10 @@ const mergeNotYet = "merging a modified skill with its update is not supported y
 // removed from this machine, which is exit code 5 as installing from it
 // is; a skill the last update check found its source no longer holds,
 // which is kept as it is and never updated; and, having found an update
-// for it, a skill that was edited since it was installed, and one whose
-// library entry is a symlink. A skill with no update is neither: u and f
-// are then both nil.
+// for it, a skill that holds something git cannot record, which the update
+// would discard with no record of it and which a revert refuses too, one
+// that was edited since it was installed, and one whose library entry is a
+// symlink. A skill with no update is neither: u and f are then both nil.
 func (inv *invocation) judgeUpdate(name string, rec lineage.Record, managed bool, lib scan.LibrarySkill, held bool, sources map[string]bool) (*updating, *failure) {
 	again := "run '" + skillCommand("update", name) + "' again"
 	switch {
@@ -276,6 +278,9 @@ func (inv *invocation) judgeUpdate(name string, rec lineage.Record, managed bool
 	tree, err := inv.readLibraryTree(lib.Path)
 	if err != nil {
 		return nil, failureOf(err)
+	}
+	if len(tree.Unrecordable) > 0 {
+		return nil, unrecordableRefusal(name, libPath, tree.Unrecordable, "an update", "update")
 	}
 	if !rec.Current(tree) {
 		return nil, refuse(exitRefused, name+" was edited since it was installed, and "+mergeNotYet,

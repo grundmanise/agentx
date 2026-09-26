@@ -325,9 +325,10 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 		ev.Drift = driftOf(obs, !sources[rec.Import.Source], rec.UpstreamRemoved != "")
 		// What the last update check found stays until a check finds
 		// otherwise, whatever the source holds by now: it is read from the
-		// candidate ref, in the for-each-ref that read the lineage.
-		if c := rec.Candidate; c != nil && c.HasImport {
-			ev.Candidate = &scan.LibraryCandidate{UpstreamCommit: c.Import.Commit, ContentHash: c.Import.Hash}
+		// candidate ref, in the for-each-ref that read the lineage. A
+		// candidate the branch already holds is no update; see AtCandidate.
+		if next, ok := rec.AtCandidate(); ok {
+			ev.Candidate = &scan.LibraryCandidate{UpstreamCommit: next.Import.Commit, ContentHash: next.Import.Hash}
 		}
 	}
 	return ev
