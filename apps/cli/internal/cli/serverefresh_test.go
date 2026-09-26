@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -23,16 +26,12 @@ import (
 // which bumps the version file once: n writes are n checks done.
 func (h *harness) awaitWrites(t *testing.T, from, n int) int {
 	t.Helper()
-	deadline := time.Now().Add(serveDeadline)
-	for {
-		if v := mutationVersion(t, h); v >= from+n {
-			return v
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("no %d writes after version %d within %s", n, from, serveDeadline)
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+	var v int
+	awaitTrue(t, fmt.Sprintf("%d writes after version %d", n, from), func() bool {
+		v = mutationVersion(t, h)
+		return v >= from+n
+	})
+	return v
 }
 
 // awaitTrue waits until done reports true, which it is asked every few
@@ -44,7 +43,7 @@ func awaitTrue(t *testing.T, what string, done func() bool) {
 		if time.Now().After(deadline) {
 			t.Fatalf("%s: not within %s", what, serveDeadline)
 		}
-		time.Sleep(20 * time.Millisecond)
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 
@@ -71,18 +70,20 @@ func (p *serveProc) logged(level, prefix string) []string {
 
 // awaitLogged waits until serve has written at least n log lines at level
 // whose message starts with prefix, and returns every one written by then.
+// A wait that fails logs what serve wrote instead.
 func (p *serveProc) awaitLogged(level, prefix string, n int) []string {
 	p.t.Helper()
-	deadline := time.Now().Add(serveDeadline)
-	for {
-		if got := p.logged(level, prefix); len(got) >= n {
-			return got
+	var got []string
+	defer func() {
+		if len(got) < n { // awaitTrue failed the test, and this runs as it ends
+			p.t.Logf("stderr:\n%s", p.stderr.String())
 		}
-		if time.Now().After(deadline) {
-			p.t.Fatalf("fewer than %d %s lines starting %q within %s:\n%s", n, level, prefix, serveDeadline, p.stderr.String())
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	}()
+	awaitTrue(p.t, fmt.Sprintf("%d %s lines starting %q", n, level, prefix), func() bool {
+		got = p.logged(level, prefix)
+		return len(got) >= n
+	})
+	return got
 }
 
 // TestServeRefreshesEverySource runs serve with the check interval
@@ -119,6 +120,17 @@ func TestServeRefreshesEverySource(t *testing.T) {
 	two.skill("delta", "delta", "A skill added upstream", nil)
 	moved := two.commit("delta")
 	awaitTrue(t, "two's source ref moves to the new commit", func() bool { return h.sourceRef(two.url) == moved })
+
+	// No refresh is asked for, and until the settings are backdated below
+	// nothing but the checks writes to agentx home: the rescan the write of
+	// the check that moved the ref sets off rebuilds the index on its own.
+	want := []string{two.url + " delta delta"}
+	searches := 0
+	awaitTrue(t, fmt.Sprintf("a search after the ref moved finds %q", want), func() bool {
+		searches++
+		return reflect.DeepEqual(p.search(fmt.Sprintf("s%d", searches), "upstream"), want)
+	})
+
 	// Checks never overlap, so once the ref has moved every write still to
 	// come is that of a check that fetched after the commit. The lock keeps
 	// them out while the settings go back to an old last_fetched, so that
@@ -128,21 +140,6 @@ func TestServeRefreshesEverySource(t *testing.T) {
 	unlock()
 	awaitTrue(t, "two's last_fetched is written again", func() bool { return lastFetched(t, h, two.url) != backdated })
 	refetched(t, h, two.url)
-
-	// No refresh is asked for: the rescan the write sets off rebuilds the
-	// index on its own.
-	want := []string{two.url + " delta delta"}
-	deadline := time.Now().Add(serveDeadline)
-	for i := 0; ; i++ {
-		got := p.search(fmt.Sprintf("s%d", i+1), "upstream")
-		if reflect.DeepEqual(got, want) {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("results after the ref moved = %q, want %q", got, want)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
 	equal(t, "exit", p.close(), 0)
 	if w := warnings(h, p.stderr.String()); len(w) > 0 {
 		t.Errorf("serve warned: %q", w)
@@ -319,6 +316,82 @@ func TestServeRefreshesNothingWithoutASource(t *testing.T) {
 			equal(t, "exit", p.close(), 0)
 		})
 	}
+}
+
+// TestServeWarnsOnceAboutSourcesAnImportBrought runs serve with the check
+// interval shortened on a machine whose settings name two sources because
+// an import wrote them, and which has fetched nothing, so has no account
+// repo to fetch into until source add creates one. No check runs a git
+// fetch, creates the account repo or writes anything, but the first warns
+// about each source as not fetched, as source fetch refuses it, and the
+// checks after it log the same line at debug level. skill check, which
+// checks only the sources a managed skill came from, still has nothing to
+// check there.
+//
+// Then source add adds one of the two, which creates the account repo, and
+// a new serve starts. Its checks fetch that source, but the account repo
+// brings nothing of the other, which is still not fetched: the new serve
+// warns about it once again, since what a serve remembers of a failing
+// source is its own, and its checks after that log it at debug level.
+func TestServeWarnsOnceAboutSourcesAnImportBrought(t *testing.T) {
+	t.Parallel()
+	from := newHarness(t)
+	from.build(t, fixture{dirs: []string{".claude"}})
+	one, two := from.fetchSources(t)
+	file := from.exportPath("export.json")
+	from.mustRun("export", file)
+
+	h := newHarness(t)
+	h.build(t, fixture{dirs: []string{".claude"}})
+	h.mustRun("import", file, "--yes")
+	account := filepath.Join(h.agentx, "account.git")
+	if _, err := os.Stat(account); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("the import left %s behind, or it cannot be told: %v", account, err)
+	}
+	version := mutationVersion(t, h)
+	calls := countingGit(t, h)
+	h.env["AGENTX_CHECK_INTERVAL"] = "100ms"
+	p := h.serve(t, "--json", "--verbose")
+	p.next("snapshot")
+	var want []string
+	for _, s := range []*sourceRepo{one, two} {
+		line := "update check: source not fetched: " + s.url
+		p.awaitLogged("debug", line, 2) // two checks after the one at launch
+		want = append(want, line)
+	}
+	equal(t, "exit", p.close(), 0)
+
+	warned := p.logged("warn", "update check: ")
+	slices.Sort(warned)
+	slices.Sort(want)
+	if !slices.Equal(warned, want) {
+		t.Errorf("the check warnings = %q, want one per source: %q", warned, want)
+	}
+	for _, call := range calls() {
+		if slices.Contains(strings.Fields(call), "fetch") {
+			t.Errorf("serve fetched on a machine with no account repo: %s", call)
+		}
+	}
+	if _, err := os.Stat(account); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("serve created %s: %v", account, err)
+	}
+	equal(t, "the version file", mutationVersion(t, h), version)
+	equal(t, "skill check", h.mustRun("skill", "check").stdout,
+		"Nothing to check: no managed skill comes from a source added on this machine.\n")
+
+	h.mustRun("source", "add", one.url)
+	backdate(t, h)
+	before := mutationVersion(t, h)
+	p = h.serve(t, "--json", "--verbose")
+	p.next("snapshot")
+	h.awaitWrites(t, before, 1) // the check at launch, which fetched one
+	line := "update check: source not fetched: " + two.url
+	p.awaitLogged("debug", line, 2) // two checks after the one at launch
+	equal(t, "exit", p.close(), 0)
+
+	refetched(t, h, one.url)
+	equal(t, "two's last_fetched", lastFetched(t, h, two.url), backdated)
+	equal(t, "the check warnings of the new serve", strings.Join(p.logged("warn", "update check: "), "\n"), line)
 }
 
 // TestServeSkipsARemovedSource runs serve with the check interval shortened

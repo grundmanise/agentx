@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
-	"sort"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -211,7 +210,9 @@ func newServeCommand(inv *invocation) *cobra.Command {
 // made on the loop's goroutine and carries one update_available per update,
 // with this process's instance id, and the warnings of what the check could
 // not check, a source it could not fetch once per cause (see
-// sourceFailures). A machine with no source runs no git at all. The rescan
+// sourceFailures). A machine with no source runs no git at all, and neither
+// does one with no account repo; a source an import wrote stays a source
+// not fetched, account repo or not, until source add adds it. The rescan
 // its write of the version file sets off brings the candidates and markers
 // it wrote into the next snapshot, and every source ref it moved into the
 // source index.
@@ -273,7 +274,7 @@ func (sf sourceFailures) report(out *writer, rep checkReport) {
 			recovered = append(recovered, url)
 		}
 	}
-	sort.Strings(recovered)
+	slices.Sort(recovered)
 	for _, url := range recovered {
 		out.info("update check: " + url + " can be fetched again")
 	}

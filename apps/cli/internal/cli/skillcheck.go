@@ -122,7 +122,7 @@ type removedSkill struct {
 // checkReport is what one update check found and did, for skill check to
 // print and for the serve child to emit.
 type checkReport struct {
-	idle      bool            // nothing to fetch: no managed skill comes from a source this machine has, no source at all for the serve child, or every one the check set out to fetch was removed while it ran
+	idle      bool            // nothing to fetch: no managed skill comes from a source this machine has, no source at all for the serve child, or every one the check set out to fetch was removed while it ran; a serve child whose settings name sources it has no account repo for is not idle, each of them being a failure
 	refreshed map[string]bool // the sources that were fetched and that the settings still hold, by canonical URL
 	checked   int             // the managed skills the check recorded a verdict for
 	updates   []updateAvailableEvent
@@ -261,9 +261,11 @@ func checkRefusal(failures []checkFailure) error {
 // fetches every source of the settings, a source no skill was installed
 // from included, so that each tick refreshes them all in this one pass,
 // each fetched once, and the source index serve answers searches from
-// follows them. It takes the lock as the serve child does, waiting for a
-// holder. And it reports no progress, where skill check reports a progress
-// event per source.
+// follows them; on a machine with no account repo, where nothing can be
+// fetched, each is reported as not fetched rather than passed over. It
+// takes the lock as the serve child does, waiting for a holder. And it
+// reports no progress, where skill check reports a progress event per
+// source.
 //
 // A source the settings no longer hold is not fetched and its skills are
 // left as they are, candidate and marker included: nothing names it to
@@ -285,8 +287,21 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool) (checkRep
 	if err != nil {
 		return rep, accountRepoFailure(err)
 	}
-	if !exists {
+	if !exists && !serving { // no managed skill, and nothing a source was fetched into
 		rep.idle = true
+		return rep, nil
+	}
+	if !exists {
+		// Settings that name sources on a machine that has fetched none,
+		// as an import leaves them: nothing can be fetched into an account
+		// repo that source add has not created yet, and each source is the
+		// failure a fetch of it gives there, which the serve child warns
+		// about once. Nothing is fetched or written, and no git is run.
+		for _, entry := range s.Sources {
+			t := target(entry)
+			res := source.Result{Source: t.src, Err: fmt.Errorf("%w: %s", source.ErrNotFetched, t.src.URL)}
+			rep.failures = append(rep.failures, checkFailure{source: entry.URL, fetch: true, f: fetchRefused(res)})
+		}
 		return rep, nil
 	}
 	records, err := lineage.List(ctx, inv.git, gitDir)
