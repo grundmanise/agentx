@@ -1,15 +1,12 @@
 package cli
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 )
 
 // driftHarness is a machine with four configurations and one managed skill
@@ -120,65 +117,6 @@ func TestARootSkillIsComparedUnderTheRepositoryName(t *testing.T) {
 	}
 	h.mustRun("skill", "revert", "solo")
 	equal(t, "state after the revert", h.listed("solo")["state"], stateCurrent)
-}
-
-// TestASkillStoredWithALegacyModeInstallsCurrent installs a skill whose
-// source stores its trees with mode 100664, which git mktree takes and
-// ls-tree reads back as 100644: the tree keeps an id of its own that no
-// directory on disk has. The import writes the tree git writes today
-// instead, so the skill lists as current straight after the install, the
-// diff agrees, and an edit reverts back to current.
-func TestASkillStoredWithALegacyModeInstallsCurrent(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude"}})
-	s := h.newSourceRepo("legacy", true)
-	s.skill("skills/nc", "nc", "Stored with a legacy mode", map[string]string{"a.md": "a\n", "sub/b.md": "b\n"})
-	s.commit("nc")
-	sub := s.mktree("100664 blob " + s.run("rev-parse", "HEAD:skills/nc/sub/b.md") + "\tb.md")
-	nc := s.mktree(
-		"100644 blob "+s.run("rev-parse", "HEAD:skills/nc/SKILL.md")+"\tSKILL.md",
-		"100664 blob "+s.run("rev-parse", "HEAD:skills/nc/a.md")+"\ta.md",
-		"040000 tree "+sub+"\tsub")
-	skills := s.mktree(s.replaced("HEAD:skills", "nc", nc)...)
-	root := s.mktree(s.replaced("HEAD^{tree}", "skills", skills)...)
-	canonical := s.tree("skills/nc")
-	s.bare("update-ref", "refs/heads/main", s.bare("commit-tree", root, "-p", "HEAD", "-m", "legacy modes"))
-	if s.tree("skills/nc") == canonical {
-		t.Fatal("the rewritten tree has the canonical id; the fixture proves nothing")
-	}
-	contains(t, "the source listing", s.bare("ls-tree", "HEAD:skills/nc"), "100644 blob "+s.run("rev-parse", "HEAD:skills/nc/a.md")+"\ta.md")
-
-	h.mustRun("source", "add", s.url)
-	h.mustRun("skill", "add", s.url, "--skill", "nc")
-	ev := h.listed("nc")
-	equal(t, "state after the install", ev["state"], stateCurrent)
-	equal(t, "the import tree", h.accountGit("rev-parse", "refs/heads/managed/nc:nc"), canonical)
-	short := h.accountGit("log", "-1", "--format=%(trailers:key=Agentx-Upstream-Commit,valueonly)", "refs/heads/managed/nc")[:7]
-	equal(t, "the diff", h.mustRun("skill", "diff", "nc").stdout, "nc matches its base version at "+short+"\n")
-
-	file := filepath.Join(h.library, "nc", "a.md")
-	writeFile(t, file, "an edit\n")
-	equal(t, "state after an edit", h.listed("nc")["state"], stateModified)
-	contains(t, "the revert", h.mustRun("skill", "revert", "nc").stdout, "✓ reverted nc to its base version at "+short+"\n")
-	equal(t, "a.md after the revert", fileBody(t, file), "a\n")
-	equal(t, "state after the revert", h.listed("nc")["state"], stateCurrent)
-
-	// An import written before imports wrote canonical trees holds the
-	// source's own tree, legacy modes and all. A revert still lays out the
-	// version it holds and publishes it.
-	tip := h.accountGit("rev-parse", "refs/heads/managed/nc")
-	r := gitx.New(h.env, false, func(string, ...any) {})
-	wrapped, err := r.IsolatedInput(context.Background(), gitx.AccountRepoPath(h.agentx),
-		strings.NewReader("040000 tree "+s.tree("skills/nc")+"\tnc\n"), "mktree")
-	if err != nil {
-		t.Fatal(err)
-	}
-	legacy := h.accountGit("commit-tree", strings.TrimSpace(wrapped), "-m", h.accountGit("log", "-1", "--format=%B", tip))
-	h.accountGit("update-ref", "refs/heads/managed/nc", legacy, tip)
-	writeFile(t, file, "another edit\n")
-	contains(t, "the revert to a legacy base", h.mustRun("skill", "revert", "nc").stdout, "✓ reverted nc to its base version at "+short+"\n")
-	equal(t, "a.md after the revert to a legacy base", fileBody(t, file), "a\n")
 }
 
 // TestPlacementDriftIsReadAtEachConfigurationsOwnPlace: displaced and

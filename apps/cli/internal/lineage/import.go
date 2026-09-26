@@ -322,6 +322,46 @@ func WriteAll(ctx context.Context, r *gitx.Runner, gitDir, run string, versions 
 	return ids, trees, nil
 }
 
+// Rewrite writes the import commit of the version rec records once more,
+// as an import writes one today, onto the first staging ref of run: the
+// same trailers and message, the same dates, and the tree base gets from
+// a git of today. It is for a branch whose commit fails Canonical, which
+// an earlier agentx wrote over a source's own tree, legacy modes and all:
+// no directory on disk is ever current against that commit, while the one
+// this returns is the commit an install of the same version writes now,
+// on this machine or any other.
+//
+// The date is read off the commit rec names, which carries the upstream
+// commit's committer time as every import commit does, and is held to the
+// rule an install holds that time to.
+func Rewrite(ctx context.Context, r *gitx.Runner, gitDir, run string, rec Record, base Base) (string, error) {
+	if !rec.HasImport {
+		return "", fmt.Errorf("%w: %s carries no lineage", ErrTrailer, rec.Ref)
+	}
+	out, err := r.Isolated(ctx, gitDir, "log", "-1", "--format=%ct", rec.Commit)
+	if err != nil {
+		return "", err
+	}
+	when, err := UpstreamDate(strings.TrimSpace(out))
+	if err != nil {
+		return "", err
+	}
+	dir := rec.Import.Dir()
+	commits, trees, err := WriteAll(ctx, r, gitDir, run, []Version{{
+		Import: rec.Import, Dir: dir, Tree: base.Tree, Entries: base.Entries, When: when,
+	}})
+	if err != nil {
+		return "", err
+	}
+	// An import holds regular files alone, so a base holding anything
+	// else was not written by one, and the commit written now would hold
+	// another version than the one a revert lays out.
+	if want := treeid.Wrap(dir, base.ID()); trees[0] != want {
+		return "", fmt.Errorf("%w: %s holds entries no import writes", ErrTrailer, rec.Ref)
+	}
+	return commits[0], nil
+}
+
 // DropImporting removes the staging refs of run, in one transaction. It is
 // cleanup: the refs hold commits the import branches now hold too, and a
 // deletion of a ref that is not there succeeds.
@@ -360,7 +400,7 @@ func writeTrees(ctx context.Context, r *gitx.Runner, gitDir string, versions []V
 	plans := make([]*treePlan, len(versions))
 	maxDepth := 0
 	for i, v := range versions {
-		plans[i] = newTreePlan(v)
+		plans[i] = planTrees(v, false)
 		maxDepth = max(maxDepth, plans[i].maxDepth)
 	}
 	// A directory is written once every directory below it is, so the levels
@@ -426,11 +466,13 @@ type plannedDir struct {
 	dir  string
 }
 
-// newTreePlan reads the entries of one version into its directories and
+// planTrees reads the entries of one version into its directories and
 // computes, deepest first, the id each one ends at: its regular files as
 // git lists them, which is with their canonical modes, and the directories
-// below it at the ids they end at, one left with nothing left out.
-func newTreePlan(v Version) *treePlan {
+// below it at the ids they end at, one left with nothing left out. links
+// keeps the symlinks too, which an import leaves out and a version laid
+// out on disk holds.
+func planTrees(v Version, links bool) *treePlan {
 	p := &treePlan{
 		dir:     v.Dir,
 		entries: map[string][]treeid.Entry{},
@@ -452,7 +494,7 @@ func newTreePlan(v Version) *treePlan {
 			depth := strings.Count(e.Path, "/") + 1
 			p.byDepth[depth] = append(p.byDepth[depth], e.Path)
 			p.maxDepth = max(p.maxDepth, depth)
-		case source.IsFileMode(e.Mode):
+		case source.IsFileMode(e.Mode), links && e.Mode == source.SymlinkMode:
 			files[parent] = append(files[parent], treeid.Entry{Name: path.Base(e.Path), Mode: e.Mode, OID: e.OID})
 		}
 	}

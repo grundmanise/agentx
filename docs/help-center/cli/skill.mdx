@@ -375,6 +375,14 @@ There is one diff per file, and every path is relative to the skill's directory.
 
 The diff only reads your library: nothing is written to it. agentx compares the files exactly as they are on disk, so no `.gitignore` or other git setting hides a file from the comparison. A repository nested in the skill, or anything else git cannot record, such as a named pipe, is left out with a warning naming it. Such a skill never matches its base version: `skill list` shows it as `modified`, the diff ends with the number of paths git cannot record, as in `pdf differs from its base version at 3f2a9c1 only in 1 path git cannot record`, and `skill revert` refuses it until you move the path out of the skill.
 
+An earlier version of agentx could store a skill from a source that uses an old kind of file mode in a form that makes it show as `modified` even though you changed nothing. `skill diff` then says so instead of showing a diff:
+
+```text
+pdf differs from its base version at 3f2a9c1 only in how the account repo stores it; run 'agentx skill revert pdf' to store it as git writes it today, which changes no file
+```
+
+Run `agentx skill revert pdf`, or install the same version again with `agentx skill add`. Either one stores the version again without touching your files, and the skill shows as `current`.
+
 A skill agentx did not install, and a fork, have no base version to compare with, so `skill diff` stops with exit code 6.
 
 ## Revert a skill
@@ -404,7 +412,11 @@ A skill that holds a repository of its own, or anything else git cannot record, 
 
 If the skill's library directory is a symlink to a directory of your own, `skill revert` stops with exit code 6 and discards nothing: a revert replaces the library directory, so it would remove your link and leave your changes where the link leads. Replace the link with the directory it points to, then revert again, or use `agentx skill diff` to see what differs and put the files back yourself.
 
-A skill agentx did not install, and a fork, have no base version to revert to, so `skill revert` stops with exit code 6. Reverting a skill that already holds its base version changes nothing.
+A skill agentx did not install, and a fork, have no base version to revert to, so `skill revert` stops with exit code 6. Reverting a skill that already holds its base version changes nothing. If the version was stored in an older form, as described under [See what you changed](#see-what-you-changed), the revert stores it again and changes none of your files:
+
+```text
+✓ pdf already matches its base version at 3f2a9c1; nothing was reverted, and its import branch now stores that version as git writes it today
+```
 
 ## Script it
 

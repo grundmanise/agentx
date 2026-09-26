@@ -289,9 +289,27 @@ func (inv *invocation) removeAbsent(ctx context.Context, name string, from []str
 		}
 		judge := copyJudge{against: "its base version"}
 		if rec.HasImport {
+			// A branch an earlier agentx stored in a form git no longer
+			// writes is current against no directory, so a copy that is not
+			// current is held to the base's files as well, read once and
+			// only for such a copy.
+			var base *lineage.Base
 			judge.differs = func(path string) bool {
 				tree, err := treeid.Read(path)
-				return err != nil || !rec.Current(tree)
+				if err != nil {
+					return true
+				}
+				if rec.Current(tree) {
+					return false
+				}
+				if base == nil {
+					read, err := lineage.ReadBase(ctx, inv.git, gitDir, rec)
+					if err != nil {
+						return true
+					}
+					base = &read
+				}
+				return !base.HeldBy(tree)
 			}
 		}
 		edit, err := inv.beginSettings()
@@ -306,7 +324,7 @@ func (inv *invocation) removeAbsent(ctx context.Context, name string, from []str
 			return err
 		}
 		if state, err := home.State(libPath); err == nil && !home.IsAbsent(state) {
-			inv.out.warn(libPath + " holds no skill and was left as it is; move it aside before installing " + name + " again")
+			inv.out.warn(quotedPath(libPath) + " holds no skill and was left as it is; move it aside before installing " + name + " again")
 		}
 		plan.managed = commit
 		m.Ref(gitDir, lineage.ManagedRef(name), commit, "")

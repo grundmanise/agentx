@@ -3,6 +3,7 @@ package lineage
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -246,42 +247,7 @@ func TestWriteTreesWritesCanonicalModes(t *testing.T) {
 	requireGit(t)
 	ctx := context.Background()
 	r, gitDir := newRepo(t)
-	blob := func(content string) string {
-		oid, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(content), "hash-object", "-t", "blob", "-w", "--stdin")
-		if err != nil {
-			t.Fatal(err)
-		}
-		return strings.TrimSpace(oid)
-	}
-	skill, notes, deep := blob("---\nname: alpha\n---\n"), blob("notes\n"), blob("deep\n")
-	// The canonical form: what update-index and write-tree make of the files.
-	canonical := skillTree(t, ctx, r, gitDir, map[string]string{
-		"SKILL.md": "---\nname: alpha\n---\n", "notes.md": "notes\n", "sub/deep.md": "deep\n",
-	}, "")
-
-	mktree := func(lines ...string) string {
-		out, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(strings.Join(lines, "\n")+"\n"), "mktree")
-		if err != nil {
-			t.Fatal(err)
-		}
-		return strings.TrimSpace(out)
-	}
-	sub := mktree("100664 blob " + deep + "\tdeep.md")
-	// mktree writes a directory's mode as 40000 whatever it is given, so the
-	// padded one is written byte for byte.
-	raw, err := hex.DecodeString(sub)
-	if err != nil {
-		t.Fatal(err)
-	}
-	body := "100644 SKILL.md\x00" + string(mustHex(t, skill)) + "100664 notes.md\x00" + string(mustHex(t, notes)) + "040000 sub\x00" + string(raw)
-	out, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(body), "hash-object", "-t", "tree", "--literally", "-w", "--stdin")
-	if err != nil {
-		t.Fatal(err)
-	}
-	legacy := strings.TrimSpace(out)
-	if legacy == canonical.tree {
-		t.Fatal("the legacy tree has the canonical id; the fixture proves nothing")
-	}
+	legacy, canonical := legacyTree(t, ctx, r, gitDir)
 	entries, err := source.ReadTree(ctx, r, gitDir, legacy)
 	if err != nil {
 		t.Fatal(err)
@@ -313,6 +279,138 @@ func TestWriteTreesWritesCanonicalModes(t *testing.T) {
 	}
 	if want := treeid.Wrap("alpha", canonical.tree); roots[0] != want {
 		t.Errorf("the import tree is %s, want %s: the skill under its canonical tree %s", roots[0], want, canonical.tree)
+	}
+}
+
+// legacyTree writes one skill directory twice: in forms git reads but no
+// longer writes, a file of mode 100664, which ls-tree reads back as 100644,
+// and a directory whose mode is padded with a zero; and as git writes the
+// same files today.
+func legacyTree(t *testing.T, ctx context.Context, r *gitx.Runner, gitDir string) (legacy string, canonical built) {
+	t.Helper()
+	blob := func(content string) string {
+		oid, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(content), "hash-object", "-t", "blob", "-w", "--stdin")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.TrimSpace(oid)
+	}
+	skill, notes, deep := blob("---\nname: alpha\n---\n"), blob("notes\n"), blob("deep\n")
+	// The canonical form: what update-index and write-tree make of the files.
+	canonical = skillTree(t, ctx, r, gitDir, map[string]string{
+		"SKILL.md": "---\nname: alpha\n---\n", "notes.md": "notes\n", "sub/deep.md": "deep\n",
+	}, "")
+	sub := mktreeOf(t, ctx, r, gitDir, "100664 blob "+deep+"\tdeep.md")
+	// mktree writes a directory's mode as 40000 whatever it is given, so the
+	// padded one is written byte for byte.
+	body := "100644 SKILL.md\x00" + string(mustHex(t, skill)) + "100664 notes.md\x00" + string(mustHex(t, notes)) + "040000 sub\x00" + string(mustHex(t, sub))
+	out, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(body), "hash-object", "-t", "tree", "--literally", "-w", "--stdin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy = strings.TrimSpace(out)
+	if legacy == canonical.tree {
+		t.Fatal("the legacy tree has the canonical id; the fixture proves nothing")
+	}
+	return legacy, canonical
+}
+
+// mktreeOf writes one tree from ls-tree lines, through git mktree.
+func mktreeOf(t *testing.T, ctx context.Context, r *gitx.Runner, gitDir string, lines ...string) string {
+	t.Helper()
+	out, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(strings.Join(lines, "\n")+"\n"), "mktree")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSpace(out)
+}
+
+// importCommit writes, through commit-tree, the import commit of imp over
+// the skill tree tree under dir, the way an earlier agentx wrote one: the
+// tree given, whatever form it is in.
+func importCommit(t *testing.T, ctx context.Context, r *gitx.Runner, gitDir string, imp Import, dir, tree, when string) Record {
+	t.Helper()
+	root := mktreeOf(t, ctx, r, gitDir, "040000 tree "+tree+"\t"+dir)
+	commit, err := r.IsolatedAt(ctx, gitDir, when, "commit-tree", root, "-m", imp.Message())
+	if err != nil {
+		t.Fatalf("commit-tree: %v", err)
+	}
+	return Record{Name: dir, Kind: KindManaged, Ref: ManagedRef(dir), Commit: commit, Tree: root, Import: imp, HasImport: true}
+}
+
+// TestRewriteStoresALegacyBaseAsAnInstallWritesItToday: a branch an
+// earlier agentx wrote over a source's own tree, legacy modes and all, is
+// current against no directory, and Canonical says so. Rewrite writes the
+// commit of the same version once more, and it is the very commit an
+// install of that version writes today, dates and message and all, held by
+// the run's staging ref.
+func TestRewriteStoresALegacyBaseAsAnInstallWritesItToday(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+	ctx := context.Background()
+	r, gitDir := newRepo(t)
+	legacy, canonical := legacyTree(t, ctx, r, gitDir)
+	imp := Import{Source: "https://github.com/example/skills", Path: "skills/alpha", Commit: commitID, Hash: hashID}
+	const when = "1700000000 +0000"
+	installed, _, err := WriteAll(ctx, r, gitDir, NewRun(), []Version{{Import: imp, Dir: "alpha", Tree: canonical.tree, Entries: canonical.entries, When: when}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rec := importCommit(t, ctx, r, gitDir, imp, "alpha", legacy, when)
+	base, err := ReadBase(ctx, r, gitDir, rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Canonical(base) {
+		t.Fatal("a branch over the legacy tree reads as canonical")
+	}
+	if base.Tree != legacy || base.ID() != canonical.tree {
+		t.Fatalf("the base is stored as %s with the id %s, want %s with the id %s", base.Tree, base.ID(), legacy, canonical.tree)
+	}
+	run := NewRun()
+	got, err := Rewrite(ctx, r, gitDir, run, rec, base)
+	if err != nil {
+		t.Fatalf("rewrite: %v", err)
+	}
+	if got != installed[0] {
+		t.Errorf("the rewritten commit is %s, want %s, the one an install writes", got, installed[0])
+	}
+	if held, err := r.Isolated(ctx, gitDir, "rev-parse", ImportingRef(run, 0)); err != nil || held != got {
+		t.Errorf("the staging ref holds %q (%v), want %s", held, err, got)
+	}
+
+	again := importCommit(t, ctx, r, gitDir, imp, "alpha", canonical.tree, when)
+	if base, err := ReadBase(ctx, r, gitDir, again); err != nil || !again.Canonical(base) {
+		t.Errorf("a branch over the canonical tree reads as canonical: %v, %v", again.Canonical(base), err)
+	}
+}
+
+// TestBaseIDCountsItsSymlinks: the id of a base is the id of the directory
+// laid out from it, a symlink it holds included, which is the tree git
+// writes for them. No import writes a symlink, so Rewrite refuses a base
+// holding one rather than write a commit of another version.
+func TestBaseIDCountsItsSymlinks(t *testing.T) {
+	t.Parallel()
+	requireGit(t)
+	ctx := context.Background()
+	r, gitDir := newRepo(t)
+	linked := skillTree(t, ctx, r, gitDir, map[string]string{"SKILL.md": "---\nname: gamma\n---\n", "sub/keep.md": "keep\n"}, "sub/away")
+	base := Base{Tree: linked.tree, Entries: linked.entries}
+	if base.ID() != linked.tree {
+		t.Errorf("the base's id is %s, want %s, the tree holding its symlink", base.ID(), linked.tree)
+	}
+	imp := Import{Source: "https://github.com/example/skills", Path: "skills/gamma", Commit: commitID, Hash: hashID}
+	rec := importCommit(t, ctx, r, gitDir, imp, "gamma", linked.tree, "1700000000 +0000")
+	read, err := ReadBase(ctx, r, gitDir, rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !rec.Canonical(read) {
+		t.Error("a branch over a tree git writes today does not read as canonical")
+	}
+	if _, err := Rewrite(ctx, r, gitDir, NewRun(), rec, read); !errors.Is(err, ErrTrailer) {
+		t.Errorf("rewriting a base that holds a symlink: %v, want %v", err, ErrTrailer)
 	}
 }
 

@@ -801,12 +801,12 @@ func (inv *invocation) stageAdoption(m *home.Mutation, gitDir string, c *candida
 	// Modified is what skill list will say of the skill: the directory's
 	// tree against the import tree, modes and links included.
 	c.hash, c.modified = hash, !holdsVersion(c.path, c.imported)
-	create, f := refPlan(c.imported, records, c.path, false)
+	from, write, f := refPlan(c.imported, records, c.path, false)
 	if f != nil {
 		return f, nil
 	}
-	if create {
-		m.Ref(gitDir, lineage.ManagedRef(c.entry.Name), "", c.imported.commit)
+	if write {
+		m.Ref(gitDir, lineage.ManagedRef(c.entry.Name), from, c.imported.commit)
 	}
 	return nil, nil
 }

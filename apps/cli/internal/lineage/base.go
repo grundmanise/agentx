@@ -49,6 +49,18 @@ func Holds(lib treeid.Tree, dir, importTree string) bool {
 	return len(lib.Unrecordable) == 0 && treeid.Wrap(dir, lib.ID) == importTree
 }
 
+// Canonical reports whether the import commit rec names stores base, the
+// version read out of it, as git writes a tree today, which is the only
+// form a directory on disk can be compared equal to. Every import writes
+// it that way; an earlier agentx reused a source's own tree whole, and a
+// source may store a mode git reads but no longer writes, such as 100664.
+// Current is never true against a branch that fails this, whatever the
+// library holds: a diff says so, and a revert writes the branch again, see
+// Rewrite.
+func (rec Record) Canonical(base Base) bool {
+	return rec.HasImport && treeid.Wrap(rec.Import.Dir(), base.ID()) == rec.Tree
+}
+
 // Base is the base version of a managed skill as the account repo holds it:
 // the tree of the skill's directory and every entry below it, their paths
 // relative to that directory.
@@ -58,15 +70,26 @@ type Base struct {
 }
 
 // ID is the id git gives the base version's directory as it writes a tree
-// today, computed in process from the entries. For a base an import writes
-// now it is Tree itself, since every import tree is written that way. A
-// base an earlier import reused whole from a source that stores a mode git
-// no longer writes, such as 100664, keeps an id of its own in Tree, while
-// the directory laid out from it, like any directory on disk, has this one.
+// today, computed in process from every entry it holds: its files, and
+// the symlinks no import writes but a directory laid out from the base
+// would hold all the same. For a base an import writes now it is Tree
+// itself, since every import tree is written that way. A base an earlier
+// agentx reused whole from a source that stores a mode git no longer
+// writes, such as 100664, keeps an id of its own in Tree, while the
+// directory laid out from it, like any directory on disk, has this one.
 // So a command that lays the base out holds what it laid out to ID, and a
 // diff, which git reads with canonical modes, compares with Tree.
 func (b Base) ID() string {
-	return newTreePlan(Version{Tree: b.Tree, Entries: b.Entries}).ids[""]
+	return planTrees(Version{Tree: b.Tree, Entries: b.Entries}, true).ids[""]
+}
+
+// HeldBy reports whether lib, a directory read as git would record it,
+// holds exactly the files, modes and links of the base, however the
+// account repo stores them. Against a branch that is Canonical it is
+// Current; against one that is not, which Current never matches, it is
+// what tells a directory holding the version from one holding another.
+func (b Base) HeldBy(lib treeid.Tree) bool {
+	return len(lib.Unrecordable) == 0 && lib.ID == b.ID()
 }
 
 // ReadBase reads the base version of a managed skill out of its import

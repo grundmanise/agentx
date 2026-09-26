@@ -437,21 +437,29 @@ func TestRevertChildProcess(t *testing.T) {
 // when the child is gone, so that nothing else the test runs meets it.
 func killedRevert(t *testing.T, h *harness, name string) string {
 	t.Helper()
+	return killedRevertBy(t, h, name, `
+for f in %MUTATIONS%/*.json; do
+	if [ -e "$f" ]; then
+		kill -9 $PPID
+		exit 1
+	fi
+done
+exec %GIT% "$@"
+`)
+}
+
+// killedRevertBy runs one revert in a child process under a git wrapper
+// whose body is script, in which %GIT% is the real git and %MUTATIONS%
+// the journal directory, and which kills the revert where it chooses.
+func killedRevertBy(t *testing.T, h *harness, name, script string) string {
+	t.Helper()
 	real, err := exec.LookPath("git")
 	if err != nil {
 		t.Fatal(err)
 	}
 	path := h.env["PATH"]
 	defer func() { h.env["PATH"] = path }()
-	stubGit(t, h, `#!/bin/sh
-for f in `+shellWord(filepath.Join(h.agentx, "mutations"))+`/*.json; do
-	if [ -e "$f" ]; then
-		kill -9 $PPID
-		exit 1
-	fi
-done
-exec `+real+` "$@"
-`)
+	stubGit(t, h, "#!/bin/sh"+strings.NewReplacer("%MUTATIONS%", shellWord(filepath.Join(h.agentx, "mutations")), "%GIT%", real).Replace(script))
 	child := exec.Command(os.Args[0], "-test.run=^TestRevertChildProcess$", "-test.v")
 	child.Env = append(os.Environ(), revertChildEnv+"="+name)
 	for k, v := range h.env {

@@ -64,7 +64,11 @@ type fileDiff struct {
 // Record.Current and by nothing else, so that the diff never says a skill
 // matches while the listing calls it modified: a directory holding
 // something git cannot record is not the base version, even when every
-// path git can record is.
+// path git can record is. Nor is one holding every file of a base that an
+// earlier agentx stored over a source's own tree, in a form no directory
+// is current against: git finds no file that differs, and the command
+// says the difference is where the version is stored, and that a revert
+// stores it again without touching a file.
 //
 // The versions compared are chosen here and diffed by diffTrees, so a
 // comparison of other versions of the same skill is another choice of the
@@ -93,6 +97,10 @@ func (inv *invocation) skillDiff(ctx context.Context, name string) error {
 	base, err := lineage.ReadBase(ctx, inv.git, gitDir, rec)
 	if err != nil {
 		return accountRepoFailure(err)
+	}
+	if base.HeldBy(tree) {
+		inv.reportStoredDiff(name, against)
+		return nil
 	}
 	var files []fileDiff
 	if tree.ID != base.ID() {
@@ -149,6 +157,18 @@ func (inv *invocation) reportDiff(name, against string, files []fileDiff, unreco
 			}
 		}
 	}
+}
+
+// reportStoredDiff says that the library directory holds every file of
+// its base version while the import commit stores that version in a form
+// git no longer writes, which is why the skill lists as modified, and how
+// to put that right.
+func (inv *invocation) reportStoredDiff(name, against string) {
+	const stored = " only in how the account repo stores it; run '"
+	fix := skillCommand("revert", name) + "' to store it as git writes it today, which changes no file"
+	inv.summary = name + " differs from " + against + stored + fix
+	out := inv.out
+	out.print(out.paint(heading, sanitised(name)), " differs from ", against, stored, sanitised(fix))
 }
 
 // patchLine is one line of a diff as the text output prints it. The lines

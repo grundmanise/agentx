@@ -45,6 +45,13 @@ func newSkillRevertCommand(inv *invocation) *cobra.Command {
 // being discarded with the rest. The journal's remove step carries the same
 // fingerprint, and the content it retains is dropped only when it still
 // hashes to it, so an edit made while the mutation runs is kept as well.
+//
+// A branch an earlier agentx wrote over a source's own tree, one that
+// stores a mode git no longer writes, is never current against any
+// directory, so a revert that left it would leave the skill modified. The
+// same mutation moves it, from the commit it holds, to the commit an
+// install of that version writes today, which is all a revert of a library
+// directory that already holds the base's files does.
 func (inv *invocation) skillRevert(ctx context.Context, name string) error {
 	lib, ok := librarySkill(inv.dirs.Library, name)
 	if !ok {
@@ -73,28 +80,44 @@ func (inv *invocation) skillRevert(ctx context.Context, name string) error {
 	}
 	against := "its base version at " + short(rec.Import.Commit)
 	if rec.Current(edited) {
-		return inv.reportReverted(ctx, name, against, nil)
+		return inv.reportReverted(ctx, name, against, revertNothing, placements{})
 	}
+	base, err := lineage.ReadBase(ctx, inv.git, gitDir, rec)
+	if err != nil {
+		return accountRepoFailure(err)
+	}
+	target := base.ID() // the tree the base has laid out on disk
+	restore := !base.HeldBy(edited)
 	// A library entry that is a symlink leads to the directory the user
 	// edits, which is not the library's to replace: the mutation replaces
 	// the entry itself, so it would drop the link, leave every edit where
 	// the link led, and report the skill as reverted. Laying the base out
 	// where the link leads instead would stage and sweep in a directory
 	// outside the library, perhaps one another tool keeps.
-	if target, isLink := home.LinkTarget(captured); isLink {
+	if target, isLink := home.LinkTarget(captured); isLink && restore {
 		return fail(exitRefused, fmt.Sprintf("%s is a symlink to %s; a revert replaces the library directory and would drop the link without touching the files it leads to", quotedPath(libPath), quotedPath(target)),
 			"replace the link with the directory it points to, then run '"+skillCommand("revert", name)+"' again, or put the files back by hand: '"+skillCommand("diff", name)+"' shows what differs")
 	}
-	base, err := lineage.ReadBase(ctx, inv.git, gitDir, rec)
-	if err != nil {
-		return accountRepoFailure(err)
+	var bodies map[string]string
+	if restore {
+		if bodies, err = source.ReadBlobs(ctx, inv.git, gitDir, baseBlobs(base)); err != nil {
+			return accountRepoFailure(err)
+		}
 	}
-	bodies, err := source.ReadBlobs(ctx, inv.git, gitDir, baseBlobs(base))
-	if err != nil {
-		return accountRepoFailure(err)
+	// The branch stays at its commit, unless that commit stores the base
+	// in a form no directory is current against: then it moves to the one
+	// an install writes today, held by a staging ref of this run's own
+	// until the journal that names it is applied, as an install's is.
+	recorded, run := rec.Commit, ""
+	if !rec.Canonical(base) {
+		run = lineage.NewRun()
+		if recorded, err = lineage.Rewrite(ctx, inv.git, gitDir, run, rec, base); err != nil {
+			inv.dropImporting(ctx, gitDir, run, 1)
+			return accountRepoFailure(err)
+		}
 	}
-	target := base.ID() // the tree the base has laid out on disk
 	var done placements
+	journaled := false
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		// Every input is read again under the lock: the branch the base came
 		// from, and the directory the user asked to discard.
@@ -106,51 +129,78 @@ func (inv *invocation) skillRevert(ctx context.Context, name string) error {
 			return fail(exitRefused, "the import branch "+lineage.ManagedRef(name)+" moved while "+name+" was being reverted, so nothing was discarded",
 				"run '"+skillCommand("diff", name)+"' to see the base version now, then revert again")
 		}
-		live, err := home.State(libPath)
-		if err != nil {
-			return libraryFailure(inv.dirs.Library, err)
-		}
-		if live != captured {
-			return fail(exitRefused, name+" changed while it was being reverted, so nothing was discarded",
-				"run '"+skillCommand("diff", name)+"' to see the change, then revert again to discard it too")
-		}
-		// A revert killed before its journal was written left what it staged
-		// with nothing to name it: beside the library directory, and beside
-		// each copy it was refreshing. All of it is swept before anything is
-		// staged, since a sweep of a directory two configurations share would
-		// take a sibling this plan staged a moment earlier.
-		edit, err := inv.beginSettings()
-		if err != nil {
-			return err
-		}
-		recorded := edit.copiesOf(name)
-		sweepStaged(inv.dirs.Library)
-		for _, t := range inv.detectedTargets() {
-			if !t.readsLibrary && slices.Contains(recorded, t.id) {
-				sweepStaged(t.dir)
+		m := home.NewMutation(inv.dirs.Home)
+		// The ref step comes first and is the only step when the library
+		// already holds the base's files. When the branch does not move, the
+		// step holds the journal to the base the content came from, so that
+		// a revert finished by recovery puts back the version the branch
+		// still names and no other.
+		m.Ref(gitDir, lineage.ManagedRef(name), rec.Commit, recorded)
+		if restore {
+			if err := inv.stageRevert(m, name, libPath, captured, base, target, bodies, edited.ID, &done); err != nil {
+				m.Discard()
+				return err
 			}
 		}
-		done = placements{}
-		m := home.NewMutation(inv.dirs.Home)
-		staged := m.Sibling(libPath, "staged")
-		fingerprint, err := stageBase(staged, base, target, bodies)
-		if err != nil {
-			os.RemoveAll(staged)
-			return libraryFailure(inv.dirs.Library, err)
-		}
-		// The branch does not move: the step holds the journal to the base
-		// the content came from, so that a revert finished by recovery puts
-		// back the version the branch still names and no other.
-		m.Ref(gitDir, lineage.ManagedRef(name), rec.Commit, rec.Commit)
-		m.Remove(libPath, captured)
-		m.Publish(libPath, staged, fingerprint)
-		inv.refreshCopies(m, name, target, []string{edited.ID}, staged, recorded, &done)
-		return m.Apply(inv.refs(ctx))
+		applied := m.Apply(inv.refs(ctx))
+		journaled = m.Journaled()
+		return applied
 	})
+	// The staging ref goes once the branch holds the commit, or when no
+	// journal that recovery could finish names it.
+	if run != "" && (err == nil || !journaled) {
+		inv.dropImporting(ctx, gitDir, run, 1)
+	}
 	if err != nil {
 		return mutationFailure(err)
 	}
-	return inv.reportReverted(ctx, name, against, &done)
+	if !restore {
+		return inv.reportReverted(ctx, name, against, revertBranch, done)
+	}
+	return inv.reportReverted(ctx, name, against, revertLibrary, done)
+}
+
+// stageRevert records, under the lock, the steps that put the library
+// directory back to the base and refresh the copies that held it: the
+// directory is read again first, and one that changed since it was
+// captured refuses the revert, so an edit made in the meantime is never
+// discarded with the rest.
+func (inv *invocation) stageRevert(m *home.Mutation, name, libPath, captured string, base lineage.Base, target string, bodies map[string]string, edited string, done *placements) error {
+	live, err := home.State(libPath)
+	if err != nil {
+		return libraryFailure(inv.dirs.Library, err)
+	}
+	if live != captured {
+		return fail(exitRefused, name+" changed while it was being reverted, so nothing was discarded",
+			"run '"+skillCommand("diff", name)+"' to see the change, then revert again to discard it too")
+	}
+	// A revert killed before its journal was written left what it staged
+	// with nothing to name it: beside the library directory, and beside
+	// each copy it was refreshing. All of it is swept before anything is
+	// staged, since a sweep of a directory two configurations share would
+	// take a sibling this plan staged a moment earlier.
+	edit, err := inv.beginSettings()
+	if err != nil {
+		return err
+	}
+	recorded := edit.copiesOf(name)
+	sweepStaged(inv.dirs.Library)
+	for _, t := range inv.detectedTargets() {
+		if !t.readsLibrary && slices.Contains(recorded, t.id) {
+			sweepStaged(t.dir)
+		}
+	}
+	*done = placements{}
+	staged := m.Sibling(libPath, "staged")
+	fingerprint, err := stageBase(staged, base, target, bodies)
+	if err != nil {
+		os.RemoveAll(staged)
+		return libraryFailure(inv.dirs.Library, err)
+	}
+	m.Remove(libPath, captured)
+	m.Publish(libPath, staged, fingerprint)
+	inv.refreshCopies(m, name, target, []string{edited}, staged, recorded, done)
+	return nil
 }
 
 // stageBase lays the base version out at staged and reads it back as git
@@ -174,10 +224,19 @@ func stageBase(staged string, base lineage.Base, target string, bodies map[strin
 	return home.Fingerprint(staged)
 }
 
+// revertOutcome is what a revert changed.
+type revertOutcome int
+
+const (
+	revertNothing revertOutcome = iota // the library held the base, and the branch stored it as git writes it
+	revertBranch                       // the library held the base's files; the branch was stored again
+	revertLibrary                      // the library directory was put back, and the branch too when it had to be
+)
+
 // reportReverted reads the machine again and reports the skill as it now
-// stands. done is what the mutation did to the copies, nil when the library
-// already held the base version and nothing was changed.
-func (inv *invocation) reportReverted(ctx context.Context, name, against string, done *placements) error {
+// stands. done is what the mutation did to the copies, which only a revert
+// that put the library directory back touched.
+func (inv *invocation) reportReverted(ctx context.Context, name, against string, outcome revertOutcome, done placements) error {
 	snap, err := inv.scan(ctx, lockWait, "", false)
 	if err != nil {
 		return err
@@ -192,9 +251,15 @@ func (inv *invocation) reportReverted(ctx context.Context, name, against string,
 	}
 	inv.out.emit(sc.librarySkillEventFor(inv, snap, lib, nil))
 	out := inv.out
-	if done == nil {
+	switch outcome {
+	case revertNothing:
 		inv.summary = name + " already matches " + against + "; nothing was reverted"
 		out.print(out.paint(heading, sanitised(name)), " already matches ", against, "; nothing was reverted")
+		return nil
+	case revertBranch:
+		const stored = "; nothing was reverted, and its import branch now stores that version as git writes it today"
+		inv.summary = name + " already matches " + against + stored
+		out.done(out.paint(heading, sanitised(name)) + " already matches " + against + stored)
 		return nil
 	}
 	inv.summary = "reverted " + name + " to " + against
