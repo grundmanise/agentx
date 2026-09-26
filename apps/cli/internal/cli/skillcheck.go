@@ -91,7 +91,8 @@ type finding struct {
 // fetch or read, with the managed skills that came from it, or one skill
 // whose newer version cannot be imported.
 type checkFailure struct {
-	source string   // the source's canonical URL; "" for the failure of one skill
+	source string   // the canonical URL of the source, the one the skill came from for a skill's failure
+	skill  bool     // the failure is the one skill's that skills names, not its source's
 	skills []string // the skills left unchecked, by name
 	f      *failure
 }
@@ -99,7 +100,7 @@ type checkFailure struct {
 // warning is the line a failure is reported with, naming what it left
 // unchecked: the source and its skills, or the skill.
 func (cf checkFailure) warning() string {
-	if cf.source == "" {
+	if cf.skill {
 		return cf.skills[0] + ": " + cf.f.message
 	}
 	return cf.f.message + "; not checked: " + strings.Join(cf.skills, ", ")
@@ -114,7 +115,7 @@ type removedSkill struct {
 // checkReport is what one update check found and did, for skill check to
 // print and for the serve child to emit.
 type checkReport struct {
-	idle     bool // no managed skill comes from a source this machine has: nothing was fetched
+	idle     bool // no managed skill comes from a source this machine has, or every one the check set out to fetch was removed while it ran
 	fetched  int  // the sources that were fetched and that the settings still hold
 	checked  int  // the managed skills the check recorded a verdict for
 	updates  []updateAvailableEvent
@@ -208,13 +209,17 @@ func (inv *invocation) printCheck(rep checkReport) {
 // checkRefusal is how a check ends when something it set out to check could
 // not be: the code every failure agrees on, as a fetch of several sources
 // answers, and the source-level refusal when they disagree. It names every
-// source with the skills it left unchecked, and every skill.
+// source with the skills it left unchecked, and every skill. The hint a
+// fetch of several sources gives goes with it only when every failure is a
+// source's, since a skill refused is none of what that hint says to check.
 func checkRefusal(failures []checkFailure) error {
 	st := failures[0].f.status
-	for _, cf := range failures[1:] {
+	sources := true
+	for _, cf := range failures {
 		if cf.f.status != st {
 			st = exitSource
 		}
+		sources = sources && !cf.skill
 	}
 	if len(failures) == 1 {
 		return fail(st, "could not check "+failures[0].warning(), failures[0].f.hint)
@@ -222,14 +227,16 @@ func checkRefusal(failures []checkFailure) error {
 	named := make([]string, len(failures))
 	for i, cf := range failures {
 		named[i] = cf.skills[0]
-		if cf.source != "" {
+		if !cf.skill {
 			named[i] = cf.source + " (" + strings.Join(cf.skills, ", ") + ")"
 		}
 	}
 	hint := "the warnings name each failure"
 	switch st {
 	case exitSource, exitNotFound, exitAccountRepo: // what a run of several sources that failed that way says
-		hint += "; " + refusalHint(st)
+		if sources {
+			hint += "; " + refusalHint(st)
+		}
 	}
 	return fail(st, "could not check "+strings.Join(named, ", "), hint)
 }
@@ -305,7 +312,7 @@ func (inv *invocation) checkUpdates(ctx context.Context, wait, progress bool) (c
 	if err := run.writeCandidates(ctx, importing); err != nil {
 		return rep, err
 	}
-	live, added, moved, journaled, err := inv.recordCheck(ctx, gitDir, wait, run.findings, fetched, records, s)
+	live, added, moved, journaled, err := inv.recordCheck(ctx, gitDir, wait, run.findings, fetched, records)
 	if !journaled || err == nil {
 		// Recovery of a journal that could not be finished needs the
 		// commits the staging refs hold; otherwise they are what the
@@ -315,12 +322,24 @@ func (inv *invocation) checkUpdates(ctx context.Context, wait, progress bool) (c
 	if err != nil {
 		return rep, err
 	}
+	// A source removed while the check ran is not one it checked, and
+	// neither is a fetch or a read of it that failed: the removal takes the
+	// source's remote and staging refs away, which is often what made it
+	// fail, and the check leaves the skills of a removed source alone.
 	for url := range fetched {
-		if added[url] { // a source removed while the check ran is not one it checked
+		if added[url] {
 			rep.fetched++
 		}
 	}
-	rep.failures = run.failures
+	for _, cf := range run.failures {
+		if added[cf.source] {
+			rep.failures = append(rep.failures, cf)
+		}
+	}
+	if rep.fetched == 0 && len(rep.failures) == 0 { // every source it set out to check was removed meanwhile
+		rep.idle = true
+		return rep, nil
+	}
 	checked := map[string]bool{} // the skills the check recorded a verdict for
 	for _, fd := range run.findings {
 		rec, ok := live[fd.name]
@@ -537,7 +556,7 @@ func (c *checkRun) found(rec lineage.Record, v verdict, set func(*finding)) {
 func (c *checkRun) refused(recs []lineage.Record, f *failure) {
 	for _, rec := range recs {
 		c.found(rec, verdictPresent, nil)
-		c.failures = append(c.failures, checkFailure{skills: []string{rec.Name}, f: f})
+		c.failures = append(c.failures, checkFailure{source: rec.Import.Source, skill: true, skills: []string{rec.Name}, f: f})
 	}
 }
 
@@ -568,8 +587,8 @@ func (c *checkRun) writeCandidates(ctx context.Context, run string) error {
 
 // recordCheck writes what the check found in one mutation under the lock,
 // the only hold of it after the network, and returns the lineage as the
-// mutation left it, the sources the settings hold, and the skills whose
-// candidate it moved.
+// mutation left it, the sources the settings hold once the fetches are
+// done, and the skills whose candidate it moved.
 //
 // The lineage is read again under the lock. A skill whose branch no longer
 // names the import commit it was compared with, or that is gone, gets
@@ -580,12 +599,20 @@ func (c *checkRun) writeCandidates(ctx context.Context, run string) error {
 // overwritten: an update of the skill's own, or a removal, deletes the
 // candidate with its value just the same. The settings get last_fetched for
 // every source that fetched, and the write bumps the version file once.
-func (inv *invocation) recordCheck(ctx context.Context, gitDir string, wait bool, findings []finding, fetched map[string]bool, records map[string]lineage.Record, s home.Settings) (
+func (inv *invocation) recordCheck(ctx context.Context, gitDir string, wait bool, findings []finding, fetched map[string]bool, records map[string]lineage.Record) (
 	live map[string]lineage.Record, added, moved map[string]bool, journaled bool, err error,
 ) {
-	live, added, moved = records, sourceURLs(s), map[string]bool{}
-	if len(fetched) == 0 { // every fetch failed: nothing was compared, and there is nothing to write
-		return live, added, moved, false, nil
+	live, moved = records, map[string]bool{}
+	if len(fetched) == 0 {
+		// Every fetch failed: nothing was compared, and there is nothing to
+		// write. The sources the settings hold are read again all the same,
+		// a plain read of a file only ever replaced whole, so that a source
+		// removed while its fetch ran is not reported as one that failed.
+		s, err := inv.loadSettings()
+		if err != nil {
+			return nil, nil, nil, false, err
+		}
+		return live, sourceURLs(s), moved, false, nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	err = inv.holdLock(ctx, wait, true, func() error {
