@@ -2087,7 +2087,9 @@ echo after > `+shellWord(after)+`
 // it: a merge completed gives the directory up to the user, its owner file
 // gone; one given up keeps it, with the warning giving the merge up gives;
 // and one another run resolved a file of keeps it, promising no more than
-// a moved merge does.
+// a moved merge does. A scan that holds the lock, shared, as the run is
+// stopped, which its wait gives up on, changes none of that: the run reads
+// the merge without the lock, and never promises a merge gone opens again.
 func TestSkillResolveStoppedWhileTheEditorIsOpenTellsTheMergeAsItIs(t *testing.T) {
 	t.Parallel()
 	sleeper, err := exec.LookPath("sleep")
@@ -2097,12 +2099,16 @@ func TestSkillResolveStoppedWhileTheEditorIsOpenTellsTheMergeAsItIs(t *testing.T
 	for _, c := range []struct {
 		name      string
 		meanwhile []string
+		scan      bool // a scan holds the lock, shared, once the merge changed
 		warning   func(dir string) string
 		owner     string // "" for a directory given up to the user
 	}{
 		{name: "completed", meanwhile: append([]string{"--hunk", "kept.md:1=theirs"}, hunks(kitSides)...), warning: givenUpWarning},
 		{name: "given up", meanwhile: []string{"--abort"}, warning: abortWarning, owner: "kept"},
 		{name: "resolved in part", meanwhile: []string{"--hunk", "logo.bin:1=mine"}, warning: movedWarning, owner: "kept"},
+		{name: "completed while a scan reads", meanwhile: append([]string{"--hunk", "kept.md:1=theirs"}, hunks(kitSides)...), scan: true, warning: givenUpWarning},
+		{name: "given up while a scan reads", meanwhile: []string{"--abort"}, scan: true, warning: abortWarning, owner: "kept"},
+		{name: "resolved in part while a scan reads", meanwhile: []string{"--hunk", "logo.bin:1=mine"}, scan: true, warning: movedWarning, owner: "kept"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -2122,19 +2128,36 @@ i=0
 while [ $i -lt 1200 ]; do `+sleeper+` 0.05; i=$((i+1)); done
 `)
 			meanwhile := outcome{exit: -1}
+			var scan *os.File // the scan's shared hold of the lock
+			var scanErr error
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
 				if waitFor(typed) {
 					meanwhile = h.run(append([]string{"skill", "resolve", "kit"}, c.meanwhile...)...)
+					if c.scan {
+						// Held as holdReadLock holds it, from a goroutine that
+						// may not fail the test itself.
+						if scan, scanErr = os.OpenFile(filepath.Join(h.agentx, "lock"), os.O_CREATE|os.O_RDWR, 0o644); scanErr == nil {
+							scanErr = syscall.Flock(int(scan.Fd()), syscall.LOCK_SH)
+						}
+					}
 				}
 				_ = os.WriteFile(goFile, []byte("go\n"), 0o600)
 			}()
-			t.Cleanup(func() { <-done })
+			t.Cleanup(func() {
+				<-done
+				if scan != nil {
+					scan.Close()
+				}
+			})
 
 			code, stderr := signalled(t, h, stopRun{ready: ready, sigs: []syscall.Signal{syscall.SIGTERM}, group: true,
 				args: []string{"skill", "resolve", "kit", "--editor", "--color", "off"}})
 			<-done
+			if scanErr != nil {
+				t.Fatal(scanErr)
+			}
 			equal(t, "exit of the run meanwhile", meanwhile.exit, 0)
 			equal(t, "exit", code, exitInterrupted.exit)
 			contains(t, "stderr", stderr, "error: interrupted")
@@ -2143,7 +2166,93 @@ while [ $i -lt 1200 ]; do `+sleeper+` 0.05; i=$((i+1)); done
 				t.Fatalf("the run left %v, want the one directory:\n%s", dirs, stderr)
 			}
 			contains(t, "the warning", stderr, "warning: "+c.warning(dirs[0])+"\n")
+			if strings.Count(stderr, "warning: ") != 1 {
+				t.Errorf("want the one warning:\n%s", stderr)
+			}
 			equal(t, "what the editor typed, kept", fileBody(t, filepath.Join(dirs[0], "kit", "notes.md")), "typed before the stop\n")
+			if c.owner == "" {
+				nothingAt(t, "the owner file of what is kept", filepath.Join(dirs[0], editorOwner))
+				return
+			}
+			equal(t, "the owner of what is kept", ownerOf(t, dirs[0]), c.owner)
+		})
+	}
+}
+
+// TestSkillResolveStoppedKeepsWhatTheEditorSavesAsItStops: an editor sent
+// SIGTERM may write what it held beside the file as it stops, as nano and
+// Emacs do, after the sh that runs it is gone and the run has read the
+// directory. So a run stopped while its editor is open never removes the
+// directory, even with nothing typed in the files when it reads them: once
+// another run completed the merge meanwhile it gives the directory up to
+// the user, and once another run gave it up it keeps it, and a warning
+// names it either way. What the editor writes as it stops is there.
+func TestSkillResolveStoppedKeepsWhatTheEditorSavesAsItStops(t *testing.T) {
+	t.Parallel()
+	sleeper, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct {
+		name      string
+		meanwhile []string
+		warning   func(dir string) string
+		owner     string // "" for a directory given up to the user
+	}{
+		{name: "completed", meanwhile: append([]string{"--hunk", "kept.md:1=theirs"}, hunks(kitSides)...), warning: givenUpWarning},
+		{name: "given up", meanwhile: []string{"--abort"}, warning: swapWarning, owner: "kept"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			h, _, _ := resolveHarness(t)
+			logs := t.TempDir()
+			opened, goFile, ready, saved := filepath.Join(logs, "opened"), filepath.Join(logs, "go"), filepath.Join(logs, "open"), filepath.Join(logs, "saved")
+			h.env["PATH"] = gitOnlyPath(t) // as TestSkillResolveLeavesACtrlCToTheEditor says
+			// The editor types nothing. It waits for the other run to change
+			// the merge before it says it is open, and then for the SIGTERM,
+			// which it answers a moment later, as an editor that saves what it
+			// held does, with a file beside each one it was given.
+			h.env["GIT_EDITOR"] = editorStub(t, "saving-editor", `stop() {
+	`+sleeper+` 0.3
+	for f in "$@"; do printf 'unsaved typing\n' > "$f.save"; done
+	echo saved > `+shellWord(saved)+`
+	exit 143
+}
+trap 'stop "$@"' TERM
+echo opened > `+shellWord(opened)+`
+i=0
+while [ ! -e `+shellWord(goFile)+` ] && [ $i -lt 1200 ]; do `+sleeper+` 0.05; i=$((i+1)); done
+echo open > `+shellWord(ready)+`
+i=0
+while [ $i -lt 1200 ]; do `+sleeper+` 0.05; i=$((i+1)); done
+`)
+			meanwhile := outcome{exit: -1}
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				if waitFor(opened) {
+					meanwhile = h.run(append([]string{"skill", "resolve", "kit"}, c.meanwhile...)...)
+				}
+				_ = os.WriteFile(goFile, []byte("go\n"), 0o600)
+			}()
+			t.Cleanup(func() { <-done })
+
+			code, stderr := signalled(t, h, stopRun{ready: ready, sigs: []syscall.Signal{syscall.SIGTERM},
+				args: []string{"skill", "resolve", "kit", "--editor", "--color", "off"}})
+			<-done
+			equal(t, "exit of the run meanwhile", meanwhile.exit, 0)
+			equal(t, "exit", code, exitInterrupted.exit)
+			contains(t, "stderr", stderr, "error: interrupted")
+			if !waitFor(saved) {
+				t.Fatalf("the editor never saved what it held:\n%s", stderr)
+			}
+			dirs := editorDirs(t, h)
+			if len(dirs) != 1 {
+				t.Fatalf("the run left %v, want the one directory:\n%s", dirs, stderr)
+			}
+			contains(t, "the warning", stderr, "warning: "+c.warning(dirs[0])+"\n")
+			equal(t, "what the editor saved as it stopped", fileBody(t, filepath.Join(dirs[0], "kit", "notes.md.save")), "unsaved typing\n")
+			equal(t, "notes.md, as the editor was given it", fileBody(t, filepath.Join(dirs[0], "kit", "notes.md")), kitText["notes.md"])
 			if c.owner == "" {
 				nothingAt(t, "the owner file of what is kept", filepath.Join(dirs[0], editorOwner))
 				return

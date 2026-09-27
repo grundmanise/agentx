@@ -88,9 +88,11 @@ func (inv *invocation) editorCommand() (command string, ok bool) {
 // meanwhile is refused rather than reported as it was.
 //
 // The directory is removed once what the editor left is written, or found
-// to hold nothing typed, and never otherwise: agentx deletes nothing typed.
-// Anything typed there that is not written keeps it: every file, when the
-// editor fails or the run refuses to write, a file left with markers and
+// to hold nothing typed once the editor is over, and never otherwise:
+// agentx deletes nothing typed. A run stopped while its editor was open
+// never removes it, since the editor may not be over, see keep. Anything
+// typed there that is not written keeps it: every file, when the editor
+// fails or the run refuses to write, a file left with markers and
 // something typed, a file the editor resolved that a merge done again, a
 // completion of an edited library directory or a run on a moved import
 // branch, makes conflict anew or merge cleanly, git's merge of it written
@@ -102,7 +104,8 @@ func (inv *invocation) editorCommand() (command string, ok bool) {
 // was open, once an update leaves it pending anew, see keptGivenUp. Once
 // the merge is complete, completed by this run or by another, it is given
 // up to the user instead, see releaseEditorDir, and the warning says so.
-// Which of these it is, is read under the lock, waited for, see keep.
+// Which of these it is, is read under the lock, waited for, see keep, or
+// without it where that wait fails.
 func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	inv, name := r.inv, r.rec.Name
 	see := "run '" + skillCommand("resolve", name) + "' to see every file left to resolve"
@@ -172,12 +175,22 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 		}
 		inv.out.warn("the files you edited in an earlier session are kept in " + d + keptNotOpened(what))
 	}
+	// stopped says the run was stopped while its editor was open. The sh
+	// that runs the editor dies of the stop at once, so the editor may still
+	// be running as the run settles its directory, and one sent SIGTERM may
+	// write what it held beside the file as it stops, as nano and Emacs do,
+	// after the run has read the directory, see keep.
+	stopped := false
 	// keep settles the directory of a run that did not write everything
 	// typed there, and reports whether it stays, and whether it is given up
 	// to the user, or kept for a merge given up meanwhile, rather than kept
-	// for the merge pending. One whose merge was completed or given up
-	// meanwhile goes when nothing was typed there: there is nothing to open
-	// again. One whose merge was completed meanwhile, the import branch
+	// for the merge pending, and of that one, whether another run moved it
+	// meanwhile. One whose merge was completed or given up meanwhile goes
+	// when nothing was typed there: there is nothing to open again. Not in a
+	// run stopped, see stopped: its directory stays as one that holds
+	// something typed does, and a later session, giving the merge up or
+	// completing it, removes one kept once nothing typed is there, see
+	// spent. One whose merge was completed meanwhile, the import branch
 	// moved on from where the run read it, is given up to the user, see
 	// releaseEditorDir: the conflict it was typed for cannot come back.
 	// Every other one is kept, marked so, for the next session of the same
@@ -192,35 +205,38 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	// either finishes first, and the directory is given up here, or starts
 	// once it is kept, and gives it up in turn, see clearEditorDirs. A run
 	// stopped still reads the refs once it holds the lock, so that its
-	// warning is as true as any other's; a wait that fails, the run stopped
-	// while another command holds the lock say, keeps it.
-	keep := func() (stays, released, givenUp bool) {
-		stays = true
-		inv.out.debugf("taking the lock to settle %s, waiting while another command holds it", dir)
-		err := home.MutateQuietWaiting(ctx, inv.dirs.Home, inv.refs(ctx), func() error {
+	// warning is as true as any other's. A hold that fails, as the wait of a
+	// run stopped does while another command holds the lock, a scan that
+	// holds it shared included, reads them without the lock and settles the
+	// directory all the same, so that its warning never tells a merge gone
+	// as one pending; refs it cannot read at all keep the directory.
+	keep := func() (stays, released, givenUp, moved bool) {
+		settleDir := func() error {
 			values, err := inv.lineageRefs(interrupt.Uninterruptible(ctx), r.gitDir, name)
-			switch {
-			case err != nil:
+			if err != nil {
 				return err
-			case values[lineage.MergeRef(name)] != "":
+			}
+			switch held := values[lineage.MergeRef(name)]; {
+			case held != "":
 				keepEditorDir(dir)
-			case untouched(dir, name, records):
+				stays, moved = true, held != r.pending.Commit
+			case !stopped && untouched(dir, name, records):
 				os.RemoveAll(dir)
-				stays = false
 			case values[lineage.ManagedRef(name)] != r.rec.Commit:
 				releaseEditorDir(dir)
-				released = true
+				stays, released = true, true
 			default:
 				keepEditorDir(dir)
-				givenUp = true
+				stays, givenUp = true, true
 			}
 			return nil
-		})
-		if err != nil {
-			keepEditorDir(dir)
-			return true, false, false
 		}
-		return stays, released, givenUp
+		inv.out.debugf("taking the lock to settle %s, waiting while another command holds it", dir)
+		if err := home.MutateQuietWaiting(ctx, inv.dirs.Home, inv.refs(ctx), settleDir); err != nil && settleDir() != nil {
+			keepEditorDir(dir)
+			return true, false, false, false
+		}
+		return stays, released, givenUp, moved
 	}
 	// kept settles the directory of a run that writes nothing of what the
 	// editor left, and names it in a warning that says what opens it again.
@@ -234,16 +250,11 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	// it, and what holds no marker only while the merge is the one it was
 	// typed in, see reopen, which the warning says. Any other session whose
 	// merge another run moved meanwhile, resolving one of its files
-	// perhaps, promises no more than keptMoved does.
+	// perhaps, promises no more than keptMoved does. A merge ref that cannot
+	// be read is not taken for one that moved.
 	kept := func() {
-		stays, released, givenUp := keep()
+		stays, released, givenUp, moved := keep()
 		k := keptOf(sessionDir(dir, name, records), records)
-		moved := func() bool {
-			// A merge ref that cannot be read is not taken for one that
-			// changed; a run stopped still reads it, as keep does.
-			values, err := inv.lineageRefs(interrupt.Uninterruptible(ctx), r.gitDir, name)
-			return err == nil && values[lineage.MergeRef(name)] != r.pending.Commit
-		}
 		end := opensAgain(name, "", "them")
 		switch {
 		case released:
@@ -258,9 +269,9 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 			p := files[0].Path
 			end = opensAgain(name, p, "them")
 			if body, err := os.ReadFile(paths[0]); err == nil && !holdsMarkers(string(body), files[0].text.size) {
-				end = keptWhileUnchanged(name, p, moved())
+				end = keptWhileUnchanged(name, p, moved)
 			}
-		case moved():
+		case moved:
 			end = keptMoved(name)
 		}
 		inv.out.warn("the files you edited are kept in " + dir + end)
@@ -270,6 +281,7 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	err = inv.runEditor(ctx, s, paths)
 	release()
 	if err != nil {
+		stopped = errors.Is(err, errEditorStopped)
 		kept()
 		named := ""
 		if s.file != "" {
@@ -365,7 +377,7 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 				_ = os.Remove(filepath.Join(dir, name, filepath.FromSlash(res.path)))
 			}
 		}
-		switch stays, released, givenUp := keep(); {
+		switch stays, released, givenUp, _ := keep(); {
 		case released:
 			held, given = dir, givenUpToYou(name)
 			again, elsewhere = given, given
@@ -1174,7 +1186,8 @@ func holdsMarkers(text string, size int) bool {
 // stopped by SIGTERM, which reaches agentx alone when a supervisor or the
 // app sends it, sends SIGTERM to the editor and every process it started,
 // and then to the sh, see stopEditor; the sh is killed a second later if it
-// has not exited by then.
+// has not exited by then. The error of a run stopped while the editor was
+// open is errEditorStopped.
 func (inv *invocation) runEditor(ctx context.Context, s *editorSession, files []string) error {
 	script := "trap : INT QUIT; " + s.command + ` "$@"`
 	cmd := exec.CommandContext(ctx, "/bin/sh", append([]string{"-c", script, s.command}, files...)...)
@@ -1198,7 +1211,7 @@ func (inv *invocation) runEditor(ctx context.Context, s *editorSession, files []
 	case err == nil:
 		return nil
 	case ctx.Err() != nil:
-		return errors.New("was stopped")
+		return errEditorStopped
 	case errors.Is(err, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.Success():
 		// The editor exited 0, and only a process it left running, a server
 		// it started say, still holds its output, which is dropped.
@@ -1212,13 +1225,17 @@ func (inv *invocation) runEditor(ctx context.Context, s *editorSession, files []
 	// end the editor before it reaches the run, which then answers for
 	// that stop.
 	if interrupt.Settle(ctx) {
-		return errors.New("was stopped")
+		return errEditorStopped
 	}
 	if status, ok := exit.Sys().(syscall.WaitStatus); ok && status.Signaled() {
 		return fmt.Errorf("was stopped by %s", unix.SignalName(status.Signal()))
 	}
 	return fmt.Errorf("could not be run: %w", err)
 }
+
+// errEditorStopped is the error of an editor the stop of its run ended,
+// which may still be running, see runEditor.
+var errEditorStopped = errors.New("was stopped")
 
 // stopEditor stops the editor that sh, the process runEditor started,
 // runs: SIGTERM to every process sh started, the editor and what it started
