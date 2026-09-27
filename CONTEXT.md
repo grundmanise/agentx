@@ -116,7 +116,7 @@ An explicit user action that pushes one fork's or greenfield skill's branch from
 _Avoid_: sync, share, upload
 
 **Modified skill**:
-A managed skill whose on-disk content no longer matches its base version because it was edited outside agentx, by hand or by any other tool. Decided by comparing the library directory's git tree with the base version's, so a changed file mode or symlink counts as an edit. Shown as drift, local to one machine, never synced. Can be reverted or converted to a fork.
+A managed skill whose on-disk content no longer matches its base version because it was edited outside agentx, by hand or by any other tool. Decided as git decides for a work tree: git records the library directory over an index loaded from the base version, and the skill is modified when the tree it writes differs from the base version's, so a changed file mode or symlink counts as an edit and a file git ignores does not. Shown as drift, local to one machine, never synced. Can be reverted or converted to a fork.
 _Avoid_: dirty, drifted, changed
 
 **Lineage record**:

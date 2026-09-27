@@ -316,7 +316,7 @@ Each row shows the skill, what agentx knows about it, how it stands against the 
 - `managed`: installed by agentx, with an upstream and a version it can compare against.
 - `fork`: a skill of your own in the account repo.
 - `unmanaged`: a directory in the library agentx did not install. It is inventoried and otherwise left alone.
-- `current` or `modified`: whether the directory still holds the version it was installed at. Every change counts, whatever tool made it: a file you edited, added or deleted, but also a file made executable, a file replaced by a symlink and a symlink added. See what changed with [`agentx skill diff`](#see-what-you-changed).
+- `current` or `modified`: whether the directory still holds the version it was installed at. Every change counts, whatever tool made it: a file you edited, added or deleted, but also a file made executable, a file replaced by a symlink and a symlink added. Files git ignores do not count: see [Files that do not count](#files-that-do-not-count). See what changed with [`agentx skill diff`](#see-what-you-changed).
 - `displaced`: a client that should see the skill through a link from its own skills directory has a real directory there instead, which is what an installer that copies over links leaves. For a client you placed a copy in, it is the other way round: a link to the library where the copy should be.
 - `missing`: an enabled client has nothing of the skill in its own skills directory, because you placed the skill with `--to`, removed it with `--from`, or the placement was deleted. Place it with `agentx skill place <name> --to <client>`. Universal clients and disabled clients are never missing a skill.
 - `source removed`: the source the skill came from is no longer added on this machine. The skill keeps working, stays where it is and keeps its record of where it came from. Add the source again to clear it: see below.
@@ -373,7 +373,7 @@ index 0000000..2f1c9e0
 
 There is one diff per file, and every path is relative to the skill's directory. A file you moved shows as one deleted and one added. A skill that holds exactly its base version prints `pdf matches its base version at 3f2a9c1`. A file that is not UTF-8 text prints as the bytes it holds. Control characters other than the tab, such as the carriage return of a Windows line ending, print as a space, so nothing in a file can control your terminal. Use `--json` to get the patch exactly as git wrote it.
 
-The diff only reads your library: nothing is written to it. agentx compares the files exactly as they are on disk, so no `.gitignore` or other git setting hides a file from the comparison. A repository nested in the skill, or anything else git cannot record, such as a named pipe, is left out with a warning naming it. Such a skill never matches its base version: `skill list` shows it as `modified`, the diff ends with the number of paths git cannot record, as in `pdf differs from its base version at 3f2a9c1 only in 1 path git cannot record`, and `skill revert` refuses it until you move the path out of the skill.
+The diff only reads your library: nothing is written to it. A file git ignores is never in the diff, and a file the skill's `.gitattributes` converts, for example to other line endings, is compared as git converts it: see [Files that do not count](#files-that-do-not-count). A repository nested in the skill, or anything else git cannot record, such as a named pipe, is left out with a warning naming it. Such a skill never matches its base version: `skill list` shows it as `modified`, the diff ends with the number of paths git cannot record, as in `pdf differs from its base version at 3f2a9c1 only in 1 path git cannot record`, and `skill revert` refuses it until you move the path out of the skill.
 
 An earlier version of agentx could store a skill from a source that uses an old kind of file mode in a form that makes it show as `modified` even though you changed nothing. `skill diff` then says so instead of showing a diff:
 
@@ -384,6 +384,16 @@ pdf differs from its base version at 3f2a9c1 only in how the account repo stores
 Run `agentx skill revert pdf`. It stores the version again without touching your files, and the skill shows as `current`. While the source still holds that version, installing it again with `agentx skill add` does the same.
 
 A skill agentx did not install, and a fork, have no base version to compare with, so `skill diff` stops with exit code 6.
+
+### Files that do not count
+
+agentx compares a skill as git compares a work tree, so the files git ignores never make a skill `modified`, never show in `skill diff`, and are kept by `skill revert`:
+
+- files the skill's own `.gitignore` names, such as a `node_modules` directory;
+- files your global git ignore file names, `~/.config/git/ignore` or the file your `core.excludesFile` setting points to;
+- files your operating system or editor leaves behind, such as `.DS_Store`, `Thumbs.db`, `*.swp` and `*~` backups, while the [`ignore_system_files`](/cli/config) setting is on, which it is by default.
+
+A file that was part of the version you installed always counts, even when an ignore rule names it. The skill's own `.gitattributes` applies too: a file that differs only in line endings the skill asks git to normalise is not a change.
 
 ## Revert a skill
 
@@ -397,7 +407,7 @@ agentx skill revert pdf
 ✓ reverted pdf to its base version at 3f2a9c1, 1 copy placement refreshed
 ```
 
-Reverting discards every change made to the skill since it was installed: files you added are deleted, and files you changed or deleted come back as they were, with their permissions. Run `agentx skill diff` first to see what you are about to discard.
+Reverting discards every change made to the skill since it was installed: files you added are deleted, and files you changed or deleted come back as they were, with their permissions. Files git ignores, such as a `.DS_Store` or a `node_modules` directory the skill's `.gitignore` names, are kept, in the library and in every copy the revert refreshes. Run `agentx skill diff` first to see what you are about to discard.
 
 Only what the skill held when you ran the command is discarded. If the skill changes while the revert runs, for example because your editor saves a file, or another agentx command changes the version it was installed at, agentx stops with exit code 6 and discards nothing. Run `agentx skill diff` to see the change, then revert again. agentx keeps what it replaces until the revert is complete, so an interrupted revert finishes on the next command and loses nothing.
 
