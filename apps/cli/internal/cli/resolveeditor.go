@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -15,6 +17,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/interrupt"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
@@ -41,10 +44,8 @@ func (inv *invocation) editorCommand() (command string, ok bool) {
 			return command, true
 		}
 	}
-	for _, dir := range filepath.SplitList(inv.env["PATH"]) {
-		if info, err := os.Stat(filepath.Join(dir, "code")); dir != "" && err == nil && info.Mode().IsRegular() && info.Mode()&0o111 != 0 {
-			return "code --wait", true
-		}
+	if _, ok := gitx.LookPath(inv.env, "code"); ok {
+		return "code --wait", true
 	}
 	return "", false
 }
@@ -61,14 +62,14 @@ func (inv *invocation) editorCommand() (command string, ok bool) {
 // scans of the app, go on while it is open, and SIGINT is left to the
 // editor while it runs, as git leaves it.
 //
-// Once the editor exits 0, each file is read back. One in which a marker
-// of the size it was written with is left, alone on its line or followed by
-// a space, is not resolved, or keeps the way an earlier run resolved it,
-// and is named in a warning; every other one is resolved to what it holds,
-// and written into the merge as a resolve writes a file, see resolve, only
-// while the merge ref still holds the commit the files were written from:
-// one that another run moved while the editor was open is refused with
-// nothing written. A session that resolved nothing reads the merge ref
+// Once the editor exits 0, each file is read back. One that is gone, or in
+// which a marker of the size it was written with is left, alone on its line
+// or followed by a space, is not resolved, or keeps the way an earlier run
+// resolved it, and is named in a warning; every other one is resolved to
+// what it holds, and written into the merge as a resolve writes a file, see
+// resolve, only while the merge ref still holds the commit the files were
+// written from: one that another run moved while the editor was open is
+// refused with nothing written. A session that resolved nothing reads the merge ref
 // again before it reports the merge, and one given up or moved meanwhile
 // is refused rather than reported as it was.
 //
@@ -77,11 +78,12 @@ func (inv *invocation) editorCommand() (command string, ok bool) {
 // write, it is kept, marked so in its owner file, and a warning names it,
 // so that nothing typed there is lost: a later session leaves it alone, and
 // only completing the merge or giving it up removes it, which a run that
-// finds the merge completed or given up meanwhile does at once. A
-// completion that merged the library directory again and left the merge
-// pending, exit code 4, wrote every resolution that still applies, and
-// keeps the directory only for a file the editor resolved that conflicts
-// anew, which a warning names.
+// finds the merge completed or given up meanwhile does at once. So is a
+// directory that holds a file left with markers in it and something typed
+// besides, whose warning says so. A completion that merged the library
+// directory again and left the merge pending, exit code 4, wrote every
+// resolution that still applies, and keeps the directory only for a file
+// the editor resolved that conflicts anew, which a warning names.
 func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	inv, name := r.inv, r.rec.Name
 	see := "run '" + skillCommand("resolve", name) + "' to see every file left to resolve"
@@ -125,18 +127,24 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	if err != nil {
 		return mutationFailure(err)
 	}
-	// kept keeps the directory of a run that writes nothing of what the
-	// editor left, and names it in a warning. One whose merge was completed
-	// or given up meanwhile goes instead, as completing or giving the merge
-	// up removes it: what was typed there can no longer be written anywhere.
-	kept := func() {
+	// keep keeps the directory, marked so, and reports whether it did. One
+	// whose merge was completed or given up meanwhile goes instead, as
+	// completing or giving the merge up removes it: what was typed there can
+	// no longer be written anywhere. kept keeps the directory of a run that
+	// writes nothing of what the editor left, and names it in a warning.
+	keep := func() bool {
 		if values, err := inv.lineageRefs(ctx, r.gitDir, name); err == nil && values[lineage.MergeRef(name)] == "" {
 			os.RemoveAll(dir)
-			return
+			return false
 		}
 		keepEditorDir(dir)
-		inv.out.warn("the files you edited are kept in " + dir + " until the merge of " + name + " completes or is given up; " +
-			"a new session opens the files afresh, so copy what you typed from there")
+		return true
+	}
+	kept := func() {
+		if keep() {
+			inv.out.warn("the files you edited are kept in " + dir + " until the merge of " + name + " completes or is given up; " +
+				"a new session opens the files afresh, so copy what you typed from there")
+		}
 	}
 
 	release := interrupt.Hold(ctx)
@@ -149,58 +157,73 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	}
 
 	var rs []resolution
-	var left []string
+	var left []string          // the files left as they were resolved, or unresolved
+	gone := map[string]bool{}  // of those, the ones the editor left no file at
+	typed := map[string]bool{} // and the ones that hold markers and something typed, which is kept
 	for i, f := range files {
 		body, err := os.ReadFile(paths[i])
-		if err != nil || holdsMarkers(string(body), f.text.size) {
-			left = append(left, f.Path)
-			continue
+		switch {
+		case err != nil:
+			left, gone[f.Path] = append(left, f.Path), true
+		case holdsMarkers(string(body), f.text.size):
+			left, typed[f.Path] = append(left, f.Path), string(body) != editorText(f.text)
+		default:
+			content := string(body)
+			rs = append(rs, resolution{path: f.Path, entry: &source.TreeEntry{Mode: resolvedMode(f, nil)}, body: &content})
 		}
-		content := string(body)
-		rs = append(rs, resolution{path: f.Path, entry: &source.TreeEntry{Mode: resolvedMode(f, nil)}, body: &content})
 	}
+	var anew []string // the files the editor resolved that conflict anew, what was typed for them kept
 	if len(rs) == 0 {
-		if err := r.stillPending(ctx, "the editor was open"); err != nil {
+		if err = r.stillPending(ctx, "the editor was open"); err != nil {
 			kept()
 			return err
 		}
+	} else if err = r.resolve(ctx, rs); err != nil {
+		if r.carried == nil {
+			kept()
+			return err
+		}
+		// The merge was merged again and written, every resolution that
+		// still applies carried into it, before the run was refused.
+		for _, res := range rs {
+			if !r.carried[res.path] {
+				anew = append(anew, res.path)
+			}
+		}
+	}
+	// The directory stays, marked kept, while it holds something typed that
+	// was not written: a file left with markers in it and more, and a file
+	// the editor resolved that conflicts anew.
+	held := ""
+	if slices.ContainsFunc(left, func(p string) bool { return typed[p] }) || len(anew) > 0 {
+		if keep() {
+			held = dir
+		}
+	} else {
 		os.RemoveAll(dir)
 	}
 	for _, p := range left {
-		if r.resolved[p] {
-			inv.out.warn(quotedPath(p) + " still holds conflict markers, or is gone, so it keeps the way it was resolved before")
-			continue
+		why, how := " still holds conflict markers", " was left unresolved"
+		if gone[p] {
+			why = " is gone"
 		}
-		inv.out.warn(quotedPath(p) + " still holds conflict markers, or is gone, so it was left unresolved")
+		if r.resolved[p] {
+			how = " keeps the way it was resolved before"
+		}
+		warning := quotedPath(p) + why + ", so it" + how
+		if typed[p] && held != "" {
+			warning += "; what you typed is kept in " + held + " until the merge of " + name + " completes or is given up"
+		}
+		inv.out.warn(warning)
+	}
+	if held != "" {
+		for _, p := range anew {
+			inv.out.warn(quotedPath(p) + " conflicts anew now that the merge was merged again, so what you typed for it is kept in " + held +
+				" until the merge of " + name + " completes or is given up")
+		}
 	}
 	if len(rs) == 0 {
 		return r.reportUnchanged()
-	}
-	err = r.resolve(ctx, rs)
-	switch {
-	case err == nil:
-		os.RemoveAll(dir)
-		return nil
-	case r.carried == nil:
-		kept()
-		return err
-	}
-	// The merge was merged again and written, every resolution that still
-	// applies carried into it, before the run was refused.
-	var anew []string
-	for _, res := range rs {
-		if !r.carried[res.path] {
-			anew = append(anew, res.path)
-		}
-	}
-	if len(anew) == 0 {
-		os.RemoveAll(dir)
-		return err
-	}
-	keepEditorDir(dir)
-	for _, p := range anew {
-		inv.out.warn(quotedPath(p) + " conflicts anew now that the merge was merged again, so what you typed for it is kept in " + dir +
-			" until the merge of " + name + " completes or is given up")
 	}
 	return err
 }
@@ -369,7 +392,11 @@ func holdsMarkers(text string, size int) bool {
 // editor running with nobody waiting for it. So the sh catches both with
 // a trap that does nothing, which a command it starts does not inherit:
 // the editor answers them as it always does, and the sh waits for it and
-// exits as it did.
+// exits as it did. The sh is then no process the editor replaced, so a run
+// stopped by SIGTERM, which reaches agentx alone when a supervisor or the
+// app sends it, sends SIGTERM to the editor and every process it started,
+// and then to the sh, see stopEditor; the sh is killed a second later if it
+// has not exited by then.
 func (inv *invocation) runEditor(ctx context.Context, s *editorSession, files []string) error {
 	script := "trap : INT QUIT; " + s.command + ` "$@"`
 	cmd := exec.CommandContext(ctx, "/bin/sh", append([]string{"-c", script, s.command}, files...)...)
@@ -385,6 +412,7 @@ func (inv *invocation) runEditor(ctx context.Context, s *editorSession, files []
 		defer relay.flush()
 		cmd.Stdout, cmd.Stderr = relay, relay
 	}
+	cmd.Cancel = func() error { return stopEditor(cmd.Process) }
 	cmd.WaitDelay = time.Second
 	err := cmd.Run()
 	var exit *exec.ExitError
@@ -414,6 +442,74 @@ func (inv *invocation) runEditor(ctx context.Context, s *editorSession, files []
 	return fmt.Errorf("could not be run: %w", err)
 }
 
+// stopEditor stops the editor that sh, the process runEditor started,
+// runs: SIGTERM to every process sh started, the editor and what it started
+// in turn, and then to sh itself. sh does not exec the editor, see
+// runEditor, so a signal to it alone would leave the editor running, still
+// drawing on the terminal, after the run is over. A process that cannot be
+// listed is left out, and sh is then all that is signalled.
+func stopEditor(sh *os.Process) error {
+	children := map[int][]int{}
+	for pid, parent := range processParents() {
+		children[parent] = append(children[parent], pid)
+	}
+	queue := slices.Clone(children[sh.Pid])
+	for len(queue) > 0 {
+		pid := queue[0]
+		queue = append(queue[1:], children[pid]...)
+		_ = syscall.Kill(pid, syscall.SIGTERM)
+	}
+	return sh.Signal(syscall.SIGTERM)
+}
+
+// processParents is the parent of every process this user can see, by
+// process id: read from /proc where it lists them, as on Linux, and from
+// ps otherwise, as on macOS. It is empty when neither can be read.
+func processParents() map[int]int {
+	parents := map[int]int{}
+	if entries, err := os.ReadDir("/proc"); err == nil {
+		for _, e := range entries {
+			pid, err := strconv.Atoi(e.Name())
+			if err != nil {
+				continue
+			}
+			stat, err := os.ReadFile(filepath.Join("/proc", e.Name(), "stat"))
+			if err != nil {
+				continue
+			}
+			// The command's name, in parentheses, may hold anything, so the
+			// fields are read after the last closing one: the state, then
+			// the parent's id.
+			i := bytes.LastIndexByte(stat, ')')
+			if fields := strings.Fields(string(stat[i+1:])); i >= 0 && len(fields) > 1 {
+				if parent, err := strconv.Atoi(fields[1]); err == nil {
+					parents[pid] = parent
+				}
+			}
+		}
+		if len(parents) > 0 {
+			return parents
+		}
+	}
+	for _, ps := range []string{"/bin/ps", "/usr/bin/ps"} {
+		out, err := exec.Command(ps, "-A", "-o", "pid=,ppid=").Output()
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(out), "\n") {
+			if fields := strings.Fields(line); len(fields) == 2 {
+				pid, err := strconv.Atoi(fields[0])
+				parent, err2 := strconv.Atoi(fields[1])
+				if err == nil && err2 == nil {
+					parents[pid] = parent
+				}
+			}
+		}
+		break
+	}
+	return parents
+}
+
 // lineRelay hands every line written to it to emit as it completes, and a
 // last line with no newline on flush. exec copies both of a command's
 // streams into one writer from goroutines of its own when they are the
@@ -426,7 +522,7 @@ type lineRelay struct {
 func (l *lineRelay) Write(p []byte) (int, error) {
 	l.buf = append(l.buf, p...)
 	for {
-		i := strings.IndexByte(string(l.buf), '\n')
+		i := bytes.IndexByte(l.buf, '\n')
 		if i < 0 {
 			return len(p), nil
 		}

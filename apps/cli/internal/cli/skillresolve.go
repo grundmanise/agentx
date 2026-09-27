@@ -26,17 +26,18 @@ func newSkillResolveCommand(inv *invocation) *cobra.Command {
 	var hunks []string
 	var editor, abort bool
 	cmd := &cobra.Command{
-		Use:   "resolve <name> [--hunk <file>:<index>=mine|theirs|both]... [--editor [<file>]] [--abort]",
+		Use:   "resolve <name> [<file>] [--hunk <file>:<index>=mine|theirs|both]... [--editor] [--abort]",
 		Short: "Resolve, or give up, the merge an update left pending for a skill you edited",
 		Long: "Show and resolve the conflicts an update found between the edits of a managed skill\n" +
 			"and its newer version. With no flag the files left to resolve are shown and nothing\n" +
 			"changes. --hunk <file>:<index>=mine|theirs|both chooses one part of a file, numbered\n" +
 			"as shown, and can be given once per part: every part of a file is chosen in the same\n" +
-			"run. --editor opens every text file left to resolve, or the one named, in your editor\n" +
-			"with conflict markers: GIT_EDITOR, else EDITOR, else 'code --wait'. Once no file is\n" +
-			"left the merge completes: the library directory takes the merged version and the\n" +
-			"skill is at its update. --abort gives the merge up and leaves the library directory\n" +
-			"as it is. Agents never see a half-merged file: the merge waits in the account repo.",
+			"run. --editor opens every text file left to resolve, or the one <file> names, in your\n" +
+			"editor with conflict markers: GIT_EDITOR, else EDITOR, else 'code --wait'; <file> is\n" +
+			"taken with --editor alone. Once no file is left the merge completes: the library\n" +
+			"directory takes the merged version and the skill is at its update. --abort gives the\n" +
+			"merge up and leaves the library directory as it is. Agents never see a half-merged\n" +
+			"file: the merge waits in the account repo.",
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			const hint = "run 'agentx skill resolve --help' to see how a merge is resolved"
@@ -68,7 +69,7 @@ func newSkillResolveCommand(inv *invocation) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringArrayVar(&hunks, "hunk", nil, "choose mine, theirs or both for one part of a file, as <file>:<index>=<side>; give every part of a file")
-	cmd.Flags().BoolVar(&editor, "editor", false, "open the files left to resolve, or the one named after it, in your editor")
+	cmd.Flags().BoolVar(&editor, "editor", false, "open the files left to resolve, or the one <file> names, in your editor")
 	cmd.Flags().BoolVar(&abort, "abort", false, "give the merge up; the library directory stays as it is")
 	return cmd
 }
@@ -365,6 +366,7 @@ type resolution struct {
 	entry *source.TreeEntry // the file or symlink put at the path, by mode and blob; nil for nothing
 	keep  bool              // the directory the tree holds at the path stays, as one side has it
 	body  *string           // what a text file resolved here holds, written into the account repo as entry's blob
+	side  string            // the side every part of the file was resolved to, "" for parts resolved otherwise or an editor's save
 }
 
 // choose turns the --hunk choices into how each file they name is
@@ -437,7 +439,11 @@ func (r *pendingRun) choose(choices []hunkChoice) ([]resolution, error) {
 			chosen[i] = sides[p][i+1]
 		}
 		body := assemble(f.text, chosen)
-		rs = append(rs, resolution{path: p, entry: &source.TreeEntry{Mode: resolvedMode(f, chosen)}, body: &body})
+		res := resolution{path: p, entry: &source.TreeEntry{Mode: resolvedMode(f, chosen)}, body: &body}
+		if !slices.ContainsFunc(chosen, func(s string) bool { return s != chosen[0] }) {
+			res.side = chosen[0]
+		}
+		rs = append(rs, res)
 	}
 	return rs, nil
 }
@@ -461,9 +467,9 @@ func wholeResolution(f *conflictFile, side string) resolution {
 		stage = gitStageTheirs
 	}
 	if v, ok := f.stages[stage]; ok {
-		return resolution{path: f.Path, entry: &source.TreeEntry{Mode: v.mode, OID: v.oid}}
+		return resolution{path: f.Path, entry: &source.TreeEntry{Mode: v.mode, OID: v.oid}, side: side}
 	}
-	return resolution{path: f.Path, keep: len(f.aside) > 0}
+	return resolution{path: f.Path, keep: len(f.aside) > 0, side: side}
 }
 
 // assemble is the content of a text file whose parts are resolved to
@@ -519,16 +525,25 @@ func resolvedMode(f *conflictFile, sides []string) string {
 }
 
 // resolve writes how the files rs name are resolved into the pending merge.
-// The content of every text file assembled or edited here is written into
-// the account repo first, outside the lock. The resolutions are written
-// into the tree of the pending merge commit, see applyResolutions, and a
-// merge whose import branch moved since is then merged again, see rebase.
-// Otherwise a merge that still has a file left to resolve is rewritten: the
-// tree of the merge with every resolution in it and the commit over it are
-// written, see commit, and the merge ref is moved to it, see publish. One
-// that has none left is completed in the same run, see complete.
+// A resolution that would put something inside a file the merge holds is
+// refused first, with nothing written, see inFile. The content of every
+// text file assembled or edited here is written into the account repo,
+// outside the lock. The resolutions are written into the tree of the
+// pending merge commit, see applyResolutions, and a merge whose import
+// branch moved since is then merged again, see rebase. Otherwise a merge
+// that still has a file left to resolve is rewritten: the tree of the merge
+// with every resolution in it and the commit over it are written, see
+// commit, and the merge ref is moved to it, see publish. One that has none
+// left is completed in the same run, see complete.
 func (r *pendingRun) resolve(ctx context.Context, rs []resolution) error {
 	git, gitDir := r.inv.git, r.gitDir
+	held, err := lineage.ReadMerged(ctx, git, gitDir, r.pending.Commit, r.dir)
+	if err != nil {
+		return accountRepoFailure(err)
+	}
+	if err := r.inFile(held, rs); err != nil {
+		return err
+	}
 	var bodies []string
 	for _, res := range rs {
 		if res.body != nil {
@@ -543,10 +558,6 @@ func (r *pendingRun) resolve(ctx context.Context, rs []resolution) error {
 		if rs[i].body != nil {
 			rs[i].entry.OID, ids = ids[0], ids[1:]
 		}
-	}
-	held, err := lineage.ReadMerged(ctx, git, gitDir, r.pending.Commit, r.dir)
-	if err != nil {
-		return accountRepoFailure(err)
 	}
 	// The tree merge-tree wrote is read only for a path resolved to the
 	// directory one side has there, see applyResolutions.
@@ -587,6 +598,92 @@ func (r *pendingRun) resolve(ctx context.Context, rs []resolution) error {
 	return r.reportResolved(rs, r.pending.Merge, left)
 }
 
+// inFile refuses, with exit code 1, a resolution that puts a file, a
+// symlink or a directory inside a path the merge holds a file or a symlink
+// at once rs is written into held, the pending merge's version: a path this
+// run resolves so, or one an earlier run did and this one leaves alone.
+// Written, it would make that path a directory, and the file resolved
+// there would go with no word while the merge still listed it as resolved.
+// A path resolved to the directory one side holds there, or to nothing,
+// has room for it. The hint names the side that keeps a directory at the
+// path, where one side does.
+func (r *pendingRun) inFile(held lineage.Base, rs []resolution) error {
+	now := map[string]resolution{}
+	for _, res := range rs {
+		now[res.path] = res
+	}
+	was := map[string]source.TreeEntry{}
+	for _, e := range held.Entries {
+		was[e.Path] = e
+	}
+	sorted := slices.Clone(rs)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].path < sorted[j].path })
+	for _, res := range sorted {
+		if res.entry == nil && !res.keep {
+			continue
+		}
+		for dir := path.Dir(res.path); dir != "."; dir = path.Dir(dir) {
+			e, side := was[dir], ""
+			if at, ok := now[dir]; ok {
+				e, side = source.TreeEntry{Mode: source.DirMode}, at.side
+				if at.entry != nil {
+					e = *at.entry
+				}
+			}
+			if e.Mode == "" || e.Mode == source.DirMode {
+				continue
+			}
+			return r.fileInTheWay(dir, e, side, res)
+		}
+	}
+	return nil
+}
+
+// fileInTheWay is inFile's refusal of res, whose path is inside dir, which
+// the merge holds e at, the side it was resolved to being side, "" when the
+// run did not resolve it and the side is then read from the versions of
+// the file that conflicts there.
+func (r *pendingRun) fileInTheWay(dir string, e source.TreeEntry, side string, res resolution) error {
+	f := r.files[dir]
+	stages := [][2]string{{gitStageMine, sideMine}, {gitStageTheirs, sideTheirs}}
+	if side == "" && f != nil {
+		for _, st := range stages {
+			if v, ok := f.stages[st[0]]; ok && v.mode == e.Mode && v.oid == e.OID {
+				side = st[1]
+				break
+			}
+		}
+	}
+	held := entryKind(e.Mode)
+	if side != "" {
+		held = side + ", " + held
+	}
+	to := "a version of its own"
+	if res.side != "" {
+		to = res.side
+	}
+	message := fmt.Sprintf("%s is resolved to %s, so %s cannot be resolved to %s inside it", quotedPath(dir), held, quotedPath(res.path), to)
+	// The side with no version at the path, where git moved the other
+	// side's aside, is the one that keeps a directory there.
+	var other string
+	if f != nil && len(f.aside) > 0 {
+		for _, st := range stages {
+			if _, ok := f.stages[st[0]]; !ok {
+				other = st[1]
+				break
+			}
+		}
+	}
+	if other == "" {
+		return fail(exitUsage, message, "run '"+skillCommand("resolve", r.rec.Name)+"' to see every file left to resolve and its parts")
+	}
+	example := fmt.Sprintf("--hunk %s:1=%s", dir, other)
+	if g := r.files[res.path]; g != nil && g.text == nil && res.side != "" {
+		example += fmt.Sprintf(" --hunk %s:1=%s", res.path, res.side)
+	}
+	return fail(exitUsage, message, fmt.Sprintf("resolve %s to %s, which keeps a directory there, first or in the same run, as in %s", quotedPath(dir), other, example))
+}
+
 // applyResolutions is the version a pending merge holds, as ReadMerged read
 // it out of its tree, held, with rs written into it, in path order: every
 // path git moved a version of a resolved file aside to goes, and the path
@@ -602,7 +699,10 @@ func (r *pendingRun) resolve(ctx context.Context, rs []resolution) error {
 // git kept it for the side that has it; a file of the merge inside it
 // whose resolution went with it when the file replaced the directory, and
 // that rs does not resolve again, is left to resolve again, and reopened
-// names it.
+// names it. So is a file of the merge inside a path resolved to a file, or
+// to nothing, which takes everything below it away. inFile has refused
+// anything rs puts inside a file already, so the directory a path needs
+// to sit in never replaces one.
 func applyResolutions(held, fresh lineage.Base, files map[string]*conflictFile, rs []resolution) (v lineage.Base, reopened []string) {
 	entries := map[string]source.TreeEntry{}
 	for _, e := range held.Entries {
@@ -629,6 +729,13 @@ func applyResolutions(held, fresh lineage.Base, files map[string]*conflictFile, 
 	for _, res := range sorted {
 		now[res.path] = true
 	}
+	reopen := func(dir string) {
+		for p := range files {
+			if strings.HasPrefix(p, dir+"/") && !now[p] {
+				reopened = append(reopened, p)
+			}
+		}
+	}
 	for _, res := range sorted {
 		if f := files[res.path]; f != nil {
 			for _, aside := range f.aside {
@@ -646,14 +753,11 @@ func applyResolutions(held, fresh lineage.Base, files map[string]*conflictFile, 
 				}
 			}
 			parents(res.path)
-			for p := range files {
-				if strings.HasPrefix(p, res.path+"/") && !now[p] {
-					reopened = append(reopened, p)
-				}
-			}
+			reopen(res.path)
 			continue
 		}
 		drop(res.path)
+		reopen(res.path)
 		if res.entry == nil {
 			continue
 		}

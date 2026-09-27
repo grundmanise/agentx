@@ -330,16 +330,26 @@ func subcommand(args []string) string {
 
 // lookPath finds git in the PATH of the environment map, never the process's.
 func (r *Runner) lookPath() (string, error) {
-	for _, dir := range filepath.SplitList(r.env["PATH"]) {
+	if path, ok := LookPath(r.env, "git"); ok {
+		return path, nil
+	}
+	return "", ErrMissing
+}
+
+// LookPath finds the command called name in the PATH of env, never the
+// process's: the first regular file of that name someone may execute. ok
+// is false when there is none.
+func LookPath(env map[string]string, name string) (path string, ok bool) {
+	for _, dir := range filepath.SplitList(env["PATH"]) {
 		if dir == "" {
 			continue
 		}
-		path := filepath.Join(dir, "git")
+		path := filepath.Join(dir, name)
 		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Mode()&0o111 != 0 {
-			return path, nil
+			return path, true
 		}
 	}
-	return "", ErrMissing
+	return "", false
 }
 
 // childEnv builds the environment of one git process from the environment
