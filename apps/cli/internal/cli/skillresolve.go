@@ -215,17 +215,18 @@ func (inv *invocation) finishJournals(ctx context.Context) error {
 // of the three versions the ref's commit names, run again, which gives the
 // same files and the same hunks, numbered alike, as the update that left it.
 type pendingRun struct {
-	inv      *invocation
-	gitDir   string
-	rec      lineage.Record           // the import branch as the run read it, at the merge's base unless something moved it since
-	pending  lineage.PendingMerge     // what the merge ref held
-	dir      string                   // the upstream directory every tree of the merge wraps the skill in
-	res      mergeResult              // the merge of the three versions, run again
-	files    map[string]*conflictFile // the files that conflict, by path
-	resolved map[string]bool          // the files the pending merge commit records as resolved
-	theirs   lineage.Import           // the lineage of the update merged
-	carried  map[string]bool          // once the run merged the merge again and wrote it: the files whose resolution it kept
-	left     map[string]bool          // and the files it left to resolve
+	inv       *invocation
+	gitDir    string
+	rec       lineage.Record           // the import branch as the run read it, at the merge's base unless something moved it since
+	pending   lineage.PendingMerge     // what the merge ref held
+	dir       string                   // the upstream directory every tree of the merge wraps the skill in
+	res       mergeResult              // the merge of the three versions, run again
+	files     map[string]*conflictFile // the files that conflict, by path
+	resolved  map[string]bool          // the files the pending merge commit records as resolved
+	theirs    lineage.Import           // the lineage of the update merged
+	carried   map[string]bool          // once the run merged the merge again and wrote or completed it: the files whose resolution it kept
+	left      map[string]bool          // and the files it left to resolve, none once it completed it
+	completed bool                     // the run completed the merge
 }
 
 // readPending reads the merge a skill's merge ref holds, refusing one that
@@ -587,7 +588,7 @@ func (r *pendingRun) resolve(ctx context.Context, rs []resolution) error {
 	}
 	left := r.unresolved(now)
 	if len(left) == 0 {
-		return r.complete(ctx, v, r.pending.Merge)
+		return r.complete(ctx, v, r.pending.Merge, nil)
 	}
 	commit, err := r.commit(ctx, v, r.pending.Merge, len(left), resolved)
 	if err != nil {
@@ -853,6 +854,15 @@ func (r *pendingRun) write(ctx context.Context, again mergedAgain, doing string)
 	if err := r.publish(ctx, commit, again.m.Base, doing); err != nil {
 		return err
 	}
+	r.note(again)
+	return nil
+}
+
+// note records, once the run wrote the merge as again merged it or
+// completed it so, which files kept their resolution and which are left to
+// resolve, none for a merge completed: every other file of the merge the
+// run read merges cleanly now, git's merge of it written, see edit.
+func (r *pendingRun) note(again mergedAgain) {
 	r.carried, r.left = map[string]bool{}, map[string]bool{}
 	for _, p := range again.resolved {
 		r.carried[p] = true
@@ -860,7 +870,6 @@ func (r *pendingRun) write(ctx context.Context, again mergedAgain, doing string)
 	for _, f := range again.left {
 		r.left[f.Path] = true
 	}
-	return nil
 }
 
 // rebase merges again, on the version the import branch points at now, a
@@ -886,7 +895,7 @@ func (r *pendingRun) rebase(ctx context.Context, v lineage.Base, rs []resolution
 	}
 	if len(again.left) == 0 {
 		r.adopt(again.res, again.resolved)
-		return r.complete(ctx, again.v, m)
+		return r.complete(ctx, again.v, m, &again)
 	}
 	if err := r.write(ctx, again, "resolved"); err != nil {
 		return err
@@ -972,7 +981,8 @@ func (r *pendingRun) reportResolved(rs []resolution, m lineage.Merge, left []con
 // complete completes a merge of m that has no file left to resolve once it
 // holds v, the skill's directory as the merge resolves it, in the same run
 // that resolved its last file. m is the merge the pending merge commit
-// names, or the one a moved import branch made of it, see rebase.
+// names, or the one a moved import branch made of it, see rebase, merged
+// being then that merge merged again, and nil otherwise.
 //
 // First the library directory is judged, outside the lock, as an update
 // judges it: one that is gone, is a symlink, or holds something git cannot
@@ -983,7 +993,7 @@ func (r *pendingRun) reportResolved(rs []resolution, m lineage.Merge, left []con
 // one Agentx-Merge-Mine names. A directory edited while the merge was
 // pending, by any tool, is merged again, see remerge, and that edit is
 // never lost. The merge is then applied, see apply.
-func (r *pendingRun) complete(ctx context.Context, v lineage.Base, m lineage.Merge) error {
+func (r *pendingRun) complete(ctx context.Context, v lineage.Base, m lineage.Merge, merged *mergedAgain) error {
 	inv, name := r.inv, r.rec.Name
 	again := "run the command again"
 	lib, held := librarySkill(inv.dirs.Library, name)
@@ -1013,7 +1023,7 @@ func (r *pendingRun) complete(ctx context.Context, v lineage.Base, m lineage.Mer
 	if err != nil {
 		return accountRepoFailure(err)
 	}
-	c := completion{v: v, m: m, libPath: libPath, captured: captured, tree: tree}
+	c := completion{v: v, m: m, libPath: libPath, captured: captured, tree: tree, again: merged}
 	if treeid.Wrap(r.dir, tree.ID) != mine {
 		done, err := r.remerge(ctx, &c)
 		if done || err != nil {
@@ -1031,9 +1041,10 @@ type completion struct {
 	v        lineage.Base
 	m        lineage.Merge
 	libPath  string
-	captured string      // the library entry, in the words a journal records
-	tree     treeid.Tree // what the library directory holds, as git would record it
-	remerged bool        // the directory was edited while the merge was pending, and merged again
+	captured string       // the library entry, in the words a journal records
+	tree     treeid.Tree  // what the library directory holds, as git would record it
+	remerged bool         // the directory was edited while the merge was pending, and merged again
+	again    *mergedAgain // the merge merged again that is completed, on a moved import branch or an edited directory; nil for the one the pending merge commit records
 }
 
 // remerge merges again a merge whose library directory was edited while it
@@ -1070,7 +1081,7 @@ func (r *pendingRun) remerge(ctx context.Context, c *completion) (done bool, err
 		return false, err
 	}
 	if len(again.left) == 0 {
-		c.v, c.m, c.remerged = again.v, m, true
+		c.v, c.m, c.remerged, c.again = again.v, m, true, &again
 		return false, nil
 	}
 	if err := r.write(ctx, again, "completed"); err != nil {
@@ -1231,6 +1242,10 @@ func (r *pendingRun) apply(ctx context.Context, c completion) error {
 	})
 	if err != nil {
 		return mutationFailure(err)
+	}
+	r.completed = true
+	if c.again != nil {
+		r.note(*c.again)
 	}
 	inv.pruneEditorDirs(name, pruneKept)
 	return r.reportCompleted(ctx, c, newer, upstreamRename(name, skillName(theirs, bodies), next.Import.Dir()), done)

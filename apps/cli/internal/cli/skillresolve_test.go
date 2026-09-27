@@ -971,15 +971,17 @@ func TestSkillResolveRefusesAMergeItCannotMergeAgain(t *testing.T) {
 
 // editorDir makes a directory an editor session of the skill called name
 // could have left, owned by the process pid, or kept by its run when pid
-// is "kept", for the agentx home at home, and returns it.
+// is "kept", for the agentx home at home, and returns it. It holds
+// notes.md as the session wrote it, which its owner file records.
 func editorDir(t *testing.T, h *harness, name, pid, home string) string {
 	t.Helper()
 	dir, err := os.MkdirTemp(h.env["TMPDIR"], "agentx-resolve-")
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, filepath.Join(dir, editorOwner), pid+"\n"+home+"\n"+h.ref(lineage.MergeRef(name))+"\n")
-	writeFile(t, mkdirs(t, filepath.Join(dir, name), "notes.md"), "<<<<<<< mine\n")
+	const written = "<<<<<<< mine\n"
+	writeFile(t, filepath.Join(dir, editorOwner), pid+"\n"+home+"\n"+h.ref(lineage.MergeRef(name))+"\n"+editorRecord("notes.md", []byte(written))+"\n")
+	writeFile(t, mkdirs(t, filepath.Join(dir, name), "notes.md"), written)
 	return dir
 }
 
@@ -1742,48 +1744,76 @@ func TestSkillResolveRemovesTheFilesOfAMergeCompletedWhileTheEditorIsOpen(t *tes
 // edit made merge cleanly, git's merge of it written in its place, and
 // for one a moved import branch makes merge cleanly, in a run that leaves
 // the merge pending with other files to resolve.
+//
+// A run that merges again and completes the merge, the edit or the moved
+// branch leaving no file to resolve, keeps what was typed for such a file
+// the same way, a file left with markers in it included: the directory
+// stays, its owner file gone, since the merge that would have removed it
+// is complete, and the warning says it is the user's to delete.
 func TestSkillResolveInAnEditorCompletesIntoAMergeDoneAgain(t *testing.T) {
 	t.Parallel()
+	moveGuide := func(t *testing.T, h *harness, base string) {
+		h.accountGit("update-ref", lineage.ManagedRef("kit"), versionOf(t, h, base, map[string]string{"guide.md": kitMine["guide.md"]}))
+	}
 	for _, c := range []struct {
 		name      string
+		resolved  []string // what --hunk resolves first, beside the files that conflict whole
 		meanwhile func(t *testing.T, h *harness, base string)
 		args      []string // after --editor
+		typing    bool     // the editor types into guide.md and leaves its markers, rather than resolving it
 		exit      int
-		left      string // the files the conflict event reports
-		kept      string // the file the editor resolved whose typed content stays, if any
+		left      string // the files the conflict event reports, "" when the run completes the merge
+		kept      string // the file whose typed content stays, if any
 		clean     bool   // and it merges cleanly now, rather than conflicting anew
 	}{
-		{name: "another file conflicts anew", exit: 4, left: "guide.md:1",
+		{name: "another file conflicts anew", resolved: []string{"guide.md:1=mine"}, exit: 4, left: "guide.md:1",
 			meanwhile: func(t *testing.T, h *harness, _ string) { editLibrary(t, h, "kit", "guide.md", "guide, mine again\n") }},
-		{name: "the file edited conflicts anew", exit: 4, left: "notes.md:2", kept: "notes.md",
+		{name: "the file edited conflicts anew", resolved: []string{"guide.md:1=mine"}, exit: 4, left: "notes.md:2", kept: "notes.md",
 			meanwhile: func(t *testing.T, h *harness, _ string) {
 				editLibrary(t, h, "kit", "notes.md", "ONE\ntwo\nthree\nfour\nFIVE again\n")
 			}},
-		{name: "the file edited merges cleanly", exit: 4, left: "guide.md:1", kept: "notes.md", clean: true,
+		{name: "the file edited merges cleanly", resolved: []string{"guide.md:1=mine"}, exit: 4, left: "guide.md:1", kept: "notes.md", clean: true,
 			meanwhile: func(t *testing.T, h *harness, _ string) {
 				editLibrary(t, h, "kit", "notes.md", kitTheirs["notes.md"])
 				editLibrary(t, h, "kit", "guide.md", "guide, mine again\n")
 			}},
 		{name: "a file merges cleanly on a moved import branch", args: []string{"guide.md"}, exit: 0, left: "notes.md:2", kept: "guide.md", clean: true,
-			meanwhile: func(t *testing.T, h *harness, base string) {
-				h.accountGit("update-ref", lineage.ManagedRef("kit"), versionOf(t, h, base, map[string]string{"guide.md": kitMine["guide.md"]}))
-			}},
+			meanwhile: moveGuide},
+		{name: "the file edited merges cleanly and completes the merge", resolved: []string{"guide.md:1=mine"}, exit: 0, kept: "notes.md", clean: true,
+			meanwhile: func(t *testing.T, h *harness, _ string) { editLibrary(t, h, "kit", "notes.md", kitTheirs["notes.md"]) }},
+		{name: "a file merges cleanly on a moved import branch and completes the merge", resolved: []string{"notes.md:1=mine", "notes.md:2=theirs"},
+			args: []string{"guide.md"}, exit: 0, kept: "guide.md", clean: true, meanwhile: moveGuide},
+		{name: "a file left with markers merges cleanly on a moved import branch and completes the merge", typing: true, exit: 0, kept: "guide.md", clean: true,
+			meanwhile: moveGuide},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			h, _, updated := resolveHarness(t)
-			resolved := slices.Clone(kitWholeFiles)
-			if c.args == nil {
-				resolved = append(resolved, "guide.md:1=mine")
-			}
-			resolveKit(t, h, 0, resolved...)
+			resolveKit(t, h, 0, append(slices.Clone(kitWholeFiles), c.resolved...)...)
 			c.meanwhile(t, h, updated["base"].(string))
 			stub, _, _ := resolvingEditor(t)
+			if c.typing {
+				stub = editorStub(t, "typing-editor", `for f in "$@"; do
+	case "$f" in
+	*/guide.md) printf 'typed\n' >> "$f" ;;
+	*) printf 'resolved in the editor\n' > "$f" ;;
+	esac
+done
+`)
+			}
 			h.env["EDITOR"] = stub
 
 			out := h.run(append([]string{"--json", "skill", "resolve", "kit", "--editor"}, c.args...)...)
 			equal(t, "exit", out.exit, c.exit)
-			equal(t, "what is left", conflictFiles(h.one(out.stdout, "conflict")), c.left)
+			until := " until the merge of kit completes or is given up"
+			if c.left == "" {
+				equal(t, "conflict events", len(h.eventsOfType(out.stdout, "conflict")), 0)
+				contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), " and updated it from ")
+				equal(t, "the merge ref", h.ref(lineage.MergeRef("kit")), "")
+				until = ", which nothing removes but you now that the merge of kit is complete"
+			} else {
+				equal(t, "what is left", conflictFiles(h.one(out.stdout, "conflict")), c.left)
+			}
 			dirs := editorDirs(t, h)
 			if c.kept == "" {
 				equal(t, "what the session left", strings.Join(dirs, " "), "")
@@ -1796,24 +1826,57 @@ func TestSkillResolveInAnEditorCompletesIntoAMergeDoneAgain(t *testing.T) {
 				t.Fatalf("the session left %v, want the one directory", dirs)
 			}
 			how := " conflicts anew now that the merge was merged again, so what you typed for it is kept in "
-			if c.clean {
+			switch {
+			case c.typing:
+				how = " still holds conflict markers, and merges cleanly now that the merge was merged again, so git's merge of it was written; what you typed is kept in "
+			case c.clean:
 				how = " merges cleanly now that the merge was merged again, so what you typed for it was not written and is kept in "
-				equal(t, c.kept+" in the merge, as git merged it", h.accountGit("cat-file", "blob", lineage.MergeRef("kit")+":kit-dir/"+c.kept),
-					strings.TrimSpace(kitTheirs[c.kept]))
 			}
-			equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), c.kept+how+dirs[0]+" until the merge of kit completes or is given up")
-			equal(t, "what the editor saved", fileBody(t, filepath.Join(dirs[0], "kit", c.kept)), "resolved in the editor\n")
-			equal(t, "the owner of what is kept", ownerOf(t, dirs[0]), "kept")
+			// The copies, which hold the version before the import branch
+			// moved, are kept with warnings of their own when the merge
+			// completes on it.
+			var got []string
+			for _, w := range warnings(h, out.stderr) {
+				if !strings.Contains(w, "'s copy of kit is different from the library") {
+					got = append(got, w)
+				}
+			}
+			equal(t, "warnings", strings.Join(got, "\n"), c.kept+how+dirs[0]+until)
+			saved := fileBody(t, filepath.Join(dirs[0], "kit", c.kept))
+			if c.typing {
+				if !strings.HasPrefix(saved, "<<<<<<< mine\n") || !strings.HasSuffix(saved, ">>>>>>> theirs\ntyped\n") {
+					t.Errorf("what the editor saved is not what it typed after the markers:\n%s", saved)
+				}
+			} else {
+				equal(t, "what the editor saved", saved, "resolved in the editor\n")
+			}
+			if c.left != "" {
+				if c.clean {
+					equal(t, c.kept+" in the merge, as git merged it", h.accountGit("cat-file", "blob", lineage.MergeRef("kit")+":kit-dir/"+c.kept),
+						strings.TrimSpace(kitTheirs[c.kept]))
+				}
+				equal(t, "the owner of what is kept", ownerOf(t, dirs[0]), "kept")
+				return
+			}
+			equal(t, c.kept+" in the library, as git merged it", fileBody(t, filepath.Join(h.library, "kit", c.kept)), kitTheirs[c.kept])
+			nothingAt(t, "the owner file of what is kept", filepath.Join(dirs[0], editorOwner))
+			if c.typing {
+				equal(t, "notes.md in the library", fileBody(t, filepath.Join(h.library, "kit", "notes.md")), "resolved in the editor\n")
+			}
 		})
 	}
 }
 
 // TestSkillResolvePrunesWhatAnEditorSessionLeftBehind: a directory an
 // editor session of the skill left for this home, whose run is gone
-// without keeping it, killed say, is removed when the next session starts;
-// one whose run is still going, one its run kept, and one of another skill
-// stay. Completing the merge removes the kept one too, and leaves the one
-// whose run is still going.
+// without keeping it, killed or hung up on say, is removed when the next
+// session starts, as long as it holds the files as they were written; one
+// whose run is still going, one its run kept, and one of another skill
+// stay. One whose run is gone and that holds anything else, a file saved,
+// a swap file an editor left beside one, or an owner file that records no
+// file, is kept instead, marked so, and a warning names it. Completing
+// the merge removes the kept ones too, and leaves the one whose run is
+// still going.
 func TestSkillResolvePrunesWhatAnEditorSessionLeftBehind(t *testing.T) {
 	t.Parallel()
 	h, _, _ := resolveHarness(t)
@@ -1826,11 +1889,30 @@ func TestSkillResolvePrunesWhatAnEditorSessionLeftBehind(t *testing.T) {
 	live := editorDir(t, h, "kit", ownPid, h.agentx)
 	kept := editorDir(t, h, "kit", "kept", h.agentx)
 	other := editorDir(t, h, "other", pid, h.agentx)
+	saved := editorDir(t, h, "kit", pid, h.agentx)
+	writeFile(t, filepath.Join(saved, "kit", "notes.md"), "saved before the hang-up\n")
+	swapped := editorDir(t, h, "kit", pid, h.agentx)
+	writeFile(t, filepath.Join(swapped, "kit", ".notes.md.swp"), "typed, not saved\n")
+	unrecorded := editorDir(t, h, "kit", pid, h.agentx)
+	writeFile(t, filepath.Join(unrecorded, editorOwner), pid+"\n"+h.agentx+"\n"+h.ref(lineage.MergeRef("kit"))+"\n")
 	h.env["EDITOR"] = editorStub(t, "idle-editor", "exit 0\n")
 
-	h.mustRun("skill", "resolve", "kit", "--editor")
+	out := h.run("--json", "skill", "resolve", "kit", "--editor")
+	equal(t, "exit", out.exit, 0)
 	nothingAt(t, "the stale session", stale)
-	equal(t, "what is left", strings.Join(editorDirs(t, h), " "), strings.Join(sortedStrings(live, kept, other), " "))
+	equal(t, "what is left", strings.Join(editorDirs(t, h), " "), strings.Join(sortedStrings(live, kept, other, saved, swapped, unrecorded), " "))
+	var want []string
+	for _, dir := range sortedStrings(saved, swapped, unrecorded) {
+		equal(t, "the owner of "+dir, ownerOf(t, dir), "kept")
+		want = append(want, "the files you edited in an earlier session that did not finish are kept in "+dir+
+			" until the merge of kit completes or is given up; this session opens the files afresh, so copy what you typed from there")
+	}
+	// Each file the idle editor left as it was is named in a warning of
+	// its own after those.
+	got := warnings(h, out.stderr)
+	equal(t, "warnings", strings.Join(got[:min(len(got), len(want))], "\n"), strings.Join(want, "\n"))
+	equal(t, "what was saved", fileBody(t, filepath.Join(saved, "kit", "notes.md")), "saved before the hang-up\n")
+	equal(t, "the swap file", fileBody(t, filepath.Join(swapped, "kit", ".notes.md.swp")), "typed, not saved\n")
 
 	resolveKit(t, h, 0, append(kitSides, "kept.md:1=theirs")...)
 	equal(t, "what is left once the merge completed", strings.Join(editorDirs(t, h), " "), strings.Join(sortedStrings(live, other), " "))

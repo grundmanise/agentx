@@ -3,9 +3,12 @@ package cli
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -82,10 +85,17 @@ func (inv *invocation) editorCommand() (command string, ok bool) {
 // directory that holds a file left with markers in it and something typed
 // besides, whose warning says so. A run that merged the merge again, a
 // completion of an edited library directory or a run on a moved import
-// branch, and left it pending wrote every resolution that still applies,
-// and keeps the directory only for a file the editor resolved that
-// conflicts anew, or that merges cleanly now, git's merge of it written
-// in place of what was typed, which a warning names.
+// branch, wrote every resolution that still applies, and keeps the
+// directory only for a file the editor resolved that conflicts anew, or
+// that merges cleanly now, git's merge of it written in place of what was
+// typed, which a warning names. When that run completed the merge, which is
+// what removes a kept directory, the directory is given up to the user
+// instead, see releaseEditorDir: nothing removes it but them.
+//
+// A directory an earlier session left whose run is gone without keeping
+// it, killed or hung up on say, is removed as the session starts, unless
+// something was saved there, which keeps it and a warning names it, see
+// pruneEditorDirs.
 func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	inv, name := r.inv, r.rec.Name
 	see := "run '" + skillCommand("resolve", name) + "' to see every file left to resolve"
@@ -113,7 +123,7 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 		}
 	}
 	var dir string
-	var paths []string
+	var paths, stale []string
 	err := home.MutateQuiet(inv.dirs.Home, inv.refs(ctx), func() error {
 		values, err := inv.lineageRefs(ctx, r.gitDir, name)
 		if err != nil {
@@ -122,10 +132,14 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 		if values[lineage.MergeRef(name)] != r.pending.Commit {
 			return mergeMovedFailure(name, "the files were being opened")
 		}
-		inv.pruneEditorDirs(name, pruneGone)
+		stale = inv.pruneEditorDirs(name, pruneGone)
 		dir, paths, err = inv.layOutForEditor(name, r.pending.Commit, files)
 		return err
 	})
+	for _, d := range stale {
+		inv.out.warn("the files you edited in an earlier session that did not finish are kept in " + d + " until the merge of " + name + " completes or is given up; " +
+			"this session opens the files afresh, so copy what you typed from there")
+	}
 	if err != nil {
 		return mutationFailure(err)
 	}
@@ -185,11 +199,11 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 		return err
 	}
 	if r.carried != nil {
-		// The merge was merged again and written, every resolution that
-		// still applies carried into it. A file the editor resolved that
-		// is left to resolve conflicts anew; any other one merges cleanly
-		// now, and git's merge of it was written in place of what was
-		// typed.
+		// The merge was merged again and written, or completed, every
+		// resolution that still applies carried into it. A file the editor
+		// resolved that is left to resolve conflicts anew; any other one
+		// merges cleanly now, and git's merge of it was written in place
+		// of what was typed.
 		for _, res := range rs {
 			switch {
 			case r.carried[res.path]:
@@ -200,39 +214,45 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 			}
 		}
 	}
-	// The directory stays, marked kept, while it holds something typed that
-	// was not written: a file left with markers in it and more, and a file
-	// the editor resolved that conflicts anew or merges cleanly now.
-	held := ""
-	if slices.ContainsFunc(left, func(p string) bool { return typed[p] }) || len(anew)+len(clean) > 0 {
-		if keep() {
-			held = dir
-		}
-	} else {
+	// The directory stays while it holds something typed that was not
+	// written: a file left with markers in it and more, and a file the
+	// editor resolved that conflicts anew or merges cleanly now. While the
+	// merge is pending it is marked kept, and goes once the merge completes
+	// or is given up; a run that completed the merge gives it up to the
+	// user, since nothing would remove it for them any more.
+	held, until := "", " until the merge of "+name+" completes or is given up"
+	switch {
+	case !slices.ContainsFunc(left, func(p string) bool { return typed[p] }) && len(anew)+len(clean) == 0:
 		os.RemoveAll(dir)
+	case r.completed:
+		releaseEditorDir(dir)
+		held, until = dir, ", which nothing removes but you now that the merge of "+name+" is complete"
+	case keep():
+		held = dir
 	}
 	for _, p := range left {
-		why, how := " still holds conflict markers", " was left unresolved"
+		why, how := " still holds conflict markers", ", so it was left unresolved"
 		if gone[p] {
 			why = " is gone"
 		}
-		if r.resolved[p] {
-			how = " keeps the way it was resolved before"
+		switch {
+		case r.carried != nil && !r.left[p]:
+			how = ", and merges cleanly now that the merge was merged again, so git's merge of it was written"
+		case r.resolved[p]:
+			how = ", so it keeps the way it was resolved before"
 		}
-		warning := quotedPath(p) + why + ", so it" + how
+		warning := quotedPath(p) + why + how
 		if typed[p] && held != "" {
-			warning += "; what you typed is kept in " + held + " until the merge of " + name + " completes or is given up"
+			warning += "; what you typed is kept in " + held + until
 		}
 		inv.out.warn(warning)
 	}
 	if held != "" {
 		for _, p := range anew {
-			inv.out.warn(quotedPath(p) + " conflicts anew now that the merge was merged again, so what you typed for it is kept in " + held +
-				" until the merge of " + name + " completes or is given up")
+			inv.out.warn(quotedPath(p) + " conflicts anew now that the merge was merged again, so what you typed for it is kept in " + held + until)
 		}
 		for _, p := range clean {
-			inv.out.warn(quotedPath(p) + " merges cleanly now that the merge was merged again, so what you typed for it was not written and is kept in " + held +
-				" until the merge of " + name + " completes or is given up")
+			inv.out.warn(quotedPath(p) + " merges cleanly now that the merge was merged again, so what you typed for it was not written and is kept in " + held + until)
 		}
 	}
 	if len(rs) == 0 {
@@ -282,10 +302,11 @@ const editorDirPrefix = "agentx-resolve-"
 // editorOwner is the file of an editor session's directory that says whose
 // it is, one per line: the process id of the run that made it, or the word
 // in editorKept once that run kept it, the agentx home it resolves a merge
-// of, and the pending merge commit its files were written from. It sits
-// beside the skill's directory and never in it, so no file of the skill can
-// be taken for it, and its name is a hidden one, which the library never
-// gives a skill, so the skill's directory cannot be taken for it either.
+// of, the pending merge commit its files were written from, and then each
+// file as it was written, see editorRecord. It sits beside the skill's
+// directory and never in it, so no file of the skill can be taken for it,
+// and its name is a hidden one, which the library never gives a skill, so
+// the skill's directory cannot be taken for it either.
 const editorOwner = ".owner"
 
 // editorKept stands in for the process id in the owner file of a directory
@@ -308,6 +329,73 @@ func keepEditorDir(dir string) {
 	_ = os.WriteFile(path, []byte(editorKept+"\n"+rest), 0o600)
 }
 
+// releaseEditorDir gives the directory an editor session laid its files out
+// in up to the user, once the merge they were for is complete and nothing
+// typed there can be written any more: its owner file goes, so that no run
+// takes it for a session's, see pruneEditorDirs, and nothing removes it but
+// the user.
+func releaseEditorDir(dir string) {
+	_ = os.Remove(filepath.Join(dir, editorOwner))
+}
+
+// editorRecord is the line of an editor session's owner file that records
+// a file as it was written for the editor: the SHA-256 of what it holds, in
+// hex, then its path relative to the skill's directory, quoted as git
+// quotes a path, so that no path breaks the line.
+func editorRecord(path string, body []byte) string {
+	sum := sha256.Sum256(body)
+	return hex.EncodeToString(sum[:]) + " " + gitQuoted(path)
+}
+
+// errTouched stops the walk of untouched at the first thing that was not
+// written for the editor.
+var errTouched = errors.New("touched")
+
+// untouched reports whether the directory an editor session of the skill
+// called name laid its files out in holds them exactly as they were
+// written, records being the lines of its owner file that record them, see
+// editorRecord: every file there with what it was given, and nothing else,
+// no swap or backup file an editor writes beside the one it opens, no file
+// saved under another name. An owner file that records no file tells
+// nothing, and its directory is taken for one that holds something typed.
+func untouched(dir, name string, records []string) bool {
+	want := map[string]bool{}
+	for _, line := range records {
+		if line != "" {
+			want[line] = true
+		}
+	}
+	if len(want) == 0 {
+		return false
+	}
+	root := filepath.Join(dir, name)
+	found := 0
+	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		switch {
+		case err != nil:
+			return err
+		case p == dir, p == root, p == filepath.Join(dir, editorOwner):
+			return nil
+		case !strings.HasPrefix(p, root+string(filepath.Separator)):
+			return errTouched
+		case d.IsDir():
+			return nil
+		case !d.Type().IsRegular():
+			return errTouched
+		}
+		body, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		if !want[editorRecord(filepath.ToSlash(p[len(root)+1:]), body)] {
+			return errTouched
+		}
+		found++
+		return nil
+	})
+	return err == nil && found == len(want)
+}
+
 // tempDir is the operating system's temporary directory, read from the
 // environment the CLI was given: TMPDIR, else /tmp.
 func (inv *invocation) tempDir() string {
@@ -319,7 +407,8 @@ func (inv *invocation) tempDir() string {
 
 // layOutForEditor makes the directory an editor session opens files in,
 // agentx-resolve-<random> in the temporary directory: the owner file, which
-// names commit, the pending merge commit the files are written from, and a
+// names commit, the pending merge commit the files are written from, and
+// records every file as it is written, and a
 // directory named after the skill with each file at its path relative to
 // the skill's directory, so that the editor shows what it is. Every file is
 // written as merge-file wrote it, see editorText. It returns the directory
@@ -330,6 +419,9 @@ func (inv *invocation) layOutForEditor(name, commit string, files []*conflictFil
 		return "", nil, err
 	}
 	owner := fmt.Sprintf("%d\n%s\n%s\n", os.Getpid(), inv.dirs.Home, commit)
+	for _, f := range files {
+		owner += editorRecord(f.Path, []byte(editorText(f.text))) + "\n"
+	}
 	if err := os.WriteFile(filepath.Join(dir, editorOwner), []byte(owner), 0o600); err != nil {
 		os.RemoveAll(dir)
 		return "", nil, err
@@ -557,7 +649,9 @@ type prune int
 
 const (
 	// pruneGone removes those whose run is gone without keeping them, a run
-	// killed while its editor was open, as a new session does.
+	// killed while its editor was open, as a new session does, when they
+	// hold the files as they were written; one that holds anything else is
+	// kept instead, as its run would have kept it.
 	pruneGone prune = iota
 	// pruneKept removes the kept ones too, as completing the merge does:
 	// the merge what was typed there was for is complete.
@@ -571,8 +665,13 @@ const (
 // pruneEditorDirs removes the directories editor sessions of the skill
 // called name laid files out in for this agentx home, which says. A
 // directory whose owner file is missing or names another home is left
-// alone: it is not this merge's.
-func (inv *invocation) pruneEditorDirs(name string, which prune) {
+// alone: it is not this merge's. A directory whose run is gone, a run
+// killed or hung up on while its editor was open, is removed by pruneGone
+// only when it holds the files exactly as they were written, see
+// untouched: one where anything was saved, or where the editor left a swap
+// file of what was typed, is marked kept, see keepEditorDir, and returned,
+// so that the session names it, and nothing saved there is lost.
+func (inv *invocation) pruneEditorDirs(name string, which prune) (kept []string) {
 	tmp := inv.tempDir()
 	entries, err := os.ReadDir(tmp)
 	if err != nil {
@@ -604,9 +703,15 @@ func (inv *invocation) pruneEditorDirs(name string, which prune) {
 			if n, err := strconv.Atoi(pid); err == nil && running(n) {
 				continue
 			}
+			if which == pruneGone && (len(lines) < 4 || !untouched(dir, name, lines[3:])) {
+				keepEditorDir(dir)
+				kept = append(kept, dir)
+				continue
+			}
 		}
 		os.RemoveAll(dir)
 	}
+	return kept
 }
 
 // running reports whether a process with the id pid is running, as far as
