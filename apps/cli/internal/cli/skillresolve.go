@@ -766,7 +766,7 @@ func (r *pendingRun) remerge(ctx context.Context, c *completion) (done bool, err
 	if err != nil {
 		return false, err
 	}
-	if err := r.publish(ctx, commit, "its merge was being completed"); err != nil {
+	if err := r.publish(ctx, commit, "it was being completed"); err != nil {
 		return false, err
 	}
 	out := inv.out
@@ -866,7 +866,7 @@ func (r *pendingRun) apply(ctx context.Context, c completion) error {
 		}
 		switch {
 		case values[lineage.MergeRef(name)] != r.pending.Commit:
-			return mergeMovedFailure(name, "its merge was being completed")
+			return mergeMovedFailure(name, "it was being completed")
 		case values[lineage.ManagedRef(name)] != c.m.Base || values[lineage.ForkRef(name)] != "":
 			return baseMovedFailure(name)
 		}
