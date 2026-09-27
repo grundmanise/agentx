@@ -227,7 +227,7 @@ type pendingRun struct {
 	carried   map[string]bool          // once the run merged the merge again and wrote or completed it: the files whose resolution it kept
 	left      map[string]bool          // and the files it left to resolve, none once it completed it
 	completed bool                     // the run completed the merge
-	turned    map[string]bool          // the directories of earlier editor sessions whose run was gone that this run kept as its session started, see settle
+	named     map[string]bool          // the directories of earlier editor sessions that this run named as its session started, see settle
 }
 
 // readPending reads the merge a skill's merge ref holds, refusing one that
@@ -1153,9 +1153,9 @@ func changedWhileCompleting(name string) *failure {
 // directory, whose content and tree must be the ones the run judged. What
 // the library directory holds unchanged keeps its permissions, see
 // keepPerms. Once it is written, the directories editor sessions of the
-// skill left go, see clearEditorDirs, but for one an earlier session whose
-// run is gone typed something in, which no warning named before this run,
-// and which is given up to the user and named in a warning.
+// skill left go, see clearEditorDirs, but for one that holds something
+// typed whose run is gone, or that this run named as its session started,
+// which is given up to the user and named in a warning.
 func (r *pendingRun) apply(ctx context.Context, c completion) error {
 	inv, git, gitDir, name := r.inv, r.inv.git, r.gitDir, r.rec.Name
 	target := c.v.ID()
@@ -1251,7 +1251,7 @@ func (r *pendingRun) apply(ctx context.Context, c completion) error {
 	if c.again != nil {
 		r.note(*c.again)
 	}
-	for _, dir := range inv.clearEditorDirs(name, r.turned) {
+	for _, dir := range inv.clearEditorDirs(name, r.named) {
 		inv.out.warn(leftToYou(dir, name))
 	}
 	return r.reportCompleted(ctx, c, newer, upstreamRename(name, skillName(theirs, bodies), next.Import.Dir()), done)

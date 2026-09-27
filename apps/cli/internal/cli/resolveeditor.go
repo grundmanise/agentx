@@ -73,8 +73,9 @@ func (inv *invocation) editorCommand() (command string, ok bool) {
 // earlier sessions are then settled, see settle, once the files are
 // written, so that a run killed in between leaves what was typed in one of
 // them at least: what was carried over leaves the directory it came from,
-// and one kept for what this session did not open is named in a warning
-// that says so, since nothing opens it by itself.
+// and every one that still holds something typed is kept and named in a
+// warning that says this session did not open it, whether or not an
+// earlier run named it.
 //
 // Once the editor exits 0, each file is read back. One that is gone, or in
 // which a marker of the size it was written with is left, alone on its line
@@ -163,7 +164,7 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 		for i, f := range files {
 			laid[f.Path] = laidFile{record: records[i], text: texts[i]}
 		}
-		r.turned, carried = settle(earlier, name, laid)
+		r.named, carried = settle(earlier, name, laid)
 		return nil
 	})
 	if err != nil {
@@ -174,12 +175,12 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 			inv.out.info(quotedPath(f.Path) + " opens with what you typed in an earlier session, carried over from " + from[i])
 		}
 	}
-	for _, d := range slices.Sorted(maps.Keys(r.turned)) {
+	for _, d := range slices.Sorted(maps.Keys(r.named)) {
 		what := "what you typed there"
 		if carried[d] {
 			what = "what else you typed there"
 		}
-		inv.out.warn("the files you edited in an earlier session that did not finish are kept in " + d + keptNotOpened(name, what))
+		inv.out.warn("the files you edited in an earlier session are kept in " + d + keptNotOpened(name, what))
 	}
 	// keep settles the directory of a run that did not write everything
 	// typed there, and reports whether it stays, and whether it is given up
@@ -444,9 +445,9 @@ var editorLayoutHook func(step string)
 // write what was typed there, or by a later run that found its run gone
 // and something typed there. A later session of the same conflict opens
 // what was typed there again, and removes it only once everything typed
-// there is carried into its own directory, see settle; completing a merge
-// of the skill removes it, which every warning that names it says, see
-// clearEditorDirs.
+// there is carried into its own directory; every other session of the
+// skill names it, see settle. Completing a merge of the skill removes it,
+// which every warning that names it says, see clearEditorDirs.
 const editorKept = "kept"
 
 // keepEditorDir marks the directory an editor session laid its files out
@@ -499,11 +500,11 @@ func releaseEditorDir(dir string) {
 	_ = os.Remove(filepath.Join(dir, editorOwner))
 }
 
-// leftToYou is the warning that names the directory an earlier session
-// whose run is gone left something saved in, once completing the merge
-// gives it up to the user, see clearEditorDirs.
+// leftToYou is the warning that names the directory of an earlier session
+// that holds something typed, once completing the merge gives it up to the
+// user, see clearEditorDirs.
 func leftToYou(dir, name string) string {
-	return "the files you edited in an earlier session that did not finish are kept in " + dir + givenUpToYou(name)
+	return "the files you edited in an earlier session are kept in " + dir + givenUpToYou(name)
 }
 
 // givenUpToYou ends a warning that names a directory given up to the user
@@ -555,7 +556,7 @@ func resolveInEditor(name, file string) string {
 }
 
 // keptNotOpened ends the warning that names the directory of an earlier
-// session a session kept as it started, see settle: how long it stays, and
+// session a session keeps as it starts, see settle: how long it stays, and
 // that what, what was typed there or, where something typed there was
 // carried over, what else was, was not opened, with every reason there can
 // be, so that the user copies what they need from it rather than wait for
@@ -880,22 +881,24 @@ func reopen(dirs []earlierDir, files []*conflictFile, resolved map[string]bool, 
 // kept: the new directory holds it now, and a later session opens the file
 // as this one leaves it, or as the merge holds it once this one writes it,
 // never what that replaced. Its line stays in the owner file, and reads as
-// a file deleted, with nothing typed in it, see spent. A directory left
-// with nothing typed in it then goes. One whose run is gone and that holds
-// something else, typed for a conflict that changed or for a file the
-// session does not lay out, what lost to a newer copy of the same file, or
-// a file of any other name, a swap file an editor left say, is kept,
-// marked so, and returned in turned, so that the run names it, saying that
-// what was typed there was not opened, see keptNotOpened, or what else was
-// where something typed there was carried over, which carried says of
-// every directory it holds. A kept one stays as it is, named when it was
-// kept. A copy that lost to a newer one stays where it is, and a later
-// session of the same conflict may open it again once no directory holds a
-// newer copy, as after the newer one is written into the merge and the
-// merge given up; the warning that named its directory said it was not
-// opened.
-func settle(dirs []earlierDir, name string, laid map[string]laidFile) (turned, carried map[string]bool) {
-	turned, carried = map[string]bool{}, map[string]bool{}
+// a file deleted, with nothing typed in it, see spent. Then each directory
+// is settled as giving the merge up settles it, see keepTyped: one left
+// with nothing typed in it goes, and one that holds something else, typed
+// for a conflict that changed or for a file the session does not lay out,
+// what lost to a newer copy of the same file, or a file of any other name,
+// a swap file an editor left say, is kept, marked so when its run is gone,
+// and returned in named, so that the run names it, saying that what was
+// typed there was not opened, see keptNotOpened, or what else was where
+// something typed there was carried over, which carried says of every
+// directory it holds. Every session names every such directory, whether or
+// not an earlier run named it, so that each session tells where everything
+// typed that it does not open is. A copy that lost to a newer one stays
+// where it is, and a later session of the same conflict may open it again
+// once no directory holds a newer copy, as after the newer one is written
+// into the merge and the merge given up; the warning that named its
+// directory said it was not opened.
+func settle(dirs []earlierDir, name string, laid map[string]laidFile) (named, carried map[string]bool) {
+	named, carried = map[string]bool{}, map[string]bool{}
 	for _, d := range dirs {
 		for p, f := range d.files {
 			l, ok := laid[p]
@@ -910,15 +913,27 @@ func settle(dirs []earlierDir, name string, laid map[string]laidFile) (turned, c
 				carried[d.path] = true
 			}
 		}
-		switch {
-		case d.spent():
-			os.RemoveAll(d.path)
-		case d.gone:
-			keepEditorDir(d.path)
-			turned[d.path] = true
+		if keepTyped(d) {
+			named[d.path] = true
 		}
 	}
-	return turned, carried
+	return named, carried
+}
+
+// keepTyped settles d, a directory of an earlier editor session, once
+// nothing more is to be carried out of it: one that holds nothing typed,
+// see spent, goes, since nothing typed is lost by that, and every other
+// one is kept, marked so when its run is gone, see keepEditorDir, and
+// reported to stay, so that the run names it.
+func keepTyped(d earlierDir) (stays bool) {
+	if d.spent() {
+		os.RemoveAll(d.path)
+		return false
+	}
+	if d.gone {
+		keepEditorDir(d.path)
+	}
+	return true
 }
 
 // tempDir is the operating system's temporary directory, read from the
@@ -1199,16 +1214,18 @@ func (l *lineRelay) flush() {
 // skill called name left for this home, see earlierDirs, once its merge is
 // complete, as the run that completed it does: the merge what was typed
 // there was for is done. A kept one goes, as every warning that named it
-// said it would, but for one this run kept itself as its session started,
-// turned: the warning that named it came just before the editor took the
-// terminal, and this same run completes the merge, so the user had no
-// time to act on it. That one, and one whose run is gone that holds
-// anything but the files as merge-file wrote them, see spent, are given up
-// to the user instead, see releaseEditorDir, and returned, so that the run
-// names them; every other one goes.
-func (inv *invocation) clearEditorDirs(name string, turned map[string]bool) (released []string) {
+// said it would, but for one this run named as its session started, one
+// of named, see settle, whether or not an earlier run named it too: that
+// warning came just before the editor took the terminal, and this same run
+// completes the merge, so the user had no time to act on it. That one, and
+// one whose run is gone that holds anything but the files as merge-file
+// wrote them, see spent, are given up to the user instead, see
+// releaseEditorDir, and returned, so that the run names them; every other
+// one goes. So no run removes a directory that holds something typed and
+// that it names itself: one goes only as an earlier run's warning said.
+func (inv *invocation) clearEditorDirs(name string, named map[string]bool) (released []string) {
 	for _, d := range inv.earlierDirs(name) {
-		if !d.spent() && (d.gone || turned[d.path]) {
+		if !d.spent() && (d.gone || named[d.path]) {
 			releaseEditorDir(d.path)
 			released = append(released, d.path)
 			continue
@@ -1220,9 +1237,10 @@ func (inv *invocation) clearEditorDirs(name string, turned map[string]bool) (rel
 
 // keepEditorDirs settles the directories earlier editor sessions of the
 // skill called name left for this home, see earlierDirs, once its merge is
-// given up, as the run that gave it up does. One that holds nothing but the
-// files as merge-file wrote them goes, see spent; every other one is kept,
-// marked so when its run is gone, and returned, so that the run names it:
+// given up, as the run that gave it up does, and as a session settles them
+// as it starts, see keepTyped. One that holds nothing but the files as
+// merge-file wrote them goes, see spent; every other one is kept, marked
+// so when its run is gone, and returned, so that the run names it:
 // what was typed there in a file the owner file records is opened again by
 // the next editor session of the same conflict, once an update of the skill
 // leaves one pending again, and what it holds under any other name, a swap
@@ -1233,14 +1251,9 @@ func (inv *invocation) clearEditorDirs(name string, turned map[string]bool) (rel
 // see edit.
 func (inv *invocation) keepEditorDirs(name string) (kept []keptDir) {
 	for _, d := range inv.earlierDirs(name) {
-		if d.spent() {
-			os.RemoveAll(d.path)
-			continue
+		if keepTyped(d) {
+			kept = append(kept, keptOf(d))
 		}
-		if d.gone {
-			keepEditorDir(d.path)
-		}
-		kept = append(kept, keptOf(d))
 	}
 	return kept
 }
