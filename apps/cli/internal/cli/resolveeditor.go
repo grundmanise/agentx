@@ -72,7 +72,8 @@ func (inv *invocation) editorCommand() (command string, ok bool) {
 // note says so before the editor takes the terminal. The directories of
 // earlier sessions are then settled, see settle, once the files are
 // written, so that a run killed in between leaves what was typed in one of
-// them at least.
+// them at least; one kept for what this session did not open is named in a
+// warning that says so, since nothing opens it by itself.
 //
 // Once the editor exits 0, each file is read back. One that is gone, or in
 // which a marker of the size it was written with is left, alone on its line
@@ -91,18 +92,21 @@ func (inv *invocation) editorCommand() (command string, ok bool) {
 // so that nothing typed there is lost: the next session of the same
 // conflict opens what was typed there again, and completing a merge of the
 // skill removes it. So is a directory that holds a file left with markers
-// in it and something typed besides, whose warning says so. So is one
-// whose merge was completed or given up while the editor was open, once
-// something was typed there, which the next session of the same conflict
-// opens again when an update leaves it pending anew; one with nothing typed
-// in it goes at once. A run that merged the merge again, a completion of an
+// in it and something typed besides, whose warning says so; the files the
+// run wrote into the merge leave it first. So is one whose merge was given
+// up while the editor was open, once something was typed there, which the
+// next session of the same conflict opens again when an update leaves it
+// pending anew. One whose merge was completed while the editor was open is
+// given up to the user instead, see releaseEditorDir, since the conflict
+// it was typed for cannot come back; either way one with nothing typed in
+// it goes at once. A run that merged the merge again, a completion of an
 // edited library directory or a run on a moved import branch, wrote every
 // resolution that still applies, and keeps the directory only for a file
 // the editor resolved that conflicts anew, or that merges cleanly now,
 // git's merge of it written in place of what was typed, which a warning
 // names. When that run completed the merge, which is what removes a kept
-// directory, the directory is given up to the user instead, see
-// releaseEditorDir: agentx never removes it.
+// directory, the directory is given up to the user instead: agentx never
+// removes it.
 func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	inv, name := r.inv, r.rec.Name
 	see := "run '" + skillCommand("resolve", name) + "' to see every file left to resolve"
@@ -141,8 +145,9 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 		}
 		earlier := inv.earlierDirs(name)
 		var texts []string
-		texts, from = reopen(earlier, files)
-		if dir, paths, records, err = inv.layOutForEditor(name, r.pending.Commit, files, texts); err != nil {
+		var mods []time.Time
+		texts, from, mods = reopen(earlier, files, r.resolved)
+		if dir, paths, records, err = inv.layOutForEditor(name, r.pending.Commit, files, texts, mods); err != nil {
 			return err
 		}
 		if editorLayoutHook != nil {
@@ -160,27 +165,43 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	}
 	for i, f := range files {
 		if from[i] != "" {
-			inv.out.info(quotedPath(f.Path) + " opens with what you typed in an earlier session, taken from " + from[i])
+			inv.out.info(quotedPath(f.Path) + " opens with what you typed in an earlier session, carried over from " + from[i])
 		}
 	}
 	for _, d := range slices.Sorted(maps.Keys(r.turned)) {
-		inv.out.warn("the files you edited in an earlier session that did not finish are kept in " + d + keptUntil(name, "them"))
+		inv.out.warn("the files you edited in an earlier session that did not finish are kept in " + d + keptNotOpened(name))
 	}
-	// keep keeps the directory, marked so, and reports whether it did. One
-	// whose merge was completed or given up meanwhile goes instead when
-	// nothing was typed there: there is nothing to open again once an update
-	// conflicts the same way. kept keeps the directory of a run that writes
-	// nothing of what the editor left, and names it in a warning.
-	keep := func() bool {
-		if values, err := inv.lineageRefs(ctx, r.gitDir, name); err == nil && values[lineage.MergeRef(name)] == "" && untouched(dir, name, records) {
-			os.RemoveAll(dir)
-			return false
+	// keep settles the directory of a run that did not write everything
+	// typed there, and reports whether it stays, and whether it is given up
+	// to the user rather than kept. One whose merge was completed or given
+	// up meanwhile goes when nothing was typed there: there is nothing to
+	// open again. One whose merge was completed meanwhile, the import branch
+	// moved on from where the run read it, is given up to the user, see
+	// releaseEditorDir: the conflict it was typed for cannot come back, and
+	// the completion that removes a kept directory is done. Every other one
+	// is kept, marked so, for the next session of the same conflict to open
+	// again, a merge given up meanwhile included once an update leaves it
+	// pending anew. kept settles the directory of a run that writes nothing
+	// of what the editor left, and names it in a warning.
+	keep := func() (stays, released bool) {
+		if values, err := inv.lineageRefs(ctx, r.gitDir, name); err == nil && values[lineage.MergeRef(name)] == "" {
+			switch {
+			case untouched(dir, name, records):
+				os.RemoveAll(dir)
+				return false, false
+			case values[lineage.ManagedRef(name)] != r.rec.Commit:
+				releaseEditorDir(dir)
+				return true, true
+			}
 		}
 		keepEditorDir(dir)
-		return true
+		return true, false
 	}
 	kept := func() {
-		if keep() {
+		switch stays, released := keep(); {
+		case released:
+			inv.out.warn("the files you edited are kept in " + dir + givenUpToYou(name))
+		case stays:
 			inv.out.warn("the files you edited are kept in " + dir + keptUntil(name, "them"))
 		}
 	}
@@ -242,17 +263,35 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	// resolved that conflicts anew or merges cleanly now. While the merge is
 	// pending it is marked kept, and goes once a merge of the skill
 	// completes; a run that completed the merge gives it up to the user,
-	// since agentx would not remove it for them any more.
+	// since agentx would not remove it for them any more, and so does one
+	// that finds the merge completed by another run meanwhile, see keep.
 	held, until, again := "", " until a merge of "+name+" completes", keptUntil(name, "it")
 	switch {
 	case !slices.ContainsFunc(left, func(p string) bool { return typed[p] }) && len(anew)+len(clean) == 0:
 		os.RemoveAll(dir)
 	case r.completed:
 		releaseEditorDir(dir)
-		held, until = dir, ", which agentx leaves for you to delete now that the merge of "+name+" is complete"
+		held, until = dir, givenUpToYou(name)
 		again = until
-	case keep():
-		held = dir
+	default:
+		// What the run wrote into the merge is there now, so its file leaves
+		// the directory before the directory is kept: a kept directory holds
+		// nothing typed but what was not written, and a later session opens
+		// such a file as the merge holds it, never what the merge replaced
+		// since. Its line stays in the owner file, and reads as a file
+		// deleted, with nothing typed in it, see spent.
+		for _, res := range rs {
+			if r.carried == nil || r.carried[res.path] {
+				_ = os.Remove(filepath.Join(dir, name, filepath.FromSlash(res.path)))
+			}
+		}
+		switch stays, released := keep(); {
+		case released:
+			held, until = dir, givenUpToYou(name)
+			again = until
+		case stays:
+			held = dir
+		}
 	}
 	for _, p := range left {
 		why, how, stays := " still holds conflict markers", ", so it was left unresolved", again
@@ -346,9 +385,11 @@ const editorLayingOut = ".laying-out"
 // set it in a process of their own to kill that process at a step of
 // laying out an editor session's files: "staged", once every file is
 // written in editorLayingOut, and "laid out", once they are in place and
-// before the directories of earlier sessions are settled, see edit. No
-// command the run starts falls between those steps, so nothing else lets a
-// test stop the run there.
+// before the directories of earlier sessions are settled, see edit; or at
+// the step of keeping a directory, "keeping", once keepEditorDir has
+// written the owner file anew beside the old one and before it renames it
+// over it. No command the run starts falls between those steps, so nothing
+// else lets a test stop the run there.
 var editorLayoutHook func(step string)
 
 // editorKept stands in for the process id in the owner file of a directory
@@ -384,6 +425,9 @@ func keepEditorDir(dir string) {
 		err = cerr
 	}
 	if err == nil {
+		if editorLayoutHook != nil {
+			editorLayoutHook("keeping")
+		}
 		err = os.Rename(f.Name(), path)
 	}
 	if err != nil {
@@ -412,7 +456,14 @@ func releaseEditorDir(dir string) {
 // whose run is gone left something saved in, once completing the merge
 // gives it up to the user, see clearEditorDirs.
 func leftToYou(dir, name string) string {
-	return "the files you edited in an earlier session that did not finish are kept in " + dir + ", which agentx leaves for you to delete now that the merge of " + name + " is complete"
+	return "the files you edited in an earlier session that did not finish are kept in " + dir + givenUpToYou(name)
+}
+
+// givenUpToYou ends a warning that names a directory given up to the user
+// once the merge of the skill called name is complete, see
+// releaseEditorDir.
+func givenUpToYou(name string) string {
+	return ", which agentx leaves for you to delete now that the merge of " + name + " is complete"
 }
 
 // keptUntil ends a warning that names a directory kept for what was typed
@@ -420,6 +471,15 @@ func leftToYou(dir, name string) string {
 // of the same conflict opens what was typed there again.
 func keptUntil(name, what string) string {
 	return " until a merge of " + name + " completes, and the next '" + skillCommand("resolve", name, "--editor") + "' of the same conflict opens " + what + " again"
+}
+
+// keptNotOpened ends the warning that names the directory of an earlier
+// session a session kept as it started, see settle: how long it stays, and
+// that what was typed there was not opened, with every reason there can be,
+// so that the user copies what they need from it rather than wait for it
+// to come back, which it may never do.
+func keptNotOpened(name string) string {
+	return " until a merge of " + name + " completes; what you typed there was not opened, because its conflict changed, its file is resolved or was not named, a newer copy was opened, or it is saved under another name, so copy what you need from it"
 }
 
 // editorRecord is the line of an editor session's owner file that records
@@ -566,7 +626,8 @@ func recordsByPath(records []string) map[string]string {
 // files out leaves it, see laidOutNothing, names no skill and goes,
 // whichever skill's run finds it: nothing was typed there. One that holds
 // no directory of the skill is some other skill's, or holds something
-// saved beside its owner file, and is left as it is.
+// saved beside its owner file, and is left as it is. So is one that is not
+// this user's own, see ownDir.
 func (inv *invocation) earlierDirs(name string) []earlierDir {
 	tmp := inv.tempDir()
 	entries, err := os.ReadDir(tmp)
@@ -579,6 +640,9 @@ func (inv *invocation) earlierDirs(name string) []earlierDir {
 			continue
 		}
 		dir := filepath.Join(tmp, e.Name())
+		if !ownDir(dir) {
+			continue
+		}
 		owner, err := os.ReadFile(filepath.Join(dir, editorOwner))
 		if err != nil {
 			continue
@@ -614,33 +678,54 @@ func (inv *invocation) earlierDirs(name string) []earlierDir {
 	return dirs
 }
 
+// ownDir reports whether dir, a directory an editor session could have
+// made, is this user's own and no other user can write in it, as every one
+// a session makes is: one another user made, or could have put a file in,
+// is never read, opened from or removed.
+func ownDir(dir string) bool {
+	info, err := os.Lstat(dir)
+	if err != nil || !info.IsDir() || info.Mode().Perm()&0o022 != 0 {
+		return false
+	}
+	st, ok := info.Sys().(*syscall.Stat_t)
+	return ok && int(st.Uid) == os.Getuid()
+}
+
 // reopen is what each of files is laid out with: what was typed for it in
 // an earlier session, where the directory of one records the file for the
 // same conflict, see editorRecord, and holds a regular file at its path
 // with something else in it, the most recently saved where several do; and
 // otherwise the file as merge-file wrote it, see editorText. from is the
-// directory each comes from, "" for a file laid out afresh. The pending
+// directory each comes from, "" for a file laid out afresh, and mods when
+// what was typed there was saved, which the file laid out keeps, so that
+// the most recently saved is still told by when it was typed. The pending
 // merge commit a directory's owner file names plays no part: a merge given
 // up and left again by an update, or rewritten by a resolve since,
-// conflicts the same way in a file whose three versions are the same.
-func reopen(dirs []earlierDir, files []*conflictFile) (texts, from []string) {
-	texts, from = make([]string, len(files)), make([]string, len(files))
+// conflicts the same way in a file whose three versions are the same. What
+// was typed for a file the merge records as resolved, which only a file
+// named after --editor is, is opened only while it holds a marker: closed
+// unchanged, it keeps the way the file was resolved, whereas what holds
+// none would replace it.
+func reopen(dirs []earlierDir, files []*conflictFile, resolved map[string]bool) (texts, from []string, mods []time.Time) {
+	texts, from, mods = make([]string, len(files)), make([]string, len(files)), make([]time.Time, len(files))
 	for i, f := range files {
 		fresh := editorText(f.text)
 		record := editorRecord(f.Path, []byte(fresh))
 		texts[i] = fresh
-		var newest time.Time
 		for _, d := range dirs {
 			saved, ok := d.files[f.Path]
-			if !ok || d.byPath[f.Path] != record || saved.body == fresh {
+			switch {
+			case !ok, d.byPath[f.Path] != record, saved.body == fresh:
+				continue
+			case resolved[f.Path] && !holdsMarkers(saved.body, f.text.size):
 				continue
 			}
-			if from[i] == "" || saved.mod.After(newest) || saved.mod.Equal(newest) && d.path > from[i] {
-				texts[i], from[i], newest = saved.body, d.path, saved.mod
+			if from[i] == "" || saved.mod.After(mods[i]) || saved.mod.Equal(mods[i]) && d.path > from[i] {
+				texts[i], from[i], mods[i] = saved.body, d.path, saved.mod
 			}
 		}
 	}
-	return texts, from
+	return texts, from, mods
 }
 
 // settle settles the directories of earlier sessions, dirs, once a session
@@ -650,9 +735,10 @@ func reopen(dirs []earlierDir, files []*conflictFile) (texts, from []string) {
 // directory with nothing typed in it that the session did not carry over
 // goes, see spent. One whose run is gone and that holds something else,
 // typed for a conflict that changed or for a file the session does not
-// lay out, or a file of any other name, is kept, marked so, and returned,
-// so that the run names it; a kept one stays as it is, named when it was
-// kept.
+// lay out, what lost to a newer copy of the same file, or a file of any
+// other name, is kept, marked so, and returned, so that the run names it,
+// saying that what was typed there was not opened, see keptNotOpened; a
+// kept one stays as it is, named when it was kept.
 func settle(dirs []earlierDir, laid map[string]laidFile) (turned map[string]bool) {
 	turned = map[string]bool{}
 	for _, d := range dirs {
@@ -685,13 +771,14 @@ func (inv *invocation) tempDir() string {
 // is. Each file holds its text, in the order of files: what merge-file
 // wrote, or what was typed for the same conflict in an earlier session,
 // see reopen, which the record, of what merge-file wrote, then tells from
-// it. The files are written in editorLayingOut first, which is renamed to
+// it, and which keeps the time it was saved, its mod, where that is not
+// zero. The files are written in editorLayingOut first, which is renamed to
 // the skill's name once every one is whole: a run killed on the way leaves
 // no directory of the skill, so no later run takes a file cut short for
 // what was typed, and nothing there is anything but what agentx wrote,
 // which goes, see laidOutNothing. It returns the directory, each file's
 // path and the line recording each, in the order of files.
-func (inv *invocation) layOutForEditor(name, commit string, files []*conflictFile, texts []string) (dir string, paths, records []string, err error) {
+func (inv *invocation) layOutForEditor(name, commit string, files []*conflictFile, texts []string, mods []time.Time) (dir string, paths, records []string, err error) {
 	dir, err = os.MkdirTemp(inv.tempDir(), editorDirPrefix)
 	if err != nil {
 		return "", nil, nil, err
@@ -725,6 +812,10 @@ func (inv *invocation) layOutForEditor(name, commit string, files []*conflictFil
 		if err := os.WriteFile(staged, []byte(texts[i]), 0o600); err != nil {
 			os.RemoveAll(dir)
 			return "", nil, nil, err
+		}
+		if !mods[i].IsZero() {
+			// Only which of two copies was saved last rides on it.
+			_ = os.Chtimes(staged, mods[i], mods[i])
 		}
 		paths[i] = filepath.Join(dir, name, filepath.FromSlash(f.Path))
 	}

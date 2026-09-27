@@ -719,14 +719,15 @@ agentx opens every text file left to resolve in your editor, with conflict marke
 - A file that still has conflict markers when you close the editor stays unresolved, and agentx says so. If you left markers in a file you had already resolved, it keeps the way you resolved it before; save it without markers to replace that resolution. If you typed in a file you left markers in, agentx keeps what you typed and opens it again next time, as below.
 - Other agentx commands, and the desktop app, keep working while your editor is open. If the merge changes meanwhile, for example because you resolved a file in another terminal, nothing is written and agentx keeps your edited files.
 - If the editor exits with an error, nothing is written either, and agentx keeps your edited files.
-- If the merge is finished or given up while your editor is open, for example in another terminal, nothing is written, and agentx keeps your edited files if you typed anything.
+- If the merge is given up while your editor is open, for example in another terminal, nothing is written, and agentx keeps your edited files if you typed anything, to open them again as below.
+- If the merge is finished while your editor is open, nothing is written either, and if you typed anything agentx leaves the folder with your edited files to you and tells you where it is: copy what you need from it, then delete it. That conflict never comes back, so agentx does not open the folder again.
 - While your editor is open, Ctrl-C belongs to the editor: agentx keeps waiting until you close it.
 - If agentx itself is stopped while your editor is open, for example with `kill`, it stops your editor too, writes nothing, and keeps your edited files.
 - A binary file, or any file that conflicts as a whole, has nothing to edit: choose a side for it with `--hunk`.
 
 ### Get back what you typed
 
-What you type in your editor is never lost. When agentx cannot write it, it keeps your files in a folder in your temporary directory and tells you where. Run `agentx skill resolve docx --editor` again, and your editor opens with what you typed instead of fresh conflict markers. agentx tells you which files it opened that way and which folder it took them from, before your editor starts.
+What you type in your editor is kept until a merge of the skill is finished, and opens again by itself for the same conflict. When agentx cannot write it, it keeps your files in a folder in your temporary directory and tells you where. Run `agentx skill resolve docx --editor` again, and your editor opens with what you typed instead of fresh conflict markers. agentx tells you which files it opened that way and which folder it took them from, before your editor starts.
 
 This works after each of these:
 
@@ -734,11 +735,11 @@ This works after each of these:
 - The merge changed while your editor was open.
 - You left conflict markers in a file you typed in.
 - Your terminal closed, or you lost the connection, while your editor was open.
-- You gave the merge up with `--abort`. Run `agentx skill update docx` again; if the update conflicts the same way, run `agentx skill resolve docx --editor` and what you typed opens again.
+- You gave the merge up with `--abort`. Run `agentx skill update docx` again; if the update conflicts the same way, run `agentx skill resolve docx --editor` and what you typed opens again. What agentx had already written into the merge is given up with it, like the parts you chose with `--hunk`.
 
-What you typed opens again only for the same conflict. If a file now conflicts differently, for example because you edited the skill while the merge was pending, it opens afresh. What you typed earlier stays in the folder agentx named when it kept your files, so copy from there until a merge of the skill is finished.
+What you typed opens again only for the same conflict. If a file now conflicts differently, for example because you edited the skill while the merge was pending, it opens afresh. So does a file you resolved with `--hunk` in the meantime, and when two folders hold what you typed for the same file, only the one you saved last opens. When a folder with your typing is not opened this way, agentx keeps it and says what you typed there was not opened: it does not come back by itself, so copy what you need from that folder before a merge of the skill is finished.
 
-A kept folder stays until a merge of the skill is finished, which deletes it. agentx deletes a folder earlier only when nothing you typed is lost by it: when it holds only what agentx wrote, or once your editor has what you typed from it. It never reads or deletes the folder of an editor still open in another terminal. If the command that finishes the merge finds a folder with your typing that agentx had not told you about before, for example from a terminal that closed, it leaves that folder to you and tells you where it is: agentx never deletes it after that, so delete it once you have copied what you need.
+A kept folder stays until a merge of the skill is finished, which deletes it. agentx deletes a folder earlier only when nothing you typed is lost by it: when it holds only what agentx wrote, or once your editor has what you typed from it. A file agentx wrote into the merge leaves the folder, since the merge holds it. It never reads or deletes the folder of an editor still open in another terminal. If the command that finishes the merge finds a folder with your typing that agentx had not told you about before, for example from a terminal that closed, or one it named as that same command started, it leaves that folder to you and tells you where it is: agentx never deletes it after that, so delete it once you have copied what you need.
 
 ### Finish the merge
 
