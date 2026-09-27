@@ -199,11 +199,12 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 // client may well reach for skill add, and the answer they need is skill
 // place, not the forms a source takes. The refusal keeps the exit code of
 // every other argument that is no source, and its hint is the skill place
-// command with the --to and --copy that were given, a placeholder standing
-// in for --to when none was. A source form is a source whatever the
-// library holds: an argument that parses as one, or that is a source id, is
-// installed from as today even when a library directory has that name. It
-// reads the library alone, so nothing is fetched, locked or written.
+// command with the --to and --copy that were given, which places into
+// every enabled configuration when no --to was, as skill add would have.
+// A source form is a source whatever the library holds: an argument that
+// parses as one, or that is a source id, is installed from as today even
+// when a library directory has that name. It reads the library alone, so
+// nothing is fetched, locked or written.
 func (inv *invocation) alreadyInLibrary(arg string, to []string, asCopy bool) error {
 	if source.IsID(arg) {
 		return nil
@@ -214,18 +215,8 @@ func (inv *invocation) alreadyInLibrary(arg string, to []string, asCopy bool) er
 	if _, ok := librarySkill(inv.dirs.Library, arg); !ok {
 		return nil
 	}
-	var flags []string
-	for _, id := range to {
-		flags = append(flags, "--to", shellWord(id))
-	}
-	if len(to) == 0 {
-		flags = append(flags, "--to", "<configuration>")
-	}
-	if asCopy {
-		flags = append(flags, "--copy")
-	}
 	return fail(exitUsage, arg+" is already in the library; skill add installs a skill from a source",
-		"to place it in more clients, run '"+skillCommand("place", arg, flags...)+"'")
+		"to place it in more clients, run '"+skillCommand("place", arg, placeFlags(to, asCopy)...)+"'")
 }
 
 // batch is one run of agentx skill add: how many steps it planned, how many

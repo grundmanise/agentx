@@ -124,8 +124,8 @@ func (inv *invocation) skipRefresh(done *placements, place string, err error) {
 // it, copied from the directory at from, and reads it back as git would
 // record it: content whose tree is not target never gets published. The
 // new content of a copy is copied from the library directory staged for
-// the same mutation; the new library directory of a repair that keeps a
-// displaced directory's content is copied from that directory.
+// the same mutation; the new library directory of a skill place
+// --keep-placement is copied from the displaced directory it keeps.
 func stageRefresh(m *home.Mutation, place, from, target string) (string, string, error) {
 	fresh := m.Sibling(place, "staged")
 	err := os.MkdirAll(fresh, 0o755)

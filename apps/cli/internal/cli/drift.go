@@ -117,7 +117,7 @@ func (p placeSite) asked() bool { return len(p.enabled) > 0 }
 // ownPlaces are the places of the skill called name, one per path, in the
 // order the configurations were detected, judged against the configurations
 // the settings disable and the ones copy_mode records a copy of the skill
-// for. Drift reads them, and a repair puts back what drift finds there.
+// for. Drift reads them, and skill place puts back what drift finds there.
 //
 // Only an enabled configuration is asked about: a disabled one is one the
 // user chose not to place into. A path two configurations share, as
@@ -127,7 +127,7 @@ func (p placeSite) asked() bool { return len(p.enabled) > 0 }
 // records one for either of them, since a copy placed for one is the copy
 // the other reads. Judged for each configuration on its own, the copy
 // agentx placed for one would read as a directory displacing the other's
-// link, and a repair would plan the one path twice, the second step
+// link, and skill place would plan the one path twice, the second step
 // finding the first one's work there and stopping the mutation part way.
 // So is a path two configurations spell differently, one of their skills
 // directories a symlink to the other's, the link's own spelling in another
@@ -162,8 +162,8 @@ func ownPlaces(targets []placeTarget, library, name string, disabled, copies []s
 // placeKey is how the paths of places are told apart: the path as
 // canonicalPath writes it, and the directory it sits in, read once as a
 // file, nil when it cannot be read. Drift judges each place once by it, a
-// revert or a repair refreshes each copy once, and a repair changes each
-// path once.
+// revert or skill place refreshes each copy once, and skill place changes
+// each path once.
 type placeKey struct {
 	real string
 	dir  fs.FileInfo
@@ -187,9 +187,9 @@ func keyAt(real string) placeKey {
 // name in one directory, that directory compared as a file. canonicalPath
 // spells a directory as the links on the way to it spell it, and on a disk
 // that ignores case two links can spell one directory in two cases, which
-// the spellings alone would take for two places, and a repair would plan
-// the one path twice. The directory is compared, not the entry, so that a
-// place nothing is at yet is found to be one as well.
+// the spellings alone would take for two places, and skill place would
+// plan the one path twice. The directory is compared, not the entry, so
+// that a place nothing is at yet is found to be one as well.
 func (k placeKey) is(o placeKey) bool {
 	return k.real == o.real ||
 		filepath.Base(k.real) == filepath.Base(o.real) && k.dir != nil && o.dir != nil && os.SameFile(k.dir, o.dir)
@@ -206,8 +206,8 @@ func (k placeKey) is(o placeKey) bool {
 //     still the copy and earns nothing here; see keepCopy.
 //   - The library directory itself, which a library entry made a symlink
 //     to the place leaves there, is what the client reads: the library,
-//     not a directory displacing a placement. It earns "", and a repair
-//     never plans it; see isLibraryDirectory.
+//     not a directory displacing a placement. It earns "", and skill
+//     place never replaces it; see isLibraryDirectory.
 //   - A link of the user's to somewhere else, and anything else at the
 //     place, is theirs: the place is taken, so the skill is not missing,
 //     and nothing agentx keeps was displaced. It earns "".
