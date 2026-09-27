@@ -296,16 +296,20 @@ func (inv *invocation) removeAbsent(ctx context.Context, name string, from []str
 			judge.differs = func(string) bool { return true }
 		} else {
 			// A branch an earlier agentx stored in a form git no longer
-			// writes is current against no directory, so a copy that is not
-			// current is held to the base's files as well, read once and
-			// only for such a copy.
+			// writes is held by no directory, so a copy that does not hold
+			// it is held to the base's files as well, read once and only
+			// for such a copy.
 			var base *lineage.Base
 			judge.differs = func(path string) bool {
 				tree, err := treeid.Read(path)
 				if err != nil {
 					return true
 				}
-				if rec.Current(tree) {
+				j, err := inv.judgeDir(ctx, gitDir, path, tree, baseVersion(rec), false)
+				if err != nil {
+					return true
+				}
+				if j.holds {
 					return false
 				}
 				if base == nil {
@@ -315,7 +319,7 @@ func (inv *invocation) removeAbsent(ctx context.Context, name string, from []str
 					}
 					base = &read
 				}
-				return !base.HeldBy(tree)
+				return j.written != base.ID()
 			}
 		}
 		edit, err := inv.beginSettings()
@@ -728,7 +732,7 @@ func (inv *invocation) reportRemoved(ctx context.Context, plan removalPlan, targ
 		if err != nil {
 			return err
 		}
-		inv.out.emit(sc.librarySkillEventFor(inv, snap, lib, targetIDs(targets)))
+		inv.out.emit(sc.librarySkillEventFor(ctx, inv, snap, lib, targetIDs(targets)))
 	}
 	if plan.whole {
 		inv.warnStillSeen(snap, plan, targetIDs(targets))

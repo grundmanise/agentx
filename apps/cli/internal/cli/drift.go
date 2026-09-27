@@ -1,17 +1,16 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"slices"
 	"sort"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
-	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
 // The drift states a managed skill's placements can be in, beside source
@@ -33,48 +32,44 @@ const (
 )
 
 // observation is what the drift of one library skill is judged from beside
-// its lineage and the settings: the tree its directory holds, as git would
-// record it, and what the configurations' own places hold. It is read from
+// its lineage and the settings: whether its directory holds its base
+// version, and what the configurations' own places hold. It is read from
 // the filesystem, so a snapshot reads it under the lock it reads the
 // library under, and every other report reads it with the rest of what it
 // reports on.
 type observation struct {
-	tree   treeid.Tree
-	read   bool     // the directory was read whole; one that could not be is not the base version
-	placed []string // the drift states of the placements, sorted
+	modified bool     // the directory does not hold its base version, see holdsBase
+	placed   []string // the drift states of the placements, sorted
 }
 
 // observe reads what a managed skill's drift is judged from, and nothing for
 // any other: a fork's drift is decided by its own history and an unmanaged
 // skill has no base to drift from.
-func (sc skillContext) observe(inv *invocation, lib scan.LibrarySkill) observation {
+func (sc skillContext) observe(ctx context.Context, inv *invocation, lib scan.LibrarySkill) observation {
 	rec, ok := sc.records[lib.Name]
 	if !ok || rec.Kind != lineage.KindManaged || !rec.HasImport {
 		return observation{}
 	}
-	obs := observation{placed: sc.placementDrift(inv, lib)}
-	tree, err := treeid.Read(lib.ResolvedPath)
-	obs.tree, obs.read = tree, err == nil
-	return obs
+	return observation{modified: !inv.holdsBase(ctx, lib, rec), placed: sc.placementDrift(inv, lib)}
 }
 
 // observeAll reads the observation of every skill of the library ahead of
 // the report, for a snapshot, which composes its library entries after it
 // released the lock the reads have to happen under.
-func (sc *skillContext) observeAll(inv *invocation, libs []scan.LibrarySkill) {
+func (sc *skillContext) observeAll(ctx context.Context, inv *invocation, libs []scan.LibrarySkill) {
 	sc.observed = make(map[string]observation, len(libs))
 	for _, lib := range libs {
-		sc.observed[lib.Name] = sc.observe(inv, lib)
+		sc.observed[lib.Name] = sc.observe(ctx, inv, lib)
 	}
 }
 
 // observationOf is the observation of lib: the one read ahead of the
 // report when there was one, and a fresh read otherwise.
-func (sc skillContext) observationOf(inv *invocation, lib scan.LibrarySkill) observation {
+func (sc skillContext) observationOf(ctx context.Context, inv *invocation, lib scan.LibrarySkill) observation {
 	if obs, ok := sc.observed[lib.Name]; ok {
 		return obs
 	}
-	return sc.observe(inv, lib)
+	return sc.observe(ctx, inv, lib)
 }
 
 // placementDrift is what the configurations' own places say about a managed
@@ -218,18 +213,6 @@ func (sc skillContext) absentWarnings(inv *invocation, libs []scan.LibrarySkill)
 			" run "+add+" to install it again, or "+remove+" to stop managing it")
 	}
 	return warnings
-}
-
-// holdsVersion reports whether the directory at path holds exactly the
-// version v, as git would record the two: false for a directory this
-// machine cannot read whole.
-func holdsVersion(path string, v *imported) bool {
-	real, err := filepath.EvalSymlinks(path)
-	if err != nil {
-		return false
-	}
-	tree, err := treeid.Read(real)
-	return err == nil && lineage.Holds(tree, v.dir, v.tree)
 }
 
 // newSkillContext is the context of a report built from what it already

@@ -1291,7 +1291,7 @@ func (inv *invocation) reportInstalled(ctx context.Context, b *batch, dones []*i
 		}
 		sc.records[done.v.name] = lineage.Record{Name: done.v.name, Kind: lineage.KindManaged, Ref: lineage.ManagedRef(done.v.name),
 			Commit: done.v.commit, Tree: done.v.tree, Import: done.v.imp, HasImport: true}
-		ev := sc.librarySkillEventFor(inv, snap, lib, targetIDs(done.placed))
+		ev := sc.librarySkillEventFor(ctx, inv, snap, lib, targetIDs(done.placed))
 		inv.out.emit(ev)
 		inv.printInstalled(done, ev)
 	}

@@ -3,7 +3,6 @@ package cli
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
@@ -182,36 +181,6 @@ func TestSkillDiffNamesWhatGitCannotRecord(t *testing.T) {
 	equal(t, "the listing's state with an edit", h.listed("pdf")["state"], stateModified)
 }
 
-// TestSkillDiffSaysADeletedFileChanged: a file deleted between the read of
-// the directory and git writing it is the directory changing, exit code 6
-// with the hint to run the command again, and not an account repo git
-// cannot use. A git wrapper deletes it as the blobs are written.
-func TestSkillDiffSaysADeletedFileChanged(t *testing.T) {
-	t.Parallel()
-	h, _ := driftHarness(t)
-	file := filepath.Join(h.library, "pdf", "new.md")
-	writeFile(t, file, "a file of my own\n")
-	real, err := exec.LookPath("git")
-	if err != nil {
-		t.Fatal(err)
-	}
-	rm, err := exec.LookPath("rm") // the wrapper's PATH holds nothing but itself
-	if err != nil {
-		t.Fatal(err)
-	}
-	stubGit(t, h, `#!/bin/sh
-case " $* " in
-*" hash-object "*) `+rm+` -f `+shellWord(file)+` ;;
-esac
-exec `+real+` "$@"
-`)
-	out := h.run("--json", "skill", "diff", "pdf")
-	equal(t, "exit", out.exit, 6)
-	e := h.one(out.stdout, "error")
-	contains(t, "message", e["message"].(string), "pdf changed while agentx read it")
-	equal(t, "hint", e["hint"], "run the command again")
-}
-
 // TestSkillDiffAndRevertRefuseWhatHasNoBase: a name the library does not
 // hold, an unmanaged skill and a fork each have no base version this
 // command can read.
@@ -257,40 +226,35 @@ func TestAdoptionOffersNoDiff(t *testing.T) {
 	}
 }
 
-// TestIgnoreRulesAndAttributesChangeNothing: a skill holding a .gitignore
-// that ignores everything and a .gitattributes that asks for CRLF line
-// endings is compared and reverted as the bytes it holds. Neither file
-// hides a file from the diff or changes a byte of one, and the revert
-// takes both away with the rest of the edit.
-func TestIgnoreRulesAndAttributesChangeNothing(t *testing.T) {
+// TestIgnoreRulesAndAttributesApplyAsGitAppliesThem: a skill holding a
+// .gitignore that ignores everything and a .gitattributes that asks for
+// CRLF line endings is compared as git compares a work tree. A file the
+// base holds counts whatever the .gitignore says, so the edit to a.md is
+// the one difference, and its diff carries no carriage return, since git
+// normalises what it adds. The revert puts a.md back and keeps both
+// files, which git ignores, and the skill is current again.
+func TestIgnoreRulesAndAttributesApplyAsGitAppliesThem(t *testing.T) {
 	t.Parallel()
 	h, _ := driftHarness(t)
 	lib := filepath.Join(h.library, "pdf")
-	base := libraryTree(t, lib)
+	want := libraryTree(t, lib)
 	writeFile(t, filepath.Join(lib, ".gitignore"), "*\n")
 	writeFile(t, filepath.Join(lib, ".gitattributes"), "* text eol=crlf\n")
 	writeFile(t, filepath.Join(lib, "a.md"), "the same bytes\nand a line of mine\n")
+	equal(t, "state", h.listed("pdf")["state"], stateModified)
 
 	diffs := h.eventsOfType(h.mustRun("--json", "skill", "diff", "pdf").stdout, "diff")
-	var got []string
-	for _, d := range diffs {
-		got = append(got, d["path"].(string)+" "+d["status"].(string))
+	if len(diffs) != 1 || diffs[0]["path"] != "a.md" || diffs[0]["status"] != diffModified {
+		t.Fatalf("diffs = %v, want a.md modified alone", diffs)
 	}
-	if want := []string{".gitattributes added", ".gitignore added", "a.md modified"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("diffs = %v, want %v", got, want)
-	}
-	patch := diffs[2]["patch"].(string)
+	patch := diffs[0]["patch"].(string)
 	contains(t, "a.md's diff", patch, "\n+and a line of mine\n")
 	if strings.Contains(patch, "\r") {
-		t.Errorf("a.md's diff carries a carriage return the file does not hold:\n%q", patch)
+		t.Errorf("a.md's diff carries a carriage return:\n%q", patch)
 	}
 
 	h.mustRun("skill", "revert", "pdf")
-	sameTree(t, "the library directory", libraryTree(t, lib), base)
-	for _, name := range []string{".gitignore", ".gitattributes"} {
-		if _, err := os.Lstat(filepath.Join(lib, name)); err == nil {
-			t.Errorf("%s is still there after the revert", name)
-		}
-	}
-	equal(t, "state", h.listed("pdf")["state"], stateCurrent)
+	want[".gitignore"], want[".gitattributes"] = "*\n", "* text eol=crlf\n"
+	sameTree(t, "the library directory", libraryTree(t, lib), want)
+	equal(t, "state after the revert", h.listed("pdf")["state"], stateCurrent)
 }

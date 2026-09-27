@@ -502,7 +502,7 @@ func (inv *invocation) reportPlaced(ctx context.Context, name string, targets []
 	if err != nil {
 		return err
 	}
-	ev := sc.librarySkillEventFor(inv, snap, lib, targetIDs(targets))
+	ev := sc.librarySkillEventFor(ctx, inv, snap, lib, targetIDs(targets))
 	inv.out.emit(ev)
 	inv.printPlaced(lib, targets, done, ev)
 	inv.summary = placeSummary(name, done) + universalClause(ev.Universal)
@@ -545,13 +545,13 @@ func (inv *invocation) skillContext(ctx context.Context) (skillContext, error) {
 // which is what a listing of the whole library does. The universal clients
 // are every one the rescan detected, covered or not: they see the skill
 // through the library whatever the command covered.
-func (sc skillContext) librarySkillEventFor(inv *invocation, snap scan.Snapshot, lib scan.LibrarySkill, covered []string) librarySkillEvent {
+func (sc skillContext) librarySkillEventFor(ctx context.Context, inv *invocation, snap scan.Snapshot, lib scan.LibrarySkill, covered []string) librarySkillEvent {
 	places := inv.placements(snap, lib, sc.modes)
 	if covered != nil {
 		places = filterPlacements(places, covered)
 	}
 	rec, managed := sc.records[lib.Name]
-	return skillFromLibrary(lib, rec, managed, sc.sources, places, universalClients(snap), sc.observationOf(inv, lib))
+	return skillFromLibrary(lib, rec, managed, sc.sources, places, universalClients(snap), sc.observationOf(ctx, inv, lib))
 }
 
 // lineageRecords are the branches of the account repo by skill name, empty

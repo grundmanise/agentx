@@ -13,7 +13,6 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
-	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
 func newSkillRevertCommand(inv *invocation) *cobra.Command {
@@ -22,9 +21,10 @@ func newSkillRevertCommand(inv *invocation) *cobra.Command {
 		Short: "Put a managed skill back to the version it was installed at",
 		Long: "Put the library directory of a managed skill back to its base version, the\n" +
 			"version it was installed at, discarding every edit made to it since: files added\n" +
-			"are deleted, files changed or deleted are restored. A copy placement that holds\n" +
-			"the edited content is put back too; a copy edited on its own is kept and named.\n" +
-			"Run 'agentx skill diff <name>' first to see what the revert discards.",
+			"are deleted, files changed or deleted are restored, and files git ignores are kept.\n" +
+			"A copy placement that holds the edited content is put back too; a copy edited on\n" +
+			"its own is kept and named. Run 'agentx skill diff <name>' first to see what the\n" +
+			"revert discards.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return inv.skillRevert(cmd.Context(), args[0])
@@ -36,7 +36,9 @@ func newSkillRevertCommand(inv *invocation) *cobra.Command {
 // version: the import commit's tree is laid out in a hidden directory beside
 // the library directory, which the mutation then retains and replaces, so a
 // file the base does not hold is gone afterwards, and the copies that held
-// the edited content are refreshed with it.
+// the edited content are refreshed with it. The files git ignores in the
+// library directory are carried into the new one, as git checkout keeps
+// them.
 //
 // Reverting discards, so what is discarded is what the directory held when
 // the command began and nothing later. That content is captured first, by
@@ -79,7 +81,11 @@ func (inv *invocation) skillRevert(ctx context.Context, name string) error {
 			"a revert would discard it with no record of it anywhere; move it out of the skill, then run '"+skillCommand("revert", name)+"' again")
 	}
 	against := "its base version at " + short(rec.Import.Commit)
-	if rec.Current(edited) {
+	j, err := inv.judgeDir(ctx, gitDir, lib.ResolvedPath, edited, baseVersion(rec), true)
+	if err != nil {
+		return accountRepoFailure(err)
+	}
+	if j.holds {
 		return inv.reportReverted(ctx, name, against, revertNothing, placements{})
 	}
 	base, err := lineage.ReadBase(ctx, inv.git, gitDir, rec)
@@ -87,7 +93,7 @@ func (inv *invocation) skillRevert(ctx context.Context, name string) error {
 		return accountRepoFailure(err)
 	}
 	target := base.ID() // the tree the base has laid out on disk
-	restore := !base.HeldBy(edited)
+	restore := j.written != target
 	// A library entry that is a symlink leads to the directory the user
 	// edits, which is not the library's to replace: the mutation replaces
 	// the entry itself, so it would drop the link, leave every edit where
@@ -98,11 +104,13 @@ func (inv *invocation) skillRevert(ctx context.Context, name string) error {
 		return fail(exitRefused, fmt.Sprintf("%s is a symlink to %s; a revert replaces the library directory and would drop the link without touching the files it leads to", quotedPath(libPath), quotedPath(target)),
 			"replace the link with the directory it points to, then run '"+skillCommand("revert", name)+"' again, or put the files back by hand: '"+skillCommand("diff", name)+"' shows what differs")
 	}
-	var bodies map[string]string
+	var lay func(dest string) error // lays the base out
 	if restore {
-		if bodies, err = source.ReadBlobs(ctx, inv.git, gitDir, baseBlobs(base)); err != nil {
+		bodies, err := source.ReadBlobs(ctx, inv.git, gitDir, baseBlobs(base))
+		if err != nil {
 			return accountRepoFailure(err)
 		}
+		lay = func(dest string) error { return materialise(dest, base, bodies) }
 	}
 	// The branch stays at its commit, unless that commit stores the base
 	// in a form no directory is current against: then it moves to the one
@@ -137,7 +145,7 @@ func (inv *invocation) skillRevert(ctx context.Context, name string) error {
 		// still names and no other.
 		m.Ref(gitDir, lineage.ManagedRef(name), rec.Commit, recorded)
 		if restore {
-			if err := inv.stageRevert(m, name, libPath, captured, base, target, bodies, edited.ID, &done); err != nil {
+			if err := inv.stageRevert(ctx, m, gitDir, name, libPath, captured, rec, target, lay, j, &done); err != nil {
 				m.Discard()
 				return err
 			}
@@ -161,11 +169,12 @@ func (inv *invocation) skillRevert(ctx context.Context, name string) error {
 }
 
 // stageRevert records, under the lock, the steps that put the library
-// directory back to the base and refresh the copies that held it: the
-// directory is read again first, and one that changed since it was
-// captured refuses the revert, so an edit made in the meantime is never
-// discarded with the rest.
-func (inv *invocation) stageRevert(m *home.Mutation, name, libPath, captured string, base lineage.Base, target string, bodies map[string]string, edited string, done *placements) error {
+// directory back to the base, whose tree on disk is target, and refresh
+// the copies that held it: the directory is read again first, and one that
+// changed since it was captured refuses the revert, so an edit made in the
+// meantime is never discarded with the rest. j is how the directory
+// compared with the base, the files git ignores in it included.
+func (inv *invocation) stageRevert(ctx context.Context, m *home.Mutation, gitDir, name, libPath, captured string, rec lineage.Record, target string, lay func(string) error, j judged, done *placements) error {
 	live, err := home.State(libPath)
 	if err != nil {
 		return libraryFailure(inv.dirs.Library, err)
@@ -191,37 +200,19 @@ func (inv *invocation) stageRevert(m *home.Mutation, name, libPath, captured str
 		}
 	}
 	*done = placements{}
+	// What is laid out is the base as a directory on disk holds it, even
+	// from a branch an earlier agentx stored in another form.
+	laidOut := version{load: baseVersion(rec).load, holds: func(id string) bool { return id == target }}
 	staged := m.Sibling(libPath, "staged")
-	fingerprint, err := stageBase(staged, base, target, bodies)
+	fingerprint, err := stageVersion(staged, lay, laidOut, libPath, j.ignored)
 	if err != nil {
 		os.RemoveAll(staged)
 		return libraryFailure(inv.dirs.Library, err)
 	}
 	m.Remove(libPath, captured)
 	m.Publish(libPath, staged, fingerprint)
-	inv.refreshCopies(m, name, target, []string{edited}, staged, recorded, done)
+	inv.refreshCopies(ctx, m, gitDir, name, laidOut, []version{treeVersion(j.written)}, lay, recorded, done)
 	return nil
-}
-
-// stageBase lays the base version out at staged and reads it back as git
-// would record it: a directory that is not the base version, whose tree is
-// target, never gets published. It returns the fingerprint the publish
-// step expects.
-func stageBase(staged string, base lineage.Base, target string, bodies map[string]string) (string, error) {
-	if err := materialise(staged, base, bodies); err != nil {
-		return "", err
-	}
-	if err := home.SyncTree(staged); err != nil {
-		return "", err
-	}
-	tree, err := treeid.Read(staged)
-	if err != nil {
-		return "", err
-	}
-	if tree.ID != target {
-		return "", fmt.Errorf("the base version staged at %s holds tree %s, not %s", staged, tree.ID, target)
-	}
-	return home.Fingerprint(staged)
 }
 
 // revertOutcome is what a revert changed.
@@ -249,7 +240,7 @@ func (inv *invocation) reportReverted(ctx context.Context, name, against string,
 	if err != nil {
 		return err
 	}
-	inv.out.emit(sc.librarySkillEventFor(inv, snap, lib, nil))
+	inv.out.emit(sc.librarySkillEventFor(ctx, inv, snap, lib, nil))
 	out := inv.out
 	switch outcome {
 	case revertNothing:

@@ -252,13 +252,12 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 		ev.Source, ev.Subpath, ev.UpstreamCommit, ev.BaseHash = rec.Import.Source, &subpath, rec.Import.Commit, rec.Import.Hash
 	}
 	// A managed skill's base version is the import commit its branch points
-	// at, so the directory's tree can be compared with that commit's; a
-	// fork's base is the last version merged into it, which a later command
-	// reads from its history. A directory that could not be read whole is
-	// not known to hold the base, and is not called current.
+	// at, so the directory can be compared with that commit's tree; a fork's
+	// base is the last version merged into it, which a later command reads
+	// from its history.
 	if rec.Kind == lineage.KindManaged && rec.HasImport {
 		ev.State = stateCurrent
-		if !obs.read || !rec.Current(obs.tree) {
+		if obs.modified {
 			ev.State = stateModified
 		}
 		// The coordinates stay as the lineage has them: they are still where
