@@ -664,9 +664,10 @@ const (
 	// pruneKept removes the kept ones too, as completing the merge does:
 	// the merge what was typed there was for is complete.
 	pruneKept
-	// pruneEvery removes every one, a session still open included, as
-	// giving the merge up does: what was typed there can no longer be
-	// written anywhere.
+	// pruneEvery removes those of a session still open too, as giving the
+	// merge up does: what was typed there can no longer be written
+	// anywhere. One whose run is gone without keeping it is still given up
+	// to the user when it holds anything else, as no run ever named it.
 	pruneEvery
 )
 
@@ -675,14 +676,16 @@ const (
 // directory whose owner file is missing or names another home is left
 // alone: it is not this merge's, or it was given up to the user. A
 // directory whose run is gone, a run killed or hung up on while its editor
-// was open, is removed by pruneGone and pruneKept only when it holds
-// nothing but the files as they were written, see untouched: one where
-// anything was saved, or where the editor left a swap file of what was
-// typed, is given up to the user instead, see releaseEditorDir, and
-// returned, so that the run names it. No warning of the run that died ever
-// did, and the run that finds it may complete the merge, which would
-// remove a directory marked kept, so marking it kept would lose what was
-// saved there.
+// was open, is removed only when it holds nothing but the files as they
+// were written, see untouched, whichever prune it is: one where anything
+// was saved, or where the editor left a swap file of what was typed, is
+// given up to the user instead, see releaseEditorDir, and returned, so
+// that the run names it. No warning of the run that died ever did, and the
+// run that finds it may complete the merge, which would remove a directory
+// marked kept, so marking it kept would lose what was saved there. One
+// whose run was killed after it wrote the owner file and before it made
+// the skill's directory holds nothing but the owner file, which names no
+// skill, and goes whichever skill's run finds it: nothing was typed there.
 func (inv *invocation) pruneEditorDirs(name string, which prune) (released []string) {
 	tmp := inv.tempDir()
 	entries, err := os.ReadDir(tmp)
@@ -702,28 +705,41 @@ func (inv *invocation) pruneEditorDirs(name string, which prune) (released []str
 		if len(lines) < 2 || lines[1] != inv.dirs.Home {
 			continue
 		}
+		pid := lines[0]
+		n, err := strconv.Atoi(pid)
+		gone := pid != editorKept && (err != nil || !running(n))
 		if info, err := os.Lstat(filepath.Join(dir, name)); err != nil || !info.IsDir() {
+			if gone && onlyOwner(dir) {
+				os.RemoveAll(dir)
+			}
 			continue
 		}
-		switch pid := lines[0]; {
-		case which == pruneEvery:
-		case pid == editorKept:
-			if which != pruneKept {
-				continue
-			}
-		default:
-			if n, err := strconv.Atoi(pid); err == nil && running(n) {
-				continue
-			}
+		switch {
+		case gone:
 			if len(lines) < 4 || !untouched(dir, name, lines[3:]) {
 				releaseEditorDir(dir)
 				released = append(released, dir)
 				continue
 			}
+		case pid == editorKept:
+			if which == pruneGone {
+				continue
+			}
+		case which != pruneEvery:
+			continue
 		}
 		os.RemoveAll(dir)
 	}
 	return released
+}
+
+// onlyOwner reports whether the directory an editor session laid its files
+// out in holds nothing but its owner file, as a run killed after it wrote
+// that file and before it made the skill's directory leaves it, see
+// layOutForEditor.
+func onlyOwner(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	return err == nil && len(entries) == 1 && entries[0].Name() == editorOwner && entries[0].Type().IsRegular()
 }
 
 // running reports whether a process with the id pid is running, as far as

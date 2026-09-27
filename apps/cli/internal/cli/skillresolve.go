@@ -1321,8 +1321,9 @@ func (r *pendingRun) reportCompleted(ctx context.Context, c completion, newer bo
 // is and whether or not agentx can read it. The library directory, the
 // import branch and the candidate are left exactly as they were, and so is
 // every placement. The files an editor had open for the merge go too, see
-// pruneEditorDirs, but for those given up to the user, and the skill is
-// reported as it now stands.
+// pruneEditorDirs, but for those given up to the user and one an earlier
+// session whose run is gone saved something in, which is given up to the
+// user and named in a warning, and the skill is reported as it now stands.
 func (inv *invocation) abortMerge(ctx context.Context, gitDir, name string) error {
 	err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		values, err := inv.lineageRefs(ctx, gitDir, name)
@@ -1340,7 +1341,9 @@ func (inv *invocation) abortMerge(ctx context.Context, gitDir, name string) erro
 	if err != nil {
 		return mutationFailure(err)
 	}
-	inv.pruneEditorDirs(name, pruneEvery)
+	for _, dir := range inv.pruneEditorDirs(name, pruneEvery) {
+		inv.out.warn(leftToYou(dir, " now that the merge of "+name+" is given up"))
+	}
 	const kept = "; the library directory is as it was"
 	inv.summary = "gave up the merge of " + name + kept
 	if lib, ok := librarySkill(inv.dirs.Library, name); ok {

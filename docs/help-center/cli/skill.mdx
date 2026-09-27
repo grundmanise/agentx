@@ -720,7 +720,7 @@ agentx opens every text file left to resolve in your editor, with conflict marke
 - Other agentx commands, and the desktop app, keep working while your editor is open. If the merge changes meanwhile, for example because you resolved a file in another terminal, nothing is written and agentx tells you where your edited files are kept.
 - If the editor exits with an error, nothing is written either, and agentx tells you where your edited files are kept.
 - Kept files stay in that folder until the merge is finished or given up. Running `--editor` again opens the files afresh, so copy what you typed from the kept folder.
-- If agentx was killed while your editor was open, for example because you closed the terminal or lost the connection, the next `--editor` command, or the command that finishes the merge, leaves the folder of that session to you when you had saved anything in it, or your editor left a swap file there, and tells you where it is. agentx never deletes that folder, even once the merge is finished or given up, so delete it once you have copied what you need. agentx deletes the folder itself only when nothing in it changed.
+- If agentx was killed while your editor was open, for example because you closed the terminal or lost the connection, the next `--editor` command, or the command that finishes or gives up the merge, leaves the folder of that session to you when you had saved anything in it, or your editor left a swap file there, and tells you where it is. agentx never deletes that folder after that, even once the merge is finished or given up, so delete it once you have copied what you need. agentx deletes the folder itself only when it holds nothing but the files agentx wrote there, each exactly as agentx wrote it. Deleting a file does not keep the folder: a deleted file holds nothing you typed.
 - If the merge is finished or given up while your editor is open, for example in another terminal, nothing is written and the folder is deleted: there is no merge left to write what you typed into.
 - While your editor is open, Ctrl-C belongs to the editor: agentx keeps waiting until you close it.
 - If agentx itself is stopped while your editor is open, for example with `kill`, it stops your editor too, writes nothing, and tells you where your edited files are kept.
@@ -750,7 +750,7 @@ agentx skill resolve docx --abort
 
 The merge is gone, and your library directory, your copies and the update the check found are left exactly as they were. Run `agentx skill update docx` to merge again.
 
-Giving up also deletes the files of any editor session for the skill, including one still open in another terminal and files kept from an earlier session. A folder agentx left to you, as it says when it does, stays until you delete it.
+Giving up also deletes the folders of the skill's editor sessions that agentx still looks after: one still open in another terminal, files kept from an earlier session, and the folder of a session agentx was killed in when you saved nothing there. If you saved something in that last folder, agentx leaves it to you instead and tells you where it is. A folder agentx left to you stays until you delete it.
 
 ## Script it
 
