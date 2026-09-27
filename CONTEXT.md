@@ -128,7 +128,7 @@ Applying a managed skill's update candidate, only ever at the user's request: th
 _Avoid_: upgrade, pull, sync
 
 **Pending merge**:
-The merge an update of a modified skill leaves when the edits and the update candidate conflict: a commit in the account repo whose tree is git's merge of the three versions and whose trailers name them, the base version, the edits and the candidate. The library directory, and so every agent, keeps the content it had until the merge is resolved or given up; a half-merged file is never written where an agent reads it. While it exists the skill is not updated, reverted or removed. Survives restarts.
+The merge an update of a modified skill leaves when the edits and the update candidate conflict: a commit in the account repo whose tree is git's merge of the three versions and whose trailers name them, the base version, the edits and the candidate. The library directory, and so every agent, keeps the content it had until the merge is resolved or given up; a half-merged file is never written where an agent reads it, and one the user edits with conflict markers lives in a scratch copy outside the library. It is resolved file by file, each part of a file to the edits, the update or both, or in the user's own editor, and the command that resolves its last file completes it: the update applies with the resolved content, and an edit made to the library meanwhile is merged again rather than lost. Giving it up leaves the library as it was. While it exists the skill is not updated, reverted or removed. Survives restarts.
 _Avoid_: merge in progress, conflict state, unmerged skill
 
 **Modified skill**:
