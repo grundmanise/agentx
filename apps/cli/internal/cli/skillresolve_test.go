@@ -3231,6 +3231,68 @@ func TestSkillResolveSaysWhatWasTypedThereWhereNothingWasCarried(t *testing.T) {
 	}
 }
 
+// TestSkillResolveSaysWhatAFailedEditorLeftUnderAnotherName: a session
+// whose editor fails having saved nothing but a swap file beside a file it
+// was given, as an editor stopped with its run may leave, keeps its
+// directory for it, and the warning that names it says what is there opens
+// in no session, rather than promise the next session opens it again, for
+// a session of every file left and for one of a file the merge records as
+// resolved alike. The next session opens the file afresh, and names the
+// directory as it starts, which stays with the swap file in it.
+func TestSkillResolveSaysWhatAFailedEditorLeftUnderAnotherName(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name     string
+		resolved []string // what --hunk resolves first
+		file     []string // what names the file after --editor
+		left     string   // the warnings of the files the next session leaves
+	}{
+		{name: "every file left",
+			left: "guide.md still holds conflict markers, so it was left unresolved\nnotes.md still holds conflict markers, so it was left unresolved"},
+		{name: "a file resolved already", resolved: []string{"guide.md:1=theirs"}, file: []string{"guide.md"},
+			left: "guide.md still holds conflict markers, so it keeps the way it was resolved before"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			h, _, _ := resolveHarness(t)
+			if len(c.resolved) > 0 {
+				resolveKit(t, h, 0, c.resolved...)
+			}
+			merge := h.ref(lineage.MergeRef("kit"))
+			h.env["EDITOR"] = editorStub(t, "failing-editor", `for f in "$@"; do
+	case "$f" in
+	*/guide.md) printf 'unsaved typing\n' > "${f%/*}/.guide.md.swp" ;;
+	esac
+done
+exit 1
+`)
+			args := append([]string{"--json", "skill", "resolve", "kit", "--editor"}, c.file...)
+			out := h.run(args...)
+			equal(t, "exit of the failing editor", out.exit, 6)
+			dirs := editorDirs(t, h)
+			if len(dirs) != 1 {
+				t.Fatalf("the session left %v, want the one directory", dirs)
+			}
+			kept, swap := dirs[0], filepath.Join(dirs[0], "kit", ".guide.md.swp")
+			equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), swapWarning(kept))
+			equal(t, "the owner of what is kept", ownerOf(t, kept), "kept")
+			equal(t, "the swap file", fileBody(t, swap), "unsaved typing\n")
+			equal(t, "the merge ref", h.ref(lineage.MergeRef("kit")), merge)
+
+			stub, seen := seeingEditor(t, "exit 0\n")
+			h.env["EDITOR"] = stub
+			out = h.run(args...)
+			equal(t, "exit of the next session", out.exit, 0)
+			equal(t, "what the next session opened", fileBody(t, filepath.Join(seen, "guide.md")), kitText["guide.md"])
+			equal(t, "its notes", strings.Join(infos(h, out.stderr), "\n"), "")
+			equal(t, "its warnings", strings.Join(warnings(h, out.stderr), "\n"), notOpenedWarning(kept)+"\n"+c.left)
+			equal(t, "what is left", strings.Join(editorDirs(t, h), " "), kept)
+			equal(t, "the owner of what is left", ownerOf(t, kept), "kept")
+			equal(t, "the swap file, still", fileBody(t, swap), "unsaved typing\n")
+		})
+	}
+}
+
 // TestSkillResolveAbortSaysWhatNeverOpensAgain: giving the merge up keeps a
 // directory an editor session whose run is gone left with a swap file in
 // it, beside a file the editor was given, and its warning says what is
