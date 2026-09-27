@@ -190,13 +190,15 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	// a held lock rather than giving up, since a run whose write a held lock
 	// refused comes here too: a completion another run makes meanwhile
 	// either finishes first, and the directory is given up here, or starts
-	// once it is kept, and gives it up in turn, see clearEditorDirs. A wait
-	// that fails, the run stopped say, keeps it.
+	// once it is kept, and gives it up in turn, see clearEditorDirs. A run
+	// stopped still reads the refs once it holds the lock, so that its
+	// warning is as true as any other's; a wait that fails, the run stopped
+	// while another command holds the lock say, keeps it.
 	keep := func() (stays, released, givenUp bool) {
 		stays = true
 		inv.out.debugf("taking the lock to settle %s, waiting while another command holds it", dir)
 		err := home.MutateQuietWaiting(ctx, inv.dirs.Home, inv.refs(ctx), func() error {
-			values, err := inv.lineageRefs(ctx, r.gitDir, name)
+			values, err := inv.lineageRefs(interrupt.Uninterruptible(ctx), r.gitDir, name)
 			switch {
 			case err != nil:
 				return err
@@ -237,9 +239,9 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 		stays, released, givenUp := keep()
 		k := keptOf(sessionDir(dir, name, records), records)
 		moved := func() bool {
-			// A merge ref that cannot be read, in a run stopped say, is not
-			// taken for one that changed.
-			values, err := inv.lineageRefs(ctx, r.gitDir, name)
+			// A merge ref that cannot be read is not taken for one that
+			// changed; a run stopped still reads it, as keep does.
+			values, err := inv.lineageRefs(interrupt.Uninterruptible(ctx), r.gitDir, name)
 			return err == nil && values[lineage.MergeRef(name)] != r.pending.Commit
 		}
 		end := opensAgain(name, "", "them")
@@ -278,10 +280,12 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	}
 
 	var rs []resolution
-	var left []string          // the files left as they were resolved, or unresolved
-	gone := map[string]bool{}  // of those, the ones the editor left no file at
-	typed := map[string]bool{} // and the ones that hold markers and something typed, which is kept
+	var left []string               // the files left as they were resolved, or unresolved
+	gone := map[string]bool{}       // of those, the ones the editor left no file at
+	typed := map[string]bool{}      // and the ones that hold markers and something typed, which is kept
+	recorded := map[string]string{} // the line the owner file records each file with, see editorRecord
 	for i, f := range files {
+		recorded[f.Path] = records[i]
 		body, err := os.ReadFile(paths[i])
 		switch {
 		case err != nil:
@@ -324,19 +328,21 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	}
 	// The directory stays while it holds something typed that was not
 	// written: a file left with markers in it and more, which the next
-	// session of the same conflict opens again, a file the editor resolved
-	// that conflicts anew or merges cleanly now, and anything else, a file
-	// saved under another name, a swap file an editor left or a symlink say,
-	// see keptOf, which no session opens. While the merge is pending it is
-	// marked kept; a run that completed the merge gives it up to the user,
-	// and so does one that finds the merge completed by another run
-	// meanwhile, see keep. pending says it is kept for the merge pending,
-	// whose next session of the same conflict opens it again: that of every
-	// file left, or, for a file the merge records as resolved, the one that
-	// names it. elsewhere ends the warning that names it where only
-	// something under another name keeps it, and given that of a file whose
-	// typed text no session opens again, which says more only once the
-	// directory is given up to the user.
+	// session of the same conflict opens again, unless the merge merged again
+	// conflicts in it anew, see note, a file the editor resolved that
+	// conflicts anew or merges cleanly now, and anything else, a file saved
+	// under another name, a swap file an editor left or a symlink say, see
+	// keptOf, which no session opens. While the merge is pending it is marked
+	// kept; a run that completed the merge gives it up to the user, and so
+	// does one that finds the merge completed by another run meanwhile, see
+	// keep. pending says it is kept for the merge pending, whose next session
+	// of the same conflict opens it again: that of every file left, or, for a
+	// file the merge records as resolved, the one that names it; a file that
+	// conflicts anew opens in neither, which its warning says instead.
+	// elsewhere ends the warning that names it where only something under
+	// another name keeps it, and given that of a file whose typed text no
+	// session opens again, which says more only once the directory is given
+	// up to the user.
 	named := slices.ContainsFunc(left, func(p string) bool { return typed[p] }) || len(anew)+len(clean) > 0
 	held, given, again, elsewhere := "", "", opensAgain(name, "", "it"), keptUnopened()
 	pending := false
@@ -383,6 +389,12 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 		switch {
 		case r.carried != nil && !r.left[p]:
 			how, stays = ", and merges cleanly now that the merge was merged again, so git's merge of it was written", given
+		case r.carried != nil && !slices.Contains(r.remerged, recorded[p]):
+			// It conflicts anew in the merge merged again, so no session of
+			// the merge pending opens what was typed for the conflict it had.
+			if pending {
+				stays = ", but it does not open again, because its conflict changed when the merge was merged again, so copy what you need from it"
+			}
 		case r.resolved[p]:
 			how = ", so it keeps the way it was resolved before"
 			if pending {
