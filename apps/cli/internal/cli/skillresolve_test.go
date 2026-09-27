@@ -1643,6 +1643,27 @@ while [ ! -e `+shellWord(goFile)+` ] && [ $i -lt 1200 ]; do `+sleeper+` 0.05; i=
 	return stub, goFile
 }
 
+// settling is the debug line a run of --verbose writes once its editor
+// exited and nothing it left was written, as it takes the lock to settle
+// its directory, waiting for the lock while another command holds it. A
+// test watching for it knows the run is past its write, and reads the
+// merge only once it holds the lock, without sleeping for it.
+const settling = "taking the lock to settle "
+
+// awaitAlso blocks until the run wrote want too, as await does for the
+// line start watches, once that one is seen.
+func (p *runProc) awaitAlso(want string) {
+	p.t.Helper()
+	w := p.log
+	w.mu.Lock()
+	w.want, w.hit, w.seen = want, make(chan struct{}), strings.Contains(w.buf.String(), want)
+	if w.seen {
+		close(w.hit)
+	}
+	w.mu.Unlock()
+	p.await()
+}
+
 // TestSkillResolveLeavesTheLockFreeWhileTheEditorIsOpen: nothing holds the
 // lock while the editor is open, so every other command goes on meanwhile:
 // a mutation and a placement of the skill itself both succeed while a stub
@@ -1669,9 +1690,10 @@ func TestSkillResolveLeavesTheLockFreeWhileTheEditorIsOpen(t *testing.T) {
 }
 
 // TestSkillResolveKeepsTheFilesWhenTheLockIsBusyAfterTheEditor: the run
-// takes the lock again once the editor exits, without waiting for it. Held
-// by another command then, one that writes or a scan alike, the run is exit
-// code 7 with nothing written, and what the editor saved stays in its
+// takes the lock again once the editor exits, without waiting for it to
+// write. Held by another command then, one that writes or a scan alike, the
+// run is exit code 7 with nothing written, and settles its directory once
+// the lock is free, waiting for it: what the editor saved stays in its
 // directory, kept, which a warning names; the next session opens it again
 // and, as it holds no marker, writes it.
 func TestSkillResolveKeepsTheFilesWhenTheLockIsBusyAfterTheEditor(t *testing.T) {
@@ -1689,13 +1711,14 @@ func TestSkillResolveKeepsTheFilesWhenTheLockIsBusyAfterTheEditor(t *testing.T) 
 			merge := h.ref(lineage.MergeRef("kit"))
 			stub, goFile := waitingEditor(t)
 			h.env["EDITOR"] = stub
-			p := h.start("editor open", "--json", "skill", "resolve", "kit", "--editor")
+			p := h.start("editor open", "--json", "--verbose", "skill", "resolve", "kit", "--editor")
 			p.await()
 
 			release := c.hold(t, h)
 			writeFile(t, goFile, "")
-			out := p.wait()
+			p.awaitAlso(settling)
 			release()
+			out := p.wait()
 			equal(t, "exit", out.exit, 7)
 			equal(t, "code", h.one(out.stdout, "error")["code"], "locked")
 			equal(t, "the merge ref", h.ref(lineage.MergeRef("kit")), merge)
@@ -1716,6 +1739,55 @@ func TestSkillResolveKeepsTheFilesWhenTheLockIsBusyAfterTheEditor(t *testing.T) 
 			equal(t, "what is left after the next session", strings.Join(editorDirs(t, h), " "), "")
 		})
 	}
+}
+
+// TestSkillResolveSettlesItsDirectoryAfterACompletionUnderWay: a session
+// whose editor exits while another run completes the merge, holding the
+// lock with the merge ref not yet deleted, is refused the lock as it
+// writes, and settles its directory only once that completion is done,
+// waiting for the lock: it finds the merge complete, and gives the
+// directory up to the user with what the editor saved in it, which its
+// warning says. The completion settles the directories of earlier
+// sessions under the hold that deletes the merge ref, so it never meets
+// this one kept, and removes it with no word.
+func TestSkillResolveSettlesItsDirectoryAfterACompletionUnderWay(t *testing.T) {
+	t.Parallel()
+	h, _, _ := resolveHarness(t)
+	arm := gateGit(t, h, `case " $* " in
+*" update-ref --stdin "*) gate=1 ;;
+esac`)
+	stub, goFile := waitingEditor(t)
+	h.env["EDITOR"] = stub
+	p := h.start("editor open", "--json", "--verbose", "skill", "resolve", "kit", "--editor")
+	p.await()
+
+	reached, release := arm()
+	args := []string{"--json", "skill", "resolve", "kit"}
+	for _, hunk := range append(slices.Clone(kitSides), "kept.md:1=theirs") {
+		args = append(args, "--hunk", hunk)
+	}
+	completion := h.start("", args...)
+	reached() // the completion holds the lock, and has written none of its refs
+	writeFile(t, goFile, "")
+	p.awaitAlso(settling) // the session was refused the lock, and waits for it
+	release()
+	completed := completion.wait()
+	out := p.wait()
+
+	equal(t, "exit of the completion", completed.exit, 0)
+	contains(t, "summary of the completion", h.one(completed.stdout, "result")["summary"].(string), "resolved kit and updated it from ")
+	equal(t, "warnings of the completion", strings.Join(warnings(h, completed.stderr), "\n"), "")
+	equal(t, "exit", out.exit, 7)
+	equal(t, "code", h.one(out.stdout, "error")["code"], "locked")
+	equal(t, "the merge ref", h.ref(lineage.MergeRef("kit")), "")
+	dirs := editorDirs(t, h)
+	if len(dirs) != 1 {
+		t.Fatalf("the session left %v, want the one directory", dirs)
+	}
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), givenUpWarning(dirs[0]))
+	nothingAt(t, "the owner file of what is kept", filepath.Join(dirs[0], editorOwner))
+	equal(t, "what the editor saved", fileBody(t, filepath.Join(dirs[0], "kit", "notes.md")), "resolved in the editor\n")
+	equal(t, "what the editor saved of guide.md", fileBody(t, filepath.Join(dirs[0], "kit", "guide.md")), "resolved in the editor\n")
 }
 
 // TestSkillResolveInAnEditorRefusesABusyLock: laying the files out takes
@@ -2063,6 +2135,48 @@ func TestSkillResolveKeepsWhatWasTypedForAMergeGoneWhileTheEditorIsOpen(t *testi
 			equal(t, "notes", strings.Join(infos(h, out.stderr), "\n"), reopenedNote("guide.md", dirs[0])+"\n"+reopenedNote("notes.md", dirs[0]))
 			equal(t, "notes.md in the merge", inMerge(h, "notes.md"), "resolved in the editor")
 			equal(t, "what is left after the next session", strings.Join(editorDirs(t, h), " "), "")
+		})
+	}
+}
+
+// TestSkillResolveSaysWhatAnEditorLeftUnderAnotherNameForAMergeGivenUp: a
+// session whose merge is given up while its editor is open, and whose
+// editor left a swap file beside a file it was given, keeps its directory,
+// marked kept, and says what opens again as giving the merge up says it:
+// with nothing typed in the files it was given, that nothing there opens
+// again, since no session opens a swap file; with something typed in them
+// besides, that the next session opens that once an update conflicts the
+// same way, and that the swap file does not open again.
+func TestSkillResolveSaysWhatAnEditorLeftUnderAnotherNameForAMergeGivenUp(t *testing.T) {
+	t.Parallel()
+	for _, typed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("typed %v", typed), func(t *testing.T) {
+			t.Parallel()
+			h, _, _ := resolveHarness(t)
+			then := `for f in "$@"; do case "$f" in */guide.md) printf 'unsaved typing\n' > "${f%/*}/.guide.md.swp" ;; esac; done` + "\n"
+			if typed {
+				then += `for f in "$@"; do printf 'resolved in the editor\n' > "$f"; done` + "\n"
+			}
+			stub, goFile := waitThen(t, then)
+			h.env["EDITOR"] = stub
+			p := h.start("editor open", "--json", "skill", "resolve", "kit", "--editor")
+			p.await()
+			h.mustRun("skill", "resolve", "kit", "--abort")
+
+			writeFile(t, goFile, "")
+			out := p.wait()
+			equal(t, "exit", out.exit, 6)
+			dirs := editorDirs(t, h)
+			if len(dirs) != 1 {
+				t.Fatalf("the session left %v, want the one directory", dirs)
+			}
+			want := swapWarning(dirs[0])
+			if typed {
+				want = abortMixedWarning(dirs[0])
+			}
+			equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), want)
+			equal(t, "the owner of what is kept", ownerOf(t, dirs[0]), "kept")
+			equal(t, "the swap file", fileBody(t, filepath.Join(dirs[0], "kit", ".guide.md.swp")), "unsaved typing\n")
 		})
 	}
 }

@@ -110,7 +110,8 @@ func (inv *invocation) editorCommand() (command string, ok bool) {
 // one it was typed in, see reopen. One whose merge was completed while the
 // editor was open is given up to the user instead, see releaseEditorDir,
 // since the conflict it was typed for cannot come back; either way one
-// with nothing typed in it goes at once. A run that merged the merge
+// with nothing typed in it goes at once. Which of these it is, is read
+// under the lock, waited for, see keep. A run that merged the merge
 // again, a completion of an edited library directory or a run on a moved
 // import branch, wrote every resolution that still applies, and keeps the
 // directory only for a file the editor resolved that conflicts anew, or
@@ -200,21 +201,44 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	// is kept, marked so, for the next session of the same conflict to open
 	// again, one whose merge was given up meanwhile once an update leaves it
 	// pending anew, which givenUp says, since no session opens it before.
+	//
+	// It reads the refs and settles the directory under the lock, and waits
+	// for a held lock rather than giving up, since a run whose write a held
+	// lock refused comes here too. A run completing the merge settles the
+	// directories of earlier sessions under the hold that deletes the merge
+	// ref, see apply, so either that completion is done first, and the
+	// merge reads as completed here, or this directory is settled before
+	// the completion takes the lock, and named in a warning that says a
+	// completion removes it; never kept here while a completion under way
+	// goes on to remove it unnamed. A wait that fails, the run stopped say,
+	// keeps it.
 	keep := func() (stays, released, givenUp bool) {
-		if values, err := inv.lineageRefs(ctx, r.gitDir, name); err == nil && values[lineage.MergeRef(name)] == "" {
+		stays = true
+		inv.out.debugf("taking the lock to settle %s, waiting while another command holds it", dir)
+		err := home.MutateQuietWaiting(ctx, inv.dirs.Home, inv.refs(ctx), func() error {
+			values, err := inv.lineageRefs(ctx, r.gitDir, name)
 			switch {
+			case err != nil:
+				return err
+			case values[lineage.MergeRef(name)] != "":
+				keepEditorDir(dir)
 			case untouched(dir, name, records):
 				os.RemoveAll(dir)
-				return false, false, false
+				stays = false
 			case values[lineage.ManagedRef(name)] != r.rec.Commit:
 				releaseEditorDir(dir)
-				return true, true, false
+				released = true
+			default:
+				keepEditorDir(dir)
+				givenUp = true
 			}
+			return nil
+		})
+		if err != nil {
 			keepEditorDir(dir)
-			return true, false, true
+			return true, false, false
 		}
-		keepEditorDir(dir)
-		return true, false, false
+		return stays, released, givenUp
 	}
 	// kept settles the directory of a run that writes nothing of what the
 	// editor left, and names it in a warning that says what opens it again.
@@ -1269,6 +1293,10 @@ func (l *lineRelay) flush() {
 // releaseEditorDir, and returned, so that the run names them; every other
 // one goes. So no run removes a directory that holds something typed and
 // that it names itself: one goes only as an earlier run's warning said.
+// It runs under the hold of the lock that deleted the merge ref, so that a
+// session whose editor exits meanwhile, which settles its own directory
+// under the lock, see edit, either kept it before, its warning saying a
+// completion removes it, or finds the merge complete afterwards.
 func (inv *invocation) clearEditorDirs(name string, named map[string]bool) (released []string) {
 	for _, d := range inv.earlierDirs(name) {
 		if !d.spent() && (d.gone || named[d.path]) {

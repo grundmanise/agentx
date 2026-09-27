@@ -1152,10 +1152,12 @@ func changedWhileCompleting(name string) *failure {
 // the lock first: the import branch, the merge ref and the library
 // directory, whose content and tree must be the ones the run judged. What
 // the library directory holds unchanged keeps its permissions, see
-// keepPerms. Once it is written, the directories editor sessions of the
-// skill left go, see clearEditorDirs, but for one that holds something
-// typed whose run is gone, or that this run named as its session started,
-// which is given up to the user and named in a warning.
+// keepPerms. Once it is written, under the same hold of the lock, the
+// directories editor sessions of the skill left go, see clearEditorDirs,
+// but for one that holds something typed whose run is gone, or that this
+// run named as its session started, which is given up to the user and
+// named in a warning. A session whose editor exits meanwhile settles its
+// own directory under the lock too, so before this or after, see edit.
 func (r *pendingRun) apply(ctx context.Context, c completion) error {
 	inv, git, gitDir, name := r.inv, r.inv.git, r.gitDir, r.rec.Name
 	target := c.v.ID()
@@ -1180,6 +1182,7 @@ func (r *pendingRun) apply(ctx context.Context, c completion) error {
 		return accountRepoFailure(err)
 	}
 	var done placements
+	var released []string
 	newer := false
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		values, err := inv.lineageRefs(ctx, gitDir, name)
@@ -1242,17 +1245,23 @@ func (r *pendingRun) apply(ctx context.Context, c completion) error {
 			newer = true
 		}
 		m.Ref(gitDir, lineage.MergeRef(name), r.pending.Commit, "")
-		return m.Apply(inv.refs(ctx))
+		if err := m.Apply(inv.refs(ctx)); err != nil {
+			return err
+		}
+		released = inv.clearEditorDirs(name, r.named)
+		return nil
 	})
+	// A directory given up to the user is named even when the change
+	// signal fails after the merge completed.
+	for _, dir := range released {
+		inv.out.warn(leftToYou(dir, name))
+	}
 	if err != nil {
 		return mutationFailure(err)
 	}
 	r.completed = true
 	if c.again != nil {
 		r.note(*c.again)
-	}
-	for _, dir := range inv.clearEditorDirs(name, r.named) {
-		inv.out.warn(leftToYou(dir, name))
 	}
 	return r.reportCompleted(ctx, c, newer, upstreamRename(name, skillName(theirs, bodies), next.Import.Dir()), done)
 }
