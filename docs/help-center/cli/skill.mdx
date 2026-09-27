@@ -727,10 +727,10 @@ When agentx cannot write what you typed in your editor, it keeps your files in a
 
 Run `agentx skill resolve docx --editor` again, and each file opens with what you typed instead of fresh conflict markers. This works after an editor error, a closed terminal, markers left in a file, a merge that changed while your editor was open (for files still left to resolve), and `--abort` followed by an update that conflicts the same way.
 
-- To reopen a file you already resolved, name it: `agentx skill resolve docx --editor SKILL.md`. What you typed for it with no conflict markers left opens only if nothing has changed the merge since you typed it, such as a `--hunk` choice or another terminal resolving the file. Otherwise agentx names the folder that holds it, so copy what you need from there.
-- A file reopens only for the same conflict. Each time you run `--editor`, agentx names every folder that still holds typing it did not open, such as a file whose conflict changed, a file you saved under another name, or a swap file. Copy what you need from it.
-- A folder stays until a merge of docx completes, which deletes it. A folder agentx says it leaves for you stays until you delete it.
-- These folders are in your temporary directory, which your system may clean after some days or at a restart, so copy anything you want to keep for longer.
+- To reopen a file you already resolved, name it: `agentx skill resolve docx --editor SKILL.md`. What you typed for it without conflict markers opens only if nothing has changed the merge since; otherwise copy it from the folder agentx names.
+- A file reopens only for the same conflict. Each time you run `--editor`, agentx names every folder that still holds typing it did not open, such as a file whose conflict changed or a swap file. Copy what you need from it.
+- agentx never deletes what you typed: once a merge is finished, it tells you where the folder is and leaves it to you. Delete the folder when you no longer need it.
+- Your system may clean its temporary directory after some days or at a restart, so copy anything you want to keep for longer.
 
 ### Finish the merge
 
@@ -742,7 +742,7 @@ The command that resolves the last file finishes the merge:
 
 The skill is then at the new version with the changes you chose, as after any update: copies that held your version, or the version you installed, get the merged one, and copies you edited in place are kept.
 
-If you edited the skill while the merge was pending, your edit is kept. agentx merges again: every file your edit did not touch keeps the choice you made, and a file your edit made conflict again is shown on its own. The command then stops with exit code 4, and you resolve that file as before. When you were resolving in your editor, what you saved is kept the same way, and what you typed for a file that conflicts again, or that your edit made merge on its own, stays in the folder agentx names. If no file is left to resolve, the command finishes the merge with git's merge of the files that now merge on their own, and leaves that folder for you: agentx no longer deletes it, so delete it once you have copied what you need.
+If you edited the skill while the merge was pending, your edit is kept. agentx merges again: every file your edit did not touch keeps the choice you made, and a file your edit made conflict again is shown on its own. The command then stops with exit code 4, and you resolve that file as before. When you were resolving in your editor, what you saved is kept the same way, and what you typed for a file that conflicts again, or that your edit made merge on its own, stays in the folder agentx names. If no file is left to resolve, the command finishes the merge with git's merge of the files that now merge on their own, and leaves that folder to you: copy what you need and delete it.
 
 If the skill's import branch moved while the merge was pending, for example because a git command outside agentx moved it, agentx merges again on the version it points at now. Every choice that still applies is kept. If a file now conflicts differently, the command shows every file left and stops with exit code 4; resolve them as before. What you typed in your editor for a file that now merges on its own stays in the folder agentx names, whether the merge is still pending or the command finished it, as above.
 

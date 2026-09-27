@@ -227,7 +227,6 @@ type pendingRun struct {
 	carried   map[string]bool          // once the run merged the merge again and wrote or completed it: the files whose resolution it kept
 	left      map[string]bool          // and the files it left to resolve, none once it completed it
 	completed bool                     // the run completed the merge
-	named     map[string]bool          // the directories of earlier editor sessions that this run named as its session started, see settle
 }
 
 // readPending reads the merge a skill's merge ref holds, refusing one that
@@ -1154,10 +1153,8 @@ func changedWhileCompleting(name string) *failure {
 // the library directory holds unchanged keeps its permissions, see
 // keepPerms. Once it is written, under the same hold of the lock, the
 // directories editor sessions of the skill left go, see clearEditorDirs,
-// but for one that holds something typed whose run is gone, or that this
-// run named as its session started, which is given up to the user and
-// named in a warning. A session whose editor exits meanwhile settles its
-// own directory under the lock too, so before this or after, see edit.
+// but for one that holds something typed, which is given up to the user
+// and named in a warning.
 func (r *pendingRun) apply(ctx context.Context, c completion) error {
 	inv, git, gitDir, name := r.inv, r.inv.git, r.gitDir, r.rec.Name
 	target := c.v.ID()
@@ -1248,7 +1245,7 @@ func (r *pendingRun) apply(ctx context.Context, c completion) error {
 		if err := m.Apply(inv.refs(ctx)); err != nil {
 			return err
 		}
-		released = inv.clearEditorDirs(name, r.named)
+		released = inv.clearEditorDirs(name)
 		return nil
 	})
 	// A directory given up to the user is named even when the change
@@ -1334,11 +1331,9 @@ func (r *pendingRun) reportCompleted(ctx context.Context, c completion, newer bo
 // a directory of one holding anything typed is kept, and named in a
 // warning, so that the next editor session of the same conflict opens it
 // again once an update leaves the merge pending anew, see keepEditorDirs;
-// one that holds nothing typed goes. The warning says that a kept one
-// stays until a merge of the skill completes, which removes it as it
-// removes every kept one, see clearEditorDirs, and that what it holds under
-// another name, a swap file say, opens in no session, see keptGivenUp. The
-// skill is reported as it now stands.
+// one that holds nothing typed goes. The warning says that what it holds
+// under another name, a swap file say, opens in no session, see
+// keptGivenUp. The skill is reported as it now stands.
 func (inv *invocation) abortMerge(ctx context.Context, gitDir, name string) error {
 	err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		values, err := inv.lineageRefs(ctx, gitDir, name)
