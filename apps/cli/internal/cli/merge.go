@@ -105,13 +105,15 @@ type staged struct {
 // stages, all of them read in one cat-file, as git merge-file writes them,
 // one merge-file per file: the tree merge-tree wrote is not read for them,
 // since its markers are git's default size and a line of the file itself
-// may look like one.
+// may look like one. The three blobs merge-file reads are written to a
+// directory of their own in tmp, the temporary directory the CLI's
+// environment names, which is removed before it returns.
 //
 // The three versions decide everything here, so the same three merge to
 // the same tree, the same files and the same hunks, numbered alike, on any
 // later run: which is how a pending merge, whose commit names the three in
 // its trailers, is read back.
-func mergeVersions(ctx context.Context, r *gitx.Runner, gitDir, dir string, m lineage.Merge) (mergeResult, error) {
+func mergeVersions(ctx context.Context, r *gitx.Runner, gitDir, tmp, dir string, m lineage.Merge) (mergeResult, error) {
 	out, status, err := r.IsolatedStatus(ctx, gitDir, 1, "-c", "merge.directoryRenames=false",
 		"merge-tree", "--write-tree", "-z", "--no-messages", "--merge-base="+m.Base, m.Mine, m.Theirs)
 	if err != nil {
@@ -191,7 +193,7 @@ func mergeVersions(ctx context.Context, r *gitx.Runner, gitDir, dir string, m li
 		f.stages, f.aside = stages[p], aside[p]
 		if text {
 			if scratch == "" {
-				if scratch, err = os.MkdirTemp("", "agentx-merge-"); err != nil {
+				if scratch, err = os.MkdirTemp(tmp, "agentx-merge-"); err != nil {
 					return mergeResult{}, err
 				}
 			}

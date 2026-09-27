@@ -461,7 +461,7 @@ func (r *updateRun) merge(ctx context.Context, u *updating) *failure {
 		return failureOf(accountRepoFailure(err))
 	}
 	m := lineage.Merge{Base: u.rec.Commit, Mine: mine, Theirs: u.next.Commit}
-	res, err := mergeVersions(ctx, git, gitDir, dir, m)
+	res, err := mergeVersions(ctx, git, gitDir, r.inv.tempDir(), dir, m)
 	if err != nil {
 		return failureOf(accountRepoFailure(err))
 	}

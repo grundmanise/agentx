@@ -289,7 +289,7 @@ func TestSkillUpdateLeavesAConflictPending(t *testing.T) {
 		Mine:   trailer(t, h, merge, lineage.TrailerMergeMine),
 		Theirs: trailer(t, h, merge, lineage.TrailerMergeTheirs),
 	}
-	res, err := mergeVersions(context.Background(), r, gitx.AccountRepoPath(h.agentx), "alpha-dir", m)
+	res, err := mergeVersions(context.Background(), r, gitx.AccountRepoPath(h.agentx), t.TempDir(), "alpha-dir", m)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -433,7 +433,8 @@ func TestSkillUpdateConflictsOfEveryKind(t *testing.T) {
 // TestSkillUpdateMergesASkillAtTheRootOfItsSource: a skill at the root of
 // its source, whose import tree holds it under the repository's name, merges
 // as any other: an edit the update leaves alone is kept, and one it
-// overlaps conflicts at a path relative to the skill's directory.
+// overlaps conflicts at a path relative to the skill's directory, which
+// resolving it names, and which completes the merge.
 func TestSkillUpdateMergesASkillAtTheRootOfItsSource(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -461,6 +462,15 @@ func TestSkillUpdateMergesASkillAtTheRootOfItsSource(t *testing.T) {
 	ev := h.one(out.stdout, "conflict")
 	equal(t, "files", conflictFiles(ev), "usage.md:1")
 	equal(t, "the hunk", hunkOf(t, ev, "usage.md", 1), "root usage, edited here\n|root usage\n|root usage, revised\n")
+
+	candidate := h.ref(lineage.CandidateRef("rooted"))
+	h.mustRun("skill", "resolve", "rooted", "--hunk", "usage.md:1=theirs")
+	sameTree(t, "the library directory once resolved", libraryTree(t, filepath.Join(h.library, "rooted")), map[string]string{
+		"SKILL.md": fileBody(t, filepath.Join(s.work, "SKILL.md")), "notes.md": "root notes, revised\n", "usage.md": "root usage, revised\n",
+	})
+	equal(t, "the import branch once resolved", h.ref(lineage.ManagedRef("rooted")), candidate)
+	equal(t, "the merge ref once resolved", h.ref(lineage.MergeRef("rooted")), "")
+	equal(t, "state once resolved", h.listed("rooted")["state"], stateCurrent)
 }
 
 // TestAPendingMergeBlocksWhatWouldReplaceOrRemoveTheSkill: while a merge

@@ -265,7 +265,7 @@ func (inv *invocation) readPending(ctx context.Context, gitDir string, rec linea
 		return nil, fail(exitRefused, "the import branch "+lineage.ManagedRef(name)+" moved since the merge of "+name+" was left pending, to a version that holds the skill under another directory than the update, so the merge cannot be resolved",
 			"run '"+skillCommand("resolve", name, "--abort")+"' to give it up, then '"+skillCommand("update", name)+"' to merge again")
 	}
-	res, err := mergeVersions(ctx, inv.git, gitDir, r.dir, p.Merge)
+	res, err := mergeVersions(ctx, inv.git, gitDir, inv.tempDir(), r.dir, p.Merge)
 	if err != nil {
 		return nil, accountRepoFailure(err)
 	}
@@ -548,9 +548,13 @@ func (r *pendingRun) resolve(ctx context.Context, rs []resolution) error {
 	if err != nil {
 		return accountRepoFailure(err)
 	}
-	fresh, err := lineage.ReadMerged(ctx, git, gitDir, r.res.tree, r.dir)
-	if err != nil {
-		return accountRepoFailure(err)
+	// The tree merge-tree wrote is read only for a path resolved to the
+	// directory one side has there, see applyResolutions.
+	var fresh lineage.Base
+	if slices.ContainsFunc(rs, func(res resolution) bool { return res.keep }) {
+		if fresh, err = lineage.ReadMerged(ctx, git, gitDir, r.res.tree, r.dir); err != nil {
+			return accountRepoFailure(err)
+		}
 	}
 	v, reopened := applyResolutions(held, fresh, r.files, rs)
 	for _, p := range reopened {
@@ -687,7 +691,7 @@ type mergedAgain struct {
 // move changed, a new one, or one not resolved yet, is left to resolve.
 func (r *pendingRun) mergeAgain(ctx context.Context, v lineage.Base, m lineage.Merge, done map[string]bool) (mergedAgain, error) {
 	git, gitDir := r.inv.git, r.gitDir
-	res, err := mergeVersions(ctx, git, gitDir, r.dir, m)
+	res, err := mergeVersions(ctx, git, gitDir, r.inv.tempDir(), r.dir, m)
 	if err != nil {
 		return mergedAgain{}, accountRepoFailure(err)
 	}

@@ -480,7 +480,8 @@ func TestSkillResolveKeepsANewerUpdate(t *testing.T) {
 // the run reports that file alone, keeps every other resolution, rewrites
 // the pending merge with the directory as it is now as its mine, first
 // parent and trailer, and exits 4; resolving the file then completes the
-// merge with both edits.
+// merge with both edits. A copy placed from the library directory once it
+// was edited meanwhile is refreshed with the merge.
 func TestSkillResolveMergesAnEditMadeMeanwhile(t *testing.T) {
 	t.Parallel()
 	t.Run("an edit to a file that does not conflict", func(t *testing.T) {
@@ -489,12 +490,17 @@ func TestSkillResolveMergesAnEditMadeMeanwhile(t *testing.T) {
 		candidate := h.ref(lineage.CandidateRef("kit"))
 		resolveKit(t, h, 0, kitSides...)
 		editLibrary(t, h, "kit", "usage.md", "usage, edited meanwhile\n")
+		claude := filepath.Join(h.home, ".claude", "skills", "kit")
+		h.mustRun("skill", "remove", "kit", "--from", "claude-code")
+		h.mustRun("skill", "place", "kit", "--to", "claude-code", "--copy")
 
 		out := resolveKit(t, h, 0, "kept.md:1=theirs")
 		contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), "resolved kit, merged the edits made to it meanwhile and updated it from ")
+		contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), ", 2 copy placements refreshed")
 		want := kitTree(t, h, kitResolved)
 		want["usage.md"] = "usage, edited meanwhile\n"
 		sameTree(t, "the library directory", libraryTree(t, filepath.Join(h.library, "kit")), want)
+		sameTree(t, "claude's copy", libraryTree(t, claude), want)
 		equal(t, "the import branch", h.ref(lineage.ManagedRef("kit")), candidate)
 		equal(t, "the merge ref", h.ref(lineage.MergeRef("kit")), "")
 	})
@@ -543,25 +549,38 @@ func TestSkillResolveMergesAnEditMadeMeanwhile(t *testing.T) {
 // clashHarness is a machine with Claude Code and one skill, kit, whose
 // first version holds base and notes.md, "one", and whose update and edits
 // conflict in notes.md, one hunk, and wherever upstream and edit, given
-// the source and the library directory, make a file meet a directory. It
-// returns once the update left the merge pending.
+// the source and the library directory, make a file meet a directory, or
+// conflict otherwise. It returns once the update left the merge pending.
 func clashHarness(t *testing.T, base map[string]string, upstream func(s *sourceRepo), edit func(lib string)) *harness {
 	t.Helper()
+	return pendingHarness(t, "kit", base, upstream, edit)
+}
+
+// pendingHarness is clashHarness for a skill called name, at
+// skills/<name>-dir in its source. Editor sessions lay their files out in
+// a temporary directory of the test's own.
+func pendingHarness(t *testing.T, name string, base map[string]string, upstream func(s *sourceRepo), edit func(lib string)) *harness {
+	t.Helper()
 	h := newHarness(t)
+	tmp, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.env["TMPDIR"] = tmp
 	h.build(t, fixture{dirs: []string{".claude"}})
-	s := h.newSourceRepo("kit", true)
+	s := h.newSourceRepo(name, true)
 	first := map[string]string{"notes.md": "one\n"}
 	maps.Copy(first, base)
-	s.skill("skills/kit-dir", "kit", "A skill where a file meets a directory", first)
+	s.skill("skills/"+name+"-dir", name, "A skill whose update conflicts with its edits", first)
 	s.commit("first version")
 	h.mustRun("skill", "add", s.url)
-	s.write("skills/kit-dir/notes.md", "uno\n")
+	s.write("skills/"+name+"-dir/notes.md", "uno\n")
 	upstream(s)
 	s.commit("second version")
 	h.mustRun("skill", "check")
-	editLibrary(t, h, "kit", "notes.md", "ONE\n")
-	edit(filepath.Join(h.library, "kit"))
-	if out := h.run("skill", "update", "kit"); out.exit != 4 {
+	editLibrary(t, h, name, "notes.md", "ONE\n")
+	edit(filepath.Join(h.library, name))
+	if out := h.run("skill", "update", name); out.exit != 4 {
 		t.Fatalf("the update that should conflict: exit %d\n%s%s", out.exit, out.stdout, out.stderr)
 	}
 	return h
@@ -782,21 +801,44 @@ func TestSkillResolveMergesAgainOnAMovedImportBranch(t *testing.T) {
 	})
 }
 
+// versionUnder writes a commit of the version commit holds with kit's
+// directory named dir, in its tree and in its Agentx-Path trailer, as an
+// import of the skill from another directory of its source would be, and
+// returns it. Nothing points at it.
+func versionUnder(h *harness, commit, dir string) string {
+	h.t.Helper()
+	root := h.accountGitInput("040000 tree "+h.accountGit("rev-parse", commit+":kit-dir")+"\t"+dir+"\n", "mktree")
+	was := h.accountGit("log", "-1", "--format=%B", commit)
+	message := strings.Replace(was, lineage.TrailerPath+": skills/kit-dir", lineage.TrailerPath+": skills/"+dir, 1)
+	if message == was {
+		h.t.Fatalf("%s names no skills/kit-dir:\n%s", commit, was)
+	}
+	return h.accountGitInput("", "commit-tree", root, "-m", message)
+}
+
 // TestSkillResolveRefusesAMergeItCannotMergeAgain: an import branch moved
-// to the very update the merge merges leaves nothing to merge, and one moved
-// to a commit agentx cannot read names no version to merge on: either is
-// exit code 6 whatever the run asks, and nothing is written; giving the
-// merge up still works.
+// to the very update the merge merges leaves nothing to merge, one moved to
+// a commit agentx cannot read names no version to merge on, and one moved
+// to a version that holds the skill under another upstream directory than
+// the update cannot be merged with it: each is exit code 6 whatever the run
+// asks, and nothing is written; giving the merge up still works.
 func TestSkillResolveRefusesAMergeItCannotMergeAgain(t *testing.T) {
 	t.Parallel()
+	abandon := "run 'agentx skill resolve kit --abort' to give the merge up; the library directory stays as it is"
 	for _, c := range []struct {
-		name, message string
-		to            func(h *harness, updated jsonEvent) string
+		name, message, hint string
+		to                  func(h *harness, updated jsonEvent) string
 	}{
-		{name: "moved to the update", message: "the import branch refs/heads/managed/kit moved to the update the merge of kit merges, so there is nothing left to merge",
+		{name: "moved to the update", message: "the import branch refs/heads/managed/kit moved to the update the merge of kit merges, so there is nothing left to merge", hint: abandon,
 			to: func(h *harness, _ jsonEvent) string { return h.ref(lineage.CandidateRef("kit")) }},
-		{name: "moved to a commit with no lineage", message: "the import branch refs/heads/managed/kit records no version agentx can read",
+		{name: "moved to a commit with no lineage", message: "the import branch refs/heads/managed/kit records no version agentx can read", hint: abandon,
 			to: func(_ *harness, updated jsonEvent) string { return updated["mine"].(string) }},
+		{name: "moved to a version under another directory",
+			message: "the import branch refs/heads/managed/kit moved since the merge of kit was left pending, to a version that holds the skill under another directory than the update, so the merge cannot be resolved",
+			hint:    "run 'agentx skill resolve kit --abort' to give it up, then 'agentx skill update kit' to merge again",
+			to: func(h *harness, updated jsonEvent) string {
+				return versionUnder(h, updated["base"].(string), "other-dir")
+			}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -811,7 +853,7 @@ func TestSkillResolveRefusesAMergeItCannotMergeAgain(t *testing.T) {
 				equal(t, what+": exit", out.exit, 6)
 				e := h.one(out.stdout, "error")
 				equal(t, what+": message", e["message"], c.message)
-				equal(t, what+": hint", e["hint"], "run 'agentx skill resolve kit --abort' to give the merge up; the library directory stays as it is")
+				equal(t, what+": hint", e["hint"], c.hint)
 				equal(t, what+": the merge ref", h.ref(lineage.MergeRef("kit")), merge)
 			}
 			equal(t, "the library", onDisk(t, h.library), library)
@@ -830,7 +872,7 @@ func editorDir(t *testing.T, h *harness, name, pid, home string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, filepath.Join(dir, "owner"), pid+"\n"+home+"\n"+h.ref(lineage.MergeRef(name))+"\n")
+	writeFile(t, filepath.Join(dir, editorOwner), pid+"\n"+home+"\n"+h.ref(lineage.MergeRef(name))+"\n")
 	writeFile(t, mkdirs(t, filepath.Join(dir, name), "notes.md"), "<<<<<<< mine\n")
 	return dir
 }
@@ -849,7 +891,7 @@ func keptWarning(dir string) string {
 // directory: the process id of its run, or kept.
 func ownerOf(t *testing.T, dir string) string {
 	t.Helper()
-	first, _, _ := strings.Cut(fileBody(t, filepath.Join(dir, "owner")), "\n")
+	first, _, _ := strings.Cut(fileBody(t, filepath.Join(dir, editorOwner)), "\n")
 	return first
 }
 
@@ -1069,6 +1111,61 @@ func TestSkillResolveInAnEditor(t *testing.T) {
 		equal(t, "what the editor wrote, after a later session", fileBody(t, filepath.Join(dirs[0], "kit", "guide.md")), "half done\n")
 		resolveKit(t, h, 0, append(kitSides, "kept.md:1=theirs")...)
 		equal(t, "what is left once the merge completed", strings.Join(editorDirs(t, h), " "), "")
+	})
+	t.Run("a file resolved already, named after --editor", func(t *testing.T) {
+		t.Parallel()
+		h, _, _ := resolveHarness(t)
+		resolveKit(t, h, 0, "guide.md:1=both")
+		merge := h.ref(lineage.MergeRef("kit"))
+		h.env["EDITOR"] = editorStub(t, "idle-editor", "exit 0\n")
+
+		out := h.run("--json", "skill", "resolve", "kit", "--editor", "guide.md")
+		equal(t, "exit", out.exit, 0)
+		equal(t, "summary", h.one(out.stdout, "result")["summary"], "resolved nothing in the merge of kit: 4 files left to resolve")
+		equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"),
+			"guide.md still holds conflict markers, or is gone, so it keeps the way it was resolved before")
+		equal(t, "the merge ref", h.ref(lineage.MergeRef("kit")), merge)
+		equal(t, "guide.md in the merge", h.accountGit("cat-file", "blob", merge+":kit-dir/guide.md"), "guide, mine\nguide, upstream")
+	})
+	t.Run("an editor that leaves a process holding its output", func(t *testing.T) {
+		t.Parallel()
+		h, _, _ := resolveHarness(t)
+		candidate := h.ref(lineage.CandidateRef("kit"))
+		resolveKit(t, h, 0, kitWholeFiles...)
+		sleeper, err := exec.LookPath("sleep")
+		if err != nil {
+			t.Fatal(err)
+		}
+		// A process the editor starts in the background, as a wrapper
+		// starts an editor server, holds the editor's stdout and stderr
+		// after the editor exits. Its exit status is what counts.
+		lingering := func(name, then string) string {
+			return editorStub(t, name, sleeper+" 3 &\n"+then)
+		}
+		logged := func(out outcome) string {
+			var lines []string
+			for _, e := range h.eventsOfType(out.stderr, "log") {
+				lines = append(lines, e["level"].(string)+": "+e["message"].(string))
+			}
+			return strings.Join(lines, "\n")
+		}
+
+		h.env["EDITOR"] = lingering("failing-editor", "echo \"editor failed\"\nexit 3\n")
+		out := h.run("--json", "skill", "resolve", "kit", "--editor")
+		equal(t, "exit of an editor that fails", out.exit, 6)
+		equal(t, "message of an editor that fails", h.one(out.stdout, "error")["message"], "the editor "+h.env["EDITOR"]+" exited with status 3, so nothing was written")
+
+		h.env["EDITOR"] = lingering("resolving-editor", `for f in "$@"; do printf 'resolved in the editor\n' > "$f"; done
+echo "editor done"
+`)
+		out = h.run("--json", "skill", "resolve", "kit", "--editor")
+		equal(t, "exit", out.exit, 0)
+		contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), "resolved kit and updated it from ")
+		equal(t, "what the run logged", logged(out), "info: editor done")
+		equal(t, "notes.md", fileBody(t, filepath.Join(h.library, "kit", "notes.md")), "resolved in the editor\n")
+		equal(t, "the import branch", h.ref(lineage.ManagedRef("kit")), candidate)
+		equal(t, "the merge ref", h.ref(lineage.MergeRef("kit")), "")
+		equal(t, "what the sessions left", strings.Join(editorDirs(t, h), " "), "")
 	})
 	t.Run("an editor whose sh is killed by a signal", func(t *testing.T) {
 		t.Parallel()
@@ -1290,18 +1387,26 @@ func TestSkillResolveFindsTheMergeRewrittenWhileTheEditorIsOpen(t *testing.T) {
 
 // TestSkillResolveReportsNothingOfAMergeGoneWhileTheEditorIsOpen: a
 // session that resolved nothing reads the merge ref again before it reports
-// the merge. A merge given up while the editor was open, whose files went
-// with it, is exit code 6, and so is one another run resolved part of: no
-// conflict event reports a merge that is no longer the one pending.
+// the merge. A merge given up or completed while the editor was open is
+// exit code 6, and its files go, as giving the merge up or completing it
+// removes them; one another run resolved part of is exit code 6 too, and
+// keeps the files the editor was given, which a warning names, so that
+// nothing typed there is lost. No conflict event reports a merge that is
+// no longer the one pending.
 func TestSkillResolveReportsNothingOfAMergeGoneWhileTheEditorIsOpen(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
 		name, message string
 		meanwhile     func(t *testing.T, h *harness)
+		kept          bool
 	}{
 		{name: "given up", message: "kit has no merge pending: it was given up or completed while the editor was open",
 			meanwhile: func(_ *testing.T, h *harness) { h.mustRun("skill", "resolve", "kit", "--abort") }},
-		{name: "resolved in part", message: "the merge of kit changed while the editor was open, so nothing was written",
+		{name: "completed", message: "kit has no merge pending: it was given up or completed while the editor was open",
+			meanwhile: func(t *testing.T, h *harness) {
+				resolveKit(t, h, 0, append(slices.Clone(kitSides), "kept.md:1=theirs")...)
+			}},
+		{name: "resolved in part", message: "the merge of kit changed while the editor was open, so nothing was written", kept: true,
 			meanwhile: func(t *testing.T, h *harness) { resolveKit(t, h, 0, "logo.bin:1=mine") }},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -1319,9 +1424,47 @@ func TestSkillResolveReportsNothingOfAMergeGoneWhileTheEditorIsOpen(t *testing.T
 			if got := h.eventsOfType(out.stdout, "conflict"); len(got) != 0 {
 				t.Errorf("the run reported %v", got)
 			}
-			equal(t, "what the session left", strings.Join(editorDirs(t, h), " "), "")
+			dirs := editorDirs(t, h)
+			if !c.kept {
+				equal(t, "what the session left", strings.Join(dirs, " "), "")
+				equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "")
+				return
+			}
+			if len(dirs) != 1 {
+				t.Fatalf("the session left %v, want the one directory", dirs)
+			}
+			equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), keptWarning(dirs[0]))
+			equal(t, "the owner of what is kept", ownerOf(t, dirs[0]), "kept")
+			equal(t, "what the editor was given, kept", fileBody(t, filepath.Join(dirs[0], "kit", "guide.md")),
+				"<<<<<<< mine\nguide, mine\n||||||| base\nguide\n=======\nguide, upstream\n>>>>>>> theirs\n")
 		})
 	}
+}
+
+// TestSkillResolveRemovesTheFilesOfAMergeCompletedWhileTheEditorIsOpen: a
+// session whose editor resolved files of a merge another run completed
+// meanwhile writes nothing, exit code 6, and removes the files the editor
+// was given, as completing the merge removes them: what was typed there
+// can no longer be written anywhere, and no warning names a folder kept
+// for a merge that is gone. The library holds what the other run
+// completed.
+func TestSkillResolveRemovesTheFilesOfAMergeCompletedWhileTheEditorIsOpen(t *testing.T) {
+	t.Parallel()
+	h, _, _ := resolveHarness(t)
+	stub, goFile := waitingEditor(t)
+	h.env["EDITOR"] = stub
+	p := h.start("editor open", "--json", "skill", "resolve", "kit", "--editor")
+	p.await()
+	resolveKit(t, h, 0, append(slices.Clone(kitSides), "kept.md:1=theirs")...)
+
+	writeFile(t, goFile, "")
+	out := p.wait()
+	equal(t, "exit", out.exit, 6)
+	equal(t, "message", h.one(out.stdout, "error")["message"], "the merge of kit changed while it was being resolved, so nothing was written")
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "")
+	equal(t, "what the session left", strings.Join(editorDirs(t, h), " "), "")
+	equal(t, "the merge ref", h.ref(lineage.MergeRef("kit")), "")
+	sameTree(t, "the library directory", libraryTree(t, filepath.Join(h.library, "kit")), kitTree(t, h, kitResolved))
 }
 
 // TestSkillResolveInAnEditorCompletesIntoAMergeDoneAgain: a session that
@@ -1772,4 +1915,374 @@ func TestSkillResolveRecoveryKeepsTheMergeWhenTheLibraryChanged(t *testing.T) {
 	equal(t, "the candidate ref after recovery", h.ref(lineage.CandidateRef("kit")), "")
 	equal(t, "the merge ref after recovery", h.ref(lineage.MergeRef("kit")), "")
 	sameTree(t, "the library directory", libraryTree(t, filepath.Join(h.library, "kit")), kitTree(t, h, kitResolved))
+}
+
+// blobIn is what an object of the account repo that is a blob holds, byte
+// for byte, read back with plain git: accountGit takes off the newlines it
+// ends with.
+func blobIn(t *testing.T, h *harness, object string) string {
+	t.Helper()
+	r := gitx.New(h.env, false, func(string, ...any) {})
+	out, err := r.IsolatedInput(context.Background(), gitx.AccountRepoPath(h.agentx), strings.NewReader(""), "cat-file", "blob", object)
+	if err != nil {
+		t.Fatalf("git cat-file blob %s: %v", object, err)
+	}
+	return out
+}
+
+// modeIn is the mode a commit of the account repo holds kit's file at path
+// with, relative to the skill's directory, read back with plain git.
+func modeIn(h *harness, commit, path string) string {
+	h.t.Helper()
+	mode, _, _ := strings.Cut(h.accountGit("ls-tree", commit+":kit-dir", path), " ")
+	return mode
+}
+
+// TestSkillResolveAPartThatEndsAFileWithNoNewline: a hunk that ends a file
+// ends as the side chosen for it ends the file, with no newline where that
+// side has none, whether the other side has one or not: in the pending
+// merge, and in the library once the merge completes. Both sides give
+// mine's last line a newline of its own, so that theirs starts a line, and
+// end as theirs does.
+func TestSkillResolveAPartThatEndsAFileWithNoNewline(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		theirs string
+		want   map[string]string // what tail.md holds once resolved to each side
+	}{
+		{theirs: "a\nTHEIRS", want: map[string]string{sideMine: "a\nMINE", sideTheirs: "a\nTHEIRS", sideBoth: "a\nMINE\nTHEIRS"}},
+		{theirs: "a\nTHEIRS\n", want: map[string]string{sideMine: "a\nMINE", sideTheirs: "a\nTHEIRS\n", sideBoth: "a\nMINE\nTHEIRS\n"}},
+	} {
+		for _, side := range []string{sideMine, sideTheirs, sideBoth} {
+			t.Run(fmt.Sprintf("%s, the update's ending in %q", side, c.theirs), func(t *testing.T) {
+				t.Parallel()
+				h := clashHarness(t, map[string]string{"tail.md": "a\nb"},
+					func(s *sourceRepo) { s.write("skills/kit-dir/tail.md", c.theirs) },
+					func(lib string) { writeFile(t, filepath.Join(lib, "tail.md"), "a\nMINE") })
+				resolveKit(t, h, 0, "tail.md:1="+side)
+				equal(t, "tail.md in the merge", blobIn(t, h, lineage.MergeRef("kit")+":kit-dir/tail.md"), c.want[side])
+				resolveKit(t, h, 0, "notes.md:1=theirs")
+				equal(t, "the merge ref", h.ref(lineage.MergeRef("kit")), "")
+				equal(t, "tail.md in the library", fileBody(t, filepath.Join(h.library, "kit", "tail.md")), c.want[side])
+			})
+		}
+	}
+}
+
+// TestSkillResolveKeepsTheModeEitherSideGaveAFile: a file resolved by its
+// parts, or in an editor, takes the mode one side changed, as git merges
+// modes. An update that makes the file executable keeps it so when the
+// line both sides changed is resolved to mine: in the pending merge, in the
+// library once the merge completes, and on the import branch. An
+// executable bit set in the library stays when the line is resolved to the
+// update's. A file neither side changes keeps the permissions it has in
+// the library.
+func TestSkillResolveKeepsTheModeEitherSideGaveAFile(t *testing.T) {
+	t.Parallel()
+	executable := func(t *testing.T, path string) bool {
+		t.Helper()
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return info.Mode()&0o111 != 0
+	}
+	t.Run("made executable by the update, resolved to mine", func(t *testing.T) {
+		t.Parallel()
+		h := clashHarness(t, map[string]string{"other.md": "o\n"},
+			func(s *sourceRepo) {
+				s.executable("skills/kit-dir/notes.md")
+				s.write("skills/kit-dir/other.md", "o, upstream\n")
+			},
+			func(lib string) {
+				writeFile(t, filepath.Join(lib, "other.md"), "o, mine\n")
+				if err := os.Chmod(filepath.Join(lib, "SKILL.md"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			})
+		resolveKit(t, h, 0, "notes.md:1=mine")
+		equal(t, "notes.md in the merge", modeIn(h, lineage.MergeRef("kit"), "notes.md"), "100755")
+		resolveKit(t, h, 0, "other.md:1=theirs")
+		lib := filepath.Join(h.library, "kit")
+		equal(t, "the merge ref", h.ref(lineage.MergeRef("kit")), "")
+		equal(t, "notes.md", fileBody(t, filepath.Join(lib, "notes.md")), "ONE\n")
+		equal(t, "notes.md executable", executable(t, filepath.Join(lib, "notes.md")), true)
+		equal(t, "notes.md on the import branch", modeIn(h, lineage.ManagedRef("kit"), "notes.md"), "100755")
+		info, err := os.Stat(filepath.Join(lib, "SKILL.md"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		equal(t, "the permissions of SKILL.md", info.Mode().Perm(), os.FileMode(0o600))
+	})
+	t.Run("made executable by the update, resolved in an editor", func(t *testing.T) {
+		t.Parallel()
+		h := clashHarness(t, nil, func(s *sourceRepo) { s.executable("skills/kit-dir/notes.md") }, func(string) {})
+		stub, _, _ := resolvingEditor(t)
+		h.env["EDITOR"] = stub
+		h.mustRun("skill", "resolve", "kit", "--editor")
+		lib := filepath.Join(h.library, "kit")
+		equal(t, "the merge ref", h.ref(lineage.MergeRef("kit")), "")
+		equal(t, "notes.md", fileBody(t, filepath.Join(lib, "notes.md")), "resolved in the editor\n")
+		equal(t, "notes.md executable", executable(t, filepath.Join(lib, "notes.md")), true)
+		equal(t, "notes.md on the import branch", modeIn(h, lineage.ManagedRef("kit"), "notes.md"), "100755")
+	})
+	t.Run("made executable in the library, resolved to theirs", func(t *testing.T) {
+		t.Parallel()
+		h := clashHarness(t, nil, func(*sourceRepo) {}, func(lib string) {
+			if err := os.Chmod(filepath.Join(lib, "notes.md"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		})
+		resolveKit(t, h, 0, "notes.md:1=theirs")
+		lib := filepath.Join(h.library, "kit")
+		equal(t, "the merge ref", h.ref(lineage.MergeRef("kit")), "")
+		equal(t, "notes.md", fileBody(t, filepath.Join(lib, "notes.md")), "uno\n")
+		equal(t, "notes.md executable", executable(t, filepath.Join(lib, "notes.md")), true)
+		equal(t, "notes.md on the import branch", modeIn(h, lineage.ManagedRef("kit"), "notes.md"), "100644")
+	})
+}
+
+// TestSkillResolveInAnEditorASkillCalledOwner: the file that says whose an
+// editor session's directory is sits beside the skill's directory under a
+// hidden name, which no skill of the library can have, so a skill called
+// owner opens in an editor and completes like any other, and what an
+// earlier session of it left behind, its run gone, is removed by the next.
+func TestSkillResolveInAnEditorASkillCalledOwner(t *testing.T) {
+	t.Parallel()
+	h := pendingHarness(t, "owner", nil, func(*sourceRepo) {}, func(string) {})
+	candidate := h.ref(lineage.CandidateRef("owner"))
+	gone := exec.Command("true")
+	if err := gone.Run(); err != nil {
+		t.Fatal(err)
+	}
+	stale := editorDir(t, h, "owner", strconv.Itoa(gone.Process.Pid), h.agentx)
+	stub, _, _ := resolvingEditor(t)
+	h.env["EDITOR"] = stub
+
+	out := h.run("--json", "skill", "resolve", "owner", "--editor")
+	equal(t, "exit", out.exit, 0)
+	contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), "resolved owner and updated it from ")
+	equal(t, "notes.md", fileBody(t, filepath.Join(h.library, "owner", "notes.md")), "resolved in the editor\n")
+	equal(t, "the import branch", h.ref(lineage.ManagedRef("owner")), candidate)
+	equal(t, "the merge ref", h.ref(lineage.MergeRef("owner")), "")
+	nothingAt(t, "the stale session", stale)
+	equal(t, "what the sessions left", strings.Join(editorDirs(t, h), " "), "")
+}
+
+// TestSkillResolveInAnEditorKeepsLinesLikeMarkers: a file whose own lines
+// look like conflict markers is opened with markers longer than any of
+// them, and only a marker of that size keeps it unresolved: a save that
+// keeps the file's own lines as they are resolves it, and completes the
+// merge with them byte for byte, and one that leaves the markers keeps the
+// merge pending. Chosen by --hunk, the file keeps those lines too.
+func TestSkillResolveInAnEditorKeepsLinesLikeMarkers(t *testing.T) {
+	t.Parallel()
+	markers := "a\n<<<<<<< HEAD\nb\n=========\nc\n>>>>>>>> x\n"
+	pending := func(t *testing.T) *harness {
+		t.Helper()
+		h := clashHarness(t, map[string]string{"markers.md": markers},
+			func(s *sourceRepo) {
+				s.write("skills/kit-dir/markers.md", strings.Replace(markers, "c\n", "c, upstream\n", 1))
+			},
+			func(lib string) {
+				writeFile(t, filepath.Join(lib, "markers.md"), strings.Replace(markers, "c\n", "c, mine\n", 1))
+			})
+		resolveKit(t, h, 0, "notes.md:1=theirs")
+		return h
+	}
+	t.Run("a save that keeps them", func(t *testing.T) {
+		t.Parallel()
+		h := pending(t)
+		candidate := h.ref(lineage.CandidateRef("kit"))
+		seen := filepath.Join(t.TempDir(), "seen")
+		saved := "a\n<<<<<<< HEAD\nb\n=========\nc, resolved\n>>>>>>>> x\n"
+		h.env["EDITOR"] = editorStub(t, "saving-editor", `while IFS= read -r line; do printf '%s\n' "$line"; done < "$1" > `+shellWord(seen)+`
+printf '%s' `+shellWord(saved)+` > "$1"
+`)
+		out := h.run("--json", "skill", "resolve", "kit", "--editor")
+		equal(t, "exit", out.exit, 0)
+		equal(t, "what the editor was given", fileBody(t, seen), "a\n<<<<<<< HEAD\nb\n=========\n"+
+			strings.Repeat("<", 10)+" mine\nc, mine\n"+strings.Repeat("|", 10)+" base\nc\n"+strings.Repeat("=", 10)+"\nc, upstream\n"+strings.Repeat(">", 10)+" theirs\n"+
+			">>>>>>>> x\n")
+		contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), "resolved kit and updated it from ")
+		equal(t, "markers.md", fileBody(t, filepath.Join(h.library, "kit", "markers.md")), saved)
+		equal(t, "the import branch", h.ref(lineage.ManagedRef("kit")), candidate)
+		equal(t, "the merge ref", h.ref(lineage.MergeRef("kit")), "")
+	})
+	t.Run("a save that leaves the markers", func(t *testing.T) {
+		t.Parallel()
+		h := pending(t)
+		merge := h.ref(lineage.MergeRef("kit"))
+		h.env["EDITOR"] = editorStub(t, "idle-editor", "exit 0\n")
+		out := h.run("--json", "skill", "resolve", "kit", "--editor")
+		equal(t, "exit", out.exit, 0)
+		equal(t, "summary", h.one(out.stdout, "result")["summary"], "resolved nothing in the merge of kit: 1 file left to resolve")
+		equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "markers.md still holds conflict markers, or is gone, so it was left unresolved")
+		equal(t, "the merge ref", h.ref(lineage.MergeRef("kit")), merge)
+	})
+	t.Run("the update's side chosen", func(t *testing.T) {
+		t.Parallel()
+		h := pending(t)
+		resolveKit(t, h, 0, "markers.md:1=theirs")
+		equal(t, "the merge ref", h.ref(lineage.MergeRef("kit")), "")
+		equal(t, "markers.md", fileBody(t, filepath.Join(h.library, "kit", "markers.md")), strings.Replace(markers, "c\n", "c, upstream\n", 1))
+	})
+}
+
+// TestSkillResolveRefreshesACopyOfTheEditedLibrary: completing the merge
+// refreshes a copy that holds the library directory as the merge read it,
+// the edits that conflicted included, as it refreshes one that holds the
+// version installed; a copy edited where it is keeps its edits, with its
+// warning.
+func TestSkillResolveRefreshesACopyOfTheEditedLibrary(t *testing.T) {
+	t.Parallel()
+	h, _, _ := resolveHarness(t)
+	lib := filepath.Join(h.library, "kit")
+	claude := filepath.Join(h.home, ".claude", "skills", "kit")
+	cursor := filepath.Join(h.home, ".cursor", "skills", "kit")
+	h.mustRun("skill", "remove", "kit", "--from", "claude-code")
+	h.mustRun("skill", "place", "kit", "--to", "claude-code", "--copy")
+	sameTree(t, "claude's copy, placed while the merge is pending", libraryTree(t, claude), libraryTree(t, lib))
+	editCopy(t, cursor)
+	edited := libraryTree(t, cursor)
+	resolveKit(t, h, 0, kitSides...)
+
+	out := resolveKit(t, h, 0, "kept.md:1=theirs")
+	contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), ", 1 copy placement refreshed, 1 placement skipped")
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"),
+		keptCopyWarning(cursor, "kit", "agentx skill remove kit --from cursor", "agentx skill place kit --to cursor --copy"))
+	want := kitTree(t, h, kitResolved)
+	sameTree(t, "the library directory", libraryTree(t, lib), want)
+	sameTree(t, "claude's copy", libraryTree(t, claude), want)
+	sameTree(t, "cursor's copy", libraryTree(t, cursor), edited)
+	for _, dir := range []string{h.library, filepath.Dir(claude), filepath.Dir(cursor)} {
+		equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
+	}
+	equal(t, "journals", journalCount(t, h), 0)
+}
+
+// TestSkillResolveOfAMergeWhosePathsDifferInCase: a merge resolved to a
+// version that holds readme.md, a file the user added, and README.md, one
+// the update adds, completes where the library tells the two apart. Where
+// it does not, as macOS's by default does not, completing it is refused
+// with exit code 6 before anything is written, and the hint says how out
+// of it: resolve one of them to the other side, or give the merge up and
+// rename the user's file. The merge stays pending as it was, and giving it
+// up leaves the user's file where it is.
+func TestSkillResolveOfAMergeWhosePathsDifferInCase(t *testing.T) {
+	t.Parallel()
+	h, s, _ := updateHarness(t)
+	lib := filepath.Join(h.library, "alpha")
+	editLibrary(t, h, "alpha", "notes.md", editedNotes)
+	editLibrary(t, h, "alpha", "readme.md", "my own readme\n")
+	s.write("skills/alpha-dir/README.md", "the upstream readme\n")
+	newVersion(t, s)
+	h.mustRun("skill", "check")
+	if out := h.run("--json", "skill", "update", "alpha"); out.exit != 4 {
+		t.Fatalf("the update that should conflict: exit %d\n%s%s", out.exit, out.stdout, out.stderr)
+	}
+	candidate := h.ref(lineage.CandidateRef("alpha"))
+
+	if !foldsCaseAt(t, filepath.Join(lib, "SKILL.md")) {
+		h.mustRun("skill", "resolve", "alpha", "--hunk", "notes.md:1=theirs")
+		equal(t, "readme.md", fileBody(t, filepath.Join(lib, "readme.md")), "my own readme\n")
+		equal(t, "README.md", fileBody(t, filepath.Join(lib, "README.md")), "the upstream readme\n")
+		equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), candidate)
+		equal(t, "the merge ref", h.ref(lineage.MergeRef("alpha")), "")
+		return
+	}
+	refs := h.accountGit("for-each-ref", "--format=%(refname) %(objectname)")
+	library, placed, before := onDisk(t, h.library), onDisk(t, h.home), mutationVersion(t, h)
+
+	out := h.run("--json", "skill", "resolve", "alpha", "--hunk", "notes.md:1=theirs")
+	equal(t, "exit", out.exit, 6)
+	e := h.one(out.stdout, "error")
+	equal(t, "code", e["code"], "refused")
+	equal(t, "message", e["message"], "the merge of alpha holds both README.md and readme.md, which this file system cannot keep apart, so nothing was changed")
+	equal(t, "hint", e["hint"], "resolve one of them to the other side, or run 'agentx skill resolve alpha --abort' to give the merge up and rename the one in "+
+		quotedPath(lib)+" before you update again")
+	equal(t, "the refs", h.accountGit("for-each-ref", "--format=%(refname) %(objectname)"), refs)
+	equal(t, "the library", onDisk(t, h.library), library)
+	equal(t, "the placements", onDisk(t, h.home), placed)
+	equal(t, "mutations", mutationVersion(t, h), before)
+	equal(t, "journals", journalCount(t, h), 0)
+	equal(t, "what is left beside the library", strings.Join(hiddenEntries(t, h.library), " "), "")
+
+	h.mustRun("skill", "resolve", "alpha", "--abort")
+	equal(t, "the merge ref once given up", h.ref(lineage.MergeRef("alpha")), "")
+	equal(t, "readme.md once given up", fileBody(t, filepath.Join(lib, "readme.md")), "my own readme\n")
+}
+
+// TestSkillResolveRefusesAnImportBranchMovedUnderTheLock: the import branch
+// is read again under the lock, and one something moved after the run read
+// it, or a fork branch made for the skill meanwhile, refuses the run with
+// exit code 6 and nothing written, whether the run completes the merge or
+// rewrites it: what it would write is a merge on a version the skill is no
+// longer at. The merge ref, the candidate, the library and every copy are
+// left as they were, and the run made again merges on the version the
+// branch points at now.
+func TestSkillResolveRefusesAnImportBranchMovedUnderTheLock(t *testing.T) {
+	t.Parallel()
+	hint := "run the command again to merge it on the version the branch points at now"
+	for _, c := range []struct {
+		name     string
+		at       string   // the git command the branch is moved on, the last before the lock
+		fork     bool     // a fork branch is made rather than the import branch moved
+		resolved []string // what is resolved before the run
+		hunk     string   // what the run resolves
+		message  string
+	}{
+		{name: "a completion", at: `*" rev-parse "*"^{tree} "*`, resolved: kitSides, hunk: "kept.md:1=theirs",
+			message: "the import branch refs/heads/managed/kit moved while the merge of kit was being completed, so nothing was written"},
+		{name: "a completion, a fork made meanwhile", at: `*" rev-parse "*"^{tree} "*`, fork: true, resolved: kitSides, hunk: "kept.md:1=theirs",
+			message: "the import branch refs/heads/managed/kit moved while the merge of kit was being completed, so nothing was written"},
+		{name: "a rewrite", at: `*" commit-tree "*`, hunk: "logo.bin:1=mine",
+			message: "the import branch refs/heads/managed/kit moved while the merge of kit was being resolved, so nothing was written"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			h, _, _ := resolveHarness(t)
+			if len(c.resolved) > 0 {
+				resolveKit(t, h, 0, c.resolved...)
+			}
+			merge, tip, candidate := h.ref(lineage.MergeRef("kit")), h.ref(lineage.ManagedRef("kit")), h.ref(lineage.CandidateRef("kit"))
+			moved := versionOf(t, h, tip, nil)
+			step := "update-ref " + lineage.ManagedRef("kit") + " " + moved
+			if c.fork {
+				step = "update-ref " + lineage.ForkRef("kit") + " " + tip
+			}
+			library, placed := onDisk(t, h.library), onDisk(t, h.home)
+			stubGit(t, h, `#!/bin/sh
+case " $* " in
+`+c.at+`) `+realGit(t)+" --git-dir="+shellWord(gitx.AccountRepoPath(h.agentx))+" "+step+` || exit 1 ;;
+esac
+exec `+realGit(t)+` "$@"
+`)
+			out := resolveKit(t, h, 6, c.hunk)
+			e := h.one(out.stdout, "error")
+			equal(t, "message", e["message"], c.message)
+			equal(t, "hint", e["hint"], hint)
+			equal(t, "the merge ref", h.ref(lineage.MergeRef("kit")), merge)
+			equal(t, "the candidate", h.ref(lineage.CandidateRef("kit")), candidate)
+			equal(t, "the library", onDisk(t, h.library), library)
+			equal(t, "the placements", onDisk(t, h.home), placed)
+			equal(t, "journals", journalCount(t, h), 0)
+			equal(t, "what is left beside the library", strings.Join(hiddenEntries(t, h.library), " "), "")
+			if c.fork {
+				return
+			}
+			equal(t, "the import branch", h.ref(lineage.ManagedRef("kit")), moved)
+
+			h.env["PATH"] = gitOnlyPath(t) // the git that moves the branch is gone
+			again := resolveKit(t, h, 0, c.hunk)
+			if len(c.resolved) == 0 {
+				equal(t, "summary once run again", h.one(again.stdout, "result")["summary"], "resolved logo.bin in the merge of kit, 4 files left to resolve")
+				equal(t, "Agentx-Merge-Base once run again", trailer(t, h, h.ref(lineage.MergeRef("kit")), lineage.TrailerMergeBase), moved)
+				return
+			}
+			sameTree(t, "the library directory once run again", libraryTree(t, filepath.Join(h.library, "kit")), kitTree(t, h, kitResolved))
+			equal(t, "the import branch once run again", h.ref(lineage.ManagedRef("kit")), candidate)
+			equal(t, "the merge ref once run again", h.ref(lineage.MergeRef("kit")), "")
+		})
+	}
 }

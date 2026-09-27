@@ -63,23 +63,25 @@ func (inv *invocation) editorCommand() (command string, ok bool) {
 //
 // Once the editor exits 0, each file is read back. One in which a marker
 // of the size it was written with is left, alone on its line or followed by
-// a space, is not resolved and is named in a warning; every other one is
-// resolved to what it holds, and written into the merge as a resolve
-// writes a file, see resolve, only while the merge ref still holds the
-// commit the files were written from: one that another run moved while the
-// editor was open is refused with nothing written. A session that resolved
-// nothing reads the merge ref again before it reports the merge, and one
-// given up or moved meanwhile is refused rather than reported as it was.
+// a space, is not resolved, or keeps the way an earlier run resolved it,
+// and is named in a warning; every other one is resolved to what it holds,
+// and written into the merge as a resolve writes a file, see resolve, only
+// while the merge ref still holds the commit the files were written from:
+// one that another run moved while the editor was open is refused with
+// nothing written. A session that resolved nothing reads the merge ref
+// again before it reports the merge, and one given up or moved meanwhile
+// is refused rather than reported as it was.
 //
 // The directory is removed once what the editor left is written or found
 // to have nothing to write. When the editor fails, or the run refuses to
 // write, it is kept, marked so in its owner file, and a warning names it,
 // so that nothing typed there is lost: a later session leaves it alone, and
-// only completing the merge or giving it up removes it. A completion that
-// merged the library directory again and left the merge pending, exit code
-// 4, wrote every resolution that still applies, and keeps the directory
-// only for a file the editor resolved that conflicts anew, which a warning
-// names.
+// only completing the merge or giving it up removes it, which a run that
+// finds the merge completed or given up meanwhile does at once. A
+// completion that merged the library directory again and left the merge
+// pending, exit code 4, wrote every resolution that still applies, and
+// keeps the directory only for a file the editor resolved that conflicts
+// anew, which a warning names.
 func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	inv, name := r.inv, r.rec.Name
 	see := "run '" + skillCommand("resolve", name) + "' to see every file left to resolve"
@@ -123,7 +125,15 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	if err != nil {
 		return mutationFailure(err)
 	}
+	// kept keeps the directory of a run that writes nothing of what the
+	// editor left, and names it in a warning. One whose merge was completed
+	// or given up meanwhile goes instead, as completing or giving the merge
+	// up removes it: what was typed there can no longer be written anywhere.
 	kept := func() {
+		if values, err := inv.lineageRefs(ctx, r.gitDir, name); err == nil && values[lineage.MergeRef(name)] == "" {
+			os.RemoveAll(dir)
+			return
+		}
 		keepEditorDir(dir)
 		inv.out.warn("the files you edited are kept in " + dir + " until the merge of " + name + " completes or is given up; " +
 			"a new session opens the files afresh, so copy what you typed from there")
@@ -150,12 +160,17 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 		rs = append(rs, resolution{path: f.Path, entry: &source.TreeEntry{Mode: resolvedMode(f, nil)}, body: &content})
 	}
 	if len(rs) == 0 {
-		os.RemoveAll(dir)
 		if err := r.stillPending(ctx, "the editor was open"); err != nil {
+			kept()
 			return err
 		}
+		os.RemoveAll(dir)
 	}
 	for _, p := range left {
+		if r.resolved[p] {
+			inv.out.warn(quotedPath(p) + " still holds conflict markers, or is gone, so it keeps the way it was resolved before")
+			continue
+		}
 		inv.out.warn(quotedPath(p) + " still holds conflict markers, or is gone, so it was left unresolved")
 	}
 	if len(rs) == 0 {
@@ -233,8 +248,9 @@ const editorDirPrefix = "agentx-resolve-"
 // in editorKept once that run kept it, the agentx home it resolves a merge
 // of, and the pending merge commit its files were written from. It sits
 // beside the skill's directory and never in it, so no file of the skill can
-// be taken for it.
-const editorOwner = "owner"
+// be taken for it, and its name is a hidden one, which the library never
+// gives a skill, so the skill's directory cannot be taken for it either.
+const editorOwner = ".owner"
 
 // editorKept stands in for the process id in the owner file of a directory
 // its run kept, so that nothing typed there is lost: no later session
@@ -343,7 +359,9 @@ func holdsMarkers(text string, size int) bool {
 // drawing on them; with --json, where each stream carries nothing but
 // events, every line it prints is an info log event instead. A command that
 // cannot be run, exits otherwise than 0 or is killed by a signal is an
-// error that says how.
+// error that says how. One that exits 0 has succeeded, even when a process
+// it left running, as a wrapper that starts an editor server does, still
+// holds its output: that is read for a second longer, and then dropped.
 //
 // A terminal's Ctrl-C and Ctrl-\ reach its whole foreground process group,
 // and the sh that runs the editor is in it: a sh that does not exec the
@@ -375,6 +393,10 @@ func (inv *invocation) runEditor(ctx context.Context, s *editorSession, files []
 		return nil
 	case ctx.Err() != nil:
 		return errors.New("was stopped")
+	case errors.Is(err, exec.ErrWaitDelay) && cmd.ProcessState != nil && cmd.ProcessState.Success():
+		// The editor exited 0, and only a process it left running, a server
+		// it started say, still holds its output, which is dropped.
+		return nil
 	case !errors.As(err, &exit):
 		return fmt.Errorf("could not be run: %w", err)
 	case exit.ExitCode() >= 0:
