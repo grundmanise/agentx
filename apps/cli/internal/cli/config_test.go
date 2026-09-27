@@ -143,6 +143,7 @@ func TestConfigSetKeepsUnknownCollections(t *testing.T) {
 	contains(t, "stdout", out.stdout, "disabled_configurations  cursor")
 	contains(t, "stdout", out.stdout, `sources                  [{"url":"https://example.com/skills"}]`)
 	contains(t, "stdout", out.stdout, `copy_mode                {"my-skill":["cursor"]}`)
+	contains(t, "stdout", out.stdout, "ignore_system_files      true")
 }
 
 func TestConfigErrors(t *testing.T) {

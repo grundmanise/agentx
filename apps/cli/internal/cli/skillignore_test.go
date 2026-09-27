@@ -166,8 +166,8 @@ func TestConfigSetIgnoreSystemFilesWritesTheList(t *testing.T) {
 }
 
 // TestServeKeepsGitsVerdictUntilTheSkillChanges: serve asks git about an
-// edited skill once, and a refresh with nothing changed runs no git over
-// the skill directory.
+// edited skill once, a refresh with nothing changed runs no git over the
+// skill directory, and a refresh after another edit asks git again.
 func TestServeKeepsGitsVerdictUntilTheSkillChanges(t *testing.T) {
 	t.Parallel()
 	h, _ := driftHarness(t)
@@ -191,6 +191,12 @@ func TestServeKeepsGitsVerdictUntilTheSkillChanges(t *testing.T) {
 	p.send(`{"type":"refresh","request_id":"r1"}`)
 	p.next("refresh_complete")
 	equal(t, "git runs over the skill after a refresh", overSkills(), first)
+	writeFile(t, filepath.Join(h.library, "pdf", "a.md"), "another edit\n")
+	p.send(`{"type":"refresh","request_id":"r2"}`)
+	p.until("r2")
+	if overSkills() == first {
+		t.Error("an edit after the first verdict ran no git over the skill")
+	}
 	equal(t, "exit", p.close(), 0)
 }
 
