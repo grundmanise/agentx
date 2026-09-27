@@ -606,11 +606,18 @@ func changedWhileUpdating(name string) *failure {
 // give the skill, when it is not the skill's library name, and ""
 // otherwise, see upstreamRename.
 func upstreamNameOf(u *updating, bodies map[string]string) string {
-	name := ""
-	if ids := skillFileBlob(u.theirs); len(ids) > 0 {
-		name, _, _ = scan.SkillFrontmatter(bodies[ids[0]])
+	return upstreamRename(u.name, skillName(u.theirs, bodies), u.next.Import.Dir())
+}
+
+// skillName is the name the SKILL.md of a version gives the skill, read
+// out of bodies, "" when it gives none.
+func skillName(v lineage.Base, bodies map[string]string) string {
+	ids := skillFileBlob(v)
+	if len(ids) == 0 {
+		return ""
 	}
-	return upstreamRename(u.name, name, u.next.Import.Dir())
+	name, _, _ := scan.SkillFrontmatter(bodies[ids[0]])
+	return name
 }
 
 // apply reads every skill's inputs again under the lock and applies the

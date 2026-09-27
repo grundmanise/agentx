@@ -17,7 +17,6 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
-	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
@@ -927,17 +926,6 @@ func (r *pendingRun) apply(ctx context.Context, c completion) error {
 	}
 	inv.pruneEditorDirs(name, false)
 	return r.reportCompleted(ctx, c, newer, upstreamRename(name, skillName(theirs, bodies), next.Import.Dir()), done)
-}
-
-// skillName is the name the SKILL.md of a version gives the skill, "" when
-// it gives none.
-func skillName(v lineage.Base, bodies map[string]string) string {
-	ids := skillFileBlob(v)
-	if len(ids) == 0 {
-		return ""
-	}
-	name, _, _ := scan.SkillFrontmatter(bodies[ids[0]])
-	return name
 }
 
 // caseClash refuses a completion whose version holds two paths that differ
