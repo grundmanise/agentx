@@ -1036,9 +1036,10 @@ func turnedWarning(dir string) string {
 }
 
 // abortWarning is the warning giving kit's merge up gives of the directory
-// in dir, which holds something typed in an editor session.
+// in dir, which holds something typed in an editor session: it says how
+// long the directory stays, as every warning that names a kept one does.
 func abortWarning(dir string) string {
-	return "the files you edited are kept in " + dir + ": when an update of kit conflicts the same way, 'agentx skill resolve kit --editor' opens what you typed again; delete the folder if you do not need it"
+	return "the files you edited are kept in " + dir + " until a merge of kit completes: when an update of kit conflicts the same way, 'agentx skill resolve kit --editor' opens what you typed again; delete the folder if you do not need it"
 }
 
 // reopenedNote is the note a session gives of a file it opens with what
@@ -1059,14 +1060,14 @@ func infos(h *harness, stderr string) []string {
 }
 
 // seeingEditor is an editor that copies each file it is given, under its
-// base name, into seen, a directory of the test's own, so that a test sees
-// what it was given, and then runs then, shell. It uses nothing but shell
-// builtins.
+// base name, into seen, a directory of the test's own, byte for byte, a
+// last line with no newline included, so that a test sees what it was
+// given, and then runs then, shell. It uses nothing but shell builtins.
 func seeingEditor(t *testing.T, then string) (stub, seen string) {
 	t.Helper()
 	seen = t.TempDir()
 	stub = editorStub(t, "seeing-editor", `for f in "$@"; do
-	while IFS= read -r line; do printf '%s\n' "$line"; done < "$f" > `+shellWord(seen)+`/"${f##*/}"
+	{ while IFS= read -r line; do printf '%s\n' "$line"; done; printf '%s' "$line"; } < "$f" > `+shellWord(seen)+`/"${f##*/}"
 done
 `+then)
 	return stub, seen
@@ -2011,20 +2012,20 @@ done
 }
 
 // TestSkillResolvePrunesWhatAnEditorSessionLeftBehind: a directory an
-// editor session of the skill left for this home, whose run is gone
-// without keeping it, killed or hung up on say, is removed when the next
-// session starts, as long as it holds nothing but the files as they were
-// written, one of them deleted or never written included, and so is one
-// that holds nothing but its owner file, a run killed before it made the
-// skill's directory, and one its run kept that holds nothing typed; one
-// whose run is still going, one that run is still laying out, one of
-// another skill, and one whose run is gone that holds a file beside its
-// owner file and no directory of the skill stay. One whose run is gone and
-// that holds anything else the session does not open again, a file saved
-// for a conflict that is not the one the session opens, a swap file an
-// editor left beside one, or an owner file that records no file, is kept,
-// marked so, and a warning names it, once: the session after that names it
-// no more. Completing the merge removes the ones kept, and leaves the ones
+// editor session of the skill left for this home, whose run is gone without
+// keeping it, killed or hung up on say, is removed when the next session
+// starts, as long as it holds nothing but the files as they were written,
+// one of them deleted included, and so is one that holds nothing but its
+// owner file, a run killed before it made the skill's directory, and one
+// its run kept that holds nothing typed; one whose run is still going, one
+// that run is still laying out, its files not yet in place, one of another
+// skill, and one whose run is gone that holds a file beside its owner file
+// and no directory of the skill stay. One whose run is gone and that holds
+// anything else the session does not open again, a file saved for a
+// conflict that is not the one the session opens, a swap file an editor
+// left beside one, or an owner file that records no file, is kept, marked
+// so, and a warning names it, once: the session after that names it no
+// more. Completing the merge removes the ones kept, and leaves the ones
 // whose run is still going and the one that holds a file beside its owner
 // file.
 func TestSkillResolvePrunesWhatAnEditorSessionLeftBehind(t *testing.T) {
@@ -2041,7 +2042,9 @@ func TestSkillResolvePrunesWhatAnEditorSessionLeftBehind(t *testing.T) {
 	writeFile(t, filepath.Join(beside, "notes.md"), "saved beside the owner file\n")
 	live := editorDir(t, h, "kit", ownPid, h.agentx)
 	laying := editorDir(t, h, "kit", ownPid, h.agentx)
-	remove(t, filepath.Join(laying, "kit"))
+	if err := os.Rename(filepath.Join(laying, "kit"), filepath.Join(laying, editorLayingOut)); err != nil {
+		t.Fatal(err)
+	}
 	kept := editorDir(t, h, "kit", "kept", h.agentx)
 	other := editorDir(t, h, "other", pid, h.agentx)
 	saved := editorDir(t, h, "kit", pid, h.agentx)
@@ -2055,7 +2058,7 @@ func TestSkillResolvePrunesWhatAnEditorSessionLeftBehind(t *testing.T) {
 	out := h.run("--json", "skill", "resolve", "kit", "--editor")
 	equal(t, "exit", out.exit, 0)
 	nothingAt(t, "the stale session", stale)
-	nothingAt(t, "the session killed as it laid its files out", unwritten)
+	nothingAt(t, "the session one of whose files was deleted", unwritten)
 	nothingAt(t, "the session killed before it made the skill's directory", ownerOnly)
 	nothingAt(t, "the session kept with nothing typed in it", kept)
 	equal(t, "what is left", strings.Join(editorDirs(t, h), " "),
@@ -2158,8 +2161,9 @@ func TestSkillResolveCompletingKeepsWhatAHungUpSessionSaved(t *testing.T) {
 // TestSkillResolveAbortKeepsWhatAHungUpSessionSaved: giving the merge up
 // keeps a directory an editor session left whose run is gone, hung up on
 // say, with a file saved in it, marked kept, and a warning names it, in
-// text and with --json, and says that the next editor session of the same
-// conflict opens it again once an update conflicts the same way. Giving a
+// text and with --json, and says that it stays until a merge of the skill
+// completes, and that the next editor session of the same conflict opens
+// it again once an update conflicts the same way. Giving a
 // later merge up names it again, as it names every directory that holds
 // something typed; completing a later merge removes it, as the warning
 // that named it when it was kept said. A directory whose run is gone and
@@ -2288,13 +2292,22 @@ session="$TMPDIR/${rest%%/*}"
 // session left, whose owner file names that process, now gone.
 func hungUpSession(t *testing.T, h *harness, typing string) string {
 	t.Helper()
-	before := editorDirs(t, h)
-	stub := editorStub(t, "hanging-up-editor", `rest=${1#"$TMPDIR"/}
+	return killedSession(t, h, editorStub(t, "hanging-up-editor", `rest=${1#"$TMPDIR"/}
 session="$TMPDIR/${rest%%/*}"
 `+typing+`
 IFS= read -r pid < "$session/`+editorOwner+`"
 kill -9 "$pid"
-`)
+`))
+}
+
+// killedSession runs an editor session of kit in a process of its own,
+// whose editor is stub and whose environment also holds env, and which is
+// killed with SIGKILL before it ends, by its editor or at the step of
+// laying out the files resolveKillAtEnv names. It returns the directory
+// the session left, whose owner file names that process, now gone.
+func killedSession(t *testing.T, h *harness, stub string, env ...string) string {
+	t.Helper()
+	before := editorDirs(t, h)
 	child := exec.Command(os.Args[0], "-test.run=^TestResolveChildProcess$")
 	child.Env = append(os.Environ(), resolveChildEnv+"=kit|--editor")
 	for k, v := range h.env {
@@ -2303,10 +2316,10 @@ kill -9 "$pid"
 	// GIT_EDITOR names the editor, whatever the test's own environment
 	// names, and PATH holds git alone, as TestSkillResolveLeavesACtrlCToTheEditor
 	// says.
-	child.Env = append(child.Env, "PATH="+gitOnlyPath(t), "GIT_EDITOR="+stub)
-	out, err := child.CombinedOutput()
-	if err == nil {
-		t.Fatalf("the session was not killed:\n%s", out)
+	child.Env = append(append(child.Env, "PATH="+gitOnlyPath(t), "GIT_EDITOR="+stub), env...)
+	out, _ := child.CombinedOutput()
+	if status, ok := child.ProcessState.Sys().(syscall.WaitStatus); !ok || !status.Signaled() || status.Signal() != syscall.SIGKILL {
+		t.Fatalf("the session was not killed, it ended %v:\n%s", child.ProcessState, out)
 	}
 	var left []string
 	for _, dir := range editorDirs(t, h) {
@@ -2429,30 +2442,67 @@ func TestSkillResolveOpensAfreshAFileWhoseConflictChanged(t *testing.T) {
 
 // TestSkillResolveReopensTheNewestOfWhatWasTyped: where two earlier
 // sessions typed in the same file for the same conflict, the one saved last
-// is opened; the directory it came from goes, and the other, whose run is
-// gone, is kept and named in a warning, what was typed there left as it is.
+// is opened, whichever of the two directories' names sorts first, and the
+// one whose name sorts last where both were saved at once; the directory it
+// came from goes, and the other, whose run is gone, is kept and named in a
+// warning, what was typed there left as it is. The note that names where
+// the file comes from, and that warning, come before the editor starts, in
+// text and with --json.
 func TestSkillResolveReopensTheNewestOfWhatWasTyped(t *testing.T) {
 	t.Parallel()
-	h, _, _ := resolveHarness(t)
-	pid := goneProcess(t)
-	older := typedDir(t, h, pid, map[string]string{"guide.md": "typed first\n"})
-	newer := typedDir(t, h, pid, map[string]string{"guide.md": "typed last\n"})
-	hourAgo := time.Now().Add(-time.Hour)
-	if err := os.Chtimes(filepath.Join(older, "kit", "guide.md"), hourAgo, hourAgo); err != nil {
-		t.Fatal(err)
-	}
+	for _, c := range []struct {
+		name                          string
+		newerSortsFirst, atOnce, text bool
+	}{
+		{name: "the newer sorts first", newerSortsFirst: true},
+		{name: "the newer sorts last"},
+		{name: "both saved at once", atOnce: true},
+		{name: "in text", newerSortsFirst: true, text: true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			h, _, _ := resolveHarness(t)
+			pid := goneProcess(t)
+			older := typedDir(t, h, pid, map[string]string{"guide.md": "typed first\n"})
+			newer := typedDir(t, h, pid, map[string]string{"guide.md": "typed last\n"})
+			if (newer < older) != c.newerSortsFirst {
+				older, newer = newer, older
+				writeFile(t, filepath.Join(older, "kit", "guide.md"), "typed first\n")
+				writeFile(t, filepath.Join(newer, "kit", "guide.md"), "typed last\n")
+			}
+			saved := map[string]time.Time{older: time.Now().Add(-2 * time.Hour), newer: time.Now().Add(-time.Hour)}
+			if c.atOnce {
+				saved[older] = saved[newer]
+			}
+			for dir, at := range saved {
+				if err := os.Chtimes(filepath.Join(dir, "kit", "guide.md"), at, at); err != nil {
+					t.Fatal(err)
+				}
+			}
 
-	stub, seen := seeingEditor(t, "exit 0\n")
-	h.env["EDITOR"] = stub
-	out := h.run("--json", "skill", "resolve", "kit", "--editor")
-	equal(t, "exit", out.exit, 0)
-	equal(t, "what the editor opened", fileBody(t, filepath.Join(seen, "guide.md")), "typed last\n")
-	equal(t, "the note", strings.Join(infos(h, out.stderr), "\n"), reopenedNote("guide.md", newer))
-	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"),
-		turnedWarning(older)+"\nnotes.md still holds conflict markers, so it was left unresolved")
-	equal(t, "guide.md in the merge", inMerge(h, "guide.md"), "typed last")
-	equal(t, "what is left", strings.Join(editorDirs(t, h), " "), older)
-	equal(t, "what was typed first", fileBody(t, filepath.Join(older, "kit", "guide.md")), "typed first\n")
+			stub, seen := seeingEditor(t, "echo \"editor open\" >&2\nexit 0\n")
+			h.env["EDITOR"] = stub
+			if c.text {
+				out := h.run("skill", "resolve", "kit", "--editor")
+				equal(t, "exit", out.exit, 0)
+				equal(t, "stderr", out.stderr, "info: "+reopenedNote("guide.md", newer)+"\nwarning: "+turnedWarning(older)+
+					"\neditor open\nwarning: notes.md still holds conflict markers, so it was left unresolved\n")
+			} else {
+				out := h.run("--json", "skill", "resolve", "kit", "--editor")
+				equal(t, "exit", out.exit, 0)
+				var logged []string
+				for _, e := range h.eventsOfType(out.stderr, "log") {
+					logged = append(logged, e["level"].(string)+": "+e["message"].(string))
+				}
+				equal(t, "what the run logged", strings.Join(logged, "\n"), "info: "+reopenedNote("guide.md", newer)+"\nwarn: "+turnedWarning(older)+
+					"\ninfo: editor open\nwarn: notes.md still holds conflict markers, so it was left unresolved")
+			}
+			equal(t, "what the editor opened", fileBody(t, filepath.Join(seen, "guide.md")), "typed last\n")
+			equal(t, "guide.md in the merge", inMerge(h, "guide.md"), "typed last")
+			equal(t, "what is left", strings.Join(editorDirs(t, h), " "), older)
+			equal(t, "what was typed first", fileBody(t, filepath.Join(older, "kit", "guide.md")), "typed first\n")
+		})
+	}
 }
 
 // TestSkillResolveKeepsWhatWasTypedForAFileResolvedMeanwhile: a file
@@ -2504,31 +2554,109 @@ func TestSkillResolveKeepsWhatWasTypedForAFileResolvedMeanwhile(t *testing.T) {
 	}
 }
 
-// TestSkillResolveReopensWhatARunKilledAsItStartedLeft: a session removes
-// the directory it opened what was typed from only once its own directory
-// holds it. A run killed in between, both directories whose run is gone
-// holding what was typed, loses nothing: the next session opens it from
-// whichever holds it, and removes both.
-func TestSkillResolveReopensWhatARunKilledAsItStartedLeft(t *testing.T) {
+// TestSkillResolveLosesNothingWhenKilledAsItLaysOut kills an editor
+// session's run with SIGKILL as it lays its files out, at each step, see
+// editorLayoutHook, with and without what an earlier session whose run is
+// gone typed in guide.md for it to open again. Killed before its files are
+// in place, it leaves no directory of the skill, only the files it wrote
+// so far, the last one cut short say, which no session takes for anything
+// typed: the next one opens what the earlier session typed, or guide.md
+// afresh, and removes what the killed run left. Killed once its files are
+// in place and before it settles the earlier directories, it leaves what
+// was typed in both, the earlier one untouched, since a session removes a
+// directory it opened what was typed from only once its own holds it: the
+// next session opens it from the one saved last and removes both. Nothing
+// is left in the temporary directory.
+func TestSkillResolveLosesNothingWhenKilledAsItLaysOut(t *testing.T) {
+	t.Parallel()
+	const typed = "typed before the hang-up\n"
+	for _, c := range []struct {
+		step  string
+		typed bool
+	}{{"staged", false}, {"staged", true}, {"laid out", true}} {
+		t.Run(fmt.Sprintf("%s, typed %v", c.step, c.typed), func(t *testing.T) {
+			t.Parallel()
+			h, _, _ := resolveHarness(t)
+			var earlier string
+			want := kitText["guide.md"]
+			if c.typed {
+				earlier, want = typedDir(t, h, goneProcess(t), map[string]string{"guide.md": typed}), typed
+				hourAgo := time.Now().Add(-time.Hour)
+				if err := os.Chtimes(filepath.Join(earlier, "kit", "guide.md"), hourAgo, hourAgo); err != nil {
+					t.Fatal(err)
+				}
+			}
+			left := killedSession(t, h, editorStub(t, "unreached-editor", "exit 1\n"), resolveKillAtEnv+"="+c.step)
+			if c.typed {
+				equal(t, "what was typed", fileBody(t, filepath.Join(earlier, "kit", "guide.md")), typed)
+			}
+			var note string
+			if c.step == "staged" {
+				nothingAt(t, "the skill's directory of the killed run", filepath.Join(left, "kit"))
+				staged := filepath.Join(left, editorLayingOut, "guide.md")
+				equal(t, "what the killed run wrote", fileBody(t, staged), want)
+				// As a run killed as it wrote the file leaves it.
+				writeFile(t, staged, want[:len(want)/2])
+				if c.typed {
+					note = reopenedNote("guide.md", earlier)
+				}
+			} else {
+				equal(t, "what the killed run laid out", fileBody(t, filepath.Join(left, "kit", "guide.md")), typed)
+				note = reopenedNote("guide.md", left)
+			}
+
+			stub, seen := seeingEditor(t, "exit 0\n")
+			h.env["EDITOR"] = stub
+			out := h.run("--json", "skill", "resolve", "kit", "--editor")
+			equal(t, "exit", out.exit, 0)
+			equal(t, "what the editor opened", fileBody(t, filepath.Join(seen, "guide.md")), want)
+			equal(t, "the note", strings.Join(infos(h, out.stderr), "\n"), note)
+			if c.typed {
+				equal(t, "guide.md in the merge", inMerge(h, "guide.md"), "typed before the hang-up")
+			}
+			equal(t, "what is left", strings.Join(editorDirs(t, h), " "), "")
+		})
+	}
+}
+
+// TestSkillResolveKeepsWhatWasTypedWhenKilledAsItKeptIt: a run marks a
+// directory kept by writing its owner file anew beside it and renaming it
+// over it, so one killed in between leaves the owner file as it was,
+// naming the run that left the directory, and the new one beside it. Such
+// a directory is still found, and what was typed there with it: giving the
+// merge up keeps it and names it, and once an update conflicts the same
+// way the next session opens what was typed there and removes it, the file
+// left beside the owner file taken for nothing typed.
+func TestSkillResolveKeepsWhatWasTypedWhenKilledAsItKeptIt(t *testing.T) {
 	t.Parallel()
 	h, _, _ := resolveHarness(t)
-	pid := goneProcess(t)
-	typed := "typed before the hang-up\n"
-	earlier := typedDir(t, h, pid, map[string]string{"guide.md": typed})
-	// What the killed run laid out, as layOutForEditor writes it: every
-	// file recorded as merge-file wrote it, and guide.md holding what was
-	// typed.
-	laidOut := typedDir(t, h, pid, map[string]string{"guide.md": typed, "notes.md": kitText["notes.md"]})
+	const typed = "typed before the hang-up\n"
+	earlier := typedDir(t, h, goneProcess(t), map[string]string{"guide.md": typed})
+	_, rest, _ := strings.Cut(fileBody(t, filepath.Join(earlier, editorOwner)), "\n")
+	cutShort := editorOwner + ".2718281828"
+	writeFile(t, filepath.Join(earlier, cutShort), editorKept+"\n"+rest)
 
+	out := h.run("--json", "skill", "resolve", "kit", "--abort")
+	equal(t, "exit of the abort", out.exit, 0)
+	equal(t, "warnings of the abort", strings.Join(warnings(h, out.stderr), "\n"), abortWarning(earlier))
+	equal(t, "the owner of what is kept", ownerOf(t, earlier), "kept")
+	entries, err := os.ReadDir(earlier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var held []string
+	for _, e := range entries {
+		held = append(held, e.Name())
+	}
+	equal(t, "what the kept directory holds", strings.Join(held, " "), editorOwner+" "+cutShort+" kit")
+
+	equal(t, "the update that conflicts the same way", h.run("skill", "update", "kit").exit, 4)
 	stub, seen := seeingEditor(t, "exit 0\n")
 	h.env["EDITOR"] = stub
-	out := h.run("--json", "skill", "resolve", "kit", "--editor")
+	out = h.run("--json", "skill", "resolve", "kit", "--editor")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "what the editor opened", fileBody(t, filepath.Join(seen, "guide.md")), typed)
-	if note := strings.Join(infos(h, out.stderr), "\n"); note != reopenedNote("guide.md", earlier) && note != reopenedNote("guide.md", laidOut) {
-		t.Errorf("the note is %q, want one that names either directory", note)
-	}
-	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "notes.md still holds conflict markers, so it was left unresolved")
+	equal(t, "the note", strings.Join(infos(h, out.stderr), "\n"), reopenedNote("guide.md", earlier))
 	equal(t, "guide.md in the merge", inMerge(h, "guide.md"), "typed before the hang-up")
 	equal(t, "what is left", strings.Join(editorDirs(t, h), " "), "")
 }
@@ -2642,12 +2770,25 @@ func sortedStrings(ss ...string) []string {
 // it.
 const resolveChildEnv = "AGENTX_TEST_RESOLVE_CHILD"
 
+// resolveKillAtEnv names the step of laying out an editor session's files,
+// see editorLayoutHook, at which that process kills itself with SIGKILL.
+const resolveKillAtEnv = "AGENTX_TEST_RESOLVE_KILL_AT"
+
 // TestResolveChildProcess is not a test: it is the body of that process.
-// It does nothing when the variable that marks it is not set.
+// It does nothing when the variable that marks it is not set. The hook it
+// sets is set in that process alone, never in one that runs tests.
 func TestResolveChildProcess(t *testing.T) {
 	args := os.Getenv(resolveChildEnv)
 	if args == "" {
 		t.Skip("not the resolve child process")
+	}
+	if at := os.Getenv(resolveKillAtEnv); at != "" {
+		editorLayoutHook = func(step string) {
+			if step == at {
+				_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
+				time.Sleep(time.Minute)
+			}
+		}
 	}
 	env := map[string]string{}
 	for _, kv := range os.Environ() {

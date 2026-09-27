@@ -736,7 +736,7 @@ This works after each of these:
 - Your terminal closed, or you lost the connection, while your editor was open.
 - You gave the merge up with `--abort`. Run `agentx skill update docx` again; if the update conflicts the same way, run `agentx skill resolve docx --editor` and what you typed opens again.
 
-What you typed opens again only for the same conflict. If a file now conflicts differently, for example because you edited the skill while the merge was pending, it opens afresh, and agentx tells you where your earlier files are kept, so you can copy from there.
+What you typed opens again only for the same conflict. If a file now conflicts differently, for example because you edited the skill while the merge was pending, it opens afresh. What you typed earlier stays in the folder agentx named when it kept your files, so copy from there until a merge of the skill is finished.
 
 A kept folder stays until a merge of the skill is finished, which deletes it. agentx deletes a folder earlier only when nothing you typed is lost by it: when it holds only what agentx wrote, or once your editor has what you typed from it. It never reads or deletes the folder of an editor still open in another terminal. If the command that finishes the merge finds a folder with your typing that agentx had not told you about before, for example from a terminal that closed, it leaves that folder to you and tells you where it is: agentx never deletes it after that, so delete it once you have copied what you need.
 
@@ -764,7 +764,7 @@ agentx skill resolve docx --abort
 
 The merge is gone, and your library directory, your copies and the update the check found are left exactly as they were. Run `agentx skill update docx` to merge again.
 
-Giving up keeps what you typed in your editor. agentx deletes the folders of the skill's editor sessions in which you typed nothing, and tells you where each folder with your typing is kept. If you run `agentx skill update docx` again and it conflicts the same way, `agentx skill resolve docx --editor` opens what you typed again. Delete a kept folder if you do not need it. The folder of an editor still open in another terminal is left alone, and a folder agentx left to you stays until you delete it.
+Giving up keeps what you typed in your editor. agentx deletes the folders of the skill's editor sessions in which you typed nothing, and tells you where each folder with your typing is kept. If you run `agentx skill update docx` again and it conflicts the same way, `agentx skill resolve docx --editor` opens what you typed again. Each kept folder stays until a merge of docx is finished, which deletes it whether or not it opened again, so copy anything you still need from it before then. Delete it sooner if you do not need it. The folder of an editor still open in another terminal is left alone, and a folder agentx left to you stays until you delete it.
 
 ## Script it
 

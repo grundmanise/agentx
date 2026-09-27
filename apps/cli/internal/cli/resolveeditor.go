@@ -145,6 +145,9 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 		if dir, paths, records, err = inv.layOutForEditor(name, r.pending.Commit, files, texts); err != nil {
 			return err
 		}
+		if editorLayoutHook != nil {
+			editorLayoutHook("laid out")
+		}
 		laid := map[string]laidFile{}
 		for i, f := range files {
 			laid[f.Path] = laidFile{record: records[i], text: texts[i]}
@@ -332,6 +335,22 @@ const editorDirPrefix = "agentx-resolve-"
 // directory cannot be taken for it either.
 const editorOwner = ".owner"
 
+// editorLayingOut is the directory beside the owner file that an editor
+// session writes its files in first, see layOutForEditor, and renames to
+// the skill's name once every one of them is whole, so that no run ever
+// finds the skill's directory with a file in it cut short. Its name is a
+// hidden one, which the library never gives a skill.
+const editorLayingOut = ".laying-out"
+
+// editorLayoutHook is nil but in the crash tests of skill resolve, which
+// set it in a process of their own to kill that process at a step of
+// laying out an editor session's files: "staged", once every file is
+// written in editorLayingOut, and "laid out", once they are in place and
+// before the directories of earlier sessions are settled, see edit. No
+// command the run starts falls between those steps, so nothing else lets a
+// test stop the run there.
+var editorLayoutHook func(step string)
+
 // editorKept stands in for the process id in the owner file of a directory
 // kept so that nothing typed there is lost: by its own run, which did not
 // write what was typed there, or by a later run that found its run gone
@@ -343,9 +362,12 @@ const editorOwner = ".owner"
 const editorKept = "kept"
 
 // keepEditorDir marks the directory an editor session laid its files out
-// in as kept, see editorKept. A directory whose owner file cannot be
-// rewritten is left as it is; it is then taken for one whose run was
-// killed.
+// in as kept, see editorKept. The owner file is written anew beside the
+// old one and renamed over it, so that a run killed on the way leaves the
+// old one whole, never one cut short, which would leave the directory to
+// no run: what is left beside it then is no file typed in, see
+// ownerBeingKept. A directory whose owner file cannot be rewritten is left
+// as it is; it is then taken for one whose run was killed.
 func keepEditorDir(dir string) {
 	path := filepath.Join(dir, editorOwner)
 	owner, err := os.ReadFile(path)
@@ -353,7 +375,29 @@ func keepEditorDir(dir string) {
 		return
 	}
 	_, rest, _ := strings.Cut(string(owner), "\n")
-	_ = os.WriteFile(path, []byte(editorKept+"\n"+rest), 0o600)
+	f, err := os.CreateTemp(dir, editorOwner+".")
+	if err != nil {
+		return
+	}
+	_, err = f.WriteString(editorKept + "\n" + rest)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Rename(f.Name(), path)
+	}
+	if err != nil {
+		os.Remove(f.Name())
+	}
+}
+
+// ownerBeingKept reports whether e, an entry of the directory an editor
+// session laid its files out in, is what a run killed as it kept the
+// directory leaves: the owner file keepEditorDir wrote anew and had not
+// yet renamed over the old one, a regular file named after the owner file
+// and a dot.
+func ownerBeingKept(e fs.DirEntry) bool {
+	return strings.HasPrefix(e.Name(), editorOwner+".") && e.Type().IsRegular()
 }
 
 // releaseEditorDir gives the directory an editor session laid its files out
@@ -426,8 +470,9 @@ type laidFile struct {
 // savedFiles reads what the directory an editor session of the skill called
 // name laid its files out in holds: every regular file under the skill's
 // directory, by its path relative to it, and other when there is anything
-// else, the owner file aside. A directory that cannot be read through is
-// taken for one that holds something else.
+// else, the owner file aside, and one a run killed as it kept the
+// directory left beside it, see keepEditorDir. A directory that cannot be
+// read through is taken for one that holds something else.
 func savedFiles(dir, name string) (files map[string]savedFile, other bool) {
 	files = map[string]savedFile{}
 	root := filepath.Join(dir, name)
@@ -435,7 +480,7 @@ func savedFiles(dir, name string) (files map[string]savedFile, other bool) {
 		switch {
 		case err != nil:
 			return err
-		case p == dir, p == root, p == filepath.Join(dir, editorOwner):
+		case p == dir, p == root, p == filepath.Join(dir, editorOwner), filepath.Dir(p) == dir && ownerBeingKept(d):
 			return nil
 		case !strings.HasPrefix(p, root+string(filepath.Separator)), !d.IsDir() && !d.Type().IsRegular():
 			other = true
@@ -466,10 +511,10 @@ func savedFiles(dir, name string) (files map[string]savedFile, other bool) {
 // session laid it out, with what was typed in it carried over, see reopen.
 // Nothing else is there: no swap or backup file an editor writes beside the
 // one it opens, no file saved under another name. A recorded file that is
-// not there holds nothing typed, one deleted or one a run killed as it laid
-// them out never wrote, see layOutForEditor, which records every file
-// before it writes any. An owner file that records no file tells nothing,
-// and its directory is taken for one that holds something typed.
+// not there was deleted, and holds nothing typed; one cut short by a run
+// killed as it laid them out is never there, see layOutForEditor. An owner
+// file that records no file tells nothing, and its directory is taken for
+// one that holds something typed.
 func (d earlierDir) spent(laid map[string]laidFile) bool {
 	written := map[string]bool{}
 	for _, line := range d.records {
@@ -517,11 +562,11 @@ func recordsByPath(records []string) map[string]string {
 // missing or names another home is left alone: it is not this merge's, or
 // it was given up to the user. So is one whose run is still going: a
 // session still open is never read or touched. One whose run is gone and
-// that holds nothing but its owner file, as a run killed after it wrote
-// that file and before it made the skill's directory leaves it, names no
-// skill and goes, whichever skill's run finds it: nothing was typed there.
-// One that holds no directory of the skill is some other skill's, or holds
-// something saved beside its owner file, and is left as it is.
+// that holds no file the editor was given, as a run killed as it laid the
+// files out leaves it, see laidOutNothing, names no skill and goes,
+// whichever skill's run finds it: nothing was typed there. One that holds
+// no directory of the skill is some other skill's, or holds something
+// saved beside its owner file, and is left as it is.
 func (inv *invocation) earlierDirs(name string) []earlierDir {
 	tmp := inv.tempDir()
 	entries, err := os.ReadDir(tmp)
@@ -549,7 +594,7 @@ func (inv *invocation) earlierDirs(name string) []earlierDir {
 			continue
 		}
 		if info, err := os.Lstat(filepath.Join(dir, name)); err != nil || !info.IsDir() {
-			if gone && onlyOwner(dir) {
+			if gone && laidOutNothing(dir) {
 				os.RemoveAll(dir)
 			}
 			continue
@@ -574,10 +619,10 @@ func (inv *invocation) earlierDirs(name string) []earlierDir {
 // same conflict, see editorRecord, and holds a regular file at its path
 // with something else in it, the most recently saved where several do; and
 // otherwise the file as merge-file wrote it, see editorText. from is the
-// directory each comes from, "" for a file laid out afresh. The pending merge commit a
-// directory's owner file names plays no part: a merge given up and left
-// again by an update, or rewritten by a resolve since, conflicts the same
-// way in a file whose three versions are the same.
+// directory each comes from, "" for a file laid out afresh. The pending
+// merge commit a directory's owner file names plays no part: a merge given
+// up and left again by an update, or rewritten by a resolve since,
+// conflicts the same way in a file whose three versions are the same.
 func reopen(dirs []earlierDir, files []*conflictFile) (texts, from []string) {
 	texts, from = make([]string, len(files)), make([]string, len(files))
 	for i, f := range files {
@@ -640,8 +685,12 @@ func (inv *invocation) tempDir() string {
 // is. Each file holds its text, in the order of files: what merge-file
 // wrote, or what was typed for the same conflict in an earlier session,
 // see reopen, which the record, of what merge-file wrote, then tells from
-// it. It returns the directory, each file's path and the line recording
-// each, in the order of files.
+// it. The files are written in editorLayingOut first, which is renamed to
+// the skill's name once every one is whole: a run killed on the way leaves
+// no directory of the skill, so no later run takes a file cut short for
+// what was typed, and nothing there is anything but what agentx wrote,
+// which goes, see laidOutNothing. It returns the directory, each file's
+// path and the line recording each, in the order of files.
 func (inv *invocation) layOutForEditor(name, commit string, files []*conflictFile, texts []string) (dir string, paths, records []string, err error) {
 	dir, err = os.MkdirTemp(inv.tempDir(), editorDirPrefix)
 	if err != nil {
@@ -657,21 +706,34 @@ func (inv *invocation) layOutForEditor(name, commit string, files []*conflictFil
 		os.RemoveAll(dir)
 		return "", nil, nil, err
 	}
+	staging := filepath.Join(dir, editorLayingOut)
+	if err := os.Mkdir(staging, 0o700); err != nil {
+		os.RemoveAll(dir)
+		return "", nil, nil, err
+	}
 	paths = make([]string, len(files))
 	for i, f := range files {
 		if !lineage.FilePath(f.Path) {
 			os.RemoveAll(dir)
 			return "", nil, nil, fmt.Errorf("%s is no path an editor can open inside %s", quotedPath(f.Path), dir)
 		}
+		staged := filepath.Join(staging, filepath.FromSlash(f.Path))
+		if err := os.MkdirAll(filepath.Dir(staged), 0o700); err != nil {
+			os.RemoveAll(dir)
+			return "", nil, nil, err
+		}
+		if err := os.WriteFile(staged, []byte(texts[i]), 0o600); err != nil {
+			os.RemoveAll(dir)
+			return "", nil, nil, err
+		}
 		paths[i] = filepath.Join(dir, name, filepath.FromSlash(f.Path))
-		if err := os.MkdirAll(filepath.Dir(paths[i]), 0o700); err != nil {
-			os.RemoveAll(dir)
-			return "", nil, nil, err
-		}
-		if err := os.WriteFile(paths[i], []byte(texts[i]), 0o600); err != nil {
-			os.RemoveAll(dir)
-			return "", nil, nil, err
-		}
+	}
+	if editorLayoutHook != nil {
+		editorLayoutHook("staged")
+	}
+	if err := os.Rename(staging, filepath.Join(dir, name)); err != nil {
+		os.RemoveAll(dir)
+		return "", nil, nil, err
 	}
 	return dir, paths, records, nil
 }
@@ -879,11 +941,12 @@ func (l *lineRelay) flush() {
 // complete, as the run that completed it does: the merge what was typed
 // there was for is done. A kept one goes, as every warning that named it
 // said it would, but for one this run kept itself as its session started,
-// turned, of which no warning said so before its editor took the terminal.
-// That one, and one whose run is gone that holds anything but the files as
-// merge-file wrote them, see spent, are given up to the user instead, see
-// releaseEditorDir, and returned, so that the run names them; every other
-// one goes.
+// turned: the warning that named it came just before the editor took the
+// terminal, and this same run completes the merge, so the user had no
+// time to act on it. That one, and one whose run is gone that holds
+// anything but the files as merge-file wrote them, see spent, are given up
+// to the user instead, see releaseEditorDir, and returned, so that the run
+// names them; every other one goes.
 func (inv *invocation) clearEditorDirs(name string, turned map[string]bool) (released []string) {
 	for _, d := range inv.earlierDirs(name) {
 		if !d.spent(nil) && (d.gone || turned[d.path]) {
@@ -902,9 +965,10 @@ func (inv *invocation) clearEditorDirs(name string, turned map[string]bool) (rel
 // files as merge-file wrote them goes, see spent; every other one is kept,
 // marked so when its run is gone, and returned, so that the run names it:
 // what was typed there is opened again by the next editor session of the
-// same conflict, once an update of the skill leaves one pending again. A
-// session still open is left alone: it finds the merge gone once its editor
-// exits, see edit.
+// same conflict, once an update of the skill leaves one pending again, and
+// it goes, as every kept one does, once a merge of the skill completes, see
+// clearEditorDirs, which the warning says. A session still open is left
+// alone: it finds the merge gone once its editor exits, see edit.
 func (inv *invocation) keepEditorDirs(name string) (kept []string) {
 	for _, d := range inv.earlierDirs(name) {
 		if d.spent(nil) {
@@ -919,13 +983,30 @@ func (inv *invocation) keepEditorDirs(name string) (kept []string) {
 	return kept
 }
 
-// onlyOwner reports whether the directory an editor session laid its files
-// out in holds nothing but its owner file, as a run killed after it wrote
-// that file and before it made the skill's directory leaves it, see
-// layOutForEditor.
-func onlyOwner(dir string) bool {
+// laidOutNothing reports whether the directory an editor session laid its
+// files out in holds no file the editor was given: its owner file, and
+// nothing beside it but what a run killed as it laid the files out leaves,
+// editorLayingOut with the files written so far, the last perhaps cut
+// short, see layOutForEditor, and an owner file being kept, see
+// keepEditorDir. The editor is started only once the files are in place,
+// and the directories of earlier sessions they were opened from are
+// settled after that, so nothing typed is lost when it goes.
+func laidOutNothing(dir string) bool {
 	entries, err := os.ReadDir(dir)
-	return err == nil && len(entries) == 1 && entries[0].Name() == editorOwner && entries[0].Type().IsRegular()
+	if err != nil {
+		return false
+	}
+	owner := false
+	for _, e := range entries {
+		switch {
+		case e.Name() == editorOwner && e.Type().IsRegular():
+			owner = true
+		case e.Name() == editorLayingOut && e.IsDir(), ownerBeingKept(e):
+		default:
+			return false
+		}
+	}
+	return owner
 }
 
 // running reports whether a process with the id pid is running, as far as
