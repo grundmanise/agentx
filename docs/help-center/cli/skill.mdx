@@ -723,13 +723,14 @@ agentx opens every text file left to resolve in your editor, with conflict marke
 
 ### Get back what you typed
 
-What you type in your editor is never lost. When agentx cannot write it, it keeps your files in a folder in your temporary directory and prints where.
+When agentx cannot write what you typed in your editor, it keeps your files in a folder in your temporary directory and prints where.
 
-Run `agentx skill resolve docx --editor` again, and each file opens with what you typed instead of fresh conflict markers. This works after an editor error, a closed terminal, markers left in a file, a merge that changed while your editor was open, and `--abort` followed by an update that conflicts the same way.
+Run `agentx skill resolve docx --editor` again, and each file opens with what you typed instead of fresh conflict markers. This works after an editor error, a closed terminal, markers left in a file, a merge that changed while your editor was open (for files still left to resolve), and `--abort` followed by an update that conflicts the same way.
 
-- To reopen a file you already resolved, name it: `agentx skill resolve docx --editor SKILL.md`.
-- A file reopens only for the same conflict. Each time you run `--editor`, agentx names every folder that still holds typing it did not open, such as a file whose conflict changed or a swap file. Copy what you need from it.
+- To reopen a file you already resolved, name it: `agentx skill resolve docx --editor SKILL.md`. What you typed for it with no conflict markers left opens only if nothing has changed the merge since you typed it, such as a `--hunk` choice or another terminal resolving the file. Otherwise agentx names the folder that holds it, so copy what you need from there.
+- A file reopens only for the same conflict. Each time you run `--editor`, agentx names every folder that still holds typing it did not open, such as a file whose conflict changed, a file you saved under another name, or a swap file. Copy what you need from it.
 - A folder stays until a merge of docx completes, which deletes it. A folder agentx says it leaves for you stays until you delete it.
+- These folders are in your temporary directory, which your system may clean after some days or at a restart, so copy anything you want to keep for longer.
 
 ### Finish the merge
 
@@ -755,7 +756,7 @@ agentx skill resolve docx --abort
 
 The merge is gone, and your library directory, your copies and the update the check found are left exactly as they were. Run `agentx skill update docx` to merge again.
 
-Giving up keeps what you typed in your editor, and agentx prints where. Run `agentx skill update docx` again: if it conflicts the same way, `agentx skill resolve docx --editor` opens what you typed. What agentx already wrote into the merge is given up with it, like the parts you chose with `--hunk`. If the update merges cleanly, no merge is left to finish: delete the folder once you do not need it.
+Giving up keeps what you typed in your editor, and agentx prints where. Run `agentx skill update docx` again: if it conflicts the same way, `agentx skill resolve docx --editor` opens what you typed. What agentx already wrote into the merge is given up with it, like the parts you chose with `--hunk`. If the update merges cleanly, no merge is left to finish: delete the folder once you do not need it. The folder is in your temporary directory, which your system may clean after some days or at a restart, so copy anything you want to keep for longer.
 
 ## Script it
 

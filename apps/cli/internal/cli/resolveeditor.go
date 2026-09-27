@@ -93,26 +93,31 @@ func (inv *invocation) editorCommand() (command string, ok bool) {
 // write, it is kept, marked so in its owner file, and a warning names it,
 // so that nothing typed there is lost: the next session of the same
 // conflict opens what was typed there again, and completing a merge of the
-// skill removes it. So is a directory that holds a file left with markers
-// in it and something typed besides, whose warning says so; the files the
-// run wrote into the merge leave it first. So is one whose merge was given
-// up while the editor was open, once something was typed there, which the
-// next session of the same conflict opens again when an update leaves it
-// pending anew, as its warning says, the one giving the merge up gives,
-// see keptGivenUp. For a file the merge records as resolved, which only a
-// session that names it opens, a warning names that session, and says
-// that what holds no marker opens again only while the merge is the one
-// it was typed in, see reopen. One whose merge was completed while the
-// editor was open is given up to the user instead, see releaseEditorDir,
-// since the conflict it was typed for cannot come back; either way one
-// with nothing typed in it goes at once. A run that merged the merge
-// again, a completion of an edited library directory or a run on a moved
-// import branch, wrote every resolution that still applies, and keeps the
-// directory only for a file the editor resolved that conflicts anew, or
-// that merges cleanly now, git's merge of it written in place of what was
-// typed, which a warning names. When that run completed the merge, which
-// is what removes a kept directory, the directory is given up to the user
-// instead: agentx never removes it.
+// skill removes it; one whose merge another run moved meanwhile, resolving
+// one of its files perhaps, says what opens again, see keptMoved. So is a
+// directory that holds a file left with markers in it and something typed
+// besides, whose warning says so, and one that holds anything else, a file
+// saved under another name say, which no session opens and a warning names
+// when no other does; the files the run wrote into the merge leave it
+// first. So is one whose merge was given up while the editor was open,
+// once something was typed there, which the next session of the same
+// conflict opens again when an update leaves it pending anew, as its
+// warning says, the one giving the merge up gives, see keptGivenUp. For a
+// file the merge records as resolved, which only a session that names it
+// opens, a warning names that session, and says that what holds no marker
+// opens again only while the merge is the one it was typed in, see
+// reopen. One whose merge was completed while the editor was open is given
+// up to the user instead, see releaseEditorDir, since the conflict it was
+// typed for cannot come back; either way one with nothing typed in it goes
+// at once. A run that merged the merge again, a completion of an edited
+// library directory or a run on a moved import branch, wrote every
+// resolution that still applies, and keeps the directory only for a file
+// the editor resolved that conflicts anew, or that merges cleanly now,
+// git's merge of it written in place of what was typed, which a warning
+// names, or for anything else it holds, as above. When the merge is
+// complete, completed by this run or by another, which is what removes a
+// kept directory, the directory is given up to the user instead: agentx
+// never removes it.
 func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	inv, name := r.inv, r.rec.Name
 	see := "run '" + skillCommand("resolve", name) + "' to see every file left to resolve"
@@ -216,9 +221,17 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	// keptGivenUp. A session of one file the merge records as resolved,
 	// which only one named after --editor is, is opened again only by a
 	// session that names it, and what holds no marker only while the merge
-	// is the one it was typed in, see reopen, which the warning says.
+	// is the one it was typed in, see reopen, which the warning says. Any
+	// other session whose merge another run moved meanwhile, resolving one
+	// of its files perhaps, promises no more than keptMoved does.
 	kept := func() {
 		stays, released, givenUp := keep()
+		moved := func() bool {
+			// A merge ref that cannot be read, in a run stopped say, is not
+			// taken for one that changed.
+			values, err := inv.lineageRefs(ctx, r.gitDir, name)
+			return err == nil && values[lineage.MergeRef(name)] != r.pending.Commit
+		}
 		end := keptUntil(name, "", "them")
 		switch {
 		case released:
@@ -232,11 +245,10 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 			p := files[0].Path
 			end = keptUntil(name, p, "them")
 			if body, err := os.ReadFile(paths[0]); err == nil && !holdsMarkers(string(body), files[0].text.size) {
-				// A merge ref that cannot be read, in a run stopped say, is
-				// not taken for one that changed.
-				values, err := inv.lineageRefs(ctx, r.gitDir, name)
-				end = keptWhileUnchanged(name, p, err == nil && values[lineage.MergeRef(name)] != r.pending.Commit)
+				end = keptWhileUnchanged(name, p, moved())
 			}
+		case moved():
+			end = keptMoved(name)
 		}
 		inv.out.warn("the files you edited are kept in " + dir + end)
 	}
@@ -298,24 +310,28 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	}
 	// The directory stays while it holds something typed that was not
 	// written: a file left with markers in it and more, which the next
-	// session of the same conflict opens again, and a file the editor
-	// resolved that conflicts anew or merges cleanly now. While the merge is
-	// pending it is marked kept, and goes once a merge of the skill
-	// completes; a run that completed the merge gives it up to the user,
-	// since agentx would not remove it for them any more, and so does one
-	// that finds the merge completed by another run meanwhile, see keep.
-	// pending says it is kept for the merge pending, whose next session of
-	// the same conflict opens it again: that of every file left, or, for a
-	// file the merge records as resolved, the one that names it.
-	held, until, again := "", " until a merge of "+name+" completes", keptUntil(name, "", "it")
+	// session of the same conflict opens again, a file the editor resolved
+	// that conflicts anew or merges cleanly now, and anything else, a file
+	// saved under another name, a swap file an editor left or a symlink say,
+	// see keptOf, which no session opens. While the merge is pending it is
+	// marked kept, and goes once a merge of the skill completes; a run that
+	// completed the merge gives it up to the user, since agentx would not
+	// remove it for them any more, and so does one that finds the merge
+	// completed by another run meanwhile, see keep. pending says it is kept
+	// for the merge pending, whose next session of the same conflict opens
+	// it again: that of every file left, or, for a file the merge records as
+	// resolved, the one that names it. elsewhere ends the warning that names
+	// it where only something under another name keeps it.
+	named := slices.ContainsFunc(left, func(p string) bool { return typed[p] }) || len(anew)+len(clean) > 0
+	held, until, again, elsewhere := "", " until a merge of "+name+" completes", keptUntil(name, "", "it"), keptUnopened(name)
 	pending := false
 	switch {
-	case !slices.ContainsFunc(left, func(p string) bool { return typed[p] }) && len(anew)+len(clean) == 0:
+	case !named && !keptOf(sessionDir(dir, name, records)).rest:
 		os.RemoveAll(dir)
 	case r.completed:
 		releaseEditorDir(dir)
 		held, until = dir, givenUpToYou(name)
-		again = until
+		again, elsewhere = until, until
 	default:
 		// What the run wrote into the merge is there now, so its file leaves
 		// the directory before the directory is kept: a kept directory holds
@@ -331,7 +347,7 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 		switch stays, released, givenUp := keep(); {
 		case released:
 			held, until = dir, givenUpToYou(name)
-			again = until
+			again, elsewhere = until, until
 		case givenUp:
 			held, again = dir, keptGivenUp(name, true, keptOf(sessionDir(dir, name, records)).rest)
 		case stays:
@@ -364,6 +380,9 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 		}
 		for _, p := range clean {
 			inv.out.warn(quotedPath(p) + " merges cleanly now that the merge was merged again, so what you typed for it was not written and is kept in " + held + until)
+		}
+		if !named {
+			inv.out.warn("the files you edited are kept in " + held + elsewhere)
 		}
 	}
 	if len(rs) == 0 {
@@ -572,17 +591,38 @@ func keptNotOpened(name, what string) string {
 // laid out, reopens, that the next editor session of the same conflict
 // opens that again once an update leaves the merge pending anew. What it
 // holds under any other name, rest, a swap file an editor left say, is
-// opened by no session, and the warning says so.
+// opened by no session, and the warning says so. Nothing reads the
+// directory until then, and the operating system may clean its temporary
+// directory meanwhile, so the warning says to copy what is worth keeping.
 func keptGivenUp(name string, reopens, rest bool) string {
-	until := " until a merge of " + name + " completes"
 	if !reopens {
-		return until + "; what you typed there does not open again, because it is saved under another name, such as a swap file an editor left, so copy what you need from it"
+		return keptUnopened(name)
 	}
-	again := ": when an update of " + name + " conflicts the same way, '" + skillCommand("resolve", name, "--editor") + "' opens what you typed again"
+	again := " until a merge of " + name + " completes: when an update of " + name + " conflicts the same way, '" + skillCommand("resolve", name, "--editor") + "' opens what you typed again"
 	if rest {
-		again += "; a file saved there under another name, such as a swap file an editor left, does not open again, so copy what you need from it"
+		again += "; a file saved there under another name, such as a swap file an editor left, does not open again"
 	}
-	return until + again + "; delete the folder if you do not need it"
+	return again + "; the folder is in your temporary directory, which your system may clean, so copy what you want to keep, and delete it if you do not need it"
+}
+
+// keptUnopened ends the warning that names a directory kept for nothing
+// but what is saved there under another name, a swap file an editor left
+// say, which no session opens, see keptOf: how long it stays, and that
+// nothing there opens again.
+func keptUnopened(name string) string {
+	return " until a merge of " + name + " completes; what you typed there does not open again, because it is saved under another name, such as a swap file an editor left, so copy what you need from it"
+}
+
+// keptMoved ends the warning that names the directory of a session that
+// writes nothing once another run moved the merge of the skill called name
+// while its editor was open: how long it stays, and that the next session
+// of every file left to resolve opens again what was typed for each such
+// file with the same conflict. A file the other run resolved is not, since
+// that session does not lay it out, and the session that names it opens
+// what holds no marker only while the merge is the one it was typed in,
+// see reopen.
+func keptMoved(name string) string {
+	return " until a merge of " + name + " completes; the next '" + resolveInEditor(name, "") + "' opens what you typed again for each file still left to resolve with the same conflict, but not for a file resolved while your editor was open, so copy what you need from it"
 }
 
 // editorRecord is the line of an editor session's owner file that records
