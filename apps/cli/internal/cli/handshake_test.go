@@ -16,6 +16,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 )
 
 // mcpServer is the fixture MCP server built by TestMain; mcpServerErr says
@@ -29,6 +31,7 @@ var (
 // skip when go is not on PATH.
 func TestMain(m *testing.M) {
 	capParallel()
+	home.SkipFlushesInTests()
 	os.Exit(func() int {
 		if _, err := exec.LookPath("go"); err != nil {
 			mcpServerErr = err
