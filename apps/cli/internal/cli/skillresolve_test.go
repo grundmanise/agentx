@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -1823,6 +1824,130 @@ esac`)
 	equal(t, "what the editor saved of guide.md", fileBody(t, filepath.Join(dirs[0], "kit", "guide.md")), "resolved in the editor\n")
 }
 
+// TestSkillResolveSettlesWhatItWroteForAMergeDoneMeanwhile holds an editor
+// session at "written", see editorLayoutHook, once it has written what its
+// editor resolved and before it settles its directory, where no command it
+// starts falls, while another run completes the merge or gives it up. The
+// editor resolved guide.md, which leaves the directory, and left markers
+// and something typed in notes.md, which keeps it. A completion gives the
+// directory up to the user, its owner file gone and what was typed still
+// in it, and the warning that names it promises nothing opens it again.
+// Giving the merge up keeps it, marked kept, and the warning says, as
+// giving the merge up says it, that an update that conflicts the same way
+// opens what was typed again, and that a swap file the editor left there
+// does not; the next session after such an update does. A session that
+// merged the merge again on a moved import branch, notes.md conflicting
+// anew, promises nothing for what was typed for the conflict as it was.
+//
+// The hook is the package's, and every run in this binary reaches it, so
+// the test runs alone, never in parallel.
+func TestSkillResolveSettlesWhatItWroteForAMergeDoneMeanwhile(t *testing.T) {
+	const typed = "MY CAREFUL WORK\n"
+	for _, c := range []struct {
+		name               string
+		abort, swap, moved bool
+	}{
+		{name: "completed"},
+		{name: "given up", abort: true},
+		{name: "given up with a swap file", abort: true, swap: true},
+		{name: "given up once merged again", abort: true, moved: true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			h, _, updated := resolveHarness(t)
+			if c.moved {
+				moved := versionOf(t, h, updated["base"].(string), map[string]string{"notes.md": "one\ntwo\nthree\nfour\ncinco\n"})
+				h.accountGit("update-ref", lineage.ManagedRef("kit"), moved)
+			}
+			then := `for f in "$@"; do
+	case "$f" in
+	*/guide.md) printf 'resolved in the editor\n' > "$f" ;;
+	*/notes.md) printf 'MY CAREFUL WORK\n' >> "$f" ;;
+	esac
+done
+`
+			if c.swap {
+				then += `for f in "$@"; do case "$f" in */notes.md) printf 'unsaved typing\n' > "${f%/*}/.notes.md.swp" ;; esac; done` + "\n"
+			}
+			h.env["EDITOR"] = editorStub(t, "careful-editor", then)
+			written, resume := make(chan struct{}), make(chan struct{})
+			editorLayoutHook = func(step string) {
+				if step == "written" {
+					close(written)
+					<-resume
+				}
+			}
+			t.Cleanup(func() { editorLayoutHook = nil })
+			p := h.start("", "--json", "skill", "resolve", "kit", "--editor")
+			var once sync.Once
+			release := func() { once.Do(func() { close(resume) }) }
+			t.Cleanup(release)
+			select {
+			case <-written:
+			case <-p.done:
+				t.Fatalf("the session ended before it settled its directory:\n%s%s", p.stdout.String(), p.log.text())
+			case <-time.After(runDeadline):
+				t.Fatalf("the session wrote nothing within %s:\n%s", runDeadline, p.log.text())
+			}
+			dirs := editorDirs(t, h)
+			if len(dirs) != 1 {
+				t.Fatalf("the session has %v, want the one directory", dirs)
+			}
+			dir := dirs[0]
+			if c.abort {
+				out := h.run("--json", "skill", "resolve", "kit", "--abort")
+				equal(t, "exit of the abort", out.exit, 0)
+				equal(t, "warnings of the abort", strings.Join(warnings(h, out.stderr), "\n"), "")
+			} else {
+				out := resolveKit(t, h, 0, append(slices.Clone(kitSides), "kept.md:1=theirs")...)
+				equal(t, "warnings of the completion", strings.Join(notCopyWarnings(h, out.stderr), "\n"), "")
+			}
+			release()
+			out := p.wait()
+
+			exit := 0
+			if c.moved {
+				exit = 4
+			}
+			equal(t, "exit", out.exit, exit)
+			equal(t, "the merge ref", h.ref(lineage.MergeRef("kit")), "")
+			equal(t, "what is left", strings.Join(editorDirs(t, h), " "), dir)
+			nothingAt(t, "guide.md, written", filepath.Join(dir, "kit", "guide.md"))
+			equal(t, "what was typed", fileBody(t, filepath.Join(dir, "kit", "notes.md")), kitText["notes.md"]+typed)
+			kept := "notes.md still holds conflict markers, so it was left unresolved; what you typed is kept in " + dir
+			switch {
+			case !c.abort:
+				nothingAt(t, "the owner file", filepath.Join(dir, editorOwner))
+				got := strings.Join(warnings(h, out.stderr), "\n")
+				equal(t, "warnings", got, kept+leftToYouKit)
+				if strings.Contains(got, "opens it again") {
+					t.Errorf("a warning promises a session opens what was typed again: %s", got)
+				}
+				return
+			case c.moved:
+				equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"),
+					kept+"; what you typed there does not open again, because its conflict changed before the merge was given up, so copy what you need from it")
+				equal(t, "the owner", ownerOf(t, dir), "kept")
+				return
+			}
+			given := abortWarning(dir)
+			if c.swap {
+				given = abortMixedWarning(dir)
+				equal(t, "the swap file", fileBody(t, filepath.Join(dir, "kit", ".notes.md.swp")), "unsaved typing\n")
+			}
+			equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), kept+strings.TrimPrefix(given, "the files you edited are kept in "+dir))
+			equal(t, "the owner", ownerOf(t, dir), "kept")
+
+			equal(t, "the update that conflicts the same way", h.run("skill", "update", "kit").exit, 4)
+			stub, seen := seeingEditor(t, "exit 0\n")
+			h.env["EDITOR"] = stub
+			out = h.run("--json", "skill", "resolve", "kit", "--editor")
+			equal(t, "exit of the next session", out.exit, 0)
+			equal(t, "what the next session opened", fileBody(t, filepath.Join(seen, "notes.md")), kitText["notes.md"]+typed)
+			equal(t, "notes", strings.Join(infos(h, out.stderr), "\n"), reopenedNote("notes.md", dir))
+		})
+	}
+}
+
 // TestSkillResolveInAnEditorRefusesABusyLock: laying the files out takes
 // the lock without waiting for it, as every command that writes does. Held
 // by another command, a scan included, the run is exit code 7 before any
@@ -2527,8 +2652,7 @@ func TestSkillResolveAbortKeepsWhatAHungUpSessionSaved(t *testing.T) {
 			t.Parallel()
 			h, _, _ := resolveHarness(t)
 			pid := goneProcess(t)
-			saved := editorDir(t, h, "kit", pid, h.agentx)
-			writeFile(t, filepath.Join(saved, "kit", "notes.md"), "saved before the hang-up\n")
+			saved := typedDir(t, h, pid, map[string]string{"notes.md": "saved before the hang-up\n"})
 			stale := editorDir(t, h, "kit", pid, h.agentx)
 			ownerOnly := editorDir(t, h, "kit", pid, h.agentx)
 			remove(t, filepath.Join(ownerOnly, "kit"))
@@ -3504,6 +3628,121 @@ func TestSkillResolveAbortSaysWhatNeverOpensAgain(t *testing.T) {
 	}
 }
 
+// TestSkillResolveAbortPromisesNothingForAConflictThatChanged: what the
+// editor resolved for a file that conflicts anew once a completion merges
+// the edited library directory again is kept for the conflict it was
+// typed for, which the merge left pending no longer has. Giving that merge
+// up keeps it, but promises no session opens it again: an update then
+// conflicts as the merge given up did, and the next session opens the file
+// afresh and names the directory as one it did not open.
+func TestSkillResolveAbortPromisesNothingForAConflictThatChanged(t *testing.T) {
+	t.Parallel()
+	h, _, _ := resolveHarness(t)
+	resolveKit(t, h, 0, append(slices.Clone(kitWholeFiles), "guide.md:1=mine")...)
+	editLibrary(t, h, "kit", "notes.md", "ONE\ntwo\nthree\nfour\nFIVE again\n")
+	stub, _, _ := resolvingEditor(t)
+	h.env["EDITOR"] = stub
+	out := h.run("--json", "skill", "resolve", "kit", "--editor")
+	equal(t, "exit of the session", out.exit, 4)
+	equal(t, "what conflicts anew", conflictFiles(h.one(out.stdout, "conflict")), "notes.md:2")
+	dirs := editorDirs(t, h)
+	if len(dirs) != 1 {
+		t.Fatalf("the session left %v, want the one directory", dirs)
+	}
+	dir := dirs[0]
+	equal(t, "warnings of the session", strings.Join(warnings(h, out.stderr), "\n"),
+		"notes.md conflicts anew now that the merge was merged again, so what you typed for it is kept in "+dir)
+
+	out = h.run("--json", "skill", "resolve", "kit", "--abort")
+	equal(t, "exit of the abort", out.exit, 0)
+	got := strings.Join(warnings(h, out.stderr), "\n")
+	equal(t, "warnings of the abort", got, "the files you edited are kept in "+dir+
+		"; what you typed there does not open again, because its conflict changed before the merge was given up, so copy what you need from it")
+	if strings.Contains(got, "opens what you typed again") {
+		t.Errorf("the abort promises what was typed opens again: %s", got)
+	}
+	equal(t, "the owner of what is kept", ownerOf(t, dir), "kept")
+
+	equal(t, "the update", h.run("skill", "update", "kit").exit, 4)
+	seeing, seen := seeingEditor(t, "exit 0\n")
+	h.env["EDITOR"] = seeing
+	out = h.run("--json", "skill", "resolve", "kit", "--editor")
+	equal(t, "exit of the next session", out.exit, 0)
+	equal(t, "notes of the next session", strings.Join(infos(h, out.stderr), "\n"), "")
+	if opened := fileBody(t, filepath.Join(seen, "notes.md")); !strings.HasPrefix(opened, "<<<<<<< mine\n") {
+		t.Errorf("the next session opened notes.md with something other than its conflict:\n%s", opened)
+	}
+	got = strings.Join(warnings(h, out.stderr), "\n")
+	contains(t, "warnings of the next session", got, notOpenedWarning(dir))
+	equal(t, "what was typed, kept", fileBody(t, filepath.Join(dir, "kit", "notes.md")), "resolved in the editor\n")
+}
+
+// TestSkillResolveAbortSaysWhatWasTypedForAConflictThatChanged: giving the
+// merge up keeps a directory of an earlier session that holds something
+// typed for a conflict the merge no longer has, as its owner file records
+// it, and its warning says that does not open again, beside what does, and
+// beside a swap file its editor left, which does not either. Once an
+// update conflicts the same way, the next session opens what the warning
+// promised and nothing else, and names the directory for what it did not
+// open.
+func TestSkillResolveAbortSaysWhatWasTypedForAConflictThatChanged(t *testing.T) {
+	t.Parallel()
+	const (
+		changed = "; what you typed there does not open again, because its conflict changed before the merge was given up"
+		again   = ": when an update of kit conflicts the same way, 'agentx skill resolve kit --editor' opens what you typed again"
+		swapped = "; a file saved there under another name, such as a swap file an editor left, does not open again"
+	)
+	for _, c := range []struct {
+		name          string
+		reopens, swap bool
+		end           string
+	}{
+		{name: "alone", end: changed + ", so copy what you need from it"},
+		{name: "beside a swap file", swap: true,
+			end: changed + " or it is saved under another name, such as a swap file an editor left, so copy what you need from it"},
+		{name: "beside what opens again", reopens: true,
+			end: again + "; what you typed for a conflict that changed before the merge was given up does not open again" + mayClean},
+		{name: "beside what opens again and a swap file", reopens: true, swap: true,
+			end: again + "; what you typed for a conflict that changed before the merge was given up does not open again" + swapped + mayClean},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			h, _, _ := resolveHarness(t)
+			typed := map[string]string{"notes.md": "typed for a conflict as it was\n"}
+			if c.reopens {
+				typed["guide.md"] = "typed for the conflict as it is\n"
+			}
+			dir := typedDir(t, h, goneProcess(t), typed)
+			owner := filepath.Join(dir, editorOwner)
+			writeFile(t, owner, strings.Replace(fileBody(t, owner),
+				editorRecord("notes.md", []byte(kitText["notes.md"])), editorRecord("notes.md", []byte("<<<<<<< mine\nas it was\n")), 1))
+			if c.swap {
+				writeFile(t, filepath.Join(dir, "kit", ".notes.md.swp"), "unsaved typing\n")
+			}
+
+			out := h.run("--json", "skill", "resolve", "kit", "--abort")
+			equal(t, "exit of the abort", out.exit, 0)
+			equal(t, "warnings of the abort", strings.Join(warnings(h, out.stderr), "\n"), "the files you edited are kept in "+dir+c.end)
+			equal(t, "the owner of what is kept", ownerOf(t, dir), "kept")
+
+			equal(t, "the update that conflicts the same way", h.run("skill", "update", "kit").exit, 4)
+			stub, seen := seeingEditor(t, "exit 0\n")
+			h.env["EDITOR"] = stub
+			out = h.run("--json", "skill", "resolve", "kit", "--editor")
+			equal(t, "exit", out.exit, 0)
+			equal(t, "notes.md as the editor opened it", fileBody(t, filepath.Join(seen, "notes.md")), kitText["notes.md"])
+			note, named := "", notOpenedWarning(dir)
+			if c.reopens {
+				equal(t, "guide.md as the editor opened it", fileBody(t, filepath.Join(seen, "guide.md")), typed["guide.md"])
+				note, named = reopenedNote("guide.md", dir), partlyWarning(dir)
+			}
+			equal(t, "notes", strings.Join(infos(h, out.stderr), "\n"), note)
+			equal(t, "the warning that names the directory", warnings(h, out.stderr)[0], named)
+			equal(t, "what was typed for the conflict as it was", fileBody(t, filepath.Join(dir, "kit", "notes.md")), typed["notes.md"])
+		})
+	}
+}
+
 // TestSkillResolveLosesNothingWhenKilledAsItLaysOut kills an editor
 // session's run with SIGKILL as it lays its files out, at each step, see
 // editorLayoutHook, with and without what an earlier session whose run is
@@ -3969,7 +4208,9 @@ func pendingWith(t *testing.T, h *harness, theirs string) {
 // message agentx did not write, a merge whose versions no longer conflict
 // when merged again, and a skill that is a fork are exit code 6 whatever
 // the run asks, with nothing written; a merge that cannot be read can
-// still be given up.
+// still be given up, and giving it up keeps what was typed in an editor
+// session but promises nothing opens it again, since agentx cannot tell
+// which conflicts the merge given up had.
 func TestSkillResolveRefusesAMergeItCannotRead(t *testing.T) {
 	t.Parallel()
 	abandon := "run 'agentx skill resolve kit --abort' to give the merge up; the library directory stays as it is"
@@ -4014,8 +4255,13 @@ func TestSkillResolveRefusesAMergeItCannotRead(t *testing.T) {
 			equal(t, "the library and its copies", onDisk(t, h.home), placed)
 			equal(t, "journals", journalCount(t, h), 0)
 			if !c.fork {
-				h.mustRun("skill", "resolve", "kit", "--abort")
+				typed := typedDir(t, h, goneProcess(t), map[string]string{"guide.md": "typed\n"})
+				out := h.run("--json", "skill", "resolve", "kit", "--abort")
+				equal(t, "exit of the abort", out.exit, 0)
 				equal(t, "the merge ref once given up", h.ref(lineage.MergeRef("kit")), "")
+				equal(t, "warnings of the abort", strings.Join(warnings(h, out.stderr), "\n"), "the files you edited are kept in "+typed+
+					"; what you typed there does not open again, because its conflict changed before the merge was given up, so copy what you need from it")
+				equal(t, "the owner of what is kept", ownerOf(t, typed), "kept")
 			}
 		})
 	}

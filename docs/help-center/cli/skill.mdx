@@ -756,7 +756,7 @@ agentx skill resolve docx --abort
 
 The merge is gone, and your library directory, your copies and the update the check found are left exactly as they were. Run `agentx skill update docx` to merge again.
 
-Giving up keeps what you typed in your editor, and agentx prints where. Run `agentx skill update docx` again: if it conflicts the same way, `agentx skill resolve docx --editor` opens what you typed. What agentx already wrote into the merge is given up with it, like the parts you chose with `--hunk`. If the update merges cleanly, no merge is left to finish: delete the folder once you do not need it. The folder is in your temporary directory, which your system may clean after some days or at a restart, so copy anything you want to keep for longer.
+Giving up keeps what you typed in your editor, and agentx prints where. Run `agentx skill update docx` again: if it conflicts the same way, `agentx skill resolve docx --editor` opens what you typed. What you typed for a conflict that changed before you gave up does not open again, and agentx says so: copy what you need from the folder. What agentx already wrote into the merge is given up with it, like the parts you chose with `--hunk`. If the update merges cleanly, no merge is left to finish: delete the folder once you do not need it. The folder is in your temporary directory, which your system may clean after some days or at a restart, so copy anything you want to keep for longer.
 
 ## Script it
 

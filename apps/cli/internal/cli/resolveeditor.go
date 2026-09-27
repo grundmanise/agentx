@@ -223,18 +223,19 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	// kept settles the directory of a run that writes nothing of what the
 	// editor left, and names it in a warning that says what opens it again.
 	// A merge given up meanwhile is worded as giving it up words it, see
-	// keptGivenUp. A directory that holds nothing typed but under another
-	// name, a swap file an editor left say, which no session opens, promises
-	// nothing opens again, see keptUnopened. A session of one file the merge
-	// records as resolved, which only one named after --editor is, is opened
-	// again only by a session that names it, and what holds no marker only
-	// while the merge is the one it was typed in, see reopen, which the
-	// warning says. Any other session whose merge another run moved
-	// meanwhile, resolving one of its files perhaps, promises no more than
-	// keptMoved does.
+	// keptGivenUp, the merge given up taken for the last one the run read,
+	// the one it laid the files out from. A directory that holds nothing
+	// typed but under another name, a swap file an editor left say, which
+	// no session opens, promises nothing opens again, see keptUnopened. A
+	// session of one file the merge records as resolved, which only one
+	// named after --editor is, is opened again only by a session that names
+	// it, and what holds no marker only while the merge is the one it was
+	// typed in, see reopen, which the warning says. Any other session whose
+	// merge another run moved meanwhile, resolving one of its files
+	// perhaps, promises no more than keptMoved does.
 	kept := func() {
 		stays, released, givenUp := keep()
-		k := keptOf(sessionDir(dir, name, records))
+		k := keptOf(sessionDir(dir, name, records), records)
 		moved := func() bool {
 			// A merge ref that cannot be read, in a run stopped say, is not
 			// taken for one that changed.
@@ -246,7 +247,7 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 		case released:
 			end = givenUpToYou(name)
 		case givenUp:
-			end = keptGivenUp(name, k.reopens, k.rest)
+			end = keptGivenUp(name, k)
 		case !stays:
 			return
 		case !k.reopens && k.rest:
@@ -302,6 +303,9 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 		kept()
 		return err
 	}
+	if len(rs) > 0 && editorLayoutHook != nil {
+		editorLayoutHook("written")
+	}
 	if r.carried != nil {
 		// The merge was merged again and written, or completed, every
 		// resolution that still applies carried into it. A file the editor
@@ -337,7 +341,7 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	held, given, again, elsewhere := "", "", opensAgain(name, "", "it"), keptUnopened()
 	pending := false
 	switch {
-	case !named && !keptOf(sessionDir(dir, name, records)).rest:
+	case !named && !keptOf(sessionDir(dir, name, records), records).rest:
 		os.RemoveAll(dir)
 	case r.completed:
 		releaseEditorDir(dir)
@@ -360,7 +364,13 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 			held, given = dir, givenUpToYou(name)
 			again, elsewhere = given, given
 		case givenUp:
-			held, again = dir, keptGivenUp(name, true, keptOf(sessionDir(dir, name, records)).rest)
+			// The merge given up is taken for the one the run wrote: the one
+			// it laid the files out from, or the one it merged again.
+			conflicts := records
+			if r.carried != nil {
+				conflicts = r.remerged
+			}
+			held, again = dir, keptGivenUp(name, keptOf(sessionDir(dir, name, records), conflicts))
 		case stays:
 			held, pending = dir, true
 		}
@@ -466,8 +476,11 @@ const editorLayingOut = ".laying-out"
 // before the directories of earlier sessions are settled, see edit; or at
 // the step of keeping a directory, "keeping", once keepEditorDir has
 // written the owner file anew beside the old one and before it renames it
-// over it. No command the run starts falls between those steps, so nothing
-// else lets a test stop the run there.
+// over it; and in a test that runs alone, never in parallel, which holds
+// the run at "written", once it has written what the editor resolved and
+// before it settles its directory, see edit, while another run completes
+// the merge or gives it up. No command the run starts falls between those
+// steps, so nothing else lets a test stop the run there.
 var editorLayoutHook func(step string)
 
 // editorKept stands in for the process id in the owner file of a directory
@@ -597,20 +610,31 @@ func keptNotOpened(what string) string {
 
 // keptGivenUp ends the warning that names a directory giving the merge of
 // the skill called name up keeps, see keepEditorDirs, or that a session
-// whose merge was given up while its editor was open keeps, see edit:
-// where it holds something typed in a file the session laid out, reopens,
-// the next editor session of the same conflict opens that again once an
-// update leaves the merge pending anew. What it holds under any other
-// name, rest, a swap file an editor left say, is opened by no session, and
-// the warning says so. Nothing reads the directory until then, and the
+// whose merge was given up while its editor was open keeps, see edit, k
+// telling what it holds, see keptOf: where it holds something typed for a
+// conflict of the merge given up, the next editor session of the same
+// conflict opens that again once an update leaves the merge pending anew.
+// What was typed for a conflict that changed before, which an update of
+// the merge given up does not make again, and what it holds under any
+// other name, a swap file an editor left say, are opened by no session,
+// and the warning says so. Nothing reads the directory until then, and the
 // operating system may clean its temporary directory meanwhile, so the
 // warning says to copy what is worth keeping.
-func keptGivenUp(name string, reopens, rest bool) string {
-	if !reopens {
+func keptGivenUp(name string, k keptDir) string {
+	const changed = "its conflict changed before the merge was given up"
+	switch {
+	case !k.reopens && !k.changed:
 		return keptUnopened()
+	case !k.reopens && k.rest:
+		return "; what you typed there does not open again, because " + changed + " or it is saved under another name, such as a swap file an editor left, so copy what you need from it"
+	case !k.reopens:
+		return "; what you typed there does not open again, because " + changed + ", so copy what you need from it"
 	}
 	again := ": when an update of " + name + " conflicts the same way, '" + skillCommand("resolve", name, "--editor") + "' opens what you typed again"
-	if rest {
+	if k.changed {
+		again += "; what you typed for a conflict that changed before the merge was given up does not open again"
+	}
+	if k.rest {
 		again += "; a file saved there under another name, such as a swap file an editor left, does not open again"
 	}
 	return again + "; the folder is in your temporary directory, which your system may clean, so copy what you want to keep, and delete it if you do not need it"
@@ -690,27 +714,48 @@ type laidFile struct {
 // keptDir is a directory of an earlier editor session that giving a merge
 // up keeps, see keepEditorDirs, or of a session whose merge was given up
 // while its editor was open, see edit, and what it holds: something typed
-// in a file its owner file records, which the next editor session of the
-// same conflict opens again, see reopen, and anything else, which none
-// does.
+// in a file its owner file records for a conflict of the merge given up,
+// which the next editor session of the same conflict opens again once an
+// update leaves it pending anew, see reopen, something typed for a
+// conflict the merge given up no longer has, and anything else, which no
+// session opens.
 type keptDir struct {
-	path          string
-	reopens, rest bool
+	path                   string
+	reopens, changed, rest bool
 }
 
 // keptOf is what d holds, as the warning that names it once the merge is
-// given up tells it, see keptGivenUp.
-func keptOf(d earlierDir) keptDir {
+// given up tells it, see keptGivenUp: given are the lines an owner file
+// records the conflicts of that merge with, see conflictRecords, nil when
+// they are not known, and nothing typed is then promised to open again.
+func keptOf(d earlierDir, given []string) keptDir {
 	k := keptDir{path: d.path, rest: d.other || d.byPath == nil}
 	for p, f := range d.files {
 		switch record := d.byPath[p]; {
 		case record == "":
 			k.rest = true
-		case editorRecord(p, []byte(f.body)) != record:
+		case editorRecord(p, []byte(f.body)) == record:
+		case slices.Contains(given, record):
 			k.reopens = true
+		default:
+			k.changed = true
 		}
 	}
 	return k
+}
+
+// conflictRecords is the line an editor session's owner file records each
+// text file of files with, see editorRecord: the conflicts a session of a
+// merge that conflicts in files lays out, whether a file is resolved in it
+// or not.
+func conflictRecords(files []conflictFile) []string {
+	var records []string
+	for _, f := range files {
+		if f.text != nil {
+			records = append(records, editorRecord(f.Path, []byte(editorText(f.text))))
+		}
+	}
+	return records
 }
 
 // savedFiles reads what the directory an editor session of the skill called
@@ -1290,12 +1335,14 @@ func (inv *invocation) clearEditorDirs(name string) (released []string) {
 // next editor session of the same conflict, once an update of the skill
 // leaves one pending again, and what it holds under any other name, a swap
 // file an editor left say, never is, which the warning says, see
-// keptGivenUp. A session still open is left alone: it finds the merge gone
-// once its editor exits, see edit.
-func (inv *invocation) keepEditorDirs(name string) (kept []keptDir) {
+// keptGivenUp, as it does of what was typed for a conflict the merge
+// given up no longer has, given being the lines an owner file records its
+// conflicts with, see keptOf. A session still open is left alone: it finds
+// the merge gone once its editor exits, see edit.
+func (inv *invocation) keepEditorDirs(name string, given []string) (kept []keptDir) {
 	for _, d := range inv.earlierDirs(name) {
 		if keepTyped(d) {
-			kept = append(kept, keptOf(d))
+			kept = append(kept, keptOf(d, given))
 		}
 	}
 	return kept

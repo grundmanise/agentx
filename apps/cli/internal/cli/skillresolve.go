@@ -226,6 +226,7 @@ type pendingRun struct {
 	theirs    lineage.Import           // the lineage of the update merged
 	carried   map[string]bool          // once the run merged the merge again and wrote or completed it: the files whose resolution it kept
 	left      map[string]bool          // and the files it left to resolve, none once it completed it
+	remerged  []string                 // and the lines an editor session's owner file records the conflicts of that merge with, see conflictRecords
 	completed bool                     // the run completed the merge
 }
 
@@ -861,9 +862,11 @@ func (r *pendingRun) write(ctx context.Context, again mergedAgain, doing string)
 // note records, once the run wrote the merge as again merged it or
 // completed it so, which files kept their resolution and which are left to
 // resolve, none for a merge completed: every other file of the merge the
-// run read merges cleanly now, git's merge of it written, see edit.
+// run read merges cleanly now, git's merge of it written, see edit. It
+// records the conflicts of that merge too, which tell a session whose
+// merge is given up next what an update of it opens again, see keptOf.
 func (r *pendingRun) note(again mergedAgain) {
-	r.carried, r.left = map[string]bool{}, map[string]bool{}
+	r.carried, r.left, r.remerged = map[string]bool{}, map[string]bool{}, conflictRecords(again.res.files)
 	for _, p := range again.resolved {
 		r.carried[p] = true
 	}
@@ -1331,10 +1334,13 @@ func (r *pendingRun) reportCompleted(ctx context.Context, c completion, newer bo
 // a directory of one holding anything typed is kept, and named in a
 // warning, so that the next editor session of the same conflict opens it
 // again once an update leaves the merge pending anew, see keepEditorDirs;
-// one that holds nothing typed goes. The warning says that what it holds
-// under another name, a swap file say, opens in no session, see
-// keptGivenUp. The skill is reported as it now stands.
+// one that holds nothing typed goes. The warning says that what was typed
+// for a conflict the merge given up no longer has, and what it holds under
+// another name, a swap file say, opens in no session, see keptGivenUp: the
+// conflicts of the merge are read under the lock, before its ref is
+// deleted, see conflictsHeld. The skill is reported as it now stands.
 func (inv *invocation) abortMerge(ctx context.Context, gitDir, name string) error {
+	var given []string
 	err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		values, err := inv.lineageRefs(ctx, gitDir, name)
 		if err != nil {
@@ -1344,6 +1350,7 @@ func (inv *invocation) abortMerge(ctx context.Context, gitDir, name string) erro
 		if held == "" {
 			return fail(exitRefused, name+" has no merge pending", "run 'agentx skill list' to see which skills have one")
 		}
+		given = inv.conflictsHeld(ctx, gitDir, name)
 		m := home.NewMutation(inv.dirs.Home)
 		m.Ref(gitDir, lineage.MergeRef(name), held, "")
 		return m.Apply(inv.refs(ctx))
@@ -1351,8 +1358,8 @@ func (inv *invocation) abortMerge(ctx context.Context, gitDir, name string) erro
 	if err != nil {
 		return mutationFailure(err)
 	}
-	for _, d := range inv.keepEditorDirs(name) {
-		inv.out.warn("the files you edited are kept in " + d.path + keptGivenUp(name, d.reopens, d.rest))
+	for _, d := range inv.keepEditorDirs(name, given) {
+		inv.out.warn("the files you edited are kept in " + d.path + keptGivenUp(name, d))
 	}
 	const kept = "; the library directory is as it was"
 	inv.summary = "gave up the merge of " + name + kept
@@ -1369,4 +1376,22 @@ func (inv *invocation) abortMerge(ctx context.Context, gitDir, name string) erro
 	}
 	inv.out.done("gave up the merge of " + inv.out.paint(heading, sanitised(name)) + kept)
 	return nil
+}
+
+// conflictsHeld is the lines an editor session's owner file records the
+// conflicts of the merge pending for the skill called name with, see
+// conflictRecords, read under the hold of the lock that gives it up, so
+// that they are the merge's that is given up. It is nil when agentx cannot
+// read that merge, and nothing typed is then promised to open again, see
+// keptOf.
+func (inv *invocation) conflictsHeld(ctx context.Context, gitDir, name string) []string {
+	records, err := lineage.List(ctx, inv.git, gitDir)
+	if err != nil || records[name].PendingMerge == nil {
+		return nil
+	}
+	r, err := inv.readPending(ctx, gitDir, records[name])
+	if err != nil {
+		return nil
+	}
+	return conflictRecords(r.res.files)
 }
