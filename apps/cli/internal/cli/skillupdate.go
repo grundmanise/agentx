@@ -184,18 +184,11 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 	// until it is finished the skill reads as already updated while the
 	// library still holds the version replaced, or holds no directory once
 	// that was retained, and the run would answer for a machine halfway
-	// through its own change. The lock is taken for it only when there is
-	// a journal to finish, and nothing is written beyond what the recovery
+	// through its own change. Nothing is written beyond what the recovery
 	// writes, its own bump of the version file included, as for the
 	// recovery a scan runs.
-	switch journals, err := home.Journals(inv.dirs.Home); {
-	case err != nil:
-		return mutationFailure(err)
-	case len(journals) > 0:
-		inv.out.debugf("recovering %s", strings.Join(journals, ", "))
-		if err := home.MutateQuiet(inv.dirs.Home, inv.refs(ctx), func() error { return nil }); err != nil {
-			return mutationFailure(err)
-		}
+	if err := inv.finishJournals(ctx); err != nil {
+		return err
 	}
 	records := map[string]lineage.Record{}
 	if exists {
@@ -473,7 +466,7 @@ func (r *updateRun) merge(ctx context.Context, u *updating) *failure {
 		return failureOf(accountRepoFailure(err))
 	}
 	if len(res.files) > 0 {
-		if u.pending, err = lineage.CommitPending(ctx, git, gitDir, res.tree, u.name, m, len(res.files)); err != nil {
+		if u.pending, err = lineage.CommitPending(ctx, git, gitDir, res.tree, u.name, m, len(res.files), nil); err != nil {
 			return failureOf(accountRepoFailure(err))
 		}
 		u.conflict = conflictOfSkill(u.name, m, res.files)
@@ -771,7 +764,7 @@ func (inv *invocation) stageUpdate(m *home.Mutation, gitDir string, u *updating,
 	staged := m.Sibling(u.libPath, "staged")
 	fingerprint, err := stageBase(staged, u.base, target, bodies)
 	if err == nil {
-		err = keepPerms(staged, u)
+		err = keepPerms(staged, u.libPath, u.tree, u.base)
 	}
 	if err != nil {
 		os.RemoveAll(staged)
@@ -786,8 +779,9 @@ func (inv *invocation) stageUpdate(m *home.Mutation, gitDir string, u *updating,
 	return nil
 }
 
-// keepPerms gives what the update laid out at staged the permissions the
-// library directory gives the same thing: a file the library holds at the
+// keepPerms gives what an update laid out at staged, the version v, the
+// permissions the library directory at libPath, read as tree, gives the
+// same thing: a file the library holds at the
 // same path with the same content, and executable exactly when git records
 // it so, and a directory the library holds at the same path, the skill's
 // own included, both as the library's tree was read, never through a
@@ -800,19 +794,19 @@ func (inv *invocation) stageUpdate(m *home.Mutation, gitDir string, u *updating,
 // it was changed, is left as it was laid out. The library directory was
 // read again under the lock, so what it holds is what the update merged or
 // replaced.
-func keepPerms(staged string, u *updating) error {
+func keepPerms(staged, libPath string, tree treeid.Tree, v lineage.Base) error {
 	held := map[string]string{}
-	for _, b := range u.tree.Blobs {
+	for _, b := range tree.Blobs {
 		if !b.Link {
 			held[b.Path] = b.OID
 		}
 	}
 	dirs := map[string]bool{}
-	for _, d := range u.tree.Dirs {
+	for _, d := range tree.Dirs {
 		dirs[d.Path] = true
 	}
 	keep := func(rel string, dir, executable bool) error {
-		info, err := os.Lstat(filepath.Join(u.libPath, filepath.FromSlash(rel)))
+		info, err := os.Lstat(filepath.Join(libPath, filepath.FromSlash(rel)))
 		if err != nil {
 			return nil
 		}
@@ -839,7 +833,7 @@ func keepPerms(staged string, u *updating) error {
 	if err := keep("", true, false); err != nil {
 		return err
 	}
-	for _, e := range u.base.Entries {
+	for _, e := range v.Entries {
 		var err error
 		switch {
 		case e.Mode == source.DirMode && dirs[e.Path]:
@@ -869,7 +863,9 @@ func (r *updateRun) report(ctx context.Context) error {
 		}
 	}
 	for _, u := range r.pending {
-		r.inv.printConflicts(u.conflict, short(u.rec.Import.Commit), short(u.next.Import.Commit))
+		out := r.inv.out
+		r.inv.printConflicts(u.conflict, out.paint(heading, sanitised(u.name)), " conflicts with its update from ", short(u.rec.Import.Commit),
+			" to ", short(u.next.Import.Commit), " in ", out.paint(noteStyle, plural(len(u.conflict.Files), "file")))
 		r.drop(u.name, conflictFailure(u.name, len(u.conflict.Files)))
 	}
 	return nil

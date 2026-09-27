@@ -187,6 +187,27 @@ func writeDir(ctx context.Context, r *gitx.Runner, gitDir, root string, tree tre
 	return written[len(written)-1], nil
 }
 
+// WriteContent writes each of bodies into the object store of gitDir as a
+// blob, byte for byte, through the one hash-object every blob of a
+// directory is written through, and returns their ids in the same order:
+// the content a resolve assembled of a file, or an editor saved. Each id is
+// held to the one computed in process.
+func WriteContent(ctx context.Context, r *gitx.Runner, gitDir string, bodies []string) ([]string, error) {
+	blobs := make([]treeid.Blob, len(bodies))
+	ids := make([]string, len(bodies))
+	for i, body := range bodies {
+		// A blob written from what it holds rather than from a path of the
+		// directory is a symlink's to writeBlobs: its Data goes into a file
+		// of its own, which is what a body needs.
+		ids[i] = treeid.BlobID([]byte(body))
+		blobs[i] = treeid.Blob{Path: fmt.Sprint(i), OID: ids[i], Link: true, Data: body}
+	}
+	if err := writeBlobs(ctx, r, gitDir, "", blobs); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
 // ErrChanged is the error of a directory that changed while it was written.
 var ErrChanged = errors.New("the directory changed while it was read")
 

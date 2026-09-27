@@ -61,6 +61,35 @@ func TestUninterruptibleSurvivesTheSignal(t *testing.T) {
 	}
 }
 
+// TestAHoldLeavesSIGINTToTheEditor: while a run holds SIGINT, as it does
+// while an editor it started has the terminal, a Ctrl-C does not stop the
+// run, and is not counted as the first of two signals either; SIGTERM
+// still stops it. Released, SIGINT stops the run again.
+func TestAHoldLeavesSIGINTToTheEditor(t *testing.T) {
+	ctx, stop := Watch(context.Background())
+	defer stop()
+	release := Hold(ctx)
+	raise(t, syscall.SIGINT)
+	raise(t, syscall.SIGTERM)
+	waitDone(t, ctx)
+	if got := From(ctx).Signal(); got != syscall.SIGTERM {
+		t.Errorf("the stop signal is %v, want SIGTERM: SIGINT was held", got)
+	}
+	release()
+	release() // releasing twice is not an error
+	stop()    // a second signal this watch saw would kill the test binary
+
+	again, stopAgain := Watch(context.Background())
+	defer stopAgain()
+	Hold(again)()
+	raise(t, syscall.SIGINT)
+	waitDone(t, again)
+	if got := From(again).Signal(); got != syscall.SIGINT {
+		t.Errorf("the stop signal once the hold is released is %v, want SIGINT", got)
+	}
+	Hold(context.Background())() // a context no Watch made holds nothing
+}
+
 // TestAContextNoWatchMadeIsNeverInterrupted is what every test of the CLI
 // drives: Run takes a plain context, and nothing about signals leaks into
 // it.

@@ -29,6 +29,7 @@ import (
 // whatever its cancelled git call happened to report.
 type Stop struct {
 	signal atomic.Int32 // the first stop signal, 0 until one arrives
+	held   atomic.Int32 // how many holds of SIGINT are in force, see Hold
 }
 
 // Signal is the stop signal the run received, 0 when none did.
@@ -92,6 +93,22 @@ func Uninterruptible(ctx context.Context) context.Context {
 	return context.WithoutCancel(ctx)
 }
 
+// Hold leaves SIGINT to a program the run hands the terminal to, an editor
+// say, until release is called: a Ctrl-C typed there is that program's to
+// answer, as git leaves it to the editor it starts, and the run goes on
+// once the program exits and decides from what it left. SIGTERM still
+// stops the run, since it is sent to agentx and not typed at the editor. A
+// context no Watch made holds nothing.
+func Hold(ctx context.Context) (release func()) {
+	s := From(ctx)
+	if s == nil {
+		return func() {}
+	}
+	s.held.Add(1)
+	var once sync.Once
+	return func() { once.Do(func() { s.held.Add(-1) }) }
+}
+
 // Watch installs the handler for the stop signals and returns a context
 // cancelled by the first of them, carrying the Stop that says so, and a
 // function that takes the handler off again. Call it once, from the process
@@ -128,7 +145,7 @@ func watch(s *Stop, ch <-chan os.Signal, cancel context.CancelFunc, quit <-chan 
 		select {
 		case sig := <-ch:
 			num, ok := sig.(syscall.Signal)
-			if !ok {
+			if !ok || num == syscall.SIGINT && s.held.Load() > 0 {
 				continue
 			}
 			if s.signal.CompareAndSwap(0, int32(num)) {

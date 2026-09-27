@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -43,6 +44,13 @@ type conflictFile struct {
 	Binary bool           `json:"binary"`
 	Hunks  []conflictHunk `json:"hunks"`
 	why    string         // what conflicts, for a file that conflicts whole: the words the text says it in
+	// What resolving the file reads, and no event carries: the version of
+	// each side merge-tree listed, by stage, the paths it moved a version
+	// of the file aside to, relative to the skill's directory, and, for a
+	// file that has hunks, how merge-file merged its three versions.
+	stages map[string]staged
+	aside  []string
+	text   *textMerge
 }
 
 // conflictHunk is one region of a file that conflicts: what each of the
@@ -115,7 +123,7 @@ func mergeVersions(ctx context.Context, r *gitx.Runner, gitDir, dir string, m li
 		return mergeResult{}, fmt.Errorf("git merge-tree: cannot read the tree of %q", out)
 	}
 	stages := map[string]map[string]staged{}
-	aside := map[string]bool{} // the paths a version was moved aside from
+	aside := map[string][]string{} // the paths a version was moved aside to, by the path it was moved from
 	for _, f := range fields[1:] {
 		if f == "" {
 			continue
@@ -130,7 +138,10 @@ func mergeVersions(ctx context.Context, r *gitx.Runner, gitDir, dir string, m li
 			return mergeResult{}, fmt.Errorf("git merge-tree: the conflicted file %q is outside %s", path, dir)
 		}
 		if real, moved := movedAside(rel, m); moved {
-			rel, aside[real] = real, true
+			if !slices.Contains(aside[real], rel) {
+				aside[real] = append(aside[real], rel)
+			}
+			rel = real
 		}
 		if stages[rel] == nil {
 			stages[rel] = map[string]staged{}
@@ -176,21 +187,23 @@ func mergeVersions(ctx context.Context, r *gitx.Runner, gitDir, dir string, m li
 		}
 	}()
 	for _, p := range paths {
-		f, text := conflictOf(p, stages[p], bodies, aside[p], renamed)
+		f, text := conflictOf(p, stages[p], bodies, len(aside[p]) > 0, renamed)
+		f.stages, f.aside = stages[p], aside[p]
 		if text {
 			if scratch == "" {
 				if scratch, err = os.MkdirTemp("", "agentx-merge-"); err != nil {
 					return mergeResult{}, err
 				}
 			}
-			if f.Hunks, err = hunksOf(ctx, r, gitDir, scratch, stages[p], bodies); err != nil {
+			if f.text, err = mergeText(ctx, r, gitDir, scratch, stages[p], bodies); err != nil {
 				return mergeResult{}, err
 			}
+			f.Hunks = f.text.hunks()
 			// A file added on both sides, executable on one side only,
 			// whose content merges conflicts in its mode alone, and
-			// whole, see hunksOf.
+			// whole, see mergeText.
 			if len(f.Hunks) == 0 {
-				f.Hunks, f.why = []conflictHunk{}, "added here and by the update, executable on one side only"
+				f.Hunks, f.why, f.text = []conflictHunk{}, "added here and by the update, executable on one side only", nil
 			}
 		}
 		res.files = append(res.files, f)
@@ -303,13 +316,30 @@ func isBinary(body string) bool {
 	return strings.IndexByte(body[:min(len(body), 8000)], 0) >= 0
 }
 
-// hunksOf reads the hunks of one text file that conflicts: its three
-// versions are written into scratch, an empty file for a base that has
-// none, as an add on both sides is, and git merge-file writes their merge
-// in zdiff3 style with markers longer than any run of marker characters at
-// the start of a line of any of the three, so that no line of the file is
-// ever read as a marker. The hunks are read from the regions between those
-// markers, in order.
+// textMerge is how git merge-file merged the three versions of one text
+// file that conflicts, which the hunks of the file are read from and a
+// resolution of them is assembled from: the text merge-file wrote, with
+// markers of size, the text around the hunks, from before the first to
+// after the last, and each hunk as merge-file wrote it, a last line of the
+// file ended with the line ending merge-file gives it before a marker.
+// whole says that merge-file merged the file with no hunk left although
+// merge-tree found it conflicting, and it is then one hunk, the whole of
+// each version, with nothing around it.
+type textMerge struct {
+	size               int
+	out                string
+	around             []string // one more than hunks
+	raw                []conflictHunk
+	whole              bool
+	mine, base, theirs string
+}
+
+// mergeText merges one text file that conflicts: its three versions are
+// written into scratch, an empty file for a base that has none, as an add
+// on both sides is, and git merge-file writes their merge in zdiff3 style
+// with markers longer than any run of marker characters at the start of a
+// line of any of the three, so that no line of the file is ever read as a
+// marker. The hunks are the regions between those markers, in order.
 //
 // merge-file does not always agree with merge-tree: merge-tree compares
 // each side with the base by git's histogram diff, and merge-file by its
@@ -321,33 +351,64 @@ func isBinary(body string) bool {
 // to choose; but a file added on both sides whose two versions differ in
 // mode conflicts in that, the one thing git cannot merge of it with no base
 // to go by, and has none.
-func hunksOf(ctx context.Context, r *gitx.Runner, gitDir, scratch string, versions map[string]staged, bodies map[string]string) ([]conflictHunk, error) {
+func mergeText(ctx context.Context, r *gitx.Runner, gitDir, scratch string, versions map[string]staged, bodies map[string]string) (*textMerge, error) {
 	text := func(stage string) string {
 		if v, ok := versions[stage]; ok {
 			return bodies[v.oid]
 		}
 		return ""
 	}
-	mine, base, theirs := text(gitStageMine), text(gitStageBase), text(gitStageTheirs)
+	t := &textMerge{mine: text(gitStageMine), base: text(gitStageBase), theirs: text(gitStageTheirs)}
 	files := make([]string, 3)
-	for i, body := range []string{mine, base, theirs} {
+	for i, body := range []string{t.mine, t.base, t.theirs} {
 		files[i] = filepath.Join(scratch, fmt.Sprint(i))
 		if err := os.WriteFile(files[i], []byte(body), 0o600); err != nil {
 			return nil, err
 		}
 	}
-	size := markerSize(mine, base, theirs)
-	out, _, err := r.IsolatedStatus(ctx, gitDir, 127, "merge-file", "-p", "--zdiff3", fmt.Sprintf("--marker-size=%d", size),
+	t.size = markerSize(t.mine, t.base, t.theirs)
+	out, _, err := r.IsolatedStatus(ctx, gitDir, 127, "merge-file", "-p", "--zdiff3", fmt.Sprintf("--marker-size=%d", t.size),
 		"-L", "mine", "-L", "base", "-L", "theirs", files[0], files[1], files[2])
 	if err != nil {
 		return nil, err
 	}
-	hunks, err := parseHunks(out, size, mine, base, theirs)
-	_, based := versions[gitStageBase]
-	if err != nil || len(hunks) > 0 || !based && versions[gitStageMine].mode != versions[gitStageTheirs].mode {
-		return hunks, err
+	if t.around, t.raw, err = splitMerged(out, t.size); err != nil {
+		return nil, err
 	}
-	return []conflictHunk{{Index: 1, Mine: mine, Base: base, Theirs: theirs}}, nil
+	t.out = out
+	_, based := versions[gitStageBase]
+	if len(t.raw) == 0 && (based || versions[gitStageMine].mode == versions[gitStageTheirs].mode) {
+		t.out, t.whole = "", true
+		t.around = []string{"", ""}
+		t.raw = []conflictHunk{{Index: 1, Mine: t.mine, Base: t.base, Theirs: t.theirs}}
+	}
+	return t, nil
+}
+
+// hunksOf reads the hunks of one text file that conflicts, as mergeText
+// merges it.
+func hunksOf(ctx context.Context, r *gitx.Runner, gitDir, scratch string, versions map[string]staged, bodies map[string]string) ([]conflictHunk, error) {
+	t, err := mergeText(ctx, r, gitDir, scratch, versions, bodies)
+	if err != nil {
+		return nil, err
+	}
+	return t.hunks(), nil
+}
+
+// hunks is the hunks of the file as the conflict event carries them.
+// merge-file ends a last line with no newline with one when a marker
+// follows it, so a hunk that ends the file gives each version whose file
+// has no newline at its end its last line back as that file has it.
+func (t *textMerge) hunks() []conflictHunk {
+	hunks := slices.Clone(t.raw)
+	if n := len(hunks); n > 0 && !t.whole && t.around[n] == "" {
+		h := &hunks[n-1]
+		h.Mine, h.Base, h.Theirs = asAtEnd(h.Mine, t.mine), asAtEnd(h.Base, t.base), asAtEnd(h.Theirs, t.theirs)
+	}
+	if hunks == nil {
+		hunks = []conflictHunk{}
+	}
+	return hunks
 }
 
 // markerSize is the length of the markers merge-file is to write between
@@ -367,57 +428,59 @@ func markerSize(texts ...string) int {
 	return max(7, longest+1)
 }
 
-// parseHunks reads the hunks out of what merge-file wrote with markers of
-// size: every region from a line of that many < to one of that many >,
-// with the base after the | line and theirs after the = line, as zdiff3
-// writes them. merge-file ends a last line with no newline with one when a
-// marker follows it, so a hunk that ends the file gives each version whose
-// file has no newline at its end its last line back as that file has it.
-func parseHunks(out string, size int, mine, base, theirs string) ([]conflictHunk, error) {
-	isMarker := func(line string, c string) bool {
-		bare := strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
-		run := strings.Repeat(c, size)
-		return bare == run || strings.HasPrefix(bare, run+" ")
-	}
+// splitMerged reads what merge-file wrote with markers of size: every
+// region from a line of that many < to one of that many >, with the base
+// after the | line and theirs after the = line, as zdiff3 writes them, is
+// a hunk, numbered from 1, and around holds the text before, between and
+// after them, one more than there are hunks.
+func splitMerged(out string, size int) (around []string, hunks []conflictHunk, err error) {
 	const (
 		outside = iota
 		inMine
 		inBase
 		inTheirs
 	)
-	var hunks []conflictHunk
 	var h conflictHunk
-	at, last := outside, false
+	var text strings.Builder
+	at := outside
 	for _, line := range strings.SplitAfter(out, "\n") {
 		if line == "" {
 			continue
 		}
-		last = false
 		switch {
-		case at == outside && isMarker(line, "<"):
+		case at == outside && isMarkerLine(line, "<", size):
+			around = append(around, text.String())
+			text.Reset()
 			h, at = conflictHunk{Index: len(hunks) + 1}, inMine
-		case at == inMine && isMarker(line, "|"):
+		case at == inMine && isMarkerLine(line, "|", size):
 			at = inBase
-		case (at == inMine || at == inBase) && isMarker(line, "="):
+		case (at == inMine || at == inBase) && isMarkerLine(line, "=", size):
 			at = inTheirs
-		case at == inTheirs && isMarker(line, ">"):
-			hunks, at, last = append(hunks, h), outside, true
+		case at == inTheirs && isMarkerLine(line, ">", size):
+			hunks, at = append(hunks, h), outside
 		case at == inMine:
 			h.Mine += line
 		case at == inBase:
 			h.Base += line
 		case at == inTheirs:
 			h.Theirs += line
+		default:
+			text.WriteString(line)
 		}
 	}
 	if at != outside {
-		return nil, fmt.Errorf("git merge-file: a conflict with no end")
+		return nil, nil, fmt.Errorf("git merge-file: a conflict with no end")
 	}
-	if last {
-		h := &hunks[len(hunks)-1]
-		h.Mine, h.Base, h.Theirs = asAtEnd(h.Mine, mine), asAtEnd(h.Base, base), asAtEnd(h.Theirs, theirs)
-	}
-	return hunks, nil
+	return append(around, text.String()), hunks, nil
+}
+
+// isMarkerLine reports whether line is a marker of size made of c: that
+// many of it alone on the line, or followed by a space and a label, the
+// line ending LF or CRLF.
+func isMarkerLine(line, c string, size int) bool {
+	bare := strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+	run := strings.Repeat(c, size)
+	return bare == run || strings.HasPrefix(bare, run+" ")
 }
 
 // asAtEnd is the text of a hunk that ends the file whose content is file,
@@ -439,18 +502,17 @@ func conflictOfSkill(name string, m lineage.Merge, files []conflictFile) conflic
 	return conflictEvent{event: newEvent("conflict"), Name: name, Kind: lineage.KindManaged, Base: m.Base, Mine: m.Mine, Theirs: m.Theirs, Files: files}
 }
 
-// printConflicts reports a merge left pending: one conflict event, and in
-// the text a line naming the skill, the two upstream commits and the files
-// that conflict, then every hunk of every file under its file and number,
+// printConflicts reports conflicts of a merge: one conflict event, and in
+// the text the line headline makes, which names the skill and says what the
+// conflicts are, then every hunk of every file under its file and number,
 // file:index as the hunk is named, between markers git's own size with the
 // three versions' names on them, and every file that conflicts whole with
 // what conflicts in it. Every line of a hunk holds the file's own bytes,
 // so it is printed as a line of a diff is.
-func (inv *invocation) printConflicts(ev conflictEvent, from, to string) {
+func (inv *invocation) printConflicts(ev conflictEvent, headline ...string) {
 	out := inv.out
 	out.emit(ev)
-	out.print(out.paint(heading, sanitised(ev.Name)), " conflicts with its update from ", from, " to ", to, " in ",
-		out.paint(noteStyle, plural(len(ev.Files), "file")))
+	out.print(headline...)
 	for _, f := range ev.Files {
 		if len(f.Hunks) == 0 {
 			out.print(out.paint(label, quotedPath(f.Path)), ": ", f.why)

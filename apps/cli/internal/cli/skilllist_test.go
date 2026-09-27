@@ -176,7 +176,7 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	// A pending merge is a commit of its own too, whose message counts the
 	// files it has left to resolve.
 	tip := h.ref(lineage.ManagedRef("alpha"))
-	pending := lineage.Merge{Base: tip, Mine: tip, Theirs: candidate}.Message("alpha", 2)
+	pending := lineage.Merge{Base: tip, Mine: tip, Theirs: candidate}.Message("alpha", 2, nil)
 	h.accountGit("update-ref", lineage.MergeRef("alpha"), h.accountGit("commit-tree", "refs/heads/managed/alpha^{tree}", "-p", tip, "-p", candidate, "-m", pending))
 	equal(t, "alpha's state", h.listed("alpha")["state"], stateModified)
 	if h.listed("alpha")["candidate"] == nil {

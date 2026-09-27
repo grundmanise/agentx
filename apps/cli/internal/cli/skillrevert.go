@@ -280,10 +280,17 @@ func (inv *invocation) reportReverted(ctx context.Context, name, against string,
 // is the replacement in words, "a revert", and verb the skill command to
 // run again once they are moved out.
 func unrecordableRefusal(name, libPath string, unrecordable []string, what, verb string) *failure {
+	return unrecordableThen(name, libPath, unrecordable, what, "run '"+skillCommand(verb, name)+"' again")
+}
+
+// unrecordableThen is unrecordableRefusal for a command whose way on is not
+// one skill command run again: then says what to do once the paths are
+// moved out.
+func unrecordableThen(name, libPath string, unrecordable []string, what, then string) *failure {
 	paths := make([]string, len(unrecordable))
 	for i, p := range unrecordable {
 		paths[i] = quotedPath(filepath.Join(libPath, filepath.FromSlash(p)))
 	}
 	return refuse(exitRefused, fmt.Sprintf("%s holds %s, which git cannot record", name, strings.Join(paths, ", ")),
-		what+" would discard it with no record of it anywhere; move it out of the skill, then run '"+skillCommand(verb, name)+"' again")
+		what+" would discard it with no record of it anywhere; move it out of the skill, then "+then)
 }
