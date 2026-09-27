@@ -176,9 +176,9 @@ func targetIDs(targets []placeTarget) []string {
 
 // skillPlace places a skill the library already holds into the
 // configurations to names, or every enabled one when it names none. It is
-// the placement half of an install on its own: the same journal steps and
-// the same refusals, so a placement made later is the placement an install
-// would have made. It also puts back what drift finds wrong at the places
+// the placement half of an install on its own: the same targets and the
+// same copy_mode write, so a placement made later is the placement an
+// install would have made. It also puts back what drift finds wrong at the places
 // it covers, and nothing else: every place is judged by the one classifier
 // drift reads, so what it changes is exactly what the listing says is
 // wrong there.
