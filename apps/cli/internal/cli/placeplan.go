@@ -261,8 +261,8 @@ type touchedPath struct {
 // displaced directory, a missing place and the library's symlink where a
 // copy belongs. A place this machine cannot read is skipped, not changed,
 // and a place that already holds what it should is not written. replaces
-// reports whether the plan removes or replaces anything at all: a
-// displaced placement, or the library directory.
+// reports whether the plan removes a displaced directory or replaces the
+// library directory.
 func (plan placePlan) touched(choice keepChoice) (paths []touchedPath, replaces bool) {
 	libraryReplaced := choice == keepPlacement && len(plan.differing()) > 0
 	if libraryReplaced {
@@ -281,7 +281,7 @@ func (plan placePlan) touched(choice keepChoice) (paths []touchedPath, replaces 
 	for _, p := range plan.places {
 		if p.err == nil && p.writes {
 			add(p.path)
-			replaces = replaces || p.word == driftDisplaced
+			replaces = replaces || p.removed()
 		}
 	}
 	if libraryReplaced {
@@ -298,12 +298,12 @@ func (plan placePlan) touched(choice keepChoice) (paths []touchedPath, replaces 
 // out what, it refuses, whatever the flags, wherever links make what it
 // changes overlap what it must leave alone:
 //
-//   - A run that removes or replaces anything finds the skill's library
-//     entry is not a real directory. agentx installs one, and replacing a
-//     link would drop it without touching what it leads to. A run that only
-//     makes placements writes links to the entry and copies of what it
-//     leads to, so a skill linked into the library by hand can still have
-//     them made.
+//   - A run that removes a displaced directory or replaces the library
+//     directory finds the skill's library entry is not a real directory.
+//     agentx installs one, and replacing a link would drop it without
+//     touching what it leads to. A run that only writes placements writes
+//     links to the entry and copies of what it leads to, so a skill linked
+//     into the library by hand can still have them made.
 //   - A path the run changes, see touched, is, lies inside or holds the
 //     library, or the directory a library entry leads to, each compared
 //     where it really is. The library directory --keep-placement replaces
@@ -312,12 +312,12 @@ func (plan placePlan) touched(choice keepChoice) (paths []touchedPath, replaces 
 //     configuration's own place of the skill, lie one inside the other:
 //     removing the outer one takes the inner one with it, and writing the
 //     inner one changes what the outer one was judged to hold.
-//   - A run that removes or replaces anything finds a symlink anywhere in
-//     the skill's library directory. An import never holds one, so it is a
-//     hand edit whose link may lead into what the run replaces. With
-//     --keep-placement, so does a symlink anywhere in a directory whose
-//     content becomes the library's, which would be copied into the library
-//     link for link.
+//   - A run that removes a displaced directory or replaces the library
+//     directory finds a symlink anywhere in the skill's library directory.
+//     An import never holds one, so it is a hand edit whose link may lead
+//     into what the run replaces. With --keep-placement, so does a symlink
+//     anywhere in a directory whose content becomes the library's, which
+//     would be copied into the library link for link.
 //
 // A symlink elsewhere on disk that leads into what the run changes is the
 // user's, and no disk is searched for one. The rule is read afresh at
@@ -599,14 +599,14 @@ func (inv *invocation) stageKept(_ context.Context, m *home.Mutation, plan place
 //
 // A displaced directory is replaced by the expected placement: a symlink,
 // or a copy where --copy asks for one. One holding the library's content
-// loses nothing to it and is adopted, as an install adopts it, and with
-// --copy it becomes the copy, see stagePlacement. One holding anything
-// else is replaced only as the choice says: --keep-library discards it,
-// and --keep-placement already made its content the library's. Every
-// other place gets the placement stagePlacement makes, with its refusals:
-// a missing one is made, the library's symlink where a copy belongs is
-// replaced by one, and a link of the user's or a copy edited where it is
-// is left as it is and counted as skipped.
+// loses nothing to it, is replaced all the same and is reported as
+// adopted, as an install adopts it. One holding anything else is replaced
+// only as the choice says: --keep-library discards it, and --keep-placement
+// already made its content the library's. Every other place gets the
+// placement stagePlacement makes, with its refusals: a missing one is
+// made, the library's symlink where a copy belongs is replaced by one, and
+// a link of the user's or a copy edited where it is is left as it is and
+// counted as skipped.
 //
 // A place two configurations share is placed once, and counts as placed
 // for each of them the run covers.
@@ -615,7 +615,7 @@ func (inv *invocation) stagePlaceAt(m *home.Mutation, p placeable, place planned
 	switch {
 	case place.err != nil:
 		inv.skipPlacement(done, t, place.path, place.err)
-	case place.removed() && (!place.same || !asCopy):
+	case place.removed():
 		if !place.same && choice == keepNeither {
 			return // refused before the lock; never planned
 		}
@@ -644,9 +644,9 @@ func (inv *invocation) stagePlaceAt(m *home.Mutation, p placeable, place planned
 		done.placedAt(place)
 	default:
 		// Nothing at the place, the library's own link where a copy
-		// belongs, a directory holding the library's content with --copy,
-		// or anything that is no drift: the placement skill add would make,
-		// made by the same staging and refused for the same reasons.
+		// belongs, or anything that is no drift: the placement skill add
+		// would make, made by the same staging and refused for the same
+		// reasons.
 		var one placements
 		inv.stagePlacement(m, p, t, libPath, asCopy || place.copied, copies, &one)
 		if asCopy && len(one.copies) > 0 {

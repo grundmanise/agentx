@@ -852,6 +852,33 @@ func TestSkillPlaceKeepFlagsWithCopyWriteACopy(t *testing.T) {
 	}
 }
 
+// TestSkillPlaceKeepPlacementWithCopyReplacesADirectoryOfTheOldLibrary: a
+// displaced directory holding what the library held before --keep-placement
+// is adopted, and with --copy it too is replaced by a copy of the content
+// kept, never left as a directory that is not this skill.
+func TestSkillPlaceKeepPlacementWithCopyReplacesADirectoryOfTheOldLibrary(t *testing.T) {
+	t.Parallel()
+	h, lib, claude, cursor := everywhereHarness(t)
+	displace(t, lib, claude, true)
+	displace(t, lib, cursor, false)
+	kept := libraryTree(t, claude)
+
+	out := h.mustRun("--json", "skill", "place", "alpha", "--keep-placement", "--copy")
+	sameTree(t, "the library directory", libraryTree(t, lib), kept)
+	for _, place := range []string{claude, cursor} {
+		if _, ok := isSymlink(t, place); ok {
+			t.Fatalf("%s is a symlink, want a copy", place)
+		}
+		sameTree(t, "the copy at "+place, libraryTree(t, place), kept)
+	}
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "")
+	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "claude-code,cursor")
+	equal(t, "summary", h.one(out.stdout, "result")["summary"],
+		"placed alpha in 4 configurations, 2 placements as copy, 1 placement adopted; the library now holds what "+claude+" held"+universalClauseOf)
+	equal(t, "drift", drift(h.listed("alpha")), "")
+	cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor))
+}
+
 // TestSkillRepairIsNoLongerACommand: skill place puts placements back, and
 // skill repair is gone.
 func TestSkillRepairIsNoLongerACommand(t *testing.T) {
@@ -1592,13 +1619,13 @@ func TestSkillPlaceRefusesAPlaceInsideAnother(t *testing.T) {
 // TestSkillPlaceRefusesALibraryDirectoryHoldingASymlink: an import never
 // holds a symlink, so one in the skill's library directory is a hand edit,
 // and it may lead into, through or above what skill place removes. Rather
-// than follow it, every run that removes or replaces anything refuses
-// while the library directory holds a symlink at any depth, whatever the
-// flags, --keep-placement included, which would replace the library
-// directory link and all, names the link, points at diff and revert, and
-// changes nothing. A run that only puts a copy back where the library's
-// symlink stands refuses as well, since it removes that symlink. A run
-// that only makes a missing placement removes nothing and goes ahead.
+// than follow it, every run that removes a displaced directory or replaces
+// the library directory refuses while the library directory holds a
+// symlink at any depth, whatever the flags, --keep-placement included,
+// which would replace the library directory link and all, names the link,
+// points at diff and revert, and changes nothing. A run that only writes
+// placements, a missing one or a copy where the library's symlink stands,
+// removes no directory and goes ahead.
 func TestSkillPlaceRefusesALibraryDirectoryHoldingASymlink(t *testing.T) {
 	t.Parallel()
 	refusal := func(lib, at string) (message, hint string) {
@@ -1680,9 +1707,12 @@ func TestSkillPlaceRefusesALibraryDirectoryHoldingASymlink(t *testing.T) {
 		at := filepath.Join(lib, "shared.md")
 		link(t, outside, at)
 		equal(t, "drift", drift(h.listed("alpha")), "displaced")
-		message, hint := refusal(lib, at)
-		refusesUntouched(t, h, everyFlag, message, hint)
-		linksToLibrary(t, "cursor's placement", cursor, lib)
+		h.mustRun("skill", "place", "alpha")
+		if _, ok := isSymlink(t, cursor); ok {
+			t.Fatal("cursor's placement is still a symlink, want the copy copy_mode records")
+		}
+		sameTree(t, "cursor's copy", libraryTree(t, cursor), libraryTree(t, lib))
+		linksToLibrary(t, "the library's own link", at, outside)
 		cleanAfterPlace(t, h, h.library, filepath.Dir(cursor))
 	})
 
@@ -2177,8 +2207,9 @@ func TestSkillPlaceWhenEveryPlaceIsSkipped(t *testing.T) {
 }
 
 // TestSkillPlaceKeepFlagsOnWhatTheyCannotJudge: a fork is placed as it
-// always was, and --keep-library or --keep-placement on it stops with exit
-// 6 and changes nothing. A skill agentx does not manage is judged like a
+// always was, a directory that differs left in place and counted as
+// skipped, and --keep-library or --keep-placement on it stops with exit 6
+// and changes nothing. A skill agentx does not manage is judged like a
 // managed one: a directory that differs stops the run until a flag decides.
 // A managed skill whose library directory is gone has nothing to place,
 // one whose import branch records no version agentx can read has no base
@@ -2193,6 +2224,8 @@ func TestSkillPlaceKeepFlagsOnWhatTheyCannotJudge(t *testing.T) {
 		h.accountGit("update-ref", "refs/heads/skills/alpha", commit)
 		h.accountGit("update-ref", "-d", "refs/heads/managed/alpha")
 		remove(t, cursor)
+		displace(t, lib, claude, true)
+		kept := libraryTree(t, claude)
 		version := mutationVersion(t, h)
 		for _, flag := range []string{"--keep-library", "--keep-placement"} {
 			out := h.run("--json", "skill", "place", "alpha", flag)
@@ -2204,9 +2237,10 @@ func TestSkillPlaceKeepFlagsOnWhatTheyCannotJudge(t *testing.T) {
 		nothingAt(t, "cursor's placement", cursor)
 		equal(t, "no mutation", mutationVersion(t, h), version)
 
-		h.mustRun("skill", "place", "alpha")
-		linksToLibrary(t, "claude's placement", claude, lib)
+		out := h.mustRun("--json", "skill", "place", "alpha")
+		sameTree(t, "claude's directory", libraryTree(t, claude), kept)
 		linksToLibrary(t, "cursor's placement", cursor, lib)
+		contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), ", 1 placement skipped")
 		equal(t, "the fork", h.accountGit("rev-parse", "refs/heads/skills/alpha"), commit)
 		cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor))
 	})
