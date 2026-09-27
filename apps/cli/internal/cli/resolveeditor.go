@@ -179,7 +179,7 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	// that runs the editor dies of the stop at once, so the editor may still
 	// be running as the run settles its directory, and one sent SIGTERM may
 	// write what it held beside the file as it stops, as nano and Emacs do,
-	// after the run has read the directory, see keep.
+	// after the run has read the directory, see keep and kept.
 	stopped := false
 	// keep settles the directory of a run that did not write everything
 	// typed there, and reports whether it stays, and whether it is given up
@@ -208,8 +208,10 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	// warning is as true as any other's. A hold that fails, as the wait of a
 	// run stopped does while another command holds the lock, a scan that
 	// holds it shared included, reads them without the lock and settles the
-	// directory all the same, so that its warning never tells a merge gone
-	// as one pending; refs it cannot read at all keep the directory.
+	// directory all the same, its warning telling the merge as it read it,
+	// which a command that holds the lock, a completion or --abort of the
+	// same merge say, may still change meanwhile: nothing typed is deleted
+	// either way. Refs it cannot read at all keep the directory.
 	keep := func() (stays, released, givenUp, moved bool) {
 		settleDir := func() error {
 			values, err := inv.lineageRefs(interrupt.Uninterruptible(ctx), r.gitDir, name)
@@ -244,7 +246,10 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	// keptGivenUp, the merge given up taken for the last one the run read,
 	// the one it laid the files out from. A directory that holds nothing
 	// typed but under another name, a swap file an editor left say, which
-	// no session opens, promises nothing opens again, see keptUnopened. A
+	// no session opens, promises nothing opens again, see keptUnopened, and
+	// so does that of a run stopped with nothing typed in the files the
+	// editor was given, whose editor may yet write what it held beside
+	// them as it stops, see stopped, which no session opens either. A
 	// session of one file the merge records as resolved, which only one
 	// named after --editor is, is opened again only by a session that names
 	// it, and what holds no marker only while the merge is the one it was
@@ -263,7 +268,7 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 			end = keptGivenUp(name, k)
 		case !stays:
 			return
-		case !k.reopens && k.rest:
+		case !k.reopens && (k.rest || stopped):
 			end = keptUnopened()
 		case s.file != "" && r.resolved[files[0].Path]:
 			p := files[0].Path

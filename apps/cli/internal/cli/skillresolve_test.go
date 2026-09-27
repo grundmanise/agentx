@@ -1107,8 +1107,9 @@ const mayClean = "; the folder is in your temporary directory, which your system
 
 // swapWarning is the warning that names the directory in dir, which holds
 // nothing typed but under another name, a swap file say, which no session
-// opens, as giving kit's merge up keeps it, or as a session keeps its own:
-// it promises nothing opens again.
+// opens, as giving kit's merge up keeps it, or as a session keeps its own,
+// a run stopped with nothing typed in the files included: it promises
+// nothing opens again.
 func swapWarning(dir string) string {
 	return "the files you edited are kept in " + dir + "; what you typed there does not open again, because it is saved under another name, such as a swap file an editor left, so copy what you need from it"
 }
@@ -2013,8 +2014,9 @@ for f in "$@"; do printf 'resolved in the editor\n' > "$f"; done
 
 // TestSkillResolveStoppedWhileTheEditorIsOpenKeepsTheFiles: a SIGTERM still
 // stops a run whose editor is open, exit code 9, and what the editor was
-// given stays in its directory, kept, which a warning names; the merge is
-// left as it was.
+// given stays in its directory, kept, with what was typed and saved in the
+// files before the stop, which a warning names, promising the next session
+// of the same conflict opens it again; the merge is left as it was.
 func TestSkillResolveStoppedWhileTheEditorIsOpenKeepsTheFiles(t *testing.T) {
 	t.Parallel()
 	h, _, _ := resolveHarness(t)
@@ -2022,7 +2024,8 @@ func TestSkillResolveStoppedWhileTheEditorIsOpenKeepsTheFiles(t *testing.T) {
 	stub, _ := waitThen(t, "exit 0\n")
 	ready := filepath.Join(t.TempDir(), "open")
 	h.env["PATH"] = gitOnlyPath(t) // as TestSkillResolveLeavesACtrlCToTheEditor says
-	h.env["GIT_EDITOR"] = editorStub(t, "reporting-editor", "echo open > "+shellWord(ready)+"\nexec "+shellWord(stub)+` "$@"`+"\n")
+	h.env["GIT_EDITOR"] = editorStub(t, "reporting-editor", `for f in "$@"; do printf 'typed before the stop\n' > "$f"; done
+echo open > `+shellWord(ready)+"\nexec "+shellWord(stub)+` "$@"`+"\n")
 
 	code, stderr := signalled(t, h, stopRun{ready: ready, sigs: []syscall.Signal{syscall.SIGTERM}, group: true,
 		args: []string{"skill", "resolve", "kit", "--editor", "--color", "off"}})
@@ -2032,7 +2035,8 @@ func TestSkillResolveStoppedWhileTheEditorIsOpenKeepsTheFiles(t *testing.T) {
 	if len(dirs) != 1 {
 		t.Fatalf("the run left %v, want the one directory:\n%s", dirs, stderr)
 	}
-	contains(t, "the warning", stderr, "warning: "+keptWarning(dirs[0]))
+	contains(t, "the warning", stderr, "warning: "+keptWarning(dirs[0])+"\n")
+	equal(t, "what the editor typed, kept", fileBody(t, filepath.Join(dirs[0], "kit", "notes.md")), "typed before the stop\n")
 	equal(t, "the owner of what is kept", ownerOf(t, dirs[0]), "kept")
 	equal(t, "the merge ref", h.ref(lineage.MergeRef("kit")), merge)
 	equal(t, "journals", journalCount(t, h), 0)
@@ -2042,7 +2046,8 @@ func TestSkillResolveStoppedWhileTheEditorIsOpenKeepsTheFiles(t *testing.T) {
 // sent to agentx alone, as a supervisor or the app sends one, reaches the
 // editor too, and not only the sh that runs it: the editor stops before the
 // work it would do next, rather than going on after the run is over. The
-// run exits 9 and keeps the files, as any stopped run does.
+// run exits 9 and keeps the files, as any stopped run does, with nothing
+// typed in them, so its warning promises nothing opens again.
 func TestSkillResolveStoppedWhileTheEditorIsOpenStopsTheEditor(t *testing.T) {
 	t.Parallel()
 	h, _, _ := resolveHarness(t)
@@ -2075,7 +2080,7 @@ echo after > `+shellWord(after)+`
 	if len(dirs) != 1 {
 		t.Fatalf("the run left %v, want the one directory:\n%s", dirs, stderr)
 	}
-	contains(t, "the warning", stderr, "warning: "+keptWarning(dirs[0]))
+	contains(t, "the warning", stderr, "warning: "+swapWarning(dirs[0])+"\n")
 	equal(t, "the merge ref", h.ref(lineage.MergeRef("kit")), merge)
 	equal(t, "journals", journalCount(t, h), 0)
 }
@@ -2185,8 +2190,12 @@ while [ $i -lt 1200 ]; do `+sleeper+` 0.05; i=$((i+1)); done
 // directory. So a run stopped while its editor is open never removes the
 // directory, even with nothing typed in the files when it reads them: once
 // another run completed the merge meanwhile it gives the directory up to
-// the user, and once another run gave it up it keeps it, and a warning
-// names it either way. What the editor writes as it stops is there.
+// the user, once another run gave it up it keeps it, and so it does with
+// the merge left pending, and a warning names it each time. What the editor
+// writes as it stops is there. Saved under another name, it is opened by
+// no later session, so the warning of a merge left pending promises no
+// session opens it, and the next session names the directory as one it
+// did not open.
 func TestSkillResolveStoppedKeepsWhatTheEditorSavesAsItStops(t *testing.T) {
 	t.Parallel()
 	sleeper, err := exec.LookPath("sleep")
@@ -2195,12 +2204,13 @@ func TestSkillResolveStoppedKeepsWhatTheEditorSavesAsItStops(t *testing.T) {
 	}
 	for _, c := range []struct {
 		name      string
-		meanwhile []string
+		meanwhile []string // nil for no run meanwhile, the merge left pending as it was
 		warning   func(dir string) string
 		owner     string // "" for a directory given up to the user
 	}{
 		{name: "completed", meanwhile: append([]string{"--hunk", "kept.md:1=theirs"}, hunks(kitSides)...), warning: givenUpWarning},
 		{name: "given up", meanwhile: []string{"--abort"}, warning: swapWarning, owner: "kept"},
+		{name: "pending", warning: swapWarning, owner: "kept"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -2226,11 +2236,12 @@ echo open > `+shellWord(ready)+`
 i=0
 while [ $i -lt 1200 ]; do `+sleeper+` 0.05; i=$((i+1)); done
 `)
+			merge := h.ref(lineage.MergeRef("kit"))
 			meanwhile := outcome{exit: -1}
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
-				if waitFor(opened) {
+				if waitFor(opened) && c.meanwhile != nil {
 					meanwhile = h.run(append([]string{"skill", "resolve", "kit"}, c.meanwhile...)...)
 				}
 				_ = os.WriteFile(goFile, []byte("go\n"), 0o600)
@@ -2240,7 +2251,9 @@ while [ $i -lt 1200 ]; do `+sleeper+` 0.05; i=$((i+1)); done
 			code, stderr := signalled(t, h, stopRun{ready: ready, sigs: []syscall.Signal{syscall.SIGTERM},
 				args: []string{"skill", "resolve", "kit", "--editor", "--color", "off"}})
 			<-done
-			equal(t, "exit of the run meanwhile", meanwhile.exit, 0)
+			if c.meanwhile != nil {
+				equal(t, "exit of the run meanwhile", meanwhile.exit, 0)
+			}
 			equal(t, "exit", code, exitInterrupted.exit)
 			contains(t, "stderr", stderr, "error: interrupted")
 			if !waitFor(saved) {
@@ -2258,6 +2271,23 @@ while [ $i -lt 1200 ]; do `+sleeper+` 0.05; i=$((i+1)); done
 				return
 			}
 			equal(t, "the owner of what is kept", ownerOf(t, dirs[0]), c.owner)
+			if c.meanwhile != nil {
+				return
+			}
+
+			// The next session of the same conflict opens the files afresh,
+			// and names the directory as one it did not open.
+			equal(t, "the merge ref", h.ref(lineage.MergeRef("kit")), merge)
+			stub, seen := seeingEditor(t, "exit 0\n")
+			h.env["GIT_EDITOR"] = stub
+			out := h.run("--json", "skill", "resolve", "kit", "--editor")
+			equal(t, "exit of the next session", out.exit, 0)
+			equal(t, "what the next session opened, afresh", fileBody(t, filepath.Join(seen, "notes.md")), kitText["notes.md"])
+			equal(t, "the notes of the next session", strings.Join(infos(h, out.stderr), "\n"), "")
+			equal(t, "the warnings of the next session", strings.Join(warnings(h, out.stderr), "\n"), notOpenedWarning(dirs[0])+
+				"\nguide.md still holds conflict markers, so it was left unresolved\nnotes.md still holds conflict markers, so it was left unresolved")
+			equal(t, "what the editor saved as it stopped, still kept", fileBody(t, filepath.Join(dirs[0], "kit", "notes.md.save")), "unsaved typing\n")
+			equal(t, "what the sessions left", strings.Join(editorDirs(t, h), " "), dirs[0])
 		})
 	}
 }
