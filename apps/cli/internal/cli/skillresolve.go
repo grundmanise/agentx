@@ -225,6 +225,7 @@ type pendingRun struct {
 	resolved map[string]bool          // the files the pending merge commit records as resolved
 	theirs   lineage.Import           // the lineage of the update merged
 	carried  map[string]bool          // once the run merged the merge again and wrote it: the files whose resolution it kept
+	left     map[string]bool          // and the files it left to resolve
 }
 
 // readPending reads the merge a skill's merge ref holds, refusing one that
@@ -702,7 +703,8 @@ func (r *pendingRun) fileInTheWay(dir string, e source.TreeEntry, side string, r
 // names it. So is a file of the merge inside a path resolved to a file, or
 // to nothing, which takes everything below it away. inFile has refused
 // anything rs puts inside a file already, so the directory a path needs
-// to sit in never replaces one.
+// to sit in never replaces one. A directory left with nothing below it,
+// its last file resolved to the side that deleted it, goes too.
 func applyResolutions(held, fresh lineage.Base, files map[string]*conflictFile, rs []resolution) (v lineage.Base, reopened []string) {
 	entries := map[string]source.TreeEntry{}
 	for _, e := range held.Entries {
@@ -765,6 +767,23 @@ func applyResolutions(held, fresh lineage.Base, files map[string]*conflictFile, 
 		e := *res.entry
 		e.Path = res.path
 		entries[res.path] = e
+	}
+	// A directory with no file left below it goes, as git records none and
+	// no tree of the merge holds one: laid out, it would be a directory
+	// neither side has.
+	filled := map[string]bool{}
+	for p, e := range entries {
+		if e.Mode == source.DirMode {
+			continue
+		}
+		for dir := path.Dir(p); dir != "." && !filled[dir]; dir = path.Dir(dir) {
+			filled[dir] = true
+		}
+	}
+	for p, e := range entries {
+		if e.Mode == source.DirMode && !filled[p] {
+			delete(entries, p)
+		}
 	}
 	v = lineage.Base{Tree: held.Tree, Entries: make([]source.TreeEntry, 0, len(entries))}
 	for _, e := range entries {
@@ -834,9 +853,12 @@ func (r *pendingRun) write(ctx context.Context, again mergedAgain, doing string)
 	if err := r.publish(ctx, commit, again.m.Base, doing); err != nil {
 		return err
 	}
-	r.carried = map[string]bool{}
+	r.carried, r.left = map[string]bool{}, map[string]bool{}
 	for _, p := range again.resolved {
 		r.carried[p] = true
+	}
+	for _, f := range again.left {
+		r.left[f.Path] = true
 	}
 	return nil
 }

@@ -69,9 +69,9 @@ func (inv *invocation) editorCommand() (command string, ok bool) {
 // what it holds, and written into the merge as a resolve writes a file, see
 // resolve, only while the merge ref still holds the commit the files were
 // written from: one that another run moved while the editor was open is
-// refused with nothing written. A session that resolved nothing reads the merge ref
-// again before it reports the merge, and one given up or moved meanwhile
-// is refused rather than reported as it was.
+// refused with nothing written. A session that resolved nothing reads the
+// merge ref again before it reports the merge, and one given up or moved
+// meanwhile is refused rather than reported as it was.
 //
 // The directory is removed once what the editor left is written or found
 // to have nothing to write. When the editor fails, or the run refuses to
@@ -80,10 +80,12 @@ func (inv *invocation) editorCommand() (command string, ok bool) {
 // only completing the merge or giving it up removes it, which a run that
 // finds the merge completed or given up meanwhile does at once. So is a
 // directory that holds a file left with markers in it and something typed
-// besides, whose warning says so. A completion that merged the library
-// directory again and left the merge pending, exit code 4, wrote every
-// resolution that still applies, and keeps the directory only for a file
-// the editor resolved that conflicts anew, which a warning names.
+// besides, whose warning says so. A run that merged the merge again, a
+// completion of an edited library directory or a run on a moved import
+// branch, and left it pending wrote every resolution that still applies,
+// and keeps the directory only for a file the editor resolved that
+// conflicts anew, or that merges cleanly now, git's merge of it written
+// in place of what was typed, which a warning names.
 func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	inv, name := r.inv, r.rec.Name
 	see := "run '" + skillCommand("resolve", name) + "' to see every file left to resolve"
@@ -172,30 +174,37 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 			rs = append(rs, resolution{path: f.Path, entry: &source.TreeEntry{Mode: resolvedMode(f, nil)}, body: &content})
 		}
 	}
-	var anew []string // the files the editor resolved that conflict anew, what was typed for them kept
+	var anew, clean []string // the files the editor resolved that conflict anew, and that merge cleanly now, what was typed for them kept
 	if len(rs) == 0 {
 		if err = r.stillPending(ctx, "the editor was open"); err != nil {
 			kept()
 			return err
 		}
-	} else if err = r.resolve(ctx, rs); err != nil {
-		if r.carried == nil {
-			kept()
-			return err
-		}
+	} else if err = r.resolve(ctx, rs); err != nil && r.carried == nil {
+		kept()
+		return err
+	}
+	if r.carried != nil {
 		// The merge was merged again and written, every resolution that
-		// still applies carried into it, before the run was refused.
+		// still applies carried into it. A file the editor resolved that
+		// is left to resolve conflicts anew; any other one merges cleanly
+		// now, and git's merge of it was written in place of what was
+		// typed.
 		for _, res := range rs {
-			if !r.carried[res.path] {
+			switch {
+			case r.carried[res.path]:
+			case r.left[res.path]:
 				anew = append(anew, res.path)
+			default:
+				clean = append(clean, res.path)
 			}
 		}
 	}
 	// The directory stays, marked kept, while it holds something typed that
 	// was not written: a file left with markers in it and more, and a file
-	// the editor resolved that conflicts anew.
+	// the editor resolved that conflicts anew or merges cleanly now.
 	held := ""
-	if slices.ContainsFunc(left, func(p string) bool { return typed[p] }) || len(anew) > 0 {
+	if slices.ContainsFunc(left, func(p string) bool { return typed[p] }) || len(anew)+len(clean) > 0 {
 		if keep() {
 			held = dir
 		}
@@ -219,6 +228,10 @@ func (r *pendingRun) edit(ctx context.Context, s *editorSession) error {
 	if held != "" {
 		for _, p := range anew {
 			inv.out.warn(quotedPath(p) + " conflicts anew now that the merge was merged again, so what you typed for it is kept in " + held +
+				" until the merge of " + name + " completes or is given up")
+		}
+		for _, p := range clean {
+			inv.out.warn(quotedPath(p) + " merges cleanly now that the merge was merged again, so what you typed for it was not written and is kept in " + held +
 				" until the merge of " + name + " completes or is given up")
 		}
 	}

@@ -716,7 +716,7 @@ agentx skill resolve docx --editor
 agentx opens every text file left to resolve in your editor, with conflict markers the way git writes them. Edit each file to what you want, remove the markers, save, and close the editor. To open one file only, name it: `agentx skill resolve docx --editor SKILL.md`.
 
 - agentx uses the editor in `GIT_EDITOR`, then the one in `EDITOR`, then VS Code with `code --wait`.
-- A file that still has conflict markers when you close the editor stays unresolved, and agentx says so. A file you had already resolved and named after `--editor` keeps the way you resolved it. If you typed in such a file, agentx keeps it and tells you where, so copy what you typed from there.
+- A file that still has conflict markers when you close the editor stays unresolved, and agentx says so. If you left markers in a file you had already resolved, it keeps the way you resolved it before; save it without markers to replace that resolution. If you typed in a file you left markers in, agentx keeps it and tells you where, so copy what you typed from there.
 - Other agentx commands, and the desktop app, keep working while your editor is open. If the merge changes meanwhile, for example because you resolved a file in another terminal, nothing is written and agentx tells you where your edited files are kept.
 - If the editor exits with an error, nothing is written either, and agentx tells you where your edited files are kept.
 - Kept files stay in that folder until the merge is finished or given up. Running `--editor` again opens the files afresh, so copy what you typed from the kept folder.
@@ -735,9 +735,9 @@ The command that resolves the last file finishes the merge:
 
 The skill is then at the new version with the changes you chose, as after any update: copies that held your version, or the version you installed, get the merged one, and copies you edited in place are kept.
 
-If you edited the skill while the merge was pending, your edit is kept. agentx merges again: every file your edit did not touch keeps the choice you made, and a file your edit made conflict again is shown on its own. The command then stops with exit code 4, and you resolve that file as before. When you were resolving in your editor, what you saved is kept the same way, and what you typed for a file that conflicts again stays in the folder agentx names.
+If you edited the skill while the merge was pending, your edit is kept. agentx merges again: every file your edit did not touch keeps the choice you made, and a file your edit made conflict again is shown on its own. The command then stops with exit code 4, and you resolve that file as before. When you were resolving in your editor, what you saved is kept the same way, and what you typed for a file that conflicts again, or that your edit made merge on its own, stays in the folder agentx names.
 
-If the skill's import branch moved while the merge was pending, for example because a git command outside agentx moved it, agentx merges again on the version it points at now. Every choice that still applies is kept. If a file now conflicts differently, the command shows every file left and stops with exit code 4; resolve them as before.
+If the skill's import branch moved while the merge was pending, for example because a git command outside agentx moved it, agentx merges again on the version it points at now. Every choice that still applies is kept. If a file now conflicts differently, the command shows every file left and stops with exit code 4; resolve them as before. While the merge is still pending, what you typed in your editor for a file that now merges on its own stays in the folder agentx names.
 
 If a check found an even newer version while the merge was pending, the skill is updated to the version you merged, and the newer one stays available for your next update.
 
