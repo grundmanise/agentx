@@ -1182,7 +1182,7 @@ func writeSynced(path string, data []byte, mode os.FileMode) error {
 	}
 	_, err = f.Write(data)
 	if err == nil {
-		err = f.Sync()
+		err = home.Sync(f)
 	}
 	if closeErr := f.Close(); err == nil {
 		err = closeErr
