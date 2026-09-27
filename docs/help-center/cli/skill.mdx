@@ -720,7 +720,7 @@ agentx opens every text file left to resolve in your editor, with conflict marke
 - Other agentx commands, and the desktop app, keep working while your editor is open. If the merge changes meanwhile, for example because you resolved a file in another terminal, nothing is written and agentx tells you where your edited files are kept.
 - If the editor exits with an error, nothing is written either, and agentx tells you where your edited files are kept.
 - Kept files stay in that folder until the merge is finished or given up. Running `--editor` again opens the files afresh, so copy what you typed from the kept folder.
-- If agentx was killed while your editor was open, for example because you closed the terminal or lost the connection, the next `--editor` command keeps the folder of that session when you had saved anything in it, or your editor left a swap file there, and tells you where it is. It deletes the folder only when nothing in it changed.
+- If agentx was killed while your editor was open, for example because you closed the terminal or lost the connection, the next `--editor` command, or the command that finishes the merge, leaves the folder of that session to you when you had saved anything in it, or your editor left a swap file there, and tells you where it is. agentx never deletes that folder, even once the merge is finished or given up, so delete it once you have copied what you need. agentx deletes the folder itself only when nothing in it changed.
 - If the merge is finished or given up while your editor is open, for example in another terminal, nothing is written and the folder is deleted: there is no merge left to write what you typed into.
 - While your editor is open, Ctrl-C belongs to the editor: agentx keeps waiting until you close it.
 - If agentx itself is stopped while your editor is open, for example with `kill`, it stops your editor too, writes nothing, and tells you where your edited files are kept.
@@ -750,7 +750,7 @@ agentx skill resolve docx --abort
 
 The merge is gone, and your library directory, your copies and the update the check found are left exactly as they were. Run `agentx skill update docx` to merge again.
 
-Giving up also deletes the files of any editor session for the skill, including one still open in another terminal and files kept from an earlier session.
+Giving up also deletes the files of any editor session for the skill, including one still open in another terminal and files kept from an earlier session. A folder agentx left to you, as it says when it does, stays until you delete it.
 
 ## Script it
 
@@ -815,7 +815,7 @@ For each skill whose edits conflict with its update, `skill update` emits one `c
 
 `base`, `mine` and `theirs` at the top are the three versions merged: the commit of the version you installed, your library directory as it was, and the update. Each file names the blob each of them holds, `null` for one that has no file there, and `hunks` lists every part that conflicts, as text, numbered from 1 in the order they come in the file. A text file that conflicts in its content has at least one hunk, and when git cannot tell its parts apart that hunk is the whole of each version. A file that conflicts as a whole, a binary, deleted or moved file, one that meets a folder or a symlink, or one added on both sides that is executable on one side only, has no hunks, and `binary` says whether it is binary. Every `path` is a path of the skill, relative to its directory.
 
-`skill resolve` with no flag emits the same `conflict` event, listing the files left to resolve. A `skill resolve` that leaves files to resolve emits a `conflict` event with those files, and its `result` says how many are left, as in `resolved SKILL.md in the merge of docx, 1 file left to resolve`. One that finishes the merge emits the skill's `library_skill` event, and one that finds the skill edited while the merge was pending emits a `conflict` event with only the files that conflict again, then exits with code 4. `--abort` emits the skill's `library_skill` event. With `--json`, whatever your editor prints arrives as `log` events of level `info`.
+`skill resolve` with no flag emits the same `conflict` event, listing the files left to resolve. A `skill resolve` that leaves files to resolve emits a `conflict` event with those files, and its `result` says how many are left, as in `resolved SKILL.md in the merge of docx, 1 file left to resolve`. One that finishes the merge emits the skill's `library_skill` event, and one that finds the skill edited while the merge was pending emits a `conflict` event with only the files that conflict again, then exits with code 4. One that merges again because the import branch moved emits a `conflict` event with every file left, and exits with code 4 when a file conflicts anew. `--abort` emits the skill's `library_skill` event. With `--json`, whatever your editor prints arrives as `log` events of level `info`.
 
 A skill with a merge pending carries `pending_merge` in its `library_skill` event and in the snapshot, with the number of files that still conflict:
 

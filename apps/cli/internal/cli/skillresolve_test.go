@@ -1008,7 +1008,8 @@ func ownerOf(t *testing.T, dir string) string {
 // library directory, every placement, the import branch and the candidate
 // byte for byte as they were. The files an editor session of the skill
 // left for this home go with it, a session still open and one its run kept
-// included, and those of another skill or another home stay. The skill is
+// included, and those of another skill or another home stay, and so do
+// those given up to the user, which no owner file claims. The skill is
 // reported as it now stands, with no merge pending, and giving it up again
 // is exit code 6.
 func TestSkillResolveAbortLeavesTheLibraryAsItWas(t *testing.T) {
@@ -1020,6 +1021,8 @@ func TestSkillResolveAbortLeavesTheLibraryAsItWas(t *testing.T) {
 	ours, kept := editorDir(t, h, "kit", ownPid, h.agentx), editorDir(t, h, "kit", "kept", h.agentx)
 	other := editorDir(t, h, "other", ownPid, h.agentx)
 	elsewhere := editorDir(t, h, "kit", ownPid, filepath.Join(h.agentx, "elsewhere"))
+	yours := editorDir(t, h, "kit", goneProcess(t), h.agentx)
+	remove(t, filepath.Join(yours, editorOwner))
 	before := mutationVersion(t, h)
 
 	out := h.run("--json", "skill", "resolve", "kit", "--abort")
@@ -1038,7 +1041,7 @@ func TestSkillResolveAbortLeavesTheLibraryAsItWas(t *testing.T) {
 	equal(t, "journals", journalCount(t, h), 0)
 	nothingAt(t, "the skill's editor files", ours)
 	nothingAt(t, "the skill's kept editor files", kept)
-	for _, dir := range []string{other, elsewhere} {
+	for _, dir := range []string{other, elsewhere, yours} {
 		if _, err := os.Stat(dir); err != nil {
 			t.Errorf("%s went with the merge: %v", dir, err)
 		}
@@ -1810,7 +1813,7 @@ done
 				equal(t, "conflict events", len(h.eventsOfType(out.stdout, "conflict")), 0)
 				contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), " and updated it from ")
 				equal(t, "the merge ref", h.ref(lineage.MergeRef("kit")), "")
-				until = ", which nothing removes but you now that the merge of kit is complete"
+				until = ", which agentx leaves for you to delete now that the merge of kit is complete"
 			} else {
 				equal(t, "what is left", conflictFiles(h.one(out.stdout, "conflict")), c.left)
 			}
@@ -1870,22 +1873,21 @@ done
 // TestSkillResolvePrunesWhatAnEditorSessionLeftBehind: a directory an
 // editor session of the skill left for this home, whose run is gone
 // without keeping it, killed or hung up on say, is removed when the next
-// session starts, as long as it holds the files as they were written; one
-// whose run is still going, one its run kept, and one of another skill
-// stay. One whose run is gone and that holds anything else, a file saved,
-// a swap file an editor left beside one, or an owner file that records no
-// file, is kept instead, marked so, and a warning names it. Completing
-// the merge removes the kept ones too, and leaves the one whose run is
-// still going.
+// session starts, as long as it holds nothing but the files as they were
+// written, one of them deleted or never written included; one whose run is
+// still going, one its run kept, and one of another skill stay. One whose
+// run is gone and that holds anything else, a file saved, a swap file an
+// editor left beside one, or an owner file that records no file, is given
+// up to the user instead, its owner file gone, and a warning names it.
+// Completing the merge removes the one its run kept, and leaves the one
+// whose run is still going and every one given up to the user.
 func TestSkillResolvePrunesWhatAnEditorSessionLeftBehind(t *testing.T) {
 	t.Parallel()
 	h, _, _ := resolveHarness(t)
-	gone := exec.Command("true")
-	if err := gone.Run(); err != nil {
-		t.Fatal(err)
-	}
-	pid := strconv.Itoa(gone.Process.Pid)
+	pid := goneProcess(t)
 	stale := editorDir(t, h, "kit", pid, h.agentx)
+	unwritten := editorDir(t, h, "kit", pid, h.agentx)
+	remove(t, filepath.Join(unwritten, "kit", "notes.md"))
 	live := editorDir(t, h, "kit", ownPid, h.agentx)
 	kept := editorDir(t, h, "kit", "kept", h.agentx)
 	other := editorDir(t, h, "other", pid, h.agentx)
@@ -1900,12 +1902,12 @@ func TestSkillResolvePrunesWhatAnEditorSessionLeftBehind(t *testing.T) {
 	out := h.run("--json", "skill", "resolve", "kit", "--editor")
 	equal(t, "exit", out.exit, 0)
 	nothingAt(t, "the stale session", stale)
+	nothingAt(t, "the session killed as it laid its files out", unwritten)
 	equal(t, "what is left", strings.Join(editorDirs(t, h), " "), strings.Join(sortedStrings(live, kept, other, saved, swapped, unrecorded), " "))
 	var want []string
 	for _, dir := range sortedStrings(saved, swapped, unrecorded) {
-		equal(t, "the owner of "+dir, ownerOf(t, dir), "kept")
-		want = append(want, "the files you edited in an earlier session that did not finish are kept in "+dir+
-			" until the merge of kit completes or is given up; this session opens the files afresh, so copy what you typed from there")
+		nothingAt(t, "the owner file of "+dir, filepath.Join(dir, editorOwner))
+		want = append(want, staleWarning(dir))
 	}
 	// Each file the idle editor left as it was is named in a warning of
 	// its own after those.
@@ -1915,7 +1917,142 @@ func TestSkillResolvePrunesWhatAnEditorSessionLeftBehind(t *testing.T) {
 	equal(t, "the swap file", fileBody(t, filepath.Join(swapped, "kit", ".notes.md.swp")), "typed, not saved\n")
 
 	resolveKit(t, h, 0, append(kitSides, "kept.md:1=theirs")...)
-	equal(t, "what is left once the merge completed", strings.Join(editorDirs(t, h), " "), strings.Join(sortedStrings(live, other), " "))
+	equal(t, "what is left once the merge completed", strings.Join(editorDirs(t, h), " "),
+		strings.Join(sortedStrings(live, other, saved, swapped, unrecorded), " "))
+	equal(t, "what was saved, once the merge completed", fileBody(t, filepath.Join(saved, "kit", "notes.md")), "saved before the hang-up\n")
+}
+
+// goneProcess is the process id of a process that has exited, as the
+// owner file of a session whose run was killed names it.
+func goneProcess(t *testing.T) string {
+	t.Helper()
+	gone := exec.Command("true")
+	if err := gone.Run(); err != nil {
+		t.Fatal(err)
+	}
+	return strconv.Itoa(gone.Process.Pid)
+}
+
+// staleWarning is the warning a new session gives of the directory in dir
+// an earlier one whose run is gone saved something in, once it gives it up
+// to the user.
+func staleWarning(dir string) string {
+	return "the files you edited in an earlier session that did not finish are kept in " + dir +
+		", which agentx leaves for you to delete; this session opens the files afresh, so copy what you typed from there"
+}
+
+// TestSkillResolveCompletingKeepsWhatAHungUpSessionSaved: a directory an
+// editor session left whose run is gone, hung up on say, with a file saved
+// in it, outlives the run that completes the merge, whether that is a new
+// editor session, which names it as it starts and so before its editor
+// takes the terminal, or a --hunk that no warning of that session ever
+// reached, which names it as the merge completes. Either way it is given up
+// to the user, its owner file gone, so that no later run removes it. A
+// directory whose run is gone and that holds the files as they were
+// written goes, and so does one its own run kept, as completing the merge
+// removes it.
+func TestSkillResolveCompletingKeepsWhatAHungUpSessionSaved(t *testing.T) {
+	t.Parallel()
+	for _, editor := range []bool{true, false} {
+		t.Run(fmt.Sprintf("in an editor %v", editor), func(t *testing.T) {
+			t.Parallel()
+			h, _, _ := resolveHarness(t)
+			resolveKit(t, h, 0, kitWholeFiles...)
+			pid := goneProcess(t)
+			saved := editorDir(t, h, "kit", pid, h.agentx)
+			writeFile(t, filepath.Join(saved, "kit", "notes.md"), "saved before the hang-up\n")
+			stale := editorDir(t, h, "kit", pid, h.agentx)
+			kept := editorDir(t, h, "kit", "kept", h.agentx)
+
+			var out outcome
+			want := staleWarning(saved)
+			if editor {
+				stub, _, _ := resolvingEditor(t)
+				h.env["EDITOR"] = stub
+				out = h.run("--json", "skill", "resolve", "kit", "--editor")
+				equal(t, "exit", out.exit, 0)
+			} else {
+				out = resolveKit(t, h, 0, "notes.md:1=mine", "notes.md:2=theirs", "guide.md:1=both")
+				want = "the files you edited in an earlier session that did not finish are kept in " + saved +
+					", which agentx leaves for you to delete now that the merge of kit is complete"
+			}
+			contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), "resolved kit and updated it from ")
+			equal(t, "the merge ref", h.ref(lineage.MergeRef("kit")), "")
+			// The copy edited in place is kept with a warning of its own.
+			var got []string
+			for _, w := range warnings(h, out.stderr) {
+				if !strings.Contains(w, "'s copy of kit is different from the library") {
+					got = append(got, w)
+				}
+			}
+			equal(t, "warnings", strings.Join(got, "\n"), want)
+			equal(t, "what the sessions left", strings.Join(editorDirs(t, h), " "), saved)
+			equal(t, "what was saved", fileBody(t, filepath.Join(saved, "kit", "notes.md")), "saved before the hang-up\n")
+			nothingAt(t, "the owner file of what was saved", filepath.Join(saved, editorOwner))
+			nothingAt(t, "the stale session", stale)
+			nothingAt(t, "the session its run kept", kept)
+		})
+	}
+}
+
+// TestSkillResolvePrunesWhatARealSessionLeft checks the owner file a
+// session writes against the check a later one makes of it: an editor
+// that copies the directory of its own session aside twice, once as it is
+// and once with a byte of a file changed, stands in for two sessions whose
+// run was killed while the editor was open, their owner files naming a
+// process that has exited. The files sit in a nested folder, under a name
+// git quotes. The next session removes the copy that holds the files as
+// they were written, and gives the other up to the user with a warning.
+func TestSkillResolvePrunesWhatARealSessionLeft(t *testing.T) {
+	t.Parallel()
+	nested := "docs/deep dir/say \"hi\"\tnow.md"
+	h := clashHarness(t, map[string]string{nested: "one\n"},
+		func(s *sourceRepo) { s.write("skills/kit-dir/"+nested, "uno\n") },
+		func(lib string) { writeFile(t, filepath.Join(lib, filepath.FromSlash(nested)), "ONE\n") })
+	equal(t, "the conflicts", conflictFiles(h.one(h.mustRun("--json", "skill", "resolve", "kit").stdout, "conflict")), nested+":1,notes.md:1")
+	cp, err := exec.LookPath("cp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmp := h.env["TMPDIR"]
+	clean, edited := filepath.Join(tmp, "agentx-resolve-clean"), filepath.Join(tmp, "agentx-resolve-edited")
+	h.env["EDITOR"] = editorStub(t, "copying-editor", `rest=${1#"$TMPDIR"/}
+session="$TMPDIR/${rest%%/*}"
+`+cp+` -R "$session" `+shellWord(clean)+`
+`+cp+` -R "$session" `+shellWord(edited)+`
+`)
+	if out := h.run("--json", "skill", "resolve", "kit", "--editor"); out.exit != 0 {
+		t.Fatalf("the session that copies its files: exit %d\n%s%s", out.exit, out.stdout, out.stderr)
+	}
+	equal(t, "what the sessions left", strings.Join(editorDirs(t, h), " "), strings.Join(sortedStrings(clean, edited), " "))
+	pid := goneProcess(t)
+	for _, dir := range []string{clean, edited} {
+		owner := fileBody(t, filepath.Join(dir, editorOwner))
+		first, rest, _ := strings.Cut(owner, "\n")
+		equal(t, "the owner of "+dir, first, strconv.Itoa(os.Getpid()))
+		contains(t, "the owner file of "+dir, rest, gitQuoted(nested))
+		writeFile(t, filepath.Join(dir, editorOwner), pid+"\n"+rest)
+	}
+	file := filepath.Join(edited, "kit", filepath.FromSlash(nested))
+	body := fileBody(t, file)
+	writeFile(t, file, strings.Replace(body, "ONE", "One", 1))
+	h.env["EDITOR"] = editorStub(t, "idle-editor", "exit 0\n")
+
+	out := h.run("--json", "skill", "resolve", "kit", "--editor")
+	equal(t, "exit", out.exit, 0)
+	nothingAt(t, "the copy as it was written", clean)
+	equal(t, "what the sessions left", strings.Join(editorDirs(t, h), " "), edited)
+	nothingAt(t, "the owner file of the edited copy", filepath.Join(edited, editorOwner))
+	equal(t, "what was edited", fileBody(t, file), strings.Replace(body, "ONE", "One", 1))
+	// Each file the idle editor left as it was is named in a warning of
+	// its own after that.
+	got := warnings(h, out.stderr)
+	equal(t, "the first warning", strings.Join(got[:min(len(got), 1)], ""), staleWarning(edited))
+	for _, w := range got[1:] {
+		if strings.Contains(w, "earlier session") {
+			t.Errorf("another session named: %s", w)
+		}
+	}
 }
 
 // sortedStrings is ss sorted.
@@ -2434,11 +2571,7 @@ func TestSkillResolveInAnEditorASkillCalledOwner(t *testing.T) {
 	t.Parallel()
 	h := pendingHarness(t, "owner", nil, func(*sourceRepo) {}, func(string) {})
 	candidate := h.ref(lineage.CandidateRef("owner"))
-	gone := exec.Command("true")
-	if err := gone.Run(); err != nil {
-		t.Fatal(err)
-	}
-	stale := editorDir(t, h, "owner", strconv.Itoa(gone.Process.Pid), h.agentx)
+	stale := editorDir(t, h, "owner", goneProcess(t), h.agentx)
 	stub, _, _ := resolvingEditor(t)
 	h.env["EDITOR"] = stub
 

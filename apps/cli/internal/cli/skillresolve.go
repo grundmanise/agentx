@@ -1151,7 +1151,10 @@ func changedWhileCompleting(name string) *failure {
 // the lock first: the import branch, the merge ref and the library
 // directory, whose content and tree must be the ones the run judged. What
 // the library directory holds unchanged keeps its permissions, see
-// keepPerms.
+// keepPerms. Once it is written, the directories editor sessions of the
+// skill left go, see pruneEditorDirs, but for one an earlier session whose
+// run is gone saved something in, which is given up to the user and named
+// in a warning.
 func (r *pendingRun) apply(ctx context.Context, c completion) error {
 	inv, git, gitDir, name := r.inv, r.inv.git, r.gitDir, r.rec.Name
 	target := c.v.ID()
@@ -1247,7 +1250,9 @@ func (r *pendingRun) apply(ctx context.Context, c completion) error {
 	if c.again != nil {
 		r.note(*c.again)
 	}
-	inv.pruneEditorDirs(name, pruneKept)
+	for _, dir := range inv.pruneEditorDirs(name, pruneKept) {
+		inv.out.warn(leftToYou(dir, " now that the merge of "+name+" is complete"))
+	}
 	return r.reportCompleted(ctx, c, newer, upstreamRename(name, skillName(theirs, bodies), next.Import.Dir()), done)
 }
 
@@ -1316,7 +1321,8 @@ func (r *pendingRun) reportCompleted(ctx context.Context, c completion, newer bo
 // is and whether or not agentx can read it. The library directory, the
 // import branch and the candidate are left exactly as they were, and so is
 // every placement. The files an editor had open for the merge go too, see
-// pruneEditorDirs, and the skill is reported as it now stands.
+// pruneEditorDirs, but for those given up to the user, and the skill is
+// reported as it now stands.
 func (inv *invocation) abortMerge(ctx context.Context, gitDir, name string) error {
 	err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		values, err := inv.lineageRefs(ctx, gitDir, name)
