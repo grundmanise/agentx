@@ -1327,8 +1327,9 @@ func (r *pendingRun) reportCompleted(ctx context.Context, c completion, newer bo
 // again once an update leaves the merge pending anew, see keepEditorDirs;
 // one that holds nothing typed goes. The warning says that a kept one
 // stays until a merge of the skill completes, which removes it as it
-// removes every kept one, see clearEditorDirs. The skill is reported as it
-// now stands.
+// removes every kept one, see clearEditorDirs, and that what it holds under
+// another name, a swap file say, opens in no session, see keptGivenUp. The
+// skill is reported as it now stands.
 func (inv *invocation) abortMerge(ctx context.Context, gitDir, name string) error {
 	err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		values, err := inv.lineageRefs(ctx, gitDir, name)
@@ -1346,9 +1347,8 @@ func (inv *invocation) abortMerge(ctx context.Context, gitDir, name string) erro
 	if err != nil {
 		return mutationFailure(err)
 	}
-	for _, dir := range inv.keepEditorDirs(name) {
-		inv.out.warn("the files you edited are kept in " + dir + " until a merge of " + name + " completes: when an update of " + name +
-			" conflicts the same way, '" + skillCommand("resolve", name, "--editor") + "' opens what you typed again; delete the folder if you do not need it")
+	for _, d := range inv.keepEditorDirs(name) {
+		inv.out.warn("the files you edited are kept in " + d.path + keptGivenUp(name, d.reopens, d.rest))
 	}
 	const kept = "; the library directory is as it was"
 	inv.summary = "gave up the merge of " + name + kept
