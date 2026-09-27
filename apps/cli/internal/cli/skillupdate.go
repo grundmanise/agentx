@@ -788,19 +788,18 @@ func (inv *invocation) stageUpdate(m *home.Mutation, gitDir string, u *updating,
 
 // keepPerms gives what an update laid out at staged, the version v, the
 // permissions the library directory at libPath, read as tree, gives the
-// same thing: a file the library holds at the
-// same path with the same content, and executable exactly when git records
-// it so, and a directory the library holds at the same path, the skill's
-// own included, both as the library's tree was read, never through a
-// symlink of it. A version is laid out with every file 0644, or 0755, and
-// every directory 0755, so a file of the user's they made private, 0600
-// say, which the update does not change, would otherwise come out of it
-// readable by everyone. The owner's execute bit of a file is never changed,
-// so the tree staged and its fingerprint stay what they were; a file the
-// update changes, and anything agentx could not read back or enter once
-// it was changed, is left as it was laid out. The library directory was
-// read again under the lock, so what it holds is what the update merged or
-// replaced.
+// same thing: a file the library holds at the same path with the same
+// content, and executable exactly when git records it so, and a directory
+// the library holds at the same path, the skill's own included, both as
+// the library's tree was read, never through a symlink of it. A version is
+// laid out with every file 0644, or 0755, and every directory 0755, so a
+// file of the user's they made private, 0600 say, which the update does not
+// change, would otherwise come out of it readable by everyone. The owner's
+// execute bit of a file is never changed, so the tree staged and its
+// fingerprint stay what they were; a file the update changes, and anything
+// agentx could not read back or enter once it was changed, is left as it
+// was laid out. The library directory was read again under the lock, so
+// what it holds is what the update merged or replaced.
 func keepPerms(staged, libPath string, tree treeid.Tree, v lineage.Base) error {
 	held := map[string]string{}
 	for _, b := range tree.Blobs {

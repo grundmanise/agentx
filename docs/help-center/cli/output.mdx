@@ -62,7 +62,7 @@ A failed command prints `error: ...` and, when there is a fix, `hint: ...` on st
 | 1 | `usage` | Unknown command, bad flag or missing argument. Run `agentx help`. |
 | 2 | `git` | Git is missing or older than 2.40. Install or upgrade git. |
 | 3 | `source` | A source is unreachable or authentication failed. |
-| 4 | `pending_merge` | A pending merge blocks the action, or `skill update` left one pending because [your edits conflict with the update](/cli/skill#when-your-edits-conflict). |
+| 4 | `pending_merge` | A pending merge blocks the action, `skill update` left one pending because [your edits conflict with the update](/cli/skill#when-your-edits-conflict), or `skill resolve` [merged again](/cli/skill#finish-the-merge) because the skill changed while the merge was pending, and files are left to resolve. |
 | 5 | `not_found` | The skill, source or configuration does not exist. |
 | 6 | `refused` | A collision or an unmet precondition. |
 | 7 | `locked` | Another agentx command is running. Retry when it finishes. |
@@ -86,6 +86,8 @@ Press Ctrl-C a second time to kill the run outright. That is safe for the same r
 A run that had already finished everything you asked for exits `0`: the signal arrived too late to change the outcome, and agentx reports what it did.
 
 Run agentx in the background from a script and Ctrl-C in that terminal leaves it alone, exactly as it leaves every other background job alone.
+
+While `agentx skill resolve --editor` waits for your editor, Ctrl-C and Ctrl-\ belong to the editor: they neither stop agentx nor count toward a second Ctrl-C. Close the editor to go on. An editor that exits with an error writes nothing into the merge, and agentx names the folder where the files you edited are kept. `SIGTERM` still stops the run, and keeps those files the same way.
 
 ## Directories
 

@@ -96,17 +96,33 @@ func Uninterruptible(ctx context.Context) context.Context {
 // Hold leaves SIGINT to a program the run hands the terminal to, an editor
 // say, until release is called: a Ctrl-C typed there is that program's to
 // answer, as git leaves it to the editor it starts, and the run goes on
-// once the program exits and decides from what it left. SIGTERM still
-// stops the run, since it is sent to agentx and not typed at the editor. A
-// context no Watch made holds nothing.
+// once the program exits and decides from what it left. SIGQUIT, a
+// terminal's Ctrl-\, is the program's too: it is caught and dropped
+// meanwhile, since the runtime's own answer to it ends the process, unless
+// the process started with it ignored. SIGTERM still stops the run, since
+// it is sent to agentx and not typed at the editor. A context no Watch made
+// holds nothing.
 func Hold(ctx context.Context) (release func()) {
 	s := From(ctx)
 	if s == nil {
 		return func() {}
 	}
 	s.held.Add(1)
+	var quit chan os.Signal
+	if !signal.Ignored(syscall.SIGQUIT) {
+		// One slot, never read: a signal that finds it full is dropped.
+		quit = make(chan os.Signal, 1)
+		signal.Notify(quit, syscall.SIGQUIT)
+	}
 	var once sync.Once
-	return func() { once.Do(func() { s.held.Add(-1) }) }
+	return func() {
+		once.Do(func() {
+			if quit != nil {
+				signal.Stop(quit)
+			}
+			s.held.Add(-1)
+		})
+	}
 }
 
 // Watch installs the handler for the stop signals and returns a context

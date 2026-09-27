@@ -163,7 +163,7 @@ func resolvedPaths(body string) (paths []string, ok bool) {
 			continue
 		}
 		p, err := cUnquoted(quoted)
-		if err != nil || !filePath(p) {
+		if err != nil || !FilePath(p) {
 			return nil, false
 		}
 		paths = append(paths, p)
@@ -209,10 +209,11 @@ func cUnquoted(quoted string) (string, error) {
 
 func isOctal(c byte) bool { return c >= '0' && c <= '7' }
 
-// filePath reports whether p can be the path of a file of a skill, relative
+// FilePath reports whether p can be the path of a file of a skill, relative
 // to its directory, as a tree holds it: not empty, no NUL, and no empty,
-// "." or ".." component, so none that leaves the directory.
-func filePath(p string) bool {
+// "." or ".." component, so none that leaves the directory, a leading or
+// doubled slash included.
+func FilePath(p string) bool {
 	if p == "" || strings.ContainsRune(p, 0) {
 		return false
 	}

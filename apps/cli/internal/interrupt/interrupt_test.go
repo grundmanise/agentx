@@ -63,13 +63,16 @@ func TestUninterruptibleSurvivesTheSignal(t *testing.T) {
 
 // TestAHoldLeavesSIGINTToTheEditor: while a run holds SIGINT, as it does
 // while an editor it started has the terminal, a Ctrl-C does not stop the
-// run, and is not counted as the first of two signals either; SIGTERM
-// still stops it. Released, SIGINT stops the run again.
+// run, and is not counted as the first of two signals either, and a Ctrl-\
+// does not end the process, as the runtime would, which nothing else in
+// this test binary catches; SIGTERM still stops it. Released, SIGINT stops
+// the run again.
 func TestAHoldLeavesSIGINTToTheEditor(t *testing.T) {
 	ctx, stop := Watch(context.Background())
 	defer stop()
 	release := Hold(ctx)
 	raise(t, syscall.SIGINT)
+	raise(t, syscall.SIGQUIT)
 	raise(t, syscall.SIGTERM)
 	waitDone(t, ctx)
 	if got := From(ctx).Signal(); got != syscall.SIGTERM {

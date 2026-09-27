@@ -74,12 +74,12 @@ func TestHunksOfReadsWhatMergeFileWrites(t *testing.T) {
 				gitStageBase: {mode: "100644", oid: "base"}, gitStageMine: {mode: "100644", oid: "mine"}, gitStageTheirs: {mode: "100644", oid: "theirs"},
 			}
 			bodies := map[string]string{"base": c.base, "mine": c.mine, "theirs": c.theirs}
-			hunks, err := hunksOf(ctx, r, gitDir, t.TempDir(), versions, bodies)
+			merged, err := mergeText(ctx, r, gitDir, t.TempDir(), versions, bodies)
 			if err != nil {
 				t.Fatal(err)
 			}
 			var got []string
-			for i, h := range hunks {
+			for i, h := range merged.hunks() {
 				if h.Index != i+1 {
 					t.Errorf("hunk %d is numbered %d", i+1, h.Index)
 				}

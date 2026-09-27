@@ -385,16 +385,6 @@ func mergeText(ctx context.Context, r *gitx.Runner, gitDir, scratch string, vers
 	return t, nil
 }
 
-// hunksOf reads the hunks of one text file that conflicts, as mergeText
-// merges it.
-func hunksOf(ctx context.Context, r *gitx.Runner, gitDir, scratch string, versions map[string]staged, bodies map[string]string) ([]conflictHunk, error) {
-	t, err := mergeText(ctx, r, gitDir, scratch, versions, bodies)
-	if err != nil {
-		return nil, err
-	}
-	return t.hunks(), nil
-}
-
 // hunks is the hunks of the file as the conflict event carries them.
 // merge-file ends a last line with no newline with one when a marker
 // follows it, so a hunk that ends the file gives each version whose file

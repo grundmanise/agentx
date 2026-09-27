@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
@@ -117,7 +118,7 @@ func parseHunkChoices(args []string) ([]hunkChoice, error) {
 			return nil, fail(exitUsage, fmt.Sprintf("--hunk %q is not <file>:<index>=<side>", arg), hint)
 		case side != sideMine && side != sideTheirs && side != sideBoth:
 			return nil, fail(exitUsage, fmt.Sprintf("--hunk %q chooses %q, which is not mine, theirs or both", arg, side), hint)
-		case clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || strings.HasPrefix(clean, "/"):
+		case !lineage.FilePath(clean):
 			return nil, fail(exitUsage, fmt.Sprintf("--hunk %q names no file of the skill", arg), hint)
 		}
 		choices = append(choices, hunkChoice{path: clean, index: n, side: side})
@@ -137,11 +138,12 @@ func cutLast(s, sep string) (before, after string, found bool) {
 // for the managed skill called name. An unfinished journal is finished
 // first, as an update finishes one: a completion stopped part way through
 // moves the import branch before anything else, and the merge would read
-// as one whose base moved. Then the skill is judged, in this order: a name
-// the library does not hold and no lineage names is exit code 5; a fork,
-// a skill with no import branch and one with no merge pending are exit
-// code 6. --abort gives up any merge the ref holds, whatever else is true
-// of it; everything else reads the merge first, see readPending.
+// as one whose branch moved to the very update it merges. Then the skill is
+// judged, in this order: a name the library does not hold and no lineage
+// names is exit code 5; a fork, a skill with no import branch and one with
+// no merge pending are exit code 6. --abort gives up any merge the ref
+// holds, whatever else is true of it; everything else reads the merge
+// first, see readPending.
 func (inv *invocation) skillResolve(ctx context.Context, name string, act resolveAction) error {
 	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
@@ -214,23 +216,31 @@ func (inv *invocation) finishJournals(ctx context.Context) error {
 type pendingRun struct {
 	inv      *invocation
 	gitDir   string
-	rec      lineage.Record           // the import branch, at the merge's base
+	rec      lineage.Record           // the import branch as the run read it, at the merge's base unless something moved it since
 	pending  lineage.PendingMerge     // what the merge ref held
 	dir      string                   // the upstream directory every tree of the merge wraps the skill in
 	res      mergeResult              // the merge of the three versions, run again
 	files    map[string]*conflictFile // the files that conflict, by path
 	resolved map[string]bool          // the files the pending merge commit records as resolved
 	theirs   lineage.Import           // the lineage of the update merged
+	carried  map[string]bool          // once the run merged the merge again and wrote it: the files whose resolution it kept
 }
 
 // readPending reads the merge a skill's merge ref holds, refusing one that
 // cannot be resolved with exit code 6 and the hint that gives it up: an
-// import branch or a pending merge commit agentx cannot read, and a merge
-// whose base is no longer the version the import branch points at, which
-// only something outside agentx does, since every command that moves the
-// branch is refused while the merge is pending. Its three versions are
-// then merged again, which is what the conflicts, their numbering and which
-// files are left are read from.
+// import branch or a pending merge commit agentx cannot read, an import
+// branch that moved to the very update the merge merges, which leaves
+// nothing to merge, and one that moved to a version holding the skill
+// under another upstream directory than the update does. Its three
+// versions are then merged again, which is what the conflicts, their
+// numbering and which files are left are read from.
+//
+// An import branch that moved to another version since the merge was left
+// pending, which only something outside agentx does, a legacy import
+// branch that skill add or adopt writes again in today's form included, is
+// no refusal: what the run resolves is written into the merge as it was
+// recorded, and the merge is then merged again on the version the branch
+// points at now, see rebase, keeping every resolution that still applies.
 func (inv *invocation) readPending(ctx context.Context, gitDir string, rec lineage.Record) (*pendingRun, error) {
 	name, p := rec.Name, *rec.PendingMerge
 	abandon := "run '" + skillCommand("resolve", name, "--abort") + "' to give the merge up; the library directory stays as it is"
@@ -239,10 +249,22 @@ func (inv *invocation) readPending(ctx context.Context, gitDir string, rec linea
 		return nil, fail(exitRefused, fmt.Sprintf("the import branch %s records no version agentx can read", rec.Ref), abandon)
 	case !p.Readable:
 		return nil, fail(exitRefused, "the pending merge "+lineage.MergeRef(name)+" names no versions agentx can read", abandon)
-	case rec.Commit != p.Merge.Base:
-		return nil, baseMovedFailure(name)
+	case rec.Commit == p.Merge.Theirs:
+		return nil, fail(exitRefused, "the import branch "+lineage.ManagedRef(name)+" moved to the update the merge of "+name+" merges, so there is nothing left to merge", abandon)
 	}
 	r := &pendingRun{inv: inv, gitDir: gitDir, rec: rec, pending: p, dir: rec.Import.Dir(), resolved: map[string]bool{}}
+	var err error
+	if c := rec.Candidate; c != nil && c.Commit == p.Merge.Theirs && c.HasImport {
+		r.theirs = c.Import
+	} else if r.theirs, err = lineage.ReadImport(ctx, inv.git, gitDir, p.Merge.Theirs); err != nil {
+		return nil, accountRepoFailure(fmt.Errorf("the update %s the pending merge of %s names: %w", p.Merge.Theirs, name, err))
+	}
+	if r.baseMoved() && r.theirs.Dir() != r.dir {
+		// The update refuses a candidate held under another directory than
+		// the import branch, so only a branch moved since gets here.
+		return nil, fail(exitRefused, "the import branch "+lineage.ManagedRef(name)+" moved since the merge of "+name+" was left pending, to a version that holds the skill under another directory than the update, so the merge cannot be resolved",
+			"run '"+skillCommand("resolve", name, "--abort")+"' to give it up, then '"+skillCommand("update", name)+"' to merge again")
+	}
 	res, err := mergeVersions(ctx, inv.git, gitDir, r.dir, p.Merge)
 	if err != nil {
 		return nil, accountRepoFailure(err)
@@ -250,30 +272,35 @@ func (inv *invocation) readPending(ctx context.Context, gitDir string, rec linea
 	if len(res.files) == 0 {
 		return nil, fail(exitRefused, "the versions the pending merge of "+name+" names no longer conflict when merged again", abandon+", then run '"+skillCommand("update", name)+"' again")
 	}
-	r.res, r.files = res, map[string]*conflictFile{}
-	for i := range res.files {
-		r.files[res.files[i].Path] = &r.res.files[i]
+	r.adopt(res, p.Resolved)
+	return r, nil
+}
+
+// adopt makes res the merge the run resolves, the files of it listed in
+// resolved being the ones resolved so far.
+func (r *pendingRun) adopt(res mergeResult, resolved []string) {
+	r.res, r.files, r.resolved = res, map[string]*conflictFile{}, map[string]bool{}
+	for i := range r.res.files {
+		r.files[r.res.files[i].Path] = &r.res.files[i]
 	}
-	for _, path := range p.Resolved {
+	for _, path := range resolved {
 		if r.files[path] != nil {
 			r.resolved[path] = true
 		}
 	}
-	if c := rec.Candidate; c != nil && c.Commit == p.Merge.Theirs && c.HasImport {
-		r.theirs = c.Import
-	} else if r.theirs, err = lineage.ReadImport(ctx, inv.git, gitDir, p.Merge.Theirs); err != nil {
-		return nil, accountRepoFailure(fmt.Errorf("the update %s the pending merge of %s names: %w", p.Merge.Theirs, name, err))
-	}
-	return r, nil
 }
 
-// baseMovedFailure refuses a merge whose base, the version the import
-// branch pointed at when the update merged it, is no longer the one the
-// branch points at: what the merge would complete to is no longer an update
-// of what the skill is at.
-func baseMovedFailure(name string) *failure {
-	return refuse(exitRefused, "the import branch "+lineage.ManagedRef(name)+" moved since the merge of "+name+" was left pending, so the merge cannot be resolved",
-		"run '"+skillCommand("resolve", name, "--abort")+"' to give it up, then '"+skillCommand("update", name)+"' to merge again")
+// baseMoved reports whether the import branch no longer points at the base
+// of the merge the pending merge commit records.
+func (r *pendingRun) baseMoved() bool { return r.rec.Commit != r.pending.Merge.Base }
+
+// branchMovedFailure refuses a run that found the import branch moved
+// under the lock, after it read it: what it would write is a merge on a
+// version the skill is no longer at. Run again, it merges on the one it is.
+// doing is what the run was doing to the merge, as "resolved".
+func branchMovedFailure(name, doing string) *failure {
+	return refuse(exitRefused, "the import branch "+lineage.ManagedRef(name)+" moved while the merge of "+name+" was being "+doing+", so nothing was written",
+		"run the command again to merge it on the version the branch points at now")
 }
 
 // mergeMovedFailure refuses a run whose merge ref no longer holds the
@@ -305,15 +332,29 @@ func (r *pendingRun) to() string   { return short(r.theirs.Commit) }
 // event with every file left to resolve and every hunk of it, as the update
 // that left it reported them, numbered alike, and in the text the same
 // lines the update printed under a line that says how many files are
-// left.
+// left. The merge shown is the one the pending merge commit records, whose
+// numbering a --hunk is read against, so a warning says when the import
+// branch moved since and the next run that resolves anything merges again.
 func (r *pendingRun) show() error {
 	inv, out, name := r.inv, r.inv.out, r.rec.Name
+	r.warnBaseMoved()
 	left := r.unresolved(nil)
 	count := fmt.Sprintf("%d of %s unresolved", len(left), plural(len(r.res.files), "file"))
 	inv.printConflicts(conflictOfSkill(name, r.pending.Merge, left),
 		out.paint(heading, sanitised(name)), " has a merge pending with its update from ", r.from(), " to ", r.to(), ": ", out.paint(noteStyle, count))
 	inv.summary = name + " has a merge pending with its update from " + r.from() + " to " + r.to() + ": " + count
 	return nil
+}
+
+// warnBaseMoved warns, for a run that reports the merge as its pending
+// merge commit records it, that the import branch moved since the merge was
+// left pending, so that the files shown may not be the ones left once it is
+// merged again.
+func (r *pendingRun) warnBaseMoved() {
+	if r.baseMoved() {
+		r.inv.out.warn("the import branch " + lineage.ManagedRef(r.rec.Name) + " moved since the merge of " + r.rec.Name +
+			" was left pending; the next run that resolves a file merges it again on the version the branch points at, keeping every resolution that still applies")
+	}
 }
 
 // resolution is how one file of a pending merge is resolved: what the
@@ -479,11 +520,13 @@ func resolvedMode(f *conflictFile, sides []string) string {
 
 // resolve writes how the files rs name are resolved into the pending merge.
 // The content of every text file assembled or edited here is written into
-// the account repo first, outside the lock. A merge that still has a file
-// left to resolve is then rewritten: the tree of the merge with every
-// resolution in it and the commit over it are written, see commit, and the
-// merge ref is moved to it, see publish. One that has none left is
-// completed in the same run, see complete.
+// the account repo first, outside the lock. The resolutions are written
+// into the tree of the pending merge commit, see applyResolutions, and a
+// merge whose import branch moved since is then merged again, see rebase.
+// Otherwise a merge that still has a file left to resolve is rewritten: the
+// tree of the merge with every resolution in it and the commit over it are
+// written, see commit, and the merge ref is moved to it, see publish. One
+// that has none left is completed in the same run, see complete.
 func (r *pendingRun) resolve(ctx context.Context, rs []resolution) error {
 	git, gitDir := r.inv.git, r.gitDir
 	var bodies []string
@@ -505,10 +548,20 @@ func (r *pendingRun) resolve(ctx context.Context, rs []resolution) error {
 	if err != nil {
 		return accountRepoFailure(err)
 	}
-	v := applyResolutions(held, r.files, rs)
+	fresh, err := lineage.ReadMerged(ctx, git, gitDir, r.res.tree, r.dir)
+	if err != nil {
+		return accountRepoFailure(err)
+	}
+	v, reopened := applyResolutions(held, fresh, r.files, rs)
+	for _, p := range reopened {
+		delete(r.resolved, p)
+	}
 	now := map[string]bool{}
 	for _, res := range rs {
 		now[res.path] = true
+	}
+	if r.baseMoved() {
+		return r.rebase(ctx, v, rs, now)
 	}
 	resolved := make([]string, 0, len(r.resolved)+len(now))
 	for _, f := range r.res.files {
@@ -518,27 +571,37 @@ func (r *pendingRun) resolve(ctx context.Context, rs []resolution) error {
 	}
 	left := r.unresolved(now)
 	if len(left) == 0 {
-		return r.complete(ctx, v)
+		return r.complete(ctx, v, r.pending.Merge)
 	}
 	commit, err := r.commit(ctx, v, r.pending.Merge, len(left), resolved)
 	if err != nil {
 		return err
 	}
-	if err := r.publish(ctx, commit, "it was being resolved"); err != nil {
+	if err := r.publish(ctx, commit, r.pending.Merge.Base, "resolved"); err != nil {
 		return err
 	}
-	return r.reportResolved(rs, left)
+	return r.reportResolved(rs, r.pending.Merge, left)
 }
 
 // applyResolutions is the version a pending merge holds, as ReadMerged read
-// it out of its tree, with rs written into it, in path order: every path
-// git moved a version of a resolved file aside to goes, and the path
+// it out of its tree, held, with rs written into it, in path order: every
+// path git moved a version of a resolved file aside to goes, and the path
 // itself, with anything below it, takes the version the file is resolved
-// to, a directory it needs to sit in included, or keeps the directory it
-// holds. files are the files of the merge the tree comes from, by path.
-func applyResolutions(v lineage.Base, files map[string]*conflictFile, rs []resolution) lineage.Base {
+// to, a directory it needs to sit in included, or keeps the directory the
+// side resolved to holds there. files are the files of the merge the tree
+// comes from, by path, and fresh the tree merge-tree wrote for it, before
+// anything was resolved.
+//
+// A path resolved to a directory keeps the one held holds there. Where held
+// holds anything else, the path having been resolved to the other side's
+// file before, the directory is taken again from fresh, which holds it as
+// git kept it for the side that has it; a file of the merge inside it
+// whose resolution went with it when the file replaced the directory, and
+// that rs does not resolve again, is left to resolve again, and reopened
+// names it.
+func applyResolutions(held, fresh lineage.Base, files map[string]*conflictFile, rs []resolution) (v lineage.Base, reopened []string) {
 	entries := map[string]source.TreeEntry{}
-	for _, e := range v.Entries {
+	for _, e := range held.Entries {
 		entries[e.Path] = e
 	}
 	drop := func(p string) {
@@ -549,8 +612,19 @@ func applyResolutions(v lineage.Base, files map[string]*conflictFile, rs []resol
 			}
 		}
 	}
+	parents := func(p string) {
+		for dir := path.Dir(p); dir != "."; dir = path.Dir(dir) {
+			if e, ok := entries[dir]; !ok || e.Mode != source.DirMode {
+				entries[dir] = source.TreeEntry{Path: dir, Mode: source.DirMode}
+			}
+		}
+	}
 	sorted := slices.Clone(rs)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i].path < sorted[j].path })
+	now := map[string]bool{}
+	for _, res := range sorted {
+		now[res.path] = true
+	}
 	for _, res := range sorted {
 		if f := files[res.path]; f != nil {
 			for _, aside := range f.aside {
@@ -558,27 +632,145 @@ func applyResolutions(v lineage.Base, files map[string]*conflictFile, rs []resol
 			}
 		}
 		if res.keep {
+			if e, ok := entries[res.path]; ok && e.Mode == source.DirMode {
+				continue
+			}
+			drop(res.path)
+			for _, e := range fresh.Entries {
+				if e.Path == res.path || strings.HasPrefix(e.Path, res.path+"/") {
+					entries[e.Path] = e
+				}
+			}
+			parents(res.path)
+			for p := range files {
+				if strings.HasPrefix(p, res.path+"/") && !now[p] {
+					reopened = append(reopened, p)
+				}
+			}
 			continue
 		}
 		drop(res.path)
 		if res.entry == nil {
 			continue
 		}
-		for dir := path.Dir(res.path); dir != "."; dir = path.Dir(dir) {
-			if e, ok := entries[dir]; !ok || e.Mode != source.DirMode {
-				entries[dir] = source.TreeEntry{Path: dir, Mode: source.DirMode}
-			}
-		}
+		parents(res.path)
 		e := *res.entry
 		e.Path = res.path
 		entries[res.path] = e
 	}
-	out := lineage.Base{Tree: v.Tree, Entries: make([]source.TreeEntry, 0, len(entries))}
+	v = lineage.Base{Tree: held.Tree, Entries: make([]source.TreeEntry, 0, len(entries))}
 	for _, e := range entries {
-		out.Entries = append(out.Entries, e)
+		v.Entries = append(v.Entries, e)
 	}
-	sort.Slice(out.Entries, func(i, j int) bool { return out.Entries[i].Path < out.Entries[j].Path })
-	return out
+	sort.Slice(v.Entries, func(i, j int) bool { return v.Entries[i].Path < v.Entries[j].Path })
+	sort.Strings(reopened)
+	return v, reopened
+}
+
+// mergedAgain is a pending merge merged again because one of its three
+// versions moved since the pending merge commit was written: what
+// merge-tree made of the three versions now, and the files of it.
+type mergedAgain struct {
+	m        lineage.Merge
+	res      mergeResult
+	v        lineage.Base   // the tree merge-tree wrote, every resolution kept written into it
+	resolved []string       // the files whose resolution was kept, in path order
+	left     []conflictFile // every other file that conflicts, in path order
+	anew     bool           // a file left conflicts otherwise than it did in the merge the run read
+}
+
+// mergeAgain merges m, the merge the run read with one of its versions
+// moved, the base or mine, and carries over what v resolved: a file that
+// conflicts as it did, its base, mine and theirs the versions they were,
+// keeps the way v resolves it when it is one of done, the files resolved
+// by this run or an earlier one. Every other file that conflicts, one the
+// move changed, a new one, or one not resolved yet, is left to resolve.
+func (r *pendingRun) mergeAgain(ctx context.Context, v lineage.Base, m lineage.Merge, done map[string]bool) (mergedAgain, error) {
+	git, gitDir := r.inv.git, r.gitDir
+	res, err := mergeVersions(ctx, git, gitDir, r.dir, m)
+	if err != nil {
+		return mergedAgain{}, accountRepoFailure(err)
+	}
+	merged, err := lineage.ReadMerged(ctx, git, gitDir, res.tree, r.dir)
+	if err != nil {
+		return mergedAgain{}, accountRepoFailure(err)
+	}
+	again := mergedAgain{m: m, res: res, left: []conflictFile{}}
+	files := map[string]*conflictFile{}
+	var kept []resolution
+	for i, f := range res.files {
+		files[f.Path] = &res.files[i]
+		was := r.files[f.Path]
+		same := was != nil && sameStages(was.stages, f.stages)
+		if same && done[f.Path] {
+			kept = append(kept, resolutionIn(v, f.Path))
+			again.resolved = append(again.resolved, f.Path)
+			continue
+		}
+		again.left = append(again.left, f)
+		again.anew = again.anew || !same
+	}
+	again.v, _ = applyResolutions(merged, merged, files, kept)
+	return again, nil
+}
+
+// write rewrites the pending merge as again merged it: the commit over its
+// tree, which names its three versions and lists the files whose
+// resolution it kept, and the merge ref moved to it, see publish. doing is
+// what the run was doing to the merge, for a refusal.
+func (r *pendingRun) write(ctx context.Context, again mergedAgain, doing string) error {
+	commit, err := r.commit(ctx, again.v, again.m, len(again.left), again.resolved)
+	if err != nil {
+		return err
+	}
+	if err := r.publish(ctx, commit, again.m.Base, doing); err != nil {
+		return err
+	}
+	r.carried = map[string]bool{}
+	for _, p := range again.resolved {
+		r.carried[p] = true
+	}
+	return nil
+}
+
+// rebase merges again, on the version the import branch points at now, a
+// merge whose base moved since it was left pending, once v holds what the
+// run resolved, rs, now naming their files: the base is that version, and
+// mine and theirs are the ones the merge names, see mergeAgain. When no
+// file is left to resolve, the merge completes on that base. Otherwise it
+// is rewritten, see write: a merge whose files left conflict as they did
+// is reported as any rewritten merge is, and one where a file conflicts
+// anew, or lost its resolution, emits a conflict event with every file left
+// and exits 4, since what the run chose was read against a merge that is
+// no longer the one pending.
+func (r *pendingRun) rebase(ctx context.Context, v lineage.Base, rs []resolution, now map[string]bool) error {
+	inv, name := r.inv, r.rec.Name
+	done := maps.Clone(now)
+	for p := range r.resolved {
+		done[p] = true
+	}
+	m := lineage.Merge{Base: r.rec.Commit, Mine: r.pending.Merge.Mine, Theirs: r.pending.Merge.Theirs}
+	again, err := r.mergeAgain(ctx, v, m, done)
+	if err != nil {
+		return err
+	}
+	if len(again.left) == 0 {
+		r.adopt(again.res, again.resolved)
+		return r.complete(ctx, again.v, m)
+	}
+	if err := r.write(ctx, again, "resolved"); err != nil {
+		return err
+	}
+	if !again.anew {
+		return r.reportResolved(rs, m, again.left)
+	}
+	out := inv.out
+	files := plural(len(again.left), "file")
+	inv.printConflicts(conflictOfSkill(name, m, again.left),
+		"The import branch of ", out.paint(heading, sanitised(name)), " moved while its merge was pending, and merging it again with its update from ",
+		r.from(), " to ", r.to(), " leaves ", out.paint(noteStyle, files), " to resolve")
+	return refuse(exitPendingMerge, "the import branch "+lineage.ManagedRef(name)+" moved while the merge of "+name+" was pending, and merging it again leaves "+files+" to resolve, so the merge is still pending",
+		"run '"+skillCommand("resolve", name)+"' to see every file left to resolve")
 }
 
 // commit writes v as the tree of a pending merge of m, and the pending
@@ -601,9 +793,10 @@ func (r *pendingRun) commit(ctx context.Context, v lineage.Base, m lineage.Merge
 // journal, with the commit the run read as its expected old value: one ref
 // step, the whole of the rewrite. The merge ref and the import branch are
 // read again first, and a merge ref another run moved meanwhile, or an
-// import branch something moved, refuses the run with nothing written.
-// what says what the run was doing, for the refusal.
-func (r *pendingRun) publish(ctx context.Context, commit, what string) error {
+// import branch no longer at base, the base of the merge commit is of,
+// refuses the run with nothing written. doing says what the run was doing
+// to the merge, as "resolved", for the refusal.
+func (r *pendingRun) publish(ctx context.Context, commit, base, doing string) error {
 	inv, name := r.inv, r.rec.Name
 	if commit == r.pending.Commit {
 		return nil
@@ -615,9 +808,9 @@ func (r *pendingRun) publish(ctx context.Context, commit, what string) error {
 		}
 		switch {
 		case values[lineage.MergeRef(name)] != r.pending.Commit:
-			return mergeMovedFailure(name, what)
-		case values[lineage.ManagedRef(name)] != r.pending.Merge.Base || values[lineage.ForkRef(name)] != "":
-			return baseMovedFailure(name)
+			return mergeMovedFailure(name, "it was being "+doing)
+		case values[lineage.ManagedRef(name)] != base || values[lineage.ForkRef(name)] != "":
+			return branchMovedFailure(name, doing)
 		}
 		m := home.NewMutation(inv.dirs.Home)
 		m.Ref(r.gitDir, lineage.MergeRef(name), r.pending.Commit, commit)
@@ -630,11 +823,12 @@ func (r *pendingRun) publish(ctx context.Context, commit, what string) error {
 }
 
 // reportResolved reports a run that resolved the files rs name and left
-// the merge pending with left still to resolve: a conflict event with those
-// files and every hunk of them, and the line that says what the run did.
-func (r *pendingRun) reportResolved(rs []resolution, left []conflictFile) error {
+// the merge of m pending with left still to resolve: a conflict event with
+// those files and every hunk of them, and the line that says what the run
+// did.
+func (r *pendingRun) reportResolved(rs []resolution, m lineage.Merge, left []conflictFile) error {
 	inv, out, name := r.inv, r.inv.out, r.rec.Name
-	out.emit(conflictOfSkill(name, r.pending.Merge, left))
+	out.emit(conflictOfSkill(name, m, left))
 	what := plural(len(rs), "file")
 	if len(rs) == 1 {
 		what = quotedPath(rs[0].path)
@@ -645,20 +839,21 @@ func (r *pendingRun) reportResolved(rs []resolution, left []conflictFile) error 
 	return nil
 }
 
-// complete completes a merge that has no file left to resolve once it holds
-// v, the skill's directory as the merge resolves it, in the same run that
-// resolved its last file.
+// complete completes a merge of m that has no file left to resolve once it
+// holds v, the skill's directory as the merge resolves it, in the same run
+// that resolved its last file. m is the merge the pending merge commit
+// names, or the one a moved import branch made of it, see rebase.
 //
 // First the library directory is judged, outside the lock, as an update
 // judges it: one that is gone, is a symlink, or holds something git cannot
 // record is refused with nothing written, and the run can be made again
 // once that is put right. Then it is compared with mine, the directory as
 // the update read it, by tree id: the directory's own, wrapped in the
-// upstream directory, against the tree of the commit Agentx-Merge-Mine
-// names. A directory edited while the merge was pending, by any tool, is
-// merged again, see remerge, and that edit is never lost. The merge is then
-// applied, see apply.
-func (r *pendingRun) complete(ctx context.Context, v lineage.Base) error {
+// upstream directory, against the tree of the commit m names as mine, the
+// one Agentx-Merge-Mine names. A directory edited while the merge was
+// pending, by any tool, is merged again, see remerge, and that edit is
+// never lost. The merge is then applied, see apply.
+func (r *pendingRun) complete(ctx context.Context, v lineage.Base, m lineage.Merge) error {
 	inv, name := r.inv, r.rec.Name
 	again := "run the command again"
 	lib, held := librarySkill(inv.dirs.Library, name)
@@ -684,11 +879,11 @@ func (r *pendingRun) complete(ctx context.Context, v lineage.Base) error {
 	if len(tree.Unrecordable) > 0 {
 		return unrecordableThen(name, libPath, tree.Unrecordable, "completing the merge", again)
 	}
-	mine, err := inv.git.Isolated(ctx, r.gitDir, "rev-parse", r.pending.Merge.Mine+"^{tree}")
+	mine, err := inv.git.Isolated(ctx, r.gitDir, "rev-parse", m.Mine+"^{tree}")
 	if err != nil {
 		return accountRepoFailure(err)
 	}
-	c := completion{v: v, m: r.pending.Merge, libPath: libPath, captured: captured, tree: tree}
+	c := completion{v: v, m: m, libPath: libPath, captured: captured, tree: tree}
 	if treeid.Wrap(r.dir, tree.ID) != mine {
 		done, err := r.remerge(ctx, &c)
 		if done || err != nil {
@@ -716,11 +911,12 @@ type completion struct {
 // the update wrote it, on the same base, and merged with the same update.
 // A file that conflicts as it did, its base, mine and theirs the versions
 // they were, keeps the way it was resolved, whether this run or an earlier
-// one resolved it; every other file that conflicts, one the edit changed
-// or a new one, is left to resolve. When none is, the merge completes with
-// the new mine, and done is false; when some are, the merge is rewritten
-// with the new mine as its first parent and in its trailer, and with the
-// resolutions it kept, and the run reports those files alone and exits 4.
+// one resolved it, see mergeAgain; every other file that conflicts, one
+// the edit changed or a new one, is left to resolve. When none is, the
+// merge completes with the new mine, and done is false; when some are, the
+// merge is rewritten with the new mine as its first parent and in its
+// trailer, and with the resolutions it kept, see write, and the run
+// reports those files alone and exits 4.
 func (r *pendingRun) remerge(ctx context.Context, c *completion) (done bool, err error) {
 	inv, git, gitDir, name := r.inv, r.inv.git, r.gitDir, r.rec.Name
 	root, err := filepath.EvalSymlinks(c.libPath)
@@ -734,45 +930,27 @@ func (r *pendingRun) remerge(ctx context.Context, c *completion) (done bool, err
 	if err != nil {
 		return false, accountRepoFailure(err)
 	}
-	m := lineage.Merge{Base: r.pending.Merge.Base, Mine: mine, Theirs: r.pending.Merge.Theirs}
-	res, err := mergeVersions(ctx, git, gitDir, r.dir, m)
+	m := lineage.Merge{Base: c.m.Base, Mine: mine, Theirs: c.m.Theirs}
+	every := map[string]bool{} // a merge is completed only once every file of it is resolved
+	for p := range r.files {
+		every[p] = true
+	}
+	again, err := r.mergeAgain(ctx, c.v, m, every)
 	if err != nil {
-		return false, accountRepoFailure(err)
+		return false, err
 	}
-	merged, err := lineage.ReadMerged(ctx, git, gitDir, res.tree, r.dir)
-	if err != nil {
-		return false, accountRepoFailure(err)
-	}
-	files := map[string]*conflictFile{}
-	var kept []resolution
-	var resolved []string
-	left := []conflictFile{}
-	for i, f := range res.files {
-		files[f.Path] = &res.files[i]
-		if was := r.files[f.Path]; was != nil && sameStages(was.stages, f.stages) {
-			kept = append(kept, resolutionIn(c.v, f.Path))
-			resolved = append(resolved, f.Path)
-			continue
-		}
-		left = append(left, f)
-	}
-	v := applyResolutions(merged, files, kept)
-	if len(left) == 0 {
-		c.v, c.m, c.remerged = v, m, true
+	if len(again.left) == 0 {
+		c.v, c.m, c.remerged = again.v, m, true
 		return false, nil
 	}
-	commit, err := r.commit(ctx, v, m, len(left), resolved)
-	if err != nil {
+	if err := r.write(ctx, again, "completed"); err != nil {
 		return false, err
 	}
-	if err := r.publish(ctx, commit, "it was being completed"); err != nil {
-		return false, err
-	}
-	out := inv.out
-	inv.printConflicts(conflictOfSkill(name, m, left),
+	out, files := inv.out, plural(len(again.left), "file")
+	inv.printConflicts(conflictOfSkill(name, m, again.left),
 		out.paint(heading, sanitised(name)), " was edited while its merge was pending, and merging it again with its update from ",
-		r.from(), " to ", r.to(), " conflicts in ", out.paint(noteStyle, plural(len(left), "file")))
-	return true, refuse(exitPendingMerge, name+" was edited while its merge was pending, and merging it again conflicts in "+plural(len(left), "file")+", so the merge is still pending",
+		r.from(), " to ", r.to(), " conflicts in ", out.paint(noteStyle, files))
+	return true, refuse(exitPendingMerge, name+" was edited while its merge was pending, and merging it again conflicts in "+files+", so the merge is still pending",
 		"run '"+skillCommand("resolve", name)+"' to see every file left to resolve")
 }
 
@@ -867,7 +1045,7 @@ func (r *pendingRun) apply(ctx context.Context, c completion) error {
 		case values[lineage.MergeRef(name)] != r.pending.Commit:
 			return mergeMovedFailure(name, "it was being completed")
 		case values[lineage.ManagedRef(name)] != c.m.Base || values[lineage.ForkRef(name)] != "":
-			return baseMovedFailure(name)
+			return branchMovedFailure(name, "completed")
 		}
 		live, err := home.State(c.libPath)
 		if err != nil {
@@ -924,7 +1102,7 @@ func (r *pendingRun) apply(ctx context.Context, c completion) error {
 	if err != nil {
 		return mutationFailure(err)
 	}
-	inv.pruneEditorDirs(name, false)
+	inv.pruneEditorDirs(name, pruneKept)
 	return r.reportCompleted(ctx, c, newer, upstreamRename(name, skillName(theirs, bodies), next.Import.Dir()), done)
 }
 
@@ -1011,7 +1189,7 @@ func (inv *invocation) abortMerge(ctx context.Context, gitDir, name string) erro
 	if err != nil {
 		return mutationFailure(err)
 	}
-	inv.pruneEditorDirs(name, true)
+	inv.pruneEditorDirs(name, pruneEvery)
 	const kept = "; the library directory is as it was"
 	inv.summary = "gave up the merge of " + name + kept
 	if lib, ok := librarySkill(inv.dirs.Library, name); ok {
