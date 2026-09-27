@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -225,9 +226,52 @@ func gitQuoted(path string) string {
 	return b.String()
 }
 
+// gitUnquoted reads back a path gitQuoted wrote, and ok is false for
+// anything gitQuoted would not write.
+func gitUnquoted(quoted string) (path string, ok bool) {
+	inner, ok := strings.CutPrefix(quoted, `"`)
+	if ok {
+		inner, ok = strings.CutSuffix(inner, `"`)
+	}
+	if !ok {
+		return "", false
+	}
+	var b strings.Builder
+	for i := 0; i < len(inner); i++ {
+		c := inner[i]
+		switch esc := inner[i:min(i+2, len(inner))]; {
+		case c != '\\':
+		case esc == `\"`, esc == `\\`:
+			c, i = esc[1], i+1
+		case cUnescapes[esc] != 0:
+			c, i = cUnescapes[esc], i+1
+		case i+3 < len(inner):
+			n, err := strconv.ParseUint(inner[i+1:i+4], 8, 8)
+			if err != nil {
+				return "", false
+			}
+			c, i = byte(n), i+3
+		default:
+			return "", false
+		}
+		b.WriteByte(c)
+	}
+	path = b.String()
+	return path, gitQuoted(path) == quoted
+}
+
 // cEscapes are the control characters git's quoting gives a letter of its
 // own; every other one is written in octal.
 var cEscapes = map[byte]string{'\a': `\a`, '\b': `\b`, '\t': `\t`, '\n': `\n`, '\v': `\v`, '\f': `\f`, '\r': `\r`}
+
+// cUnescapes is cEscapes read back.
+var cUnescapes = func() map[string]byte {
+	m := map[string]byte{}
+	for c, esc := range cEscapes {
+		m[esc] = c
+	}
+	return m
+}()
 
 // controlAt is how many bytes of the control character path[i:] starts
 // with, and 0 when it starts with none. It is the rule sanitised applies

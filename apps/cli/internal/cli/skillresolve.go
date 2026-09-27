@@ -227,6 +227,7 @@ type pendingRun struct {
 	carried   map[string]bool          // once the run merged the merge again and wrote or completed it: the files whose resolution it kept
 	left      map[string]bool          // and the files it left to resolve, none once it completed it
 	completed bool                     // the run completed the merge
+	turned    map[string]bool          // the directories of earlier editor sessions whose run was gone that this run kept as its session started, see settle
 }
 
 // readPending reads the merge a skill's merge ref holds, refusing one that
@@ -1152,9 +1153,9 @@ func changedWhileCompleting(name string) *failure {
 // directory, whose content and tree must be the ones the run judged. What
 // the library directory holds unchanged keeps its permissions, see
 // keepPerms. Once it is written, the directories editor sessions of the
-// skill left go, see pruneEditorDirs, but for one an earlier session whose
-// run is gone saved something in, which is given up to the user and named
-// in a warning.
+// skill left go, see clearEditorDirs, but for one an earlier session whose
+// run is gone typed something in, which no warning named before this run,
+// and which is given up to the user and named in a warning.
 func (r *pendingRun) apply(ctx context.Context, c completion) error {
 	inv, git, gitDir, name := r.inv, r.inv.git, r.gitDir, r.rec.Name
 	target := c.v.ID()
@@ -1250,8 +1251,8 @@ func (r *pendingRun) apply(ctx context.Context, c completion) error {
 	if c.again != nil {
 		r.note(*c.again)
 	}
-	for _, dir := range inv.pruneEditorDirs(name, pruneKept) {
-		inv.out.warn(leftToYou(dir, " now that the merge of "+name+" is complete"))
+	for _, dir := range inv.clearEditorDirs(name, r.turned) {
+		inv.out.warn(leftToYou(dir, name))
 	}
 	return r.reportCompleted(ctx, c, newer, upstreamRename(name, skillName(theirs, bodies), next.Import.Dir()), done)
 }
@@ -1320,10 +1321,12 @@ func (r *pendingRun) reportCompleted(ctx context.Context, c completion, newer bo
 // it holds under the lock as its expected old value, whatever that commit
 // is and whether or not agentx can read it. The library directory, the
 // import branch and the candidate are left exactly as they were, and so is
-// every placement. The files an editor had open for the merge go too, see
-// pruneEditorDirs, but for those given up to the user and one an earlier
-// session whose run is gone saved something in, which is given up to the
-// user and named in a warning, and the skill is reported as it now stands.
+// every placement. So is what was typed in an editor session of the skill:
+// a directory of one holding anything typed is kept, and named in a
+// warning, so that the next editor session of the same conflict opens it
+// again once an update leaves the merge pending anew, see keepEditorDirs;
+// one that holds nothing typed goes. The skill is reported as it now
+// stands.
 func (inv *invocation) abortMerge(ctx context.Context, gitDir, name string) error {
 	err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		values, err := inv.lineageRefs(ctx, gitDir, name)
@@ -1341,8 +1344,9 @@ func (inv *invocation) abortMerge(ctx context.Context, gitDir, name string) erro
 	if err != nil {
 		return mutationFailure(err)
 	}
-	for _, dir := range inv.pruneEditorDirs(name, pruneEvery) {
-		inv.out.warn(leftToYou(dir, " now that the merge of "+name+" is given up"))
+	for _, dir := range inv.keepEditorDirs(name) {
+		inv.out.warn("the files you edited are kept in " + dir + ": when an update of " + name + " conflicts the same way, '" +
+			skillCommand("resolve", name, "--editor") + "' opens what you typed again; delete the folder if you do not need it")
 	}
 	const kept = "; the library directory is as it was"
 	inv.summary = "gave up the merge of " + name + kept
