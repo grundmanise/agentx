@@ -834,7 +834,7 @@ func keepPerms(staged string, u *updating) error {
 		if err := f.Chmod(perm); err != nil {
 			return err
 		}
-		return f.Sync()
+		return home.Sync(f)
 	}
 	if err := keep("", true, false); err != nil {
 		return err
