@@ -833,8 +833,9 @@ func TestSkillResolveOpensTheEditorTheEnvironmentNames(t *testing.T) {
 
 // waitingEditor is an editor that says it is open on stderr, then waits
 // until the file go exists before it resolves every file it was given, as
-// resolvingEditor does. The wait is a loop of short sleeps, bounded by the
-// test's own deadline on the run.
+// resolvingEditor does. The wait is a loop of short sleeps that gives up
+// after a minute, so that a test that fails before it writes go leaves no
+// editor behind for long; the test's own deadline on the run is shorter.
 func waitingEditor(t *testing.T) (stub, goFile string) {
 	t.Helper()
 	sleeper, err := exec.LookPath("sleep")
@@ -843,7 +844,8 @@ func waitingEditor(t *testing.T) (stub, goFile string) {
 	}
 	goFile = filepath.Join(t.TempDir(), "go")
 	stub = editorStub(t, "waiting-editor", `echo "editor open" >&2
-while [ ! -e `+shellWord(goFile)+` ]; do `+sleeper+` 0.05; done
+i=0
+while [ ! -e `+shellWord(goFile)+` ] && [ $i -lt 1200 ]; do `+sleeper+` 0.05; i=$((i+1)); done
 for f in "$@"; do printf 'resolved in the editor\n' > "$f"; done
 `)
 	return stub, goFile
@@ -1107,4 +1109,38 @@ exec `+realGit(t)+` "$@"
 			t.Errorf("the library entry is %q, %v", target, err)
 		}
 	})
+}
+
+// TestSkillResolveRecoveryKeepsTheMergeWhenTheLibraryChanged kills a
+// completion once its journal is on disk, and the library directory is
+// edited before the next command. That command's recovery moves the import
+// branch, finds the directory holding something the completion did not
+// capture, and refuses: the directory keeps the edit, and the candidate and
+// the merge ref, read back with plain git, are still there, since recovery
+// deletes them after the paths as the completion does, so nothing of the
+// merge is lost. Restoring the directory lets the next command finish it.
+func TestSkillResolveRecoveryKeepsTheMergeWhenTheLibraryChanged(t *testing.T) {
+	t.Parallel()
+	h, _, _ := resolveHarness(t)
+	resolveKit(t, h, 0, kitSides...)
+	merge, candidate := h.ref(lineage.MergeRef("kit")), h.ref(lineage.CandidateRef("kit"))
+	killedChild(t, h, "TestResolveChildProcess", resolveChildEnv, "kit|--hunk|kept.md:1=theirs", killedUpdateScript)
+	equal(t, "journals the killed completion left", journalCount(t, h), 1)
+	usage := filepath.Join(h.library, "kit", "usage.md")
+	writeFile(t, usage, "an edit made after the completion stopped\n")
+
+	out := h.run("--json", "config", "set", "label", "recovered")
+	equal(t, "exit", out.exit, 6)
+	contains(t, "message", h.one(out.stdout, "error")["message"].(string), "recovery required")
+	equal(t, "the import branch, moved before the paths", h.ref(lineage.ManagedRef("kit")), candidate)
+	equal(t, "the candidate ref", h.ref(lineage.CandidateRef("kit")), candidate)
+	equal(t, "the merge ref", h.ref(lineage.MergeRef("kit")), merge)
+	equal(t, "the edit", fileBody(t, usage), "an edit made after the completion stopped\n")
+
+	writeFile(t, usage, "usage\n")
+	h.mustRun("config", "set", "label", "recovered")
+	equal(t, "journals after recovery", journalCount(t, h), 0)
+	equal(t, "the candidate ref after recovery", h.ref(lineage.CandidateRef("kit")), "")
+	equal(t, "the merge ref after recovery", h.ref(lineage.MergeRef("kit")), "")
+	sameTree(t, "the library directory", libraryTree(t, filepath.Join(h.library, "kit")), kitTree(t, h, kitResolved))
 }
