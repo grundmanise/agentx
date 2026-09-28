@@ -282,13 +282,14 @@ func TestSkillUpdateLeavesAConflictPending(t *testing.T) {
 }
 
 // TestSkillUpdateAppliesAMergeResolvedWithGit: once the file that
-// conflicts is resolved with plain git in the checkout, staged or
+// conflicts is merged by hand in the checkout and staged with plain git,
 // committed too, the update run again applies the merge as it applies a
 // clean one: the import branch moves to the update and the candidate goes,
-// the library directory holds the merge as resolved, keeping the .DS_Store
-// git ignores in it, the copy that still held the version installed is
-// refreshed and the one edited where it is kept with its warning, and the
-// checkout and git's registration of it are gone, nothing left behind.
+// the library directory and the copy that still held the version installed
+// hold the user's resolution rather than the update, the library keeping
+// the .DS_Store git ignores in it, the copy edited where it is is kept with
+// its warning, and the checkout and git's registration of it are gone,
+// nothing left behind.
 func TestSkillUpdateAppliesAMergeResolvedWithGit(t *testing.T) {
 	t.Parallel()
 	for _, commit := range []bool{false, true} {
@@ -302,7 +303,12 @@ func TestSkillUpdateAppliesAMergeResolvedWithGit(t *testing.T) {
 			editLibrary(t, h, "alpha", ".DS_Store", "finder data\n")
 			pendingMerge(t, h, s)
 			candidate := h.ref(lineage.CandidateRef("alpha"))
-			resolvedWithGit(t, h, commit)
+			skillDir := filepath.Join(pendingCheckout(h, "alpha"), "alpha-dir")
+			writeFile(t, filepath.Join(skillDir, "notes.md"), "alpha notes, merged by hand\n")
+			gitIn(t, h, skillDir, "add", "notes.md")
+			if commit {
+				gitIn(t, h, skillDir, "commit", "--quiet", "--no-edit")
+			}
 
 			out := h.mustRun("--json", "skill", "update", "alpha")
 			equal(t, "summary", h.one(out.stdout, "result")["summary"],
@@ -312,6 +318,7 @@ func TestSkillUpdateAppliesAMergeResolvedWithGit(t *testing.T) {
 			equal(t, "the candidate ref", h.ref(lineage.CandidateRef("alpha")), "")
 			noCheckout(t, h, "alpha")
 			want := secondTree(t, s)
+			want["notes.md"] = "alpha notes, merged by hand\n"
 			sameTree(t, "the library directory", libraryTree(t, filepath.Join(h.library, "alpha")), withFile(want, ".DS_Store", "finder data\n"))
 			sameTree(t, "claude's copy", libraryTree(t, claude), want)
 			sameTree(t, "cursor's copy", libraryTree(t, cursor), edited)
@@ -320,7 +327,7 @@ func TestSkillUpdateAppliesAMergeResolvedWithGit(t *testing.T) {
 			}
 			equal(t, "journals", journalCount(t, h), 0)
 			ev := h.one(out.stdout, "library_skill")
-			equal(t, "state", ev["state"], stateCurrent)
+			equal(t, "state", ev["state"], stateModified)
 			if _, ok := ev["pending_merge"]; ok {
 				t.Errorf("the skill still carries pending_merge: %v", ev["pending_merge"])
 			}
@@ -358,8 +365,9 @@ func TestSkillUpdateFromInsideTheCheckout(t *testing.T) {
 // given up. skill update --abort gives it up whatever state it is in: git
 // removes the checkout and its registration, and the library, every copy,
 // the import branch and the candidate are byte for byte as they were. A
-// second --abort finds no merge pending, --abort takes no --all, and the
-// update then conflicts again as it did.
+// second --abort finds no merge pending, as does one on a name the library
+// does not hold, --abort takes no --all, and the update then conflicts
+// again as it did.
 func TestSkillUpdateAbortGivesTheMergeUp(t *testing.T) {
 	t.Parallel()
 	h, s, _ := updateHarness(t)
@@ -393,6 +401,7 @@ func TestSkillUpdateAbortGivesTheMergeUp(t *testing.T) {
 	second := h.run("--json", "skill", "update", "alpha", "--abort")
 	equal(t, "exit of a second abort", second.exit, 6)
 	equal(t, "message of a second abort", h.one(second.stdout, "error")["message"], "alpha has no merge pending")
+	equal(t, "exit of --abort on a name the library does not hold", h.run("skill", "update", "nosuch", "--abort").exit, 6)
 	equal(t, "exit of --abort with --all", h.run("skill", "update", "--all", "--abort").exit, 1)
 	equal(t, "the update once given up conflicts again", h.run("skill", "update", "alpha").exit, 4)
 }
