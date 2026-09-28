@@ -497,8 +497,8 @@ func TestSkillPlaceStopsAtADirectoryOfTheUsers(t *testing.T) {
 	equal(t, "exit", out.exit, 6)
 	e := h.one(out.stdout, "error")
 	equal(t, "message", e["message"], handMade+" is a directory whose content differs from the library's alpha, so nothing was placed")
-	equal(t, "hint", e["hint"], "to keep the library's content and discard it, run 'agentx skill place alpha --to cursor --keep-library';"+
-		" to make its content the library's, run 'agentx skill place alpha --to cursor --keep-placement'")
+	equal(t, "hint", e["hint"], "to replace it with the library's version and delete what it holds, run 'agentx skill place alpha --to cursor --force';"+
+		" to keep it, move it elsewhere first")
 	equal(t, "the directory", onDisk(t, handMade), held)
 	equal(t, "the settings", fileBody(t, filepath.Join(h.agentx, "settings.json")), settings)
 	equal(t, "no mutation", mutationVersion(t, h), version)

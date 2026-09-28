@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
-	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -173,10 +172,10 @@ func TestSkillPlaceAdoptsADirectoryHoldingTheLibrarysContent(t *testing.T) {
 }
 
 // TestSkillPlaceRefusesADirectoryThatDiffers: a displaced directory whose
-// content is not the library's is one of two versions of the skill, and
-// replacing it without a flag would discard one of them. skill place
-// refuses, names both flags and changes nothing at all, the missing
-// placement it could have made included. A file made executable is a
+// content is not the library's would be discarded by replacing it, so
+// without --force skill place refuses, names --force and what it deletes
+// and how to keep the directory instead, and changes nothing at all, the
+// missing placement it could have made included. A file made executable is a
 // difference too, as it is to the state of the skill.
 func TestSkillPlaceRefusesADirectoryThatDiffers(t *testing.T) {
 	t.Parallel()
@@ -201,8 +200,8 @@ func TestSkillPlaceRefusesADirectoryThatDiffers(t *testing.T) {
 			equal(t, "exit", out.exit, 6)
 			e := h.one(out.stdout, "error")
 			equal(t, "message", e["message"], claude+" is a directory whose content differs from the library's alpha, so nothing was placed")
-			equal(t, "hint", e["hint"], "to keep the library's content and discard it, run 'agentx skill place alpha --keep-library';"+
-				" to make its content the library's, run 'agentx skill place alpha --keep-placement'")
+			equal(t, "hint", e["hint"], "to replace it with the library's version and delete what it holds, run 'agentx skill place alpha --force';"+
+				" to keep it, move it elsewhere first")
 			if _, ok := isSymlink(t, claude); ok {
 				t.Fatal("claude's directory was replaced")
 			}
@@ -222,8 +221,8 @@ func TestSkillPlaceRefusesADirectoryThatDiffers(t *testing.T) {
 		equal(t, "exit", out.exit, 6)
 		e := h.one(out.stdout, "error")
 		equal(t, "message", e["message"], claude+", "+cursor+" are directories whose content differs from the library's alpha, so nothing was placed")
-		equal(t, "hint", e["hint"], "to keep the library's content and discard them, run 'agentx skill place alpha --keep-library';"+
-			" to make their content the library's, run 'agentx skill place alpha --keep-placement'")
+		equal(t, "hint", e["hint"], "to replace them with the library's version and delete what they hold, run 'agentx skill place alpha --force';"+
+			" to keep them, move them elsewhere first")
 		cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor))
 	})
 }
@@ -275,17 +274,17 @@ func TestSkillPlaceComparesWhatGitCannotRecordByteForByte(t *testing.T) {
 	}
 }
 
-// TestSkillPlaceKeepLibraryDiscardsTheDirectory: --keep-library is the
-// explicit choice to discard a displaced directory that differs. The
-// symlink replaces it, the library is untouched, the skill stays current,
-// and the run names what it discarded.
-func TestSkillPlaceKeepLibraryDiscardsTheDirectory(t *testing.T) {
+// TestSkillPlaceForceDiscardsTheDirectory: --force is the explicit choice
+// to discard a displaced directory that differs. The symlink replaces it,
+// the library is untouched, the skill stays current, and the run names
+// what it discarded.
+func TestSkillPlaceForceDiscardsTheDirectory(t *testing.T) {
 	t.Parallel()
 	h, lib, claude, cursor := everywhereHarness(t)
 	base := libraryTree(t, lib)
 	displace(t, lib, claude, true)
 
-	out := h.mustRun("--json", "skill", "place", "alpha", "--keep-library")
+	out := h.mustRun("--json", "skill", "place", "alpha", "--force")
 	linksToLibrary(t, "claude's placement", claude, lib)
 	sameTree(t, "the library directory", libraryTree(t, lib), base)
 	linksToLibrary(t, "cursor's placement", cursor, lib)
@@ -296,540 +295,25 @@ func TestSkillPlaceKeepLibraryDiscardsTheDirectory(t *testing.T) {
 	cleanAfterPlace(t, h, h.library, filepath.Dir(claude))
 
 	displace(t, lib, claude, true)
-	text := h.mustRun("skill", "place", "alpha", "--keep-library").stdout
+	text := h.mustRun("skill", "place", "alpha", "--force").stdout
 	equal(t, "the text", text, "✓ placed alpha in 4 configurations\n"+everyRow(lib, claude, cursor)+
 		"  discarded what "+claude+" held\n"+universalLine)
-	equal(t, "placing again", placesNothing(t, h, "alpha", "--keep-library"), "✓ placed alpha in 4 configurations\n"+everyRow(lib, claude, cursor)+universalLine)
+	equal(t, "placing again", placesNothing(t, h, "alpha", "--force"), "✓ placed alpha in 4 configurations\n"+everyRow(lib, claude, cursor)+universalLine)
 	equal(t, "drift after placing again", drift(h.listed("alpha")), "")
 }
 
-// TestSkillPlaceKeepPlacementMakesItTheLibrary: --keep-placement is the
-// explicit choice to keep a displaced directory that differs. Its content
-// becomes the library's, so the skill is modified against its base
-// version, and the symlink replaces it. Every other placement follows the
-// library as a revert makes it follow: a copy that held the library's
-// content is refreshed, a copy edited where it is is kept, named and
-// counted as skipped, and a missing copy is made from the content kept.
-func TestSkillPlaceKeepPlacementMakesItTheLibrary(t *testing.T) {
-	t.Parallel()
-	h, s := placementHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code")
-	h.mustRun("skill", "place", "alpha", "--to", "cursor", "--to", "windsurf", "--to", "github-copilot", "--copy")
-	lib := filepath.Join(h.library, "alpha")
-	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
-	windsurf := filepath.Join(h.home, ".codeium", "windsurf", "skills", "alpha")
-	copilot := filepath.Join(h.home, ".copilot", "skills", "alpha")
-	displace(t, lib, claude, true)
-	kept := libraryTree(t, claude)
-	editCopy(t, cursor)
-	edited := libraryTree(t, cursor)
-	remove(t, copilot)
-	equal(t, "drift before skill place", drift(h.listed("alpha")), "displaced,missing")
-
-	out := h.mustRun("--json", "skill", "place", "alpha", "--keep-placement")
-	sameTree(t, "the library directory", libraryTree(t, lib), kept)
-	linksToLibrary(t, "claude's placement", claude, lib)
-	sameTree(t, "cursor's edited copy", libraryTree(t, cursor), edited)
-	sameTree(t, "windsurf's refreshed copy", libraryTree(t, windsurf), kept)
-	sameTree(t, "copilot's copy", libraryTree(t, copilot), kept)
-	if !executable(t, filepath.Join(lib, "scripts", "run.sh")) {
-		t.Error("scripts/run.sh of the library is not executable")
-	}
-	ev := h.one(out.stdout, "library_skill")
-	equal(t, "drift", drift(ev), "")
-	equal(t, "state", ev["state"], stateModified)
-	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"),
-		keptCopyWarning(cursor, "alpha", "agentx skill remove alpha --from cursor", "agentx skill place alpha --to cursor --copy"))
-	equal(t, "summary", h.one(out.stdout, "result")["summary"],
-		"placed alpha in 5 configurations, 1 placement as copy, 1 copy placement refreshed, 1 placement skipped; the library now holds what "+claude+" held"+universalClauseOf)
-	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "cursor,github-copilot,windsurf")
-	cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor), filepath.Dir(windsurf), filepath.Dir(copilot))
-
-	diffs := h.eventsOfType(h.mustRun("--json", "skill", "diff", "alpha").stdout, "diff")
-	var changed []string
-	for _, d := range diffs {
-		changed = append(changed, d["path"].(string)+" "+d["status"].(string))
-	}
-	equal(t, "the diff against the base", strings.Join(changed, ", "), "mine.md added, notes.md modified")
-	contains(t, "placing again", placesNothing(t, h, "alpha", "--keep-placement"), "✓ placed alpha in 5 configurations, 1 placement skipped\n")
-	equal(t, "drift after placing again", drift(h.listed("alpha")), "")
-}
-
-// TestSkillPlaceKeepPlacementRefreshesACopyOfTheBase: copies placed
-// before the library was edited still hold the base version, which is what
-// agentx placed there, so --keep-placement refreshes them with the content
-// kept, as it refreshes a copy of what the library held. A copy edited
-// where it is beside them is still kept byte for byte, and named.
-func TestSkillPlaceKeepPlacementRefreshesACopyOfTheBase(t *testing.T) {
-	t.Parallel()
-	h, s := placementHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code")
-	h.mustRun("skill", "place", "alpha", "--to", "cursor", "--to", "windsurf", "--to", "github-copilot", "--copy")
-	lib := filepath.Join(h.library, "alpha")
-	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
-	windsurf := filepath.Join(h.home, ".codeium", "windsurf", "skills", "alpha")
-	copilot := filepath.Join(h.home, ".copilot", "skills", "alpha")
-	editCopy(t, cursor)
-	edited := libraryTree(t, cursor)
-	writeFile(t, filepath.Join(lib, "lib-edit.md"), "an edit made in the library\n")
-	equal(t, "state before skill place", h.listed("alpha")["state"], stateModified)
-	displace(t, lib, claude, true)
-	kept := libraryTree(t, claude)
-
-	out := h.mustRun("--json", "skill", "place", "alpha", "--keep-placement")
-	sameTree(t, "the library directory", libraryTree(t, lib), kept)
-	linksToLibrary(t, "claude's placement", claude, lib)
-	sameTree(t, "windsurf's copy of the base", libraryTree(t, windsurf), kept)
-	sameTree(t, "copilot's copy of the base", libraryTree(t, copilot), kept)
-	sameTree(t, "cursor's edited copy", libraryTree(t, cursor), edited)
-	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"),
-		keptCopyWarning(cursor, "alpha", "agentx skill remove alpha --from cursor", "agentx skill place alpha --to cursor --copy"))
-	equal(t, "summary", h.one(out.stdout, "result")["summary"],
-		"placed alpha in 5 configurations, 2 copy placements refreshed, 1 placement skipped; the library now holds what "+claude+" held"+universalClauseOf)
-	cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor), filepath.Dir(windsurf), filepath.Dir(copilot))
-}
-
-// TestSkillPlaceKeepPlacementOfTheBaseLeavesItCurrent: a displaced
-// directory holding the skill's base version, kept with --keep-placement
-// while the library is edited, makes the library hold the base again, so
-// the skill is current afterwards, not modified. A copy that held what
-// the library held is refreshed with it, and a copy that already holds the
-// base is left alone and counted as placed, not as refreshed.
-func TestSkillPlaceKeepPlacementOfTheBaseLeavesItCurrent(t *testing.T) {
-	t.Parallel()
-	h, s := placementHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code")
-	h.mustRun("skill", "place", "alpha", "--to", "cursor", "--to", "windsurf", "--to", "github-copilot", "--copy")
-	lib := filepath.Join(h.library, "alpha")
-	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
-	windsurf := filepath.Join(h.home, ".codeium", "windsurf", "skills", "alpha")
-	copilot := filepath.Join(h.home, ".copilot", "skills", "alpha")
-	base := libraryTree(t, lib)
-	writeFile(t, filepath.Join(lib, "lib-edit.md"), "an edit made in the library\n")
-	remove(t, windsurf)
-	copyTree(t, lib, windsurf)
-	remove(t, claude)
-	copyTree(t, cursor, claude)
-	ev := h.listed("alpha")
-	equal(t, "state before skill place", ev["state"], stateModified)
-	equal(t, "drift before skill place", drift(ev), "displaced")
-	cursorBefore, err := os.Lstat(cursor)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	out := h.mustRun("--json", "skill", "place", "alpha", "--keep-placement")
-	sameTree(t, "the library directory", libraryTree(t, lib), base)
-	linksToLibrary(t, "claude's placement", claude, lib)
-	for _, place := range []string{cursor, windsurf, copilot} {
-		sameTree(t, "the copy at "+place, libraryTree(t, place), base)
-	}
-	if cursorAfter, err := os.Lstat(cursor); err != nil || !os.SameFile(cursorBefore, cursorAfter) {
-		t.Errorf("cursor's copy of the base was replaced although it held what the library now holds: %v", err)
-	}
-	ev = h.one(out.stdout, "library_skill")
-	equal(t, "state", ev["state"], stateCurrent)
-	equal(t, "drift", drift(ev), "")
-	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "")
-	equal(t, "summary", h.one(out.stdout, "result")["summary"],
-		"placed alpha in 6 configurations, 1 copy placement refreshed; the library now holds what "+claude+" held"+universalClauseOf)
-	cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor), filepath.Dir(windsurf), filepath.Dir(copilot))
-}
-
-// TestSkillPlaceKeepPlacementKeepsTheLibrarysIgnoredFiles: the files git
-// ignores in the library directory, a .DS_Store and a build directory its
-// .gitignore names, are no part of what --keep-placement discards: they
-// are carried into the content kept, as a revert carries them. A copy of
-// the library's content, refreshed with the content kept, keeps its own
-// .DS_Store the same way, and a copy the run makes holds only the content
-// kept. A file the base version of a managed skill holds is content even
-// when an ignore rule matches it, so a deletion in the content kept stands.
-// An unmanaged skill on a machine with no account repo yet gets one for
-// git to judge its library directory in.
-func TestSkillPlaceKeepPlacementKeepsTheLibrarysIgnoredFiles(t *testing.T) {
-	t.Parallel()
-	t.Run("a managed skill", func(t *testing.T) {
-		t.Parallel()
-		h, s := placementHarness(t)
-		h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code")
-		lib := filepath.Join(h.library, "alpha")
-		claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-		cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
-		writeFile(t, filepath.Join(lib, ".gitignore"), "build/\n")
-		h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
-		displace(t, lib, claude, true)
-		kept := libraryTree(t, claude)
-		writeFile(t, filepath.Join(lib, ".DS_Store"), "the library's finder data\n")
-		writeFile(t, mkdirs(t, filepath.Join(lib, "build"), "out.txt"), "built\n")
-		writeFile(t, filepath.Join(cursor, ".DS_Store"), "cursor's finder data\n")
-
-		out := h.mustRun("--json", "skill", "place", "alpha", "--keep-placement")
-		want := maps.Clone(kept)
-		want[".DS_Store"], want["build/out.txt"] = "the library's finder data\n", "built\n"
-		sameTree(t, "the library directory", libraryTree(t, lib), want)
-		linksToLibrary(t, "claude's placement", claude, lib)
-		want = maps.Clone(kept)
-		want[".DS_Store"] = "cursor's finder data\n"
-		sameTree(t, "cursor's refreshed copy", libraryTree(t, cursor), want)
-		contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), ", 1 copy placement refreshed;")
-		cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor))
-	})
-
-	t.Run("a copy the run makes", func(t *testing.T) {
-		t.Parallel()
-		h, s := placementHarness(t)
-		h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code")
-		lib := filepath.Join(h.library, "alpha")
-		claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-		cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
-		writeFile(t, filepath.Join(lib, ".gitignore"), "build/\n")
-		h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
-		remove(t, cursor)
-		displace(t, lib, claude, true)
-		kept := libraryTree(t, claude)
-		writeFile(t, filepath.Join(lib, ".DS_Store"), "the library's finder data\n")
-		writeFile(t, mkdirs(t, filepath.Join(lib, "build"), "out.txt"), "built\n")
-
-		h.mustRun("skill", "place", "alpha", "--keep-placement")
-		sameTree(t, "cursor's new copy", libraryTree(t, cursor), kept)
-		cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor))
-	})
-
-	t.Run("a file the base holds is content, not a file to carry", func(t *testing.T) {
-		t.Parallel()
-		h, s := placementHarness(t)
-		h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code")
-		lib := filepath.Join(h.library, "alpha")
-		claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-		writeFile(t, filepath.Join(lib, ".gitignore"), "notes.md\n")
-		displace(t, lib, claude, true)
-		remove(t, filepath.Join(claude, "notes.md"))
-		kept := libraryTree(t, claude)
-		h.mustRun("skill", "place", "alpha", "--keep-placement")
-		sameTree(t, "the library directory", libraryTree(t, lib), kept)
-		cleanAfterPlace(t, h, h.library, filepath.Dir(claude))
-	})
-
-	t.Run("an unmanaged skill and no account repo", func(t *testing.T) {
-		t.Parallel()
-		h := newHarness(t)
-		h.build(t, fixture{dirs: []string{".claude"}})
-		lib := filepath.Join(h.library, "notes")
-		claude := filepath.Join(h.home, ".claude", "skills", "notes")
-		writeFile(t, mkdirs(t, lib, "SKILL.md"), skill("notes", "My own notes"))
-		h.mustRun("skill", "place", "notes")
-		remove(t, claude)
-		copyTree(t, lib, claude)
-		writeFile(t, filepath.Join(claude, "mine.md"), "a file of my own\n")
-		kept := libraryTree(t, claude)
-		writeFile(t, filepath.Join(lib, ".DS_Store"), "the library's finder data\n")
-		nothingAt(t, "the account repo", gitx.AccountRepoPath(h.agentx))
-
-		h.mustRun("skill", "place", "notes", "--keep-placement")
-		kept[".DS_Store"] = "the library's finder data\n"
-		sameTree(t, "the library directory", libraryTree(t, lib), kept)
-		linksToLibrary(t, "claude's placement", claude, lib)
-		h.mustRun("skill", "list")
-		cleanAfterPlace(t, h, h.library, filepath.Dir(claude))
-	})
-}
-
-// TestSkillPlaceKeepPlacementText: the text is the one skill place always
-// prints, a row per configuration and the directories it adopted, and it
-// names the directory the library now holds the content of below them,
-// above the universal clients.
-func TestSkillPlaceKeepPlacementText(t *testing.T) {
-	t.Parallel()
-	h, lib, claude, cursor := everywhereHarness(t)
-	displace(t, lib, cursor, false)
-	displace(t, lib, claude, true)
-	equal(t, "the text", h.mustRun("skill", "place", "alpha", "--keep-placement").stdout, "✓ placed alpha in 4 configurations\n"+
-		everyRow(lib, claude, cursor)+
-		"  adopted "+cursor+"\n"+
-		"  the library now holds what "+claude+" held\n"+
-		universalLine)
-}
-
-// TestSkillPlaceKeepPlacementRefusals: --keep-placement makes one
-// directory's content the library's, so it refuses what would leave the
-// library holding something else. Nothing is changed by any of them.
-func TestSkillPlaceKeepPlacementRefusals(t *testing.T) {
-	t.Parallel()
-	t.Run("two directories that differ from each other", func(t *testing.T) {
-		t.Parallel()
-		h, lib, claude, cursor := everywhereHarness(t)
-		displace(t, lib, claude, true)
-		displace(t, lib, cursor, false)
-		writeFile(t, filepath.Join(cursor, "notes.md"), "another edit\n")
-		out := h.run("--json", "skill", "place", "alpha", "--keep-placement")
-		equal(t, "exit", out.exit, 6)
-		e := h.one(out.stdout, "error")
-		equal(t, "message", e["message"], "--keep-placement keeps the content of one directory, and "+claude+", "+cursor+" hold different content")
-		contains(t, "hint", e["hint"].(string), "move aside every directory but the one to keep")
-		equal(t, "cursor's edit", fileBody(t, filepath.Join(cursor, "notes.md")), "another edit\n")
-		cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor))
-
-		// Two directories holding the same content are one content to keep.
-		displace(t, lib, cursor, true)
-		h.mustRun("skill", "place", "alpha", "--keep-placement")
-		linksToLibrary(t, "claude's placement", claude, lib)
-		linksToLibrary(t, "cursor's placement", cursor, lib)
-		equal(t, "the library's notes.md", fileBody(t, filepath.Join(lib, "notes.md")), "alpha notes, edited in the displaced directory\n")
-	})
-
-	t.Run("a directory with no SKILL.md", func(t *testing.T) {
-		t.Parallel()
-		h, _, claude, _ := everywhereHarness(t)
-		remove(t, claude)
-		writeFile(t, mkdirs(t, claude, "notes.md"), "not a skill\n")
-		out := h.run("--json", "skill", "place", "alpha", "--keep-placement")
-		equal(t, "exit", out.exit, 6)
-		equal(t, "message", h.one(out.stdout, "error")["message"], claude+" holds no SKILL.md, so its content cannot become the library's alpha")
-		equal(t, "the directory", fileBody(t, filepath.Join(claude, "notes.md")), "not a skill\n")
-		cleanAfterPlace(t, h, h.library, filepath.Dir(claude))
-	})
-
-	t.Run("a directory holding a repository", func(t *testing.T) {
-		t.Parallel()
-		h, lib, claude, _ := everywhereHarness(t)
-		displace(t, lib, claude, true)
-		writeFile(t, mkdirs(t, filepath.Join(claude, "vendored", ".git"), "HEAD"), "ref: refs/heads/main\n")
-		out := h.run("--json", "skill", "place", "alpha", "--keep-placement")
-		equal(t, "exit", out.exit, 6)
-		equal(t, "message", h.one(out.stdout, "error")["message"], claude+" holds what git cannot record, so its content cannot become the library's")
-		cleanAfterPlace(t, h, h.library, filepath.Dir(claude))
-	})
-}
-
-// keptLinkRefusal is the message and hint of skill place refusing to make
-// the content of dir the library's because it holds the symlink link.
-func keptLinkRefusal(dir, link string) (string, string) {
-	return dir + " holds the symlink " + link + ", so its content cannot become the library's",
-		"replace the link with the files it leads to, then run 'agentx skill place alpha --keep-placement' again, " +
-			"or keep the library's content with 'agentx skill place alpha --keep-library'"
-}
-
-// TestSkillPlaceKeepPlacementRefusesADirectoryHoldingASymlink: the kept
-// directory is copied into the library link for link, so a symlink anywhere
-// in it would lead from the library into what the run replaces, the
-// library directory, another displaced directory or a copy, or through one
-// of them and out by "..", or, spelled relative, elsewhere than it did.
-// Rather than follow each link to find out, --keep-placement refuses a
-// directory holding any symlink at any depth, one that leads somewhere
-// harmless included, names it, and changes nothing. --keep-library, which
-// copies nothing, places the skill and leaves the library as it was.
-func TestSkillPlaceKeepPlacementRefusesADirectoryHoldingASymlink(t *testing.T) {
-	t.Parallel()
-	for _, c := range []struct {
-		name, link string // the link, relative to Claude Code's displaced directory
-		// arrange sets the machine up and returns what the link names.
-		arrange func(t *testing.T, h *harness, lib, claude, cursor string) string
-	}{
-		{"a link into the library directory", "scripts", func(t *testing.T, _ *harness, lib, _, _ string) string {
-			return filepath.Join(lib, "scripts")
-		}},
-		{"a link to the library's SKILL.md", "SKILL.md", func(t *testing.T, _ *harness, lib, _, _ string) string {
-			return filepath.Join(lib, "SKILL.md")
-		}},
-		{"a relative link into the library", "scripts", func(t *testing.T, _ *harness, lib, claude, _ string) string {
-			rel, err := filepath.Rel(claude, filepath.Join(lib, "scripts"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			return rel
-		}},
-		{"a link into another displaced directory", "scripts", func(t *testing.T, _ *harness, lib, _, cursor string) string {
-			displace(t, lib, cursor, false)
-			return filepath.Join(cursor, "scripts")
-		}},
-		{"a link into a copy placement", "scripts", func(t *testing.T, h *harness, _, _, cursor string) string {
-			remove(t, cursor)
-			h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
-			return filepath.Join(cursor, "scripts")
-		}},
-		{"a link to a directory outside holding a link into the library", "ext", func(t *testing.T, h *harness, lib, _, _ string) string {
-			outside := filepath.Join(h.home, "ext")
-			link(t, filepath.Join(lib, "scripts"), mkdirs(t, outside, "y"))
-			return outside
-		}},
-		{"a link through another displaced directory and out by '..'", "ref", func(t *testing.T, h *harness, lib, _, cursor string) string {
-			displace(t, lib, cursor, false)
-			writeFile(t, mkdirs(t, filepath.Join(h.home, ".cursor", "vendor"), "x.md"), "notes kept outside the skill\n")
-			return cursor + "/../../vendor"
-		}},
-		{"a link through the directory itself and out by '..'", "ref", func(t *testing.T, h *harness, _, claude, _ string) string {
-			writeFile(t, mkdirs(t, filepath.Join(h.home, ".claude", "vendor"), "x.md"), "notes kept outside the skill\n")
-			return claude + "/../../vendor"
-		}},
-		{"an absolute link to a file outside", "shared.md", func(t *testing.T, h *harness, _, _, _ string) string {
-			outside := filepath.Join(h.home, "shared-notes.md")
-			writeFile(t, outside, "notes kept outside the skill\n")
-			return outside
-		}},
-		{"a link to a sibling in the client's skills directory", "sibling", func(t *testing.T, _ *harness, _, claude, _ string) string {
-			sibling := filepath.Join(filepath.Dir(claude), "shared-notes")
-			writeFile(t, mkdirs(t, sibling, "x.md"), "notes beside the skill\n")
-			return sibling
-		}},
-		{"a relative link that stays inside it", "run", func(t *testing.T, _ *harness, _, _, _ string) string {
-			return filepath.Join("scripts", "run.sh")
-		}},
-		{"a relative link out of it and in again by its name", "again.md", func(t *testing.T, _ *harness, _, _, _ string) string {
-			return filepath.Join("..", "alpha", "mine.md")
-		}},
-		{"a relative link out of it", "notes", func(t *testing.T, _ *harness, _, claude, _ string) string {
-			writeFile(t, mkdirs(t, filepath.Join(filepath.Dir(claude), "notes-of-mine"), "n.md"), "my notes\n")
-			return filepath.Join("..", "notes-of-mine")
-		}},
-		{"a relative link out of it, deep inside it", filepath.Join("scripts", "notes"), func(t *testing.T, _ *harness, _, claude, _ string) string {
-			writeFile(t, mkdirs(t, filepath.Join(filepath.Dir(claude), "notes-of-mine"), "n.md"), "my notes\n")
-			return filepath.Join("..", "..", "notes-of-mine")
-		}},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			t.Parallel()
-			h, lib, claude, cursor := everywhereHarness(t)
-			displace(t, lib, claude, true)
-			target := c.arrange(t, h, lib, claude, cursor)
-			at := filepath.Join(claude, c.link)
-			remove(t, at)
-			link(t, target, at)
-			library := onDisk(t, lib)
-
-			message, hint := keptLinkRefusal(claude, at)
-			refusesUntouched(t, h, []string{"--keep-placement"}, message, hint)
-			if got, ok := isSymlink(t, at); !ok || got != target {
-				t.Errorf("the link in claude's directory: link %v to %q, want a link to %q", ok, got, target)
-			}
-			cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor))
-
-			// Told to keep the library's content, skill place discards the
-			// directory, link and all, and the library keeps its files.
-			h.mustRun("skill", "place", "alpha", "--keep-library")
-			linksToLibrary(t, "claude's placement", claude, lib)
-			equal(t, "the library directory after --keep-library", onDisk(t, lib), library)
-			equal(t, "the library's run.sh", fileBody(t, filepath.Join(lib, "scripts", "run.sh")), "#!/bin/sh\n")
-		})
-	}
-}
-
-// TestSkillPlaceKeepPlacementIgnoresALibraryLinkOutOfTheLibraryDirectory:
-// a library link that enters alpha's library directory by name and leaves
-// it by ".." does not pass through it once --keep-placement replaced it:
-// the library directory is a real directory again, whose ".." is where it
-// was, and the link still leads where it did.
-func TestSkillPlaceKeepPlacementIgnoresALibraryLinkOutOfTheLibraryDirectory(t *testing.T) {
+// TestSkillPlaceKeepFlagsAreGone: --force is the one way to replace a
+// displaced directory that differs, and the flags that chose which content
+// to keep are no flags of skill place.
+func TestSkillPlaceKeepFlagsAreGone(t *testing.T) {
 	t.Parallel()
 	h, lib, claude, _ := everywhereHarness(t)
 	displace(t, lib, claude, true)
-	writeFile(t, mkdirs(t, filepath.Join(h.library, "gamma"), "SKILL.md"), skill("gamma", "A skill of my own"))
-	delta := filepath.Join(h.library, "delta")
-	link(t, lib+"/../gamma", delta)
-
-	h.mustRun("skill", "place", "alpha", "--keep-placement")
-	linksToLibrary(t, "claude's placement", claude, lib)
-	equal(t, "what delta leads to", fileBody(t, filepath.Join(delta, "SKILL.md")), skill("gamma", "A skill of my own"))
-	equal(t, "alpha's state", h.listed("alpha")["state"], stateModified)
-	cleanAfterPlace(t, h, h.library, filepath.Dir(claude))
-}
-
-// TestSkillPlaceKeepPlacementCopiesTheExecBitGitRecords: git records a
-// file as executable by its owner's bit alone, and so does every copy
-// skill place makes: a file only others may run is laid out in the library
-// and in a refreshed copy as a plain file, so each holds the tree it was
-// judged to hold, and the run lands.
-func TestSkillPlaceKeepPlacementCopiesTheExecBitGitRecords(t *testing.T) {
-	t.Parallel()
-	h, s := placementHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code")
-	h.mustRun("skill", "place", "alpha", "--to", "windsurf", "--copy")
-	lib := filepath.Join(h.library, "alpha")
-	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-	windsurf := filepath.Join(h.home, ".codeium", "windsurf", "skills", "alpha")
-	displace(t, lib, claude, true)
-	chmod(t, filepath.Join(claude, "mine.md"), 0o645)
-
-	out := h.mustRun("--json", "skill", "place", "alpha", "--keep-placement")
-	for _, dir := range []string{lib, windsurf} {
-		if executable(t, filepath.Join(dir, "mine.md")) {
-			t.Errorf("mine.md in %s is executable, want the plain file git records", dir)
-		}
-		if !executable(t, filepath.Join(dir, "scripts", "run.sh")) {
-			t.Errorf("scripts/run.sh in %s is not executable", dir)
-		}
+	for _, flag := range []string{"--keep-library", "--keep-placement"} {
+		out := h.run("skill", "place", "alpha", flag)
+		equal(t, flag+": exit", out.exit, 1)
+		contains(t, flag+": stderr", out.stderr, "unknown flag: "+flag)
 	}
-	equal(t, "summary", h.one(out.stdout, "result")["summary"],
-		"placed alpha in 6 configurations, 1 copy placement refreshed; the library now holds what "+claude+" held"+universalClauseOf)
-	cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(windsurf))
-}
-
-// TestSkillPlaceRefreshesALinkedCopyOnce: Cursor's skills directory made a
-// symlink to Claude Code's makes the copies copy_mode records for the two
-// one directory spelled two ways, and on a disk that ignores case so does
-// a link that spells Claude Code's directory in another case.
-// --keep-placement refreshes it once and counts it for both
-// configurations: refreshed twice, the second removal would find the
-// first one's copy there and stop the mutation part way.
-func TestSkillPlaceRefreshesALinkedCopyOnce(t *testing.T) {
-	t.Parallel()
-	for _, c := range []struct {
-		name      string
-		otherCase bool
-	}{{"spelled the same", false}, {"spelled in another case", true}} {
-		otherCase := c.otherCase
-		t.Run(c.name, func(t *testing.T) {
-			t.Parallel()
-			if otherCase {
-				ignoresCase(t)
-			}
-			h, s := placementHarness(t)
-			h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code", "--to", "cursor", "--copy")
-			h.mustRun("skill", "place", "alpha", "--to", "windsurf")
-			lib := filepath.Join(h.library, "alpha")
-			claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-			cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
-			windsurf := filepath.Join(h.home, ".codeium", "windsurf", "skills", "alpha")
-			skills := filepath.Dir(claude)
-			if otherCase {
-				skills = filepath.Join(inAnotherCase(filepath.Join(h.home, ".claude")), "skills")
-			}
-			remove(t, filepath.Dir(cursor))
-			link(t, skills, filepath.Dir(cursor))
-			displace(t, lib, windsurf, true)
-			kept := libraryTree(t, windsurf)
-
-			out := h.run("--json", "skill", "place", "alpha", "--keep-placement")
-			if out.exit != 0 {
-				t.Fatalf("skill place: exit %d\n%s", out.exit, out.stderr)
-			}
-			sameTree(t, "the library directory", libraryTree(t, lib), kept)
-			sameTree(t, "the copy both read", libraryTree(t, claude), kept)
-			linksToLibrary(t, "windsurf's placement", windsurf, lib)
-			equal(t, "summary", h.one(out.stdout, "result")["summary"],
-				"placed alpha in 6 configurations, 2 copy placements refreshed; the library now holds what "+windsurf+" held"+universalClauseOf)
-			equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "")
-			ev := h.one(out.stdout, "library_skill")
-			equal(t, "state", ev["state"], stateModified)
-			equal(t, "drift", drift(ev), "")
-			cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(windsurf))
-		})
-	}
-}
-
-// TestSkillPlaceKeepFlagsAreExclusive: each flag keeps one of the two
-// contents, so giving both is a usage error, and nothing is changed.
-func TestSkillPlaceKeepFlagsAreExclusive(t *testing.T) {
-	t.Parallel()
-	h, lib, claude, _ := everywhereHarness(t)
-	displace(t, lib, claude, true)
-	out := h.run("--json", "skill", "place", "alpha", "--keep-library", "--keep-placement")
-	equal(t, "exit", out.exit, 1)
-	e := h.one(out.stdout, "error")
-	equal(t, "code", e["code"], "usage")
-	equal(t, "message", e["message"], "--keep-library and --keep-placement cannot both be given")
 	if _, ok := isSymlink(t, claude); ok {
 		t.Fatal("claude's directory was replaced")
 	}
@@ -856,12 +340,12 @@ func TestSkillPlaceWithoutToCoversEveryEnabledConfiguration(t *testing.T) {
 	cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor))
 }
 
-// TestSkillPlaceKeepFlagsCombineWithTo: --to narrows skill place to the
-// configurations it names, the flags included. A directory that differs
-// in a configuration not named is not judged, the refusal and its hint
-// name the --to given, and --keep-library then discards only the named
-// configuration's directory.
-func TestSkillPlaceKeepFlagsCombineWithTo(t *testing.T) {
+// TestSkillPlaceForceCombinesWithTo: --to narrows skill place to the
+// configurations it names, --force included. A directory that differs in
+// a configuration not named is not judged, the refusal and its hint name
+// the --to given, and --force then discards only the named configuration's
+// directory.
+func TestSkillPlaceForceCombinesWithTo(t *testing.T) {
 	t.Parallel()
 	h, lib, claude, cursor := everywhereHarness(t)
 	displace(t, lib, claude, true)
@@ -872,73 +356,36 @@ func TestSkillPlaceKeepFlagsCombineWithTo(t *testing.T) {
 	equal(t, "exit", out.exit, 6)
 	e := h.one(out.stdout, "error")
 	equal(t, "message", e["message"], cursor+" is a directory whose content differs from the library's alpha, so nothing was placed")
-	equal(t, "hint", e["hint"], "to keep the library's content and discard it, run 'agentx skill place alpha --to cursor --keep-library';"+
-		" to make its content the library's, run 'agentx skill place alpha --to cursor --keep-placement'")
+	equal(t, "hint", e["hint"], "to replace it with the library's version and delete what it holds, run 'agentx skill place alpha --to cursor --force';"+
+		" to keep it, move it elsewhere first")
 
-	out = h.mustRun("--json", "skill", "place", "alpha", "--to", "cursor", "--keep-library")
+	out = h.mustRun("--json", "skill", "place", "alpha", "--to", "cursor", "--force")
 	linksToLibrary(t, "cursor's placement", cursor, lib)
 	sameTree(t, "claude's directory", libraryTree(t, claude), held)
 	equal(t, "summary", h.one(out.stdout, "result")["summary"], "placed alpha in 1 configuration; discarded what "+cursor+" held"+universalClauseOf)
 	cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor))
 }
 
-// TestSkillPlaceKeepFlagsWithCopyWriteACopy: with --copy, a displaced
-// directory that differs is replaced by a copy, which copy_mode records:
-// of the library's content with --keep-library, and of the directory's own
-// with --keep-placement, which first makes it the library's.
-func TestSkillPlaceKeepFlagsWithCopyWriteACopy(t *testing.T) {
+// TestSkillPlaceForceWithCopyWritesACopy: with --copy, a displaced
+// directory that differs is replaced by a copy of the library's content,
+// which copy_mode records.
+func TestSkillPlaceForceWithCopyWritesACopy(t *testing.T) {
 	t.Parallel()
-	for _, flag := range []string{"--keep-library", "--keep-placement"} {
-		t.Run(flag, func(t *testing.T) {
-			t.Parallel()
-			h, lib, claude, _ := everywhereHarness(t)
-			want := libraryTree(t, lib)
-			displace(t, lib, claude, true)
-			clause := "; discarded what " + claude + " held"
-			if flag == "--keep-placement" {
-				want = libraryTree(t, claude)
-				clause = "; the library now holds what " + claude + " held"
-			}
-
-			out := h.mustRun("--json", "skill", "place", "alpha", "--to", "claude-code", "--copy", flag)
-			if _, ok := isSymlink(t, claude); ok {
-				t.Fatal("claude's placement is a symlink, want a copy")
-			}
-			sameTree(t, "the library directory", libraryTree(t, lib), want)
-			sameTree(t, "claude's copy", libraryTree(t, claude), want)
-			equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "claude-code")
-			equal(t, "summary", h.one(out.stdout, "result")["summary"], "placed alpha in 1 configuration, 1 placement as copy"+clause+universalClauseOf)
-			equal(t, "drift", drift(h.listed("alpha")), "")
-			cleanAfterPlace(t, h, h.library, filepath.Dir(claude))
-		})
-	}
-}
-
-// TestSkillPlaceKeepPlacementWithCopyReplacesADirectoryOfTheOldLibrary: a
-// displaced directory holding what the library held before --keep-placement
-// is adopted, and with --copy it too is replaced by a copy of the content
-// kept, never left as a directory that is not this skill.
-func TestSkillPlaceKeepPlacementWithCopyReplacesADirectoryOfTheOldLibrary(t *testing.T) {
-	t.Parallel()
-	h, lib, claude, cursor := everywhereHarness(t)
+	h, lib, claude, _ := everywhereHarness(t)
+	want := libraryTree(t, lib)
 	displace(t, lib, claude, true)
-	displace(t, lib, cursor, false)
-	kept := libraryTree(t, claude)
 
-	out := h.mustRun("--json", "skill", "place", "alpha", "--keep-placement", "--copy")
-	sameTree(t, "the library directory", libraryTree(t, lib), kept)
-	for _, place := range []string{claude, cursor} {
-		if _, ok := isSymlink(t, place); ok {
-			t.Fatalf("%s is a symlink, want a copy", place)
-		}
-		sameTree(t, "the copy at "+place, libraryTree(t, place), kept)
+	out := h.mustRun("--json", "skill", "place", "alpha", "--to", "claude-code", "--copy", "--force")
+	if _, ok := isSymlink(t, claude); ok {
+		t.Fatal("claude's placement is a symlink, want a copy")
 	}
-	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "")
-	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "claude-code,cursor")
+	sameTree(t, "the library directory", libraryTree(t, lib), want)
+	sameTree(t, "claude's copy", libraryTree(t, claude), want)
+	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "claude-code")
 	equal(t, "summary", h.one(out.stdout, "result")["summary"],
-		"placed alpha in 4 configurations, 2 placements as copy, 1 placement adopted; the library now holds what "+claude+" held"+universalClauseOf)
+		"placed alpha in 1 configuration, 1 placement as copy; discarded what "+claude+" held"+universalClauseOf)
 	equal(t, "drift", drift(h.listed("alpha")), "")
-	cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor))
+	cleanAfterPlace(t, h, h.library, filepath.Dir(claude))
 }
 
 // TestSkillRepairIsNoLongerACommand: skill place puts placements back, and
@@ -1007,7 +454,7 @@ func TestSkillPlaceLeavesWhatIsNotDrift(t *testing.T) {
 	h.mustRun("config", "disable", "github-copilot")
 	equal(t, "drift", drift(h.listed("alpha")), "")
 
-	for _, flag := range []string{"", "--keep-library", "--keep-placement"} {
+	for _, flag := range []string{"", "--force"} {
 		args := []string{"alpha"}
 		if flag != "" {
 			args = append(args, flag)
@@ -1083,7 +530,7 @@ func TestSkillPlaceLeavesTheLibraryAClientReadsThroughALink(t *testing.T) {
 				"claude-code library library;codex library library;cursor library library;cursor symlink symlink;"+
 					"gemini-cli library library;github-copilot symlink symlink;windsurf symlink symlink")
 
-			for _, flag := range []string{"", "--keep-library", "--keep-placement"} {
+			for _, flag := range []string{"", "--force"} {
 				args := []string{"alpha"}
 				if flag != "" {
 					args = append(args, flag)
@@ -1159,7 +606,7 @@ func TestSkillPlaceLeavesALibraryEntryThatLinksIntoAClient(t *testing.T) {
 		cleanAfterPlace(t, h, h.library, filepath.Dir(claude))
 	}
 
-	for _, flag := range []string{"", "--keep-library", "--keep-placement"} {
+	for _, flag := range []string{"", "--force"} {
 		args := []string{"alpha"}
 		if flag != "" {
 			args = append(args, flag)
@@ -1244,7 +691,7 @@ func refusesUntouched(t *testing.T, h *harness, flags []string, message, hint st
 }
 
 // everyFlag is every way skill place can be asked to put a placement back.
-var everyFlag = []string{"", "--keep-library", "--keep-placement"}
+var everyFlag = []string{"", "--force"}
 
 // overlapHint is the hint of skill place refusing because two paths
 // overlap.
@@ -1374,10 +821,11 @@ func TestSkillPlaceRefusesALibraryEntryThatIsASymlink(t *testing.T) {
 // skills directory linked into the library puts there, one a library
 // entry's link leads into, through or above, the library's symlink where a
 // copy belongs there, and a displaced directory the library was moved
-// into. --keep-placement, which also replaces the library directory and
-// refreshes every copy copy_mode records, refuses as well where another
-// skill's entry leads into that directory, or where a copy lies in the
-// library or in what an entry leads to; --keep-library goes ahead there.
+// into. --force changes neither the library directory nor a copy nothing
+// is wrong with, so another skill's entry leading into the library
+// directory, or a copy lying in the library or in what an entry leads to,
+// stops nothing: the skill is placed, and the other skill and the copy are
+// kept as they were.
 func TestSkillPlaceRefusesAPathThatOverlapsTheLibrary(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
@@ -1505,9 +953,6 @@ func TestSkillPlaceRefusesAPathThatOverlapsTheLibrary(t *testing.T) {
 		})
 	}
 
-	// --keep-placement replaces the library directory itself, so it refuses
-	// where another skill's entry leads into it; --keep-library does not
-	// replace it and places the skill, the other skill kept as it was.
 	t.Run("another skill's entry linked into the library directory", func(t *testing.T) {
 		t.Parallel()
 		h, lib, claude, _ := everywhereHarness(t)
@@ -1517,32 +962,24 @@ func TestSkillPlaceRefusesAPathThatOverlapsTheLibrary(t *testing.T) {
 		beta := filepath.Join(h.library, "beta")
 		link(t, vendored, beta)
 
-		refusesUntouched(t, h, []string{"--keep-placement"}, entryOverlap(lib, "holds", vendored, beta), overlapHint)
-		h.mustRun("skill", "place", "alpha", "--keep-library")
+		h.mustRun("skill", "place", "alpha", "--force")
 		linksToLibrary(t, "claude's placement", claude, lib)
 		equal(t, "what beta leads to", fileBody(t, filepath.Join(beta, "SKILL.md")), skill("beta", "A skill of my own"))
 		cleanAfterPlace(t, h, h.library, filepath.Dir(claude))
 	})
 
-	// --keep-placement also refreshes every copy copy_mode records with the
-	// content it keeps, so it refuses where one of them lies inside the
-	// library or inside what a library entry leads to, even a copy nothing
-	// is wrong with; --keep-library refreshes no copy and places the skill,
-	// the copy kept as it was.
 	for _, c := range []struct {
 		name string
-		// arrange returns the directory to hold beta and Cursor's skills,
-		// and the message of the refusal.
-		arrange func(t *testing.T, h *harness, cursor string) (dir, message string)
+		// arrange returns the directory to hold beta and Cursor's skills.
+		arrange func(t *testing.T, h *harness) string
 	}{
-		{"a copy inside the library", func(t *testing.T, h *harness, cursor string) (string, string) {
-			return filepath.Join(h.library, "beta"), libraryOverlap(cursor, "lies inside", h.library)
+		{"a copy inside the library", func(t *testing.T, h *harness) string {
+			return filepath.Join(h.library, "beta")
 		}},
-		{"a copy inside what a library entry leads to", func(t *testing.T, h *harness, cursor string) (string, string) {
+		{"a copy inside what a library entry leads to", func(t *testing.T, h *harness) string {
 			dev := filepath.Join(h.home, "dev", "beta")
-			beta := filepath.Join(h.library, "beta")
-			link(t, dev, beta)
-			return dev, entryOverlap(cursor, "lies inside", dev, beta)
+			link(t, dev, filepath.Join(h.library, "beta"))
+			return dev
 		}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -1550,7 +987,7 @@ func TestSkillPlaceRefusesAPathThatOverlapsTheLibrary(t *testing.T) {
 			h, lib, claude, cursor := everywhereHarness(t)
 			remove(t, cursor)
 			h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
-			dir, message := c.arrange(t, h, cursor)
+			dir := c.arrange(t, h)
 			writeFile(t, mkdirs(t, dir, "SKILL.md"), skill("beta", "A skill of my own"))
 			copyTree(t, lib, filepath.Join(dir, "alpha"))
 			skills := filepath.Dir(cursor)
@@ -1561,11 +998,7 @@ func TestSkillPlaceRefusesAPathThatOverlapsTheLibrary(t *testing.T) {
 			equal(t, "drift", drift(h.listed("alpha")), "displaced")
 			beta := onDisk(t, dir)
 
-			refusesUntouched(t, h, []string{"--keep-placement"}, message, overlapHint)
-			if _, err := os.Lstat(filepath.Join(dir, "alpha", "mine.md")); !os.IsNotExist(err) {
-				t.Errorf("Cursor's copy was refreshed with the displaced directory's content: %v", err)
-			}
-			h.mustRun("skill", "place", "alpha", "--keep-library")
+			h.mustRun("skill", "place", "alpha", "--force")
 			linksToLibrary(t, "claude's placement", claude, lib)
 			equal(t, "what beta holds", onDisk(t, dir), beta)
 			cleanAfterPlace(t, h, h.library, filepath.Dir(claude), dir)
@@ -1681,11 +1114,10 @@ func TestSkillPlaceRefusesAPlaceInsideAnother(t *testing.T) {
 // TestSkillPlaceRefusesALibraryDirectoryHoldingASymlink: an import never
 // holds a symlink, so one in the skill's library directory is a hand edit,
 // and it may lead into, through or above what skill place removes. Rather
-// than follow it, every run that removes a displaced directory or replaces
-// the library directory refuses while the library directory holds a
-// symlink at any depth, whatever the flags, --keep-placement included,
-// which would replace the library directory link and all, names the link,
-// points at diff and revert, and changes nothing. A run that only writes
+// than follow it, every run that removes a displaced directory refuses
+// while the library directory holds a symlink at any depth, with or
+// without --force, names the link, points at diff and revert, and changes
+// nothing. A run that only writes
 // placements, a missing one or a copy where the library's symlink stands,
 // removes no directory and goes ahead.
 func TestSkillPlaceRefusesALibraryDirectoryHoldingASymlink(t *testing.T) {
@@ -1798,35 +1230,26 @@ func TestSkillPlaceRefusesALibraryDirectoryHoldingASymlink(t *testing.T) {
 // the displaced directory there replaced and a missing placement made.
 func TestSkillPlaceFollowsASkillsDirectoryLinkedElsewhere(t *testing.T) {
 	t.Parallel()
-	for _, flag := range []string{"--keep-library", "--keep-placement"} {
-		t.Run(flag, func(t *testing.T) {
-			t.Parallel()
-			h, lib, claude, cursor := everywhereHarness(t)
-			displace(t, lib, claude, true)
-			kept := libraryTree(t, claude)
-			want := libraryTree(t, lib)
-			if flag == "--keep-placement" {
-				want = kept
-			}
-			elsewhere := filepath.Join(h.home, "dotfiles", "claude-skills")
-			if err := os.MkdirAll(filepath.Dir(elsewhere), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.Rename(filepath.Dir(claude), elsewhere); err != nil {
-				t.Fatal(err)
-			}
-			link(t, elsewhere, filepath.Dir(claude))
-			remove(t, cursor)
-			equal(t, "drift before skill place", drift(h.listed("alpha")), "displaced,missing")
-
-			h.mustRun("skill", "place", "alpha", flag)
-			linksToLibrary(t, "claude's placement", filepath.Join(elsewhere, "alpha"), lib)
-			linksToLibrary(t, "cursor's placement", cursor, lib)
-			sameTree(t, "the library directory", libraryTree(t, lib), want)
-			equal(t, "drift after skill place", drift(h.listed("alpha")), "")
-			cleanAfterPlace(t, h, h.library, elsewhere, filepath.Dir(cursor))
-		})
+	h, lib, claude, cursor := everywhereHarness(t)
+	displace(t, lib, claude, true)
+	want := libraryTree(t, lib)
+	elsewhere := filepath.Join(h.home, "dotfiles", "claude-skills")
+	if err := os.MkdirAll(filepath.Dir(elsewhere), 0o755); err != nil {
+		t.Fatal(err)
 	}
+	if err := os.Rename(filepath.Dir(claude), elsewhere); err != nil {
+		t.Fatal(err)
+	}
+	link(t, elsewhere, filepath.Dir(claude))
+	remove(t, cursor)
+	equal(t, "drift before skill place", drift(h.listed("alpha")), "displaced,missing")
+
+	h.mustRun("skill", "place", "alpha", "--force")
+	linksToLibrary(t, "claude's placement", filepath.Join(elsewhere, "alpha"), lib)
+	linksToLibrary(t, "cursor's placement", cursor, lib)
+	sameTree(t, "the library directory", libraryTree(t, lib), want)
+	equal(t, "drift after skill place", drift(h.listed("alpha")), "")
+	cleanAfterPlace(t, h, h.library, elsewhere, filepath.Dir(cursor))
 }
 
 // TestSkillPlaceLooksNoFurtherThanTheLibrarysEntries: another skill's
@@ -1837,88 +1260,57 @@ func TestSkillPlaceFollowsASkillsDirectoryLinkedElsewhere(t *testing.T) {
 // cannot read. Nor does a link deep inside another skill's directory.
 func TestSkillPlaceLooksNoFurtherThanTheLibrarysEntries(t *testing.T) {
 	t.Parallel()
-	for _, flag := range []string{"--keep-library", "--keep-placement"} {
-		t.Run(flag, func(t *testing.T) {
-			t.Parallel()
-			h, lib, claude, _ := everywhereHarness(t)
-			displace(t, lib, claude, true)
-			want := libraryTree(t, lib)
-			if flag == "--keep-placement" {
-				want = libraryTree(t, claude)
-			}
-			beta := filepath.Join(h.library, "beta")
-			writeFile(t, mkdirs(t, beta, "SKILL.md"), skill("beta", "A skill of my own"))
-			link(t, beta, filepath.Join(beta, "loop"))
-			link(t, h.home, filepath.Join(beta, "home"))
-			dev := filepath.Join(h.home, "dev", "gamma")
-			writeFile(t, mkdirs(t, dev, "SKILL.md"), skill("gamma", "Another skill of my own"))
-			link(t, dev, filepath.Join(dev, "self"))
-			link(t, h.library, filepath.Join(dev, "library"))
-			link(t, filepath.Dir(dev), filepath.Join(dev, "up"))
-			link(t, dev, filepath.Join(h.library, "gamma"))
-			if os.Geteuid() != 0 {
-				private := filepath.Join(h.home, "dev", "private")
-				writeFile(t, mkdirs(t, private, "SKILL.md"), skill("delta", "A skill no one can read"))
-				link(t, private, filepath.Join(h.library, "delta"))
-				chmod(t, private, 0)
-				t.Cleanup(func() { _ = os.Chmod(private, 0o755) }) // so the temporary home can be removed
-			}
-
-			out := h.run("skill", "place", "alpha", flag)
-			if out.exit != 0 {
-				t.Fatalf("skill place: exit %d\n%s", out.exit, out.stderr)
-			}
-			linksToLibrary(t, "claude's placement", claude, lib)
-			sameTree(t, "the library directory", libraryTree(t, lib), want)
-			equal(t, "beta's SKILL.md", fileBody(t, filepath.Join(beta, "SKILL.md")), skill("beta", "A skill of my own"))
-			equal(t, "gamma's SKILL.md", fileBody(t, filepath.Join(h.library, "gamma", "SKILL.md")), skill("gamma", "Another skill of my own"))
-			cleanAfterPlace(t, h, h.library, filepath.Dir(claude))
-		})
+	h, lib, claude, _ := everywhereHarness(t)
+	displace(t, lib, claude, true)
+	want := libraryTree(t, lib)
+	beta := filepath.Join(h.library, "beta")
+	writeFile(t, mkdirs(t, beta, "SKILL.md"), skill("beta", "A skill of my own"))
+	link(t, beta, filepath.Join(beta, "loop"))
+	link(t, h.home, filepath.Join(beta, "home"))
+	dev := filepath.Join(h.home, "dev", "gamma")
+	writeFile(t, mkdirs(t, dev, "SKILL.md"), skill("gamma", "Another skill of my own"))
+	link(t, dev, filepath.Join(dev, "self"))
+	link(t, h.library, filepath.Join(dev, "library"))
+	link(t, filepath.Dir(dev), filepath.Join(dev, "up"))
+	link(t, dev, filepath.Join(h.library, "gamma"))
+	if os.Geteuid() != 0 {
+		private := filepath.Join(h.home, "dev", "private")
+		writeFile(t, mkdirs(t, private, "SKILL.md"), skill("delta", "A skill no one can read"))
+		link(t, private, filepath.Join(h.library, "delta"))
+		chmod(t, private, 0)
+		t.Cleanup(func() { _ = os.Chmod(private, 0o755) }) // so the temporary home can be removed
 	}
+
+	out := h.run("skill", "place", "alpha", "--force")
+	if out.exit != 0 {
+		t.Fatalf("skill place: exit %d\n%s", out.exit, out.stderr)
+	}
+	linksToLibrary(t, "claude's placement", claude, lib)
+	sameTree(t, "the library directory", libraryTree(t, lib), want)
+	equal(t, "beta's SKILL.md", fileBody(t, filepath.Join(beta, "SKILL.md")), skill("beta", "A skill of my own"))
+	equal(t, "gamma's SKILL.md", fileBody(t, filepath.Join(h.library, "gamma", "SKILL.md")), skill("gamma", "Another skill of my own"))
+	cleanAfterPlace(t, h, h.library, filepath.Dir(claude))
 }
 
 // TestSkillPlaceKeepsLinksIntoADirectoryResolving: skill place does not
 // search the disk for links into what it replaces, and does not have to
-// for what it keeps: a displaced directory holding the library's content is
-// replaced by a symlink to that same content, and one whose content
-// --keep-placement keeps becomes the library's, so a link elsewhere that
-// leads into either, a link deep in another skill's directory or in a
-// directory of the user's, still resolves to what it did.
+// for a displaced directory holding the library's content: it is replaced
+// by a symlink to that same content, so a link deep in another skill's
+// directory that leads into it still resolves to what it did.
 func TestSkillPlaceKeepsLinksIntoADirectoryResolving(t *testing.T) {
 	t.Parallel()
-	t.Run("a directory holding the library's content", func(t *testing.T) {
-		t.Parallel()
-		h, lib, claude, _ := everywhereHarness(t)
-		writeFile(t, mkdirs(t, filepath.Join(lib, "shared"), "data.md"), "data alpha and beta share\n")
-		displace(t, lib, claude, false)
-		beta := filepath.Join(h.library, "beta")
-		writeFile(t, mkdirs(t, beta, "SKILL.md"), skill("beta", "A skill of my own"))
-		shared := filepath.Join(beta, "shared")
-		link(t, filepath.Join(claude, "shared"), shared)
+	h, lib, claude, _ := everywhereHarness(t)
+	writeFile(t, mkdirs(t, filepath.Join(lib, "shared"), "data.md"), "data alpha and beta share\n")
+	displace(t, lib, claude, false)
+	beta := filepath.Join(h.library, "beta")
+	writeFile(t, mkdirs(t, beta, "SKILL.md"), skill("beta", "A skill of my own"))
+	shared := filepath.Join(beta, "shared")
+	link(t, filepath.Join(claude, "shared"), shared)
 
-		h.mustRun("skill", "place", "alpha")
-		linksToLibrary(t, "claude's placement", claude, lib)
-		equal(t, "what beta's link leads to", fileBody(t, filepath.Join(shared, "data.md")), "data alpha and beta share\n")
-		cleanAfterPlace(t, h, h.library, filepath.Dir(claude))
-	})
-
-	t.Run("a directory whose content --keep-placement keeps", func(t *testing.T) {
-		t.Parallel()
-		h, lib, claude, _ := everywhereHarness(t)
-		displace(t, lib, claude, true)
-		writeFile(t, mkdirs(t, filepath.Join(claude, "shared"), "data.md"), "only in the displaced directory\n")
-		dev := filepath.Join(h.home, "dev", "beta")
-		writeFile(t, mkdirs(t, dev, "SKILL.md"), skill("beta", "A skill of my own"))
-		shared := filepath.Join(dev, "shared")
-		link(t, filepath.Join(claude, "shared"), shared)
-		link(t, dev, filepath.Join(h.library, "beta"))
-
-		h.mustRun("skill", "place", "alpha", "--keep-placement")
-		linksToLibrary(t, "claude's placement", claude, lib)
-		equal(t, "the library's copy", fileBody(t, filepath.Join(lib, "shared", "data.md")), "only in the displaced directory\n")
-		equal(t, "what the link leads to", fileBody(t, filepath.Join(shared, "data.md")), "only in the displaced directory\n")
-		cleanAfterPlace(t, h, h.library, filepath.Dir(claude))
-	})
+	h.mustRun("skill", "place", "alpha")
+	linksToLibrary(t, "claude's placement", claude, lib)
+	equal(t, "what beta's link leads to", fileBody(t, filepath.Join(shared, "data.md")), "data alpha and beta share\n")
+	cleanAfterPlace(t, h, h.library, filepath.Dir(claude))
 }
 
 // TestSkillPlacePlacesBesideWhatALibraryLinkLeadsTo: a link of the
@@ -1942,7 +1334,7 @@ func TestSkillPlacePlacesBesideWhatALibraryLinkLeadsTo(t *testing.T) {
 // TestSkillPlaceJudgesALinkedSkillsDirectoryOnce: Cursor's skills
 // directory made a symlink to Claude Code's makes their places one
 // directory spelled two ways. A displaced directory there is judged and
-// replaced once, whatever is kept of it, and reported for both
+// replaced once, adopted or discarded, and reported for both
 // configurations, each at the path it names the place by: replaced twice,
 // the second removal would find the first one's link there and stop the
 // mutation part way.
@@ -1951,12 +1343,10 @@ func TestSkillPlaceJudgesALinkedSkillsDirectoryOnce(t *testing.T) {
 	for _, c := range []struct {
 		name, flag string
 		edited     bool
-		state      string
-		last       string // the line under the rows, naming what was adopted, kept or discarded
+		last       string // the line under the rows, naming what was adopted or discarded
 	}{
-		{"the library's content", "", false, stateCurrent, "adopted %s"},
-		{"an edit, with --keep-library", "--keep-library", true, stateCurrent, "discarded what %s held"},
-		{"an edit, with --keep-placement", "--keep-placement", true, stateModified, "the library now holds what %s held"},
+		{"the library's content", "", false, "adopted %s"},
+		{"an edit, with --force", "--force", true, "discarded what %s held"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -1965,9 +1355,6 @@ func TestSkillPlaceJudgesALinkedSkillsDirectoryOnce(t *testing.T) {
 			link(t, filepath.Dir(claude), filepath.Dir(cursor))
 			displace(t, lib, claude, c.edited)
 			want := libraryTree(t, lib)
-			if c.flag == "--keep-placement" {
-				want = libraryTree(t, claude)
-			}
 			equal(t, "drift before skill place", drift(h.listed("alpha")), "displaced")
 
 			args := []string{"skill", "place", "alpha"}
@@ -1981,7 +1368,7 @@ func TestSkillPlaceJudgesALinkedSkillsDirectoryOnce(t *testing.T) {
 			linksToLibrary(t, "the placement both read", claude, lib)
 			sameTree(t, "the library directory", libraryTree(t, lib), want)
 			ev := h.listed("alpha")
-			equal(t, "state", ev["state"], c.state)
+			equal(t, "state", ev["state"], stateCurrent)
 			equal(t, "drift after skill place", drift(ev), "")
 			cleanAfterPlace(t, h, h.library, filepath.Dir(claude))
 		})
@@ -2162,7 +1549,7 @@ func TestSkillPlaceSkipsAPlaceItCannotRead(t *testing.T) {
 	chmod(t, scripts, 0)
 	t.Cleanup(func() { _ = os.Chmod(scripts, 0o755) }) // so the temporary home can be removed
 
-	out := h.run("--json", "skill", "place", "alpha", "--keep-library")
+	out := h.run("--json", "skill", "place", "alpha", "--force")
 	chmod(t, scripts, 0o755)
 	if out.exit != 0 {
 		t.Fatalf("skill place: exit %d\n%s", out.exit, out.stderr)
@@ -2191,7 +1578,7 @@ func TestSkillPlaceSkipsAPlaceItCannotWrite(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("root writes a read-only directory anyway")
 	}
-	for _, flag := range []string{"", "--keep-library"} {
+	for _, flag := range []string{"", "--force"} {
 		name := flag
 		if name == "" {
 			name = "no flag"
@@ -2268,16 +1655,16 @@ func TestSkillPlaceWhenEveryPlaceIsSkipped(t *testing.T) {
 	cleanAfterPlace(t, h, h.library, filepath.Dir(claude))
 }
 
-// TestSkillPlaceKeepFlagsOnWhatTheyCannotJudge: a fork is placed as it
-// always was, a directory that differs left in place and counted as
-// skipped, and --keep-library or --keep-placement on it stops with exit 6
-// and changes nothing. A skill agentx does not manage is judged like a
-// managed one: a directory that differs stops the run until a flag decides.
-// A managed skill whose library directory is gone has nothing to place,
-// one whose import branch records no version agentx can read has no base
-// for --keep-placement to refresh copies against, and a name the library
-// does not hold is not found.
-func TestSkillPlaceKeepFlagsOnWhatTheyCannotJudge(t *testing.T) {
+// TestSkillPlaceForceOnWhatItCannotJudge: a fork is placed as it always
+// was, a directory that differs left in place and counted as skipped, and
+// --force on it stops with exit 6 and changes nothing. A skill agentx does
+// not manage is judged like a managed one: a directory that differs stops
+// the run until --force discards it. A managed skill whose library
+// directory is gone has nothing to place, one whose import branch records
+// no version agentx can read is placed all the same, since --force judges
+// nothing against the base, and a name the library does not hold is not
+// found.
+func TestSkillPlaceForceOnWhatItCannotJudge(t *testing.T) {
 	t.Parallel()
 	t.Run("a fork", func(t *testing.T) {
 		t.Parallel()
@@ -2289,17 +1676,15 @@ func TestSkillPlaceKeepFlagsOnWhatTheyCannotJudge(t *testing.T) {
 		displace(t, lib, claude, true)
 		kept := libraryTree(t, claude)
 		version := mutationVersion(t, h)
-		for _, flag := range []string{"--keep-library", "--keep-placement"} {
-			out := h.run("--json", "skill", "place", "alpha", flag)
-			equal(t, "exit "+flag, out.exit, 6)
-			e := h.one(out.stdout, "error")
-			equal(t, "message "+flag, e["message"], "alpha is a fork on this machine, which --keep-library and --keep-placement do not apply to")
-			equal(t, "hint "+flag, e["hint"], "place it without them with 'agentx skill place alpha'")
-		}
+		out := h.run("--json", "skill", "place", "alpha", "--force")
+		equal(t, "exit", out.exit, 6)
+		e := h.one(out.stdout, "error")
+		equal(t, "message", e["message"], "alpha is a fork on this machine, which --force does not apply to")
+		equal(t, "hint", e["hint"], "place it without --force with 'agentx skill place alpha'")
 		nothingAt(t, "cursor's placement", cursor)
 		equal(t, "no mutation", mutationVersion(t, h), version)
 
-		out := h.mustRun("--json", "skill", "place", "alpha")
+		out = h.mustRun("--json", "skill", "place", "alpha")
 		sameTree(t, "claude's directory", libraryTree(t, claude), kept)
 		linksToLibrary(t, "cursor's placement", cursor, lib)
 		contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), ", 1 placement skipped")
@@ -2315,20 +1700,20 @@ func TestSkillPlaceKeepFlagsOnWhatTheyCannotJudge(t *testing.T) {
 		writeFile(t, mkdirs(t, lib, "SKILL.md"), skill("notes", "My own notes"))
 		h.mustRun("skill", "place", "notes")
 		linksToLibrary(t, "claude's placement", claude, lib)
+		want := libraryTree(t, lib)
 		remove(t, claude)
 		copyTree(t, lib, claude)
 		writeFile(t, filepath.Join(claude, "mine.md"), "a file of my own\n")
-		kept := libraryTree(t, claude)
 
 		out := h.run("--json", "skill", "place", "notes")
 		equal(t, "exit", out.exit, 6)
 		e := h.one(out.stdout, "error")
 		equal(t, "message", e["message"], claude+" is a directory whose content differs from the library's notes, so nothing was placed")
-		equal(t, "hint", e["hint"], "to keep the library's content and discard it, run 'agentx skill place notes --keep-library';"+
-			" to make its content the library's, run 'agentx skill place notes --keep-placement'")
+		equal(t, "hint", e["hint"], "to replace it with the library's version and delete what it holds, run 'agentx skill place notes --force';"+
+			" to keep it, move it elsewhere first")
 
-		out = h.mustRun("--json", "skill", "place", "notes", "--keep-placement")
-		sameTree(t, "the library directory", libraryTree(t, lib), kept)
+		out = h.mustRun("--json", "skill", "place", "notes", "--force")
+		sameTree(t, "the library directory", libraryTree(t, lib), want)
 		linksToLibrary(t, "claude's placement", claude, lib)
 		equal(t, "kind", h.one(out.stdout, "library_skill")["kind"], "unmanaged")
 		cleanAfterPlace(t, h, h.library, filepath.Dir(claude))
@@ -2354,15 +1739,7 @@ func TestSkillPlaceKeepFlagsOnWhatTheyCannotJudge(t *testing.T) {
 		plain := h.accountGit("commit-tree", tree, "-m", "plain")
 		h.accountGit("update-ref", "refs/heads/managed/alpha", plain)
 		displace(t, lib, claude, true)
-		version := mutationVersion(t, h)
-		out := h.run("--json", "skill", "place", "alpha", "--keep-placement")
-		equal(t, "exit", out.exit, 6)
-		e := h.one(out.stdout, "error")
-		equal(t, "message", e["message"], "the import branch refs/heads/managed/alpha records no version agentx can read")
-		equal(t, "hint", e["hint"], "run 'agentx doctor' and check the account repo it names")
-		equal(t, "no mutation", mutationVersion(t, h), version)
-
-		h.mustRun("skill", "place", "alpha", "--keep-library")
+		h.mustRun("skill", "place", "alpha", "--force")
 		linksToLibrary(t, "claude's placement", claude, lib)
 		cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor))
 	})
@@ -2371,7 +1748,7 @@ func TestSkillPlaceKeepFlagsOnWhatTheyCannotJudge(t *testing.T) {
 		t.Parallel()
 		h, _ := installHarness(t)
 		version := mutationVersion(t, h)
-		out := h.run("--json", "skill", "place", "nothing", "--keep-library")
+		out := h.run("--json", "skill", "place", "nothing", "--force")
 		equal(t, "exit", out.exit, 5)
 		contains(t, "message", h.one(out.stdout, "error")["message"].(string), `the library holds no skill called "nothing"`)
 		equal(t, "no mutation", mutationVersion(t, h), version)
@@ -2405,27 +1782,27 @@ func TestSkillPlaceRefusesWhenItsInputsChange(t *testing.T) {
 		// check of what it left once the run refused.
 		change func(t *testing.T, h *harness, git, lib, claude string) (script string, check func(t *testing.T))
 	}{
-		{"the import branch moves", "--keep-library", moved, "", "", func(t *testing.T, h *harness, git, _, _ string) (string, func(*testing.T)) {
+		{"the import branch moves", "--force", moved, "", "", func(t *testing.T, h *harness, git, _, _ string) (string, func(*testing.T)) {
 			before := h.accountGit("rev-parse", "refs/heads/managed/alpha")
 			written := h.accountGit("commit-tree", before+"^{tree}", "-p", before, "-m", "moved")
 			return accountRepoCommand(h, git, "update-ref", "refs/heads/managed/alpha", written), func(t *testing.T) {
 				equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), written)
 			}
 		}},
-		{"a fork appears", "--keep-library", moved, "", "", func(t *testing.T, h *harness, git, _, _ string) (string, func(*testing.T)) {
+		{"a fork appears", "--force", moved, "", "", func(t *testing.T, h *harness, git, _, _ string) (string, func(*testing.T)) {
 			before := h.accountGit("rev-parse", "refs/heads/managed/alpha")
 			return accountRepoCommand(h, git, "update-ref", "refs/heads/skills/alpha", before), func(t *testing.T) {
 				equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), before)
 				equal(t, "the fork", h.accountGit("rev-parse", "refs/heads/skills/alpha"), before)
 			}
 		}},
-		{"the library is edited", "--keep-placement", changed, "", "library", func(t *testing.T, _ *harness, _, lib, _ string) (string, func(*testing.T)) {
+		{"the library is edited", "--force", changed, "", "library", func(t *testing.T, _ *harness, _, lib, _ string) (string, func(*testing.T)) {
 			file := filepath.Join(lib, "notes.md")
 			return "printf 'an edit made meanwhile\\n' > " + shellWord(file), func(t *testing.T) {
 				equal(t, "the library's notes.md", fileBody(t, file), "an edit made meanwhile\n")
 			}
 		}},
-		{"the library entry becomes a symlink", "--keep-placement", changed, "", "library", func(t *testing.T, _ *harness, _, lib, _ string) (string, func(*testing.T)) {
+		{"the library entry becomes a symlink", "--force", changed, "", "library", func(t *testing.T, _ *harness, _, lib, _ string) (string, func(*testing.T)) {
 			// The same content, moved behind a link: no tree changes, and
 			// only the library entry, read again, tells the two apart.
 			dev := filepath.Join(t.TempDir(), "dev-alpha")
@@ -2444,13 +1821,13 @@ func TestSkillPlaceRefusesWhenItsInputsChange(t *testing.T) {
 				}
 			}
 		}},
-		{"the displaced directory is edited", "--keep-library", changed, "", "place", func(t *testing.T, _ *harness, _, _, claude string) (string, func(*testing.T)) {
+		{"the displaced directory is edited", "--force", changed, "", "place", func(t *testing.T, _ *harness, _, _, claude string) (string, func(*testing.T)) {
 			file := filepath.Join(claude, "notes.md")
 			return "printf 'an edit made meanwhile\\n' > " + shellWord(file), func(t *testing.T) {
 				equal(t, "the directory's notes.md", fileBody(t, file), "an edit made meanwhile\n")
 			}
 		}},
-		{"a library entry comes to lead into the displaced directory", "--keep-library", "", overlapHint, "place", func(t *testing.T, h *harness, _, _, claude string) (string, func(*testing.T)) {
+		{"a library entry comes to lead into the displaced directory", "--force", "", overlapHint, "place", func(t *testing.T, h *harness, _, _, claude string) (string, func(*testing.T)) {
 			// The directory is there from the first read; only the link
 			// that makes it another skill's content comes later.
 			inside := filepath.Join(claude, "beta")
@@ -2465,7 +1842,7 @@ func TestSkillPlaceRefusesWhenItsInputsChange(t *testing.T) {
 				equal(t, "beta's SKILL.md", fileBody(t, filepath.Join(inside, "SKILL.md")), skill("beta", "A skill of my own"))
 			}
 		}},
-		{"the settings change", "--keep-library", changed, "", "", func(t *testing.T, h *harness, _, _, _ string) (string, func(*testing.T)) {
+		{"the settings change", "--force", changed, "", "", func(t *testing.T, h *harness, _, _, _ string) (string, func(*testing.T)) {
 			settings := filepath.Join(h.agentx, "settings.json")
 			edited := readSettingsFile(t, h)
 			edited["disabled_configurations"] = []any{"claude-code"}
@@ -2597,55 +1974,40 @@ exec `+real+` "$@"
 // once its journal is on disk, then leaves the machine as a process killed
 // after each later step would, for each way a displaced directory is put
 // back beside a missing placement: adopted without a flag when it holds
-// the library's content, and with each flag when it differs. The next
-// command recovers each one, and the run is then whole: the library holds
-// the content chosen, with the .DS_Store --keep-placement carries into it,
-// both placements are the library's symlink, the import branch is where it
-// was, and nothing staged or retained is left behind.
+// the library's content, and discarded with --force when it differs. The
+// next command recovers each one, and the run is then whole: the library
+// holds what it held, both placements are the library's symlink, the
+// import branch is where it was, and nothing staged or retained is left
+// behind.
 func TestSkillPlaceRecoversAtEveryBoundary(t *testing.T) {
 	t.Parallel()
-	for _, c := range []struct {
-		flag  string // "" for a directory holding the library's content
-		kinds string // the journal's steps, as recorded
-		state string // the state of the skill afterwards
-	}{
-		{"", "remove, link, link, ref", stateCurrent},
-		{"--keep-library", "remove, link, link, ref", stateCurrent},
-		{"--keep-placement", "remove, publish, remove, link, link, ref", stateModified},
-	} {
-		pathSteps := strings.Count(c.kinds, ",")
+	const kinds = "remove, link, link, ref" // the journal's steps, as recorded
+	for _, flag := range []string{"", "--force"} {
+		pathSteps := strings.Count(kinds, ",")
 		for stop := 0; stop <= pathSteps; stop++ {
-			t.Run(fmt.Sprintf("%s after %d steps", cmp.Or(c.flag, "adopted"), stop), func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s after %d steps", cmp.Or(flag, "adopted"), stop), func(t *testing.T) {
 				t.Parallel()
 				h, lib, claude, cursor := everywhereHarness(t)
 				base := libraryTree(t, lib)
 				branch := h.accountGit("rev-parse", "refs/heads/managed/alpha")
-				displace(t, lib, claude, c.flag != "")
+				displace(t, lib, claude, flag != "")
 				kept := libraryTree(t, claude)
 				remove(t, cursor)
-				if c.flag == "--keep-placement" {
-					writeFile(t, filepath.Join(lib, ".DS_Store"), "finder data\n")
-				}
 
-				out := killedPlace(t, h, "alpha", c.flag)
+				out := killedPlace(t, h, "alpha", flag)
 				steps := readJournal(t, h)
-				var kinds []string
+				var got []string
 				for _, s := range steps {
-					kinds = append(kinds, s.Kind)
+					got = append(got, s.Kind)
 				}
-				equal(t, "the journal's steps", strings.Join(kinds, ", "), c.kinds)
+				equal(t, "the journal's steps", strings.Join(got, ", "), kinds)
 				sameTree(t, "claude's directory when skill place was killed", libraryTree(t, claude), kept)
 				applySteps(t, steps, stop)
 
 				if got := h.run("config", "set", "label", "recovered"); got.exit != 0 {
 					t.Fatalf("the command after the killed run: exit %d\n%s\nthe killed run:\n%s", got.exit, got.stderr, out)
 				}
-				want := base
-				if c.flag == "--keep-placement" {
-					want = maps.Clone(kept)
-					want[".DS_Store"] = "finder data\n"
-				}
-				sameTree(t, "the library directory", libraryTree(t, lib), want)
+				sameTree(t, "the library directory", libraryTree(t, lib), base)
 				linksToLibrary(t, "claude's placement", claude, lib)
 				linksToLibrary(t, "cursor's placement", cursor, lib)
 				if !executable(t, filepath.Join(lib, "scripts", "run.sh")) {
@@ -2654,7 +2016,7 @@ func TestSkillPlaceRecoversAtEveryBoundary(t *testing.T) {
 				equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), branch)
 				cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor))
 				ev := h.listed("alpha")
-				equal(t, "state", ev["state"], c.state)
+				equal(t, "state", ev["state"], stateCurrent)
 				equal(t, "drift", drift(ev), "")
 			})
 		}
@@ -2662,83 +2024,68 @@ func TestSkillPlaceRecoversAtEveryBoundary(t *testing.T) {
 }
 
 // TestSkillPlaceRecoversCopiesAtEveryBoundary kills skill place as
-// TestSkillPlaceRecoversAtEveryBoundary does, for the steps it takes at
-// copy placements: with --keep-placement a copy holding what the library
-// held is refreshed and a missing copy is made from the content kept, and
-// with --keep-library the library's symlink where copy_mode records a copy
-// is replaced by a copy. The next command recovers each one, and every copy
-// then holds what the library holds.
+// TestSkillPlaceRecoversAtEveryBoundary does, for the steps it takes at a
+// copy placement: with --force the library's symlink where copy_mode
+// records a copy is replaced by a copy, beside the displaced directory it
+// discards. The next command recovers each one, and the copy then holds
+// what the library holds.
 func TestSkillPlaceRecoversCopiesAtEveryBoundary(t *testing.T) {
 	t.Parallel()
-	for _, c := range []struct {
-		flag  string
-		kinds string // the journal's steps, as recorded
-	}{
-		{"--keep-placement", "remove, publish, remove, publish, remove, link, publish, ref"},
-		{"--keep-library", "remove, link, remove, publish, ref"},
-	} {
-		pathSteps := strings.Count(c.kinds, ",")
-		for stop := 0; stop <= pathSteps; stop++ {
-			t.Run(fmt.Sprintf("%s after %d steps", c.flag, stop), func(t *testing.T) {
-				t.Parallel()
-				h, s := placementHarness(t)
-				h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code", "--to", "cursor")
-				h.mustRun("skill", "place", "alpha", "--to", "windsurf", "--to", "github-copilot", "--copy")
-				lib := filepath.Join(h.library, "alpha")
-				claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-				windsurf := filepath.Join(h.home, ".codeium", "windsurf", "skills", "alpha")
-				copilot := filepath.Join(h.home, ".copilot", "skills", "alpha")
-				want := libraryTree(t, lib)
-				displace(t, lib, claude, true)
-				if c.flag == "--keep-placement" {
-					want = libraryTree(t, claude)
-					remove(t, copilot)
-				} else {
-					remove(t, windsurf)
-					link(t, lib, windsurf)
-				}
+	const kinds = "remove, link, remove, publish, ref" // the journal's steps, as recorded
+	pathSteps := strings.Count(kinds, ",")
+	for stop := 0; stop <= pathSteps; stop++ {
+		t.Run(fmt.Sprintf("after %d steps", stop), func(t *testing.T) {
+			t.Parallel()
+			h, s := placementHarness(t)
+			h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code", "--to", "cursor")
+			h.mustRun("skill", "place", "alpha", "--to", "windsurf", "--to", "github-copilot", "--copy")
+			lib := filepath.Join(h.library, "alpha")
+			claude := filepath.Join(h.home, ".claude", "skills", "alpha")
+			windsurf := filepath.Join(h.home, ".codeium", "windsurf", "skills", "alpha")
+			copilot := filepath.Join(h.home, ".copilot", "skills", "alpha")
+			want := libraryTree(t, lib)
+			displace(t, lib, claude, true)
+			remove(t, windsurf)
+			link(t, lib, windsurf)
 
-				out := killedPlace(t, h, "alpha", c.flag)
-				steps := readJournal(t, h)
-				var kinds []string
-				for _, s := range steps {
-					kinds = append(kinds, s.Kind)
-				}
-				equal(t, "the journal's steps", strings.Join(kinds, ", "), c.kinds)
-				applySteps(t, steps, stop)
+			out := killedPlace(t, h, "alpha", "--force")
+			steps := readJournal(t, h)
+			var got []string
+			for _, s := range steps {
+				got = append(got, s.Kind)
+			}
+			equal(t, "the journal's steps", strings.Join(got, ", "), kinds)
+			applySteps(t, steps, stop)
 
-				if got := h.run("config", "set", "label", "recovered"); got.exit != 0 {
-					t.Fatalf("the command after the killed run: exit %d\n%s\nthe killed run:\n%s", got.exit, got.stderr, out)
+			if got := h.run("config", "set", "label", "recovered"); got.exit != 0 {
+				t.Fatalf("the command after the killed run: exit %d\n%s\nthe killed run:\n%s", got.exit, got.stderr, out)
+			}
+			sameTree(t, "the library directory", libraryTree(t, lib), want)
+			linksToLibrary(t, "claude's placement", claude, lib)
+			for _, place := range []string{windsurf, copilot} {
+				if _, ok := isSymlink(t, place); ok {
+					t.Errorf("%s is a symlink, want the copy copy_mode records", place)
 				}
-				sameTree(t, "the library directory", libraryTree(t, lib), want)
-				linksToLibrary(t, "claude's placement", claude, lib)
-				for _, place := range []string{windsurf, copilot} {
-					if _, ok := isSymlink(t, place); ok {
-						t.Errorf("%s is a symlink, want the copy copy_mode records", place)
-					}
-					sameTree(t, "the copy at "+place, libraryTree(t, place), want)
-				}
-				cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(windsurf), filepath.Dir(copilot))
-				equal(t, "drift", drift(h.listed("alpha")), "")
-			})
-		}
+				sameTree(t, "the copy at "+place, libraryTree(t, place), want)
+			}
+			cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(windsurf), filepath.Dir(copilot))
+			equal(t, "drift", drift(h.listed("alpha")), "")
+		})
 	}
 }
 
 // TestSkillPlaceSweepsStagingAKilledPlaceLeft stands in for a skill place
 // killed after it staged and before its journal was written: what it
-// staged, beside the library directory, beside a copy placement or beside
-// a place it was putting back, is in directories nothing names. The next
-// run sweeps them before it stages anything and leaves nothing behind.
-// A link in what was staged in the library, as a copy of a displaced
-// directory holds, is no link of the library's and refuses nothing.
+// staged, beside a copy placement or beside a place it was putting back,
+// is in directories nothing names. The next run sweeps them before it
+// stages anything and leaves nothing behind.
 func TestSkillPlaceSweepsStagingAKilledPlaceLeft(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
 		name string
 		args []string
 	}{
-		{"a displaced directory kept", []string{"--keep-placement"}},
+		{"a displaced directory discarded", []string{"--force"}},
 		{"a missing placement", nil},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -2757,10 +2104,8 @@ func TestSkillPlaceSweepsStagingAKilledPlaceLeft(t *testing.T) {
 				remove(t, claude)
 			} else {
 				displace(t, lib, claude, true)
-				stage(h.library, 1)
-				link(t, filepath.Join(claude, "notes.md"), filepath.Join(h.library, ".agentx-staged-deadbeef-1", "notes.md"))
 				stage(filepath.Dir(cursor), 3)
-				dirs = append(dirs, h.library, filepath.Dir(cursor))
+				dirs = append(dirs, filepath.Dir(cursor))
 			}
 			stage(filepath.Dir(claude), 2)
 
