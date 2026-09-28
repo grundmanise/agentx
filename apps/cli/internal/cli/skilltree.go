@@ -54,6 +54,13 @@ func rawVersion(id string) version {
 	return version{holds: func(got string) bool { return got == id }}
 }
 
+// emptyVersion is the tree that holds nothing, which git knows without
+// the account repo holding it: what a skill agentx does not manage, which
+// has no base version, is compared with.
+func emptyVersion() version {
+	return treeVersion(treeid.EmptyTree)
+}
+
 // importedVersion is the version an adoption establishes, once its import
 // commit is written.
 func importedVersion(v *imported) version {

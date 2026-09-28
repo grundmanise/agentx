@@ -562,18 +562,31 @@ func (p plannedPlace) holdsCopy() bool {
 // stageKept plans the library directory's replacement by the content of
 // the displaced directory --keep-placement keeps, and returns that content
 // as what every placement of the run is made of, and the copies it left as
-// they were. The copies copy_mode records follow it as a revert makes them
-// follow the base: a copy holding what the library directory held or the
-// base version of a managed skill, which a copy placed before the library
-// was edited still holds, is agentx's and is refreshed, and any other copy
-// is kept.
+// they were. The files git ignores in the library directory are carried
+// into the new one, as git checkout keeps them and as a revert carries
+// them, unless the content kept holds a file at the same path. The copies
+// copy_mode records follow it as a revert makes them follow the base: a
+// copy holding what the library directory held or the base version of a
+// managed skill, which a copy placed before the library was edited still
+// holds, is agentx's and is refreshed, and any other copy is kept.
 func (inv *invocation) stageKept(ctx context.Context, m *home.Mutation, gitDir string, plan placePlan, done *placements) (placeable, []string, error) {
 	name, libPath := plan.lib.Name, plan.lib.Path
 	kept := plan.differing()[0]
+	// What the library directory held is judged against the base version of
+	// a managed skill, so a file the base holds is content, not a file to
+	// carry, and against the empty tree for a skill agentx does not manage.
+	before := emptyVersion()
+	if plan.managed {
+		before = baseVersion(plan.rec)
+	}
+	j, err := inv.judgeDir(ctx, gitDir, plan.lib.ResolvedPath, plan.libTree, before, true)
+	if err != nil {
+		return placeable{}, nil, accountRepoFailure(err)
+	}
 	target := rawVersion(kept.tree)
 	lay := func(dest string) error { return copyTreeTo(kept.path, dest) }
 	staged := m.Sibling(libPath, "staged")
-	fingerprint, err := stageVersion(staged, lay, target, libPath, nil)
+	fingerprint, err := stageVersion(staged, lay, target, plan.lib.ResolvedPath, j.ignored)
 	if err != nil {
 		os.RemoveAll(staged)
 		return placeable{}, nil, libraryFailure(inv.dirs.Library, err)
@@ -585,7 +598,10 @@ func (inv *invocation) stageKept(ctx context.Context, m *home.Mutation, gitDir s
 	}
 	m.Remove(libPath, plan.libState)
 	m.Publish(libPath, staged, fingerprint)
-	placed := []version{rawVersion(plan.libTree.ID)}
+	var placed []version
+	if j.written != "" {
+		placed = append(placed, treeVersion(j.written))
+	}
 	if plan.managed {
 		placed = append(placed, baseVersion(plan.rec))
 	}

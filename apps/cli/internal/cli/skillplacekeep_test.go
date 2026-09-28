@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -436,6 +437,66 @@ func TestSkillPlaceKeepPlacementOfTheBaseLeavesItCurrent(t *testing.T) {
 	equal(t, "summary", h.one(out.stdout, "result")["summary"],
 		"placed alpha in 6 configurations, 1 copy placement refreshed; the library now holds what "+claude+" held"+universalClauseOf)
 	cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor), filepath.Dir(windsurf), filepath.Dir(copilot))
+}
+
+// TestSkillPlaceKeepPlacementKeepsTheLibrarysIgnoredFiles: the files git
+// ignores in the library directory, a .DS_Store and a build directory its
+// .gitignore names, are no part of what --keep-placement discards: they
+// are carried into the content kept, as a revert carries them. A copy
+// refreshed with the content kept keeps its own .DS_Store the same way.
+// An unmanaged skill on a machine with no account repo yet gets one for
+// git to judge its library directory in.
+func TestSkillPlaceKeepPlacementKeepsTheLibrarysIgnoredFiles(t *testing.T) {
+	t.Parallel()
+	t.Run("a managed skill", func(t *testing.T) {
+		t.Parallel()
+		h, s := placementHarness(t)
+		h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code")
+		h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
+		lib := filepath.Join(h.library, "alpha")
+		claude := filepath.Join(h.home, ".claude", "skills", "alpha")
+		cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
+		writeFile(t, filepath.Join(lib, ".gitignore"), "build/\n")
+		displace(t, lib, claude, true)
+		kept := libraryTree(t, claude)
+		writeFile(t, filepath.Join(lib, ".DS_Store"), "the library's finder data\n")
+		writeFile(t, mkdirs(t, filepath.Join(lib, "build"), "out.txt"), "built\n")
+		writeFile(t, filepath.Join(cursor, ".DS_Store"), "cursor's finder data\n")
+
+		out := h.mustRun("--json", "skill", "place", "alpha", "--keep-placement")
+		want := maps.Clone(kept)
+		want[".DS_Store"], want["build/out.txt"] = "the library's finder data\n", "built\n"
+		sameTree(t, "the library directory", libraryTree(t, lib), want)
+		linksToLibrary(t, "claude's placement", claude, lib)
+		want = maps.Clone(kept)
+		want[".DS_Store"] = "cursor's finder data\n"
+		sameTree(t, "cursor's refreshed copy", libraryTree(t, cursor), want)
+		contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), ", 1 copy placement refreshed;")
+		cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor))
+	})
+
+	t.Run("an unmanaged skill and no account repo", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		h.build(t, fixture{dirs: []string{".claude"}})
+		lib := filepath.Join(h.library, "notes")
+		claude := filepath.Join(h.home, ".claude", "skills", "notes")
+		writeFile(t, mkdirs(t, lib, "SKILL.md"), skill("notes", "My own notes"))
+		h.mustRun("skill", "place", "notes")
+		remove(t, claude)
+		copyTree(t, lib, claude)
+		writeFile(t, filepath.Join(claude, "mine.md"), "a file of my own\n")
+		kept := libraryTree(t, claude)
+		writeFile(t, filepath.Join(lib, ".DS_Store"), "the library's finder data\n")
+		nothingAt(t, "the account repo", gitx.AccountRepoPath(h.agentx))
+
+		h.mustRun("skill", "place", "notes", "--keep-placement")
+		kept[".DS_Store"] = "the library's finder data\n"
+		sameTree(t, "the library directory", libraryTree(t, lib), kept)
+		linksToLibrary(t, "claude's placement", claude, lib)
+		h.mustRun("skill", "list")
+		cleanAfterPlace(t, h, h.library, filepath.Dir(claude))
+	})
 }
 
 // TestSkillPlaceKeepPlacementText: the text is the one skill place always
@@ -2500,9 +2561,9 @@ exec `+real+` "$@"
 // back beside a missing placement: adopted without a flag when it holds
 // the library's content, and with each flag when it differs. The next
 // command recovers each one, and the run is then whole: the library holds
-// the content chosen, both placements are the library's symlink, the
-// import branch is where it was, and nothing staged or retained is left
-// behind.
+// the content chosen, with the .DS_Store --keep-placement carries into it,
+// both placements are the library's symlink, the import branch is where it
+// was, and nothing staged or retained is left behind.
 func TestSkillPlaceRecoversAtEveryBoundary(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
@@ -2524,6 +2585,9 @@ func TestSkillPlaceRecoversAtEveryBoundary(t *testing.T) {
 				displace(t, lib, claude, c.flag != "")
 				kept := libraryTree(t, claude)
 				remove(t, cursor)
+				if c.flag == "--keep-placement" {
+					writeFile(t, filepath.Join(lib, ".DS_Store"), "finder data\n")
+				}
 
 				out := killedPlace(t, h, "alpha", c.flag)
 				steps := readJournal(t, h)
@@ -2540,7 +2604,8 @@ func TestSkillPlaceRecoversAtEveryBoundary(t *testing.T) {
 				}
 				want := base
 				if c.flag == "--keep-placement" {
-					want = kept
+					want = maps.Clone(kept)
+					want[".DS_Store"] = "finder data\n"
 				}
 				sameTree(t, "the library directory", libraryTree(t, lib), want)
 				linksToLibrary(t, "claude's placement", claude, lib)

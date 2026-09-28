@@ -237,14 +237,23 @@ func (inv *invocation) skillPlace(ctx context.Context, name string, to []string,
 		return err
 	}
 	gitDir := gitx.AccountRepoPath(inv.dirs.Home)
-	// A run that makes a displaced directory's content the library's
-	// refreshes every copy that holds what agentx placed there: what the
-	// library directory held, or the base version of a managed skill, which
-	// a copy placed before the library was edited still holds. The branch
-	// the base comes from is read again under the lock.
-	if choice == keepPlacement && managed && !rec.HasImport && len(plan.differing()) > 0 {
-		return fail(exitRefused, fmt.Sprintf("the import branch %s records no version agentx can read", rec.Ref),
-			"run 'agentx doctor' and check the account repo it names")
+	// A run that makes a displaced directory's content the library's has
+	// git judge what the library directory holds, in the account repo, which
+	// is made now for a skill agentx does not manage on a machine that has
+	// none yet. It refreshes every copy that holds what agentx placed there:
+	// what the library directory held, or the base version of a managed
+	// skill, which a copy placed before the library was edited still holds.
+	// The branch the base comes from is read again under the lock.
+	if choice == keepPlacement && len(plan.differing()) > 0 {
+		if managed && !rec.HasImport {
+			return fail(exitRefused, fmt.Sprintf("the import branch %s records no version agentx can read", rec.Ref),
+				"run 'agentx doctor' and check the account repo it names")
+		}
+		if !managed {
+			if gitDir, _, err = gitx.OpenAccountRepo(ctx, inv.git, inv.dirs.Home); err != nil {
+				return accountRepoFailure(err)
+			}
+		}
 	}
 	again := "run " + plan.command() + " again"
 	var done placements
