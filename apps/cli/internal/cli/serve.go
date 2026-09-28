@@ -111,7 +111,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			defer lock.Close()
+			defer home.Unlock(lock)
 			inv.instanceID() // fixed here, before two goroutines report it
 			inv.verdicts = map[string]verdict{}
 			dirs, trees := inv.watchedDirs()

@@ -32,7 +32,7 @@ import (
 
 // version is what a directory is compared with.
 type version struct {
-	load  string               // the tree-ish git loads into the index: "<commit>:<dir>" or a tree id the account repo holds
+	load  string               // the tree-ish git loads into the index: "<commit>:<dir>" or a tree id the account repo holds; "" for none
 	holds func(id string) bool // whether a directory whose tree id is id holds the version
 }
 
@@ -45,6 +45,20 @@ func baseVersion(rec lineage.Record) version {
 // directory.
 func treeVersion(tree string) version {
 	return version{load: tree, holds: func(id string) bool { return id == tree }}
+}
+
+// rawVersion is content known only by its tree id, such as a directory
+// read in process, which the account repo does not hold: only the fast
+// path can find a directory holds it.
+func rawVersion(id string) version {
+	return version{holds: func(got string) bool { return got == id }}
+}
+
+// emptyVersion is the tree that holds nothing, which git knows without
+// the account repo holding it: what a skill agentx does not manage, which
+// has no base version, is compared with.
+func emptyVersion() version {
+	return treeVersion(treeid.EmptyTree)
 }
 
 // importedVersion is the version an adoption establishes, once its import
@@ -84,6 +98,8 @@ func (inv *invocation) judgeDir(ctx context.Context, gitDir, dir string, t treei
 		return judged{}, nil
 	case v.holds(t.ID), !wantIgnored && fastHolds(t, inv.systemFilesIgnored(), v):
 		return judged{holds: true}, nil
+	case v.load == "":
+		return judged{}, nil // git has nothing to load it from
 	}
 	wt, err := inv.openWorkTree(ctx, gitDir, dir)
 	if err != nil {

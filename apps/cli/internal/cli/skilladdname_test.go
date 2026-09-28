@@ -16,9 +16,9 @@ import (
 // exactly that name, one agentx installed or one of the user's own, the
 // refusal says so and its hint is the skill place command that puts it in
 // more clients, carrying the --to and --copy that were given, which runs as
-// it is printed. The exit code is the one any other argument that is no
-// source gets, and the refusal is decided before anything is fetched,
-// locked or written.
+// it is printed: with no --to, it places into every enabled client. The exit
+// code is the one any other argument that is no source gets, and the refusal
+// is decided before anything is fetched, locked or written.
 func TestSkillAddPointsAtSkillPlaceForALibrarySkill(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
@@ -38,11 +38,11 @@ func TestSkillAddPointsAtSkillPlaceForALibrarySkill(t *testing.T) {
 		},
 		{
 			what: "no client named", name: "alpha", args: []string{"alpha"},
-			hint: "agentx skill place alpha --to <configuration>",
+			hint: "agentx skill place alpha", follows: true,
 		},
 		{
 			what: "a skill of the user's own", name: "mine", args: []string{"mine", "--copy"},
-			hint: "agentx skill place mine --to <configuration> --copy",
+			hint: "agentx skill place mine --copy", follows: true,
 		},
 		{
 			what: "a name that starts with a dash", name: "-mine", args: []string{"--to", "cursor", "--", "-mine"},

@@ -136,15 +136,15 @@ The path inside one agent configuration's skills directory through which that cl
 _Avoid_: install, link, copy
 
 **Displaced placement**:
-A placement whose kind on disk is not the one agentx keeps for it: a real directory where a symlink is kept, or the symlink to the library directory where machine settings record a copy. Reported as drift, never repaired on its own.
+A placement whose kind on disk is not the one agentx keeps for it: a real directory where a symlink is kept, or the symlink to the library directory where machine settings record a copy. Reported as drift and never put back on its own: `skill place` puts it back when the user asks, and replaces a directory whose content differs from the library only once the user chooses which of the two survives.
 _Avoid_: broken link, overwritten
 
 **Missing placement**:
-A placement a managed skill lacks in an enabled configuration: nothing is at that configuration's own placement path, whether the skill was never placed there or the placement went. Reported as drift, for information only. A universal client and a disabled configuration never have one.
+A placement a library skill lacks in an enabled configuration: nothing is at that configuration's own placement path, whether the skill was never placed there or the placement went. Reported as drift, for information only; `skill place` places it again when the user asks. A universal client and a disabled configuration never have one.
 _Avoid_: unplaced, orphaned
 
 **Universal client**:
-An agent client that reads the library as one of its own skills directories, such as Codex and Gemini CLI. It sees every library skill whether or not its agent configuration is enabled and whatever the placements, since the library entry is its placement. A skill leaves it only by leaving the library, which takes the skill from every agent client.
+An agent client that reads the library as one of its own skills directories, such as Codex and Gemini CLI, or one of whose skills directories is the library through a symlink: Cursor, which reads Claude Code's skills directory, is one once that directory is linked to the library. It sees every library skill whether or not its agent configuration is enabled and whatever the placements, since the library entry is its placement. A skill leaves it only by leaving the library, which takes the skill from every agent client.
 _Avoid_: library client, library reader
 
 **Base version**:

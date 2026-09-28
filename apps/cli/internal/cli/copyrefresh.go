@@ -38,27 +38,35 @@ import (
 // skills directory, is judged and planned once: a second remove of it
 // would find the first one's publish there, which is neither what it was
 // to remove nor what it was to become, and would stop the mutation part
-// way through, and a second warning would count one copy twice. Each
-// configuration whose copy is refreshed is still named, as a placement
-// names each configuration it placed into.
+// way through, and a second warning would count one copy twice. So is a
+// path two configurations spell differently, one of their skills
+// directories a symlink to the other's, the link's own spelling in another
+// case included: paths are told apart as placeKey tells them, as drift
+// tells places apart. Each configuration whose copy is refreshed is still
+// named, as a placement names each configuration it placed into.
 //
 // Every copy removed carries the fingerprint it held when it was judged,
 // so a copy edited between this plan and the step that removes it stops
 // the mutation rather than being discarded.
 func (inv *invocation) refreshCopies(ctx context.Context, m *home.Mutation, gitDir, name string, target version, placed []version, lay func(dest string) error, recorded []string, done *placements) {
-	refreshed := map[string]bool{} // by path, every path judged, true when its copy is refreshed
+	type seenPlace struct {
+		key   placeKey
+		fresh bool // its copy is refreshed
+	}
+	var seen []seenPlace // every path judged
 	for _, t := range inv.detectedTargets() {
 		if t.readsLibrary || !slices.Contains(recorded, t.id) {
 			continue
 		}
 		place := t.ownPlace(inv.dirs.Library, name)
-		if fresh, judged := refreshed[place]; judged {
-			if fresh {
+		key := keyOf(place)
+		if i := slices.IndexFunc(seen, func(s seenPlace) bool { return s.key.is(key) }); i >= 0 {
+			if seen[i].fresh {
 				done.copies = append(done.copies, t.id)
 			}
 			continue
 		}
-		refreshed[place] = inv.refreshCopy(ctx, m, gitDir, t, place, name, target, placed, lay, done)
+		seen = append(seen, seenPlace{key, inv.refreshCopy(ctx, m, gitDir, t, place, name, target, placed, lay, done)})
 	}
 }
 

@@ -588,3 +588,41 @@ func TestAManagedSkillWithoutItsSKILLmdNamesTheDirectory(t *testing.T) {
 	equal(t, "state after installing it again", h.librarySkill(listed.stdout, "alpha")["state"], stateCurrent)
 	equal(t, "warnings after installing it again", strings.Join(warnings(h, listed.stderr), "\n"), "")
 }
+
+// TestPlaceKeyTellsOnePlaceInTwoSpellings: two spellings of one place are
+// one place, whether anything is at it yet or not, and the same name in
+// another directory, or another name in the same one, is not. Here the
+// second spelling goes through a symlink above the place's directory,
+// which canonicalPath would resolve, standing in for the spelling in
+// another case a disk that ignores case leaves as a link writes it.
+func TestPlaceKeyTellsOnePlaceInTwoSpellings(t *testing.T) {
+	t.Parallel()
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	skills := filepath.Join(root, "real", "skills")
+	other := filepath.Join(root, "other", "skills")
+	for _, dir := range []string{skills, other} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	link(t, filepath.Join(root, "real"), filepath.Join(root, "alias"))
+	place, spelled := filepath.Join(skills, "pdf"), filepath.Join(root, "alias", "skills", "pdf")
+	for _, at := range []string{"nothing", "a directory"} {
+		if at == "a directory" {
+			if err := os.Mkdir(place, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		equal(t, "two spellings of the place holding "+at, keyAt(place).is(keyAt(spelled)), true)
+		equal(t, "the same name in another directory, the place holding "+at, keyAt(place).is(keyAt(filepath.Join(other, "pdf"))), false)
+		equal(t, "another name in the same directory, the place holding "+at, keyAt(place).is(keyAt(filepath.Join(skills, "docx"))), false)
+	}
+	// Where the directory cannot be read, only the spelling tells.
+	gone := filepath.Join(root, "gone", "skills", "pdf")
+	equal(t, "a place in no directory, spelled the same", keyAt(gone).is(keyAt(gone)), true)
+	equal(t, "a place in no directory, spelled otherwise", keyAt(gone).is(keyAt(filepath.Join(root, "gone", "skills2", "pdf"))), false)
+	equal(t, "the spelling keyOf resolves", keyOf(spelled).real, place)
+}
