@@ -976,7 +976,7 @@ func (r *resolveRun) restart(ctx context.Context, edited, finished string, size 
 		_, err = inv.git.InCheckout(ctx, p.path, "checkout", "-q", "--detach", "--force", edited)
 	}
 	if err == nil {
-		err = inv.mergeIn(ctx, p.path, mergeStart{base: p.mine, mine: edited, theirs: finished, message: message, size: size})
+		err = inv.mergeIn(ctx, r.gitDir, p.path, mergeStart{base: p.mine, mine: edited, theirs: finished, message: message, size: size})
 	}
 	if err != nil {
 		return nil, accountRepoFailure(err)

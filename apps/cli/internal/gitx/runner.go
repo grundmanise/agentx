@@ -159,14 +159,7 @@ func (r *Runner) IsolatedStatus(ctx context.Context, gitDir string, upTo int, ar
 // file modes and symlinks as they are, whatever the repository's own
 // configuration says of them. It returns stdout as is.
 func (r *Runner) InCheckout(ctx context.Context, dir string, args ...string) (string, error) {
-	out, _, err := r.InCheckoutStatus(ctx, dir, 0, args...)
-	return out, err
-}
-
-// InCheckoutStatus is InCheckout for a git whose exit status is part of
-// its answer, as IsolatedStatus is for Isolated.
-func (r *Runner) InCheckoutStatus(ctx context.Context, dir string, upTo int, args ...string) (string, int, error) {
-	return r.inCheckout(ctx, call{isolated: true, dir: dir}, upTo, args)
+	return r.InCheckoutInput(ctx, dir, nil, args...)
 }
 
 // InCheckoutAs is InCheckout for the one git that writes a commit of the
@@ -180,14 +173,17 @@ func (r *Runner) InCheckoutAs(ctx context.Context, dir string, a Author, args ..
 		env["GIT_"+who+"_NAME"] = a.Name
 		env["GIT_"+who+"_EMAIL"] = a.Email
 	}
-	c := call{isolated: true, dir: dir, dates: fmt.Sprintf("%d %s", now.Unix(), now.Format("-0700")), env: env}
-	out, _, err := r.inCheckout(ctx, c, 0, args)
-	return out, err
+	return r.inCheckout(ctx, call{isolated: true, dir: dir, dates: fmt.Sprintf("%d %s", now.Unix(), now.Format("-0700")), env: env}, args)
 }
 
-func (r *Runner) inCheckout(ctx context.Context, c call, upTo int, args []string) (string, int, error) {
+// InCheckoutInput is InCheckout with stdin fed to git.
+func (r *Runner) InCheckoutInput(ctx context.Context, dir string, stdin io.Reader, args ...string) (string, error) {
+	return r.inCheckout(ctx, call{isolated: true, dir: dir, stdin: stdin}, args)
+}
+
+func (r *Runner) inCheckout(ctx context.Context, c call, args []string) (string, error) {
 	full := append(isolatedConfig(), "-c", "core.fileMode=true", "-c", "core.symlinks=true")
-	return r.runStatus(ctx, c, upTo, append(full, args...)...)
+	return r.run(ctx, c, append(full, args...)...)
 }
 
 // Author is who a commit is written as.

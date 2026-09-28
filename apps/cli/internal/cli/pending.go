@@ -82,7 +82,7 @@ type mergeStart struct {
 
 // startMerge sets up the pending merge of the skill called name, under the
 // lock: the checkout is added, detached at mine and locked, and the merge
-// runs in it, see mergeIn. When anything fails, the run being stopped
+// is set up in it, see mergeIn. When anything fails, the run being stopped
 // included, the checkout is removed again, so that a merge is pending only
 // once it is set up whole.
 func (inv *invocation) startMerge(ctx context.Context, gitDir, name string, in mergeStart) error {
@@ -92,7 +92,7 @@ func (inv *invocation) startMerge(ctx context.Context, gitDir, name string, in m
 	path := inv.checkoutPath(name)
 	err := inv.git.AddCheckout(ctx, gitDir, path, in.mine, pendingReason)
 	if err == nil {
-		err = inv.mergeIn(ctx, path, in)
+		err = inv.mergeIn(ctx, gitDir, path, in)
 	}
 	if err != nil {
 		return errors.Join(err, inv.git.RemoveCheckout(interrupt.Uninterruptible(ctx), gitDir, path))
@@ -100,17 +100,19 @@ func (inv *invocation) startMerge(ctx context.Context, gitDir, name string, in m
 	return nil
 }
 
-// mergeIn merges in the checkout at dir, whose HEAD is in.mine, as git
-// merges any two commits over a base given: one merge-recursive with
-// in.base as the merge base, with the lines paired by histogram diff and
-// git's detection of a renamed directory off as merge-tree had them, the
-// conflicts written in zdiff3 style, so that each carries the base between
-// mine and theirs, with markers of in.size, which an attributes file of
-// its own asks for in place of the null device the isolated environment
-// names. Then git's own merge state is written where git keeps it for
-// the checkout, MERGE_MSG and then MERGE_HEAD, the candidate, so that the
-// checkout is a merge in progress git knows how to complete.
-func (inv *invocation) mergeIn(ctx context.Context, dir string, in mergeStart) error {
+// mergeIn sets the merge up in the checkout at dir, whose HEAD is in.mine,
+// as merge-tree finds it, so that the checkout holds the conflicts the
+// update was judged by, whatever git version runs: merge-tree merges the
+// three versions again as mergeVersions did, the conflicts written in
+// zdiff3 style, so that each carries the base between mine and theirs,
+// with markers of in.size, which an attributes file of its own asks for in
+// place of the null device the isolated environment names. Its tree is read
+// into the checkout's index and work tree, and the stages it lists for each
+// conflicted file take the place of that file in the index, as git's own
+// merge leaves them. Then git's own merge state is written where git keeps
+// it for the checkout, MERGE_MSG and then MERGE_HEAD, the candidate, so
+// that the checkout is a merge in progress git knows how to complete.
+func (inv *invocation) mergeIn(ctx context.Context, gitDir, dir string, in mergeStart) error {
 	attrs, err := os.CreateTemp("", "agentx-attributes-")
 	if err != nil {
 		return err
@@ -123,9 +125,31 @@ func (inv *invocation) mergeIn(ctx context.Context, dir string, in mergeStart) e
 	if err != nil {
 		return err
 	}
-	_, _, err = inv.git.InCheckoutStatus(ctx, dir, 1, "-c", "merge.directoryRenames=false", "-c", "merge.conflictStyle=zdiff3",
-		"-c", "core.attributesFile="+attrs.Name(), "merge-recursive", "--diff-algorithm=histogram", in.base, "--", in.mine, in.theirs)
+	out, _, err := inv.git.IsolatedStatus(ctx, gitDir, 1, "-c", "merge.directoryRenames=false", "-c", "merge.conflictStyle=zdiff3",
+		"-c", "core.attributesFile="+attrs.Name(), "merge-tree", "--write-tree", "-z", "--no-messages", "--merge-base="+in.base, in.mine, in.theirs)
 	if err != nil {
+		return err
+	}
+	fields := strings.Split(out, "\x00")
+	if _, err := inv.git.InCheckout(ctx, dir, "read-tree", "--reset", "-u", fields[0]); err != nil {
+		return err
+	}
+	// A path takes its stages once its merged entry is taken out, by a line
+	// of mode 0, as git update-index documents.
+	var removed, stages strings.Builder
+	seen := map[string]bool{}
+	for _, f := range fields[1:] {
+		_, path, ok := strings.Cut(f, "\t")
+		if !ok {
+			continue
+		}
+		if !seen[path] {
+			seen[path] = true
+			fmt.Fprintf(&removed, "0 %s\t%s\x00", strings.Repeat("0", len(in.mine)), path)
+		}
+		stages.WriteString(f + "\x00")
+	}
+	if _, err := inv.git.InCheckoutInput(ctx, dir, strings.NewReader(removed.String()+stages.String()), "update-index", "-z", "--index-info"); err != nil {
 		return err
 	}
 	paths, err := inv.gitPaths(ctx, dir, "MERGE_MSG", "MERGE_HEAD")
@@ -278,10 +302,11 @@ func hunksIn(path string, versions map[string]staged, bodies map[string]string) 
 // under the lock and once every journal is finished: a directory under
 // the merges directory that is no checkout git knows, its .git file gone
 // or naming a git directory that is not there, and the registration of a
-// checkout under the merges directory whose directory is gone. A checkout
-// anywhere else, a fork's worktree say, is never touched. It runs no git
-// unless there is something to remove.
-func (inv *invocation) pruneMerges(ctx context.Context, gitDir string) error {
+// checkout under the merges directory whose directory is gone, its
+// directory under the account repo's worktrees, as git's own pruning
+// removes one. A checkout anywhere else, a fork's worktree say, is never
+// touched. It runs no git.
+func (inv *invocation) pruneMerges(gitDir string) error {
 	entries, err := os.ReadDir(inv.mergesDir())
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
@@ -294,7 +319,11 @@ func (inv *invocation) pruneMerges(ctx context.Context, gitDir string) error {
 			}
 		}
 	}
-	admins, err := os.ReadDir(filepath.Join(gitDir, "worktrees"))
+	worktrees, err := filepath.Abs(filepath.Join(gitDir, "worktrees"))
+	if err != nil {
+		return err
+	}
+	admins, err := os.ReadDir(worktrees)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
@@ -320,7 +349,7 @@ func (inv *invocation) pruneMerges(ctx context.Context, gitDir string) error {
 		return dir == filepath.Join(home, "merges")
 	}
 	for _, a := range admins {
-		admin := filepath.Join(gitDir, "worktrees", a.Name())
+		admin := filepath.Join(worktrees, a.Name())
 		b, err := os.ReadFile(filepath.Join(admin, "gitdir"))
 		if err != nil {
 			continue
@@ -334,7 +363,7 @@ func (inv *invocation) pruneMerges(ctx context.Context, gitDir string) error {
 			continue
 		}
 		if _, err := os.Lstat(path); errors.Is(err, fs.ErrNotExist) {
-			if err := inv.git.RemoveCheckout(ctx, gitDir, path); err != nil {
+			if err := os.RemoveAll(admin); err != nil {
 				return err
 			}
 		}

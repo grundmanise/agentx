@@ -134,7 +134,7 @@ func TestHoldsMarkersNeedsTheMergesOwnMarkers(t *testing.T) {
 		{name: "a start marker", file: "a\n<<<<<<< mine\nb\n", blobs: []string{"a\n"}, want: true},
 		{name: "an end marker alone", file: "a\n>>>>>>>\r\n", blobs: []string{"a\n"}, want: true},
 		{name: "a quote", file: "> a quote\n>> and a deeper one\n", blobs: []string{"a\n"}},
-		{name: "a skill's own smaller markers", file: "a\n<<< mine\nb\n", blobs: []string{"a\n"}, want: true},
+		{name: "markers smaller than seven", file: "a\n<<< mine\nb\n", blobs: []string{"a\n"}, want: true},
 		{name: "a line of the versions' own", file: "<<<<<<< HEAD\n", blobs: []string{"<<<<<<< HEAD\n"}},
 		{name: "past a line of the versions' own", file: "<<<<<<<< mine\n", blobs: []string{"<<<<<<< HEAD\n"}, want: true},
 		{name: "a run with text after it", file: "<<<<<<<<x\n", blobs: []string{"a\n"}},
