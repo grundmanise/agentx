@@ -390,7 +390,7 @@ A skill agentx did not install, and a fork, have no base version to compare with
 
 ### Files that do not count
 
-agentx compares a skill as git compares a work tree, so the files git ignores never make a skill `modified`, never show in `skill diff`, and are kept by `skill revert`:
+agentx compares a skill as git compares a work tree, so the files git ignores never make a skill `modified`, never show in `skill diff`, and are kept by `skill revert` and by `skill place --keep-placement`:
 
 - files the skill's own `.gitignore` names, such as a `node_modules` directory;
 - files your global git ignore file names, `~/.config/git/ignore` or the file your `core.excludesFile` setting points to;
@@ -467,7 +467,7 @@ hint: to keep the library's content and discard it, run 'agentx skill place pdf 
 Choose what survives:
 
 - `--keep-library` keeps the library version. The directory is deleted and replaced with the link.
-- `--keep-placement` keeps the directory's version. Its content replaces the library directory, then the directory is replaced with the link, so every client sees your version. The skill shows as `modified` from then on, unless the directory held the version you installed; see what differs with [`agentx skill diff`](#see-what-you-changed), or go back to the installed version with [`agentx skill revert`](#revert-a-skill).
+- `--keep-placement` keeps the directory's version. Its content replaces the library directory, then the directory is replaced with the link, so every client sees your version. Files git ignores in the library directory, such as a `.DS_Store` or a build directory its `.gitignore` names, are kept, unless the directory holds a file at the same path; see [Files that do not count](#files-that-do-not-count). The skill shows as `modified` from then on, unless the directory held the version you installed; see what differs with [`agentx skill diff`](#see-what-you-changed), or go back to the installed version with [`agentx skill revert`](#revert-a-skill).
 
 ```sh
 agentx skill place pdf --to claude-code --keep-placement
