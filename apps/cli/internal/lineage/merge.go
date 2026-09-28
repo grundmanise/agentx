@@ -48,3 +48,20 @@ func CommitDir(ctx context.Context, r *gitx.Runner, gitDir, dir, tree, parent, m
 func ReadMerged(ctx context.Context, r *gitx.Runner, gitDir, tree, dir string) (Base, error) {
 	return readVersion(ctx, r, gitDir, tree, dir, "the merged tree "+tree)
 }
+
+// At is the record of rec's skill with its import branch at commit, an
+// import commit no ref of the skill's own may name any more, read in one
+// git log: the update a pending merge merges, which a check may have moved
+// the candidate on from since.
+func (rec Record) At(ctx context.Context, r *gitx.Runner, gitDir, commit string) (Record, error) {
+	out, err := r.Isolated(ctx, gitDir, "log", "-1", "--format=%T%n%B", commit)
+	if err != nil {
+		return Record{}, err
+	}
+	tree, message, _ := strings.Cut(out, "\n")
+	imp, err := Parse(message)
+	if err != nil {
+		return Record{}, err
+	}
+	return Record{Name: rec.Name, Kind: rec.Kind, Ref: rec.Ref, Commit: commit, Tree: tree, Import: imp, HasImport: true}, nil
+}

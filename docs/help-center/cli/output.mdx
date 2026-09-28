@@ -62,7 +62,7 @@ A failed command prints `error: ...` and, when there is a fix, `hint: ...` on st
 | 1 | `usage` | Unknown command, bad flag or missing argument. Run `agentx help`. |
 | 2 | `git` | Git is missing or older than 2.40. Install or upgrade git. |
 | 3 | `source` | A source is unreachable or authentication failed. |
-| 4 | `pending_merge` | A pending merge blocks the action, or `skill update` left one pending because [your edits conflict with the update](/cli/skill#when-your-edits-conflict). |
+| 4 | `pending_merge` | A pending merge blocks the action, or `skill update` left one pending because [your edits conflict with the update](/cli/skill#when-your-edits-conflict), or found files of one still to resolve. |
 | 5 | `not_found` | The skill, source or configuration does not exist. |
 | 6 | `refused` | A collision or an unmet precondition. |
 | 7 | `locked` | Another agentx command is running. Retry when it finishes. |

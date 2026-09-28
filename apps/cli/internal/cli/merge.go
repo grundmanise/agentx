@@ -13,8 +13,9 @@ import (
 // three versions the merge took, each a commit of the account repo and the
 // base, HEAD and MERGE_HEAD of the merge in progress in the skill's
 // checkout, and every file that conflicts there. It is emitted by an update
-// that leaves a merge pending, and names the blobs a front end feeds to a
-// diff tool to show a file's versions, without reading the account repo.
+// that leaves a merge pending, or finds files of one still unmerged, and
+// names the blobs a front end feeds to a diff tool to show a file's
+// versions, without reading the account repo.
 type conflictEvent struct {
 	event
 	Name   string         `json:"name"`
