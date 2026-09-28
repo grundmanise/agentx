@@ -1699,6 +1699,24 @@ printf '%s' `+shellWord(saved)+` > "$1"
 	})
 }
 
+// TestSkillResolveInAnEditorKeepsASkillsOwnSmallerMarkers: a skill whose
+// own .gitattributes sets a marker size smaller than git's seven has its
+// conflicts written with markers of that size, and a save that leaves them
+// stages nothing and completes nothing.
+func TestSkillResolveInAnEditorKeepsASkillsOwnSmallerMarkers(t *testing.T) {
+	t.Parallel()
+	h := clashHarness(t, map[string]string{".gitattributes": "*.md conflict-marker-size=5\n"}, func(*sourceRepo) {}, func(string) {})
+	if given := fileBody(t, inCheckout(h, "notes.md")); !strings.HasPrefix(given, "<<<<< ") {
+		t.Fatalf("the merge wrote no markers of five:\n%s", given)
+	}
+	h.env["EDITOR"] = idleEditor(t)
+	out := h.run("--json", "skill", "resolve", "kit", "--editor")
+	equal(t, "exit", out.exit, 0)
+	equal(t, "summary", h.one(out.stdout, "result")["summary"], "resolved nothing in the merge of kit: 1 file left to resolve")
+	equal(t, "what is unmerged", unmerged(t, h, "kit"), "1 kit-dir/notes.md\n2 kit-dir/notes.md\n3 kit-dir/notes.md")
+	equal(t, "notes.md", fileBody(t, filepath.Join(h.library, "kit", "notes.md")), "ONE\n")
+}
+
 // resolveChildEnv marks the process the crash tests of skill resolve
 // start, which runs skill resolve with the arguments it holds, separated by
 // |, against the parent's temporary home, and is killed in the middle of

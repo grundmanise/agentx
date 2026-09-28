@@ -267,12 +267,16 @@ func markerSizeIn(file string, blobs ...string) int {
 }
 
 // holdsMarkers reports whether file, a text file of a merge whose versions
-// are blobs, still holds a conflict marker: a line starting with a run of
+// are blobs, still holds a conflict marker: a start marker markerSizeIn
+// finds, whatever size it was written at, or a line starting with a run of
 // < or > at least as long as the markers of a merge of those versions,
 // see markerSize, followed by a space or the end of the line. No line of
 // the versions' own is taken for one, and neither is a quote, a line
 // starting with "> ", that a resolution added.
 func holdsMarkers(file string, blobs ...string) bool {
+	if markerSizeIn(file, blobs...) > 0 {
+		return true
+	}
 	size := markerSize(blobs...)
 	for _, line := range strings.Split(file, "\n") {
 		if line == "" || (line[0] != '<' && line[0] != '>') {
