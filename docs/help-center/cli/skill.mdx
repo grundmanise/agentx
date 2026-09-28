@@ -637,29 +637,22 @@ Git merges line by line, and changes to lines next to each other conflict, so a 
 
 ### When your edits conflict
 
-When your changes and the update change the same lines, agentx changes nothing in your library. The merge waits in a hidden Git checkout in agentx home, `~/.agentx/merges/<name>`, and never in the directory your agents read, so an agent never loads a half-merged file with conflict markers in it; the skill keeps working exactly as you left it. `skill update` stops with exit code 4 and shows every conflict: each part of a file that conflicts, numbered per file, with your version (`mine`), the version you installed (`base`) and the update's (`theirs`):
+When your changes and the update change the same lines, agentx changes nothing in your library. The merge waits in a Git worktree of the account repo in agentx home, `~/.agentx/merges/<name>`, and never in the directory your agents read, so an agent never loads a half-merged file with conflict markers in it; the skill keeps working exactly as you left it. `skill update` stops with exit code 4 and lists the files that conflict, each with what `git status` says of it:
 
 ```text
 docx conflicts with its update from 3f2a9c1 to 8b1e0f4 in 2 files
-SKILL.md:1
-<<<<<<< mine
-Always answer in French.
-||||||| base
-Always answer in English.
-=======
-Always answer in the language of the question.
->>>>>>> theirs
-logo.png: binary, changed here and by the update
+SKILL.md: both modified
+logo.png: both modified
 error: docx conflicts with its update in 2 files, so the merge is pending and the library directory was left as it is
-hint: run 'agentx skill resolve docx' to resolve the conflicts, or 'agentx skill resolve docx --abort' to give the merge up
+hint: resolve it with git in /Users/you/.agentx/merges/docx ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), then run 'agentx skill update docx' again to apply it, or 'agentx skill update docx --abort' to give it up
 ```
 
-A file you changed and the update deleted, or the other way round, a file you and the update moved to different places, and a binary file both sides changed conflict as a whole file, and the line says how, for example `logo.png: binary, changed here and by the update`. Files your ignore rules name are not part of your edits, so they never conflict and stay as they are.
+As in `git status`, "us" is your library directory and "them" the update: a file you deleted and the update changed reads `deleted by us`, and one the update added where you had added a file too reads `both added`. Files your ignore rules name are not part of your edits, so they never conflict and stay as they are.
 
-The checkout is an ordinary Git merge in progress: your edits are checked out and the update is being merged into them, so `git status`, `git diff` and `git commit` work there as in any merge. It stays until the merge is resolved or given up, across restarts, and `agentx skill list` shows the skill as `merge pending`. Meanwhile:
+The worktree is a Git merge in progress like any other: your edits are checked out and the update is being merged into them. Resolve it there with Git: edit each file that conflicts and `git add` it, or take one side of a file whole with `git checkout --ours <file>`, your version, or `git checkout --theirs <file>`, the update's, then `git add` it. `git status`, `git diff` and `git commit` work there as in any merge. The merge stays until it is resolved or given up, across restarts, and `agentx skill list` shows the skill as `merge pending`. Meanwhile:
 
 - `skill update`, `skill revert`, and `skill remove` without `--from` or with `--from universal`, stop with exit code 4 and change nothing.
-- Everything else works as usual: placing the skill, `skill place` with its flags included, removing it from one client, `skill diff`, and update checks, which may find a newer version still. `skill place --keep-placement` replaces the library directory with the client's copy; resolving the merge then takes that change into account, as it does any edit you make meanwhile.
+- Everything else works as usual: placing the skill, `skill place` with its flags included, removing it from one client, `skill diff`, and update checks, which may find a newer version still.
 
 With `--all`, a skill whose edits conflict is left with its merge pending and the other skills are still updated. The run then exits with code 4, or 6 if other skills were not updated for other reasons.
 
@@ -735,10 +728,10 @@ A skill with an update carries `candidate`, the newer version the last check fou
 For each skill whose edits conflict with its update, `skill update` emits one `conflict` event after the `library_skill` events, then the `error`:
 
 ```json
-{"type":"conflict","schema_version":1,"name":"docx","kind":"managed","base":"5e1f0a2b...","mine":"a4c3d2e1...","theirs":"9f8e7d6c...","files":[{"path":"SKILL.md","base":"1a2b3c4d...","mine":"5e6f7a8b...","theirs":"9c0d1e2f...","binary":false,"hunks":[{"index":1,"mine":"Always answer in French.\n","base":"Always answer in English.\n","theirs":"Always answer in the language of the question.\n"}]},{"path":"logo.png","base":"3b4c5d6e...","mine":"7f8a9b0c...","theirs":"1d2e3f4a...","binary":true,"hunks":[]}]}
+{"type":"conflict","schema_version":1,"name":"docx","kind":"managed","base":"5e1f0a2b...","mine":"a4c3d2e1...","theirs":"9f8e7d6c...","files":[{"path":"SKILL.md","base":"1a2b3c4d...","mine":"5e6f7a8b...","theirs":"9c0d1e2f..."},{"path":"logo.png","base":"3b4c5d6e...","mine":"7f8a9b0c...","theirs":"1d2e3f4a..."}]}
 ```
 
-`base`, `mine` and `theirs` at the top are the three versions merged: the commit of the version you installed, your library directory as git records it, without the files your ignore rules name, and the update. They are the base, the `HEAD` and the `MERGE_HEAD` of the merge in `~/.agentx/merges/<name>`. Each file is one that conflicts there and names the blob each version holds, `null` for one that has no file there, and `hunks` lists every part that conflicts, as text, as the file in the checkout holds it, numbered from 1 in the order they come in the file. A file that conflicts as a whole, a binary, deleted or moved file, one that meets a symlink, or one added on both sides that is executable on one side only, has no hunks, and `binary` says whether it is binary. Every `path` is a path of the skill, relative to its directory.
+`base`, `mine` and `theirs` at the top are the three versions merged: the commit of the version you installed, your library directory as git records it, without the files your ignore rules name, and the update. They are the base, the `HEAD` and the `MERGE_HEAD` of the merge in `~/.agentx/merges/<name>`. Each file is one that conflicts there and names the blob each version holds, `null` for one that has no file there: to show a file, feed two of its versions to a diff tool. Every `path` is a path of the skill, relative to its directory.
 
 A skill with a merge pending carries `pending_merge: true` in its `library_skill` event and in the snapshot:
 

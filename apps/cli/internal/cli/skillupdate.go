@@ -31,13 +31,14 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 			"'agentx skill check' found for it, and record that version as the one the skill\n" +
 			"is at. A skill edited since it was installed keeps its edits: they are merged\n" +
 			"into the newer version. When they conflict with it, the library is left as it is\n" +
-			"and the conflicts are shown: the merge waits, an ordinary Git merge in progress in\n" +
-			"a hidden checkout under agentx home, never in the library, until it is resolved.\n" +
-			"Files git ignores in the skill, such as a .DS_Store or an ignored build directory,\n" +
-			"are not edits, and stay. A copy placement that holds the version replaced is\n" +
-			"refreshed; a copy edited on its own is kept and named. Pass --all instead of a\n" +
-			"name to update every managed skill the last check found an update for. Read an\n" +
-			"update before you apply it with 'agentx skill diff <name> --upstream'.",
+			"and the conflicting files are listed: the merge waits, an ordinary Git merge in\n" +
+			"progress in a Git worktree under agentx home, never in the library, for you to\n" +
+			"resolve with git. Files git ignores in the skill, such as a .DS_Store or an\n" +
+			"ignored build directory, are not edits, and stay. A copy placement that holds the\n" +
+			"version replaced is refreshed; a copy edited on its own is kept and named. Pass\n" +
+			"--all instead of a name to update every managed skill the last check found an\n" +
+			"update for. Read an update before you apply it with\n" +
+			"'agentx skill diff <name> --upstream'.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			const hint = "name the skill to update, or run 'agentx skill update --all' to update every skill the last check found an update for"
@@ -86,8 +87,7 @@ type updating struct {
 	target       version      // base, as the copies are compared with it
 	placed       []version    // the versions a copy holds that agentx could have placed there, which the update refreshes
 	merge        lineage.Merge
-	conflicted   bool          // the merge conflicts, so the update leaves it pending
-	size         int           // the size of its conflict markers
+	merged       mergeResult   // what merge-tree made of merge; one that conflicts the update leaves pending
 	conflict     conflictEvent // the conflicts of the merge left pending
 	upstreamName string        // the name the candidate's SKILL.md gives the skill, when it is not name
 	done         placements    // the copies the mutation refreshed or kept
@@ -417,7 +417,7 @@ func (r *updateRun) read(ctx context.Context) error {
 				continue
 			}
 		}
-		if !u.conflicted {
+		if !u.merged.conflicted {
 			ids = append(ids, baseBlobs(u.base)...)
 		}
 		ids = append(ids, skillFileBlob(u.theirs)...)
@@ -453,8 +453,8 @@ func (r *updateRun) read(ctx context.Context) error {
 // as it was or the base version, since a copy placed before the edits holds
 // the base. A clean merge the library's file system cannot hold is refused
 // instead, see caseClashRefusal. A merge that conflicts lays nothing out:
-// the update leaves it pending, see startMerge, with markers of the size
-// mergeVersions judged.
+// the update leaves it pending as merge-tree found it, see startMerge, and
+// the files that conflict are read from merge-tree's own list.
 //
 // A directory that holds exactly the base version's files, which reads as
 // modified only because an earlier agentx stored that version in a form git
@@ -482,16 +482,19 @@ func (r *updateRun) merge(ctx context.Context, u *updating) *failure {
 	if err != nil {
 		return failureOf(accountRepoFailure(err))
 	}
-	m := lineage.Merge{Base: u.rec.Commit, Mine: mine, Theirs: u.next.Commit}
-	res, err := mergeVersions(ctx, git, gitDir, dir, m)
-	if err != nil {
+	u.merge = lineage.Merge{Base: u.rec.Commit, Mine: mine, Theirs: u.next.Commit}
+	if u.merged, err = mergeVersions(ctx, git, gitDir, u.merge); err != nil {
 		return failureOf(accountRepoFailure(err))
 	}
-	if res.conflicted {
-		u.merge, u.conflicted, u.size = m, true, res.size
+	if u.merged.conflicted {
+		files, err := conflictFiles(u.merged.stages, dir)
+		if err != nil {
+			return failureOf(accountRepoFailure(err))
+		}
+		u.conflict = conflictOfSkill(u.name, u.merge, files)
 		return nil
 	}
-	merged, err := lineage.ReadMerged(ctx, git, gitDir, res.tree, dir)
+	merged, err := lineage.ReadMerged(ctx, git, gitDir, u.merged.tree, dir)
 	if err != nil {
 		return failureOf(accountRepoFailure(err))
 	}
@@ -642,10 +645,8 @@ func upstreamNameOf(u *updating, bodies map[string]string) string {
 // every skill was dropped here writes no journal. A skill whose merge
 // conflicts has no step in the journal and nothing of it changes: once the
 // journal is applied, and only then, its merge is left pending in its
-// checkout, under the same hold of the lock, and its conflicts are read
-// from there. A skill whose merge cannot be set up is dropped with nothing
-// of it left; one whose conflicts cannot be read is dropped with its merge
-// pending all the same.
+// checkout, under the same hold of the lock. A skill whose merge cannot be
+// set up is dropped with nothing of it left.
 func (r *updateRun) apply(ctx context.Context) error {
 	inv := r.inv
 	var refs []string
@@ -668,7 +669,7 @@ func (r *updateRun) apply(ctx context.Context) error {
 			switch f := inv.recheckUpdate(u, values, sources); {
 			case f != nil:
 				r.drop(u.name, f)
-			case u.conflicted:
+			case u.merged.conflicted:
 				conflicted = append(conflicted, u)
 			default:
 				live = append(live, u)
@@ -707,24 +708,15 @@ func (r *updateRun) apply(ctx context.Context) error {
 		} else if err := m.Apply(inv.refs(ctx)); err != nil {
 			return err
 		}
-		setUp := 0
 		for _, u := range conflicted {
-			start := mergeStart{base: u.merge.Base, mine: u.merge.Mine, theirs: u.merge.Theirs,
-				message: updateMergeMessage(u.name, u.rec, u.next), size: u.size}
+			start := mergeStart{mine: u.merge.Mine, theirs: u.merge.Theirs, merged: u.merged, message: updateMergeMessage(u.name, u.rec, u.next)}
 			if err := inv.startMerge(ctx, r.gitDir, u.name, start); err != nil {
 				r.drop(u.name, failureOf(accountRepoFailure(err)))
 				continue
 			}
-			setUp++
-			files, err := inv.readConflicts(ctx, r.gitDir, inv.checkoutPath(u.name), u.rec.Import.Dir())
-			if err != nil {
-				r.drop(u.name, failureOf(accountRepoFailure(err)))
-				continue
-			}
-			u.conflict = conflictOfSkill(u.name, u.merge, files)
 			pending = append(pending, u)
 		}
-		if len(staged)+setUp == 0 {
+		if len(staged)+len(pending) == 0 {
 			return errNothingApplied
 		}
 		return nil
@@ -899,17 +891,20 @@ func (r *updateRun) report(ctx context.Context) error {
 	}
 	for _, u := range r.pending {
 		r.inv.printConflicts(u.conflict, short(u.rec.Import.Commit), short(u.next.Import.Commit))
-		r.drop(u.name, conflictFailure(u.name, len(u.conflict.Files)))
+		r.drop(u.name, conflictFailure(u.name, r.inv.checkoutPath(u.name), len(u.conflict.Files)))
 	}
 	return nil
 }
 
 // conflictFailure is how an update answers for a skill whose merge it left
-// pending: exit code 4, the library directory left as it is, and the ways
-// on from there.
-func conflictFailure(name string, files int) *failure {
+// pending in the checkout at path: exit code 4, the library directory left
+// as it is, and the ways on from there, all of them git's own but for the
+// update that applies the merge once it is resolved and the one that gives
+// it up.
+func conflictFailure(name, path string, files int) *failure {
 	return refuse(exitPendingMerge, name+" conflicts with its update in "+plural(files, "file")+", so the merge is pending and the library directory was left as it is",
-		"run '"+skillCommand("resolve", name)+"' to resolve the conflicts, or '"+skillCommand("resolve", name, "--abort")+"' to give the merge up")
+		"resolve it with git in "+quotedPath(path)+" ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), "+
+			"then run '"+skillCommand("update", name)+"' again to apply it, or '"+skillCommand("update", name, "--abort")+"' to give it up")
 }
 
 // reportApplied is report's part for the skills the run updated.

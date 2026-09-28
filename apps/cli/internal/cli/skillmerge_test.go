@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -31,23 +30,14 @@ func pendingMerge(t *testing.T, h *harness, s *sourceRepo) {
 	}
 }
 
-// conflictFiles is what a conflict event says of its files, in order: the
-// path of each and its number of hunks, or how it conflicts whole.
-func conflictFiles(ev jsonEvent) string {
-	var files []string
+// conflictPaths is the paths of the files a conflict event names, in
+// order.
+func conflictPaths(ev jsonEvent) string {
+	var paths []string
 	for _, f := range ev["files"].([]any) {
-		file := f.(map[string]any)
-		hunks := len(file["hunks"].([]any))
-		switch {
-		case file["binary"] == true:
-			files = append(files, fmt.Sprintf("%s:binary", file["path"]))
-		case hunks == 0:
-			files = append(files, fmt.Sprintf("%s:whole", file["path"]))
-		default:
-			files = append(files, fmt.Sprintf("%s:%d", file["path"], hunks))
-		}
+		paths = append(paths, f.(map[string]any)["path"].(string))
 	}
-	return strings.Join(files, ",")
+	return strings.Join(paths, ",")
 }
 
 // fileOf is the file at path of a conflict event.
@@ -60,21 +50,6 @@ func fileOf(t *testing.T, ev jsonEvent, path string) map[string]any {
 	}
 	t.Fatalf("the conflict names no %s: %v", path, ev["files"])
 	return nil
-}
-
-// hunkOf is hunk i, counted from 1, of the file at path of a conflict
-// event, as mine|base|theirs.
-func hunkOf(t *testing.T, ev jsonEvent, path string, i int) string {
-	t.Helper()
-	hunks := fileOf(t, ev, path)["hunks"].([]any)
-	if i > len(hunks) {
-		t.Fatalf("%s has %d hunks, not %d", path, len(hunks), i)
-	}
-	h := hunks[i-1].(map[string]any)
-	if h["index"] != float64(i) {
-		t.Errorf("hunk %d of %s is numbered %v", i, path, h["index"])
-	}
-	return fmt.Sprintf("%s|%s|%s", h["mine"], h["base"], h["theirs"])
 }
 
 // pendingCheckout is the checkout of the merge pending for the skill
@@ -272,17 +247,15 @@ func TestSkillUpdateOfAMergeWhosePathsDifferInCase(t *testing.T) {
 // conflicts. The update exits 4 and changes nothing agents read: the
 // library directory and every copy are byte for byte as they were, and the
 // import branch and the candidate hold what they held. The conflict event
-// names the three versions and every hunk, mine, base and theirs as text,
-// and the stage blobs of the file. The merge is an ordinary git merge in
-// progress in the skill's checkout, read back with plain git: locked with
-// agentx's reason, at mine, the library directory committed on the base
-// version, with the candidate as MERGE_HEAD, the completion's message with
-// the trailer naming the candidate in MERGE_MSG, the three stages of the
-// file in the index and zdiff3 markers in the file, which git wrote with
-// the line endings the update's own .gitattributes asks for, as it writes
-// any file of a checkout, and which the hunks give as the file holds them.
-// Reading the checkout again gives the same files and hunks, and a later
-// invocation sees the merge pending in skill list.
+// names the three versions and the stage blobs of the file, and the hint
+// names the checkout to resolve it in with git. The merge is an ordinary
+// git merge in progress in the skill's checkout, read back with plain git:
+// locked with agentx's reason, at mine, the library directory committed on
+// the base version, with the candidate as MERGE_HEAD, the completion's
+// message in MERGE_MSG, the three stages of the file in the index and
+// zdiff3 markers in the file, which git wrote with the line endings the
+// update's own .gitattributes asks for, as it writes any file of a
+// checkout. A later invocation sees the merge pending in skill list.
 func TestSkillUpdateLeavesAConflictPending(t *testing.T) {
 	t.Parallel()
 	h, s, first := updateHarness(t)
@@ -298,7 +271,8 @@ func TestSkillUpdateLeavesAConflictPending(t *testing.T) {
 	e := h.one(out.stdout, "error")
 	equal(t, "code", e["code"], "pending_merge")
 	equal(t, "message", e["message"], "alpha conflicts with its update in 1 file, so the merge is pending and the library directory was left as it is")
-	equal(t, "hint", e["hint"], "run 'agentx skill resolve alpha' to resolve the conflicts, or 'agentx skill resolve alpha --abort' to give the merge up")
+	equal(t, "hint", e["hint"], "resolve it with git in "+pendingCheckout(h, "alpha")+" ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), "+
+		"then run 'agentx skill update alpha' again to apply it, or 'agentx skill update alpha --abort' to give it up")
 	if got := h.eventsOfType(out.stdout, "library_skill"); len(got) != 0 {
 		t.Errorf("an update that left a merge pending reported %v", got)
 	}
@@ -307,8 +281,7 @@ func TestSkillUpdateLeavesAConflictPending(t *testing.T) {
 	equal(t, "kind", ev["kind"], "managed")
 	equal(t, "base", ev["base"], tip)
 	equal(t, "theirs", ev["theirs"], candidate)
-	equal(t, "files", conflictFiles(ev), "notes.md:1")
-	equal(t, "the hunk", hunkOf(t, ev, "notes.md", 1), crlf(editedNotes)+"|alpha notes\r\n|alpha notes, revised upstream\r\n")
+	equal(t, "files", conflictPaths(ev), "notes.md")
 	file := fileOf(t, ev, "notes.md")
 	equal(t, "the base blob", file["base"], h.accountGit("rev-parse", tip+":alpha-dir/notes.md"))
 	equal(t, "the theirs blob", file["theirs"], h.accountGit("rev-parse", candidate+":alpha-dir/notes.md"))
@@ -319,7 +292,7 @@ func TestSkillUpdateLeavesAConflictPending(t *testing.T) {
 	equal(t, "the checkout's HEAD", head, mine)
 	equal(t, "the checkout's MERGE_HEAD", mergeHead, candidate)
 	equal(t, "the checkout's MERGE_MSG", msg,
-		"update alpha from "+first[:7]+" to "+second[:7]+", keeping its edits\n\n"+lineage.TrailerBase+": "+candidate+"\n")
+		"update alpha from "+first[:7]+" to "+second[:7]+", keeping its edits\n")
 	equal(t, "mine's parent", h.accountGit("rev-parse", mine+"^@"), tip)
 	equal(t, "mine's notes.md", h.accountGit("cat-file", "blob", mine+":alpha-dir/notes.md"), strings.TrimSuffix(editedNotes, "\n"))
 	contains(t, "the checkout's lock", h.accountGit("worktree", "list", "--porcelain"), "locked "+pendingReason)
@@ -342,45 +315,19 @@ func TestSkillUpdateLeavesAConflictPending(t *testing.T) {
 	}
 	contains(t, "skill list", h.mustRun("skill", "list").stdout, "modified, "+updateAvailable+", "+mergePending+"  ")
 
-	// The checkout alone gives the conflict back, hunk for hunk.
-	inv := &invocation{git: gitx.New(h.env, false, func(string, ...any) {})}
-	files, err := inv.readConflicts(context.Background(), gitx.AccountRepoPath(h.agentx), pendingCheckout(h, "alpha"), "alpha-dir")
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Through JSON and back, so that both sides are marshalled from maps,
-	// whose keys come out in one order.
-	raw, err := json.Marshal(files)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var read any
-	if err := json.Unmarshal(raw, &read); err != nil {
-		t.Fatal(err)
-	}
-	again, err := json.Marshal(read)
-	if err != nil {
-		t.Fatal(err)
-	}
-	emitted, err := json.Marshal(ev["files"])
-	if err != nil {
-		t.Fatal(err)
-	}
-	equal(t, "the files read again", string(again), string(emitted))
-
 	text := h.run("skill", "update", "alpha")
 	equal(t, "exit of the update run again", text.exit, 4)
 	equal(t, "stderr of the update run again", text.stderr,
 		"error: alpha has a merge with its update pending, so it cannot be updated until the merge is resolved or given up\n"+
-			"hint: run 'agentx skill resolve alpha --abort' to give the merge up; the library directory stays as it is\n")
+			"hint: run 'agentx skill update alpha --abort' to give the merge up; the library directory stays as it is\n")
 }
 
 // TestAPendingMergeCheckoutIsAnOrdinaryMergeInProgress: the checkout of a
 // pending merge is a merge git knows how to finish. git status there lists
 // the unmerged path, and once the file is resolved and added, a plain git
 // commit makes the merge commit, mine and the candidate its parents and
-// the message MERGE_MSG holds its message, trailer included. The library
-// directory is as it was all along.
+// the message MERGE_MSG holds its message. The library directory is as it
+// was all along.
 func TestAPendingMergeCheckoutIsAnOrdinaryMergeInProgress(t *testing.T) {
 	t.Parallel()
 	h, s, _ := updateHarness(t)
@@ -394,89 +341,63 @@ func TestAPendingMergeCheckoutIsAnOrdinaryMergeInProgress(t *testing.T) {
 	checkoutGit(t, h, "alpha", "commit", "--no-edit", "--quiet")
 	equal(t, "the commit's parents", strings.TrimSpace(checkoutGit(t, h, "alpha", "rev-parse", "HEAD^@")), head+"\n"+candidate)
 	equal(t, "the commit's message", checkoutGit(t, h, "alpha", "log", "-1", "--format=%B"), msg+"\n")
-	equal(t, "the commit's trailer", strings.TrimSpace(checkoutGit(t, h, "alpha", "log", "-1", "--format=%(trailers:key="+lineage.TrailerBase+",valueonly)")), candidate)
 	equal(t, "the library", onDisk(t, h.library), library)
 }
 
 // TestSkillUpdateConflictsOfEveryKind merges edits that conflict with an
-// update every way a file can: a line changed on both sides; a file with
-// lines of its own that look like conflict markers, whose hunks are read
-// with markers longer than any of them; a file added on both sides, whose
-// base is empty; a file the update deletes and the library changed, and
-// one the library deleted and the update changed, each conflicting whole
-// with the missing side null; a file moved to one place in the library and
-// to another by the update, each of the three paths whole; a binary file
-// changed on both sides, whole and binary; a file added on both sides
-// alike but executable on one side only, which conflicts in its mode
-// alone, whole; and a file with no newline at its end, whose hunk ends as
-// the file does. Every path is relative to the skill's directory, which
-// the upstream calls otherwise. The text shows every hunk under its file
-// and number, and says of each whole file how it conflicts.
+// update in each way git tells apart: a line changed on both sides; a file
+// added on both sides, which has no base; a file the update deletes and
+// the library changed, and one the library deleted and the update changed,
+// each with the missing side null; and a file moved to one place in the
+// library and to another by the update, each of its three paths with the
+// one version that has a file there. Every path is relative to the skill's
+// directory, which the upstream calls otherwise, and the text says of each
+// file what conflicts in it in git status's own words.
 func TestSkillUpdateConflictsOfEveryKind(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	s := h.newSourceRepo("kinds", true)
-	markers := "a\n<<<<<<< HEAD\nb\n=========\nc\n>>>>>>>> x\n"
 	s.skill("skills/kinds-dir", "kinds", "Conflicts of every kind", map[string]string{
-		"notes.md":   "one\ntwo\nthree\n",
-		"markers.md": markers,
-		"gone.md":    "gone\n",
-		"kept.md":    "kept\n",
-		"logo.bin":   "\x00base",
-		"tail.md":    "x\ny",
-		"moved.md":   "1\n2\n3\n4\n5\n6\n7\n8\n",
+		"notes.md": "one\ntwo\nthree\n",
+		"gone.md":  "gone\n",
+		"kept.md":  "kept\n",
+		"moved.md": "1\n2\n3\n4\n5\n6\n7\n8\n",
 	})
 	first := s.commit("first version")
 	h.mustRun("skill", "add", s.url)
 	s.write("skills/kinds-dir/notes.md", "one\ntwo, upstream\nthree\n")
-	s.write("skills/kinds-dir/markers.md", strings.Replace(markers, "c\n", "c, upstream\n", 1))
 	s.write("skills/kinds-dir/both.md", "added upstream\n")
 	s.run("rm", "--quiet", "skills/kinds-dir/gone.md")
 	s.write("skills/kinds-dir/kept.md", "kept, upstream\n")
-	s.write("skills/kinds-dir/logo.bin", "\x00upstream")
-	s.write("skills/kinds-dir/tail.md", "x\ny, upstream")
 	s.run("mv", "skills/kinds-dir/moved.md", "skills/kinds-dir/moved-upstream.md")
-	s.write("skills/kinds-dir/mode.sh", "the same\n")
 	second := s.commit("second version")
 	h.mustRun("skill", "check")
 	lib := filepath.Join(h.library, "kinds")
 	editLibrary(t, h, "kinds", "notes.md", "one\ntwo, mine\nthree\n")
-	editLibrary(t, h, "kinds", "markers.md", strings.Replace(markers, "c\n", "c, mine\n", 1))
 	editLibrary(t, h, "kinds", "both.md", "added here\n")
 	editLibrary(t, h, "kinds", "gone.md", "gone, edited here\n")
 	remove(t, filepath.Join(lib, "kept.md"))
-	editLibrary(t, h, "kinds", "logo.bin", "\x00mine")
-	editLibrary(t, h, "kinds", "tail.md", "x\ny, mine")
 	if err := os.Rename(filepath.Join(lib, "moved.md"), filepath.Join(lib, "moved-here.md")); err != nil {
 		t.Fatal(err)
 	}
-	editLibrary(t, h, "kinds", "mode.sh", "the same\n")
-	chmod(t, filepath.Join(lib, "mode.sh"), 0o755)
 	library := onDisk(t, h.library)
 
 	out := h.run("--json", "skill", "update", "kinds")
 	equal(t, "exit", out.exit, 4)
 	ev := h.one(out.stdout, "conflict")
-	equal(t, "files", conflictFiles(ev),
-		"both.md:1,gone.md:whole,kept.md:whole,logo.bin:binary,markers.md:1,mode.sh:whole,moved-here.md:whole,moved-upstream.md:whole,moved.md:whole,notes.md:1,tail.md:1")
-	equal(t, "notes.md", hunkOf(t, ev, "notes.md", 1), "two, mine\n|two\n|two, upstream\n")
-	equal(t, "markers.md", hunkOf(t, ev, "markers.md", 1), "c, mine\n|c\n|c, upstream\n")
-	equal(t, "both.md", hunkOf(t, ev, "both.md", 1), "added here\n||added upstream\n")
-	equal(t, "tail.md", hunkOf(t, ev, "tail.md", 1), "y, mine|y|y, upstream")
+	equal(t, "files", conflictPaths(ev), "both.md,gone.md,kept.md,moved-here.md,moved-upstream.md,moved.md,notes.md")
 	for _, c := range []struct {
 		path               string
 		base, mine, theirs bool
-		binary             bool
 	}{
 		{path: "both.md", mine: true, theirs: true},
 		{path: "gone.md", base: true, mine: true},
 		{path: "kept.md", base: true, theirs: true},
-		{path: "logo.bin", base: true, mine: true, theirs: true, binary: true},
-		{path: "mode.sh", mine: true, theirs: true},
 		{path: "moved-here.md", mine: true},
 		{path: "moved-upstream.md", theirs: true},
 		{path: "moved.md", base: true},
+		{path: "notes.md", base: true, mine: true, theirs: true},
 	} {
 		f := fileOf(t, ev, c.path)
 		for _, side := range []struct {
@@ -487,7 +408,6 @@ func TestSkillUpdateConflictsOfEveryKind(t *testing.T) {
 				t.Errorf("%s: %s is %v", c.path, side.name, f[side.name])
 			}
 		}
-		equal(t, c.path+": binary", f["binary"], c.binary)
 	}
 	equal(t, "the library", onDisk(t, h.library), library)
 	equal(t, "pending_merge", h.listed("kinds")["pending_merge"], true)
@@ -496,21 +416,18 @@ func TestSkillUpdateConflictsOfEveryKind(t *testing.T) {
 	h.accountGit("worktree", "remove", "-f", "-f", pendingCheckout(h, "kinds"))
 	text := h.run("skill", "update", "kinds")
 	equal(t, "exit in text", text.exit, 4)
-	equal(t, "the text", text.stdout, "kinds conflicts with its update from "+first[:7]+" to "+second[:7]+" in 11 files\n"+
-		"both.md:1\n<<<<<<< mine\nadded here\n||||||| base\n=======\nadded upstream\n>>>>>>> theirs\n"+
-		"gone.md: changed here, deleted by the update\n"+
-		"kept.md: deleted here, changed by the update\n"+
-		"logo.bin: binary, changed here and by the update\n"+
-		"markers.md:1\n<<<<<<< mine\nc, mine\n||||||| base\nc\n=======\nc, upstream\n>>>>>>> theirs\n"+
-		"mode.sh: added here and by the update, executable on one side only\n"+
-		"moved-here.md: moved here, and moved or deleted by the update\n"+
-		"moved-upstream.md: moved here by the update, and moved or deleted here\n"+
-		"moved.md: moved or deleted on both sides\n"+
-		"notes.md:1\n<<<<<<< mine\ntwo, mine\n||||||| base\ntwo\n=======\ntwo, upstream\n>>>>>>> theirs\n"+
-		"tail.md:1\n<<<<<<< mine\ny, mine\n||||||| base\ny\n=======\ny, upstream\n>>>>>>> theirs\n")
+	equal(t, "the text", text.stdout, "kinds conflicts with its update from "+first[:7]+" to "+second[:7]+" in 7 files\n"+
+		"both.md: both added\n"+
+		"gone.md: deleted by them\n"+
+		"kept.md: deleted by us\n"+
+		"moved-here.md: added by us\n"+
+		"moved-upstream.md: added by them\n"+
+		"moved.md: both deleted\n"+
+		"notes.md: both modified\n")
 	equal(t, "stderr in text", text.stderr,
-		"error: kinds conflicts with its update in 11 files, so the merge is pending and the library directory was left as it is\n"+
-			"hint: run 'agentx skill resolve kinds' to resolve the conflicts, or 'agentx skill resolve kinds --abort' to give the merge up\n")
+		"error: kinds conflicts with its update in 7 files, so the merge is pending and the library directory was left as it is\n"+
+			"hint: resolve it with git in "+pendingCheckout(h, "kinds")+" ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), "+
+			"then run 'agentx skill update kinds' again to apply it, or 'agentx skill update kinds --abort' to give it up\n")
 }
 
 // TestSkillUpdateMergesASkillAtTheRootOfItsSource: a skill at the root of
@@ -542,8 +459,7 @@ func TestSkillUpdateMergesASkillAtTheRootOfItsSource(t *testing.T) {
 	out := h.run("--json", "skill", "update", "rooted")
 	equal(t, "exit", out.exit, 4)
 	ev := h.one(out.stdout, "conflict")
-	equal(t, "files", conflictFiles(ev), "usage.md:1")
-	equal(t, "the hunk", hunkOf(t, ev, "usage.md", 1), "root usage, edited here\n|root usage\n|root usage, revised\n")
+	equal(t, "files", conflictPaths(ev), "usage.md")
 }
 
 // TestAPendingMergeBlocksWhatWouldReplaceOrRemoveTheSkill: while a merge
@@ -566,7 +482,7 @@ func TestAPendingMergeBlocksWhatWouldReplaceOrRemoveTheSkill(t *testing.T) {
 	head, mergeHead, _ := mergeState(t, h, "alpha")
 	refs := h.accountGit("for-each-ref", "--format=%(refname) %(objectname)")
 	library := onDisk(t, h.library)
-	hint := "run 'agentx skill resolve alpha --abort' to give the merge up; the library directory stays as it is"
+	hint := "run 'agentx skill update alpha --abort' to give the merge up; the library directory stays as it is"
 	for _, c := range []struct {
 		args []string
 		what string
@@ -701,7 +617,7 @@ func TestSkillUpdateOfASkillAdoptedWithItsEdits(t *testing.T) {
 			out := h.run("--json", "skill", "update", "alpha")
 			if c.conflicts {
 				equal(t, "exit", out.exit, 4)
-				equal(t, "files", conflictFiles(h.one(out.stdout, "conflict")), "notes.md:1")
+				equal(t, "files", conflictPaths(h.one(out.stdout, "conflict")), "notes.md")
 				equal(t, "the library", onDisk(t, h.library), library)
 				equal(t, "the candidate", h.ref(lineage.CandidateRef("alpha")), candidate)
 			} else {
@@ -823,7 +739,7 @@ exec %GIT% "$@"
 			next := h.run("--json", "skill", "update", "alpha")
 			equal(t, "exit of the next update", next.exit, 4)
 			equal(t, "hint of the next update", h.one(next.stdout, "error")["hint"],
-				"run 'agentx skill resolve alpha --abort' to give the merge up; the library directory stays as it is")
+				"run 'agentx skill update alpha --abort' to give the merge up; the library directory stays as it is")
 			equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), tip)
 			equal(t, "the candidate ref", h.ref(lineage.CandidateRef("alpha")), candidate)
 			equal(t, "the library", onDisk(t, h.library), library)
@@ -961,8 +877,8 @@ func TestSkillUpdateOfABranchStoredInAnOlderForm(t *testing.T) {
 // TestSkillUpdateMergesWithNoAttributesOfTheUsers: git attributes of the
 // user's own, a merge driver that joins both sides of every Markdown file
 // say, decide nothing about how an update merges: an edit the update
-// overlaps still conflicts, the merge is left pending with its hunk, the
-// file unmerged in the checkout, and the library directory is as it was.
+// overlaps still conflicts, the merge is left pending with the file
+// unmerged in the checkout, and the library directory is as it was.
 func TestSkillUpdateMergesWithNoAttributesOfTheUsers(t *testing.T) {
 	t.Parallel()
 	h, s, _ := updateHarness(t)
@@ -974,8 +890,7 @@ func TestSkillUpdateMergesWithNoAttributesOfTheUsers(t *testing.T) {
 	out := h.run("--json", "skill", "update", "alpha")
 	equal(t, "exit", out.exit, 4)
 	ev := h.one(out.stdout, "conflict")
-	equal(t, "files", conflictFiles(ev), "notes.md:1")
-	equal(t, "the hunk", hunkOf(t, ev, "notes.md", 1), crlf(editedNotes)+"|alpha notes\r\n|alpha notes, revised upstream\r\n")
+	equal(t, "files", conflictPaths(ev), "notes.md")
 	equal(t, "the unmerged paths", unmerged(t, h, "alpha"), "1 alpha-dir/notes.md\n2 alpha-dir/notes.md\n3 alpha-dir/notes.md")
 	equal(t, "the library", onDisk(t, h.library), library)
 }
@@ -1003,7 +918,7 @@ func TestSkillUpdateConflictsInTheCheckoutAsMergeTreeFoundIt(t *testing.T) {
 
 	out := h.run("--json", "skill", "update", "union")
 	equal(t, "exit", out.exit, 4)
-	equal(t, "files", conflictFiles(h.one(out.stdout, "conflict")), "notes.md:1")
+	equal(t, "files", conflictPaths(h.one(out.stdout, "conflict")), "notes.md")
 	_, mergeHead, _ := mergeState(t, h, "union")
 	equal(t, "MERGE_HEAD", mergeHead, candidate)
 	equal(t, "the unmerged paths", unmerged(t, h, "union"), "1 union/notes.md\n2 union/notes.md\n3 union/notes.md")
@@ -1049,7 +964,7 @@ func TestSkillUpdateKeepsAFileAddedInADirectoryTheUpdateRenamed(t *testing.T) {
 				editLibrary(t, h, "renamed", "notes.md", "notes, mine\n")
 				out := h.run("--json", "skill", "update", "renamed")
 				equal(t, "exit", out.exit, 4)
-				equal(t, "files", conflictFiles(h.one(out.stdout, "conflict")), "notes.md:1")
+				equal(t, "files", conflictPaths(h.one(out.stdout, "conflict")), "notes.md")
 				equal(t, "the unmerged paths", unmerged(t, h, "renamed"), "1 renamed/notes.md\n2 renamed/notes.md\n3 renamed/notes.md")
 				equal(t, "the user's file in the checkout", fileBody(t, filepath.Join(pendingCheckout(h, "renamed"), "renamed", "docs", "mine.md")), "a file of my own\n")
 				nothingAt(t, "the user's file moved", filepath.Join(pendingCheckout(h, "renamed"), "renamed", "guide", "mine.md"))
@@ -1178,7 +1093,7 @@ exec `+realGit(t)+` "$@"
 `)
 	out := h.run("--json", "skill", "remove", "alpha")
 	equal(t, "exit", out.exit, 4)
-	equal(t, "hint", h.one(out.stdout, "error")["hint"], "run 'agentx skill resolve alpha --abort' to give the merge up; the library directory stays as it is")
+	equal(t, "hint", h.one(out.stdout, "error")["hint"], "run 'agentx skill update alpha --abort' to give the merge up; the library directory stays as it is")
 	equal(t, "journals", journalCount(t, h), 0)
 	equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), tip)
 	equal(t, "the pending merge's HEAD", strings.TrimSpace(checkoutGit(t, h, "alpha", "rev-parse", "HEAD")), tip)

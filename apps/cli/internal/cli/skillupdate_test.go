@@ -300,13 +300,14 @@ func TestSkillUpdateAllMergesEditsAndLeavesConflictsPending(t *testing.T) {
 	sameEvent(t, "epsilon's library_skill and skill list's", events[1], h.listed("epsilon"))
 	conflict := h.one(out.stdout, "conflict")
 	equal(t, "the conflict's skill", conflict["name"], "beta")
-	equal(t, "the conflict's files", conflictFiles(conflict), "notes.md:1")
+	equal(t, "the conflict's files", conflictPaths(conflict), "notes.md")
 	refusal := "beta conflicts with its update in 1 file, so the merge is pending and the library directory was left as it is"
 	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "beta: "+refusal)
 	e := h.one(out.stdout, "error")
 	equal(t, "code", e["code"], "pending_merge")
 	equal(t, "message", e["message"], "1 of 3 skills could not be updated: beta: "+refusal)
-	equal(t, "hint", e["hint"], "run 'agentx skill resolve beta' to resolve the conflicts, or 'agentx skill resolve beta --abort' to give the merge up")
+	equal(t, "hint", e["hint"], "resolve it with git in "+pendingCheckout(h, "beta")+" ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), "+
+		"then run 'agentx skill update beta' again to apply it, or 'agentx skill update beta --abort' to give it up")
 	equal(t, "alpha's notes", fileBody(t, filepath.Join(h.library, "alpha", "notes.md")), "alpha notes, revised\n")
 	equal(t, "alpha's candidate", h.ref(lineage.CandidateRef("alpha")), "")
 	equal(t, "epsilon's notes", fileBody(t, filepath.Join(h.library, "epsilon", "notes.md")), "epsilon notes, revised\n")
@@ -328,7 +329,7 @@ func TestSkillUpdateAllMergesEditsAndLeavesConflictsPending(t *testing.T) {
 	equal(t, "exit of the second run", again.exit, 4)
 	e = h.one(again.stdout, "error")
 	equal(t, "message of the second run", e["message"], "beta has a merge with its update pending, so it cannot be updated until the merge is resolved or given up")
-	equal(t, "hint of the second run", e["hint"], "run 'agentx skill resolve beta --abort' to give the merge up; the library directory stays as it is")
+	equal(t, "hint of the second run", e["hint"], "run 'agentx skill update beta --abort' to give the merge up; the library directory stays as it is")
 	if got := h.eventsOfType(again.stdout, "conflict"); len(got) != 0 {
 		t.Errorf("the second run reported conflicts again: %v", got)
 	}
@@ -349,7 +350,7 @@ func TestSkillUpdateAllTextOfAMixedRun(t *testing.T) {
 		"  alpha    "+moved+"\n"+
 		"  epsilon  "+moved+"  edits merged cleanly\n"+
 		"beta conflicts with its update from "+first[:7]+" to "+second[:7]+" in 1 file\n"+
-		"notes.md:1\n<<<<<<< mine\nbeta notes, edited here\n||||||| base\nbeta notes\n=======\nbeta notes, revised\n>>>>>>> theirs\n")
+		"notes.md: both modified\n")
 	contains(t, "stderr", out.stderr, "error: 1 of 3 skills could not be updated: beta: beta conflicts with its update in 1 file")
 }
 
@@ -816,7 +817,7 @@ func TestSkillUpdateRefusesInOrder(t *testing.T) {
 			name: "a skill with a merge pending", skill: "alpha", exit: 4,
 			setup:   pendingMerge,
 			message: "alpha has a merge with its update pending, so it cannot be updated until the merge is resolved or given up",
-			hint:    "run 'agentx skill resolve alpha --abort' to give the merge up; the library directory stays as it is",
+			hint:    "run 'agentx skill update alpha --abort' to give the merge up; the library directory stays as it is",
 		},
 		{
 			name: "a skill with a merge pending whose source was removed", skill: "alpha", exit: 4,
@@ -825,7 +826,7 @@ func TestSkillUpdateRefusesInOrder(t *testing.T) {
 				h.mustRun("source", "remove", s.url)
 			},
 			message: "alpha has a merge with its update pending, so it cannot be updated until the merge is resolved or given up",
-			hint:    "run 'agentx skill resolve alpha --abort' to give the merge up; the library directory stays as it is",
+			hint:    "run 'agentx skill update alpha --abort' to give the merge up; the library directory stays as it is",
 		},
 		{
 			name: "a skill with a merge pending and no update left", skill: "alpha", exit: 4,
@@ -834,7 +835,7 @@ func TestSkillUpdateRefusesInOrder(t *testing.T) {
 				h.accountGit("update-ref", "-d", lineage.CandidateRef("alpha"))
 			},
 			message: "alpha has a merge with its update pending, so it cannot be updated until the merge is resolved or given up",
-			hint:    "run 'agentx skill resolve alpha --abort' to give the merge up; the library directory stays as it is",
+			hint:    "run 'agentx skill update alpha --abort' to give the merge up; the library directory stays as it is",
 		},
 		{
 			name: "a skill whose library entry is a symlink", skill: "alpha", exit: 6,
@@ -945,7 +946,7 @@ func TestSkillUpdateRefusesWhatChangedBeforeTheLock(t *testing.T) {
 			exit:   4,
 			branch: "tip", candidate: "candidate", notes: "alpha notes\n",
 			message: "alpha has a merge with its update pending, so it cannot be updated until the merge is resolved or given up",
-			hint:    "run 'agentx skill resolve alpha --abort' to give the merge up; the library directory stays as it is",
+			hint:    "run 'agentx skill update alpha --abort' to give the merge up; the library directory stays as it is",
 		},
 		{
 			name: "a check moves the candidate",
