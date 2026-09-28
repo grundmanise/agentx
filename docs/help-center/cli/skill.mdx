@@ -740,7 +740,7 @@ The command that resolves the last file finishes the merge:
 ✓ resolved docx and updated it from 3f2a9c1 to 8b1e0f4, 1 copy placement refreshed
 ```
 
-agentx commits the merge in the checkout as you, with your git `user.name` and `user.email`, and the skill is then at the new version with the changes you chose, as after any update: copies that held your version, or the version you installed, get the merged one, and copies you edited in place are kept. Files your ignore rules name stay in your library directory. If you resolve or commit the merge with plain git, run `agentx skill resolve docx` to finish it.
+agentx commits the merge in the checkout as you, with your git `user.name` and `user.email`, and the skill is then at the new version with the changes you chose, as after any update: copies that held your version, or the version you installed, get the merged one, and copies you edited in place are kept. Files your ignore rules name stay in your library directory. If you resolve or commit the merge with plain git, run `agentx skill resolve docx` to finish it. Commit with `git commit --no-edit`, or keep the `Agentx-Base:` line of the message git proposes: it names the update, and without it agentx cannot finish the merge.
 
 If you edited the skill while the merge was pending, your edit is kept: agentx merges it into the finished merge. When your edit and your choices touch different lines, the merge finishes at once. When they overlap, the command shows only the parts where they overlap and stops with exit code 4; resolve them as before, and every other choice you made stays.
 
