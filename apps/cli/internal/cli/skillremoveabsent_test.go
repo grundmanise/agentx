@@ -25,6 +25,18 @@ func absentHarness(t *testing.T) (h *harness, claude, cursor string) {
 	return h, filepath.Join(h.home, ".claude", "skills", "alpha"), filepath.Join(h.home, ".cursor", "skills", "alpha")
 }
 
+// refValue is what a ref of the account repo holds, empty when it holds
+// nothing: the removal under test may have deleted it, which is the thing
+// being measured rather than a reason to fail on the spot.
+func refValue(t *testing.T, h *harness, ref string) string {
+	t.Helper()
+	out, err := h.accountGitErr("for-each-ref", "--format=%(objectname)", ref)
+	if err != nil {
+		t.Fatalf("for-each-ref %s: %v", ref, err)
+	}
+	return strings.TrimSpace(out)
+}
+
 // TestSkillRemoveTakesAwayWhatIsLeftOfASkillTheLibraryNoLongerHolds: the
 // listing warns about a managed skill whose library directory is gone until
 // it is installed again or removed, and the removal always works, whatever
@@ -118,33 +130,31 @@ func TestSkillRemoveOfAnAbsentSkillWithNoLineageSaysEveryCopyWent(t *testing.T) 
 // removal of a skill the library no longer holds takes away is decided by
 // what it read before the lock, and it reads both inputs again under it. A
 // git wrapper changes one of them right after the first read of the refs:
-// the library comes to hold the skill again, the import branch moves, or a
-// fork of the name appears. The removal then refuses before it writes a
-// journal, and every placement, the copy mode and whatever the other
-// writer wrote stay as they were.
+// the library comes to hold the skill again, or a fork of the name
+// appears, which the second read of the refs refuses as it refuses the
+// import branch moving. The removal then refuses before it writes a
+// journal, and every placement, the copy mode and whatever the other writer
+// wrote stay as they were.
 func TestSkillRemoveOfAnAbsentSkillRefusesWhatChangedUnderTheLock(t *testing.T) {
 	t.Parallel()
 	real, err := exec.LookPath("git")
 	if err != nil {
 		t.Fatal(err)
 	}
-	moved := "the import branch refs/heads/managed/alpha moved while alpha was being removed, so nothing was removed"
 	for _, c := range []struct {
 		name, message string
-		ref           string // the ref the wrapper writes; empty when it writes the library
-		fork          bool   // the ref is a fork's, and the managed branch stays where it was
+		fork          string // the fork's ref the wrapper writes; empty when it writes the library
 	}{
-		{"the library comes to hold the skill", "the library came to hold alpha while it was being removed, so nothing was removed", "", false},
-		{"the managed branch moves", moved, "refs/heads/managed/alpha", false},
-		{"a fork appears", moved, "refs/heads/skills/alpha", true},
+		{"the library comes to hold the skill", "the library came to hold alpha while it was being removed, so nothing was removed", ""},
+		{"a fork appears", "the import branch refs/heads/managed/alpha moved while alpha was being removed, so nothing was removed", "refs/heads/skills/alpha"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			h, claude, cursor := absentHarness(t)
 			tip := refValue(t, h, "refs/heads/managed/alpha")
 			lib := filepath.Join(h.library, "alpha")
-			var change, written string
-			if c.ref == "" {
+			change := real + " --git-dir=" + shellWord(gitx.AccountRepoPath(h.agentx)) + " update-ref " + c.fork + " " + tip + " || exit 1"
+			if c.fork == "" {
 				// A directory with no SKILL.md is not the skill, so the
 				// removal still takes the path of one the library does
 				// not hold, until the wrapper writes the SKILL.md.
@@ -152,12 +162,6 @@ func TestSkillRemoveOfAnAbsentSkillRefusesWhatChangedUnderTheLock(t *testing.T) 
 					t.Fatal(err)
 				}
 				change = "printf '%s' " + shellWord(skill("alpha", "Back again")) + " > " + shellWord(filepath.Join(lib, "SKILL.md"))
-			} else {
-				written = tip
-				if !c.fork {
-					written = h.accountGit("commit-tree", tip+"^{tree}", "-p", tip, "-m", "moved")
-				}
-				change = real + " --git-dir=" + shellWord(gitx.AccountRepoPath(h.agentx)) + " update-ref " + c.ref + " " + written + " || exit 1"
 			}
 			marker := filepath.Join(t.TempDir(), "changed")
 			stubGit(t, h, `#!/bin/sh
@@ -187,14 +191,11 @@ exec `+real+` "$@"
 				t.Errorf("cursor's copy is gone: %v", err)
 			}
 			equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "cursor")
-			if c.ref == "" {
+			equal(t, "the import branch", refValue(t, h, "refs/heads/managed/alpha"), tip)
+			if c.fork == "" {
 				equal(t, "the SKILL.md written meanwhile", fileBody(t, filepath.Join(lib, "SKILL.md")), skill("alpha", "Back again"))
-				equal(t, "the import branch", refValue(t, h, "refs/heads/managed/alpha"), tip)
 			} else {
-				equal(t, "the ref written meanwhile", refValue(t, h, c.ref), written)
-			}
-			if c.fork {
-				equal(t, "the import branch", refValue(t, h, "refs/heads/managed/alpha"), tip)
+				equal(t, "the fork written meanwhile", refValue(t, h, c.fork), tip)
 			}
 			for _, dir := range []string{h.library, filepath.Dir(claude), filepath.Dir(cursor)} {
 				equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
@@ -258,10 +259,6 @@ func TestRemoveChildProcess(t *testing.T) {
 // next command recovers either one, and the removal is then whole.
 func TestSkillRemoveOfAnAbsentSkillRecovers(t *testing.T) {
 	t.Parallel()
-	real, err := exec.LookPath("git")
-	if err != nil {
-		t.Fatal(err)
-	}
 	for _, c := range []struct {
 		name, script string
 		branch       bool // the branch is still there when the run is killed
@@ -292,19 +289,7 @@ exec %GIT% "$@"
 			h, claude, cursor := absentHarness(t)
 			branch := refValue(t, h, "refs/heads/managed/alpha")
 
-			path := h.env["PATH"]
-			script := strings.NewReplacer("%MUTATIONS%", shellWord(filepath.Join(h.agentx, "mutations")), "%GIT%", real).Replace(c.script)
-			stubGit(t, h, "#!/bin/sh"+script)
-			child := exec.Command(os.Args[0], "-test.run=^TestRemoveChildProcess$", "-test.v")
-			child.Env = append(os.Environ(), removeChildEnv+"=alpha")
-			for k, v := range h.env {
-				child.Env = append(child.Env, k+"="+v)
-			}
-			out, err := child.CombinedOutput()
-			h.env["PATH"] = path
-			if err == nil {
-				t.Fatalf("the removal was not killed:\n%s", out)
-			}
+			out := killedChild(t, h, "TestRemoveChildProcess", removeChildEnv, "alpha", c.script)
 			equal(t, "journals when the removal was killed", journalCount(t, h), 1)
 			nothingAt(t, "claude-code's link", claude)
 			nothingAt(t, "cursor's copy", cursor)

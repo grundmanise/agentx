@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -250,6 +251,43 @@ func TestSkillRemoveLeavesAFileAndAHandMadeDirectory(t *testing.T) {
 	contains(t, "stderr", out.stderr, aFile+" is not a placement agentx made")
 	contains(t, "stderr", out.stderr, handMade+" is a directory agentx did not place there")
 	contains(t, "the result", out.stdout, "2 placements left in place")
+	// Cursor still sees the skill in the directory left, and the warning
+	// that left it said so: the one that names what a client still sees
+	// after a whole removal does not name it a second time.
+	if n := strings.Count(out.stderr, handMade); n != 1 {
+		t.Errorf("%s is named %d times on stderr, want once:\n%s", handMade, n, out.stderr)
+	}
+}
+
+// TestWholeRemovalSaysWhoStillSeesTheSkill covers what a removal without
+// --from claims. It reports every covered configuration as having lost the
+// skill, and for a client that reads the library that claim rests on the
+// library entry alone: the removal never looks at a directory of that
+// client's own, because it deletes only what agentx placed. So a leftover
+// directory under the same name leaves the client seeing the skill a second
+// after the run said it did not, and a whole removal emits no skill event
+// for anything to correct the claim with. The run has to say it itself.
+func TestWholeRemovalSaysWhoStillSeesTheSkill(t *testing.T) {
+	t.Parallel()
+	h, s := placementHarness(t)
+	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+
+	// Codex reads the library, so the removal never examines its own skills
+	// directory. Cursor reads that directory too, so both clients keep the
+	// skill after the library entry goes.
+	leftover := filepath.Join(h.home, ".codex", "skills", "alpha")
+	writeFile(t, mkdirs(t, leftover, "SKILL.md"), skill("alpha", "A leftover of mine"))
+
+	out := h.run("skill", "remove", "alpha")
+	equal(t, "exit", out.exit, 0)
+	contains(t, "the warning", out.stderr, "codex still sees alpha at "+leftover)
+	contains(t, "the warning", out.stderr, "cursor still sees alpha at "+leftover)
+
+	// What a scan says a moment later is what the run said, not the
+	// opposite of it.
+	sc := h.run("scan")
+	equal(t, "scan", sc.exit, 0)
+	contains(t, "the scan", sc.stdout, leftover)
 }
 
 // TestSkillRemoveRefusesAFork leaves a fork's branch and library entry
@@ -303,65 +341,48 @@ func TestSkillRemoveDropsTheCopyModeOfWhatItRemoved(t *testing.T) {
 // directory came to differ from the library's version: the user may have
 // edited the copy, replaced it with something of another project, or had a
 // directory of their own adopted there that was never a copy agentx wrote.
-// So the warning claims no history, and the second case proves it: a
+// So the warning claims no history, and the replaced copies prove it: a
 // directory holding somebody else's README is not "a copy you edited".
 func TestSkillRemoveSaysACopyWasNotTheLibraryVersion(t *testing.T) {
 	t.Parallel()
+	edit := func(t *testing.T, place string) {
+		writeFile(t, filepath.Join(place, "notes.md"), "edited by hand\n")
+	}
+	replace := func(t *testing.T, place string) {
+		remove(t, place)
+		writeFile(t, mkdirs(t, place, "README.md"), "# another project\n")
+	}
+	// Text and JSON say it from one list of warnings, and the two kinds of
+	// difference take one path, so each removal is run once.
 	for _, c := range []struct {
 		what  string
 		build func(t *testing.T, place string)
-	}{{
-		what: "a copy the user edited",
-		build: func(t *testing.T, place string) {
-			writeFile(t, filepath.Join(place, "notes.md"), "edited by hand\n")
-		},
-	}, {
-		what: "a copy the user replaced with something else",
-		build: func(t *testing.T, place string) {
-			if err := os.RemoveAll(place); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.MkdirAll(place, 0o755); err != nil {
-				t.Fatal(err)
-			}
-			writeFile(t, filepath.Join(place, "README.md"), "# another project\n")
-		},
-	}} {
-		for _, r := range []struct {
-			what string
-			from []string
-			json bool
-		}{
-			{what: "from cursor", from: []string{"--from", "cursor"}},
-			{what: "from cursor with --json", from: []string{"--from", "cursor"}, json: true},
-			{what: "from universal with --json", from: []string{"--from", "universal"}, json: true},
-			{what: "off the machine", from: nil},
-		} {
-			t.Run(c.what+" "+r.what, func(t *testing.T) {
-				t.Parallel()
-				h, s := placementHarness(t)
-				equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "cursor", "--copy").exit, 0)
-				place := filepath.Join(h.home, ".cursor", "skills", "alpha")
-				c.build(t, place)
+		args  []string // after skill remove alpha
+	}{
+		{"a copy the user edited, from cursor", edit, []string{"--from", "cursor"}},
+		{"a copy the user replaced, from universal with --json", replace, []string{"--from", "universal", "--json"}},
+		{"a copy the user replaced, off the machine", replace, nil},
+	} {
+		t.Run(c.what, func(t *testing.T) {
+			t.Parallel()
+			h, s := placementHarness(t)
+			equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "cursor", "--copy").exit, 0)
+			place := filepath.Join(h.home, ".cursor", "skills", "alpha")
+			c.build(t, place)
 
-				args := append([]string{"skill", "remove", "alpha"}, r.from...)
-				if r.json {
-					args = append(args, "--json")
-				}
-				out := h.run(args...)
-				equal(t, "exit", out.exit, 0)
-				nothingAt(t, "the copy", place)
-				warning := removedCopyWarning(place, "alpha")
-				if r.json {
-					equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), warning)
-				} else {
-					equal(t, "stderr", out.stderr, "warning: "+warning+"\n")
-				}
-				if strings.Contains(out.stderr, "edited") {
-					t.Errorf("the warning claims a history agentx has no record of:\n%s", out.stderr)
-				}
-			})
-		}
+			out := h.run(append([]string{"skill", "remove", "alpha"}, c.args...)...)
+			equal(t, "exit", out.exit, 0)
+			nothingAt(t, "the copy", place)
+			warning := removedCopyWarning(place, "alpha")
+			if slices.Contains(c.args, "--json") {
+				equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), warning)
+			} else {
+				equal(t, "stderr", out.stderr, "warning: "+warning+"\n")
+			}
+			if strings.Contains(out.stderr, "edited") {
+				t.Errorf("the warning claims a history agentx has no record of:\n%s", out.stderr)
+			}
+		})
 	}
 }
 
@@ -416,61 +437,28 @@ func TestSkillRemoveHandlesAPlacementThatIsNotThere(t *testing.T) {
 	equal(t, "journals left behind", journalCount(t, h), 0)
 }
 
-// TestSkillRemoveSanitisesTheNameAndQuotesThePaths removes a skill whose
-// name holds control characters: a library directory whoever made it named
-// across two lines and with an escape sequence in it, and a skill a source
-// named with a C1 control, which an import branch can hold. The name on the
-// line that confirms the removal is sanitised, and so is the import branch,
-// which carries it; the paths of the rows and of the line naming what was
-// deleted carry it too, so they are quoted as skill place quotes its rows:
-// every line stays one line, and each path still names what was on disk.
+// TestSkillRemoveSanitisesTheNameAndQuotesThePaths removes a library
+// directory whoever made it named across two lines and with an escape
+// sequence in it. The name on the line that confirms the removal is
+// sanitised; the paths of the rows and of the line naming what was deleted
+// carry it too, so they are quoted as skill place quotes its rows: every
+// line stays one line, and each path still names what was on disk. The two
+// rules are TestSanitisedText and TestQuotedPath; this is the removal
+// using them.
 func TestSkillRemoveSanitisesTheNameAndQuotesThePaths(t *testing.T) {
 	t.Parallel()
-	for _, tt := range []struct {
-		what    string
-		install func(*testing.T, *harness, string)
-		name    string
-		shown   string
-		quoted  string
-		branch  string
-	}{
-		{
-			what: "a library directory",
-			install: func(t *testing.T, h *harness, name string) {
-				dir := filepath.Join(h.library, name)
-				if err := os.MkdirAll(dir, 0o755); err != nil {
-					t.Fatal(err)
-				}
-				writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: mine\ndescription: made here\n---\n\nmine\n")
-				equal(t, "place", h.run("skill", "place", name, "--to", "cursor").exit, 0)
-			},
-			name: "two\nrows \x1b[31mRED\x1b[0m", shown: "two rows [31mRED [0m", quoted: `two\nrows \033[31mRED\033[0m"`,
-		},
-		{
-			what: "a skill a source named",
-			install: func(t *testing.T, h *harness, name string) {
-				s := h.newSourceRepo("odd", true)
-				s.write(filepath.Join("skills", "odd", "SKILL.md"), "---\nname: "+yamlQuoted(name)+"\ndescription: An odd skill\n---\n\n# odd\n")
-				s.commit("an odd skill")
-				equal(t, "add", h.run("skill", "add", s.url, "--skill", name, "--to", "cursor").exit, 0)
-			},
-			name: "re\u009bmove", shown: "re move", quoted: `re\302\233move"`, branch: " and refs/heads/managed/re move",
-		},
-	} {
-		t.Run(tt.what, func(t *testing.T) {
-			t.Parallel()
-			h, _ := placementHarness(t)
-			tt.install(t, h, tt.name)
+	h := newHarness(t)
+	h.build(t, fixture{dirs: []string{".cursor"}})
+	const name = "two\nrows \x1b[31mRED\x1b[0m"
+	writeFile(t, mkdirs(t, filepath.Join(h.library, name), "SKILL.md"), skill("mine", "made here"))
+	h.mustRun("skill", "place", name, "--to", "cursor")
 
-			out := h.run("skill", "remove", tt.name)
-			equal(t, "exit", out.exit, 0)
-			placement := `"` + filepath.Join(h.home, ".cursor", "skills") + string(filepath.Separator) + tt.quoted
-			library := `"` + h.library + string(filepath.Separator) + tt.quoted
-			equal(t, "stdout", out.stdout, "✓ removed "+tt.shown+" from the library: 3 placements\n"+
-				"  cursor      symlink  "+placement+"\n"+
-				"  codex       library  "+library+"\n"+
-				"  gemini-cli  library  "+library+"\n"+
-				"  deleted "+library+tt.branch+"\n")
-		})
-	}
+	out := h.run("skill", "remove", name)
+	equal(t, "exit", out.exit, 0)
+	quoted := string(filepath.Separator) + `two\nrows \033[31mRED\033[0m"`
+	lines := strings.Split(strings.TrimSuffix(out.stdout, "\n"), "\n")
+	equal(t, "the first line", lines[0], "✓ removed two rows [31mRED [0m from the library: 1 placement")
+	contains(t, "the row", out.stdout, "  cursor  symlink  \""+filepath.Join(h.home, ".cursor", "skills")+quoted+"\n")
+	contains(t, "what was deleted", out.stdout, "  deleted \""+h.library+quoted+"\n")
+	equal(t, "lines", len(lines), 3)
 }
