@@ -159,15 +159,13 @@ func (r *Runner) IsolatedStatus(ctx context.Context, gitDir string, upTo int, ar
 // file modes and symlinks as they are, whatever the repository's own
 // configuration says of them. It returns stdout as is.
 func (r *Runner) InCheckout(ctx context.Context, dir string, args ...string) (string, error) {
-	out, _, err := r.InCheckoutStatus(ctx, dir, 0, args...)
-	return out, err
+	return r.InCheckoutInput(ctx, dir, nil, args...)
 }
 
-// InCheckoutStatus is InCheckout for a git whose exit status is part of
-// its answer, as IsolatedStatus is for Isolated.
-func (r *Runner) InCheckoutStatus(ctx context.Context, dir string, upTo int, args ...string) (string, int, error) {
+// InCheckoutInput is InCheckout with stdin fed to git.
+func (r *Runner) InCheckoutInput(ctx context.Context, dir string, stdin io.Reader, args ...string) (string, error) {
 	full := append(isolatedConfig(), "-c", "core.fileMode=true", "-c", "core.symlinks=true")
-	return r.runStatus(ctx, call{isolated: true, dir: dir}, upTo, append(full, args...)...)
+	return r.run(ctx, call{isolated: true, dir: dir, stdin: stdin}, append(full, args...)...)
 }
 
 // AddCheckout adds a linked worktree of the repository at gitDir at path,
