@@ -128,8 +128,8 @@ Applying a managed skill's update candidate, only ever at the user's request: th
 _Avoid_: upgrade, pull, sync
 
 **Pending merge**:
-The merge an update of a modified skill leaves when the edits and the update candidate conflict: a commit in the account repo whose tree is git's merge of the three versions and whose trailers name them, the base version, the edits and the candidate. The library directory, and so every agent, keeps the content it had until the merge is resolved or given up; a half-merged file is never written where an agent reads it. While it exists the skill is not updated, reverted or removed. Survives restarts.
-_Avoid_: merge in progress, conflict state, unmerged skill
+The merge an update of a modified skill leaves when the edits and the update candidate conflict: an ordinary Git merge in progress in a hidden checkout of the account repo under agentx home. The library directory, and so every agent, keeps its content until the merge is resolved or given up. While it exists the skill is not updated, reverted or removed. Survives restarts.
+_Avoid_: merge ref, conflict state
 
 **Modified skill**:
 A managed skill whose on-disk content no longer matches its base version because it was edited outside agentx, by hand or by any other tool. Decided as git decides for a work tree: git records the library directory over an index loaded from the base version, and the skill is modified when the tree it writes differs from the base version's, so a changed file mode or symlink counts as an edit and a file git ignores does not. Shown as drift, local to one machine, never synced. Can be reverted, updated by merging its edits with the update, or converted to a fork.

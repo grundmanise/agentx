@@ -327,7 +327,7 @@ Each row shows the skill, what agentx knows about it, how it stands against the 
 - `source removed`: the source the skill came from is no longer added on this machine. The skill keeps working, stays where it is and keeps its record of where it came from. Add the source again to clear it: see below.
 - `upstream removed`: the last [update check](#check-for-updates) found the skill gone from its source. The skill stays as it is and is never updated. The next check that finds it back in the source clears the state.
 - `update available`: the last update check found a newer version of the skill in its source. Nothing changed in your library; read the update with `agentx skill diff <name> --upstream`, and apply it with [`agentx skill update <name>`](#update-a-skill).
-- `merge pending (<n> unresolved)`: an update of the skill found your edits conflicting with it, and `<n>` files still conflict. The update left your library directory as it was, and it applies nothing until the merge is resolved or given up. See [When your edits conflict](#when-your-edits-conflict).
+- `merge pending`: an update of the skill found your edits conflicting with it. The update left your library directory as it was, and it applies nothing until the merge is resolved or given up. See [When your edits conflict](#when-your-edits-conflict).
 
 A skill can be in more than one state at once, so the row names each of them: `modified, source removed` is a skill you edited whose source you then removed. `displaced` and `missing` are information only: they never make a command fail.
 
@@ -637,7 +637,7 @@ Git merges line by line, and changes to lines next to each other conflict, so a 
 
 ### When your edits conflict
 
-When your changes and the update change the same lines, agentx changes nothing in your library. The merge is kept in the account repo in agentx home and never in the directory your agents read, so an agent never loads a half-merged file with conflict markers in it; the skill keeps working exactly as you left it. `skill update` stops with exit code 4 and shows every conflict: each part of a file that conflicts, numbered per file, with your version (`mine`), the version you installed (`base`) and the update's (`theirs`):
+When your changes and the update change the same lines, agentx changes nothing in your library. The merge waits in a hidden Git checkout in agentx home, `~/.agentx/merges/<name>`, and never in the directory your agents read, so an agent never loads a half-merged file with conflict markers in it; the skill keeps working exactly as you left it. `skill update` stops with exit code 4 and shows every conflict: each part of a file that conflicts, numbered per file, with your version (`mine`), the version you installed (`base`) and the update's (`theirs`):
 
 ```text
 docx conflicts with its update from 3f2a9c1 to 8b1e0f4 in 2 files
@@ -654,12 +654,12 @@ error: docx conflicts with its update in 2 files, so the merge is pending and th
 hint: run 'agentx skill resolve docx' to resolve the conflicts, or 'agentx skill resolve docx --abort' to give the merge up
 ```
 
-A file you changed and the update deleted, or the other way round, a file you and the update moved to different places, a binary file both sides changed, a file where the other side has a folder, and a file you replaced with a symlink that the update changed conflict as a whole file, and the line says how, for example `docs: a directory here, a file in the update`. A text file that conflicts in its content always has at least one part to choose from: when git cannot tell the parts apart, the whole file is one part.
+A file you changed and the update deleted, or the other way round, a file you and the update moved to different places, a binary file both sides changed, and a file you replaced with a symlink that the update changed conflict as a whole file, and the line says how, for example `logo.png: binary, changed here and by the update`. Files your ignore rules name are not part of your edits, so they never conflict and stay as they are.
 
-The merge stays pending until it is resolved or given up, across restarts, and `agentx skill list` shows it as `merge pending (2 unresolved)`. Meanwhile:
+The checkout is an ordinary Git merge in progress: your edits are checked out and the update is being merged into them, so `git status`, `git diff` and `git commit` work there as in any merge. It stays until the merge is resolved or given up, across restarts, and `agentx skill list` shows the skill as `merge pending`. Meanwhile:
 
 - `skill update`, `skill revert`, and `skill remove` without `--from` or with `--from universal`, stop with exit code 4 and change nothing.
-- Everything else works as usual: placing the skill, removing it from one client, repairing placements, `skill diff`, and update checks, which may find a newer version still. Repairing with `--keep-placement` replaces the library directory with the client's copy; resolving the merge then takes that change into account, as it does any edit you make meanwhile.
+- Everything else works as usual: placing the skill, `skill place` with its flags included, removing it from one client, `skill diff`, and update checks, which may find a newer version still. `skill place --keep-placement` replaces the library directory with the client's copy; resolving the merge then takes that change into account, as it does any edit you make meanwhile.
 
 With `--all`, a skill whose edits conflict is left with its merge pending and the other skills are still updated. The run then exits with code 4, or 6 if other skills were not updated for other reasons.
 
@@ -738,12 +738,12 @@ For each skill whose edits conflict with its update, `skill update` emits one `c
 {"type":"conflict","schema_version":1,"name":"docx","kind":"managed","base":"5e1f0a2b...","mine":"a4c3d2e1...","theirs":"9f8e7d6c...","files":[{"path":"SKILL.md","base":"1a2b3c4d...","mine":"5e6f7a8b...","theirs":"9c0d1e2f...","binary":false,"hunks":[{"index":1,"mine":"Always answer in French.\n","base":"Always answer in English.\n","theirs":"Always answer in the language of the question.\n"}]},{"path":"logo.png","base":"3b4c5d6e...","mine":"7f8a9b0c...","theirs":"1d2e3f4a...","binary":true,"hunks":[]}]}
 ```
 
-`base`, `mine` and `theirs` at the top are the three versions merged: the commit of the version you installed, your library directory as it was, and the update. Each file names the blob each of them holds, `null` for one that has no file there, and `hunks` lists every part that conflicts, as text, numbered from 1 in the order they come in the file. A text file that conflicts in its content has at least one hunk, and when git cannot tell its parts apart that hunk is the whole of each version. A file that conflicts as a whole, a binary, deleted or moved file, one that meets a folder or a symlink, or one added on both sides that is executable on one side only, has no hunks, and `binary` says whether it is binary. Every `path` is a path of the skill, relative to its directory.
+`base`, `mine` and `theirs` at the top are the three versions merged: the commit of the version you installed, your library directory as git records it, without the files your ignore rules name, and the update. They are the base, the `HEAD` and the `MERGE_HEAD` of the merge in `~/.agentx/merges/<name>`. Each file is one that conflicts there and names the blob each version holds, `null` for one that has no file there, and `hunks` lists every part that conflicts, as text, as the file in the checkout holds it, numbered from 1 in the order they come in the file. A file that conflicts as a whole, a binary, deleted or moved file, one that meets a symlink, or one added on both sides that is executable on one side only, has no hunks, and `binary` says whether it is binary. Every `path` is a path of the skill, relative to its directory.
 
-A skill with a merge pending carries `pending_merge` in its `library_skill` event and in the snapshot, with the number of files that still conflict:
+A skill with a merge pending carries `pending_merge: true` in its `library_skill` event and in the snapshot:
 
 ```json
-{"type":"library_skill","schema_version":1,"name":"docx","kind":"managed",...,"state":"modified","candidate":{"upstream_commit":"8b1e0f4a...","content_hash":"4c3b2a19..."},"pending_merge":{"unresolved":2},"placements":[...],"universal":["codex","gemini-cli"]}
+{"type":"library_skill","schema_version":1,"name":"docx","kind":"managed",...,"state":"modified","candidate":{"upstream_commit":"8b1e0f4a...","content_hash":"4c3b2a19..."},"pending_merge":true,"placements":[...],"universal":["codex","gemini-cli"]}
 ```
 
 ## Where it is recorded
