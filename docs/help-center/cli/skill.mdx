@@ -1,6 +1,6 @@
 ---
 title: "agentx skill"
-description: "Install skills from a source into your library, place them in your agent clients and put their placements back, see and revert what you changed, check for updates and apply them, remove them again, and see what you have."
+description: "Install skills from a source into your library, place them in your agent clients and put their placements back, see and revert what you changed, check for updates and apply them, resolve the merges an update leaves, remove them again, and see what you have."
 ---
 
 Your library is one directory, `~/.agents/skills`, that holds every skill agentx manages for you. Installing a skill puts it there once and links it into each agent client, so every client sees the same files and an update reaches all of them at once.
@@ -677,6 +677,85 @@ With `--all`, a skill whose edits conflict is left with its merge pending and th
 
 With `--all`, a skill that is not updated does not stop the others: agentx names it and still updates the rest, then exits with the code those skills share, or 6 when they differ. A skill whose source you removed is skipped rather than counted, so it leaves the exit code at 0.
 
+## Resolve a conflict
+
+When an update leaves a [merge pending](#when-your-edits-conflict), finish it with `agentx skill resolve`. The merge waits in the hidden Git checkout `~/.agentx/merges/<name>`, where `git status` and `git diff` work as in any merge, and your library directory keeps working exactly as you left it until the merge is complete.
+
+### See what is left
+
+```sh
+agentx skill resolve docx
+```
+
+```text
+docx has a merge pending with its update from 3f2a9c1 to 8b1e0f4: 2 files unresolved
+SKILL.md:1
+<<<<<<< mine
+Always answer in French.
+||||||| base
+Always answer in English.
+=======
+Always answer in the language of the question.
+>>>>>>> theirs
+logo.png: binary, changed here and by the update
+```
+
+This changes nothing. Each part of a file that conflicts is numbered per file, as in `SKILL.md:1`, which is how you choose it.
+
+### Choose parts
+
+Choose `mine`, `theirs` or `both` for each part with `--hunk <file>:<part>=<side>`:
+
+```sh
+agentx skill resolve docx --hunk SKILL.md:1=theirs --hunk logo.png:1=mine
+```
+
+- `mine` keeps your version of the part, `theirs` takes the update's, and `both` keeps your lines followed by the update's.
+- Choose every part of a file in the same command. For a file with three parts, give three `--hunk` flags; leaving one out stops with exit code 1 and names the parts you missed.
+- A file that conflicts as a whole, such as a binary file or a file one side deleted, has one part, `1`, and takes `mine` or `theirs`. Choosing the side that deleted the file deletes it.
+- Paths are relative to the skill's folder.
+
+agentx writes your choice into the file in the checkout and stages it, as `git add` does, so you can resolve a merge over several commands. A staged file is resolved: to start a file over, give the merge up and update again. You can also resolve files with plain git in the checkout; what you stage there counts too.
+
+### Open in your editor
+
+```sh
+agentx skill resolve docx --editor
+```
+
+agentx opens every text file left to resolve in your editor, in place in the checkout, with the conflict markers the merge wrote. Edit each file to what you want, remove the markers, save, and close the editor. To open one file only, name it: `agentx skill resolve docx --editor SKILL.md`.
+
+- agentx uses the editor in `GIT_EDITOR`, then the one in `EDITOR`, then VS Code with `code --wait`.
+- A file you close with no conflict markers left is staged. A file you close with markers in it stays unresolved, with what you saved.
+- Other agentx commands, and the desktop app, keep working while your editor is open. Ctrl-C goes to your editor.
+- If another agentx command is running when you close the editor, agentx stops with exit code 7 and stages nothing. What you saved stays in the checkout: run the same command again to stage it.
+- If your editor fails, or agentx is stopped, nothing is staged, and what you saved stays in the checkout.
+- A binary file, or any file that conflicts as a whole, has nothing to edit: choose a side for it with `--hunk`.
+
+### Finish the merge
+
+The command that resolves the last file finishes the merge:
+
+```text
+✓ resolved docx and updated it from 3f2a9c1 to 8b1e0f4, 1 copy placement refreshed
+```
+
+agentx commits the merge in the checkout as you, with your git `user.name` and `user.email`, and the skill is then at the new version with the changes you chose, as after any update: copies that held your version, or the version you installed, get the merged one, and copies you edited in place are kept. Files your ignore rules name stay in your library directory. If you resolve or commit the merge with plain git, run `agentx skill resolve docx` to finish it.
+
+If you edited the skill while the merge was pending, your edit is kept: agentx merges it into the finished merge. When your edit and your choices touch different lines, the merge finishes at once. When they overlap, the command shows only the parts where they overlap and stops with exit code 4; resolve them as before, and every other choice you made stays.
+
+If the skill's import branch was moved outside agentx while the merge was pending, the merge cannot finish: agentx stops with exit code 6 and keeps the checkout. Give the merge up with `--abort`.
+
+If a check found an even newer version while the merge was pending, the skill is updated to the version you merged, and the newer one stays available for your next update.
+
+### Give up
+
+```sh
+agentx skill resolve docx --abort
+```
+
+This works as `git merge --abort`: the checkout is removed, with everything you chose or edited in it, and your library directory, your copies and the update the check found are left exactly as they were. Run `agentx skill update docx` to merge again.
+
 ## Script it
 
 Add `--json` to get one `library_skill` event per skill:
@@ -740,6 +819,8 @@ For each skill whose edits conflict with its update, `skill update` emits one `c
 
 `base`, `mine` and `theirs` at the top are the three versions merged: the commit of the version you installed, your library directory as git records it, without the files your ignore rules name, and the update. They are the base, the `HEAD` and the `MERGE_HEAD` of the merge in `~/.agentx/merges/<name>`. Each file is one that conflicts there and names the blob each version holds, `null` for one that has no file there, and `hunks` lists every part that conflicts, as text, as the file in the checkout holds it, numbered from 1 in the order they come in the file. A file that conflicts as a whole, a binary, deleted or moved file, one that meets a symlink, or one added on both sides that is executable on one side only, has no hunks, and `binary` says whether it is binary. Every `path` is a path of the skill, relative to its directory.
 
+`skill resolve` with no flag emits the same `conflict` event, listing the files left to resolve. A `skill resolve` that leaves files to resolve emits a `conflict` event with those files, and its `result` says how many are left, as in `resolved SKILL.md in the merge of docx, 1 file left to resolve`. One that finishes the merge emits the skill's `library_skill` event, and one that finds the skill edited while the merge was pending, where the edit overlaps the finished merge, emits a `conflict` event with only those files and exits with code 4: its `base` is then your library directory as the merge first had it, `mine` the directory as it is now, and `theirs` the finished merge. `--abort` emits the skill's `library_skill` event.
+
 A skill with a merge pending carries `pending_merge: true` in its `library_skill` event and in the snapshot:
 
 ```json
@@ -752,11 +833,11 @@ Every install writes one commit per skill in the account repo in agentx home: th
 
 ## Exit codes
 
-- `1`: the command line names no skill to install, the flags contradict each other (`--all` with `--skill`, `--except` without `--all`, `--except` leaving nothing, or `--from universal` with a client that is not universal), it names the source with another branch or tag than its pin, `skill add` is given something that is not a source (for example, the name of a skill the library already holds), `skill place` was given both `--keep-library` and `--keep-placement`, or `skill update` was given both a name and `--all`, or neither.
+- `1`: the command line names no skill to install, the flags contradict each other (`--all` with `--skill`, `--except` without `--all`, `--except` leaving nothing, or `--from universal` with a client that is not universal), it names the source with another branch or tag than its pin, `skill add` is given something that is not a source (for example, the name of a skill the library already holds), `skill place` was given both `--keep-library` and `--keep-placement`, or `skill update` was given both a name and `--all`, or neither. For `skill resolve`, it is also `--abort` with `--hunk` or `--editor`, `--hunk` with `--editor`, a file named without `--editor`, a `--hunk` that is not `<file>:<part>=mine|theirs|both`, a file that is not left to resolve or a part it does not have, two sides for one part, not choosing every part of a file, `both` for a file that conflicts as a whole, a file named after `--editor` that has no text to edit, or no editor to open.
 - `3`: the source, or the files of the skill, could not be fetched. For `skill check`, also a run whose sources and skills failed for different reasons.
-- `4`: `skill update` found your edits conflicting with the update and left the merge pending, or a merge already pending blocks `skill update`, `skill revert` or a `skill remove` that takes the skill off the machine. See [When your edits conflict](#when-your-edits-conflict).
-- `5`: a source id names no source on this machine (for a source you removed, the hint names the `agentx source add` command that brings it back), the source did not serve a skill's files, the path or a skill named by `--skill` or `--except` does not exist in the source, or `--to` or `--from` names a configuration that is not detected. For `skill place`, `skill diff`, `skill revert` and `skill update`, also a name the library does not hold as a skill; for `skill update`, also a skill whose source you removed; for `skill remove`, a name that is neither a skill of the library nor a managed skill whose library directory is gone. For `skill check`, also a source added on this machine that it has never fetched, such as one `agentx import` brought back; `agentx source add` fetches it.
-- `6`: the library already holds a different skill under that name, the name is already managed at another version, the skill's name cannot be both a directory and a git branch, the skill's directory in the source is not one agentx can record, the skill holds a file whose path would put it outside the skill's directory, agentx cannot use your library directory, or an interrupted change has to be resolved before anything else can run. The message names what to restore; if you would rather keep what is there, move the named file in `~/.agentx/mutations` aside. For `skill remove`, it is also `--from` naming a universal client, one that reads the library directly, even next to `--from universal`, removing a name that is a fork, and `--from <client>` for a skill whose library directory is gone. For `skill diff` and `skill revert`, it is a skill agentx did not install or a fork, which have no base version, or a managed skill whose import branch records no version agentx can read; for `skill diff --upstream`, also a skill no check has found an update for; for `skill check`, a newer version agentx will not install, for the reasons `skill add` refuses one; for `skill revert`, also a skill that changed while it was being reverted, a skill whose installed version another command changed meanwhile, a skill that holds something git cannot record, or a skill whose library directory is a symlink. For `skill place`, it is a displaced directory that differs from the library when neither `--keep-library` nor `--keep-placement` is given, either flag on a fork, a managed skill whose library directory is gone, a skill or placement that changed while it was being placed, a library directory that is a symlink or holds one when the command would remove a displaced directory or replace the library directory, a client's directory it would change that symlinks make overlap the library, a directory a library entry links to or another client's directory, and, for `--keep-placement`, directories that differ from each other, a directory with no `SKILL.md`, holding something git cannot record, or holding a symlink, or a managed skill whose import branch records no version agentx can read. For `skill update`, it is a skill agentx did not install or a fork, a managed skill whose library directory is gone or whose import branch records no version agentx can read, a skill its source no longer holds, a skill that holds something git cannot record, a skill whose library directory is a symlink, or a skill, its installed version or its update that changed while it was being updated. In a run of several skills other than `skill check`, `6` is also the code when the skills that were skipped disagree about why: a run whose failures all have one cause exits with that cause, so a batch that skipped two skills the source did not serve exits `5`.
-- `7`: another agentx command is running. Retry when it finishes.
+- `4`: `skill update` found your edits conflicting with the update and left the merge pending, or a merge already pending blocks `skill update`, `skill revert` or a `skill remove` that takes the skill off the machine. See [When your edits conflict](#when-your-edits-conflict). For `skill resolve`, you edited the skill while its merge was pending and your edit overlaps the finished merge; see [Finish the merge](#finish-the-merge).
+- `5`: a source id names no source on this machine (for a source you removed, the hint names the `agentx source add` command that brings it back), the source did not serve a skill's files, the path or a skill named by `--skill` or `--except` does not exist in the source, or `--to` or `--from` names a configuration that is not detected. For `skill place`, `skill diff`, `skill revert`, `skill update` and `skill resolve`, also a name the library does not hold as a skill; for `skill update`, also a skill whose source you removed; for `skill remove`, a name that is neither a skill of the library nor a managed skill whose library directory is gone. For `skill check`, also a source added on this machine that it has never fetched, such as one `agentx import` brought back; `agentx source add` fetches it.
+- `6`: the library already holds a different skill under that name, the name is already managed at another version, the skill's name cannot be both a directory and a git branch, the skill's directory in the source is not one agentx can record, the skill holds a file whose path would put it outside the skill's directory, agentx cannot use your library directory, or an interrupted change has to be resolved before anything else can run. The message names what to restore; if you would rather keep what is there, move the named file in `~/.agentx/mutations` aside. For `skill remove`, it is also `--from` naming a universal client, one that reads the library directly, even next to `--from universal`, removing a name that is a fork, and `--from <client>` for a skill whose library directory is gone. For `skill diff` and `skill revert`, it is a skill agentx did not install or a fork, which have no base version, or a managed skill whose import branch records no version agentx can read; for `skill diff --upstream`, also a skill no check has found an update for; for `skill check`, a newer version agentx will not install, for the reasons `skill add` refuses one; for `skill revert`, also a skill that changed while it was being reverted, a skill whose installed version another command changed meanwhile, a skill that holds something git cannot record, or a skill whose library directory is a symlink. For `skill place`, it is a displaced directory that differs from the library when neither `--keep-library` nor `--keep-placement` is given, either flag on a fork, a managed skill whose library directory is gone, a skill or placement that changed while it was being placed, a library directory that is a symlink or holds one when the command would remove a displaced directory or replace the library directory, a client's directory it would change that symlinks make overlap the library, a directory a library entry links to or another client's directory, and, for `--keep-placement`, directories that differ from each other, a directory with no `SKILL.md`, holding something git cannot record, or holding a symlink, or a managed skill whose import branch records no version agentx can read. For `skill update`, it is a skill agentx did not install or a fork, a managed skill whose library directory is gone or whose import branch records no version agentx can read, a skill its source no longer holds, a skill that holds something git cannot record, a skill whose library directory is a symlink, or a skill, its installed version or its update that changed while it was being updated. For `skill resolve`, it is a fork, a skill with no merge pending, a merge given up or completed while your editor was open, a checkout that is no longer a merge in progress (give it up with `--abort`), an import branch moved outside agentx while the merge was pending (give the merge up with `--abort`), an editor that failed, only whole files left for `--editor`, a merge that would leave the skill without a `SKILL.md`, or a merge it cannot finish for the reasons `skill update` refuses an update, such as a library directory that is a symlink or that changed while the merge was being finished. In a run of several skills other than `skill check`, `6` is also the code when the skills that were skipped disagree about why: a run whose failures all have one cause exits with that cause, so a batch that skipped two skills the source did not serve exits `5`.
+- `7`: another agentx command is running. Retry when it finishes. For `skill resolve --editor`, what you saved stays in the merge, unstaged, until you run the command again.
 - `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`. For `skill update`, also an update recorded in a form this agentx does not write; run `agentx skill check` to record it again.
 - `10`: agentx could not read its own settings file, the library still held the skill after `skill remove` took it away, or agentx hit an error it has no better answer for. Run `agentx doctor`.
