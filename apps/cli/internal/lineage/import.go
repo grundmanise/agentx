@@ -38,6 +38,19 @@ const (
 // managed skill, the version its import branch moves to.
 const TrailerBase = "Agentx-Base"
 
+// BaseOf reads the import commit the TrailerBase trailer of a merge
+// commit's message names, from the message's trailer block as Parse reads
+// one; ok is false when it names none.
+func BaseOf(message string) (commit string, ok bool) {
+	for _, line := range strings.Split(trailerBlock(message), "\n") {
+		if key, value, found := strings.Cut(line, ":"); found && strings.TrimSpace(key) == TrailerBase {
+			commit = strings.TrimSpace(value)
+			return commit, IsObjectID(commit)
+		}
+	}
+	return "", false
+}
+
 // Import is the lineage of one upstream version: the source it came from,
 // the directory inside it, the commit it was taken at and the content hash
 // of that version.

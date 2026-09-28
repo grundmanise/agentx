@@ -227,25 +227,6 @@ func TestQuotedPath(t *testing.T) {
 	}
 }
 
-// TestGitUnquoted pins that gitUnquoted reads back every path gitQuoted
-// writes, and refuses anything gitQuoted would not write: a path the owner
-// file of an editor session records is read back so, and one that fails
-// is never trusted.
-func TestGitUnquoted(t *testing.T) {
-	t.Parallel()
-	for _, path := range []string{"notes.md", "docs/deep dir/say \"hi\"\tnow.md", "a\\b", "na\x1b[31msty\n", "a\u009bb", "a\xffb", "日本語", ""} {
-		got, ok := gitUnquoted(gitQuoted(path))
-		if !ok || got != path {
-			t.Errorf("gitUnquoted(gitQuoted(%q)) = %q, %v", path, got, ok)
-		}
-	}
-	for _, quoted := range []string{`notes.md`, `"notes.md`, `"a"b"`, `"a\qb"`, `"a\1"`, `"a\400"`, `"a\"`, `"\141"`, `"a\011b"`} {
-		if got, ok := gitUnquoted(quoted); ok {
-			t.Errorf("gitUnquoted(%s) = %q, want it refused", quoted, got)
-		}
-	}
-}
-
 // TestUnderShown pins how a line on stdout names the directory of a source
 // a skill was read from: sanitised, as the source chose it, and quoted the
 // way a path is when sanitising would leave nothing, so that the line never

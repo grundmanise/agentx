@@ -48,3 +48,30 @@ func CommitDir(ctx context.Context, r *gitx.Runner, gitDir, dir, tree, parent, m
 func ReadMerged(ctx context.Context, r *gitx.Runner, gitDir, tree, dir string) (Base, error) {
 	return readVersion(ctx, r, gitDir, tree, dir, "the merged tree "+tree)
 }
+
+// ReadImport reads the lineage the import commit commit carries, for a
+// version no ref of the skill's own names any more, as the update a
+// pending merge merges once a check moved the candidate on.
+func ReadImport(ctx context.Context, r *gitx.Runner, gitDir, commit string) (Import, error) {
+	out, err := r.Isolated(ctx, gitDir, "log", "-1", "--format=%B", commit)
+	if err != nil {
+		return Import{}, err
+	}
+	return Parse(out)
+}
+
+// FilePath reports whether p can be the path of a file of a skill, relative
+// to its directory, as a tree holds it: not empty, no NUL, and no empty,
+// "." or ".." component, so none that leaves the directory, a leading or
+// doubled slash included.
+func FilePath(p string) bool {
+	if p == "" || strings.ContainsRune(p, 0) {
+		return false
+	}
+	for _, seg := range strings.Split(p, "/") {
+		if seg == "" || seg == "." || seg == ".." {
+			return false
+		}
+	}
+	return true
+}

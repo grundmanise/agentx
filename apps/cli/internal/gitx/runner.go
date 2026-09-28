@@ -166,8 +166,56 @@ func (r *Runner) InCheckout(ctx context.Context, dir string, args ...string) (st
 // InCheckoutStatus is InCheckout for a git whose exit status is part of
 // its answer, as IsolatedStatus is for Isolated.
 func (r *Runner) InCheckoutStatus(ctx context.Context, dir string, upTo int, args ...string) (string, int, error) {
+	return r.inCheckout(ctx, call{isolated: true, dir: dir}, upTo, args)
+}
+
+// InCheckoutAs is InCheckout for the one git that writes a commit of the
+// user's own: a as its author and committer, and the current date, in
+// place of the identity and the date the isolated environment fixes.
+// Everything else the isolated environment sets still holds.
+func (r *Runner) InCheckoutAs(ctx context.Context, dir string, a Author, args ...string) (string, error) {
+	now := time.Now()
+	env := map[string]string{}
+	for _, who := range []string{"AUTHOR", "COMMITTER"} {
+		env["GIT_"+who+"_NAME"] = a.Name
+		env["GIT_"+who+"_EMAIL"] = a.Email
+	}
+	c := call{isolated: true, dir: dir, dates: fmt.Sprintf("%d %s", now.Unix(), now.Format("-0700")), env: env}
+	out, _, err := r.inCheckout(ctx, c, 0, args)
+	return out, err
+}
+
+func (r *Runner) inCheckout(ctx context.Context, c call, upTo int, args []string) (string, int, error) {
 	full := append(isolatedConfig(), "-c", "core.fileMode=true", "-c", "core.symlinks=true")
-	return r.runStatus(ctx, call{isolated: true, dir: dir}, upTo, append(full, args...)...)
+	return r.runStatus(ctx, c, upTo, append(full, args...)...)
+}
+
+// Author is who a commit is written as.
+type Author struct {
+	Name, Email string
+}
+
+// UserAuthor is who the user's own configuration says they are, user.name
+// and user.email read in the user environment, each one it does not set
+// being agentx's own, IdentityName or IdentityEmail: a commit agentx
+// writes for them lives in the account repo alone, so it is never refused
+// for want of one.
+func (r *Runner) UserAuthor(ctx context.Context, gitDir string) (Author, error) {
+	out, _, err := r.runStatus(ctx, call{}, 1, "--git-dir="+gitDir, "config", "--get-regexp", `^user\.(name|email)$`)
+	if err != nil {
+		return Author{}, err
+	}
+	a := Author{Name: IdentityName, Email: IdentityEmail}
+	for _, line := range strings.Split(out, "\n") {
+		switch key, value, _ := strings.Cut(line, " "); {
+		case value == "":
+		case key == "user.name":
+			a.Name = value
+		case key == "user.email":
+			a.Email = value
+		}
+	}
+	return a, nil
 }
 
 // AddCheckout adds a linked worktree of the repository at gitDir at path,

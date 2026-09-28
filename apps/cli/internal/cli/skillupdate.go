@@ -192,18 +192,11 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 	// until it is finished the skill reads as already updated while the
 	// library still holds the version replaced, or holds no directory once
 	// that was retained, and the run would answer for a machine halfway
-	// through its own change. The lock is taken for it only when there is
-	// a journal to finish, and nothing is written beyond what the recovery
+	// through its own change. Nothing is written beyond what the recovery
 	// writes, its own bump of the version file included, as for the
 	// recovery a scan runs.
-	switch journals, err := home.Journals(inv.dirs.Home); {
-	case err != nil:
-		return mutationFailure(err)
-	case len(journals) > 0:
-		inv.out.debugf("recovering %s", strings.Join(journals, ", "))
-		if err := home.MutateQuiet(inv.dirs.Home, inv.refs(ctx), func() error { return nil }); err != nil {
-			return mutationFailure(err)
-		}
+	if err := inv.finishJournals(ctx); err != nil {
+		return err
 	}
 	records := map[string]lineage.Record{}
 	if exists {
@@ -627,11 +620,18 @@ func changedWhileUpdating(name string) *failure {
 // give the skill, when it is not the skill's library name, and ""
 // otherwise, see upstreamRename.
 func upstreamNameOf(u *updating, bodies map[string]string) string {
-	name := ""
-	if ids := skillFileBlob(u.theirs); len(ids) > 0 {
-		name, _, _ = scan.SkillFrontmatter(bodies[ids[0]])
+	return upstreamRename(u.name, skillName(u.theirs, bodies), u.next.Import.Dir())
+}
+
+// skillName is the name the SKILL.md of a version gives the skill, read
+// out of bodies, "" when it gives none.
+func skillName(v lineage.Base, bodies map[string]string) string {
+	ids := skillFileBlob(v)
+	if len(ids) == 0 {
+		return ""
 	}
-	return upstreamRename(u.name, name, u.next.Import.Dir())
+	name, _, _ := scan.SkillFrontmatter(bodies[ids[0]])
+	return name
 }
 
 // apply reads every skill's inputs again under the lock and applies the
@@ -798,7 +798,7 @@ func (inv *invocation) stageUpdate(ctx context.Context, m *home.Mutation, gitDir
 		if err := materialise(dest, u.base, bodies); err != nil {
 			return err
 		}
-		return keepPerms(dest, u)
+		return keepPerms(dest, u.libPath, u.tree, u.base)
 	}
 	staged := m.Sibling(u.libPath, "staged")
 	fingerprint, err := stageVersion(staged, lay, u.target, u.libPath, u.ignored)
@@ -815,33 +815,33 @@ func (inv *invocation) stageUpdate(ctx context.Context, m *home.Mutation, gitDir
 	return nil
 }
 
-// keepPerms gives what the update laid out at staged the permissions the
-// library directory gives the same thing: a file the library holds at the
-// same path with the same content, and executable exactly when git records
-// it so, and a directory the library holds at the same path, the skill's
-// own included, both as the library's tree was read, never through a
-// symlink of it. A version is laid out with every file 0644, or 0755, and
-// every directory 0755, so a file of the user's they made private, 0600
-// say, which the update does not change, would otherwise come out of it
-// readable by everyone. The owner's execute bit of a file is never changed,
-// so the tree staged and its fingerprint stay what they were; a file the
-// update changes, and anything agentx could not read back or enter once
-// it was changed, is left as it was laid out. The library directory was
-// read again under the lock, so what it holds is what the update merged or
-// replaced.
-func keepPerms(staged string, u *updating) error {
+// keepPerms gives what an update laid out at staged, the version v, the
+// permissions the library directory at libPath, read as tree, gives the
+// same thing: a file the library holds at the same path with the same
+// content, and executable exactly when git records it so, and a directory
+// the library holds at the same path, the skill's own included, both as
+// the library's tree was read, never through a symlink of it. A version is
+// laid out with every file 0644, or 0755, and every directory 0755, so a
+// file of the user's they made private, 0600 say, which the update does not
+// change, would otherwise come out of it readable by everyone. The owner's
+// execute bit of a file is never changed, so the tree staged and its
+// fingerprint stay what they were; a file the update changes, and anything
+// agentx could not read back or enter once it was changed, is left as it
+// was laid out. The library directory was read again under the lock, so
+// what it holds is what the update merged or replaced.
+func keepPerms(staged, libPath string, tree treeid.Tree, v lineage.Base) error {
 	held := map[string]string{}
-	for _, b := range u.tree.Blobs {
+	for _, b := range tree.Blobs {
 		if !b.Link {
 			held[b.Path] = b.OID
 		}
 	}
 	dirs := map[string]bool{}
-	for _, d := range u.tree.Dirs {
+	for _, d := range tree.Dirs {
 		dirs[d.Path] = true
 	}
 	keep := func(rel string, dir, executable bool) error {
-		info, err := os.Lstat(filepath.Join(u.libPath, filepath.FromSlash(rel)))
+		info, err := os.Lstat(filepath.Join(libPath, filepath.FromSlash(rel)))
 		if err != nil {
 			return nil
 		}
@@ -868,7 +868,7 @@ func keepPerms(staged string, u *updating) error {
 	if err := keep("", true, false); err != nil {
 		return err
 	}
-	for _, e := range u.base.Entries {
+	for _, e := range v.Entries {
 		var err error
 		switch {
 		case e.Mode == source.DirMode && dirs[e.Path]:
@@ -898,7 +898,9 @@ func (r *updateRun) report(ctx context.Context) error {
 		}
 	}
 	for _, u := range r.pending {
-		r.inv.printConflicts(u.conflict, short(u.rec.Import.Commit), short(u.next.Import.Commit))
+		out := r.inv.out
+		r.inv.printConflicts(u.conflict, out.paint(heading, sanitised(u.name)), " conflicts with its update from ", short(u.rec.Import.Commit),
+			" to ", short(u.next.Import.Commit), " in ", out.paint(noteStyle, plural(len(u.conflict.Files), "file")))
 		r.drop(u.name, conflictFailure(u.name, len(u.conflict.Files)))
 	}
 	return nil

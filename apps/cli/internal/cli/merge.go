@@ -41,6 +41,17 @@ type conflictFile struct {
 	Binary bool           `json:"binary"`
 	Hunks  []conflictHunk `json:"hunks"`
 	why    string         // what conflicts, for a file that conflicts whole: the words the text says it in
+	text   *conflictText  // for a text file in every version that holds it, what a resolve rewrites it from; nil for any other
+}
+
+// conflictText is one text file of a merge as a resolve rewrites it: what
+// its versions hold, as the index keeps them, and the file the merge
+// wrote, split at its marker blocks, see splitMerged. A file with no block
+// agentx can tell has no raw hunk and conflicts whole.
+type conflictText struct {
+	mine, base, theirs string
+	around             []string       // the text between the blocks, one piece more than there are
+	raw                []conflictHunk // the blocks, as the file holds them
 }
 
 // conflictHunk is one region of a file that conflicts, one marker block of
@@ -255,6 +266,26 @@ func markerSizeIn(file string, blobs ...string) int {
 	return 0
 }
 
+// holdsMarkers reports whether file, a text file of a merge whose versions
+// are blobs, still holds a conflict marker: a line starting with a run of
+// < or > at least as long as the markers of a merge of those versions,
+// see markerSize, followed by a space or the end of the line. No line of
+// the versions' own is taken for one, and neither is a quote, a line
+// starting with "> ", that a resolution added.
+func holdsMarkers(file string, blobs ...string) bool {
+	size := markerSize(blobs...)
+	for _, line := range strings.Split(file, "\n") {
+		if line == "" || (line[0] != '<' && line[0] != '>') {
+			continue
+		}
+		n := len(line) - len(strings.TrimLeft(line, line[:1]))
+		if rest := strings.TrimSuffix(line[n:], "\r"); n >= size && (rest == "" || rest[0] == ' ') {
+			return true
+		}
+	}
+	return false
+}
+
 // splitMerged reads the marker blocks of size out of a merged file: every
 // region from a line of that many < to one of that many >, with the base
 // after the | line and theirs after the = line, as zdiff3 writes them, each
@@ -326,18 +357,17 @@ func conflictOfSkill(name string, m lineage.Merge, files []conflictFile) conflic
 	return conflictEvent{event: newEvent("conflict"), Name: name, Kind: lineage.KindManaged, Base: m.Base, Mine: m.Mine, Theirs: m.Theirs, Files: files}
 }
 
-// printConflicts reports a merge left pending: one conflict event, and in
-// the text a line naming the skill, the two upstream commits and the files
-// that conflict, then every hunk of every file under its file and number,
+// printConflicts reports a merge pending: one conflict event, and in the
+// text the headline, which names the skill and says how many files are
+// left, then every hunk of every file under its file and number,
 // file:index as the hunk is named, between markers git's own size with the
 // three versions' names on them, and every file that conflicts whole with
 // what conflicts in it. Every line of a hunk holds the file's own bytes,
 // so it is printed as a line of a diff is.
-func (inv *invocation) printConflicts(ev conflictEvent, from, to string) {
+func (inv *invocation) printConflicts(ev conflictEvent, headline ...string) {
 	out := inv.out
 	out.emit(ev)
-	out.print(out.paint(heading, sanitised(ev.Name)), " conflicts with its update from ", from, " to ", to, " in ",
-		out.paint(noteStyle, plural(len(ev.Files), "file")))
+	out.print(headline...)
 	for _, f := range ev.Files {
 		if len(f.Hunks) == 0 {
 			out.print(out.paint(label, quotedPath(f.Path)), ": ", f.why)

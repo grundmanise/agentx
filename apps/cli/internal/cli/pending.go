@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -127,23 +128,37 @@ func (inv *invocation) mergeIn(ctx context.Context, dir string, in mergeStart) e
 	if err != nil {
 		return err
 	}
-	out, err := inv.git.InCheckout(ctx, dir, "rev-parse", "--git-path", "MERGE_MSG", "--git-path", "MERGE_HEAD")
+	paths, err := inv.gitPaths(ctx, dir, "MERGE_MSG", "MERGE_HEAD")
 	if err != nil {
 		return err
 	}
+	if err := os.WriteFile(paths[0], []byte(in.message), 0o644); err != nil {
+		return err
+	}
+	return os.WriteFile(paths[1], []byte(in.theirs+"\n"), 0o644)
+}
+
+// gitPaths are where git keeps the files names for the checkout at dir,
+// as absolute paths.
+func (inv *invocation) gitPaths(ctx context.Context, dir string, names ...string) ([]string, error) {
+	var args []string
+	for _, n := range names {
+		args = append(args, "--git-path", n)
+	}
+	out, err := inv.git.InCheckout(ctx, dir, append([]string{"rev-parse"}, args...)...)
+	if err != nil {
+		return nil, err
+	}
 	paths := strings.Split(strings.TrimSuffix(out, "\n"), "\n")
-	if len(paths) != 2 {
-		return fmt.Errorf("git rev-parse: cannot read where the merge state goes in %q", out)
+	if len(paths) != len(names) {
+		return nil, fmt.Errorf("git rev-parse: cannot read where %s are in %q", strings.Join(names, " and "), out)
 	}
 	for i, p := range paths {
 		if !filepath.IsAbs(p) {
 			paths[i] = filepath.Join(dir, p)
 		}
 	}
-	if err := os.WriteFile(paths[0], []byte(in.message), 0o644); err != nil {
-		return err
-	}
-	return os.WriteFile(paths[1], []byte(in.theirs+"\n"), 0o644)
+	return paths, nil
 }
 
 // updateMergeMessage is the message of the commit that completes the
@@ -209,7 +224,7 @@ func (inv *invocation) readConflicts(ctx context.Context, gitDir, dir, skillDir 
 	for _, p := range paths {
 		f, text := conflictOf(p, stages[p], bodies, renamed)
 		if text {
-			if f.Hunks, f.why, err = hunksIn(filepath.Join(dir, skillDir, filepath.FromSlash(p)), stages[p], bodies); err != nil {
+			if f.Hunks, f.text, f.why, err = hunksIn(filepath.Join(dir, skillDir, filepath.FromSlash(p)), stages[p], bodies); err != nil {
 				return nil, err
 			}
 		}
@@ -223,38 +238,39 @@ func (inv *invocation) readConflicts(ctx context.Context, gitDir, dir, skillDir 
 // markerSizeIn finds, so that no line of the file's own is taken for a
 // marker, each with mine, the base and theirs as the file's three versions
 // hold them there. A file with no such block conflicts whole: why says
-// how.
-func hunksIn(path string, versions map[string]staged, bodies map[string]string) ([]conflictHunk, string, error) {
-	text := func(stage string) string {
+// how. text is the file as a resolve rewrites it.
+func hunksIn(path string, versions map[string]staged, bodies map[string]string) ([]conflictHunk, *conflictText, string, error) {
+	version := func(stage string) string {
 		if v, ok := versions[stage]; ok {
 			return bodies[v.oid]
 		}
 		return ""
 	}
-	mine, base, theirs := text(gitStageMine), text(gitStageBase), text(gitStageTheirs)
+	text := &conflictText{mine: version(gitStageMine), base: version(gitStageBase), theirs: version(gitStageTheirs)}
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, "", err
 	}
 	file := string(b)
 	var hunks []conflictHunk
-	if size := markerSizeIn(file, mine, base, theirs); size > 0 {
-		var around []string
-		if around, hunks, err = splitMerged(file, size); err != nil {
-			hunks = nil
-		} else if len(hunks) > 0 && around[len(around)-1] == "" {
+	if size := markerSizeIn(file, text.mine, text.base, text.theirs); size > 0 {
+		if text.around, text.raw, err = splitMerged(file, size); err != nil {
+			text.around, text.raw = nil, nil
+		}
+		hunks = slices.Clone(text.raw)
+		if len(hunks) > 0 && text.around[len(text.around)-1] == "" {
 			h := &hunks[len(hunks)-1]
-			h.Mine, h.Base, h.Theirs = asAtEnd(h.Mine, mine), asAtEnd(h.Base, base), asAtEnd(h.Theirs, theirs)
+			h.Mine, h.Base, h.Theirs = asAtEnd(h.Mine, text.mine), asAtEnd(h.Base, text.base), asAtEnd(h.Theirs, text.theirs)
 		}
 	}
 	_, based := versions[gitStageBase]
 	switch {
 	case len(hunks) > 0:
-		return hunks, "", nil
+		return hunks, text, "", nil
 	case !based && versions[gitStageMine].mode != versions[gitStageTheirs].mode:
-		return []conflictHunk{}, "added here and by the update, executable on one side only", nil
+		return []conflictHunk{}, text, "added here and by the update, executable on one side only", nil
 	}
-	return []conflictHunk{}, "changed here and by the update, with no conflict markers agentx can tell from its lines", nil
+	return []conflictHunk{}, text, "changed here and by the update, with no conflict markers agentx can tell from its lines", nil
 }
 
 // pruneMerges removes what an interrupted command left of a pending merge,
