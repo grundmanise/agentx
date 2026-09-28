@@ -74,7 +74,6 @@ type updating struct {
 	next         lineage.Record // the import branch as the update leaves it, at the candidate
 	libPath      string
 	captured     string       // the library entry when the run began, in the words a journal records
-	held         string       // the tree id of what the library directory holds, which is the base version's
 	base         lineage.Base // the candidate's version, the one laid out in the library
 	upstreamName string       // the name the candidate's SKILL.md gives the skill, when it is not name
 	done         placements   // the copies the mutation refreshed or kept
@@ -332,12 +331,12 @@ func (inv *invocation) judgeUpdate(name string, rec lineage.Record, managed bool
 	if len(tree.Unrecordable) > 0 {
 		return nil, unrecordableRefusal(name, libPath, tree.Unrecordable, "an update", "update")
 	}
-	if !rec.Current(tree) {
+	if !rec.HoldsID(tree.ID) {
 		return nil, refuse(exitRefused, name+" was edited since it was installed, and "+mergeNotYet,
 			"run '"+skillCommand("diff", name)+"' to see the edits, or '"+skillCommand("revert", name)+"' to discard them and then '"+
 				skillCommand("update", name)+"'").wrap(errEdited)
 	}
-	return &updating{name: name, rec: rec, next: next, libPath: libPath, captured: captured, held: tree.ID}, nil
+	return &updating{name: name, rec: rec, next: next, libPath: libPath, captured: captured}, nil
 }
 
 // removedSourceRefusal refuses a skill whose source is gone from this
@@ -461,7 +460,7 @@ func (r *updateRun) apply(ctx context.Context) error {
 		}
 		m := home.NewMutation(inv.dirs.Home)
 		for _, u := range live {
-			if err := inv.stageUpdate(m, r.gitDir, u, r.bodies, edit.copiesOf(u.name)); err != nil {
+			if err := inv.stageUpdate(ctx, m, r.gitDir, u, r.bodies, edit.copiesOf(u.name)); err != nil {
 				m.Discard()
 				return err
 			}
@@ -521,10 +520,12 @@ func (inv *invocation) recheckUpdate(u *updating, values map[string]string, sour
 // with the new one, see refreshCopies; and the candidate ref deleted, with
 // the candidate as its expected old value, which the journal runs after
 // every path step, so that a refusal on the way leaves it in place.
-func (inv *invocation) stageUpdate(m *home.Mutation, gitDir string, u *updating, bodies map[string]string, recorded []string) error {
+func (inv *invocation) stageUpdate(ctx context.Context, m *home.Mutation, gitDir string, u *updating, bodies map[string]string, recorded []string) error {
+	lay := func(dest string) error { return materialise(dest, u.base, bodies) }
 	target := u.base.ID()
+	laidOut := version{load: baseVersion(u.next).load, holds: func(id string) bool { return id == target }}
 	staged := m.Sibling(u.libPath, "staged")
-	fingerprint, err := stageBase(staged, u.base, target, bodies)
+	fingerprint, err := stageVersion(staged, lay, laidOut, u.libPath, nil)
 	if err != nil {
 		os.RemoveAll(staged)
 		return libraryFailure(inv.dirs.Library, err)
@@ -533,7 +534,7 @@ func (inv *invocation) stageUpdate(m *home.Mutation, gitDir string, u *updating,
 	m.Ref(gitDir, lineage.ManagedRef(u.name), u.rec.Commit, u.next.Commit)
 	m.Remove(u.libPath, u.captured)
 	m.Publish(u.libPath, staged, fingerprint)
-	inv.refreshCopies(m, u.name, target, []string{u.held}, "", staged, recorded, &u.done)
+	inv.refreshCopies(ctx, m, gitDir, u.name, laidOut, []version{baseVersion(u.rec)}, lay, recorded, &u.done)
 	m.Ref(gitDir, lineage.CandidateRef(u.name), u.next.Commit, "")
 	return nil
 }
@@ -564,7 +565,7 @@ func (r *updateRun) report(ctx context.Context) error {
 		if !ok {
 			return fail(exitInternal, "the library holds no "+u.name+" after updating it", "run 'agentx doctor' and check the library it names")
 		}
-		inv.out.emit(sc.librarySkillEventFor(inv, snap, lib, nil))
+		inv.out.emit(sc.librarySkillEventFor(ctx, inv, snap, lib, nil))
 	}
 	out := inv.out
 	if !r.all {

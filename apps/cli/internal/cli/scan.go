@@ -180,7 +180,7 @@ func (inv *invocation) inventory(ctx context.Context, wait time.Duration, projec
 				// pairs the library's directory with placements or content
 				// from the other side of a mutation.
 				read := newSkillContext(inv, records, s, copyMode)
-				read.observeAll(inv, sc.Library())
+				read.observeAll(ctx, inv, sc.Library())
 				listing = &read
 				// A managed skill the library no longer holds has no entry
 				// and so no drift; the warnings are how the desktop app
@@ -211,7 +211,7 @@ func (inv *invocation) inventory(ctx context.Context, wait time.Duration, projec
 	snap, fresh := sc.Snapshot()
 	if listing != nil {
 		for _, lib := range sc.Library() {
-			snap.Library = append(snap.Library, listing.librarySkillEventFor(inv, snap, lib, nil).LibraryEntry)
+			snap.Library = append(snap.Library, listing.librarySkillEventFor(ctx, inv, snap, lib, nil).LibraryEntry)
 		}
 	}
 	if len(fresh) > 0 {

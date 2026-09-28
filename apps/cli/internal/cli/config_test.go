@@ -36,6 +36,7 @@ func TestConfigListDefaults(t *testing.T) {
 		"label                    test-host",
 		"auto_push                false",
 		"accept_operations        false",
+		"ignore_system_files      true",
 		"disabled_configurations  (none)",
 		"sources                  []",
 		"copy_mode                {}",
@@ -60,6 +61,7 @@ func TestConfigListDefaults(t *testing.T) {
 		"label":                   "test-host",
 		"auto_push":               false,
 		"accept_operations":       false,
+		"ignore_system_files":     true,
 		"disabled_configurations": []any{},
 		"sources":                 []any{},
 		"copy_mode":               map[string]any{},
@@ -141,6 +143,7 @@ func TestConfigSetKeepsUnknownCollections(t *testing.T) {
 	contains(t, "stdout", out.stdout, "disabled_configurations  cursor")
 	contains(t, "stdout", out.stdout, `sources                  [{"url":"https://example.com/skills"}]`)
 	contains(t, "stdout", out.stdout, `copy_mode                {"my-skill":["cursor"]}`)
+	contains(t, "stdout", out.stdout, "ignore_system_files      true")
 }
 
 func TestConfigErrors(t *testing.T) {
