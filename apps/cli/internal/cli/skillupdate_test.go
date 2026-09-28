@@ -1196,55 +1196,6 @@ exec `+real+` "$@"
 	}
 }
 
-// TestSkillUpdateAllGoesOnPastAVersionItCannotLayOut: in a run over every
-// skill, one skill whose new version cannot be laid out under the lock, a
-// file of it named longer than any file system allows, is dropped on its
-// own. Its warning names it, the other skill is updated all the same, and
-// the run ends with exit code 6 and an error naming it. The dropped skill
-// keeps its library directory, its branch and its candidate, and nothing
-// staged for it is left behind.
-func TestSkillUpdateAllGoesOnPastAVersionItCannotLayOut(t *testing.T) {
-	t.Parallel()
-	h, s, _ := updateHarness(t)
-	newVersion(t, s)
-	s.write("skills/beta/notes.md", "beta notes, revised\n")
-	s.commit("beta revised")
-	long := strings.Repeat("x", 300) + ".md"
-	blob, err := s.git.IsolatedInput(context.Background(), s.gitDir, strings.NewReader("a file no file system can name\n"), "hash-object", "-w", "--stdin")
-	if err != nil {
-		t.Fatal(err)
-	}
-	alpha := s.mktree(append(strings.Split(strings.TrimSpace(s.bare("ls-tree", "HEAD:skills/alpha-dir")), "\n"),
-		"100644 blob "+strings.TrimSpace(blob)+"\t"+long)...)
-	root := s.mktree(s.replaced("HEAD", "skills", s.mktree(s.replaced("HEAD:skills", "alpha-dir", alpha)...))...)
-	s.bare("update-ref", "HEAD", strings.TrimSpace(s.bare("commit-tree", root, "-p", "HEAD", "-m", "a file named too long")))
-	h.mustRun("skill", "check")
-	alphaTip, alphaCandidate := h.ref(lineage.ManagedRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
-	betaCandidate := h.ref(lineage.CandidateRef("beta"))
-	if alphaCandidate == "" || betaCandidate == "" {
-		t.Fatalf("the check pinned candidates %q and %q", alphaCandidate, betaCandidate)
-	}
-	lib := filepath.Join(h.library, "alpha")
-	library := onDisk(t, lib)
-
-	out := h.run("--json", "skill", "update", "--all")
-	equal(t, "exit", out.exit, 6)
-	warned := warnings(h, out.stderr)
-	if len(warned) != 1 || !strings.HasPrefix(warned[0], "alpha: ") || !strings.Contains(warned[0], long) {
-		t.Errorf("warnings %q, want one naming alpha and its file", warned)
-	}
-	e := h.one(out.stdout, "error")
-	contains(t, "message", e["message"].(string), "1 of 2 skills could not be updated: alpha: ")
-	equal(t, "updated", updatedNames(h, out.stdout), "beta")
-	equal(t, "beta's import branch", h.ref(lineage.ManagedRef("beta")), betaCandidate)
-	equal(t, "beta's notes", fileBody(t, filepath.Join(h.library, "beta", "notes.md")), "beta notes, revised\n")
-	equal(t, "alpha's import branch", h.ref(lineage.ManagedRef("alpha")), alphaTip)
-	equal(t, "alpha's candidate", h.ref(lineage.CandidateRef("alpha")), alphaCandidate)
-	equal(t, "alpha's library directory", onDisk(t, lib), library)
-	equal(t, "journals", journalCount(t, h), 0)
-	equal(t, "what is left beside the library", strings.Join(hiddenEntries(t, h.library), " "), "")
-}
-
 // TestSkillUpdateKeepsTheLocalNameThroughAnUpstreamRename: a newer version
 // whose SKILL.md names the skill otherwise is applied all the same. The
 // skill keeps its library name, its import branch and its placements, its

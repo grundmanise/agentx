@@ -182,67 +182,6 @@ func TestSkillUpdateMergesANonOverlappingEdit(t *testing.T) {
 	equal(t, "what skill diff shows", strings.Join(diffs, ", "), "SKILL.md modified, mine.md added")
 }
 
-// TestSkillUpdateOfAMergeWhosePathsDifferInCase: git merges paths byte for
-// byte, so readme.md, a file the user added to alpha, and README.md, one
-// its update adds, merge cleanly. A library that tells paths apart by case
-// takes both. One that does not, as macOS's by default does not, cannot
-// hold the version merged: the update of alpha refuses before the lock
-// with exit code 6, naming the user's file as the one to rename, and
-// changes nothing, and update --all updates beta, which nobody edited, all
-// the same.
-func TestSkillUpdateOfAMergeWhosePathsDifferInCase(t *testing.T) {
-	t.Parallel()
-	h, s, _ := updateHarness(t)
-	lib := filepath.Join(h.library, "alpha")
-	editLibrary(t, h, "alpha", "readme.md", "my own readme\n")
-	s.write("skills/alpha-dir/README.md", "the upstream readme\n")
-	s.write("skills/beta/notes.md", "beta notes, revised\n")
-	checked(t, h, s)
-	tip, candidate := h.ref(lineage.ManagedRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
-	betaCandidate := h.ref(lineage.CandidateRef("beta"))
-
-	if !foldsCaseAt(t, filepath.Join(lib, "SKILL.md")) {
-		h.mustRun("skill", "update", "alpha")
-		equal(t, "readme.md", fileBody(t, filepath.Join(lib, "readme.md")), "my own readme\n")
-		equal(t, "README.md", fileBody(t, filepath.Join(lib, "README.md")), "the upstream readme\n")
-		equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), candidate)
-		equal(t, "state", h.listed("alpha")["state"], stateModified)
-		return
-	}
-	library := onDisk(t, h.library)
-	before := mutationVersion(t, h)
-	refusal := "the update of alpha merged with its edits holds both README.md and readme.md, which this file system cannot keep apart, so nothing was changed"
-	hint := "rename readme.md in " + lib + ", then run 'agentx skill update alpha' again"
-
-	out := h.run("--json", "skill", "update", "alpha")
-	equal(t, "exit", out.exit, 6)
-	e := h.one(out.stdout, "error")
-	equal(t, "code", e["code"], "refused")
-	equal(t, "message", e["message"], refusal)
-	equal(t, "hint", e["hint"], hint)
-	equal(t, "the library", onDisk(t, h.library), library)
-	equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), tip)
-	equal(t, "the candidate", h.ref(lineage.CandidateRef("alpha")), candidate)
-	equal(t, "journals", journalCount(t, h), 0)
-	equal(t, "mutations", mutationVersion(t, h), before)
-
-	all := h.run("--json", "skill", "update", "--all")
-	equal(t, "exit of --all", all.exit, 6)
-	events := h.eventsOfType(all.stdout, "library_skill")
-	if len(events) != 1 || events[0]["name"] != "beta" {
-		t.Fatalf("library_skill events %v, want beta's", events)
-	}
-	equal(t, "warnings of --all", strings.Join(warnings(h, all.stderr), "\n"), "alpha: "+refusal)
-	e = h.one(all.stdout, "error")
-	equal(t, "message of --all", e["message"], "1 of 2 skills could not be updated: alpha: "+refusal)
-	equal(t, "hint of --all", e["hint"], hint)
-	equal(t, "beta's notes", fileBody(t, filepath.Join(h.library, "beta", "notes.md")), "beta notes, revised\n")
-	equal(t, "beta's branch", h.ref(lineage.ManagedRef("beta")), betaCandidate)
-	equal(t, "alpha's readme", fileBody(t, filepath.Join(lib, "readme.md")), "my own readme\n")
-	equal(t, "alpha's branch", h.ref(lineage.ManagedRef("alpha")), tip)
-	equal(t, "alpha's candidate", h.ref(lineage.CandidateRef("alpha")), candidate)
-}
-
 // TestSkillUpdateLeavesAConflictPending: an edit the update overlaps
 // conflicts. The update exits 4 and changes nothing agents read: the
 // library directory and every copy are byte for byte as they were, and the
@@ -848,32 +787,6 @@ func TestSkillUpdateStoppedWhileItMergesChangesNothing(t *testing.T) {
 	}
 }
 
-// TestSkillUpdateOfABranchStoredInAnOlderForm: a branch an earlier agentx
-// wrote over a source's own tree lists its skill as modified whatever the
-// library holds. A library directory holding exactly that version's files
-// has no edits to merge, so it updates by replacement, and the skill is
-// current at the new version afterwards.
-func TestSkillUpdateOfABranchStoredInAnOlderForm(t *testing.T) {
-	t.Parallel()
-	h, s, _ := legacyHarness(t)
-	h.storeInOlderForm(t, s)
-	s.write("skills/nc/a.md", "a, revised\n")
-	s.commit("a revised")
-	h.mustRun("skill", "check")
-	candidate := h.ref(lineage.CandidateRef("nc"))
-	if candidate == "" {
-		t.Fatal("the check pinned no candidate")
-	}
-
-	out := h.mustRun("--json", "skill", "update", "nc")
-	if summary := h.one(out.stdout, "result")["summary"].(string); strings.Contains(summary, "merged") {
-		t.Errorf("an update with no edits to merge says %q", summary)
-	}
-	equal(t, "the import branch", h.ref(lineage.ManagedRef("nc")), candidate)
-	equal(t, "a.md", fileBody(t, filepath.Join(h.library, "nc", "a.md")), "a, revised\n")
-	equal(t, "state", h.listed("nc")["state"], stateCurrent)
-}
-
 // TestSkillUpdateMergesWithNoAttributesOfTheUsers: git attributes of the
 // user's own, a merge driver that joins both sides of every Markdown file
 // say, decide nothing about how an update merges: an edit the update
@@ -982,59 +895,6 @@ func TestSkillUpdateKeepsAFileAddedInADirectoryTheUpdateRenamed(t *testing.T) {
 				filepath.Join("docs", "mine.md"): "a file of my own\n",
 			})
 			equal(t, "state", h.listed("renamed")["state"], stateModified)
-		})
-	}
-}
-
-// TestSkillUpdateKeepsThePermissionsOfWhatItLeavesAlone: an update lays
-// its version out afresh, and what the library directory held that the
-// update does not change keeps the permissions it had: a file of the
-// user's and a file of the version, both made private, a private directory
-// of the user's, and the skill's directory itself, whether the update
-// merges edits or replaces a directory nobody edited. A file the update
-// changes is laid out as the version has it.
-func TestSkillUpdateKeepsThePermissionsOfWhatItLeavesAlone(t *testing.T) {
-	t.Parallel()
-	for _, edited := range []bool{true, false} {
-		name := "a skill nobody edited"
-		if edited {
-			name = "an edited skill"
-		}
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			h, s, _ := updateHarness(t)
-			lib := filepath.Join(h.library, "alpha")
-			private := map[string]os.FileMode{"": 0o700, "SKILL.md": 0o600, "notes.md": 0o600}
-			if edited {
-				writeFile(t, mkdirs(t, filepath.Join(lib, "private"), "token.txt"), "a secret of my own\n")
-				private["private"], private[filepath.Join("private", "token.txt")] = 0o700, 0o600
-			}
-			for path, mode := range private {
-				if err := os.Chmod(filepath.Join(lib, path), mode); err != nil {
-					t.Fatal(err)
-				}
-			}
-			checked(t, h, s)
-
-			h.mustRun("skill", "update", "alpha")
-			for path, mode := range private {
-				if path == "notes.md" {
-					continue
-				}
-				info, err := os.Stat(filepath.Join(lib, path))
-				if err != nil {
-					t.Fatal(err)
-				}
-				if got := info.Mode().Perm(); got != mode {
-					t.Errorf("%q is %v after the update, want %v", path, got, mode)
-				}
-			}
-			equal(t, "notes.md", fileBody(t, filepath.Join(lib, "notes.md")), "alpha notes, revised upstream\n")
-			want := stateCurrent
-			if edited {
-				want = stateModified
-			}
-			equal(t, "state", h.listed("alpha")["state"], want)
 		})
 	}
 }
