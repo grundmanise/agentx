@@ -733,6 +733,7 @@ type skillContext struct {
 	disabled []string               // the configurations the settings disable
 	targets  []placeTarget          // every detected configuration a placement can be made in
 	observed map[string]observation // read ahead of the report, by skill name; see observeAll
+	merges   map[string]bool        // the skills an update left a merge pending for, see pendingMerges
 }
 
 func (inv *invocation) skillContext(ctx context.Context) (skillContext, error) {

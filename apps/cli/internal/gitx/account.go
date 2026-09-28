@@ -63,10 +63,6 @@ func OpenAccountRepo(ctx context.Context, r *Runner, homeDir string) (gitDir str
 // needs, in a temporary directory that is renamed into place only once every
 // step succeeded, so a failure leaves no half-configured repo behind.
 func createAccountRepo(ctx context.Context, r *Runner, gitDir string) error {
-	v, err := r.Version(ctx)
-	if err != nil {
-		return err
-	}
 	tmp, err := os.MkdirTemp(filepath.Dir(gitDir), ".account.git.*")
 	if err != nil {
 		return err
@@ -79,9 +75,6 @@ func createAccountRepo(ctx context.Context, r *Runner, gitDir string) error {
 		{"gc.auto", "0"},                  // maintenance runs on the serve child's timer, never inside a command
 		{"core.logAllRefUpdates", "true"}, // a bare repo has no reflogs by default
 		{"merge.conflictStyle", "zdiff3"},
-	}
-	if v.AtLeast(2, 48) {
-		config = append(config, [2]string{"worktree.useRelativePaths", "true"})
 	}
 	if _, err := r.Isolated(ctx, tmp, "init", "--bare", "--quiet"); err != nil {
 		return err

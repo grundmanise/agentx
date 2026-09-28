@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -62,7 +63,7 @@ func TestEnvironments(t *testing.T) {
 	expect(t, "isolated", out,
 		[]string{
 			"-c core.autocrlf=false -c commit.gpgsign=false -c core.hooksPath=/dev/null -c core.attributesFile=/dev/null --git-dir=/repo.git commit",
-			"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_NO_LAZY_FETCH=1",
+			"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_ATTR_NOSYSTEM=1", "GIT_NO_LAZY_FETCH=1",
 			"GIT_AUTHOR_NAME=agentx", "GIT_AUTHOR_EMAIL=agentx@localhost", "GIT_AUTHOR_DATE=946684800 +0000",
 			"GIT_COMMITTER_NAME=agentx", "GIT_COMMITTER_EMAIL=agentx@localhost", "GIT_COMMITTER_DATE=946684800 +0000",
 			"HOME=/home/someone",
@@ -75,7 +76,7 @@ func TestEnvironments(t *testing.T) {
 	}
 	expect(t, "user", out,
 		[]string{"--git-dir=/repo.git fetch origin", "GIT_AUTHOR_NAME=Someone", "GIT_SSH_COMMAND=ssh -i /home/someone/key", "HOME=/home/someone"},
-		[]string{"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_NO_LAZY_FETCH=1", "AGENTX_LEAK=from the process", "GIT_ASKPASS=/bin/false"})
+		[]string{"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_ATTR_NOSYSTEM=1", "GIT_NO_LAZY_FETCH=1", "AGENTX_LEAK=from the process", "GIT_ASKPASS=/bin/false"})
 
 	serve := New(env, true, logf)
 	out, err = serve.run(ctx, call{}, "fetch")
@@ -160,14 +161,7 @@ func TestOpenAccountRepoCreatesOnceWithAgentxConfig(t *testing.T) {
 	if err != nil || !created || gitDir != filepath.Join(home, "account.git") {
 		t.Fatalf("OpenAccountRepo = %q, %v, %v", gitDir, created, err)
 	}
-	v, err := r.Version(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
 	want := map[string]string{"core.bare": "true", "gc.auto": "0", "core.logAllRefUpdates": "true", "merge.conflictStyle": "zdiff3"}
-	if v.AtLeast(2, 48) {
-		want["worktree.useRelativePaths"] = "true"
-	}
 	for key, value := range want {
 		if got, err := r.Isolated(ctx, gitDir, "config", "--get", key); err != nil || got != value {
 			t.Errorf("%s = %q, %v; want %q", key, got, err, value)
@@ -180,4 +174,152 @@ func TestOpenAccountRepoCreatesOnceWithAgentxConfig(t *testing.T) {
 	if _, exists, err := CheckAccountRepo(ctx, r, home); err != nil || !exists {
 		t.Errorf("CheckAccountRepo after creation = %v, %v", exists, err)
 	}
+}
+
+// TestIsolatedReadsNoAttributesOfTheUsers: an attributes file of the
+// user's, the one git reads under XDG_CONFIG_HOME when no configuration
+// names one, sets nothing for a path in the isolated environment, where a
+// merge driver it named would decide how files merge; the user's own
+// environment still reads it.
+func TestIsolatedReadsNoAttributesOfTheUsers(t *testing.T) {
+	t.Parallel()
+	config := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(config, "git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(config, "git", "attributes"), []byte("*.md merge=union\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env := map[string]string{"PATH": os.Getenv("PATH"), "HOME": t.TempDir(), "XDG_CONFIG_HOME": config}
+	r := New(env, false, func(string, ...any) {})
+	ctx := context.Background()
+	gitDir := filepath.Join(t.TempDir(), "repo.git")
+	if _, err := r.Isolated(ctx, gitDir, "init", "--bare", "--quiet", gitDir); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := r.Isolated(ctx, gitDir, "check-attr", "merge", "--", "notes.md"); err != nil || got != "notes.md: merge: unspecified" {
+		t.Errorf("isolated check-attr = %q, %v; want the attribute unspecified", got, err)
+	}
+	if got, err := r.User(ctx, gitDir, "check-attr", "merge", "--", "notes.md"); err != nil || got != "notes.md: merge: union" {
+		t.Errorf("user check-attr = %q, %v; want the user's attribute", got, err)
+	}
+}
+
+// TestIsolatedStatusAnswersWithTheExitStatus: a git that exits with a
+// status up to the bound the caller names answers with it and with what it
+// wrote, as merge-tree does for a merge that conflicts; one that exits
+// above it, or that is killed, is an error as any failure of Isolated is.
+func TestIsolatedStatusAnswersWithTheExitStatus(t *testing.T) {
+	dir := t.TempDir()
+	script := "#!/bin/sh\nfor last; do :; done\necho written\nif [ \"$last\" = kill ]; then kill -9 $$; fi\nexit $last\n"
+	if err := os.WriteFile(filepath.Join(dir, "git"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	r := New(map[string]string{"PATH": dir}, false, func(string, ...any) {})
+	ctx := context.Background()
+	for _, c := range []struct {
+		exit   string
+		status int
+		fails  bool
+	}{
+		{exit: "0"},
+		{exit: "1", status: 1},
+		{exit: "2", status: 2},
+		{exit: "3", fails: true},
+		{exit: "kill", fails: true},
+	} {
+		out, status, err := r.IsolatedStatus(ctx, "/repo.git", 2, "merge-tree", c.exit)
+		switch {
+		case c.fails && err == nil:
+			t.Errorf("exit %s: no error, status %d", c.exit, status)
+		case c.fails:
+		case err != nil:
+			t.Errorf("exit %s: %v", c.exit, err)
+		case status != c.status || out != "written\n":
+			t.Errorf("exit %s: status %d and %q, want %d and %q", c.exit, status, out, c.status, "written\n")
+		}
+	}
+}
+
+// TestAddCheckoutLocksWithTheReason: a checkout is added detached at the
+// commit given and locked with the reason, which git worktree list shows,
+// so that git's own pruning never takes it.
+func TestAddCheckoutLocksWithTheReason(t *testing.T) {
+	t.Parallel()
+	r, gitDir, commit := checkoutRepo(t)
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "merges", "alpha")
+	if err := r.AddCheckout(ctx, gitDir, path, commit, "a reason of its own"); err != nil {
+		t.Fatal(err)
+	}
+	list, err := r.Isolated(ctx, gitDir, "worktree", "list", "--porcelain")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "HEAD " + commit + "\ndetached\nlocked a reason of its own"; !strings.Contains(list, want) {
+		t.Errorf("worktree list says\n%s\nwant it to hold %q", list, want)
+	}
+	if top, err := r.InCheckout(ctx, path, "rev-parse", "HEAD"); err != nil || strings.TrimSpace(top) != commit {
+		t.Errorf("HEAD in the checkout = %q, %v; want %s", top, err, commit)
+	}
+}
+
+// TestRemoveCheckoutOfALockedCheckout: a locked checkout is removed, its
+// directory and its registration, and so is one whose directory is already
+// gone; removing one git knows nothing of is no error.
+func TestRemoveCheckoutOfALockedCheckout(t *testing.T) {
+	t.Parallel()
+	r, gitDir, commit := checkoutRepo(t)
+	ctx := context.Background()
+	for _, gone := range []bool{false, true} {
+		path := filepath.Join(t.TempDir(), "alpha")
+		if err := r.AddCheckout(ctx, gitDir, path, commit, "locked"); err != nil {
+			t.Fatal(err)
+		}
+		if gone {
+			if err := os.RemoveAll(path); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := r.RemoveCheckout(ctx, gitDir, path); err != nil {
+			t.Fatalf("directory gone %v: %v", gone, err)
+		}
+		if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("directory gone %v: the checkout is still there: %v", gone, err)
+		}
+		if list, err := r.Isolated(ctx, gitDir, "worktree", "list", "--porcelain"); err != nil || strings.Contains(list, "locked") {
+			t.Errorf("directory gone %v: worktree list says\n%s, %v", gone, list, err)
+		}
+		if err := r.RemoveCheckout(ctx, gitDir, path); err != nil {
+			t.Errorf("directory gone %v: removing it again: %v", gone, err)
+		}
+	}
+}
+
+// checkoutRepo is a bare repository holding one commit, for a checkout of
+// it to be added at.
+func checkoutRepo(t *testing.T) (*Runner, string, string) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	ctx := context.Background()
+	gitDir := filepath.Join(t.TempDir(), "account.git")
+	r := New(map[string]string{"PATH": os.Getenv("PATH"), "HOME": t.TempDir()}, false, func(string, ...any) {})
+	if _, err := r.Isolated(ctx, gitDir, "init", "--bare", "--quiet", gitDir); err != nil {
+		t.Fatal(err)
+	}
+	blob, err := r.IsolatedInput(ctx, gitDir, strings.NewReader("notes\n"), "hash-object", "-w", "--stdin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree, err := r.IsolatedInput(ctx, gitDir, strings.NewReader("100644 blob "+strings.TrimSpace(blob)+"\tnotes.md\n"), "mktree")
+	if err != nil {
+		t.Fatal(err)
+	}
+	commit, err := r.Isolated(ctx, gitDir, "commit-tree", strings.TrimSpace(tree), "-m", "one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r, gitDir, commit
 }

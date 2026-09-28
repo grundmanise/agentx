@@ -44,19 +44,27 @@ type invocation struct {
 // would leave a half-applied journal for the next command and save nothing;
 // the mutation finishes instead and the run stops after it. Every other
 // call of the command keeps the cancellation, so a stop before the journal
-// exists still gives up at once and leaves nothing behind.
+// exists still gives up at once and leaves nothing behind. What an
+// interrupted command left of a pending merge is pruned once the journals
+// are finished, see pruneMerges.
 func (inv *invocation) refs(ctx context.Context) home.RefUpdater {
-	return journalRefs{RefUpdater: inv.git.Refs(interrupt.Uninterruptible(ctx)), out: inv.out}
+	ctx = interrupt.Uninterruptible(ctx)
+	return journalRefs{RefUpdater: inv.git.Refs(ctx), out: inv.out,
+		prune: func() error { return inv.pruneMerges(gitx.AccountRepoPath(inv.dirs.Home)) }}
 }
 
-// journalRefs is the ref updater plus the command's stderr: the journal has
-// no streams of its own.
+// journalRefs is the ref updater plus the command's stderr, the journal
+// having no streams of its own, and what prunes the pending merges an
+// interrupted command left, see pruneMerges.
 type journalRefs struct {
 	home.RefUpdater
-	out *writer
+	out   *writer
+	prune func() error
 }
 
 func (j journalRefs) Warn(message string) { j.out.warn(message) }
+
+func (j journalRefs) Prune() error { return j.prune() }
 
 // Main is Run for a real process: it watches the stop signals first, so
 // that a Ctrl-C or a SIGTERM ends the run through its own error path

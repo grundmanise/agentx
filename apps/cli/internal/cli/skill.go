@@ -77,6 +77,12 @@ const driftUpstreamRemoved = "upstream removed"
 // candidate rather than in drift.
 const updateAvailable = "update available"
 
+// mergePending is what the skill list row says of a managed skill an update
+// left a pending merge for. Like an update available it is no drift: the
+// library directory is as it was, and the event carries it as
+// pending_merge.
+const mergePending = "merge pending"
+
 func newSkillCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "skill",
@@ -327,6 +333,9 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 		if next, ok := rec.AtCandidate(); ok {
 			ev.Candidate = &scan.LibraryCandidate{UpstreamCommit: next.Import.Commit, ContentHash: next.Import.Hash}
 		}
+		// A merge an update left pending is its checkout under agentx
+		// home, which the context read with one read of the directory.
+		ev.PendingMerge = obs.pending
 	}
 	return ev
 }

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"unicode"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
@@ -146,17 +147,19 @@ func TestSkillListSpawnsOneGitProcess(t *testing.T) {
 
 // TestSkillListSpawnsOneGitProcessWhateverTheDrift holds the budget above
 // for skills that differ every way drift reads: one edited, a file of it
-// made executable too, and with an update a check pinned, one whose link
-// became a real directory in one configuration and whose placement is gone
-// from another, and whose upstream no longer holds it, and a skill of the
-// user's own beside them, and a managed branch whose library directory is
-// gone and whose commit carries no lineage, which a warning names with
-// <source> for the source it cannot name. Whether a skill is displaced,
-// missing or gone is read in process, and so is modified until the tree id
-// differs: then git decides, with a read-tree, an add and a write-tree for
-// the edited skill and one read of the user's global ignore file per run.
-// Its candidate and its upstream-removed marker come with the lineage, so
-// the listing still runs one for-each-ref, and so does the snapshot.
+// made executable too, with an update a check pinned and a merge an update
+// left pending, one whose link became a real directory in one
+// configuration and whose placement is gone from another, and whose
+// upstream no longer holds it, and a skill of the user's own beside them,
+// and a managed branch whose library directory is gone and whose commit
+// carries no lineage, which a warning names with <source> for the source
+// it cannot name. Whether a skill is displaced, missing or gone is read in
+// process, and so is modified until the tree id differs: then git decides,
+// with a read-tree, an add and a write-tree for the edited skill and one
+// read of the user's global ignore file per run. Its candidate and its
+// upstream-removed marker come with the lineage, so the listing still runs
+// one for-each-ref, and so does the snapshot, and its pending merge is its
+// checkout under agentx home, which costs no git process at all.
 func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -176,10 +179,15 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	candidate := strings.TrimSpace(h.accountGit("commit-tree", "refs/heads/managed/alpha^{tree}", "-p", "refs/heads/managed/alpha", "-m", message))
 	h.accountGit("update-ref", "refs/agentx/candidate/alpha", candidate)
 	h.accountGit("update-ref", "refs/agentx/upstream-removed/beta", "refs/agentx/sources/"+source.ID(s.url))
+	// A pending merge is a checkout of the account repo, as an update adds
+	// one.
+	h.accountGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", pendingReason,
+		pendingCheckout(h, "alpha"), h.ref(lineage.ManagedRef("alpha")))
 	equal(t, "alpha's state", h.listed("alpha")["state"], stateModified)
 	if h.listed("alpha")["candidate"] == nil {
 		t.Error("alpha carries no candidate")
 	}
+	equal(t, "alpha's pending merge", h.listed("alpha")["pending_merge"], true)
 	equal(t, "beta's drift", drift(h.listed("beta")), "displaced,missing,upstream removed")
 
 	calls := countingGit(t, h)
@@ -206,7 +214,9 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	}
 	ghost := "ghost is managed in the account repo but the library holds no skill directory for it;" +
 		" run 'agentx skill add <source> --skill ghost' to install it again, or 'agentx skill remove ghost' to stop managing it"
-	equal(t, "skill list's warning", h.mustRun("skill", "list").stderr, "warning: "+ghost+"\n")
+	list := h.mustRun("skill", "list")
+	equal(t, "skill list's warning", list.stderr, "warning: "+ghost+"\n")
+	contains(t, "skill list", list.stdout, "modified, update available, merge pending  ")
 	count("skill list", calls())
 	before := len(calls())
 	snap := h.snapshot(t)
@@ -214,10 +224,10 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	states := map[string]string{}
 	for _, e := range snap["library"].([]any) {
 		entry := e.(map[string]any)
-		states[entry["name"].(string)] = fmt.Sprint(entry["state"]) + " " + drift(entry)
+		states[entry["name"].(string)] = fmt.Sprint(entry["state"]) + " " + drift(entry) + " " + fmt.Sprint(entry["pending_merge"])
 	}
-	equal(t, "alpha in the snapshot", states["alpha"], stateModified+" ")
-	equal(t, "beta in the snapshot", states["beta"], stateCurrent+" displaced,missing,upstream removed")
+	equal(t, "alpha in the snapshot", states["alpha"], stateModified+"  true")
+	equal(t, "beta in the snapshot", states["beta"], stateCurrent+" displaced,missing,upstream removed <nil>")
 	contains(t, "the snapshot's warnings", fmt.Sprint(snap["warnings"]), ghost)
 }
 

@@ -80,11 +80,17 @@ func ReadBase(ctx context.Context, r *gitx.Runner, gitDir string, rec Record) (B
 	if !rec.HasImport {
 		return Base{}, fmt.Errorf("%w: %s carries no lineage", ErrTrailer, rec.Ref)
 	}
-	entries, err := source.ReadTree(ctx, r, gitDir, rec.Commit)
+	return readVersion(ctx, r, gitDir, rec.Commit, rec.Import.Dir(), rec.Ref)
+}
+
+// readVersion reads the version of a skill a tree of the account repo holds
+// under the upstream directory dir, the tree's one entry, as ReadBase says.
+// what names the tree in an error.
+func readVersion(ctx context.Context, r *gitx.Runner, gitDir, treeish, dir, what string) (Base, error) {
+	entries, err := source.ReadTree(ctx, r, gitDir, treeish)
 	if err != nil {
 		return Base{}, err
 	}
-	dir := rec.Import.Dir()
 	var base Base
 	for _, e := range entries {
 		switch rest, below := strings.CutPrefix(e.Path, dir+"/"); {
@@ -94,11 +100,11 @@ func ReadBase(ctx context.Context, r *gitx.Runner, gitDir string, rec Record) (B
 			e.Path = rest
 			base.Entries = append(base.Entries, e)
 		default:
-			return Base{}, fmt.Errorf("%w: %s holds %q beside %s", ErrTrailer, rec.Ref, e.Path, dir)
+			return Base{}, fmt.Errorf("%w: %s holds %q beside %s", ErrTrailer, what, e.Path, dir)
 		}
 	}
 	if base.Tree == "" {
-		return Base{}, fmt.Errorf("%w: %s holds no directory %s", ErrTrailer, rec.Ref, dir)
+		return Base{}, fmt.Errorf("%w: %s holds no directory %s", ErrTrailer, what, dir)
 	}
 	return base, nil
 }

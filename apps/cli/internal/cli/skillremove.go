@@ -125,6 +125,12 @@ func (inv *invocation) skillRemove(ctx context.Context, name string, from []stri
 			if whole && values[lineage.ForkRef(name)] != "" {
 				return forkOutOfScope(name)
 			}
+			// A merge an update left pending holds the library directory
+			// and the import branch the removal would take away; taking
+			// one placement away leaves both, and is not refused.
+			if whole && inv.mergePending(name) {
+				return pendingMergeRefusal(name, "removed")
+			}
 			refs = values
 		}
 		edit, err := inv.beginSettings()
@@ -274,6 +280,9 @@ func (inv *invocation) removeAbsent(ctx context.Context, name string, from []str
 		}
 		if values[lineage.ManagedRef(name)] != commit || values[lineage.ForkRef(name)] != "" {
 			return moved
+		}
+		if inv.mergePending(name) {
+			return pendingMergeRefusal(name, "removed")
 		}
 		// The base version a copy is judged against: the tree and the
 		// trailers of the commit the branch holds, read for that commit.

@@ -84,11 +84,12 @@ type LibraryEntry struct {
 	Source         string             `json:"source,omitempty"`  // the canonical URL of the upstream
 	Subpath        *string            `json:"subpath,omitempty"` // the directory in the source, "" for its root
 	UpstreamCommit string             `json:"upstream_commit,omitempty"`
-	BaseHash       string             `json:"base_hash,omitempty"` // the content hash of the base version
-	ContentHash    string             `json:"content_hash"`        // what the library holds now
-	State          string             `json:"state,omitempty"`     // current or modified, for a managed skill
-	Drift          []string           `json:"drift,omitempty"`     // the drift states beside state, for a managed skill
-	Candidate      *LibraryCandidate  `json:"candidate,omitempty"` // the update the last check found, for a managed skill
+	BaseHash       string             `json:"base_hash,omitempty"`     // the content hash of the base version
+	ContentHash    string             `json:"content_hash"`            // what the library holds now
+	State          string             `json:"state,omitempty"`         // current or modified, for a managed skill
+	Drift          []string           `json:"drift,omitempty"`         // the drift states beside state, for a managed skill
+	Candidate      *LibraryCandidate  `json:"candidate,omitempty"`     // the update the last check found, for a managed skill
+	PendingMerge   bool               `json:"pending_merge,omitempty"` // an update left a merge pending, read from <agentx home>/merges/<name>
 	Placements     []LibraryPlacement `json:"placements"`
 	Universal      []string           `json:"universal"` // every detected universal client, which sees the skill whatever its placements
 }
