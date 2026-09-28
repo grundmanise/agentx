@@ -152,11 +152,11 @@ func updateMergeMessage(name string, from, to lineage.Record) string {
 // pruneMerges removes what an interrupted command left of a pending merge,
 // under the lock and once every journal is finished: a directory under
 // the merges directory that is no checkout git knows, its .git file gone
-// or naming a git directory that is not there, and the registration of a
-// checkout under the merges directory whose directory is gone, its
+// or naming a git directory that is not there, and git's registration of a
+// checkout locked with agentx's reason whose directory is gone, its
 // directory under the account repo's worktrees, as git's own pruning
-// removes one. A checkout anywhere else, a fork's worktree say, is never
-// touched. It runs no git.
+// removes one. A checkout agentx did not lock, a fork's worktree say, is
+// never touched. It runs no git.
 func (inv *invocation) pruneMerges(gitDir string) error {
 	entries, err := os.ReadDir(inv.mergesDir())
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -170,10 +170,7 @@ func (inv *invocation) pruneMerges(gitDir string) error {
 			}
 		}
 	}
-	worktrees, err := filepath.Abs(filepath.Join(gitDir, "worktrees"))
-	if err != nil {
-		return err
-	}
+	worktrees := filepath.Join(gitDir, "worktrees")
 	admins, err := os.ReadDir(worktrees)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
@@ -181,39 +178,23 @@ func (inv *invocation) pruneMerges(gitDir string) error {
 	if err != nil {
 		return err
 	}
-	// git records where a checkout is by its real path, or by one relative
-	// to its registration, so the directory holding a checkout is compared
-	// with the merges directory by the real path of the directory above,
-	// which is agentx home, there whatever else is not.
-	home, err := filepath.Abs(inv.dirs.Home)
-	if err != nil {
-		return err
-	}
-	if home, err = filepath.EvalSymlinks(home); err != nil {
-		return err
-	}
-	inMerges := func(path string) bool {
-		dir := filepath.Dir(path)
-		if above, err := filepath.EvalSymlinks(filepath.Dir(dir)); err == nil {
-			dir = filepath.Join(above, filepath.Base(dir))
-		}
-		return dir == filepath.Join(home, "merges")
-	}
 	for _, a := range admins {
 		admin := filepath.Join(worktrees, a.Name())
+		reason, err := os.ReadFile(filepath.Join(admin, "locked"))
+		if err != nil || strings.TrimSuffix(string(reason), "\n") != pendingReason {
+			continue
+		}
 		b, err := os.ReadFile(filepath.Join(admin, "gitdir"))
 		if err != nil {
 			continue
 		}
+		// git records the checkout's .git file by its path, or by one
+		// relative to the registration.
 		path := strings.TrimSuffix(string(b), "\n")
 		if !filepath.IsAbs(path) {
 			path = filepath.Join(admin, path)
 		}
-		path = filepath.Dir(path)
-		if !inMerges(path) {
-			continue
-		}
-		if _, err := os.Lstat(path); errors.Is(err, fs.ErrNotExist) {
+		if _, err := os.Lstat(filepath.Dir(path)); errors.Is(err, fs.ErrNotExist) {
 			if err := os.RemoveAll(admin); err != nil {
 				return err
 			}
