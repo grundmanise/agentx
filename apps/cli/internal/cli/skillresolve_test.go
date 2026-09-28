@@ -650,6 +650,36 @@ func TestSkillResolveCompletesAPlainGitCommitInTheCheckout(t *testing.T) {
 	}
 }
 
+// TestSkillResolveFromInsideTheCheckout: a run started in the checkout,
+// as one is once the merge is resolved there with plain git, completes the
+// merge or gives it up although that removes the directory it runs in.
+func TestSkillResolveFromInsideTheCheckout(t *testing.T) {
+	// Not parallel: it changes the process's working directory.
+	pending := func(t *testing.T) *harness {
+		t.Helper()
+		h := clashHarness(t, nil, func(*sourceRepo) {}, func(string) {})
+		t.Chdir(filepath.Join(pendingCheckout(h, "kit"), "kit-dir"))
+		return h
+	}
+	t.Run("completing the merge", func(t *testing.T) {
+		h := pending(t)
+		checkoutGit(t, h, "kit", "checkout", "--theirs", "--", "kit-dir/notes.md")
+		checkoutGit(t, h, "kit", "add", "--", "kit-dir/notes.md")
+		checkoutGit(t, h, "kit", "commit", "-q", "--no-edit")
+		out := h.mustRun("--json", "skill", "resolve", "kit")
+		contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), "resolved kit and updated it from ")
+		noCheckout(t, h, "kit")
+		equal(t, "notes.md", fileBody(t, filepath.Join(h.library, "kit", "notes.md")), "uno\n")
+	})
+	t.Run("giving the merge up", func(t *testing.T) {
+		h := pending(t)
+		out := h.mustRun("--json", "skill", "resolve", "kit", "--abort")
+		equal(t, "summary", h.one(out.stdout, "result")["summary"], "gave up the merge of kit; the library directory is as it was")
+		noCheckout(t, h, "kit")
+		equal(t, "notes.md", fileBody(t, filepath.Join(h.library, "kit", "notes.md")), "ONE\n")
+	})
+}
+
 // TestSkillResolveCommitsTheMergeAsYou: the commit that completes the
 // merge is the user's, with their user.name and user.email and the time
 // it is made, or agentx's identity where they set none, and carries the
@@ -864,14 +894,15 @@ func TestSkillResolveReadsAFileRemovedFromTheCheckout(t *testing.T) {
 	}
 }
 
-// TestSkillResolveRefusesToCompleteWhatItCannotReplace: completing the
-// merge replaces the library directory, so one it cannot replace as it is
-// is refused with exit code 6 and nothing written: a library entry that is
-// a symlink, and one that is gone. So is a merge that resolves to a
-// directory with no SKILL.md, which would take the skill out of every
-// client. The checkout stays with every resolution staged, the library,
-// every copy, the import branch and the candidate are left as they were,
-// and the run can be made again once that is put right, or the merge
+// TestSkillResolveRefusesToCompleteWhatItCannotReplace: completing the merge
+// replaces the library directory, so one it cannot replace as it is is
+// refused with exit code 6 and nothing written: a library entry that is a
+// symlink, one that is gone, and a directory edited while the completion
+// runs, whose edit is kept and merged by the next run. So is a merge that
+// resolves to a directory with no SKILL.md, which would take the skill out
+// of every client. The checkout stays with every resolution staged, the
+// library, every copy, the import branch and the candidate are left as they
+// were, and the run can be made again once that is put right, or the merge
 // given up.
 func TestSkillResolveRefusesToCompleteWhatItCannotReplace(t *testing.T) {
 	t.Parallel()
@@ -891,6 +922,32 @@ func TestSkillResolveRefusesToCompleteWhatItCannotReplace(t *testing.T) {
 		equal(t, "what is left beside the library", strings.Join(hiddenEntries(t, h.library), " "), "")
 		return h.one(out.stdout, "error")
 	}
+	t.Run("a directory edited while the completion runs", func(t *testing.T) {
+		t.Parallel()
+		h, _, _ := resolveHarness(t)
+		resolveKit(t, h, 0, kitSides...)
+		tip := h.ref(lineage.ManagedRef("kit"))
+		usage := filepath.Join(h.library, "kit", "usage.md")
+		stubGit(t, h, `#!/bin/sh
+case " $* " in
+*" write-tree "*) printf 'an edit made meanwhile\n' > `+shellWord(usage)+` || exit 1 ;;
+esac
+exec `+realGit(t)+` "$@"
+`)
+		out := resolveKit(t, h, 6, "kept.md:1=theirs")
+		e := h.one(out.stdout, "error")
+		equal(t, "message", e["message"], "kit changed while its merge was being completed, so nothing was changed")
+		equal(t, "hint", e["hint"], "run the command again to complete the merge with the skill as it is now")
+		equal(t, "the edit", fileBody(t, usage), "an edit made meanwhile\n")
+		equal(t, "the import branch", h.ref(lineage.ManagedRef("kit")), tip)
+		equal(t, "journals", journalCount(t, h), 0)
+		equal(t, "what is left beside the library", strings.Join(hiddenEntries(t, h.library), " "), "")
+
+		h.env["PATH"] = gitOnlyPath(t) // the git that edits the directory is gone
+		again := resolveKit(t, h, 0)
+		contains(t, "summary once run again", h.one(again.stdout, "result")["summary"].(string), "resolved kit, merged the edits made to it meanwhile and updated it from ")
+		equal(t, "usage.md once run again", fileBody(t, usage), "an edit made meanwhile\n")
+	})
 	t.Run("a library entry that is a symlink", func(t *testing.T) {
 		t.Parallel()
 		h, _, _ := resolveHarness(t)

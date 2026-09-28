@@ -31,15 +31,14 @@ func newSkillResolveCommand(inv *invocation) *cobra.Command {
 		Long: "Show and resolve the conflicts an update found between the edits of a managed skill\n" +
 			"and its newer version. The merge waits in a hidden Git checkout, merges/<name> in\n" +
 			"agentx home, where plain git works too; agents never see a half-merged file. With no\n" +
-			"flag the files left to resolve are shown and nothing changes. --hunk\n" +
-			"<file>:<index>=mine|theirs|both chooses one part of a file, numbered as shown, and\n" +
-			"can be given once per part: every part of a file is chosen in the same run, and a\n" +
-			"file left with no conflict markers is staged, as in Git. --editor opens every text\n" +
-			"file left to resolve, or the one <file> names, in your editor, in place: GIT_EDITOR,\n" +
-			"else EDITOR, else 'code --wait'; <file> is taken with --editor alone. Once no file is\n" +
-			"left the merge completes: the library directory takes the merged version and the\n" +
-			"skill is at its update. --abort gives the merge up, as 'git merge --abort' would, and\n" +
-			"leaves the library directory as it is.",
+			"flag the files left to resolve are shown. --hunk <file>:<index>=mine|theirs|both\n" +
+			"chooses one part of a file, numbered as shown, and can be given once per part: every\n" +
+			"part of a file is chosen in the same run, and a file left with no conflict markers is\n" +
+			"staged, as in Git. --editor opens every text file left to resolve, or the one <file>\n" +
+			"names, in your editor, in place: GIT_EDITOR, else EDITOR, else 'code --wait'; <file>\n" +
+			"is taken with --editor alone. Once no file is left the merge completes: the library\n" +
+			"directory takes the merged version and the skill is at its update. --abort gives the\n" +
+			"merge up, as 'git merge --abort' would, and leaves the library directory as it is.",
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			const hint = "run 'agentx skill resolve --help' to see how a merge is resolved"
@@ -147,6 +146,7 @@ func cutLast(s, sep string) (before, after string, found bool) {
 // whose checkout is there, whatever else is true of it; everything else
 // reads the checkout first, see readCheckout.
 func (inv *invocation) skillResolve(ctx context.Context, name string, act resolveAction) error {
+	inv.leaveCheckout(name)
 	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
 		return accountRepoFailure(err)
@@ -184,6 +184,18 @@ func (inv *invocation) skillResolve(ctx context.Context, name string, act resolv
 		return r.resolve(ctx, act.choices)
 	}
 	return r.show(ctx)
+}
+
+// leaveCheckout moves the process out of the checkout of the skill called
+// name when the run starts in it, as it does once the merge is resolved
+// there with plain git: completing or giving up the merge removes the
+// checkout, and every git process started after that would inherit a
+// working directory that is gone.
+func (inv *invocation) leaveCheckout(name string) {
+	path := inv.checkoutPath(name)
+	if wd, err := os.Getwd(); err == nil && (samePath(wd, path) || inside(wd, path)) {
+		_ = os.Chdir(inv.mergesDir())
+	}
 }
 
 // noMergePending refuses a run on a skill with no merge pending.
@@ -323,12 +335,12 @@ func movedBranchFailure(name string) *failure {
 		"run '"+skillCommand("resolve", name, "--abort")+"' to give it up")
 }
 
-// show reports the merge as it stands and changes nothing: one conflict
-// event with every file left unmerged and every hunk of it, and in the text
-// the same lines an update prints under a line that says how many files
-// are left, with a warning first when the import branch moved since the
-// merge started, which keeps it from completing. A merge with no file
-// left unmerged, one resolved with plain git say, is completed instead.
+// show reports the merge as it stands: one conflict event with every file
+// left unmerged and every hunk of it, and in the text the same lines an
+// update prints under a line that says how many files are left, with a
+// warning first when the import branch moved since the merge started,
+// which keeps it from completing. A merge with no file left unmerged, one
+// resolved with plain git say, is completed instead.
 func (r *resolveRun) show(ctx context.Context) error {
 	inv, out, name, p := r.inv, r.inv.out, r.rec.Name, r.p
 	if len(p.files) == 0 {
