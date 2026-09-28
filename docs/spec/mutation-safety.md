@@ -24,4 +24,4 @@ An operation spanning multiple directories and refs is recoverable, not globally
 
 ## Verification required by implementations
 
-Exercise process termination at each durable boundary, including after a live write but before its journal update. Recovery must preserve both committed lineage and unexpected edits. Cover adoption followed by update, edits during a pending merge before auto-commit, a modified copy placement, cancellation, and a source path changed immediately before replacement. Re-running recovery must not repeat a completed destructive step.
+Exercise process termination at each durable boundary, including after a live write but before its journal update. Recovery must preserve both committed lineage and unexpected edits. Cover adoption followed by update, edits during a pending merge before it is applied, a modified copy placement, cancellation, and a source path changed immediately before replacement. Re-running recovery must not repeat a completed destructive step.

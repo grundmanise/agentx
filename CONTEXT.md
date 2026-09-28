@@ -124,11 +124,11 @@ The import commit of the newer upstream version an update check found for a mana
 _Avoid_: pending update, available version
 
 **Update**:
-Applying a managed skill's update candidate, only ever at the user's request: the import branch moves to the candidate, which becomes the skill's base version, the library directory takes the new content, keeping the files git ignores there, and copy placements that held the old version are refreshed while ones edited in place are kept. A skill that is not modified updates by replacement; a modified skill updates by a three-way merge of its edits with the candidate, over the base version, which applies when it is clean and leaves a pending merge when it conflicts. The skill keeps its library name and its placements, whatever the newer version calls it.
+Applying a managed skill's update candidate, only ever at the user's request: the import branch moves to the candidate, which becomes the skill's base version, the library directory takes the new content, keeping the files git ignores there, and copy placements that held the old version are refreshed while ones edited in place are kept. A skill that is not modified updates by replacement; a modified skill updates by a three-way merge of its edits with the candidate, over the base version, which applies when it is clean and leaves a pending merge when it conflicts; the next update applies a pending merge once it is resolved. The skill keeps its library name and its placements, whatever the newer version calls it.
 _Avoid_: upgrade, pull, sync
 
 **Pending merge**:
-The merge an update of a modified skill leaves when the edits and the update candidate conflict: an ordinary Git merge in progress in a Git worktree of the account repo under agentx home, resolved with Git. The library directory, and so every agent, keeps its content until the merge is resolved or given up. While it exists the skill is not updated, reverted or removed. Survives restarts.
+The merge an update of a modified skill leaves when the edits and the update candidate conflict: an ordinary Git merge in progress in a Git worktree of the account repo under agentx home, resolved with Git. The library directory, and so every agent, keeps its content until the next update applies the resolved merge, or the merge is given up with `skill update --abort`. While it exists the skill is not reverted or removed. Survives restarts.
 _Avoid_: merge ref, conflict state
 
 **Modified skill**:
