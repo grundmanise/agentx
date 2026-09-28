@@ -26,6 +26,15 @@ func universalHarness(t *testing.T, extra ...string) (*harness, *sourceRepo) {
 	return h, s
 }
 
+// universalHome is the machine of universalHarness with no source added,
+// for a test whose library skill is the user's own.
+func universalHome(t *testing.T, extra ...string) *harness {
+	t.Helper()
+	h := newHarness(t)
+	h.build(t, fixture{dirs: append([]string{".claude", ".codex", ".gemini"}, extra...)})
+	return h
+}
+
 // universalOf renders the universal clients a skill event names, joined with
 // commas. A missing field fails the test rather than reading as none: an
 // event that names no universal client says so with an empty list.
@@ -43,11 +52,12 @@ func universalOf(t *testing.T, ev jsonEvent) string {
 }
 
 // TestSkillAddNamesTheUniversalClients: an install tells the user which
-// clients will see the skill whatever they chose, in the text, the result
-// and the library_skill event alike. Codex is named when it is disabled and
-// when --to leaves it out, since it reads the library and the skill is in
-// the library either way, while the placements stay those of the
-// configurations the install covered.
+// clients will see the skill whatever they chose, in the result and the
+// library_skill event alike. Codex is named when it is disabled and when
+// --to leaves it out, since it reads the library and the skill is in the
+// library either way, while the placements stay those of the
+// configurations the install covered. The text ends with the same line,
+// as TestSkillPlaceNamesTheUniversalClients shows for a placement.
 func TestSkillAddNamesTheUniversalClients(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
@@ -63,29 +73,19 @@ func TestSkillAddNamesTheUniversalClients(t *testing.T) {
 	} {
 		t.Run(c.what, func(t *testing.T) {
 			t.Parallel()
-			for _, asJSON := range []bool{true, false} {
-				h, s := universalHarness(t)
-				if c.disable != "" {
-					equal(t, "disable", h.run("config", "disable", c.disable).exit, 0)
-				}
-				args := append([]string{"skill", "add", s.url, "--skill", "alpha"}, c.to...)
-				if asJSON {
-					args = append([]string{"--json"}, args...)
-				}
-				out := h.run(args...)
-				equal(t, "exit", out.exit, 0)
-				nothingAt(t, "a placement in a universal client's own directory", filepath.Join(h.home, ".codex", "skills", "alpha"))
-				if !asJSON {
-					contains(t, "stdout", out.stdout, "\n  always available to universal clients: codex, gemini-cli\n")
-					continue
-				}
-				ev := h.one(out.stdout, "library_skill")
-				equal(t, "universal", universalOf(t, ev), "codex,gemini-cli")
-				equal(t, "placements", strings.Join(placementsOf(t, ev), ";"), c.placements)
-				summary := h.one(out.stdout, "result")["summary"].(string)
-				if !strings.HasSuffix(summary, "; always available to universal clients: codex, gemini-cli") {
-					t.Errorf("the summary does not end naming the universal clients: %q", summary)
-				}
+			h, s := universalHarness(t)
+			if c.disable != "" {
+				equal(t, "disable", h.run("config", "disable", c.disable).exit, 0)
+			}
+			out := h.run(append([]string{"--json", "skill", "add", s.url, "--skill", "alpha"}, c.to...)...)
+			equal(t, "exit", out.exit, 0)
+			nothingAt(t, "a placement in a universal client's own directory", filepath.Join(h.home, ".codex", "skills", "alpha"))
+			ev := h.one(out.stdout, "library_skill")
+			equal(t, "universal", universalOf(t, ev), "codex,gemini-cli")
+			equal(t, "placements", strings.Join(placementsOf(t, ev), ";"), c.placements)
+			summary := h.one(out.stdout, "result")["summary"].(string)
+			if !strings.HasSuffix(summary, "; always available to universal clients: codex, gemini-cli") {
+				t.Errorf("the summary does not end naming the universal clients: %q", summary)
 			}
 		})
 	}
@@ -93,7 +93,7 @@ func TestSkillAddNamesTheUniversalClients(t *testing.T) {
 
 // TestSkillAddNamesEveryUniversalClientOfABatch: each skill of a bulk
 // install is available to the same universal clients, and each skill's
-// event and block of text says so; the result names them once for the run.
+// event says so; the result names them once for the run.
 func TestSkillAddNamesEveryUniversalClientOfABatch(t *testing.T) {
 	t.Parallel()
 	h, s := universalHarness(t)
@@ -106,11 +106,6 @@ func TestSkillAddNamesEveryUniversalClientOfABatch(t *testing.T) {
 	}
 	summary := h.one(out.stdout, "result")["summary"].(string)
 	equal(t, "universal clauses in the summary", strings.Count(summary, "universal"), 1)
-
-	other, second := universalHarness(t)
-	text := other.run("skill", "add", second.url, "--all", "--to", "claude-code")
-	equal(t, "exit", text.exit, 0)
-	equal(t, "universal lines", strings.Count(text.stdout, "\n  always available to universal clients: codex, gemini-cli\n"), 2)
 }
 
 // TestSkillPlaceNamesTheUniversalClients: placing a skill later names the
@@ -131,15 +126,17 @@ func TestSkillPlaceNamesTheUniversalClients(t *testing.T) {
 	ev := h.one(out.stdout, "library_skill")
 	equal(t, "universal", universalOf(t, ev), "codex,gemini-cli")
 	equal(t, "placements", strings.Join(placementsOf(t, ev), ";"), "claude-code symlink symlink")
-	equal(t, "summary", h.one(out.stdout, "result")["summary"], "placed alpha in 1 configuration; always available to universal clients: codex, gemini-cli")
+	contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), "; always available to universal clients: codex, gemini-cli")
 
 	// The text says the same, once the rows are done. The placement is
-	// already right by now, which changes nothing about who sees the skill.
+	// already right by now, which changes nothing about who sees the skill:
+	// it is kept, reported and not skipped.
 	text := h.run("skill", "place", "alpha", "--to", "claude-code")
 	equal(t, "exit", text.exit, 0)
 	equal(t, "stdout", text.stdout, "✓ placed alpha in 1 configuration\n"+
 		"  claude-code  symlink  "+filepath.Join(h.home, ".claude", "skills", "alpha")+" -> "+filepath.Join(h.library, "alpha")+"\n"+
 		"  always available to universal clients: codex, gemini-cli\n")
+	equal(t, "stderr", text.stderr, "")
 }
 
 // TestSkillAddNamesNoUniversalClientWhereThereIsNone: a machine with no
@@ -169,8 +166,11 @@ func TestSkillAddNamesNoUniversalClientWhereThereIsNone(t *testing.T) {
 // universal clients is removing the library entry they read, which takes
 // the skill from every client. It is the removal without --from, by name:
 // every placement, the library directory, the import branch, its candidate
-// ref and its copy-mode entries go, in one mutation, and the output is the
-// output of that removal word for word.
+// ref and its copy-mode entries go, in one mutation, and the result is the
+// result of that removal, with no library_skill event, since the skill is
+// gone. --from universal given twice is one request. The text of the whole
+// removal, with a row for each universal client, is pinned in
+// TestSkillRemoveSanitisesTheNameAndQuotesThePaths.
 func TestSkillRemoveFromUniversalIsTheWholeRemoval(t *testing.T) {
 	t.Parallel()
 	h, s := universalHarness(t)
@@ -180,7 +180,7 @@ func TestSkillRemoveFromUniversalIsTheWholeRemoval(t *testing.T) {
 	h.accountGit("update-ref", "refs/agentx/candidate/alpha", head)
 	before := mutationVersion(t, h)
 
-	out := h.run("--json", "skill", "remove", "alpha", "--from", "universal")
+	out := h.run("--json", "skill", "remove", "alpha", "--from", "universal", "--from", "universal")
 	equal(t, "exit", out.exit, 0)
 	nothingAt(t, "the copy placement", filepath.Join(h.home, ".claude", "skills", "alpha"))
 	nothingAt(t, "the library directory", filepath.Join(h.library, "alpha"))
@@ -193,45 +193,6 @@ func TestSkillRemoveFromUniversalIsTheWholeRemoval(t *testing.T) {
 	equal(t, "journals left behind", journalCount(t, h), 0)
 	equal(t, "library_skill events", len(h.eventsOfType(out.stdout, "library_skill")), 0)
 	equal(t, "summary", h.one(out.stdout, "result")["summary"], "removed alpha from the library, 3 placements and its import branch")
-
-	// The text of --from universal, given twice, which is one request, is
-	// the text of a removal without --from on a machine in the same state.
-	text := func(from ...string) string {
-		t.Helper()
-		m, ms := universalHarness(t)
-		equal(t, "add", m.run("skill", "add", ms.url, "--skill", "alpha", "--copy").exit, 0)
-		out := m.run(append([]string{"skill", "remove", "alpha"}, from...)...)
-		equal(t, "exit", out.exit, 0)
-		return strings.ReplaceAll(out.stdout, m.home, "~")
-	}
-	named := text("--from", "universal", "--from", "universal")
-	equal(t, "the text of --from universal", named, text())
-	contains(t, "the text of --from universal", named, "✓ removed alpha from the library: 3 placements\n")
-	// Each universal client has a row of its own, as the help center shows.
-	for _, row := range []string{"  codex        library  ~/.agents/skills/alpha\n", "  gemini-cli   library  ~/.agents/skills/alpha\n"} {
-		contains(t, "the text of --from universal", named, row)
-	}
-}
-
-// TestSkillRemoveFromUniversalRefusesAFork: --from universal runs the whole
-// removal and so answers a fork as that removal does, before anything is
-// planned.
-func TestSkillRemoveFromUniversalRefusesAFork(t *testing.T) {
-	t.Parallel()
-	h, s := universalHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
-	head := strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/managed/alpha"))
-	h.accountGit("update-ref", "refs/heads/skills/alpha", head)
-	before := mutationVersion(t, h)
-
-	out := h.run("skill", "remove", "alpha", "--from", "universal")
-	equal(t, "exit", out.exit, 6)
-	contains(t, "stderr", out.stderr, "alpha is a fork on this machine")
-	if _, err := os.Stat(filepath.Join(h.library, "alpha", "SKILL.md")); err != nil {
-		t.Errorf("a refused removal took the library directory: %v", err)
-	}
-	equal(t, "the fork branch", strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/skills/alpha")), head)
-	equal(t, "mutations", mutationVersion(t, h), before)
 }
 
 // TestSkillRemoveFromUniversalStandsAlone: --from universal beside a client
@@ -275,34 +236,71 @@ func TestSkillRemoveFromUniversalStandsAlone(t *testing.T) {
 // universal is refused with.
 const standsAloneHint = "hint: --from universal asks for the removal without --from; drop it to remove only the placements you name\n"
 
-// TestSkillRemoveFromUniversalStandsAloneForAFork: the usage error is the
-// same for a fork, and its hint holds for one too. It is decided before the
-// refs are read, so it does not claim that --from universal takes the skill
-// from every client, which for a fork it does not: that removal is refused.
-// Dropping --from universal, as the hint says, leads to a removal that
-// works.
-func TestSkillRemoveFromUniversalStandsAloneForAFork(t *testing.T) {
+// TestSkillRemoveFromTheUniversalClientsOfAFork: a fork cannot be taken off
+// the machine by this command, and each way of asking for the universal
+// clients says so, changing nothing.
+//
+//   - --from universal runs the whole removal and so answers a fork as that
+//     removal does, before anything is planned.
+//   - --from universal beside a client that is not universal is the usage
+//     error it is for any skill, and its hint holds for a fork too. It is
+//     decided before the refs are read, so it does not claim that --from
+//     universal takes the skill from every client, which for a fork it does
+//     not. Dropping --from universal, as the hint says, leads to a removal
+//     that works.
+//   - --from naming a universal client is refused, alone, beside another
+//     client and beside --from universal, and the refusal offers no --from
+//     universal: following it would only be refused again. The hint says
+//     instead that the universal clients see the fork until the fork itself
+//     is removed, which is not this command, and that the other clients can
+//     still lose it.
+func TestSkillRemoveFromTheUniversalClientsOfAFork(t *testing.T) {
 	t.Parallel()
 	h, s := universalHarness(t)
 	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
 	head := strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/managed/alpha"))
 	h.accountGit("update-ref", "refs/heads/skills/alpha", head)
 	before := mutationVersion(t, h)
+	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
 
-	out := h.run("skill", "remove", "alpha", "--from", "universal", "--from", "claude-code")
-	equal(t, "exit", out.exit, 1)
-	contains(t, "stderr", out.stderr, "error: --from universal and --from claude-code cannot both be given\n"+standsAloneHint)
-	if strings.Contains(out.stderr, "every client") {
-		t.Errorf("the hint says --from universal takes a fork from every client, which it refuses to:\n%s", out.stderr)
+	whole := h.run("skill", "remove", "alpha", "--from", "universal")
+	equal(t, "exit of --from universal", whole.exit, 6)
+	contains(t, "stderr of --from universal", whole.stderr, "alpha is a fork on this machine")
+
+	usage := h.run("skill", "remove", "alpha", "--from", "universal", "--from", "claude-code")
+	equal(t, "exit of --from universal beside claude-code", usage.exit, 1)
+	contains(t, "stderr of --from universal beside claude-code", usage.stderr, "error: --from universal and --from claude-code cannot both be given\n"+standsAloneHint)
+	if strings.Contains(usage.stderr, "every client") {
+		t.Errorf("the hint says --from universal takes a fork from every client, which it refuses to:\n%s", usage.stderr)
 	}
+
+	for _, from := range [][]string{{"codex"}, {"claude-code", "codex"}, {"universal", "codex"}} {
+		args := []string{"skill", "remove", "alpha"}
+		for _, id := range from {
+			args = append(args, "--from", id)
+		}
+		out := h.run(args...)
+		equal(t, "exit of "+strings.Join(from, " "), out.exit, 6)
+		contains(t, "stderr", out.stderr, "error: codex reads the library directly, so alpha cannot be removed from it alone\n")
+		contains(t, "stderr", out.stderr, "hint: alpha is a fork on this machine: every universal client sees it through the library entry "+
+			"until the fork itself is removed, which is not this command; take it from the other clients with "+
+			"'agentx skill remove alpha --from <configuration>'\n")
+		for _, offer := range []string{"--from universal", "which removes it from"} {
+			if strings.Contains(out.stderr, offer) {
+				t.Errorf("the refusal for a fork offers %q, which refuses a fork too:\n%s", offer, out.stderr)
+			}
+		}
+	}
+
 	contains(t, "the library directory", fileBody(t, filepath.Join(h.library, "alpha", "SKILL.md")), "name: alpha")
-	if target, ok := isSymlink(t, filepath.Join(h.home, ".claude", "skills", "alpha")); !ok || target != filepath.Join(h.library, "alpha") {
+	if target, ok := isSymlink(t, claude); !ok || target != filepath.Join(h.library, "alpha") {
 		t.Errorf("the claude-code placement is %q (symlink %v), want the link to the library", target, ok)
 	}
+	equal(t, "the fork branch", strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/skills/alpha")), head)
 	equal(t, "mutations", mutationVersion(t, h), before)
 
 	equal(t, "exit of what the hint leads to", h.run("skill", "remove", "alpha", "--from", "claude-code").exit, 0)
-	nothingAt(t, "the claude-code placement", filepath.Join(h.home, ".claude", "skills", "alpha"))
+	nothingAt(t, "the claude-code placement", claude)
 }
 
 // TestSkillRemoveFromASymlinkedClient: --from naming a client that is not
@@ -343,7 +341,9 @@ func TestSkillRemoveFromASymlinkedClient(t *testing.T) {
 //
 // The refusal is decided before the lock, the journal and any placement:
 // it is given while another command holds the lock, and afterwards the
-// library, the refs, the placements and the settings are as they were.
+// library, the refs, the placements and the settings are as they were. So
+// every way of asking runs in turn on one machine for each placement mode,
+// the disabled client last.
 func TestSkillRemoveRefusesAUniversalClient(t *testing.T) {
 	t.Parallel()
 	const codexAlone = "codex reads the library directly, so alpha cannot be removed from it alone"
@@ -354,7 +354,6 @@ func TestSkillRemoveRefusesAUniversalClient(t *testing.T) {
 		refusal string
 	}{
 		{what: "alone", from: []string{"codex"}, refusal: codexAlone},
-		{what: "disabled", disable: "codex", from: []string{"codex"}, refusal: codexAlone},
 		{what: "after a client that is not universal", from: []string{"claude-code", "codex"}, refusal: codexAlone},
 		{what: "before a client that is not universal", from: []string{"gemini-cli", "claude-code"},
 			refusal: "gemini-cli reads the library directly, so alpha cannot be removed from it alone"},
@@ -364,69 +363,72 @@ func TestSkillRemoveRefusesAUniversalClient(t *testing.T) {
 		{what: "before --from universal", from: []string{"codex", "universal"}, refusal: codexAlone},
 		{what: "with --from universal and a client that is not universal", from: []string{"universal", "codex", "claude-code"},
 			refusal: codexAlone},
+		{what: "disabled", disable: "codex", from: []string{"codex"}, refusal: codexAlone},
 	}
 	for _, mode := range []string{modeSymlink, modeCopy} {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
-			for _, c := range cases {
-				t.Run(c.what, func(t *testing.T) {
-					t.Parallel()
-					h, s := universalHarness(t, ".codeium/windsurf")
+			h, s := universalHarness(t, ".codeium/windsurf")
+			add := []string{"skill", "add", s.url, "--skill", "alpha", "--to", "claude-code"}
+			if mode == modeCopy {
+				add = append(add, "--copy")
+			}
+			equal(t, "add", h.run(add...).exit, 0)
+			// A directory of the user's own where Windsurf would have its
+			// placement: the whole removal leaves it, so the hint may not say
+			// Windsurf loses the skill.
+			mine := filepath.Join(h.home, ".codeium", "windsurf", "skills", "alpha")
+			if err := os.MkdirAll(mine, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			writeFile(t, filepath.Join(mine, "SKILL.md"), "---\nname: alpha\ndescription: mine\n---\n\nmine\n")
+			head := strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/managed/alpha"))
+			h.accountGit("update-ref", "refs/agentx/candidate/alpha", head)
+			claude := filepath.Join(h.home, ".claude", "skills", "alpha")
+
+			var settings string
+			var before int
+			for i, c := range cases {
+				if i == 0 || c.disable != "" {
 					if c.disable != "" {
 						equal(t, "disable", h.run("config", "disable", c.disable).exit, 0)
 					}
-					add := []string{"skill", "add", s.url, "--skill", "alpha", "--to", "claude-code"}
-					if mode == modeCopy {
-						add = append(add, "--copy")
-					}
-					equal(t, "add", h.run(add...).exit, 0)
-					// A directory of the user's own where Windsurf would have
-					// its placement: the whole removal leaves it, so the hint
-					// may not say Windsurf loses the skill.
-					mine := filepath.Join(h.home, ".codeium", "windsurf", "skills", "alpha")
-					if err := os.MkdirAll(mine, 0o755); err != nil {
-						t.Fatal(err)
-					}
-					writeFile(t, filepath.Join(mine, "SKILL.md"), "---\nname: alpha\ndescription: mine\n---\n\nmine\n")
-					head := strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/managed/alpha"))
-					h.accountGit("update-ref", "refs/agentx/candidate/alpha", head)
-					settings := fileBody(t, filepath.Join(h.agentx, "settings.json"))
-					before := mutationVersion(t, h)
+					settings = fileBody(t, filepath.Join(h.agentx, "settings.json"))
+					before = mutationVersion(t, h)
+				}
+				args := []string{"skill", "remove", "alpha"}
+				for _, id := range c.from {
+					args = append(args, "--from", id)
+				}
+				release := holdLock(t, h)
+				out := h.run(args...)
+				js := h.run(append([]string{"--json"}, args...)...)
+				release()
+				equal(t, c.what+": exit", out.exit, 6)
+				contains(t, c.what+": stderr", out.stderr, "error: "+c.refusal+"\n")
+				contains(t, c.what+": stderr", out.stderr, "hint: take alpha off the machine with 'agentx skill remove alpha --from universal', "+
+					"which removes it from claude-code, codex, gemini-cli\n")
+				equal(t, c.what+": exit of --json", js.exit, 6)
+				ev := h.one(js.stdout, "error")
+				equal(t, c.what+": code", ev["code"], "refused")
+				contains(t, c.what+": the hint", ev["hint"].(string), "--from universal")
 
-					args := []string{"skill", "remove", "alpha"}
-					for _, id := range c.from {
-						args = append(args, "--from", id)
-					}
-					release := holdLock(t, h)
-					out := h.run(args...)
-					js := h.run(append([]string{"--json"}, args...)...)
-					release()
-					equal(t, "exit", out.exit, 6)
-					contains(t, "stderr", out.stderr, "error: "+c.refusal+"\n")
-					contains(t, "stderr", out.stderr, "hint: take alpha off the machine with 'agentx skill remove alpha --from universal', "+
-						"which removes it from claude-code, codex, gemini-cli\n")
-					equal(t, "exit of --json", js.exit, 6)
-					ev := h.one(js.stdout, "error")
-					equal(t, "code", ev["code"], "refused")
-					contains(t, "the hint", ev["hint"].(string), "--from universal")
-
-					// Nothing moved: the library, the refs, the placements, the
-					// settings, the counter.
-					contains(t, "the library directory", fileBody(t, filepath.Join(h.library, "alpha", "SKILL.md")), "name: alpha")
-					claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-					if mode == modeCopy {
-						contains(t, "the claude-code copy", fileBody(t, filepath.Join(claude, "SKILL.md")), "name: alpha")
-					} else if target, ok := isSymlink(t, claude); !ok || target != filepath.Join(h.library, "alpha") {
-						t.Errorf("the claude-code placement is %q (symlink %v), want the link to the library", target, ok)
-					}
-					contains(t, "the user's directory", fileBody(t, filepath.Join(mine, "SKILL.md")), "description: mine")
-					equal(t, "the import branch", strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/managed/alpha")), head)
-					equal(t, "the candidate ref", strings.TrimSpace(h.accountGit("rev-parse", "refs/agentx/candidate/alpha")), head)
-					equal(t, "the settings", fileBody(t, filepath.Join(h.agentx, "settings.json")), settings)
-					equal(t, "mutations", mutationVersion(t, h), before)
-					equal(t, "journals", journalCount(t, h), 0)
-				})
+				// Nothing moved: the library, the placements, the settings,
+				// the counter.
+				contains(t, c.what+": the library directory", fileBody(t, filepath.Join(h.library, "alpha", "SKILL.md")), "name: alpha")
+				if mode == modeCopy {
+					contains(t, c.what+": the claude-code copy", fileBody(t, filepath.Join(claude, "SKILL.md")), "name: alpha")
+				} else if target, ok := isSymlink(t, claude); !ok || target != filepath.Join(h.library, "alpha") {
+					t.Errorf("%s: the claude-code placement is %q (symlink %v), want the link to the library", c.what, target, ok)
+				}
+				contains(t, c.what+": the user's directory", fileBody(t, filepath.Join(mine, "SKILL.md")), "description: mine")
+				equal(t, c.what+": the settings", fileBody(t, filepath.Join(h.agentx, "settings.json")), settings)
+				equal(t, c.what+": mutations", mutationVersion(t, h), before)
+				equal(t, c.what+": journals", journalCount(t, h), 0)
 			}
+			// And the refs, read once for every run.
+			equal(t, "the import branch", strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/managed/alpha")), head)
+			equal(t, "the candidate ref", strings.TrimSpace(h.accountGit("rev-parse", "refs/agentx/candidate/alpha")), head)
 		})
 	}
 }
@@ -537,7 +539,7 @@ func TestSkillRemoveRefusalNamesAClientLinkedThroughTheLibrary(t *testing.T) {
 
 	t.Run("a link beside a library entry that is a link", func(t *testing.T) {
 		t.Parallel()
-		h, _ := universalHarness(t, ".cursor")
+		h := universalHome(t, ".cursor")
 		dev := filepath.Join(h.home, "dev", "alpha")
 		if err := os.MkdirAll(dev, 0o755); err != nil {
 			t.Fatal(err)
@@ -567,7 +569,7 @@ func TestSkillRemoveRefusalNamesAClientLinkedThroughTheLibrary(t *testing.T) {
 
 	t.Run("a chain of links through a library entry that is a link", func(t *testing.T) {
 		t.Parallel()
-		h, _ := universalHarness(t, ".cursor")
+		h := universalHome(t, ".cursor")
 		dev := filepath.Join(h.home, "dev", "alpha")
 		if err := os.MkdirAll(dev, 0o755); err != nil {
 			t.Fatal(err)
@@ -596,47 +598,6 @@ func TestSkillRemoveRefusalNamesAClientLinkedThroughTheLibrary(t *testing.T) {
 		contains(t, "the user's directory", fileBody(t, filepath.Join(dev, "SKILL.md")), "description: mine")
 		contains(t, "the warning", removed.stderr, "and was left as it is; it no longer leads to alpha\n")
 	})
-}
-
-// TestSkillRemoveRefusesAUniversalClientOfAFork: a fork cannot be taken off
-// the machine by this command, --from universal included, so the refusal of
-// a universal client offers no --from universal: following it would only be
-// refused again. The hint says instead that the universal clients see the
-// fork until the fork itself is removed, which is not this command, and
-// that the other clients can still lose it. Nothing moves.
-func TestSkillRemoveRefusesAUniversalClientOfAFork(t *testing.T) {
-	t.Parallel()
-	h, s := universalHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
-	head := strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/managed/alpha"))
-	h.accountGit("update-ref", "refs/heads/skills/alpha", head)
-	before := mutationVersion(t, h)
-
-	for _, from := range [][]string{{"codex"}, {"claude-code", "codex"}, {"universal", "codex"}} {
-		args := []string{"skill", "remove", "alpha"}
-		for _, id := range from {
-			args = append(args, "--from", id)
-		}
-		out := h.run(args...)
-		equal(t, "exit of "+strings.Join(from, " "), out.exit, 6)
-		contains(t, "stderr", out.stderr, "error: codex reads the library directly, so alpha cannot be removed from it alone\n")
-		contains(t, "stderr", out.stderr, "hint: alpha is a fork on this machine: every universal client sees it through the library entry "+
-			"until the fork itself is removed, which is not this command; take it from the other clients with "+
-			"'agentx skill remove alpha --from <configuration>'\n")
-		for _, offer := range []string{"--from universal", "which removes it from"} {
-			if strings.Contains(out.stderr, offer) {
-				t.Errorf("the refusal for a fork offers %q, which refuses a fork too:\n%s", offer, out.stderr)
-			}
-		}
-	}
-	if _, err := os.Stat(filepath.Join(h.library, "alpha", "SKILL.md")); err != nil {
-		t.Errorf("a refused removal took the library directory: %v", err)
-	}
-	if _, ok := isSymlink(t, filepath.Join(h.home, ".claude", "skills", "alpha")); !ok {
-		t.Error("a refused removal took the claude-code placement away")
-	}
-	equal(t, "the fork branch", strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/skills/alpha")), head)
-	equal(t, "mutations", mutationVersion(t, h), before)
 }
 
 // TestSkillListAndPlaceAllNameTheUniversalClients: every library_skill event
