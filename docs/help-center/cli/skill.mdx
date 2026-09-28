@@ -165,7 +165,7 @@ The first line counts the configurations you placed into. Each client you named 
 
 Name each client with `--to`, once for each. Without `--to`, agentx places the skill into every enabled client and puts back what `agentx skill list` flags there; see [Put back placements](#put-back-placements). Add `--copy` for a client that cannot follow a symlink; agentx remembers the choice, as it does for `agentx skill add --copy`. To turn a recorded copy back into a symlink, take it away with `agentx skill remove pdf --from cursor`, then place the skill again with `agentx skill place pdf --to cursor`.
 
-What is already at the path decides what happens: a link that already points at the library is left alone, a directory holding exactly this version is adopted, a directory holding anything else stops the command until you choose which version survives (see [When the directory differs from the library](#when-the-directory-differs-from-the-library)), and anything else, such as a link of your own, is left where it is with a warning. If the library entry is itself a link to that client's directory, for example `~/.agents/skills/pdf` linked to `~/.claude/skills/pdf`, the client already reads the library there: agentx leaves it as it is, reports it as placed, adopts nothing, and with `--copy` records no copy.
+What is already at the path decides what happens: a link that already points at the library is left alone, a directory holding exactly this version is adopted, a directory holding anything else stops the command unless you add `--force`, which deletes what it holds (see [When the directory differs from the library](#when-the-directory-differs-from-the-library)), and anything else, such as a link of your own, is left where it is with a warning. If the library entry is itself a link to that client's directory, for example `~/.agents/skills/pdf` linked to `~/.claude/skills/pdf`, the client already reads the library there: agentx leaves it as it is, reports it as placed, adopts nothing, and with `--copy` records no copy.
 
 An adopted directory becomes one agentx will delete when you remove the skill, so the run names every path it adopted. This holds with `--copy` too.
 
@@ -487,7 +487,7 @@ agentx skill place pdf --force
   always available to universal clients: codex, gemini-cli
 ```
 
-To keep that content, move the directory out of the client's skills directory before you run `skill place`, for example to use it as a skill of your own. `--force` never changes the library.
+To keep that content instead, move the directory out of the client's skills directory, for example to use it as a skill of your own, then run `skill place` again to put the link back. `--force` never changes the library.
 
 `--force` works with `--to` and `--copy`: it replaces only the directories of the clients `--to` names, and with `--copy` the client gets a copy of the library version.
 
@@ -650,7 +650,7 @@ As in `git status`, "us" is your library directory and "them" the update: a file
 The worktree holds a Git merge in progress like any other: your edits are checked out and the update is being merged into them. It holds the skill one folder down, and the hint names that folder, so the files listed are found there by the paths shown. The merge stays until you finish it or give it up, across restarts, and `agentx skill list` shows the skill as `merge pending`. Meanwhile:
 
 - `skill revert`, and `skill remove` without `--from` or with `--from universal`, stop with exit code 4 and change nothing.
-- Everything else works as usual: placing the skill, `skill place` with its flags included, removing it from one client, `skill diff`, and update checks, which may find a newer version still.
+- Everything else works as usual: placing the skill, `skill place --force` included, removing it from one client, `skill diff`, and update checks, which may find a newer version still.
 
 With `--all`, a skill whose edits conflict is left with its merge pending and the other skills are still updated. The run then exits with code 4, or 6 if other skills were not updated for other reasons.
 
@@ -720,7 +720,7 @@ agentx --json skill list
 
 `skill place` and `skill remove --from <client>` emit one `library_skill` event too, whose placements are what the rescan found in the clients the command covered; `skill remove` without `--from`, or with `--from universal`, emits none, the skill being gone. `skill add` emits a `source` event for the source it installed from, whose `last_fetched` says when it was fetched, then a `progress` event per step per skill (`blobs`, `import` and `install`), then one for the `rescan` at the end, then one `library_skill` event per skill it installed, then `result` with a one-line summary. `total` counts the steps the run planned; a skill it has to skip takes its remaining steps out of that count, so the run always ends on its total.
 
-`universal` lists every universal client on this machine, whether or not the command placed into it, and is `[]` when none is installed. `skill add` and `skill place` end their `result` summary with the same `always available to universal clients:` words as their text.
+`universal` lists every universal client on this machine, whether or not the command placed into it, and is `[]` when none is installed. `skill add` and `skill place` end their `result` summary with the same `always available to universal clients:` words as their text. After `--force`, the summary of `skill place` adds `; discarded what <path>, ... held` before them, naming every directory it discarded.
 
 The event carries two content hashes at its top level: `base_hash` is the version the skill was installed at, and `content_hash` is what the library directory holds now. Both names mean the same at the top level of every event and snapshot entry agentx emits; inside `candidate`, described below, `content_hash` names the newer version instead. `state` compares the files themselves, their permissions and symlinks included, so a skill whose only change is a file made executable is `modified` while its two hashes still agree.
 
@@ -740,7 +740,7 @@ Read `drift` as a list: more values will join it, and a skill can be in several 
 
 `path` and `patch` are JSON strings, which hold UTF-8 only: a byte that is not valid UTF-8, in a file name or in a file that is not UTF-8 text, arrives as `U+FFFD`. Such a patch is for display; the text output prints the bytes as they are.
 
-`skill revert` emits one `library_skill` event for the skill, with every placement, as `skill list` does. After `--force`, the `result` summary of `skill place` adds `; discarded what <path>, ... held`, naming every directory it discarded.
+`skill revert` emits one `library_skill` event for the skill, with every placement, as `skill list` does.
 
 A skill with an update carries `candidate`, the newer version the last check found, by its own `upstream_commit` and `content_hash`. Inside `candidate` both name that newer version, not the version you installed and not what the library holds:
 

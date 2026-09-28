@@ -476,10 +476,11 @@ func TestSkillPlaceLeavesALinkOfTheUsers(t *testing.T) {
 
 // TestSkillPlaceStopsAtADirectoryOfTheUsers: a directory of the user's
 // where the placement belongs holds content the library does not, so
-// placing the skill there would discard one of the two. skill place stops
-// with exit 6 and names both ways on, each with the --to it was given, and
-// changes nothing at all: the directory is byte for byte what it was, no
-// journal was written and the settings were not.
+// placing the skill there would discard what it holds. skill place stops
+// with exit 6, names --force with the --to it was given and says how to
+// keep the directory instead, and changes nothing at all: the directory is
+// byte for byte what it was, no journal was written and the settings were
+// not.
 func TestSkillPlaceStopsAtADirectoryOfTheUsers(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
