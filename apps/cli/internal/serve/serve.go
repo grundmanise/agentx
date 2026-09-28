@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	debounce = 100 * time.Millisecond // quiet time after the last change before a rescan
+	debounce = 100 * time.Millisecond // quiet time after the last change before a rescan, unless Options.Debounce sets another
 	maxWait  = 500 * time.Millisecond // a rescan happens this long after the first change at the latest
 )
 
@@ -42,6 +42,10 @@ type Options struct {
 	Trees []string                                                                       // directories whose subdirectories, present or added later, are watched too
 	Once  bool                                                                           // scan once, emit and return
 	Stdin io.Reader                                                                      // request lines
+
+	// Debounce is the quiet time after the last change before a rescan;
+	// zero or less is the default, 100 ms.
+	Debounce time.Duration
 
 	// Check is one update check, run off the loop's goroutine after the
 	// initial snapshot and then every CheckEvery; it returns what reports
@@ -131,12 +135,16 @@ func Run(ctx context.Context, o Options) error {
 
 	// A change starts the debounce timer and, unless one is running, the
 	// deadline timer; whichever fires first triggers the rescan.
+	quiet := o.Debounce
+	if quiet <= 0 {
+		quiet = debounce
+	}
 	var debounceC, deadlineC <-chan time.Time
 	schedule := func() {
 		if deadlineC == nil {
 			deadlineC = time.After(maxWait)
 		}
-		debounceC = time.After(debounce)
+		debounceC = time.After(quiet)
 	}
 	// rescan brings the watches in line first, so a directory the scan finds
 	// is watched from then on; a directory that cannot be watched ends serve.

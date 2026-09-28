@@ -110,13 +110,27 @@ const checkInterval = 30 * time.Minute
 // AGENTX_HANDSHAKE_TIMEOUT is and refused the same way when it is not a
 // positive one.
 func (inv *invocation) checkEvery() (time.Duration, error) {
-	v := inv.env["AGENTX_CHECK_INTERVAL"]
+	return inv.durationEnv("AGENTX_CHECK_INTERVAL", checkInterval, "30m or 90s")
+}
+
+// debounce is the quiet time serve waits for after the last change before
+// it rescans: the duration AGENTX_DEBOUNCE names, for tests and diagnosis,
+// or zero, which leaves serve's own 100 ms.
+func (inv *invocation) debounce() (time.Duration, error) {
+	return inv.durationEnv("AGENTX_DEBOUNCE", 0, "100ms")
+}
+
+// durationEnv is the duration the variable name holds, or def when it is
+// unset; a value that is not a positive duration is a usage error whose
+// hint gives example.
+func (inv *invocation) durationEnv(name string, def time.Duration, example string) (time.Duration, error) {
+	v := inv.env[name]
 	if v == "" {
-		return checkInterval, nil
+		return def, nil
 	}
 	d, err := time.ParseDuration(v)
 	if err != nil || d <= 0 {
-		return 0, fail(exitUsage, "AGENTX_CHECK_INTERVAL "+v+" is not a positive duration", "set it like 30m or 90s, or unset it")
+		return 0, fail(exitUsage, name+" "+v+" is not a positive duration", "set it like "+example+", or unset it")
 	}
 	return d, nil
 }
@@ -128,10 +142,15 @@ func newServeCommand(inv *invocation) *cobra.Command {
 		Short: "Watch for changes and stream a snapshot on each one, until stdin closes",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var every time.Duration // a single pass runs no check, and reads no interval
+			// A single pass runs no check and waits for no change, so it
+			// reads neither interval.
+			var every, quiet time.Duration
 			if !once {
 				var err error
 				if every, err = inv.checkEvery(); err != nil {
+					return err
+				}
+				if quiet, err = inv.debounce(); err != nil {
 					return err
 				}
 			}
@@ -160,6 +179,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 				Trees:      trees,
 				Once:       once,
 				Stdin:      cmd.InOrStdin(),
+				Debounce:   quiet,
 				Check:      func(ctx context.Context) func() { return inv.serveCheck(ctx, failing) },
 				CheckEvery: every,
 				Snapshot: func(snap scan.Snapshot) {
