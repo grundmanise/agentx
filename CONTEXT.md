@@ -124,7 +124,7 @@ The import commit of the newer upstream version an update check found for a mana
 _Avoid_: pending update, available version
 
 **Update**:
-Applying a managed skill's update candidate, only ever at the user's request: the import branch moves to the candidate, which becomes the skill's base version, the library directory takes the new content, and copy placements that held the old version are refreshed while ones edited in place are kept. A skill that is not modified updates by replacement. The skill keeps its library name and its placements, whatever the newer version calls it.
+Applying a managed skill's update candidate, only ever at the user's request: the import branch moves to the candidate, which becomes the skill's base version, the library directory takes the new content, keeping the files git ignores there, and copy placements that held the old version are refreshed while ones edited in place are kept. A skill that is not modified updates by replacement. The skill keeps its library name and its placements, whatever the newer version calls it.
 _Avoid_: upgrade, pull, sync
 
 **Modified skill**:

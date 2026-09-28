@@ -392,7 +392,7 @@ A skill agentx did not install, and a fork, have no base version to compare with
 
 ### Files that do not count
 
-agentx compares a skill as git compares a work tree, so the files git ignores never make a skill `modified`, never show in `skill diff`, and are kept by `skill revert` and by `skill place --keep-placement`:
+agentx compares a skill as git compares a work tree, so the files git ignores never make a skill `modified`, never show in `skill diff`, and are kept by `skill revert`, `skill update` and `skill place --keep-placement`:
 
 - files the skill's own `.gitignore` names, such as a `node_modules` directory;
 - files your global git ignore file names, `~/.config/git/ignore` or the file your `core.excludesFile` setting points to;
@@ -590,6 +590,8 @@ agentx skill update pdf
 
 agentx replaces the skill's library directory with the newer version and records it as the version you have. Every client that links to the library sees the new version at once, `agentx skill list` shows the skill as `current` again, and its `update available` is gone. The update needs no network: it applies exactly the version the last check found, the one `agentx skill diff pdf --upstream` shows. agentx never updates a skill unless you run this command.
 
+Files your ignore rules name stay: a `.DS_Store`, an editor's backup file or an ignored `build` folder (see [Files that do not count](#files-that-do-not-count)). If the newer version ships a file at the same path, its file replaces yours.
+
 Update every skill that has an update:
 
 ```sh
@@ -606,7 +608,7 @@ If no check has found an update for the skill, the command says it is up to date
 
 A copy placement is handled on its own:
 
-- A copy that holds the version you are replacing gets the new version.
+- A copy that holds the version you are replacing gets the new version, and keeps the files your ignore rules name in it.
 - A copy you edited in place is kept exactly as it is and skipped, with the warning for a [copy that differs from the library](#a-copy-that-differs-from-the-library).
 - A copy agentx cannot read is kept as it is and skipped, with a warning that says why.
 
@@ -614,7 +616,7 @@ If a newer version gives the skill another name, the skill keeps the name you in
 
 ### A skill you edited
 
-A skill you changed since you installed it is not updated: replacing it would discard your changes, and merging them into the newer version is not supported yet. `skill update` stops with exit code 6, and `--all` skips the skill with a warning and updates the others:
+A skill you changed since you installed it is not updated: replacing it would discard your changes, and merging them into the newer version is not supported yet. Files your ignore rules name are not changes. `skill update` stops with exit code 6, and `--all` skips the skill with a warning and updates the others:
 
 ```text
 warning: docx was edited since it was installed, so it was not updated: merging a modified skill with its update is not supported yet
