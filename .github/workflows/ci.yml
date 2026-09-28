@@ -29,14 +29,16 @@ jobs:
       - run: make lint
       - run: make tidy-check
 
-  test:
-    name: CLI test (${{ matrix.os }})
+  test-shard:
+    name: CLI test shard (${{ matrix.os }}, ${{ matrix.shard }}/3)
     # Linux and macOS: the serve watcher has a backend per platform, and the
-    # macOS one (FSEvents, cgo) only compiles there.
+    # macOS one (FSEvents, cgo) only compiles there. Three parts per system
+    # run in parallel.
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
+        shard: [1, 2, 3]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -47,4 +49,20 @@ jobs:
           cache-dependency-path: apps/cli/go.sum
 
       - run: make build
-      - run: make test
+      - run: make test-shard SHARD=${{ matrix.shard }} SHARDS=3
+
+  # The checks main requires. A matrix job has one result for all its parts,
+  # so each of these fails when any part on either system did not succeed;
+  # the shard jobs show which.
+  test:
+    name: CLI test (${{ matrix.os }})
+    needs: test-shard
+    if: always()
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ubuntu-latest
+    steps:
+      - run: '[ "$RESULT" = success ] || { echo "the test parts ended with: $RESULT"; exit 1; }'
+        env:
+          RESULT: ${{ needs.test-shard.result }}
