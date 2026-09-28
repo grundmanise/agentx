@@ -13,7 +13,7 @@ import (
 )
 
 func newSkillDiffCommand(inv *invocation) *cobra.Command {
-	var upstream bool
+	var update bool
 	cmd := &cobra.Command{
 		Use:   "diff <name>",
 		Short: "Show how a managed skill differs from the version it was installed at",
@@ -21,17 +21,17 @@ func newSkillDiffCommand(inv *invocation) *cobra.Command {
 			"the version it was installed at, as one unified diff per file. Every edit counts,\n" +
 			"whatever tool made it, a file made executable and a file turned into a symlink\n" +
 			"included. Files git ignores do not. Nothing is written to the library. With\n" +
-			"--upstream, show instead what the update 'agentx skill check' found changes in\n" +
+			"--update, show instead what the update 'agentx skill check' found changes in\n" +
 			"the base version.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if upstream {
-				return inv.skillDiffUpstream(cmd.Context(), args[0])
+			if update {
+				return inv.skillDiffUpdate(cmd.Context(), args[0])
 			}
 			return inv.skillDiff(cmd.Context(), args[0])
 		},
 	}
-	cmd.Flags().BoolVar(&upstream, "upstream", false, "compare the base version with the update the last check found")
+	cmd.Flags().BoolVar(&update, "update", false, "compare the base version with the update the last check found")
 	return cmd
 }
 
@@ -124,7 +124,7 @@ func (inv *invocation) skillDiff(ctx context.Context, name string) error {
 	return nil
 }
 
-// skillDiffUpstream shows what the update the last check found for a
+// skillDiffUpdate shows what the update the last check found for a
 // managed skill does to its base version: the base's directory against the
 // candidate's, each the upstream directory of its import commit, so that
 // every path is relative to the skill's directory. Both trees are in the
@@ -133,7 +133,7 @@ func (inv *invocation) skillDiff(ctx context.Context, name string) error {
 // what the source holds now. A skill with no candidate, or with one its
 // branch already holds, has nothing to show, and the refusal says how to
 // look for an update.
-func (inv *invocation) skillDiffUpstream(ctx context.Context, name string) error {
+func (inv *invocation) skillDiffUpdate(ctx context.Context, name string) error {
 	if _, ok := librarySkill(inv.dirs.Library, name); !ok {
 		return inv.noLibrarySkill(name)
 	}

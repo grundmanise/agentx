@@ -338,7 +338,7 @@ func TestSkillCheckReadsTheUpstreamDirectory(t *testing.T) {
 	}
 	var paths []string
 	for _, name := range []string{"solo", "pdf"} {
-		for _, e := range h.eventsOfType(h.mustRun("--json", "skill", "diff", name, "--upstream").stdout, "diff") {
+		for _, e := range h.eventsOfType(h.mustRun("--json", "skill", "diff", name, "--update").stdout, "diff") {
 			paths = append(paths, e["path"].(string))
 		}
 	}
@@ -428,7 +428,7 @@ func TestSkillCheckTextOutput(t *testing.T) {
 		"  beta  update available  "+short(first)+" -> "+short(second)+"  2 files\n"+
 		"    modified  SKILL.md\n"+
 		"    added     docs/usage.md\n"+
-		"Read an update with agentx skill diff <name> --upstream, apply it with agentx skill update <name>.\n")
+		"Apply an update with agentx skill update <name>, or read it first with agentx skill diff <name> --update.\n")
 	equal(t, "stderr", out.stderr, "")
 }
 
@@ -1138,17 +1138,17 @@ func TestSkillCheckNamesAnUpstreamRename(t *testing.T) {
 	equal(t, "the warnings of a check that moved nothing", again.stderr, "")
 }
 
-// TestSkillDiffUpstream shows the update a check pinned against the base
+// TestSkillDiffUpdate shows the update a check pinned against the base
 // version, every path relative to the skill's directory, and refuses a
 // skill with no update known, saying how to look for one.
-func TestSkillDiffUpstream(t *testing.T) {
+func TestSkillDiffUpdate(t *testing.T) {
 	t.Parallel()
 	h, s, first := checkHarness(t)
 	s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes, revised\n", "extra.md": "new\n"})
 	second := s.commit("second version")
 	h.mustRun("skill", "check")
 
-	out := h.mustRun("--json", "skill", "diff", "alpha", "--upstream")
+	out := h.mustRun("--json", "skill", "diff", "alpha", "--update")
 	var got []string
 	for _, e := range h.eventsOfType(out.stdout, "diff") {
 		equal(t, "name", e["name"], "alpha")
@@ -1157,7 +1157,7 @@ func TestSkillDiffUpstream(t *testing.T) {
 	equal(t, "diffs", strings.Join(got, ", "), "added extra.md, modified notes.md")
 	summary := "the update of alpha at " + short(second) + " differs from its base version at " + short(first) + " in 2 files"
 	equal(t, "summary", h.one(out.stdout, "result")["summary"], summary)
-	text := h.mustRun("skill", "diff", "alpha", "--upstream")
+	text := h.mustRun("skill", "diff", "alpha", "--update")
 	if !strings.HasPrefix(text.stdout, summary+"\ndiff --git a/extra.md b/extra.md\n") {
 		t.Errorf("stdout = %q", text.stdout)
 	}
@@ -1166,9 +1166,9 @@ func TestSkillDiffUpstream(t *testing.T) {
 	// The library is not what is compared: an edit shows in the plain diff
 	// and not in this one.
 	writeFile(t, filepath.Join(h.library, "alpha", "notes.md"), "edited here\n")
-	equal(t, "the upstream diff after an edit", h.mustRun("skill", "diff", "alpha", "--upstream").stdout, text.stdout)
+	equal(t, "the update diff after an edit", h.mustRun("skill", "diff", "alpha", "--update").stdout, text.stdout)
 
-	refused := h.run("--json", "skill", "diff", "beta", "--upstream")
+	refused := h.run("--json", "skill", "diff", "beta", "--update")
 	equal(t, "exit", refused.exit, 6)
 	e := h.one(refused.stdout, "error")
 	equal(t, "message", e["message"], "no update of beta is known")

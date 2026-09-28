@@ -1703,7 +1703,7 @@ func TestSkillUpdateKeepsACopyEditedMidway(t *testing.T) {
 // the edit made midway by moving the waiting journal aside. The import
 // branch already holds the new version and the candidate ref still names
 // it, which is no update: skill list shows the skill modified against the
-// new version with no update available, skill diff --upstream knows of no
+// new version with no update available, skill diff --update knows of no
 // update, skill update says the skill is up to date rather than sending
 // the user to a revert that would discard the edit, and update --all has
 // nothing to do. The next check deletes the leftover ref and announces
@@ -1727,9 +1727,9 @@ func TestSkillUpdateWhoseJournalWasMovedAsideOffersNoUpdate(t *testing.T) {
 	if list := h.mustRun("skill", "list").stdout; strings.Contains(list, updateAvailable) {
 		t.Errorf("skill list offers an update the branch already holds:\n%s", list)
 	}
-	diff := h.run("--json", "skill", "diff", "alpha", "--upstream")
-	equal(t, "exit of skill diff --upstream", diff.exit, 6)
-	equal(t, "skill diff --upstream", h.one(diff.stdout, "error")["message"], "no update of alpha is known")
+	diff := h.run("--json", "skill", "diff", "alpha", "--update")
+	equal(t, "exit of skill diff --update", diff.exit, 6)
+	equal(t, "skill diff --update", h.one(diff.stdout, "error")["message"], "no update of alpha is known")
 	update := h.run("--json", "skill", "update", "alpha")
 	equal(t, "exit of skill update", update.exit, 0)
 	equal(t, "skill update", h.one(update.stdout, "result")["summary"],
@@ -1752,7 +1752,7 @@ func TestSkillUpdateWhoseJournalWasMovedAsideOffersNoUpdate(t *testing.T) {
 // that holds a commit whose trailers agentx cannot read names no version
 // agentx could lay out or record, so it is no update to any command that
 // shows or applies one. skill list shows no candidate and no update
-// available, skill diff --upstream knows of no update, skill update says
+// available, skill diff --update knows of no update, skill update says
 // the skill is up to date, and update --all has nothing to do; none of
 // them touches the ref, and the skill stays current at its base.
 func TestSkillUpdateOffersNoUpdateWhoseLineageItCannotRead(t *testing.T) {
@@ -1769,9 +1769,9 @@ func TestSkillUpdateOffersNoUpdateWhoseLineageItCannotRead(t *testing.T) {
 	if list := h.mustRun("skill", "list").stdout; strings.Contains(list, updateAvailable) {
 		t.Errorf("skill list offers an update whose lineage agentx cannot read:\n%s", list)
 	}
-	diff := h.run("--json", "skill", "diff", "alpha", "--upstream")
-	equal(t, "exit of skill diff --upstream", diff.exit, 6)
-	equal(t, "skill diff --upstream", h.one(diff.stdout, "error")["message"], "no update of alpha is known")
+	diff := h.run("--json", "skill", "diff", "alpha", "--update")
+	equal(t, "exit of skill diff --update", diff.exit, 6)
+	equal(t, "skill diff --update", h.one(diff.stdout, "error")["message"], "no update of alpha is known")
 	update := h.run("--json", "skill", "update", "alpha")
 	equal(t, "exit of skill update", update.exit, 0)
 	equal(t, "skill update", h.one(update.stdout, "result")["summary"],

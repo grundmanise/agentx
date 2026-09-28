@@ -28,8 +28,8 @@ func newSkillCheckCommand(inv *invocation) *cobra.Command {
 		Short: "Look for newer upstream versions of the managed skills",
 		Long: "Fetch every added source a managed skill came from and report which skills have a\n" +
 			"newer upstream version, with the files each one changes; skills from a source you\n" +
-			"removed are skipped. Nothing is applied: read an update with\n" +
-			"'agentx skill diff <name> --upstream', and apply it with 'agentx skill update <name>'.",
+			"removed are skipped. Nothing is applied: apply an update with\n" +
+			"'agentx skill update <name>', or read it first with 'agentx skill diff <name> --update'.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error { return inv.skillCheck(cmd.Context()) },
 	}
@@ -214,8 +214,8 @@ func (inv *invocation) printCheck(rep checkReport) {
 			sanitised(where), " at ", short(r.commit))
 	}
 	if len(rep.updates) > 0 {
-		out.print("Read an update with ", out.paint(label, "agentx skill diff <name> --upstream"),
-			", apply it with ", out.paint(label, "agentx skill update <name>"), ".")
+		out.print("Apply an update with ", out.paint(label, "agentx skill update <name>"),
+			", or read it first with ", out.paint(label, "agentx skill diff <name> --update"), ".")
 	}
 }
 

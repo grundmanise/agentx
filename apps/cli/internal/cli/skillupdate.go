@@ -37,7 +37,7 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 			"version replaced is refreshed; a copy edited on its own is kept and named. Pass\n" +
 			"--all instead of a name to update every managed skill the last check found an\n" +
 			"update for. Read an update before you apply it with\n" +
-			"'agentx skill diff <name> --upstream'.",
+			"'agentx skill diff <name> --update'.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			const hint = "name the skill to update, or run 'agentx skill update --all' to update every skill the last check found an update for"
