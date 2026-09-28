@@ -77,7 +77,12 @@ func signalled(t *testing.T, h *harness, r stopRun) (int, string) {
 		_ = child.Wait()
 		t.Fatalf("the run never reached %s:\n%s%s", filepath.Base(ready), stdout.String(), stderr.String())
 	}
-	for _, sig := range sigs {
+	for i, sig := range sigs {
+		if i > 0 {
+			// Far enough apart that the second signal is answered as a
+			// second one and not raced with the first.
+			time.Sleep(200 * time.Millisecond)
+		}
 		target := child.Process.Pid
 		if r.group {
 			target = -target // the whole process group, git included
@@ -85,9 +90,6 @@ func signalled(t *testing.T, h *harness, r stopRun) (int, string) {
 		if err := syscall.Kill(target, sig); err != nil {
 			t.Fatal(err)
 		}
-		// Far enough apart that the second signal is answered as a second
-		// one and not raced with the first.
-		time.Sleep(200 * time.Millisecond)
 	}
 	err := child.Wait()
 	var exitErr *exec.ExitError
