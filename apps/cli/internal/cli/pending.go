@@ -238,7 +238,8 @@ func (inv *invocation) readConflicts(ctx context.Context, gitDir, dir, skillDir 
 // markerSizeIn finds, so that no line of the file's own is taken for a
 // marker, each with mine, the base and theirs as the file's three versions
 // hold them there. A file with no such block conflicts whole: why says
-// how. text is the file as a resolve rewrites it.
+// how. A file removed from the checkout reads as empty, so it conflicts
+// whole too. text is the file as a resolve rewrites it.
 func hunksIn(path string, versions map[string]staged, bodies map[string]string) ([]conflictHunk, *conflictText, string, error) {
 	version := func(stage string) string {
 		if v, ok := versions[stage]; ok {
@@ -248,7 +249,7 @@ func hunksIn(path string, versions map[string]staged, bodies map[string]string) 
 	}
 	text := &conflictText{mine: version(gitStageMine), base: version(gitStageBase), theirs: version(gitStageTheirs)}
 	b, err := os.ReadFile(path)
-	if err != nil {
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return nil, nil, "", err
 	}
 	file := string(b)

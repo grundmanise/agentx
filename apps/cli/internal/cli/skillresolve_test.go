@@ -844,6 +844,26 @@ func TestSkillResolveRefusesACheckoutThatIsNoLongerAMerge(t *testing.T) {
 	noCheckout(t, h, "kit")
 }
 
+// TestSkillResolveReadsAFileRemovedFromTheCheckout: a text file that
+// conflicts, removed from the checkout with plain rm rather than git rm,
+// conflicts whole, and a side chosen for it, or for another file, resolves
+// it as for any file that conflicts whole.
+func TestSkillResolveReadsAFileRemovedFromTheCheckout(t *testing.T) {
+	t.Parallel()
+	h, _, _ := resolveHarness(t)
+	remove(t, inCheckout(h, "notes.md"))
+
+	out := h.mustRun("--json", "skill", "resolve", "kit")
+	equal(t, "the conflicts", conflictFiles(h.one(out.stdout, "conflict")), "gone.md:whole,guide.md:1,kept.md:whole,logo.bin:binary,notes.md:whole")
+
+	resolveKit(t, h, 0, "guide.md:1=theirs")
+	resolveKit(t, h, 0, "notes.md:1=mine")
+	equal(t, "notes.md in the checkout", fileBody(t, inCheckout(h, "notes.md")), kitMine["notes.md"])
+	if staged := stagedAt(t, h, "notes.md"); !strings.HasSuffix(staged, " 0\tkit-dir/notes.md") {
+		t.Errorf("notes.md in the index is %q, not one entry at stage 0", staged)
+	}
+}
+
 // TestSkillResolveRefusesToCompleteWhatItCannotReplace: completing the
 // merge replaces the library directory, so one it cannot replace as it is
 // is refused with exit code 6 and nothing written: a library entry that is
