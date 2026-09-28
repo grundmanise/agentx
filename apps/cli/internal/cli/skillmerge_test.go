@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
@@ -42,6 +43,16 @@ func resolvedWithGit(t *testing.T, h *harness, commit bool) {
 	if commit {
 		gitIn(t, h, skillDir, "commit", "--quiet", "--no-edit")
 	}
+}
+
+// conflictHint is the hint of an update that left the merge of the skill
+// called name pending, dir being the skill's directory in its checkout.
+// TestSkillUpdateLeavesAConflictPending holds the hint to it, and every
+// other test that reads the hint whole reads it from here.
+func conflictHint(h *harness, name, dir string) string {
+	return "resolve it with git in " + filepath.Join(pendingCheckout(h, name), dir) +
+		" ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), " +
+		"then run 'agentx skill update " + name + "' again to apply it, or 'agentx skill update " + name + " --abort' to give it up"
 }
 
 // conflictPaths is the paths of the files a conflict event names, in
@@ -155,14 +166,16 @@ func TestSkillUpdateMergesANonOverlappingEdit(t *testing.T) {
 	want := withFile(withFile(withFile(merged, ".DS_Store", "finder data\n"),
 		filepath.Join("private", ".gitignore"), "*\n"), filepath.Join("private", "notes.md"), "notes git would ignore\n")
 	h.mustRun("skill", "check")
-	tip, candidate := h.ref(lineage.ManagedRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
+	refs := h.refMap()
+	tip, candidate := refs[lineage.ManagedRef("alpha")], refs[lineage.CandidateRef("alpha")]
 
 	out := h.mustRun("--json", "skill", "update", "alpha")
 	equal(t, "summary", h.one(out.stdout, "result")["summary"],
 		"updated alpha from "+first[:7]+" to "+second[:7]+" and merged its edits cleanly, 1 copy placement refreshed, 1 placement skipped")
 	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), editedCopyWarning(cursor))
-	equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), candidate)
-	equal(t, "the candidate ref", h.ref(lineage.CandidateRef("alpha")), "")
+	refs = h.refMap()
+	equal(t, "the import branch", refs[lineage.ManagedRef("alpha")], candidate)
+	equal(t, "the candidate ref", refs[lineage.CandidateRef("alpha")], "")
 	noCheckout(t, h, "alpha")
 	contains(t, "the branch's reflog", h.accountGit("reflog", "show", "--format=%H", lineage.ManagedRef("alpha")), tip)
 	sameTree(t, "the library directory", libraryTree(t, lib), want)
@@ -198,26 +211,30 @@ func TestSkillUpdateMergesANonOverlappingEdit(t *testing.T) {
 // library directory and every copy are byte for byte as they were, and the
 // import branch and the candidate hold what they held. The conflict event
 // names the three versions and the stage blobs of the file, and the hint
-// names the skill's directory in the checkout to resolve it in with git. The merge is an ordinary
-// git merge in progress in the skill's checkout, read back with plain git:
-// locked with agentx's reason, at mine, the library directory committed on
-// the base version, with the candidate as MERGE_HEAD, the completion's
-// message in MERGE_MSG, the three stages of the file in the index and
-// zdiff3 markers in the file, which git wrote with the line endings the
-// update's own .gitattributes asks for, as it writes any file of a
-// checkout. A later invocation sees the merge pending in skill list, and
-// the update run again before the file is resolved reports the same
-// conflict, read from the checkout, in the same words, and changes
-// nothing.
+// names the skill's directory in the checkout to resolve it in with git.
+// The merge is an ordinary git merge in progress in the skill's checkout,
+// read back with plain git: locked with agentx's reason, at mine, the
+// library directory committed on the base version, with the candidate as
+// MERGE_HEAD, the completion's message in MERGE_MSG, the three stages of
+// the file in the index and zdiff3 markers in the file, which git wrote
+// with the line endings the update's own .gitattributes asks for, as it
+// writes any file of a checkout. A later invocation sees the merge pending
+// in skill list, and the update run again before the file is resolved
+// reports the same conflict, read from the checkout, in the same words,
+// and changes nothing. It is a merge git knows how to finish: git status
+// lists the unmerged path, and once the file is resolved as the hint says,
+// in the skill's directory in the checkout and by the path the conflict
+// lists, a plain git commit makes the merge commit, mine and the candidate
+// its parents and what MERGE_MSG holds its message.
 func TestSkillUpdateLeavesAConflictPending(t *testing.T) {
 	t.Parallel()
 	h, s, first := updateHarness(t)
 	second := newVersion(t, s)
 	h.mustRun("skill", "check")
 	editLibrary(t, h, "alpha", "notes.md", editedNotes)
-	tip, candidate := h.ref(lineage.ManagedRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
-	library, home := onDisk(t, h.library), onDisk(t, h.home)
-	before := mutationVersion(t, h)
+	refs := h.refMap()
+	tip, candidate := refs[lineage.ManagedRef("alpha")], refs[lineage.CandidateRef("alpha")]
+	was := h.unchangedHome()
 
 	out := h.run("--json", "skill", "update", "alpha")
 	equal(t, "exit", out.exit, 4)
@@ -226,6 +243,7 @@ func TestSkillUpdateLeavesAConflictPending(t *testing.T) {
 	equal(t, "message", e["message"], "alpha conflicts with its update in 1 file, so the merge is pending and the library directory was left as it is")
 	equal(t, "hint", e["hint"], "resolve it with git in "+filepath.Join(pendingCheckout(h, "alpha"), "alpha-dir")+" ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), "+
 		"then run 'agentx skill update alpha' again to apply it, or 'agentx skill update alpha --abort' to give it up")
+	equal(t, "conflictHint", conflictHint(h, "alpha", "alpha-dir"), e["hint"])
 	if got := h.eventsOfType(out.stdout, "library_skill"); len(got) != 0 {
 		t.Errorf("an update that left a merge pending reported %v", got)
 	}
@@ -253,12 +271,8 @@ func TestSkillUpdateLeavesAConflictPending(t *testing.T) {
 	merged := fileBody(t, filepath.Join(pendingCheckout(h, "alpha"), "alpha-dir", "notes.md"))
 	contains(t, "the checkout's notes.md", merged, crlf("<<<<<<< "+mine+"\n"+editedNotes+"||||||| "))
 	contains(t, "the checkout's notes.md", merged, crlf("\nalpha notes\n=======\nalpha notes, revised upstream\n>>>>>>> "+candidate+"\n"))
-	equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), tip)
-	equal(t, "the candidate ref", h.ref(lineage.CandidateRef("alpha")), candidate)
-	equal(t, "the library", onDisk(t, h.library), library)
-	equal(t, "the clients' directories", onDisk(t, h.home), home)
-	equal(t, "mutations", mutationVersion(t, h), before+1)
-	equal(t, "journals", journalCount(t, h), 0)
+	// A merge left pending is a change, which the version file says.
+	was.check(t, h, "the update that conflicts", 1)
 
 	listed := h.listed("alpha")
 	equal(t, "state", listed["state"], stateModified)
@@ -268,6 +282,7 @@ func TestSkillUpdateLeavesAConflictPending(t *testing.T) {
 	}
 	contains(t, "skill list", h.mustRun("skill", "list").stdout, "modified, "+updateAvailable+", "+mergePending+"  ")
 
+	was = h.unchangedHome()
 	again := h.run("--json", "skill", "update", "alpha")
 	equal(t, "exit of the update run again", again.exit, 4)
 	sameEvent(t, "the conflict of the update run again", h.one(again.stdout, "conflict"), ev)
@@ -275,10 +290,15 @@ func TestSkillUpdateLeavesAConflictPending(t *testing.T) {
 	equal(t, "exit of the update run again in text", text.exit, 4)
 	equal(t, "stdout of the update run again", text.stdout, "alpha conflicts with its update from "+first[:7]+" to "+second[:7]+" in 1 file\nnotes.md: both modified\n")
 	equal(t, "stderr of the update run again", text.stderr, "error: "+e["message"].(string)+"\nhint: "+e["hint"].(string)+"\n")
-	equal(t, "the library once run again", onDisk(t, h.library), library)
-	equal(t, "the import branch once run again", h.ref(lineage.ManagedRef("alpha")), tip)
+	was.check(t, h, "the update run again", 0)
 	equal(t, "the unmerged paths once run again", unmerged(t, h, "alpha"), "1 alpha-dir/notes.md\n2 alpha-dir/notes.md\n3 alpha-dir/notes.md")
-	equal(t, "journals once run again", journalCount(t, h), 0)
+
+	contains(t, "git status", checkoutGit(t, h, "alpha", "status", "--porcelain"), "UU alpha-dir/notes.md")
+	resolvedWithGit(t, h, true)
+	equal(t, "the commit's notes.md", checkoutGit(t, h, "alpha", "rev-parse", "HEAD:alpha-dir/notes.md"), h.accountGit("rev-parse", candidate+":alpha-dir/notes.md")+"\n")
+	equal(t, "the commit's parents", strings.TrimSpace(checkoutGit(t, h, "alpha", "rev-parse", "HEAD^@")), mine+"\n"+candidate)
+	equal(t, "the commit's message", checkoutGit(t, h, "alpha", "log", "-1", "--format=%B"), msg+"\n")
+	equal(t, "the library once the merge is committed", onDisk(t, h.library), was.library)
 }
 
 // TestSkillUpdateAppliesAMergeResolvedWithGit: once the file that
@@ -314,8 +334,9 @@ func TestSkillUpdateAppliesAMergeResolvedWithGit(t *testing.T) {
 			equal(t, "summary", h.one(out.stdout, "result")["summary"],
 				"updated alpha from "+first[:7]+" to "+short(s.run("rev-parse", "HEAD"))+" with the merge you resolved, 1 copy placement refreshed, 1 placement skipped")
 			equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), editedCopyWarning(cursor))
-			equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), candidate)
-			equal(t, "the candidate ref", h.ref(lineage.CandidateRef("alpha")), "")
+			refs := h.refMap()
+			equal(t, "the import branch", refs[lineage.ManagedRef("alpha")], candidate)
+			equal(t, "the candidate ref", refs[lineage.CandidateRef("alpha")], "")
 			noCheckout(t, h, "alpha")
 			want := secondTree(t, s)
 			want["notes.md"] = "alpha notes, merged by hand\n"
@@ -337,25 +358,49 @@ func TestSkillUpdateAppliesAMergeResolvedWithGit(t *testing.T) {
 
 // TestSkillUpdateFromInsideTheCheckout: a run started in the skill's
 // directory in the checkout, as one is once the merge is resolved there
-// with git, applies the merge or gives it up although that removes the
-// directory it runs in.
+// with git, applies the merge although that removes the directory it runs
+// in. Giving the merge up from there moves out of the checkout the same
+// way, see TestLeaveCheckoutMovesOutOfTheCheckout.
 func TestSkillUpdateFromInsideTheCheckout(t *testing.T) {
 	// Not parallel: it changes the process's working directory.
-	for _, abort := range []bool{false, true} {
-		t.Run(fmt.Sprintf("abort %v", abort), func(t *testing.T) {
-			h, s, _ := updateHarness(t)
-			pendingMerge(t, h, s)
-			resolvedWithGit(t, h, false)
-			t.Chdir(filepath.Join(pendingCheckout(h, "alpha"), "alpha-dir"))
-			want := "alpha notes, revised upstream\n"
-			args := []string{"--json", "skill", "update", "alpha"}
-			if abort {
-				want, args = editedNotes, append(args, "--abort")
-			}
-			h.mustRun(args...)
-			noCheckout(t, h, "alpha")
-			equal(t, "notes.md", fileBody(t, filepath.Join(h.library, "alpha", "notes.md")), want)
-		})
+	h, s, _ := updateHarness(t)
+	pendingMerge(t, h, s)
+	resolvedWithGit(t, h, false)
+	t.Chdir(filepath.Join(pendingCheckout(h, "alpha"), "alpha-dir"))
+	h.mustRun("--json", "skill", "update", "alpha")
+	noCheckout(t, h, "alpha")
+	equal(t, "notes.md", fileBody(t, filepath.Join(h.library, "alpha", "notes.md")), "alpha notes, revised upstream\n")
+}
+
+// TestLeaveCheckoutMovesOutOfTheCheckout: a process whose working
+// directory is the checkout of the merge being applied or given up, or a
+// directory in it, moves to the merges directory before the checkout is
+// removed; one working anywhere else, the checkout of another skill whose
+// name begins the same included, stays where it is.
+func TestLeaveCheckoutMovesOutOfTheCheckout(t *testing.T) {
+	// Not parallel: it changes the process's working directory.
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	inv := &invocation{dirs: home.Dirs{Home: root}}
+	checkout := inv.checkoutPath("alpha")
+	for _, c := range []struct {
+		name, wd, want string
+	}{
+		{"the checkout", checkout, inv.mergesDir()},
+		{"the skill's directory in the checkout", filepath.Join(checkout, "alpha-dir", "scripts"), inv.mergesDir()},
+		{"the checkout of another skill", inv.checkoutPath("alpha2"), inv.checkoutPath("alpha2")},
+		{"agentx home", root, root},
+	} {
+		mkdirs(t, c.wd, "")
+		t.Chdir(c.wd)
+		inv.leaveCheckout(checkout)
+		wd, err := os.Getwd()
+		if err != nil {
+			t.Fatal(err)
+		}
+		equal(t, c.name, wd, c.want)
 	}
 }
 
@@ -372,9 +417,9 @@ func TestSkillUpdateAbortGivesTheMergeUp(t *testing.T) {
 	t.Parallel()
 	h, s, _ := updateHarness(t)
 	pendingMerge(t, h, s)
-	tip, candidate := h.ref(lineage.ManagedRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
-	library, placed, before := onDisk(t, h.library), onDisk(t, h.home), mutationVersion(t, h)
+	candidate := h.ref(lineage.CandidateRef("alpha"))
 	checkoutGit(t, h, "alpha", "merge", "--abort")
+	was := h.unchangedHome()
 
 	again := h.run("--json", "skill", "update", "alpha")
 	equal(t, "exit of the update run again", again.exit, 4)
@@ -399,12 +444,7 @@ func TestSkillUpdateAbortGivesTheMergeUp(t *testing.T) {
 		t.Error("the skill still carries pending_merge")
 	}
 	noCheckout(t, h, "alpha")
-	equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), tip)
-	equal(t, "the candidate", h.ref(lineage.CandidateRef("alpha")), candidate)
-	equal(t, "the library", onDisk(t, h.library), library)
-	equal(t, "the placements", onDisk(t, h.home), placed)
-	equal(t, "mutations", mutationVersion(t, h), before+1)
-	equal(t, "journals", journalCount(t, h), 0)
+	was.check(t, h, "the merge given up", 1)
 	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "")
 
 	second := h.run("--json", "skill", "update", "alpha", "--abort")
@@ -451,8 +491,7 @@ func TestSkillUpdateRefusesToApplyAMergeItCannot(t *testing.T) {
 			pendingMerge(t, h, s)
 			resolvedWithGit(t, h, false)
 			c.change(t, h)
-			refs := h.accountGit("for-each-ref", "--format=%(refname) %(objectname)")
-			library, placed := onDisk(t, h.library), onDisk(t, h.home)
+			was := h.unchangedHome()
 			_, mergeHead, _ := mergeState(t, h, "alpha")
 
 			out := h.run("--json", "skill", "update", "alpha")
@@ -460,41 +499,13 @@ func TestSkillUpdateRefusesToApplyAMergeItCannot(t *testing.T) {
 			e := h.one(out.stdout, "error")
 			equal(t, "message", e["message"], c.message)
 			equal(t, "hint", e["hint"], c.hint)
-			equal(t, "the refs", h.accountGit("for-each-ref", "--format=%(refname) %(objectname)"), refs)
-			equal(t, "the library", onDisk(t, h.library), library)
-			equal(t, "the placements", onDisk(t, h.home), placed)
+			was.check(t, h, "the refused merge", 0)
 			equal(t, "MERGE_HEAD", strings.TrimSpace(checkoutGit(t, h, "alpha", "rev-parse", "MERGE_HEAD")), mergeHead)
-			equal(t, "journals", journalCount(t, h), 0)
 
 			h.mustRun("skill", "update", "alpha", "--abort")
 			noCheckout(t, h, "alpha")
 		})
 	}
-}
-
-// TestAPendingMergeCheckoutIsAnOrdinaryMergeInProgress: the checkout of a
-// pending merge is a merge git knows how to finish. git status there lists
-// the unmerged path, and once the file is resolved as the hint says, in the
-// skill's directory in the checkout and by the path the conflict lists, a
-// plain git commit makes the merge commit, mine and the candidate its
-// parents and the message MERGE_MSG holds its message. The library
-// directory is as it was all along.
-func TestAPendingMergeCheckoutIsAnOrdinaryMergeInProgress(t *testing.T) {
-	t.Parallel()
-	h, s, _ := updateHarness(t)
-	pendingMerge(t, h, s)
-	library := onDisk(t, h.library)
-	head, candidate, msg := mergeState(t, h, "alpha")
-
-	contains(t, "git status", checkoutGit(t, h, "alpha", "status", "--porcelain"), "UU alpha-dir/notes.md")
-	skillDir := filepath.Join(pendingCheckout(h, "alpha"), "alpha-dir")
-	gitIn(t, h, skillDir, "checkout", "--theirs", "notes.md")
-	gitIn(t, h, skillDir, "add", "notes.md")
-	checkoutGit(t, h, "alpha", "commit", "--no-edit", "--quiet")
-	equal(t, "the commit's notes.md", checkoutGit(t, h, "alpha", "rev-parse", "HEAD:alpha-dir/notes.md"), h.accountGit("rev-parse", candidate+":alpha-dir/notes.md")+"\n")
-	equal(t, "the commit's parents", strings.TrimSpace(checkoutGit(t, h, "alpha", "rev-parse", "HEAD^@")), head+"\n"+candidate)
-	equal(t, "the commit's message", checkoutGit(t, h, "alpha", "log", "-1", "--format=%B"), msg+"\n")
-	equal(t, "the library", onDisk(t, h.library), library)
 }
 
 // TestSkillUpdateConflictsOfEveryKind merges edits that conflict with an
@@ -579,40 +590,7 @@ func TestSkillUpdateConflictsOfEveryKind(t *testing.T) {
 		"notes.md: both modified\n")
 	equal(t, "stderr in text", text.stderr,
 		"error: kinds conflicts with its update in 7 files, so the merge is pending and the library directory was left as it is\n"+
-			"hint: resolve it with git in "+filepath.Join(pendingCheckout(h, "kinds"), "kinds-dir")+" ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), "+
-			"then run 'agentx skill update kinds' again to apply it, or 'agentx skill update kinds --abort' to give it up\n")
-}
-
-// TestSkillUpdateMergesASkillAtTheRootOfItsSource: a skill at the root of
-// its source, whose import tree holds it under the repository's name, merges
-// as any other: an edit the update leaves alone is kept, and one it
-// overlaps conflicts at a path relative to the skill's directory.
-func TestSkillUpdateMergesASkillAtTheRootOfItsSource(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude"}})
-	s := h.newSourceRepo("rooted", true)
-	s.skill("", "rooted", "A skill at the root", map[string]string{"notes.md": "root notes\n", "usage.md": "root usage\n"})
-	s.commit("first version")
-	h.mustRun("skill", "add", s.url)
-	s.write("notes.md", "root notes, revised\n")
-	s.commit("second version")
-	h.mustRun("skill", "check")
-	editLibrary(t, h, "rooted", "usage.md", "root usage, edited here\n")
-
-	h.mustRun("skill", "update", "rooted")
-	sameTree(t, "the library directory", libraryTree(t, filepath.Join(h.library, "rooted")), map[string]string{
-		"SKILL.md": fileBody(t, filepath.Join(s.work, "SKILL.md")), "notes.md": "root notes, revised\n", "usage.md": "root usage, edited here\n",
-	})
-	equal(t, "state", h.listed("rooted")["state"], stateModified)
-
-	s.write("usage.md", "root usage, revised\n")
-	s.commit("third version")
-	h.mustRun("skill", "check")
-	out := h.run("--json", "skill", "update", "rooted")
-	equal(t, "exit", out.exit, 4)
-	ev := h.one(out.stdout, "conflict")
-	equal(t, "files", conflictPaths(ev), "usage.md")
+			"hint: "+conflictHint(h, "kinds", "kinds-dir")+"\n")
 }
 
 // TestAPendingMergeBlocksWhatWouldReplaceOrRemoveTheSkill: while a merge
@@ -629,8 +607,7 @@ func TestAPendingMergeBlocksWhatWouldReplaceOrRemoveTheSkill(t *testing.T) {
 	h, s, _ := updateHarness(t)
 	pendingMerge(t, h, s)
 	head, mergeHead, _ := mergeState(t, h, "alpha")
-	refs := h.accountGit("for-each-ref", "--format=%(refname) %(objectname)")
-	library := onDisk(t, h.library)
+	was := h.unchangedHome()
 	hint := "run 'agentx skill update alpha --abort' to give the merge up; the library directory stays as it is"
 	for _, c := range []struct {
 		args []string
@@ -646,9 +623,7 @@ func TestAPendingMergeBlocksWhatWouldReplaceOrRemoveTheSkill(t *testing.T) {
 		e := h.one(out.stdout, "error")
 		equal(t, what+": message", e["message"], "alpha has a merge with its update pending, so it cannot be "+c.what+" until the merge is resolved or given up")
 		equal(t, what+": hint", e["hint"], hint)
-		equal(t, what+": the refs", h.accountGit("for-each-ref", "--format=%(refname) %(objectname)"), refs)
-		equal(t, what+": the library", onDisk(t, h.library), library)
-		equal(t, what+": journals", journalCount(t, h), 0)
+		was.check(t, h, what, 0)
 	}
 
 	h.mustRun("skill", "remove", "alpha", "--from", "cursor")
@@ -657,7 +632,7 @@ func TestAPendingMergeBlocksWhatWouldReplaceOrRemoveTheSkill(t *testing.T) {
 	gotHead, gotMergeHead, _ := mergeState(t, h, "alpha")
 	equal(t, "the checkout's HEAD after a placement was removed and put back", gotHead, head)
 	equal(t, "the checkout's MERGE_HEAD after a placement was removed and put back", gotMergeHead, mergeHead)
-	equal(t, "the library after a placement was removed and put back", onDisk(t, h.library), library)
+	equal(t, "the library after a placement was removed and put back", onDisk(t, h.library), was.library)
 
 	remove(t, filepath.Join(h.library, "alpha"))
 	out := h.run("--json", "skill", "remove", "alpha")
@@ -715,8 +690,9 @@ func TestSkillCheckDuringAPendingMergeMovesOnlyTheCandidate(t *testing.T) {
 
 	resolvedWithGit(t, h, false)
 	h.mustRun("skill", "update", "alpha")
-	equal(t, "the import branch once applied", h.ref(lineage.ManagedRef("alpha")), candidate)
-	equal(t, "the candidate once applied", h.ref(lineage.CandidateRef("alpha")), moved)
+	refs := h.refMap()
+	equal(t, "the import branch once applied", refs[lineage.ManagedRef("alpha")], candidate)
+	equal(t, "the candidate once applied", refs[lineage.CandidateRef("alpha")], moved)
 	noCheckout(t, h, "alpha")
 	listed = h.listed("alpha")
 	equal(t, "the update listed once applied", listed["candidate"].(map[string]any)["upstream_commit"], third)
@@ -769,93 +745,69 @@ func TestSkillUpdateOfASkillAdoptedWithItsEdits(t *testing.T) {
 }
 
 // TestSkillUpdateMergeRecoversAtEveryBoundary kills a clean merge with
-// SIGKILL once its journal is on disk, then leaves the machine as a
-// process killed after each later step would: the import branch moved, the
-// library directory retained, the merged version published, the copy
-// retained, the copy refreshed, and the candidate deleted with the journal
-// not yet told. A last case is killed for real right after that deletion.
-// The next command recovers each one, and the update is then whole: the
-// branch at the candidate, the candidate gone, the library and the unedited
-// copy holding the new version with the edits on it, the edited copy kept,
-// the library's .DS_Store, which git ignores, still there, no merge
-// pending and nothing staged or retained left behind.
+// SIGKILL once its journal is on disk. A merge journals the steps a
+// replacement does, in the same order, with the merged version staged in
+// place of the candidate's; every later boundary is the journal's own,
+// which TestSkillUpdateRecoversAtEveryBoundary and the home package's
+// journal tests take. The next command recovers it, and the update is then
+// whole: the branch at the candidate, the candidate gone, the library and
+// the unedited copy holding the new version with the edits on it, the
+// edited copy kept, the library's .DS_Store, which git ignores, still
+// there, no merge pending and nothing staged or retained left behind.
 func TestSkillUpdateMergeRecoversAtEveryBoundary(t *testing.T) {
 	t.Parallel()
-	const steps = 6 // the branch, the library's remove and publish, the copy's, then the candidate
-	for stop := 0; stop <= steps+1; stop++ {
-		name := fmt.Sprintf("after %d steps", stop)
-		if stop > steps {
-			name = "killed after its last live write"
-		}
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			h, s, _ := updateHarness(t)
-			claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-			cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
-			editCopy(t, cursor)
-			edited := libraryTree(t, cursor)
-			editLibrary(t, h, "alpha", "mine.md", "a file of my own\n")
-			editLibrary(t, h, "alpha", ".DS_Store", "finder data\n")
-			checked(t, h, s)
-			want := secondTree(t, s)
-			want["mine.md"] = "a file of my own\n"
-			tip, candidate := h.ref(lineage.ManagedRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
+	h, s, _ := updateHarness(t)
+	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
+	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	editCopy(t, cursor)
+	edited := libraryTree(t, cursor)
+	editLibrary(t, h, "alpha", "mine.md", "a file of my own\n")
+	editLibrary(t, h, "alpha", ".DS_Store", "finder data\n")
+	checked(t, h, s)
+	want := secondTree(t, s)
+	want["mine.md"] = "a file of my own\n"
+	refs := h.refMap()
+	tip, candidate := refs[lineage.ManagedRef("alpha")], refs[lineage.CandidateRef("alpha")]
 
-			if stop > steps {
-				out := killedChild(t, h, "TestUpdateChildProcess", updateChildEnv, "alpha", lastWriteScript)
-				if h.ref(lineage.CandidateRef("alpha")) != "" {
-					t.Fatalf("the update was not killed after it deleted the candidate:\n%s", out)
-				}
-				equal(t, "journals the killed update left", journalCount(t, h), 1)
-			} else {
-				killedChild(t, h, "TestUpdateChildProcess", updateChildEnv, "alpha", killedUpdateScript)
-				journal := readJournal(t, h)
-				var kinds []string
-				for _, s := range journal {
-					kinds = append(kinds, s.Kind)
-				}
-				equal(t, "the journal's steps", strings.Join(kinds, ", "), "ref, remove, publish, remove, publish, ref")
-				equal(t, "the import branch when the update was killed", h.ref(lineage.ManagedRef("alpha")), tip)
-				nothingAt(t, "new.md when the update was killed", filepath.Join(h.library, "alpha", "new.md"))
-				applyUpdateSteps(t, h, journal, stop)
-			}
+	killedChild(t, h, "TestUpdateChildProcess", updateChildEnv, "alpha", killedUpdateScript)
+	_, kinds := journalKinds(t, h)
+	equal(t, "the journal's steps", kinds, "ref, remove, publish, remove, publish, ref")
+	equal(t, "the import branch when the update was killed", h.ref(lineage.ManagedRef("alpha")), tip)
+	nothingAt(t, "new.md when the update was killed", filepath.Join(h.library, "alpha", "new.md"))
 
-			if got := h.run("config", "set", "label", "recovered"); got.exit != 0 {
-				t.Fatalf("the command after the killed update: exit %d\n%s", got.exit, got.stderr)
-			}
-			equal(t, "journals after recovery", journalCount(t, h), 0)
-			equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), candidate)
-			equal(t, "the candidate ref", h.ref(lineage.CandidateRef("alpha")), "")
-			noCheckout(t, h, "alpha")
-			sameTree(t, "the library directory", libraryTree(t, filepath.Join(h.library, "alpha")), withFile(want, ".DS_Store", "finder data\n"))
-			sameTree(t, "claude's copy", libraryTree(t, claude), want)
-			sameTree(t, "cursor's copy", libraryTree(t, cursor), edited)
-			for _, dir := range []string{h.library, filepath.Dir(claude), filepath.Dir(cursor)} {
-				equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
-			}
-			equal(t, "state", h.listed("alpha")["state"], stateModified)
-		})
+	if got := h.run("config", "set", "label", "recovered"); got.exit != 0 {
+		t.Fatalf("the command after the killed update: exit %d\n%s", got.exit, got.stderr)
 	}
+	equal(t, "journals after recovery", journalCount(t, h), 0)
+	refs = h.refMap()
+	equal(t, "the import branch", refs[lineage.ManagedRef("alpha")], candidate)
+	equal(t, "the candidate ref", refs[lineage.CandidateRef("alpha")], "")
+	noCheckout(t, h, "alpha")
+	sameTree(t, "the library directory", libraryTree(t, filepath.Join(h.library, "alpha")), withFile(want, ".DS_Store", "finder data\n"))
+	sameTree(t, "claude's copy", libraryTree(t, claude), want)
+	sameTree(t, "cursor's copy", libraryTree(t, cursor), edited)
+	for _, dir := range []string{h.library, filepath.Dir(claude), filepath.Dir(cursor)} {
+		equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
+	}
+	equal(t, "state", h.listed("alpha")["state"], stateModified)
 }
 
 // TestSkillUpdateAppliesAResolvedMergeRecoversAtEveryBoundary kills the
-// update that applies a merge resolved with git once its journal is on
-// disk, then leaves the machine as a process killed after each later step
-// would: the import branch moved, the library directory retained, the
-// merge published, the copy retained, the copy refreshed, the checkout
-// retained, and the candidate deleted with the journal not yet told. A
-// last case is killed for real right after that deletion. The next command
-// recovers each one, and the merge is then applied whole: the branch at
-// the update, the candidate gone, the library and the unedited copy
-// holding the merge, the edited copy kept, no checkout and no registration
-// of one, and nothing staged or retained left behind.
+// update that applies a merge resolved with git at the two boundaries of
+// its own: once its journal is on disk, which holds the checkout's removal
+// among its steps, and for real right after its last live write, the
+// deletion of the candidate, when the checkout is gone and git's
+// registration of it is not. Every boundary in between is one of the
+// journal's, which the home package's journal tests replay without git.
+// The next command recovers either one, and the merge is then applied
+// whole: the branch at the update, the candidate gone, the library and the
+// unedited copy holding the merge, the edited copy kept, no checkout and
+// no registration of one, and nothing staged or retained left behind.
 func TestSkillUpdateAppliesAResolvedMergeRecoversAtEveryBoundary(t *testing.T) {
 	t.Parallel()
-	const kinds = "ref, remove, publish, remove, publish, remove, ref"
-	steps := len(strings.Split(kinds, ", "))
-	for stop := 0; stop <= steps+1; stop++ {
-		name := fmt.Sprintf("after %d steps", stop)
-		if stop > steps {
+	for _, last := range []bool{false, true} {
+		name := "killed once its journal is on disk"
+		if last {
 			name = "killed after its last live write"
 		}
 		t.Run(name, func(t *testing.T) {
@@ -869,7 +821,7 @@ func TestSkillUpdateAppliesAResolvedMergeRecoversAtEveryBoundary(t *testing.T) {
 			resolvedWithGit(t, h, false)
 			candidate := h.ref(lineage.CandidateRef("alpha"))
 
-			if stop > steps {
+			if last {
 				out := killedChild(t, h, "TestUpdateChildProcess", updateChildEnv, "alpha", lastWriteScript)
 				if h.ref(lineage.CandidateRef("alpha")) != "" {
 					t.Fatalf("the update was not killed after it deleted the candidate:\n%s", out)
@@ -877,13 +829,8 @@ func TestSkillUpdateAppliesAResolvedMergeRecoversAtEveryBoundary(t *testing.T) {
 				equal(t, "journals the killed update left", journalCount(t, h), 1)
 			} else {
 				killedChild(t, h, "TestUpdateChildProcess", updateChildEnv, "alpha", killedUpdateScript)
-				journal := readJournal(t, h)
-				var got []string
-				for _, s := range journal {
-					got = append(got, s.Kind)
-				}
-				equal(t, "the journal's steps", strings.Join(got, ", "), kinds)
-				applyUpdateSteps(t, h, journal, stop)
+				_, kinds := journalKinds(t, h)
+				equal(t, "the journal's steps", kinds, "ref, remove, publish, remove, publish, remove, ref")
 			}
 
 			if got := h.run("config", "set", "label", "recovered"); got.exit != 0 {
@@ -891,8 +838,9 @@ func TestSkillUpdateAppliesAResolvedMergeRecoversAtEveryBoundary(t *testing.T) {
 			}
 			want := secondTree(t, s)
 			equal(t, "journals after recovery", journalCount(t, h), 0)
-			equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), candidate)
-			equal(t, "the candidate ref", h.ref(lineage.CandidateRef("alpha")), "")
+			refs := h.refMap()
+			equal(t, "the import branch", refs[lineage.ManagedRef("alpha")], candidate)
+			equal(t, "the candidate ref", refs[lineage.CandidateRef("alpha")], "")
 			noCheckout(t, h, "alpha")
 			sameTree(t, "the library directory", libraryTree(t, filepath.Join(h.library, "alpha")), want)
 			sameTree(t, "claude's copy", libraryTree(t, claude), want)
@@ -920,7 +868,8 @@ func TestSkillUpdateConflictRecoversAtEveryBoundary(t *testing.T) {
 			h, s, _ := updateHarness(t)
 			checked(t, h, s)
 			editLibrary(t, h, "alpha", "notes.md", editedNotes)
-			tip, candidate := h.ref(lineage.ManagedRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
+			refs := h.refMap()
+			tip, candidate := refs[lineage.ManagedRef("alpha")], refs[lineage.CandidateRef("alpha")]
 			library, home := onDisk(t, h.library), onDisk(t, h.home)
 
 			out := killedChild(t, h, "TestUpdateChildProcess", updateChildEnv, "alpha", `
@@ -942,8 +891,9 @@ exec %GIT% "$@"
 			next := h.run("--json", "skill", "update", "alpha")
 			equal(t, "exit of the next update", next.exit, 4)
 			contains(t, "hint of the next update", h.one(next.stdout, "error")["hint"].(string), "or 'agentx skill update alpha --abort' to give it up")
-			equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), tip)
-			equal(t, "the candidate ref", h.ref(lineage.CandidateRef("alpha")), candidate)
+			refs = h.refMap()
+			equal(t, "the import branch", refs[lineage.ManagedRef("alpha")], tip)
+			equal(t, "the candidate ref", refs[lineage.CandidateRef("alpha")], candidate)
 			equal(t, "the library", onDisk(t, h.library), library)
 			equal(t, "the clients' directories", onDisk(t, h.home), home)
 			equal(t, "pending_merge", h.listed("alpha")["pending_merge"], true)
@@ -953,22 +903,20 @@ exec %GIT% "$@"
 
 // TestSkillUpdateRefusesAMergeWhoseLibraryChangedBeforeTheLock: what a
 // merge merged is the library directory as the update read it. An edit
-// made while git adds the directory to the index mine is written from, or
-// while git merges it, before the lock, is found under the lock, whether
-// the file edited is one the base version holds too or the user's own: the
-// update refuses with exit code 6, whether its merge was clean or
-// conflicted: no journal, no merge left pending, the edit where it was
-// made, the import branch and the candidate as they were, and the version
-// file not bumped.
+// made while git merges it, or while git adds it to the index mine is
+// written from, before the lock, is found under the lock: the update
+// refuses with exit code 6, whether its merge conflicted or was clean and
+// whether the file edited is one the base version holds too or the user's
+// own: no journal, no merge left pending, the edit where it was made, the
+// import branch and the candidate as they were, and the version file not
+// bumped.
 func TestSkillUpdateRefusesAMergeWhoseLibraryChangedBeforeTheLock(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
 		name, file, content string
 		during, changed     string // the git call the edit is made during, and the file it edits
 	}{
-		{name: "a clean merge", file: "mine.md", content: "a file of my own\n", during: "merge-tree", changed: "usage.md"},
 		{name: "a merge that conflicts", file: "notes.md", content: editedNotes, during: "merge-tree", changed: "usage.md"},
-		{name: "a directory edited while git adds it", file: "mine.md", content: "a file of my own\n", during: "add", changed: "SKILL.md"},
 		{name: "a file of the user's edited while git adds it", file: "mine.md", content: "a file of my own\n", during: "add", changed: "mine.md"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -976,7 +924,8 @@ func TestSkillUpdateRefusesAMergeWhoseLibraryChangedBeforeTheLock(t *testing.T) 
 			h, s, _ := updateHarness(t)
 			checked(t, h, s)
 			editLibrary(t, h, "alpha", c.file, c.content)
-			tip, candidate := h.ref(lineage.ManagedRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
+			refs := h.refMap()
+			tip, candidate := refs[lineage.ManagedRef("alpha")], refs[lineage.CandidateRef("alpha")]
 			before := mutationVersion(t, h)
 			usage := filepath.Join(h.library, "alpha", c.changed)
 			stubGit(t, h, `#!/bin/sh
@@ -997,8 +946,9 @@ exec `+realGit(t)+` "$@"
 			if c.file != c.changed {
 				equal(t, "the edit made before", fileBody(t, filepath.Join(h.library, "alpha", c.file)), c.content)
 			}
-			equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), tip)
-			equal(t, "the candidate", h.ref(lineage.CandidateRef("alpha")), candidate)
+			refs = h.refMap()
+			equal(t, "the import branch", refs[lineage.ManagedRef("alpha")], tip)
+			equal(t, "the candidate", refs[lineage.CandidateRef("alpha")], candidate)
 			noCheckout(t, h, "alpha")
 			equal(t, "journals", journalCount(t, h), 0)
 			equal(t, "mutations", mutationVersion(t, h), before)
@@ -1018,7 +968,8 @@ func TestSkillUpdateRefusesAMergePendingSinceItJudgedTheSkill(t *testing.T) {
 	h, s, _ := updateHarness(t)
 	checked(t, h, s)
 	editLibrary(t, h, "alpha", "notes.md", editedNotes)
-	tip, candidate := h.ref(lineage.ManagedRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
+	refs := h.refMap()
+	tip, candidate := refs[lineage.ManagedRef("alpha")], refs[lineage.CandidateRef("alpha")]
 	library := onDisk(t, h.library)
 	checkout := pendingCheckout(h, "alpha")
 	real := realGit(t)
@@ -1037,8 +988,9 @@ exec `+real+` "$@"
 	if got := h.eventsOfType(out.stdout, "conflict"); len(got) != 0 {
 		t.Errorf("a refused update reported %v", got)
 	}
-	equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), tip)
-	equal(t, "the candidate", h.ref(lineage.CandidateRef("alpha")), candidate)
+	refs = h.refMap()
+	equal(t, "the import branch", refs[lineage.ManagedRef("alpha")], tip)
+	equal(t, "the candidate", refs[lineage.CandidateRef("alpha")], candidate)
 	equal(t, "the library", onDisk(t, h.library), library)
 	equal(t, "journals", journalCount(t, h), 0)
 	equal(t, "the other run's checkout", strings.TrimSpace(checkoutGit(t, h, "alpha", "rev-parse", "HEAD")), tip)
@@ -1046,74 +998,46 @@ exec `+real+` "$@"
 }
 
 // TestSkillUpdateStoppedWhileItMergesChangesNothing stops an update with
-// SIGTERM while git merges the edits with the update: while merge-tree
-// merges, before the lock, and while update-index sets the merge up in
-// the checkout, under it. Either way the run answers with exit code 9 and
-// leaves the machine as it was, no checkout and no registration of one
-// left, and the next update leaves the merge pending.
+// SIGTERM while update-index sets the merge up in the checkout, under the
+// lock: the run answers with exit code 9 and leaves the machine as it was,
+// no checkout and no registration of one left, and the next update leaves
+// the merge pending. A stop before the lock, while merge-tree merges, is
+// a stop before the journal as
+// TestSkillUpdateStoppedBeforeItsJournalChangesNothing's is.
 func TestSkillUpdateStoppedWhileItMergesChangesNothing(t *testing.T) {
 	t.Parallel()
-	for _, sub := range []string{"merge-tree", "update-index"} {
-		t.Run("stopped during "+sub, func(t *testing.T) {
-			t.Parallel()
-			h, s, _ := updateHarness(t)
-			checked(t, h, s)
-			editLibrary(t, h, "alpha", "notes.md", editedNotes)
-			tip, candidate := h.ref(lineage.ManagedRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
-			library := onDisk(t, h.library)
-			before := mutationVersion(t, h)
-			ready := filepath.Join(t.TempDir(), "merging")
-			path := h.env["PATH"]
-			hangingGit(t, h, sub, ready)
-
-			code, stderr := signalled(t, h, stopRun{ready: ready, sigs: []syscall.Signal{syscall.SIGTERM},
-				args: []string{"skill", "update", "alpha", "--color", "off"}})
-			killLeftover(t, ready)
-			h.env["PATH"] = path
-
-			equal(t, "the exit code of a stopped update", code, exitInterrupted.exit)
-			contains(t, "stderr", stderr, "error: interrupted")
-			equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), tip)
-			equal(t, "the candidate", h.ref(lineage.CandidateRef("alpha")), candidate)
-			noCheckout(t, h, "alpha")
-			equal(t, "the library", onDisk(t, h.library), library)
-			equal(t, "journals", journalCount(t, h), 0)
-			equal(t, "mutations", mutationVersion(t, h), before)
-
-			equal(t, "exit of the next update", h.run("skill", "update", "alpha").exit, 4)
-			if _, err := os.Lstat(pendingCheckout(h, "alpha")); err != nil {
-				t.Errorf("the next update left no merge pending: %v", err)
-			}
-		})
-	}
-}
-
-// TestSkillUpdateMergesWithNoAttributesOfTheUsers: git attributes of the
-// user's own, a merge driver that joins both sides of every Markdown file
-// say, decide nothing about how an update merges: an edit the update
-// overlaps still conflicts, the merge is left pending with the file
-// unmerged in the checkout, and the library directory is as it was.
-func TestSkillUpdateMergesWithNoAttributesOfTheUsers(t *testing.T) {
-	t.Parallel()
 	h, s, _ := updateHarness(t)
-	writeFile(t, mkdirs(t, filepath.Join(h.config, "git"), "attributes"), "*.md merge=union\n")
 	checked(t, h, s)
 	editLibrary(t, h, "alpha", "notes.md", editedNotes)
-	library := onDisk(t, h.library)
+	was := h.unchangedHome()
+	ready := filepath.Join(t.TempDir(), "merging")
+	path := h.env["PATH"]
+	hangingGit(t, h, "update-index", ready)
 
-	out := h.run("--json", "skill", "update", "alpha")
-	equal(t, "exit", out.exit, 4)
-	ev := h.one(out.stdout, "conflict")
-	equal(t, "files", conflictPaths(ev), "notes.md")
-	equal(t, "the unmerged paths", unmerged(t, h, "alpha"), "1 alpha-dir/notes.md\n2 alpha-dir/notes.md\n3 alpha-dir/notes.md")
-	equal(t, "the library", onDisk(t, h.library), library)
+	code, stderr := signalled(t, h, stopRun{ready: ready, sigs: []syscall.Signal{syscall.SIGTERM},
+		args: []string{"skill", "update", "alpha", "--color", "off"}})
+	killLeftover(t, ready)
+	h.env["PATH"] = path
+
+	equal(t, "the exit code of a stopped update", code, exitInterrupted.exit)
+	contains(t, "stderr", stderr, "error: interrupted")
+	noCheckout(t, h, "alpha")
+	was.check(t, h, "the stopped update", 0)
+
+	equal(t, "exit of the next update", h.run("skill", "update", "alpha").exit, 4)
+	if _, err := os.Lstat(pendingCheckout(h, "alpha")); err != nil {
+		t.Errorf("the next update left no merge pending: %v", err)
+	}
 }
 
 // TestSkillUpdateConflictsInTheCheckoutAsMergeTreeFoundIt: the checkout
 // holds the conflicts merge-tree found, which the update was judged by. A
 // union merge driver the skill's own .gitattributes names for a file does
 // not merge it there, so the file's three versions are in the index, and
-// the library, the import branch and the candidate are as they were.
+// the library, the import branch and the candidate are as they were. Git
+// attributes of the user's own decide nothing either, which
+// gitx.TestIsolatedReadsNoAttributesOfTheUsers holds every isolated git
+// to.
 func TestSkillUpdateConflictsInTheCheckoutAsMergeTreeFoundIt(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -1127,7 +1051,8 @@ func TestSkillUpdateConflictsInTheCheckoutAsMergeTreeFoundIt(t *testing.T) {
 	s.commit("second version")
 	h.mustRun("skill", "check")
 	editLibrary(t, h, "union", "notes.md", "notes, edited here\n")
-	tip, candidate := h.ref(lineage.ManagedRef("union")), h.ref(lineage.CandidateRef("union"))
+	refs := h.refMap()
+	tip, candidate := refs[lineage.ManagedRef("union")], refs[lineage.CandidateRef("union")]
 	library := onDisk(t, h.library)
 
 	out := h.run("--json", "skill", "update", "union")
@@ -1136,8 +1061,9 @@ func TestSkillUpdateConflictsInTheCheckoutAsMergeTreeFoundIt(t *testing.T) {
 	_, mergeHead, _ := mergeState(t, h, "union")
 	equal(t, "MERGE_HEAD", mergeHead, candidate)
 	equal(t, "the unmerged paths", unmerged(t, h, "union"), "1 union/notes.md\n2 union/notes.md\n3 union/notes.md")
-	equal(t, "the import branch", h.ref(lineage.ManagedRef("union")), tip)
-	equal(t, "the candidate ref", h.ref(lineage.CandidateRef("union")), candidate)
+	refs = h.refMap()
+	equal(t, "the import branch", refs[lineage.ManagedRef("union")], tip)
+	equal(t, "the candidate ref", refs[lineage.CandidateRef("union")], candidate)
 	equal(t, "the library", onDisk(t, h.library), library)
 	equal(t, "journals", journalCount(t, h), 0)
 }
@@ -1235,7 +1161,8 @@ func TestSkillUpdateMergeRefreshesACopyThatHoldsTheEditedLibrary(t *testing.T) {
 // carries a .DS_Store and a log the skill's own .gitignore names over into
 // the merged version, and a log of the user's the new version ships is the
 // new version's, as git checkout leaves it. A merge that conflicts commits
-// neither into mine, and the library keeps both.
+// neither into mine, and the library keeps both. What a replacement keeps
+// is TestCarryIgnoredKeepsWhatTheNewContentHolds's.
 func TestAnIgnoredFileIsNotMineAndSurvivesTheMerge(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
