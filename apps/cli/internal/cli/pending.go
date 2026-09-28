@@ -44,10 +44,12 @@ func (inv *invocation) checkoutPath(name string) string {
 }
 
 // mergePending reports whether the skill called name has a merge pending:
-// whether its checkout is there.
+// whether the merges directory holds its checkout. A name that is not one
+// entry of that directory, such as "..", "." or one with a separator, has
+// none.
 func (inv *invocation) mergePending(name string) bool {
-	_, err := os.Lstat(inv.checkoutPath(name))
-	return err == nil
+	merges, _ := inv.pendingMerges()
+	return merges[name]
 }
 
 // pendingMerges are the names of the skills with a merge pending, read in

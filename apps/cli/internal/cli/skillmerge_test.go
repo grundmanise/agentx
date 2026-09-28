@@ -383,6 +383,15 @@ func TestSkillUpdateAbortGivesTheMergeUp(t *testing.T) {
 	equal(t, "theirs", ev["theirs"], candidate)
 	equal(t, "code", h.one(again.stdout, "error")["code"], "pending_merge")
 
+	for _, name := range []string{"", ".", "..", "alpha/alpha", "../merges/alpha"} {
+		refused := h.run("--json", "skill", "update", name, "--abort")
+		equal(t, fmt.Sprintf("exit of --abort on %q", name), refused.exit, 6)
+		equal(t, fmt.Sprintf("message of --abort on %q", name), h.one(refused.stdout, "error")["message"], name+" has no merge pending")
+	}
+	if _, err := os.Lstat(pendingCheckout(h, "alpha")); err != nil {
+		t.Fatalf("the checkout went with an --abort on another name: %v", err)
+	}
+
 	out := h.run("--json", "skill", "update", "alpha", "--abort")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "summary", h.one(out.stdout, "result")["summary"], "gave up the merge of alpha; the library directory is as it was")
