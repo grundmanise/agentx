@@ -17,16 +17,20 @@ import (
 func AccountRepoPath(homeDir string) string { return filepath.Join(homeDir, "account.git") }
 
 // CheckAccountRepo reports whether the account repo exists in agentx home
-// and, when it does, that git reads it as a bare repository. It changes
-// nothing.
+// and, when it does, that git reads it as a bare repository. A repo that
+// is plainly one needs no git to say so; any other is left to git, whose
+// answer is the error. It changes nothing.
 func CheckAccountRepo(ctx context.Context, r *Runner, homeDir string) (gitDir string, exists bool, err error) {
 	gitDir = AccountRepoPath(homeDir)
-	_, err = os.Stat(gitDir)
+	info, err := os.Stat(gitDir)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
 		return gitDir, false, nil
 	case err != nil:
 		return gitDir, false, fmt.Errorf("account repo %s: %w", gitDir, err)
+	}
+	if info.IsDir() && plainlyBare(gitDir) {
+		return gitDir, true, nil
 	}
 	if out, err := r.Isolated(ctx, gitDir, "rev-parse", "--is-bare-repository"); err != nil || out != "true" {
 		if err == nil {
