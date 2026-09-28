@@ -70,6 +70,12 @@ func hostileSource(t *testing.T, h *harness) *sourceRepo {
 // the staging directory and the library; the install refuses the skill
 // before anything is written, names the entry, and leaves every other skill
 // of the source installable.
+//
+// The same tree named through the subpath of the URL rather than through a
+// listing is refused too: a segment that decodes to skills/evil/../.. would
+// have git resolve it through the source's own ".." entries, install the
+// inner tree as a skill and record it as the source root. The URL is
+// refused before anything is read.
 func TestSkillAddRefusesAnEntryThatClimbsOut(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -87,6 +93,13 @@ func TestSkillAddRefusesAnEntryThatClimbsOut(t *testing.T) {
 	out := h.run("skill", "add", s.url, "--skill", "evil")
 	equal(t, "exit", out.exit, 6)
 	contains(t, "stderr", out.stderr, `the skill "evil" in `+s.url+` under skills/evil holds an entry agentx will not lay out: ".."`)
+
+	for _, sub := range []string{"skills%2Fevil%2F..%2F..", "skills/evil%2F..%2F.."} {
+		out := h.run("skill", "add", s.url+"/"+sub)
+		equal(t, "exit of "+sub, out.exit, 1)
+		contains(t, "stderr of "+sub, out.stderr, `the path "skills/evil/../.." inside the repository is not one agentx reads`)
+	}
+
 	sources := filepath.Join(filepath.Dir(h.home), "sources")
 	_ = filepath.WalkDir(filepath.Dir(h.home), func(p string, d fs.DirEntry, err error) error {
 		if err == nil && d.IsDir() && p == sources {
@@ -99,6 +112,9 @@ func TestSkillAddRefusesAnEntryThatClimbsOut(t *testing.T) {
 	})
 	if _, err := os.Lstat(filepath.Join(h.library, "evil")); err == nil {
 		t.Error("the library holds the refused skill")
+	}
+	if _, err := h.accountGitErr("rev-parse", "--verify", "--quiet", "refs/heads/managed/evil"); err == nil {
+		t.Error("the account repo holds managed/evil")
 	}
 
 	// The source is refused one skill at a time, not whole.
@@ -121,30 +137,5 @@ func TestStageCopyStaysInside(t *testing.T) {
 		if _, err := os.Lstat(p); err == nil {
 			t.Errorf("stageCopy wrote %s", p)
 		}
-	}
-}
-
-// TestSkillAddRefusesASubpathThatClimbsOut names the hostile tree through
-// the subpath of the URL rather than through a listing: a segment that
-// decodes to skills/evil/../.. would have git resolve it through the
-// source's own ".." entries, install the inner tree as a skill and record
-// it as the source root. The URL is refused before anything is read.
-func TestSkillAddRefusesASubpathThatClimbsOut(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude"}})
-	s := hostileSource(t, h)
-	equal(t, "exit of source add", h.run("source", "add", s.url).exit, 0)
-
-	for _, sub := range []string{"skills%2Fevil%2F..%2F..", "skills/evil%2F..%2F.."} {
-		out := h.run("skill", "add", s.url+"/"+sub)
-		equal(t, "exit of "+sub, out.exit, 1)
-		contains(t, "stderr of "+sub, out.stderr, `the path "skills/evil/../.." inside the repository is not one agentx reads`)
-	}
-	if _, err := h.accountGitErr("rev-parse", "--verify", "--quiet", "refs/heads/managed/evil"); err == nil {
-		t.Error("the account repo holds managed/evil")
-	}
-	if _, err := os.Lstat(filepath.Join(h.library, "evil")); err == nil {
-		t.Error("the library holds the hostile tree")
 	}
 }

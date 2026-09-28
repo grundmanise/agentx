@@ -234,13 +234,14 @@ func TestSkillRemoveOfAnAbsentSkillJudgesACopyByItsBaseFiles(t *testing.T) {
 }
 
 // TestSkillRevertOfAnOlderBranchRecovers kills a revert that stores its
-// branch again at each durable boundary: once its journal is on disk,
-// before the branch moved, and right after the branch moved, before any
-// path changed; and then, the branch moved, after each path step. A
-// revert whose library already holds the base's files has the branch
-// alone to move. The next command recovers each one, and the revert is
-// then whole: the library and the copy hold the base, the branch holds the
-// commit an install writes today, and the skill is current.
+// branch again at the two boundaries its ref step makes: once its journal
+// is on disk, before the branch moved, and right after the branch moved,
+// before any path changed. A revert whose library already holds the base's
+// files has the branch alone to move. The next command recovers each one,
+// and the revert is then whole: the library and the copy hold the base, the
+// branch holds the commit an install writes today, and the skill is
+// current. Recovery after each of the path steps that follow is generic,
+// and TestReplacementRecoversFromEveryBoundary in internal/home covers it.
 func TestSkillRevertOfAnOlderBranchRecovers(t *testing.T) {
 	t.Parallel()
 	const journalOnDisk = `
@@ -263,23 +264,17 @@ case " $* " in
 esac
 exec %GIT% "$@"
 `
-	type revertCase struct {
+	for _, c := range []struct {
 		name   string
 		edit   bool   // the library and the copy hold an edit the revert discards
 		script string // where the revert is killed
 		moved  bool   // the branch moved before the kill
-		stop   int    // the path steps applied after the kill, the branch moved first
-	}
-	cases := []revertCase{
+	}{
 		{name: "the branch alone, before it moved", script: journalOnDisk},
 		{name: "the branch alone, after it moved", script: branchMoved, moved: true},
 		{name: "before the branch moved", edit: true, script: journalOnDisk},
 		{name: "after the branch moved", edit: true, script: branchMoved, moved: true},
-	}
-	for stop := 1; stop <= 4; stop++ { // the library's remove and publish, then the copy's
-		cases = append(cases, revertCase{name: fmt.Sprintf("after %d path steps", stop), edit: true, script: journalOnDisk, stop: stop})
-	}
-	for _, c := range cases {
+	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			h, s, _ := legacyHarness(t)
@@ -294,9 +289,8 @@ exec %GIT% "$@"
 			legacy, tip := h.storeInOlderForm(t, s)
 
 			out := killedRevertBy(t, h, "nc", c.script)
-			steps := readJournal(t, h)
 			var kinds []string
-			for _, s := range steps {
+			for _, s := range readJournal(t, h) {
 				kinds = append(kinds, s.Kind)
 			}
 			want := "ref"
@@ -309,10 +303,6 @@ exec %GIT% "$@"
 				branch = tip
 			}
 			equal(t, "the import branch when the revert was killed", h.accountGit("rev-parse", "refs/heads/managed/nc"), branch)
-			if c.stop > 0 {
-				h.accountGit("update-ref", "refs/heads/managed/nc", tip, legacy)
-				applySteps(t, steps, c.stop)
-			}
 
 			if got := h.run("config", "set", "label", "recovered"); got.exit != 0 {
 				t.Fatalf("the command after the killed revert: exit %d\n%s\nthe killed run:\n%s", got.exit, got.stderr, out)

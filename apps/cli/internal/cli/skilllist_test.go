@@ -121,45 +121,15 @@ func TestSkillListWithoutALibrary(t *testing.T) {
 	equal(t, "events", strings.Join(h.types(h.events(json.stdout)), ","), "result")
 }
 
-// TestSkillListSpawnsOneGitProcess counts the git processes of a listing:
-// the startup version check, and one for-each-ref over both namespaces.
-// The scan the listing runs reads the filesystem and spawns nothing, a
-// skill whose only extra file is one the system-file list names included.
-func TestSkillListSpawnsOneGitProcess(t *testing.T) {
-	t.Parallel()
-	h, s := installHarness(t)
-	equal(t, "exit", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
-	writeFile(t, filepath.Join(h.library, "alpha", ".DS_Store"), "finder\n")
-	calls := countingGit(t, h)
-	equal(t, "exit", h.run("skill", "list").exit, 0)
-	refs := 0
-	for _, call := range calls() {
-		switch {
-		case strings.Contains(call, "for-each-ref"):
-			refs++
-		case strings.Contains(call, "--version"), strings.Contains(call, "rev-parse --is-bare-repository"):
-		default:
-			t.Errorf("skill list ran git %s", call)
-		}
-	}
-	equal(t, "for-each-ref calls", refs, 1)
-}
-
-// TestSkillListSpawnsOneGitProcessWhateverTheDrift holds the budget above
-// for skills that differ every way drift reads: one edited, a file of it
-// made executable too, with an update a check pinned and a merge an update
-// left pending, one whose link became a real directory in one
-// configuration and whose placement is gone from another, and whose
-// upstream no longer holds it, and a skill of the user's own beside them,
-// and a managed branch whose library directory is gone and whose commit
-// carries no lineage, which a warning names with <source> for the source
-// it cannot name. Whether a skill is displaced, missing or gone is read in
-// process, and so is modified until the tree id differs: then git decides,
-// with a read-tree, an add and a write-tree for the edited skill and one
-// read of the user's global ignore file per run. Its candidate and its
-// upstream-removed marker come with the lineage, so the listing still runs
-// one for-each-ref, and so does the snapshot, and its pending merge is its
-// checkout under agentx home, which costs no git process at all.
+// TestSkillListSpawnsOneGitProcessWhateverTheDrift counts the git processes
+// of a listing and of a snapshot over skills that differ every way drift
+// reads: alpha edited, a file of it made executable, with a candidate and a
+// pending merge; beta displaced in one configuration, missing from another,
+// removed upstream, and holding a file the system-file list names; a skill
+// of the user's own; and a managed branch with no library directory and no
+// lineage, which a warning names. All of it comes from one for-each-ref and
+// the filesystem: only the edited skill asks git, with a read-tree, an add
+// and a write-tree, and the user's global ignore file is read once.
 func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -171,6 +141,7 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	copyTree(t, filepath.Join(h.library, "beta"), claude)
 	remove(t, filepath.Join(h.home, ".cursor", "skills", "beta"))
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "mine"), "SKILL.md"), skill("mine", "A skill of my own"))
+	writeFile(t, filepath.Join(h.library, "beta", ".DS_Store"), "finder\n")
 	h.accountGit("update-ref", "refs/heads/managed/ghost", h.accountGit("commit-tree", "refs/heads/managed/beta^{tree}", "-m", "no lineage"))
 	// A candidate is a commit of its own, as a check pins it: here alpha's
 	// version again, with its lineage, on top of the branch. One the branch

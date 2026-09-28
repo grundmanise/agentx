@@ -15,6 +15,8 @@ import (
 // --copy nothing is written and the configuration only gains a copy_mode
 // entry, which made it easy to report as an ordinary placement; the
 // consequence for the user is the same, so the report has to be the same.
+// The text names the path and the result event counts it, both out of one
+// list of adoptions, so each form is read once.
 func TestPlaceAdoptsADirectoryOfThisVersionAndSaysSo(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
@@ -22,26 +24,20 @@ func TestPlaceAdoptsADirectoryOfThisVersionAndSaysSo(t *testing.T) {
 		args     []string
 		copyMode string
 	}{
-		{"a symlink placement", nil, ""},
-		{"a copy placement", []string{"--copy"}, "cursor"},
+		{"a symlink placement, in text", nil, ""},
+		{"a copy placement, in JSON", []string{"--json", "--copy"}, "cursor"},
 	} {
 		t.Run(c.what, func(t *testing.T) {
 			t.Parallel()
-			t.Run("names the path it adopted", func(t *testing.T) {
-				t.Parallel()
-				h, place := adoptable(t)
-				out := h.run(append([]string{"skill", "place", "alpha", "--to", "cursor"}, c.args...)...)
-				equal(t, "exit", out.exit, 0)
+			h, place := adoptable(t)
+			out := h.run(append([]string{"skill", "place", "alpha", "--to", "cursor"}, c.args...)...)
+			equal(t, "exit", out.exit, 0)
+			if c.copyMode == "" {
 				contains(t, "the output", out.stdout, "adopted "+place)
-				equal(t, "copy_mode", copyModeOf(t, h, "alpha"), c.copyMode)
-			})
-			t.Run("counts it in the result", func(t *testing.T) {
-				t.Parallel()
-				h, _ := adoptable(t)
-				out := h.run(append([]string{"--json", "skill", "place", "alpha", "--to", "cursor"}, c.args...)...)
-				equal(t, "exit", out.exit, 0)
-				contains(t, "the result", out.stdout, "1 placement adopted")
-			})
+			} else {
+				contains(t, "the result", h.one(out.stdout, "result")["summary"].(string), "1 placement adopted")
+			}
+			equal(t, "copy_mode", copyModeOf(t, h, "alpha"), c.copyMode)
 		})
 	}
 }
