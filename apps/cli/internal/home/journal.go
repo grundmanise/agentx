@@ -508,6 +508,12 @@ func liveState(path string) (string, error) {
 // followed, so nothing outside the directory contributes. This is not the
 // content hash of the CLI contract, which names a version of a skill; it
 // names the bytes on disk, SKILL.md frontmatter and all.
+//
+// A file is executable when its owner may execute it, the one mode bit git
+// records, so that two directories whose trees differ never share a
+// fingerprint: a journal that replaces a directory tells what it replaced
+// from what replaces it by fingerprint, and a mode git sees while this did
+// not would make recovery take a replacement not yet made for one made.
 func Fingerprint(path string) (string, error) {
 	h := sha256.New()
 	err := filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
@@ -537,7 +543,7 @@ func Fingerprint(path string) (string, error) {
 				return err
 			}
 			mode := "f"
-			if info, err := d.Info(); err == nil && info.Mode()&0o111 != 0 {
+			if info, err := d.Info(); err == nil && info.Mode()&0o100 != 0 {
 				mode = "x"
 			}
 			fmt.Fprintf(h, "%s\x00%s%d\x00", rel, mode, len(b))
@@ -667,8 +673,13 @@ func recoverJournal(dir, journalPath string, u RefUpdater) error {
 		}
 		resumed = moved
 	}
-	for _, s := range j.Steps {
+	for i, s := range j.Steps {
 		if s.Kind == stepRef {
+			continue
+		}
+		if done, err := settledLater(j.Steps, i); err != nil {
+			return unfinished(journalPath, s, err)
+		} else if done {
 			continue
 		}
 		if s.Staged != "" {
@@ -739,6 +750,36 @@ func recoverJournal(dir, journalPath string, u RefUpdater) error {
 		}
 	}
 	return os.Remove(journalPath)
+}
+
+// settledLater reports whether the path of the ith step already holds what
+// a later step of the journal leaves there, which makes the ith step and
+// every one between them done. A journal that replaces a directory records
+// two steps at one path, a remove that takes the old content out of the way
+// and a publish or a link that fills the path again, and a process stopped
+// after both leaves the path holding neither what the remove expected nor
+// what it was to become: the remove is not out of date, the path has moved
+// on past it.
+func settledLater(steps []step, i int) (bool, error) {
+	later := false
+	for _, s := range steps[i+1:] {
+		if s.Kind != stepRef && s.Path == steps[i].Path {
+			later = true
+		}
+	}
+	if !later {
+		return false, nil
+	}
+	live, err := liveState(steps[i].Path)
+	if err != nil {
+		return false, err
+	}
+	for _, s := range steps[i+1:] {
+		if s.Kind != stepRef && s.Path == steps[i].Path && s.New == live {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // discardRetained drops the content a removal displaced, once every live

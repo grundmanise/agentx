@@ -712,12 +712,12 @@ func (inv *invocation) writeAdoptions(ctx context.Context, run *adoptRun, ready 
 		versions = append(versions, c.imported.version())
 	}
 	runID := lineage.NewRun()
-	commits, err := lineage.WriteAll(ctx, inv.git, gitDir, runID, versions)
+	commits, trees, err := lineage.WriteAll(ctx, inv.git, gitDir, runID, versions)
 	if err != nil {
 		return accountRepoFailure(err)
 	}
 	for i, c := range ready {
-		c.imported.commit = commits[i]
+		c.imported.commit, c.imported.tree = commits[i], trees[i]
 	}
 	journaled := false
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
@@ -727,7 +727,7 @@ func (inv *invocation) writeAdoptions(ctx context.Context, run *adoptRun, ready 
 		}
 		m := home.NewMutation(inv.dirs.Home)
 		for _, c := range ready {
-			f, err := inv.stageAdoption(m, gitDir, c, records)
+			f, err := inv.stageAdoption(ctx, m, gitDir, c, records)
 			switch {
 			case err != nil:
 				m.Discard()
@@ -778,7 +778,7 @@ var errNothingAdopted = errors.New("no skill of the run could be adopted")
 // directory hold now. A base established from what the directory holds is
 // checked again here: a directory edited between the read and the lock
 // would otherwise be adopted at a version it no longer holds.
-func (inv *invocation) stageAdoption(m *home.Mutation, gitDir string, c *candidate, records map[string]lineage.Record) (*failure, error) {
+func (inv *invocation) stageAdoption(ctx context.Context, m *home.Mutation, gitDir string, c *candidate, records map[string]lineage.Record) (*failure, error) {
 	exists, dir, err := libraryEntry(c.path)
 	if err != nil {
 		return nil, err
@@ -798,13 +798,14 @@ func (inv *invocation) stageAdoption(m *home.Mutation, gitDir string, c *candida
 		return refuse(exitRefused, c.path+" changed while it was being adopted",
 			"run 'agentx adopt' again: its base version has to be established from what the directory holds now"), nil
 	}
-	c.hash, c.modified = hash, hash != c.imported.hash
-	create, f := refPlan(c.imported, records, c.path)
+	// Modified is what skill list will say of the skill.
+	c.hash, c.modified = hash, !inv.holdsImported(ctx, gitDir, c.path, c.imported)
+	from, write, f := refPlan(c.imported, records, c.path, false)
 	if f != nil {
 		return f, nil
 	}
-	if create {
-		m.Ref(gitDir, lineage.ManagedRef(c.entry.Name), "", c.imported.commit)
+	if write {
+		m.Ref(gitDir, lineage.ManagedRef(c.entry.Name), from, c.imported.commit)
 	}
 	return nil, nil
 }

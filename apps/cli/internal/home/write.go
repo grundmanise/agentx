@@ -17,7 +17,7 @@ func writeAtomic(path string, data []byte) error {
 	tmp := f.Name()
 	_, err = f.Write(data)
 	if err == nil {
-		err = f.Sync()
+		err = Sync(f)
 	}
 	if closeErr := f.Close(); err == nil {
 		err = closeErr
@@ -60,5 +60,28 @@ func syncDir(dir string) error {
 		return err
 	}
 	defer d.Close()
-	return d.Sync()
+	return Sync(d)
+}
+
+// flushes says whether a write is flushed to the disk before it counts as
+// made. Only tests turn it off, see SkipFlushesInTests.
+var flushes = true
+
+// SkipFlushesInTests stops every flush to the disk that Sync makes, for the
+// rest of the process. A test stops a process at most, never the machine,
+// and what a stopped process wrote stays in the page cache either way,
+// while on macOS each flush drains the disk's own cache (F_FULLFSYNC), and
+// the CLI's tests make tens of thousands of them. Call it before any test
+// runs.
+func SkipFlushesInTests() {
+	flushes = false
+}
+
+// Sync flushes f to the disk, file or directory, so that what was written
+// to it, or the names created or removed in it, survive a crash.
+func Sync(f *os.File) error {
+	if !flushes {
+		return nil
+	}
+	return f.Sync()
 }

@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"unicode"
@@ -118,11 +120,13 @@ func TestSkillListWithoutALibrary(t *testing.T) {
 
 // TestSkillListSpawnsOneGitProcess counts the git processes of a listing:
 // the startup version check, and one for-each-ref over both namespaces.
-// The scan the listing runs reads the filesystem and spawns nothing.
+// The scan the listing runs reads the filesystem and spawns nothing, a
+// skill whose only extra file is one the system-file list names included.
 func TestSkillListSpawnsOneGitProcess(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	equal(t, "exit", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	writeFile(t, filepath.Join(h.library, "alpha", ".DS_Store"), "finder\n")
 	calls := countingGit(t, h)
 	equal(t, "exit", h.run("skill", "list").exit, 0)
 	refs := 0
@@ -136,6 +140,71 @@ func TestSkillListSpawnsOneGitProcess(t *testing.T) {
 		}
 	}
 	equal(t, "for-each-ref calls", refs, 1)
+}
+
+// TestSkillListSpawnsOneGitProcessWhateverTheDrift holds the budget above
+// for skills that differ every way drift reads: one edited, a file of it
+// made executable too, one whose link became a real directory in one
+// configuration and whose placement is gone from another, and a skill of
+// the user's own beside them, and a managed branch whose library directory
+// is gone and whose commit carries no lineage, which a warning names with
+// <source> for the source it cannot name. Whether a skill is displaced,
+// missing or gone is read in process, and so is modified until the tree id
+// differs: then git decides, with a read-tree, an add and a write-tree for
+// the edited skill and one read of the user's global ignore file per run.
+// The listing still runs one for-each-ref, and so does the snapshot.
+func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
+	t.Parallel()
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--skill", "beta")
+	writeFile(t, filepath.Join(h.library, "alpha", "SKILL.md"), skill("alpha", "Edited in the library"))
+	chmod(t, filepath.Join(h.library, "alpha", "notes.md"), 0o755)
+	claude := filepath.Join(h.home, ".claude", "skills", "beta")
+	remove(t, claude)
+	copyTree(t, filepath.Join(h.library, "beta"), claude)
+	remove(t, filepath.Join(h.home, ".cursor", "skills", "beta"))
+	writeFile(t, mkdirs(t, filepath.Join(h.library, "mine"), "SKILL.md"), skill("mine", "A skill of my own"))
+	h.accountGit("update-ref", "refs/heads/managed/ghost", h.accountGit("commit-tree", "refs/heads/managed/beta^{tree}", "-m", "no lineage"))
+	equal(t, "alpha's state", h.listed("alpha")["state"], stateModified)
+	equal(t, "beta's drift", drift(h.listed("beta")), "displaced,missing")
+
+	calls := countingGit(t, h)
+	alpha := "--work-tree=" + filepath.Join(h.library, "alpha") + " "
+	count := func(what string, calls []string) {
+		t.Helper()
+		var ran []string
+		for _, call := range calls {
+			_, inAlpha, _ := strings.Cut(call, alpha)
+			switch {
+			case strings.Contains(call, "--version"), strings.Contains(call, "rev-parse --is-bare-repository"):
+			case strings.Contains(call, "for-each-ref"):
+				ran = append(ran, "for-each-ref")
+			case strings.HasSuffix(call, "config --path --get core.excludesFile"):
+				ran = append(ran, "config")
+			case inAlpha != "":
+				ran = append(ran, strings.Fields(inAlpha)[0])
+			default:
+				t.Errorf("%s ran git %s", what, call)
+			}
+		}
+		sort.Strings(ran)
+		equal(t, what+": git runs", strings.Join(ran, " "), "add config for-each-ref read-tree write-tree")
+	}
+	ghost := "ghost is managed in the account repo but the library holds no skill directory for it;" +
+		" run 'agentx skill add <source> --skill ghost' to install it again, or 'agentx skill remove ghost' to stop managing it"
+	equal(t, "skill list's warning", h.mustRun("skill", "list").stderr, "warning: "+ghost+"\n")
+	count("skill list", calls())
+	before := len(calls())
+	snap := h.snapshot(t)
+	count("the snapshot", calls()[before:])
+	states := map[string]string{}
+	for _, e := range snap["library"].([]any) {
+		entry := e.(map[string]any)
+		states[entry["name"].(string)] = fmt.Sprint(entry["state"]) + " " + drift(entry)
+	}
+	equal(t, "alpha in the snapshot", states["alpha"], stateModified+" ")
+	equal(t, "beta in the snapshot", states["beta"], stateCurrent+" displaced,missing")
+	contains(t, "the snapshot's warnings", fmt.Sprint(snap["warnings"]), ghost)
 }
 
 // TestSkillListSanitisesTheNameAndTheUpstream covers a library directory
