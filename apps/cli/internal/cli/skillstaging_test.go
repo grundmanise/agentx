@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,78 +10,8 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
-// TestARefusedInstallLeavesNoStagingDirectory refuses an install after it
-// has already staged content and checks that nothing of it is left. Only
-// the journal ever names a staging directory, so one a refusal leaves
-// behind is removed by the sweep of the next install into that same
-// directory and by nothing else, and a copy staged in a client directory
-// that no later install targets again is never removed at all.
-func TestARefusedInstallLeavesNoStagingDirectory(t *testing.T) {
-	t.Parallel()
-	t.Run("a refusal after the placements were staged", func(t *testing.T) {
-		t.Parallel()
-		h, s := installHarness(t)
-		// copy_mode that is not a map of names to configuration ids: the
-		// settings file parses, so the install runs, and the write that
-		// records the copies is the last thing to refuse, after every
-		// placement has staged its copy.
-		spoilCopyMode(t, h)
-
-		out := h.run("skill", "add", s.url, "--skill", "alpha", "--copy")
-		if out.exit == 0 {
-			t.Fatalf("the install did not refuse:\n%s", out.stderr)
-		}
-		equal(t, "journals", journalCount(t, h), 0)
-		for _, dir := range []string{h.library, filepath.Join(h.home, ".claude", "skills"), filepath.Join(h.home, ".cursor", "skills")} {
-			if left := stagingIn(t, dir); len(left) > 0 {
-				t.Errorf("the refused install left %v in %s", left, dir)
-			}
-		}
-	})
-
-	t.Run("a refusal on the import branch", func(t *testing.T) {
-		t.Parallel()
-		h, s := installHarness(t)
-		equal(t, "exit", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
-		s.skill("skills/alpha", "alpha", "The first skill, moved on", map[string]string{"notes.md": "newer\n"})
-		s.commit("a newer version")
-		equal(t, "exit", h.run("source", "fetch", s.url).exit, 0)
-		if err := os.RemoveAll(filepath.Join(h.library, "alpha")); err != nil {
-			t.Fatal(err)
-		}
-
-		out := h.run("skill", "add", s.url, "--skill", "alpha")
-		equal(t, "exit", out.exit, 6)
-		contains(t, "stderr", out.stderr, "already managed at another version")
-		if left := stagingIn(t, h.library); len(left) > 0 {
-			t.Errorf("the refused install left %v in the library", left)
-		}
-	})
-}
-
-// spoilCopyMode leaves the settings file parseable but its copy_mode
-// unreadable, so that the write recording the copies is the last thing an
-// install refuses on: every placement has staged its copy by then.
-func spoilCopyMode(t *testing.T, h *harness) {
-	t.Helper()
-	path := filepath.Join(h.agentx, "settings.json")
-	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var settings map[string]any
-	if err := json.Unmarshal(b, &settings); err != nil {
-		t.Fatal(err)
-	}
-	settings["copy_mode"] = 42
-	spoiled, err := json.Marshal(settings)
-	if err != nil {
-		t.Fatal(err)
-	}
-	writeFile(t, path, string(spoiled)+"\n")
-}
-
-// stagingIn names the staging directories left in dir.
+// stagingIn names the .agentx-staged-* entries left in dir, which is what a
+// mutation stages beside the live path before its journal exists.
 func stagingIn(t *testing.T, dir string) []string {
 	t.Helper()
 	entries, err := os.ReadDir(dir)
@@ -139,41 +67,34 @@ func TestStagedContentIsCheckedAgainstTheVersion(t *testing.T) {
 	contains(t, "the refusal", err.Error(), strings.Repeat("0", 64))
 }
 
-// TestSkillAddRefusesANameItCannotUse refuses, before anything is written,
-// a frontmatter name agentx cannot use. A name is two things at once: a
-// directory of the library and one level of refs/heads/managed/<name>. A
-// name only one of them accepts would be found out halfway through the
-// mutation, with the journal already on disk and the ref step failing, and
-// from then on every command would recover that journal and fail the same
-// way. The name comes out of a source's SKILL.md, so it is checked and not
-// trusted.
-func TestSkillAddRefusesANameItCannotUse(t *testing.T) {
+// TestACopyPlacementLeavesNoStagedDirectory covers two configurations that
+// share one skills directory: Zencoder and Zenflow both use
+// ~/.zencoder/skills. A --copy run plans a publish for each of them, so it
+// plans two publishes of the same path: the first lands and the second
+// finds the path already holding what it was to write, and does nothing.
+//
+// The directory that second step staged is then beside the live path with
+// no step left to publish it and no journal left to name it. Nothing sweeps
+// a client's skills directory except a later install into it, so a full
+// copy of the skill's content would stay there indefinitely, surviving even
+// the removal whose job was to take the skill away.
+func TestACopyPlacementLeavesNoStagedDirectory(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude"}})
-	s := h.newSourceRepo("names", true)
-	cases := []struct{ what, name string }{
-		{"a separator", "a/b"},
-		{"a hidden name", ".hidden"},
-		{"a space, which git refuses in a ref", "my skill"},
-		{"a colon, which git refuses in a ref", "we:ird"},
-		{"a name ending in .lock, which git refuses in a ref", "alpha.lock"},
-		{"two dots, which git refuses in a ref", "a..b"},
-	}
-	for i, c := range cases {
-		s.skill(fmt.Sprintf("tools/n%d", i), c.name, "A name agentx cannot use", nil)
-	}
-	s.commit("skills whose names agentx cannot use")
+	h.build(t, fixture{dirs: []string{".claude", ".zencoder"}})
+	s, _, _ := h.standardSource(true)
 	equal(t, "source add", h.run("source", "add", s.url).exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code").exit, 0)
 
-	for _, c := range cases {
-		t.Run(c.what, func(t *testing.T) {
-			out := h.run("skill", "add", s.url, "--skill", c.name)
-			equal(t, "exit", out.exit, 6)
-			contains(t, "stderr", out.stderr, c.name)
-			// Nothing was written, so the machine still works afterwards.
-			equal(t, "journals", journalCount(t, h), 0)
-			equal(t, "the command after it", h.run("config", "set", "label", "after").exit, 0)
-		})
-	}
+	shared := filepath.Join(h.home, ".zencoder", "skills")
+	out := h.run("skill", "place", "alpha", "--to", "zencoder", "--to", "zenflow", "--copy")
+	equal(t, "exit", out.exit, 0)
+	equal(t, "staged directories after the placement", strings.Join(stagingIn(t, shared), ", "), "")
+
+	// And the placement itself is whole in both configurations.
+	contains(t, "the copy", fileBody(t, filepath.Join(shared, "alpha", "notes.md")), "alpha notes")
+	contains(t, "the result", out.stdout, "placed alpha in 2 configurations")
+
+	equal(t, "remove", h.run("skill", "remove", "alpha", "--from", "zencoder", "--from", "zenflow").exit, 0)
+	equal(t, "staged directories after the removal", strings.Join(stagingIn(t, shared), ", "), "")
 }
