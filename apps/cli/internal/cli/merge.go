@@ -3,9 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
@@ -14,27 +11,28 @@ import (
 )
 
 // conflictEvent is one skill whose edits and whose update conflict: the
-// three versions the merge took, each a commit of the account repo, and
-// every file that conflicts, with every hunk of it. It is emitted by an
-// update that leaves a merge pending, and says everything a hunk chooser
-// needs without reading the account repo.
+// three versions the merge took, each a commit of the account repo and the
+// base, HEAD and MERGE_HEAD of the merge in progress in the skill's
+// checkout, and every file that conflicts there, with every hunk of it. It
+// is emitted by an update that leaves a merge pending, and says everything
+// a hunk chooser needs without reading the account repo.
 type conflictEvent struct {
 	event
 	Name   string         `json:"name"`
 	Kind   string         `json:"kind"`   // managed, the one kind that merges its update today
 	Base   string         `json:"base"`   // the import commit the skill's branch points at
-	Mine   string         `json:"mine"`   // the library directory, committed on base
+	Mine   string         `json:"mine"`   // the library directory as git records it, files it ignores aside, committed on base
 	Theirs string         `json:"theirs"` // the update candidate
 	Files  []conflictFile `json:"files"`
 }
 
-// conflictFile is one file of a merge that conflicts, at its path relative
-// to the skill's directory: the blob each of the three versions holds for
-// it, null for a version that has no file there, and its hunks. A file that
-// is binary in any of them, or that is anything but a file in one, that
-// one side deleted or where the other has a directory, or that was added on
-// both sides and differs in its mode alone, conflicts whole and has no
-// hunk; any other has one at least.
+// conflictFile is one file of a merge that conflicts, an unmerged path of
+// the checkout at its path relative to the skill's directory: the blob
+// each of the three versions holds for it, null for a version that has no
+// file there, and its hunks. A file that is binary in any of them, or that
+// is anything but a file in one, that one side deleted, or that holds no
+// conflict marker agentx can tell from its own lines, conflicts whole and
+// has no hunk; any other has one at least.
 type conflictFile struct {
 	Path   string         `json:"path"`
 	Base   *string        `json:"base"`
@@ -45,10 +43,11 @@ type conflictFile struct {
 	why    string         // what conflicts, for a file that conflicts whole: the words the text says it in
 }
 
-// conflictHunk is one region of a file that conflicts: what each of the
-// three versions holds there, as text, every line with the ending it has,
-// and a last line of the file without one as the file has it. Hunks are
-// numbered from 1 in the order they come in the file.
+// conflictHunk is one region of a file that conflicts, one marker block of
+// the checkout's file: what each of the three versions holds there, as
+// text, every line with the ending it has, and a last line of the file
+// without one as the file has it. Hunks are numbered from 1 in the order
+// they come in the file.
 type conflictHunk struct {
 	Index  int    `json:"index"`
 	Mine   string `json:"mine"`
@@ -58,27 +57,24 @@ type conflictHunk struct {
 
 // mergeResult is what git made of the three versions of a merge: the root
 // tree merge-tree wrote, which wraps the skill in its upstream directory as
-// the three versions do, and the files that conflict, sorted by path, none
-// for a merge that is clean. The tree of a merge that conflicts holds
-// markers in the files that do, and is never laid out anywhere an agent
-// reads. Where a file and a directory, or two types of entry, meet at one
-// path, it also holds the version git moved aside to make room, under the
-// path followed by ~ and the id of its side's commit: no file of the skill
-// has that path, so what resolves or completes the merge drops the entry
-// and never lays it out, and the file is reported at its own path.
+// the three versions do, whether the merge conflicts, and for one that does
+// the size its conflict markers are to have, see markerSize. The tree of a
+// merge that conflicts is never read: the merge is set up again in the
+// skill's checkout, see startMerge.
 type mergeResult struct {
-	tree  string
-	files []conflictFile
+	tree       string
+	conflicted bool
+	size       int
 }
 
-// The stages merge-tree names the versions of a conflicted file by.
+// The stages git names the versions of a conflicted file by.
 const (
 	gitStageBase   = "1"
 	gitStageMine   = "2"
 	gitStageTheirs = "3"
 )
 
-// staged is one version of a conflicted file as merge-tree names it.
+// staged is one version of a conflicted file as git's index lists it.
 type staged struct {
 	mode, oid string
 }
@@ -90,19 +86,9 @@ type staged struct {
 // git's detection of a renamed directory is off, on every run, so that a
 // file added on one side inside a directory the other side renamed stays
 // where it was added rather than being moved, or conflicting, on a guess.
-// Which files conflict is read from the stages merge-tree lists for them,
-// and from nothing else, a version git moved aside to make room for a
-// directory or an entry of another type counted at its own path, see
-// movedAside. The hunks of each are read from the three blobs of those
-// stages, all of them read in one cat-file, as git merge-file writes them,
-// one merge-file per file: the tree merge-tree wrote is not read for them,
-// since its markers are git's default size and a line of the file itself
-// may look like one.
-//
-// The three versions decide everything here, so the same three merge to
-// the same tree, the same files and the same hunks, numbered alike, on any
-// later run: which is how a pending merge, whose commit names the three in
-// its trailers, is read back.
+// A merge that conflicts is only decided here: the stages merge-tree lists
+// for its conflicted files name the blobs, all of them read in one
+// cat-file, that the size of its conflict markers is judged from.
 func mergeVersions(ctx context.Context, r *gitx.Runner, gitDir, dir string, m lineage.Merge) (mergeResult, error) {
 	out, status, err := r.IsolatedStatus(ctx, gitDir, 1, "-c", "merge.directoryRenames=false",
 		"merge-tree", "--write-tree", "-z", "--no-messages", "--merge-base="+m.Base, m.Mine, m.Theirs)
@@ -110,123 +96,55 @@ func mergeVersions(ctx context.Context, r *gitx.Runner, gitDir, dir string, m li
 		return mergeResult{}, err
 	}
 	fields := strings.Split(out, "\x00")
-	res := mergeResult{tree: fields[0]}
+	res := mergeResult{tree: fields[0], conflicted: status == 1}
 	if !lineage.IsObjectID(res.tree) {
 		return mergeResult{}, fmt.Errorf("git merge-tree: cannot read the tree of %q", out)
 	}
-	stages := map[string]map[string]staged{}
-	aside := map[string]bool{} // the paths a version was moved aside from
+	var ids []string
+	entries := 0
 	for _, f := range fields[1:] {
 		if f == "" {
 			continue
 		}
+		entries++
 		meta, path, ok := strings.Cut(f, "\t")
 		parts := strings.Fields(meta)
 		if !ok || len(parts) != 3 {
 			return mergeResult{}, fmt.Errorf("git merge-tree: cannot read the conflicted file %q", f)
 		}
-		rel, inside := strings.CutPrefix(path, dir+"/")
-		if !inside {
+		if !strings.HasPrefix(path, dir+"/") {
 			return mergeResult{}, fmt.Errorf("git merge-tree: the conflicted file %q is outside %s", path, dir)
 		}
-		if real, moved := movedAside(rel, m); moved {
-			rel, aside[real] = real, true
+		if source.IsFileMode(parts[0]) {
+			ids = append(ids, parts[1])
 		}
-		if stages[rel] == nil {
-			stages[rel] = map[string]staged{}
-		}
-		if _, twice := stages[rel][parts[2]]; twice {
-			return mergeResult{}, fmt.Errorf("git merge-tree: the conflicted file %s has stage %s twice", rel, parts[2])
-		}
-		stages[rel][parts[2]] = staged{mode: parts[0], oid: parts[1]}
 	}
 	switch {
-	case status == 0 && len(stages) > 0:
-		return mergeResult{}, fmt.Errorf("git merge-tree: a clean merge names %d conflicted files", len(stages))
-	case status == 1 && len(stages) == 0:
+	case !res.conflicted && entries > 0:
+		return mergeResult{}, fmt.Errorf("git merge-tree: a clean merge names %d conflicted files", entries)
+	case res.conflicted && entries == 0:
 		return mergeResult{}, fmt.Errorf("git merge-tree: a merge that conflicts names no conflicted file")
-	case status == 0:
+	case !res.conflicted:
 		return res, nil
-	}
-	var ids []string
-	for _, versions := range stages {
-		for _, v := range versions {
-			if source.IsFileMode(v.mode) {
-				ids = append(ids, v.oid)
-			}
-		}
 	}
 	bodies, err := source.ReadBlobs(ctx, r, gitDir, ids)
 	if err != nil {
 		return mergeResult{}, err
 	}
-	paths := make([]string, 0, len(stages))
-	renamed := false // a file moved to two places leaves its old path with the base alone
-	for p, versions := range stages {
-		paths = append(paths, p)
-		if _, ok := versions[gitStageBase]; ok && len(versions) == 1 {
-			renamed = true
-		}
+	texts := make([]string, 0, len(bodies))
+	for _, body := range bodies {
+		texts = append(texts, body)
 	}
-	sort.Strings(paths)
-	var scratch string
-	defer func() {
-		if scratch != "" {
-			os.RemoveAll(scratch)
-		}
-	}()
-	for _, p := range paths {
-		f, text := conflictOf(p, stages[p], bodies, aside[p], renamed)
-		if text {
-			if scratch == "" {
-				if scratch, err = os.MkdirTemp("", "agentx-merge-"); err != nil {
-					return mergeResult{}, err
-				}
-			}
-			if f.Hunks, err = hunksOf(ctx, r, gitDir, scratch, stages[p], bodies); err != nil {
-				return mergeResult{}, err
-			}
-			// A file added on both sides, executable on one side only,
-			// whose content merges conflicts in its mode alone, and
-			// whole, see hunksOf.
-			if len(f.Hunks) == 0 {
-				f.Hunks, f.why = []conflictHunk{}, "added here and by the update, executable on one side only"
-			}
-		}
-		res.files = append(res.files, f)
-	}
+	res.size = markerSize(texts...)
 	return res, nil
-}
-
-// movedAside reads a path of a merge's conflicted files that is not a path
-// of the skill: where a file meets a directory at one path, or a file a
-// symlink, merge-tree keeps one of the two there and moves the other aside
-// to the path followed by ~ and the name it was given for that version's
-// side, here the id of mine or of the candidate, and, when that path is
-// taken too, by _ and a number. Its stages belong to the path it was moved
-// from, which real is.
-func movedAside(path string, m lineage.Merge) (real string, moved bool) {
-	for _, id := range []string{m.Mine, m.Theirs} {
-		at := strings.LastIndex(path, "~"+id)
-		if at <= 0 {
-			continue
-		}
-		rest := path[at+1+len(id):]
-		n, numbered := strings.CutPrefix(rest, "_")
-		if rest == "" || numbered && n != "" && strings.Trim(n, "0123456789") == "" {
-			return path[:at], true
-		}
-	}
-	return "", false
 }
 
 // conflictOf is the conflicted file at path as its stages name it, and
 // whether its hunks can be read: the file is in both versions merged and
 // is a text file in every version that holds it. Anything else conflicts
-// whole, and why says how in the words the text output prints. aside says
-// that a version of it was moved aside, see movedAside, and renamed that
-// the merge moved a file to two places.
-func conflictOf(path string, versions map[string]staged, bodies map[string]string, aside, renamed bool) (conflictFile, bool) {
+// whole, and why says how in the words the text output prints. renamed
+// says that the merge moved a file to two places.
+func conflictOf(path string, versions map[string]staged, bodies map[string]string, renamed bool) (conflictFile, bool) {
 	f := conflictFile{Path: path, Hunks: []conflictHunk{}}
 	id := func(stage string) *string {
 		if v, ok := versions[stage]; ok {
@@ -246,17 +164,11 @@ func conflictOf(path string, versions map[string]staged, bodies map[string]strin
 		}
 	}
 	mine, theirs := entryKind(versions[gitStageMine].mode), entryKind(versions[gitStageTheirs].mode)
-	// A version moved aside to make room for a directory is the one side
-	// with a stage at the path: the other holds the directory. A rename
-	// that conflicts, a file moved to two places say, lists each path with
-	// the stages of the sides that have a file there, and no base where the
-	// file was not before, and leaves the path it was moved from with the
-	// base alone.
+	// A rename that conflicts, a file moved to two places say, lists each
+	// path with the stages of the sides that have a file there, and no base
+	// where the file was not before, and leaves the path it was moved from
+	// with the base alone.
 	switch {
-	case aside && f.Mine == nil:
-		f.why = "a directory here, " + theirs + " in the update"
-	case aside && f.Theirs == nil:
-		f.why = mine + " here, a directory in the update"
 	case f.Mine != nil && f.Theirs != nil && mine != theirs:
 		f.why = mine + " here, " + theirs + " in the update"
 	case f.Mine == nil && f.Theirs != nil && f.Base == nil && renamed:
@@ -297,64 +209,23 @@ func entryKind(mode string) string {
 	return "a file"
 }
 
-// isBinary is git's own test of whether content is binary, the one
-// merge-file refuses to merge: a NUL byte among its first 8000.
+// isBinary is git's own test of whether content is binary, the one a merge
+// refuses to merge line by line: a NUL byte among its first 8000.
 func isBinary(body string) bool {
 	return strings.IndexByte(body[:min(len(body), 8000)], 0) >= 0
 }
 
-// hunksOf reads the hunks of one text file that conflicts: its three
-// versions are written into scratch, an empty file for a base that has
-// none, as an add on both sides is, and git merge-file writes their merge
-// in zdiff3 style with markers longer than any run of marker characters at
-// the start of a line of any of the three, so that no line of the file is
-// ever read as a marker. The hunks are read from the regions between those
-// markers, in order.
-//
-// merge-file does not always agree with merge-tree: merge-tree compares
-// each side with the base by git's histogram diff, and merge-file by its
-// default one, the only one it takes at git 2.40, so the two can pair the
-// lines of a side with the base's differently, and merge-file can merge
-// text merge-tree left conflicting. A file merge-file merges with no hunk
-// left that merge-tree found conflicting is one hunk, the whole of each
-// version, so that a file that conflicts in its content always has a hunk
-// to choose; but a file added on both sides whose two versions differ in
-// mode conflicts in that, the one thing git cannot merge of it with no base
-// to go by, and has none.
-func hunksOf(ctx context.Context, r *gitx.Runner, gitDir, scratch string, versions map[string]staged, bodies map[string]string) ([]conflictHunk, error) {
-	text := func(stage string) string {
-		if v, ok := versions[stage]; ok {
-			return bodies[v.oid]
-		}
-		return ""
-	}
-	mine, base, theirs := text(gitStageMine), text(gitStageBase), text(gitStageTheirs)
-	files := make([]string, 3)
-	for i, body := range []string{mine, base, theirs} {
-		files[i] = filepath.Join(scratch, fmt.Sprint(i))
-		if err := os.WriteFile(files[i], []byte(body), 0o600); err != nil {
-			return nil, err
-		}
-	}
-	size := markerSize(mine, base, theirs)
-	out, _, err := r.IsolatedStatus(ctx, gitDir, 127, "merge-file", "-p", "--zdiff3", fmt.Sprintf("--marker-size=%d", size),
-		"-L", "mine", "-L", "base", "-L", "theirs", files[0], files[1], files[2])
-	if err != nil {
-		return nil, err
-	}
-	hunks, err := parseHunks(out, size, mine, base, theirs)
-	_, based := versions[gitStageBase]
-	if err != nil || len(hunks) > 0 || !based && versions[gitStageMine].mode != versions[gitStageTheirs].mode {
-		return hunks, err
-	}
-	return []conflictHunk{{Index: 1, Mine: mine, Base: base, Theirs: theirs}}, nil
+// markerSize is the size of the conflict markers of a merge of the
+// versions texts: git's own seven, or one more than the longest run of one
+// of the four marker characters at the start of a line of any of them, so
+// that no line of the versions' own is ever taken for a marker.
+func markerSize(texts ...string) int {
+	return max(7, markerRun(texts...)+1)
 }
 
-// markerSize is the length of the markers merge-file is to write between
-// the versions mine, base and theirs: git's own seven, or one more than the
-// longest run of one of the four marker characters at the start of a line
-// of any of them.
-func markerSize(texts ...string) int {
+// markerRun is the longest run of one of the four marker characters, <, |,
+// = and >, at the start of a line of any of texts.
+func markerRun(texts ...string) int {
 	longest := 0
 	for _, text := range texts {
 		for _, line := range strings.Split(text, "\n") {
@@ -364,16 +235,33 @@ func markerSize(texts ...string) int {
 			longest = max(longest, len(line)-len(strings.TrimLeft(line, line[:1])))
 		}
 	}
-	return max(7, longest+1)
+	return longest
 }
 
-// parseHunks reads the hunks out of what merge-file wrote with markers of
-// size: every region from a line of that many < to one of that many >,
-// with the base after the | line and theirs after the = line, as zdiff3
-// writes them. merge-file ends a last line with no newline with one when a
-// marker follows it, so a hunk that ends the file gives each version whose
-// file has no newline at its end its last line back as that file has it.
-func parseHunks(out string, size int, mine, base, theirs string) ([]conflictHunk, error) {
+// markerSizeIn is the size of the conflict markers the merged file holds,
+// whose versions are blobs: the length of the run of < starting the first
+// line whose run is longer than any run of a marker character starting a
+// line of the blobs, and is followed by a space or the end of the line. No
+// line of the versions' own can be taken for one, whatever size the markers
+// were written at. It is 0 for a file with no such line.
+func markerSizeIn(file string, blobs ...string) int {
+	longest := markerRun(blobs...)
+	for _, line := range strings.Split(file, "\n") {
+		n := len(line) - len(strings.TrimLeft(line, "<"))
+		if rest := strings.TrimSuffix(line[n:], "\r"); n > longest && (rest == "" || rest[0] == ' ') {
+			return n
+		}
+	}
+	return 0
+}
+
+// splitMerged reads the marker blocks of size out of a merged file: every
+// region from a line of that many < to one of that many >, with the base
+// after the | line and theirs after the = line, as zdiff3 writes them, each
+// a hunk, and around them the text between the blocks, one piece more than
+// there are hunks, the first before the first block and the last after the
+// last. A block with no end is an error.
+func splitMerged(file string, size int) (around []string, hunks []conflictHunk, err error) {
 	isMarker := func(line string, c string) bool {
 		bare := strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
 		run := strings.Repeat(c, size)
@@ -385,44 +273,43 @@ func parseHunks(out string, size int, mine, base, theirs string) ([]conflictHunk
 		inBase
 		inTheirs
 	)
-	var hunks []conflictHunk
 	var h conflictHunk
-	at, last := outside, false
-	for _, line := range strings.SplitAfter(out, "\n") {
+	var piece strings.Builder
+	at := outside
+	for _, line := range strings.SplitAfter(file, "\n") {
 		if line == "" {
 			continue
 		}
-		last = false
 		switch {
 		case at == outside && isMarker(line, "<"):
+			around = append(around, piece.String())
+			piece.Reset()
 			h, at = conflictHunk{Index: len(hunks) + 1}, inMine
 		case at == inMine && isMarker(line, "|"):
 			at = inBase
 		case (at == inMine || at == inBase) && isMarker(line, "="):
 			at = inTheirs
 		case at == inTheirs && isMarker(line, ">"):
-			hunks, at, last = append(hunks, h), outside, true
+			hunks, at = append(hunks, h), outside
 		case at == inMine:
 			h.Mine += line
 		case at == inBase:
 			h.Base += line
 		case at == inTheirs:
 			h.Theirs += line
+		default:
+			piece.WriteString(line)
 		}
 	}
 	if at != outside {
-		return nil, fmt.Errorf("git merge-file: a conflict with no end")
+		return nil, nil, fmt.Errorf("a conflict with no end")
 	}
-	if last {
-		h := &hunks[len(hunks)-1]
-		h.Mine, h.Base, h.Theirs = asAtEnd(h.Mine, mine), asAtEnd(h.Base, base), asAtEnd(h.Theirs, theirs)
-	}
-	return hunks, nil
+	return append(around, piece.String()), hunks, nil
 }
 
 // asAtEnd is the text of a hunk that ends the file whose content is file,
-// with the line ending merge-file added to the last line taken off again
-// when the file has none there.
+// with the line ending git added to the last line, for the marker after it,
+// taken off again when the file has none there.
 func asAtEnd(text, file string) string {
 	switch {
 	case file == "" || strings.HasSuffix(file, "\n"):
@@ -487,7 +374,9 @@ func printLines(out *writer, text string) {
 // would find wrong with what the skill holds or with its update, and the
 // hint names the way out that keeps the library directory as it is.
 // Everything that replaces a skill's content or takes it away calls it
-// under the lock, and before it wherever it reads the refs then.
+// under the lock, and before it too wherever it judges the skill first.
+// Whether a merge is pending is whether the skill's checkout is there, see
+// mergePending.
 func pendingMergeRefusal(name, what string) *failure {
 	return refuse(exitPendingMerge, name+" has a merge with its update pending, so it cannot be "+what+" until the merge is resolved or given up",
 		"run '"+skillCommand("resolve", name, "--abort")+"' to give the merge up; the library directory stays as it is")

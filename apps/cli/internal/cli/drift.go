@@ -41,6 +41,7 @@ const (
 type observation struct {
 	modified bool     // the directory does not hold its base version, see holdsBase
 	placed   []string // the drift states of the placements, sorted
+	pending  bool     // an update left a merge pending for the skill, see pendingMerges
 }
 
 // observe reads what a managed skill's drift is judged from, and nothing for
@@ -51,7 +52,7 @@ func (sc skillContext) observe(ctx context.Context, inv *invocation, lib scan.Li
 	if !ok || rec.Kind != lineage.KindManaged || !rec.HasImport {
 		return observation{}
 	}
-	return observation{modified: !inv.holdsBase(ctx, lib, rec), placed: sc.placementDrift(inv, lib)}
+	return observation{modified: !inv.holdsBase(ctx, lib, rec), placed: sc.placementDrift(inv, lib), pending: sc.merges[lib.Name]}
 }
 
 // observeAll reads the observation of every skill of the library ahead of
@@ -312,11 +313,16 @@ func (sc skillContext) absentNotice(inv *invocation, name string) (what, wayOut 
 // read: the lineage, the settings and their copy modes. The configurations
 // placements can be made in are detected here, once for the whole report.
 func newSkillContext(inv *invocation, records map[string]lineage.Record, s home.Settings, modes map[string][]string) skillContext {
+	merges, err := inv.pendingMerges()
+	if err != nil {
+		inv.out.debugf("cannot read the pending merges: %v", err)
+	}
 	return skillContext{
 		records:  records,
 		modes:    modes,
 		sources:  sourceURLs(s),
 		disabled: s.DisabledConfigurations,
 		targets:  inv.detectedTargets(),
+		merges:   merges,
 	}
 }

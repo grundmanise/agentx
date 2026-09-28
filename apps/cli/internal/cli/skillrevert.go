@@ -67,7 +67,7 @@ func (inv *invocation) skillRevert(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	if rec.PendingMerge != nil {
+	if inv.mergePending(name) {
 		return pendingMergeRefusal(name, "reverted")
 	}
 	libPath := inv.libraryPath(name)
@@ -139,7 +139,7 @@ func (inv *invocation) skillRevert(ctx context.Context, name string) error {
 			return fail(exitRefused, "the import branch "+lineage.ManagedRef(name)+" moved while "+name+" was being reverted, so nothing was discarded",
 				"run '"+skillCommand("diff", name)+"' to see the base version now, then revert again")
 		}
-		if refs[lineage.MergeRef(name)] != "" {
+		if inv.mergePending(name) {
 			return pendingMergeRefusal(name, "reverted")
 		}
 		m := home.NewMutation(inv.dirs.Home)

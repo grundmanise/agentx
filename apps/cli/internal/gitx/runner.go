@@ -143,14 +143,52 @@ func (r *Runner) IsolatedInput(ctx context.Context, gitDir string, stdin io.Read
 }
 
 // IsolatedStatus is Isolated for a git whose exit status is part of its
-// answer: merge-tree exits 1 for a merge that conflicts and merge-file
-// with the number of conflicts it wrote, each having written the whole of
-// its result to stdout first. An exit status from 1 to upTo is returned
-// with stdout as is and no error; any other failure is an error as it is
-// for Isolated, a status above upTo included, which is git's own way of
-// saying it could not do the work at all.
+// answer: merge-tree exits 1 for a merge that conflicts, having written the
+// whole of its result to stdout first. An exit status from 1 to upTo is
+// returned with stdout as is and no error; any other failure is an error as
+// it is for Isolated, a status above upTo included, which is git's own way
+// of saying it could not do the work at all.
 func (r *Runner) IsolatedStatus(ctx context.Context, gitDir string, upTo int, args ...string) (string, int, error) {
 	return r.runStatus(ctx, call{isolated: true}, upTo, isolatedArgs(gitDir, args)...)
+}
+
+// InCheckout runs git in the isolated environment inside dir, a linked
+// worktree of a repository, as git runs in any checkout: dir is git's
+// working directory and no --git-dir is passed, so git finds the
+// worktree's own git directory through its .git file. The worktree records
+// file modes and symlinks as they are, whatever the repository's own
+// configuration says of them. It returns stdout as is.
+func (r *Runner) InCheckout(ctx context.Context, dir string, args ...string) (string, error) {
+	out, _, err := r.InCheckoutStatus(ctx, dir, 0, args...)
+	return out, err
+}
+
+// InCheckoutStatus is InCheckout for a git whose exit status is part of
+// its answer, as IsolatedStatus is for Isolated.
+func (r *Runner) InCheckoutStatus(ctx context.Context, dir string, upTo int, args ...string) (string, int, error) {
+	full := append(isolatedConfig(), "-c", "core.fileMode=true", "-c", "core.symlinks=true")
+	return r.runStatus(ctx, call{isolated: true, dir: dir}, upTo, append(full, args...)...)
+}
+
+// AddCheckout adds a linked worktree of the repository at gitDir at path,
+// detached at commit and locked with reason, so that git's own pruning of
+// worktrees never takes it, whatever becomes of its directory.
+func (r *Runner) AddCheckout(ctx context.Context, gitDir, path, commit, reason string) error {
+	_, err := r.Isolated(ctx, gitDir, "worktree", "add", "--detach", "--lock", "--reason", reason, path, commit)
+	return err
+}
+
+// RemoveCheckout removes the linked worktree at path, its directory and its
+// registration, locked or not and whether its directory is still there or
+// not: the second -f is what removes a locked one. A path git knows no
+// worktree at has nothing to remove. It never prunes, which would take
+// other worktrees too.
+func (r *Runner) RemoveCheckout(ctx context.Context, gitDir, path string) error {
+	_, err := r.Isolated(ctx, gitDir, "worktree", "remove", "-f", "-f", path)
+	if err != nil && strings.Contains(err.Error(), "is not a working tree") {
+		return nil
+	}
+	return err
 }
 
 // Workers is how many git processes agentx runs at once. A read is mostly

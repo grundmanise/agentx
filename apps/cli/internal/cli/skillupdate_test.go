@@ -316,7 +316,9 @@ func TestSkillUpdateAllMergesEditsAndLeavesConflictsPending(t *testing.T) {
 	equal(t, "beta's notes", fileBody(t, filepath.Join(h.library, "beta", "notes.md")), "beta notes, edited here\n")
 	equal(t, "beta's candidate", h.ref(lineage.CandidateRef("beta")), betaCandidate)
 	equal(t, "beta's branch", h.ref(lineage.ManagedRef("beta")), betaTip)
-	equal(t, "beta's pending merge", h.accountGit("rev-parse", lineage.MergeRef("beta")+"^@"), conflict["mine"].(string)+"\n"+betaCandidate)
+	betaHead, betaMergeHead, _ := mergeState(t, h, "beta")
+	equal(t, "beta's pending merge's HEAD", betaHead, conflict["mine"].(string))
+	equal(t, "beta's pending merge's MERGE_HEAD", betaMergeHead, betaCandidate)
 	equal(t, "gamma's marker", h.ref(lineage.UpstreamRemovedRef("gamma")), gammaMarker)
 	sameTree(t, "gamma's library directory", libraryTree(t, filepath.Join(h.library, "gamma")), gammaTree)
 	equal(t, "delta's branch", h.ref(lineage.ManagedRef("delta")), deltaTip)
@@ -354,11 +356,14 @@ func TestSkillUpdateAllTextOfAMixedRun(t *testing.T) {
 // TestSkillUpdateAllWithOnlyAConflict: a run whose one skill with an
 // update conflicts updates nothing, and is answered as that skill on its
 // own would be: its conflicts, and exit code 4 with no warning before it.
+// It writes no journal, and the merge it left pending is a change, which
+// the version file says.
 func TestSkillUpdateAllWithOnlyAConflict(t *testing.T) {
 	t.Parallel()
 	h, _, _, _ := mixedHarness(t)
 	h.mustRun("skill", "update", "alpha")
 	h.mustRun("skill", "update", "epsilon")
+	before := mutationVersion(t, h)
 	out := h.run("--json", "skill", "update", "--all")
 	equal(t, "exit", out.exit, 4)
 	equal(t, "the conflict's skill", h.one(out.stdout, "conflict")["name"], "beta")
@@ -368,6 +373,8 @@ func TestSkillUpdateAllWithOnlyAConflict(t *testing.T) {
 	if got := h.eventsOfType(out.stdout, "library_skill"); len(got) != 0 {
 		t.Errorf("a run that updated nothing reported %v", got)
 	}
+	equal(t, "journals", journalCount(t, h), 0)
+	equal(t, "mutations", mutationVersion(t, h), before+1)
 }
 
 // otherSourceHarness is updateHarness with a second source holding gamma,
@@ -932,8 +939,8 @@ func TestSkillUpdateRefusesWhatChangedBeforeTheLock(t *testing.T) {
 		},
 		{
 			name: "another update of the skill leaves a merge pending",
-			change: func(_ *testing.T, _ *harness, _ *sourceRepo, git, other string) string {
-				return git + ` update-ref ` + lineage.MergeRef("alpha") + ` ` + other
+			change: func(t *testing.T, h *harness, _ *sourceRepo, _, other string) string {
+				return fakePendingMerge(t, h, "alpha", other)
 			},
 			exit:   4,
 			branch: "tip", candidate: "candidate", notes: "alpha notes\n",

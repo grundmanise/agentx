@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,63 +8,51 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
-	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
-// TestHunksOfReadsWhatMergeFileWrites holds the hunks of one file to the
-// three versions they come from: several hunks numbered in order, lines of
-// the file that are longer runs of marker characters than git's own
-// markers, lines that are git's own markers, in the hunk and around it, a
-// file with CRLF line endings and no line ending at its end, sides of which
-// only one ends the file without a newline, and a file merge-file merges
-// whole although merge-tree found it conflicting, which is one hunk of the
-// whole of each version. Every hunk gives each version's lines back as that
-// version holds them.
-func TestHunksOfReadsWhatMergeFileWrites(t *testing.T) {
+// TestSplitMergedReadsTheMarkers reads the hunks of a file a merge wrote
+// in zdiff3 style out of its marker blocks: several blocks numbered in
+// order with the text around them, a line of the file's own that is git's
+// default marker, which the markers sized past it never take for one, a
+// file with CRLF line endings and none at its end, sides of which only one
+// ends the file without a newline, which the hunk gives back as each
+// version holds it, and a file with no marker block agentx can tell, which
+// has no hunk. Every hunk gives each version's lines back as that version
+// holds them.
+func TestSplitMergedReadsTheMarkers(t *testing.T) {
 	t.Parallel()
-	requireGit(t)
-	ctx := context.Background()
-	gitDir := filepath.Join(t.TempDir(), "account.git")
-	r := gitx.New(map[string]string{"PATH": os.Getenv("PATH"), "HOME": t.TempDir()}, false, func(string, ...any) {})
-	if _, err := r.Isolated(ctx, gitDir, "init", "--bare", "--quiet", gitDir); err != nil {
-		t.Fatal(err)
-	}
 	for _, c := range []struct {
 		name               string
 		base, mine, theirs string
+		file               string   // what the merge wrote
 		want               []string // mine|base|theirs of each hunk
+		around             []string // the text around the blocks
 	}{
 		{
-			name: "two hunks", base: "one\ntwo\nthree\nfour\nfive\n", mine: "ONE\ntwo\nthree\nfour\nFIVE\n", theirs: "uno\ntwo\nthree\nfour\ncinco\n",
-			want: []string{"ONE\n|one\n|uno\n", "FIVE\n|five\n|cinco\n"},
+			name: "two blocks", base: "one\ntwo\nthree\n", mine: "ONE\ntwo\nTHREE\n", theirs: "uno\ntwo\ntres\n",
+			file: "<<<<<<< a\nONE\n||||||| b\none\n=======\nuno\n>>>>>>> c\ntwo\n<<<<<<< a\nTHREE\n||||||| b\nthree\n=======\ntres\n>>>>>>> c\n",
+			want: []string{"ONE\n|one\n|uno\n", "THREE\n|three\n|tres\n"}, around: []string{"", "two\n", ""},
 		},
 		{
-			name: "lines longer than git's markers", base: "<<<<<<<<<<<<\nx\n============\n", mine: "<<<<<<<<<<<<\nmine\n============\n", theirs: "<<<<<<<<<<<<\ntheirs\n============\n",
-			want: []string{"mine\n|x\n|theirs\n"},
-		},
-		{
-			name: "lines that are git's own markers", base: "<<<<<<< x\na\n=======\n>>>>>>> y\n",
-			mine: "<<<<<<< x\n=======\n|||||||\n=======\n>>>>>>> y\n", theirs: "<<<<<<< x\n>>>>>>> y\n=======\n>>>>>>> y\n",
-			want: []string{"=======\n|||||||\n|a\n|>>>>>>> y\n"},
-		},
-		{
-			name: "a file merge-file merges whole", base: "if (y) {\nreturn x;\n}\nc\n\nc\n", mine: "if (y) {\nreturn x;\nc\n\nc\n", theirs: "if (y) {\nreturn x;\nc\nc\n\n",
-			want: []string{"if (y) {\nreturn x;\nc\n\nc\n|if (y) {\nreturn x;\n}\nc\n\nc\n|if (y) {\nreturn x;\nc\nc\n\n"},
+			name: "a line that is git's own marker", base: "<<<<<<<\nx\n", mine: "<<<<<<<\nmine\n", theirs: "<<<<<<<\ntheirs\n",
+			file: "<<<<<<<\n<<<<<<<< a\nmine\n|||||||| b\nx\n========\ntheirs\n>>>>>>>> c\n",
+			want: []string{"mine\n|x\n|theirs\n"}, around: []string{"<<<<<<<\n", ""},
 		},
 		{
 			name: "CRLF with no line ending at the end", base: "a\r\nb", mine: "a\r\nb, mine", theirs: "a\r\nb, theirs",
-			want: []string{"b, mine|b|b, theirs"},
+			file: "a\r\n<<<<<<< a\r\nb, mine\r\n||||||| b\r\nb\r\n=======\r\nb, theirs\r\n>>>>>>> c\r\n",
+			want: []string{"b, mine|b|b, theirs"}, around: []string{"a\r\n", ""},
 		},
 		{
 			name: "one side with no newline at the end", base: "a\nb\n", mine: "a\nb, mine", theirs: "a\nb, theirs\n",
-			want: []string{"b, mine|b\n|b, theirs\n"},
+			file: "a\n<<<<<<< a\nb, mine\n||||||| b\nb\n=======\nb, theirs\n>>>>>>> c\n",
+			want: []string{"b, mine|b\n|b, theirs\n"}, around: []string{"a\n", ""},
 		},
 		{
-			name: "a hunk followed by lines both keep", base: "a\nb", mine: "A\nb", theirs: "α\nb",
-			want: []string{"A\n|a\n|α\n"},
+			name: "no marker block", base: "<<<<<<<\n", mine: "<<<<<<< a\n", theirs: "x\n",
+			file: "<<<<<<< a\nx\n",
 		},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -74,7 +61,9 @@ func TestHunksOfReadsWhatMergeFileWrites(t *testing.T) {
 				gitStageBase: {mode: "100644", oid: "base"}, gitStageMine: {mode: "100644", oid: "mine"}, gitStageTheirs: {mode: "100644", oid: "theirs"},
 			}
 			bodies := map[string]string{"base": c.base, "mine": c.mine, "theirs": c.theirs}
-			hunks, err := hunksOf(ctx, r, gitDir, t.TempDir(), versions, bodies)
+			path := filepath.Join(t.TempDir(), "file")
+			writeFile(t, path, c.file)
+			hunks, why, err := hunksIn(path, versions, bodies)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -86,79 +75,46 @@ func TestHunksOfReadsWhatMergeFileWrites(t *testing.T) {
 				got = append(got, fmt.Sprintf("%s|%s|%s", h.Mine, h.Base, h.Theirs))
 			}
 			equal(t, "hunks", strings.Join(got, " / "), strings.Join(c.want, " / "))
+			if len(c.want) == 0 {
+				equal(t, "why", why, "changed here and by the update, with no conflict markers agentx can tell from its lines")
+				return
+			}
+			around, _, err := splitMerged(c.file, markerSizeIn(c.file, c.mine, c.base, c.theirs))
+			if err != nil {
+				t.Fatal(err)
+			}
+			equal(t, "around", strings.Join(around, "/"), strings.Join(c.around, "/"))
 		})
 	}
-}
-
-// TestMovedAsideReadsThePathAVersionWasMovedFrom: a path merge-tree moved
-// one side's version to, to make room at its own path, is read back to
-// that path whichever side it was and however git numbered it, and a path
-// of the skill that only looks like one is left as it is.
-func TestMovedAsideReadsThePathAVersionWasMovedFrom(t *testing.T) {
-	t.Parallel()
-	mine, theirs := strings.Repeat("a", 40), strings.Repeat("b", 40)
-	m := lineage.Merge{Base: strings.Repeat("c", 40), Mine: mine, Theirs: theirs}
-	for _, c := range []struct {
-		path, real string
-		moved      bool
-	}{
-		{path: "extra~" + mine, real: "extra", moved: true},
-		{path: "docs/notes.md~" + theirs, real: "docs/notes.md", moved: true},
-		{path: "docs~" + theirs + "_2", real: "docs", moved: true},
-		{path: "notes.md"},
-		{path: "notes.md~"},
-		{path: "notes.md~" + m.Base},
-		{path: "notes.md~" + mine + "_"},
-		{path: "notes.md~" + mine + "_x"},
-		{path: "notes.md~" + mine + ".bak"},
-		{path: "~" + mine},
-	} {
-		real, moved := movedAside(c.path, m)
-		if real != c.real || moved != c.moved {
-			t.Errorf("movedAside(%q) = %q, %v; want %q, %v", c.path, real, moved, c.real, c.moved)
-		}
+	if _, _, err := splitMerged("<<<<<<< a\nx\n=======\n", 7); err == nil {
+		t.Error("a block with no end reads")
 	}
 }
 
-// TestSkillUpdateOffersAFileMergeFileMergesAsOneHunk: git merge-file and
-// the merge merge-tree runs do not always agree, and a file merge-tree
-// finds conflicting may be one merge-file merges with no conflict left. It
-// is still a conflict of its content, and has a hunk to choose from: one,
-// the whole of each version, never a file that conflicts whole with
-// nothing to choose.
-func TestSkillUpdateOffersAFileMergeFileMergesAsOneHunk(t *testing.T) {
+// TestMarkerSizeInIgnoresContentRuns: the markers of a merged file are the
+// first run of < longer than any run of a marker character at the start of
+// a line of its versions and followed by a space or the end of the line,
+// so a line of the versions' own is never one, however long, whatever
+// size the markers were written at.
+func TestMarkerSizeInIgnoresContentRuns(t *testing.T) {
 	t.Parallel()
-	const (
-		base   = "if (y) {\nreturn x;\n}\nc\n\nc\n"
-		mine   = "if (y) {\nreturn x;\nc\n\nc\n"
-		theirs = "if (y) {\nreturn x;\nc\nc\n\n"
-	)
-	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude"}})
-	s := h.newSourceRepo("code", true)
-	s.skill("skills/code", "code", "Code", map[string]string{"code.txt": base})
-	s.commit("first version")
-	h.mustRun("skill", "add", s.url)
-	s.write("skills/code/code.txt", theirs)
-	s.commit("second version")
-	h.mustRun("skill", "check")
-	editLibrary(t, h, "code", "code.txt", mine)
-	library := onDisk(t, h.library)
-
-	out := h.run("--json", "skill", "update", "code")
-	equal(t, "exit", out.exit, 4)
-	ev := h.one(out.stdout, "conflict")
-	equal(t, "files", conflictFiles(ev), "code.txt:1")
-	equal(t, "the hunk", hunkOf(t, ev, "code.txt", 1), mine+"|"+base+"|"+theirs)
-	equal(t, "binary", fileOf(t, ev, "code.txt")["binary"], false)
-	equal(t, "the library", onDisk(t, h.library), library)
-
-	h.accountGit("update-ref", "-d", lineage.MergeRef("code"))
-	text := h.run("skill", "update", "code")
-	equal(t, "exit in text", text.exit, 4)
-	contains(t, "the text", text.stdout, "code.txt:1\n<<<<<<< mine\n"+mine+"||||||| base\n"+base+"=======\n"+theirs+">>>>>>> theirs\n")
-	if strings.Contains(text.stdout, "changed here and by the update") {
-		t.Errorf("the text says the file conflicts whole:\n%s", text.stdout)
+	for _, c := range []struct {
+		name  string
+		file  string
+		blobs []string
+		want  int
+	}{
+		{name: "git's own size", file: "a\n<<<<<<< mine\n", blobs: []string{"a\n"}, want: 7},
+		{name: "past a run of the versions", file: "<<<<<<<<< x\n<<<<<<<<<< mine\n", blobs: []string{"<<<<<<<<< x\n"}, want: 10},
+		{name: "past a run of another marker character", file: "<<<<<<<< mine\n", blobs: []string{"=======\n"}, want: 8},
+		{name: "a marker with no label", file: "<<<<<<<<\r\n", blobs: []string{"<<<<<<<\r\n"}, want: 8},
+		{name: "a run with text after it", file: "<<<<<<<<x\n", blobs: []string{"a\n"}},
+		{name: "no longer than the versions'", file: "<<<<<<< mine\n", blobs: []string{"||||||| x\n"}},
+		{name: "none", file: "a\nb\n", blobs: []string{"a\n"}},
+	} {
+		if got := markerSizeIn(c.file, c.blobs...); got != c.want {
+			t.Errorf("%s: markerSizeIn = %d, want %d", c.name, got, c.want)
+		}
 	}
 }
 

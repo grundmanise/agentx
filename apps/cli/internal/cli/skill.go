@@ -78,9 +78,8 @@ const driftUpstreamRemoved = "upstream removed"
 const updateAvailable = "update available"
 
 // mergePending is what the skill list row says of a managed skill an update
-// left a pending merge for, followed by how many of its files are not
-// resolved yet when the merge says. Like an update available it is no
-// drift: the library directory is as it was, and the event carries it as
+// left a pending merge for. Like an update available it is no drift: the
+// library directory is as it was, and the event carries it as
 // pending_merge.
 const mergePending = "merge pending"
 
@@ -334,17 +333,9 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 		if next, ok := rec.AtCandidate(); ok {
 			ev.Candidate = &scan.LibraryCandidate{UpstreamCommit: next.Import.Commit, ContentHash: next.Import.Hash}
 		}
-		// A merge an update left pending is read from its ref, in the same
-		// for-each-ref, and the files it has left to resolve from the
-		// subject of its commit, which agentx rewrites whenever it writes
-		// the commit: counting them anew would take a merge of its own.
-		if p := rec.PendingMerge; p != nil {
-			ev.PendingMerge = &scan.LibraryPending{}
-			if p.Unresolved >= 0 {
-				n := p.Unresolved
-				ev.PendingMerge.Unresolved = &n
-			}
-		}
+		// A merge an update left pending is its checkout under agentx
+		// home, which the context read with one read of the directory.
+		ev.PendingMerge = obs.pending
 	}
 	return ev
 }

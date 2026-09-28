@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -234,7 +235,7 @@ func TestIsolatedStatusAnswersWithTheExitStatus(t *testing.T) {
 		{exit: "3", fails: true},
 		{exit: "kill", fails: true},
 	} {
-		out, status, err := r.IsolatedStatus(ctx, "/repo.git", 2, "merge-file", c.exit)
+		out, status, err := r.IsolatedStatus(ctx, "/repo.git", 2, "merge-tree", c.exit)
 		switch {
 		case c.fails && err == nil:
 			t.Errorf("exit %s: no error, status %d", c.exit, status)
@@ -245,4 +246,87 @@ func TestIsolatedStatusAnswersWithTheExitStatus(t *testing.T) {
 			t.Errorf("exit %s: status %d and %q, want %d and %q", c.exit, status, out, c.status, "written\n")
 		}
 	}
+}
+
+// TestAddCheckoutLocksWithTheReason: a checkout is added detached at the
+// commit given and locked with the reason, which git worktree list shows,
+// so that git's own pruning never takes it.
+func TestAddCheckoutLocksWithTheReason(t *testing.T) {
+	t.Parallel()
+	r, gitDir, commit := checkoutRepo(t)
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "merges", "alpha")
+	if err := r.AddCheckout(ctx, gitDir, path, commit, "a reason of its own"); err != nil {
+		t.Fatal(err)
+	}
+	list, err := r.Isolated(ctx, gitDir, "worktree", "list", "--porcelain")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "HEAD " + commit + "\ndetached\nlocked a reason of its own"; !strings.Contains(list, want) {
+		t.Errorf("worktree list says\n%s\nwant it to hold %q", list, want)
+	}
+	if top, err := r.InCheckout(ctx, path, "rev-parse", "HEAD"); err != nil || strings.TrimSpace(top) != commit {
+		t.Errorf("HEAD in the checkout = %q, %v; want %s", top, err, commit)
+	}
+}
+
+// TestRemoveCheckoutOfALockedCheckout: a locked checkout is removed, its
+// directory and its registration, and so is one whose directory is already
+// gone; removing one git knows nothing of is no error.
+func TestRemoveCheckoutOfALockedCheckout(t *testing.T) {
+	t.Parallel()
+	r, gitDir, commit := checkoutRepo(t)
+	ctx := context.Background()
+	for _, gone := range []bool{false, true} {
+		path := filepath.Join(t.TempDir(), "alpha")
+		if err := r.AddCheckout(ctx, gitDir, path, commit, "locked"); err != nil {
+			t.Fatal(err)
+		}
+		if gone {
+			if err := os.RemoveAll(path); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := r.RemoveCheckout(ctx, gitDir, path); err != nil {
+			t.Fatalf("directory gone %v: %v", gone, err)
+		}
+		if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("directory gone %v: the checkout is still there: %v", gone, err)
+		}
+		if list, err := r.Isolated(ctx, gitDir, "worktree", "list", "--porcelain"); err != nil || strings.Contains(list, "locked") {
+			t.Errorf("directory gone %v: worktree list says\n%s, %v", gone, list, err)
+		}
+		if err := r.RemoveCheckout(ctx, gitDir, path); err != nil {
+			t.Errorf("directory gone %v: removing it again: %v", gone, err)
+		}
+	}
+}
+
+// checkoutRepo is a bare repository holding one commit, for a checkout of
+// it to be added at.
+func checkoutRepo(t *testing.T) (*Runner, string, string) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	ctx := context.Background()
+	gitDir := filepath.Join(t.TempDir(), "account.git")
+	r := New(map[string]string{"PATH": os.Getenv("PATH"), "HOME": t.TempDir()}, false, func(string, ...any) {})
+	if _, err := r.Isolated(ctx, gitDir, "init", "--bare", "--quiet", gitDir); err != nil {
+		t.Fatal(err)
+	}
+	blob, err := r.IsolatedInput(ctx, gitDir, strings.NewReader("notes\n"), "hash-object", "-w", "--stdin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree, err := r.IsolatedInput(ctx, gitDir, strings.NewReader("100644 blob "+strings.TrimSpace(blob)+"\tnotes.md\n"), "mktree")
+	if err != nil {
+		t.Fatal(err)
+	}
+	commit, err := r.Isolated(ctx, gitDir, "commit-tree", strings.TrimSpace(tree), "-m", "one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r, gitDir, commit
 }
