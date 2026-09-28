@@ -100,34 +100,44 @@ func TestDoctorNoGitExits2(t *testing.T) {
 	contains(t, "stderr", out.stderr, "hint: install git 2.40 or newer")
 }
 
-func TestDoctorRejectsOldGit(t *testing.T) {
+// TestDoctorChecksGitAgainstTheFloor runs doctor on the last git before
+// the floor and on the floor itself. How versions compare, gitx.TestVersion
+// pins, and the hint for the git Ubuntu 22.04 ships,
+// TestStartupRejectsMissingOrOldGit, since doctor and every other command
+// check the version through the same function.
+func TestDoctorChecksGitAgainstTheFloor(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		version string
-		hint    string
-	}{
-		{"2.34.1", "Ubuntu 22.04 ships git 2.34"},
-		{"2.4.0", "install git 2.40 or newer"},
-		{"2.39.5", "install git 2.40 or newer"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.version, func(t *testing.T) {
-			t.Parallel()
-			h := newHarness(t)
-			stubGit(t, h, versionStub(tt.version))
+	t.Run("2.39.5", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		stubGit(t, h, versionStub("2.39.5"))
 
-			out := h.run("--json", "doctor")
-			equal(t, "exit", out.exit, 2)
-			events := h.events(out.stdout)
-			if got, want := h.types(events), []string{"doctor", "error", "result"}; !reflect.DeepEqual(got, want) {
-				t.Fatalf("event types = %v, want %v", got, want)
-			}
-			equal(t, "doctor.status", events[0]["status"], "fail")
-			equal(t, "error.code", events[1]["code"], "git")
-			equal(t, "error.message", events[1]["message"], "git "+tt.version+" is older than 2.40")
-			contains(t, "error.hint", events[1]["hint"].(string), tt.hint)
-		})
-	}
+		out := h.run("--json", "doctor")
+		equal(t, "exit", out.exit, 2)
+		events := h.events(out.stdout)
+		if got, want := h.types(events), []string{"doctor", "error", "result"}; !reflect.DeepEqual(got, want) {
+			t.Fatalf("event types = %v, want %v", got, want)
+		}
+		equal(t, "doctor.status", events[0]["status"], "fail")
+		equal(t, "error.code", events[1]["code"], "git")
+		equal(t, "error.message", events[1]["message"], "git 2.39.5 is older than 2.40")
+		contains(t, "error.hint", events[1]["hint"].(string), "install git 2.40 or newer")
+	})
+	t.Run("2.40.0", func(t *testing.T) {
+		t.Parallel()
+		h := newHarness(t)
+		stubGit(t, h, delegatingStub(t, "2.40.0"))
+
+		out := h.run("--json", "doctor")
+		equal(t, "exit", out.exit, 0)
+		events := h.events(out.stdout)
+		rows, _ := doctorRows(t, events)
+		equal(t, "git.status", rows["git"]["status"], "ok")
+		equal(t, "git.detail", rows["git"]["detail"], "git 2.40.0")
+		equal(t, "fork_merges.status", rows["fork_merges"]["status"], "ok")
+		equal(t, "account_repo.status", rows["account_repo"]["status"], "ok")
+		equal(t, "result.ok", events[len(events)-1]["ok"], true)
+	})
 }
 
 func TestDoctorPassesAndChangesNothing(t *testing.T) {
@@ -231,28 +241,6 @@ func TestDoctorReportsDetectedClients(t *testing.T) {
 		"  • client:cursor       info  Cursor: " + cursor + "\n\n✓ No issues detected\n",
 	} {
 		contains(t, "stdout", out.stdout, line)
-	}
-}
-
-func TestDoctorAcceptsGitAtAndAboveFloorByNumericComparison(t *testing.T) {
-	t.Parallel()
-	tests := []struct{ version string }{{"2.40.0"}, {"2.100.0"}}
-	for _, tt := range tests {
-		t.Run(tt.version, func(t *testing.T) {
-			t.Parallel()
-			h := newHarness(t)
-			stubGit(t, h, delegatingStub(t, tt.version))
-
-			out := h.run("--json", "doctor")
-			equal(t, "exit", out.exit, 0)
-			events := h.events(out.stdout)
-			rows, _ := doctorRows(t, events)
-			equal(t, "git.status", rows["git"]["status"], "ok")
-			equal(t, "git.detail", rows["git"]["detail"], "git "+tt.version)
-			equal(t, "fork_merges.status", rows["fork_merges"]["status"], "ok")
-			equal(t, "account_repo.status", rows["account_repo"]["status"], "ok")
-			equal(t, "result.ok", events[len(events)-1]["ok"], true)
-		})
 	}
 }
 
@@ -430,6 +418,7 @@ func TestStartupRejectsMissingOrOldGit(t *testing.T) {
 		{"git 2.34", func(t *testing.T, h *harness) { stubGit(t, h, versionStub("2.34.1")) }, "Ubuntu 22.04 ships git 2.34"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			h := newHarness(t)
 			tt.setup(t, h)
 			for _, args := range [][]string{{"config", "set", "label", "x"}, {"config", "list"}, {"machine"}} {

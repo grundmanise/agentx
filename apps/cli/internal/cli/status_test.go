@@ -8,6 +8,7 @@ import (
 )
 
 func TestExitCodesMatchContract(t *testing.T) {
+	t.Parallel()
 	doc, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "docs", "spec", "cli-contract.md"))
 	if err != nil {
 		t.Fatal(err)

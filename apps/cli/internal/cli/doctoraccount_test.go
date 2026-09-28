@@ -11,28 +11,16 @@ import (
 )
 
 // TestDoctorReadsTheAccountRepoOnlyWhenItOpens: the two account-repo rows
-// follow the row that says the repo can be read, and are left out of a run
-// on a machine that has no account repo yet – there is nothing to say about
-// a repository that does not exist.
+// follow the row that says the repo can be read. A run on a machine that
+// has no account repo yet leaves them out, there being nothing to say about
+// a repository that does not exist: TestDoctorPassesAndChangesNothing pins
+// the rows of that run.
 func TestDoctorReadsTheAccountRepoOnlyWhenItOpens(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-
-	rows, order := doctorRows(t, h.events(h.mustRun("--json", "doctor").stdout))
-	bare := []string{"git", "fork_merges", "commit_identity", "home", "lock", "mutations", "settings",
-		"account_repo", "library", "clients"}
-	if !reflect.DeepEqual(order, bare) {
-		t.Fatalf("checks with no account repo = %v, want %v", order, bare)
-	}
-	for _, check := range []string{"source_remotes", "staged_imports"} {
-		if _, found := rows[check]; found {
-			t.Errorf("%s is reported on a machine with no account repo", check)
-		}
-	}
-
 	s, _, _ := h.standardSource(true)
 	h.mustRun("source", "add", s.url)
-	rows, order = doctorRows(t, h.events(h.mustRun("--json", "doctor").stdout))
+	rows, order := doctorRows(t, h.events(h.mustRun("--json", "doctor").stdout))
 	want := []string{"git", "fork_merges", "commit_identity", "home", "lock", "mutations", "settings",
 		"account_repo", "source_remotes", "staged_imports", "library", "clients"}
 	if !reflect.DeepEqual(order, want) {
@@ -52,62 +40,48 @@ func TestDoctorReadsTheAccountRepoOnlyWhenItOpens(t *testing.T) {
 // doctor is the only thing that ever names it, since `source fetch` and
 // `source skills` both answer from the settings. It reports and does not
 // repair: doctor takes no lock, so it cannot tell a remote a run is writing
-// now from one a run died over.
+// now from one a run died over. The row names the remote by its URL, or by
+// its bare source id when the URL is one agentx would not have written, here
+// one carrying a token: that id is what the hint's `source remove <id>`
+// accepts.
 func TestDoctorNamesARemoteTheSettingsDoNotName(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	s, _, _ := h.standardSource(true)
 	h.mustRun("source", "add", s.url)
 	h.mustRun("source", "remove", s.url)
-	// The remove took the remote with it; putting it back on its own is
-	// exactly what the killed add left: a remote, and no entry naming it.
-	remote := source.RemoteName(source.ID(s.url))
-	h.accountGit("config", "remote."+remote+".url", s.url)
+	id := source.ID(s.url)
+	remote := source.RemoteName(id)
 
-	rows, _ := doctorRows(t, h.events(h.mustRun("--json", "doctor").stdout))
-	equal(t, "source_remotes.status", rows["source_remotes"]["status"], "warn")
-	equal(t, "source_remotes.detail", rows["source_remotes"]["detail"],
-		"1 source remote the settings do not name: "+s.url)
-	equal(t, "source_remotes.hint", rows["source_remotes"]["hint"],
-		"for each, run 'agentx source add <url>' to add the source and take the remote with it, or 'agentx source remove <id>' to clear it")
+	for _, tc := range []struct{ url, named string }{
+		{s.url, s.url},
+		{"https://user:token@github.com/owner/repo", id},
+	} {
+		// The remove took the remote with it; putting it back on its own is
+		// exactly what the killed add left: a remote, and no entry naming it.
+		h.accountGit("config", "remote."+remote+".url", tc.url)
+		rows, _ := doctorRows(t, h.events(h.mustRun("--json", "doctor").stdout))
+		equal(t, "source_remotes.status", rows["source_remotes"]["status"], "warn")
+		equal(t, "source_remotes.detail", rows["source_remotes"]["detail"],
+			"1 source remote the settings do not name: "+tc.named)
+		equal(t, "source_remotes.hint", rows["source_remotes"]["hint"],
+			"for each, run 'agentx source add <url>' to add the source and take the remote with it, or 'agentx source remove <id>' to clear it")
 
-	// Both remedies the hint names have to work, or the hint is a dead end.
-	// Removing by id clears the remote although no settings entry names it.
-	h.mustRun("source", "remove", source.ID(s.url))
-	rows, _ = doctorRows(t, h.events(h.mustRun("--json", "doctor").stdout))
-	equal(t, "source_remotes.status after removing by id", rows["source_remotes"]["status"], "ok")
-	equal(t, "source_remotes.detail after removing by id", rows["source_remotes"]["detail"], "no source remote")
+		// Both remedies the hint names have to work, or the hint is a dead
+		// end. Removing by id clears the remote although no settings entry
+		// names it.
+		h.mustRun("source", "remove", id)
+		rows, _ = doctorRows(t, h.events(h.mustRun("--json", "doctor").stdout))
+		equal(t, "source_remotes.status after removing by id", rows["source_remotes"]["status"], "ok")
+		equal(t, "source_remotes.detail after removing by id", rows["source_remotes"]["detail"], "no source remote")
+	}
 
 	// And adding the source again writes the entry and the remote together.
 	h.accountGit("config", "remote."+remote+".url", s.url)
 	h.mustRun("source", "add", s.url)
-	rows, _ = doctorRows(t, h.events(h.mustRun("--json", "doctor").stdout))
+	rows, _ := doctorRows(t, h.events(h.mustRun("--json", "doctor").stdout))
 	equal(t, "source_remotes.status after adding again", rows["source_remotes"]["status"], "ok")
 	equal(t, "source_remotes.detail after adding again", rows["source_remotes"]["detail"], "1 source remote the settings name")
-}
-
-// TestDoctorNamesARemoteItWillNotPrintByItsID: a remote whose URL agentx
-// would not have written, here one carrying a token, is named by its bare
-// source id and never by the URL. That id is what the hint's `source remove
-// <id>` accepts, so the value the row prints works in the command it gives.
-func TestDoctorNamesARemoteItWillNotPrintByItsID(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	s, _, _ := h.standardSource(true)
-	h.mustRun("source", "add", s.url)
-	h.mustRun("source", "remove", s.url)
-	id := source.ID(s.url)
-	h.accountGit("config", "remote."+source.RemoteName(id)+".url", "https://user:token@github.com/owner/repo")
-
-	rows, _ := doctorRows(t, h.events(h.mustRun("--json", "doctor").stdout))
-	equal(t, "source_remotes.status", rows["source_remotes"]["status"], "warn")
-	equal(t, "source_remotes.detail", rows["source_remotes"]["detail"],
-		"1 source remote the settings do not name: "+id)
-
-	h.mustRun("source", "remove", id)
-	rows, _ = doctorRows(t, h.events(h.mustRun("--json", "doctor").stdout))
-	equal(t, "source_remotes.status after removing the printed id", rows["source_remotes"]["status"], "ok")
-	equal(t, "source_remotes.detail after removing the printed id", rows["source_remotes"]["detail"], "no source remote")
 }
 
 // TestDoctorSendsUnreadableSettingsBackToTheSettings: when the settings do
