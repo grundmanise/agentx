@@ -182,7 +182,6 @@ func TestServeAnswersRequests(t *testing.T) {
 func TestServeWaitsForTheMutationLockAndCoalescesRefreshes(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
-	h.env["AGENTX_DEBOUNCE"] = quickRescans
 	p := h.serve(t, "--json")
 	p.next("snapshot")
 

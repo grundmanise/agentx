@@ -191,7 +191,6 @@ func TestEditedLiveFileRefusesRecovery(t *testing.T) {
 func TestServeRecoversAJournalOnRescan(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
-	h.env["AGENTX_DEBOUNCE"] = quickRescans
 	out := h.run("config", "set", "label", "one")
 	equal(t, "exit", out.exit, 0)
 	live := filepath.Join(h.agentx, "settings.json")
