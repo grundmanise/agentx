@@ -31,9 +31,15 @@ tidy-check:
 build:
 	cd $(CLI) && CGO_ENABLED=$(CGO_ENABLED) go build ./...
 
-# The race detector runs the CLI package's tests for longer than go test's
-# default ten minutes on the slower macOS runners, so allow more.
-TEST_FLAGS = -race -count=1 -timeout 30m
+# The race detector is on unless RACE is empty. `make check` keeps it, as
+# does the Linux job in CI. The macOS job runs `make test RACE=`: it is there
+# for the serve watcher's FSEvents backend (cgo), which only builds on macOS,
+# and the Linux job finds the data races, while -race costs the most on the
+# slower macOS runners.
+RACE ?= -race
+# The CLI package's tests can run for longer than go test's default ten
+# minutes on a slow runner, so allow more.
+TEST_FLAGS = $(RACE) -count=1 -timeout 30m
 
 test:
 	cd $(CLI) && go test $(TEST_FLAGS) ./...

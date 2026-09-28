@@ -47,4 +47,7 @@ jobs:
           cache-dependency-path: apps/cli/go.sum
 
       - run: make build
-      - run: make test
+      # The race detector runs on Linux only. The macOS job is there for the
+      # watcher's FSEvents backend; the Linux job finds the data races, and
+      # `make check` keeps -race locally.
+      - run: make test ${{ runner.os == 'macOS' && 'RACE=' || '' }}
