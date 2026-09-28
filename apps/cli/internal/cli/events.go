@@ -48,16 +48,16 @@ type resultEvent struct {
 // unless NO_COLOR or --color says otherwise, a pipe gets the same text bare.
 //
 // Every human line this writer puts on stderr (a warning and the line under
-// it, a hint, an error and its hint, a debug line) is sanitised here rather
-// than by whoever built it. A message is plain text by the time it arrives:
-// agentx paints the level prefix and nothing else, so there is no escape
-// sequence of its own to lose, and one rule at the one exit covers the
-// callers that relay what a source, a git or a configuration file said,
-// including the ones not written yet. Stdout is the other way round: a
-// table cell may already carry the SGR it was painted with, which this
-// writer could not tell from a source's, so a cell is sanitised where it is
-// built, before it is painted. Neither applies in JSON mode, where an event
-// carries what was read and the encoder escapes it.
+// it, a hint, an error and its hint, an info or a debug line) is sanitised
+// here rather than by whoever built it. A message is plain text by the time
+// it arrives: agentx paints the level prefix and nothing else, so there is
+// no escape sequence of its own to lose, and one rule at the one exit covers
+// the callers that relay what a source, a git or a configuration file said,
+// including the ones not written yet. Stdout is the other way round: a table
+// cell may already carry the SGR it was painted with, which this writer
+// could not tell from a source's, so a cell is sanitised where it is built,
+// before it is painted. Neither applies in JSON mode, where an event carries
+// what was read and the encoder escapes it.
 //
 // Serve answers searches from the goroutine that reads its stdin while the
 // loop reports scans from its own, so every write of one event or one line
@@ -150,6 +150,16 @@ func (w *writer) warn(msg string) {
 		return
 	}
 	w.write(w.stderr, fmt.Sprintf("%s %s\n", w.err().paint(warnStyle, "warning:"), sanitised(msg)))
+}
+
+// info logs at info level: a note that asks for nothing, such as a failure
+// warned about earlier that has ended.
+func (w *writer) info(msg string) {
+	if w.json {
+		w.line(w.stderr, logEvent{event: newEvent("log"), Level: "info", Message: msg})
+		return
+	}
+	w.write(w.stderr, fmt.Sprintf("%s %s\n", w.err().paint(infoStyle, "info:"), sanitised(msg)))
 }
 
 // warnWith logs at warn level with a second line that says what to do

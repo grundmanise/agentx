@@ -263,17 +263,39 @@ func contains(t *testing.T, what, text, sub string) {
 }
 
 // serveProc is one `agentx serve` run in a goroutine, driven through pipes.
-// Every wait is on a channel or a pipe read, never a sleep: send writes a
-// request line, next reads the next stdout event, close ends stdin and
-// cancelRun ends the context; both return the exit code once Run returned.
+// Every wait on stdout is a channel or a pipe read, never a sleep: send
+// writes a request line, next reads the next stdout event, close ends stdin
+// and cancelRun ends the context; both return the exit code once Run
+// returned. stderr can be read while serve runs: what serve does on its
+// timer and logs there has no stdout event to wait for, so a test polls for
+// it with awaitTrue.
 type serveProc struct {
 	t      *testing.T
 	stdin  *os.File
 	lines  chan string
 	done   chan struct{} // closed once Run returned
 	exit   int           // read only after done
-	stderr bytes.Buffer  // read only after done
+	stderr lockedBuffer
 	cancel context.CancelFunc
+}
+
+// lockedBuffer is a bytes.Buffer that one goroutine can write while another
+// reads it.
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
 
 const serveDeadline = 10 * time.Second

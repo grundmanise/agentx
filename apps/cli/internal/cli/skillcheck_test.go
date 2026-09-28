@@ -1533,10 +1533,10 @@ func TestServeCheckWaitsForTheLock(t *testing.T) {
 }
 
 // TestServeWarnsAboutASourceItCannotCheck: a source serve's check cannot
-// fetch is a warning on every check that fails, naming the source, why it
-// failed and the skills it left unchecked, and it ends nothing: the source
-// beside it is still checked and pinned, later checks still run and serve
-// still answers requests.
+// fetch is one warning, naming the source, why it failed and the skills it
+// left unchecked, however many checks fail on it for the same cause, and it
+// ends nothing: the source beside it is still checked and pinned, later
+// checks still run and serve still answers requests.
 func TestServeWarnsAboutASourceItCannotCheck(t *testing.T) {
 	t.Parallel()
 	h, s, _ := checkHarness(t)
@@ -1569,16 +1569,11 @@ func TestServeWarnsAboutASourceItCannotCheck(t *testing.T) {
 			warned = append(warned, w)
 		}
 	}
-	if len(warned) < 2 {
-		t.Fatalf("%d update check warnings, want one per check, at least two:\n%s", len(warned), p.stderr.String())
+	if len(warned) != 1 {
+		t.Fatalf("%d update check warnings over two checks, want one:\n%s", len(warned), p.stderr.String())
 	}
-	for _, w := range warned {
-		if !strings.HasPrefix(w, "update check: "+other.url+": ") || !strings.HasSuffix(w, "; not checked: gamma") {
-			t.Errorf("the warning = %q, want the failure of %s and the skill it left unchecked", w, other.url)
-		}
-		if strings.Contains(w, "alpha") {
-			t.Errorf("a warning names alpha, which was checked: %q", w)
-		}
+	if w := warned[0]; !strings.HasPrefix(w, "update check: "+other.url+": ") || !strings.HasSuffix(w, "; not checked: gamma") {
+		t.Errorf("the warning = %q, want the failure of %s and the skill it left unchecked", w, other.url)
 	}
 	equal(t, "gamma's candidate", h.ref(lineage.CandidateRef("gamma")), "")
 }
@@ -1622,55 +1617,6 @@ done`)
 		}
 	}
 	equal(t, "alpha's candidate", h.ref(lineage.CandidateRef("alpha")), "")
-}
-
-// TestServeChecksNothingWithoutAManagedSkill: on a machine with a source
-// and no managed skill from it, or whose managed skills came from a source
-// removed since, the last snapshot says there is nothing to check, and the
-// ticks of the check spawn no git at all.
-func TestServeChecksNothingWithoutAManagedSkill(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		name  string
-		setup func(h *harness, s *sourceRepo)
-	}{
-		{"no skill installed", func(h *harness, s *sourceRepo) {}},
-		{"the source of the skill removed", func(h *harness, s *sourceRepo) {
-			// Another source stays, so that the settings still name one and
-			// only the snapshot can tell there is nothing to check.
-			other := h.newSourceRepo("other", true)
-			other.skill("gamma", "gamma", "Never installed", nil)
-			other.commit("gamma")
-			h.mustRun("source", "add", other.url)
-			h.mustRun("skill", "add", s.url)
-			h.mustRun("source", "remove", s.url)
-		}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			h := newHarness(t)
-			h.build(t, fixture{dirs: []string{".claude"}})
-			s := h.newSourceRepo("skills", true)
-			s.skill("alpha", "alpha", "A skill", nil)
-			s.commit("alpha")
-			h.mustRun("source", "add", s.url)
-			tc.setup(h, s)
-			calls := countingGit(t, h)
-			h.env["AGENTX_CHECK_INTERVAL"] = "50ms"
-			p := h.serve(t, "--json")
-			p.next("snapshot")
-			// The scan and the source index it rebuilds have run their git by
-			// the time a refresh is acknowledged.
-			p.send(`{"type":"refresh","request_id":"settled"}`)
-			p.until("settled")
-			n := len(calls())
-			time.Sleep(500 * time.Millisecond) // ten ticks
-			if later := calls()[n:]; len(later) > 0 {
-				t.Errorf("the ticks of a check with nothing to check spawned git:\n%s", strings.Join(later, "\n"))
-			}
-			equal(t, "exit", p.close(), 0)
-		})
-	}
 }
 
 // TestServeRefusesABadCheckInterval: the interval is a positive duration

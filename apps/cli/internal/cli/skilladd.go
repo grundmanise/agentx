@@ -131,7 +131,7 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 		return accountRepoFailure(err)
 	}
 	if !exists {
-		return sourceFailure(fmt.Errorf("%w: %s", source.ErrNotFetched, src.URL), pinned)
+		return sourceFailure(source.NotFetched(src.URL), pinned)
 	}
 	if !add && !fetch {
 		// The pin the settings hold decides the commit, resolved in the
