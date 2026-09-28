@@ -82,7 +82,7 @@ func TestPlainlyBareNeverSaysMoreThanGit(t *testing.T) {
 				t.Fatal(err)
 			}
 		}},
-		{"with comments, blank lines and a section name in capitals", true, func(t *testing.T, gitDir string) {
+		{"with comments, blank lines and a section name in capitals, which git reads but never writes", false, func(t *testing.T, gitDir string) {
 			editConfig(gitDir, func(s string) string {
 				return "# written by hand\n\n" + strings.Replace(s, "[core]", "[CORE]\n  ; a comment", 1) + "\n"
 			})

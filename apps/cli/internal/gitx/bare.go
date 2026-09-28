@@ -11,22 +11,19 @@ import (
 )
 
 // plainlyBare reports whether gitDir is plainly a bare repository git
-// opens: whether git rev-parse --is-bare-repository, run on it in the
-// isolated environment, would answer true, told from its files without
-// running git. Nearly every command opens the account repo and nearly
+// opens, that is, whether git rev-parse --is-bare-repository, run on it in
+// the isolated environment, would answer true, told from its files without
+// running git. Nearly every command checks the account repo and nearly
 // always finds it as git and agentx left it, so this spares each of them a
-// git process. It checks what git checks before that answer, the same way
-// or more strictly:
+// git process. It asks, the same way git does or more strictly:
 //
-//   - the process has a working directory, which git reads first of all;
-//   - HEAD is a file naming a ref, as git init writes it;
-//   - objects and refs can be searched, which is what git asks of them;
-//   - there is no commondir, which would make the directory a linked
-//     worktree's reading its objects and refs elsewhere;
-//   - config parses as the plain lines git config writes, and holds
-//     core.repositoryformatversion 0, without which git ignores what
-//     core.bare says, and core.bare true, and nothing git would have to
-//     judge before it answers: see plainConfig.
+//   - that the process has a working directory, which git reads first;
+//   - that HEAD is a file naming a ref, as git init writes it;
+//   - that objects and refs can be searched, which is what git asks of them;
+//   - that there is no commondir, which would send git elsewhere for both;
+//   - that config is exactly what git and agentx write, with
+//     core.repositoryformatversion 0, without which git ignores core.bare,
+//     and core.bare true: see plainConfig.
 //
 // Anything else is not plain, and git answers instead, so a false changes
 // nothing but the cost: a repository git cannot read, or reads as not bare,
@@ -54,119 +51,91 @@ func plainlyBare(gitDir string) bool {
 	return err == nil && plainConfig(string(config))
 }
 
-// plainConfig reports whether config is the configuration of a bare
-// repository that git reads without judging anything in it: every line is
-// blank, a comment, a section header or a key = value pair with no
-// quoting, escaping or continuation; the only sections are core and the
-// ones git does not read before it answers, gc, merge and a remote's; core
-// holds only the keys git init and agentx write, each with a value git
-// reads as it is, repositoryformatversion 0 among them; and core.bare is
-// true wherever it is said. An include, an extension, a work tree, a value
-// git would parse and a section it does not know all make it not plain.
+// plainConfig reports whether config is, line for line, what git init,
+// git config and agentx write into the account repo: the header lines
+// [core], [gc], [merge] and [remote "<name>"], each followed by tab-indented
+// key = value lines, every key one of those agentx or git init writes, in
+// the case they write it, and every value one git config writes as it is.
+// core.repositoryformatversion must be 0 and core.bare true. No comment,
+// blank line, include, extension or other key is plain, whatever git would
+// make of it; nor is a value git would unquote or unescape.
 func plainConfig(config string) bool {
+	body, ok := strings.CutSuffix(config, "\n")
+	if !ok {
+		return false
+	}
 	var section string
 	version, bare := false, false
-	for _, line := range strings.Split(config, "\n") {
-		line = strings.Trim(line, " \t")
-		switch {
-		case !printable(line):
-			return false
-		case line == "", line[0] == '#', line[0] == ';':
-		case line[0] == '[':
-			name, sub, ok := plainHeader(line)
-			if !ok {
+	for _, line := range strings.Split(body, "\n") {
+		if pair, ok := strings.CutPrefix(line, "\t"); ok && section != "" {
+			key, value, ok := strings.Cut(pair, " = ")
+			if !ok || !plainValue(value) {
 				return false
 			}
-			switch {
-			case (name == "core" || name == "gc" || name == "merge") && sub == "":
-			case name == "remote" && sub != "":
-			default:
-				return false
-			}
-			section = name
-		default:
-			key, value, ok := plainPair(line)
-			if !ok || section == "" {
-				return false
-			}
-			if section != "core" {
-				continue
-			}
-			switch key {
-			case "repositoryformatversion":
+			switch section + "." + key {
+			case "core.repositoryformatversion":
 				if value != "0" {
 					return false
 				}
 				version = true
-			case "bare":
+			case "core.bare":
 				if value != "true" {
 					return false
 				}
 				bare = true
-			case "filemode", "symlinks", "ignorecase", "precomposeunicode", "logallrefupdates":
+			case "core.filemode", "core.symlinks", "core.ignorecase", "core.precomposeunicode", "core.logAllRefUpdates":
 				if value != "true" && value != "false" {
 					return false
 				}
+			case "gc.auto", "merge.conflictStyle", // git reads none of these to open a repository
+				"remote.url", "remote.fetch", "remote.tagOpt", "remote.promisor", "remote.partialclonefilter":
 			default:
 				return false
 			}
+			continue
+		}
+		switch {
+		case line == "[core]", line == "[gc]", line == "[merge]":
+			section = line[1 : len(line)-1]
+		case plainRemoteHeader(line):
+			section = "remote"
+		default:
+			return false
 		}
 	}
 	return version && bare
 }
 
-// printable reports whether line holds no control character but a tab:
-// no carriage return, no NUL, nothing git might read otherwise.
-func printable(line string) bool {
-	for i := 0; i < len(line); i++ {
-		if c := line[i]; (c < ' ' && c != '\t') || c == 0x7f {
+// plainRemoteHeader reports whether line is [remote "<name>"] with a name
+// of lowercase letters, digits and hyphens, as agentx names a source's
+// remote.
+func plainRemoteHeader(line string) bool {
+	name, ok := strings.CutPrefix(line, `[remote "`)
+	if !ok {
+		return false
+	}
+	if name, ok = strings.CutSuffix(name, `"]`); !ok || name == "" {
+		return false
+	}
+	for i := 0; i < len(name); i++ {
+		if c := name[i]; (c < 'a' || c > 'z') && (c < '0' || c > '9') && c != '-' {
 			return false
 		}
 	}
 	return true
 }
 
-// plainHeader reads a section header, [name] or [name "sub"], the name of
-// letters, digits and hyphens and the subsection of those, dots and
-// underscores, with nothing after it. The name is lowercased, as git
-// compares it.
-func plainHeader(line string) (name, sub string, ok bool) {
-	inner, ok := strings.CutPrefix(line, "[")
-	if !ok {
-		return "", "", false
+// plainValue reports whether git config writes value as it is and reads it
+// back the same: printable ASCII, no leading or trailing space, and nothing
+// it would quote or escape.
+func plainValue(value string) bool {
+	if value == "" || value[0] == ' ' || value[len(value)-1] == ' ' {
+		return false
 	}
-	if inner, ok = strings.CutSuffix(inner, "]"); !ok {
-		return "", "", false
-	}
-	name, quoted, hasSub := strings.Cut(inner, " ")
-	if !word(name, "-") {
-		return "", "", false
-	}
-	if hasSub {
-		sub, ok = strings.CutPrefix(quoted, `"`)
-		if !ok {
-			return "", "", false
-		}
-		if sub, ok = strings.CutSuffix(sub, `"`); !ok || !word(sub, "-._") {
-			return "", "", false
+	for i := 0; i < len(value); i++ {
+		if c := value[i]; c < ' ' || c > '~' || c == '"' || c == '\\' || c == ';' || c == '#' {
+			return false
 		}
 	}
-	return strings.ToLower(name), sub, true
-}
-
-// plainPair reads key = value, the key starting with a letter and made of
-// letters, digits and hyphens, the value free of what git would unquote,
-// unescape or cut off as a comment. A key with no value, which git reads as
-// true, is not plain. The key is lowercased, as git compares it.
-func plainPair(line string) (key, value string, ok bool) {
-	key, value, ok = strings.Cut(line, "=")
-	if !ok {
-		return "", "", false
-	}
-	key = strings.TrimRight(key, " \t")
-	value = strings.Trim(value, " \t")
-	if !word(key, "-") || !isLetter(key[0]) || strings.ContainsAny(value, "\"\\#;") {
-		return "", "", false
-	}
-	return strings.ToLower(key), value, true
+	return true
 }
