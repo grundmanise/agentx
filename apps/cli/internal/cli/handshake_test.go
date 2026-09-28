@@ -11,9 +11,7 @@ import (
 	"reflect"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -96,83 +94,13 @@ func webServer(t *testing.T) *httptest.Server {
 	return ts
 }
 
-// sseServer is an MCP endpoint on the legacy HTTP+SSE transport that refuses
-// a request without the declared header value. A GET on a path under /sse
-// opens a stream whose first event names the endpoint, and each answer comes
-// on that stream; a POST there, how a streamable HTTP session opens, is
-// refused with 405, except under /sse-modern, which answers 404 with a
-// JSON-RPC error as a current server does. /offsite names an endpoint on
-// another origin.
-func sseServer(t *testing.T) *httptest.Server {
-	t.Helper()
-	var mu sync.Mutex
-	sessions := map[string]chan string{}
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("X-Key") != "secret-hand-header-value" {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		switch {
-		case r.Method == http.MethodGet && (strings.HasPrefix(r.URL.Path, "/sse") || r.URL.Path == "/offsite"):
-			mu.Lock()
-			id := strconv.Itoa(len(sessions) + 1)
-			answers := make(chan string, 8)
-			sessions[id] = answers
-			mu.Unlock()
-			endpoint := "/messages?session=" + id
-			if r.URL.Path == "/offsite" {
-				endpoint = "http://elsewhere.example" + endpoint
-			}
-			w.Header().Set("Content-Type", "text/event-stream")
-			fmt.Fprintf(w, ": open\n\nevent: endpoint\ndata: %s\n\n", endpoint)
-			w.(http.Flusher).Flush()
-			for {
-				select {
-				case a := <-answers:
-					fmt.Fprintf(w, "event: message\ndata: %s\n\n", a)
-					w.(http.Flusher).Flush()
-				case <-r.Context().Done():
-					return
-				}
-			}
-		case r.Method == http.MethodPost && r.URL.Path == "/sse-modern":
-			// How a current server refuses a method: no reason to try SSE.
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusNotFound)
-			fmt.Fprint(w, `{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"Method not found"}}`)
-		case r.Method == http.MethodPost && r.URL.Path == "/messages":
-			mu.Lock()
-			answers, ok := sessions[r.URL.Query().Get("session")]
-			mu.Unlock()
-			var m struct {
-				ID     json.RawMessage `json:"id"`
-				Method string          `json:"method"`
-			}
-			if !ok || json.NewDecoder(r.Body).Decode(&m) != nil {
-				http.Error(w, "no session", http.StatusNotFound)
-				return
-			}
-			switch m.Method {
-			case "initialize":
-				answers <- fmt.Sprintf(`{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"2024-11-05","capabilities":{"tools":{}},"serverInfo":{"name":"legacy","version":"0"}}}`, m.ID)
-			case "tools/list":
-				answers <- fmt.Sprintf(`{"jsonrpc":"2.0","id":%s,"result":{"tools":[{"name":"recall","description":"Recall a note","inputSchema":{"type":"object"}}]}}`, m.ID)
-			}
-			w.WriteHeader(http.StatusAccepted)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	}))
-	t.Cleanup(ts.Close)
-	return ts
-}
-
 // handshakeFixture declares the fixture server twice with the same command
-// line and different environments, a server for each failure, a legacy sse
-// server, a streamable HTTP declaration of a legacy server, one whose stream
-// names an endpoint elsewhere and the web endpoint. Two servers take the whole budget: hang never
-// answers, and linger leaves a child holding stdout open past the deadline.
-func handshakeFixture(web, sse string) fixture {
+// line and different environments, a server for each failure of a local
+// server, the web endpoint, and the web endpoint without its header. Two
+// servers take the whole budget: hang never answers, and linger leaves a
+// child holding stdout open past the deadline. How each remote transport
+// succeeds and fails, the mcp package's TestHandshakeOverHTTP drives.
+func handshakeFixture(web string) fixture {
 	return fixture{
 		dirs: []string{".claude", ".cursor"},
 		files: map[string]string{
@@ -181,10 +109,7 @@ func handshakeFixture(web, sse string) fixture {
   "hang": {"command": %[1]q, "args": ["--hang"]},
   "exit": {"command": %[1]q, "args": ["--exit"]},
   "linger": {"command": %[1]q, "args": ["--linger"]},
-  "missing": {"command": "$HOME/nowhere/mcpserver"},
-  "legacy": {"type": "sse", "url": %[2]q, "headers": {"X-Key": "secret-hand-header-value"}},
-  "fallback": {"type": "http", "url": %[3]q, "headers": {"X-Key": "secret-hand-header-value"}},
-  "offsite": {"type": "sse", "url": %[4]q, "headers": {"X-Key": "secret-hand-header-value"}}}}`, mcpServer, sse+"/sse", sse+"/sse-fallback", sse+"/offsite"),
+  "missing": {"command": "$HOME/nowhere/mcpserver"}}}`, mcpServer),
 			".cursor/mcp.json": fmt.Sprintf(`{"mcpServers": {
   "fix": {"command": %q, "args": [], "env": {"MCPSERVER_VARIANT": "b", "SECRET_TOKEN": "secret-hand-env-value"}},
   "web": {"url": %q, "headers": {"X-Key": "secret-hand-header-value"}},
@@ -221,18 +146,39 @@ func TestScanHandshake(t *testing.T) {
 		t.Skip(mcpServerErr)
 	}
 	h := newHarness(t)
-	f := handshakeFixture(webServer(t).URL, sseServer(t).URL)
+	f := handshakeFixture(webServer(t).URL)
 	h.build(t, f)
-	h.env["AGENTX_HANDSHAKE_TIMEOUT"] = "1s"
+	// The budget the servers that never answer run out, with room for the
+	// others under a loaded machine.
+	h.env["AGENTX_HANDSHAKE_TIMEOUT"] = "200ms"
 	if err := os.WriteFile(filepath.Join(h.agentx, "handshakes.json"), []byte("{"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// Neither output mode prints a value from the declarations, and the
+	// fixture server echoes its whole environment to stderr.
+	equal(t, "secrets in fixture", len(secrets(f)), 3)
+	noSecret := func(args []string, out outcome) {
+		t.Helper()
+		for _, secret := range secrets(f) {
+			if strings.Contains(out.stdout, secret) || strings.Contains(out.stderr, secret) {
+				t.Errorf("%v printed %q", args, secret)
+			}
+		}
+	}
 
 	start := time.Now()
-	snap := h.snapshot(t, "--handshake")
+	args := []string{"--json", "scan", "--handshake"}
+	out := h.run(args...)
 	if elapsed := time.Since(start); elapsed > 8*time.Second {
-		t.Errorf("scan took %s, want the hanging server cut off after 1s", elapsed)
+		t.Errorf("scan took %s, want the hanging server cut off after 200ms", elapsed)
 	}
+	equal(t, "exit", out.exit, 0)
+	noSecret(args, out)
+	events := h.events(out.stdout)
+	if got, want := h.types(events), []string{"snapshot", "result"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("event types = %v, want %v", got, want)
+	}
+	snap := events[0]
 	nodes := serverNodes(snap)
 	hex64 := regexp.MustCompile(`^[0-9a-f]{64}$`)
 
@@ -276,16 +222,7 @@ func TestScanHandshake(t *testing.T) {
 	}
 	equal(t, "web handshake", web["occurrences"].([]any)[0].(map[string]any)["handshake"], true)
 
-	// The legacy transport, declared as such or found behind a 405.
-	for _, name := range []string{"legacy", "fallback"} {
-		node := nodes[name][0]
-		if rows, _ := tools(node); !reflect.DeepEqual(rows, []string{"tool recall"}) {
-			t.Errorf("%s tools = %v", name, rows)
-		}
-		equal(t, name+" handshake", node["occurrences"].([]any)[0].(map[string]any)["handshake"], true)
-	}
-
-	for _, name := range []string{"hang", "linger", "exit", "missing", "offsite"} {
+	for _, name := range []string{"hang", "linger", "exit", "missing"} {
 		node := nodes[name][0]
 		equal(t, name+" signature", node["signature"], "none")
 		equal(t, name+" handshake", node["occurrences"].([]any)[0].(map[string]any)["handshake"], false)
@@ -296,7 +233,7 @@ func TestScanHandshake(t *testing.T) {
 		}
 	}
 	// Why each one failed, with a hint, for a consumer of the snapshot.
-	for name, reason := range map[string]string{"hang": "timeout", "linger": "timeout", "exit": "failed", "missing": "not_found", "offsite": "failed", "locked": "unauthorized"} {
+	for name, reason := range map[string]string{"hang": "timeout", "linger": "timeout", "exit": "failed", "missing": "not_found", "locked": "unauthorized"} {
 		node := nodes[name][0]
 		equal(t, name+" signature", node["signature"], "none")
 		failure, _ := node["occurrences"].([]any)[0].(map[string]any)["handshake_error"].(map[string]any)
@@ -313,18 +250,17 @@ func TestScanHandshake(t *testing.T) {
 	}
 	warnings := fmt.Sprint(snap["warnings"])
 	for _, want := range []string{
-		"~/.claude.json: server hang: timed out after 1s",
-		"~/.claude.json: server linger: timed out after 1s",
+		"~/.claude.json: server hang: timed out after 200ms",
+		"~/.claude.json: server linger: timed out after 200ms",
 		"~/.claude.json: server exit: ",
 		"the server exited",
 		"~/.claude.json: server missing: fork/exec ~/nowhere/mcpserver: no such file or directory",
-		"~/.claude.json: server offsite: the endpoint event names another origin",
 		"~/.cursor/mcp.json: server locked: initialize: HTTP 401 Unauthorized",
 		"handshakes.json: not a handshakes file, ignored",
 	} {
 		contains(t, "warnings", h.portable(warnings), want)
 	}
-	equal(t, "warnings", len(snap["warnings"].([]any)), 7)
+	equal(t, "warnings", len(snap["warnings"].([]any)), 6)
 
 	// The handshakes file, corrupt before, now keeps the last signature per
 	// logical server and nothing for a server that failed; it is derived
@@ -337,7 +273,7 @@ func TestScanHandshake(t *testing.T) {
 	if err := json.Unmarshal(b, &stored); err != nil {
 		t.Fatal(err)
 	}
-	equal(t, "stored servers", len(stored), 4)
+	equal(t, "stored servers", len(stored), 2)
 	entry := stored[variantB["logical_id"].(string)]
 	equal(t, "stored signature", entry["signature"], variantB["signature"])
 	equal(t, "stored tools", len(entry["tools"].([]any)), 4)
@@ -367,30 +303,21 @@ func TestScanHandshake(t *testing.T) {
 	equal(t, "web signature after", plain["web"][0]["signature"], web["signature"])
 	equal(t, "hang signature after", plain["hang"][0]["signature"], "none")
 
-	// Neither output mode prints a value from the declarations, and the
-	// fixture server echoes its whole environment to stderr.
-	equal(t, "secrets in fixture", len(secrets(f)), 6)
-	for _, args := range [][]string{{"scan", "--handshake"}, {"--json", "scan", "--handshake"}} {
-		out := h.run(args...)
-		equal(t, "exit", out.exit, 0)
-		for _, secret := range secrets(f) {
-			if strings.Contains(out.stdout, secret) || strings.Contains(out.stderr, secret) {
-				t.Errorf("%v printed %q", args, secret)
-			}
-		}
-		if args[0] == "scan" {
-			contains(t, "stdout", out.stdout, "4 tools")
-			contains(t, "stdout", out.stdout, "1 tool\n")
-			contains(t, "stderr", h.portable(out.stderr), "warning: ~/.claude.json: server hang: timed out after 1s")
-			contains(t, "stdout", out.stdout, "needs sign-in\n")
-			contains(t, "stdout", out.stdout, "timed out\n")
-			contains(t, "stderr", out.stderr, "hint: needs sign-in: the server wants a sign-in")
-			equal(t, "timeout hints", strings.Count(out.stderr, "hint: timed out: "), 1)
-		}
-	}
+	// The text output of a handshake, which prints no secret either.
+	args = []string{"scan", "--handshake"}
+	out = h.run(args...)
+	equal(t, "exit", out.exit, 0)
+	noSecret(args, out)
+	contains(t, "stdout", out.stdout, "4 tools")
+	contains(t, "stdout", out.stdout, "1 tool\n")
+	contains(t, "stderr", h.portable(out.stderr), "warning: ~/.claude.json: server hang: timed out after 200ms")
+	contains(t, "stdout", out.stdout, "needs sign-in\n")
+	contains(t, "stdout", out.stdout, "timed out\n")
+	contains(t, "stderr", out.stderr, "hint: needs sign-in: the server wants a sign-in")
+	equal(t, "timeout hints", strings.Count(out.stderr, "hint: timed out: "), 1)
 
 	h.env["AGENTX_HANDSHAKE_TIMEOUT"] = "soon"
-	out := h.run("--json", "scan", "--handshake")
+	out = h.run("--json", "scan", "--handshake")
 	equal(t, "exit", out.exit, 1)
 	equal(t, "error.code", h.events(out.stdout)[0]["code"], "usage")
 }
@@ -406,7 +333,6 @@ func TestScanHandshakeDeclarations(t *testing.T) {
 	}
 	h := newHarness(t)
 	web := webServer(t).URL
-	sse := sseServer(t).URL
 	h.build(t, fixture{
 		dirs: []string{".claude", ".codex", ".cursor", ".gemini", ".codeium/windsurf", ".copilot"},
 		files: map[string]string{
@@ -416,8 +342,7 @@ func TestScanHandshakeDeclarations(t *testing.T) {
   "claude-key": {"type": "http", "url": "${AGENTX_TEST_WEB}", "headers": {"X-Key": "${AGENTX_TEST_KEY}"}},
   "claude-default": {"type": "http", "url": %[1]q, "headers": {"X-Key": "${AGENTX_TEST_NONE:-secret-hand-header-value}"}},
   "claude-credential": {"type": "http", "url": %[2]q, "headers": {"X-Key": "${ANTHROPIC_API_KEY}"}},
-  "claude-local": {"command": "${AGENTX_TEST_BIN}", "args": ["--variant", "${AGENTX_TEST_NONE:-b}"]},
-  "modern": {"type": "http", "url": %[3]q, "headers": {"X-Key": "secret-hand-header-value"}}}}`, web+"/default", web+"/credential", sse+"/sse-modern"),
+  "claude-local": {"command": "${AGENTX_TEST_BIN}", "args": ["--variant", "${AGENTX_TEST_NONE:-b}"]}}}`, web+"/default", web+"/credential"),
 			".cursor/mcp.json": fmt.Sprintf(`{"mcpServers": {
   "cursor-key": {"url": %q, "headers": {"X-Key": "${env:AGENTX_TEST_KEY}"}},
   "cursor-local": {"command": "${userHome}${/}bin${/}mcpserver"}}}`, web+"/cursor"),
@@ -506,9 +431,6 @@ enabled = false
 	equal(t, "claude-local command", occurrence("claude-local")["command"], "${AGENTX_TEST_BIN}")
 	credential, _ := occurrence("claude-credential")["handshake_error"].(map[string]any)
 	equal(t, "claude-credential reason", credential["reason"], "unauthorized")
-	modern, _ := occurrence("modern")["handshake_error"].(map[string]any)
-	equal(t, "modern reason", modern["reason"], "failed")
-	equal(t, "modern message", modern["message"], "initialize: HTTP 404 Not Found: server error -32601: Method not found")
 
 	failure, _ := occurrence("unset")["handshake_error"].(map[string]any)
 	equal(t, "unset reason", failure["reason"], "unauthorized")
@@ -525,7 +447,7 @@ enabled = false
 		}
 	}
 	warnings := fmt.Sprint(snap["warnings"])
-	equal(t, "warnings", len(snap["warnings"].([]any)), 3)
+	equal(t, "warnings", len(snap["warnings"].([]any)), 2)
 	contains(t, "warnings", warnings, "server unset: initialize: HTTP 401 Unauthorized")
 	contains(t, "warnings", warnings, "server claude-credential: initialize: HTTP 401 Unauthorized")
 
