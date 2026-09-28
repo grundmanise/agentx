@@ -491,6 +491,7 @@ func TestImportFillsInWhatADocumentLeavesOut(t *testing.T) {
   "schema_version": 1,
   "auto_push": false,
   "accept_operations": false,
+  "ignore_system_files": true,
   "disabled_configurations": [],
   "sources": [],
   "copy_mode": {}
@@ -503,7 +504,7 @@ func TestImportFillsInWhatADocumentLeavesOut(t *testing.T) {
 }
 
 // TestImportSaysWhyWithoutEchoingTheDocument: the reason a document was
-// refused quotes it — a field name, a character — and a document comes from
+// refused quotes it – a field name, a character – and a document comes from
 // another machine, so what it holds is sanitised before it is printed and
 // no escape sequence of its reaches the terminal.
 func TestImportSaysWhyWithoutEchoingTheDocument(t *testing.T) {
@@ -525,7 +526,7 @@ func TestImportSaysWhyWithoutEchoingTheDocument(t *testing.T) {
 // contract makes load-bearing: a URL carrying a user or a token "reaches
 // the settings by no route at all and may not reach them by this one". An
 // import is the only route by which any string reaches a source entry's
-// alias — nothing else in the CLI writes that field — so the same
+// alias – nothing else in the CLI writes that field – so the same
 // credential is put into every field of the entry in turn and each one is
 // refused, with the settings, the source event and the next export left
 // carrying no part of it.
@@ -602,6 +603,7 @@ func TestValidSettingsCoversEveryFieldOfTheSettings(t *testing.T) {
 		"Settings.Label":                  "badLabel (validLabel, as config set label is)",
 		"Settings.AutoPush":               "a bool: the JSON type is the whole domain",
 		"Settings.AcceptOperations":       "a bool: the JSON type is the whole domain",
+		"Settings.IgnoreSystemFiles":      "a bool: the JSON type is the whole domain",
 		"Settings.DisabledConfigurations": "badDisabledConfigurations",
 		"Settings.Sources":                "badSources",
 		"Settings.CopyMode":               "badCopyMode",
@@ -665,7 +667,7 @@ func TestImportRefusesADocumentNoMachineWrote(t *testing.T) {
 }
 
 // TestImportSaysWhatToRunNext: an import restores the settings entry of a
-// source and nothing of the source itself — no account repo, no remote —
+// source and nothing of the source itself – no account repo, no remote –
 // so on the machine an import just made, skill add answers that the source
 // was never added. source add is the step that has to come first, and the
 // closing line said to run skill add.

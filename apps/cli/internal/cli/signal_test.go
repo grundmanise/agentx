@@ -51,8 +51,8 @@ type stopRun struct {
 	args  []string
 }
 
-// signalled runs r and returns the exit code — negative for a process a
-// signal killed, as exec reports it — and what the command wrote to stderr,
+// signalled runs r and returns the exit code – negative for a process a
+// signal killed, as exec reports it – and what the command wrote to stderr,
 // which is where its text output goes. The child gets a process group of
 // its own, so a group signal reaches it and its git and never the test
 // binary that sent it.
@@ -253,7 +253,7 @@ func TestASignalDuringTheJournalLetsTheMutationFinish(t *testing.T) {
 	}
 	dir := t.TempDir()
 	ready, done := filepath.Join(dir, "signalled"), filepath.Join(dir, "updated")
-	// The wrapper stops the run that started it — its parent — as the
+	// The wrapper stops the run that started it, its parent, as the
 	// journal's refs go in, then hands that same update-ref to the real git.
 	// It does so once: the marker keeps a later update-ref, the run's own or
 	// another command's, from being signalled too.
@@ -277,7 +277,7 @@ exec `+real+` "$@"
 		t.Fatalf("the journal's ref step never ran, so the test did not stop the run where it means to:\n%s", stderr)
 	}
 	// The stop arrived after the last thing that could fail, so the run
-	// answers for what it did — the whole of it. An interrupted run reports
+	// answers for what it did: the whole of it. An interrupted run reports
 	// a stop, never a failure it did not have.
 	equal(t, "the exit code of an install the stop arrived too late for", code, exitOK.exit)
 

@@ -18,7 +18,7 @@ import (
 // holds the directory, the import branch is gone, and the journal the user
 // was invited to move aside was the last record of the commit it pointed
 // at. Taking the offer would turn a managed skill into an unmanaged one for
-// good — the one thing mutation safety says not to make of half-applied
+// good, the one thing mutation safety says not to make of half-applied
 // state. So the deletions run last, after every step that could still
 // refuse, and a refused removal leaves the skill exactly as managed as it
 // was.

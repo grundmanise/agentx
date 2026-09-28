@@ -429,7 +429,9 @@ func TestServeSurvivesARemovedSkillDirectory(t *testing.T) {
 // repo under a running serve and repairs it. The scan in between still
 // succeeds, with the library listed empty and a warning saying why, so the
 // desktop app keeps the rest of its inventory; the first scan after the
-// repair gives the library back.
+// repair gives the library back. A skill edited meanwhile comes back
+// modified with no drift event: the snapshot before it held no library, so
+// the skill arrives in the library, which the snapshot says itself.
 func TestServeKeepsServingWhenTheAccountRepoCannotBeRead(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -467,15 +469,31 @@ func TestServeKeepsServingWhenTheAccountRepoCannotBeRead(t *testing.T) {
 	equal(t, "request_id", e["request_id"], "broken")
 	equal(t, "ok", e["ok"], true)
 
+	replaceFile(t, filepath.Join(h.library, "alpha", "notes.md"), "edited while the account repo was broken\n")
 	setHead(string(healthy))
 	p.send(`{"type":"refresh","request_id":"repaired"}`)
-	repaired := p.next("snapshot")
-	if !reflect.DeepEqual(repaired["library"], first["library"]) {
-		t.Errorf("library after the repair = %v, want %v", repaired["library"], first["library"])
+	events := p.until("repaired")
+	var repaired jsonEvent
+	for _, e := range events {
+		switch e["type"] {
+		case "snapshot":
+			repaired = e
+		case "drift":
+			t.Errorf("a drift event for a skill the snapshot before did not list: %v", e)
+		}
 	}
+	if repaired == nil {
+		t.Fatal("no snapshot after the repair")
+	}
+	library := repaired["library"].([]any)
+	if len(library) != 1 {
+		t.Fatalf("library after the repair = %v, want alpha alone", library)
+	}
+	entry := library[0].(map[string]any)
+	equal(t, "the skill after the repair", entry["name"], "alpha")
+	equal(t, "its state after the repair", entry["state"], stateModified)
 	equal(t, "warnings after the repair", len(repaired["warnings"].([]any)), 0)
-	e = p.next("refresh_complete")
-	equal(t, "ok after the repair", e["ok"], true)
+	equal(t, "ok after the repair", events[len(events)-1]["ok"], true)
 	equal(t, "exit", p.close(), 0)
 }
 

@@ -206,7 +206,11 @@ func TestSkillAddTreatsADanglingWorktreeLinkAsAbsent(t *testing.T) {
 }
 
 // TestSkillAddRefusesASecondVersion refuses to install another version over
-// a managed skill: that is an update, which this command does not do.
+// a managed skill: that is an update, which this command does not do. The
+// library directory is gone, so the listing's warning offers the install
+// again, which cannot lay out the version the branch names once the source
+// moved past it: the refusal names the removal that stops managing that
+// version, and following it installs the version the source holds now.
 func TestSkillAddRefusesASecondVersion(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -221,10 +225,24 @@ func TestSkillAddRefusesASecondVersion(t *testing.T) {
 	if err := os.RemoveAll(filepath.Join(h.library, "alpha")); err != nil {
 		t.Fatal(err)
 	}
-	out := h.run("skill", "add", s.url, "--skill", "alpha")
+	contains(t, "the listing's warning", h.mustRun("skill", "list").stderr,
+		"run 'agentx skill add "+shellWord(s.url)+" --skill alpha' to install it again, or 'agentx skill remove alpha' to stop managing it")
+	out := h.run("--json", "skill", "add", s.url, "--skill", "alpha")
 	equal(t, "exit", out.exit, 6)
-	contains(t, "stderr", out.stderr, "already managed at another version")
+	e := h.one(out.stdout, "error")
+	equal(t, "message", e["message"], "alpha is already managed at another version, which the library no longer holds")
+	equal(t, "hint", e["hint"], "run 'agentx skill remove alpha' to stop managing that version, then install again to get the version the source holds now")
 	equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), head)
+
+	h.mustRun("skill", "remove", "alpha")
+	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	equal(t, "notes.md", fileBody(t, filepath.Join(h.library, "alpha", "notes.md")), "newer\n")
+	if h.accountGit("rev-parse", "refs/heads/managed/alpha") == head {
+		t.Error("the import branch still names the version the library no longer held")
+	}
+	listed := h.mustRun("--json", "skill", "list")
+	equal(t, "state", h.librarySkill(listed.stdout, "alpha")["state"], stateCurrent)
+	equal(t, "warnings", strings.Join(warnings(h, listed.stderr), "\n"), "")
 }
 
 // TestSkillAddNamesTheSkillToInstall refuses a source that holds more than

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
 	"regexp"
 	"slices"
 	"strconv"
@@ -12,10 +13,11 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 )
 
-const settableKeys = "label, auto_push, accept_operations"
+const settableKeys = "label, auto_push, accept_operations, ignore_system_files"
 
 type settingsEvent struct {
 	event
@@ -67,7 +69,7 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 	})
 	cmd.AddCommand(&cobra.Command{
 		Use:   "set <key> <value>",
-		Short: "Change label, auto_push or accept_operations",
+		Short: "Change label, auto_push, accept_operations or ignore_system_files",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			apply, err := settingSetter(args[0], args[1])
@@ -81,7 +83,17 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 					return err
 				}
 				apply(&s)
-				return home.SaveSettings(inv.dirs.Home, s)
+				if err := home.SaveSettings(inv.dirs.Home, s); err != nil {
+					return err
+				}
+				// The list follows the setting at once in an account repo
+				// that exists; one created later gets it with the first
+				// git run over a skill directory.
+				gitDir := gitx.AccountRepoPath(inv.dirs.Home)
+				if _, err := os.Stat(gitDir); err == nil && args[0] == "ignore_system_files" {
+					return home.SyncExclude(gitDir, s.IgnoreSystemFiles)
+				}
+				return nil
 			})
 			if err != nil {
 				return err
@@ -166,6 +178,9 @@ func settingSetter(key, value string) (func(*home.Settings), error) {
 	case "accept_operations":
 		b, err := parseBool(key, value)
 		return func(s *home.Settings) { s.AcceptOperations = b }, err
+	case "ignore_system_files":
+		b, err := parseBool(key, value)
+		return func(s *home.Settings) { s.IgnoreSystemFiles = b }, err
 	case "schema_version", "disabled_configurations", "sources", "copy_mode":
 		return nil, fail(exitUsage, key+" cannot be changed with config set", "settable keys: "+settableKeys)
 	}
@@ -184,7 +199,7 @@ func parseBool(key, value string) (bool, error) {
 // for a person to read: it is printed by config list, carried in every
 // settings event and in every export, and shown beside the machine
 // wherever the desktop app lists it. Nothing needs more than this, and
-// without a bound a settings file can be made megabytes long — not through
+// without a bound a settings file can be made megabytes long: not through
 // config set label, whose argument ARG_MAX bounds, but through an import,
 // whose label comes out of a file.
 const labelLimit = 256
@@ -196,7 +211,7 @@ const labelLimit = 256
 // No control character: the label is printed, put into the question
 // another machine's import asks, and handed to the desktop app, and while
 // the user choosing an escape sequence about their own machine is their
-// business, an import moves that choice to whoever wrote the document —
+// business, an import moves that choice to whoever wrote the document,
 // which is the reasoning the contract already applies to a source URL.
 // Keeping the rule here rather than at the import keeps the settings file
 // agentx wrote one an import restores byte for byte.
@@ -282,6 +297,7 @@ func (inv *invocation) settingRows(s home.Settings) []settingRow {
 		{"label", inv.label(s)},
 		{"auto_push", strconv.FormatBool(s.AutoPush)},
 		{"accept_operations", strconv.FormatBool(s.AcceptOperations)},
+		{"ignore_system_files", strconv.FormatBool(s.IgnoreSystemFiles)},
 		{"disabled_configurations", strings.Join(s.DisabledConfigurations, ", ")},
 		{"sources", compactValue(s.Sources)},
 		{"copy_mode", compact(s.CopyMode)},

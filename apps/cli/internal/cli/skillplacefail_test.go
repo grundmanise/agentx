@@ -78,8 +78,8 @@ func TestSkillAddSkipsAPlacementItCannotMake(t *testing.T) {
 
 // TestRecoveryRefusesAStepItCannotApplyCleanly drives a command over a
 // journal whose placement step cannot be applied at all. A step that cannot
-// be finished is a refused recovery — exit code 6 naming the path and the
-// journal, with the hint that says how to get out of it — and never an
+// be finished is a refused recovery – exit code 6 naming the path and the
+// journal, with the hint that says how to get out of it – and never an
 // internal error carrying a raw operating system message, which tells the
 // user nothing and wedges every later command the same way.
 func TestRecoveryRefusesAStepItCannotApplyCleanly(t *testing.T) {

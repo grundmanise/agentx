@@ -14,7 +14,7 @@ import (
 // window an add cannot journal away. The remote is written under the lock,
 // the fetch runs outside it so that the network never blocks a scan, and
 // the settings entry is written under the lock again. That second hold can
-// fail — and the account repo would then hold a remote for a source the
+// fail, and the account repo would then hold a remote for a source the
 // machine does not know about. `source fetch` and `source skills` both
 // answer from the settings, so nothing would ever name it again and
 // nothing would clean it up.
@@ -74,7 +74,7 @@ func TestSourceAddUnwindsItsRemoteWhenTheSettingsWriteFails(t *testing.T) {
 // back". The settings entry is written before the last thing the mutation
 // does, the change signal; a failure after the entry has landed must leave
 // the remote alone, or the settings would name a source whose remote is
-// gone — the same inconsistency the unwind exists to prevent, inverted.
+// gone, the same inconsistency the unwind exists to prevent, inverted.
 //
 // The change signal is made to fail by leaving a directory where its file
 // goes, which is the one step of the mutation that runs after the entry.

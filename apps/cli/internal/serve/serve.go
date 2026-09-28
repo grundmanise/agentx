@@ -32,8 +32,9 @@ var ErrWatch = errors.New("cannot watch for changes")
 // how to report. Search, and BadRequest for a search, are called from the
 // goroutine that reads stdin, so that a search is answered while a scan
 // runs; the two are never called at once, and neither is called once Run
-// has returned. Every other report function is called from the loop's
-// goroutine.
+// has returned. Check runs on a goroutine of its own, and the report it
+// returns is called from the loop's goroutine, as every other report
+// function is.
 type Options struct {
 	Scan  func(ctx context.Context) (scan.Snapshot, error)                               // one whole scan; ctx bounds its wait for the lock
 	Index func(ctx context.Context, prev *source.Index) (*source.Index, []string, error) // the source index after a scan, prev being the last one built; nil indexes nothing
@@ -41,6 +42,13 @@ type Options struct {
 	Trees []string                                                                       // directories whose subdirectories, present or added later, are watched too
 	Once  bool                                                                           // scan once, emit and return
 	Stdin io.Reader                                                                      // request lines
+
+	// Check is one update check, run off the loop's goroutine after the
+	// initial snapshot and then every CheckEvery; it returns what reports
+	// its outcome, nil for nothing to report. nil, or a CheckEvery that is
+	// not positive, checks nothing, and so does Once.
+	Check      func(ctx context.Context) (report func())
+	CheckEvery time.Duration
 
 	Snapshot        func(scan.Snapshot)                                   // a changed whole snapshot, counter set
 	RefreshComplete func(requestID string, counter int, err error)        // the acknowledgement of one refresh request
@@ -62,10 +70,15 @@ const (
 func Run(ctx context.Context, o Options) error {
 	ctx, cancel := context.WithCancel(ctx) // ends the stdin reader when Run returns for another reason
 	l := &loop{Options: o}
+	var checking sync.WaitGroup
 	defer func() {
 		cancel()
-		// A search being answered in the reader's goroutine finishes first,
-		// so that nothing is reported after Run returned.
+		// A check still running is stopped by the cancel and waited for, so
+		// that no git of it outlives serve and no hold of the lock does
+		// either; its report is dropped. A search being answered in the
+		// reader's goroutine finishes first, so that nothing is reported
+		// after Run returned.
+		checking.Wait()
 		l.mu.Lock()
 		l.closed = true
 		l.mu.Unlock()
@@ -83,6 +96,38 @@ func Run(ctx context.Context, o Options) error {
 		return err
 	}
 	reqs := readRequests(ctx, o.Stdin, l.answer)
+
+	// The update check runs on a timer of its own, off this goroutine, since
+	// a check waits on the network for as long as its sources take and a
+	// rescan may not wait for it. The first starts once the initial
+	// snapshot is out. A tick that finds the last check still running is
+	// skipped rather than queued, so checks never overlap and never pile
+	// up; the report of one that ended comes back over checked and is made
+	// here, where every other report is.
+	var tickC <-chan time.Time
+	checked := make(chan func())
+	running := false
+	check := func() {
+		if running {
+			return
+		}
+		running = true
+		checking.Add(1)
+		go func() {
+			defer checking.Done()
+			report := o.Check(ctx)
+			select {
+			case checked <- report:
+			case <-ctx.Done():
+			}
+		}()
+	}
+	if o.Check != nil && o.CheckEvery > 0 {
+		ticker := time.NewTicker(o.CheckEvery)
+		defer ticker.Stop()
+		tickC = ticker.C
+		check()
+	}
 
 	// A change starts the debounce timer and, unless one is running, the
 	// deadline timer; whichever fires first triggers the rescan.
@@ -136,6 +181,13 @@ func Run(ctx context.Context, o Options) error {
 		case <-deadlineC:
 			if err := rescan(); err != nil {
 				return err
+			}
+		case <-tickC:
+			check()
+		case report := <-checked:
+			running = false
+			if report != nil {
+				report()
 			}
 		}
 	}

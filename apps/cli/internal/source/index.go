@@ -103,8 +103,11 @@ func (idx *Index) Search(query string) []Match {
 // whatever its commit, so an index built while the account repo could not
 // answer for one source recovers on the next build rather than holding that
 // source empty until its ref moves. warnings, sorted, name the sources whose
-// skills are not in the index: one that was never fetched, and one the
-// account repo cannot list whole.
+// skills are not in the index: one that was never fetched, by the build
+// that first finds it so and not by the builds that keep that reading, so
+// that a rebuild that follows another source's ref does not warn about it
+// again; and one the account repo cannot list whole, by every build, since
+// each lists it again.
 func BuildIndex(ctx context.Context, r *gitx.Runner, gitDir string, urls []string, prev *Index) (idx *Index, warnings []string, err error) {
 	idx = &Index{Sources: []Indexed{}, read: map[string]reading{}}
 	if len(urls) == 0 {
@@ -141,12 +144,15 @@ func BuildIndex(ctx context.Context, r *gitx.Runner, gitDir string, urls []strin
 				warnings = append(warnings, failed)
 				continue
 			}
+			// Only a reading made here warns: one prev made has warned
+			// already, and a rebuild that follows another source's ref is
+			// no news about this one.
+			if got.warning != "" {
+				warnings = append(warnings, got.warning)
+			}
 		}
 		idx.read[key] = got
 		src.Skills = got.skills
-		if got.warning != "" {
-			warnings = append(warnings, got.warning)
-		}
 	}
 	if unchanged {
 		return prev, nil, nil

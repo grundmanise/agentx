@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -15,7 +16,7 @@ import (
 // doctor takes no lock, so it cannot tell a run that is working from one
 // that died. A remote is a settings write away from being named again, and
 // a staging ref of a run still fetching looks exactly like one of a run
-// that was killed — the run id says nothing about which, and no lock is
+// that was killed: the run id says nothing about which, and no lock is
 // held while either exists. A sweep would therefore have to guess, and a
 // wrong guess takes the objects a live install is about to publish out from
 // under it. Naming the state costs nothing and is always true.
@@ -30,7 +31,7 @@ import (
 // run killed outright, and a take-back an unrecoverable journal refused.
 // The hint gives the two repairs the add itself gives when its take-back
 // fails, in the same words, so the user hears one story whichever of the
-// two told it. The other direction — an entry whose remote is gone — needs
+// two told it. The other direction, an entry whose remote is gone, needs
 // no row: every command that uses the remote names it as missing, and
 // `source fetch` writes it back.
 func (d *doctor) sourceRemotes(ctx context.Context, gitDir string) {
@@ -85,7 +86,8 @@ func remoteSubject(id, url string) string {
 // stagedImports reports the import staging refs of runs that never
 // published them. An install writes its import commits under
 // refs/agentx/importing/<run>/<n> and points the import branches at them
-// through its journal; the refs go once the journal has them, and a run
+// through its journal, and an update check does the same for the
+// candidates it pins; the refs go once the journal has them, and a run
 // killed in between leaves them. They hold the objects they name, so a
 // source removed afterwards leaves its trees and blobs pinned by refs
 // nothing reads.
@@ -106,7 +108,11 @@ func (d *doctor) stagedImports(ctx context.Context, gitDir string) {
 		runs[run] = true
 	}
 	sort.Strings(refs)
+	interrupted := "1 interrupted install or update check"
+	if len(runs) > 1 {
+		interrupted = fmt.Sprintf("%d interrupted installs or update checks", len(runs))
+	}
 	d.row("staged_imports", "warn",
-		plural(len(refs), "staging ref")+" from "+plural(len(runs), "interrupted install")+": "+refs[0],
-		"nothing reads them and they pin what they name; delete each with 'git --git-dir="+gitDir+" update-ref -d <ref>' while no agentx command is running")
+		plural(len(refs), "staging ref")+" from "+interrupted+": "+refs[0],
+		"nothing reads them and they pin what they name; delete each with 'git --git-dir="+gitDir+" update-ref -d <ref>' while no agentx command is running, agentx serve included")
 }

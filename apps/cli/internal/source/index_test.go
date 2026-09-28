@@ -188,9 +188,9 @@ func TestBuildIndexListsASourceItCouldNotListAgain(t *testing.T) {
 
 	// A source ref at a commit whose SKILL.md blobs are not here. A fetch no
 	// longer leaves this behind: it stages until it is whole, and the source
-	// ref is published last. What is left is everything outside that path —
+	// ref is published last. What is left is everything outside that path –
 	// a killed process, objects reclaimed while the ref stands, another
-	// writer of the account repo — so the state is planted here rather than
+	// writer of the account repo – so the state is planted here rather than
 	// fetched into being, since the point of the index is to recover from it
 	// however it arose. The source repository is then moved aside, so that
 	// no git old enough to ignore GIT_NO_LAZY_FETCH can fill the blobs in
@@ -323,6 +323,70 @@ func TestBuildIndexListsEverySkillOfEverySource(t *testing.T) {
 	}
 	if len(idx2.Sources) != 1 {
 		t.Errorf("sources after beta was dropped = %d, want 1", len(idx2.Sources))
+	}
+}
+
+// TestBuildIndexWarnsOnceAboutAnUnfetchedSource covers the rebuilds that
+// follow a source never fetched while another source's ref moves, as the
+// serve child's update checks move it. The build that first finds the
+// source unfetched warns about it; the builds that keep that reading, which
+// is news about the other source alone, do not. A source that leaves the
+// settings and comes back unfetched is found so again, and warned about
+// again.
+func TestBuildIndexWarnsOnceAboutAnUnfetchedSource(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	git, gitDir := accountRepo(t)
+	ctx := context.Background()
+
+	alpha := newRepo(t, root, "alpha")
+	alpha.skill("commit", "commit", "Write a commit message")
+	alpha.commit()
+	alpha.fetch(gitDir)
+	never := "file://" + filepath.Join(root, "never-fetched")
+	urls := []string{alpha.url, never}
+	warned := []string{"source " + never + " has not been fetched, its skills cannot be searched"}
+
+	idx, warnings, err := source.BuildIndex(ctx, git, gitDir, urls, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(warnings, warned) {
+		t.Fatalf("warnings of the first build = %q, want %q", warnings, warned)
+	}
+
+	// alpha moves twice; each rebuild is a new index, and neither warns.
+	for _, name := range []string{"lint", "deploy"} {
+		alpha.skill(name, name, "Added upstream")
+		alpha.commit()
+		alpha.fetch(gitDir)
+		next, warnings, err := source.BuildIndex(ctx, git, gitDir, urls, idx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if next == idx {
+			t.Fatalf("the build after alpha moved to %s returned prev", name)
+		}
+		if len(warnings) != 0 {
+			t.Errorf("warnings of the build after alpha moved to %s = %q, want none", name, warnings)
+		}
+		if got := next.Search(name); len(got) != 1 || got[0].Source != alpha.url {
+			t.Errorf("Search(%s) after alpha moved = %#v", name, got)
+		}
+		idx = next
+	}
+
+	// Gone from the settings and back, unfetched still: found so again.
+	idx, warnings, err = source.BuildIndex(ctx, git, gitDir, []string{alpha.url}, idx)
+	if err != nil || len(warnings) != 0 {
+		t.Fatalf("the build without the unfetched source = %v, %q; want no warnings", err, warnings)
+	}
+	_, warnings, err = source.BuildIndex(ctx, git, gitDir, urls, idx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(warnings, warned) {
+		t.Errorf("warnings of the build it came back in = %q, want %q", warnings, warned)
 	}
 }
 

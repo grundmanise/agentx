@@ -22,7 +22,8 @@ const backdated = "2000-01-01T00:00:00Z"
 
 // backdate sets the last_fetched of every source in the settings file to
 // backdated, without going through a mutation: the file is replaced whole,
-// which is what a settings write does anyway.
+// in one rename, which is what a settings write does anyway, so that a
+// serve child reading the settings meanwhile reads one file or the other.
 func backdate(t *testing.T, h *harness) {
 	t.Helper()
 	file := readSettingsFile(t, h)
@@ -33,7 +34,11 @@ func backdate(t *testing.T, h *harness) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(h.agentx, "settings.json"), append(b, '\n'), 0o644); err != nil {
+	path := filepath.Join(h.agentx, "settings.json")
+	if err := os.WriteFile(path+".backdated", append(b, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(path+".backdated", path); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -678,7 +683,7 @@ func TestSourceFetchNamesASourceItHasNothingOf(t *testing.T) {
 }
 
 // TestSourceFetchDropsASourceRemovedMidRun: the settings write skips a
-// source removed while the run fetched, so the report must skip it too —
+// source removed while the run fetched, so the report must skip it too –
 // a source event and a re-fetched line would tell a script the source is
 // present and fresh when it is gone. The fetch publishes its ref last of
 // all, after the removal has deleted it, so that ref is taken away again.
@@ -715,7 +720,7 @@ func TestSourceFetchDropsASourceRemovedMidRun(t *testing.T) {
 
 // TestSourceFetchRealignsARemoteWithThePin: the settings hold the pin and
 // the remote's refspec is derived from it, so a run interrupted between the
-// two leaves a remote recording a ref the settings do not name — what a
+// two leaves a remote recording a ref the settings do not name – what a
 // `source add <url>#main` killed after the remote was written and before
 // the settings were leaves over a source pinned to v1. A fetch answers for
 // the pin the settings hold whatever the remote says, and brings the remote

@@ -142,6 +142,53 @@ func (r *Runner) IsolatedInput(ctx context.Context, gitDir string, stdin io.Read
 	return r.run(ctx, call{isolated: true, stdin: stdin}, isolatedArgs(gitDir, args)...)
 }
 
+// IsolatedStatus is Isolated for a git whose exit status is part of its
+// answer: merge-tree exits 1 for a merge that conflicts, having written the
+// whole of its result to stdout first. An exit status from 1 to upTo is
+// returned with stdout as is and no error; any other failure is an error as
+// it is for Isolated, a status above upTo included, which is git's own way
+// of saying it could not do the work at all.
+func (r *Runner) IsolatedStatus(ctx context.Context, gitDir string, upTo int, args ...string) (string, int, error) {
+	return r.runStatus(ctx, call{isolated: true}, upTo, isolatedArgs(gitDir, args)...)
+}
+
+// InCheckout runs git in the isolated environment inside dir, a linked
+// worktree of a repository, as git runs in any checkout: dir is git's
+// working directory and no --git-dir is passed, so git finds the
+// worktree's own git directory through its .git file. The worktree records
+// file modes and symlinks as they are, whatever the repository's own
+// configuration says of them. It returns stdout as is.
+func (r *Runner) InCheckout(ctx context.Context, dir string, args ...string) (string, error) {
+	return r.InCheckoutInput(ctx, dir, nil, args...)
+}
+
+// InCheckoutInput is InCheckout with stdin fed to git.
+func (r *Runner) InCheckoutInput(ctx context.Context, dir string, stdin io.Reader, args ...string) (string, error) {
+	full := append(isolatedConfig(), "-c", "core.fileMode=true", "-c", "core.symlinks=true")
+	return r.run(ctx, call{isolated: true, dir: dir, stdin: stdin}, append(full, args...)...)
+}
+
+// AddCheckout adds a linked worktree of the repository at gitDir at path,
+// detached at commit and locked with reason, so that git's own pruning of
+// worktrees never takes it, whatever becomes of its directory.
+func (r *Runner) AddCheckout(ctx context.Context, gitDir, path, commit, reason string) error {
+	_, err := r.Isolated(ctx, gitDir, "worktree", "add", "--detach", "--lock", "--reason", reason, path, commit)
+	return err
+}
+
+// RemoveCheckout removes the linked worktree at path, its directory and its
+// registration, locked or not and whether its directory is still there or
+// not: the second -f is what removes a locked one. A path git knows no
+// worktree at has nothing to remove. It never prunes, which would take
+// other worktrees too.
+func (r *Runner) RemoveCheckout(ctx context.Context, gitDir, path string) error {
+	_, err := r.Isolated(ctx, gitDir, "worktree", "remove", "-f", "-f", path)
+	if err != nil && strings.Contains(err.Error(), "is not a working tree") {
+		return nil
+	}
+	return err
+}
+
 // Workers is how many git processes agentx runs at once. A read is mostly
 // the cost of starting git and reading its answer, so a few in flight hide
 // each other's latency, while the bound keeps a command from spawning a
@@ -180,17 +227,25 @@ func (r *Runner) IsolatedAll(ctx context.Context, gitDir string, calls [][]strin
 }
 
 func isolatedArgs(gitDir string, args []string) []string {
-	return append([]string{
+	return append(append(isolatedConfig(), "--git-dir="+gitDir), args...)
+}
+
+// isolatedConfig is the configuration every isolated call sets on its
+// command line. Attributes come from nowhere but the files git reads them
+// from in a work tree: the user's own attributes file is never read.
+func isolatedConfig() []string {
+	return []string{
 		"-c", "core.autocrlf=false",
 		"-c", "commit.gpgsign=false",
 		"-c", "core.hooksPath=" + os.DevNull,
-		"--git-dir=" + gitDir,
-	}, args...)
+		"-c", "core.attributesFile=" + os.DevNull,
+	}
 }
 
 // User runs git against gitDir in the user's own environment, in which
 // credential helpers, SSH configuration and URL rewrites apply. Network
-// commands use it. It returns stdout without its trailing newline.
+// commands, and the read of the user's core.excludesFile, use it. It
+// returns stdout without its trailing newline.
 func (r *Runner) User(ctx context.Context, gitDir string, args ...string) (string, error) {
 	out, err := r.run(ctx, call{}, append([]string{"--git-dir=" + gitDir}, args...)...)
 	return strings.TrimRight(out, "\n"), err
@@ -202,30 +257,46 @@ func (r *Runner) UserInput(ctx context.Context, gitDir string, stdin io.Reader, 
 }
 
 // call is what one git process needs besides its arguments: the
-// environment to build, the dates to fix in it and what to feed its stdin.
+// environment to build, the dates to fix in it, what to feed its stdin,
+// variables of its own and the directory it runs in.
 type call struct {
 	isolated bool
 	dates    string // GIT_AUTHOR_DATE and GIT_COMMITTER_DATE, isolated only; the fixed date stands when empty
 	stdin    io.Reader
+	env      map[string]string // set on top of the environment built, such as GIT_INDEX_FILE
+	dir      string            // git's working directory; "" keeps the process's
 }
 
 // run executes git with args; a call that is not isolated runs in the
 // user's own environment, in which credential helpers, SSH configuration
 // and URL rewrites apply. stdout is returned as is.
 func (r *Runner) run(ctx context.Context, c call, args ...string) (string, error) {
+	out, _, err := r.runStatus(ctx, c, 0, args...)
+	return out, err
+}
+
+// runStatus is run that answers an exit status from 1 to upTo with stdout
+// and that status rather than with an error, for a git that exits non-zero
+// to say what it found. A git killed by a signal has no such status and is
+// an error whatever upTo is.
+func (r *Runner) runStatus(ctx context.Context, c call, upTo int, args ...string) (string, int, error) {
 	git, err := r.lookPath()
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	r.logf("git %s", strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, git, args...)
 	cmd.Env = r.childEnv(c.isolated, c.dates)
+	for k, v := range c.env {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+	cmd.Dir = c.dir
 	cmd.Stdin = c.stdin
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	// A cancelled context kills git, but git's own children — the transport
-	// of a fetch, the ssh it starts — hold the pipes agentx reads its output
+	// A cancelled context kills git, but git's own children – the transport
+	// of a fetch, the ssh it starts – hold the pipes agentx reads its output
 	// through, and waiting for those to close is waiting for a network call
 	// nobody is reading any more. WaitDelay closes them instead, so that a
 	// run stopped during a fetch ends now rather than when the far end times
@@ -240,8 +311,12 @@ func (r *Runner) run(ctx context.Context, c call, args ...string) (string, error
 	if err != nil {
 		if ctx.Err() != nil {
 			// The child was killed because the run is stopping, so its own
-			// report — "signal: killed" — says nothing true about git.
-			return "", fmt.Errorf("git %s: interrupted", subcommand(args))
+			// report, "signal: killed", says nothing true about git.
+			return "", 0, fmt.Errorf("git %s: interrupted", subcommand(args))
+		}
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() >= 1 && exitErr.ExitCode() <= upTo {
+			return stdout.String(), exitErr.ExitCode(), nil
 		}
 		if stoppedBySignal(err) {
 			// Nothing here cancelled it, so the signal came from outside:
@@ -254,9 +329,9 @@ func (r *Runner) run(ctx context.Context, c call, args ...string) (string, error
 		if detail == "" {
 			detail = err.Error()
 		}
-		return "", fmt.Errorf("git %s: %s", subcommand(args), detail)
+		return "", 0, fmt.Errorf("git %s: %s", subcommand(args), detail)
 	}
-	return stdout.String(), nil
+	return stdout.String(), 0, nil
 }
 
 // waitDelay is how long a git that has been killed, or has exited leaving a
@@ -319,11 +394,16 @@ func (r *Runner) lookPath() (string, error) {
 
 // childEnv builds the environment of one git process from the environment
 // map. The isolated environment drops every GIT_ variable of the user's,
-// fixes configuration, author and committer, and forbids the lazy fetch of
-// a missing object (git 2.45 and newer honour the variable), since it never
-// touches the network; the user environment is the map as is. Under serve,
-// both fail instead of prompting. dates, when it is not empty, replaces the
-// fixed author and committer dates for this one process.
+// fixes configuration, author and committer, reads no attributes of the
+// user's or the system's, so that no merge driver, filter or marker size
+// of theirs changes what git writes (isolatedConfig names no attributes file
+// in place of the one git reads under XDG_CONFIG_HOME when configuration
+// names none, and GIT_ATTR_NOSYSTEM drops the system's), and forbids the
+// lazy fetch of a missing object (git 2.45 and newer honour the variable),
+// since it never touches the network; the user environment is the map as
+// is. Under serve, both fail instead of prompting. dates, when it is not
+// empty, replaces the fixed author and committer dates for this one
+// process.
 func (r *Runner) childEnv(isolated bool, dates string) []string {
 	env := make(map[string]string, len(r.env)+12)
 	for k, v := range r.env {
@@ -335,6 +415,7 @@ func (r *Runner) childEnv(isolated bool, dates string) []string {
 	if isolated {
 		env["GIT_CONFIG_GLOBAL"] = os.DevNull
 		env["GIT_CONFIG_NOSYSTEM"] = "1"
+		env["GIT_ATTR_NOSYSTEM"] = "1"
 		env["GIT_NO_LAZY_FETCH"] = "1"
 		when := FixedDate
 		if dates != "" {

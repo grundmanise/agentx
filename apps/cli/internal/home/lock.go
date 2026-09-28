@@ -45,9 +45,21 @@ func MutateQuiet(dir string, u RefUpdater, fn func() error) error {
 // itself, and losing it is often what made the command fail in the first
 // place. Everything else is MutateQuiet: the same journal recovery, and no
 // change signal, since taking a change back leaves agentx home as the last
-// signalled version already describes it.
+// signalled version already describes it. The update check of the serve
+// child takes its hold before the network this way too, for the reason
+// MutateWaiting gives.
 func MutateQuietWaiting(ctx context.Context, dir string, u RefUpdater, fn func() error) error {
 	return mutate(dir, u, func() (*os.File, error) { return waitLock(ctx, dir, syscall.LOCK_EX) }, false, fn)
+}
+
+// MutateWaiting is Mutate for the update check of the serve child, which
+// runs in the background on a timer: it waits for a held lock until ctx is
+// done rather than giving up, since a command that happens to hold the lock
+// at that moment is no reason to drop what the check fetched, and nobody is
+// there to run it again. Waiting blocks nobody else: every other command
+// still gives up on a lock it finds held rather than queueing behind this.
+func MutateWaiting(ctx context.Context, dir string, u RefUpdater, fn func() error) error {
+	return mutate(dir, u, func() (*os.File, error) { return waitLock(ctx, dir, syscall.LOCK_EX) }, true, fn)
 }
 
 // acquire takes the exclusive lock of agentx home, either way a mutation
@@ -56,17 +68,30 @@ type acquire func() (*os.File, error)
 
 func quick(dir string) acquire { return func() (*os.File, error) { return takeLock(dir) } }
 
+// Pruner removes what an interrupted command left outside every journal,
+// once the journals are finished: the pending merges of agentx home that
+// setting up stopped part way through, say. A command whose RefUpdater
+// implements it has it run under the lock before its own change.
+type Pruner interface {
+	Prune() error
+}
+
 // mutate takes the exclusive lock the way take asks for it, recovers the
-// unfinished journals of earlier mutations, runs fn and, with bump,
-// rewrites the version file.
+// unfinished journals of earlier mutations, prunes what u prunes, runs fn
+// and, with bump, rewrites the version file.
 func mutate(dir string, u RefUpdater, take acquire, bump bool, fn func() error) error {
 	lock, err := take()
 	if err != nil {
 		return err
 	}
-	defer lock.Close() // closing releases the flock
+	defer Unlock(lock)
 	if err := recoverJournals(dir, u); err != nil {
 		return err
+	}
+	if p, ok := u.(Pruner); ok {
+		if err := p.Prune(); err != nil {
+			return err
+		}
 	}
 	if err := fn(); err != nil {
 		return err
@@ -86,13 +111,12 @@ func ReadLocked(ctx context.Context, dir string, fn func() error) error {
 	if err != nil {
 		return err
 	}
-	defer lock.Close()
+	defer Unlock(lock)
 	return fn()
 }
 
 // TakeServeLock takes the lock one serve child holds for its lifetime; a
-// second serve for the same home gets ErrServing at once. Close the file to
-// release it.
+// second serve for the same home gets ErrServing at once. Unlock releases it.
 func TakeServeLock(dir string) (*os.File, error) {
 	if err := createHome(dir); err != nil {
 		return nil, err
@@ -105,10 +129,11 @@ func TakeServeLock(dir string) (*os.File, error) {
 }
 
 // takeLock takes the exclusive advisory lock of agentx home; a held lock is
-// ErrLocked after a few quick retries, which cover a lock a child process
-// inherited for the instant between its fork and its exec. It creates agentx
-// home, mutations and ops directories included, on first use, since the
-// lock file lives there.
+// ErrLocked after a few quick retries. A holder that finishes frees the lock
+// at once through Unlock; the retries cover one killed while a child process
+// it had forked was not yet exec'd, which keeps the lock until its exec. It
+// creates agentx home, mutations and ops directories included, on first use,
+// since the lock file lives there.
 func takeLock(dir string) (*os.File, error) {
 	if err := createHome(dir); err != nil {
 		return nil, err
@@ -157,6 +182,16 @@ func createHome(dir string) error {
 	return nil
 }
 
+// Unlock releases the advisory lock f holds and closes f. Closing alone is
+// not enough: a child process another goroutine has forked but not yet
+// exec'd shares f's open file description, and with it the lock, which would
+// stay held until that child execs, long enough under load for the next
+// command to find it held. Releasing through f frees it for every copy.
+func Unlock(f *os.File) {
+	_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN) // closing f still releases it if this fails
+	f.Close()
+}
+
 // flock opens path and takes the advisory lock how on it without waiting; a
 // held lock is ErrLocked.
 func flock(path string, how int) (*os.File, error) {
@@ -200,8 +235,8 @@ func bumpVersion(dir string) error {
 // LockHeld reports whether another command holds the lock, and the pid that
 // command wrote into the lock file. It creates nothing: a lock file that does
 // not exist is free. A held lock is confirmed after the same few quick
-// retries as takeLock, so a child process inheriting the lock for the instant
-// between its fork and its exec is not mistaken for a holder.
+// retries as takeLock, so the instant a killed holder's child keeps the lock
+// is not mistaken for a holder.
 func LockHeld(dir string) (held bool, pid string, err error) {
 	path := LockPath(dir)
 	f, err := os.Open(path)
@@ -211,11 +246,11 @@ func LockHeld(dir string) (held bool, pid string, err error) {
 	if err != nil {
 		return false, "", err
 	}
-	defer f.Close()
+	defer Unlock(f)
 	for attempt := 1; ; attempt++ {
 		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
 		if err == nil {
-			return false, "", nil // closing f releases the lock again
+			return false, "", nil // Unlock releases the lock again
 		}
 		if !errors.Is(err, syscall.EWOULDBLOCK) {
 			return false, "", fmt.Errorf("lock %s: %w", path, err)

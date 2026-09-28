@@ -108,3 +108,68 @@ func write(t *testing.T, path, content string) {
 		t.Fatal(err)
 	}
 }
+
+// TestReadsLibraryFollowsLinksEitherWay: a skills directory is the library
+// when it is named by the library's path, or leads to the library directory
+// through a symlink, either way round, since a skill directory in it is
+// then the library's own. A directory of its own is not, and neither is
+// one that does not resolve, or any directory but the library's own path
+// when the library does not resolve.
+func TestReadsLibraryFollowsLinksEitherWay(t *testing.T) {
+	t.Parallel()
+	link := func(t *testing.T, target, path string) {
+		t.Helper()
+		if err := os.Symlink(target, path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tt := range []struct {
+		name  string
+		setup func(t *testing.T, library, skills string) // skills is a client's skills directory
+		named bool                                       // the library's path is among the directories too
+		want  bool
+	}{
+		{"the library named by its path", func(t *testing.T, library, skills string) {
+			mkdir(t, library)
+			mkdir(t, skills)
+		}, true, true},
+		{"a skills directory linked to the library", func(t *testing.T, library, skills string) {
+			mkdir(t, library)
+			link(t, library, skills)
+		}, false, true},
+		{"the library linked to a skills directory", func(t *testing.T, library, skills string) {
+			mkdir(t, skills)
+			link(t, skills, library)
+		}, false, true},
+		{"a skills directory of its own", func(t *testing.T, library, skills string) {
+			mkdir(t, library)
+			mkdir(t, skills)
+		}, false, false},
+		{"a skills directory that does not exist", func(t *testing.T, library, _ string) {
+			mkdir(t, library)
+		}, false, false},
+		{"a library that does not resolve", func(t *testing.T, _, skills string) {
+			mkdir(t, skills)
+		}, false, false},
+		{"a library that does not resolve, named by its path", func(t *testing.T, _, skills string) {
+			mkdir(t, skills)
+		}, true, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			user := t.TempDir()
+			library := filepath.Join(user, ".agents", "skills")
+			skills := filepath.Join(user, ".claude", "skills")
+			mkdir(t, filepath.Dir(library))
+			mkdir(t, filepath.Dir(skills))
+			tt.setup(t, library, skills)
+			dirs := []string{skills}
+			if tt.named {
+				dirs = append(dirs, library)
+			}
+			if got := readsLibrary(dirs, library); got != tt.want {
+				t.Errorf("readsLibrary(%v, %s) = %t, want %t", dirs, library, got, tt.want)
+			}
+		})
+	}
+}

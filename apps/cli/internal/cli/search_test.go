@@ -141,9 +141,16 @@ func TestServeAnswersSearchWhileAScanWaits(t *testing.T) {
 	h := serveHarness(t)
 	alpha, _ := h.searchSources(t)
 	calls := countingGit(t, h)
+	version := mutationVersion(t, h)
 	p := h.serve(t, "--json")
 	p.next("snapshot")
 	p.search("idle", "review") // the index is built: its first scan has run
+	// The check serve runs at launch fetches both sources and ends in one
+	// write, whose rescan rebuilds the index; once a refresh asked for after
+	// that write is acknowledged, serve has nothing left to run git for.
+	h.awaitWrites(t, version, 1)
+	p.send(`{"type":"refresh","request_id":"settled"}`)
+	p.until("settled")
 
 	f, err := os.OpenFile(filepath.Join(h.agentx, "lock"), os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
@@ -202,7 +209,7 @@ func TestServeSearchIsEmptyWithoutSources(t *testing.T) {
 //
 // It reads a source that a command elsewhere is fetching, so what it sees
 // depends on when the rebuild lands inside that fetch. That it always sees
-// a whole source is not this test's to prove — it would only ever prove
+// a whole source is not this test's to prove: it would only ever prove
 // that the timing did not bite today; TestSourceRefNeverShowsAnIncompleteFetch
 // drives the same window deliberately and proves it.
 func TestServeReindexesWhenSourcesChange(t *testing.T) {
@@ -259,7 +266,10 @@ func TestServeReindexesWhenSourcesChange(t *testing.T) {
 }
 
 // TestServeWarnsAboutAnUnfetchedSource covers a settings entry whose ref
-// the account repo does not hold, which a removal cut short leaves behind.
+// the account repo does not hold, which a removal cut short leaves behind
+// with the remote already gone. The index warns that it holds nothing of
+// the source, and the check serve runs at launch, which cannot fetch a
+// source without its remote, warns that it could not.
 func TestServeWarnsAboutAnUnfetchedSource(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
@@ -268,6 +278,7 @@ func TestServeWarnsAboutAnUnfetchedSource(t *testing.T) {
 	s.skill("commit", "commit", "Write a commit message", nil)
 	s.commit("first")
 	equal(t, "exit", h.run("source", "add", s.url).exit, 0)
+	h.accountGit("remote", "remove", source.RemoteName(source.ID(s.url)))
 	h.accountGit("update-ref", "-d", "refs/agentx/sources/"+source.ID(s.url))
 
 	p := h.serve(t, "--json")
@@ -275,13 +286,17 @@ func TestServeWarnsAboutAnUnfetchedSource(t *testing.T) {
 	if got := p.search("s1", "commit"); len(got) != 0 {
 		t.Errorf("results = %q, want none", got)
 	}
+	p.awaitLogged("warn", "update check: ", 1)
 	equal(t, "exit", p.close(), 0)
 	events := h.events(p.stderr.String())
-	if len(events) != 1 {
-		t.Fatalf("stderr events = %v, want one warning", events)
+	if len(events) != 2 {
+		t.Fatalf("stderr events = %v, want two warnings", events)
 	}
-	equal(t, "log.level", events[0]["level"], "warn")
-	contains(t, "log.message", events[0]["message"].(string), s.url+" has not been fetched")
+	for _, e := range events {
+		equal(t, "log.level", e["level"], "warn")
+	}
+	contains(t, "the index's warning", events[0]["message"].(string), s.url+" has not been fetched")
+	contains(t, "the check's warning", events[1]["message"].(string), "update check: source not fetched: "+s.url)
 }
 
 func TestServePrintsSearchLines(t *testing.T) {
@@ -301,8 +316,8 @@ func TestServePrintsSearchLines(t *testing.T) {
 // leave open. source.Fetch reaches the source over two fetches: the first
 // brings the commit and its trees without blobs, the second the SKILL.md
 // blobs in one batch. While the blob batch is held open here, every reader
-// of the account repo — the serve child rebuilding its source index, a
-// concurrent `source skills`, `source list` — must still see the commit the
+// of the account repo – the serve child rebuilding its source index, a
+// concurrent `source skills`, `source list` – must still see the commit the
 // last complete fetch left, never the new one with its blobs missing, which
 // lists no skill and warns.
 func TestSourceRefNeverShowsAnIncompleteFetch(t *testing.T) {
@@ -316,12 +331,16 @@ func TestSourceRefNeverShowsAnIncompleteFetch(t *testing.T) {
 	id := source.ID(s.url)
 	first := h.accountGit("rev-parse", source.Ref(id))
 
+	before := mutationVersion(t, h)
 	p := h.serve(t, "--json")
 	p.next("snapshot")
 	whole := []string{s.url + " commit commit"}
 	if got := p.search("s0", "commit"); !reflect.DeepEqual(got, whole) {
 		t.Fatalf("results before the fetch = %q, want %q", got, whole)
 	}
+	// The check serve runs at launch fetches the source too; the gate is for
+	// the add below alone, so it is armed once that check has written.
+	h.awaitWrites(t, before, 1)
 
 	// A second commit, fetched with the blob batch held open.
 	s.skill("release", "release", "Cut a release commit", nil)

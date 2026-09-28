@@ -7,7 +7,7 @@ import (
 )
 
 // TestACopyPlacementLeavesNoStagedDirectory covers two configurations that
-// share one skills directory — Zencoder and Zenflow both use
+// share one skills directory: Zencoder and Zenflow both use
 // ~/.zencoder/skills. A --copy run plans a publish for each of them, so it
 // plans two publishes of the same path: the first lands and the second
 // finds the path already holding what it was to write, and does nothing.

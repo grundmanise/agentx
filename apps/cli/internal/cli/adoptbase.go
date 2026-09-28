@@ -373,8 +373,8 @@ func (inv *invocation) chosenBase(ctx context.Context, run *adoptRun, gitDir str
 // not have. A commit id is read from the account repo, which holds the
 // history of the source it fetched. A branch or a tag is resolved against
 // the source itself: a fetch writes one ref per source and brings no tags
-// at all, so the names a user knows a version by — the ones the refusals,
-// the contract and the help center all offer — are in the source alone and
+// at all, so the names a user knows a version by – the ones the refusals,
+// the contract and the help center all offer – are in the source alone and
 // nowhere in this repository.
 //
 // An object the account repo does not hold is still returned: it is a ref

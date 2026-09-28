@@ -39,6 +39,13 @@ const (
 // The two states a managed skill is listed with: its library directory
 // holds the version it was installed at, or it was edited since. Nothing
 // here decides whether an upstream moved, which a later command does.
+//
+// The two are told apart the way skilltree.go compares a directory with a
+// version, so a file git ignores is no edit. A mode is content to git, so
+// a file made executable, a file swapped for a link to the same bytes and
+// a link added anywhere are edits like any other; the content hash, which
+// reads neither modes nor links, stays the name of a version and decides
+// nothing here.
 const (
 	stateCurrent  = "current"
 	stateModified = "modified"
@@ -50,16 +57,36 @@ const (
 // state rather than in it, because the two answer different questions and
 // both can be true at once: a skill edited by hand whose source was then
 // removed is modified and source removed, and saying only one of them
-// would hide the other. The drift states still to come (an upstream that
-// dropped the skill, a placement that is not what the settings record, a
-// configuration the skill is missing from) can each hold together with
-// this one too, which is why drift is a list and state stays one word.
+// would hide the other. The drift states of the placements, displaced and
+// missing, hold together with this one and with each other too, as will
+// the drift states still to come, which is why drift is a list and state
+// stays one word.
 const driftSourceRemoved = "source removed"
+
+// driftUpstreamRemoved is the drift state of a managed skill whose source,
+// as the last update check fetched it, no longer holds it: no directory at
+// its subpath, or one without a SKILL.md. The check records it as a marker
+// ref, which it alone writes and deletes once the skill is back, so this is
+// read from the lineage like the rest of a skill and never from a source
+// ref. The skill is kept as it is and never updated.
+const driftUpstreamRemoved = "upstream removed"
+
+// updateAvailable is what the skill list row says of a managed skill the
+// last update check pinned a candidate for. It is not a drift state: the
+// skill has not drifted, its upstream moved on, and the event carries it as
+// candidate rather than in drift.
+const updateAvailable = "update available"
+
+// mergePending is what the skill list row says of a managed skill an update
+// left a pending merge for. Like an update available it is no drift: the
+// library directory is as it was, and the event carries it as
+// pending_merge.
+const mergePending = "merge pending"
 
 func newSkillCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "skill",
-		Short:       "Install, place and remove skills, and list what the library holds",
+		Short:       "Install, place, compare, revert, update and remove skills, check them for updates, and list what the library holds",
 		Annotations: map[string]string{annotationGroup: "true"},
 		Args:        cobra.NoArgs,
 		RunE:        needSubcommand(inv, "no skill command given", "run 'agentx skill --help' to list commands"),
@@ -67,6 +94,10 @@ func newSkillCommand(inv *invocation) *cobra.Command {
 	cmd.AddCommand(newSkillAddCommand(inv))
 	cmd.AddCommand(newSkillPlaceCommand(inv))
 	cmd.AddCommand(newSkillRemoveCommand(inv))
+	cmd.AddCommand(newSkillDiffCommand(inv))
+	cmd.AddCommand(newSkillRevertCommand(inv))
+	cmd.AddCommand(newSkillCheckCommand(inv))
+	cmd.AddCommand(newSkillUpdateCommand(inv))
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List the skills in the library with their upstream and placements",
@@ -135,6 +166,7 @@ func (inv *invocation) libraryPath(name string) string {
 // machine are byte-identical.
 func (inv *invocation) placements(snap scan.Snapshot, lib scan.LibrarySkill, copyMode map[string][]string) []placementEvent {
 	found := []placementEvent{}
+	atLibrary := libraryEntryOf(lib, inv.dirs.Library)
 	for _, node := range snap.Skills {
 		for _, o := range node.Occurrences {
 			if o.Plugin != "" || o.Scope != "user" {
@@ -146,11 +178,12 @@ func (inv *invocation) placements(snap scan.Snapshot, lib scan.LibrarySkill, cop
 			default:
 				continue
 			}
+			entry := atLibrary(o)
 			found = append(found, placementEvent{
 				Configuration: o.Configuration,
 				Path:          o.Path,
-				Mode:          placementMode(o, lib, copyMode, inv.dirs.Library),
-				Kind:          placementKind(o, inv.dirs.Library),
+				Mode:          placementMode(o, lib, copyMode, entry),
+				Kind:          placementKind(o, entry),
 			})
 		}
 	}
@@ -159,10 +192,11 @@ func (inv *invocation) placements(snap scan.Snapshot, lib scan.LibrarySkill, cop
 }
 
 // placementMode is what agentx keeps for this configuration: the library
-// entry for a client that reads the library, a copy where the settings
-// record one, a symlink otherwise.
-func placementMode(o scan.Occurrence, lib scan.LibrarySkill, copyMode map[string][]string, library string) string {
-	if inLibrary(o, library) {
+// entry for a client that reads the library, entry saying the occurrence is
+// that entry, see libraryEntryOf, a copy where the settings record one, a
+// symlink otherwise.
+func placementMode(o scan.Occurrence, lib scan.LibrarySkill, copyMode map[string][]string, entry bool) string {
+	if entry {
 		return modeLibrary
 	}
 	for _, id := range copyMode[lib.Name] {
@@ -175,17 +209,52 @@ func placementMode(o scan.Occurrence, lib scan.LibrarySkill, copyMode map[string
 
 // placementKind is what the placement is on disk: the scan's own kinds, and
 // the library entry itself for a client that reads the library directly.
-func placementKind(o scan.Occurrence, library string) string {
-	if inLibrary(o, library) {
+func placementKind(o scan.Occurrence, entry bool) string {
+	if entry {
 		return modeLibrary
 	}
 	return o.Kind
 }
 
-// inLibrary reports whether the occurrence is the library entry itself,
-// which is the placement of every client that reads the library directly.
-func inLibrary(o scan.Occurrence, library string) bool {
-	return filepath.Dir(o.Path) == filepath.Clean(library)
+// libraryEntryOf is the test of whether an occurrence of lib is the
+// library entry itself, which is the placement of every client that reads
+// the library directly: an entry of the library directory, named by its
+// path or by a skills directory that leads to the library through a
+// symlink, either way round, as scan.ReadsLibrary counts such a client, or
+// the real directory the library entry, itself a symlink into a client's
+// skills directory, leads to, see isLibraryDirectory. A symlink elsewhere
+// that leads to the library entry is a placement of its own, agentx's or
+// the user's, and stays one. The library and each skills directory are
+// resolved once for every occurrence the test is asked about, so a listing
+// pays for it once per skill, and it runs no git.
+func libraryEntryOf(lib scan.LibrarySkill, library string) func(scan.Occurrence) bool {
+	library = filepath.Clean(library)
+	real, err := filepath.EvalSymlinks(library)
+	if err != nil {
+		real = ""
+	}
+	resolved := map[string]string{}
+	return func(o scan.Occurrence) bool {
+		dir := filepath.Dir(o.Path)
+		switch {
+		case dir == library:
+			return true
+		case o.Kind != modeSymlink && o.ResolvedPath == lib.ResolvedPath:
+			// A real directory that resolves to the library directory is
+			// that directory, whichever way it was reached.
+			return true
+		case real == "":
+			return false
+		}
+		r, ok := resolved[dir]
+		if !ok {
+			if r, err = filepath.EvalSymlinks(dir); err != nil {
+				r = ""
+			}
+			resolved[dir] = r
+		}
+		return r == real
+	}
 }
 
 // sortPlacements orders placements by configuration and then path, so that
@@ -219,7 +288,8 @@ func universalClients(snap scan.Snapshot) []string {
 
 // skillFromLibrary builds the event of one library skill from its lineage
 // record, the canonical URLs of the sources the settings hold, the
-// placements a scan found and the universal clients that scan detected.
+// placements a scan found, the universal clients that scan detected and
+// what was observed of its directory and of its places.
 //
 // Every state is derived here, on every read, and nothing is ever written
 // for one: the lineage says where the skill came from and the settings say
@@ -228,7 +298,7 @@ func universalClients(snap scan.Snapshot) []string {
 // a source is gone is its settings entry and not its ref in the account
 // repo: an entry whose ref is missing is a source this machine still has
 // and has not fetched, which is what an import leaves.
-func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, sources map[string]bool, places []placementEvent, universal []string) librarySkillEvent {
+func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, sources map[string]bool, places []placementEvent, universal []string, obs observation) librarySkillEvent {
 	ev := librarySkillEvent{event: newEvent("library_skill"), LibraryEntry: scan.LibraryEntry{
 		Name: lib.Name, Kind: lineage.KindUnmanaged, ContentHash: lib.ContentHash, Placements: places, Universal: universal,
 	}}
@@ -241,11 +311,12 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 		ev.Source, ev.Subpath, ev.UpstreamCommit, ev.BaseHash = rec.Import.Source, &subpath, rec.Import.Commit, rec.Import.Hash
 	}
 	// A managed skill's base version is the import commit its branch points
-	// at, so the two hashes can be compared; a fork's base is the last
-	// version merged into it, which a later command reads from its history.
+	// at, so the directory can be compared with that commit's tree; a fork's
+	// base is the last version merged into it, which a later command reads
+	// from its history.
 	if rec.Kind == lineage.KindManaged && rec.HasImport {
 		ev.State = stateCurrent
-		if lib.ContentHash != rec.Import.Hash {
+		if obs.modified {
 			ev.State = stateModified
 		}
 		// The coordinates stay as the lineage has them: they are still where
@@ -254,9 +325,17 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 		// matters to a fork is the account remote it is published to, and
 		// its third-party upstream is only where later versions are merged
 		// in from.
-		if !sources[rec.Import.Source] {
-			ev.Drift = []string{driftSourceRemoved}
+		ev.Drift = driftOf(obs, !sources[rec.Import.Source], rec.UpstreamRemoved != "")
+		// What the last update check found stays until a check finds
+		// otherwise, whatever the source holds by now: it is read from the
+		// candidate ref, in the for-each-ref that read the lineage. A
+		// candidate the branch already holds is no update; see AtCandidate.
+		if next, ok := rec.AtCandidate(); ok {
+			ev.Candidate = &scan.LibraryCandidate{UpstreamCommit: next.Import.Commit, ContentHash: next.Import.Hash}
 		}
+		// A merge an update left pending is its checkout under agentx
+		// home, which the context read with one read of the directory.
+		ev.PendingMerge = obs.pending
 	}
 	return ev
 }

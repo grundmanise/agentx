@@ -13,6 +13,11 @@ import (
 // managed skill whose source has no entry in the settings is listed as
 // source removed, which is read from the settings this command reads
 // anyway, never written anywhere.
+//
+// A managed skill whose library directory is gone has no row: there is
+// nothing to list, compare or place. It is named in a warning of its own
+// after the rows, see absentWarnings, so that a branch the account repo
+// still holds is never silently left out.
 func (inv *invocation) skillList(ctx context.Context) error {
 	snap, err := inv.scan(ctx, lockWait, "", false)
 	if err != nil {
@@ -23,6 +28,7 @@ func (inv *invocation) skillList(ctx context.Context) error {
 		return err
 	}
 	skills, warnings := readLibrary(inv.dirs.Library)
+	warnings = append(warnings, sc.absentWarnings(inv, skills)...)
 	out := inv.out
 	if len(skills) == 0 {
 		out.print("No skills in the library. Install one with ", out.paint(label, "agentx skill add <source>"), ".")
@@ -34,7 +40,7 @@ func (inv *invocation) skillList(ctx context.Context) error {
 	out.print(out.paint(heading, plural(len(skills), "skill")))
 	t := &table{}
 	for _, lib := range skills {
-		ev := sc.librarySkillEventFor(inv, snap, lib, nil) // every placement, not only a command's own
+		ev := sc.librarySkillEventFor(ctx, inv, snap, lib, nil) // every placement, not only a command's own
 		out.emit(ev)
 		t.add(row(out, ev)...)
 	}
@@ -62,9 +68,21 @@ func (inv *invocation) skillList(ctx context.Context) error {
 // of its own: most skills have none, and a column that is empty on almost
 // every row would widen every listing for the sake of a few. Both are said
 // in full, so that neither hides the other.
+//
+// An update the last check found is said last in the same cell, as update
+// available, and a merge an update left pending after it, as merge
+// pending: neither is drift, but both are how the skill stands against its
+// upstream, which is what the cell is about.
 func row(out *writer, ev librarySkillEvent) []cell {
-	state := c(strings.Join(append([]string{ev.State}, ev.Drift...), ", "), okStyle)
-	if ev.State == stateModified || len(ev.Drift) > 0 {
+	words := append([]string{ev.State}, ev.Drift...)
+	if ev.Candidate != nil {
+		words = append(words, updateAvailable)
+	}
+	if ev.PendingMerge {
+		words = append(words, mergePending)
+	}
+	state := c(strings.Join(words, ", "), okStyle)
+	if ev.State == stateModified || len(ev.Drift) > 0 || ev.Candidate != nil || ev.PendingMerge {
 		state.style = warnStyle
 	}
 	if ev.State == "" {
