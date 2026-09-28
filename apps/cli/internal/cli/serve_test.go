@@ -8,7 +8,6 @@ import (
 	"strings"
 	"syscall"
 	"testing"
-	"time"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
@@ -75,18 +74,18 @@ func skillDescriptions(e jsonEvent) []string {
 	return descriptions
 }
 
-// serveOnce runs `serve --once` after an earlier serve of the same home
-// ended. Every test here is one process: a git process another parallel test
-// forks at that moment holds a copy of the earlier serve's lock descriptor
-// until it execs, so a refusal within that window is retried.
+// serveOnce runs `serve --once`. A serve of the same home that ended has
+// released its lock by then: home.Unlock lets go of the lock itself rather
+// than closing a descriptor that a git another test forks meanwhile may
+// hold a copy of, so a refusal here is a lock serve leaked.
 func (h *harness) serveOnce(args ...string) outcome {
-	args = append([]string{"serve", "--once"}, args...)
-	out := h.run(args...)
-	for start := time.Now(); out.exit == 6 && time.Since(start) < serveDeadline; out = h.run(args...) {
-		time.Sleep(10 * time.Millisecond)
-	}
-	return out
+	return h.run(append([]string{"serve", "--once"}, args...)...)
 }
+
+// quickRescans is the AGENTX_DEBOUNCE of the tests that wait for a rescan:
+// every refresh and every change waits out the quiet time before its rescan
+// starts, and serve's own 100 ms would be most of what such a test waits.
+const quickRescans = "10ms"
 
 func skillNames(e jsonEvent) []string {
 	var names []string
@@ -151,6 +150,7 @@ func TestServeRefusesASecondChild(t *testing.T) {
 func TestServeAnswersRequests(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
+	h.env["AGENTX_DEBOUNCE"] = quickRescans
 	p := h.serve(t, "--json")
 	snap := p.next("snapshot")
 	equal(t, "scan_counter", snap["scan_counter"], float64(1))
@@ -182,6 +182,7 @@ func TestServeAnswersRequests(t *testing.T) {
 func TestServeWaitsForTheMutationLockAndCoalescesRefreshes(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
+	h.env["AGENTX_DEBOUNCE"] = quickRescans
 	p := h.serve(t, "--json")
 	p.next("snapshot")
 
@@ -217,6 +218,7 @@ func TestServeWaitsForTheMutationLockAndCoalescesRefreshes(t *testing.T) {
 func TestServeRescansOnVersionBumpWithoutSnapshot(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
+	h.env["AGENTX_DEBOUNCE"] = quickRescans
 	p := h.serve(t, "--json")
 	p.next("snapshot")
 	// Wait until serve is idle: its first scan created the lock file, a
@@ -245,9 +247,15 @@ func TestServeRescansOnVersionBumpWithoutSnapshot(t *testing.T) {
 	equal(t, "exit", p.close(), 0)
 }
 
+// TestServeWatchesTheLibrary takes one skill through the library while
+// serve runs, each step a change signal with no refresh asked for: the
+// skill arrives, an edit inside its directory, watched from the rescan that
+// found it, shows, and the directory goes, its watch with it. The loop
+// still scans and acknowledges after that.
 func TestServeWatchesTheLibrary(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
+	h.env["AGENTX_DEBOUNCE"] = quickRescans
 	p := h.serve(t, "--json")
 	p.next("snapshot")
 
@@ -256,18 +264,31 @@ func TestServeWatchesTheLibrary(t *testing.T) {
 	equal(t, "scan_counter", snap["scan_counter"], float64(2))
 	equal(t, "skills", strings.Join(skillNames(snap), " "), "commit")
 
+	h.editLibrarySkill(t, "commit", "Write a commit message")
+	snap = p.next("snapshot")
+	equal(t, "scan_counter", snap["scan_counter"], float64(3))
+	equal(t, "skills", strings.Join(skillDescriptions(snap), " "), "Write a commit message")
+
 	if err := os.RemoveAll(filepath.Join(h.library, "commit")); err != nil {
 		t.Fatal(err)
 	}
 	snap = p.next("snapshot")
-	equal(t, "scan_counter", snap["scan_counter"], float64(3))
+	equal(t, "scan_counter", snap["scan_counter"], float64(4))
 	equal(t, "skills", strings.Join(skillNames(snap), " "), "")
-	equal(t, "exit", p.cancelRun(), 0)
+
+	p.send(`{"type":"refresh","request_id":"r1"}`)
+	e := p.next("refresh_complete")
+	equal(t, "request_id", e["request_id"], "r1")
+	equal(t, "ok", e["ok"], true)
+	equal(t, "scan_counter", e["scan_counter"], float64(4))
+	equal(t, "exit", p.close(), 0)
+	equal(t, "stderr", p.stderr.String(), "")
 }
 
 func TestServeWatchesInsideSkills(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
+	h.env["AGENTX_DEBOUNCE"] = quickRescans
 	h.addLibrarySkill(t, "commit")
 	p := h.serve(t, "--json")
 	snap := p.next("snapshot")
@@ -281,25 +302,6 @@ func TestServeWatchesInsideSkills(t *testing.T) {
 	h.editLibrarySkill(t, "commit", "Write a commit message")
 	snap = p.next("snapshot")
 	equal(t, "scan_counter", snap["scan_counter"], float64(2))
-	equal(t, "skills", strings.Join(skillDescriptions(snap), " "), "Write a commit message")
-	equal(t, "exit", p.close(), 0)
-	equal(t, "stderr", p.stderr.String(), "")
-}
-
-func TestServeWatchesInsideSkillsAddedLater(t *testing.T) {
-	t.Parallel()
-	h := serveHarness(t)
-	p := h.serve(t, "--json")
-	p.next("snapshot")
-
-	h.addLibrarySkill(t, "commit")
-	snap := p.next("snapshot")
-	equal(t, "scan_counter", snap["scan_counter"], float64(2))
-	equal(t, "skills", strings.Join(skillNames(snap), " "), "commit")
-
-	h.editLibrarySkill(t, "commit", "Write a commit message")
-	snap = p.next("snapshot")
-	equal(t, "scan_counter", snap["scan_counter"], float64(3))
 	equal(t, "skills", strings.Join(skillDescriptions(snap), " "), "Write a commit message")
 	equal(t, "exit", p.close(), 0)
 	equal(t, "stderr", p.stderr.String(), "")
@@ -348,6 +350,7 @@ func TestWatchedDirsCoverEverySkillsDirectoryOnce(t *testing.T) {
 func TestServeWatchesAClientSkillsDirectory(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
+	h.env["AGENTX_DEBOUNCE"] = quickRescans
 	skills := filepath.Join(h.home, ".claude", "skills")
 	h.addSkill(t, skills, "commit")
 	p := h.serve(t, "--json")
@@ -376,55 +379,6 @@ func TestServeWatchesAClientSkillsDirectory(t *testing.T) {
 	equal(t, "stderr", p.stderr.String(), "")
 }
 
-// TestServeWatchesASkillsDirectoryAClientSharesOnce covers the directories
-// two clients read: Cursor reads the Claude Code directory, and watching it
-// twice would be watching one real path twice.
-func TestServeWatchesASkillsDirectoryAClientSharesOnce(t *testing.T) {
-	t.Parallel()
-	h := serveHarness(t)
-	if err := os.MkdirAll(filepath.Join(h.home, ".cursor"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	skills := filepath.Join(h.home, ".claude", "skills")
-	h.addSkill(t, skills, "commit")
-	p := h.serve(t, "--json")
-	snap := p.next("snapshot")
-	equal(t, "configurations", len(snap["configurations"].([]any)), 3)
-	p.send(`{"type":"refresh","request_id":"idle"}`)
-	p.next("refresh_complete")
-
-	h.editSkill(t, skills, "commit", "Write a commit message")
-	snap = p.next("snapshot")
-	equal(t, "scan_counter", snap["scan_counter"], float64(2))
-	equal(t, "skills", strings.Join(skillDescriptions(snap), " "), "Write a commit message")
-	equal(t, "exit", p.close(), 0)
-	equal(t, "stderr", p.stderr.String(), "")
-}
-
-func TestServeSurvivesARemovedSkillDirectory(t *testing.T) {
-	t.Parallel()
-	h := serveHarness(t)
-	h.addLibrarySkill(t, "commit")
-	p := h.serve(t, "--json")
-	p.next("snapshot")
-
-	if err := os.RemoveAll(filepath.Join(h.library, "commit")); err != nil {
-		t.Fatal(err)
-	}
-	snap := p.next("snapshot")
-	equal(t, "scan_counter", snap["scan_counter"], float64(2))
-	equal(t, "skills", strings.Join(skillNames(snap), " "), "")
-
-	// The loop still scans and acknowledges.
-	p.send(`{"type":"refresh","request_id":"r1"}`)
-	e := p.next("refresh_complete")
-	equal(t, "request_id", e["request_id"], "r1")
-	equal(t, "ok", e["ok"], true)
-	equal(t, "scan_counter", e["scan_counter"], float64(2))
-	equal(t, "exit", p.close(), 0)
-	equal(t, "stderr", p.stderr.String(), "")
-}
-
 // TestServeKeepsServingWhenTheAccountRepoCannotBeRead breaks the account
 // repo under a running serve and repairs it. The scan in between still
 // succeeds, with the library listed empty and a warning saying why, so the
@@ -436,6 +390,7 @@ func TestServeKeepsServingWhenTheAccountRepoCannotBeRead(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.env["AGENTX_DEBOUNCE"] = quickRescans
 	account := gitx.AccountRepoPath(h.agentx)
 	head := filepath.Join(account, "HEAD")
 	healthy, err := os.ReadFile(head)
@@ -497,16 +452,6 @@ func TestServeKeepsServingWhenTheAccountRepoCannotBeRead(t *testing.T) {
 	equal(t, "exit", p.close(), 0)
 }
 
-func TestServeEndsOnStdinEOF(t *testing.T) {
-	t.Parallel()
-	h := serveHarness(t)
-	p := h.serve(t, "--json")
-	p.next("snapshot")
-	equal(t, "exit", p.close(), 0)
-	p.next("result")
-	equal(t, "stderr", p.stderr.String(), "")
-}
-
 func TestServeEndsOnCancel(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
@@ -515,6 +460,20 @@ func TestServeEndsOnCancel(t *testing.T) {
 	equal(t, "exit", p.cancelRun(), 0)
 	p.next("result")
 	equal(t, "stderr", p.stderr.String(), "")
+}
+
+// TestServeRefusesABadDebounce: the quiet time before a rescan is a
+// positive duration or nothing, as the check interval is.
+func TestServeRefusesABadDebounce(t *testing.T) {
+	t.Parallel()
+	h := serveHarness(t)
+	h.env["AGENTX_DEBOUNCE"] = "0s"
+	out := h.run("--json", "serve")
+	equal(t, "exit", out.exit, 1)
+	e := h.one(out.stdout, "error")
+	equal(t, "error.code", e["code"], "usage")
+	equal(t, "error.message", e["message"], "AGENTX_DEBOUNCE 0s is not a positive duration")
+	equal(t, "serve --once ignores it", h.serveOnce("--json").exit, 0)
 }
 
 func TestServeRefusesWhenWatchingFails(t *testing.T) {
