@@ -622,16 +622,9 @@ type skillEntry struct {
 // fetch needs so that a later listing of a directory named outright still
 // reads from the account repo alone.
 func skillEntries(ctx context.Context, r *gitx.Runner, gitDir, commit, subpath string, skip bool) ([]skillEntry, error) {
-	treeish := commit + "^{tree}"
-	if subpath != "" {
-		treeish = commit + ":" + subpath
-	}
-	root, err := r.Isolated(ctx, gitDir, "rev-parse", "--verify", "--quiet", treeish)
-	if err != nil || root == "" {
-		return nil, fmt.Errorf("%w: %q", ErrNoSubpath, subpath)
-	}
-	if typ, err := r.Isolated(ctx, gitDir, "cat-file", "-t", root); err != nil || typ != "tree" {
-		return nil, fmt.Errorf("%w: %q is not a directory", ErrNoSubpath, subpath)
+	root, err := subtree(ctx, r, gitDir, commit, subpath)
+	if err != nil {
+		return nil, err
 	}
 	listed, err := ReadTree(ctx, r, gitDir, root)
 	if err != nil {
@@ -660,6 +653,54 @@ func skillEntries(ctx context.Context, r *gitx.Runner, gitDir, commit, subpath s
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].dir < entries[j].dir })
 	return entries, nil
+}
+
+// subtree is the id of the tree at subpath in commit, the whole of its tree
+// for "": ErrNoSubpath when commit holds nothing there, or something other
+// than a directory. One cat-file --batch-check names the object and its
+// type. It cannot tell a path commit does not hold from one whose object
+// the account repo lacks, a blob a partial clone never fetched, and says
+// "missing" for both, so only then, or when git fails, do the two reads
+// that tell them apart run: rev-parse resolves the path, then cat-file -t
+// reads the object's type. A path a line of input cannot carry goes to
+// those two reads as well.
+func subtree(ctx context.Context, r *gitx.Runner, gitDir, commit, subpath string) (string, error) {
+	treeish := commit + "^{tree}"
+	if subpath != "" {
+		treeish = commit + ":" + subpath
+	}
+	if !strings.ContainsAny(treeish, "\r\n") {
+		out, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(treeish+"\n"), "cat-file", "--batch-check=%(objectname) %(objecttype)")
+		id, typ, _ := strings.Cut(strings.TrimSuffix(out, "\n"), " ")
+		switch {
+		case err != nil || !objectID(id):
+		case typ == "tree":
+			return id, nil
+		case typ == "blob", typ == "commit", typ == "tag":
+			return "", fmt.Errorf("%w: %q is not a directory", ErrNoSubpath, subpath)
+		}
+	}
+	root, err := r.Isolated(ctx, gitDir, "rev-parse", "--verify", "--quiet", treeish)
+	if err != nil || root == "" {
+		return "", fmt.Errorf("%w: %q", ErrNoSubpath, subpath)
+	}
+	if typ, err := r.Isolated(ctx, gitDir, "cat-file", "-t", root); err != nil || typ != "tree" {
+		return "", fmt.Errorf("%w: %q is not a directory", ErrNoSubpath, subpath)
+	}
+	return root, nil
+}
+
+// objectID reports whether s has the shape of an object id, sha1 or sha256.
+func objectID(s string) bool {
+	if len(s) != 40 && len(s) != 64 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // filterSkipped drops the entries a listing does not show, for the listing
