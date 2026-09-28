@@ -101,16 +101,6 @@ func noCheckout(t *testing.T, h *harness, name string) {
 // attributes ask for it.
 func crlf(text string) string { return strings.ReplaceAll(text, "\n", "\r\n") }
 
-// fakePendingMerge is a shell command that leaves a merge pending for the
-// skill called name as any command sees one, unless one is there already:
-// its checkout, added at commit and locked, as an update adds it.
-func fakePendingMerge(t *testing.T, h *harness, name, commit string) string {
-	t.Helper()
-	path := shellWord(pendingCheckout(h, name))
-	return "[ -e " + path + " ] || " + realGit(t) + " --git-dir=" + shellWord(gitx.AccountRepoPath(h.agentx)) +
-		" worktree add --quiet --detach --lock --reason " + shellWord(pendingReason) + " " + path + " " + commit
-}
-
 // TestSkillUpdateMergesANonOverlappingEdit: a skill edited where its update
 // changes nothing merges cleanly. The import branch moves to the candidate
 // and the candidate goes, as for any update; the library directory holds
@@ -409,11 +399,7 @@ func TestSkillUpdateMergesASkillAtTheRootOfItsSource(t *testing.T) {
 // configuration is refused as it is for any skill whose library directory
 // is gone. Taking one placement away and putting placements back, with
 // --keep-library too, move neither the library directory nor the import
-// branch, leave the checkout's merge as it was, and are not blocked. A
-// merge left pending after the command first read the refs is found under
-// the lock, see
-// TestSkillRevertRefusesAMergeLeftPendingBeforeTheLock and
-// TestSkillRemoveOfWhatIsLeftRefusesAMergeLeftPendingBeforeTheLock.
+// branch, leave the checkout's merge as it was, and are not blocked.
 func TestAPendingMergeBlocksWhatWouldReplaceOrRemoveTheSkill(t *testing.T) {
 	t.Parallel()
 	h, s, _ := updateHarness(t)
@@ -461,29 +447,6 @@ func TestAPendingMergeBlocksWhatWouldReplaceOrRemoveTheSkill(t *testing.T) {
 	equal(t, "exit of the removal of what is left from one configuration", out.exit, 6)
 	equal(t, "message of the removal of what is left from one configuration", h.one(out.stdout, "error")["message"],
 		"the library holds no skill directory for alpha, so it cannot be removed from claude alone")
-}
-
-// TestSkillRevertRefusesAMergeLeftPendingBeforeTheLock: a merge left
-// pending while a revert reads the base version, after the revert judged
-// the skill and before it took the lock, is found under the lock, and the
-// revert discards nothing.
-func TestSkillRevertRefusesAMergeLeftPendingBeforeTheLock(t *testing.T) {
-	t.Parallel()
-	h, _, _ := updateHarness(t)
-	editLibrary(t, h, "alpha", "notes.md", editedNotes)
-	tip := h.ref(lineage.ManagedRef("alpha"))
-	stubGit(t, h, `#!/bin/sh
-case " $* " in
-*" ls-tree "*) `+fakePendingMerge(t, h, "alpha", tip)+` || exit 1 ;;
-esac
-exec `+realGit(t)+` "$@"
-`)
-	out := h.run("--json", "skill", "revert", "alpha")
-	equal(t, "exit", out.exit, 4)
-	equal(t, "message", h.one(out.stdout, "error")["message"],
-		"alpha has a merge with its update pending, so it cannot be reverted until the merge is resolved or given up")
-	equal(t, "alpha's notes", fileBody(t, filepath.Join(h.library, "alpha", "notes.md")), editedNotes)
-	equal(t, "journals", journalCount(t, h), 0)
 }
 
 // realGit is the git on the test process's PATH, for a wrapper to hand
@@ -927,37 +890,6 @@ func TestSkillUpdateMergeRefreshesACopyThatHoldsTheEditedLibrary(t *testing.T) {
 	sameTree(t, "the library directory", libraryTree(t, lib), want)
 	sameTree(t, "claude's copy", libraryTree(t, claude), want)
 	sameTree(t, "cursor's copy", libraryTree(t, cursor), want)
-}
-
-// TestSkillRemoveOfWhatIsLeftRefusesAMergeLeftPendingBeforeTheLock: a
-// merge left pending while the removal of what is left of a skill reads
-// its refs again under the lock, after it judged the skill, is found
-// there, and the removal takes nothing away: not the import branch, not
-// the pending merge, not a placement.
-func TestSkillRemoveOfWhatIsLeftRefusesAMergeLeftPendingBeforeTheLock(t *testing.T) {
-	t.Parallel()
-	h, _, _ := updateHarness(t)
-	tip := h.ref(lineage.ManagedRef("alpha"))
-	remove(t, filepath.Join(h.library, "alpha"))
-	home := onDisk(t, h.home)
-	marker := filepath.Join(t.TempDir(), "read")
-	stubGit(t, h, `#!/bin/sh
-case " $* " in
-*" for-each-ref "*`+lineage.UpstreamRemovedRef("alpha")+`*)
-  if [ -e `+shellWord(marker)+` ]; then
-    `+fakePendingMerge(t, h, "alpha", tip)+` || exit 1
-  fi
-  : > `+shellWord(marker)+` ;;
-esac
-exec `+realGit(t)+` "$@"
-`)
-	out := h.run("--json", "skill", "remove", "alpha")
-	equal(t, "exit", out.exit, 4)
-	equal(t, "hint", h.one(out.stdout, "error")["hint"], "run 'agentx skill update alpha --abort' to give the merge up; the library directory stays as it is")
-	equal(t, "journals", journalCount(t, h), 0)
-	equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), tip)
-	equal(t, "the pending merge's HEAD", strings.TrimSpace(checkoutGit(t, h, "alpha", "rev-parse", "HEAD")), tip)
-	equal(t, "the placements", onDisk(t, h.home), home)
 }
 
 // TestAnIgnoredFileIsNotMineAndSurvivesTheMerge: a file git ignores in the

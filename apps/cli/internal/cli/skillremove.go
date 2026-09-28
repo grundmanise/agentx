@@ -262,9 +262,6 @@ func (inv *invocation) removeAbsent(ctx context.Context, name string, from []str
 				"take what is left of it off the machine with '"+skillCommand("remove", name)+"'")
 		}
 	}
-	if inv.mergePending(name) {
-		return pendingMergeRefusal(name, "removed")
-	}
 	targets := inv.detectedTargets()
 	plan := removalPlan{name: name, whole: true, absent: true, from: targetIDs(targets)}
 	libPath := inv.libraryPath(name)

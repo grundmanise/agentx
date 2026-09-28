@@ -144,12 +144,9 @@ func (inv *invocation) printConflicts(ev conflictEvent, from, to string) {
 // update left a merge pending for it: the merge holds the library
 // directory as it was and the update it was merged with, and updating,
 // reverting or removing the skill would leave it merging versions that are
-// no longer there. It is exit code 4, answered once the command knows the
-// skill as a managed skill whose branch it can read, before anything it
-// would find wrong with what the skill holds or with its update, and the
+// no longer there. It is exit code 4, answered under the lock by
+// everything that replaces a skill's content or takes it away, and the
 // hint names the way out that keeps the library directory as it is.
-// Everything that replaces a skill's content or takes it away calls it
-// under the lock, and before it too wherever it judges the skill first.
 // Whether a merge is pending is whether the skill's checkout is there, see
 // mergePending.
 func pendingMergeRefusal(name, what string) *failure {

@@ -156,18 +156,17 @@ func (r *updateRun) failure() error {
 // the candidate: under the same hold of the lock, once the journal is
 // applied, it is left pending in the skill's checkout, see startMerge, the
 // conflicts are reported, and the run ends with exit code 4. A skill with
-// a merge pending is refused with that same code, whatever else is true of
-// it, until the merge is resolved or given up.
+// a merge pending is refused under the lock with that same code until the
+// merge is resolved or given up.
 //
 // Everything the mutation replaces is read before the lock and again under
-// it: the import branch, the candidate, whether a merge is pending, the
-// settings entry of the source and the library directory, whose content is
-// captured as the fingerprint the journal compares, before git reads what
-// a merge merges. A change to any of them in between refuses the skill
-// rather than updating something nobody judged, so an edit made meanwhile
-// is never replaced with the rest; the journal's remove step carries the
-// same fingerprint, and the content it retains is dropped only when it
-// still hashes to it.
+// it: the import branch, the candidate, the settings entry of the source
+// and the library directory, whose content is captured as the fingerprint
+// the journal compares, before git reads what a merge merges. A change to
+// any of them in between refuses the skill rather than updating something
+// nobody judged, so an edit made meanwhile is never replaced with the rest;
+// the journal's remove step carries the same fingerprint, and the content
+// it retains is dropped only when it still hashes to it.
 //
 // A skill whose source was removed from this machine is refused, and
 // skipped with a warning by --all, see updateRun.drop.
@@ -288,9 +287,7 @@ func (r *updateRun) selection(name string, records map[string]lineage.Record) ([
 // be updated, and reads what the mutation replaces. It refuses, in this
 // order: a name the library does not hold and no lineage names, an
 // unmanaged skill, a fork, a managed skill whose library directory is gone
-// and one whose import branch agentx cannot read; a skill with a merge
-// pending, which is exit code 4 whether or not there is an update, since
-// the merge has to be resolved or given up first; a skill whose source was
+// and one whose import branch agentx cannot read; a skill whose source was
 // removed from this machine, which is exit code 5 as installing from it
 // is; a skill the last update check found its source no longer holds,
 // which is kept as it is and never updated; and, having found an update
@@ -325,8 +322,6 @@ func (inv *invocation) judgeUpdate(ctx context.Context, gitDir, name string, rec
 	case !rec.HasImport:
 		return nil, refuse(exitRefused, fmt.Sprintf("the import branch %s records no version agentx can read", rec.Ref),
 			"run 'agentx doctor' and check the account repo it names")
-	case inv.mergePending(name):
-		return nil, pendingMergeRefusal(name, "updated")
 	case !sources[rec.Import.Source]:
 		return nil, removedSourceRefusal(name, rec.Import.Source)
 	case rec.UpstreamRemoved != "":
@@ -515,9 +510,9 @@ func upstreamNameOf(u *updating, bodies map[string]string) string {
 
 // apply reads every skill's inputs again under the lock and applies the
 // update of each one they still hold as one journaled mutation. A skill
-// whose import branch, candidate, pending merge, source or library
-// directory changed since it was judged is dropped on its own and the
-// others go on; a run whose every skill was dropped here writes no
+// with a merge pending, or whose import branch, candidate, source or
+// library directory changed since it was judged, is dropped on its own and
+// the others go on; a run whose every skill was dropped here writes no
 // journal. A skill whose merge conflicts has no step in the journal and
 // nothing of it changes: once the journal is applied, and only then, its
 // merge is left pending in its checkout, under the same hold of the lock.
@@ -609,9 +604,9 @@ func (r *updateRun) apply(ctx context.Context) error {
 // recheckUpdate reads again, under the lock, everything the update of one
 // skill replaces or depends on, and refuses the skill when any of it is no
 // longer what judgeUpdate read: the import branch, which a fork of the name
-// would supersede; a merge left pending meanwhile, by another update of the
-// skill; the settings entry of the source; the upstream-removed marker and
-// the candidate, which a check may have written meanwhile; and the library
+// would supersede; a merge pending for the skill, which is read here alone;
+// the settings entry of the source; the upstream-removed marker and the
+// candidate, which a check may have written meanwhile; and the library
 // directory, whose content an edit made since it was captured would
 // otherwise be replaced unseen: the fingerprint was captured before git
 // read the directory, so it covers what the update merged too. A removed

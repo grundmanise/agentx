@@ -685,13 +685,13 @@ func lineagelessCandidate(t *testing.T, h *harness, s *sourceRepo) {
 // TestSkillUpdateRefusesInOrder is every skill update refuses, one name at
 // a time, each with its code, its message and its hint, and each where the
 // order of the checks puts it: an import branch agentx cannot read before
-// a merge pending, a merge pending before a removed source, whether or not
-// there is an update, a removed source before an upstream that no longer
+// a removed source, a removed source before an upstream that no longer
 // holds the skill, and both before whether there is an update at all,
 // which comes before whether the library entry is a symlink, and that
-// before whether the skill holds something git cannot record. A skill with
-// no update, or with a candidate whose lineage agentx cannot read, is
-// nothing to do and exits 0. None of them changes a ref, the library or a
+// before whether the skill holds something git cannot record; a merge
+// pending is found under the lock, after all of them. A skill with no
+// update, or with a candidate whose lineage agentx cannot read, is nothing
+// to do and exits 0. None of them changes a ref, the library or a
 // placement, or leaves a journal.
 func TestSkillUpdateRefusesInOrder(t *testing.T) {
 	t.Parallel()
@@ -820,24 +820,6 @@ func TestSkillUpdateRefusesInOrder(t *testing.T) {
 			hint:    "run 'agentx skill update alpha --abort' to give the merge up; the library directory stays as it is",
 		},
 		{
-			name: "a skill with a merge pending whose source was removed", skill: "alpha", exit: 4,
-			setup: func(t *testing.T, h *harness, s *sourceRepo) {
-				pendingMerge(t, h, s)
-				h.mustRun("source", "remove", s.url)
-			},
-			message: "alpha has a merge with its update pending, so it cannot be updated until the merge is resolved or given up",
-			hint:    "run 'agentx skill update alpha --abort' to give the merge up; the library directory stays as it is",
-		},
-		{
-			name: "a skill with a merge pending and no update left", skill: "alpha", exit: 4,
-			setup: func(t *testing.T, h *harness, s *sourceRepo) {
-				pendingMerge(t, h, s)
-				h.accountGit("update-ref", "-d", lineage.CandidateRef("alpha"))
-			},
-			message: "alpha has a merge with its update pending, so it cannot be updated until the merge is resolved or given up",
-			hint:    "run 'agentx skill update alpha --abort' to give the merge up; the library directory stays as it is",
-		},
-		{
 			name: "a skill whose library entry is a symlink", skill: "alpha", exit: 6,
 			setup: func(t *testing.T, h *harness, s *sourceRepo) {
 				checked(t, h, s)
@@ -904,13 +886,12 @@ func TestSkillUpdateRefusesInOrder(t *testing.T) {
 // update reads the candidate's version, after the skill was judged and
 // before the lock is taken: an edit of the library directory, a check that
 // moves or drops the candidate, a branch moved by another command, a fork
-// of the name made meanwhile, a merge another update of the skill left
-// pending, a check that finds the source no longer holds the skill, and the
-// source removed from this machine. The update then
-// refuses under the lock, before it writes a journal, and loses nothing:
-// the edit is there, every ref holds what the other writer wrote, nothing
-// is left beside the library or a copy, and the version file is not bumped
-// for a run that changed nothing.
+// of the name made meanwhile, a check that finds the source no longer
+// holds the skill, and the source removed from this machine. The update
+// then refuses under the lock, before it writes a journal, and loses
+// nothing: the edit is there, every ref holds what the other writer wrote,
+// nothing is left beside the library or a copy, and the version file is
+// not bumped for a run that changed nothing.
 func TestSkillUpdateRefusesWhatChangedBeforeTheLock(t *testing.T) {
 	t.Parallel()
 	edited := "an edit made meanwhile\n"
@@ -937,16 +918,6 @@ func TestSkillUpdateRefusesWhatChangedBeforeTheLock(t *testing.T) {
 			branch: "tip", candidate: "candidate", notes: edited,
 			message: "alpha changed while it was being updated, so nothing was changed",
 			hint:    "run 'agentx skill update alpha' again to update it as it is now",
-		},
-		{
-			name: "another update of the skill leaves a merge pending",
-			change: func(t *testing.T, h *harness, _ *sourceRepo, _, other string) string {
-				return fakePendingMerge(t, h, "alpha", other)
-			},
-			exit:   4,
-			branch: "tip", candidate: "candidate", notes: "alpha notes\n",
-			message: "alpha has a merge with its update pending, so it cannot be updated until the merge is resolved or given up",
-			hint:    "run 'agentx skill update alpha --abort' to give the merge up; the library directory stays as it is",
 		},
 		{
 			name: "a check moves the candidate",

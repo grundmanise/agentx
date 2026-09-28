@@ -48,9 +48,9 @@ func newSkillRevertCommand(inv *invocation) *cobra.Command {
 // fingerprint, and the content it retains is dropped only when it still
 // hashes to it, so an edit made while the mutation runs is kept as well.
 //
-// A skill an update left a merge pending for is refused, before the lock
-// and under it: the merge holds the library directory as it was, and a
-// revert would leave it merging edits that are gone.
+// A skill an update left a merge pending for is refused under the lock:
+// the merge holds the library directory as it was, and a revert would
+// leave it merging edits that are gone.
 //
 // A branch an earlier agentx wrote over a source's own tree, one that
 // stores a mode git no longer writes, is never current against any
@@ -66,9 +66,6 @@ func (inv *invocation) skillRevert(ctx context.Context, name string) error {
 	gitDir, rec, err := inv.managedRecord(ctx, name, "revert to")
 	if err != nil {
 		return err
-	}
-	if inv.mergePending(name) {
-		return pendingMergeRefusal(name, "reverted")
 	}
 	libPath := inv.libraryPath(name)
 	captured, err := home.State(libPath)
