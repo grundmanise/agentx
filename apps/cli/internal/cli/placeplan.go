@@ -564,11 +564,13 @@ func (p plannedPlace) holdsCopy() bool {
 // as what every placement of the run is made of, and the copies it left as
 // they were. The files git ignores in the library directory are carried
 // into the new one, as git checkout keeps them and as a revert carries
-// them, unless the content kept holds a file at the same path. The copies
-// copy_mode records follow it as a revert makes them follow the base: a
-// copy holding what the library directory held or the base version of a
-// managed skill, which a copy placed before the library was edited still
-// holds, is agentx's and is refreshed, and any other copy is kept.
+// them, unless the content kept holds a file at the same path, and never
+// into a copy: a copy the run makes or refreshes holds the content kept
+// alone. The copies copy_mode records follow it as a revert makes them
+// follow the base: a copy holding what the library directory held or the
+// base version of a managed skill, which a copy placed before the library
+// was edited still holds, is agentx's and is refreshed, and any other copy
+// is kept.
 func (inv *invocation) stageKept(ctx context.Context, m *home.Mutation, gitDir string, plan placePlan, done *placements) (placeable, []string, error) {
 	name, libPath := plan.lib.Name, plan.lib.Path
 	kept := plan.differing()[0]
@@ -583,6 +585,10 @@ func (inv *invocation) stageKept(ctx context.Context, m *home.Mutation, gitDir s
 	if err != nil {
 		return placeable{}, nil, accountRepoFailure(err)
 	}
+	hash := contentHashAt(kept.path)
+	if hash == "" {
+		return placeable{}, nil, libraryFailure(inv.dirs.Library, fmt.Errorf("the content of %s holds no SKILL.md", kept.path))
+	}
 	target := rawVersion(kept.tree)
 	lay := func(dest string) error { return copyTreeTo(kept.path, dest) }
 	staged := m.Sibling(libPath, "staged")
@@ -590,11 +596,6 @@ func (inv *invocation) stageKept(ctx context.Context, m *home.Mutation, gitDir s
 	if err != nil {
 		os.RemoveAll(staged)
 		return placeable{}, nil, libraryFailure(inv.dirs.Library, err)
-	}
-	hash := contentHashAt(staged)
-	if hash == "" {
-		os.RemoveAll(staged)
-		return placeable{}, nil, libraryFailure(inv.dirs.Library, fmt.Errorf("the content of %s staged at %s holds no SKILL.md", kept.path, staged))
 	}
 	m.Remove(libPath, plan.libState)
 	m.Publish(libPath, staged, fingerprint)
@@ -610,7 +611,7 @@ func (inv *invocation) stageKept(ctx context.Context, m *home.Mutation, gitDir s
 	done.refreshed = append(done.refreshed, copies.copies...)
 	done.skipped = append(done.skipped, copies.skipped...)
 	done.kept = kept.path
-	return placeable{name: name, hash: hash, stage: func(dest string) error { return copyTreeTo(staged, dest) }}, copies.skipped, nil
+	return placeable{name: name, hash: hash, stage: lay}, copies.skipped, nil
 }
 
 // stagePlaceAt plans the placement at one place, made of p. A place this

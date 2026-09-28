@@ -444,7 +444,9 @@ func TestSkillPlaceKeepPlacementOfTheBaseLeavesItCurrent(t *testing.T) {
 // .gitignore names, are no part of what --keep-placement discards: they
 // are carried into the content kept, as a revert carries them. A copy of
 // the library's content, refreshed with the content kept, keeps its own
-// .DS_Store the same way.
+// .DS_Store the same way, and a copy the run makes holds only the content
+// kept. A file the base version of a managed skill holds is content even
+// when an ignore rule matches it, so a deletion in the content kept stands.
 // An unmanaged skill on a machine with no account repo yet gets one for
 // git to judge its library directory in.
 func TestSkillPlaceKeepPlacementKeepsTheLibrarysIgnoredFiles(t *testing.T) {
@@ -474,6 +476,41 @@ func TestSkillPlaceKeepPlacementKeepsTheLibrarysIgnoredFiles(t *testing.T) {
 		sameTree(t, "cursor's refreshed copy", libraryTree(t, cursor), want)
 		contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), ", 1 copy placement refreshed;")
 		cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor))
+	})
+
+	t.Run("a copy the run makes", func(t *testing.T) {
+		t.Parallel()
+		h, s := placementHarness(t)
+		h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code")
+		lib := filepath.Join(h.library, "alpha")
+		claude := filepath.Join(h.home, ".claude", "skills", "alpha")
+		cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
+		writeFile(t, filepath.Join(lib, ".gitignore"), "build/\n")
+		h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
+		remove(t, cursor)
+		displace(t, lib, claude, true)
+		kept := libraryTree(t, claude)
+		writeFile(t, filepath.Join(lib, ".DS_Store"), "the library's finder data\n")
+		writeFile(t, mkdirs(t, filepath.Join(lib, "build"), "out.txt"), "built\n")
+
+		h.mustRun("skill", "place", "alpha", "--keep-placement")
+		sameTree(t, "cursor's new copy", libraryTree(t, cursor), kept)
+		cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor))
+	})
+
+	t.Run("a file the base holds is content, not a file to carry", func(t *testing.T) {
+		t.Parallel()
+		h, s := placementHarness(t)
+		h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code")
+		lib := filepath.Join(h.library, "alpha")
+		claude := filepath.Join(h.home, ".claude", "skills", "alpha")
+		writeFile(t, filepath.Join(lib, ".gitignore"), "notes.md\n")
+		displace(t, lib, claude, true)
+		remove(t, filepath.Join(claude, "notes.md"))
+		kept := libraryTree(t, claude)
+		h.mustRun("skill", "place", "alpha", "--keep-placement")
+		sameTree(t, "the library directory", libraryTree(t, lib), kept)
+		cleanAfterPlace(t, h, h.library, filepath.Dir(claude))
 	})
 
 	t.Run("an unmanaged skill and no account repo", func(t *testing.T) {
