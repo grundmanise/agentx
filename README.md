@@ -60,8 +60,8 @@ agentx runs your own `git`, 2.40 or later, found on your `PATH`.
 | --- | --- |
 | [`agentx scan`](docs/help-center/cli/scan.mdx) | List every agent configuration on this machine and the skills, servers and plugins each one sees |
 | [`agentx source`](docs/help-center/cli/source.mdx) | Add the git repositories you install skills from, list their skills, remove them |
-| [`agentx skill`](docs/help-center/cli/skill.mdx) | Install skills from a source, place them in your agent clients, see and revert your edits, check for updates and apply them, remove them, list your library |
-| [`agentx adopt`](docs/help-center/cli/adopt.mdx) | Take over the skills the vercel skills CLI installed, without reinstalling them or touching their files |
+| [`agentx skill`](docs/help-center/cli/skill.mdx) | Install skills, place them in agent clients, update, remove, and list your library |
+| [`agentx adopt`](docs/help-center/cli/adopt.mdx) | Take over the skills the vercel skills CLI installed, without reinstalling |
 | [`agentx serve`](docs/help-center/cli/serve.mdx) | Keep watching this machine and stream a snapshot whenever it changes |
 | [`agentx doctor`](docs/help-center/cli/doctor.mdx) | Check that this machine can run agentx |
 | [`agentx config`](docs/help-center/cli/config.mdx) | List, get and set this machine's settings |
