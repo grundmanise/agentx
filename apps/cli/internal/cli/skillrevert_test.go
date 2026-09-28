@@ -466,6 +466,15 @@ func TestRevertChildProcess(t *testing.T) {
 	os.Exit(Run(context.Background(), []string{"skill", "revert", name}, env, strings.NewReader(""), os.Stdout, os.Stderr))
 }
 
+// withFile is files with one more.
+func withFile(files map[string]string, path, content string) map[string]string {
+	with := map[string]string{path: content}
+	for p, c := range files {
+		with[p] = c
+	}
+	return with
+}
+
 // killedRevert runs one revert in a child process that a git wrapper kills
 // the moment its journal is on disk: the first git the revert runs after
 // writing it is the read of the import branch its ref step holds it to,
@@ -574,8 +583,8 @@ func applySteps(t *testing.T, steps []journalStep, n int) {
 // the base published, the copy retained, the copy refreshed, and every live
 // path done with the journal not yet told. The next command recovers each
 // one, and the revert is then whole: the library and the copy hold the
-// base, the import branch is where it was, and nothing staged or retained
-// is left behind.
+// base and each keeps its own .DS_Store, the import branch is where it
+// was, and nothing staged or retained is left behind.
 func TestSkillRevertRecoversAtEveryBoundary(t *testing.T) {
 	t.Parallel()
 	const pathSteps = 4 // the library's remove and publish, then the copy's
@@ -591,6 +600,8 @@ func TestSkillRevertRecoversAtEveryBoundary(t *testing.T) {
 			editLibrary(t, h, "alpha", "notes.md", "alpha notes, edited\n")
 			h.mustRun("skill", "remove", "alpha", "--from", "cursor")
 			h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
+			writeFile(t, filepath.Join(lib, ".DS_Store"), "the library's\n")
+			writeFile(t, filepath.Join(cursor, ".DS_Store"), "the copy's\n")
 
 			out := killedRevert(t, h, "alpha")
 			steps := readJournal(t, h)
@@ -600,7 +611,7 @@ func TestSkillRevertRecoversAtEveryBoundary(t *testing.T) {
 			}
 			equal(t, "the journal's steps", strings.Join(kinds, ", "), "ref, remove, publish, remove, publish")
 			sameTree(t, "the library when the revert was killed", libraryTree(t, lib), map[string]string{
-				"SKILL.md": base["SKILL.md"], "notes.md": "alpha notes, edited\n", "scripts/run.sh": base["scripts/run.sh"],
+				"SKILL.md": base["SKILL.md"], "notes.md": "alpha notes, edited\n", "scripts/run.sh": base["scripts/run.sh"], ".DS_Store": "the library's\n",
 			})
 			applySteps(t, steps, stop)
 
@@ -608,8 +619,8 @@ func TestSkillRevertRecoversAtEveryBoundary(t *testing.T) {
 				t.Fatalf("the command after the killed revert: exit %d\n%s\nthe killed run:\n%s", got.exit, got.stderr, out)
 			}
 			equal(t, "journals after recovery", journalCount(t, h), 0)
-			sameTree(t, "the library directory", libraryTree(t, lib), base)
-			sameTree(t, "cursor's copy", libraryTree(t, cursor), base)
+			sameTree(t, "the library directory", libraryTree(t, lib), withFile(base, ".DS_Store", "the library's\n"))
+			sameTree(t, "cursor's copy", libraryTree(t, cursor), withFile(base, ".DS_Store", "the copy's\n"))
 			if !executable(t, filepath.Join(lib, "scripts", "run.sh")) {
 				t.Error("scripts/run.sh is not executable after recovery")
 			}

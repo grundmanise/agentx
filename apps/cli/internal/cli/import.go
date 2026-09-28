@@ -169,6 +169,7 @@ func readExport(path string) (exportDocument, error) {
 			"export it again from that machine with this version of agentx, or upgrade agentx here")
 	}
 	var doc exportDocument
+	doc.Settings.IgnoreSystemFiles = true // the default, for a document written before the key existed
 	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.DisallowUnknownFields() // a field this version does not know is a document it cannot restore whole
 	if err := dec.Decode(&doc); err != nil {

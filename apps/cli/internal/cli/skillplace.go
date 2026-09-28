@@ -240,20 +240,11 @@ func (inv *invocation) skillPlace(ctx context.Context, name string, to []string,
 	// A run that makes a displaced directory's content the library's
 	// refreshes every copy that holds what agentx placed there: what the
 	// library directory held, or the base version of a managed skill, which
-	// a copy placed before the library was edited still holds. The base is
-	// read here, before the lock, and the branch it comes from is read again
-	// under it.
-	var baseTree string
-	if choice == keepPlacement && managed && len(plan.differing()) > 0 {
-		if !rec.HasImport {
-			return fail(exitRefused, fmt.Sprintf("the import branch %s records no version agentx can read", rec.Ref),
-				"run 'agentx doctor' and check the account repo it names")
-		}
-		base, err := lineage.ReadBase(ctx, inv.git, gitDir, rec)
-		if err != nil {
-			return accountRepoFailure(err)
-		}
-		baseTree = base.ID() // the tree the base has laid out on disk, as a copy of it holds it
+	// a copy placed before the library was edited still holds. The branch
+	// the base comes from is read again under the lock.
+	if choice == keepPlacement && managed && !rec.HasImport && len(plan.differing()) > 0 {
+		return fail(exitRefused, fmt.Sprintf("the import branch %s records no version agentx can read", rec.Ref),
+			"run 'agentx doctor' and check the account repo it names")
 	}
 	again := "run " + plan.command() + " again"
 	var done placements
@@ -317,7 +308,7 @@ func (inv *invocation) skillPlace(ctx context.Context, name string, to []string,
 		}
 		done = placements{}
 		m := home.NewMutation(inv.dirs.Home)
-		if err := inv.stagePlace(ctx, m, live, choice, baseTree, &done); err != nil {
+		if err := inv.stagePlace(ctx, m, gitDir, live, choice, &done); err != nil {
 			m.Discard()
 			return err
 		}
@@ -714,7 +705,7 @@ func (inv *invocation) reportPlaced(ctx context.Context, name string, targets []
 	if err != nil {
 		return err
 	}
-	ev := sc.librarySkillEventFor(inv, snap, lib, targetIDs(targets))
+	ev := sc.librarySkillEventFor(ctx, inv, snap, lib, targetIDs(targets))
 	inv.out.emit(ev)
 	inv.printPlaced(lib, targets, done, ev)
 	inv.summary = placeSummary(name, done) + universalClause(ev.Universal)
@@ -757,13 +748,13 @@ func (inv *invocation) skillContext(ctx context.Context) (skillContext, error) {
 // which is what a listing of the whole library does. The universal clients
 // are every one the rescan detected, covered or not: they see the skill
 // through the library whatever the command covered.
-func (sc skillContext) librarySkillEventFor(inv *invocation, snap scan.Snapshot, lib scan.LibrarySkill, covered []string) librarySkillEvent {
+func (sc skillContext) librarySkillEventFor(ctx context.Context, inv *invocation, snap scan.Snapshot, lib scan.LibrarySkill, covered []string) librarySkillEvent {
 	places := inv.placements(snap, lib, sc.modes)
 	if covered != nil {
 		places = filterPlacements(places, covered)
 	}
 	rec, managed := sc.records[lib.Name]
-	return skillFromLibrary(lib, rec, managed, sc.sources, places, universalClients(snap), sc.observationOf(inv, lib))
+	return skillFromLibrary(lib, rec, managed, sc.sources, places, universalClients(snap), sc.observationOf(ctx, inv, lib))
 }
 
 // lineageRecords are the branches of the account repo by skill name, empty

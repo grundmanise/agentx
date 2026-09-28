@@ -355,43 +355,6 @@ func TestSkillPlaceKeepPlacementMakesItTheLibrary(t *testing.T) {
 	equal(t, "drift after placing again", drift(h.listed("alpha")), "")
 }
 
-// TestSkillPlaceKeepPlacementJudgesWhatGitCannotRecordByteForByte: a
-// library holding a repository of its own leaves one in every copy placed
-// from it, which no tree records. --keep-placement still refreshes such a
-// copy when it holds exactly what the library directory held, judged byte
-// for byte, and keeps the copy whose repository was edited where it is.
-func TestSkillPlaceKeepPlacementJudgesWhatGitCannotRecordByteForByte(t *testing.T) {
-	t.Parallel()
-	h, s := placementHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code", "--to", "github-copilot")
-	lib := filepath.Join(h.library, "alpha")
-	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
-	windsurf := filepath.Join(h.home, ".codeium", "windsurf", "skills", "alpha")
-	writeFile(t, mkdirs(t, filepath.Join(lib, "sub", ".git"), "HEAD"), "ref: refs/heads/main\n")
-	h.mustRun("skill", "place", "alpha", "--to", "windsurf", "--to", "cursor", "--copy")
-	sameTree(t, "windsurf's copy", libraryTree(t, windsurf), libraryTree(t, lib))
-	writeFile(t, filepath.Join(cursor, "sub", ".git", "HEAD"), "ref: refs/heads/other\n")
-	edited := libraryTree(t, cursor)
-	displace(t, lib, claude, true)
-	remove(t, filepath.Join(claude, "sub"))
-	kept := libraryTree(t, claude)
-
-	out := h.mustRun("--json", "skill", "place", "alpha", "--keep-placement")
-	sameTree(t, "the library directory", libraryTree(t, lib), kept)
-	linksToLibrary(t, "claude's placement", claude, lib)
-	sameTree(t, "windsurf's refreshed copy", libraryTree(t, windsurf), kept)
-	if _, err := os.Lstat(filepath.Join(windsurf, "sub")); err == nil {
-		t.Error("windsurf's refreshed copy still holds the repository the library held")
-	}
-	sameTree(t, "cursor's edited copy", libraryTree(t, cursor), edited)
-	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"),
-		keptCopyWarning(cursor, "alpha", "agentx skill remove alpha --from cursor", "agentx skill place alpha --to cursor --copy"))
-	equal(t, "summary", h.one(out.stdout, "result")["summary"],
-		"placed alpha in 5 configurations, 1 copy placement refreshed, 1 placement skipped; the library now holds what "+claude+" held"+universalClauseOf)
-	cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor), filepath.Dir(windsurf))
-}
-
 // TestSkillPlaceKeepPlacementRefreshesACopyOfTheBase: copies placed
 // before the library was edited still hold the base version, which is what
 // agentx placed there, so --keep-placement refreshes them with the content

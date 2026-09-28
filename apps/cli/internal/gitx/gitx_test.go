@@ -61,7 +61,7 @@ func TestEnvironments(t *testing.T) {
 	}
 	expect(t, "isolated", out,
 		[]string{
-			"-c core.autocrlf=false -c commit.gpgsign=false -c core.hooksPath=/dev/null --git-dir=/repo.git commit",
+			"-c core.autocrlf=false -c commit.gpgsign=false -c core.hooksPath=/dev/null -c core.attributesFile=/dev/null --git-dir=/repo.git commit",
 			"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_NO_LAZY_FETCH=1",
 			"GIT_AUTHOR_NAME=agentx", "GIT_AUTHOR_EMAIL=agentx@localhost", "GIT_AUTHOR_DATE=946684800 +0000",
 			"GIT_COMMITTER_NAME=agentx", "GIT_COMMITTER_EMAIL=agentx@localhost", "GIT_COMMITTER_DATE=946684800 +0000",

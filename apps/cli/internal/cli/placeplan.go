@@ -527,12 +527,12 @@ func inside(inner, outer string) bool {
 // already, the library entry, and each place is then planned on its own,
 // see stagePlaceAt, but a copy the replacement already judged: it counts as
 // placed unless it was kept as it is.
-func (inv *invocation) stagePlace(ctx context.Context, m *home.Mutation, plan placePlan, choice keepChoice, base string, done *placements) error {
+func (inv *invocation) stagePlace(ctx context.Context, m *home.Mutation, gitDir string, plan placePlan, choice keepChoice, done *placements) error {
 	p := libraryPlaceable(plan.lib)
 	replaced := choice == keepPlacement && len(plan.differing()) > 0
 	var left []string // the copies the replacement left as they were
 	if replaced {
-		kept, skipped, err := inv.stageKept(ctx, m, plan, base, done)
+		kept, skipped, err := inv.stageKept(ctx, m, gitDir, plan, done)
 		if err != nil {
 			return err
 		}
@@ -564,17 +564,18 @@ func (p plannedPlace) holdsCopy() bool {
 // as what every placement of the run is made of, and the copies it left as
 // they were. The copies copy_mode records follow it as a revert makes them
 // follow the base: a copy holding what the library directory held or the
-// base version, whose tree is base and which a copy placed before the
-// library was edited still holds, is agentx's and is refreshed, and any
-// other copy is kept. Where the library directory holds something git
-// cannot record, a copy placed from it holds that too, and is judged byte
-// for byte against it, as planPlace judges a displaced directory. A skill
-// agentx does not manage has no base, and base is "".
-func (inv *invocation) stageKept(_ context.Context, m *home.Mutation, plan placePlan, base string, done *placements) (placeable, []string, error) {
+// base version of a managed skill, which a copy placed before the library
+// was edited still holds, is agentx's and is refreshed, and any other copy
+// is kept.
+func (inv *invocation) stageKept(ctx context.Context, m *home.Mutation, gitDir string, plan placePlan, done *placements) (placeable, []string, error) {
 	name, libPath := plan.lib.Name, plan.lib.Path
 	kept := plan.differing()[0]
-	staged, fingerprint, err := stageRefresh(m, libPath, kept.path, kept.tree)
+	target := rawVersion(kept.tree)
+	lay := func(dest string) error { return copyTreeTo(kept.path, dest) }
+	staged := m.Sibling(libPath, "staged")
+	fingerprint, err := stageVersion(staged, lay, target, libPath, nil)
 	if err != nil {
+		os.RemoveAll(staged)
 		return placeable{}, nil, libraryFailure(inv.dirs.Library, err)
 	}
 	hash := contentHashAt(staged)
@@ -584,8 +585,12 @@ func (inv *invocation) stageKept(_ context.Context, m *home.Mutation, plan place
 	}
 	m.Remove(libPath, plan.libState)
 	m.Publish(libPath, staged, fingerprint)
+	placed := []version{rawVersion(plan.libTree.ID)}
+	if plan.managed {
+		placed = append(placed, baseVersion(plan.rec))
+	}
 	var copies placements
-	inv.refreshCopies(m, name, kept.tree, []string{plan.libTree.ID, base}, plan.libBytes, staged, plan.copies, &copies)
+	inv.refreshCopies(ctx, m, gitDir, name, target, placed, lay, plan.copies, &copies)
 	done.refreshed = append(done.refreshed, copies.copies...)
 	done.skipped = append(done.skipped, copies.skipped...)
 	done.kept = kept.path
