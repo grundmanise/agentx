@@ -12,7 +12,7 @@ agentx keeps no database on the machine. Every piece of local state has exactly 
 | Fork and greenfield content and history | `skills/<name>` branches in the account repo, one worktree per placed fork | yes | after publish |
 | Managed skill base versions and upstream coordinates | `managed/<name>` import branches in the account repo, no worktree | yes | V1: separate backup refs per machine and logical asset |
 | Update candidates and upstream-removed markers | refs in the account repo | yes | no |
-| Pending merges | a Git merge in progress in a hidden linked worktree of the account repo, `merges/<name>` in agentx home | yes | no |
+| Pending merges | a Git merge in progress in a linked Git worktree of the account repo, `merges/<name>` in agentx home | yes | no |
 | Per-machine settings | `settings.json` in agentx home | yes | no; the fleet sees their effect in the snapshot |
 | Local mutation journals | one file per mutation, with retained old content | until completion or recovery | no |
 | Fleet upload protocol metadata | `sync.json`, with registered generation and reserved sequence | yes; validate on reconnect | ordering only |

@@ -7,13 +7,10 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"slices"
-	"sort"
 	"strings"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/interrupt"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
-	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
 // A pending merge is what an update of a modified skill leaves when its
@@ -70,14 +67,14 @@ func (inv *invocation) pendingMerges() (map[string]bool, error) {
 	return merges, nil
 }
 
-// mergeStart is what a pending merge is set up from: its three versions,
-// commits of the account repo whose trees wrap the skill in its upstream
-// directory, the message the commit that completes it is to carry, and
-// the size of its conflict markers, see markerSize.
+// mergeStart is what a pending merge is set up from: mine, the commit its
+// checkout is detached at, theirs, the candidate it merges, what
+// merge-tree made of them, see mergeResult, and the message the commit
+// that completes it is to carry.
 type mergeStart struct {
-	base, mine, theirs string
-	message            string
-	size               int
+	mine, theirs string
+	merged       mergeResult
+	message      string
 }
 
 // startMerge sets up the pending merge of the skill called name, under the
@@ -92,7 +89,7 @@ func (inv *invocation) startMerge(ctx context.Context, gitDir, name string, in m
 	path := inv.checkoutPath(name)
 	err := inv.git.AddCheckout(ctx, gitDir, path, in.mine, pendingReason)
 	if err == nil {
-		err = inv.mergeIn(ctx, gitDir, path, in)
+		err = inv.mergeIn(ctx, path, in)
 	}
 	if err != nil {
 		return errors.Join(err, inv.git.RemoveCheckout(interrupt.Uninterruptible(ctx), gitDir, path))
@@ -101,48 +98,22 @@ func (inv *invocation) startMerge(ctx context.Context, gitDir, name string, in m
 }
 
 // mergeIn sets the merge up in the checkout at dir, whose HEAD is in.mine,
-// as merge-tree finds it, so that the checkout holds the conflicts the
-// update was judged by, whatever git version runs: merge-tree merges the
-// three versions again as mergeVersions did, the conflicts written in
-// zdiff3 style, so that each carries the base between mine and theirs,
-// with markers of in.size, which an attributes file of its own asks for in
-// place of the null device the isolated environment names. Its tree is read
-// into the checkout's index and work tree, and the stages it lists for each
+// as merge-tree found it when the update was judged: its tree is read into
+// the checkout's index and work tree, and the stages it listed for each
 // conflicted file take the place of that file in the index, as git's own
 // merge leaves them. Then git's own merge state is written where git keeps
 // it for the checkout, MERGE_MSG and then MERGE_HEAD, the candidate, so
 // that the checkout is a merge in progress git knows how to complete.
-func (inv *invocation) mergeIn(ctx context.Context, gitDir, dir string, in mergeStart) error {
-	attrs, err := os.CreateTemp("", "agentx-attributes-")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(attrs.Name())
-	_, err = fmt.Fprintf(attrs, "* conflict-marker-size=%d\n", in.size)
-	if closeErr := attrs.Close(); err == nil {
-		err = closeErr
-	}
-	if err != nil {
-		return err
-	}
-	out, _, err := inv.git.IsolatedStatus(ctx, gitDir, 1, "-c", "merge.directoryRenames=false", "-c", "merge.conflictStyle=zdiff3",
-		"-c", "core.attributesFile="+attrs.Name(), "merge-tree", "--write-tree", "-z", "--no-messages", "--merge-base="+in.base, in.mine, in.theirs)
-	if err != nil {
-		return err
-	}
-	fields := strings.Split(out, "\x00")
-	if _, err := inv.git.InCheckout(ctx, dir, "read-tree", "--reset", "-u", fields[0]); err != nil {
+func (inv *invocation) mergeIn(ctx context.Context, dir string, in mergeStart) error {
+	if _, err := inv.git.InCheckout(ctx, dir, "read-tree", "--reset", "-u", in.merged.tree); err != nil {
 		return err
 	}
 	// A path takes its stages once its merged entry is taken out, by a line
 	// of mode 0, as git update-index documents.
 	var removed, stages strings.Builder
 	seen := map[string]bool{}
-	for _, f := range fields[1:] {
-		_, path, ok := strings.Cut(f, "\t")
-		if !ok {
-			continue
-		}
+	for _, f := range in.merged.stages {
+		_, path, _ := strings.Cut(f, "\t")
 		if !seen[path] {
 			seen[path] = true
 			fmt.Fprintf(&removed, "0 %s\t%s\x00", strings.Repeat("0", len(in.mine)), path)
@@ -152,9 +123,18 @@ func (inv *invocation) mergeIn(ctx context.Context, gitDir, dir string, in merge
 	if _, err := inv.git.InCheckoutInput(ctx, dir, strings.NewReader(removed.String()+stages.String()), "update-index", "-z", "--index-info"); err != nil {
 		return err
 	}
-	paths, err := inv.gitPaths(ctx, dir, "MERGE_MSG", "MERGE_HEAD")
+	out, err := inv.git.InCheckout(ctx, dir, "rev-parse", "--git-path", "MERGE_MSG", "--git-path", "MERGE_HEAD")
 	if err != nil {
 		return err
+	}
+	paths := strings.Split(strings.TrimSuffix(out, "\n"), "\n")
+	if len(paths) != 2 {
+		return fmt.Errorf("git rev-parse: cannot read where the merge state goes in %q", out)
+	}
+	for i, p := range paths {
+		if !filepath.IsAbs(p) {
+			paths[i] = filepath.Join(dir, p)
+		}
 	}
 	if err := os.WriteFile(paths[0], []byte(in.message), 0o644); err != nil {
 		return err
@@ -162,150 +142,21 @@ func (inv *invocation) mergeIn(ctx context.Context, gitDir, dir string, in merge
 	return os.WriteFile(paths[1], []byte(in.theirs+"\n"), 0o644)
 }
 
-// gitPaths are where git keeps the files names for the checkout at dir,
-// as absolute paths.
-func (inv *invocation) gitPaths(ctx context.Context, dir string, names ...string) ([]string, error) {
-	var args []string
-	for _, n := range names {
-		args = append(args, "--git-path", n)
-	}
-	out, err := inv.git.InCheckout(ctx, dir, append([]string{"rev-parse"}, args...)...)
-	if err != nil {
-		return nil, err
-	}
-	paths := strings.Split(strings.TrimSuffix(out, "\n"), "\n")
-	if len(paths) != len(names) {
-		return nil, fmt.Errorf("git rev-parse: cannot read where %s are in %q", strings.Join(names, " and "), out)
-	}
-	for i, p := range paths {
-		if !filepath.IsAbs(p) {
-			paths[i] = filepath.Join(dir, p)
-		}
-	}
-	return paths, nil
-}
-
 // updateMergeMessage is the message of the commit that completes the
 // pending merge of an update of the skill called name from the version
-// from to the candidate to: what it did, and the trailer naming the import
-// commit the skill's branch moves to then. Nothing about the machine
-// enters it.
+// from to the candidate to. Nothing about the machine enters it.
 func updateMergeMessage(name string, from, to lineage.Record) string {
-	return fmt.Sprintf("update %s from %s to %s, keeping its edits\n\n%s: %s\n",
-		name, short(from.Import.Commit), short(to.Import.Commit), lineage.TrailerBase, to.Commit)
-}
-
-// readConflicts reads the files that conflict in the merge in progress in
-// the checkout at dir, whose tree holds the skill under skillDir, sorted
-// by path relative to the skill: the unmerged paths git's index lists, the
-// blob of each stage of each, read in one cat-file, and the hunks of a
-// text file from the marker blocks the checkout's file holds, see
-// hunksIn. A file conflicts whole as conflictOf says.
-func (inv *invocation) readConflicts(ctx context.Context, gitDir, dir, skillDir string) ([]conflictFile, error) {
-	out, err := inv.git.InCheckout(ctx, dir, "ls-files", "-u", "-z")
-	if err != nil {
-		return nil, err
-	}
-	stages := map[string]map[string]staged{}
-	for _, entry := range strings.Split(out, "\x00") {
-		if entry == "" {
-			continue
-		}
-		meta, path, ok := strings.Cut(entry, "\t")
-		parts := strings.Fields(meta)
-		if !ok || len(parts) != 3 {
-			return nil, fmt.Errorf("git ls-files: cannot read the unmerged entry %q", entry)
-		}
-		rel, inside := strings.CutPrefix(path, skillDir+"/")
-		if !inside {
-			continue
-		}
-		if stages[rel] == nil {
-			stages[rel] = map[string]staged{}
-		}
-		stages[rel][parts[2]] = staged{mode: parts[0], oid: parts[1]}
-	}
-	var ids []string
-	paths := make([]string, 0, len(stages))
-	renamed := false // a file moved to two places leaves its old path with the base alone
-	for p, versions := range stages {
-		paths = append(paths, p)
-		for _, v := range versions {
-			if source.IsFileMode(v.mode) {
-				ids = append(ids, v.oid)
-			}
-		}
-		if _, ok := versions[gitStageBase]; ok && len(versions) == 1 {
-			renamed = true
-		}
-	}
-	sort.Strings(paths)
-	bodies, err := source.ReadBlobs(ctx, inv.git, gitDir, ids)
-	if err != nil {
-		return nil, err
-	}
-	files := []conflictFile{}
-	for _, p := range paths {
-		f, text := conflictOf(p, stages[p], bodies, renamed)
-		if text {
-			if f.Hunks, f.text, f.why, err = hunksIn(filepath.Join(dir, skillDir, filepath.FromSlash(p)), stages[p], bodies); err != nil {
-				return nil, err
-			}
-		}
-		files = append(files, f)
-	}
-	return files, nil
-}
-
-// hunksIn reads the hunks of one text file that conflicts out of the file
-// at path, where the merge wrote it: the marker blocks of the size
-// markerSizeIn finds, so that no line of the file's own is taken for a
-// marker, each with mine, the base and theirs as the file's three versions
-// hold them there. A file with no such block conflicts whole: why says
-// how. A file removed from the checkout reads as empty, so it conflicts
-// whole too. text is the file as a resolve rewrites it.
-func hunksIn(path string, versions map[string]staged, bodies map[string]string) ([]conflictHunk, *conflictText, string, error) {
-	version := func(stage string) string {
-		if v, ok := versions[stage]; ok {
-			return bodies[v.oid]
-		}
-		return ""
-	}
-	text := &conflictText{mine: version(gitStageMine), base: version(gitStageBase), theirs: version(gitStageTheirs)}
-	b, err := os.ReadFile(path)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return nil, nil, "", err
-	}
-	file := string(b)
-	var hunks []conflictHunk
-	if size := markerSizeIn(file, text.mine, text.base, text.theirs); size > 0 {
-		if text.around, text.raw, err = splitMerged(file, size); err != nil {
-			text.around, text.raw = nil, nil
-		}
-		hunks = slices.Clone(text.raw)
-		if len(hunks) > 0 && text.around[len(text.around)-1] == "" {
-			h := &hunks[len(hunks)-1]
-			h.Mine, h.Base, h.Theirs = asAtEnd(h.Mine, text.mine), asAtEnd(h.Base, text.base), asAtEnd(h.Theirs, text.theirs)
-		}
-	}
-	_, based := versions[gitStageBase]
-	switch {
-	case len(hunks) > 0:
-		return hunks, text, "", nil
-	case !based && versions[gitStageMine].mode != versions[gitStageTheirs].mode:
-		return []conflictHunk{}, text, "added here and by the update, executable on one side only", nil
-	}
-	return []conflictHunk{}, text, "changed here and by the update, with no conflict markers agentx can tell from its lines", nil
+	return fmt.Sprintf("update %s from %s to %s, keeping its edits\n", name, short(from.Import.Commit), short(to.Import.Commit))
 }
 
 // pruneMerges removes what an interrupted command left of a pending merge,
 // under the lock and once every journal is finished: a directory under
 // the merges directory that is no checkout git knows, its .git file gone
-// or naming a git directory that is not there, and the registration of a
-// checkout under the merges directory whose directory is gone, its
+// or naming a git directory that is not there, and git's registration of a
+// checkout locked with agentx's reason whose directory is gone, its
 // directory under the account repo's worktrees, as git's own pruning
-// removes one. A checkout anywhere else, a fork's worktree say, is never
-// touched. It runs no git.
+// removes one. A checkout agentx did not lock, a fork's worktree say, is
+// never touched. It runs no git.
 func (inv *invocation) pruneMerges(gitDir string) error {
 	entries, err := os.ReadDir(inv.mergesDir())
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -319,10 +170,7 @@ func (inv *invocation) pruneMerges(gitDir string) error {
 			}
 		}
 	}
-	worktrees, err := filepath.Abs(filepath.Join(gitDir, "worktrees"))
-	if err != nil {
-		return err
-	}
+	worktrees := filepath.Join(gitDir, "worktrees")
 	admins, err := os.ReadDir(worktrees)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
@@ -330,39 +178,23 @@ func (inv *invocation) pruneMerges(gitDir string) error {
 	if err != nil {
 		return err
 	}
-	// git records where a checkout is by its real path, or by one relative
-	// to its registration, so the directory holding a checkout is compared
-	// with the merges directory by the real path of the directory above,
-	// which is agentx home, there whatever else is not.
-	home, err := filepath.Abs(inv.dirs.Home)
-	if err != nil {
-		return err
-	}
-	if home, err = filepath.EvalSymlinks(home); err != nil {
-		return err
-	}
-	inMerges := func(path string) bool {
-		dir := filepath.Dir(path)
-		if above, err := filepath.EvalSymlinks(filepath.Dir(dir)); err == nil {
-			dir = filepath.Join(above, filepath.Base(dir))
-		}
-		return dir == filepath.Join(home, "merges")
-	}
 	for _, a := range admins {
 		admin := filepath.Join(worktrees, a.Name())
+		reason, err := os.ReadFile(filepath.Join(admin, "locked"))
+		if err != nil || strings.TrimSuffix(string(reason), "\n") != pendingReason {
+			continue
+		}
 		b, err := os.ReadFile(filepath.Join(admin, "gitdir"))
 		if err != nil {
 			continue
 		}
+		// git records the checkout's .git file by its path, or by one
+		// relative to the registration.
 		path := strings.TrimSuffix(string(b), "\n")
 		if !filepath.IsAbs(path) {
 			path = filepath.Join(admin, path)
 		}
-		path = filepath.Dir(path)
-		if !inMerges(path) {
-			continue
-		}
-		if _, err := os.Lstat(path); errors.Is(err, fs.ErrNotExist) {
+		if _, err := os.Lstat(filepath.Dir(path)); errors.Is(err, fs.ErrNotExist) {
 			if err := os.RemoveAll(admin); err != nil {
 				return err
 			}

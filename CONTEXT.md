@@ -128,7 +128,7 @@ Applying a managed skill's update candidate, only ever at the user's request: th
 _Avoid_: upgrade, pull, sync
 
 **Pending merge**:
-The merge an update of a modified skill leaves when the edits and the update candidate conflict: an ordinary Git merge in progress in a hidden checkout of the account repo under agentx home. The library directory, and so every agent, keeps its content until the merge is resolved or given up. It is resolved in that checkout, part by part or in the user's own editor in place; a file with no markers left is staged, as in Git. The resolve that leaves nothing unmerged completes it: the finished merge is committed there and applied to the library, and an edit made meanwhile is merged on top, or restarts the merge showing only where it overlaps. Giving it up removes the checkout and leaves the library as it was. While it exists the skill is not updated, reverted or removed. Survives restarts.
+The merge an update of a modified skill leaves when the edits and the update candidate conflict: an ordinary Git merge in progress in a Git worktree of the account repo under agentx home, resolved with Git. The library directory, and so every agent, keeps its content until the merge is resolved or given up. While it exists the skill is not updated, reverted or removed. Survives restarts.
 _Avoid_: merge ref, conflict state
 
 **Modified skill**:

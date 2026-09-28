@@ -6,11 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"sort"
 	"strings"
-	"unicode"
 
 	"github.com/spf13/cobra"
 
@@ -19,7 +17,6 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
-	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
 func newSkillUpdateCommand(inv *invocation) *cobra.Command {
@@ -31,13 +28,14 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 			"'agentx skill check' found for it, and record that version as the one the skill\n" +
 			"is at. A skill edited since it was installed keeps its edits: they are merged\n" +
 			"into the newer version. When they conflict with it, the library is left as it is\n" +
-			"and the conflicts are shown: the merge waits, an ordinary Git merge in progress in\n" +
-			"a hidden checkout under agentx home, never in the library, until it is resolved.\n" +
-			"Files git ignores in the skill, such as a .DS_Store or an ignored build directory,\n" +
-			"are not edits, and stay. A copy placement that holds the version replaced is\n" +
-			"refreshed; a copy edited on its own is kept and named. Pass --all instead of a\n" +
-			"name to update every managed skill the last check found an update for. Read an\n" +
-			"update before you apply it with 'agentx skill diff <name> --upstream'.",
+			"and the conflicting files are listed: the merge waits, an ordinary Git merge in\n" +
+			"progress in a Git worktree under agentx home, never in the library, for you to\n" +
+			"resolve with git. Files git ignores in the skill, such as a .DS_Store or an\n" +
+			"ignored build directory, are not edits, and stay. A copy placement that holds the\n" +
+			"version replaced is refreshed; a copy edited on its own is kept and named. Pass\n" +
+			"--all instead of a name to update every managed skill the last check found an\n" +
+			"update for. Read an update before you apply it with\n" +
+			"'agentx skill diff <name> --upstream'.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			const hint = "name the skill to update, or run 'agentx skill update --all' to update every skill the last check found an update for"
@@ -77,7 +75,6 @@ type updating struct {
 	next         lineage.Record // the import branch as the update leaves it, at the candidate
 	libPath      string
 	captured     string       // the library entry when the run began, in the words a journal records
-	tree         treeid.Tree  // what the library directory holds, as it was read
 	edited       bool         // the library directory is not the base version, so the update merges
 	written      string       // the tree git wrote of the library directory, when it was edited
 	ignored      []string     // the files git ignores in the library directory, which the new one keeps
@@ -86,8 +83,7 @@ type updating struct {
 	target       version      // base, as the copies are compared with it
 	placed       []version    // the versions a copy holds that agentx could have placed there, which the update refreshes
 	merge        lineage.Merge
-	conflicted   bool          // the merge conflicts, so the update leaves it pending
-	size         int           // the size of its conflict markers
+	merged       mergeResult   // what merge-tree made of merge; one that conflicts the update leaves pending
 	conflict     conflictEvent // the conflicts of the merge left pending
 	upstreamName string        // the name the candidate's SKILL.md gives the skill, when it is not name
 	done         placements    // the copies the mutation refreshed or kept
@@ -161,18 +157,17 @@ func (r *updateRun) failure() error {
 // the candidate: under the same hold of the lock, once the journal is
 // applied, it is left pending in the skill's checkout, see startMerge, the
 // conflicts are reported, and the run ends with exit code 4. A skill with
-// a merge pending is refused with that same code, whatever else is true of
-// it, until the merge is resolved or given up.
+// a merge pending is refused under the lock with that same code until the
+// merge is resolved or given up.
 //
 // Everything the mutation replaces is read before the lock and again under
-// it: the import branch, the candidate, whether a merge is pending, the
-// settings entry of the source and the library directory, whose content is
-// captured as the fingerprint the journal compares, before git reads what
-// a merge merges. A change to any of them in between refuses the skill
-// rather than updating something nobody judged, so an edit made meanwhile
-// is never replaced with the rest; the journal's remove step carries the
-// same fingerprint, and the content it retains is dropped only when it
-// still hashes to it.
+// it: the import branch, the candidate, the settings entry of the source
+// and the library directory, whose content is captured as the fingerprint
+// the journal compares, before git reads what a merge merges. A change to
+// any of them in between refuses the skill rather than updating something
+// nobody judged, so an edit made meanwhile is never replaced with the rest;
+// the journal's remove step carries the same fingerprint, and the content
+// it retains is dropped only when it still hashes to it.
 //
 // A skill whose source was removed from this machine is refused, and
 // skipped with a warning by --all, see updateRun.drop.
@@ -192,11 +187,18 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 	// until it is finished the skill reads as already updated while the
 	// library still holds the version replaced, or holds no directory once
 	// that was retained, and the run would answer for a machine halfway
-	// through its own change. Nothing is written beyond what the recovery
+	// through its own change. The lock is taken for it only when there is
+	// a journal to finish, and nothing is written beyond what the recovery
 	// writes, its own bump of the version file included, as for the
 	// recovery a scan runs.
-	if err := inv.finishJournals(ctx); err != nil {
-		return err
+	switch journals, err := home.Journals(inv.dirs.Home); {
+	case err != nil:
+		return mutationFailure(err)
+	case len(journals) > 0:
+		inv.out.debugf("recovering %s", strings.Join(journals, ", "))
+		if err := home.MutateQuiet(inv.dirs.Home, inv.refs(ctx), func() error { return nil }); err != nil {
+			return mutationFailure(err)
+		}
 	}
 	records := map[string]lineage.Record{}
 	if exists {
@@ -286,9 +288,7 @@ func (r *updateRun) selection(name string, records map[string]lineage.Record) ([
 // be updated, and reads what the mutation replaces. It refuses, in this
 // order: a name the library does not hold and no lineage names, an
 // unmanaged skill, a fork, a managed skill whose library directory is gone
-// and one whose import branch agentx cannot read; a skill with a merge
-// pending, which is exit code 4 whether or not there is an update, since
-// the merge has to be resolved or given up first; a skill whose source was
+// and one whose import branch agentx cannot read; a skill whose source was
 // removed from this machine, which is exit code 5 as installing from it
 // is; a skill the last update check found its source no longer holds,
 // which is kept as it is and never updated; and, having found an update
@@ -323,8 +323,6 @@ func (inv *invocation) judgeUpdate(ctx context.Context, gitDir, name string, rec
 	case !rec.HasImport:
 		return nil, refuse(exitRefused, fmt.Sprintf("the import branch %s records no version agentx can read", rec.Ref),
 			"run 'agentx doctor' and check the account repo it names")
-	case inv.mergePending(name):
-		return nil, pendingMergeRefusal(name, "updated")
 	case !sources[rec.Import.Source]:
 		return nil, removedSourceRefusal(name, rec.Import.Source)
 	case rec.UpstreamRemoved != "":
@@ -359,7 +357,7 @@ func (inv *invocation) judgeUpdate(ctx context.Context, gitDir, name string, rec
 	if err != nil {
 		return nil, failureOf(accountRepoFailure(err))
 	}
-	return &updating{name: name, rec: rec, next: next, libPath: libPath, captured: captured, tree: tree,
+	return &updating{name: name, rec: rec, next: next, libPath: libPath, captured: captured,
 		edited: !j.holds, written: j.written, ignored: j.ignored}, nil
 }
 
@@ -410,7 +408,7 @@ func (r *updateRun) read(ctx context.Context) error {
 				continue
 			}
 		}
-		if !u.conflicted {
+		if !u.merged.conflicted {
 			ids = append(ids, baseBlobs(u.base)...)
 		}
 		ids = append(ids, skillFileBlob(u.theirs)...)
@@ -444,14 +442,9 @@ func (r *updateRun) read(ctx context.Context) error {
 // candidate's, and the skill keeps its edits on the new base. The copies
 // agentx could have placed are then the ones holding the library directory
 // as it was or the base version, since a copy placed before the edits holds
-// the base. A clean merge the library's file system cannot hold is refused
-// instead, see caseClashRefusal. A merge that conflicts lays nothing out:
-// the update leaves it pending, see startMerge, with markers of the size
-// mergeVersions judged.
-//
-// A directory that holds exactly the base version's files, which reads as
-// modified only because an earlier agentx stored that version in a form git
-// no longer writes, has no edits to merge, and updates by replacement.
+// the base. A merge that conflicts lays nothing out: the update leaves it
+// pending as merge-tree found it, see startMerge, and the files that
+// conflict are read from merge-tree's own list.
 func (r *updateRun) merge(ctx context.Context, u *updating) *failure {
 	git, gitDir := r.inv.git, r.gitDir
 	dir := u.rec.Import.Dir()
@@ -459,141 +452,30 @@ func (r *updateRun) merge(ctx context.Context, u *updating) *failure {
 		return refuse(exitAccountRepo, "the update candidate "+lineage.CandidateRef(u.name)+" holds "+u.name+" under another directory than its import branch",
 			"run 'agentx skill check' to pin the update again")
 	}
-	base, err := lineage.ReadBase(ctx, git, gitDir, u.rec)
-	if err != nil {
-		return failureOf(accountRepoFailure(err))
-	}
-	if u.written == base.ID() {
-		u.edited = false
-		return nil
-	}
-	root, err := filepath.EvalSymlinks(u.libPath)
-	if err != nil {
-		return failureOf(libraryFailure(r.inv.dirs.Library, err))
-	}
 	mine, err := lineage.CommitDir(ctx, git, gitDir, dir, u.written, u.rec.Commit, "library directory of "+u.name+"\n")
 	if err != nil {
 		return failureOf(accountRepoFailure(err))
 	}
-	m := lineage.Merge{Base: u.rec.Commit, Mine: mine, Theirs: u.next.Commit}
-	res, err := mergeVersions(ctx, git, gitDir, dir, m)
-	if err != nil {
+	u.merge = lineage.Merge{Base: u.rec.Commit, Mine: mine, Theirs: u.next.Commit}
+	if u.merged, err = mergeVersions(ctx, git, gitDir, u.merge); err != nil {
 		return failureOf(accountRepoFailure(err))
 	}
-	if res.conflicted {
-		u.merge, u.conflicted, u.size = m, true, res.size
+	if u.merged.conflicted {
+		files, err := conflictFiles(u.merged.stages, dir)
+		if err != nil {
+			return failureOf(accountRepoFailure(err))
+		}
+		u.conflict = conflictOfSkill(u.name, u.merge, files)
 		return nil
 	}
-	merged, err := lineage.ReadMerged(ctx, git, gitDir, res.tree, dir)
+	merged, err := lineage.ReadMerged(ctx, git, gitDir, u.merged.tree, dir)
 	if err != nil {
 		return failureOf(accountRepoFailure(err))
-	}
-	if f := caseClashRefusal(u, merged, root); f != nil {
-		return f
 	}
 	u.base = merged
 	u.target = treeVersion(merged.ID())
 	u.placed = []version{treeVersion(u.written), baseVersion(u.rec)}
 	return nil
-}
-
-// caseClashRefusal refuses a clean merge that holds two paths differing in
-// case alone when the file system of the library directory at root cannot
-// keep them apart, as macOS and Windows by default cannot. git compares
-// paths byte for byte, so a file the user added and one the update added,
-// readme.md and README.md say, merge cleanly, into a version that laid out
-// there would be one file and not the version merged. It is refused before
-// the lock, for its skill alone, and names the path of the two the library
-// directory holds as the one to rename; the update holds the other. A pair
-// the update itself holds both of has nothing in the library to rename,
-// and is only laid out once its source tells them apart.
-func caseClashRefusal(u *updating, merged lineage.Base, root string) *failure {
-	a, b, ok := caseClash(merged.Entries)
-	if !ok {
-		return nil
-	}
-	held := map[string]bool{}
-	for _, d := range u.tree.Dirs {
-		held[d.Path] = true
-	}
-	for _, blob := range u.tree.Blobs {
-		held[blob.Path] = true
-	}
-	if (held[a] && held[b]) || !foldsCase(root, u.tree) {
-		return nil // the file system keeps them apart
-	}
-	message := fmt.Sprintf("the update of %s merged with its edits holds both %s and %s, which this file system cannot keep apart, so nothing was changed",
-		u.name, quotedPath(a), quotedPath(b))
-	mine := a
-	if held[b] {
-		mine = b
-	}
-	if !held[mine] {
-		return refuse(exitRefused, message,
-			"the update itself holds both: once its source tells them apart, run 'agentx skill check', then '"+skillCommand("update", u.name)+"'")
-	}
-	return refuse(exitRefused, message,
-		"rename "+quotedPath(mine)+" in "+quotedPath(u.libPath)+", then run '"+skillCommand("update", u.name)+"' again")
-}
-
-// caseClash finds two paths of a version, directories included, that
-// differ in case alone, the first such pair in the order given. A
-// directory is listed before what it holds, so two directories whose names
-// differ in case clash as themselves, before any file below them does.
-func caseClash(entries []source.TreeEntry) (a, b string, ok bool) {
-	seen := map[string]string{}
-	for _, e := range entries {
-		key := foldedCase(e.Path)
-		if other, found := seen[key]; found {
-			return other, e.Path, true
-		}
-		seen[key] = e.Path
-	}
-	return "", "", false
-}
-
-// foldedCase is path with every letter replaced by the least of the
-// letters Unicode folds it together with, so that two paths strings.EqualFold
-// holds equal are the same string.
-func foldedCase(path string) string {
-	return strings.Map(func(r rune) rune {
-		least := r
-		for f := unicode.SimpleFold(r); f != r; f = unicode.SimpleFold(f) {
-			least = min(least, f)
-		}
-		return least
-	}, path)
-}
-
-// foldsCase reports whether the file system of the directory at root, read
-// as tree, finds a path whatever the case it is spelled in: whether a file
-// the directory holds is found again, as the same file, with the case of
-// every letter of its path swapped. A directory with no such path to try
-// is judged by its operating system instead: macOS and Windows fold case
-// by default.
-func foldsCase(root string, tree treeid.Tree) bool {
-	held := map[string]bool{}
-	for _, b := range tree.Blobs {
-		held[b.Path] = true
-	}
-	for _, b := range tree.Blobs {
-		swapped := strings.Map(func(r rune) rune {
-			if unicode.IsUpper(r) {
-				return unicode.ToLower(r)
-			}
-			return unicode.ToUpper(r)
-		}, b.Path)
-		if swapped == b.Path || held[swapped] {
-			continue
-		}
-		info, err := os.Lstat(filepath.Join(root, filepath.FromSlash(b.Path)))
-		if err != nil {
-			continue
-		}
-		other, err := os.Lstat(filepath.Join(root, filepath.FromSlash(swapped)))
-		return err == nil && os.SameFile(info, other)
-	}
-	return runtime.GOOS == "darwin" || runtime.GOOS == "windows"
 }
 
 // skillFileBlob is the blob of the SKILL.md a version holds, the one file
@@ -620,32 +502,22 @@ func changedWhileUpdating(name string) *failure {
 // give the skill, when it is not the skill's library name, and ""
 // otherwise, see upstreamRename.
 func upstreamNameOf(u *updating, bodies map[string]string) string {
-	return upstreamRename(u.name, skillName(u.theirs, bodies), u.next.Import.Dir())
-}
-
-// skillName is the name the SKILL.md of a version gives the skill, read
-// out of bodies, "" when it gives none.
-func skillName(v lineage.Base, bodies map[string]string) string {
-	ids := skillFileBlob(v)
-	if len(ids) == 0 {
-		return ""
+	name := ""
+	if ids := skillFileBlob(u.theirs); len(ids) > 0 {
+		name, _, _ = scan.SkillFrontmatter(bodies[ids[0]])
 	}
-	name, _, _ := scan.SkillFrontmatter(bodies[ids[0]])
-	return name
+	return upstreamRename(u.name, name, u.next.Import.Dir())
 }
 
 // apply reads every skill's inputs again under the lock and applies the
 // update of each one they still hold as one journaled mutation. A skill
-// whose import branch, candidate, pending merge, source or library
-// directory changed since it was judged is dropped on its own and the
-// others go on, as is one whose version could not be laid out; a run whose
-// every skill was dropped here writes no journal. A skill whose merge
-// conflicts has no step in the journal and nothing of it changes: once the
-// journal is applied, and only then, its merge is left pending in its
-// checkout, under the same hold of the lock, and its conflicts are read
-// from there. A skill whose merge cannot be set up is dropped with nothing
-// of it left; one whose conflicts cannot be read is dropped with its merge
-// pending all the same.
+// with a merge pending, or whose import branch, candidate, source or
+// library directory changed since it was judged, is dropped on its own and
+// the others go on; a run whose every skill was dropped here writes no
+// journal. A skill whose merge conflicts has no step in the journal and
+// nothing of it changes: once the journal is applied, and only then, its
+// merge is left pending in its checkout, under the same hold of the lock.
+// A skill whose merge cannot be set up is dropped with nothing of it left.
 func (r *updateRun) apply(ctx context.Context) error {
 	inv := r.inv
 	var refs []string
@@ -668,11 +540,14 @@ func (r *updateRun) apply(ctx context.Context) error {
 			switch f := inv.recheckUpdate(u, values, sources); {
 			case f != nil:
 				r.drop(u.name, f)
-			case u.conflicted:
+			case u.merged.conflicted:
 				conflicted = append(conflicted, u)
 			default:
 				live = append(live, u)
 			}
+		}
+		if len(live)+len(conflicted) == 0 {
+			return errNothingApplied
 		}
 		// An update killed before its journal was written left what it
 		// staged with nothing to name it: beside the library directory, and
@@ -691,40 +566,28 @@ func (r *updateRun) apply(ctx context.Context) error {
 				}
 			}
 		}
-		// stageUpdate records no step of a skill until its version is laid
-		// out, and removes what it laid out when that fails, so a skill it
-		// fails for is dropped with nothing of it in the mutation.
 		m := home.NewMutation(inv.dirs.Home)
 		for _, u := range live {
 			if err := inv.stageUpdate(ctx, m, r.gitDir, u, r.bodies, edit.copiesOf(u.name)); err != nil {
-				r.drop(u.name, failureOf(err))
-				continue
+				m.Discard()
+				return err
 			}
-			staged = append(staged, u)
 		}
-		if len(staged) == 0 {
-			m.Discard()
-		} else if err := m.Apply(inv.refs(ctx)); err != nil {
-			return err
+		if len(live) > 0 {
+			if err := m.Apply(inv.refs(ctx)); err != nil {
+				return err
+			}
 		}
-		setUp := 0
+		staged = live
 		for _, u := range conflicted {
-			start := mergeStart{base: u.merge.Base, mine: u.merge.Mine, theirs: u.merge.Theirs,
-				message: updateMergeMessage(u.name, u.rec, u.next), size: u.size}
+			start := mergeStart{mine: u.merge.Mine, theirs: u.merge.Theirs, merged: u.merged, message: updateMergeMessage(u.name, u.rec, u.next)}
 			if err := inv.startMerge(ctx, r.gitDir, u.name, start); err != nil {
 				r.drop(u.name, failureOf(accountRepoFailure(err)))
 				continue
 			}
-			setUp++
-			files, err := inv.readConflicts(ctx, r.gitDir, inv.checkoutPath(u.name), u.rec.Import.Dir())
-			if err != nil {
-				r.drop(u.name, failureOf(accountRepoFailure(err)))
-				continue
-			}
-			u.conflict = conflictOfSkill(u.name, u.merge, files)
 			pending = append(pending, u)
 		}
-		if len(staged)+setUp == 0 {
+		if len(staged)+len(pending) == 0 {
 			return errNothingApplied
 		}
 		return nil
@@ -742,9 +605,9 @@ func (r *updateRun) apply(ctx context.Context) error {
 // recheckUpdate reads again, under the lock, everything the update of one
 // skill replaces or depends on, and refuses the skill when any of it is no
 // longer what judgeUpdate read: the import branch, which a fork of the name
-// would supersede; a merge left pending meanwhile, by another update of the
-// skill; the settings entry of the source; the upstream-removed marker and
-// the candidate, which a check may have written meanwhile; and the library
+// would supersede; a merge pending for the skill, which is read here alone;
+// the settings entry of the source; the upstream-removed marker and the
+// candidate, which a check may have written meanwhile; and the library
 // directory, whose content an edit made since it was captured would
 // otherwise be replaced unseen: the fingerprint was captured before git
 // read the directory, so it covers what the update merged too. A removed
@@ -786,20 +649,14 @@ func (inv *invocation) recheckUpdate(u *updating, values map[string]string, sour
 // refreshed with the new one, see refreshCopies; and the candidate ref
 // deleted, with the candidate as its expected old value, which the journal
 // runs after every path step, so that a refusal on the way leaves it in
-// place. What the library directory holds unchanged keeps its permissions,
-// see keepPerms.
+// place.
 //
 // The files git ignores in the library directory are carried into the new
 // one, as git checkout keeps them, but for a path the new version holds,
 // which keeps the new version's file. What they held before stays in the
 // retained library directory until the update is complete.
 func (inv *invocation) stageUpdate(ctx context.Context, m *home.Mutation, gitDir string, u *updating, bodies map[string]string, recorded []string) error {
-	lay := func(dest string) error {
-		if err := materialise(dest, u.base, bodies); err != nil {
-			return err
-		}
-		return keepPerms(dest, u.libPath, u.tree, u.base)
-	}
+	lay := func(dest string) error { return materialise(dest, u.base, bodies) }
 	staged := m.Sibling(u.libPath, "staged")
 	fingerprint, err := stageVersion(staged, lay, u.target, u.libPath, u.ignored)
 	if err != nil {
@@ -812,74 +669,6 @@ func (inv *invocation) stageUpdate(ctx context.Context, m *home.Mutation, gitDir
 	m.Publish(u.libPath, staged, fingerprint)
 	inv.refreshCopies(ctx, m, gitDir, u.name, u.target, u.placed, lay, recorded, &u.done)
 	m.Ref(gitDir, lineage.CandidateRef(u.name), u.next.Commit, "")
-	return nil
-}
-
-// keepPerms gives what an update laid out at staged, the version v, the
-// permissions the library directory at libPath, read as tree, gives the
-// same thing: a file the library holds at the same path with the same
-// content, and executable exactly when git records it so, and a directory
-// the library holds at the same path, the skill's own included, both as
-// the library's tree was read, never through a symlink of it. A version is
-// laid out with every file 0644, or 0755, and every directory 0755, so a
-// file of the user's they made private, 0600 say, which the update does not
-// change, would otherwise come out of it readable by everyone. The owner's
-// execute bit of a file is never changed, so the tree staged and its
-// fingerprint stay what they were; a file the update changes, and anything
-// agentx could not read back or enter once it was changed, is left as it
-// was laid out. The library directory was read again under the lock, so
-// what it holds is what the update merged or replaced.
-func keepPerms(staged, libPath string, tree treeid.Tree, v lineage.Base) error {
-	held := map[string]string{}
-	for _, b := range tree.Blobs {
-		if !b.Link {
-			held[b.Path] = b.OID
-		}
-	}
-	dirs := map[string]bool{}
-	for _, d := range tree.Dirs {
-		dirs[d.Path] = true
-	}
-	keep := func(rel string, dir, executable bool) error {
-		info, err := os.Lstat(filepath.Join(libPath, filepath.FromSlash(rel)))
-		if err != nil {
-			return nil
-		}
-		perm := info.Mode().Perm()
-		switch {
-		case dir && (!info.IsDir() || perm&0o700 != 0o700):
-			return nil
-		case !dir && (!info.Mode().IsRegular() || perm&0o400 == 0 || (perm&0o100 != 0) != executable):
-			return nil
-		}
-		f, err := os.Open(filepath.Join(staged, filepath.FromSlash(rel)))
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		if laid, err := f.Stat(); err != nil || laid.Mode().Perm() == perm {
-			return err
-		}
-		if err := f.Chmod(perm); err != nil {
-			return err
-		}
-		return home.Sync(f)
-	}
-	if err := keep("", true, false); err != nil {
-		return err
-	}
-	for _, e := range v.Entries {
-		var err error
-		switch {
-		case e.Mode == source.DirMode && dirs[e.Path]:
-			err = keep(e.Path, true, false)
-		case source.IsFileMode(e.Mode) && held[e.Path] == e.OID:
-			err = keep(e.Path, false, e.Mode == source.ExecutableMode)
-		}
-		if err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -898,20 +687,22 @@ func (r *updateRun) report(ctx context.Context) error {
 		}
 	}
 	for _, u := range r.pending {
-		out := r.inv.out
-		r.inv.printConflicts(u.conflict, out.paint(heading, sanitised(u.name)), " conflicts with its update from ", short(u.rec.Import.Commit),
-			" to ", short(u.next.Import.Commit), " in ", out.paint(noteStyle, plural(len(u.conflict.Files), "file")))
-		r.drop(u.name, conflictFailure(u.name, len(u.conflict.Files)))
+		r.inv.printConflicts(u.conflict, short(u.rec.Import.Commit), short(u.next.Import.Commit))
+		r.drop(u.name, conflictFailure(u.name, filepath.Join(r.inv.checkoutPath(u.name), u.rec.Import.Dir()), len(u.conflict.Files)))
 	}
 	return nil
 }
 
 // conflictFailure is how an update answers for a skill whose merge it left
-// pending: exit code 4, the library directory left as it is, and the ways
-// on from there.
-func conflictFailure(name string, files int) *failure {
+// pending, path being the skill's directory in the checkout, which the
+// files it lists are relative to: exit code 4, the library directory left
+// as it is, and the ways on from there, all of them git's own but for the
+// update that applies the merge once it is resolved and the one that gives
+// it up.
+func conflictFailure(name, path string, files int) *failure {
 	return refuse(exitPendingMerge, name+" conflicts with its update in "+plural(files, "file")+", so the merge is pending and the library directory was left as it is",
-		"run '"+skillCommand("resolve", name)+"' to resolve the conflicts, or '"+skillCommand("resolve", name, "--abort")+"' to give the merge up")
+		"resolve it with git in "+quotedPath(path)+" ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), "+
+			"then run '"+skillCommand("update", name)+"' again to apply it, or '"+skillCommand("update", name, "--abort")+"' to give it up")
 }
 
 // reportApplied is report's part for the skills the run updated.
