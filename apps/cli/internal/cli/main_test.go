@@ -19,11 +19,11 @@ var (
 	mcpServerErr error
 )
 
-// TestMain turns off the flushes to the disk that agentx and git make, and
-// builds the fixture server once per test run. Tests that need the server
-// skip when go is not on PATH.
+// TestMain sets how many tests run at once, turns off the flushes to the
+// disk that agentx and git make, and builds the fixture server once per
+// test run. Tests that need the server skip when go is not on PATH.
 func TestMain(m *testing.M) {
-	capParallel()
+	setParallel()
 	home.SkipFlushesInTests()
 	gitx.SkipFlushesInTests()
 	skipRaceExitSleep()
