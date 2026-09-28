@@ -78,7 +78,14 @@ Supports 75 agents. 6 are read in full – skills, MCP servers and plugins:
 
 Other agents support skills management only at this time.
 
-> Under active development: The command-line tool inventories a single machine. Installing skills from sources, forking and editing them, and syncing across machines are all in progress, as is the desktop app.
+> Under active development. On a single machine, the command-line tool already:
+>
+> - inventories every agent configuration and what it sees: [`agentx scan`](docs/help-center/cli/scan.mdx)
+> - installs skills from git sources and places them in your agent clients: [`agentx skill add`](docs/help-center/cli/skill.mdx#install-a-skill)
+> - checks for newer versions and applies them, merging your own edits into each update: [`agentx skill check`](docs/help-center/cli/skill.mdx#check-for-updates), [`agentx skill update`](docs/help-center/cli/skill.mdx#update-a-skill)
+> - takes over the skills the vercel skills CLI installed, so agentx can update them too: [`agentx adopt`](docs/help-center/cli/adopt.mdx)
+>
+> Forking and editing skills, syncing across machines and the desktop app are in progress.
 
 ## Documentation
 
