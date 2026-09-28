@@ -96,7 +96,7 @@ func (inv *invocation) reportPlacedAll(ctx context.Context, id string, targets [
 	placed := 0
 	t := &table{}
 	for _, lib := range skills {
-		ev := sc.librarySkillEventFor(inv, snap, lib, []string{id})
+		ev := sc.librarySkillEventFor(ctx, inv, snap, lib, []string{id})
 		inv.out.emit(ev)
 		if len(ev.Placements) > 0 {
 			// One skill the configuration now sees, however many ways it sees

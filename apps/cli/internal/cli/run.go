@@ -8,6 +8,7 @@ import (
 	"io"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/spf13/cobra"
 
@@ -25,6 +26,10 @@ type invocation struct {
 	instance string // the instance_id snapshots carry, fixed once per run
 	parsed   bool   // set once cobra has parsed the command line; errors after that are agentx's own
 	summary  string // what the result event says about a run that succeeded
+
+	excludes     sync.Once // reads excludesPath, the user's core.excludesFile; see excludesFile
+	excludesPath string
+	verdicts     map[string]keptVerdict // serve's verdicts on managed skills, by name; nil keeps none, see holdsBase
 }
 
 // refs is what the mutation journal needs to apply and recover the lineage

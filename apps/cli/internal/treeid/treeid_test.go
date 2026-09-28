@@ -8,13 +8,15 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 )
 
 // gitTree is the tree id git itself records for dir: every entry added to
 // a temporary index of a throwaway repository, then written as a tree. The
 // test machine's git configuration is kept out, so nothing but git's
-// defaults decides how the files are read.
-func gitTree(t *testing.T, dir string) string {
+// defaults and the patterns of exclude decide how the files are read.
+func gitTree(t *testing.T, dir string, exclude ...string) string {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git is not installed")
@@ -32,6 +34,7 @@ func gitTree(t *testing.T, dir string) string {
 		return strings.TrimSpace(string(out))
 	}
 	run(env, "init", "--quiet", "--bare", repo)
+	write(t, filepath.Join(repo, "info", "exclude"), strings.Join(exclude, "\n")+"\n", 0o644)
 	env = append(env, "GIT_DIR="+repo, "GIT_WORK_TREE="+dir, "GIT_INDEX_FILE="+filepath.Join(t.TempDir(), "index"))
 	run(env, "add", "--all", ".")
 	return run(env, "write-tree")
@@ -109,6 +112,33 @@ func TestReadGivesTheIdGitGives(t *testing.T) {
 	}
 	if want := gitTree(t, dir); moded.ID != want {
 		t.Errorf("tree id after chmod = %s, git writes %s", moded.ID, want)
+	}
+}
+
+// TestWithoutGivesTheIdGitGivesIgnoringTheList holds Without to git on a
+// directory holding files the system-file list names, at the root and
+// deeper, a directory the list names and one holding nothing else: the id
+// with them left out is the one git writes with the list as its excludes.
+func TestWithoutGivesTheIdGitGivesIgnoringTheList(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, "SKILL.md"), "skill\n", 0o644)
+	write(t, filepath.Join(dir, ".DS_Store"), "finder\n", 0o644)
+	write(t, filepath.Join(dir, "notes", "a.md"), "a\n", 0o644)
+	write(t, filepath.Join(dir, "notes", "a.md~"), "a backup\n", 0o644)
+	write(t, filepath.Join(dir, "notes", ".a.md.swp"), "swap\n", 0o644)
+	write(t, filepath.Join(dir, ".AppleDouble", "a.md"), "resource fork\n", 0o644)
+	write(t, filepath.Join(dir, "only", "Thumbs.db"), "thumbnails\n", 0o644)
+
+	tree, err := Read(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := tree.Without(home.IsSystemFile), gitTree(t, dir, home.SystemFiles...); got != want {
+		t.Errorf("tree id without the list = %s, git writes %s", got, want)
+	}
+	if !tree.Has(".DS_Store") || tree.Has(".gitignore") {
+		t.Errorf("Has(.DS_Store) = %v, Has(.gitignore) = %v, want true and false", tree.Has(".DS_Store"), tree.Has(".gitignore"))
 	}
 }
 

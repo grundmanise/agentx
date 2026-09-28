@@ -144,6 +144,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 			}
 			defer home.Unlock(lock)
 			inv.instanceID() // fixed here, before two goroutines report it
+			inv.verdicts = map[string]keptVerdict{}
 			dirs, trees := inv.watchedDirs()
 			// The library of the last snapshot emitted, which the next one's
 			// drift is told against. Snapshots are reported from the loop's

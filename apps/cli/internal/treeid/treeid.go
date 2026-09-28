@@ -9,9 +9,10 @@
 // of mode 120000 holding the link's target, a directory is a tree, and a
 // directory holding nothing git records is left out, as git leaves it out.
 // Nothing is ignored and nothing is filtered: no .gitignore, no attributes,
-// no line-ending conversion. A git that ran add over the same directory
-// could give another id, which is exactly why this package exists: what is
-// compared, written and diffed is the directory as it is.
+// no line-ending conversion. The id is the fast path of a comparison: when
+// it equals a version's, the directory holds that version and no git runs.
+// When it differs, git decides, with the directory as a work tree, since a
+// file git ignores or an attribute can make the two agree after all.
 //
 // What git cannot record is named rather than dropped silently: a path with
 // a .git component, which git refuses in any case and which marks a
@@ -152,6 +153,46 @@ func (w *walker) dir(rel string) (string, bool, error) {
 	id := TreeID(entries)
 	w.dirs = append(w.dirs, Dir{Path: rel, ID: id, Entries: entries})
 	return id, true, nil
+}
+
+// Without is the tree id of the directory with every entry whose base name
+// skip matches left out, at any depth, and a directory that holds nothing
+// else dropped, as git leaves out an empty one. Nothing is read again: the
+// ids of the blobs are the ones Read computed.
+func (t Tree) Without(skip func(name string) bool) string {
+	ids := make(map[string]string, len(t.Dirs)) // by path; "" for a directory left empty
+	for _, d := range t.Dirs {
+		var entries []Entry
+		for _, e := range d.Entries {
+			if skip(e.Name) {
+				continue
+			}
+			if e.Mode == DirMode {
+				if e.OID = ids[path.Join(d.Path, e.Name)]; e.OID == "" {
+					continue
+				}
+			}
+			entries = append(entries, e)
+		}
+		if len(entries) > 0 {
+			ids[d.Path] = TreeID(entries)
+		}
+	}
+	if id := ids[""]; id != "" {
+		return id
+	}
+	return EmptyTree
+}
+
+// Has reports whether a file or a symlink called name is anywhere in the
+// directory.
+func (t Tree) Has(name string) bool {
+	for _, b := range t.Blobs {
+		if path.Base(b.Path) == name {
+			return true
+		}
+	}
+	return false
 }
 
 // fileMode is the mode git records a regular file with: executable when its

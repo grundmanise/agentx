@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -11,7 +10,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
-	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
 func newSkillDiffCommand(inv *invocation) *cobra.Command {
@@ -22,8 +20,9 @@ func newSkillDiffCommand(inv *invocation) *cobra.Command {
 		Long: "Show how the library directory of a managed skill differs from its base version,\n" +
 			"the version it was installed at, as one unified diff per file. Every edit counts,\n" +
 			"whatever tool made it, a file made executable and a file turned into a symlink\n" +
-			"included. Nothing is written to the library. With --upstream, show instead what\n" +
-			"the update 'agentx skill check' found changes in the base version.",
+			"included. Files git ignores do not. Nothing is written to the library. With\n" +
+			"--upstream, show instead what the update 'agentx skill check' found changes in\n" +
+			"the base version.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if upstream {
@@ -60,26 +59,21 @@ type fileDiff struct {
 }
 
 // skillDiff compares a managed skill's library directory with its base
-// version. The directory's tree is computed in process first, and a
-// directory that holds exactly the base costs no write at all. Otherwise
-// the directory is written into the account repo as the tree it is,
-// through the one writer every tree of the directory takes, and git
-// compares the two trees: git produces every diff, and the library is only
-// read.
+// version. The directory's tree id is computed in process first, and a
+// directory that holds the base by it costs no git at all. Otherwise git
+// compares the two with the directory as a work tree, over an index loaded
+// from the base: git produces every diff and applies the skill's ignore
+// and attribute rules, so a file git ignores is never in it, and the
+// library is only read.
 //
-// Whether the directory matches its base is decided as its state is, by
-// Record.Current and by nothing else, so that the diff never says a skill
-// matches while the listing calls it modified: a directory holding
-// something git cannot record is not the base version, even when every
-// path git can record is. Nor is one holding every file of a base that an
-// earlier agentx stored over a source's own tree, in a form no directory
-// is current against: git finds no file that differs, and the command
-// says the difference is where the version is stored, and that a revert
-// stores it again without touching a file.
-//
-// The versions compared are chosen here and diffed by diffTrees, so a
-// comparison of other versions of the same skill is another choice of the
-// two trees and nothing more.
+// Whether the directory matches its base is decided as its state is, so
+// that the diff never says a skill matches while the listing calls it
+// modified: a directory holding something git cannot record is not the
+// base version, even when every path git can record is. Nor is one holding
+// every file of a base that an earlier agentx stored over a source's own
+// tree, in a form no directory holds: git finds no file that differs, and
+// the command says the difference is where the version is stored, and
+// that a revert stores it again without touching a file.
 func (inv *invocation) skillDiff(ctx context.Context, name string) error {
 	lib, ok := librarySkill(inv.dirs.Library, name)
 	if !ok {
@@ -95,32 +89,35 @@ func (inv *invocation) skillDiff(ctx context.Context, name string) error {
 	}
 	against := "its base version at " + short(rec.Import.Commit)
 	subject := diffSubject{plain: name, painted: inv.out.paint(heading, sanitised(name))}
-	if rec.Current(tree) {
+	base := baseVersion(rec)
+	if fastHolds(tree, inv.systemFilesIgnored(), base) {
 		inv.reportDiff(subject, name, against, nil, 0)
 		return nil
 	}
 	for _, p := range tree.Unrecordable {
 		inv.out.warn(quotedPath(filepath.Join(lib.Path, filepath.FromSlash(p))) + " cannot be recorded by git and is left out of the diff")
 	}
-	base, err := lineage.ReadBase(ctx, inv.git, gitDir, rec)
+	wt, err := inv.openWorkTree(ctx, gitDir, lib.ResolvedPath)
 	if err != nil {
 		return accountRepoFailure(err)
 	}
-	if base.HeldBy(tree) {
-		inv.reportStoredDiff(name, against)
-		return nil
+	defer wt.Close()
+	written, err := writeWorkTree(ctx, wt, base)
+	if err != nil {
+		return accountRepoFailure(err)
 	}
 	var files []fileDiff
-	if tree.ID != base.ID() {
-		written, err := lineage.WriteDir(ctx, inv.git, gitDir, lib.ResolvedPath, tree)
-		if errors.Is(err, lineage.ErrChanged) {
-			return fail(exitRefused, fmt.Sprintf("%s changed while agentx read it: %v", name, err), "run the command again")
+	if !base.holds(written) {
+		status, patch, err := wt.DiffCached(ctx, base.load)
+		if err == nil {
+			files, err = parseDiff(status, patch)
 		}
 		if err != nil {
 			return accountRepoFailure(err)
 		}
-		if files, err = diffTrees(ctx, inv.git, gitDir, base.Tree, written); err != nil {
-			return accountRepoFailure(err)
+		if len(files) == 0 && len(tree.Unrecordable) == 0 {
+			inv.reportStoredDiff(name, against)
+			return nil
 		}
 	}
 	inv.reportDiff(subject, name, against, files, len(tree.Unrecordable))
@@ -261,17 +258,9 @@ func patchLine(line string) string {
 	return b.String()
 }
 
-// diffTrees is the diff between two trees of the account repo, one entry
-// per file that differs, sorted by path, with the unified diff git writes
-// for it. Two reads that do not depend on each other, run at once: the
-// status of every file, NUL-terminated so that a name git would quote comes
-// back as its own bytes, and the diff itself. Renames are not looked for:
-// a file moved is one deleted and one added, which is what happened to the
-// paths an agent reads.
-//
-// git writes a file whose type changed, a file turned into a symlink or
-// back, as two diffs of the one path, the old content deleted and the new
-// one added. It is one file here, modified, with both.
+// diffTrees is the diff between two trees of the account repo, read as
+// parseDiff reads it. Two reads that do not depend on each other, run at
+// once: the status of every file and the diff itself.
 func diffTrees(ctx context.Context, r *gitx.Runner, gitDir, from, to string) ([]fileDiff, error) {
 	outs, err := r.IsolatedAll(ctx, gitDir, [][]string{
 		{"diff-tree", "-r", "-z", "--no-renames", "--name-status", from, to},
@@ -280,15 +269,29 @@ func diffTrees(ctx context.Context, r *gitx.Runner, gitDir, from, to string) ([]
 	if err != nil {
 		return nil, err
 	}
-	fields := strings.Split(strings.TrimSuffix(outs[0], "\x00"), "\x00")
+	return parseDiff(outs[0], outs[1])
+}
+
+// parseDiff reads a diff between two versions of a skill as git writes it,
+// one entry per file that differs, sorted by path, with the unified diff
+// git wrote for it. status is the status of every file, NUL-terminated so
+// that a name git would quote comes back as its own bytes, and patch the
+// diff itself. Renames are not looked for: a file moved is one deleted and
+// one added, which is what happened to the paths an agent reads.
+//
+// git writes a file whose type changed, a file turned into a symlink or
+// back, as two diffs of the one path, the old content deleted and the new
+// one added. It is one file here, modified, with both.
+func parseDiff(status, patch string) ([]fileDiff, error) {
+	fields := strings.Split(strings.TrimSuffix(status, "\x00"), "\x00")
 	if len(fields) == 1 && fields[0] == "" {
 		fields = nil
 	}
 	if len(fields)%2 != 0 {
-		return nil, fmt.Errorf("git diff-tree: cannot read the status of %q", outs[0])
+		return nil, fmt.Errorf("git diff: cannot read the status of %q", status)
 	}
 	var chunks []string
-	for _, line := range strings.SplitAfter(outs[1], "\n") {
+	for _, line := range strings.SplitAfter(patch, "\n") {
 		switch {
 		case strings.HasPrefix(line, "diff --git "):
 			chunks = append(chunks, line)
@@ -310,7 +313,7 @@ func diffTrees(ctx context.Context, r *gitx.Runner, gitDir, from, to string) ([]
 			n = 2
 		}
 		if next+n > len(chunks) {
-			return nil, fmt.Errorf("git diff-tree wrote %d diffs for %d files", len(chunks), len(fields)/2)
+			return nil, fmt.Errorf("git diff wrote %d diffs for %d files", len(chunks), len(fields)/2)
 		}
 		f.patch = strings.Join(chunks[next:next+n], "")
 		if !strings.HasSuffix(f.patch, "\n") {
@@ -320,7 +323,7 @@ func diffTrees(ctx context.Context, r *gitx.Runner, gitDir, from, to string) ([]
 		files = append(files, f)
 	}
 	if next != len(chunks) {
-		return nil, fmt.Errorf("git diff-tree wrote %d diffs for %d files", len(chunks), len(fields)/2)
+		return nil, fmt.Errorf("git diff wrote %d diffs for %d files", len(chunks), len(fields)/2)
 	}
 	return files, nil
 }

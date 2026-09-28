@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"fmt"
+	"context"
 	"os"
 	"slices"
 
@@ -10,23 +10,19 @@ import (
 )
 
 // refreshCopies plans, into a mutation that replaces a skill's library
-// directory with the version whose tree is target, what happens to the
-// copies copy_mode records for the skill. Nothing records what a copy held
-// when it was placed, so each one is judged by what it holds now, as git
-// would record it:
+// directory with the version target, what happens to the copies copy_mode
+// records for the skill. Nothing records what a copy held when it was
+// placed, so each one is judged by what it holds now, as drift judges a
+// library directory: the fast path, then git with the copy as its work
+// tree, so a file git ignores in a copy changes nothing.
 //
 //   - A copy that already holds target is left alone and says nothing.
 //   - A copy that holds what agentx could have placed there, one of the
-//     trees in placed (the library directory the mutation replaces, or a
-//     version the skill was at), is refreshed: removed, its content
-//     retained beside it until the mutation is verified, and replaced by a
-//     copy of staged, the new library directory laid out for publishing.
-//     A copy holding something git cannot record, a nested repository or a
-//     named pipe, has no tree that says all of it, so it is judged byte for
-//     byte instead, as the journal fingerprints it: it is agentx's when it
-//     holds exactly placedBytes, what the library directory the mutation
-//     replaces holds, and "" when that is not asked, as it is not where the
-//     library holds nothing git cannot record.
+//     versions in placed (the library directory the mutation replaces, or
+//     a version the skill was at), is refreshed: removed, its content
+//     retained beside it until the mutation is verified, and replaced by
+//     target, which lay lays out, with the files git ignores in the copy
+//     carried over.
 //   - A copy holding anything else was edited where it is and is kept byte
 //     for byte, skipped and named with the warning a placement gives a copy
 //     it keeps, see keepCopy.
@@ -52,31 +48,31 @@ import (
 // Every copy removed carries the fingerprint it held when it was judged,
 // so a copy edited between this plan and the step that removes it stops
 // the mutation rather than being discarded.
-func (inv *invocation) refreshCopies(m *home.Mutation, name, target string, placed []string, placedBytes, staged string, recorded []string, done *placements) {
-	type judged struct {
+func (inv *invocation) refreshCopies(ctx context.Context, m *home.Mutation, gitDir, name string, target version, placed []version, lay func(dest string) error, recorded []string, done *placements) {
+	type seenPlace struct {
 		key   placeKey
 		fresh bool // its copy is refreshed
 	}
-	var seen []judged // every path judged
+	var seen []seenPlace // every path judged
 	for _, t := range inv.detectedTargets() {
 		if t.readsLibrary || !slices.Contains(recorded, t.id) {
 			continue
 		}
 		place := t.ownPlace(inv.dirs.Library, name)
 		key := keyOf(place)
-		if i := slices.IndexFunc(seen, func(j judged) bool { return j.key.is(key) }); i >= 0 {
+		if i := slices.IndexFunc(seen, func(s seenPlace) bool { return s.key.is(key) }); i >= 0 {
 			if seen[i].fresh {
 				done.copies = append(done.copies, t.id)
 			}
 			continue
 		}
-		seen = append(seen, judged{key, inv.refreshCopy(m, t, place, name, target, placed, placedBytes, staged, done)})
+		seen = append(seen, seenPlace{key, inv.refreshCopy(ctx, m, gitDir, t, place, name, target, placed, lay, done)})
 	}
 }
 
 // refreshCopy judges and plans the one copy at place, as refreshCopies
 // says, and reports whether it is refreshed.
-func (inv *invocation) refreshCopy(m *home.Mutation, t placeTarget, place, name, target string, placed []string, placedBytes, staged string, done *placements) bool {
+func (inv *invocation) refreshCopy(ctx context.Context, m *home.Mutation, gitDir string, t placeTarget, place, name string, target version, placed []version, lay func(string) error, done *placements) bool {
 	state, err := home.State(place)
 	if err != nil {
 		inv.skipRefresh(done, place, err)
@@ -90,13 +86,26 @@ func (inv *invocation) refreshCopy(m *home.Mutation, t placeTarget, place, name,
 		inv.skipRefresh(done, place, err)
 		return false
 	}
-	clean := len(tree.Unrecordable) == 0
-	switch {
-	case clean && tree.ID == target:
+	j, err := inv.judgeDir(ctx, gitDir, place, tree, target, false)
+	if err != nil {
+		inv.skipRefresh(done, place, err)
 		return false
-	case clean && slices.Contains(placed, tree.ID), !clean && placedBytes != "" && state == placedBytes:
-		fresh, fingerprint, err := stageRefresh(m, place, staged, target)
+	}
+	if j.holds {
+		return false
+	}
+	for _, v := range placed {
+		if j, err = inv.judgeDir(ctx, gitDir, place, tree, v, true); err != nil {
+			inv.skipRefresh(done, place, err)
+			return false
+		}
+		if !j.holds {
+			continue
+		}
+		fresh := m.Sibling(place, "staged")
+		fingerprint, err := stageVersion(fresh, lay, target, place, j.ignored)
 		if err != nil {
+			os.RemoveAll(fresh)
 			inv.skipRefresh(done, place, err)
 			return false
 		}
@@ -104,10 +113,9 @@ func (inv *invocation) refreshCopy(m *home.Mutation, t placeTarget, place, name,
 		m.Publish(place, fresh, fingerprint)
 		done.copies = append(done.copies, t.id)
 		return true
-	default:
-		inv.keepCopy(done, t, place, name)
-		return false
 	}
+	inv.keepCopy(done, t, place, name)
+	return false
 }
 
 // skipRefresh leaves one copy as it is when this machine cannot read it or
@@ -118,37 +126,4 @@ func (inv *invocation) refreshCopy(m *home.Mutation, t placeTarget, place, name,
 func (inv *invocation) skipRefresh(done *placements, place string, err error) {
 	done.skipped = append(done.skipped, place)
 	inv.out.warn("cannot refresh " + place + ": " + err.Error() + "; the copy was left as it is")
-}
-
-// stageRefresh lays the new content of the directory at place out beside
-// it, copied from the directory at from, and reads it back as git would
-// record it: content whose tree is not target never gets published. The
-// new content of a copy is copied from the library directory staged for
-// the same mutation; the new library directory of a repair that keeps a
-// displaced directory's content is copied from that directory.
-func stageRefresh(m *home.Mutation, place, from, target string) (string, string, error) {
-	fresh := m.Sibling(place, "staged")
-	err := os.MkdirAll(fresh, 0o755)
-	if err == nil {
-		err = copyTreeTo(from, fresh)
-	}
-	if err == nil {
-		err = home.SyncTree(fresh)
-	}
-	var tree treeid.Tree
-	if err == nil {
-		tree, err = treeid.Read(fresh)
-	}
-	if err == nil && tree.ID != target {
-		err = fmt.Errorf("the staged copy at %s holds tree %s, not %s", fresh, tree.ID, target)
-	}
-	var fingerprint string
-	if err == nil {
-		fingerprint, err = home.Fingerprint(fresh)
-	}
-	if err != nil {
-		os.RemoveAll(fresh)
-		return "", "", err
-	}
-	return fresh, fingerprint, nil
 }
