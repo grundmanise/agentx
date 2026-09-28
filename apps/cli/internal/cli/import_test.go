@@ -183,152 +183,205 @@ func TestImportAsksBeforeItWrites(t *testing.T) {
 	}
 }
 
-// TestImportRefusesADocumentItCannotRead: an export is a file from
-// somewhere else, so every shape of broken one is refused, and the
-// settings on disk are untouched whichever it was.
-func TestImportRefusesADocumentItCannotRead(t *testing.T) {
-	t.Parallel()
-	_, good := plainExport(t)
-	to := newHarness(t)
-	to.build(t, fixture{dirs: []string{".claude"}})
-	equal(t, "label", to.run("config", "set", "label", "keep-me").exit, 0)
-	before := readText(t, home.SettingsPath(to.agentx))
-	sound := to.readExportFile(good)
+// soundExport is a document agentx would write, with one sound lineage
+// record, which each case of the refusal tests below changes in one place.
+const soundExport = `{"schema_version": 1,
+ "machine": {"id": "0123456789abcdef0123456789abcdef", "label": "first-laptop"},
+ "settings": {"schema_version": 1, "label": "first-laptop", "auto_push": false, "accept_operations": false,
+  "ignore_system_files": true, "disabled_configurations": [], "sources": [], "copy_mode": {}},
+ "skills": [{"name": "alpha", "kind": "managed", "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "source": "https://github.com/example/skills", "subpath": "skills/alpha",
+  "upstream_commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "base_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "placed": true}]}
+`
 
-	// edited copies the good document with one thing changed.
-	edited := func(change func(map[string]any)) string {
-		doc := to.readExportFile(good)
-		change(doc)
-		b, err := json.Marshal(doc)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return string(b)
+// importToken is a credential that would be unmistakable in a settings
+// file, an event or an export if any of them ever carried one.
+const importToken = "ghp_NotARealTokenJustForThisTest"
+
+// editedSound is soundExport with one thing changed.
+func editedSound(t *testing.T, change func(doc map[string]any)) string {
+	t.Helper()
+	var doc map[string]any
+	if err := json.Unmarshal([]byte(soundExport), &doc); err != nil {
+		t.Fatal(err)
 	}
+	change(doc)
+	b, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+// TestReadExportRefusesWhatAgentxWouldNotWrite: an export is a file from
+// somewhere else, so every shape of broken one is refused by readExport,
+// before the lock and before any write, and the refusal repeats no
+// credential the document carried. TestValidSettingsCoversEveryFieldOfTheSettings
+// holds every field of the settings to a check here.
+func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	write := func(name, content string) string {
+		path := filepath.Join(dir, strings.ReplaceAll(name, " ", "-")+".json")
+		writeFile(t, path, content)
+		return path
+	}
+	if _, err := readExport(write("sound", soundExport)); err != nil {
+		t.Fatalf("the sound document is refused: %v", err)
+	}
+	edited := func(change func(map[string]any)) string { return editedSound(t, change) }
 	settingsWith := func(key string, value any) string {
 		return edited(func(doc map[string]any) { doc["settings"].(map[string]any)[key] = value })
 	}
 	recordWith := func(key string, value any) string {
-		return edited(func(doc map[string]any) {
-			rec := doc["skills"].([]any)[0].(map[string]any)
-			rec[key] = value
-		})
+		return edited(func(doc map[string]any) { doc["skills"].([]any)[0].(map[string]any)[key] = value })
 	}
-
-	whole := readText(t, good)
-	// A credential that would be unmistakable in a settings file, an event
-	// or an export if any of them ever carried one.
-	const token = "ghp_NotARealTokenJustForThisTest"
-	for _, tc := range []struct {
-		name, content string
-		exit          int
-		says          string
-	}{
-		{"empty", "", 6, "not an agentx export"},
-		{"not json", "{ not json", 6, "not an agentx export"},
-		{"truncated", whole[:len(whole)/2], 6, "not an agentx export"},
-		{"trailing rubbish", whole + "}", 6, "not an agentx export"},
-		{"no version", `{"settings":{},"skills":[]}`, 6, "carries no schema_version"},
-		{"a later version", edited(func(doc map[string]any) { doc["schema_version"] = 2 }), 6, "schema version 2"},
-		{"a field agentx does not know", edited(func(doc map[string]any) { doc["snapshot"] = map[string]any{} }), 6, "not an agentx export"},
-		{"later settings", settingsWith("schema_version", 2), 6, "schema_version is 2"},
-		{"a settings field agentx does not know", settingsWith("secrets", "x"), 6, "not an agentx export"},
-		{"a label of two lines", settingsWith("label", "one\ntwo"), 6, "one non-empty line"},
-		{"a source carrying a token", settingsWith("sources", []any{map[string]any{"url": "https://user:token@github.com/example/skills"}}), 6, "canonical URL"},
-		{"a source with a subpath", settingsWith("sources", []any{map[string]any{"url": "https://github.com/example/skills/tools"}}), 6, "canonical URL"},
-		{"a record of another kind", recordWith("kind", "greenfield"), 6, "neither managed nor fork"},
-		{"a record with no commit", recordWith("commit", "HEAD"), 6, "does not name the commit"},
-		{"a record with a bad hash", recordWith("base_hash", "nonsense"), 6, "one upstream version"},
-		{"a record that walks out", recordWith("name", "../evil"), 6, "not a name the library and a branch can both hold"},
-		{"a record named for a nested branch", recordWith("name", "nested/deeper"), 6, "not a name the library and a branch can both hold"},
+	credentialed := "https://user:" + importToken + "@github.com/example/skills"
+	for _, tc := range []struct{ name, content, says string }{
+		{"empty", "", "not an agentx export"},
+		{"not json", "{ not json", "not an agentx export"},
+		{"truncated", soundExport[:len(soundExport)/2], "not an agentx export"},
+		{"trailing rubbish", soundExport + "}", "not an agentx export"},
+		{"no version", `{"settings":{},"skills":[]}`, "carries no schema_version"},
+		{"a later version", edited(func(doc map[string]any) { doc["schema_version"] = 2 }), "schema version 2"},
+		{"a field agentx does not know", edited(func(doc map[string]any) { doc["snapshot"] = map[string]any{} }), "not an agentx export"},
+		{"later settings", settingsWith("schema_version", 2), "schema_version is 2"},
+		{"a settings field agentx does not know", settingsWith("secrets", "x"), "not an agentx export"},
+		{"a label of two lines", settingsWith("label", "one\ntwo"), "one non-empty line"},
+		{"a record of another kind", recordWith("kind", "greenfield"), "neither managed nor fork"},
+		{"a record with no commit", recordWith("commit", "HEAD"), "does not name the commit"},
+		{"a record with a bad hash", recordWith("base_hash", "nonsense"), "one upstream version"},
+		{"a record that walks out", recordWith("name", "../evil"), "not a name the library and a branch can both hold"},
+		{"a record named for a nested branch", recordWith("name", "nested/deeper"), "not a name the library and a branch can both hold"},
 		{"a record given twice", edited(func(doc map[string]any) {
 			skills := doc["skills"].([]any)
 			doc["skills"] = []any{skills[0], skills[0]}
-		}), 6, "is listed twice"},
+		}), "is listed twice"},
 
-		// Every other field of a source entry. url is the one a reader
-		// would think of; alias is a second URL of the same source that
-		// nothing else in the CLI writes, pin is a ref this machine hands
-		// to git, and last_fetched is a date agentx wrote.
+		// Every field of a source entry. url is the one a reader would
+		// think of; alias is a second URL of the same source that nothing
+		// else in the CLI writes, so an import is the only route a string
+		// reaches it by; pin is a ref this machine hands to git, and
+		// last_fetched is a date agentx wrote.
+		{"a source carrying a token", settingsWith("sources", []any{map[string]any{"url": credentialed}}), "canonical URL"},
+		{"a source with a subpath", settingsWith("sources", []any{map[string]any{"url": "https://github.com/example/skills/tools"}}), "canonical URL"},
 		{"an alias carrying a token", settingsWith("sources", []any{map[string]any{
-			"url":   "https://github.com/example/skills",
-			"alias": "https://user:" + token + "@github.com/example/skills",
-		}}), 6, "canonical URL"},
+			"url": "https://github.com/example/skills", "alias": credentialed,
+		}}), "canonical URL"},
 		{"an alias with a subpath", settingsWith("sources", []any{map[string]any{
-			"url":   "https://github.com/example/skills",
-			"alias": "https://github.com/example/skills-old/tools",
-		}}), 6, "canonical URL"},
+			"url": "https://github.com/example/skills", "alias": "https://github.com/example/skills-old/tools",
+		}}), "canonical URL"},
 		{"a source with no url", settingsWith("sources", []any{map[string]any{
 			"alias": "https://github.com/example/skills",
-		}}), 6, "not a source URL"},
+		}}), "not a source URL"},
 		{"an alias that is not a URL", settingsWith("sources", []any{map[string]any{
-			"url":   "https://github.com/example/skills",
-			"alias": "not a url at all",
-		}}), 6, "not a source URL"},
+			"url": "https://github.com/example/skills", "alias": "not a url at all",
+		}}), "not a source URL"},
 		{"a pin git refuses", settingsWith("sources", []any{map[string]any{
 			"url": "https://github.com/example/skills", "pin": "main:refs/heads/skills/EVIL",
-		}}), 6, "not a ref git accepts"},
+		}}), "not a ref git accepts"},
 		{"a pin with a newline", settingsWith("sources", []any{map[string]any{
 			"url": "https://github.com/example/skills", "pin": "main\nINJECTED",
-		}}), 6, "not a ref git accepts"},
+		}}), "not a ref git accepts"},
 		{"a pin that reads as an option", settingsWith("sources", []any{map[string]any{
 			"url": "https://github.com/example/skills", "pin": "--upload-pack=touch",
-		}}), 6, "not a ref git accepts"},
+		}}), "not a ref git accepts"},
 		{"a last_fetched that is not a date", settingsWith("sources", []any{map[string]any{
 			"url": "https://github.com/example/skills", "last_fetched": "whenever",
-		}}), 6, "RFC 3339 in UTC"},
+		}}), "RFC 3339 in UTC"},
 		{"a last_fetched that is not in UTC", settingsWith("sources", []any{map[string]any{
 			"url": "https://github.com/example/skills", "last_fetched": "2026-09-18T12:00:00+02:00",
-		}}), 6, "RFC 3339 in UTC"},
+		}}), "RFC 3339 in UTC"},
 		{"one source twice", settingsWith("sources", []any{
 			map[string]any{"url": "https://github.com/example/skills"},
 			map[string]any{"url": "https://github.com/example/skills", "pin": "v1"},
-		}), 6, "is listed twice"},
+		}), "is listed twice"},
 		{"sources out of order", settingsWith("sources", []any{
 			map[string]any{"url": "https://github.com/example/skills"},
 			map[string]any{"url": "https://github.com/example/alpha"},
-		}), 6, "sorted by url"},
+		}), "sorted by url"},
 
 		// disabled_configurations holds ids config disable wrote, which
 		// are slugs of the client registry and nothing else.
 		{"a disabled configuration carrying an escape", settingsWith("disabled_configurations",
-			[]any{"\u001b[31mcursor"}), 6, "not a configuration id"},
+			[]any{"\u001b[31mcursor"}), "not a configuration id"},
 		{"a disabled configuration of ten thousand characters", settingsWith("disabled_configurations",
-			[]any{strings.Repeat("a", 10000)}), 6, "not a configuration id"},
+			[]any{strings.Repeat("a", 10000)}), "not a configuration id"},
 		{"a configuration disabled twice", settingsWith("disabled_configurations",
-			[]any{"cursor", "cursor"}), 6, "disabled twice"},
+			[]any{"cursor", "cursor"}), "disabled twice"},
 		{"disabled configurations out of order", settingsWith("disabled_configurations",
-			[]any{"cursor", "codex"}), 6, "must be sorted"},
+			[]any{"cursor", "codex"}), "must be sorted"},
 
 		// copy_mode is kept as raw JSON so that a write never loses it,
 		// which is also why a spelling agentx would not write is kept for
 		// good once it is imported.
-		{"a copy mode that is not one", settingsWith("copy_mode", []any{"alpha"}), 6, "copy_mode"},
-		{"a copy mode of JSON null", settingsWith("copy_mode", nil), 6, "the way agentx writes it"},
+		{"a copy mode that is not one", settingsWith("copy_mode", []any{"alpha"}), "copy_mode"},
+		{"a copy mode of JSON null", settingsWith("copy_mode", nil), "the way agentx writes it"},
 		{"a copy mode with a key twice", edited(func(doc map[string]any) {
 			doc["settings"].(map[string]any)["copy_mode"] = json.RawMessage(`{"alpha":["cursor"],"alpha":["codex"]}`)
-		}), 6, "the way agentx writes it"},
+		}), "the way agentx writes it"},
 		{"a copy mode out of order", edited(func(doc map[string]any) {
 			doc["settings"].(map[string]any)["copy_mode"] = json.RawMessage(`{"beta":["cursor"],"alpha":["codex"]}`)
-		}), 6, "the way agentx writes it"},
+		}), "the way agentx writes it"},
 		{"a copy mode with no configuration", settingsWith("copy_mode",
-			map[string]any{"alpha": []any{}}), 6, "which agentx removes rather than writes"},
+			map[string]any{"alpha": []any{}}), "which agentx removes rather than writes"},
 		{"a copy mode of a name the library cannot hold", settingsWith("copy_mode",
-			map[string]any{"../evil": []any{"cursor"}}), 6, "no name a skill of the library has"},
+			map[string]any{"../evil": []any{"cursor"}}), "no name a skill of the library has"},
 		{"a copy mode to something that is no configuration", settingsWith("copy_mode",
-			map[string]any{"alpha": []any{"\u001b[31mcursor"}}), 6, "not a configuration id"},
+			map[string]any{"alpha": []any{"\u001b[31mcursor"}}), "not a configuration id"},
 
 		// The label, which config set label cannot make this long because
 		// its argument is bounded by ARG_MAX, and an import can.
-		{"a label carrying an escape", settingsWith("label", "\u001b[31mred"), 6, "no control character"},
-		{"a label of a thousand characters", settingsWith("label", strings.Repeat("l", 1000)), 6, "at most 256 bytes"},
+		{"a label carrying an escape", settingsWith("label", "\u001b[31mred"), "no control character"},
+		{"a label of a thousand characters", settingsWith("label", strings.Repeat("l", 1000)), "at most 256 bytes"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := readExport(write(tc.name, tc.content))
+			var f *failure
+			if !errors.As(err, &f) || f.status != exitRefused {
+				t.Fatalf("readExport = %v, want a refusal", err)
+			}
+			contains(t, "the refusal", f.message, tc.says)
+			// The refusal names the URL it parsed to, never what it was given.
+			if said := f.message + f.hint; strings.Contains(said, importToken) || strings.Contains(said, "user:") {
+				t.Errorf("the refusal repeated the credential: %q", said)
+			}
+		})
+	}
+}
+
+// TestImportRefusesADocumentItCannotRead is readExport's refusal as the
+// command answers it: exit 6, the reason on stderr, no credential of the
+// document anywhere, and the settings on disk untouched whichever it was.
+func TestImportRefusesADocumentItCannotRead(t *testing.T) {
+	t.Parallel()
+	to := newHarness(t)
+	to.build(t, fixture{dirs: []string{".claude"}})
+	equal(t, "label", to.run("config", "set", "label", "keep-me").exit, 0)
+	before := readText(t, home.SettingsPath(to.agentx))
+
+	for _, tc := range []struct {
+		name, content string
+		says          string
+	}{
+		{"not json", "{ not json", "not an agentx export"},
+		{"settings agentx would not write", editedSound(t, func(doc map[string]any) {
+			doc["settings"].(map[string]any)["sources"] = []any{map[string]any{"url": "https://user:" + importToken + "@github.com/example/skills"}}
+		}), "must be stored as the canonical URL of a source alone"},
+		{"a record agentx cannot read", editedSound(t, func(doc map[string]any) {
+			doc["skills"].([]any)[0].(map[string]any)["commit"] = "HEAD"
+		}), "does not name the commit"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			file := to.exportPath(strings.ReplaceAll(tc.name, " ", "-") + ".json")
 			writeFile(t, file, tc.content)
 			out := to.run("import", file, "--yes")
-			equal(t, "exit", out.exit, tc.exit)
+			equal(t, "exit", out.exit, 6)
 			contains(t, "stderr", out.stderr, tc.says)
+			if strings.Contains(out.stdout+out.stderr, importToken) {
+				t.Errorf("the refusal repeated the credential:\n%s%s", out.stdout, out.stderr)
+			}
 			equal(t, "the settings", readText(t, home.SettingsPath(to.agentx)), before)
 		})
 	}
@@ -340,10 +393,11 @@ func TestImportRefusesADocumentItCannotRead(t *testing.T) {
 		equal(t, "the settings", readText(t, home.SettingsPath(to.agentx)), before)
 	})
 
-	// The good document still imports after all of that, so the refusals
+	// The sound document still imports after all of that, so the refusals
 	// were about the documents and not about the machine.
+	good := to.exportPath("sound.json")
+	writeFile(t, good, soundExport)
 	equal(t, "the sound document", to.run("import", good, "--yes").exit, 0)
-	equal(t, "records", len(sound["skills"].([]any)), 1)
 }
 
 // TestImportListsWhatTheAccountRepoHas is the point of the listing: one
@@ -522,70 +576,6 @@ func TestImportSaysWhyWithoutEchoingTheDocument(t *testing.T) {
 	}
 }
 
-// TestImportPutsNoCredentialInTheSettingsByAnyField is the gate the
-// contract makes load-bearing: a URL carrying a user or a token "reaches
-// the settings by no route at all and may not reach them by this one". An
-// import is the only route by which any string reaches a source entry's
-// alias – nothing else in the CLI writes that field – so the same
-// credential is put into every field of the entry in turn and each one is
-// refused, with the settings, the source event and the next export left
-// carrying no part of it.
-func TestImportPutsNoCredentialInTheSettingsByAnyField(t *testing.T) {
-	t.Parallel()
-	const token = "ghp_NotARealTokenJustForThisTest"
-	const credentialed = "https://user:" + token + "@github.com/example/skills"
-
-	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude"}})
-	equal(t, "label", h.run("config", "set", "label", "keep-me").exit, 0)
-	before := readText(t, home.SettingsPath(h.agentx))
-
-	for _, field := range []string{"url", "alias"} {
-		t.Run(field, func(t *testing.T) {
-			entry := map[string]any{"url": "https://github.com/example/skills"}
-			entry[field] = credentialed
-			file := h.exportPath("credential-in-" + field + ".json")
-			writeFile(t, file, `{"schema_version":1,"machine":{"id":"0123456789abcdef0123456789abcdef","label":"attacker"},`+
-				`"settings":{"schema_version":1,"sources":[`+mustJSON(t, entry)+`]},"skills":[]}`)
-
-			out := h.run("import", file, "--yes")
-			equal(t, "exit", out.exit, 6)
-			contains(t, "stderr", out.stderr, "must be stored as the canonical URL of a source alone")
-			// The refusal names the URL it parsed to, never what it was given.
-			if strings.Contains(out.stdout+out.stderr, token) {
-				t.Errorf("the refusal repeated the credential:\n%s%s", out.stdout, out.stderr)
-			}
-			equal(t, "the settings", readText(t, home.SettingsPath(h.agentx)), before)
-		})
-	}
-
-	// And nothing of it is anywhere afterwards: not at rest in the
-	// settings, not in the source event the desktop app reads, and not in
-	// an export that would carry it on to the next machine.
-	equal(t, "source list", h.run("--json", "source", "list").exit, 0)
-	onward := h.exportPath("onward.json")
-	equal(t, "export", h.run("export", onward).exit, 0)
-	for what, text := range map[string]string{
-		"the settings":      readText(t, home.SettingsPath(h.agentx)),
-		"the source events": h.run("--json", "source", "list").stdout,
-		"the next export":   readText(t, onward),
-	} {
-		if strings.Contains(text, token) || strings.Contains(text, "user:") {
-			t.Errorf("%s carries the credential:\n%s", what, text)
-		}
-	}
-}
-
-// mustJSON marshals a value a test builds a document out of.
-func mustJSON(t *testing.T, v any) string {
-	t.Helper()
-	b, err := json.Marshal(v)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(b)
-}
-
 // TestValidSettingsCoversEveryFieldOfTheSettings is the guard on the audit
 // rather than on one bug: an import is the only route by which a string
 // somebody else chose reaches the settings file, so a field added to the
@@ -667,85 +657,15 @@ func TestImportRefusesADocumentNoMachineWrote(t *testing.T) {
 }
 
 // TestImportSaysWhatToRunNext: an import restores the settings entry of a
-// source and nothing of the source itself – no account repo, no remote –
-// so on the machine an import just made, skill add answers that the source
-// was never added. source add is the step that has to come first, and the
-// closing line said to run skill add.
+// source and nothing of the source itself, no account repo and no remote,
+// so on the machine it made skill add, source fetch and source skills
+// answer that the source was never fetched, with a source add to run. The
+// import's closing line prints one source add per source, and each of
+// those refusals names one, with the pin the settings hold: source add
+// writes the pin its argument names, so a bare URL would unpin the very
+// source the import restored. This is the one test of that hint's text.
+// Running the lines keeps every pin, and skill add then installs.
 func TestImportSaysWhatToRunNext(t *testing.T) {
-	t.Parallel()
-	from, file := exportedFrom(t)
-	url := from.run("--json", "source", "list")
-	sources := from.eventsOfType(url.stdout, "source")
-	if len(sources) == 0 {
-		t.Fatal("the exporting machine has no source")
-	}
-
-	to := newHarness(t)
-	to.build(t, fixture{dirs: []string{".claude", ".cursor"}})
-	out := to.run("import", file, "--yes")
-	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "only the settings were written: add each source again, then install a missing skill with 'agentx skill add <source>'")
-
-	// What the closing line now names is what works; what it named before
-	// is exit 5 until that has been run.
-	first := sources[0]["url"].(string)
-	early := to.run("skill", "add", first, "--all")
-	equal(t, "skill add before source add", early.exit, 5)
-	contains(t, "stderr", early.stderr, "source not fetched")
-	equal(t, "source add", to.run("source", "add", first).exit, 0)
-	equal(t, "skill add after source add", to.run("skill", "add", first, "--all").exit, 0)
-}
-
-// TestImportPrintsTheSourceAddThatKeepsThePin: source add writes the pin its
-// argument names, so an import that pointed at the bare URL had the user
-// unpin the very source it had just restored. It prints one source add per
-// source instead, with the pin the settings hold, and running those lines
-// leaves every source pinned where the export had it.
-func TestImportPrintsTheSourceAddThatKeepsThePin(t *testing.T) {
-	t.Parallel()
-	from, file := exportedFrom(t)
-	exported, err := home.LoadSettings(from.agentx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pins := func(s home.Settings) map[string]string {
-		m := map[string]string{}
-		for _, src := range s.Sources {
-			m[src.URL] = src.Pin
-		}
-		return m
-	}
-	if !slices.ContainsFunc(exported.Sources, func(src home.Source) bool { return src.Pin != "" }) {
-		t.Fatal("the exporting machine pins no source")
-	}
-
-	to := newHarness(t)
-	to.build(t, fixture{dirs: []string{".claude"}})
-	out := to.run("import", file, "--yes")
-	equal(t, "exit", out.exit, 0)
-	printed := printedSourceAdds(t, out.stdout, t.TempDir())
-	equal(t, "source add lines", len(printed), len(exported.Sources))
-	for _, arg := range printed {
-		equal(t, "source add "+arg, to.run("source", "add", arg).exit, 0)
-	}
-
-	restored, err := home.LoadSettings(to.agentx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got, want := pins(restored), pins(exported); !reflect.DeepEqual(got, want) {
-		t.Errorf("pins after the printed source add = %v, want %v\n%s", got, want, out.stdout)
-	}
-}
-
-// TestTheNotFetchedHintKeepsAnImportedPin: on the machine an import made, a
-// source is in the settings with its pin and nothing of it is fetched, and
-// skill add, source fetch and source skills answer that with a source add
-// to run. That hint named the bare URL, and source add writes the pin its
-// argument names, so following it unpinned the source the import had just
-// restored. It names the pin the settings hold, both before this machine
-// has an account repo and once another source has made one.
-func TestTheNotFetchedHintKeepsAnImportedPin(t *testing.T) {
 	t.Parallel()
 	from, file := exportedFrom(t)
 	exported, err := home.LoadSettings(from.agentx)
@@ -758,14 +678,29 @@ func TestTheNotFetchedHintKeepsAnImportedPin(t *testing.T) {
 		t.Fatalf("the exporting machine should have a pinned and an unpinned source: %+v", exported.Sources)
 	}
 	pinned, unpinned := exported.Sources[i], exported.Sources[j]
+	pinnedArg := pinned.URL + "#" + pinned.Pin
+	pins := func(s home.Settings) map[string]string {
+		m := map[string]string{}
+		for _, src := range s.Sources {
+			m[src.URL] = src.Pin
+		}
+		return m
+	}
 
 	to := newHarness(t)
 	to.build(t, fixture{dirs: []string{".claude"}})
-	equal(t, "import", to.run("import", file, "--yes").exit, 0)
+	out := to.run("import", file, "--yes")
+	equal(t, "exit", out.exit, 0)
+	contains(t, "stdout", out.stdout, "only the settings were written: add each source again, then install a missing skill with 'agentx skill add <source>'")
+	printed := printedSourceAdds(t, out.stdout, t.TempDir())
+	slices.Sort(printed)
+	if want := []string{pinnedArg, unpinned.URL}; !slices.Equal(printed, slices.Sorted(slices.Values(want))) {
+		t.Errorf("the printed source add lines read back as %q, want %q\n%s", printed, want, out.stdout)
+	}
 
 	// hinted checks the argument of the source add each command's refusal
-	// names, as a POSIX shell reads it back, and returns the last one.
-	hinted := func(when string) (arg string) {
+	// names, as a POSIX shell reads it back.
+	hinted := func(when string) {
 		t.Helper()
 		for _, args := range [][]string{
 			{"skill", "add", pinned.URL, "--all"},
@@ -781,31 +716,23 @@ func TestTheNotFetchedHintKeepsAnImportedPin(t *testing.T) {
 				t.Errorf("%s: %s %s hint = %q, want a source add to fetch it", when, args[0], args[1], hint)
 				continue
 			}
-			got := shellRead(t, word, t.TempDir())
-			if want := []string{pinned.URL + "#" + pinned.Pin}; !reflect.DeepEqual(got, want) {
+			if got, want := shellRead(t, word, t.TempDir()), []string{pinnedArg}; !reflect.DeepEqual(got, want) {
 				t.Errorf("%s: %s %s hint names %q, want %q", when, args[0], args[1], got, want)
 			}
-			if len(got) == 1 {
-				arg = got[0]
-			}
 		}
-		return arg
 	}
 	hinted("no account repo")
 	equal(t, "source add of the unpinned source", to.run("source", "add", unpinned.URL).exit, 0)
-	arg := hinted("an account repo without the source")
-	if arg == "" {
-		t.FailNow()
-	}
+	hinted("an account repo without the source")
 
 	// Following the hint keeps the pin, and skill add then installs.
-	equal(t, "source add as hinted", to.run("source", "add", arg).exit, 0)
+	equal(t, "source add as hinted", to.run("source", "add", pinnedArg).exit, 0)
 	restored, err := home.LoadSettings(to.agentx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if k := restored.FindSource(pinned.URL); k < 0 || restored.Sources[k].Pin != pinned.Pin {
-		t.Errorf("after the hinted source add the settings hold %+v, want %s pinned to %q", restored.Sources, pinned.URL, pinned.Pin)
+	if got, want := pins(restored), pins(exported); !reflect.DeepEqual(got, want) {
+		t.Errorf("pins after the printed source adds = %v, want %v", got, want)
 	}
 	equal(t, "skill add after the hinted source add", to.run("skill", "add", pinned.URL, "--all").exit, 0)
 }
