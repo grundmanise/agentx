@@ -123,7 +123,7 @@ func TestConfigEnablePlaceAllIntoAClientThatReadsTheLibrary(t *testing.T) {
 // the name, are quoted, so that they still name the directories on disk.
 func TestConfigEnablePlaceAllSanitisesTheNameAndQuotesThePaths(t *testing.T) {
 	t.Parallel()
-	h, _ := placementHarness(t)
+	h := placeHome(t)
 	equal(t, "disable", h.run("config", "disable", "cursor").exit, 0)
 	const raw = "two\nrows \x1b[31mRED\x1b[0m"
 	dir := filepath.Join(h.library, raw)
@@ -148,10 +148,11 @@ func TestConfigEnablePlaceAllSanitisesTheNameAndQuotesThePaths(t *testing.T) {
 	}
 }
 
-// TestConfigDisableTakesNoPlaceAll: the flag belongs to enable alone.
+// TestConfigDisableTakesNoPlaceAll: the flag belongs to enable alone, and
+// the command line says so before anything is read.
 func TestConfigDisableTakesNoPlaceAll(t *testing.T) {
 	t.Parallel()
-	h, _ := placementHarness(t)
+	h := newHarness(t)
 	out := h.run("config", "disable", "cursor", "--place-all")
 	equal(t, "exit", out.exit, 1)
 	contains(t, "stderr", out.stderr, "place-all")
@@ -161,7 +162,7 @@ func TestConfigDisableTakesNoPlaceAll(t *testing.T) {
 // the configuration.
 func TestConfigEnablePlaceAllOnAnEmptyLibrary(t *testing.T) {
 	t.Parallel()
-	h, _ := placementHarness(t)
+	h := placeHome(t)
 	equal(t, "disable", h.run("config", "disable", "cursor").exit, 0)
 
 	out := h.run("--json", "config", "enable", "cursor", "--place-all")

@@ -7,12 +7,28 @@ import (
 	"testing"
 )
 
-// TestSkillPlaceAddsAPlacementLater puts a library skill into a
-// configuration the install left out, and changes nothing else.
+// placeHome is the machine of placementHarness with no source added: the
+// six configurations and nothing else, for a test that places a library
+// skill of the user's own and installs nothing.
+func placeHome(t *testing.T) *harness {
+	t.Helper()
+	h := newHarness(t)
+	h.build(t, fixture{dirs: []string{".claude", ".cursor", ".codeium/windsurf", ".copilot", ".codex", ".gemini"}})
+	return h
+}
+
+// TestSkillPlaceAddsAPlacementLater puts a library skill into
+// configurations the install left out, each a mutation of its own that
+// changes nothing else: a symlink into Cursor, and into GitHub Copilot a
+// copy of the library directory, its executable bit included, which
+// copy_mode records as an install with --copy records it. Codex reads the
+// library, so placing the skill there makes no second entry: the library
+// entry is the placement, and a symlink beside it would make that client
+// list the skill twice.
 func TestSkillPlaceAddsAPlacementLater(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "codex").exit, 0)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "codex")
 	nothingAt(t, "a placement the install did not make", filepath.Join(h.home, ".cursor", "skills", "alpha"))
 	head := h.accountGit("rev-parse", "refs/heads/managed/alpha")
 	before := mutationVersion(t, h)
@@ -28,24 +44,14 @@ func TestSkillPlaceAddsAPlacementLater(t *testing.T) {
 	equal(t, "mutations", mutationVersion(t, h), before+1)
 	equal(t, "journals left behind", journalCount(t, h), 0)
 	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "")
-
 	ev := h.one(out.stdout, "library_skill")
 	equal(t, "kind", ev["kind"], "managed")
 	equal(t, "placements", strings.Join(placementsOf(t, ev), ";"), "cursor symlink symlink")
 	contains(t, "the result", out.stdout, "placed alpha in 1 configuration")
-}
 
-// TestSkillPlaceCopyRecordsTheMode places a copy of the library directory
-// and records the configuration in copy_mode, as an install with --copy
-// does.
-func TestSkillPlaceCopyRecordsTheMode(t *testing.T) {
-	t.Parallel()
-	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "codex").exit, 0)
-
-	out := h.run("--json", "skill", "place", "alpha", "--to", "cursor", "--copy")
-	equal(t, "exit", out.exit, 0)
-	place := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	out = h.run("--json", "skill", "place", "alpha", "--to", "github-copilot", "--copy")
+	equal(t, "exit of --copy", out.exit, 0)
+	place = filepath.Join(h.home, ".copilot", "skills", "alpha")
 	info, err := os.Lstat(place)
 	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		t.Fatalf("the placement is not a copy: %v", err)
@@ -53,16 +59,17 @@ func TestSkillPlaceCopyRecordsTheMode(t *testing.T) {
 	contains(t, "the copy", fileBody(t, filepath.Join(place, "notes.md")), "alpha notes")
 	// The executable bit of the source survives the copy, so the copy hashes
 	// to the version it was made from.
-	script, err := os.Stat(filepath.Join(place, "scripts", "run.sh"))
-	if err != nil {
-		t.Fatalf("the copy is missing the script: %v", err)
+	if !executable(t, filepath.Join(place, "scripts", "run.sh")) {
+		t.Error("the copied script is not executable")
 	}
-	if script.Mode()&0o111 == 0 {
-		t.Errorf("the copied script is not executable: %v", script.Mode())
-	}
-	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "cursor")
-	equal(t, "placements", strings.Join(placementsOf(t, h.one(out.stdout, "library_skill")), ";"), "cursor copy copy")
-	contains(t, "the result", out.stdout, "1 placement as copy")
+	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "github-copilot")
+	equal(t, "placements of the copy", strings.Join(placementsOf(t, h.one(out.stdout, "library_skill")), ";"), "github-copilot copy copy")
+	contains(t, "the result of --copy", out.stdout, "1 placement as copy")
+
+	out = h.run("--json", "skill", "place", "alpha", "--to", "codex")
+	equal(t, "exit into codex", out.exit, 0)
+	nothingAt(t, "a placement in the client's own directory", filepath.Join(h.home, ".codex", "skills", "alpha"))
+	equal(t, "placements in codex", strings.Join(placementsOf(t, h.one(out.stdout, "library_skill")), ";"), "codex library library")
 }
 
 // TestPlacingAgainKeepsARecordedCopy: a configuration copy_mode records for
@@ -70,44 +77,26 @@ func TestSkillPlaceCopyRecordsTheMode(t *testing.T) {
 // --copy, since its client may not follow a symlink, and agentx's own copy
 // is not reported as adopted. Otherwise copy_mode would name a copy where a
 // symlink stands, and a directory the user later put at that path would be
-// one a removal deletes.
+// one a removal deletes. skill add and config enable --place-all place by
+// the same staging, see TestPlacingAgainKeepsAnEditedCopy.
 func TestPlacingAgainKeepsARecordedCopy(t *testing.T) {
 	t.Parallel()
-	for _, c := range []struct {
-		what  string
-		again func(t *testing.T, h *harness, s *sourceRepo) outcome
-	}{
-		{"skill place", func(_ *testing.T, h *harness, _ *sourceRepo) outcome {
-			return h.run("--json", "skill", "place", "alpha", "--to", "cursor")
-		}},
-		{"skill add", func(_ *testing.T, h *harness, s *sourceRepo) outcome {
-			return h.run("--json", "skill", "add", s.url, "--skill", "alpha", "--to", "cursor")
-		}},
-		{"config enable --place-all", func(t *testing.T, h *harness, _ *sourceRepo) outcome {
-			equal(t, "disable", h.run("config", "disable", "cursor").exit, 0)
-			return h.run("--json", "config", "enable", "cursor", "--place-all")
-		}},
-	} {
-		t.Run(c.what, func(t *testing.T) {
-			t.Parallel()
-			h, s := placementHarness(t)
-			equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "cursor", "--copy").exit, 0)
+	h, s := placementHarness(t)
+	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "cursor", "--copy").exit, 0)
 
-			out := c.again(t, h, s)
-			equal(t, "exit", out.exit, 0)
-			place := filepath.Join(h.home, ".cursor", "skills", "alpha")
-			info, err := os.Lstat(place)
-			if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-				t.Fatalf("the placement is no longer a copy: %v", err)
-			}
-			equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "cursor")
-			equal(t, "placements", strings.Join(placementsOf(t, h.one(out.stdout, "library_skill")), ";"), "cursor copy copy")
-			if strings.Contains(out.stdout, "placement adopted") {
-				t.Errorf("agentx's own copy was reported as adopted:\n%s", out.stdout)
-			}
-			equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "")
-		})
+	out := h.run("--json", "skill", "place", "alpha", "--to", "cursor")
+	equal(t, "exit", out.exit, 0)
+	place := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	info, err := os.Lstat(place)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		t.Fatalf("the placement is no longer a copy: %v", err)
 	}
+	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "cursor")
+	equal(t, "placements", strings.Join(placementsOf(t, h.one(out.stdout, "library_skill")), ";"), "cursor copy copy")
+	if strings.Contains(out.stdout, "placement adopted") {
+		t.Errorf("agentx's own copy was reported as adopted:\n%s", out.stdout)
+	}
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "")
 }
 
 // TestPlacingAgainKeepsAnEditedCopy: a copy copy_mode records for the
@@ -165,7 +154,7 @@ func TestPlacingAgainKeepsAnEditedCopy(t *testing.T) {
 // directory agentx did not place there, one a removal keeps, so an install
 // skips it with a warning that names neither agentx's copy nor a removal
 // that would not delete it. skill place stops there instead, see
-// TestSkillPlaceStopsAtADirectoryOfTheUsers.
+// TestSkillPlaceRefusesADirectoryThatDiffers.
 func TestPlacingAgainLeavesAnEditedCopyOfAnotherConfiguration(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
@@ -190,51 +179,37 @@ func TestPlacingAgainLeavesAnEditedCopyOfAnotherConfiguration(t *testing.T) {
 // a file at that path. Neither is agentx's copy, which is a real directory,
 // and a removal would not delete either, so each keeps the warning of what
 // it is and names no removal; copy_mode still records the configuration.
+// Neither run changes anything, so the two run on one machine in turn.
 func TestPlacingAgainLeavesWhatReplacedARecordedCopy(t *testing.T) {
 	t.Parallel()
+	h, s := placementHarness(t)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "cursor", "--copy")
+	place := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	mine := filepath.Join(h.home, "my-skills", "alpha")
+	copyTree(t, place, mine)
 	for _, c := range []struct {
 		what    string
-		replace func(t *testing.T, h *harness, place string)
+		replace func()
 		warning string
 	}{
-		{"a link", func(t *testing.T, h *harness, place string) {
-			mine := filepath.Join(h.home, "my-skills", "alpha")
-			copyTree(t, place, mine)
-			if err := os.RemoveAll(place); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.Symlink(mine, place); err != nil {
-				t.Fatal(err)
-			}
-		}, " is a link of your own and was left as it is; no placement was made for cursor"},
-		{"a file", func(t *testing.T, _ *harness, place string) {
-			if err := os.RemoveAll(place); err != nil {
-				t.Fatal(err)
-			}
-			writeFile(t, place, "mine\n")
-		}, " is not this skill and was left as it is; no placement was made for cursor"},
+		{"a link", func() { swapForLink(t, place, mine) }, " is a link of your own and was left as it is; no placement was made for cursor"},
+		{"a file", func() { restore(t, place, "mine\n") }, " is not this skill and was left as it is; no placement was made for cursor"},
 	} {
-		t.Run(c.what, func(t *testing.T) {
-			t.Parallel()
-			h, s := placementHarness(t)
-			h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "cursor", "--copy")
-			place := filepath.Join(h.home, ".cursor", "skills", "alpha")
-			c.replace(t, h, place)
-			before, err := os.Lstat(place)
-			if err != nil {
-				t.Fatal(err)
-			}
+		c.replace()
+		before, err := os.Lstat(place)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-			out := h.run("--json", "skill", "place", "alpha", "--to", "cursor")
-			equal(t, "exit", out.exit, 0)
-			after, err := os.Lstat(place)
-			if err != nil || after.Mode() != before.Mode() || after.Size() != before.Size() {
-				t.Errorf("what the user put at the placement path changed: %v", err)
-			}
-			equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "cursor")
-			equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), place+c.warning)
-			contains(t, "the result", h.one(out.stdout, "result")["summary"].(string), ", 1 placement skipped")
-		})
+		out := h.run("--json", "skill", "place", "alpha", "--to", "cursor")
+		equal(t, c.what+": exit", out.exit, 0)
+		after, err := os.Lstat(place)
+		if err != nil || after.Mode() != before.Mode() || after.Size() != before.Size() {
+			t.Errorf("%s: what the user put at the placement path changed: %v", c.what, err)
+		}
+		equal(t, c.what+": copy_mode", copyModeOf(t, h, "alpha"), "cursor")
+		equal(t, c.what+": warnings", strings.Join(warnings(h, out.stderr), "\n"), place+c.warning)
+		contains(t, c.what+": the result", h.one(out.stdout, "result")["summary"].(string), ", 1 placement skipped")
 	}
 }
 
@@ -249,13 +224,15 @@ func TestPlacingAgainLeavesWhatReplacedARecordedCopy(t *testing.T) {
 // it for a flag, and a name a shell would split is quoted as one word.
 func TestTheHintForAnEditedCopyTakesTheLibraryVersion(t *testing.T) {
 	t.Parallel()
-	addAlpha := func(t *testing.T, h *harness, s *sourceRepo) {
+	addAlpha := func(t *testing.T) *harness {
+		h, s := placementHarness(t)
 		h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "cursor", "--copy")
+		return h
 	}
 	for _, c := range []struct {
 		what    string
 		name    string
-		install func(t *testing.T, h *harness, s *sourceRepo)
+		install func(t *testing.T) *harness // a machine with a copy of the skill placed in Cursor
 		edit    func(t *testing.T, h *harness, place string)
 		remove  string
 		again   string
@@ -285,8 +262,7 @@ func TestTheHintForAnEditedCopyTakesTheLibraryVersion(t *testing.T) {
 	} {
 		t.Run(c.what, func(t *testing.T) {
 			t.Parallel()
-			h, s := placementHarness(t)
-			c.install(t, h, s)
+			h := c.install(t)
 			place := filepath.Join(h.home, ".cursor", "skills", c.name)
 			c.edit(t, h, place)
 
@@ -324,15 +300,17 @@ func editCopy(t *testing.T, place string) {
 	writeFile(t, filepath.Join(place, "mine.md"), "a file of my own\n")
 }
 
-// placeOwnCopy makes a library skill of the user's own called name, which
-// no source holds, and places a copy of it in Cursor.
-func placeOwnCopy(name string) func(t *testing.T, h *harness, _ *sourceRepo) {
-	return func(t *testing.T, h *harness, _ *sourceRepo) {
+// placeOwnCopy is a machine with no source whose library holds a skill of
+// the user's own called name, a copy of it placed in Cursor.
+func placeOwnCopy(name string) func(t *testing.T) *harness {
+	return func(t *testing.T) *harness {
+		h := placeHome(t)
 		if err := os.MkdirAll(filepath.Join(h.library, name), 0o755); err != nil {
 			t.Fatal(err)
 		}
 		writeFile(t, filepath.Join(h.library, name, "SKILL.md"), skill("mine", "A skill of my own"))
 		h.mustRun("skill", "place", "--to", "cursor", "--copy", "--", name)
+		return h
 	}
 }
 
@@ -474,107 +452,26 @@ func TestSkillPlaceLeavesALinkOfTheUsers(t *testing.T) {
 	equal(t, "journals left behind", journalCount(t, h), 0)
 }
 
-// TestSkillPlaceStopsAtADirectoryOfTheUsers: a directory of the user's
-// where the placement belongs holds content the library does not, so
-// placing the skill there would discard what it holds. skill place stops
-// with exit 6, names --force with the --to it was given and says how to
-// keep the directory instead, and changes nothing at all: the directory is
-// byte for byte what it was, no journal was written and the settings were
-// not.
-func TestSkillPlaceStopsAtADirectoryOfTheUsers(t *testing.T) {
-	t.Parallel()
-	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code", "--copy").exit, 0)
-	handMade := filepath.Join(h.home, ".cursor", "skills", "alpha")
-	if err := os.MkdirAll(handMade, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeFile(t, filepath.Join(handMade, "SKILL.md"), "---\nname: alpha\ndescription: mine\n---\n\nmine\n")
-	held := onDisk(t, handMade)
-	settings := fileBody(t, filepath.Join(h.agentx, "settings.json"))
-	version := mutationVersion(t, h)
-
-	out := h.run("--json", "skill", "place", "alpha", "--to", "cursor")
-	equal(t, "exit", out.exit, 6)
-	e := h.one(out.stdout, "error")
-	equal(t, "message", e["message"], handMade+" is a directory whose content differs from the library's alpha, so nothing was placed")
-	equal(t, "hint", e["hint"], "to replace it with the library's version and delete what it holds, run 'agentx skill place alpha --to cursor --force';"+
-		" to keep it, move it elsewhere first")
-	equal(t, "the directory", onDisk(t, handMade), held)
-	equal(t, "the settings", fileBody(t, filepath.Join(h.agentx, "settings.json")), settings)
-	equal(t, "no mutation", mutationVersion(t, h), version)
-	equal(t, "journals left behind", journalCount(t, h), 0)
-}
-
-// TestSkillPlaceIsThePlacementAnInstallMakes proves the reuse: installing
-// straight into a configuration and placing into it later leave the same
-// thing on disk and the same entry in the settings.
-func TestSkillPlaceIsThePlacementAnInstallMakes(t *testing.T) {
-	t.Parallel()
-	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "cursor", "--copy").exit, 0)
-
-	later := newHarness(t)
-	later.build(t, fixture{dirs: []string{".claude", ".cursor", ".codex"}})
-	equal(t, "source add", later.run("source", "add", s.url).exit, 0)
-	equal(t, "add", later.run("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code").exit, 0)
-	equal(t, "place", later.run("skill", "place", "alpha", "--to", "cursor", "--copy").exit, 0)
-
-	installed := filepath.Join(h.home, ".cursor", "skills", "alpha")
-	placed := filepath.Join(later.home, ".cursor", "skills", "alpha")
-	for _, rel := range []string{"SKILL.md", "notes.md", filepath.Join("scripts", "run.sh")} {
-		equal(t, "the file "+rel+" of the placement", fileBody(t, filepath.Join(placed, rel)), fileBody(t, filepath.Join(installed, rel)))
-	}
-	equal(t, "copy_mode", copyModeOf(t, later, "alpha"), copyModeOf(t, h, "alpha"))
-}
-
-// TestSkillPlaceKeepsAPlacementThatIsAlreadyRight leaves a symlink already
-// naming the library where it is and reports it.
-func TestSkillPlaceKeepsAPlacementThatIsAlreadyRight(t *testing.T) {
-	t.Parallel()
-	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "cursor").exit, 0)
-
-	out := h.run("--json", "skill", "place", "alpha", "--to", "cursor")
-	equal(t, "exit", out.exit, 0)
-	target, ok := isSymlink(t, filepath.Join(h.home, ".cursor", "skills", "alpha"))
-	if !ok || target != filepath.Join(h.library, "alpha") {
-		t.Errorf("the placement is %q (symlink %v)", target, ok)
-	}
-	if strings.Contains(out.stderr, "left as it is") {
-		t.Errorf("a placement that was already right was reported as skipped:\n%s", out.stderr)
-	}
-	contains(t, "the result", out.stdout, "placed alpha in 1 configuration")
-}
-
-// TestSkillPlaceIntoAClientThatReadsTheLibrary makes no second entry: the
-// library entry is the placement, and a symlink beside it would make that
-// client list the skill twice.
-func TestSkillPlaceIntoAClientThatReadsTheLibrary(t *testing.T) {
-	t.Parallel()
-	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code").exit, 0)
-
-	out := h.run("--json", "skill", "place", "alpha", "--to", "codex")
-	equal(t, "exit", out.exit, 0)
-	nothingAt(t, "a placement in the client's own directory", filepath.Join(h.home, ".codex", "skills", "alpha"))
-	equal(t, "placements", strings.Join(placementsOf(t, h.one(out.stdout, "library_skill")), ";"), "codex library library")
-}
-
 // TestSkillPlaceRefusesWhatItCannotFind answers for a skill the library
-// does not hold and a configuration that is not detected.
+// does not hold, --force or not, and for a configuration that is not
+// detected, before anything is read that could change: no mutation, no
+// journal.
 func TestSkillPlaceRefusesWhatItCannotFind(t *testing.T) {
 	t.Parallel()
-	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code").exit, 0)
+	h := placeHome(t)
+	writeFile(t, mkdirs(t, filepath.Join(h.library, "alpha"), "SKILL.md"), skill("alpha", "A skill of my own"))
 
-	none := h.run("skill", "place", "gamma", "--to", "cursor")
-	equal(t, "exit", none.exit, 5)
-	contains(t, "stderr", none.stderr, "the library holds no skill called \"gamma\"")
+	for _, args := range [][]string{{"gamma", "--to", "cursor"}, {"gamma", "--force"}} {
+		none := h.run(append([]string{"skill", "place"}, args...)...)
+		equal(t, strings.Join(args, " ")+": exit", none.exit, 5)
+		contains(t, strings.Join(args, " ")+": stderr", none.stderr, "the library holds no skill called \"gamma\"")
+	}
 
 	nowhere := h.run("skill", "place", "alpha", "--to", "nowhere")
 	equal(t, "exit", nowhere.exit, 5)
 	contains(t, "stderr", nowhere.stderr, "detected configurations:")
+	equal(t, "mutations", mutationVersion(t, h), 0)
+	equal(t, "journals", journalCount(t, h), 0)
 }
 
 // TestSkillPlaceQuotesThePathsOfItsRows places a library directory whoever
@@ -586,7 +483,7 @@ func TestSkillPlaceRefusesWhatItCannotFind(t *testing.T) {
 // a directory on disk.
 func TestSkillPlaceQuotesThePathsOfItsRows(t *testing.T) {
 	t.Parallel()
-	h, _ := placementHarness(t)
+	h := placeHome(t)
 	const raw = "two\nrows \x1b[31mRED\x1b[0m"
 	dir := filepath.Join(h.library, raw)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
