@@ -101,6 +101,13 @@ func (s *sourceRepo) run(args ...string) string {
 func (s *sourceRepo) bare(args ...string) string {
 	s.t.Helper()
 	s.at = nil
+	return s.query(args...)
+}
+
+// query runs a git command that only reads the bare repository. It leaves
+// at as it is, so parallel subtests can read one source.
+func (s *sourceRepo) query(args ...string) string {
+	s.t.Helper()
 	out, err := s.git.Isolated(context.Background(), s.gitDir, fixtureGitConfig(args...)...)
 	if err != nil {
 		s.t.Fatalf("git %s: %v", strings.Join(args, " "), err)
@@ -225,7 +232,7 @@ func (s *sourceRepo) tree(path string) string { s.t.Helper(); return s.treeAt("H
 // the folder hash of a skill directory at that version.
 func (s *sourceRepo) treeAt(rev, path string) string {
 	s.t.Helper()
-	return s.run("rev-parse", rev+":"+path)
+	return s.query("rev-parse", rev+":"+path)
 }
 
 // standardSource is the source most tests use: two skills under skills/,
