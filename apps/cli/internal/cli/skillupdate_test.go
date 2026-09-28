@@ -306,7 +306,7 @@ func TestSkillUpdateAllMergesEditsAndLeavesConflictsPending(t *testing.T) {
 	e := h.one(out.stdout, "error")
 	equal(t, "code", e["code"], "pending_merge")
 	equal(t, "message", e["message"], "1 of 3 skills could not be updated: beta: "+refusal)
-	equal(t, "hint", e["hint"], "resolve it with git in "+pendingCheckout(h, "beta")+" ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), "+
+	equal(t, "hint", e["hint"], "resolve it with git in "+filepath.Join(pendingCheckout(h, "beta"), "beta")+" ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), "+
 		"then run 'agentx skill update beta' again to apply it, or 'agentx skill update beta --abort' to give it up")
 	equal(t, "alpha's notes", fileBody(t, filepath.Join(h.library, "alpha", "notes.md")), "alpha notes, revised\n")
 	equal(t, "alpha's candidate", h.ref(lineage.CandidateRef("alpha")), "")

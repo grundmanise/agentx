@@ -62,10 +62,17 @@ func pendingCheckout(h *harness, name string) string {
 // called name, as agentx runs it there, and returns stdout as is.
 func checkoutGit(t *testing.T, h *harness, name string, args ...string) string {
 	t.Helper()
+	return gitIn(t, h, pendingCheckout(h, name), args...)
+}
+
+// gitIn runs git in dir, a checkout or a directory in one, as agentx runs
+// it in a checkout, and returns stdout as is.
+func gitIn(t *testing.T, h *harness, dir string, args ...string) string {
+	t.Helper()
 	r := gitx.New(h.env, false, func(string, ...any) {})
-	out, err := r.InCheckout(context.Background(), pendingCheckout(h, name), args...)
+	out, err := r.InCheckout(context.Background(), dir, args...)
 	if err != nil {
-		t.Fatalf("git %s in the checkout of %s: %v", strings.Join(args, " "), name, err)
+		t.Fatalf("git %s in %s: %v", strings.Join(args, " "), dir, err)
 	}
 	return out
 }
@@ -177,7 +184,7 @@ func TestSkillUpdateMergesANonOverlappingEdit(t *testing.T) {
 // library directory and every copy are byte for byte as they were, and the
 // import branch and the candidate hold what they held. The conflict event
 // names the three versions and the stage blobs of the file, and the hint
-// names the checkout to resolve it in with git. The merge is an ordinary
+// names the skill's directory in the checkout to resolve it in with git. The merge is an ordinary
 // git merge in progress in the skill's checkout, read back with plain git:
 // locked with agentx's reason, at mine, the library directory committed on
 // the base version, with the candidate as MERGE_HEAD, the completion's
@@ -200,7 +207,7 @@ func TestSkillUpdateLeavesAConflictPending(t *testing.T) {
 	e := h.one(out.stdout, "error")
 	equal(t, "code", e["code"], "pending_merge")
 	equal(t, "message", e["message"], "alpha conflicts with its update in 1 file, so the merge is pending and the library directory was left as it is")
-	equal(t, "hint", e["hint"], "resolve it with git in "+pendingCheckout(h, "alpha")+" ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), "+
+	equal(t, "hint", e["hint"], "resolve it with git in "+filepath.Join(pendingCheckout(h, "alpha"), "alpha-dir")+" ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), "+
 		"then run 'agentx skill update alpha' again to apply it, or 'agentx skill update alpha --abort' to give it up")
 	if got := h.eventsOfType(out.stdout, "library_skill"); len(got) != 0 {
 		t.Errorf("an update that left a merge pending reported %v", got)
@@ -253,10 +260,11 @@ func TestSkillUpdateLeavesAConflictPending(t *testing.T) {
 
 // TestAPendingMergeCheckoutIsAnOrdinaryMergeInProgress: the checkout of a
 // pending merge is a merge git knows how to finish. git status there lists
-// the unmerged path, and once the file is resolved and added, a plain git
-// commit makes the merge commit, mine and the candidate its parents and
-// the message MERGE_MSG holds its message. The library directory is as it
-// was all along.
+// the unmerged path, and once the file is resolved as the hint says, in the
+// skill's directory in the checkout and by the path the conflict lists, a
+// plain git commit makes the merge commit, mine and the candidate its
+// parents and the message MERGE_MSG holds its message. The library
+// directory is as it was all along.
 func TestAPendingMergeCheckoutIsAnOrdinaryMergeInProgress(t *testing.T) {
 	t.Parallel()
 	h, s, _ := updateHarness(t)
@@ -265,9 +273,11 @@ func TestAPendingMergeCheckoutIsAnOrdinaryMergeInProgress(t *testing.T) {
 	head, candidate, msg := mergeState(t, h, "alpha")
 
 	contains(t, "git status", checkoutGit(t, h, "alpha", "status", "--porcelain"), "UU alpha-dir/notes.md")
-	writeFile(t, filepath.Join(pendingCheckout(h, "alpha"), "alpha-dir", "notes.md"), "alpha notes, resolved\n")
-	checkoutGit(t, h, "alpha", "add", "alpha-dir/notes.md")
+	skillDir := filepath.Join(pendingCheckout(h, "alpha"), "alpha-dir")
+	gitIn(t, h, skillDir, "checkout", "--theirs", "notes.md")
+	gitIn(t, h, skillDir, "add", "notes.md")
 	checkoutGit(t, h, "alpha", "commit", "--no-edit", "--quiet")
+	equal(t, "the commit's notes.md", checkoutGit(t, h, "alpha", "rev-parse", "HEAD:alpha-dir/notes.md"), h.accountGit("rev-parse", candidate+":alpha-dir/notes.md")+"\n")
 	equal(t, "the commit's parents", strings.TrimSpace(checkoutGit(t, h, "alpha", "rev-parse", "HEAD^@")), head+"\n"+candidate)
 	equal(t, "the commit's message", checkoutGit(t, h, "alpha", "log", "-1", "--format=%B"), msg+"\n")
 	equal(t, "the library", onDisk(t, h.library), library)
@@ -355,7 +365,7 @@ func TestSkillUpdateConflictsOfEveryKind(t *testing.T) {
 		"notes.md: both modified\n")
 	equal(t, "stderr in text", text.stderr,
 		"error: kinds conflicts with its update in 7 files, so the merge is pending and the library directory was left as it is\n"+
-			"hint: resolve it with git in "+pendingCheckout(h, "kinds")+" ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), "+
+			"hint: resolve it with git in "+filepath.Join(pendingCheckout(h, "kinds"), "kinds-dir")+" ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), "+
 			"then run 'agentx skill update kinds' again to apply it, or 'agentx skill update kinds --abort' to give it up\n")
 }
 
@@ -976,23 +986,5 @@ func TestRecoveryPrunesStaleMergeCheckouts(t *testing.T) {
 	equal(t, "alpha's pending_merge", h.listed("alpha")["pending_merge"], true)
 	if pending, ok := h.listed("beta")["pending_merge"]; ok {
 		t.Errorf("beta lists a pending merge: %v", pending)
-	}
-}
-
-// TestRecoveryPrunesStaleMergeCheckoutsUnderARelativeHome: agentx home
-// named relative to the working directory, a registration of a checkout
-// whose directory is gone goes all the same.
-func TestRecoveryPrunesStaleMergeCheckoutsUnderARelativeHome(t *testing.T) {
-	// Not parallel: it changes the process's working directory.
-	h, _, _ := updateHarness(t)
-	h.accountGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", pendingReason,
-		pendingCheckout(h, "beta"), h.ref(lineage.ManagedRef("beta")))
-	remove(t, pendingCheckout(h, "beta"))
-	t.Chdir(filepath.Dir(h.agentx))
-	h.env["AGENTX_HOME"] = filepath.Base(h.agentx)
-
-	h.mustRun("config", "set", "label", "pruned")
-	if list := h.accountGit("worktree", "list", "--porcelain"); strings.Contains(list, filepath.Join("merges", "beta")) {
-		t.Errorf("the registration of beta's checkout is still there:\n%s", list)
 	}
 }

@@ -642,12 +642,12 @@ docx conflicts with its update from 3f2a9c1 to 8b1e0f4 in 2 files
 SKILL.md: both modified
 logo.png: both modified
 error: docx conflicts with its update in 2 files, so the merge is pending and the library directory was left as it is
-hint: resolve it with git in /Users/you/.agentx/merges/docx ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), then run 'agentx skill update docx' again to apply it, or 'agentx skill update docx --abort' to give it up
+hint: resolve it with git in /Users/you/.agentx/merges/docx/docx ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), then run 'agentx skill update docx' again to apply it, or 'agentx skill update docx --abort' to give it up
 ```
 
 As in `git status`, "us" is your library directory and "them" the update: a file you deleted and the update changed reads `deleted by us`, and one the update added where you had added a file too reads `both added`. Files your ignore rules name are not part of your edits, so they never conflict and stay as they are.
 
-The worktree is a Git merge in progress like any other: your edits are checked out and the update is being merged into them. Resolve it there with Git: edit each file that conflicts and `git add` it, or take one side of a file whole with `git checkout --ours <file>`, your version, or `git checkout --theirs <file>`, the update's, then `git add` it. `git status`, `git diff` and `git commit` work there as in any merge. The merge stays until it is resolved or given up, across restarts, and `agentx skill list` shows the skill as `merge pending`. Meanwhile:
+The worktree is a Git merge in progress like any other: your edits are checked out and the update is being merged into them. It holds the skill one folder down, and the hint names that folder, so the files listed are found there by the paths shown. Resolve it there with Git: edit each file that conflicts and `git add` it, or take one side of a file whole with `git checkout --ours <file>`, your version, or `git checkout --theirs <file>`, the update's, then `git add` it. `git status`, `git diff` and `git commit` work there as in any merge. The merge stays until it is resolved or given up, across restarts, and `agentx skill list` shows the skill as `merge pending`. Meanwhile:
 
 - `skill update`, `skill revert`, and `skill remove` without `--from` or with `--from universal`, stop with exit code 4 and change nothing.
 - Everything else works as usual: placing the skill, `skill place` with its flags included, removing it from one client, `skill diff`, and update checks, which may find a newer version still.

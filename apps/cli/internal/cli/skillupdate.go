@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -687,13 +688,14 @@ func (r *updateRun) report(ctx context.Context) error {
 	}
 	for _, u := range r.pending {
 		r.inv.printConflicts(u.conflict, short(u.rec.Import.Commit), short(u.next.Import.Commit))
-		r.drop(u.name, conflictFailure(u.name, r.inv.checkoutPath(u.name), len(u.conflict.Files)))
+		r.drop(u.name, conflictFailure(u.name, filepath.Join(r.inv.checkoutPath(u.name), u.rec.Import.Dir()), len(u.conflict.Files)))
 	}
 	return nil
 }
 
 // conflictFailure is how an update answers for a skill whose merge it left
-// pending in the checkout at path: exit code 4, the library directory left
+// pending, path being the skill's directory in the checkout, which the
+// files it lists are relative to: exit code 4, the library directory left
 // as it is, and the ways on from there, all of them git's own but for the
 // update that applies the merge once it is resolved and the one that gives
 // it up.
