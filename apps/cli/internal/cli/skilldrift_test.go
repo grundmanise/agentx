@@ -19,11 +19,14 @@ func driftHarness(t *testing.T) (*harness, *sourceRepo) {
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude", ".cursor", ".codex", ".gemini"}})
 	s := h.newSourceRepo("tools", true)
-	s.skill("tools/pdf-tools", "pdf", "Named by its frontmatter", map[string]string{
-		"a.md": "the same bytes\n", "b.md": "the same bytes\n", "c.md": "a third file\n", "bin/run.sh": "#!/bin/sh\necho run\n",
+	s.advance("driftHarness", func(s *sourceRepo) []string {
+		s.skill("tools/pdf-tools", "pdf", "Named by its frontmatter", map[string]string{
+			"a.md": "the same bytes\n", "b.md": "the same bytes\n", "c.md": "a third file\n", "bin/run.sh": "#!/bin/sh\necho run\n",
+		})
+		s.executable("tools/pdf-tools/bin/run.sh")
+		s.commit("pdf")
+		return nil
 	})
-	s.executable("tools/pdf-tools/bin/run.sh")
-	s.commit("pdf")
 	h.mustRun("source", "add", s.url)
 	h.mustRun("skill", "add", s.url, "--skill", "pdf")
 	return h, s

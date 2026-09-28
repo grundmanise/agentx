@@ -23,21 +23,24 @@ func legacyHarness(t *testing.T) (h *harness, s *sourceRepo, canonical string) {
 	h = newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude", ".cursor"}})
 	s = h.newSourceRepo("legacy", true)
-	s.skill("skills/nc", "nc", "Stored with a legacy mode", map[string]string{"a.md": "a\n", "sub/b.md": "b\n"})
-	s.commit("nc")
-	sub := s.mktree("100664 blob " + s.run("rev-parse", "HEAD:skills/nc/sub/b.md") + "\tb.md")
-	nc := s.mktree(
-		"100644 blob "+s.run("rev-parse", "HEAD:skills/nc/SKILL.md")+"\tSKILL.md",
-		"100664 blob "+s.run("rev-parse", "HEAD:skills/nc/a.md")+"\ta.md",
-		"040000 tree "+sub+"\tsub")
-	skills := s.mktree(s.replaced("HEAD:skills", "nc", nc)...)
-	root := s.mktree(s.replaced("HEAD^{tree}", "skills", skills)...)
-	canonical = s.tree("skills/nc")
-	s.bare("update-ref", "refs/heads/main", s.bare("commit-tree", root, "-p", "HEAD", "-m", "legacy modes"))
-	if s.tree("skills/nc") == canonical {
-		t.Fatal("the rewritten tree has the canonical id; the fixture proves nothing")
-	}
-	contains(t, "the source listing", s.bare("ls-tree", "HEAD:skills/nc"), "100644 blob "+s.run("rev-parse", "HEAD:skills/nc/a.md")+"\ta.md")
+	canonical = s.advance("legacyHarness", func(s *sourceRepo) []string {
+		s.skill("skills/nc", "nc", "Stored with a legacy mode", map[string]string{"a.md": "a\n", "sub/b.md": "b\n"})
+		s.commit("nc")
+		sub := s.mktree("100664 blob " + s.run("rev-parse", "HEAD:skills/nc/sub/b.md") + "\tb.md")
+		nc := s.mktree(
+			"100644 blob "+s.run("rev-parse", "HEAD:skills/nc/SKILL.md")+"\tSKILL.md",
+			"100664 blob "+s.run("rev-parse", "HEAD:skills/nc/a.md")+"\ta.md",
+			"040000 tree "+sub+"\tsub")
+		skills := s.mktree(s.replaced("HEAD:skills", "nc", nc)...)
+		root := s.mktree(s.replaced("HEAD^{tree}", "skills", skills)...)
+		canonical := s.tree("skills/nc")
+		s.bare("update-ref", "refs/heads/main", s.bare("commit-tree", root, "-p", "HEAD", "-m", "legacy modes"))
+		if s.tree("skills/nc") == canonical {
+			s.t.Fatal("the rewritten tree has the canonical id; the fixture proves nothing")
+		}
+		contains(s.t, "the source listing", s.bare("ls-tree", "HEAD:skills/nc"), "100644 blob "+s.run("rev-parse", "HEAD:skills/nc/a.md")+"\ta.md")
+		return []string{canonical}
+	})[0]
 	h.mustRun("source", "add", s.url)
 	h.mustRun("skill", "add", s.url, "--skill", "nc")
 	return h, s, canonical

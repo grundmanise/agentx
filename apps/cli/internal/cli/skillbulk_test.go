@@ -19,10 +19,13 @@ func bulkHarness(t *testing.T) (*harness, *sourceRepo) {
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude", ".cursor", ".codex", ".gemini"}})
 	s := h.newSourceRepo("bulk", true)
-	for _, name := range bulkSkills {
-		s.skill("skills/"+name, name, "The "+name+" skill", map[string]string{"notes.md": name + " notes\n"})
-	}
-	s.commit("three skills")
+	s.advance("bulkHarness", func(s *sourceRepo) []string {
+		for _, name := range bulkSkills {
+			s.skill("skills/"+name, name, "The "+name+" skill", map[string]string{"notes.md": name + " notes\n"})
+		}
+		s.commit("three skills")
+		return nil
+	})
 	if out := h.run("source", "add", s.url); out.exit != 0 {
 		t.Fatalf("source add: exit %d\n%s", out.exit, out.stderr)
 	}

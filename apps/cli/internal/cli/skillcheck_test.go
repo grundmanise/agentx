@@ -27,9 +27,11 @@ func checkHarness(t *testing.T) (*harness, *sourceRepo, string) {
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	s := h.newSourceRepo("skills", true)
-	s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes\n"})
-	s.skill("skills/beta", "beta", "The second skill", nil)
-	first := s.commit("first version")
+	first := s.advance("checkHarness", func(s *sourceRepo) []string {
+		s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes\n"})
+		s.skill("skills/beta", "beta", "The second skill", nil)
+		return []string{s.commit("first version")}
+	})[0]
 	h.mustRun("source", "add", s.url)
 	h.mustRun("skill", "add", s.url, "--all")
 	return h, s, first

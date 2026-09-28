@@ -80,14 +80,19 @@ func adoptHarness(t *testing.T) (*harness, *sourceRepo, string, string) {
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	s := h.newSourceRepo("skills", true)
-	s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes\n"})
-	s.write("README.md", "# skills\n")
-	v1 := s.commit("the version the other tool installed")
-	installed := s.treeAt(v1, "skills/alpha")
+	ids := s.advance("adoptHarness", func(s *sourceRepo) []string {
+		s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes\n"})
+		s.write("README.md", "# skills\n")
+		v1 := s.commit("the version the other tool installed")
+		return []string{v1, s.treeAt(v1, "skills/alpha")}
+	})
 	vercelInstall(t, h, s, "skills/alpha", "alpha")
-	s.skill("skills/alpha", "alpha", "The first skill, revised", map[string]string{"notes.md": "alpha notes, revised\n"})
-	s.commit("a version nobody on this machine has")
-	return h, s, v1, installed
+	s.advance("adoptHarness, revised", func(s *sourceRepo) []string {
+		s.skill("skills/alpha", "alpha", "The first skill, revised", map[string]string{"notes.md": "alpha notes, revised\n"})
+		s.commit("a version nobody on this machine has")
+		return nil
+	})
+	return h, s, ids[0], ids[1]
 }
 
 // editLibrary changes a file of a library directory by hand, the way a user

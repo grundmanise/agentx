@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,11 +35,16 @@ type sourceRepo struct {
 	gitDir string
 	work   string
 	url    string // the file:// URL of the bare repository
+	// state names the steps that built the source, for advance to find a
+	// copy of the next one by; "" once anything else has written to it.
+	state string
 }
 
 // newSourceRepo creates the bare repository <name>.git under the harness
 // root with main as its branch. partial lets it serve blobless fetches, as
-// a hosting service does; without it every fetch is a full one.
+// a hosting service does; without it every fetch is a full one. The
+// repository is a copy of one git created once for the whole test binary,
+// without the sample hooks and other template files a source never reads.
 func (h *harness) newSourceRepo(name string, partial bool) *sourceRepo {
 	h.t.Helper()
 	requireGit(h.t)
@@ -50,15 +56,36 @@ func (h *harness) newSourceRepo(name string, partial bool) *sourceRepo {
 		work:   filepath.Join(root, "sources", name),
 	}
 	s.url = "file://" + s.gitDir
+	fresh := true
 	for _, dir := range []string{s.gitDir, s.work} {
+		if _, err := os.Lstat(dir); !errors.Is(err, fs.ErrNotExist) {
+			fresh = false
+		}
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			h.t.Fatal(err)
 		}
 	}
-	s.bare("init", "--bare", "--quiet", "--initial-branch=main")
-	if partial {
-		s.bare("config", "uploadpack.allowFilter", "true")
+	if !fresh {
+		// What is there already, a repository of the same name included,
+		// is kept, as git init keeps it.
+		s.bare("init", "--bare", "--quiet", "--initial-branch=main")
+		if partial {
+			s.bare("config", "uploadpack.allowFilter", "true")
+		}
+		return s
 	}
+	s.state = "new"
+	step := "init"
+	if partial {
+		step = "init --partial"
+	}
+	s.advance(step, func(s *sourceRepo) []string {
+		s.bare("init", "--bare", "--quiet", "--initial-branch=main", "--template="+s.t.TempDir())
+		if partial {
+			s.bare("config", "uploadpack.allowFilter", "true")
+		}
+		return nil
+	})
 	return s
 }
 
@@ -72,7 +99,8 @@ func (s *sourceRepo) run(args ...string) string {
 // bare runs git on the bare repository alone.
 func (s *sourceRepo) bare(args ...string) string {
 	s.t.Helper()
-	out, err := s.git.Isolated(context.Background(), s.gitDir, args...)
+	s.state = ""
+	out, err := s.git.Isolated(context.Background(), s.gitDir, fixtureGitConfig(args...)...)
 	if err != nil {
 		s.t.Fatalf("git %s: %v", strings.Join(args, " "), err)
 	}
@@ -82,6 +110,7 @@ func (s *sourceRepo) bare(args ...string) string {
 // write puts content at path inside the work tree.
 func (s *sourceRepo) write(path, content string) {
 	s.t.Helper()
+	s.state = ""
 	full := filepath.Join(s.work, path)
 	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 		s.t.Fatal(err)
@@ -171,7 +200,7 @@ func (s *sourceRepo) commitAt(message, when string) string {
 	s.t.Helper()
 	s.run("add", "--all")
 	_, err := s.git.IsolatedAt(context.Background(), s.gitDir, when,
-		"--work-tree="+s.work, "commit", "--quiet", "--allow-empty", "--message", message)
+		fixtureGitConfig("--work-tree="+s.work, "commit", "--quiet", "--allow-empty", "--message", message)...)
 	if err != nil {
 		s.t.Fatalf("git commit: %v", err)
 	}
@@ -182,6 +211,7 @@ func (s *sourceRepo) commitAt(message, when string) string {
 // holds it with mode 100755.
 func (s *sourceRepo) executable(path string) {
 	s.t.Helper()
+	s.state = ""
 	if err := os.Chmod(filepath.Join(s.work, path), 0o755); err != nil {
 		s.t.Fatal(err)
 	}
@@ -202,6 +232,14 @@ func (s *sourceRepo) treeAt(rev, path string) string {
 func (h *harness) standardSource(partial bool) (*sourceRepo, string, string) {
 	h.t.Helper()
 	s := h.newSourceRepo("skills", partial)
+	ids := s.advance("standardSource", buildStandard)
+	return s, ids[0], ids[1]
+}
+
+// buildStandard commits the two versions of standardSource and returns
+// their ids.
+func buildStandard(s *sourceRepo) []string {
+	s.t.Helper()
 	s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes\n", "scripts/run.sh": "#!/bin/sh\n"})
 	s.skill("skills/beta", "beta", "The second skill", nil)
 	s.write("README.md", "# skills\n")
@@ -209,7 +247,7 @@ func (h *harness) standardSource(partial bool) (*sourceRepo, string, string) {
 	s.tag("v1")
 	s.skill("skills/alpha", "alpha", "The first skill, revised", map[string]string{"notes.md": "alpha notes, revised\n"})
 	head := s.commit("second version")
-	return s, v1, head
+	return []string{v1, head}
 }
 
 // accountGit runs git on the harness account repo in the isolated
