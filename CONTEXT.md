@@ -152,7 +152,7 @@ The path inside one agent configuration's skills directory through which that cl
 _Avoid_: install, link, copy
 
 **Displaced placement**:
-A placement whose kind on disk is not the one agentx keeps for it: a real directory where a symlink is kept, or the symlink to the library directory where machine settings record a copy. Reported as drift and never put back on its own: `skill place` puts it back when the user asks, and replaces a directory whose content differs from the library only once the user chooses which of the two survives.
+A placement whose kind on disk is not the one agentx keeps for it: a real directory where a symlink is kept, or the symlink to the library directory where machine settings record a copy. Reported as drift and never put back on its own: `skill place` puts it back when the user asks, and replaces a directory whose content differs from the library only with `--force`, which discards that content.
 _Avoid_: broken link, overwritten
 
 **Missing placement**:
