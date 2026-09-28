@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -269,10 +270,16 @@ func (h *harness) accountGitErr(args ...string) (string, error) {
 	return r.Isolated(context.Background(), gitx.AccountRepoPath(h.agentx), args...)
 }
 
-// fetches counts the git fetch commands in the verbose stderr of one run.
+// fetches counts the git fetch commands in the verbose stderr of one run,
+// in text, where each is a debug line, or with --json, where each is a
+// debug log event.
 func fetches(stderr string) int {
 	n := 0
 	for _, line := range strings.Split(stderr, "\n") {
+		var e struct{ Level, Message string }
+		if json.Unmarshal([]byte(line), &e) == nil && e.Level == "debug" {
+			line = "debug: " + e.Message
+		}
 		if strings.HasPrefix(line, "debug: git ") && strings.Contains(line, " fetch --") {
 			n++
 		}
