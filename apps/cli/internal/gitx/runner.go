@@ -72,10 +72,23 @@ func (v Version) AtLeast(major, minor int) bool {
 	return v.Major > major || v.Major == major && v.Minor >= minor
 }
 
-// Version runs git --version once and caches the answer.
+// Version runs git --version once and caches the answer. The process keeps
+// it as well, for the executable that gave it, so that the next runner over
+// the same git does not ask again: see versions.
 func (r *Runner) Version(ctx context.Context) (Version, error) {
 	if r.version != nil {
 		return *r.version, nil
+	}
+	git, err := r.lookPath()
+	if err != nil {
+		return Version{}, err
+	}
+	exe, identified := identify(git)
+	if identified {
+		if v, ok := knownVersion(exe); ok {
+			r.version = &v
+			return v, nil
+		}
 	}
 	out, err := r.run(ctx, call{}, "--version")
 	if err != nil {
@@ -84,6 +97,9 @@ func (r *Runner) Version(ctx context.Context) (Version, error) {
 	v, err := parseVersion(strings.TrimRight(out, "\n"))
 	if err != nil {
 		return Version{}, err
+	}
+	if identified {
+		rememberVersion(exe, v)
 	}
 	r.version = &v
 	return v, nil
