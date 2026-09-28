@@ -12,9 +12,9 @@ import (
 // TestVersionIsAskedOncePerGit: every runner over the same git takes the
 // version the first one asked for; a git rewritten in place, to another
 // size or at another time, is asked again, and so is one that failed to
-// answer.
+// answer. It is not parallel: it writes the stub git and runs it at once,
+// which fails with ETXTBSY while another test forks.
 func TestVersionIsAskedOncePerGit(t *testing.T) {
-	t.Parallel()
 	dir := t.TempDir()
 	calls := filepath.Join(dir, "calls")
 	git := filepath.Join(dir, "git")
