@@ -69,11 +69,24 @@ func listDir(t *testing.T, dir string) string {
 // ends whether or not the test called it.
 func holdLock(t *testing.T, h *harness) (release func()) {
 	t.Helper()
+	return holdLockAs(t, h, syscall.LOCK_EX)
+}
+
+// holdReadLock is holdLock for a command that only reads under the lock:
+// it holds it shared, which keeps out every writer and lets every other
+// reader, a scan included, in.
+func holdReadLock(t *testing.T, h *harness) (release func()) {
+	t.Helper()
+	return holdLockAs(t, h, syscall.LOCK_SH)
+}
+
+func holdLockAs(t *testing.T, h *harness, how int) (release func()) {
+	t.Helper()
 	f, err := os.OpenFile(filepath.Join(h.agentx, "lock"), os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
+	if err := syscall.Flock(int(f.Fd()), how); err != nil {
 		t.Fatal(err)
 	}
 	var once sync.Once

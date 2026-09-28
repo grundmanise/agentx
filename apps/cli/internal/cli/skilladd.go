@@ -131,7 +131,7 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 		return accountRepoFailure(err)
 	}
 	if !exists {
-		return sourceFailure(fmt.Errorf("%w: %s", source.ErrNotFetched, src.URL), pinned)
+		return sourceFailure(source.NotFetched(src.URL), pinned)
 	}
 	if !add && !fetch {
 		// The pin the settings hold decides the commit, resolved in the
@@ -199,11 +199,12 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 // client may well reach for skill add, and the answer they need is skill
 // place, not the forms a source takes. The refusal keeps the exit code of
 // every other argument that is no source, and its hint is the skill place
-// command with the --to and --copy that were given, a placeholder standing
-// in for --to when none was. A source form is a source whatever the
-// library holds: an argument that parses as one, or that is a source id, is
-// installed from as today even when a library directory has that name. It
-// reads the library alone, so nothing is fetched, locked or written.
+// command with the --to and --copy that were given, which places into
+// every enabled configuration when no --to was, as skill add would have.
+// A source form is a source whatever the library holds: an argument that
+// parses as one, or that is a source id, is installed from as today even
+// when a library directory has that name. It reads the library alone, so
+// nothing is fetched, locked or written.
 func (inv *invocation) alreadyInLibrary(arg string, to []string, asCopy bool) error {
 	if source.IsID(arg) {
 		return nil
@@ -214,18 +215,8 @@ func (inv *invocation) alreadyInLibrary(arg string, to []string, asCopy bool) er
 	if _, ok := librarySkill(inv.dirs.Library, arg); !ok {
 		return nil
 	}
-	var flags []string
-	for _, id := range to {
-		flags = append(flags, "--to", shellWord(id))
-	}
-	if len(to) == 0 {
-		flags = append(flags, "--to", "<configuration>")
-	}
-	if asCopy {
-		flags = append(flags, "--copy")
-	}
 	return fail(exitUsage, arg+" is already in the library; skill add installs a skill from a source",
-		"to place it in more clients, run '"+skillCommand("place", arg, flags...)+"'")
+		"to place it in more clients, run '"+skillCommand("place", arg, placeFlags(to, asCopy)...)+"'")
 }
 
 // batch is one run of agentx skill add: how many steps it planned, how many
@@ -294,6 +285,7 @@ type imported struct {
 	fetched string   // when the source was last fetched, as the settings record it
 	imp     lineage.Import
 	commit  string // the import commit, once written
+	tree    string // the tree of that commit, the upstream directory alone
 }
 
 // treeFile is one regular file of the version with its bytes and the mode
@@ -316,7 +308,51 @@ func (v *imported) version() lineage.Version {
 // process per skill: the whole commit is listed once and sliced, and one
 // history walk finds the upstream commit of every selected skill, so a
 // batch of thirty skills reads what one skill reads.
+//
+// It is the import of skill add. skill check reads the versions it writes
+// candidates for through the same two halves, listVersions and
+// fillVersions, so that a candidate is the commit an install of that
+// version writes.
 func (inv *invocation) readVersions(ctx context.Context, b *batch, gitDir string, src source.Source, tip string, skills []source.Skill) ([]*imported, error) {
+	versions, missing, err := inv.listVersions(ctx, gitDir, src, tip, skills)
+	if err != nil {
+		return nil, err
+	}
+	taken := map[string]string{} // library name to the subpath that claimed it
+	var kept []*imported
+	for _, v := range versions {
+		if f := inv.usable(v, taken, src); f != nil {
+			b.drop(v.name, stepsPerSkill, f)
+			continue
+		}
+		taken[v.name] = v.skill.Subpath
+		kept = append(kept, v)
+	}
+	if len(kept) == 0 {
+		return nil, nil
+	}
+	return inv.fillVersions(ctx, gitDir, src, kept, missing, func(v *imported, f *failure) {
+		if f != nil {
+			b.drop(v.name, stepsPerSkill, f)
+			return
+		}
+		for _, d := range v.dropped {
+			inv.out.warn(path.Join(v.skill.Subpath, d) + " is not a regular file and is left out of the import")
+		}
+		b.step(phaseBlobs, v.name)
+	})
+}
+
+// listVersions reads what the version of every skill of skills is made of
+// at tip, in one round of reads that do not depend on each other: what the
+// commit holds, which objects of the skills' trees this machine does not
+// hold yet, and the upstream commit of each skill with its committer time.
+// It returns one version per skill, in the order given, with its entries,
+// the entries an import leaves out, and the lineage the import commit will
+// carry but for the content hash, which arrives with the files; and the ids
+// of the objects that are missing. Nothing is refused here, which is the
+// caller's to decide, and nothing is fetched.
+func (inv *invocation) listVersions(ctx context.Context, gitDir string, src source.Source, tip string, skills []source.Skill) ([]*imported, []string, error) {
 	trees := make([]string, 0, len(skills))
 	seen := map[string]bool{}
 	subpaths := make([]string, 0, len(skills))
@@ -327,58 +363,49 @@ func (inv *invocation) readVersions(ctx context.Context, b *batch, gitDir string
 		}
 		subpaths = append(subpaths, sk.Subpath)
 	}
-	// Reads of the account repo that do not depend on each other: what the
-	// commit holds, which of the selected skills' objects this machine does
-	// not have yet, and the upstream commit of each selected skill with its
-	// committer time.
 	reads := append([][]string{source.TreeArgs(tip), source.MissingArgs(trees...)}, upstreamReads(tip, subpaths)...)
 	out, err := inv.git.IsolatedAll(ctx, gitDir, reads)
 	if err != nil {
-		return nil, accountRepoFailure(err)
+		return nil, nil, accountRepoFailure(err)
 	}
 	listed, err := source.ParseTree(out[0])
 	if err != nil {
-		return nil, accountRepoFailure(err)
+		return nil, nil, accountRepoFailure(err)
 	}
 	ups, err := upstreams(tip, subpaths, out[2:])
 	if err != nil {
-		return nil, accountRepoFailure(err)
+		return nil, nil, accountRepoFailure(err)
 	}
-	taken := map[string]string{} // library name to the subpath that claimed it
-	var kept []*imported
+	versions := make([]*imported, 0, len(skills))
 	for _, sk := range skills {
 		entries := entriesUnder(listed, sk.Subpath)
 		// The lineage is put together in two steps, as it is known in two:
 		// the coordinates come off the listing and the history walk, and are
 		// what usable holds to the reader's rule, and the content hash
 		// arrives with the files.
-		v := &imported{skill: sk, name: sk.Name, dir: upstreamDir(src, sk), entries: entries, when: ups[sk.Subpath].when, dropped: lineage.Dropped(entries),
-			imp: lineage.Import{Source: src.URL, Path: sk.Subpath, Commit: ups[sk.Subpath].commit}}
-		if f := inv.usable(v, taken, src); f != nil {
-			b.drop(v.name, stepsPerSkill, f)
-			continue
-		}
-		taken[v.name] = sk.Subpath
-		kept = append(kept, v)
+		versions = append(versions, &imported{skill: sk, name: sk.Name, dir: upstreamDir(src, sk), entries: entries, when: ups[sk.Subpath].when, dropped: lineage.Dropped(entries),
+			imp: lineage.Import{Source: src.URL, Path: sk.Subpath, Commit: ups[sk.Subpath].commit}})
 	}
-	if len(kept) == 0 {
-		return nil, nil
-	}
-	bodies, err := inv.readBlobs(ctx, gitDir, src, kept, source.ParseMissing(out[1]))
+	return versions, source.ParseMissing(out[1]), nil
+}
+
+// fillVersions reads the files of every version into it, fetching in one
+// batch the blobs missing names that the versions need, and completes each
+// version's lineage with its content hash. each hears about every version
+// in the order given, with the refusal of one that cannot be filled or nil,
+// and the versions that were filled come back in that order.
+func (inv *invocation) fillVersions(ctx context.Context, gitDir string, src source.Source, versions []*imported, missing []string, each func(v *imported, f *failure)) ([]*imported, error) {
+	bodies, err := inv.readBlobs(ctx, gitDir, src, versions, missing)
 	if err != nil {
 		return nil, err
 	}
 	var ready []*imported
-	for _, v := range kept {
-		if f := v.fill(bodies, src.URL); f != nil {
-			b.drop(v.name, stepsPerSkill, f)
-			continue
+	for _, v := range versions {
+		f := v.fill(bodies, src.URL)
+		each(v, f)
+		if f == nil {
+			ready = append(ready, v)
 		}
-		for _, d := range v.dropped {
-			inv.out.warn(path.Join(v.skill.Subpath, d) + " is not a regular file and is left out of the import")
-		}
-		ready = append(ready, v)
-		b.step(phaseBlobs, v.name)
 	}
 	return ready, nil
 }
@@ -562,6 +589,14 @@ func (inv *invocation) usable(v *imported, taken map[string]string, src source.S
 		return refuse(exitRefused, fmt.Sprintf("%q %s", v.name, why),
 			"a name cannot be empty or hidden, or carry a separator, a space or any of ~^:?*[; fix it in the skill's SKILL.md frontmatter upstream, or install another skill")
 	}
+	return inv.importable(v, taken, src)
+}
+
+// importable refuses a version no import commit can be written for, which
+// is usable without the name: an update keeps the name the skill was
+// installed under, whatever the upstream calls it now. taken, when it is
+// not nil, is the names a batch has already claimed.
+func (inv *invocation) importable(v *imported, taken map[string]string, src source.Source) *failure {
 	// The directory is checked with the reader's own rule, and before the
 	// version is read, for the reason the name is: an import commit
 	// records it on one line of a trailer, and one the reader would refuse
@@ -735,12 +770,12 @@ func (inv *invocation) writeImports(ctx context.Context, b *batch, gitDir, run s
 	for i, v := range versions {
 		list[i] = v.version()
 	}
-	commits, err := lineage.WriteAll(ctx, inv.git, gitDir, run, list)
+	commits, trees, err := lineage.WriteAll(ctx, inv.git, gitDir, run, list)
 	if err != nil {
 		return accountRepoFailure(err)
 	}
 	for i, v := range versions {
-		v.commit = commits[i]
+		v.commit, v.tree = commits[i], trees[i]
 		b.step(phaseImport, v.name)
 	}
 	return nil
@@ -748,7 +783,7 @@ func (inv *invocation) writeImports(ctx context.Context, b *batch, gitDir, run s
 
 // dropImporting takes this run's staging refs away again. It is cleanup:
 // the commits they held are on the import branches by now, and a failure to
-// remove them costs nothing but a ref no command reads — which is why it
+// remove them costs nothing but a ref no command reads, which is why it
 // runs on a context a stop signal does not reach. Giving up here would
 // leave behind exactly the refs `agentx doctor` has a row for, for a run
 // that had already decided what to do with them.
@@ -763,10 +798,7 @@ func (inv *invocation) dropImporting(ctx context.Context, gitDir, run string, n 
 // skill at the root, which is what the source listing calls it too. It is
 // not the library directory name, which the frontmatter decides.
 func upstreamDir(src source.Source, sk source.Skill) string {
-	if sk.Subpath == "" {
-		return source.RepoName(src.URL)
-	}
-	return path.Base(sk.Subpath)
+	return lineage.UpstreamDir(src.URL, sk.Subpath)
 }
 
 // check refuses a selection whose flags contradict each other. The two
@@ -1025,13 +1057,13 @@ func (inv *invocation) stageSkill(m *home.Mutation, gitDir string, v *imported, 
 	if f != nil {
 		return nil, f, nil
 	}
-	ref, f := refPlan(v, records, libPath)
+	from, write, f := refPlan(v, records, libPath, home.IsAbsent(state))
 	if f != nil {
 		return nil, f, nil
 	}
 	done := &installed{v: v, adopted: lib.adopt}
-	if ref {
-		m.Ref(gitDir, lineage.ManagedRef(v.name), "", v.commit)
+	if write {
+		m.Ref(gitDir, lineage.ManagedRef(v.name), from, v.commit)
 	}
 	if !lib.adopt {
 		if lib.displace {
@@ -1093,21 +1125,43 @@ func (inv *invocation) libraryPlan(v *imported, libPath, state string) (libraryA
 }
 
 // refPlan decides the import branch, which is created with an expected old
-// value of empty, so that two commands cannot both claim the name. A branch
-// already at this commit is the same version installed again; one at
-// another commit is a version this command does not replace.
-func refPlan(v *imported, records map[string]lineage.Record, libPath string) (create bool, f *failure) {
+// value of empty, so that two commands cannot both claim the name. write
+// says whether the branch is written at all, and from is the value it is
+// expected to hold when it is. A branch already at this commit is the same
+// version installed again; one at another commit is a version this command
+// does not replace.
+//
+// The same version is the same four trailers, not the same commit: an
+// earlier agentx wrote the import commit of a source that stores a mode git
+// no longer writes over that source's own tree, which no directory on disk
+// is current against, and the commit an install writes now holds the same
+// version as git writes it today. Such a branch is moved to that commit,
+// from the one it holds, so installing the version again is what puts it
+// right, and two machines that installed it end at one commit again.
+//
+// absent says the library path holds nothing: the branch is all that is
+// left of the skill, its directory having been deleted outside agentx, and
+// the source has moved past the version the branch names, since otherwise
+// this would be that version again. skill remove takes such a branch away,
+// so the hint names it rather than a directory that is not there and a ref
+// to delete by hand.
+func refPlan(v *imported, records map[string]lineage.Record, libPath string, absent bool) (from string, write bool, f *failure) {
 	rec, ok := records[v.name]
 	switch {
 	case !ok:
-		return true, nil
+		return "", true, nil
 	case rec.Kind == lineage.KindFork:
-		return false, refuse(exitRefused, fmt.Sprintf("%s is a fork on this machine", v.name),
+		return "", false, refuse(exitRefused, fmt.Sprintf("%s is a fork on this machine", v.name),
 			"install the skill under another name, or remove the fork first")
 	case rec.Commit == v.commit: // the same version again: nothing to move
-		return false, nil
+		return "", false, nil
+	case rec.HasImport && rec.Import == v.imp: // the same version, stored in an older form
+		return rec.Commit, true, nil
+	case absent:
+		return "", false, refuse(exitRefused, fmt.Sprintf("%s is already managed at another version, which the library no longer holds", v.name),
+			"run '"+skillCommand("remove", v.name)+"' to stop managing that version, then install again to get the version the source holds now")
 	}
-	return false, refuse(exitRefused, fmt.Sprintf("%s is already managed at another version", v.name),
+	return "", false, refuse(exitRefused, fmt.Sprintf("%s is already managed at another version", v.name),
 		"remove "+libPath+" and the branch "+lineage.ManagedRef(v.name)+", then install again")
 }
 
@@ -1162,7 +1216,7 @@ func writeSynced(path string, data []byte, mode os.FileMode) error {
 	}
 	_, err = f.Write(data)
 	if err == nil {
-		err = f.Sync()
+		err = home.Sync(f)
 	}
 	if closeErr := f.Close(); err == nil {
 		err = closeErr
@@ -1190,11 +1244,18 @@ func sweepStaged(dir string) {
 // contentHashAt is the content hash of the skill at path, empty when there
 // is no skill there.
 func contentHashAt(path string) string {
-	if info, err := os.Stat(filepath.Join(path, "SKILL.md")); err != nil || !info.Mode().IsRegular() {
+	if !holdsSkillFile(path) {
 		return ""
 	}
 	hash, _ := scan.ContentHashAt(path)
 	return hash
+}
+
+// holdsSkillFile reports whether the directory at path holds a SKILL.md
+// that is a file, which is what makes a directory a skill.
+func holdsSkillFile(path string) bool {
+	info, err := os.Stat(filepath.Join(path, "SKILL.md"))
+	return err == nil && info.Mode().IsRegular()
 }
 
 // intoWorktrees reports whether the symlink at path points into the agentx
@@ -1253,7 +1314,8 @@ func (inv *invocation) reportInstalled(ctx context.Context, b *batch, dones []*i
 	if err != nil {
 		modes = map[string][]string{}
 	}
-	sources := sourceURLs(s)
+	// The lineage is what the run just wrote, so it is not read again.
+	sc := newSkillContext(inv, map[string]lineage.Record{}, s, modes)
 	// The library is read once for the whole run. Reading it content-hashes
 	// every directory it holds, so reading it per installed skill costs a
 	// batch of n skills n hashes of the whole library: a run of forty was
@@ -1268,9 +1330,9 @@ func (inv *invocation) reportInstalled(ctx context.Context, b *batch, dones []*i
 		if !found {
 			return fail(exitInternal, "the library holds no "+done.v.name+" after installing it", "run 'agentx doctor' and check the library it names")
 		}
-		places := inv.placements(snap, lib, modes)
-		rec := lineage.Record{Name: done.v.name, Kind: lineage.KindManaged, Ref: lineage.ManagedRef(done.v.name), Commit: done.v.commit, Import: done.v.imp, HasImport: true}
-		ev := skillFromLibrary(lib, rec, true, sources, filterPlacements(places, targetIDs(done.placed)), universal)
+		sc.records[done.v.name] = lineage.Record{Name: done.v.name, Kind: lineage.KindManaged, Ref: lineage.ManagedRef(done.v.name),
+			Commit: done.v.commit, Tree: done.v.tree, Import: done.v.imp, HasImport: true}
+		ev := sc.librarySkillEventFor(ctx, inv, snap, lib, targetIDs(done.placed))
 		inv.out.emit(ev)
 		inv.printInstalled(done, ev)
 	}

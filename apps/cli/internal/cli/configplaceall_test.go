@@ -90,7 +90,7 @@ func TestConfigEnablePlaceAllSkipsWhatIsInTheWay(t *testing.T) {
 
 // TestConfigEnablePlaceAllIntoAClientThatReadsTheLibrary makes no entry of
 // its own: that client already sees every library skill. So the run says
-// that rather than reporting placements it did not make — the contract asks
+// that rather than reporting placements it did not make: the contract asks
 // it to say so rather than making a second entry, and claiming to have
 // placed what was already there is the same untruth by other means.
 func TestConfigEnablePlaceAllIntoAClientThatReadsTheLibrary(t *testing.T) {

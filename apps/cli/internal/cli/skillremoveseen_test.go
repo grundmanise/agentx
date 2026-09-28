@@ -10,7 +10,7 @@ import (
 // TestWholeRemovalSaysWhoStillSeesTheSkill covers what a removal without
 // --from claims. It reports every covered configuration as having lost the
 // skill, and for a client that reads the library that claim rests on the
-// library entry alone — the removal never looks at a directory of that
+// library entry alone: the removal never looks at a directory of that
 // client's own, because it deletes only what agentx placed.
 //
 // So a leftover directory under the same name leaves the client seeing the

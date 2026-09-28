@@ -14,6 +14,7 @@ import (
 	"unicode"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
+	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
 // requireGit skips a test that fetches from a real repository when the
@@ -272,8 +273,8 @@ func (s *sourceRepo) annotatedTag(name, message string) {
 //
 // No bare repository can be configured to behave this way. git's
 // upload-pack turns on allow-any-sha1-in-want whenever
-// uploadpack.allowFilter is set — a partial clone would be unusable
-// otherwise — and setting uploadpack.allowAnySHA1InWant,
+// uploadpack.allowFilter is set – a partial clone would be unusable
+// otherwise – and setting uploadpack.allowAnySHA1InWant,
 // allowReachableSHA1InWant and allowTipSHA1InWant to false does not take it
 // back. A server that serves a filtered fetch therefore always serves
 // single objects too, so the refusal has to come from the wrapper.
@@ -407,18 +408,15 @@ done
 
 // gatePublish holds open the update-ref that puts a whole fetch on the
 // source ref, which is the last thing a fetch does: a command parked there
-// has everything it needs and has told nobody yet. A deletion carries -d
-// and is never held, so a removal can run while a fetch waits here.
+// has everything it needs and has told nobody yet. That write alone names a
+// source ref on its command line: a removal deletes its refs in one
+// transaction read from its standard input, and is never held, so it can
+// run while a fetch waits here.
 func gatePublish(t *testing.T, h *harness) (arm func() (reached, release func())) {
 	t.Helper()
-	return gateGit(t, h, `sub= ; del=
-for arg in "$@"; do
-	case "$arg" in
-	update-ref) sub=update-ref ;;
-	-d) del=1 ;;
-	esac
-done
-[ "$sub" = update-ref ] && [ -z "$del" ] && gate=1`)
+	return gateGit(t, h, `case " $* " in
+*" update-ref `+source.RefPrefix+`"*) gate=1 ;;
+esac`)
 }
 
 // readFifo waits for the other end to write, and writeFifo lets it

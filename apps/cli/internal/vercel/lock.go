@@ -202,7 +202,7 @@ func objectFields(raw json.RawMessage) (fields map[string]json.RawMessage, dupli
 	// The opening brace is read before anything else: JSON null unmarshals
 	// into a map without an error and leaves it nil, so a file whose skills
 	// are null would otherwise read as a file holding no skill rather than
-	// as one holding no skills map at all — which is the one answer a
+	// as one holding no skills map at all, which is the one answer a
 	// command asked to adopt what a file holds may not give.
 	if open, err := dec.Token(); err != nil || open != json.Delim('{') {
 		return nil, nil, errors.New("skills is not an object")

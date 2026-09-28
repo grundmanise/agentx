@@ -24,7 +24,7 @@ PR and commit titles should follow the conventional commit format. We squash mer
 
 ### Descriptions
 
-PR and commit descriptions should use an imperative style and provide a clear, concise summary of the changes made. They should focus on how the changes affect end users – what changed and why – rather than on how it was implemented, unless that’s essential for understanding the changes. Never add links to agent sessions to commits or PRs.
+PR and commit descriptions should use an imperative style and provide a clear, concise summary of the changes made. They should focus on how the changes affect end users – what changed and why – rather than on how it was implemented, unless that’s essential for understanding the changes.
 
 ### Branches
 

@@ -52,6 +52,8 @@ On Linux, `CGO_ENABLED=0 go build` produces a static binary. On macOS, build wit
 default – so `agentx serve` watches through `FSEvents`; a macOS binary built without `cgo` falls back to
 `kqueue`, which costs one file descriptor per watched file.
 
+agentx runs your own `git`, 2.40 or later, found on your `PATH`.
+
 ## Commands
 
 | Command | What it does |
