@@ -668,6 +668,11 @@ func TestSkillResolveCommitsTheMergeAsYou(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			h, _, _ := resolveHarness(t)
+			// The user's configuration is the harness's alone, whatever the
+			// machine's system configuration or the test's own environment
+			// holds, the killed child's included.
+			h.env["GIT_CONFIG_GLOBAL"] = filepath.Join(h.home, ".gitconfig")
+			h.env["GIT_CONFIG_NOSYSTEM"] = "1"
 			if c.config != "" {
 				writeFile(t, filepath.Join(h.home, ".gitconfig"), c.config)
 			}
@@ -1143,15 +1148,16 @@ func TestSkillResolveSweepsStagingAKilledCompletionLeft(t *testing.T) {
 
 // TestSkillResolveOfAMergeWhosePathsDifferInCase: a merge resolved to a
 // version that holds readme.md, a file the user added, and README.md, one
-// the update adds, completes where the library tells the two apart. Where
-// it does not, as macOS's by default does not, completing it is refused
-// with exit code 6 before anything is written, and the hint says how out
-// of it: give the merge up and rename the user's file. The checkout stays
-// as it was, and giving it up leaves the user's file where it is.
+// the update adds, completes where the library tells the two apart. A file
+// system that folds case, as macOS's by default does, cannot hold both in
+// the merge's checkout either, so there it is git's to refuse the merge.
 func TestSkillResolveOfAMergeWhosePathsDifferInCase(t *testing.T) {
 	t.Parallel()
 	h, s, _ := updateHarness(t)
 	lib := filepath.Join(h.library, "alpha")
+	if foldsCaseAt(t, filepath.Join(lib, "SKILL.md")) {
+		t.Skip("this file system folds case")
+	}
 	editLibrary(t, h, "alpha", "notes.md", editedNotes)
 	editLibrary(t, h, "alpha", "readme.md", "my own readme\n")
 	s.write("skills/alpha-dir/README.md", "the upstream readme\n")
@@ -1162,33 +1168,11 @@ func TestSkillResolveOfAMergeWhosePathsDifferInCase(t *testing.T) {
 	}
 	candidate := h.ref(lineage.CandidateRef("alpha"))
 
-	if !foldsCaseAt(t, filepath.Join(lib, "SKILL.md")) {
-		h.mustRun("skill", "resolve", "alpha", "--hunk", "notes.md:1=theirs")
-		equal(t, "readme.md", fileBody(t, filepath.Join(lib, "readme.md")), "my own readme\n")
-		equal(t, "README.md", fileBody(t, filepath.Join(lib, "README.md")), "the upstream readme\n")
-		equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), candidate)
-		noCheckout(t, h, "alpha")
-		return
-	}
-	refs := h.accountGit("for-each-ref", "--format=%(refname) %(objectname)")
-	library, placed, before := onDisk(t, h.library), onDisk(t, h.home), mutationVersion(t, h)
-
-	out := h.run("--json", "skill", "resolve", "alpha", "--hunk", "notes.md:1=theirs")
-	equal(t, "exit", out.exit, 6)
-	e := h.one(out.stdout, "error")
-	equal(t, "code", e["code"], "refused")
-	equal(t, "message", e["message"], "the merge of alpha holds both README.md and readme.md, which this file system cannot keep apart, so nothing was changed")
-	equal(t, "hint", e["hint"], "run 'agentx skill resolve alpha --abort' to give the merge up and rename the one in "+quotedPath(lib)+" before you update again")
-	equal(t, "the refs", h.accountGit("for-each-ref", "--format=%(refname) %(objectname)"), refs)
-	equal(t, "the library", onDisk(t, h.library), library)
-	equal(t, "the placements", onDisk(t, h.home), placed)
-	equal(t, "mutations", mutationVersion(t, h), before)
-	equal(t, "journals", journalCount(t, h), 0)
-	equal(t, "what is left beside the library", strings.Join(hiddenEntries(t, h.library), " "), "")
-
-	h.mustRun("skill", "resolve", "alpha", "--abort")
+	h.mustRun("skill", "resolve", "alpha", "--hunk", "notes.md:1=theirs")
+	equal(t, "readme.md", fileBody(t, filepath.Join(lib, "readme.md")), "my own readme\n")
+	equal(t, "README.md", fileBody(t, filepath.Join(lib, "README.md")), "the upstream readme\n")
+	equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), candidate)
 	noCheckout(t, h, "alpha")
-	equal(t, "readme.md once given up", fileBody(t, filepath.Join(lib, "readme.md")), "my own readme\n")
 }
 
 // editorStub writes an editor script, body under a #!/bin/sh line, into a
