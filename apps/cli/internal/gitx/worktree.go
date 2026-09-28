@@ -25,9 +25,17 @@ type WorkTree struct {
 // NewWorkTree opens dir, a real directory, as a work tree of the
 // repository at gitDir with an empty index. excludesFile is the user's
 // core.excludesFile, "" for none, which the isolated environment would
-// otherwise lose; git's default place for the file needs no setting. The
-// caller loads the index and closes the work tree.
+// otherwise lose; git's default place for the file needs no setting. Both
+// paths are made absolute, since git runs in dir. The caller loads the
+// index and closes the work tree.
 func (r *Runner) NewWorkTree(gitDir, dir, excludesFile string) (*WorkTree, error) {
+	var err error
+	if gitDir, err = filepath.Abs(gitDir); err != nil {
+		return nil, err
+	}
+	if dir, err = filepath.Abs(dir); err != nil {
+		return nil, err
+	}
 	tmp, err := os.MkdirTemp("", "agentx-index-")
 	if err != nil {
 		return nil, err

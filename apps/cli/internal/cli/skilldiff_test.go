@@ -258,3 +258,31 @@ func TestIgnoreRulesAndAttributesApplyAsGitAppliesThem(t *testing.T) {
 	sameTree(t, "the library directory", libraryTree(t, lib), want)
 	equal(t, "state after the revert", h.listed("pdf")["state"], stateCurrent)
 }
+
+// TestSkillDiffAndRevertTakeARelativeHome names agentx home and the library
+// relative to the working directory. git runs in the skill directory, so
+// the paths agentx gives it are made absolute first: the diff shows the
+// edit and the revert undoes it.
+func TestSkillDiffAndRevertTakeARelativeHome(t *testing.T) {
+	// Not parallel: it changes the process's working directory.
+	h, _ := driftHarness(t)
+	root := filepath.Dir(h.agentx)
+	t.Chdir(root)
+	for key, path := range map[string]string{"AGENTX_HOME": h.agentx, "AGENTX_LIBRARY": h.library} {
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		h.env[key] = rel
+	}
+	lib := filepath.Join(h.library, "pdf")
+	want := libraryTree(t, lib)
+	writeFile(t, filepath.Join(lib, "a.md"), "the same bytes\nand a line of mine\n")
+
+	diffs := h.eventsOfType(h.mustRun("--json", "skill", "diff", "pdf").stdout, "diff")
+	if len(diffs) != 1 || diffs[0]["path"] != "a.md" || diffs[0]["status"] != diffModified {
+		t.Fatalf("diffs = %v, want a.md modified alone", diffs)
+	}
+	h.mustRun("skill", "revert", "pdf")
+	sameTree(t, "the library directory", libraryTree(t, lib), want)
+}
