@@ -83,9 +83,9 @@ func (r *Runner) Version(ctx context.Context) (Version, error) {
 	if err != nil {
 		return Version{}, err
 	}
-	exe, identified := identify(git)
-	if identified {
-		if v, ok := knownVersion(exe); ok {
+	info, statErr := os.Stat(git)
+	if statErr == nil {
+		if v, ok := knownVersion(git, info); ok {
 			r.version = &v
 			return v, nil
 		}
@@ -98,8 +98,8 @@ func (r *Runner) Version(ctx context.Context) (Version, error) {
 	if err != nil {
 		return Version{}, err
 	}
-	if identified {
-		rememberVersion(exe, v)
+	if statErr == nil {
+		rememberVersion(git, info, v)
 	}
 	r.version = &v
 	return v, nil
