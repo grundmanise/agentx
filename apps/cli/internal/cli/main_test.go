@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 )
 
@@ -18,11 +19,13 @@ var (
 	mcpServerErr error
 )
 
-// TestMain builds the fixture server once per test run. Tests that need it
+// TestMain turns off the flushes to the disk that agentx and git make, and
+// builds the fixture server once per test run. Tests that need the server
 // skip when go is not on PATH.
 func TestMain(m *testing.M) {
 	capParallel()
 	home.SkipFlushesInTests()
+	gitx.SkipFlushesInTests()
 	skipRaceExitSleep()
 	os.Exit(func() int {
 		if _, err := exec.LookPath("go"); err != nil {
