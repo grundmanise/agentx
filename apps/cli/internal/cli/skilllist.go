@@ -41,7 +41,7 @@ func (inv *invocation) skillList(ctx context.Context) error {
 	out.print(out.paint(heading, plural(len(skills), "skill")))
 	t := &table{}
 	for _, lib := range skills {
-		ev := sc.librarySkillEventFor(inv, snap, lib, nil) // every placement, not only a command's own
+		ev := sc.librarySkillEventFor(ctx, inv, snap, lib, nil) // every placement, not only a command's own
 		out.emit(ev)
 		t.add(row(out, ev)...)
 	}

@@ -191,18 +191,25 @@ func (r *Runner) IsolatedAll(ctx context.Context, gitDir string, calls [][]strin
 }
 
 func isolatedArgs(gitDir string, args []string) []string {
-	return append([]string{
+	return append(append(isolatedConfig(), "--git-dir="+gitDir), args...)
+}
+
+// isolatedConfig is the configuration every isolated call sets on its
+// command line. Attributes come from nowhere but the files git reads them
+// from in a work tree: the user's own attributes file is never read.
+func isolatedConfig() []string {
+	return []string{
 		"-c", "core.autocrlf=false",
 		"-c", "commit.gpgsign=false",
 		"-c", "core.hooksPath=" + os.DevNull,
 		"-c", "core.attributesFile=" + os.DevNull,
-		"--git-dir=" + gitDir,
-	}, args...)
+	}
 }
 
 // User runs git against gitDir in the user's own environment, in which
 // credential helpers, SSH configuration and URL rewrites apply. Network
-// commands use it. It returns stdout without its trailing newline.
+// commands, and the read of the user's core.excludesFile, use it. It
+// returns stdout without its trailing newline.
 func (r *Runner) User(ctx context.Context, gitDir string, args ...string) (string, error) {
 	out, err := r.run(ctx, call{}, append([]string{"--git-dir=" + gitDir}, args...)...)
 	return strings.TrimRight(out, "\n"), err
@@ -214,11 +221,14 @@ func (r *Runner) UserInput(ctx context.Context, gitDir string, stdin io.Reader, 
 }
 
 // call is what one git process needs besides its arguments: the
-// environment to build, the dates to fix in it and what to feed its stdin.
+// environment to build, the dates to fix in it, what to feed its stdin,
+// variables of its own and the directory it runs in.
 type call struct {
 	isolated bool
 	dates    string // GIT_AUTHOR_DATE and GIT_COMMITTER_DATE, isolated only; the fixed date stands when empty
 	stdin    io.Reader
+	env      map[string]string // set on top of the environment built, such as GIT_INDEX_FILE
+	dir      string            // git's working directory; "" keeps the process's
 }
 
 // run executes git with args; a call that is not isolated runs in the
@@ -241,6 +251,10 @@ func (r *Runner) runStatus(ctx context.Context, c call, upTo int, args ...string
 	r.logf("git %s", strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, git, args...)
 	cmd.Env = r.childEnv(c.isolated, c.dates)
+	for k, v := range c.env {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+	cmd.Dir = c.dir
 	cmd.Stdin = c.stdin
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -346,7 +360,7 @@ func (r *Runner) lookPath() (string, error) {
 // map. The isolated environment drops every GIT_ variable of the user's,
 // fixes configuration, author and committer, reads no attributes of the
 // user's or the system's, so that no merge driver, filter or marker size
-// of theirs changes what git writes (isolatedArgs names no attributes file
+// of theirs changes what git writes (isolatedConfig names no attributes file
 // in place of the one git reads under XDG_CONFIG_HOME when configuration
 // names none, and GIT_ATTR_NOSYSTEM drops the system's), and forbids the
 // lazy fetch of a missing object (git 2.45 and newer honour the variable),

@@ -115,8 +115,9 @@ func (rec Record) CandidateCommit() string {
 
 // List reads every lineage branch of the account repo in one for-each-ref
 // over both namespaces, trees and trailers and all, and returns them by
-// skill name. The tree is what tells a managed skill's library directory
-// from its base version without another git process: see Record.Current.
+// skill name. The tree is what the fast path tells a managed skill's
+// library directory from its base version by, with no git process of its
+// own: see Record.HoldsID.
 // A managed branch wins over a fork of the same name, which cannot happen
 // while a rename into the fork namespace moves the branch rather than
 // copying it.

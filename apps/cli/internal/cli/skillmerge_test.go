@@ -93,12 +93,14 @@ func trailer(t *testing.T, h *harness, commit, key string) string {
 // changes nothing merges cleanly. The import branch moves to the candidate
 // and the candidate goes, as for any update; the library directory holds
 // the new version with the edits on top of it, every file the update
-// added, deleted or made executable included, and a directory of the
-// user's whose own ignore file names everything in it, so the skill stays
-// modified, and skill diff shows the edits and nothing else. Of the two
-// copies, the one that still held the version installed is refreshed with
-// the merged library, and the one edited where it is kept with its
-// warning. No merge is left pending.
+// added, deleted or made executable included, so the skill stays modified,
+// and skill diff shows the edits and nothing else. A .DS_Store and a
+// directory of the user's whose own ignore file names everything in it are
+// files git ignores, not edits: they are not merged, and the library keeps
+// them. Of the two copies, the one that still held the version installed
+// is refreshed with the merged version, and none of the library's ignored
+// files, and the one edited where it is kept with its warning. No merge is
+// left pending.
 func TestSkillUpdateMergesANonOverlappingEdit(t *testing.T) {
 	t.Parallel()
 	h, s, first := updateHarness(t)
@@ -113,10 +115,12 @@ func TestSkillUpdateMergesANonOverlappingEdit(t *testing.T) {
 	private := filepath.Join(lib, "private")
 	writeFile(t, mkdirs(t, private, ".gitignore"), "*\n")
 	writeFile(t, filepath.Join(private, "notes.md"), "notes git would ignore\n")
+	writeFile(t, filepath.Join(lib, ".DS_Store"), "finder data\n")
 	second := newVersion(t, s)
-	want := secondTree(t, s)
-	want["SKILL.md"], want["mine.md"] = skillMD, "a file of my own\n"
-	want[filepath.Join("private", ".gitignore")], want[filepath.Join("private", "notes.md")] = "*\n", "notes git would ignore\n"
+	merged := secondTree(t, s)
+	merged["SKILL.md"], merged["mine.md"] = skillMD, "a file of my own\n"
+	want := withFile(withFile(withFile(merged, ".DS_Store", "finder data\n"),
+		filepath.Join("private", ".gitignore"), "*\n"), filepath.Join("private", "notes.md"), "notes git would ignore\n")
 	h.mustRun("skill", "check")
 	tip, candidate := h.ref(lineage.ManagedRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
 
@@ -133,7 +137,7 @@ func TestSkillUpdateMergesANonOverlappingEdit(t *testing.T) {
 		t.Error("scripts/run.sh is not executable after the merge")
 	}
 	nothingAt(t, "old.md", filepath.Join(lib, "old.md"))
-	sameTree(t, "claude's copy", libraryTree(t, claude), want)
+	sameTree(t, "claude's copy", libraryTree(t, claude), merged)
 	sameTree(t, "cursor's copy", libraryTree(t, cursor), edited)
 	ev := h.one(out.stdout, "library_skill")
 	equal(t, "state", ev["state"], stateModified)
@@ -153,7 +157,7 @@ func TestSkillUpdateMergesANonOverlappingEdit(t *testing.T) {
 	for _, d := range h.eventsOfType(h.mustRun("--json", "skill", "diff", "alpha").stdout, "diff") {
 		diffs = append(diffs, d["path"].(string)+" "+d["status"].(string))
 	}
-	equal(t, "what skill diff shows", strings.Join(diffs, ", "), "SKILL.md modified, mine.md added, private/.gitignore added, private/notes.md added")
+	equal(t, "what skill diff shows", strings.Join(diffs, ", "), "SKILL.md modified, mine.md added")
 }
 
 // TestSkillUpdateOfAMergeWhosePathsDifferInCase: git merges paths byte for
@@ -469,7 +473,7 @@ func TestSkillUpdateMergesASkillAtTheRootOfItsSource(t *testing.T) {
 // and change nothing; so does the removal of what is left of the skill
 // once its library directory is gone, while a removal of it from one
 // configuration is refused as it is for any skill whose library directory
-// is gone. Taking one placement away and repairing placements move
+// is gone. Taking one placement away and putting placements back move
 // neither the library directory nor the import branch the merge holds,
 // and are not blocked. A merge left pending after the command first read
 // the refs is found under the lock, see
@@ -503,9 +507,9 @@ func TestAPendingMergeBlocksWhatWouldReplaceOrRemoveTheSkill(t *testing.T) {
 	}
 
 	h.mustRun("skill", "remove", "alpha", "--from", "cursor")
-	h.mustRun("skill", "repair", "alpha")
-	equal(t, "the merge ref after a placement was removed and repaired", h.ref(lineage.MergeRef("alpha")), merge)
-	equal(t, "the library after a placement was removed and repaired", onDisk(t, h.library), library)
+	h.mustRun("skill", "place", "alpha")
+	equal(t, "the merge ref after a placement was removed and put back", h.ref(lineage.MergeRef("alpha")), merge)
+	equal(t, "the library after a placement was removed and put back", onDisk(t, h.library), library)
 
 	remove(t, filepath.Join(h.library, "alpha"))
 	out := h.run("--json", "skill", "remove", "alpha")
@@ -767,12 +771,10 @@ func TestSkillUpdateConflictRecoversAtEveryBoundary(t *testing.T) {
 
 // TestSkillUpdateRefusesAMergeWhoseLibraryChangedBeforeTheLock: what a
 // merge merged is the library directory as the update read it. An edit
-// made after that directory was committed as mine, while git merges it and
-// before the lock, is found under the lock. One made while the directory
-// is written into the account repo is found by the write, before git
-// merges anything, whether the file edited is one the base version holds
-// too or the user's own, which the account repo holds nothing of. Either
-// way the update refuses with exit code 6, whether its merge was clean or
+// made while git adds the directory to the index mine is written from, or
+// while git merges it, before the lock, is found under the lock, whether
+// the file edited is one the base version holds too or the user's own: the
+// update refuses with exit code 6, whether its merge was clean or
 // conflicted: no journal, no merge left pending, the edit where it was
 // made, the import branch and the candidate as they were, and the version
 // file not bumped.
@@ -784,8 +786,8 @@ func TestSkillUpdateRefusesAMergeWhoseLibraryChangedBeforeTheLock(t *testing.T) 
 	}{
 		{name: "a clean merge", file: "mine.md", content: "a file of my own\n", during: "merge-tree", changed: "usage.md"},
 		{name: "a merge that conflicts", file: "notes.md", content: editedNotes, during: "merge-tree", changed: "usage.md"},
-		{name: "a directory edited while it is written", file: "mine.md", content: "a file of my own\n", during: "hash-object", changed: "SKILL.md"},
-		{name: "a file of the user's edited while it is written", file: "mine.md", content: "a file of my own\n", during: "hash-object", changed: "mine.md"},
+		{name: "a directory edited while git adds it", file: "mine.md", content: "a file of my own\n", during: "add", changed: "SKILL.md"},
+		{name: "a file of the user's edited while git adds it", file: "mine.md", content: "a file of my own\n", during: "add", changed: "mine.md"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -795,11 +797,7 @@ func TestSkillUpdateRefusesAMergeWhoseLibraryChangedBeforeTheLock(t *testing.T) 
 			tip, candidate := h.ref(lineage.ManagedRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
 			before := mutationVersion(t, h)
 			usage := filepath.Join(h.library, "alpha", c.changed)
-			calls := filepath.Join(t.TempDir(), "calls")
 			stubGit(t, h, `#!/bin/sh
-case " $* " in
-*" merge-tree "*) echo merge-tree >> `+shellWord(calls)+` ;;
-esac
 case " $* " in
 *" `+c.during+` "*) printf 'an edit made meanwhile\n' > `+shellWord(usage)+` || exit 1 ;;
 esac
@@ -816,9 +814,6 @@ exec `+realGit(t)+` "$@"
 			equal(t, "the edit made meanwhile", fileBody(t, usage), "an edit made meanwhile\n")
 			if c.file != c.changed {
 				equal(t, "the edit made before", fileBody(t, filepath.Join(h.library, "alpha", c.file)), c.content)
-			}
-			if b, err := os.ReadFile(calls); c.during == "hash-object" && err == nil && len(b) > 0 {
-				t.Errorf("the write did not refuse: git merged %q", b)
 			}
 			equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), tip)
 			equal(t, "the candidate", h.ref(lineage.CandidateRef("alpha")), candidate)

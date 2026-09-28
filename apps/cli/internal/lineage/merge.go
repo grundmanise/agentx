@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
+	"github.com/grundmanise/agentx/apps/cli/internal/source"
 	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
@@ -111,30 +112,22 @@ func ParsePending(commit, message string) PendingMerge {
 	return p
 }
 
-// WriteMine writes what the library directory at root holds, as tree read
-// it, into the object store of gitDir as the "mine" of a merge: a commit
-// whose tree wraps the directory in the upstream directory of the import
-// commit rec names, as an import tree wraps a version, and whose parent is
-// that commit, so that merge-tree compares the directory with its base
-// version path for path. The directory goes in as WriteDir writes one,
-// never through an index, and the one-entry tree around it in the same
-// mktree; the commit has the fixed identity and date of every commit the
-// isolated environment writes, so the same directory on the same base is
-// the same commit. Three git processes, whatever the directory holds.
-func WriteMine(ctx context.Context, r *gitx.Runner, gitDir, root string, tree treeid.Tree, rec Record) (string, error) {
-	if !rec.HasImport {
-		return "", fmt.Errorf("%w: %s carries no lineage", ErrTrailer, rec.Ref)
-	}
-	if len(tree.Dirs) == 0 {
-		return "", fmt.Errorf("%w: the library directory of %s holds nothing git records", ErrChanged, rec.Name)
-	}
-	dir := rec.Import.Dir()
-	wrapped, err := writeDir(ctx, r, gitDir, root, tree, dir)
+// CommitDir commits tree, a tree git wrote of a library directory, as the
+// "mine" of a merge: the commit's tree wraps it in one entry named dir, the
+// upstream directory, as an import tree wraps a version, and its one
+// parent is parent, so that merge-tree compares the directory with its
+// base version path for path. One mktree and one commit-tree, in the
+// isolated environment, whose fixed identity and date make the same tree
+// on the same parent the same commit.
+func CommitDir(ctx context.Context, r *gitx.Runner, gitDir, dir, tree, parent, message string) (string, error) {
+	wrapped, err := mktree(ctx, r, gitDir, []string{treeInput([]string{entryLine(source.DirMode, tree, dir)})})
 	if err != nil {
 		return "", err
 	}
-	message := "library directory of " + rec.Name + "\n"
-	out, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(message), "commit-tree", wrapped, "-p", rec.Commit)
+	if want := treeid.Wrap(dir, tree); wrapped[0] != want {
+		return "", fmt.Errorf("git wrote the tree around %s as %s, not %s", dir, wrapped[0], want)
+	}
+	out, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(message), "commit-tree", wrapped[0], "-p", parent)
 	return strings.TrimSpace(out), err
 }
 

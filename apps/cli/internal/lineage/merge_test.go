@@ -2,8 +2,6 @@ package lineage
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -59,12 +57,11 @@ func TestParsePendingRefusesAnythingElse(t *testing.T) {
 	}
 }
 
-// TestWriteMineWrapsTheDirectoryAsAnImportTree: the mine of a merge is the
-// library directory as the in-process reader recorded it, a symlink and an
-// executable file included and nothing ignored, wrapped in the upstream
-// directory of the import commit it is committed on, which is its one
-// parent. A second write of the same directory is the same commit.
-func TestWriteMineWrapsTheDirectoryAsAnImportTree(t *testing.T) {
+// TestCommitDirWrapsTheTreeGitWrote: the mine of a merge is the tree git
+// wrote of the library directory, wrapped in the upstream directory of the
+// import commit it is committed on, which is its one parent. A second
+// commit of the same tree on the same parent is the same commit.
+func TestCommitDirWrapsTheTreeGitWrote(t *testing.T) {
 	t.Parallel()
 	requireGit(t)
 	ctx := context.Background()
@@ -72,30 +69,9 @@ func TestWriteMineWrapsTheDirectoryAsAnImportTree(t *testing.T) {
 	imp := Import{Source: "https://github.com/example/skills", Path: "skills/alpha-dir", Commit: commitID, Hash: hashID}
 	base := skillTree(t, ctx, r, gitDir, map[string]string{"SKILL.md": "---\nname: alpha\n---\n"}, "")
 	rec := importCommit(t, ctx, r, gitDir, imp, imp.Dir(), base.tree, "1700000000 +0000")
-	rec.Name = "alpha"
+	edited := skillTree(t, ctx, r, gitDir, map[string]string{"SKILL.md": "---\nname: alpha\n---\nedited\n", "notes.md": "notes\n"}, "")
 
-	dir := t.TempDir()
-	for path, body := range map[string]string{"SKILL.md": "---\nname: alpha\n---\nedited\n", ".gitignore": "*\n", "sub/run.sh": "#!/bin/sh\n"} {
-		full := filepath.Join(dir, filepath.FromSlash(path))
-		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := os.Chmod(filepath.Join(dir, "sub", "run.sh"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink("sub/run.sh", filepath.Join(dir, "run")); err != nil {
-		t.Fatal(err)
-	}
-	tree, err := treeid.Read(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	mine, err := WriteMine(ctx, r, gitDir, dir, tree, rec)
+	mine, err := CommitDir(ctx, r, gitDir, imp.Dir(), edited.tree, rec.Commit, "library directory of alpha\n")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,17 +83,14 @@ func TestWriteMineWrapsTheDirectoryAsAnImportTree(t *testing.T) {
 		}
 		return out
 	}
-	if got, want := git("rev-parse", mine+"^{tree}"), treeid.Wrap("alpha-dir", tree.ID); got != want {
+	if got, want := git("rev-parse", mine+"^{tree}"), treeid.Wrap("alpha-dir", edited.tree); got != want {
 		t.Errorf("mine's tree is %s, want %s", got, want)
 	}
 	if got := git("rev-parse", mine+"^@"); got != rec.Commit {
 		t.Errorf("mine's parents are %q, want %s", got, rec.Commit)
 	}
-	if got := git("ls-tree", "-r", mine, "--format=%(objectmode) %(path)"); got != "100644 alpha-dir/.gitignore\n100644 alpha-dir/SKILL.md\n120000 alpha-dir/run\n100755 alpha-dir/sub/run.sh" {
-		t.Errorf("mine holds\n%s", got)
-	}
-	again, err := WriteMine(ctx, r, gitDir, dir, tree, rec)
+	again, err := CommitDir(ctx, r, gitDir, imp.Dir(), edited.tree, rec.Commit, "library directory of alpha\n")
 	if err != nil || again != mine {
-		t.Errorf("a second write is %s, %v; want %s", again, err, mine)
+		t.Errorf("a second commit is %s, %v; want %s", again, err, mine)
 	}
 }
