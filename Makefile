@@ -40,6 +40,11 @@ RACE ?= -race
 # The CLI package's tests can run for longer than go test's default ten
 # minutes on a slow runner, so allow more.
 TEST_FLAGS = $(RACE) -count=1 -timeout 30m
+# A binary built with -race that exits with status 0 sleeps for a second
+# first, in case a goroutine still running races with the exit: every test
+# binary would. The CLI's TestMain passes this on to the test binary's runs
+# as a child process.
+GORACE ?= atexit_sleep_ms=0
 
 test:
-	cd $(CLI) && go test $(TEST_FLAGS) ./...
+	cd $(CLI) && GORACE='$(GORACE)' go test $(TEST_FLAGS) ./...
