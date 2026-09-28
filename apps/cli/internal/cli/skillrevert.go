@@ -73,12 +73,7 @@ func (inv *invocation) skillRevert(ctx context.Context, name string) error {
 		return err
 	}
 	if len(edited.Unrecordable) > 0 {
-		paths := make([]string, len(edited.Unrecordable))
-		for i, p := range edited.Unrecordable {
-			paths[i] = quotedPath(filepath.Join(libPath, filepath.FromSlash(p)))
-		}
-		return fail(exitRefused, fmt.Sprintf("%s holds %s, which git cannot record", name, strings.Join(paths, ", ")),
-			"a revert would discard it with no record of it anywhere; move it out of the skill, then run '"+skillCommand("revert", name)+"' again")
+		return unrecordableRefusal(name, libPath, edited.Unrecordable, "a revert", "revert")
 	}
 	against := "its base version at " + short(rec.Import.Commit)
 	j, err := inv.judgeDir(ctx, gitDir, lib.ResolvedPath, edited, baseVersion(rec), true)
@@ -253,16 +248,23 @@ func (inv *invocation) reportReverted(ctx context.Context, name, against string,
 		out.done(out.paint(heading, sanitised(name)) + " already matches " + against + stored)
 		return nil
 	}
-	inv.summary = "reverted " + name + " to " + against
-	line := "reverted " + out.paint(heading, sanitised(name)) + " to " + against
-	if n := len(done.copies); n > 0 {
-		inv.summary += ", " + plural(n, "copy placement") + " refreshed"
-		line += ", " + out.paint(noteStyle, plural(n, "copy placement")+" refreshed")
-	}
-	if n := len(done.skipped); n > 0 {
-		inv.summary += ", " + plural(n, "placement") + " skipped"
-		line += ", " + out.paint(warnStyle, plural(n, "placement")+" skipped")
-	}
-	out.done(line)
+	note, painted := copiesNote(out, len(done.copies), len(done.skipped))
+	inv.summary = "reverted " + name + " to " + against + note
+	out.done("reverted " + out.paint(heading, sanitised(name)) + " to " + against + painted)
 	return nil
+}
+
+// unrecordableRefusal refuses to replace the library directory of the skill
+// called name, at libPath, while it holds paths git cannot record, a
+// repository nested in it say, relative to the directory: what replaces
+// the directory would discard them with no record of them anywhere. what
+// is the replacement in words, "a revert", and verb the skill command to
+// run again once they are moved out.
+func unrecordableRefusal(name, libPath string, unrecordable []string, what, verb string) *failure {
+	paths := make([]string, len(unrecordable))
+	for i, p := range unrecordable {
+		paths[i] = quotedPath(filepath.Join(libPath, filepath.FromSlash(p)))
+	}
+	return refuse(exitRefused, fmt.Sprintf("%s holds %s, which git cannot record", name, strings.Join(paths, ", ")),
+		what+" would discard it with no record of it anywhere; move it out of the skill, then run '"+skillCommand(verb, name)+"' again")
 }

@@ -29,7 +29,7 @@ func newSkillCheckCommand(inv *invocation) *cobra.Command {
 		Long: "Fetch every added source a managed skill came from and report which skills have a\n" +
 			"newer upstream version, with the files each one changes; skills from a source you\n" +
 			"removed are skipped. Nothing is applied: read an update with\n" +
-			"'agentx skill diff <name> --upstream'.",
+			"'agentx skill diff <name> --upstream', and apply it with 'agentx skill update <name>'.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error { return inv.skillCheck(cmd.Context()) },
 	}
@@ -203,7 +203,8 @@ func (inv *invocation) printCheck(rep checkReport) {
 			sanitised(where), " at ", short(r.commit))
 	}
 	if len(rep.updates) > 0 {
-		out.print("Read an update with ", out.paint(label, "agentx skill diff <name> --upstream"), ".")
+		out.print("Read an update with ", out.paint(label, "agentx skill diff <name> --upstream"),
+			", apply it with ", out.paint(label, "agentx skill update <name>"), ".")
 	}
 }
 
@@ -363,7 +364,8 @@ func (inv *invocation) checkUpdates(ctx context.Context, wait, progress bool) (c
 	rep.checked = len(checked)
 	var announced []lineage.Record
 	for name := range checked {
-		if rec := live[name]; rec.Candidate != nil && rec.Candidate.HasImport {
+		rec := live[name]
+		if _, ok := rec.AtCandidate(); ok {
 			announced = append(announced, rec)
 		}
 	}
@@ -374,7 +376,7 @@ func (inv *invocation) checkUpdates(ctx context.Context, wait, progress bool) (c
 	}
 	for _, ev := range rep.updates {
 		if ev.UpstreamName != "" && moved[ev.Name] {
-			rep.notes = append(rep.notes, fmt.Sprintf("%s: the update names the skill %q; updating it keeps the name %s", ev.Name, ev.UpstreamName, ev.Name))
+			rep.notes = append(rep.notes, renameWarning(ev.Name, ev.UpstreamName))
 		}
 	}
 	return rep, nil
@@ -726,18 +728,34 @@ func (inv *invocation) describeCandidates(ctx context.Context, gitDir string, re
 			ev.Files = append(ev.Files, f)
 		}
 		sort.Slice(ev.Files, func(i, j int) bool { return ev.Files[i].Path < ev.Files[j].Path })
-		// The name an install of the version would give the skill: its
-		// frontmatter's, else the upstream's own directory name.
 		name, _, _ := scan.SkillFrontmatter(bodies[i])
-		if name == "" {
-			name = c.Import.Dir()
-		}
-		if name != rec.Name {
-			ev.UpstreamName = name
-		}
+		ev.UpstreamName = upstreamRename(rec.Name, name, c.Import.Dir())
 		events[i] = ev
 	}
 	return events, nil
+}
+
+// upstreamRename is the name an install of a newer version would give the
+// skill called name, when it is not name, and "" otherwise: the name the
+// frontmatter of the version's SKILL.md gives, else dir, the upstream's own
+// directory name. The skill keeps its library name, its branch and its
+// placements whatever the version calls it, and its SKILL.md is never
+// rewritten.
+func upstreamRename(name, frontmatter, dir string) string {
+	if frontmatter == "" {
+		frontmatter = dir
+	}
+	if frontmatter == name {
+		return ""
+	}
+	return frontmatter
+}
+
+// renameWarning is the warning for an update that names the skill called
+// name otherwise, upstream: the check gives it when it finds the update,
+// and the update once it applied it.
+func renameWarning(name, upstream string) string {
+	return fmt.Sprintf("%s: the update names the skill %q; updating it keeps the name %s", name, upstream, name)
 }
 
 // parsePairDiffs reads what diff-tree --stdin -z --name-status prints for

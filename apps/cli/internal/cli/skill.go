@@ -80,7 +80,7 @@ const updateAvailable = "update available"
 func newSkillCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "skill",
-		Short:       "Install, place, compare, revert and remove skills, check them for updates, and list what the library holds",
+		Short:       "Install, place, compare, revert, update and remove skills, check them for updates, and list what the library holds",
 		Annotations: map[string]string{annotationGroup: "true"},
 		Args:        cobra.NoArgs,
 		RunE:        needSubcommand(inv, "no skill command given", "run 'agentx skill --help' to list commands"),
@@ -91,6 +91,7 @@ func newSkillCommand(inv *invocation) *cobra.Command {
 	cmd.AddCommand(newSkillDiffCommand(inv))
 	cmd.AddCommand(newSkillRevertCommand(inv))
 	cmd.AddCommand(newSkillCheckCommand(inv))
+	cmd.AddCommand(newSkillUpdateCommand(inv))
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",
 		Short: "List the skills in the library with their upstream and placements",
@@ -321,9 +322,10 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 		ev.Drift = driftOf(obs, !sources[rec.Import.Source], rec.UpstreamRemoved != "")
 		// What the last update check found stays until a check finds
 		// otherwise, whatever the source holds by now: it is read from the
-		// candidate ref, in the for-each-ref that read the lineage.
-		if c := rec.Candidate; c != nil && c.HasImport {
-			ev.Candidate = &scan.LibraryCandidate{UpstreamCommit: c.Import.Commit, ContentHash: c.Import.Hash}
+		// candidate ref, in the for-each-ref that read the lineage. A
+		// candidate the branch already holds is no update; see AtCandidate.
+		if next, ok := rec.AtCandidate(); ok {
+			ev.Candidate = &scan.LibraryCandidate{UpstreamCommit: next.Import.Commit, ContentHash: next.Import.Hash}
 		}
 	}
 	return ev

@@ -130,8 +130,9 @@ func (inv *invocation) skillDiff(ctx context.Context, name string) error {
 // every path is relative to the skill's directory. Both trees are in the
 // account repo already, so this reads nothing else, writes nothing and
 // never reaches the network: the candidate is what the check pinned, not
-// what the source holds now. A skill with no candidate has nothing to show,
-// and the refusal says how to look for an update.
+// what the source holds now. A skill with no candidate, or with one its
+// branch already holds, has nothing to show, and the refusal says how to
+// look for an update.
 func (inv *invocation) skillDiffUpstream(ctx context.Context, name string) error {
 	if _, ok := librarySkill(inv.dirs.Library, name); !ok {
 		return inv.noLibrarySkill(name)
@@ -140,8 +141,8 @@ func (inv *invocation) skillDiffUpstream(ctx context.Context, name string) error
 	if err != nil {
 		return err
 	}
-	c := rec.Candidate
-	if c == nil || !c.HasImport {
+	c, ok := rec.AtCandidate()
+	if !ok {
 		return fail(exitRefused, "no update of "+name+" is known",
 			"run 'agentx skill check' to look for one; it pins what it finds for this command to show")
 	}

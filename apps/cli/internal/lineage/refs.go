@@ -18,8 +18,9 @@ const (
 
 // CandidatePrefix is where an update candidate of a skill waits until it is
 // accepted or dropped: the import commit of the newer upstream version the
-// update check found, which the check writes and moves and removal deletes
-// with the skill, so that nothing of the skill is left under refs/agentx.
+// update check found, which the check writes and moves, an update deletes
+// once the import branch holds it, and removal deletes with the skill, so
+// that nothing of the skill is left under refs/agentx.
 const CandidatePrefix = "refs/agentx/candidate/"
 
 // CandidateRef is the update candidate of the skill called name.
@@ -77,6 +78,28 @@ type Candidate struct {
 	Tree      string // the root tree, the upstream directory as its one entry, as a branch's is
 	Import    Import
 	HasImport bool
+}
+
+// AtCandidate is the record of the skill as an update leaves it: the same
+// import branch at the candidate's import commit, with the tree and the
+// lineage that commit carries, and nothing a check found left over. It is
+// what the version an update lays out is read from, as ReadBase reads a
+// branch's, and whether the skill has an update at all, for every command
+// that shows or applies one.
+//
+// ok is false when there is no candidate whose lineage agentx can read, and
+// when the candidate is the commit the import branch already holds. That is
+// what an update leaves that moved the branch and stopped before it deleted
+// the candidate, once its journal was moved aside to keep what the library
+// directory held: the version is the skill's base already, so it is no
+// update. The ref stays until the next check deletes it, reading
+// CandidateCommit for the value it expects there.
+func (rec Record) AtCandidate() (Record, bool) {
+	c := rec.Candidate
+	if c == nil || !c.HasImport || c.Commit == rec.Commit {
+		return Record{}, false
+	}
+	return Record{Name: rec.Name, Kind: rec.Kind, Ref: rec.Ref, Commit: c.Commit, Tree: c.Tree, Import: c.Import, HasImport: true}, true
 }
 
 // CandidateCommit is the commit the skill's candidate ref holds, "" when it

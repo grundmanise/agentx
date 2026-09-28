@@ -264,23 +264,15 @@ func replaceFile(dir, path string, data []byte) error {
 	return m.Apply(nil) // a file replacement has no ref step
 }
 
-// apply moves the refs, runs the path steps in order and then renames every
-// staged file over its live path, marks the journal applied and removes it.
-// Retained content is discarded last, once every live path holds its new
-// state.
-//
-// The refs of a journal go together, and first when the journal creates or
-// moves them: they are the record of what this machine accepted, they
-// depend on no path, and a batch of them is one transaction, so a run
-// stopped anywhere leaves either every branch or none and the paths behind
-// them to recover. A journal whose ref steps only delete runs them last
-// instead; see refsGoLast.
+// apply creates and moves the refs, runs the path steps in order, renames
+// every staged file over its live path, deletes the refs the journal
+// deletes, marks the journal applied and removes it. Retained content is
+// discarded last, once every live path holds its new state. The refs go in
+// the two transactions refPhases splits them into.
 func apply(journalPath string, j journal, u RefUpdater) error {
-	last := refsGoLast(j.Steps)
-	if !last {
-		if _, err := applyRefs(j.Steps, u); err != nil {
-			return err
-		}
+	early, late := refPhases(j.Steps)
+	if _, err := applyRefs(early, u); err != nil {
+		return err
 	}
 	for _, s := range j.Steps {
 		if s.Kind == stepRef {
@@ -295,10 +287,8 @@ func apply(journalPath string, j journal, u RefUpdater) error {
 			return unfinished(journalPath, step{Kind: "replace", Path: r.Path}, err)
 		}
 	}
-	if last {
-		if _, err := applyRefs(j.Steps, u); err != nil {
-			return err
-		}
+	if _, err := applyRefs(late, u); err != nil {
+		return err
 	}
 	j.Progress = "applied"
 	if err := writeJournal(journalPath, j); err != nil {
@@ -329,7 +319,7 @@ func unfinished(journalPath string, s step, err error) error {
 // applyStep brings one path step's live state to New, doing nothing when it
 // is there already, and reports whether it changed anything. A live state
 // that is neither Old nor New was changed by something else and is left
-// alone. Ref steps are applied by applyRefs, all of them at once.
+// alone. Ref steps are applied by applyRefs, a phase of them at once.
 //
 // That comparison is load-bearing for a remove step above all: every other
 // step writes something, while remove deletes, so a remove step applied to
@@ -386,46 +376,59 @@ func applyStep(s step, u RefUpdater) (bool, error) {
 	return false, fmt.Errorf("%w: unknown step %q in a mutation journal", ErrRecovery, s.Kind)
 }
 
-// refsGoLast reports whether this journal's ref steps run after its path
-// steps rather than before them. They do when every one of them deletes.
+// refPhases splits the ref steps of a journal into the two transactions
+// they run in, in the order they are recorded: early, every ref the journal
+// creates or moves, which runs before the path steps, and late, every ref
+// it deletes, which runs after the path steps and the state files. Apply
+// and recovery both take them from here, so that a journal is finished in
+// the order it was started in.
 //
-// A ref a journal creates or moves is recoverable: the journal holds the
-// value, the step is safe to repeat, and a later command finishes it. A ref
-// a journal deletes is not. Once it is gone the only record of the commit
-// it pointed at is the journal itself, and the journal is exactly what a
-// refusal invites the user to move aside to keep what is on disk. Deleting
-// first would mean that taking that offer after a removal stopped half way
-// left the skill's directory in the library with no branch for it: a
-// managed skill turned unmanaged, permanently, which is what mutation
-// safety forbids making of half-applied state.
+// A ref a journal creates or moves goes first: it is the record of what
+// this machine accepted and depends on no path, so a run stopped anywhere
+// leaves every such branch or none, and the paths behind them to recover.
+// An install whose library directory went in before its branch would leave,
+// stopped in between, a real skill directory no lineage names, which the
+// next scan reads as a new unmanaged skill.
 //
-// So deletions go last, when everything that could still refuse has not. A
-// journal that both creates and deletes refs keeps them first and together,
-// since they are one transaction and must not be split. The update check
-// writes such a journal, moving one skill's candidate while it deletes
-// another's, and has no path step for the order to matter to: its only
-// other change is the settings file, which the refs never depend on.
-func refsGoLast(steps []step) bool {
-	deletes := false
+// A ref a journal deletes goes last, once everything that could still
+// refuse has not. A ref it writes can be written again from the journal,
+// and one it deletes cannot be brought back: once it is gone the only
+// record of the commit it pointed at is the journal itself, and the journal
+// is exactly what a refusal invites the user to move aside to keep what is
+// on disk. A removal that deleted its branch first and then stopped at a
+// path would leave the skill's directory in the library with no branch for
+// it, a managed skill turned unmanaged for good; an update that deleted its
+// candidate first and then found the library directory changed would have
+// dropped the one ref naming the version it was applying, while the
+// directory still held the one before. Both are what mutation safety
+// forbids making of half-applied state.
+//
+// A journal that both writes and deletes refs therefore splits them, and
+// each phase is still one transaction per repository: an update moves the
+// import branch before it replaces the library directory and deletes the
+// candidate after, and an update check moves one skill's candidate early
+// and deletes another's late, with only the settings file between.
+func refPhases(steps []step) (early, late []step) {
 	for _, s := range steps {
-		if s.Kind != stepRef {
-			continue
+		switch {
+		case s.Kind != stepRef:
+		case s.New == "":
+			late = append(late, s)
+		default:
+			early = append(early, s)
 		}
-		if s.New != "" {
-			return false
-		}
-		deletes = true
 	}
-	return deletes
+	return early, late
 }
 
-// applyRefs moves every lineage ref of a journal with its expected old
-// value, so that two commands cannot both create one. A ref that already
-// holds the new value is done; one that holds neither value is left alone
-// and refuses the recovery. What is left to do is read in one call per
-// repository and applied in one, so that a journal of thirty skills is two
-// git processes and one transaction rather than sixty processes and thirty
-// chances to stop halfway.
+// applyRefs moves every lineage ref of steps, one phase of a journal's
+// refs (see refPhases), with its expected old value, so that two commands
+// cannot both create one. A ref that already holds the new value is done;
+// one that holds neither value is left alone and refuses the recovery.
+// What is left to do is read in one call per repository and applied in
+// one, so that a journal of thirty skills is two git processes and one
+// transaction rather than sixty processes and thirty chances to stop
+// halfway.
 func applyRefs(steps []step, u RefUpdater) (bool, error) {
 	byDir := map[string][]step{}
 	var dirs []string // the repositories in the order the journal names them
@@ -666,14 +669,10 @@ func recoverJournal(dir, journalPath string, u RefUpdater) error {
 	if err := json.Unmarshal(b, &j); err != nil || len(j.Replace)+len(j.Steps) == 0 {
 		return fmt.Errorf("%w: %s is not a mutation journal", ErrRecovery, journalPath)
 	}
-	last := refsGoLast(j.Steps)
-	var resumed bool
-	if !last {
-		moved, err := applyRefs(j.Steps, u)
-		if err != nil {
-			return err
-		}
-		resumed = moved
+	early, late := refPhases(j.Steps)
+	resumed, err := applyRefs(early, u)
+	if err != nil {
+		return err
 	}
 	for i, s := range j.Steps {
 		if s.Kind == stepRef {
@@ -738,13 +737,11 @@ func recoverJournal(dir, journalPath string, u RefUpdater) error {
 	for _, r := range j.Replace {
 		os.Remove(r.Staged) // left behind when the live file already held the new content
 	}
-	if last {
-		moved, err := applyRefs(j.Steps, u)
-		if err != nil {
-			return err
-		}
-		resumed = resumed || moved
+	moved, err := applyRefs(late, u)
+	if err != nil {
+		return err
 	}
+	resumed = resumed || moved
 	discardRetained(j, u)
 	if resumed {
 		if err := bumpVersion(dir); err != nil {

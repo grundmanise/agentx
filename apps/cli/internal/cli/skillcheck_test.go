@@ -428,7 +428,7 @@ func TestSkillCheckTextOutput(t *testing.T) {
 		"  beta  update available  "+short(first)+" -> "+short(second)+"  2 files\n"+
 		"    modified  SKILL.md\n"+
 		"    added     docs/usage.md\n"+
-		"Read an update with agentx skill diff <name> --upstream.\n")
+		"Read an update with agentx skill diff <name> --upstream, apply it with agentx skill update <name>.\n")
 	equal(t, "stderr", out.stderr, "")
 }
 
