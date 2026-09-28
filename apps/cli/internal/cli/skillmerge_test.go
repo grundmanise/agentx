@@ -1174,3 +1174,43 @@ func TestAnIgnoredFileIsNotMineAndSurvivesTheMerge(t *testing.T) {
 		"logs/.gitignore\nlogs/SKILL.md\nlogs/notes.md\nlogs/run.log\nlogs/usage.md")
 	equal(t, "the library", onDisk(t, h.library), library)
 }
+
+// TestRecoveryPrunesStaleMergeCheckouts: what an interrupted command left
+// of a pending merge goes with the next command that changes anything,
+// once its journals are finished: a directory under the merges directory
+// that is no checkout, one whose checkout's registration is gone, and a
+// registration of a checkout there whose directory is gone. The checkout
+// of a merge that is pending stays, and still lists as pending.
+func TestRecoveryPrunesStaleMergeCheckouts(t *testing.T) {
+	t.Parallel()
+	h, s, _ := updateHarness(t)
+	pendingMerge(t, h, s)
+	writeFile(t, mkdirs(t, pendingCheckout(h, "ghost"), "notes.md"), "left behind\n")
+	writeFile(t, mkdirs(t, pendingCheckout(h, "orphan"), ".git"), "gitdir: "+filepath.Join(h.agentx, "account.git", "worktrees", "orphan")+"\n")
+	h.accountGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", pendingReason,
+		pendingCheckout(h, "beta"), h.ref(lineage.ManagedRef("beta")))
+	remove(t, pendingCheckout(h, "beta"))
+	head, mergeHead, _ := mergeState(t, h, "alpha")
+
+	h.mustRun("config", "set", "label", "pruned")
+	entries, err := os.ReadDir(filepath.Join(h.agentx, "merges"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, e := range entries {
+		names = append(names, e.Name())
+	}
+	equal(t, "the merges directory", strings.Join(names, " "), "alpha")
+	list := h.accountGit("worktree", "list", "--porcelain")
+	if strings.Contains(list, filepath.Join("merges", "beta")) {
+		t.Errorf("the registration of beta's checkout is still there:\n%s", list)
+	}
+	gotHead, gotMergeHead, _ := mergeState(t, h, "alpha")
+	equal(t, "alpha's HEAD", gotHead, head)
+	equal(t, "alpha's MERGE_HEAD", gotMergeHead, mergeHead)
+	equal(t, "alpha's pending_merge", h.listed("alpha")["pending_merge"], true)
+	if pending, ok := h.listed("beta")["pending_merge"]; ok {
+		t.Errorf("beta lists a pending merge: %v", pending)
+	}
+}

@@ -254,3 +254,86 @@ func hunksIn(path string, versions map[string]staged, bodies map[string]string) 
 	}
 	return []conflictHunk{}, "changed here and by the update, with no conflict markers agentx can tell from its lines", nil
 }
+
+// pruneMerges removes what an interrupted command left of a pending merge,
+// under the lock and once every journal is finished: a directory under
+// the merges directory that is no checkout git knows, its .git file gone
+// or naming a git directory that is not there, and the registration of a
+// checkout under the merges directory whose directory is gone. A checkout
+// anywhere else, a fork's worktree say, is never touched. It runs no git
+// unless there is something to remove.
+func (inv *invocation) pruneMerges(ctx context.Context, gitDir string) error {
+	entries, err := os.ReadDir(inv.mergesDir())
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	for _, e := range entries {
+		path := filepath.Join(inv.mergesDir(), e.Name())
+		if !strings.HasPrefix(e.Name(), ".") && !isCheckout(path) {
+			if err := os.RemoveAll(path); err != nil {
+				return err
+			}
+		}
+	}
+	admins, err := os.ReadDir(filepath.Join(gitDir, "worktrees"))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	// git records where a checkout is by its real path, or by one relative
+	// to its registration, so the directory holding a checkout is compared
+	// with the merges directory by the real path of the directory above,
+	// which is agentx home, there whatever else is not.
+	home, err := filepath.EvalSymlinks(inv.dirs.Home)
+	if err != nil {
+		return err
+	}
+	inMerges := func(path string) bool {
+		dir := filepath.Dir(path)
+		if above, err := filepath.EvalSymlinks(filepath.Dir(dir)); err == nil {
+			dir = filepath.Join(above, filepath.Base(dir))
+		}
+		return dir == filepath.Join(home, "merges")
+	}
+	for _, a := range admins {
+		admin := filepath.Join(gitDir, "worktrees", a.Name())
+		b, err := os.ReadFile(filepath.Join(admin, "gitdir"))
+		if err != nil {
+			continue
+		}
+		path := strings.TrimSuffix(string(b), "\n")
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(admin, path)
+		}
+		path = filepath.Dir(path)
+		if !inMerges(path) {
+			continue
+		}
+		if _, err := os.Lstat(path); errors.Is(err, fs.ErrNotExist) {
+			if err := inv.git.RemoveCheckout(ctx, gitDir, path); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// isCheckout reports whether the directory at path is a checkout git
+// knows: its .git file names a git directory that is there.
+func isCheckout(path string) bool {
+	b, err := os.ReadFile(filepath.Join(path, ".git"))
+	if err != nil {
+		return false
+	}
+	admin, ok := strings.CutPrefix(strings.TrimSuffix(string(b), "\n"), "gitdir: ")
+	if !ok {
+		return false
+	}
+	if !filepath.IsAbs(admin) {
+		admin = filepath.Join(path, admin)
+	}
+	_, err = os.Stat(admin)
+	return err == nil
+}
