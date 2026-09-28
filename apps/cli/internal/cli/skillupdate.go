@@ -776,15 +776,16 @@ func (inv *invocation) stageUpdate(ctx context.Context, m *home.Mutation, gitDir
 // reported as they now stand, in name order: a warning for each whose new
 // version names it otherwise, one library_skill event each, carrying every
 // placement as skill list reports them, and the line that says what the
-// run did. Every merge left pending is reported after them, see
-// printConflicts, and costs its skill as a refusal does: the skill was not
-// updated, and the run exits 4 for it.
+// run did. Every merge left pending is reported after them, in name order,
+// see printConflicts, and costs its skill as a refusal does: the skill was
+// not updated, and the run exits 4 for it.
 func (r *updateRun) report(ctx context.Context) error {
 	if len(r.applied) > 0 {
 		if err := r.reportApplied(ctx); err != nil {
 			return err
 		}
 	}
+	slices.SortFunc(r.pending, func(a, b *updating) int { return strings.Compare(a.name, b.name) })
 	for _, u := range r.pending {
 		r.inv.printConflicts(u.conflict, short(u.rec.Import.Commit), short(u.next.Import.Commit))
 		r.drop(u.name, conflictFailure(u.name, filepath.Join(r.inv.checkoutPath(u.name), u.rec.Import.Dir()), len(u.conflict.Files)))

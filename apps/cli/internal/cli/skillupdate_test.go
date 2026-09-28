@@ -384,6 +384,25 @@ func TestSkillUpdateAllWithOnlyAConflict(t *testing.T) {
 	equal(t, "mutations", mutationVersion(t, h), before+1)
 }
 
+// TestSkillUpdateAllReportsConflictsInNameOrder: a merge still pending
+// from an earlier run and one the run leaves pending for the first time
+// are reported together, in name order, their warnings too.
+func TestSkillUpdateAllReportsConflictsInNameOrder(t *testing.T) {
+	t.Parallel()
+	h, _, _, _ := mixedHarness(t)
+	equal(t, "exit of beta's update", h.run("skill", "update", "beta").exit, 4)
+	editLibrary(t, h, "alpha", "notes.md", "alpha notes, edited here\n")
+	out := h.run("--json", "skill", "update", "--all")
+	equal(t, "exit", out.exit, 4)
+	var names []string
+	for _, e := range h.eventsOfType(out.stdout, "conflict") {
+		names = append(names, e["name"].(string))
+	}
+	equal(t, "the conflicts' skills", strings.Join(names, " "), "alpha beta")
+	refusal := " conflicts with its update in 1 file, so the merge is pending and the library directory was left as it is"
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "alpha: alpha"+refusal+"\nbeta: beta"+refusal)
+}
+
 // otherSourceHarness is updateHarness with a second source holding gamma,
 // installed too, and a check that found an update for all three skills:
 // alpha's second version, beta revised and gamma revised.
