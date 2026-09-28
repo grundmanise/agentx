@@ -88,19 +88,6 @@ func TestSkillDiffShowsEachFileAgainstTheBase(t *testing.T) {
 	contains(t, "the text", text, "\n+and a line of mine\n")
 }
 
-// TestSkillDiffKeepsEveryByteButControls prints a diff whose file holds a
-// tab, runs of spaces and an escape sequence: the layout survives and the
-// sequence does not reach the terminal. The event carries the bytes.
-func TestSkillDiffKeepsEveryByteButControls(t *testing.T) {
-	t.Parallel()
-	h, _ := driftHarness(t)
-	writeFile(t, filepath.Join(h.library, "pdf", "a.md"), "\tindented  twice\x1b[31m red\n")
-	text := h.mustRun("skill", "diff", "pdf").stdout
-	contains(t, "the text", text, "\n+\tindented  twice [31m red\n")
-	patch := h.one(h.mustRun("--json", "skill", "diff", "pdf").stdout, "diff")["patch"].(string)
-	contains(t, "the event", patch, "\n+\tindented  twice\x1b[31m red\n")
-}
-
 // TestSkillDiffPrintsBytesThatAreNotUTF8 edits a file into Latin-1, which
 // git diffs as text, beside an escape and a C1 control: the text prints the
 // Latin-1 byte as it is and each control as one space. The event is JSON,

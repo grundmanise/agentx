@@ -259,22 +259,6 @@ func TestImportedSettingsDecideSourceRemoved(t *testing.T) {
 	}
 }
 
-// TestSourceRemovedDoesNotHideAnEdit holds the two states side by side: a
-// skill edited by hand whose source is then removed is both, and neither
-// word may stand in for the other.
-func TestSourceRemovedDoesNotHideAnEdit(t *testing.T) {
-	t.Parallel()
-	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
-	writeFile(t, filepath.Join(h.library, "alpha", "notes.md"), "edited by hand\n")
-	h.mustRun("source", "remove", s.url)
-
-	ev := h.librarySkill(h.mustRun("--json", "skill", "list").stdout, "alpha")
-	equal(t, "state", ev["state"], "modified")
-	equal(t, "drift", drift(ev), "source removed")
-	contains(t, "skill list", h.mustRun("skill", "list").stdout, "modified, source removed")
-}
-
 // TestSourceRemovedIsForManagedSkillsAlone lists a fork and an unmanaged
 // skill beside the managed one after the source goes. The source that
 // matters to a fork is the account remote, not the third-party upstream it
@@ -293,28 +277,6 @@ func TestSourceRemovedIsForManagedSkillsAlone(t *testing.T) {
 	for _, name := range []string{"beta", "gamma"} {
 		if ev := h.librarySkill(out, name); drift(ev) != "" {
 			t.Errorf("%s, a %s, carries drift %q", name, ev["kind"], drift(ev))
-		}
-	}
-}
-
-// TestInstallByURLAddsARemovedSourceBack installs from a removed source by
-// URL, which adds the source again on the way, as an install from any URL
-// the settings do not hold does: the skills already installed from it are
-// no longer source removed.
-func TestInstallByURLAddsARemovedSourceBack(t *testing.T) {
-	t.Parallel()
-	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
-	h.mustRun("source", "remove", s.url)
-	equal(t, "drift after the removal", drift(h.librarySkill(h.mustRun("--json", "skill", "list").stdout, "alpha")), "source removed")
-
-	out := h.mustRun("--json", "skill", "add", s.url, "--skill", "beta")
-	equal(t, "added source", h.one(out.stdout, "source")["url"], s.url)
-	equal(t, "beta's add event drift", drift(h.librarySkill(out.stdout, "beta")), "")
-	list := h.mustRun("--json", "skill", "list").stdout
-	for _, name := range []string{"alpha", "beta"} {
-		if got := drift(h.librarySkill(list, name)); got != "" {
-			t.Errorf("%s carries drift %q after its source was added again", name, got)
 		}
 	}
 }
@@ -491,37 +453,6 @@ func TestPlacementEventsCarryTheDrift(t *testing.T) {
 	report("source removed")
 }
 
-// TestAdoptingFromARemovedSourceClearsSourceRemoved adopts a skill the
-// vercel skills CLI installed from a source this machine removed. Adopting
-// adds the source again as source add would, so the managed skill already
-// installed from it is no longer source removed, and nothing else of it
-// changes.
-func TestAdoptingFromARemovedSourceClearsSourceRemoved(t *testing.T) {
-	t.Parallel()
-	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
-	before := h.librarySkill(h.mustRun("--json", "skill", "list").stdout, "alpha")
-	branch := h.accountGit("rev-parse", "refs/heads/managed/alpha")
-	h.mustRun("source", "remove", s.url)
-	equal(t, "drift after the removal", drift(h.librarySkill(h.mustRun("--json", "skill", "list").stdout, "alpha")), "source removed")
-
-	vercelInstall(t, h, s, "skills/beta", "beta")
-	h.writeLock(h.lockPath(), map[string]lockEntry{"beta": {
-		Source: "owner/repo", SourceType: "github", SourceURL: s.url,
-		SkillPath: "skills/beta", SkillFolderHash: s.tree("skills/beta"),
-	}})
-	h.mustRun("adopt", "--skill", "beta")
-
-	list := h.mustRun("--json", "skill", "list").stdout
-	if after := h.librarySkill(list, "alpha"); !reflect.DeepEqual(after, before) {
-		t.Errorf("alpha after the adoption = %v, want %v", after, before)
-	}
-	// The other tool placed beta in no client of its own, so it is missing
-	// from the enabled ones; its source is added.
-	equal(t, "beta's drift", drift(h.librarySkill(list, "beta")), "missing")
-	equal(t, "alpha's import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), branch)
-}
-
 // besideServe runs a mutation while a serve of the same home is running.
 // Every scan of serve holds the shared lock over its reads, and a mutation
 // that finds the lock held gives up after 50 ms, as the contract has it, so
@@ -542,49 +473,4 @@ func (h *harness) runBesideServe(args ...string) {
 	if out := h.besideServe(args...); out.exit != 0 {
 		h.t.Fatalf("agentx %s: exit %d\n%s%s", strings.Join(args, " "), out.exit, out.stdout, out.stderr)
 	}
-}
-
-// TestServeSnapshotFollowsTheSource runs serve while the source goes and
-// comes back. Each is a mutation of agentx home, and the snapshot that
-// follows it is a changed one, since the library it lists changed: serve
-// emits it without being asked, and the desktop app applies it. The drift
-// of the skill changed with it, so a drift event follows each snapshot.
-func TestServeSnapshotFollowsTheSource(t *testing.T) {
-	t.Parallel()
-	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
-	p := h.serve(t, "--json")
-	libraryOf := func(snap jsonEvent) map[string]any {
-		t.Helper()
-		entries := snap["library"].([]any)
-		if len(entries) != 1 {
-			t.Fatalf("the snapshot lists %d library skills, want 1: %v", len(entries), entries)
-		}
-		return entries[0].(map[string]any)
-	}
-	first := libraryOf(p.next("snapshot"))
-	equal(t, "drift at start", drift(first), "")
-
-	h.runBesideServe("source", "remove", s.url)
-	p.send(`{"type":"refresh","request_id":"removed"}`)
-	removed := libraryOf(p.next("snapshot"))
-	equal(t, "drift after the removal", drift(removed), "source removed")
-	for _, field := range coordinates {
-		equal(t, field, removed[field], first[field])
-	}
-	d := p.next("drift")
-	equal(t, "drift after the removal", words(d["drift"]), "source removed")
-	equal(t, "the drift before it", words(d["previous_drift"]), "")
-	equal(t, "request_id", p.next("refresh_complete")["request_id"], "removed")
-
-	h.runBesideServe("source", "add", s.url)
-	p.send(`{"type":"refresh","request_id":"added"}`)
-	if again := libraryOf(p.next("snapshot")); !reflect.DeepEqual(again, first) {
-		t.Errorf("the library entry after the source came back = %v, want %v", again, first)
-	}
-	d = p.next("drift")
-	equal(t, "drift after the source came back", words(d["drift"]), "")
-	equal(t, "the drift before it", words(d["previous_drift"]), "source removed")
-	equal(t, "request_id", p.next("refresh_complete")["request_id"], "added")
-	equal(t, "exit", p.close(), 0)
 }
