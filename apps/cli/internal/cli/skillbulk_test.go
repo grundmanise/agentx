@@ -322,9 +322,8 @@ func TestSkillAddKeepsTheBatchEdgeCasesApart(t *testing.T) {
 // no half-built library directory, no staged directory and no journal that
 // would refuse the next command.
 func TestSkillAddRefusesAConcurrentInstallOfOneName(t *testing.T) {
-	// Not parallel, for the reason harness_test.go gives above
-	// suiteParallel: it races two installs over one home and counts how
-	// many won, so a lock another test's fork was holding would decide it.
+	// Not parallel: it races two installs over one home and counts how many
+	// won, and tests running beside it would change how the race plays out.
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	sources := map[string]*sourceRepo{}

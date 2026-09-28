@@ -647,9 +647,8 @@ func TestConfigEnableDisable(t *testing.T) {
 
 // TestScanSpawnBudget puts a counting git on PATH and scans a 100-skill library.
 func TestScanSpawnBudget(t *testing.T) {
-	// Not parallel, for the reason harness_test.go gives above
-	// suiteParallel: it counts the processes a scan spawns and times it,
-	// and it writes a shim it then execs.
+	// Not parallel: it times the scan, which tests running beside it would
+	// slow (see harness_test.go above suiteParallel).
 	h := newHarness(t)
 	f := fixture{dirs: []string{".codex", ".gemini", ".cursor"}, files: map[string]string{}, links: map[string]string{}}
 	for i := 0; i < 100; i++ {
