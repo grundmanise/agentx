@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/interrupt"
@@ -59,6 +60,14 @@ func OpenAccountRepo(ctx context.Context, r *Runner, homeDir string) (gitDir str
 	return gitDir, created, err
 }
 
+// accountConfig is the configuration agentx sets in the account repo when
+// it creates it.
+var accountConfig = [][2]string{
+	{"gc.auto", "0"},                  // maintenance runs on the serve child's timer, never inside a command
+	{"core.logAllRefUpdates", "true"}, // a bare repo has no reflogs by default
+	{"merge.conflictStyle", "zdiff3"},
+}
+
 // createAccountRepo initialises the bare repo with the configuration agentx
 // needs, in a temporary directory that is renamed into place only once every
 // step succeeded, so a failure leaves no half-configured repo behind.
@@ -71,21 +80,100 @@ func createAccountRepo(ctx context.Context, r *Runner, gitDir string) error {
 	if err := os.Chmod(tmp, 0o755); err != nil {
 		return err
 	}
-	config := [][2]string{
-		{"gc.auto", "0"},                  // maintenance runs on the serve child's timer, never inside a command
-		{"core.logAllRefUpdates", "true"}, // a bare repo has no reflogs by default
-		{"merge.conflictStyle", "zdiff3"},
-	}
 	if _, err := r.Isolated(ctx, tmp, "init", "--bare", "--quiet"); err != nil {
 		return err
 	}
-	for _, kv := range config {
-		if _, err := r.Isolated(ctx, tmp, "config", kv[0], kv[1]); err != nil {
-			return err
-		}
+	if err := configureNew(ctx, r, tmp, accountConfig); err != nil {
+		return err
 	}
 	if err := os.Rename(tmp, gitDir); err != nil {
 		return fmt.Errorf("account repo %s: %w", gitDir, err)
 	}
 	return nil
 }
+
+// configureNew sets every key of config in the repository git init has
+// just made at gitDir, which nothing else can reach yet. git config sets one
+// key per process, so a config that is still what git init wrote gets the
+// keys in one write instead, in the very bytes git config would leave, see
+// appendConfig; any other is set by git config, one key at a time.
+func configureNew(ctx context.Context, r *Runner, gitDir string, config [][2]string) error {
+	path := filepath.Join(gitDir, "config")
+	if b, err := os.ReadFile(path); err == nil {
+		if text, ok := appendConfig(string(b), config); ok {
+			return os.WriteFile(path, []byte(text), 0o644) // the file is there: it keeps the mode git init gave it
+		}
+	}
+	for _, kv := range config {
+		if _, err := r.Isolated(ctx, gitDir, "config", kv[0], kv[1]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// appendConfig is text, a config holding the core section alone, once
+// every key of config is set in it the way git config sets a key that is
+// not there yet: at the end of its section, and in a section of its own at
+// the end of the file when the file has none. A key of core therefore
+// follows the lines git init wrote, and every other section follows in the
+// order its first key was given. ok is false, and git config is left to
+// do it, unless text is a [core] line and tab-indented key = value lines,
+// each ending in a newline, none of them a key of config, and every name
+// and value of config needs no quoting.
+func appendConfig(text string, config [][2]string) (string, bool) {
+	lines := strings.Split(text, "\n")
+	if len(lines) < 2 || lines[0] != "[core]" || lines[len(lines)-1] != "" {
+		return "", false
+	}
+	set := map[string]bool{}
+	for _, line := range lines[1 : len(lines)-1] {
+		key, value, ok := strings.Cut(line, " = ")
+		if !ok || !strings.HasPrefix(key, "\t") || !word(key[1:], "-") || !word(value, "-") {
+			return "", false
+		}
+		set["core."+strings.ToLower(key[1:])] = true
+	}
+	var core strings.Builder
+	var order []string
+	sections := map[string]*strings.Builder{}
+	for _, kv := range config {
+		section, name, ok := strings.Cut(kv[0], ".")
+		if !ok || !word(section, "-") || section != strings.ToLower(section) || !word(name, "-") || !word(kv[1], "-") ||
+			set[strings.ToLower(kv[0])] {
+			return "", false
+		}
+		set[strings.ToLower(kv[0])] = true
+		line := "\t" + name + " = " + kv[1] + "\n"
+		if section == "core" {
+			core.WriteString(line)
+			continue
+		}
+		if sections[section] == nil {
+			order = append(order, section)
+			sections[section] = &strings.Builder{}
+		}
+		sections[section].WriteString(line)
+	}
+	out := text + core.String()
+	for _, section := range order {
+		out += "[" + section + "]\n" + sections[section].String()
+	}
+	return out, true
+}
+
+// word reports whether s is not empty and made of ASCII letters, digits and
+// the bytes of extra.
+func word(s, extra string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; !isLetter(c) && (c < '0' || c > '9') && !strings.ContainsRune(extra, rune(c)) {
+			return false
+		}
+	}
+	return true
+}
+
+func isLetter(c byte) bool { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' }
