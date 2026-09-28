@@ -1021,14 +1021,13 @@ func TestSkillUpdateConflictsInTheCheckoutAsMergeTreeFoundIt(t *testing.T) {
 	equal(t, "the unmerged paths", unmerged(t, h, "braces"), "1 braces/code.txt\n2 braces/code.txt\n3 braces/code.txt")
 }
 
-// TestSkillUpdateFailsWhenTheSkillsOwnAttributesMergeWhatConflicted: the
+// TestSkillUpdateLeavesPendingWhatTheSkillsOwnAttributesMergeCleanly: the
 // skill's own .gitattributes applies in the checkout, so a union merge
 // driver it names for a file merge-tree found conflicting merges that file
-// cleanly there. That is not the merge judged, so the update fails with
-// git's error and leaves no merge pending, neither the checkout nor git's
-// registration of it, and the library, the import branch and the
+// cleanly there. The merge is still left pending, with nothing unmerged
+// and no file to resolve, and the library, the import branch and the
 // candidate are as they were.
-func TestSkillUpdateFailsWhenTheSkillsOwnAttributesMergeWhatConflicted(t *testing.T) {
+func TestSkillUpdateLeavesPendingWhatTheSkillsOwnAttributesMergeCleanly(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
@@ -1045,9 +1044,12 @@ func TestSkillUpdateFailsWhenTheSkillsOwnAttributesMergeWhatConflicted(t *testin
 	library := onDisk(t, h.library)
 
 	out := h.run("--json", "skill", "update", "union")
-	equal(t, "exit", out.exit, 8)
-	contains(t, "message", h.one(out.stdout, "error")["message"].(string), "git merged the skill cleanly in the checkout")
-	noCheckout(t, h, "union")
+	equal(t, "exit", out.exit, 4)
+	equal(t, "files", conflictFiles(h.one(out.stdout, "conflict")), "")
+	_, mergeHead, _ := mergeState(t, h, "union")
+	equal(t, "MERGE_HEAD", mergeHead, candidate)
+	equal(t, "the unmerged paths", unmerged(t, h, "union"), "")
+	equal(t, "the merged file in the checkout", fileBody(t, filepath.Join(pendingCheckout(h, "union"), "union", "notes.md")), "notes, edited here\nnotes, revised upstream\n")
 	equal(t, "the import branch", h.ref(lineage.ManagedRef("union")), tip)
 	equal(t, "the candidate ref", h.ref(lineage.CandidateRef("union")), candidate)
 	equal(t, "the library", onDisk(t, h.library), library)
