@@ -408,8 +408,10 @@ func TestAPendingMergeCheckoutIsAnOrdinaryMergeInProgress(t *testing.T) {
 // to another by the update, each of the three paths whole; a binary file
 // changed on both sides, whole and binary; a file added on both sides
 // alike but executable on one side only, which conflicts in its mode
-// alone, whole; and a file with no newline at its end, whose hunk ends as
-// the file does. Every path is relative to the skill's directory, which
+// alone, whole; a file the library replaced with a symlink and the update
+// changed, and a symlink of the library's where the update adds a file,
+// each whole, a symlink here and a file in the update; and a file with no
+// newline at its end, whose hunk ends as the file does. Every path is relative to the skill's directory, which
 // the upstream calls otherwise. The text shows every hunk under its file
 // and number, and says of each whole file how it conflicts.
 func TestSkillUpdateConflictsOfEveryKind(t *testing.T) {
@@ -419,6 +421,7 @@ func TestSkillUpdateConflictsOfEveryKind(t *testing.T) {
 	s := h.newSourceRepo("kinds", true)
 	markers := "a\n<<<<<<< HEAD\nb\n=========\nc\n>>>>>>>> x\n"
 	s.skill("skills/kinds-dir", "kinds", "Conflicts of every kind", map[string]string{
+		"a.md":       "a\n",
 		"notes.md":   "one\ntwo\nthree\n",
 		"markers.md": markers,
 		"gone.md":    "gone\n",
@@ -438,6 +441,8 @@ func TestSkillUpdateConflictsOfEveryKind(t *testing.T) {
 	s.write("skills/kinds-dir/tail.md", "x\ny, upstream")
 	s.run("mv", "skills/kinds-dir/moved.md", "skills/kinds-dir/moved-upstream.md")
 	s.write("skills/kinds-dir/mode.sh", "the same\n")
+	s.write("skills/kinds-dir/a.md", "a, upstream\n")
+	s.write("skills/kinds-dir/x", "a file upstream\n")
 	second := s.commit("second version")
 	h.mustRun("skill", "check")
 	lib := filepath.Join(h.library, "kinds")
@@ -453,13 +458,19 @@ func TestSkillUpdateConflictsOfEveryKind(t *testing.T) {
 	}
 	editLibrary(t, h, "kinds", "mode.sh", "the same\n")
 	chmod(t, filepath.Join(lib, "mode.sh"), 0o755)
+	remove(t, filepath.Join(lib, "a.md"))
+	for _, link := range []string{"a.md", "x"} {
+		if err := os.Symlink("SKILL.md", filepath.Join(lib, link)); err != nil {
+			t.Fatal(err)
+		}
+	}
 	library := onDisk(t, h.library)
 
 	out := h.run("--json", "skill", "update", "kinds")
 	equal(t, "exit", out.exit, 4)
 	ev := h.one(out.stdout, "conflict")
 	equal(t, "files", conflictFiles(ev),
-		"both.md:1,gone.md:whole,kept.md:whole,logo.bin:binary,markers.md:1,mode.sh:whole,moved-here.md:whole,moved-upstream.md:whole,moved.md:whole,notes.md:1,tail.md:1")
+		"a.md:whole,both.md:1,gone.md:whole,kept.md:whole,logo.bin:binary,markers.md:1,mode.sh:whole,moved-here.md:whole,moved-upstream.md:whole,moved.md:whole,notes.md:1,tail.md:1,x:whole")
 	equal(t, "notes.md", hunkOf(t, ev, "notes.md", 1), "two, mine\n|two\n|two, upstream\n")
 	equal(t, "markers.md", hunkOf(t, ev, "markers.md", 1), "c, mine\n|c\n|c, upstream\n")
 	equal(t, "both.md", hunkOf(t, ev, "both.md", 1), "added here\n||added upstream\n")
@@ -469,6 +480,7 @@ func TestSkillUpdateConflictsOfEveryKind(t *testing.T) {
 		base, mine, theirs bool
 		binary             bool
 	}{
+		{path: "a.md", base: true, mine: true, theirs: true},
 		{path: "both.md", mine: true, theirs: true},
 		{path: "gone.md", base: true, mine: true},
 		{path: "kept.md", base: true, theirs: true},
@@ -477,6 +489,7 @@ func TestSkillUpdateConflictsOfEveryKind(t *testing.T) {
 		{path: "moved-here.md", mine: true},
 		{path: "moved-upstream.md", theirs: true},
 		{path: "moved.md", base: true},
+		{path: "x", mine: true, theirs: true},
 	} {
 		f := fileOf(t, ev, c.path)
 		for _, side := range []struct {
@@ -496,7 +509,8 @@ func TestSkillUpdateConflictsOfEveryKind(t *testing.T) {
 	h.accountGit("worktree", "remove", "-f", "-f", pendingCheckout(h, "kinds"))
 	text := h.run("skill", "update", "kinds")
 	equal(t, "exit in text", text.exit, 4)
-	equal(t, "the text", text.stdout, "kinds conflicts with its update from "+first[:7]+" to "+second[:7]+" in 11 files\n"+
+	equal(t, "the text", text.stdout, "kinds conflicts with its update from "+first[:7]+" to "+second[:7]+" in 13 files\n"+
+		"a.md: a symlink here, a file in the update\n"+
 		"both.md:1\n<<<<<<< mine\nadded here\n||||||| base\n=======\nadded upstream\n>>>>>>> theirs\n"+
 		"gone.md: changed here, deleted by the update\n"+
 		"kept.md: deleted here, changed by the update\n"+
@@ -507,9 +521,10 @@ func TestSkillUpdateConflictsOfEveryKind(t *testing.T) {
 		"moved-upstream.md: moved here by the update, and moved or deleted here\n"+
 		"moved.md: moved or deleted on both sides\n"+
 		"notes.md:1\n<<<<<<< mine\ntwo, mine\n||||||| base\ntwo\n=======\ntwo, upstream\n>>>>>>> theirs\n"+
-		"tail.md:1\n<<<<<<< mine\ny, mine\n||||||| base\ny\n=======\ny, upstream\n>>>>>>> theirs\n")
+		"tail.md:1\n<<<<<<< mine\ny, mine\n||||||| base\ny\n=======\ny, upstream\n>>>>>>> theirs\n"+
+		"x: a symlink here, a file in the update\n")
 	equal(t, "stderr in text", text.stderr,
-		"error: kinds conflicts with its update in 11 files, so the merge is pending and the library directory was left as it is\n"+
+		"error: kinds conflicts with its update in 13 files, so the merge is pending and the library directory was left as it is\n"+
 			"hint: run 'agentx skill resolve kinds' to resolve the conflicts, or 'agentx skill resolve kinds --abort' to give the merge up\n")
 }
 
@@ -815,7 +830,7 @@ case " $* " in
 esac
 exec %GIT% "$@"
 `)
-			if _, err := os.Lstat(pendingCheckout(h, "alpha")); err != nil {
+			if _, err := os.Lstat(pendingCheckout(h, "alpha")); err != nil || strings.Contains(out, "conflicts with its update") {
 				t.Fatalf("the update was not killed after git %s:\n%s", after, out)
 			}
 			equal(t, "journals the killed update left", journalCount(t, h), 0)
@@ -983,33 +998,59 @@ func TestSkillUpdateMergesWithNoAttributesOfTheUsers(t *testing.T) {
 // TestSkillUpdateKeepsAFileAddedInADirectoryTheUpdateRenamed: a file the
 // user added inside a directory the update renames merges cleanly and
 // stays where the user put it, beside the renamed directory; git is not
-// left to guess that it should move with the rest.
+// left to guess that it should move with the rest. When a line both sides
+// changed makes the update conflict, the merge left pending conflicts in
+// that file alone, and its checkout keeps the user's file where the user
+// put it too.
 func TestSkillUpdateKeepsAFileAddedInADirectoryTheUpdateRenamed(t *testing.T) {
 	t.Parallel()
-	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude"}})
-	s := h.newSourceRepo("renamed", true)
-	s.skill("skills/renamed", "renamed", "A directory renamed", map[string]string{"docs/a.md": "a\n", "docs/b.md": "b\n"})
-	s.commit("first version")
-	h.mustRun("skill", "add", s.url)
-	s.run("mv", "skills/renamed/docs", "skills/renamed/guide")
-	s.commit("second version")
-	h.mustRun("skill", "check")
-	lib := filepath.Join(h.library, "renamed")
-	editLibrary(t, h, "renamed", filepath.Join("docs", "mine.md"), "a file of my own\n")
-	candidate := h.ref(lineage.CandidateRef("renamed"))
+	for _, conflicting := range []bool{false, true} {
+		name := "merged cleanly"
+		if conflicting {
+			name = "left pending"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			h := newHarness(t)
+			h.build(t, fixture{dirs: []string{".claude"}})
+			s := h.newSourceRepo("renamed", true)
+			s.skill("skills/renamed", "renamed", "A directory renamed", map[string]string{"docs/a.md": "a\n", "docs/b.md": "b\n", "notes.md": "notes\n"})
+			s.commit("first version")
+			h.mustRun("skill", "add", s.url)
+			s.run("mv", "skills/renamed/docs", "skills/renamed/guide")
+			if conflicting {
+				s.write("skills/renamed/notes.md", "notes, upstream\n")
+			}
+			s.commit("second version")
+			h.mustRun("skill", "check")
+			lib := filepath.Join(h.library, "renamed")
+			editLibrary(t, h, "renamed", filepath.Join("docs", "mine.md"), "a file of my own\n")
+			candidate := h.ref(lineage.CandidateRef("renamed"))
 
-	out := h.mustRun("--json", "skill", "update", "renamed")
-	contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), " and merged its edits cleanly")
-	equal(t, "the import branch", h.ref(lineage.ManagedRef("renamed")), candidate)
-	noCheckout(t, h, "renamed")
-	sameTree(t, "the library directory", libraryTree(t, lib), map[string]string{
-		"SKILL.md":                       fileBody(t, filepath.Join(s.work, "skills", "renamed", "SKILL.md")),
-		filepath.Join("guide", "a.md"):   "a\n",
-		filepath.Join("guide", "b.md"):   "b\n",
-		filepath.Join("docs", "mine.md"): "a file of my own\n",
-	})
-	equal(t, "state", h.listed("renamed")["state"], stateModified)
+			if conflicting {
+				editLibrary(t, h, "renamed", "notes.md", "notes, mine\n")
+				out := h.run("--json", "skill", "update", "renamed")
+				equal(t, "exit", out.exit, 4)
+				equal(t, "files", conflictFiles(h.one(out.stdout, "conflict")), "notes.md:1")
+				equal(t, "the unmerged paths", unmerged(t, h, "renamed"), "1 renamed/notes.md\n2 renamed/notes.md\n3 renamed/notes.md")
+				equal(t, "the user's file in the checkout", fileBody(t, filepath.Join(pendingCheckout(h, "renamed"), "renamed", "docs", "mine.md")), "a file of my own\n")
+				nothingAt(t, "the user's file moved", filepath.Join(pendingCheckout(h, "renamed"), "renamed", "guide", "mine.md"))
+				return
+			}
+			out := h.mustRun("--json", "skill", "update", "renamed")
+			contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), " and merged its edits cleanly")
+			equal(t, "the import branch", h.ref(lineage.ManagedRef("renamed")), candidate)
+			noCheckout(t, h, "renamed")
+			sameTree(t, "the library directory", libraryTree(t, lib), map[string]string{
+				"SKILL.md":                       fileBody(t, filepath.Join(s.work, "skills", "renamed", "SKILL.md")),
+				"notes.md":                       "notes\n",
+				filepath.Join("guide", "a.md"):   "a\n",
+				filepath.Join("guide", "b.md"):   "b\n",
+				filepath.Join("docs", "mine.md"): "a file of my own\n",
+			})
+			equal(t, "state", h.listed("renamed")["state"], stateModified)
+		})
+	}
 }
 
 // TestSkillUpdateKeepsThePermissionsOfWhatItLeavesAlone: an update lays
@@ -1212,5 +1253,23 @@ func TestRecoveryPrunesStaleMergeCheckouts(t *testing.T) {
 	equal(t, "alpha's pending_merge", h.listed("alpha")["pending_merge"], true)
 	if pending, ok := h.listed("beta")["pending_merge"]; ok {
 		t.Errorf("beta lists a pending merge: %v", pending)
+	}
+}
+
+// TestRecoveryPrunesStaleMergeCheckoutsUnderARelativeHome: agentx home
+// named relative to the working directory, a registration of a checkout
+// whose directory is gone goes all the same.
+func TestRecoveryPrunesStaleMergeCheckoutsUnderARelativeHome(t *testing.T) {
+	// Not parallel: it changes the process's working directory.
+	h, _, _ := updateHarness(t)
+	h.accountGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", pendingReason,
+		pendingCheckout(h, "beta"), h.ref(lineage.ManagedRef("beta")))
+	remove(t, pendingCheckout(h, "beta"))
+	t.Chdir(filepath.Dir(h.agentx))
+	h.env["AGENTX_HOME"] = filepath.Base(h.agentx)
+
+	h.mustRun("config", "set", "label", "pruned")
+	if list := h.accountGit("worktree", "list", "--porcelain"); strings.Contains(list, filepath.Join("merges", "beta")) {
+		t.Errorf("the registration of beta's checkout is still there:\n%s", list)
 	}
 }

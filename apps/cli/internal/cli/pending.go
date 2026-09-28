@@ -101,7 +101,8 @@ func (inv *invocation) startMerge(ctx context.Context, gitDir, name string, in m
 
 // mergeIn merges in the checkout at dir, whose HEAD is in.mine, as git
 // merges any two commits over a base given: one merge-recursive with
-// in.base as the merge base, the conflicts written in zdiff3 style, so
+// in.base as the merge base, with git's detection of a renamed directory
+// off as merge-tree had it, the conflicts written in zdiff3 style, so
 // that each carries the base between mine and theirs, with markers of
 // in.size, which an attributes file of its own asks for in place of the
 // null device the isolated environment names. Then git's own merge state
@@ -121,8 +122,8 @@ func (inv *invocation) mergeIn(ctx context.Context, dir string, in mergeStart) e
 	if err != nil {
 		return err
 	}
-	if _, _, err := inv.git.InCheckoutStatus(ctx, dir, 1, "-c", "merge.conflictStyle=zdiff3", "-c", "core.attributesFile="+attrs.Name(),
-		"merge-recursive", in.base, "--", in.mine, in.theirs); err != nil {
+	if _, _, err := inv.git.InCheckoutStatus(ctx, dir, 1, "-c", "merge.directoryRenames=false", "-c", "merge.conflictStyle=zdiff3",
+		"-c", "core.attributesFile="+attrs.Name(), "merge-recursive", in.base, "--", in.mine, in.theirs); err != nil {
 		return err
 	}
 	out, err := inv.git.InCheckout(ctx, dir, "rev-parse", "--git-path", "MERGE_MSG", "--git-path", "MERGE_HEAD")
@@ -286,8 +287,11 @@ func (inv *invocation) pruneMerges(ctx context.Context, gitDir string) error {
 	// to its registration, so the directory holding a checkout is compared
 	// with the merges directory by the real path of the directory above,
 	// which is agentx home, there whatever else is not.
-	home, err := filepath.EvalSymlinks(inv.dirs.Home)
+	home, err := filepath.Abs(inv.dirs.Home)
 	if err != nil {
+		return err
+	}
+	if home, err = filepath.EvalSymlinks(home); err != nil {
 		return err
 	}
 	inMerges := func(path string) bool {
