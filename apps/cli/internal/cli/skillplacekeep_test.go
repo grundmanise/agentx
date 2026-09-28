@@ -442,8 +442,9 @@ func TestSkillPlaceKeepPlacementOfTheBaseLeavesItCurrent(t *testing.T) {
 // TestSkillPlaceKeepPlacementKeepsTheLibrarysIgnoredFiles: the files git
 // ignores in the library directory, a .DS_Store and a build directory its
 // .gitignore names, are no part of what --keep-placement discards: they
-// are carried into the content kept, as a revert carries them. A copy
-// refreshed with the content kept keeps its own .DS_Store the same way.
+// are carried into the content kept, as a revert carries them. A copy of
+// the library's content, refreshed with the content kept, keeps its own
+// .DS_Store the same way.
 // An unmanaged skill on a machine with no account repo yet gets one for
 // git to judge its library directory in.
 func TestSkillPlaceKeepPlacementKeepsTheLibrarysIgnoredFiles(t *testing.T) {
@@ -452,11 +453,11 @@ func TestSkillPlaceKeepPlacementKeepsTheLibrarysIgnoredFiles(t *testing.T) {
 		t.Parallel()
 		h, s := placementHarness(t)
 		h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code")
-		h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
 		lib := filepath.Join(h.library, "alpha")
 		claude := filepath.Join(h.home, ".claude", "skills", "alpha")
 		cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
 		writeFile(t, filepath.Join(lib, ".gitignore"), "build/\n")
+		h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
 		displace(t, lib, claude, true)
 		kept := libraryTree(t, claude)
 		writeFile(t, filepath.Join(lib, ".DS_Store"), "the library's finder data\n")
