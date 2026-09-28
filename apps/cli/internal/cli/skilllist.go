@@ -68,9 +68,17 @@ func (inv *invocation) skillList(ctx context.Context) error {
 // of its own: most skills have none, and a column that is empty on almost
 // every row would widen every listing for the sake of a few. Both are said
 // in full, so that neither hides the other.
+//
+// An update the last check found is said last in the same cell, as update
+// available: it is no drift, but it is how the skill stands against its
+// upstream, which is what the cell is about.
 func row(out *writer, ev librarySkillEvent) []cell {
-	state := c(strings.Join(append([]string{ev.State}, ev.Drift...), ", "), okStyle)
-	if ev.State == stateModified || len(ev.Drift) > 0 {
+	words := append([]string{ev.State}, ev.Drift...)
+	if ev.Candidate != nil {
+		words = append(words, updateAvailable)
+	}
+	state := c(strings.Join(words, ", "), okStyle)
+	if ev.State == stateModified || len(ev.Drift) > 0 || ev.Candidate != nil {
 		state.style = warnStyle
 	}
 	if ev.State == "" {

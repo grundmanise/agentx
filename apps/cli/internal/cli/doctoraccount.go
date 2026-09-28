@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 
@@ -85,7 +86,8 @@ func remoteSubject(id, url string) string {
 // stagedImports reports the import staging refs of runs that never
 // published them. An install writes its import commits under
 // refs/agentx/importing/<run>/<n> and points the import branches at them
-// through its journal; the refs go once the journal has them, and a run
+// through its journal, and an update check does the same for the
+// candidates it pins; the refs go once the journal has them, and a run
 // killed in between leaves them. They hold the objects they name, so a
 // source removed afterwards leaves its trees and blobs pinned by refs
 // nothing reads.
@@ -106,7 +108,11 @@ func (d *doctor) stagedImports(ctx context.Context, gitDir string) {
 		runs[run] = true
 	}
 	sort.Strings(refs)
+	interrupted := "1 interrupted install or update check"
+	if len(runs) > 1 {
+		interrupted = fmt.Sprintf("%d interrupted installs or update checks", len(runs))
+	}
 	d.row("staged_imports", "warn",
-		plural(len(refs), "staging ref")+" from "+plural(len(runs), "interrupted install")+": "+refs[0],
-		"nothing reads them and they pin what they name; delete each with 'git --git-dir="+gitDir+" update-ref -d <ref>' while no agentx command is running")
+		plural(len(refs), "staging ref")+" from "+interrupted+": "+refs[0],
+		"nothing reads them and they pin what they name; delete each with 'git --git-dir="+gitDir+" update-ref -d <ref>' while no agentx command is running, agentx serve included")
 }

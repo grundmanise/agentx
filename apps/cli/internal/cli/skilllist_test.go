@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"unicode"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
 // TestSkillListReportsManagedAndUnmanaged lists every directory of the
@@ -144,15 +146,17 @@ func TestSkillListSpawnsOneGitProcess(t *testing.T) {
 
 // TestSkillListSpawnsOneGitProcessWhateverTheDrift holds the budget above
 // for skills that differ every way drift reads: one edited, a file of it
-// made executable too, one whose link became a real directory in one
-// configuration and whose placement is gone from another, and a skill of
-// the user's own beside them, and a managed branch whose library directory
-// is gone and whose commit carries no lineage, which a warning names with
+// made executable too, and with an update a check pinned, one whose link
+// became a real directory in one configuration and whose placement is gone
+// from another, and whose upstream no longer holds it, and a skill of the
+// user's own beside them, and a managed branch whose library directory is
+// gone and whose commit carries no lineage, which a warning names with
 // <source> for the source it cannot name. Whether a skill is displaced,
 // missing or gone is read in process, and so is modified until the tree id
 // differs: then git decides, with a read-tree, an add and a write-tree for
 // the edited skill and one read of the user's global ignore file per run.
-// The listing still runs one for-each-ref, and so does the snapshot.
+// Its candidate and its upstream-removed marker come with the lineage, so
+// the listing still runs one for-each-ref, and so does the snapshot.
 func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -165,8 +169,13 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	remove(t, filepath.Join(h.home, ".cursor", "skills", "beta"))
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "mine"), "SKILL.md"), skill("mine", "A skill of my own"))
 	h.accountGit("update-ref", "refs/heads/managed/ghost", h.accountGit("commit-tree", "refs/heads/managed/beta^{tree}", "-m", "no lineage"))
+	h.accountGit("update-ref", "refs/agentx/candidate/alpha", "refs/heads/managed/alpha")
+	h.accountGit("update-ref", "refs/agentx/upstream-removed/beta", "refs/agentx/sources/"+source.ID(s.url))
 	equal(t, "alpha's state", h.listed("alpha")["state"], stateModified)
-	equal(t, "beta's drift", drift(h.listed("beta")), "displaced,missing")
+	if h.listed("alpha")["candidate"] == nil {
+		t.Error("alpha carries no candidate")
+	}
+	equal(t, "beta's drift", drift(h.listed("beta")), "displaced,missing,upstream removed")
 
 	calls := countingGit(t, h)
 	alpha := "--work-tree=" + filepath.Join(h.library, "alpha") + " "
@@ -203,7 +212,7 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 		states[entry["name"].(string)] = fmt.Sprint(entry["state"]) + " " + drift(entry)
 	}
 	equal(t, "alpha in the snapshot", states["alpha"], stateModified+" ")
-	equal(t, "beta in the snapshot", states["beta"], stateCurrent+" displaced,missing")
+	equal(t, "beta in the snapshot", states["beta"], stateCurrent+" displaced,missing,upstream removed")
 	contains(t, "the snapshot's warnings", fmt.Sprint(snap["warnings"]), ghost)
 }
 

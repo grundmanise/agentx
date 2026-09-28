@@ -177,14 +177,14 @@ func (inv *invocation) holdsBase(ctx context.Context, lib scan.LibrarySkill, rec
 		return false
 	}
 	if inv.verdicts != nil {
-		inv.verdicts[lib.Name] = verdict{key: key, holds: j.holds}
+		inv.verdicts[lib.Name] = keptVerdict{key: key, holds: j.holds}
 	}
 	return j.holds
 }
 
-// verdict is git's verdict on one managed skill, kept by serve, and
+// keptVerdict is git's verdict on one managed skill, kept by serve, and
 // verdictKey what it was reached on.
-type verdict struct {
+type keptVerdict struct {
 	key   verdictKey
 	holds bool
 }

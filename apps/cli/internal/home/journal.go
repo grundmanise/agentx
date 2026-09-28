@@ -401,8 +401,10 @@ func applyStep(s step, u RefUpdater) (bool, error) {
 //
 // So deletions go last, when everything that could still refuse has not. A
 // journal that both creates and deletes refs keeps them first and together,
-// since they are one transaction and must not be split; no command writes
-// such a journal today.
+// since they are one transaction and must not be split. The update check
+// writes such a journal, moving one skill's candidate while it deletes
+// another's, and has no path step for the order to matter to: its only
+// other change is the settings file, which the refs never depend on.
 func refsGoLast(steps []step) bool {
 	deletes := false
 	for _, s := range steps {

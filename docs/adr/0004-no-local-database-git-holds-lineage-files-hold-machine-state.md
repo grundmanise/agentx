@@ -11,7 +11,7 @@ agentx keeps no database on the machine. Every piece of local state has exactly 
 |---|---|---|---|
 | Fork and greenfield content and history | `skills/<name>` branches in the account repo, one worktree per placed fork | yes | after publish |
 | Managed skill base versions and upstream coordinates | `managed/<name>` import branches in the account repo, no worktree | yes | V1: separate backup refs per machine and logical asset |
-| Pending merges and update candidates | refs in the account repo | yes | no |
+| Pending merges, update candidates and upstream-removed markers | refs in the account repo | yes | no |
 | Per-machine settings | `settings.json` in agentx home | yes | no; the fleet sees their effect in the snapshot |
 | Local mutation journals | one file per mutation, with retained old content | until completion or recovery | no |
 | Fleet upload protocol metadata | `sync.json`, with registered generation and reserved sequence | yes; validate on reconnect | ordering only |
@@ -24,7 +24,7 @@ agentx keeps no database on the machine. Every piece of local state has exactly 
 ```mermaid
 flowchart LR
   subgraph home["agentx home"]
-    repo["account repo<br/>skills/* forks<br/>managed/* import branches<br/>merge, candidate and source refs"]
+    repo["account repo<br/>skills/* forks<br/>managed/* import branches<br/>merge, candidate, upstream-removed and source refs"]
     wt["worktrees"]
     files["settings.json, sync.json<br/>mutation journals, operation records<br/>lock, mutation counter"]
   end

@@ -29,7 +29,7 @@ type invocation struct {
 
 	excludes     sync.Once // reads excludesPath, the user's core.excludesFile; see excludesFile
 	excludesPath string
-	verdicts     map[string]verdict // serve's verdicts on managed skills, by name; nil keeps none, see holdsBase
+	verdicts     map[string]keptVerdict // serve's verdicts on managed skills, by name; nil keeps none, see holdsBase
 }
 
 // refs is what the mutation journal needs to apply and recover the lineage

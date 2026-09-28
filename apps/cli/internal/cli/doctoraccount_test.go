@@ -153,7 +153,7 @@ func TestDoctorNamesStagingRefsOfAnInterruptedInstall(t *testing.T) {
 	rows, _ := doctorRows(t, h.events(out.stdout))
 	equal(t, "staged_imports.status", rows["staged_imports"]["status"], "warn")
 	equal(t, "staged_imports.detail", rows["staged_imports"]["detail"],
-		"2 staging refs from 1 interrupted install: "+lineage.ImportingRef(run, 0))
+		"2 staging refs from 1 interrupted install or update check: "+lineage.ImportingRef(run, 0))
 	contains(t, "staged_imports.hint", rows["staged_imports"]["hint"].(string),
 		"update-ref -d <ref>")
 
@@ -161,7 +161,7 @@ func TestDoctorNamesStagingRefsOfAnInterruptedInstall(t *testing.T) {
 	text := h.mustRun("doctor", "--color", "off").stdout
 	for _, line := range []string{
 		"staged_imports",
-		"2 staging refs from 1 interrupted install: " + lineage.ImportingRef(run, 0),
+		"2 staging refs from 1 interrupted install or update check: " + lineage.ImportingRef(run, 0),
 		"hint: nothing reads them and they pin what they name",
 	} {
 		contains(t, "doctor", text, line)
