@@ -35,9 +35,9 @@ type sourceRepo struct {
 	gitDir string
 	work   string
 	url    string // the file:// URL of the bare repository
-	// state names the steps that built the source, for advance to find a
-	// copy of the next one by; "" once anything else has written to it.
-	state string
+	// at is the image the source holds, for advance to go on from; nil
+	// once anything else has written to it.
+	at *sourceImage
 }
 
 // newSourceRepo creates the bare repository <name>.git under the harness
@@ -74,7 +74,7 @@ func (h *harness) newSourceRepo(name string, partial bool) *sourceRepo {
 		}
 		return s
 	}
-	s.state = "new"
+	s.at = newSource
 	step := "init"
 	if partial {
 		step = "init --partial"
@@ -99,7 +99,7 @@ func (s *sourceRepo) run(args ...string) string {
 // bare runs git on the bare repository alone.
 func (s *sourceRepo) bare(args ...string) string {
 	s.t.Helper()
-	s.state = ""
+	s.at = nil
 	out, err := s.git.Isolated(context.Background(), s.gitDir, fixtureGitConfig(args...)...)
 	if err != nil {
 		s.t.Fatalf("git %s: %v", strings.Join(args, " "), err)
@@ -110,7 +110,7 @@ func (s *sourceRepo) bare(args ...string) string {
 // write puts content at path inside the work tree.
 func (s *sourceRepo) write(path, content string) {
 	s.t.Helper()
-	s.state = ""
+	s.at = nil
 	full := filepath.Join(s.work, path)
 	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 		s.t.Fatal(err)
@@ -211,7 +211,7 @@ func (s *sourceRepo) commitAt(message, when string) string {
 // holds it with mode 100755.
 func (s *sourceRepo) executable(path string) {
 	s.t.Helper()
-	s.state = ""
+	s.at = nil
 	if err := os.Chmod(filepath.Join(s.work, path), 0o755); err != nil {
 		s.t.Fatal(err)
 	}

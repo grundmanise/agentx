@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -47,12 +48,17 @@ func fixtureRunner() *gitx.Runner {
 // and the ids the build that made it returned. The first test to need it
 // builds it, and every test after that copies it.
 type sourceImage struct {
+	state  string // the steps that led to it, which name it
 	once   sync.Once
 	built  bool // the build finished; a build that failed leaves it false
 	gitDir dirImage
 	work   dirImage
 	ids    []string
 }
+
+// newSource is the state of a source newSourceRepo has made the empty
+// directories of and nothing else yet.
+var newSource = &sourceImage{state: "new", built: true}
 
 var sourceImages = struct {
 	sync.Mutex
@@ -64,7 +70,7 @@ func sourceImageOf(state string) *sourceImage {
 	defer sourceImages.Unlock()
 	img := sourceImages.byState[state]
 	if img == nil {
-		img = &sourceImage{}
+		img = &sourceImage{state: state}
 		sourceImages.byState[state] = img
 	}
 	return img
@@ -72,7 +78,8 @@ func sourceImageOf(state string) *sourceImage {
 
 // advance brings s from the state it is in to the one build makes of it,
 // and returns what build returned. The first test to get there builds it
-// with git in its own source; every later test gets a copy of that result.
+// with git in its own source; every later test gets a copy of that result,
+// written over what s holds as the difference between the two states.
 //
 // A state is named by the steps that led to it, so step must name build
 // alone, and build must depend on nothing but the source it is handed: a
@@ -81,11 +88,11 @@ func sourceImageOf(state string) *sourceImage {
 // it since it was created or last advanced, is built here, with git.
 func (s *sourceRepo) advance(step string, build func(s *sourceRepo) []string) []string {
 	s.t.Helper()
-	if s.state == "" {
+	from := s.at
+	if from == nil {
 		return build(s)
 	}
-	state := s.state + "/" + step
-	img := sourceImageOf(state)
+	img := sourceImageOf(from.state + "/" + step)
 	here := false
 	img.once.Do(func() {
 		b := *s
@@ -102,19 +109,17 @@ func (s *sourceRepo) advance(step string, build func(s *sourceRepo) []string) []
 		img.gitDir, img.work, img.ids, img.built, here = gitDir, work, ids, true, true
 	})
 	if !img.built {
-		s.t.Fatalf("the fixture source %s failed to build in another test", state)
+		s.t.Fatalf("the fixture source %s failed to build in another test", img.state)
 	}
 	if !here {
-		for _, c := range []struct {
-			img dirImage
-			dir string
-		}{{img.gitDir, s.gitDir}, {img.work, s.work}} {
-			if err := c.img.replace(c.dir); err != nil {
-				s.t.Fatal(err)
-			}
+		if err := img.gitDir.writeOver(from.gitDir, s.gitDir); err != nil {
+			s.t.Fatal(err)
+		}
+		if err := img.work.writeOver(from.work, s.work); err != nil {
+			s.t.Fatal(err)
 		}
 	}
-	s.state = state
+	s.at = img
 	return slices.Clone(img.ids)
 }
 
@@ -165,25 +170,35 @@ func imageOf(root string) (dirImage, error) {
 	return img, err
 }
 
-// replace makes the tree under root the image, whatever root held before.
-func (img dirImage) replace(root string) error {
-	if err := os.RemoveAll(root); err != nil {
-		return err
+// writeOver makes the tree under root, which holds prev, hold the image
+// instead: what the image does not hold goes, what it holds otherwise is
+// written, and the rest is left as it is. Every mode is set as it was read,
+// whatever the umask: git records the executable bit of a work tree file,
+// and it keeps its objects read-only.
+func (img dirImage) writeOver(prev dirImage, root string) error {
+	next := make(map[string]imageEntry, len(img))
+	for _, e := range img {
+		next[e.path] = e
 	}
-	if err := os.MkdirAll(root, 0o755); err != nil {
-		return err
+	kept := make(map[string]imageEntry, len(prev))
+	for i := len(prev) - 1; i >= 0; i-- { // what a directory holds before the directory
+		e := prev[i]
+		if n, ok := next[e.path]; ok && n.mode.Type() == e.mode.Type() && (e.mode.IsDir() || bytes.Equal(n.data, e.data)) {
+			kept[e.path] = e
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(root, e.path)); err != nil {
+			return err
+		}
 	}
-	return img.writeTo(root)
-}
-
-// writeTo writes the image under root, which must hold none of it yet.
-// Every mode is set as it was read, whatever the umask: git records the
-// executable bit of a work tree file, and it keeps its objects read-only.
-func (img dirImage) writeTo(root string) error {
 	for _, e := range img {
 		path := filepath.Join(root, e.path)
+		k, ok := kept[e.path]
 		var err error
 		switch {
+		case ok && e.mode.IsRegular() && k.mode != e.mode:
+			err = os.Chmod(path, e.mode.Perm())
+		case ok:
 		case e.mode.IsDir():
 			err = os.Mkdir(path, 0o700)
 		case e.mode&fs.ModeSymlink != 0:
@@ -198,10 +213,12 @@ func (img dirImage) writeTo(root string) error {
 	// Directories last, deepest first, so that one that is not writable is
 	// filled before it gets its mode.
 	for i := len(img) - 1; i >= 0; i-- {
-		if e := img[i]; e.mode.IsDir() {
-			if err := os.Chmod(filepath.Join(root, e.path), e.mode.Perm()); err != nil {
-				return err
-			}
+		e := img[i]
+		if k, ok := kept[e.path]; !e.mode.IsDir() || ok && k.mode == e.mode {
+			continue
+		}
+		if err := os.Chmod(filepath.Join(root, e.path), e.mode.Perm()); err != nil {
+			return err
 		}
 	}
 	return nil
