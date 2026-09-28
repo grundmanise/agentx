@@ -19,7 +19,7 @@ import (
 
 func newSkillPlaceCommand(inv *invocation) *cobra.Command {
 	var to []string
-	var asCopy, keepLib, keepPlace bool
+	var asCopy, force bool
 	cmd := &cobra.Command{
 		Use:   "place <name>",
 		Short: "Place a skill the library already holds, or put its placements back",
@@ -30,32 +30,18 @@ func newSkillPlaceCommand(inv *invocation) *cobra.Command {
 			"symlink to the library directory everywhere else.\n\n" +
 			"A real directory where the symlink belongs is replaced by the placement when it\n" +
 			"holds exactly the library's content, and reported as adopted. When it holds\n" +
-			"anything else, the command stops until you choose what survives:\n" +
-			"--keep-library discards the directory, --keep-placement makes its content the\n" +
-			"library's. A directory that differs from the library is never deleted without\n" +
-			"one of them.",
+			"anything else, the command stops and changes nothing: --force replaces the\n" +
+			"directory with the placement and deletes what it held. To keep that content,\n" +
+			"move the directory elsewhere first.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if keepLib && keepPlace {
-				return fail(exitUsage, "--keep-library and --keep-placement cannot both be given",
-					"give --keep-library to keep the library's content, or --keep-placement to keep the directory's")
-			}
-			choice := keepNeither
-			switch {
-			case keepLib:
-				choice = keepLibrary
-			case keepPlace:
-				choice = keepPlacement
-			}
-			return inv.skillPlace(cmd.Context(), args[0], to, asCopy, choice)
+			return inv.skillPlace(cmd.Context(), args[0], to, asCopy, force)
 		},
 	}
 	cmd.Flags().StringArrayVar(&to, "to", nil, "the configuration to place the skill in, instead of every enabled one; give it again for each")
 	cmd.Flags().BoolVar(&asCopy, "copy", false, "place a copy instead of a symlink")
-	cmd.Flags().BoolVar(&keepLib, "keep-library", false,
-		"replace a displaced directory whose content differs from the library with the expected placement, discarding the directory")
-	cmd.Flags().BoolVar(&keepPlace, "keep-placement", false,
-		"make a displaced directory's content the library's, then replace the directory with the expected placement")
+	cmd.Flags().BoolVar(&force, "force", false,
+		"replace a displaced directory whose content differs from the library with the expected placement, deleting what the directory holds")
 	return cmd
 }
 
@@ -85,9 +71,7 @@ type placements struct {
 	copies    []string      // the configurations that hold a copy
 	adoptions []string      // the placement paths that were a directory of this version
 	skipped   []string      // the placement paths the run left without a placement
-	refreshed []string      // the configurations whose copy a new library content refreshed; see refreshCopies
-	kept      string        // with --keep-placement, the directory whose content the library now holds
-	discarded []string      // with --keep-library, the directories whose content was discarded
+	discarded []string      // with --force, the directories whose content was discarded
 }
 
 // placeable is what a placement is made of: the name the skill is placed
@@ -189,12 +173,10 @@ func targetIDs(targets []placeTarget) []string {
 //   - A real directory where the symlink belongs is replaced by the
 //     expected placement when it holds exactly what the library directory
 //     holds, as git would record the two: nothing of the user's is lost,
-//     and it is adopted. When it holds anything else, one of the two
-//     contents has to go, and the run refuses unless told which:
-//     --keep-library replaces the directory with the placement and
-//     discards it, and --keep-placement first makes its content the
-//     library's, which leaves a managed skill whose content is not its base
-//     version modified.
+//     and it is adopted. When it holds anything else, replacing it would
+//     discard what it holds, and the run refuses unless --force says to:
+//     the directory is then replaced with the placement and discarded. A
+//     user who wants to keep it moves it elsewhere first.
 //
 // A link of the user's, a copy edited where it is and anything else at a
 // place is no drift, and is left as it is, named in a warning and counted
@@ -210,14 +192,14 @@ func targetIDs(targets []placeTarget) []string {
 // while the mutation runs is kept as well.
 //
 // A fork is placed as it always was, see placeEach: its placements are not
-// judged against a library content to keep.
-func (inv *invocation) skillPlace(ctx context.Context, name string, to []string, asCopy bool, choice keepChoice) error {
+// judged against the library's content.
+func (inv *invocation) skillPlace(ctx context.Context, name string, to []string, asCopy, force bool) error {
 	sc, err := inv.skillContext(ctx)
 	if err != nil {
 		return err
 	}
 	flags := placeFlags(to, asCopy)
-	lib, rec, managed, err := inv.placeRecord(sc, name, choice, flags)
+	lib, rec, managed, err := inv.placeRecord(sc, name, force, flags)
 	if err != nil {
 		return err
 	}
@@ -233,28 +215,10 @@ func (inv *invocation) skillPlace(ctx context.Context, name string, to []string,
 		return err
 	}
 	plan.rec, plan.managed, plan.flags = rec, managed, flags
-	if err := plan.refusal(choice); err != nil {
+	if err := plan.refusal(force); err != nil {
 		return err
 	}
 	gitDir := gitx.AccountRepoPath(inv.dirs.Home)
-	// A run that makes a displaced directory's content the library's has
-	// git judge what the library directory holds, in the account repo, which
-	// is made now for a skill agentx does not manage on a machine that has
-	// none yet. It refreshes every copy that holds what agentx placed there:
-	// what the library directory held, or the base version of a managed
-	// skill, which a copy placed before the library was edited still holds.
-	// The branch the base comes from is read again under the lock.
-	if choice == keepPlacement && len(plan.differing()) > 0 {
-		if managed && !rec.HasImport {
-			return fail(exitRefused, fmt.Sprintf("the import branch %s records no version agentx can read", rec.Ref),
-				"run 'agentx doctor' and check the account repo it names")
-		}
-		if !managed {
-			if gitDir, _, err = gitx.OpenAccountRepo(ctx, inv.git, inv.dirs.Home); err != nil {
-				return accountRepoFailure(err)
-			}
-		}
-	}
 	again := "run " + plan.command() + " again"
 	var done placements
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
@@ -296,7 +260,7 @@ func (inv *invocation) skillPlace(ctx context.Context, name string, to []string,
 		}
 		// Where links make paths overlap is no part of the signature, so it
 		// is read again, before the sweep changes anything.
-		if err := live.overlap(choice); err != nil {
+		if err := live.overlap(); err != nil {
 			return err
 		}
 		// A run killed before its journal was written left what it staged
@@ -304,23 +268,17 @@ func (inv *invocation) skillPlace(ctx context.Context, name string, to []string,
 		// staged, since a sweep of a directory two configurations share would
 		// take a sibling this plan staged a moment earlier.
 		for _, t := range detected {
-			if !t.readsLibrary && (containsString(asked, t.id) || choice == keepPlacement && containsString(live.copies, t.id)) {
+			if !t.readsLibrary && containsString(asked, t.id) {
 				sweepStaged(t.dir)
 			}
 		}
-		if choice == keepPlacement {
-			sweepStaged(inv.dirs.Library)
-		}
 		// And once more, the last read before anything is staged.
-		if err := live.overlap(choice); err != nil {
+		if err := live.overlap(); err != nil {
 			return err
 		}
 		done = placements{}
 		m := home.NewMutation(inv.dirs.Home)
-		if err := inv.stagePlace(ctx, m, gitDir, live, choice, &done); err != nil {
-			m.Discard()
-			return err
-		}
+		inv.stagePlace(m, live, force, &done)
 		edit.addCopies(name, done.copies)
 		if err := edit.stage(m, inv.dirs.Home); err != nil {
 			m.Discard()
@@ -801,7 +759,7 @@ func filterPlacements(places []placementEvent, covered []string) []placementEven
 }
 
 // placeSummary is what the result event says a placement run did: the
-// counts, then what a displaced directory's content became, see keptClause.
+// counts, then the displaced directories --force discarded.
 func placeSummary(name string, done placements) string {
 	summary := fmt.Sprintf("placed %s in %s", name, plural(len(done.placed), "configuration"))
 	for _, what := range []struct {
@@ -812,32 +770,18 @@ func placeSummary(name string, done placements) string {
 			summary += fmt.Sprintf(", %s %s", plural(what.n, "placement"), what.text)
 		}
 	}
-	if n := len(done.refreshed); n > 0 {
-		summary += ", " + plural(n, "copy placement") + " refreshed"
-	}
 	if n := len(done.skipped); n > 0 {
 		summary += ", " + plural(n, "placement") + " skipped"
 	}
-	return summary + keptClause(done)
-}
-
-// keptClause is what the summary of skill place adds about a displaced
-// directory whose content differed from the library: the directory whose
-// content --keep-placement made the library's, or the directories whose
-// content --keep-library discarded, and nothing otherwise.
-func keptClause(done placements) string {
-	switch {
-	case done.kept != "":
-		return "; the library now holds what " + done.kept + " held"
-	case len(done.discarded) > 0:
-		return "; discarded what " + strings.Join(done.discarded, ", ") + " held"
+	if len(done.discarded) > 0 {
+		summary += "; discarded what " + strings.Join(done.discarded, ", ") + " held"
 	}
-	return ""
+	return summary
 }
 
 // printPlaced writes the confirmation of one placement run and one row per
 // configuration it covered, as ownPlacements picks them out of what the
-// rescan found, then what it adopted, kept or discarded. The name is a
+// rescan found, then what it adopted or discarded. The name is a
 // library directory's, which whoever made it chose, so it is sanitised as
 // skill list prints it.
 func (inv *invocation) printPlaced(lib scan.LibrarySkill, targets []placeTarget, done placements, ev librarySkillEvent) {
@@ -847,18 +791,12 @@ func (inv *invocation) printPlaced(lib scan.LibrarySkill, targets []placeTarget,
 	// the skill through another client's skills directory, as Cursor reads
 	// Claude Code's.
 	line := "placed " + out.paint(heading, sanitised(lib.Name)) + " in " + out.paint(noteStyle, plural(len(done.placed), "configuration"))
-	if n := len(done.refreshed); n > 0 {
-		line += ", " + out.paint(noteStyle, plural(n, "copy placement")+" refreshed")
-	}
 	if n := len(done.skipped); n > 0 {
 		line += ", " + out.paint(warnStyle, plural(n, "placement")+" skipped")
 	}
 	out.done(line)
 	inv.printPlacementRows(lib.Name, inv.ownPlacements(lib.Name, targets, ev.Placements))
 	inv.printAdoptions(done.adoptions)
-	if done.kept != "" {
-		out.print("  ", out.paint(muted, "the library now holds what "+quotedPath(done.kept)+" held"))
-	}
 	for _, p := range done.discarded {
 		out.print("  ", out.paint(muted, "discarded what "+quotedPath(p)+" held"))
 	}

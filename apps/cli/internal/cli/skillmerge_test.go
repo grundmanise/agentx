@@ -622,7 +622,7 @@ func TestSkillUpdateMergesASkillAtTheRootOfItsSource(t *testing.T) {
 // once its library directory is gone, while a removal of it from one
 // configuration is refused as it is for any skill whose library directory
 // is gone. Taking one placement away and putting placements back, with
-// --keep-library too, move neither the library directory nor the import
+// --force too, move neither the library directory nor the import
 // branch, leave the checkout's merge as it was, and are not blocked.
 func TestAPendingMergeBlocksWhatWouldReplaceOrRemoveTheSkill(t *testing.T) {
 	t.Parallel()
@@ -653,7 +653,7 @@ func TestAPendingMergeBlocksWhatWouldReplaceOrRemoveTheSkill(t *testing.T) {
 
 	h.mustRun("skill", "remove", "alpha", "--from", "cursor")
 	h.mustRun("skill", "place", "alpha")
-	h.mustRun("skill", "place", "alpha", "--keep-library")
+	h.mustRun("skill", "place", "alpha", "--force")
 	gotHead, gotMergeHead, _ := mergeState(t, h, "alpha")
 	equal(t, "the checkout's HEAD after a placement was removed and put back", gotHead, head)
 	equal(t, "the checkout's MERGE_HEAD after a placement was removed and put back", gotMergeHead, mergeHead)

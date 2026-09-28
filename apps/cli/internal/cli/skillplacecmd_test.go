@@ -476,10 +476,11 @@ func TestSkillPlaceLeavesALinkOfTheUsers(t *testing.T) {
 
 // TestSkillPlaceStopsAtADirectoryOfTheUsers: a directory of the user's
 // where the placement belongs holds content the library does not, so
-// placing the skill there would discard one of the two. skill place stops
-// with exit 6 and names both ways on, each with the --to it was given, and
-// changes nothing at all: the directory is byte for byte what it was, no
-// journal was written and the settings were not.
+// placing the skill there would discard what it holds. skill place stops
+// with exit 6, names --force with the --to it was given and says how to
+// keep the directory instead, and changes nothing at all: the directory is
+// byte for byte what it was, no journal was written and the settings were
+// not.
 func TestSkillPlaceStopsAtADirectoryOfTheUsers(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
@@ -497,8 +498,8 @@ func TestSkillPlaceStopsAtADirectoryOfTheUsers(t *testing.T) {
 	equal(t, "exit", out.exit, 6)
 	e := h.one(out.stdout, "error")
 	equal(t, "message", e["message"], handMade+" is a directory whose content differs from the library's alpha, so nothing was placed")
-	equal(t, "hint", e["hint"], "to keep the library's content and discard it, run 'agentx skill place alpha --to cursor --keep-library';"+
-		" to make its content the library's, run 'agentx skill place alpha --to cursor --keep-placement'")
+	equal(t, "hint", e["hint"], "to replace it with the library's version and delete what it holds, run 'agentx skill place alpha --to cursor --force';"+
+		" to keep it, move it elsewhere first")
 	equal(t, "the directory", onDisk(t, handMade), held)
 	equal(t, "the settings", fileBody(t, filepath.Join(h.agentx, "settings.json")), settings)
 	equal(t, "no mutation", mutationVersion(t, h), version)
