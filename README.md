@@ -60,10 +60,14 @@ agentx runs your own `git`, 2.40 or later, found on your `PATH`.
 | --- | --- |
 | [`agentx scan`](docs/help-center/cli/scan.mdx) | List every agent configuration on this machine and the skills, servers and plugins each one sees |
 | [`agentx source`](docs/help-center/cli/source.mdx) | Add the git repositories you install skills from, list their skills, remove them |
+| [`agentx skill`](docs/help-center/cli/skill.mdx) | Install skills, place them in agent clients, update, remove, and list your library |
+| [`agentx adopt`](docs/help-center/cli/adopt.mdx) | Import skills installed with the Vercel skills CLI |
 | [`agentx serve`](docs/help-center/cli/serve.mdx) | Keep watching this machine and stream a snapshot whenever it changes |
 | [`agentx doctor`](docs/help-center/cli/doctor.mdx) | Check that this machine can run agentx |
 | [`agentx config`](docs/help-center/cli/config.mdx) | List, get and set this machine's settings |
 | [`agentx machine`](docs/help-center/cli/machine.mdx) | Show this machine's id and label, rename it, reset the id |
+| [`agentx export`](docs/help-center/cli/export.mdx) | Write this machine's settings and a list of its skills to a file |
+| [`agentx import`](docs/help-center/cli/export.mdx) | Restore the settings from an export and list the skills this machine can bring back |
 | [`agentx version`](docs/help-center/cli/version.mdx) | Print the CLI version and its output schema version |
 
 ## Status
@@ -74,7 +78,14 @@ Supports 75 agents. 6 are read in full – skills, MCP servers and plugins:
 
 Other agents support skills management only at this time.
 
-> Under active development: The command-line tool inventories a single machine. Installing skills from sources, forking and editing them, and syncing across machines are all in progress, as is the desktop app.
+> Under active development. On a single machine, the command-line tool already:
+>
+> - inventories every agent configuration and what it sees: [`agentx scan`](docs/help-center/cli/scan.mdx)
+> - installs skills from git sources and places them in your agent clients: [`agentx skill add`](docs/help-center/cli/skill.mdx#install-a-skill)
+> - checks for newer versions and applies them, merging your own edits into each update: [`agentx skill check`](docs/help-center/cli/skill.mdx#check-for-updates), [`agentx skill update`](docs/help-center/cli/skill.mdx#update-a-skill)
+> - takes over the skills the vercel skills CLI installed, so agentx can update them too: [`agentx adopt`](docs/help-center/cli/adopt.mdx)
+>
+> Forking and editing skills, syncing across machines and the desktop app are in progress.
 
 ## Documentation
 
