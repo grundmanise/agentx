@@ -11,7 +11,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 	"unicode"
@@ -357,6 +356,13 @@ func TestScanGolden(t *testing.T) {
 			if got, want := h.types(events), []string{"snapshot", "result"}; !reflect.DeepEqual(got, want) {
 				t.Fatalf("event types = %v, want %v", got, want)
 			}
+			// No value a configuration file holds secret reaches the
+			// snapshot; TestScanPrintsWhatTheSnapshotHolds checks the text.
+			for _, secret := range secrets(f) {
+				if strings.Contains(first.stdout, secret) {
+					t.Errorf("the snapshot carries %q", secret)
+				}
+			}
 			got := h.portable(strings.SplitN(first.stdout, "\n", 2)[0] + "\n")
 			path := filepath.Join("testdata", "golden", name+".snapshot.json")
 			if *update {
@@ -507,70 +513,6 @@ func TestScanSanitisesUntrustedNames(t *testing.T) {
 	}
 }
 
-func TestScanWarnings(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		fixture string
-		want    []string
-	}{
-		{"broken-symlink", []string{"~/.claude/skills/gone: broken symlink, skipped"}},
-		{"broken-symlinks", []string{"~/.claude/skills: 2 broken symlinks (gone, lost), skipped"}},
-		{"library-broken-symlink", []string{"~/.agents/skills/dangling: broken symlink, skipped"}},
-		{"unparsable-frontmatter", []string{
-			"~/.claude/skills/broken/SKILL.md: unparsable frontmatter at line 3: non-map value is specified, using the directory name",
-			"~/.claude/skills/nameless/SKILL.md: frontmatter has no name, using the directory name",
-			"~/.claude/skills/no-frontmatter/SKILL.md: no frontmatter, using the directory name",
-			"~/.claude/skills/unclosed/SKILL.md: unparsable frontmatter, the --- block is not closed, using the directory name",
-		}},
-		{"nested-symlink", []string{
-			"~/.claude/skills/docs/loop: symlink loops inside the skill, skipped",
-			"~/.claude/skills/docs/outside.md: symlink resolves outside the skill, skipped",
-		}},
-		{"mcp-malformed", []string{
-			"~/.claude/plugins/installed_plugins.json: invalid JSON, skipped",
-			"~/.codex/config.toml: invalid TOML, skipped",
-			"~/.cursor/mcp.json: invalid JSON, skipped",
-		}},
-		{"plugins", []string{
-			"~/.claude/plugins/cache/acme-tools/gone/2.0.0: plugin gone@acme-tools is not installed there, skipped",
-			"~/.claude/plugins/installed_plugins.json: plugin legacy@acme-tools has no installPath, skipped",
-		}},
-		{"codex-plugins", []string{
-			"~/.codex/config.toml: plugin key \"no-marketplace\" is not <name>@<marketplace>, skipped",
-			"~/.codex/plugins/cache/personal/broken/1.0.0/.codex-plugin/plugin.json: invalid JSON, skipped",
-			"~/.codex/plugins/cache/team/ghost: plugin ghost@team is not installed there, skipped",
-		}},
-		{"cursor-plugins", []string{
-			"~/.cursor/plugins/cache/cursor-public/half/0000000000000000000000000000000000000000: incomplete plugin cache, skipped",
-			"~/.cursor/plugins/local/bad/.cursor-plugin/plugin.json: invalid JSON, skipped",
-			"~/.cursor/plugins/local/escape: symlink resolves outside ~/.cursor/plugins/local, skipped",
-			"~/.cursor/plugins/local/mani/.cursor-plugin/plugin.json: skills path \"../outside\" must be relative and stay inside the plugin, skipped",
-		}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.fixture, func(t *testing.T) {
-			t.Parallel()
-			h := newHarness(t)
-			h.build(t, fixtures[tt.fixture])
-			snap := h.snapshot(t)
-			var got []string
-			for _, w := range snap["warnings"].([]any) {
-				got = append(got, h.portable(w.(string)))
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("warnings = %q, want %q", got, tt.want)
-			}
-
-			out := h.run("scan")
-			equal(t, "exit", out.exit, 0)
-			for _, w := range tt.want {
-				contains(t, "stderr", h.portable(out.stderr), "warning: "+w)
-			}
-			noSecrets(t, h, fixtures[tt.fixture])
-		})
-	}
-}
-
 func TestScanProjectScope(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -639,14 +581,7 @@ func TestScanHoldsSharedLock(t *testing.T) {
 	}
 	equal(t, "home entries", listDir(t, h.agentx), "lock machine.json mutations ops")
 
-	lock, err := os.OpenFile(filepath.Join(h.agentx, "lock"), os.O_CREATE|os.O_RDWR, 0o644)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer lock.Close()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
-		t.Fatal(err)
-	}
+	holdLock(t, h)
 	out = h.run("--json", "scan")
 	equal(t, "exit", out.exit, 7)
 	events := h.events(out.stdout)
@@ -899,414 +834,117 @@ func secrets(f fixture) []string {
 	return found
 }
 
-// noSecrets scans in both output modes and fails when any secret value of
-// f reaches stdout or stderr.
-func noSecrets(t *testing.T, h *harness, f fixture) {
-	t.Helper()
-	for _, args := range [][]string{{"scan"}, {"--json", "scan"}} {
-		out := h.run(args...)
-		equal(t, "exit", out.exit, 0)
-		for _, secret := range secrets(f) {
-			if strings.Contains(out.stdout, secret) || strings.Contains(out.stderr, secret) {
-				t.Errorf("%v printed %q", args, secret)
+// TestScanPrintsWhatTheSnapshotHolds is the text half of the golden
+// snapshots, which pin every server, plugin, edge and warning a scan finds:
+// the inventory prints the servers and the plugins, each warning goes to
+// stderr, and no secret value of a configuration file reaches either
+// stream, which TestScanGolden checks of the snapshot.
+func TestScanPrintsWhatTheSnapshotHolds(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		fixture  string
+		secrets  int // what the fixture holds, so that the check is not vacuous
+		warnings []string
+		stdout   func(t *testing.T, h *harness, stdout string)
+	}{
+		{fixture: "broken-symlink", warnings: []string{"~/.claude/skills/gone: broken symlink, skipped"}},
+		{fixture: "broken-symlinks", warnings: []string{"~/.claude/skills: 2 broken symlinks (gone, lost), skipped"}},
+		{fixture: "library-broken-symlink", warnings: []string{"~/.agents/skills/dangling: broken symlink, skipped"}},
+		{fixture: "unparsable-frontmatter", warnings: []string{
+			"~/.claude/skills/broken/SKILL.md: unparsable frontmatter at line 3: non-map value is specified, using the directory name",
+			"~/.claude/skills/nameless/SKILL.md: frontmatter has no name, using the directory name",
+			"~/.claude/skills/no-frontmatter/SKILL.md: no frontmatter, using the directory name",
+			"~/.claude/skills/unclosed/SKILL.md: unparsable frontmatter, the --- block is not closed, using the directory name",
+		}},
+		{fixture: "nested-symlink", warnings: []string{
+			"~/.claude/skills/docs/loop: symlink loops inside the skill, skipped",
+			"~/.claude/skills/docs/outside.md: symlink resolves outside the skill, skipped",
+		}},
+		{fixture: "mcp-malformed", secrets: 4, warnings: []string{
+			"~/.claude/plugins/installed_plugins.json: invalid JSON, skipped",
+			"~/.codex/config.toml: invalid TOML, skipped",
+			"~/.cursor/mcp.json: invalid JSON, skipped",
+		}},
+		{fixture: "mcp-all-clients", secrets: 12, stdout: func(t *testing.T, h *harness, stdout string) {
+			contains(t, "stdout", stdout, "  servers:\n")
+			contains(t, "stdout", stdout, "npx -y @upstash/context7-mcp@1.0.0")
+			contains(t, "stdout", stdout, "streamable-http")
+			contains(t, "stdout", stdout, "https://stream.example.com/mcp")
+			if strings.Contains(stdout, "plugins:") {
+				t.Errorf("a machine without plugins prints a plugins block:\n%s", stdout)
 			}
-		}
-	}
-}
-
-// servers lists "name transport configuration command args|url" for every server occurrence.
-func servers(t *testing.T, snap jsonEvent) (rows []string, nodes int) {
-	t.Helper()
-	for _, s := range snap["mcp_servers"].([]any) {
-		node := s.(map[string]any)
-		nodes++
-		for _, o := range node["occurrences"].([]any) {
-			occ := o.(map[string]any)
-			what := occ["url"].(string)
-			if cmd := occ["command"].(string); cmd != "" {
-				what = cmd
-				for _, a := range occ["args"].([]any) {
-					what += " " + a.(string)
+		}},
+		{fixture: "plugins", secrets: 1, warnings: []string{
+			"~/.claude/plugins/cache/acme-tools/gone/2.0.0: plugin gone@acme-tools is not installed there, skipped",
+			"~/.claude/plugins/installed_plugins.json: plugin legacy@acme-tools has no installPath, skipped",
+		}, stdout: func(t *testing.T, h *harness, stdout string) {
+			contains(t, "stdout", stdout, "  plugins:\n")
+			contains(t, "stdout", stdout, "formatter  1.2.0  1 skill, 1 server\n")
+			contains(t, "stdout", stdout, "(plugin formatter)")
+			contains(t, "stdout", stdout, "notes     1.0.0\n")
+			contains(t, "stdout", stdout, "security  0.3.0  1 skill, 1 server\n")
+		}},
+		{fixture: "codex-plugins", secrets: 3, warnings: []string{
+			"~/.codex/config.toml: plugin key \"no-marketplace\" is not <name>@<marketplace>, skipped",
+			"~/.codex/plugins/cache/personal/broken/1.0.0/.codex-plugin/plugin.json: invalid JSON, skipped",
+			"~/.codex/plugins/cache/team/ghost: plugin ghost@team is not installed there, skipped",
+		}, stdout: func(t *testing.T, h *harness, stdout string) {
+			contains(t, "stdout", stdout, "  plugins:\n")
+			var beta, alphaWeb string
+			for _, line := range strings.Split(stdout, "\n") {
+				switch row := strings.TrimSpace(line); {
+				case strings.HasPrefix(row, "beta "):
+					beta = line
+				case strings.HasPrefix(row, "alpha-web "):
+					alphaWeb = line
 				}
 			}
-			rows = append(rows, fmt.Sprintf("%s %s %s %s", node["name"], occ["transport"], occ["configuration"], what))
-		}
-	}
-	sort.Strings(rows)
-	return rows, nodes
-}
-
-func TestScanMCPServers(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	f := fixtures["mcp-all-clients"]
-	h.build(t, f)
-	snap := h.snapshot(t)
-
-	rows, nodes := servers(t, snap)
-	want := []string{
-		"cloudflare sse github-copilot https://docs.mcp.cloudflare.com/sse",
-		"context7 stdio claude-code npx -y @upstash/context7-mcp@1.0.0",
-		"context7 stdio cursor npx -y @upstash/context7-mcp",
-		"events sse gemini-cli https://events.example.com/sse",
-		"fetch stdio codex uvx mcp-server-fetch==0.6",
-		"figma streamable-http codex https://mcp.figma.com/mcp",
-		"gh streamable-http github-copilot https://api.githubcopilot.com/mcp/readonly",
-		"git stdio gemini-cli pipx run mcp-server-git",
-		"legacy sse claude-code https://legacy.example.com/sse",
-		"local stdio gemini-cli python -m my_server",
-		"pg stdio cursor docker run -i --rm -e PGURL ghcr.io/example/pg-mcp:1.4",
-		"pg stdio windsurf docker run --rm -i ghcr.io/example/pg-mcp:2.0",
-		"remote streamable-http windsurf https://remote.example.com/mcp",
-		"sentry stdio github-copilot npx @sentry/mcp-server@latest",
-		"stream streamable-http gemini-cli https://stream.example.com/mcp",
-		"stripe streamable-http claude-code https://MCP.Stripe.com:443/",
-		"stripe streamable-http cursor https://mcp.stripe.com",
-	}
-	if !reflect.DeepEqual(rows, want) {
-		t.Errorf("server occurrences = %q, want %q", rows, want)
-	}
-	// The same package, the same normalised URL and the same image with another
-	// tag each merge into one node with two occurrences.
-	equal(t, "server nodes", nodes, 14)
-
-	logical := map[string]string{}
-	for _, s := range snap["mcp_servers"].([]any) {
-		node := s.(map[string]any)
-		logical[node["name"].(string)] = node["logical_id"].(string)
-		equal(t, node["name"].(string)+" signature", node["signature"], "none")
-		for _, o := range node["occurrences"].([]any) {
-			occ := o.(map[string]any)
-			equal(t, node["name"].(string)+" handshake", occ["handshake"], false)
-			if _, ok := occ["plugin"]; ok {
-				t.Errorf("%s: a configuration's own server carries a plugin field", node["name"])
+			contains(t, "beta line", beta, "0.4.0")
+			contains(t, "beta line", beta, "(disabled)")
+			contains(t, "alpha-web line", alphaWeb, "(plugin alpha)")
+			contains(t, "alpha-web line", alphaWeb, "(disabled)")
+			equal(t, "disabled markers", strings.Count(stdout, "(disabled)"), 3)
+		}},
+		{fixture: "cursor-plugins", secrets: 3, warnings: []string{
+			"~/.cursor/plugins/cache/cursor-public/half/0000000000000000000000000000000000000000: incomplete plugin cache, skipped",
+			"~/.cursor/plugins/local/bad/.cursor-plugin/plugin.json: invalid JSON, skipped",
+			"~/.cursor/plugins/local/escape: symlink resolves outside ~/.cursor/plugins/local, skipped",
+			"~/.cursor/plugins/local/mani/.cursor-plugin/plugin.json: skills path \"../outside\" must be relative and stay inside the plugin, skipped",
+		}, stdout: func(t *testing.T, h *harness, stdout string) {
+			contains(t, "stdout", stdout, "  plugins:\n")
+			contains(t, "stdout", h.portable(stdout), "~/.cursor/plugins/local/agent-std/bin/srv --root ~/.cursor/plugins/local/agent-std  (plugin agent-std)")
+			if !regexp.MustCompile(`(?m)^ +thermos +9f86d081884c7d659a2feaa0c55ad015a3bf4f1b  1 skill, 1 server$`).MatchString(stdout) {
+				t.Errorf("stdout has no thermos plugin line with its commit as the version:\n%s", stdout)
 			}
-			switch node["name"] {
-			case "figma":
-				// bearer_token_env_var sets Authorization.
-				if got := occ["header_keys"]; !reflect.DeepEqual(got, []any{"Authorization", "X-Env", "X-Figma-Region"}) {
-					t.Errorf("figma header_keys = %v", got)
-				}
-			case "sentry":
-				if got := occ["env_keys"]; !reflect.DeepEqual(got, []any{"SENTRY_TOKEN"}) {
-					t.Errorf("sentry env_keys = %v", got)
-				}
-				equal(t, "sentry config_file", h.portable(occ["config_file"].(string)), "~/.copilot/mcp-config.json")
-			case "stream":
-				if got := occ["header_keys"]; !reflect.DeepEqual(got, []any{}) {
-					t.Errorf("stream header_keys = %v, want empty", got)
+			if strings.Contains(stdout, "(disabled)") {
+				t.Errorf("Cursor records no enabled state, yet the output marks a plugin disabled:\n%s", stdout)
+			}
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.fixture, func(t *testing.T) {
+			t.Parallel()
+			f := fixtures[tt.fixture]
+			equal(t, "secrets in fixture", len(secrets(f)), tt.secrets)
+			h := newHarness(t)
+			h.build(t, f)
+			out := h.run("scan")
+			equal(t, "exit", out.exit, 0)
+			if tt.stdout != nil {
+				tt.stdout(t, h, out.stdout)
+			}
+			stderr := h.portable(out.stderr)
+			for _, w := range tt.warnings {
+				contains(t, "stderr", stderr, "warning: "+w)
+			}
+			equal(t, "warnings", strings.Count(stderr, "warning: "), len(tt.warnings))
+			for _, secret := range secrets(f) {
+				if strings.Contains(out.stdout, secret) || strings.Contains(out.stderr, secret) {
+					t.Errorf("the text scan printed %q", secret)
 				}
 			}
-		}
+		})
 	}
-	if logical["local"] == logical["git"] || logical["context7"] == logical["sentry"] {
-		t.Errorf("distinct servers share a logical id: %v", logical)
-	}
-	equal(t, "edges", len(snap["edges"].([]any)), 6+17) // machine to six configurations, one per occurrence
-
-	equal(t, "secrets in fixture", len(secrets(f)), 12)
-	noSecrets(t, h, f)
-
-	out := h.run("scan")
-	contains(t, "stdout", out.stdout, "  servers:\n")
-	contains(t, "stdout", out.stdout, "npx -y @upstash/context7-mcp@1.0.0")
-	contains(t, "stdout", out.stdout, "streamable-http")
-	contains(t, "stdout", out.stdout, "https://stream.example.com/mcp")
-	if strings.Contains(out.stdout, "plugins:") {
-		t.Errorf("a machine without plugins prints a plugins block:\n%s", out.stdout)
-	}
-}
-
-// plugins lists "name|marketplace|version|configuration|path" for every
-// plugin node, with "|enabled=<bool>" when the node carries the field, and
-// the physical ids by name.
-func plugins(t *testing.T, h *harness, snap jsonEvent) (rows []string, ids map[string]string) {
-	t.Helper()
-	ids = map[string]string{}
-	for _, p := range snap["plugins"].([]any) {
-		plugin := p.(map[string]any)
-		ids[plugin["name"].(string)] = plugin["physical_id"].(string)
-		row := fmt.Sprintf("%s|%s|%s|%s|%s", plugin["name"], plugin["marketplace"], plugin["version"], plugin["configuration"], h.portable(plugin["path"].(string)))
-		if enabled, ok := plugin["enabled"]; ok {
-			row += fmt.Sprintf("|enabled=%v", enabled)
-		}
-		rows = append(rows, row)
-	}
-	sort.Strings(rows)
-	return rows, ids
-}
-
-func TestScanPlugins(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	h.build(t, fixtures["plugins"])
-	snap := h.snapshot(t)
-
-	rows, ids := plugins(t, h, snap)
-	want := []string{
-		"formatter|acme-tools|1.2.0|claude-code|~/.claude/plugins/cache/acme-tools/formatter/1.2.0",
-		"notes||1.0.0|gemini-cli|~/.gemini/extensions/notes",
-		"security|https://github.com/example/security-ext|0.3.0|gemini-cli|~/.gemini/extensions/security",
-	}
-	if !reflect.DeepEqual(rows, want) {
-		t.Errorf("plugins = %q, want %q", rows, want)
-	}
-
-	equal(t, "skill nodes", len(snap["skills"].([]any)), 2)
-	wantOcc := []string{
-		"claude-code directory user ~/.claude/plugins/cache/acme-tools/formatter/1.2.0/skills/format plugin=formatter",
-		"claude-code directory user ~/.claude/skills/format",
-		"cursor directory user ~/.claude/skills/format",
-	}
-	if got := occurrences(t, h, snap, "format"); !reflect.DeepEqual(got, wantOcc) {
-		t.Errorf("format occurrences = %q, want %q", got, wantOcc)
-	}
-	wantOcc = []string{"gemini-cli directory user ~/.gemini/extensions/security/skills/security-audit plugin=security"}
-	if got := occurrences(t, h, snap, "security-audit"); !reflect.DeepEqual(got, wantOcc) {
-		t.Errorf("security-audit occurrences = %q, want %q", got, wantOcc)
-	}
-
-	serverRows, nodes := servers(t, snap)
-	// ${extensionPath} stands for the extension's directory.
-	wantServers := []string{
-		"formatter-db stdio claude-code npx -y @acme/formatter-mcp",
-		"scanner stdio gemini-cli node " + filepath.Join(h.home, ".gemini/extensions/security/server.js"),
-	}
-	if !reflect.DeepEqual(serverRows, wantServers) {
-		t.Errorf("server occurrences = %q, want %q", serverRows, wantServers)
-	}
-	equal(t, "server nodes", nodes, 2)
-	for _, s := range snap["mcp_servers"].([]any) {
-		node := s.(map[string]any)
-		occ := node["occurrences"].([]any)[0].(map[string]any)
-		equal(t, node["name"].(string)+" plugin", occ["plugin"], map[string]string{"formatter-db": "formatter", "scanner": "security"}[node["name"].(string)])
-	}
-
-	// Provides edges: plugin to skill and plugin to server, next to the
-	// configuration's own edges.
-	from := map[string]int{}
-	for _, e := range snap["edges"].([]any) {
-		from[e.(map[string]any)["from"].(string)]++
-	}
-	equal(t, "edges from formatter", from[ids["formatter"]], 2)
-	equal(t, "edges from security", from[ids["security"]], 2)
-	equal(t, "edges from notes", from[ids["notes"]], 0)
-	equal(t, "edges", len(snap["edges"].([]any)), 4+3+3+2+4) // machine to four configurations, three plugins, three skill placements, two servers, four provides
-
-	out := h.run("scan")
-	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "  plugins:\n")
-	contains(t, "stdout", out.stdout, "formatter  1.2.0  1 skill, 1 server\n")
-	contains(t, "stdout", out.stdout, "(plugin formatter)")
-	contains(t, "stdout", out.stdout, "notes     1.0.0\n")
-	contains(t, "stdout", out.stdout, "security  0.3.0  1 skill, 1 server\n")
-	noSecrets(t, h, fixtures["plugins"])
-}
-
-func TestScanCodexPlugins(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	f := fixtures["codex-plugins"]
-	h.build(t, f)
-	snap := h.snapshot(t)
-
-	rows, ids := plugins(t, h, snap)
-	want := []string{
-		"alpha|personal|local|codex|~/.codex/plugins/cache/personal/alpha/local|enabled=true",
-		"beta|team|0.4.0|codex|~/.codex/plugins/cache/team/beta/0.4.0|enabled=false",
-		"broken|personal|1.0.0|codex|~/.codex/plugins/cache/personal/broken/1.0.0|enabled=true",
-		"delta|team|1.10.0|codex|~/.codex/plugins/cache/team/delta/1.10.0|enabled=true",
-		"gamma|team|2.0.0|codex|~/.codex/plugins/cache/team/gamma/2.0.0",
-	}
-	if !reflect.DeepEqual(rows, want) {
-		t.Errorf("plugins = %q, want %q", rows, want)
-	}
-
-	equal(t, "skill nodes", len(snap["skills"].([]any)), 4)
-	for skill, wantOcc := range map[string][]string{
-		"one":     {"codex directory user ~/.codex/plugins/cache/personal/alpha/local/skills/one plugin=alpha"},
-		"two":     {"codex directory user ~/.codex/plugins/cache/team/beta/0.4.0/skills/two plugin=beta"},
-		"three":   {"codex directory user ~/.codex/plugins/cache/team/gamma/2.0.0/skills/three plugin=gamma"},
-		"four":    {"codex directory user ~/.codex/plugins/cache/team/delta/1.10.0/extra/four plugin=delta"},
-		"old":     nil,
-		"ignored": nil,
-	} {
-		if got := occurrences(t, h, snap, skill); !reflect.DeepEqual(got, wantOcc) {
-			t.Errorf("%s occurrences = %q, want %q", skill, got, wantOcc)
-		}
-	}
-
-	serverRows, nodes := servers(t, snap)
-	wantServers := []string{
-		"agent-srv streamable-http codex https://mcp.example.com/beta",
-		"alpha-db stdio codex npx -y @acme/alpha-mcp",
-		"alpha-web streamable-http codex https://mcp.example.com/alpha",
-		"delta-srv stdio codex node srv.js",
-		"gamma-srv stdio codex python -m gamma",
-	}
-	if !reflect.DeepEqual(serverRows, wantServers) {
-		t.Errorf("server occurrences = %q, want %q", serverRows, wantServers)
-	}
-	equal(t, "server nodes", nodes, 5)
-	for _, s := range snap["mcp_servers"].([]any) {
-		node := s.(map[string]any)
-		occ := node["occurrences"].([]any)[0].(map[string]any)
-		// alpha-web is turned off by its overlay, agent-srv with its plugin.
-		if _, ok := occ["enabled"]; ok != (node["name"] == "alpha-web" || node["name"] == "agent-srv") {
-			t.Errorf("%s occurrence enabled = %v, want it only on alpha-web and agent-srv", node["name"], occ["enabled"])
-		}
-		switch node["name"] {
-		case "agent-srv":
-			equal(t, "agent-srv plugin", occ["plugin"], "beta")
-			equal(t, "agent-srv config_file", h.portable(occ["config_file"].(string)), "~/.codex/plugins/cache/team/beta/0.4.0/mcp.json")
-			if got := occ["header_keys"]; !reflect.DeepEqual(got, []any{"X-Env", "X-Key"}) {
-				t.Errorf("agent-srv header_keys = %v", got)
-			}
-		case "alpha-web":
-			equal(t, "alpha-web plugin", occ["plugin"], "alpha")
-			equal(t, "alpha-web enabled", occ["enabled"], false)
-		case "alpha-db":
-			equal(t, "alpha-db config_file", h.portable(occ["config_file"].(string)), "~/.codex/plugins/cache/personal/alpha/local/conf/mcp.json")
-			if got := occ["env_keys"]; !reflect.DeepEqual(got, []any{"DB_TOKEN"}) {
-				t.Errorf("alpha-db env_keys = %v", got)
-			}
-		case "delta-srv":
-			equal(t, "delta-srv config_file", h.portable(occ["config_file"].(string)), "~/.codex/plugins/cache/team/delta/1.10.0/.codex-plugin/plugin.json")
-			if got := occ["env_keys"]; !reflect.DeepEqual(got, []any{"TOKEN"}) {
-				t.Errorf("delta-srv env_keys = %v", got)
-			}
-		case "gamma-srv":
-			equal(t, "gamma-srv config_file", h.portable(occ["config_file"].(string)), "~/.codex/plugins/cache/team/gamma/2.0.0/.mcp.json")
-		}
-	}
-
-	from := map[string]int{}
-	for _, e := range snap["edges"].([]any) {
-		from[e.(map[string]any)["from"].(string)]++
-	}
-	for name, n := range map[string]int{"alpha": 3, "beta": 2, "broken": 0, "delta": 2, "gamma": 2} {
-		equal(t, "edges from "+name, from[ids[name]], n)
-	}
-	equal(t, "edges", len(snap["edges"].([]any)), 1+5+4+5+9) // machine to codex, five plugins, four skills, five servers, nine provides
-
-	out := h.run("scan")
-	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "  plugins:\n")
-	var beta, alphaWeb string
-	for _, line := range strings.Split(out.stdout, "\n") {
-		switch row := strings.TrimSpace(line); {
-		case strings.HasPrefix(row, "beta "):
-			beta = line
-		case strings.HasPrefix(row, "alpha-web "):
-			alphaWeb = line
-		}
-	}
-	contains(t, "beta line", beta, "0.4.0")
-	contains(t, "beta line", beta, "(disabled)")
-	contains(t, "alpha-web line", alphaWeb, "(plugin alpha)")
-	contains(t, "alpha-web line", alphaWeb, "(disabled)")
-	equal(t, "disabled markers", strings.Count(out.stdout, "(disabled)"), 3)
-	equal(t, "secrets in fixture", len(secrets(f)), 3)
-	noSecrets(t, h, f)
-}
-
-func TestScanCursorPlugins(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	f := fixtures["cursor-plugins"]
-	h.build(t, f)
-	snap := h.snapshot(t)
-
-	rows, ids := plugins(t, h, snap)
-	want := []string{
-		"agent-std||0.1.0|cursor|~/.cursor/plugins/local/agent-std",
-		"bad|||cursor|~/.cursor/plugins/local/bad",
-		"bare|||cursor|~/.cursor/plugins/local/bare",
-		"cursor-fmt||1.0.0|cursor|~/.cursor/plugins/local/cursor-fmt",
-		"mani||0.2.0|cursor|~/.cursor/plugins/local/mani",
-		"named||0.3.0|cursor|~/.cursor/plugins/local/named",
-		"stored||2.0.0|cursor|~/.cursor/plugins/local/linked",
-		"thermos|cursor-public|9f86d081884c7d659a2feaa0c55ad015a3bf4f1b|cursor|~/.cursor/plugins/cache/cursor-public/thermos/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b",
-		"tools|acme-team|1.2.0|cursor|~/.cursor/plugins/cache/acme-team/tools/release_v1.2.0",
-	}
-	if !reflect.DeepEqual(rows, want) {
-		t.Errorf("plugins = %q, want %q", rows, want)
-	}
-
-	equal(t, "skill nodes", len(snap["skills"].([]any)), 6)
-	for skill, wantOcc := range map[string][]string{
-		"lint":    {"cursor directory user ~/.cursor/plugins/local/agent-std/skills/lint plugin=agent-std"},
-		"format":  {"cursor directory user ~/.cursor/plugins/local/cursor-fmt/skills/format plugin=cursor-fmt"},
-		"notes":   {"cursor directory user ~/.cursor/plugins/local/bare/skills/notes plugin=bare"},
-		"brew":    {"cursor directory user ~/.cursor/plugins/cache/cursor-public/thermos/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b/skills/brew plugin=thermos"},
-		"plan":    {"cursor directory user ~/.cursor/plugins/local/mani/tools/plan plugin=mani"},
-		"draft":   {"cursor directory user ~/.cursor/plugins/local/mani/solo/draft plugin=mani"},
-		"ignored": nil,
-	} {
-		if got := occurrences(t, h, snap, skill); !reflect.DeepEqual(got, wantOcc) {
-			t.Errorf("%s occurrences = %q, want %q", skill, got, wantOcc)
-		}
-	}
-
-	serverRows, nodes := servers(t, snap)
-	for i := range serverRows {
-		serverRows[i] = h.portable(serverRows[i])
-	}
-	wantServers := []string{
-		"fmt-srv stdio cursor node ~/.cursor/plugins/local/cursor-fmt/server.js",
-		"mani-srv stdio cursor ~/.cursor/plugins/local/mani/bin/mani",
-		"named-srv streamable-http cursor https://named.example.com/mcp",
-		"std-srv stdio cursor ~/.cursor/plugins/local/agent-std/bin/srv --root ~/.cursor/plugins/local/agent-std",
-		"thermos-api streamable-http cursor https://api.thermos.example.com/mcp",
-	}
-	if !reflect.DeepEqual(serverRows, wantServers) {
-		t.Errorf("server occurrences = %q, want %q", serverRows, wantServers)
-	}
-	equal(t, "server nodes", nodes, 5)
-	for _, s := range snap["mcp_servers"].([]any) {
-		node := s.(map[string]any)
-		occ := node["occurrences"].([]any)[0].(map[string]any)
-		switch node["name"] {
-		case "std-srv":
-			equal(t, "std-srv plugin", occ["plugin"], "agent-std")
-			equal(t, "std-srv config_file", h.portable(occ["config_file"].(string)), "~/.cursor/plugins/local/agent-std/mcp.json")
-		case "fmt-srv":
-			equal(t, "fmt-srv config_file", h.portable(occ["config_file"].(string)), "~/.cursor/plugins/local/cursor-fmt/.mcp.json")
-		case "mani-srv":
-			equal(t, "mani-srv config_file", h.portable(occ["config_file"].(string)), "~/.cursor/plugins/local/mani/.cursor-plugin/plugin.json")
-			if got := occ["env_keys"]; !reflect.DeepEqual(got, []any{"KEY"}) {
-				t.Errorf("mani-srv env_keys = %v", got)
-			}
-		case "named-srv":
-			equal(t, "named-srv config_file", h.portable(occ["config_file"].(string)), "~/.cursor/plugins/local/named/conf/servers.json")
-		case "thermos-api":
-			if got := occ["header_keys"]; !reflect.DeepEqual(got, []any{"Authorization"}) {
-				t.Errorf("thermos-api header_keys = %v", got)
-			}
-		}
-	}
-
-	from := map[string]int{}
-	for _, e := range snap["edges"].([]any) {
-		from[e.(map[string]any)["from"].(string)]++
-	}
-	for name, n := range map[string]int{"agent-std": 2, "bad": 0, "bare": 1, "cursor-fmt": 2, "mani": 3, "named": 1, "stored": 0, "thermos": 2, "tools": 0} {
-		equal(t, "edges from "+name, from[ids[name]], n)
-	}
-	equal(t, "edges", len(snap["edges"].([]any)), 1+9+6+5+11) // machine to cursor, nine plugins, six skills, five servers, eleven provides
-
-	out := h.run("scan")
-	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "  plugins:\n")
-	contains(t, "stdout", h.portable(out.stdout), "~/.cursor/plugins/local/agent-std/bin/srv --root ~/.cursor/plugins/local/agent-std  (plugin agent-std)")
-	if !regexp.MustCompile(`(?m)^ +thermos +9f86d081884c7d659a2feaa0c55ad015a3bf4f1b  1 skill, 1 server$`).MatchString(out.stdout) {
-		t.Errorf("stdout has no thermos plugin line with its commit as the version:\n%s", out.stdout)
-	}
-	if strings.Contains(out.stdout, "(disabled)") {
-		t.Errorf("Cursor records no enabled state, yet the output marks a plugin disabled:\n%s", out.stdout)
-	}
-	equal(t, "secrets in fixture", len(secrets(f)), 3)
-	noSecrets(t, h, f)
 }
 
 // TestScanQuotesPathsAndSanitisesDeclarations covers the values of the
