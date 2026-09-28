@@ -101,14 +101,16 @@ func (inv *invocation) startMerge(ctx context.Context, gitDir, name string, in m
 
 // mergeIn merges in the checkout at dir, whose HEAD is in.mine, as git
 // merges any two commits over a base given: one merge-recursive with
-// in.base as the merge base, with git's detection of a renamed directory
-// off as merge-tree had it, the conflicts written in zdiff3 style, so
-// that each carries the base between mine and theirs, with markers of
-// in.size, which an attributes file of its own asks for in place of the
-// null device the isolated environment names. Then git's own merge state
-// is written where git keeps it for the checkout, MERGE_MSG and then
-// MERGE_HEAD, the candidate, so that the checkout is a merge in progress
-// git knows how to complete.
+// in.base as the merge base, with the lines paired by histogram diff and
+// git's detection of a renamed directory off as merge-tree had them, the
+// conflicts written in zdiff3 style, so that each carries the base between
+// mine and theirs, with markers of in.size, which an attributes file of
+// its own asks for in place of the null device the isolated environment
+// names. The skill's own .gitattributes applies in the checkout, so a
+// merge that comes out clean there is not the merge merge-tree judged,
+// and fails. Then git's own merge state is written where git keeps it for
+// the checkout, MERGE_MSG and then MERGE_HEAD, the candidate, so that the
+// checkout is a merge in progress git knows how to complete.
 func (inv *invocation) mergeIn(ctx context.Context, dir string, in mergeStart) error {
 	attrs, err := os.CreateTemp("", "agentx-attributes-")
 	if err != nil {
@@ -122,9 +124,13 @@ func (inv *invocation) mergeIn(ctx context.Context, dir string, in mergeStart) e
 	if err != nil {
 		return err
 	}
-	if _, _, err := inv.git.InCheckoutStatus(ctx, dir, 1, "-c", "merge.directoryRenames=false", "-c", "merge.conflictStyle=zdiff3",
-		"-c", "core.attributesFile="+attrs.Name(), "merge-recursive", in.base, "--", in.mine, in.theirs); err != nil {
+	_, status, err := inv.git.InCheckoutStatus(ctx, dir, 1, "-c", "merge.directoryRenames=false", "-c", "merge.conflictStyle=zdiff3",
+		"-c", "core.attributesFile="+attrs.Name(), "merge-recursive", "--diff-algorithm=histogram", in.base, "--", in.mine, in.theirs)
+	if err != nil {
 		return err
+	}
+	if status == 0 {
+		return errors.New("git merged the skill cleanly in the checkout, where its own .gitattributes applies")
 	}
 	out, err := inv.git.InCheckout(ctx, dir, "rev-parse", "--git-path", "MERGE_MSG", "--git-path", "MERGE_HEAD")
 	if err != nil {

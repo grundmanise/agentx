@@ -995,6 +995,65 @@ func TestSkillUpdateMergesWithNoAttributesOfTheUsers(t *testing.T) {
 	equal(t, "the library", onDisk(t, h.library), library)
 }
 
+// TestSkillUpdateConflictsInTheCheckoutAsMergeTreeFoundIt: a file whose
+// lines repeat, as braces do, conflicts in the checkout where merge-tree
+// found it conflicting, since both pair its lines by histogram diff: the
+// merge is left pending with the file's three versions in the index, not
+// set up with nothing in it to resolve.
+func TestSkillUpdateConflictsInTheCheckoutAsMergeTreeFoundIt(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.build(t, fixture{dirs: []string{".claude"}})
+	s := h.newSourceRepo("kit", true)
+	lines := func(tokens ...string) string { return strings.Join(tokens, "\n") + "\n" }
+	s.skill("skills/braces", "braces", "Nests its braces", map[string]string{"code.txt": lines("{", "{", "x", "{", "{", "a", "}", "a", "}")})
+	s.commit("first version")
+	h.mustRun("source", "add", s.url)
+	h.mustRun("skill", "add", s.url, "--skill", "braces")
+	s.write("skills/braces/code.txt", lines("{", "{", "x", "{", "x", "a", "a", "}"))
+	s.commit("second version")
+	h.mustRun("skill", "check")
+	editLibrary(t, h, "braces", "code.txt", lines("{", "x", "{", "{", "a", "a", "}"))
+
+	out := h.run("--json", "skill", "update", "braces")
+	equal(t, "exit", out.exit, 4)
+	equal(t, "files", conflictFiles(h.one(out.stdout, "conflict")), "code.txt:1")
+	equal(t, "the unmerged paths", unmerged(t, h, "braces"), "1 braces/code.txt\n2 braces/code.txt\n3 braces/code.txt")
+}
+
+// TestSkillUpdateFailsWhenTheSkillsOwnAttributesMergeWhatConflicted: the
+// skill's own .gitattributes applies in the checkout, so a union merge
+// driver it names for a file merge-tree found conflicting merges that file
+// cleanly there. That is not the merge judged, so the update fails with
+// git's error and leaves no merge pending, neither the checkout nor git's
+// registration of it, and the library, the import branch and the
+// candidate are as they were.
+func TestSkillUpdateFailsWhenTheSkillsOwnAttributesMergeWhatConflicted(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.build(t, fixture{dirs: []string{".claude"}})
+	s := h.newSourceRepo("kit", true)
+	s.skill("skills/union", "union", "Joins its notes", map[string]string{".gitattributes": "notes.md merge=union\n", "notes.md": "notes\n"})
+	s.commit("first version")
+	h.mustRun("source", "add", s.url)
+	h.mustRun("skill", "add", s.url, "--skill", "union")
+	s.write("skills/union/notes.md", "notes, revised upstream\n")
+	s.commit("second version")
+	h.mustRun("skill", "check")
+	editLibrary(t, h, "union", "notes.md", "notes, edited here\n")
+	tip, candidate := h.ref(lineage.ManagedRef("union")), h.ref(lineage.CandidateRef("union"))
+	library := onDisk(t, h.library)
+
+	out := h.run("--json", "skill", "update", "union")
+	equal(t, "exit", out.exit, 8)
+	contains(t, "message", h.one(out.stdout, "error")["message"].(string), "git merged the skill cleanly in the checkout")
+	noCheckout(t, h, "union")
+	equal(t, "the import branch", h.ref(lineage.ManagedRef("union")), tip)
+	equal(t, "the candidate ref", h.ref(lineage.CandidateRef("union")), candidate)
+	equal(t, "the library", onDisk(t, h.library), library)
+	equal(t, "journals", journalCount(t, h), 0)
+}
+
 // TestSkillUpdateKeepsAFileAddedInADirectoryTheUpdateRenamed: a file the
 // user added inside a directory the update renames merges cleanly and
 // stays where the user put it, beside the renamed directory; git is not
@@ -1138,9 +1197,9 @@ func TestSkillUpdateMergeRefreshesACopyThatHoldsTheEditedLibrary(t *testing.T) {
 
 // TestSkillRemoveOfWhatIsLeftRefusesAMergeLeftPendingBeforeTheLock: a
 // merge left pending while the removal of what is left of a skill reads
-// its refs, after that first read and before the lock, is found under the
-// lock, and the removal takes nothing away: not the import branch, not the
-// pending merge, not a placement.
+// its refs again under the lock, after it judged the skill, is found
+// there, and the removal takes nothing away: not the import branch, not
+// the pending merge, not a placement.
 func TestSkillRemoveOfWhatIsLeftRefusesAMergeLeftPendingBeforeTheLock(t *testing.T) {
 	t.Parallel()
 	h, _, _ := updateHarness(t)
@@ -1151,12 +1210,10 @@ func TestSkillRemoveOfWhatIsLeftRefusesAMergeLeftPendingBeforeTheLock(t *testing
 	stubGit(t, h, `#!/bin/sh
 case " $* " in
 *" for-each-ref "*`+lineage.UpstreamRemovedRef("alpha")+`*)
-  if [ ! -e `+shellWord(marker)+` ]; then
-    `+realGit(t)+` "$@" || exit 1
-    : > `+shellWord(marker)+`
+  if [ -e `+shellWord(marker)+` ]; then
     `+fakePendingMerge(t, h, "alpha", tip)+` || exit 1
-    exit 0
-  fi ;;
+  fi
+  : > `+shellWord(marker)+` ;;
 esac
 exec `+realGit(t)+` "$@"
 `)
