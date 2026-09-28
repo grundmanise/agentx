@@ -40,13 +40,12 @@ const (
 // holds the version it was installed at, or it was edited since. Nothing
 // here decides whether an upstream moved, which a later command does.
 //
-// The two are told apart by tree id, the one way agentx compares a
-// directory with a base version: the directory's tree as git would record
-// it, computed in process, against the tree of the import commit. A mode
-// is content to git, so a file made executable, a file swapped for a link
-// to the same bytes and a link added anywhere are edits like any other;
-// the content hash, which reads neither modes nor links, stays the name of
-// a version and decides nothing here.
+// The two are told apart the way skilltree.go compares a directory with a
+// version, so a file git ignores is no edit. A mode is content to git, so
+// a file made executable, a file swapped for a link to the same bytes and
+// a link added anywhere are edits like any other; the content hash, which
+// reads neither modes nor links, stays the name of a version and decides
+// nothing here.
 const (
 	stateCurrent  = "current"
 	stateModified = "modified"
