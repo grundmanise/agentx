@@ -11,6 +11,8 @@ Serve watches agentx itself, the library and every skills directory an agent cli
 
 A change outside the inventory, such as a skill in a directory no installed client reads, causes a rescan that prints nothing.
 
+Serve rescans 100 ms after the last change it sees, so a burst of saves costs one rescan. To wait a different time, set `AGENTX_DEBOUNCE` to a duration such as `10ms` before starting serve. Serve refuses to start with exit code 1 when it is not a positive duration.
+
 ## Run it
 
 ```sh
