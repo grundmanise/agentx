@@ -998,6 +998,44 @@ exec `+realGit(t)+` "$@"
 	}
 }
 
+// TestSkillUpdateRefusesAMergePendingSinceItJudgedTheSkill: a merge left
+// pending for the skill by another run while the update merges, before
+// the lock, is found under it: the update refuses with exit code 4 and the
+// --abort hint rather than set up a merge of its own over it. No journal,
+// the import branch, the candidate and the library as they were, and the
+// other run's checkout still there, locked and registered.
+func TestSkillUpdateRefusesAMergePendingSinceItJudgedTheSkill(t *testing.T) {
+	t.Parallel()
+	h, s, _ := updateHarness(t)
+	checked(t, h, s)
+	editLibrary(t, h, "alpha", "notes.md", editedNotes)
+	tip, candidate := h.ref(lineage.ManagedRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
+	library := onDisk(t, h.library)
+	checkout := pendingCheckout(h, "alpha")
+	real := realGit(t)
+	stubGit(t, h, `#!/bin/sh
+case " $* " in
+*" merge-tree "*) [ -d `+shellWord(checkout)+` ] || `+real+` --git-dir=`+shellWord(gitx.AccountRepoPath(h.agentx))+
+		` worktree add --quiet --detach --lock --reason `+shellWord(pendingReason)+` `+shellWord(checkout)+` `+tip+` >/dev/null || exit 1 ;;
+esac
+exec `+real+` "$@"
+`)
+	out := h.run("--json", "skill", "update", "alpha")
+	equal(t, "exit", out.exit, 4)
+	e := h.one(out.stdout, "error")
+	equal(t, "message", e["message"], "alpha has a merge with its update pending, so it cannot be updated until the merge is resolved or given up")
+	equal(t, "hint", e["hint"], "run 'agentx skill update alpha --abort' to give the merge up; the library directory stays as it is")
+	if got := h.eventsOfType(out.stdout, "conflict"); len(got) != 0 {
+		t.Errorf("a refused update reported %v", got)
+	}
+	equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), tip)
+	equal(t, "the candidate", h.ref(lineage.CandidateRef("alpha")), candidate)
+	equal(t, "the library", onDisk(t, h.library), library)
+	equal(t, "journals", journalCount(t, h), 0)
+	equal(t, "the other run's checkout", strings.TrimSpace(checkoutGit(t, h, "alpha", "rev-parse", "HEAD")), tip)
+	contains(t, "its registration", h.accountGit("worktree", "list", "--porcelain"), "locked "+pendingReason)
+}
+
 // TestSkillUpdateStoppedWhileItMergesChangesNothing stops an update with
 // SIGTERM while git merges the edits with the update: while merge-tree
 // merges, before the lock, and while update-index sets the merge up in
@@ -1235,7 +1273,8 @@ func TestAnIgnoredFileIsNotMineAndSurvivesTheMerge(t *testing.T) {
 // once its journals are finished: a directory under the merges directory
 // that is no checkout, one whose checkout's registration is gone, and a
 // registration of a checkout there whose directory is gone. The checkout
-// of a merge that is pending stays, and still lists as pending.
+// of a merge that is pending stays, and still lists as pending, and a
+// registration locked with another reason stays.
 func TestRecoveryPrunesStaleMergeCheckouts(t *testing.T) {
 	t.Parallel()
 	h, s, _ := updateHarness(t)
@@ -1245,6 +1284,9 @@ func TestRecoveryPrunesStaleMergeCheckouts(t *testing.T) {
 	h.accountGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", pendingReason,
 		pendingCheckout(h, "beta"), h.ref(lineage.ManagedRef("beta")))
 	remove(t, pendingCheckout(h, "beta"))
+	other := filepath.Join(t.TempDir(), "elsewhere")
+	h.accountGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", "on a usb stick", other, h.ref(lineage.ManagedRef("beta")))
+	remove(t, other)
 	head, mergeHead, _ := mergeState(t, h, "alpha")
 
 	h.mustRun("config", "set", "label", "pruned")
@@ -1260,6 +1302,9 @@ func TestRecoveryPrunesStaleMergeCheckouts(t *testing.T) {
 	list := h.accountGit("worktree", "list", "--porcelain")
 	if strings.Contains(list, filepath.Join("merges", "beta")) {
 		t.Errorf("the registration of beta's checkout is still there:\n%s", list)
+	}
+	if !strings.Contains(list, other) {
+		t.Errorf("the registration of %s, locked with another reason, is gone:\n%s", other, list)
 	}
 	gotHead, gotMergeHead, _ := mergeState(t, h, "alpha")
 	equal(t, "alpha's HEAD", gotHead, head)

@@ -693,15 +693,13 @@ func (r *updateRun) apply(ctx context.Context) error {
 // skill replaces or depends on, and refuses the skill when any of it is no
 // longer what judgeUpdate read: the import branch, which a fork of the name
 // would supersede; whether a merge is pending for the skill, one pending
-// now refusing an update that merges anew and one given up meanwhile an
-// update that applies it; the settings entry of the source; the
-// upstream-removed marker and the candidate, which a check may have
-// written meanwhile; and the library
-// directory, whose content an edit made since it was captured would
-// otherwise be replaced unseen: the fingerprint was captured before git
-// read the directory, so it covers what the update merged too. A removed
-// source is answered for before the marker, in the order judgeUpdate
-// answers for them.
+// now refusing an update that merges anew; the settings entry of the
+// source; the upstream-removed marker and the candidate, which a check may
+// have written meanwhile; and the library directory, whose content an edit
+// made since it was captured would otherwise be replaced unseen: the
+// fingerprint was captured before git read the directory, so it covers
+// what the update merged too. A removed source is answered for before the
+// marker, in the order judgeUpdate answers for them.
 func (inv *invocation) recheckUpdate(u *updating, values map[string]string, sources map[string]bool) *failure {
 	name := u.name
 	again := "run '" + skillCommand("update", name) + "' again"
@@ -710,8 +708,6 @@ func (inv *invocation) recheckUpdate(u *updating, values map[string]string, sour
 		return refuse(exitRefused, "the import branch "+lineage.ManagedRef(name)+" moved while "+name+" was being updated, so nothing was changed", again)
 	case u.checkout == "" && inv.mergePending(name):
 		return pendingMergeRefusal(name, "updated")
-	case u.checkout != "" && !inv.mergePending(name):
-		return changedWhileUpdating(name)
 	case !sources[u.rec.Import.Source]:
 		return removedSourceRefusal(name, u.rec.Import.Source)
 	case values[lineage.UpstreamRemovedRef(name)] != "":
