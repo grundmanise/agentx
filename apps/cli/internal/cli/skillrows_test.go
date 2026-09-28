@@ -131,21 +131,20 @@ func TestConfigEnablePlaceAllShowsOneRowPerSkill(t *testing.T) {
 }
 
 // TestPlacingShowsWhereAClientStillSeesASkillItCouldNotPlace: when Cursor's
-// own path holds a directory of the user's, placing the skill there is
-// skipped, yet Cursor still sees the skill through Claude Code's skills
-// directory. With nothing of the skill at its own place, Cursor keeps the
-// row of the path it does see it through, so the text never leaves out a
-// client that sees the skill: after skill place, and after config enable
-// --place-all.
+// own path holds a file of the user's, placing the skill there is skipped,
+// yet Cursor still sees the skill through Claude Code's skills directory.
+// With nothing of the skill at its own place, Cursor keeps the row of the
+// path it does see it through, so the text never leaves out a client that
+// sees the skill: after skill place, and after config enable --place-all.
 func TestPlacingShowsWhereAClientStillSeesASkillItCouldNotPlace(t *testing.T) {
 	t.Parallel()
 	h, s := universalHarness(t, ".cursor")
 	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code")
 	handMade := filepath.Join(h.home, ".cursor", "skills", "alpha")
-	if err := os.MkdirAll(handMade, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(handMade), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, filepath.Join(handMade, "SKILL.md"), "---\nname: alpha\ndescription: mine\n---\n\nmine\n")
+	writeFile(t, handMade, "mine\n")
 	row := "symlink  " + filepath.Join(h.home, ".claude", "skills", "alpha") + " -> " + filepath.Join(h.library, "alpha") + "\n"
 
 	out := h.mustRun("skill", "place", "alpha", "--to", "cursor")

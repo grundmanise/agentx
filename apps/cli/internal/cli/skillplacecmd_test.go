@@ -162,8 +162,10 @@ func TestPlacingAgainKeepsAnEditedCopy(t *testing.T) {
 // TestPlacingAgainLeavesAnEditedCopyOfAnotherConfiguration: a directory is
 // agentx's copy only in the configuration copy_mode records it for. The same
 // edited copy in the skills directory of another configuration is a
-// directory agentx did not place there, one a removal keeps, so its warning
-// names neither agentx's copy nor a removal that would not delete it.
+// directory agentx did not place there, one a removal keeps, so an install
+// skips it with a warning that names neither agentx's copy nor a removal
+// that would not delete it. skill place stops there instead, see
+// TestSkillPlaceStopsAtADirectoryOfTheUsers.
 func TestPlacingAgainLeavesAnEditedCopyOfAnotherConfiguration(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
@@ -174,7 +176,7 @@ func TestPlacingAgainLeavesAnEditedCopyOfAnotherConfiguration(t *testing.T) {
 	copyTree(t, recorded, other)
 	edited := libraryTree(t, other)
 
-	out := h.run("--json", "skill", "place", "alpha", "--to", "cursor", "--to", "github-copilot")
+	out := h.run("--json", "skill", "add", s.url, "--skill", "alpha", "--to", "cursor", "--to", "github-copilot")
 	equal(t, "exit", out.exit, 0)
 	sameTree(t, "the other copy", libraryTree(t, other), edited)
 	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "cursor")
@@ -438,22 +440,18 @@ func warnings(h *harness, stderr string) []string {
 	return messages
 }
 
-// TestSkillPlaceLeavesWhatItDidNotMake refuses the placement path and keeps
-// the user's bytes, exactly as an install does: a directory of their own,
-// and a symlink of their own that happens to hold the same version. The
-// skill is a copy in another configuration, which makes neither path
-// agentx's copy: copy_mode records a copy for one configuration at a time.
-func TestSkillPlaceLeavesWhatItDidNotMake(t *testing.T) {
+// TestSkillPlaceLeavesALinkOfTheUsers keeps the user's symlink at the
+// placement path, one that happens to hold the same version included, and
+// skips it with a warning, exactly as an install does: a link is refused
+// for being a link, and removing it would decide for the user where their
+// skill lives. The skill is a copy in another configuration, which makes
+// the path no copy of agentx's: copy_mode records a copy for one
+// configuration at a time.
+func TestSkillPlaceLeavesALinkOfTheUsers(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
 	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code", "--copy").exit, 0)
 	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "claude-code")
-
-	handMade := filepath.Join(h.home, ".cursor", "skills", "alpha")
-	if err := os.MkdirAll(handMade, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeFile(t, filepath.Join(handMade, "SKILL.md"), "---\nname: alpha\ndescription: mine\n---\n\nmine\n")
 	mine := filepath.Join(h.home, "my-skills", "alpha")
 	copyTree(t, filepath.Join(h.library, "alpha"), mine)
 	foreign := filepath.Join(h.home, ".copilot", "skills", "alpha")
@@ -464,17 +462,47 @@ func TestSkillPlaceLeavesWhatItDidNotMake(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out := h.run("--json", "skill", "place", "alpha", "--to", "cursor", "--to", "github-copilot")
+	out := h.run("--json", "skill", "place", "alpha", "--to", "github-copilot")
 	equal(t, "exit", out.exit, 0)
-	contains(t, "the hand-made directory", fileBody(t, filepath.Join(handMade, "SKILL.md")), "description: mine")
 	target, ok := isSymlink(t, foreign)
 	if !ok || target != mine {
 		t.Errorf("the user's symlink is %q (symlink %v), want %q", target, ok, mine)
 	}
 	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"),
-		handMade+" is not this skill and was left as it is; no placement was made for cursor\n"+
-			foreign+" is a link of your own and was left as it is; no placement was made for github-copilot")
-	contains(t, "the result", out.stdout, "2 placements skipped")
+		foreign+" is a link of your own and was left as it is; no placement was made for github-copilot")
+	contains(t, "the result", h.one(out.stdout, "result")["summary"].(string), "placed alpha in 0 configurations, 1 placement skipped")
+	equal(t, "journals left behind", journalCount(t, h), 0)
+}
+
+// TestSkillPlaceStopsAtADirectoryOfTheUsers: a directory of the user's
+// where the placement belongs holds content the library does not, so
+// placing the skill there would discard one of the two. skill place stops
+// with exit 6 and names both ways on, each with the --to it was given, and
+// changes nothing at all: the directory is byte for byte what it was, no
+// journal was written and the settings were not.
+func TestSkillPlaceStopsAtADirectoryOfTheUsers(t *testing.T) {
+	t.Parallel()
+	h, s := placementHarness(t)
+	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code", "--copy").exit, 0)
+	handMade := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	if err := os.MkdirAll(handMade, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(handMade, "SKILL.md"), "---\nname: alpha\ndescription: mine\n---\n\nmine\n")
+	held := onDisk(t, handMade)
+	settings := fileBody(t, filepath.Join(h.agentx, "settings.json"))
+	version := mutationVersion(t, h)
+
+	out := h.run("--json", "skill", "place", "alpha", "--to", "cursor")
+	equal(t, "exit", out.exit, 6)
+	e := h.one(out.stdout, "error")
+	equal(t, "message", e["message"], handMade+" is a directory whose content differs from the library's alpha, so nothing was placed")
+	equal(t, "hint", e["hint"], "to keep the library's content and discard it, run 'agentx skill place alpha --to cursor --keep-library';"+
+		" to make its content the library's, run 'agentx skill place alpha --to cursor --keep-placement'")
+	equal(t, "the directory", onDisk(t, handMade), held)
+	equal(t, "the settings", fileBody(t, filepath.Join(h.agentx, "settings.json")), settings)
+	equal(t, "no mutation", mutationVersion(t, h), version)
+	equal(t, "journals left behind", journalCount(t, h), 0)
 }
 
 // TestSkillPlaceIsThePlacementAnInstallMakes proves the reuse: installing
@@ -532,16 +560,12 @@ func TestSkillPlaceIntoAClientThatReadsTheLibrary(t *testing.T) {
 	equal(t, "placements", strings.Join(placementsOf(t, h.one(out.stdout, "library_skill")), ";"), "codex library library")
 }
 
-// TestSkillPlaceRefusesWhatItCannotFind answers for a missing --to, a skill
-// the library does not hold and a configuration that is not detected.
+// TestSkillPlaceRefusesWhatItCannotFind answers for a skill the library
+// does not hold and a configuration that is not detected.
 func TestSkillPlaceRefusesWhatItCannotFind(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
 	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code").exit, 0)
-
-	noTo := h.run("skill", "place", "alpha")
-	equal(t, "exit", noTo.exit, 1)
-	contains(t, "stderr", noTo.stderr, "skill place needs --to")
 
 	none := h.run("skill", "place", "gamma", "--to", "cursor")
 	equal(t, "exit", none.exit, 5)
