@@ -10,21 +10,11 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
-// TestSourceAddUnwindsItsRemoteWhenTheSettingsWriteFails covers the one
-// window an add cannot journal away. The remote is written under the lock,
-// the fetch runs outside it so that the network never blocks a scan, and
-// the settings entry is written under the lock again. That second hold can
-// fail, and the account repo would then hold a remote for a source the
-// machine does not know about. `source fetch` and `source skills` both
-// answer from the settings, so nothing would ever name it again and
-// nothing would clean it up.
-//
-// A refusal cleans up after itself, the way a failed fetch already does.
-//
-// The settings file is taken away while the add is parked in its fetch, so
-// the write fails inside the hold the run has already won. That is also
-// where the unwind runs: the alternative, taking the lock a second time,
-// would have the run competing for it with whatever made it fail.
+// TestSourceAddUnwindsItsRemoteWhenTheSettingsWriteFails: an add writes
+// its remote under the lock, fetches outside it and writes the settings
+// entry under it again. When that write fails inside the hold the run has
+// won, the run takes the remote back there and then, since no command
+// would ever name a remote the settings do not.
 func TestSourceAddUnwindsItsRemoteWhenTheSettingsWriteFails(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -69,15 +59,10 @@ func TestSourceAddUnwindsItsRemoteWhenTheSettingsWriteFails(t *testing.T) {
 	equal(t, "source add again", h.run("source", "add", s.url).exit, 0)
 }
 
-// TestSourceAddKeepsItsRemoteOnceTheEntryIsWritten is the other side of the
-// unwind, and the reason it is not simply "the add failed, take the remote
-// back". The settings entry is written before the last thing the mutation
-// does, the change signal; a failure after the entry has landed must leave
-// the remote alone, or the settings would name a source whose remote is
-// gone, the same inconsistency the unwind exists to prevent, inverted.
-//
-// The change signal is made to fail by leaving a directory where its file
-// goes, which is the one step of the mutation that runs after the entry.
+// TestSourceAddKeepsItsRemoteOnceTheEntryIsWritten is the other side of
+// the unwind: a failure after the entry has landed, here the change signal
+// the mutation writes last, must leave the remote alone, or the settings
+// would name a source whose remote is gone.
 func TestSourceAddKeepsItsRemoteOnceTheEntryIsWritten(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)

@@ -103,6 +103,19 @@ func (inv *invocation) parseSource(arg string) (source.Source, error) {
 // write, so the bound covers a long queue of them and still ends the run.
 const takeBackWait = 5 * time.Second
 
+// takeBackWaitKey is the context key a test sets to bound the take-back of
+// the one run it drives by another duration; nothing else sets it, so every
+// real run waits takeBackWait.
+type takeBackWaitKey struct{}
+
+// takeBackBound is how long the take-back of a run under ctx waits.
+func takeBackBound(ctx context.Context) time.Duration {
+	if d, ok := ctx.Value(takeBackWaitKey{}).(time.Duration); ok && d > 0 {
+		return d
+	}
+	return takeBackWait
+}
+
 // leftBehind is the refusal of a run that wrote the remote of a source,
 // could not record the source and could not take the remote back either. A
 // remote the settings do not name is not a source: `source fetch` and
@@ -195,7 +208,7 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 	// take back. A run that will not stop still answers a second signal.
 	takeBack := func(cause error) error {
 		inv.out.debugf("taking back the remote %s of %s: %v", remote, src.URL, cause)
-		waiting, cancel := context.WithTimeout(undo, takeBackWait)
+		waiting, cancel := context.WithTimeout(undo, takeBackBound(ctx))
 		defer cancel()
 		return left(cause, home.MutateQuietWaiting(waiting, inv.dirs.Home, inv.refs(ctx), revert))
 	}
