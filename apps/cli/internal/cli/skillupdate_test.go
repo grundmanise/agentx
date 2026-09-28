@@ -272,7 +272,8 @@ func mixedHarness(t *testing.T) (h *harness, s *sourceRepo, first, second string
 // the run exit code 4 as a refusal of its own would; the upstream-removed
 // skill and the one with no update are not touched. A second run, with
 // only the conflicting skill left to update, is answered as that skill on
-// its own: the merge pending blocks it.
+// its own: its merge is still pending, and is reported again. Once it is
+// resolved with git, a third run applies it.
 func TestSkillUpdateAllMergesEditsAndLeavesConflictsPending(t *testing.T) {
 	t.Parallel()
 	h, _, _, second := mixedHarness(t)
@@ -327,13 +328,18 @@ func TestSkillUpdateAllMergesEditsAndLeavesConflictsPending(t *testing.T) {
 
 	again := h.run("--json", "skill", "update", "--all")
 	equal(t, "exit of the second run", again.exit, 4)
-	e = h.one(again.stdout, "error")
-	equal(t, "message of the second run", e["message"], "beta has a merge with its update pending, so it cannot be updated until the merge is resolved or given up")
-	equal(t, "hint of the second run", e["hint"], "run 'agentx skill update beta --abort' to give the merge up; the library directory stays as it is")
-	if got := h.eventsOfType(again.stdout, "conflict"); len(got) != 0 {
-		t.Errorf("the second run reported conflicts again: %v", got)
-	}
+	equal(t, "message of the second run", h.one(again.stdout, "error")["message"], refusal)
+	sameEvent(t, "the conflict of the second run", h.one(again.stdout, "conflict"), conflict)
 	equal(t, "beta's candidate after the second run", h.ref(lineage.CandidateRef("beta")), betaCandidate)
+
+	checkoutGit(t, h, "beta", "checkout", "--theirs", "--", "beta/notes.md")
+	checkoutGit(t, h, "beta", "add", "--", "beta/notes.md")
+	third := h.mustRun("--json", "skill", "update", "--all")
+	equal(t, "summary of the third run", h.one(third.stdout, "result")["summary"], "updated 1 skill")
+	equal(t, "beta's notes once applied", fileBody(t, filepath.Join(h.library, "beta", "notes.md")), "beta notes, revised\n")
+	equal(t, "beta's branch once applied", h.ref(lineage.ManagedRef("beta")), betaCandidate)
+	equal(t, "beta's candidate once applied", h.ref(lineage.CandidateRef("beta")), "")
+	noCheckout(t, h, "beta")
 }
 
 // TestSkillUpdateAllTextOfAMixedRun is the text of the run above: one line
@@ -689,7 +695,8 @@ func lineagelessCandidate(t *testing.T, h *harness, s *sourceRepo) {
 // holds the skill, and both before whether there is an update at all,
 // which comes before whether the library entry is a symlink, and that
 // before whether the skill holds something git cannot record; a merge
-// pending is found under the lock, after all of them. A skill with no
+// pending comes after the upstream and before the update, and one with a
+// file left to resolve is reported again, exit code 4. A skill with no
 // update, or with a candidate whose lineage agentx cannot read, is nothing
 // to do and exits 0. None of them changes a ref, the library or a
 // placement, or leaves a journal.
@@ -816,8 +823,9 @@ func TestSkillUpdateRefusesInOrder(t *testing.T) {
 		{
 			name: "a skill with a merge pending", skill: "alpha", exit: 4,
 			setup:   pendingMerge,
-			message: "alpha has a merge with its update pending, so it cannot be updated until the merge is resolved or given up",
-			hint:    "run 'agentx skill update alpha --abort' to give the merge up; the library directory stays as it is",
+			message: "alpha conflicts with its update in 1 file, so the merge is pending and the library directory was left as it is",
+			hint: "resolve it with git in %AGENTX%/merges/alpha/alpha-dir ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), " +
+				"then run 'agentx skill update alpha' again to apply it, or 'agentx skill update alpha --abort' to give it up",
 		},
 		{
 			name: "a skill whose library entry is a symlink", skill: "alpha", exit: 6,
@@ -859,7 +867,7 @@ func TestSkillUpdateRefusesInOrder(t *testing.T) {
 			}
 			refs := h.accountGit("for-each-ref", "--format=%(refname) %(objectname)")
 			library := onDisk(t, h.library)
-			expand := strings.NewReplacer("%LIB%", h.library, "%URL%", s.url, "%HOME%", h.home).Replace
+			expand := strings.NewReplacer("%LIB%", h.library, "%URL%", s.url, "%HOME%", h.home, "%AGENTX%", h.agentx).Replace
 
 			out := h.run("--json", "skill", "update", c.skill)
 			equal(t, "exit", out.exit, c.exit)

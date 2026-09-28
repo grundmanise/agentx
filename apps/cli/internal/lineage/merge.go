@@ -49,29 +49,19 @@ func ReadMerged(ctx context.Context, r *gitx.Runner, gitDir, tree, dir string) (
 	return readVersion(ctx, r, gitDir, tree, dir, "the merged tree "+tree)
 }
 
-// ReadImport reads the lineage the import commit commit carries, for a
-// version no ref of the skill's own names any more, as the update a
-// pending merge merges once a check moved the candidate on.
-func ReadImport(ctx context.Context, r *gitx.Runner, gitDir, commit string) (Import, error) {
-	out, err := r.Isolated(ctx, gitDir, "log", "-1", "--format=%B", commit)
+// At is the record of rec's skill with its import branch at commit, an
+// import commit no ref of the skill's own may name any more, read in one
+// git log: the update a pending merge merges, which a check may have moved
+// the candidate on from since.
+func (rec Record) At(ctx context.Context, r *gitx.Runner, gitDir, commit string) (Record, error) {
+	out, err := r.Isolated(ctx, gitDir, "log", "-1", "--format=%T%n%B", commit)
 	if err != nil {
-		return Import{}, err
+		return Record{}, err
 	}
-	return Parse(out)
-}
-
-// FilePath reports whether p can be the path of a file of a skill, relative
-// to its directory, as a tree holds it: not empty, no NUL, and no empty,
-// "." or ".." component, so none that leaves the directory, a leading or
-// doubled slash included.
-func FilePath(p string) bool {
-	if p == "" || strings.ContainsRune(p, 0) {
-		return false
+	tree, message, _ := strings.Cut(out, "\n")
+	imp, err := Parse(message)
+	if err != nil {
+		return Record{}, err
 	}
-	for _, seg := range strings.Split(p, "/") {
-		if seg == "" || seg == "." || seg == ".." {
-			return false
-		}
-	}
-	return true
+	return Record{Name: rec.Name, Kind: rec.Kind, Ref: rec.Ref, Commit: commit, Tree: tree, Import: imp, HasImport: true}, nil
 }

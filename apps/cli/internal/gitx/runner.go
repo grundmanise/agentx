@@ -162,56 +162,10 @@ func (r *Runner) InCheckout(ctx context.Context, dir string, args ...string) (st
 	return r.InCheckoutInput(ctx, dir, nil, args...)
 }
 
-// InCheckoutAs is InCheckout for the one git that writes a commit of the
-// user's own: a as its author and committer, and the current date, in
-// place of the identity and the date the isolated environment fixes.
-// Everything else the isolated environment sets still holds.
-func (r *Runner) InCheckoutAs(ctx context.Context, dir string, a Author, args ...string) (string, error) {
-	now := time.Now()
-	env := map[string]string{}
-	for _, who := range []string{"AUTHOR", "COMMITTER"} {
-		env["GIT_"+who+"_NAME"] = a.Name
-		env["GIT_"+who+"_EMAIL"] = a.Email
-	}
-	return r.inCheckout(ctx, call{isolated: true, dir: dir, dates: fmt.Sprintf("%d %s", now.Unix(), now.Format("-0700")), env: env}, args)
-}
-
 // InCheckoutInput is InCheckout with stdin fed to git.
 func (r *Runner) InCheckoutInput(ctx context.Context, dir string, stdin io.Reader, args ...string) (string, error) {
-	return r.inCheckout(ctx, call{isolated: true, dir: dir, stdin: stdin}, args)
-}
-
-func (r *Runner) inCheckout(ctx context.Context, c call, args []string) (string, error) {
 	full := append(isolatedConfig(), "-c", "core.fileMode=true", "-c", "core.symlinks=true")
-	return r.run(ctx, c, append(full, args...)...)
-}
-
-// Author is who a commit is written as.
-type Author struct {
-	Name, Email string
-}
-
-// UserAuthor is who the user's own configuration says they are, user.name
-// and user.email read in the user environment, each one it does not set
-// being agentx's own, IdentityName or IdentityEmail: a commit agentx
-// writes for them lives in the account repo alone, so it is never refused
-// for want of one.
-func (r *Runner) UserAuthor(ctx context.Context, gitDir string) (Author, error) {
-	out, _, err := r.runStatus(ctx, call{}, 1, "--git-dir="+gitDir, "config", "--get-regexp", `^user\.(name|email)$`)
-	if err != nil {
-		return Author{}, err
-	}
-	a := Author{Name: IdentityName, Email: IdentityEmail}
-	for _, line := range strings.Split(out, "\n") {
-		switch key, value, _ := strings.Cut(line, " "); {
-		case value == "":
-		case key == "user.name":
-			a.Name = value
-		case key == "user.email":
-			a.Email = value
-		}
-	}
-	return a, nil
+	return r.run(ctx, call{isolated: true, dir: dir, stdin: stdin}, append(full, args...)...)
 }
 
 // AddCheckout adds a linked worktree of the repository at gitDir at path,
@@ -426,26 +380,16 @@ func subcommand(args []string) string {
 
 // lookPath finds git in the PATH of the environment map, never the process's.
 func (r *Runner) lookPath() (string, error) {
-	if path, ok := LookPath(r.env, "git"); ok {
-		return path, nil
-	}
-	return "", ErrMissing
-}
-
-// LookPath finds the command called name in the PATH of env, never the
-// process's: the first regular file of that name someone may execute. ok
-// is false when there is none.
-func LookPath(env map[string]string, name string) (path string, ok bool) {
-	for _, dir := range filepath.SplitList(env["PATH"]) {
+	for _, dir := range filepath.SplitList(r.env["PATH"]) {
 		if dir == "" {
 			continue
 		}
-		path := filepath.Join(dir, name)
+		path := filepath.Join(dir, "git")
 		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Mode()&0o111 != 0 {
-			return path, true
+			return path, nil
 		}
 	}
-	return "", false
+	return "", ErrMissing
 }
 
 // childEnv builds the environment of one git process from the environment
