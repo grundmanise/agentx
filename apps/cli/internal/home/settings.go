@@ -18,6 +18,7 @@ type Settings struct {
 	Label                  string          `json:"label,omitempty"` // empty until set; the hostname stands in
 	AutoPush               bool            `json:"auto_push"`
 	AcceptOperations       bool            `json:"accept_operations"`
+	IgnoreSystemFiles      bool            `json:"ignore_system_files"` // a file without the key reads true; see SystemFiles
 	DisabledConfigurations []string        `json:"disabled_configurations"`
 	Sources                []Source        `json:"sources"`
 	CopyMode               json.RawMessage `json:"copy_mode"`
@@ -95,9 +96,10 @@ func (s *Settings) SetCopyModes(modes map[string][]string) error {
 
 func SettingsPath(dir string) string { return filepath.Join(dir, "settings.json") }
 
-// LoadSettings reads the settings file whole. A missing file means defaults.
+// LoadSettings reads the settings file whole. A missing file means
+// defaults, and so does a missing key.
 func LoadSettings(dir string) (Settings, error) {
-	s := Settings{SchemaVersion: 1}
+	s := Settings{SchemaVersion: 1, IgnoreSystemFiles: true}
 	path := SettingsPath(dir)
 	b, err := os.ReadFile(path)
 	switch {

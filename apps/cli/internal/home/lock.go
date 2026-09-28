@@ -68,9 +68,17 @@ type acquire func() (*os.File, error)
 
 func quick(dir string) acquire { return func() (*os.File, error) { return takeLock(dir) } }
 
+// Pruner removes what an interrupted command left outside every journal,
+// once the journals are finished: the pending merges of agentx home that
+// setting up stopped part way through, say. A command whose RefUpdater
+// implements it has it run under the lock before its own change.
+type Pruner interface {
+	Prune() error
+}
+
 // mutate takes the exclusive lock the way take asks for it, recovers the
-// unfinished journals of earlier mutations, runs fn and, with bump,
-// rewrites the version file.
+// unfinished journals of earlier mutations, prunes what u prunes, runs fn
+// and, with bump, rewrites the version file.
 func mutate(dir string, u RefUpdater, take acquire, bump bool, fn func() error) error {
 	lock, err := take()
 	if err != nil {
@@ -79,6 +87,11 @@ func mutate(dir string, u RefUpdater, take acquire, bump bool, fn func() error) 
 	defer Unlock(lock)
 	if err := recoverJournals(dir, u); err != nil {
 		return err
+	}
+	if p, ok := u.(Pruner); ok {
+		if err := p.Prune(); err != nil {
+			return err
+		}
 	}
 	if err := fn(); err != nil {
 		return err

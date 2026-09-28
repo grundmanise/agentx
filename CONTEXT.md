@@ -124,15 +124,15 @@ The import commit of the newer upstream version an update check found for a mana
 _Avoid_: pending update, available version
 
 **Update**:
-Applying a managed skill's update candidate, only ever at the user's request: the import branch moves to the candidate, which becomes the skill's base version, the library directory takes the new content, and copy placements that held the old version are refreshed while ones edited in place are kept. A skill that is not modified updates by replacement; a modified skill updates by a three-way merge of its edits with the candidate, over the base version, which applies when it is clean and leaves a pending merge when it conflicts. The skill keeps its library name and its placements, whatever the newer version calls it.
+Applying a managed skill's update candidate, only ever at the user's request: the import branch moves to the candidate, which becomes the skill's base version, the library directory takes the new content, keeping the files git ignores there, and copy placements that held the old version are refreshed while ones edited in place are kept. A skill that is not modified updates by replacement; a modified skill updates by a three-way merge of its edits with the candidate, over the base version, which applies when it is clean and leaves a pending merge when it conflicts. The skill keeps its library name and its placements, whatever the newer version calls it.
 _Avoid_: upgrade, pull, sync
 
 **Pending merge**:
-The merge an update of a modified skill leaves when the edits and the update candidate conflict: a commit in the account repo whose tree is git's merge of the three versions and whose trailers name them, the base version, the edits and the candidate. The library directory, and so every agent, keeps the content it had until the merge is resolved or given up; a half-merged file is never written where an agent reads it, and one the user edits with conflict markers lives in a scratch copy outside the library. It is resolved file by file, each part of a file to the edits, the update or both, or in the user's own editor, and the command that resolves its last file completes it: the update applies with the resolved content, and an edit made to the library meanwhile is merged again rather than lost. Giving it up leaves the library as it was. While it exists the skill is not updated, reverted or removed. Survives restarts.
-_Avoid_: merge in progress, conflict state, unmerged skill
+The merge an update of a modified skill leaves when the edits and the update candidate conflict: an ordinary Git merge in progress in a hidden checkout of the account repo under agentx home. The library directory, and so every agent, keeps its content until the merge is resolved or given up. While it exists the skill is not updated, reverted or removed. Survives restarts.
+_Avoid_: merge ref, conflict state
 
 **Modified skill**:
-A managed skill whose on-disk content no longer matches its base version because it was edited outside agentx, by hand or by any other tool. Decided by comparing the library directory's git tree with the base version's, so a changed file mode or symlink counts as an edit. Shown as drift, local to one machine, never synced. Can be reverted, updated by merging its edits with the update, or converted to a fork.
+A managed skill whose on-disk content no longer matches its base version because it was edited outside agentx, by hand or by any other tool. Decided as git decides for a work tree: git records the library directory over an index loaded from the base version, and the skill is modified when the tree it writes differs from the base version's, so a changed file mode or symlink counts as an edit and a file git ignores does not. Shown as drift, local to one machine, never synced. Can be reverted, updated by merging its edits with the update, or converted to a fork.
 _Avoid_: dirty, drifted, changed
 
 **Lineage record**:
@@ -152,11 +152,11 @@ The path inside one agent configuration's skills directory through which that cl
 _Avoid_: install, link, copy
 
 **Displaced placement**:
-A placement whose kind on disk is not the one agentx keeps for it: a real directory where a symlink is kept, or the symlink to the library directory where machine settings record a copy. Reported as drift and never repaired on its own: a repair puts it back when the user asks, and replaces a directory whose content differs from the library only once the user chooses which of the two survives.
+A placement whose kind on disk is not the one agentx keeps for it: a real directory where a symlink is kept, or the symlink to the library directory where machine settings record a copy. Reported as drift and never put back on its own: `skill place` puts it back when the user asks, and replaces a directory whose content differs from the library only once the user chooses which of the two survives.
 _Avoid_: broken link, overwritten
 
 **Missing placement**:
-A placement a managed skill lacks in an enabled configuration: nothing is at that configuration's own placement path, whether the skill was never placed there or the placement went. Reported as drift, for information only; a repair places it again when the user asks. A universal client and a disabled configuration never have one.
+A placement a library skill lacks in an enabled configuration: nothing is at that configuration's own placement path, whether the skill was never placed there or the placement went. Reported as drift, for information only; `skill place` places it again when the user asks. A universal client and a disabled configuration never have one.
 _Avoid_: unplaced, orphaned
 
 **Universal client**:

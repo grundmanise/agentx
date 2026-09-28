@@ -57,8 +57,7 @@ func ForkRef(name string) string { return ForkPrefix + name }
 // them, the four lineage trailers. A fork's tip carries the trailers of the
 // last upstream version merged into it, and may carry none at all. What the
 // last update check found for the skill comes with it: the candidate it
-// pinned, and the source commit it found without the skill; and so does the
-// merge an update left pending for it.
+// pinned, and the source commit it found without the skill.
 type Record struct {
 	Name            string
 	Kind            string // managed or fork
@@ -67,9 +66,8 @@ type Record struct {
 	Tree            string // the root tree of that commit: for an import commit, the upstream directory as its one entry
 	Import          Import
 	HasImport       bool
-	Candidate       *Candidate    // the update candidate, nil when the account repo holds none
-	UpstreamRemoved string        // the source commit the upstream-removed marker names, "" when there is none
-	PendingMerge    *PendingMerge // the merge ref, nil when the account repo holds none
+	Candidate       *Candidate // the update candidate, nil when the account repo holds none
+	UpstreamRemoved string     // the source commit the upstream-removed marker names, "" when there is none
 }
 
 // Candidate is an update candidate: the import commit of a newer upstream
@@ -115,20 +113,20 @@ func (rec Record) CandidateCommit() string {
 
 // List reads every lineage branch of the account repo in one for-each-ref
 // over both namespaces, trees and trailers and all, and returns them by
-// skill name. The tree is what tells a managed skill's library directory
-// from its base version without another git process: see Record.Current.
+// skill name. The tree is what the fast path tells a managed skill's
+// library directory from its base version by, with no git process of its
+// own: see Record.HoldsID.
 // A managed branch wins over a fork of the same name, which cannot happen
 // while a rename into the fork namespace moves the branch rather than
 // copying it.
 //
 // The same for-each-ref reads what the last update check left for each
 // skill, its candidate with the trailers of the version it pins and its
-// upstream-removed marker, and the merge an update left pending for it, with
-// the message that names its three versions, so that a listing that shows
-// them still costs one git process. A marker names a source's own commit,
-// whose message is the source's and says nothing agentx reads, so its
-// message is not printed at all. A candidate, a marker or a pending merge
-// of a name no branch holds is no skill's and is left out.
+// upstream-removed marker, so that a listing that shows them still costs
+// one git process. A marker names a source's own commit, whose message is
+// the source's and says nothing agentx reads, so its message is not
+// printed at all. A candidate or a marker of a name no branch holds is no
+// skill's and is left out.
 //
 // Nothing here reads the source refs: the lineage of a skill is what its own
 // branch says, so deleting a source ref changes no lineage. Whether the
@@ -140,14 +138,13 @@ func List(ctx context.Context, r *gitx.Runner, gitDir string) (map[string]Record
 	out, err := r.Isolated(ctx, gitDir,
 		"for-each-ref", "--format=%(refname)%00%(objectname)%00%(tree)%00"+
 			"%(if:notequals="+markers+")%(refname:rstrip=1)%(then)%(contents)%(end)"+recordEnd,
-		ManagedPrefix, ForkPrefix, CandidatePrefix, UpstreamRemovedPrefix, MergePrefix)
+		ManagedPrefix, ForkPrefix, CandidatePrefix, UpstreamRemovedPrefix)
 	if err != nil {
 		return nil, err
 	}
 	records := map[string]Record{}
 	candidates := map[string]Candidate{}
 	removed := map[string]string{}
-	merges := map[string]PendingMerge{}
 	for _, entry := range strings.Split(out, recordEnd) {
 		entry = strings.TrimPrefix(entry, "\n")
 		if strings.TrimSpace(entry) == "" {
@@ -173,9 +170,6 @@ func List(ctx context.Context, r *gitx.Runner, gitDir string) (map[string]Record
 		case strings.HasPrefix(rec.Ref, UpstreamRemovedPrefix):
 			removed[strings.TrimPrefix(rec.Ref, UpstreamRemovedPrefix)] = rec.Commit
 			continue
-		case strings.HasPrefix(rec.Ref, MergePrefix):
-			merges[strings.TrimPrefix(rec.Ref, MergePrefix)] = ParsePending(rec.Commit, fields[3])
-			continue
 		default:
 			continue
 		}
@@ -191,9 +185,6 @@ func List(ctx context.Context, r *gitx.Runner, gitDir string) (map[string]Record
 			rec.Candidate = &c
 		}
 		rec.UpstreamRemoved = removed[name]
-		if p, ok := merges[name]; ok {
-			rec.PendingMerge = &p
-		}
 		records[name] = rec
 	}
 	return records, nil

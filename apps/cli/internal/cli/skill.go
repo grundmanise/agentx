@@ -40,13 +40,12 @@ const (
 // holds the version it was installed at, or it was edited since. Nothing
 // here decides whether an upstream moved, which a later command does.
 //
-// The two are told apart by tree id, the one way agentx compares a
-// directory with a base version: the directory's tree as git would record
-// it, computed in process, against the tree of the import commit. A mode
-// is content to git, so a file made executable, a file swapped for a link
-// to the same bytes and a link added anywhere are edits like any other;
-// the content hash, which reads neither modes nor links, stays the name of
-// a version and decides nothing here.
+// The two are told apart the way skilltree.go compares a directory with a
+// version, so a file git ignores is no edit. A mode is content to git, so
+// a file made executable, a file swapped for a link to the same bytes and
+// a link added anywhere are edits like any other; the content hash, which
+// reads neither modes nor links, stays the name of a version and decides
+// nothing here.
 const (
 	stateCurrent  = "current"
 	stateModified = "modified"
@@ -79,16 +78,15 @@ const driftUpstreamRemoved = "upstream removed"
 const updateAvailable = "update available"
 
 // mergePending is what the skill list row says of a managed skill an update
-// left a pending merge for, followed by how many of its files are not
-// resolved yet when the merge says. Like an update available it is no
-// drift: the library directory is as it was, and the event carries it as
+// left a pending merge for. Like an update available it is no drift: the
+// library directory is as it was, and the event carries it as
 // pending_merge.
 const mergePending = "merge pending"
 
 func newSkillCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "skill",
-		Short:       "Install, place, compare, revert, repair, update and remove skills, check them for updates, resolve their merges, and list what the library holds",
+		Short:       "Install, place, compare, revert, update and remove skills, check them for updates, resolve their merges, and list what the library holds",
 		Annotations: map[string]string{annotationGroup: "true"},
 		Args:        cobra.NoArgs,
 		RunE:        needSubcommand(inv, "no skill command given", "run 'agentx skill --help' to list commands"),
@@ -98,7 +96,6 @@ func newSkillCommand(inv *invocation) *cobra.Command {
 	cmd.AddCommand(newSkillRemoveCommand(inv))
 	cmd.AddCommand(newSkillDiffCommand(inv))
 	cmd.AddCommand(newSkillRevertCommand(inv))
-	cmd.AddCommand(newSkillRepairCommand(inv))
 	cmd.AddCommand(newSkillCheckCommand(inv))
 	cmd.AddCommand(newSkillUpdateCommand(inv))
 	cmd.AddCommand(newSkillResolveCommand(inv))
@@ -315,13 +312,12 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 		ev.Source, ev.Subpath, ev.UpstreamCommit, ev.BaseHash = rec.Import.Source, &subpath, rec.Import.Commit, rec.Import.Hash
 	}
 	// A managed skill's base version is the import commit its branch points
-	// at, so the directory's tree can be compared with that commit's; a
-	// fork's base is the last version merged into it, which a later command
-	// reads from its history. A directory that could not be read whole is
-	// not known to hold the base, and is not called current.
+	// at, so the directory can be compared with that commit's tree; a fork's
+	// base is the last version merged into it, which a later command reads
+	// from its history.
 	if rec.Kind == lineage.KindManaged && rec.HasImport {
 		ev.State = stateCurrent
-		if !obs.read || !rec.Current(obs.tree) {
+		if obs.modified {
 			ev.State = stateModified
 		}
 		// The coordinates stay as the lineage has them: they are still where
@@ -338,17 +334,9 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 		if next, ok := rec.AtCandidate(); ok {
 			ev.Candidate = &scan.LibraryCandidate{UpstreamCommit: next.Import.Commit, ContentHash: next.Import.Hash}
 		}
-		// A merge an update left pending is read from its ref, in the same
-		// for-each-ref, and the files it has left to resolve from the
-		// subject of its commit, which agentx rewrites whenever it writes
-		// the commit: counting them anew would take a merge of its own.
-		if p := rec.PendingMerge; p != nil {
-			ev.PendingMerge = &scan.LibraryPending{}
-			if p.Unresolved >= 0 {
-				n := p.Unresolved
-				ev.PendingMerge.Unresolved = &n
-			}
-		}
+		// A merge an update left pending is its checkout under agentx
+		// home, which the context read with one read of the directory.
+		ev.PendingMerge = obs.pending
 	}
 	return ev
 }

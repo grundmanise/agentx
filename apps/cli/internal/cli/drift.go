@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"os"
@@ -11,7 +12,6 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
-	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
 // The drift states a managed skill's placements can be in, beside source
@@ -33,48 +33,45 @@ const (
 )
 
 // observation is what the drift of one library skill is judged from beside
-// its lineage and the settings: the tree its directory holds, as git would
-// record it, and what the configurations' own places hold. It is read from
+// its lineage and the settings: whether its directory holds its base
+// version, and what the configurations' own places hold. It is read from
 // the filesystem, so a snapshot reads it under the lock it reads the
 // library under, and every other report reads it with the rest of what it
 // reports on.
 type observation struct {
-	tree   treeid.Tree
-	read   bool     // the directory was read whole; one that could not be is not the base version
-	placed []string // the drift states of the placements, sorted
+	modified bool     // the directory does not hold its base version, see holdsBase
+	placed   []string // the drift states of the placements, sorted
+	pending  bool     // an update left a merge pending for the skill, see pendingMerges
 }
 
 // observe reads what a managed skill's drift is judged from, and nothing for
 // any other: a fork's drift is decided by its own history and an unmanaged
 // skill has no base to drift from.
-func (sc skillContext) observe(inv *invocation, lib scan.LibrarySkill) observation {
+func (sc skillContext) observe(ctx context.Context, inv *invocation, lib scan.LibrarySkill) observation {
 	rec, ok := sc.records[lib.Name]
 	if !ok || rec.Kind != lineage.KindManaged || !rec.HasImport {
 		return observation{}
 	}
-	obs := observation{placed: sc.placementDrift(inv, lib)}
-	tree, err := treeid.Read(lib.ResolvedPath)
-	obs.tree, obs.read = tree, err == nil
-	return obs
+	return observation{modified: !inv.holdsBase(ctx, lib, rec), placed: sc.placementDrift(inv, lib), pending: sc.merges[lib.Name]}
 }
 
 // observeAll reads the observation of every skill of the library ahead of
 // the report, for a snapshot, which composes its library entries after it
 // released the lock the reads have to happen under.
-func (sc *skillContext) observeAll(inv *invocation, libs []scan.LibrarySkill) {
+func (sc *skillContext) observeAll(ctx context.Context, inv *invocation, libs []scan.LibrarySkill) {
 	sc.observed = make(map[string]observation, len(libs))
 	for _, lib := range libs {
-		sc.observed[lib.Name] = sc.observe(inv, lib)
+		sc.observed[lib.Name] = sc.observe(ctx, inv, lib)
 	}
 }
 
 // observationOf is the observation of lib: the one read ahead of the
 // report when there was one, and a fresh read otherwise.
-func (sc skillContext) observationOf(inv *invocation, lib scan.LibrarySkill) observation {
+func (sc skillContext) observationOf(ctx context.Context, inv *invocation, lib scan.LibrarySkill) observation {
 	if obs, ok := sc.observed[lib.Name]; ok {
 		return obs
 	}
-	return sc.observe(inv, lib)
+	return sc.observe(ctx, inv, lib)
 }
 
 // placementDrift is what the configurations' own places say about a managed
@@ -117,7 +114,7 @@ func (p placeSite) asked() bool { return len(p.enabled) > 0 }
 // ownPlaces are the places of the skill called name, one per path, in the
 // order the configurations were detected, judged against the configurations
 // the settings disable and the ones copy_mode records a copy of the skill
-// for. Drift reads them, and a repair puts back what drift finds there.
+// for. Drift reads them, and skill place puts back what drift finds there.
 //
 // Only an enabled configuration is asked about: a disabled one is one the
 // user chose not to place into. A path two configurations share, as
@@ -127,7 +124,7 @@ func (p placeSite) asked() bool { return len(p.enabled) > 0 }
 // records one for either of them, since a copy placed for one is the copy
 // the other reads. Judged for each configuration on its own, the copy
 // agentx placed for one would read as a directory displacing the other's
-// link, and a repair would plan the one path twice, the second step
+// link, and skill place would plan the one path twice, the second step
 // finding the first one's work there and stopping the mutation part way.
 // So is a path two configurations spell differently, one of their skills
 // directories a symlink to the other's, the link's own spelling in another
@@ -162,8 +159,8 @@ func ownPlaces(targets []placeTarget, library, name string, disabled, copies []s
 // placeKey is how the paths of places are told apart: the path as
 // canonicalPath writes it, and the directory it sits in, read once as a
 // file, nil when it cannot be read. Drift judges each place once by it, a
-// revert or a repair refreshes each copy once, and a repair changes each
-// path once.
+// revert or skill place refreshes each copy once, and skill place changes
+// each path once.
 type placeKey struct {
 	real string
 	dir  fs.FileInfo
@@ -187,9 +184,9 @@ func keyAt(real string) placeKey {
 // name in one directory, that directory compared as a file. canonicalPath
 // spells a directory as the links on the way to it spell it, and on a disk
 // that ignores case two links can spell one directory in two cases, which
-// the spellings alone would take for two places, and a repair would plan
-// the one path twice. The directory is compared, not the entry, so that a
-// place nothing is at yet is found to be one as well.
+// the spellings alone would take for two places, and skill place would
+// plan the one path twice. The directory is compared, not the entry, so
+// that a place nothing is at yet is found to be one as well.
 func (k placeKey) is(o placeKey) bool {
 	return k.real == o.real ||
 		filepath.Base(k.real) == filepath.Base(o.real) && k.dir != nil && o.dir != nil && os.SameFile(k.dir, o.dir)
@@ -206,8 +203,8 @@ func (k placeKey) is(o placeKey) bool {
 //     still the copy and earns nothing here; see keepCopy.
 //   - The library directory itself, which a library entry made a symlink
 //     to the place leaves there, is what the client reads: the library,
-//     not a directory displacing a placement. It earns "", and a repair
-//     never plans it; see isLibraryDirectory.
+//     not a directory displacing a placement. It earns "", and skill
+//     place never replaces it; see isLibraryDirectory.
 //   - A link of the user's to somewhere else, and anything else at the
 //     place, is theirs: the place is taken, so the skill is not missing,
 //     and nothing agentx keeps was displaced. It earns "".
@@ -312,27 +309,20 @@ func (sc skillContext) absentNotice(inv *invocation, name string) (what, wayOut 
 		"run " + add + " to install it again, or " + remove + " to stop managing it"
 }
 
-// holdsVersion reports whether the directory at path holds exactly the
-// version v, as git would record the two: false for a directory this
-// machine cannot read whole.
-func holdsVersion(path string, v *imported) bool {
-	real, err := filepath.EvalSymlinks(path)
-	if err != nil {
-		return false
-	}
-	tree, err := treeid.Read(real)
-	return err == nil && lineage.Holds(tree, v.dir, v.tree)
-}
-
 // newSkillContext is the context of a report built from what it already
 // read: the lineage, the settings and their copy modes. The configurations
 // placements can be made in are detected here, once for the whole report.
 func newSkillContext(inv *invocation, records map[string]lineage.Record, s home.Settings, modes map[string][]string) skillContext {
+	merges, err := inv.pendingMerges()
+	if err != nil {
+		inv.out.debugf("cannot read the pending merges: %v", err)
+	}
 	return skillContext{
 		records:  records,
 		modes:    modes,
 		sources:  sourceURLs(s),
 		disabled: s.DisabledConfigurations,
 		targets:  inv.detectedTargets(),
+		merges:   merges,
 	}
 }

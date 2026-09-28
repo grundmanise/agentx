@@ -491,6 +491,7 @@ func TestImportFillsInWhatADocumentLeavesOut(t *testing.T) {
   "schema_version": 1,
   "auto_push": false,
   "accept_operations": false,
+  "ignore_system_files": true,
   "disabled_configurations": [],
   "sources": [],
   "copy_mode": {}
@@ -602,6 +603,7 @@ func TestValidSettingsCoversEveryFieldOfTheSettings(t *testing.T) {
 		"Settings.Label":                  "badLabel (validLabel, as config set label is)",
 		"Settings.AutoPush":               "a bool: the JSON type is the whole domain",
 		"Settings.AcceptOperations":       "a bool: the JSON type is the whole domain",
+		"Settings.IgnoreSystemFiles":      "a bool: the JSON type is the whole domain",
 		"Settings.DisabledConfigurations": "badDisabledConfigurations",
 		"Settings.Sources":                "badSources",
 		"Settings.CopyMode":               "badCopyMode",

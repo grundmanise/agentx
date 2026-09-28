@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"unicode"
@@ -122,11 +123,13 @@ func TestSkillListWithoutALibrary(t *testing.T) {
 
 // TestSkillListSpawnsOneGitProcess counts the git processes of a listing:
 // the startup version check, and one for-each-ref over both namespaces.
-// The scan the listing runs reads the filesystem and spawns nothing.
+// The scan the listing runs reads the filesystem and spawns nothing, a
+// skill whose only extra file is one the system-file list names included.
 func TestSkillListSpawnsOneGitProcess(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	equal(t, "exit", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	writeFile(t, filepath.Join(h.library, "alpha", ".DS_Store"), "finder\n")
 	calls := countingGit(t, h)
 	equal(t, "exit", h.run("skill", "list").exit, 0)
 	refs := 0
@@ -150,10 +153,13 @@ func TestSkillListSpawnsOneGitProcess(t *testing.T) {
 // upstream no longer holds it, and a skill of the user's own beside them,
 // and a managed branch whose library directory is gone and whose commit
 // carries no lineage, which a warning names with <source> for the source
-// it cannot name. Whether a skill is modified, displaced, missing or gone
-// is read in process, and its candidate, its upstream-removed marker and
-// its pending merge come with the lineage, so the listing still runs one
-// for-each-ref, and so does the snapshot.
+// it cannot name. Whether a skill is displaced, missing or gone is read in
+// process, and so is modified until the tree id differs: then git decides,
+// with a read-tree, an add and a write-tree for the edited skill and one
+// read of the user's global ignore file per run. Its candidate and its
+// upstream-removed marker come with the lineage, so the listing still runs
+// one for-each-ref, and so does the snapshot, and its pending merge is its
+// checkout under agentx home, which costs no git process at all.
 func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -173,38 +179,44 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	candidate := strings.TrimSpace(h.accountGit("commit-tree", "refs/heads/managed/alpha^{tree}", "-p", "refs/heads/managed/alpha", "-m", message))
 	h.accountGit("update-ref", "refs/agentx/candidate/alpha", candidate)
 	h.accountGit("update-ref", "refs/agentx/upstream-removed/beta", "refs/agentx/sources/"+source.ID(s.url))
-	// A pending merge is a commit of its own too, whose message counts the
-	// files it has left to resolve.
-	tip := h.ref(lineage.ManagedRef("alpha"))
-	pending := lineage.Merge{Base: tip, Mine: tip, Theirs: candidate}.Message("alpha", 2, nil)
-	h.accountGit("update-ref", lineage.MergeRef("alpha"), h.accountGit("commit-tree", "refs/heads/managed/alpha^{tree}", "-p", tip, "-p", candidate, "-m", pending))
+	// A pending merge is a checkout of the account repo, as an update adds
+	// one.
+	h.accountGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", pendingReason,
+		pendingCheckout(h, "alpha"), h.ref(lineage.ManagedRef("alpha")))
 	equal(t, "alpha's state", h.listed("alpha")["state"], stateModified)
 	if h.listed("alpha")["candidate"] == nil {
 		t.Error("alpha carries no candidate")
 	}
-	equal(t, "alpha's pending merge", fmt.Sprint(h.listed("alpha")["pending_merge"]), "map[unresolved:2]")
+	equal(t, "alpha's pending merge", h.listed("alpha")["pending_merge"], true)
 	equal(t, "beta's drift", drift(h.listed("beta")), "displaced,missing,upstream removed")
 
 	calls := countingGit(t, h)
+	alpha := "--work-tree=" + filepath.Join(h.library, "alpha") + " "
 	count := func(what string, calls []string) {
 		t.Helper()
-		refs := 0
+		var ran []string
 		for _, call := range calls {
+			_, inAlpha, _ := strings.Cut(call, alpha)
 			switch {
-			case strings.Contains(call, "for-each-ref"):
-				refs++
 			case strings.Contains(call, "--version"), strings.Contains(call, "rev-parse --is-bare-repository"):
+			case strings.Contains(call, "for-each-ref"):
+				ran = append(ran, "for-each-ref")
+			case strings.HasSuffix(call, "config --path --get core.excludesFile"):
+				ran = append(ran, "config")
+			case inAlpha != "":
+				ran = append(ran, strings.Fields(inAlpha)[0])
 			default:
 				t.Errorf("%s ran git %s", what, call)
 			}
 		}
-		equal(t, what+": for-each-ref calls", refs, 1)
+		sort.Strings(ran)
+		equal(t, what+": git runs", strings.Join(ran, " "), "add config for-each-ref read-tree write-tree")
 	}
 	ghost := "ghost is managed in the account repo but the library holds no skill directory for it;" +
 		" run 'agentx skill add <source> --skill ghost' to install it again, or 'agentx skill remove ghost' to stop managing it"
 	list := h.mustRun("skill", "list")
 	equal(t, "skill list's warning", list.stderr, "warning: "+ghost+"\n")
-	contains(t, "skill list", list.stdout, "modified, update available, merge pending (2 unresolved)")
+	contains(t, "skill list", list.stdout, "modified, update available, merge pending  ")
 	count("skill list", calls())
 	before := len(calls())
 	snap := h.snapshot(t)
@@ -214,19 +226,9 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 		entry := e.(map[string]any)
 		states[entry["name"].(string)] = fmt.Sprint(entry["state"]) + " " + drift(entry) + " " + fmt.Sprint(entry["pending_merge"])
 	}
-	equal(t, "alpha in the snapshot", states["alpha"], stateModified+"  map[unresolved:2]")
+	equal(t, "alpha in the snapshot", states["alpha"], stateModified+"  true")
 	equal(t, "beta in the snapshot", states["beta"], stateCurrent+" displaced,missing,upstream removed <nil>")
 	contains(t, "the snapshot's warnings", fmt.Sprint(snap["warnings"]), ghost)
-
-	// A merge ref at a commit agentx did not write is a merge pending all
-	// the same, with no count of what is left to resolve.
-	h.accountGit("update-ref", lineage.MergeRef("alpha"), h.accountGit("commit-tree", "refs/heads/managed/alpha^{tree}", "-p", tip, "-m", "a merge of my own"))
-	equal(t, "alpha's pending merge of a plain message", fmt.Sprint(h.listed("alpha")["pending_merge"]), "map[]")
-	list = h.mustRun("skill", "list")
-	contains(t, "skill list of a plain message", list.stdout, "modified, update available, merge pending ")
-	if strings.Contains(list.stdout, "unresolved") {
-		t.Errorf("skill list counts what a plain message does not:\n%s", list.stdout)
-	}
 }
 
 // TestSkillListSanitisesTheNameAndTheUpstream covers a library directory

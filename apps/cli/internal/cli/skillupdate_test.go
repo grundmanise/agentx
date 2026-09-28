@@ -61,19 +61,25 @@ func secondTree(t *testing.T, s *sourceRepo) map[string]string {
 // to a skill nobody edited. The import branch moves to the candidate, which
 // a second invocation reads back with plain git, and the candidate ref is
 // gone; the library directory holds the new version, the changed, added
-// and deleted files and the exec bit included. Of the two copies, the one
-// that held the version replaced is refreshed and the one edited where it
-// is kept byte for byte, with the warning and the skipped count. The skill
-// reads current at the new base afterwards, skill list shows no update, a
-// check right after finds none, and the old import stays reachable through
-// the branch's reflog.
+// and deleted files and the exec bit included, and keeps the .DS_Store git
+// ignores in it. Of the two copies, the one that held the version replaced
+// is refreshed and keeps a .DS_Store of its own, and the one edited where
+// it is kept byte for byte, with the warning and the skipped count. The
+// skill reads current at the new base afterwards with nothing to diff,
+// skill list shows no update, a check right after finds none, and the old
+// import stays reachable through the branch's reflog.
 func TestSkillUpdateReplacesAnUnmodifiedSkill(t *testing.T) {
 	t.Parallel()
 	h, s, first := updateHarness(t)
+	lib := filepath.Join(h.library, "alpha")
 	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
 	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
 	editCopy(t, cursor)
 	edited := libraryTree(t, cursor)
+	// The two hold the same bytes, since a copy whose files differ from
+	// the library's, ignored or not, is listed as no placement of it.
+	writeFile(t, filepath.Join(lib, ".DS_Store"), "finder data\n")
+	writeFile(t, filepath.Join(claude, ".DS_Store"), "finder data\n")
 	second := newVersion(t, s)
 	want := secondTree(t, s)
 	h.mustRun("skill", "check")
@@ -89,13 +95,12 @@ func TestSkillUpdateReplacesAnUnmodifiedSkill(t *testing.T) {
 	equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), candidate)
 	equal(t, "the candidate ref", h.ref(lineage.CandidateRef("alpha")), "")
 	contains(t, "the branch's reflog", h.accountGit("reflog", "show", "--format=%H", lineage.ManagedRef("alpha")), tip)
-	lib := filepath.Join(h.library, "alpha")
-	sameTree(t, "the library directory", libraryTree(t, lib), want)
+	sameTree(t, "the library directory", libraryTree(t, lib), withFile(want, ".DS_Store", "finder data\n"))
 	if !executable(t, filepath.Join(lib, "scripts", "run.sh")) {
 		t.Error("scripts/run.sh is not executable after the update")
 	}
 	nothingAt(t, "old.md", filepath.Join(lib, "old.md"))
-	sameTree(t, "claude's copy", libraryTree(t, claude), want)
+	sameTree(t, "claude's copy", libraryTree(t, claude), withFile(want, ".DS_Store", "finder data\n"))
 	sameTree(t, "cursor's copy", libraryTree(t, cursor), edited)
 	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), editedCopyWarning(cursor))
 	equal(t, "summary", h.one(out.stdout, "result")["summary"],
@@ -122,6 +127,7 @@ func TestSkillUpdateReplacesAnUnmodifiedSkill(t *testing.T) {
 	equal(t, "state after the update", listed["state"], stateCurrent)
 	equal(t, "upstream_commit after the update", listed["upstream_commit"], second)
 	sameEvent(t, "the update's library_skill and skill list's", ev, listed)
+	equal(t, "the diff after the update", diffPaths(h, "alpha"), "")
 	if strings.Contains(h.mustRun("skill", "list").stdout, updateAvailable) {
 		t.Error("skill list still shows an update after it was applied")
 	}
@@ -151,6 +157,83 @@ func sameEvent(t *testing.T, what string, got, want jsonEvent) {
 		return string(b)
 	}
 	equal(t, what, strip(got), strip(want))
+}
+
+// TestSkillUpdateKeepsIgnoredFiles updates, by name and with --all, a
+// skill whose first version ships a .gitignore naming build/ and *.log,
+// and whose second changes notes.md and ships a run.log. The library holds
+// a .DS_Store, an ignored build/cache.bin and a run.log of its own, all
+// files git ignores, so the skill is unmodified and --all does not skip
+// it. The update keeps the .DS_Store and build/cache.bin as they were, and
+// run.log holds the new version's bytes, as git checkout leaves a path the
+// version it checks out holds. The copy is refreshed with the files it
+// ignores itself, a .DS_Store of its own, and none of the library's. The
+// skill reads current afterwards, and nothing is left beside the library.
+func TestSkillUpdateKeepsIgnoredFiles(t *testing.T) {
+	t.Parallel()
+	for _, args := range [][]string{{"skill", "update", "logs"}, {"skill", "update", "--all"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			t.Parallel()
+			h := newHarness(t)
+			h.build(t, fixture{dirs: []string{".claude"}})
+			s := h.newSourceRepo("kit", true)
+			s.skill("skills/logs", "logs", "Keeps its logs", map[string]string{".gitignore": "build/\n*.log\n", "notes.md": "notes\n"})
+			s.commit("first version")
+			h.mustRun("source", "add", s.url)
+			h.mustRun("skill", "add", s.url, "--skill", "logs", "--copy")
+			s.write("skills/logs/notes.md", "notes, revised upstream\n")
+			s.write("skills/logs/run.log", "the log the new version ships\n")
+			s.run("add", "--force", "skills/logs/run.log") // the source's own .gitignore names it
+			s.commit("second version")
+			h.mustRun("skill", "check")
+			want := libraryTree(t, filepath.Join(s.work, "skills", "logs"))
+			lib := filepath.Join(h.library, "logs")
+			claude := filepath.Join(h.home, ".claude", "skills", "logs")
+			writeFile(t, filepath.Join(lib, ".DS_Store"), "the library's finder data\n")
+			writeFile(t, mkdirs(t, filepath.Join(lib, "build"), "cache.bin"), "a build cache\n")
+			writeFile(t, filepath.Join(lib, "run.log"), "local log\n")
+			writeFile(t, filepath.Join(claude, ".DS_Store"), "the copy's finder data\n")
+
+			out := h.run(append([]string{"--json"}, args...)...)
+			equal(t, "exit", out.exit, 0)
+			if strings.Contains(h.one(out.stdout, "result")["summary"].(string), "skipped") {
+				t.Errorf("the run skipped the skill: %s", h.one(out.stdout, "result")["summary"])
+			}
+			equal(t, "the updated skill's state", h.one(out.stdout, "library_skill")["state"], stateCurrent)
+			kept := withFile(withFile(want, ".DS_Store", "the library's finder data\n"), "build/cache.bin", "a build cache\n")
+			sameTree(t, "the library directory", libraryTree(t, lib), kept)
+			equal(t, "run.log", fileBody(t, filepath.Join(lib, "run.log")), "the log the new version ships\n")
+			sameTree(t, "claude's copy", libraryTree(t, claude), withFile(want, ".DS_Store", "the copy's finder data\n"))
+			equal(t, "state", h.listed("logs")["state"], stateCurrent)
+			equal(t, "journals", journalCount(t, h), 0)
+			for _, dir := range []string{h.library, filepath.Dir(claude)} {
+				equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
+			}
+		})
+	}
+}
+
+// TestSkillUpdateCountsASystemFileWhenTheSettingIsOff: with
+// ignore_system_files off, a .DS_Store in the library directory is a file
+// of the skill, so the skill is edited: its update merges the .DS_Store in
+// as an edit, and the skill stays modified. Once the setting is on again,
+// git ignores the .DS_Store and the skill is current.
+func TestSkillUpdateCountsASystemFileWhenTheSettingIsOff(t *testing.T) {
+	t.Parallel()
+	h, s, _ := updateHarness(t)
+	checked(t, h, s)
+	lib := filepath.Join(h.library, "alpha")
+	writeFile(t, filepath.Join(lib, ".DS_Store"), "finder data\n")
+	h.mustRun("config", "set", "ignore_system_files", "false")
+
+	out := h.run("--json", "skill", "update", "alpha")
+	equal(t, "exit", out.exit, 0)
+	contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), "merged its edits cleanly")
+	sameTree(t, "the library directory", libraryTree(t, lib), withFile(secondTree(t, s), ".DS_Store", "finder data\n"))
+	equal(t, "state", h.listed("alpha")["state"], stateModified)
+
+	h.mustRun("config", "set", "ignore_system_files", "true")
+	equal(t, "state with the setting on", h.listed("alpha")["state"], stateCurrent)
 }
 
 // mixedHarness is a source of five skills, all installed from its first
@@ -233,7 +316,9 @@ func TestSkillUpdateAllMergesEditsAndLeavesConflictsPending(t *testing.T) {
 	equal(t, "beta's notes", fileBody(t, filepath.Join(h.library, "beta", "notes.md")), "beta notes, edited here\n")
 	equal(t, "beta's candidate", h.ref(lineage.CandidateRef("beta")), betaCandidate)
 	equal(t, "beta's branch", h.ref(lineage.ManagedRef("beta")), betaTip)
-	equal(t, "beta's pending merge", h.accountGit("rev-parse", lineage.MergeRef("beta")+"^@"), conflict["mine"].(string)+"\n"+betaCandidate)
+	betaHead, betaMergeHead, _ := mergeState(t, h, "beta")
+	equal(t, "beta's pending merge's HEAD", betaHead, conflict["mine"].(string))
+	equal(t, "beta's pending merge's MERGE_HEAD", betaMergeHead, betaCandidate)
 	equal(t, "gamma's marker", h.ref(lineage.UpstreamRemovedRef("gamma")), gammaMarker)
 	sameTree(t, "gamma's library directory", libraryTree(t, filepath.Join(h.library, "gamma")), gammaTree)
 	equal(t, "delta's branch", h.ref(lineage.ManagedRef("delta")), deltaTip)
@@ -271,11 +356,14 @@ func TestSkillUpdateAllTextOfAMixedRun(t *testing.T) {
 // TestSkillUpdateAllWithOnlyAConflict: a run whose one skill with an
 // update conflicts updates nothing, and is answered as that skill on its
 // own would be: its conflicts, and exit code 4 with no warning before it.
+// It writes no journal, and the merge it left pending is a change, which
+// the version file says.
 func TestSkillUpdateAllWithOnlyAConflict(t *testing.T) {
 	t.Parallel()
 	h, _, _, _ := mixedHarness(t)
 	h.mustRun("skill", "update", "alpha")
 	h.mustRun("skill", "update", "epsilon")
+	before := mutationVersion(t, h)
 	out := h.run("--json", "skill", "update", "--all")
 	equal(t, "exit", out.exit, 4)
 	equal(t, "the conflict's skill", h.one(out.stdout, "conflict")["name"], "beta")
@@ -285,6 +373,8 @@ func TestSkillUpdateAllWithOnlyAConflict(t *testing.T) {
 	if got := h.eventsOfType(out.stdout, "library_skill"); len(got) != 0 {
 		t.Errorf("a run that updated nothing reported %v", got)
 	}
+	equal(t, "journals", journalCount(t, h), 0)
+	equal(t, "mutations", mutationVersion(t, h), before+1)
 }
 
 // otherSourceHarness is updateHarness with a second source holding gamma,
@@ -849,8 +939,8 @@ func TestSkillUpdateRefusesWhatChangedBeforeTheLock(t *testing.T) {
 		},
 		{
 			name: "another update of the skill leaves a merge pending",
-			change: func(_ *testing.T, _ *harness, _ *sourceRepo, git, other string) string {
-				return git + ` update-ref ` + lineage.MergeRef("alpha") + ` ` + other
+			change: func(t *testing.T, h *harness, _ *sourceRepo, _, other string) string {
+				return fakePendingMerge(t, h, "alpha", other)
 			},
 			exit:   4,
 			branch: "tip", candidate: "candidate", notes: "alpha notes\n",
@@ -1321,8 +1411,8 @@ func applyUpdateSteps(t *testing.T, h *harness, steps []journalStep, n int) {
 // A last case is killed for real right after that deletion. The next
 // command recovers each one, and the update is then whole: the branch at
 // the candidate, the candidate gone, the library and the unedited copy
-// holding the new version, the edited copy kept, and nothing staged or
-// retained left behind.
+// holding the new version, the library with the .DS_Store git ignores in
+// it, the edited copy kept, and nothing staged or retained left behind.
 func TestSkillUpdateRecoversAtEveryBoundary(t *testing.T) {
 	t.Parallel()
 	const steps = 6 // the branch, the library's remove and publish, the copy's, then the candidate
@@ -1338,6 +1428,7 @@ func TestSkillUpdateRecoversAtEveryBoundary(t *testing.T) {
 			cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
 			editCopy(t, cursor)
 			edited := libraryTree(t, cursor)
+			writeFile(t, filepath.Join(h.library, "alpha", ".DS_Store"), "finder data\n")
 			checked(t, h, s)
 			want := secondTree(t, s)
 			tip := h.ref(lineage.ManagedRef("alpha"))
@@ -1368,7 +1459,7 @@ func TestSkillUpdateRecoversAtEveryBoundary(t *testing.T) {
 			equal(t, "journals after recovery", journalCount(t, h), 0)
 			equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), candidate)
 			equal(t, "the candidate ref", h.ref(lineage.CandidateRef("alpha")), "")
-			sameTree(t, "the library directory", libraryTree(t, filepath.Join(h.library, "alpha")), want)
+			sameTree(t, "the library directory", libraryTree(t, filepath.Join(h.library, "alpha")), withFile(want, ".DS_Store", "finder data\n"))
 			if !executable(t, filepath.Join(h.library, "alpha", "scripts", "run.sh")) {
 				t.Error("scripts/run.sh is not executable after recovery")
 			}

@@ -128,7 +128,7 @@ func (inv *invocation) skillRemove(ctx context.Context, name string, from []stri
 			// A merge an update left pending holds the library directory
 			// and the import branch the removal would take away; taking
 			// one placement away leaves both, and is not refused.
-			if whole && values[lineage.MergeRef(name)] != "" {
+			if whole && inv.mergePending(name) {
 				return pendingMergeRefusal(name, "removed")
 			}
 			refs = values
@@ -262,7 +262,7 @@ func (inv *invocation) removeAbsent(ctx context.Context, name string, from []str
 				"take what is left of it off the machine with '"+skillCommand("remove", name)+"'")
 		}
 	}
-	if refs[lineage.MergeRef(name)] != "" {
+	if inv.mergePending(name) {
 		return pendingMergeRefusal(name, "removed")
 	}
 	targets := inv.detectedTargets()
@@ -284,7 +284,7 @@ func (inv *invocation) removeAbsent(ctx context.Context, name string, from []str
 		if values[lineage.ManagedRef(name)] != commit || values[lineage.ForkRef(name)] != "" {
 			return moved
 		}
-		if values[lineage.MergeRef(name)] != "" {
+		if inv.mergePending(name) {
 			return pendingMergeRefusal(name, "removed")
 		}
 		// The base version a copy is judged against: the tree and the
@@ -306,16 +306,20 @@ func (inv *invocation) removeAbsent(ctx context.Context, name string, from []str
 			judge.differs = func(string) bool { return true }
 		} else {
 			// A branch an earlier agentx stored in a form git no longer
-			// writes is current against no directory, so a copy that is not
-			// current is held to the base's files as well, read once and
-			// only for such a copy.
+			// writes is held by no directory, so a copy that does not hold
+			// it is held to the base's files as well, read once and only
+			// for such a copy.
 			var base *lineage.Base
 			judge.differs = func(path string) bool {
 				tree, err := treeid.Read(path)
 				if err != nil {
 					return true
 				}
-				if rec.Current(tree) {
+				j, err := inv.judgeDir(ctx, gitDir, path, tree, baseVersion(rec), false)
+				if err != nil {
+					return true
+				}
+				if j.holds {
 					return false
 				}
 				if base == nil {
@@ -325,7 +329,7 @@ func (inv *invocation) removeAbsent(ctx context.Context, name string, from []str
 					}
 					base = &read
 				}
-				return !base.HeldBy(tree)
+				return j.written != base.ID()
 			}
 		}
 		edit, err := inv.beginSettings()
@@ -565,13 +569,13 @@ func canonicalPath(path string) string {
 	}
 }
 
-// lineageRefs reads the import branch, the fork branch, the candidate ref,
-// the upstream-removed marker and the merge ref of one skill in one git
-// process, so that a removal knows what it has to take away and what it
-// must refuse before it plans anything.
+// lineageRefs reads the import branch, the fork branch, the candidate ref
+// and the upstream-removed marker of one skill in one git process, so that
+// a removal knows what it has to take away and what it must refuse before
+// it plans anything.
 func (inv *invocation) lineageRefs(ctx context.Context, gitDir, name string) (map[string]string, error) {
 	values, err := inv.git.Refs(ctx).RefValues(gitDir,
-		[]string{lineage.ManagedRef(name), lineage.ForkRef(name), lineage.CandidateRef(name), lineage.UpstreamRemovedRef(name), lineage.MergeRef(name)})
+		[]string{lineage.ManagedRef(name), lineage.ForkRef(name), lineage.CandidateRef(name), lineage.UpstreamRemovedRef(name)})
 	if err != nil {
 		return nil, accountRepoFailure(err)
 	}
@@ -758,7 +762,7 @@ func (inv *invocation) reportRemoved(ctx context.Context, plan removalPlan, targ
 		if err != nil {
 			return err
 		}
-		inv.out.emit(sc.librarySkillEventFor(inv, snap, lib, targetIDs(targets)))
+		inv.out.emit(sc.librarySkillEventFor(ctx, inv, snap, lib, targetIDs(targets)))
 	}
 	if plan.whole {
 		inv.warnStillSeen(snap, plan, targetIDs(targets))
