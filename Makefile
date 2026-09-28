@@ -12,7 +12,7 @@ GO_TOOLCHAIN = go$(shell awk '$$1 == "go" { print $$2; exit }' $(CLI)/go.mod)+au
 # Static on Linux; cgo on macOS, where the serve watcher uses FSEvents.
 CGO_ENABLED ?= $(if $(filter Darwin,$(shell uname -s)),1,0)
 
-.PHONY: check fmt fmt-check lint tidy-check build test test-shard
+.PHONY: check fmt fmt-check lint tidy-check build test
 
 check: fmt-check lint tidy-check build test
 
@@ -37,16 +37,3 @@ TEST_FLAGS = -race -count=1 -timeout 30m
 
 test:
 	cd $(CLI) && go test $(TEST_FLAGS) ./...
-
-# CI runs the tests in SHARDS parallel parts. Part SHARD takes every SHARDS-th
-# top-level test of the CLI package in sorted order; part 1 also runs every
-# other package.
-SHARD ?= 1
-SHARDS ?= 3
-
-test-shard:
-	cd $(CLI) && tests=$$(go test -list . ./internal/cli | grep -E '^(Test|Example|Fuzz)' | LC_ALL=C sort | \
-		awk -v i=$(SHARD) -v n=$(SHARDS) '(NR - 1) % n == i - 1' | paste -s -d '|' -) && \
-		if [ -z "$$tests" ]; then echo "test-shard: no tests in part $(SHARD) of $(SHARDS)"; exit 1; fi && \
-		if [ $(SHARD) = 1 ]; then go test $(TEST_FLAGS) $$(go list ./... | grep -v '/internal/cli$$'); fi && \
-		go test $(TEST_FLAGS) -run "^($$tests)$$" ./internal/cli
