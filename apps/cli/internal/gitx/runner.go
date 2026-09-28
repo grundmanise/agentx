@@ -197,7 +197,8 @@ func isolatedConfig() []string {
 
 // User runs git against gitDir in the user's own environment, in which
 // credential helpers, SSH configuration and URL rewrites apply. Network
-// commands use it. It returns stdout without its trailing newline.
+// commands, and the read of the user's core.excludesFile, use it. It
+// returns stdout without its trailing newline.
 func (r *Runner) User(ctx context.Context, gitDir string, args ...string) (string, error) {
 	out, err := r.run(ctx, call{}, append([]string{"--git-dir=" + gitDir}, args...)...)
 	return strings.TrimRight(out, "\n"), err
