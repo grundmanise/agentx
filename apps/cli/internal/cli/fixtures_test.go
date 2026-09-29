@@ -8,7 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
+	"testing"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 )
@@ -233,17 +235,106 @@ func writeExactly(path string, data []byte, perm fs.FileMode) error {
 	return errors.Join(err, f.Chmod(perm), f.Close())
 }
 
-// executableSource is standardSource with a third commit that makes
+// buildExecutable is buildStandard with a third commit that makes
 // skills/alpha/scripts/run.sh executable, since a source holds modes too:
 // the source installHarness and placementHarness add.
-func (h *harness) executableSource() *sourceRepo {
-	h.t.Helper()
-	s := h.newSourceRepo("skills", true)
-	s.advance("executableSource", func(s *sourceRepo) []string {
-		buildStandard(s)
-		s.executable("skills/alpha/scripts/run.sh")
-		s.commit("an executable script")
-		return nil
+func buildExecutable(s *sourceRepo) []string {
+	s.t.Helper()
+	buildStandard(s)
+	s.executable("skills/alpha/scripts/run.sh")
+	s.commit("an executable script")
+	return nil
+}
+
+// A builder such as installHarness runs the same commands over the same
+// source for every test that calls it: a source add, an install, a
+// placement, each a dozen git processes and more. Such a home is built
+// once per test binary as well, and every later test gets a copy of it.
+//
+// A home names the path it was built at in two places. The source's URL
+// is recorded in the settings, in the account repo's remote and in the
+// trailer of every import commit, so a fixture source is added under a
+// URL of its own, fixtureURL, the same in every test, which the harness
+// user's git configuration maps to the local repository, as h.rewrite
+// does for a developer with a mirror. The placement symlinks name the
+// library by its absolute path, and are rewritten as the copy is written.
+// Nothing else in a home depends on where it was built: the machine id is
+// fixed, the version counter and last_fetched are what the same commands
+// would have written, and a finished command leaves no journal behind.
+
+// fixtureHome is one such home: the client directories, the one source,
+// and the commands build runs over them, which happens in the first test
+// to ask; every later test gets a copy written from memory, with a copy of
+// the source of its own to commit to.
+type fixtureHome struct {
+	source string   // the name of the source, which fixtureURL names it by
+	dirs   []string // the client directories of the home
+	// build fills the source and runs the commands, once, in the first
+	// test to ask; what it returns, every copy gets too.
+	build func(h *harness, s *sourceRepo) []string
+
+	once  sync.Once
+	built bool     // the build finished; a build that failed leaves it false
+	root  string   // the root of the harness the build ran in, which its symlinks name
+	image dirImage // everything under that root
+	ids   []string
+}
+
+// fixtureURL is the URL a fixture source is added under: a GitHub URL,
+// the form most sources take, with the subpath and pin syntax a file URL
+// has. No such repository exists; every fetch of it goes through the
+// harness's mapping to the test's own.
+func fixtureURL(name string) string { return "https://github.com/fixtures/" + name }
+
+// copy gives t a harness holding the home, the source at the state build
+// left it in, and what build returned.
+func (f *fixtureHome) copy(t *testing.T) (*harness, *sourceRepo, []string) {
+	t.Helper()
+	h := newHarness(t)
+	h.build(t, fixture{dirs: f.dirs})
+	s := h.newSourceRepo(f.source, true)
+	s.url = fixtureURL(f.source)
+	root := filepath.Dir(h.home)
+	here := false
+	f.once.Do(func() {
+		h.rewrite(s)
+		ids := f.build(h, s)
+		image, err := imageOf(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.root, f.image, f.ids, f.built, here = root, image, ids, true, true
 	})
-	return s
+	if !f.built {
+		t.Fatalf("the fixture home over the source %s failed to build in another test", f.source)
+	}
+	if !here {
+		prev, err := imageOf(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := f.image.rebased(f.root, root).writeOver(prev, root); err != nil {
+			t.Fatal(err)
+		}
+		// The copied configuration maps the URL to the source of the home
+		// the build ran in; this test fetches from its own.
+		h.rewrite(s)
+		s.at = nil // the source holds what build committed, a state no image names
+	}
+	return h, s, slices.Clone(f.ids)
+}
+
+// rebased is the image with every symlink into the tree at from pointing
+// into the tree at to instead.
+func (img dirImage) rebased(from, to string) dirImage {
+	out := slices.Clone(img)
+	for i, e := range out {
+		if e.mode&fs.ModeSymlink == 0 {
+			continue
+		}
+		if target, ok := strings.CutPrefix(string(e.data), from+"/"); ok {
+			out[i].data = []byte(filepath.Join(to, target))
+		}
+	}
+	return out
 }

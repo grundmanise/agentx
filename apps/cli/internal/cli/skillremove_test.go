@@ -18,13 +18,19 @@ import (
 // read the library itself, so their occurrence is the library entry.
 func placementHarness(t *testing.T) (*harness, *sourceRepo) {
 	t.Helper()
-	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude", ".cursor", ".codeium/windsurf", ".copilot", ".codex", ".gemini"}})
-	s := h.executableSource()
-	if out := h.run("source", "add", s.url); out.exit != 0 {
-		t.Fatalf("source add: exit %d\n%s", out.exit, out.stderr)
-	}
+	h, s, _ := placementHome.copy(t)
 	return h, s
+}
+
+// placementHome is the home placementHarness hands out.
+var placementHome = &fixtureHome{
+	source: "skills",
+	dirs:   []string{".claude", ".cursor", ".codeium/windsurf", ".copilot", ".codex", ".gemini"},
+	build: func(h *harness, s *sourceRepo) []string {
+		buildExecutable(s)
+		h.mustRun("source", "add", s.url)
+		return nil
+	},
 }
 
 // mutationVersion is the change counter of agentx home, so a test can say

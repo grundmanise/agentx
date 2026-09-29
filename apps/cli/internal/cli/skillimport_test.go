@@ -27,6 +27,7 @@ func TestImportCommitIsTheSameEverywhere(t *testing.T) {
 	second.build(t, fixture{dirs: []string{".claude"}})
 	second.env["TZ"] = "Pacific/Chatham" // an offset of 12:45, and 13:45 in summer
 	writeFile(t, filepath.Join(second.agentx, "machine.json"), `{"id": "00112233445566778899aabbccddeeff"}`+"\n")
+	second.rewrite(s)
 	spoilTheGitConfig(t, second)
 	second.mustRun("source", "add", s.url)
 	second.mustRun("skill", "add", s.url, "--skill", "alpha")
@@ -39,7 +40,8 @@ func TestImportCommitIsTheSameEverywhere(t *testing.T) {
 
 // spoilTheGitConfig gives the home a user git configuration with what most
 // often changes a commit: line endings, signing, hooks and an identity. The
-// isolated environment must keep all of it out.
+// isolated environment must keep all of it out. It goes below what the
+// configuration holds already, the URL mapping a fetch needs.
 func spoilTheGitConfig(t *testing.T, h *harness) {
 	t.Helper()
 	hooks := filepath.Join(h.home, "hooks")
@@ -50,7 +52,8 @@ func spoilTheGitConfig(t *testing.T, h *harness) {
 	if err := os.Chmod(filepath.Join(hooks, "prepare-commit-msg"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeFile(t, filepath.Join(h.home, ".gitconfig"), strings.Join([]string{
+	config := filepath.Join(h.home, ".gitconfig")
+	writeFile(t, config, readText(t, config)+strings.Join([]string{
 		"[core]", "\tautocrlf = true", "\thooksPath = " + hooks,
 		"[commit]", "\tgpgsign = true",
 		"[user]", "\tname = Someone Else", "\temail = else@example.com",
@@ -250,6 +253,7 @@ func TestImportCommitIgnoresUnrelatedUpstreamCommits(t *testing.T) {
 	// A home that fetched the source at the new tip writes the same commit.
 	second := newHarness(t)
 	second.build(t, fixture{dirs: []string{".claude"}})
+	second.rewrite(s)
 	equal(t, "exit of source add in the second home", second.run("source", "add", s.url).exit, 0)
 	equal(t, "exit of skill add in the second home", second.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
 	got := second.accountGit("rev-parse", "refs/heads/managed/alpha")

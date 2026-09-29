@@ -290,10 +290,16 @@ func fetches(stderr string) int {
 // rewrite makes the user's git configuration of the harness map every
 // canonical URL to the local repository, the way url.<base>.insteadOf does
 // for a developer with a mirror, so a GitHub or GitLab URL fetches locally.
+// A source known by a URL that is not its repository's, as a fixture
+// source is, keeps that mapping too.
 func (h *harness) rewrite(s *sourceRepo, canonical ...string) {
 	h.t.Helper()
+	local := "file://" + s.gitDir
+	if s.url != local {
+		canonical = append([]string{s.url}, canonical...)
+	}
 	var b strings.Builder
-	b.WriteString("[url \"" + s.url + "\"]\n")
+	b.WriteString("[url \"" + local + "\"]\n")
 	for _, c := range canonical {
 		b.WriteString("\tinsteadOf = " + c + "\n")
 	}
