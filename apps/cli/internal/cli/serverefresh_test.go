@@ -288,7 +288,10 @@ func TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves(t *testing.T) {
 // count is of this test's own git, through its own wrapper, so it runs in
 // parallel with the rest.
 func TestServeRefreshSpawnsBoundedGit(t *testing.T) {
-	t.Parallel()
+	// Not parallel: how many rescans a check's write sets off, and so how
+	// many git processes a check counts, depends on how fast serve runs,
+	// which tests running beside it change. On a loaded three-core runner
+	// the count went over the bound.
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	s := h.newSourceRepo("many", true)
