@@ -18,6 +18,8 @@ Mintlify is used for the user-facing documentation. Keep the Help Center up to d
 
 Mintlify publishes every file under `docs/help-center`, whether or not `docs.json` lists it, so treat anything you add there as public.
 
+Mintlify spellchecks the pages a PR changes. When it flags a product term, add the term to `docs/help-center/styles/config/vocabularies/agentx/accept.txt`.
+
 ## PRs and commits
 
 ### Titles
