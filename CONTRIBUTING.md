@@ -8,7 +8,7 @@ you start on anything larger than a small fix, so we can agree on the approach f
 
 Everyone taking part is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-## Report a bug or request a feature
+## Open an issue
 
 Search the [existing issues](https://github.com/grundmanise/agentx/issues) first, then open one with a
 form:
@@ -18,6 +18,8 @@ form:
   your operating system and the agent clients involved.
 - [Feature request](https://github.com/grundmanise/agentx/issues/new?template=feature_request.yml):
   asks for the problem you want solved and the change you propose.
+- [Something else](https://github.com/grundmanise/agentx/issues/new?template=other.yml): for a
+  question, feedback, a documentation fix or anything else constructive.
 
 New issues are labelled `needs-triage` until a maintainer looks at them.
 
