@@ -8,24 +8,6 @@ you start on anything larger than a small fix, so we can agree on the approach f
 
 Everyone taking part is expected to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-## Open an issue
-
-Search the [existing issues](https://github.com/grundmanise/agentx/issues) first, then open one with a
-form:
-
-- [Bug report](https://github.com/grundmanise/agentx/issues/new?template=bug_report.yml): asks what you
-  ran, what you expected, what happened instead, the output of `agentx version` and `agentx doctor`,
-  your operating system and the agent clients involved.
-- [Feature request](https://github.com/grundmanise/agentx/issues/new?template=feature_request.yml):
-  asks for the problem you want solved and the change you propose.
-- [Something else](https://github.com/grundmanise/agentx/issues/new?template=other.yml): for a
-  question, feedback, a documentation fix or anything else constructive.
-
-New issues are labelled `needs-triage` until a maintainer looks at them.
-
-Don't report a security vulnerability in a public issue.
-[Report it privately](https://github.com/grundmanise/agentx/security/advisories/new) instead.
-
 ## Set up your machine
 
 You need:
@@ -41,6 +23,18 @@ Clone the repository:
 git clone https://github.com/grundmanise/agentx.git
 cd agentx
 ```
+
+## Find your way around
+
+| Path | What it holds |
+| --- | --- |
+| [`apps/cli`](apps/cli) | The Go module of the `agentx` command-line tool |
+| [`CONTEXT.md`](CONTEXT.md) | The vocabulary: the terms to use in code, docs, issues and PRs |
+| [`docs/adr`](docs/adr) | Architecture decisions |
+| [`docs/spec`](docs/spec) | Contracts and specs, such as the CLI's output contract |
+| [`docs/help-center`](docs/help-center) | The user documentation, built with Mintlify |
+
+Read the ADRs and specs that touch the area you're changing before you start.
 
 ## Development commands
 
@@ -59,18 +53,6 @@ Run these from the repository root. Each target runs against the Go module in `a
 `golangci-lint` needs no install: its version is pinned in `apps/cli/.golangci-lint-version`, and
 `make lint` builds that release into the build cache on first use through `go run`, locally and in
 CI alike. The build uses the Go version `apps/cli/go.mod` specifies.
-
-## Find your way around
-
-| Path | What it holds |
-| --- | --- |
-| [`apps/cli`](apps/cli) | The Go module of the `agentx` command-line tool |
-| [`CONTEXT.md`](CONTEXT.md) | The vocabulary: the terms to use in code, docs, issues and PRs |
-| [`docs/adr`](docs/adr) | Architecture decisions |
-| [`docs/spec`](docs/spec) | Contracts and specs, such as the CLI's output contract |
-| [`docs/help-center`](docs/help-center) | The user documentation, built with Mintlify |
-
-Read the ADRs and specs that touch the area you're changing before you start.
 
 ## Make a change
 
@@ -104,6 +86,24 @@ Read the ADRs and specs that touch the area you're changing before you start.
   suitable punctuation.
 
 Keep each pull request to one change. A maintainer reviews it once CI is green.
+
+## Open an issue
+
+Search the [existing issues](https://github.com/grundmanise/agentx/issues) first, then open one with a
+form:
+
+- [Bug report](https://github.com/grundmanise/agentx/issues/new?template=bug_report.yml): asks what you
+  ran, what you expected, what happened instead, the output of `agentx version` and `agentx doctor`,
+  your operating system and the agent clients involved.
+- [Feature request](https://github.com/grundmanise/agentx/issues/new?template=feature_request.yml):
+  asks for the problem you want solved and the change you propose.
+- [Something else](https://github.com/grundmanise/agentx/issues/new?template=other.yml): for a
+  question, feedback, a documentation fix or anything else constructive.
+
+New issues are labelled `needs-triage` until a maintainer looks at them.
+
+Don't report a security vulnerability in a public issue.
+[Report it privately](https://github.com/grundmanise/agentx/security/advisories/new) instead.
 
 ## License
 
