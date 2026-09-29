@@ -35,15 +35,16 @@ You need:
 - `make`
 - macOS or Linux
 
-Clone the repository and run the checks:
+Clone the repository:
 
 ```sh
 git clone https://github.com/grundmanise/agentx.git
 cd agentx
-make check
 ```
 
-The Makefile targets run against the Go module in `apps/cli`:
+## Development commands
+
+Run these from the repository root. Each target runs against the Go module in `apps/cli`:
 
 | Target | Command |
 | --- | --- |
