@@ -51,19 +51,3 @@ jobs:
       # watcher's FSEvents backend; the Linux job finds the data races, and
       # `make check` keeps -race locally.
       - run: make test ${{ runner.os == 'macOS' && 'RACE=' || '' }}
-        if: runner.os != 'macOS'
-      # TEMPORARY: time every test on macOS to see what dominates there.
-      - if: runner.os == 'macOS'
-        working-directory: apps/cli
-        env:
-          GORACE: atexit_sleep_ms=0
-        run: |
-          sysctl -n hw.ncpu hw.memsize machdep.cpu.brand_string || true
-          git --version
-          echo "200 git --version from a shell:"; time (for i in $(seq 200); do git --version > /dev/null; done)
-          echo "200 /usr/bin/true from a shell:"; time (for i in $(seq 200); do /usr/bin/true; done)
-          set +e
-          go test -count=1 -timeout 30m -json ./... > "$RUNNER_TEMP/test.json"
-          status=$?
-          python3 ../../.github/ci-slowest.py "$RUNNER_TEMP/test.json"
-          exit $status
