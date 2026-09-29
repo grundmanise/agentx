@@ -135,7 +135,6 @@ func TestServeRefreshesEverySource(t *testing.T) {
 
 	calls := countingGit(t, h)
 	h.env["AGENTX_CHECK_INTERVAL"] = quickChecks
-	h.env["AGENTX_DEBOUNCE"] = quickRescans
 	before := mutationVersion(t, h)
 	p := h.serve(t, "--json")
 	p.next("snapshot")
@@ -205,7 +204,6 @@ func TestServeWarnsOnceAboutASourceItCannotFetch(t *testing.T) {
 	two.bare("symbolic-ref", "HEAD", "refs/heads/gone") // the default branch it follows names nothing
 
 	h.env["AGENTX_CHECK_INTERVAL"] = quickChecks
-	h.env["AGENTX_DEBOUNCE"] = quickRescans
 	p := h.serve(t, "--json", "--verbose")
 	p.next("snapshot")
 	about := "update check: " + two.url
@@ -250,7 +248,6 @@ func TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves(t *testing.T) {
 	h.accountGit("update-ref", "-d", source.Ref(source.ID(two.url)))
 
 	h.env["AGENTX_CHECK_INTERVAL"] = quickChecks
-	h.env["AGENTX_DEBOUNCE"] = quickRescans
 	p := h.serve(t, "--json")
 	p.next("snapshot")
 	searches := 0
@@ -308,9 +305,6 @@ func TestServeRefreshSpawnsBoundedGit(t *testing.T) {
 	h.mustRun("source", "add", other.url)
 
 	calls := countingGit(t, h)
-	// The quiet time before a rescan stays serve's own: a shorter one splits
-	// the rescan a check's write sets off into several, which is more git
-	// than serve spawns.
 	h.env["AGENTX_CHECK_INTERVAL"] = quickChecks
 	before := mutationVersion(t, h)
 	// JSON, as the desktop app runs it, so that the rescans read the
@@ -376,7 +370,6 @@ func TestServeRefreshesNothingWithoutASource(t *testing.T) {
 			tc.setup(h)
 			calls := countingGit(t, h)
 			h.env["AGENTX_CHECK_INTERVAL"] = "10ms"
-			h.env["AGENTX_DEBOUNCE"] = quickRescans
 			p := h.serve(t, "--json")
 			p.next("snapshot")
 			// The scan and the source index it rebuilds have run their git by
@@ -428,7 +421,6 @@ func TestServeWarnsOnceAboutSourcesAnImportBrought(t *testing.T) {
 	version := mutationVersion(t, h)
 	calls := countingGit(t, h)
 	h.env["AGENTX_CHECK_INTERVAL"] = quickChecks
-	h.env["AGENTX_DEBOUNCE"] = quickRescans
 	p := h.serve(t, "--json", "--verbose")
 	p.next("snapshot")
 	// The scan and the source index it rebuilds have run their git by the

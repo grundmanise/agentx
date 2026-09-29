@@ -82,11 +82,6 @@ func (h *harness) serveOnce(args ...string) outcome {
 	return h.run(append([]string{"serve", "--once"}, args...)...)
 }
 
-// quickRescans is the AGENTX_DEBOUNCE of the tests that wait for a rescan:
-// every refresh and every change waits out the quiet time before its rescan
-// starts, and serve's own 100 ms would be most of what such a test waits.
-const quickRescans = "10ms"
-
 func skillNames(e jsonEvent) []string {
 	var names []string
 	for _, s := range e["skills"].([]any) {
@@ -150,7 +145,6 @@ func TestServeRefusesASecondChild(t *testing.T) {
 func TestServeAnswersRequests(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
-	h.env["AGENTX_DEBOUNCE"] = quickRescans
 	p := h.serve(t, "--json")
 	snap := p.next("snapshot")
 	equal(t, "scan_counter", snap["scan_counter"], float64(1))
@@ -217,7 +211,6 @@ func TestServeWaitsForTheMutationLockAndCoalescesRefreshes(t *testing.T) {
 func TestServeRescansOnVersionBumpWithoutSnapshot(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
-	h.env["AGENTX_DEBOUNCE"] = quickRescans
 	p := h.serve(t, "--json")
 	p.next("snapshot")
 	// Wait until serve is idle: its first scan created the lock file, a
@@ -254,7 +247,6 @@ func TestServeRescansOnVersionBumpWithoutSnapshot(t *testing.T) {
 func TestServeWatchesTheLibrary(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
-	h.env["AGENTX_DEBOUNCE"] = quickRescans
 	p := h.serve(t, "--json")
 	p.next("snapshot")
 
@@ -287,7 +279,6 @@ func TestServeWatchesTheLibrary(t *testing.T) {
 func TestServeWatchesInsideSkills(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
-	h.env["AGENTX_DEBOUNCE"] = quickRescans
 	h.addLibrarySkill(t, "commit")
 	p := h.serve(t, "--json")
 	snap := p.next("snapshot")
@@ -349,7 +340,6 @@ func TestWatchedDirsCoverEverySkillsDirectoryOnce(t *testing.T) {
 func TestServeWatchesAClientSkillsDirectory(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
-	h.env["AGENTX_DEBOUNCE"] = quickRescans
 	skills := filepath.Join(h.home, ".claude", "skills")
 	h.addSkill(t, skills, "commit")
 	p := h.serve(t, "--json")
@@ -389,7 +379,6 @@ func TestServeKeepsServingWhenTheAccountRepoCannotBeRead(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--skill", "alpha")
-	h.env["AGENTX_DEBOUNCE"] = quickRescans
 	account := gitx.AccountRepoPath(h.agentx)
 	head := filepath.Join(account, "HEAD")
 	healthy, err := os.ReadFile(head)
@@ -459,20 +448,6 @@ func TestServeEndsOnCancel(t *testing.T) {
 	equal(t, "exit", p.cancelRun(), 0)
 	p.next("result")
 	equal(t, "stderr", p.stderr.String(), "")
-}
-
-// TestServeRefusesABadDebounce: the quiet time before a rescan is a
-// positive duration or nothing, as the check interval is.
-func TestServeRefusesABadDebounce(t *testing.T) {
-	t.Parallel()
-	h := serveHarness(t)
-	h.env["AGENTX_DEBOUNCE"] = "0s"
-	out := h.run("--json", "serve")
-	equal(t, "exit", out.exit, 1)
-	e := h.one(out.stdout, "error")
-	equal(t, "error.code", e["code"], "usage")
-	equal(t, "error.message", e["message"], "AGENTX_DEBOUNCE 0s is not a positive duration")
-	equal(t, "serve --once ignores it", h.serveOnce("--json").exit, 0)
 }
 
 func TestServeRefusesWhenWatchingFails(t *testing.T) {
