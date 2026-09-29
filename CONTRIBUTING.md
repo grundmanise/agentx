@@ -46,15 +46,15 @@ cd agentx
 
 Run these from the repository root. Each target runs against the Go module in `apps/cli`:
 
-| Target | Command |
-| --- | --- |
-| `fmt` | `gofmt -w .` |
-| `fmt-check` | `gofmt -l .`, fails when any file is listed |
-| `lint` | `golangci-lint run ./...` with `apps/cli/.golangci.yml`, including `go vet` |
-| `tidy-check` | `go mod tidy`, fails when `go.mod` or `go.sum` change |
-| `build` | `go build ./...`, `CGO_ENABLED=0` on Linux and `1` on macOS |
-| `test` | `go test -race -count=1 ./...` |
-| `check` | `fmt-check lint tidy-check build test` |
+| Target | What it does | Command |
+| --- | --- | --- |
+| `make fmt` | Formats every Go file in place | `gofmt -w .` |
+| `make fmt-check` | Checks that every Go file is formatted, without changing any | `gofmt -l .`, fails when any file is listed |
+| `make lint` | Runs the linters, including `go vet`, with the project's configuration | `golangci-lint run ./...` with `apps/cli/.golangci.yml` |
+| `make tidy-check` | Checks that `go.mod` and `go.sum` list exactly the dependencies the code uses | `go mod tidy`, fails when `go.mod` or `go.sum` change |
+| `make build` | Compiles every package | `go build ./...`, `CGO_ENABLED=0` on Linux and `1` on macOS |
+| `make test` | Runs every test with the race detector, never from cache | `go test -race -count=1 ./...` |
+| `make check` | Runs all the checks CI runs, in the same order | `fmt-check lint tidy-check build test` |
 
 `golangci-lint` needs no install: its version is pinned in `apps/cli/.golangci-lint-version`, and
 `make lint` builds that release into the build cache on first use through `go run`, locally and in
