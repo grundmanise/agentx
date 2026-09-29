@@ -43,8 +43,7 @@ cd agentx
 make check
 ```
 
-`make check` runs what CI runs on every pull request, in the same order, against the Go module in
-`apps/cli`. A green `make check` means a green pull request.
+The Makefile targets run against the Go module in `apps/cli`:
 
 | Target | Command |
 | --- | --- |
@@ -84,8 +83,8 @@ Read the ADRs and specs that touch the area you're changing before you start.
 - **Update the Help Center.** When you add a feature or change how one works, update the matching page
   in [`docs/help-center`](docs/help-center). Keep it clear, structured and concise, in an imperative
   tone.
-- **Run `make check`.** A green `make check` means a green pull request. Run `make fmt` to fix
-  formatting.
+- **Run `make check`.** It runs what CI runs, in the same order. A green `make check` means a green pull
+  request. Run `make fmt` to fix formatting.
 
 ## Open a pull request
 
