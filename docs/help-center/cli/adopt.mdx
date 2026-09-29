@@ -1,6 +1,6 @@
 ---
 title: "agentx adopt"
-description: "Take over the skills the vercel skills CLI installed, so agentx knows where each one came from, without reinstalling and without touching your files."
+description: "Take over the skills the vercel skills CLI installed, without reinstalling them or touching your files."
 ---
 
 The vercel skills CLI installs into the same library agentx uses, `~/.agents/skills`, and records what it installed in a lock file. `agentx adopt` reads that file and takes those skills over: each one keeps its directory exactly as it is and gains an upstream, so agentx can tell your edits from the version you installed.
@@ -47,7 +47,13 @@ Name single skills instead with `--skill`, once for each:
 agentx adopt --skill pdf --skill xlsx
 ```
 
-Adopting adds any source you do not have yet, exactly as [`agentx source add`](/cli/source) would, and pins it to the branch or tag the lock file recorded. Then it records the version each skill was installed at and points that skill's import branch at it. A source you removed comes back this way too, and the skills you installed from it no longer show `source removed`.
+Adopting does three things:
+
+1. It adds any source you do not have yet, exactly as [`agentx source add`](/cli/source) would, pinned to the branch or tag the lock file recorded.
+2. It records the version each skill was installed at.
+3. It points that skill's import branch at that version.
+
+A source you removed comes back this way too, and the skills you installed from it no longer show `source removed`.
 
 A source holds one pin, so when its skills were installed from different refs agentx takes the first in name order and warns you:
 
@@ -74,11 +80,11 @@ The base is the upstream version you installed, not the files on your disk. That
 
 agentx establishes the version in one of these ways, and never guesses. Each is tried in turn, and a skill is left unmanaged only when none of them reaches a version:
 
-1. **The folder hash in the lock file.** It is the id of a directory in the source, so agentx looks that directory up in the source itself, at the version you fetched and back through the history of that skill. Finding it proves the content, because a git id names one set of bytes and nothing else. This works even when the skill has since been deleted from the source: its version is in the history, which is exactly where agentx looks. Some installs record a hash of their own instead, which names nothing in the source; agentx then moves on to the next way.
+1. **The folder hash in the lock file.** It is the id of a directory in the source, so agentx looks that directory up in the source itself, at the version you fetched and back through the history of that skill. Finding it proves the content, because a git id names one set of bytes and nothing else. This works even when the skill has since been deleted from the source, because its version is still in the history. Some installs record a hash of their own instead, which names nothing in the source; agentx then moves on to the next way.
 2. **Your directory already is the current version.** If the files match the source exactly, they are an upstream version rather than an edit of one, and agentx records that version.
 3. **You name it yourself**, with `--base`.
 
-Whichever way finds the version, the commit recorded is the one at which the skill's directory took that content, never the one you happen to have fetched or named with `--base`. It is the commit an install of that version records too, so two machines that adopt the same install, or one that adopts it and one that installs it, write the same import commit, whenever each of them last fetched the source.
+Whichever way finds the version, the commit recorded is the one at which the skill's directory took that content, never the one you happen to have fetched or named with `--base`. An install of that version records the same commit. So two machines that adopt the same install, or one that adopts it and one that installs it, write the same import commit, whenever each of them last fetched the source.
 
 Your directory is never changed, whichever way the version was found. If it differs from the base, agentx says so and `agentx skill list` shows the skill as `modified`. See what differs with [`agentx skill diff <name>`](/cli/skill#see-what-you-changed), and discard it with [`agentx skill revert <name>`](/cli/skill#revert-a-skill).
 
@@ -109,7 +115,9 @@ agentx adopt --skill pdf --base v1.2.0
   base 1b9e05f: the version named with --base; the directory differs from it, so what differs is a local modification
 ```
 
-`--base` takes a commit id, a branch or a tag of the source, and it takes one `--skill`. A branch or a tag is resolved against the source itself, so name the version the way the repository publishes it; `git ls-remote <url>` lists what it has. The version it records is still read from the source; what it changes is which version you call your starting point. Your directory is left as it is, and the difference from that base becomes your local modification.
+`--base` takes a commit id, a branch or a tag of the source, and works with one `--skill` at a time. A branch or a tag is resolved against the source itself, so name the version the way the repository publishes it; `git ls-remote <url>` lists what it has.
+
+The version is still read from the source: `--base` only chooses which version counts as your starting point. Your directory is left as it is, and the difference from that base becomes your local modification.
 
 A version that is not in the history the source follows is refused: a version of another repository is not a version of this one, and neither is a branch or a tag of this one that your pin does not reach. Add the source at the ref you want first:
 

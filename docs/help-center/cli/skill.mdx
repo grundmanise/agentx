@@ -1,6 +1,6 @@
 ---
 title: "agentx skill"
-description: "Install skills from a source into your library, place them in your agent clients and put their placements back, see and revert what you changed, check for updates and apply them, remove them again, and see what you have."
+description: "Install, place, update, revert and remove skills, and see what is in your library."
 ---
 
 Your library is one directory, `~/.agents/skills`, that holds every skill agentx manages for you. Installing a skill puts it there once and links it into each agent client, so every client sees the same files and an update reaches all of them at once.
@@ -21,9 +21,11 @@ agentx skill add anthropics/skills --skill pdf
   always available to universal clients: codex, gemini-cli
 ```
 
-Each row is one client's placement: the link or copy in its own skills directory, or the library entry itself for a client that reads the library. Cursor also reads Claude Code's skills directory, so it sees the skill there too; that path is Claude Code's row. `--json` lists every path each client sees the skill through.
+Each row is one client's placement: the link or copy in its own skills directory, or the library entry itself for a client that reads the library. Cursor also reads Claude Code's skills directory, so it sees the skill there too; that path is Claude Code's row.
 
-If the source is not on this machine yet, `skill add` adds it first, as [`agentx source add`](/cli/source) would, and the source stays added even if the install then fails. Name the source by its URL for this: a source id only works for a source you already added. If you removed the source and a skill installed from it is still in your library, installing by its id tells you the command that adds it again:
+If the source is not on this machine yet, `skill add` adds it first, as [`agentx source add`](/cli/source) would. The source stays added even if the install then fails. Name the source by its URL for this: a source id only works for a source you already added.
+
+If you removed the source and a skill installed from it is still in your library, installing by its id tells you the command that adds it again:
 
 ```text
 error: no source with id 1c9d0b7e4a2f6d38: https://github.com/anthropics/skills was removed, and the skills installed from it still name it
@@ -38,7 +40,7 @@ agentx skill add anthropics/skills --skill pdf --fetch
 
 To install from another branch or tag than the one the source is pinned to, change the pin with `agentx source add <url>#<ref>` first.
 
-Name the skill with `--skill` when the source holds more than one. `--skill` and `--except` match the `name` in the skill's `SKILL.md` frontmatter in any case, or its directory name when the frontmatter has no name, as the vercel skills CLI does. If a path already narrows it to a single skill, leave `--skill` out:
+Name the skill with `--skill` when the source holds more than one. `--skill` and `--except` match the `name` in the skill's `SKILL.md` frontmatter, ignoring case, or the directory name when there is no `name`, as the vercel skills CLI does. If a path already narrows it to a single skill, leave `--skill` out:
 
 ```sh
 agentx skill add anthropics/skills/skills/pdf
@@ -82,7 +84,12 @@ agentx records where a skill came from on one line of its commit. A directory na
 
 ### Clients that see every skill
 
-Some clients, such as Codex and Gemini CLI, read the library directly. They are universal clients: they get no link of their own, because the library entry is what they see. So is any client whose skills directory you made a symlink to the library, or the library a symlink to it: both are one directory. A client that reads such a directory is universal too: Cursor reads Claude Code's skills directory, so once `~/.claude/skills` is a symlink to the library, Cursor reads the library as well. Every other client gets a symlink in its own skills directory, pointing at the library.
+Some clients, such as Codex and Gemini CLI, read the library directly. They are universal clients: they get no link of their own, because the library entry is what they see. A client is also universal when:
+
+- its skills directory is a symlink to the library, or the library is a symlink to it, since both are then one directory;
+- it reads such a directory. Cursor reads Claude Code's skills directory, so once `~/.claude/skills` is a symlink to the library, Cursor reads the library as well.
+
+Every other client gets a symlink in its own skills directory, pointing at the library.
 
 A universal client sees every skill in your library, even when you disabled it with `agentx config disable` or left it out of `--to`. Each install ends with a line naming every universal client installed on this machine, since the skill is always available to them whatever you chose:
 
@@ -141,8 +148,6 @@ The summary counts the copy as a skipped placement. agentx does not record what 
 
 To replace the copy with the library version, run the commands on the second line of the warning. Removing the copy deletes what it holds, so save anything you want to keep first. `--copy` makes the new placement a copy again, as agentx had recorded for that client. For a skill whose name starts with `-`, the commands put the name last, after `--`, for example `agentx skill remove --from cursor -- -pdf`.
 
-With `--json`, the warning is one `log` event whose `message` holds both lines, joined by `; `.
-
 ### What is left out of the import
 
 A skill directory holds regular files and directories. Anything else – a symlink or a git submodule inside the skill – is left out, with a warning naming it. The library directory then differs from the upstream one, and what agentx records as the installed version is what it actually installed.
@@ -165,7 +170,13 @@ The first line counts the configurations you placed into. Each client you named 
 
 Name each client with `--to`, once for each. Without `--to`, agentx places the skill into every enabled client and puts back what `agentx skill list` flags there; see [Put back placements](#put-back-placements). Add `--copy` for a client that cannot follow a symlink; agentx remembers the choice, as it does for `agentx skill add --copy`. To turn a recorded copy back into a symlink, take it away with `agentx skill remove pdf --from cursor`, then place the skill again with `agentx skill place pdf --to cursor`.
 
-What is already at the path decides what happens: a link that already points at the library is left alone, a directory holding exactly this version is adopted, a directory holding anything else stops the command unless you add `--force`, which deletes what it holds (see [When the directory differs from the library](#when-the-directory-differs-from-the-library)), and anything else, such as a link of your own, is left where it is with a warning. If the library entry is itself a link to that client's directory, for example `~/.agents/skills/pdf` linked to `~/.claude/skills/pdf`, the client already reads the library there: agentx leaves it as it is, reports it as placed, adopts nothing, and with `--copy` records no copy.
+What is already at the path decides what happens:
+
+- A link that already points at the library is left alone.
+- A directory holding exactly this version is adopted.
+- A directory holding anything else stops the command, unless you add `--force`, which deletes what it holds. See [When the directory differs from the library](#when-the-directory-differs-from-the-library).
+- Anything else, such as a link of your own, is left where it is, with a warning.
+- If the library entry is itself a link to that client's directory, for example `~/.agents/skills/pdf` linked to `~/.claude/skills/pdf`, the client already reads the library there. agentx leaves it as it is, reports it as placed, adopts nothing, and with `--copy` records no copy.
 
 An adopted directory becomes one agentx will delete when you remove the skill, so the run names every path it adopted. This holds with `--copy` too.
 
@@ -218,7 +229,9 @@ From every client, by name:
 agentx skill remove pdf --from universal
 ```
 
-This is the same removal as leaving `--from` out, with the same output. A universal client reads the library entry itself, so removing a skill from the universal clients means removing it from the library, which takes it from every client. Give `--from universal` on its own. Next to a client that is not universal it stops with exit code 1 and removes nothing; next to a universal client it is refused as that client is, see [Clients that read the library](#clients-that-read-the-library).
+This is the same removal as leaving `--from` out, with the same output. A universal client reads the library entry itself, so removing a skill from the universal clients means removing it from the library, which takes it from every client.
+
+Give `--from universal` on its own. Next to a client that is not universal, it stops with exit code 1 and removes nothing. Next to a universal client, it is refused as that client is; see [Clients that read the library](#clients-that-read-the-library).
 
 ### What agentx will and will not delete
 
@@ -266,9 +279,16 @@ error: codex reads the library directly, so pdf cannot be removed from it alone
 hint: take pdf off the machine with 'agentx skill remove pdf --from universal', which removes it from claude-code, codex, cursor, gemini-cli
 ```
 
-agentx refuses before it changes anything, also when `--from` names other clients as well, `universal` included, and also when the universal client is disabled. The hint lists every client that sees the skill through the library or through a link or copy agentx would delete, including one that reads another client's skills directory, as Cursor reads Claude Code's. It also lists a client whose link of yours ends up in the library: the removal leaves your link, but the link no longer leads anywhere. A directory of your own is not counted: the removal leaves it. Run the command in the hint to remove the skill everywhere, or keep the skill.
+agentx refuses before it changes anything. It also refuses when `--from` names other clients as well, `universal` included, and when the universal client is disabled.
 
-A client that is universal because it reads a skills directory linked to the library is refused the same way, even when a link in its own skills directory is still there. With `~/.claude/skills` a symlink to the library, Cursor reads the library through it, so `agentx skill remove pdf --from cursor` stops with exit code 6, `cursor reads the library directly, so pdf cannot be removed from it alone`, and leaves `~/.cursor/skills/pdf` where it is. Delete that link yourself if you no longer want it, or take the skill off the machine with `--from universal`.
+The hint lists every client the removal would take the skill from:
+
+- every client that sees the skill through the library, or through a link or copy agentx would delete, including one that reads another client's skills directory, as Cursor reads Claude Code's;
+- a client whose link of yours ends up in the library: the removal leaves your link, but the link no longer leads anywhere.
+
+A directory of your own is not counted, since the removal leaves it. Run the command in the hint to remove the skill everywhere, or keep the skill.
+
+A client that is universal because it reads a skills directory linked to the library is refused the same way, even when a link in its own skills directory is still there. For example, with `~/.claude/skills` a symlink to the library, Cursor reads the library through it. So `agentx skill remove pdf --from cursor` stops with exit code 6, `cursor reads the library directly, so pdf cannot be removed from it alone`, and leaves `~/.cursor/skills/pdf` where it is. Delete that link yourself if you no longer want it, or take the skill off the machine with `--from universal`.
 
 ### After a removal
 
@@ -297,11 +317,15 @@ agentx skill remove pdf
   deleted refs/heads/managed/pdf
 ```
 
-agentx deletes the record of where the skill came from and the placements it made, by the same rules as any removal, and takes the skill out of the settings. A copy placement may be the last copy of the skill on your machine: if it differs from the version the skill was installed at, or agentx cannot tell which version that was, agentx still removes it and warns you that your changes went with it, as in `cursor's copy of pdf was different from its base version; removing it deleted those changes`. Copy anything you want to keep out of it first. If a directory without a `SKILL.md` is still in the library under that name, agentx leaves it where it is and says so. `--from <client>` is refused with exit code 6 for such a skill: with nothing in the library, there is no skill for one client to keep. Leave `--from` out.
+agentx deletes the record of where the skill came from and the placements it made, by the same rules as any removal, and takes the skill out of the settings.
+
+- A copy placement may be the last copy of the skill on your machine. If it differs from the version the skill was installed at, or agentx cannot tell which version that was, agentx still removes it and warns you that your changes went with it, as in `cursor's copy of pdf was different from its base version; removing it deleted those changes`. Copy anything you want to keep out of it first.
+- If a directory without a `SKILL.md` is still in the library under that name, agentx leaves it where it is and says so.
+- `--from <client>` is refused with exit code 6 for such a skill: with nothing in the library, there is no skill for one client to keep. Leave `--from` out.
 
 ### Forks
 
-Removing a fork is not this command; it has its own, and `agentx skill remove <fork>` stops with exit code 6, with or without `--from universal`. You can still take a fork's placements away with `--from <client>`. The universal clients keep seeing a fork until the fork itself is removed, so `--from` naming one is refused with a hint that says so rather than offering `--from universal`.
+A fork has its own removal command, so `agentx skill remove <fork>` stops with exit code 6, with or without `--from universal`. You can still take a fork's placements away with `--from <client>`. The universal clients keep seeing a fork until the fork itself is removed, so `--from` naming one is refused with a hint that says so, rather than offering `--from universal`.
 
 ## List your skills
 
@@ -379,9 +403,15 @@ index 0000000..2f1c9e0
 +My own notes.
 ```
 
-There is one diff per file, and every path is relative to the skill's directory. A file you moved shows as one deleted and one added. A skill that holds exactly its base version prints `pdf matches its base version at 3f2a9c1`. A file that is not UTF-8 text prints as the bytes it holds. Control characters other than the tab, such as the carriage return of a Windows line ending, print as a space, so nothing in a file can control your terminal. Use `--json` to get the patch exactly as git wrote it.
+There is one diff per file, and every path is relative to the skill's directory. A file you moved shows as one deleted and one added. A skill that holds exactly its base version prints `pdf matches its base version at 3f2a9c1`. A file that is not UTF-8 text prints as the bytes it holds. Control characters other than the tab, such as the carriage return of a Windows line ending, print as a space, so nothing in a file can control your terminal.
 
-The diff only reads your library: nothing is written to it. A file git ignores is never in the diff, and a file the skill's `.gitattributes` converts, for example to other line endings, is compared as git converts it: see [Files that do not count](#files-that-do-not-count). A repository nested in the skill, or anything else git cannot record, such as a named pipe, is left out with a warning naming it. Such a skill never matches its base version: `skill list` shows it as `modified`, the diff ends with the number of paths git cannot record, as in `pdf differs from its base version at 3f2a9c1 only in 1 path git cannot record`, and `skill revert` refuses it until you move the path out of the skill.
+The diff only reads your library: nothing is written to it. A file git ignores is never in the diff, and a file the skill's `.gitattributes` converts, for example to other line endings, is compared as git converts it: see [Files that do not count](#files-that-do-not-count).
+
+A repository nested in the skill, or anything else git cannot record, such as a named pipe, is left out with a warning naming it. Such a skill never matches its base version:
+
+- `skill list` shows it as `modified`;
+- the diff ends with the number of paths git cannot record, as in `pdf differs from its base version at 3f2a9c1 only in 1 path git cannot record`;
+- `skill revert` refuses it until you move the path out of the skill.
 
 An earlier version of agentx could store a skill from a source that uses an old kind of file mode in a form that makes it show as `modified` even though you changed nothing. `skill diff` then says so instead of showing a diff:
 
@@ -536,7 +566,9 @@ Nothing is applied. Your library, your clients and your edits stay exactly as th
   pdf  managed  current, update available  https://github.com/anthropics/skills/skills/pdf  4 placements
 ```
 
-Run the check again whenever you like. It lists every update available, including the ones an earlier check found, except for a skill it could not check this time, which it names in a warning; `agentx skill list` still shows that skill's update. A newer version upstream replaces the one found before. A change that does not reach your library, such as a symlink in the source, which agentx never installs, is not an update. If a newer version gives the skill another name, the check says so; the skill keeps the name you installed it under.
+Run the check again whenever you like. It lists every update available, including the ones an earlier check found. The exception is a skill it could not check this time: the check names it in a warning, and `agentx skill list` still shows that skill's update.
+
+A newer version upstream replaces the one found before. A change that does not reach your library, such as a symlink in the source, which agentx never installs, is not an update. If a newer version gives the skill another name, the check says so; the skill keeps the name you installed it under.
 
 The [desktop app's background process](/cli/serve#update-checks) runs the same check when it starts and every thirty minutes, and fetches every other source you added in the same pass.
 
@@ -593,7 +625,9 @@ agentx skill update pdf
 ✓ updated pdf from 3f2a9c1 to 8b1e0f4, 1 copy placement refreshed
 ```
 
-agentx replaces the skill's library directory with the newer version and records it as the version you have. Every client that links to the library sees the new version at once, `agentx skill list` shows the skill as `current` again, and its `update available` is gone. The update needs no network: it applies exactly the version the last check found, the one `agentx skill diff pdf --update` shows. agentx never updates a skill unless you run this command. A skill you edited keeps your edits, see [A skill you edited](#a-skill-you-edited).
+agentx replaces the skill's library directory with the newer version and records it as the version you have. Every client that links to the library sees the new version at once. `agentx skill list` shows the skill as `current` again, and its `update available` is gone.
+
+The update needs no network: it applies exactly the version the last check found, the one `agentx skill diff pdf --update` shows. agentx never updates a skill unless you run this command. A skill you edited keeps your edits; see [A skill you edited](#a-skill-you-edited).
 
 Files your ignore rules name stay: a `.DS_Store`, an editor's backup file or an ignored `build` folder (see [Files that do not count](#files-that-do-not-count)). If the newer version ships a file at the same path, its file replaces yours.
 
@@ -619,7 +653,12 @@ A copy placement is handled on its own:
 
 If a newer version gives the skill another name, the skill keeps the name you installed it under, and the update says so.
 
-Only what the skill held when you ran the command is replaced. If the skill changes before the update starts to write, for example because your editor saves a file or a check finds another version, agentx stops with exit code 6 and changes nothing. Run the command again. If a file of the skill changes while the update is being written, agentx stops with exit code 6, keeps your change and says that recovery is required: restore the file it names to let the next command finish the update. To keep your change instead, move the named file in `~/.agentx/mutations` aside; the skill then shows as modified against the new version, with no update available. agentx keeps what it replaces until the update is complete, so an interrupted update finishes on the next command, running the update again included, and loses nothing.
+Only what the skill held when you ran the command is replaced:
+
+- If the skill changes before the update starts to write, for example because your editor saves a file or a check finds another version, agentx stops with exit code 6 and changes nothing. Run the command again.
+- If a file of the skill changes while the update is being written, agentx stops with exit code 6, keeps your change and says that recovery is required. Restore the file it names to let the next command finish the update. To keep your change instead, move the named file in `~/.agentx/mutations` aside; the skill then shows as modified against the new version, with no update available.
+
+agentx keeps what it replaces until the update is complete, so an interrupted update finishes on the next command, running the update again included, and loses nothing.
 
 ### A skill you edited
 
@@ -635,7 +674,9 @@ Git merges line by line, and changes to lines next to each other conflict, so a 
 
 ### When your edits conflict
 
-When your changes and the update change the same lines, agentx changes nothing in your library. The merge waits in a Git worktree of the account repo in agentx home, `~/.agentx/merges/<name>`, and never in the directory your agents read, so an agent never loads a half-merged file with conflict markers in it; the skill keeps working exactly as you left it. `skill update` stops with exit code 4 and lists the files that conflict, each with what `git status` says of it:
+When your changes and the update change the same lines, agentx changes nothing in your library. The merge waits in a Git worktree of the account repo in agentx home, `~/.agentx/merges/<name>`, never in the directory your agents read. So an agent never loads a half-merged file with conflict markers in it, and the skill keeps working exactly as you left it.
+
+`skill update` stops with exit code 4 and lists the files that conflict, each with what `git status` says of it:
 
 ```text
 docx conflicts with its update from 3f2a9c1 to 8b1e0f4 in 2 files
@@ -674,7 +715,12 @@ agentx skill update docx
 ✓ updated docx from 3f2a9c1 to 8b1e0f4 with the merge you resolved
 ```
 
-agentx applies the merge as it applies a clean one: your library directory takes the merged files, copies are refreshed, and the worktree is removed, so leave it with `cd` if your shell is still in it. Only what you `git add`ed is applied, as `git commit` would record it: a change you made after `git add`, or a new file you never added, is removed with the worktree. It applies the version the merge started with, even if a check has found a newer one since; that newer one stays as the skill's next update. `agentx skill update --all` applies it too, with the other updates. Until every file is resolved, the update lists the files that are left and stops with exit code 4 again, changing nothing.
+agentx applies the merge as it applies a clean one: your library directory takes the merged files, copies are refreshed, and the worktree is removed, so leave it with `cd` if your shell is still in it.
+
+- Only what you `git add`ed is applied, as `git commit` would record it. A change you made after `git add`, or a new file you never added, is removed with the worktree.
+- It applies the version the merge started with, even if a check has found a newer one since; that newer one stays as the skill's next update.
+- `agentx skill update --all` applies it too, with the other updates.
+- Until every file is resolved, the update lists the files that are left and stops with exit code 4 again, changing nothing.
 
 The update does not apply the merge, and stops with exit code 6, if the skill's library directory changed while the merge was pending, or if something outside agentx moved the skill's record in the account repo. Give the merge up and update again.
 
@@ -703,86 +749,37 @@ This removes the worktree and whatever you resolved in it. Your library director
 
 With `--all`, a skill that is not updated does not stop the others: agentx names it and still updates the rest, then exits with the code those skills share, or 6 when they differ. A skill whose source you removed is skipped rather than counted, so it leaves the exit code at 0.
 
-## Script it
-
-Add `--json` to get one `library_skill` event per skill:
-
-```sh
-agentx --json skill list
-```
-
-```json
-{"type":"library_skill","schema_version":1,"name":"pdf","kind":"managed","source":"https://github.com/anthropics/skills","subpath":"skills/pdf","upstream_commit":"3f2a9c1e...","base_hash":"9a8b7c6d...","content_hash":"9a8b7c6d...","state":"current","placements":[{"configuration":"claude-code","path":"/home/me/.claude/skills/pdf","mode":"symlink","kind":"symlink"},{"configuration":"codex","path":"/home/me/.agents/skills/pdf","mode":"library","kind":"library"},{"configuration":"cursor","path":"/home/me/.claude/skills/pdf","mode":"symlink","kind":"symlink"},{"configuration":"cursor","path":"/home/me/.cursor/skills/pdf","mode":"symlink","kind":"symlink"},{"configuration":"gemini-cli","path":"/home/me/.agents/skills/pdf","mode":"library","kind":"library"}],"universal":["codex","gemini-cli"]}
-{"type":"result","schema_version":1,"ok":true}
-```
-
-`placements` lists every path each client sees the skill through, so Cursor, which also reads Claude Code's skills directory, appears twice. The text of `skill list` counts Cursor once, and that of `skill add` and `skill place` shows one row per client.
-
-`skill place` and `skill remove --from <client>` emit one `library_skill` event too, whose placements are what the rescan found in the clients the command covered; `skill remove` without `--from`, or with `--from universal`, emits none, the skill being gone. `skill add` emits a `source` event for the source it installed from, whose `last_fetched` says when it was fetched, then a `progress` event per step per skill (`blobs`, `import` and `install`), then one for the `rescan` at the end, then one `library_skill` event per skill it installed, then `result` with a one-line summary. `total` counts the steps the run planned; a skill it has to skip takes its remaining steps out of that count, so the run always ends on its total.
-
-`universal` lists every universal client on this machine, whether or not the command placed into it, and is `[]` when none is installed. `skill add` and `skill place` end their `result` summary with the same `always available to universal clients:` words as their text. After `--force`, the summary of `skill place` adds `; discarded what <path>, ... held` before them, naming every directory it discarded.
-
-The event carries two content hashes at its top level: `base_hash` is the version the skill was installed at, and `content_hash` is what the library directory holds now. Both names mean the same at the top level of every event and snapshot entry agentx emits; inside `candidate`, described below, `content_hash` names the newer version instead. `state` compares the files themselves, their permissions and symlinks included, so a skill whose only change is a file made executable is `modified` while its two hashes still agree.
-
-`drift` lists every other way a managed skill has drifted, beside its `state`, and is absent when there is none. Its values are `displaced`, `missing`, `source removed` and `upstream removed`:
-
-```json
-{"type":"library_skill","schema_version":1,"name":"docx","kind":"managed","source":"https://github.com/me/skills","subpath":"docx","upstream_commit":"8b1e0f4a...","base_hash":"5e4d3c2b...","content_hash":"0f9e8d7c...","state":"modified","drift":["source removed"],"placements":[...],"universal":["codex","gemini-cli"]}
-```
-
-Read `drift` as a list: more values will join it, and a skill can be in several at once. The snapshot of [`agentx scan`](/cli/scan) and [`agentx serve`](/cli/serve) lists every library skill the same way, under `library`, and `agentx serve` tells you when a skill's state changes, see [Drift](/cli/serve#drift).
-
-`skill diff` emits one `diff` event per file, sorted by path, with the file's `path` relative to the skill's directory, its `status` (`added`, `modified` or `deleted`) and the `patch` git wrote for it:
-
-```json
-{"type":"diff","schema_version":1,"name":"pdf","path":"notes.md","status":"added","patch":"diff --git a/notes.md b/notes.md\nnew file mode 100644\n..."}
-```
-
-`path` and `patch` are JSON strings, which hold UTF-8 only: a byte that is not valid UTF-8, in a file name or in a file that is not UTF-8 text, arrives as `U+FFFD`. Such a patch is for display; the text output prints the bytes as they are.
-
-`skill revert` emits one `library_skill` event for the skill, with every placement, as `skill list` does.
-
-A skill with an update carries `candidate`, the newer version the last check found, by its own `upstream_commit` and `content_hash`. Inside `candidate` both name that newer version, not the version you installed and not what the library holds:
-
-```json
-{"type":"library_skill","schema_version":1,"name":"pdf","kind":"managed",...,"state":"current","candidate":{"upstream_commit":"8b1e0f4a...","content_hash":"4c3b2a19..."},"placements":[...],"universal":["codex","gemini-cli"]}
-```
-
-`skill check` emits a `progress` event per source it fetched, then one `update_available` event per skill with an update, sorted by name, then `result`:
-
-```json
-{"type":"update_available","schema_version":1,"name":"pdf","kind":"managed","source":"https://github.com/anthropics/skills","subpath":"skills/pdf","base_hash":"9a8b7c6d...","upstream_commit":"3f2a9c1e...","candidate":"5e1f0a2b...","candidate_hash":"4c3b2a19...","candidate_upstream_commit":"8b1e0f4a...","files":[{"path":"SKILL.md","status":"modified"},{"path":"forms.md","status":"added"}]}
-```
-
-`upstream_commit` and `base_hash` are the version you have, `candidate_upstream_commit` and `candidate_hash` the newer one, and `candidate` the commit agentx recorded for it, the one installing that version would write. `files` lists what the update changes, in the words of `skill diff`. `upstream_name` appears when the newer version names the skill otherwise; the skill keeps its name. `skill diff --update` emits one `diff` event per file.
-
-`skill update` emits one `library_skill` event per skill it updated, sorted by name, with every placement, as `skill list` does. The updated skill has no `candidate`, and its `upstream_commit` and `base_hash` now name the version it was updated to; a skill whose edits were merged is still `modified`. The `result` summary says what the run did, as in `updated pdf from 3f2a9c1 to 8b1e0f4, 1 copy placement refreshed`, `updated docx from 3f2a9c1 to 8b1e0f4 and merged its edits cleanly`, or with `--all`, `updated 2 skills, 1 edited skill merged cleanly, 1 copy placement refreshed`, which adds up what the update did to the copies of every skill and ends with the skills it skipped, as in `1 skill from a removed source skipped`.
-
-For each skill whose edits conflict with its update, `skill update` emits one `conflict` event after the `library_skill` events, then the `error`:
-
-```json
-{"type":"conflict","schema_version":1,"name":"docx","kind":"managed","base":"5e1f0a2b...","mine":"a4c3d2e1...","theirs":"9f8e7d6c...","files":[{"path":"SKILL.md","base":"1a2b3c4d...","mine":"5e6f7a8b...","theirs":"9c0d1e2f..."},{"path":"logo.png","base":"3b4c5d6e...","mine":"7f8a9b0c...","theirs":"1d2e3f4a..."}]}
-```
-
-`base`, `mine` and `theirs` at the top are the three versions merged: the commit of the version you installed, your library directory as git records it, without the files your ignore rules name, and the update. They are the base, the `HEAD` and the `MERGE_HEAD` of the merge in `~/.agentx/merges/<name>`. Each file is one that conflicts there and names the blob each version holds, `null` for one that has no file there: to show a file, feed two of its versions to a diff tool. Every `path` is a path of the skill, relative to its directory.
-
-A skill with a merge pending carries `pending_merge: true` in its `library_skill` event and in the snapshot:
-
-```json
-{"type":"library_skill","schema_version":1,"name":"docx","kind":"managed",...,"state":"modified","candidate":{"upstream_commit":"8b1e0f4a...","content_hash":"4c3b2a19..."},"pending_merge":true,"placements":[...],"universal":["codex","gemini-cli"]}
-```
-
 ## Where it is recorded
 
 The account repo is a Git repository in agentx home, `~/.agentx/account.git`, that plain `git` can read. Every install writes one commit per skill in it: the version's files, the source it came from, the last upstream commit that changed the skill and its content hash. That commit is the same on every machine that installs the same version, however recently each one fetched the source, so your machines agree on what "the version you have" means without sending anything anywhere. A skill installed on its own and the same skill installed as part of a bulk install get the same commit.
 
 ## Exit codes
 
-- `1`: the command line names no skill to install, the flags contradict each other (`--all` with `--skill`, `--except` without `--all`, `--except` leaving nothing, or `--from universal` with a client that is not universal), it names the source with another branch or tag than its pin, `skill add` is given something that is not a source (for example, the name of a skill the library already holds), or `skill update` was given both a name and `--all`, neither, or `--abort` with `--all`.
+- `1`: a usage error:
+  - the command line names no skill to install;
+  - the flags contradict each other: `--all` with `--skill`, `--except` without `--all`, `--except` leaving nothing, or `--from universal` with a client that is not universal;
+  - it names the source with another branch or tag than its pin;
+  - `skill add` is given something that is not a source, for example the name of a skill the library already holds;
+  - `skill update` was given both a name and `--all`, neither, or `--abort` with `--all`.
 - `3`: the source, or the files of the skill, could not be fetched. For `skill check`, also a run whose sources and skills failed for different reasons.
 - `4`: `skill update` found your edits conflicting with the update and left the merge pending, or found files of a pending merge still to resolve, or a merge already pending blocks `skill revert` or a `skill remove` that takes the skill off the machine. See [When your edits conflict](#when-your-edits-conflict).
-- `5`: a source id names no source on this machine (for a source you removed, the hint names the `agentx source add` command that brings it back), the source did not serve a skill's files, the path or a skill named by `--skill` or `--except` does not exist in the source, or `--to` or `--from` names a configuration that is not detected. For `skill place`, `skill diff`, `skill revert` and `skill update` (except with `--abort`), also a name the library does not hold as a skill; for `skill update`, also a skill whose source you removed; for `skill remove`, a name that is neither a skill of the library nor a managed skill whose library directory is gone. For `skill check`, also a source added on this machine that it has never fetched, such as one `agentx import` brought back; `agentx source add` fetches it.
-- `6`: the library already holds a different skill under that name, the name is already managed at another version, the skill's name cannot be both a directory and a git branch, the skill's directory in the source is not one agentx can record, the skill holds a file whose path would put it outside the skill's directory, agentx cannot use your library directory, or an interrupted change has to be resolved before anything else can run. The message names what to restore; if you would rather keep what is there, move the named file in `~/.agentx/mutations` aside. For `skill remove`, it is also `--from` naming a universal client, one that reads the library directly, even next to `--from universal`, removing a name that is a fork, and `--from <client>` for a skill whose library directory is gone. For `skill diff` and `skill revert`, it is a skill agentx did not install or a fork, which have no base version, or a managed skill whose import branch records no version agentx can read; for `skill diff --update`, also a skill no check has found an update for; for `skill check`, a newer version agentx will not install, for the reasons `skill add` refuses one; for `skill revert`, also a skill that changed while it was being reverted, a skill whose installed version another command changed meanwhile, a skill that holds something git cannot record, or a skill whose library directory is a symlink. For `skill place`, it is a displaced directory that differs from the library when `--force` is not given, `--force` on a fork, a managed skill whose library directory is gone, a skill or placement that changed while it was being placed, a library directory that is a symlink or holds one when the command would remove a displaced directory, and a client's directory it would change that symlinks make overlap the library, a directory a library entry links to or another client's directory. For `skill update`, it is a skill agentx did not install or a fork, a managed skill whose library directory is gone or whose import branch records no version agentx can read, a skill its source no longer holds, a skill that holds something git cannot record, a skill whose library directory is a symlink, or a skill, its installed version or its update that changed while it was being updated. For `skill update` of a skill with a merge pending, it is also a library directory edited or a record moved outside agentx while the merge was pending, see [Finish the merge](#finish-the-merge); for `skill update --abort`, any name with no merge pending, one the library does not hold included. In a run of several skills other than `skill check`, `6` is also the code when the skills that were skipped disagree about why: a run whose failures all have one cause exits with that cause, so a batch that skipped two skills the source did not serve exits `5`.
+- `5`: something the command names does not exist:
+  - a source id names no source on this machine (for a source you removed, the hint names the `agentx source add` command that brings it back), the source did not serve a skill's files, the path or a skill named by `--skill` or `--except` does not exist in the source, or `--to` or `--from` names a configuration that is not detected;
+  - `skill place`, `skill diff`, `skill revert` and `skill update` (except with `--abort`): also a name the library does not hold as a skill;
+  - `skill update`: also a skill whose source you removed;
+  - `skill remove`: a name that is neither a skill of the library nor a managed skill whose library directory is gone;
+  - `skill check`: also a source added on this machine that it has never fetched, such as one `agentx import` brought back; `agentx source add` fetches it.
+- `6`: agentx refused:
+  - the library already holds a different skill under that name, the name is already managed at another version, the skill's name cannot be both a directory and a git branch, the skill's directory in the source is not one agentx can record, the skill holds a file whose path would put it outside the skill's directory, agentx cannot use your library directory, or an interrupted change has to be resolved before anything else can run. The message names what to restore; if you would rather keep what is there, move the named file in `~/.agentx/mutations` aside.
+  - `skill remove`: also `--from` naming a universal client, one that reads the library directly, even next to `--from universal`; removing a name that is a fork; and `--from <client>` for a skill whose library directory is gone.
+  - `skill diff` and `skill revert`: a skill agentx did not install or a fork, which have no base version, or a managed skill whose import branch records no version agentx can read.
+  - `skill diff --update`: also a skill no check has found an update for.
+  - `skill check`: a newer version agentx will not install, for the reasons `skill add` refuses one.
+  - `skill revert`: also a skill that changed while it was being reverted, a skill whose installed version another command changed meanwhile, a skill that holds something git cannot record, or a skill whose library directory is a symlink.
+  - `skill place`: a displaced directory that differs from the library when `--force` is not given; `--force` on a fork; a managed skill whose library directory is gone; a skill or placement that changed while it was being placed; a library directory that is a symlink or holds one when the command would remove a displaced directory; and a client's directory it would change that symlinks make overlap the library, a directory a library entry links to or another client's directory.
+  - `skill update`: a skill agentx did not install or a fork, a managed skill whose library directory is gone or whose import branch records no version agentx can read, a skill its source no longer holds, a skill that holds something git cannot record, a skill whose library directory is a symlink, or a skill, its installed version or its update that changed while it was being updated. With a merge pending, also a library directory edited or a record moved outside agentx while the merge was pending; see [Finish the merge](#finish-the-merge).
+  - `skill update --abort`: any name with no merge pending, one the library does not hold included.
+  - A run of several skills, other than `skill check`: the skills that were skipped disagree about why. A run whose failures all have one cause exits with that cause, so a batch that skipped two skills the source did not serve exits `5`.
 - `7`: another agentx command is running. Retry when it finishes.
 - `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`. For `skill update`, also an update recorded in a form this agentx does not write; run `agentx skill check` to record it again.
 - `10`: agentx could not read its own settings file, the library still held the skill after `skill remove` took it away, or agentx hit an error it has no better answer for. Run `agentx doctor`.

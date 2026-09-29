@@ -76,7 +76,9 @@ agentx source fetch anthropics/skills
 ✓ re-fetched https://github.com/anthropics/skills, now at 9c1d0ab, was 3f2a9c1: 13 skills
 ```
 
-A fetch updates what agentx knows about a source: the commit it holds and the skills inside it. Run it when you want to see what changed upstream now. [`agentx skill check`](/cli/skill#check-for-updates) fetches the sources your managed skills came from on its own, and while the desktop app is open, its [background process](/cli/serve#update-checks) fetches every source you added when it starts and every thirty minutes, including the ones you have not installed anything from yet.
+A fetch updates what agentx knows about a source: the commit it holds and the skills inside it. Run it when you want to see what changed upstream now.
+
+You often do not need to. [`agentx skill check`](/cli/skill#check-for-updates) fetches the sources your managed skills came from on its own. While the desktop app is open, its [background process](/cli/serve#update-checks) fetches every source you added when it starts and every thirty minutes, including the ones you have not installed anything from yet.
 
 Name several sources to fetch them together, by URL or by id, or fetch every source on this machine:
 
@@ -92,7 +94,7 @@ Sources are fetched in parallel, a few at a time, and each one gets a line that 
 ✓ re-fetched https://github.com/me/skills, already at 8b1e0f4: 4 skills
 ```
 
-A source that fails is a warning naming it and does not stop the others. Every source that did fetch is recorded, and the command then fails, naming the ones that did not. Its exit code is the one they agree on, which is the code you would get fetching that source on its own, or `3` when they failed for different reasons.
+A source that fails is a warning naming it and does not stop the others. Every source that did fetch is recorded, and the command then fails, naming the ones that did not. If they all failed for the same reason, the exit code is the one that source would give on its own; if the reasons differ, it is `3`.
 
 A fetch keeps the pin the source has. To change it, add the source again with the ref you want:
 
@@ -129,7 +131,11 @@ agentx source skills anthropics/skills
   ...
 ```
 
-Every directory with a `SKILL.md` is a skill. Hidden directories and `node_modules` are skipped. Names and descriptions come from the repository, so agentx prints them with control characters replaced by spaces, keeping one skill to a row; `--json` gives you the value as it was written. Give a path to see one part of the repository, for example `anthropics/skills/skills/pdf`, or the source id instead of the URL. The command reads what the last `source add` fetched and never touches the network, whichever part of the source you ask for.
+Every directory with a `SKILL.md` is a skill. Hidden directories and `node_modules` are skipped.
+
+Give a path to see one part of the repository, for example `anthropics/skills/skills/pdf`, or give the source id instead of the URL. The command reads what the last `source add` fetched and never touches the network, whichever part of the source you ask for.
+
+Names and descriptions come from the repository, so agentx replaces any control characters in them with spaces, keeping one skill to a row.
 
 ## Remove a source
 
@@ -166,27 +172,6 @@ hint: run 'agentx source add https://github.com/anthropics/skills' to add it aga
 ```
 
 Once you take the last of those skills off the machine, with [`agentx skill remove <name>`](/cli/skill) or its `--from universal` form, nothing on this machine records the source's URL any more, and the id is refused like any other. Add the source again by its URL.
-
-## Script it
-
-Add `--json` to get a `source` event per source, and from `source skills` a `source_skill` event per skill:
-
-```sh
-agentx --json source skills anthropics/skills
-```
-
-```json
-{"type":"source","schema_version":1,"id":"1c9d0b7e4a2f6d38","url":"https://github.com/anthropics/skills","last_fetched":"2026-09-20T10:00:00Z","commit":"3f2a9c1e...","skills":12}
-{"type":"source_skill","schema_version":1,"source":"1c9d0b7e4a2f6d38","subpath":"skills/docx","name":"docx","description":"Create and edit Word documents","tree":"9a8b7c6d..."}
-{"type":"result","schema_version":1,"ok":true}
-```
-
-`source fetch` emits one `progress` event per source as that source finishes, then one `source` event per source that fetched, in the order you named them. A `source` event carries `previous_commit` when the fetch moved the source, so a script can tell a real change from a no-op:
-
-```json
-{"type":"progress","schema_version":1,"phase":"fetch","subject":"https://github.com/anthropics/skills","current":1,"total":2}
-{"type":"source","schema_version":1,"id":"1c9d0b7e4a2f6d38","url":"https://github.com/anthropics/skills","last_fetched":"2026-09-21T09:00:00Z","commit":"9c1d0ab...","previous_commit":"3f2a9c1...","skills":13}
-```
 
 ## Exit codes
 

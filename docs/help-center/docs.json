@@ -2,15 +2,66 @@
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
   "name": "agentx",
+  "description": "The inventory manager for your agents. View, manage and sync skills, MCP servers and plugins across machines.",
   "colors": {
-    "primary": "#16A34A"
+    "primary": "#d4ff4f",
+    "light": "#d4ff4f",
+    "dark": "#e2ff7a"
+  },
+  "appearance": {
+    "default": "dark",
+    "strict": true
+  },
+  "background": {
+    "color": {
+      "dark": "#0b0b0c"
+    }
   },
   "navigation": {
     "groups": [
       {
-        "group": "CLI",
-        "pages": ["index", "cli/scan", "cli/source", "cli/skill", "cli/adopt", "cli/version", "cli/doctor", "cli/config", "cli/machine", "cli/export", "cli/output", "cli/serve"]
+        "group": "Get started",
+        "icon": "rocket",
+        "pages": ["index"]
+      },
+      {
+        "group": "Inventory",
+        "icon": "radar",
+        "pages": ["cli/scan", "cli/serve"]
+      },
+      {
+        "group": "Skills",
+        "icon": "wand-sparkles",
+        "pages": ["cli/skill", "cli/source", "cli/adopt"]
+      },
+      {
+        "group": "This machine",
+        "icon": "laptop",
+        "pages": ["cli/machine", "cli/config", "cli/export", "cli/doctor"]
+      },
+      {
+        "group": "Reference",
+        "icon": "book-open",
+        "pages": ["cli/output", "cli/version"]
       }
     ]
+  },
+  "search": {
+    "prompt": "Search the agentx docs"
+  },
+  "contextual": {
+    "options": ["copy", "view", "claude", "chatgpt", "cursor"]
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Issues",
+        "href": "https://github.com/grundmanise/agentx/issues"
+      }
+    ],
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/grundmanise/agentx"
+    }
   }
 }
