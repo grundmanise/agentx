@@ -3,6 +3,7 @@ another
 booleans
 cgo
 config
+content_hash
 dotfiles
 frontmatter
 FSEvents
@@ -15,7 +16,6 @@ kqueue
 monorepo
 pdf
 repo
-[Rr]escans?
 stderr
 stdin
 stdout
@@ -23,3 +23,4 @@ streamable
 unmanaged
 vercel
 worktree
+[Rr]escans?
