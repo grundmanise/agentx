@@ -14,13 +14,19 @@ import (
 // Gemini CLI read the library itself.
 func installHarness(t *testing.T) (*harness, *sourceRepo) {
 	t.Helper()
-	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude", ".cursor", ".codex", ".gemini"}})
-	s := h.executableSource()
-	if out := h.run("source", "add", s.url); out.exit != 0 {
-		t.Fatalf("source add: exit %d\n%s", out.exit, out.stderr)
-	}
+	h, s, _ := installHome.copy(t)
 	return h, s
+}
+
+// installHome is the home installHarness hands out.
+var installHome = &fixtureHome{
+	source: "skills",
+	dirs:   []string{".claude", ".cursor", ".codex", ".gemini"},
+	build: func(h *harness, s *sourceRepo) []string {
+		buildExecutable(s)
+		h.mustRun("source", "add", s.url)
+		return nil
+	},
 }
 
 // eventsOfType returns the events of one type from a JSON run.

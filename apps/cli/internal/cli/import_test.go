@@ -110,8 +110,8 @@ func TestImportRestoresTheSettingsByteForByte(t *testing.T) {
 	}
 	contains(t, "stdout", out.stdout, "imported the settings of first-laptop")
 	contains(t, "stdout", out.stdout, "2 skills in the export: 0 in the account repo, 2 missing, 0 at a different version")
-	contains(t, "stdout", out.stdout, "  alpha  managed  missing  file://")
-	contains(t, "stdout", out.stdout, "  beta   managed  missing  file://")
+	contains(t, "stdout", out.stdout, "  alpha  managed  missing  "+fixtureURL("skills")+"/skills/alpha")
+	contains(t, "stdout", out.stdout, "  beta   managed  missing  "+fixtureURL("skills")+"/skills/beta")
 	contains(t, "stdout", out.stdout, "only the settings were written")
 
 	// The settings are now this machine's own, read by every command.
@@ -689,6 +689,8 @@ func TestImportSaysWhatToRunNext(t *testing.T) {
 
 	to := newHarness(t)
 	to.build(t, fixture{dirs: []string{".claude"}})
+	// The importing machine reaches the sources the way the exporting one does.
+	writeFile(t, filepath.Join(to.home, ".gitconfig"), readText(t, filepath.Join(from.home, ".gitconfig")))
 	out := to.run("import", file, "--yes")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "only the settings were written: add each source again, then install a missing skill with 'agentx skill add <source>'")

@@ -20,10 +20,16 @@ import (
 // in both configurations.
 func legacyHarness(t *testing.T) (h *harness, s *sourceRepo, canonical string) {
 	t.Helper()
-	h = newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude", ".cursor"}})
-	s = h.newSourceRepo("legacy", true)
-	canonical = s.advance("legacyHarness", func(s *sourceRepo) []string {
+	h, s, ids := legacyHome.copy(t)
+	return h, s, ids[0]
+}
+
+// legacyHome is the home legacyHarness hands out; its id is the canonical
+// tree id of nc.
+var legacyHome = &fixtureHome{
+	source: "legacy",
+	dirs:   []string{".claude", ".cursor"},
+	build: func(h *harness, s *sourceRepo) []string {
 		s.skill("skills/nc", "nc", "Stored with a legacy mode", map[string]string{"a.md": "a\n", "sub/b.md": "b\n"})
 		s.commit("nc")
 		sub := s.mktree("100664 blob " + s.run("rev-parse", "HEAD:skills/nc/sub/b.md") + "\tb.md")
@@ -39,11 +45,10 @@ func legacyHarness(t *testing.T) (h *harness, s *sourceRepo, canonical string) {
 			s.t.Fatal("the rewritten tree has the canonical id; the fixture proves nothing")
 		}
 		contains(s.t, "the source listing", s.bare("ls-tree", "HEAD:skills/nc"), "100644 blob "+s.run("rev-parse", "HEAD:skills/nc/a.md")+"\ta.md")
+		h.mustRun("source", "add", s.url)
+		h.mustRun("skill", "add", s.url, "--skill", "nc")
 		return []string{canonical}
-	})[0]
-	h.mustRun("source", "add", s.url)
-	h.mustRun("skill", "add", s.url, "--skill", "nc")
-	return h, s, canonical
+	},
 }
 
 // storeInOlderForm makes the import branch of nc what an agentx that reused
