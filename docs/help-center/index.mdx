@@ -1,29 +1,94 @@
 ---
 title: "agentx"
-description: "Inventory the agent clients, skills, MCP servers and plugins on your machine from one command line."
+sidebarTitle: "Introduction"
+description: "The inventory manager for your agents. View, manage and sync skills, MCP servers and plugins across machines."
 ---
 
-`agentx` is a command line tool. Run it from a terminal or script it with `--json`.
+`agentx` is a command line tool for the AI agents on your machine. It finds every agent client, such as Claude Code or Cursor, and lists the skills, MCP servers and plugins each one sees. It also installs and updates skills in all of them at once. Run it from a terminal.
 
-## Build from source
+## Highlights
+
+- Supports 75 agents. For Claude Code, Codex, Cursor, Gemini CLI, Windsurf and GitHub Copilot it reads skills, MCP servers and plugins; for the others, skills only.
+- Installs skills from any git repository into one library, `~/.agents/skills`, and links them into each agent client, so one update reaches every client.
+- Shows what you changed in a skill, and can undo it or keep your edits when you update.
+- Takes over the skills the vercel skills CLI installed, without reinstalling them.
+- Copies this machine's settings to another machine, with a list of the skills to bring back.
+
+## Install
+
+There are no binary releases yet. Build from source with Go 1.27 or later:
 
 ```sh
-cd apps/cli && go build -o agentx .
+git clone https://github.com/grundmanise/agentx.git
+cd agentx/apps/cli && go build -o agentx .
 ```
 
-agentx runs your own `git`, 2.40 or later, found on your `PATH`.
+agentx also needs `git` 2.40 or later on your `PATH`. Run [`agentx doctor`](/cli/doctor) to check that this machine is ready.
 
-## Commands
+## See what your agents have
+
+List every agent client on this machine and what each one sees:
+
+```console
+$ agentx scan
+3 configurations, 4 skills, 2 servers, 4 plugins detected
+
+Claude Code (claude-code)  /home/me/.claude  enabled  3 skills, 1 plugin
+  skills:
+    commit  symlink    user  /home/me/.claude/skills/commit -> /home/me/.agents/skills/commit
+    format  directory  user  /home/me/.claude/plugins/cache/acme-tools/formatter/1.2.0/skills/format  (plugin formatter)
+    review  directory  user  /home/me/.claude/skills/review
+  plugins:
+    formatter  1.2.0  1 skill
+
+Cursor (cursor)  /home/me/.cursor  enabled  2 skills, 2 servers, 1 plugin
+  skills:
+    commit  symlink    user  /home/me/.claude/skills/commit -> /home/me/.agents/skills/commit
+    review  directory  user  /home/me/.claude/skills/review
+  servers:
+    context7  stdio            npx -y @upstash/context7-mcp
+    stripe    streamable-http  https://mcp.stripe.com
+```
+
+See [`agentx scan`](/cli/scan) for how to read the output.
+
+## Install a skill in every client
+
+Install a skill once, and agentx links it into each client:
+
+```console
+$ agentx skill add anthropics/skills --skill pdf
+✓ added https://github.com/anthropics/skills at 8c41d07: 17 skills
+✓ installed pdf from https://github.com/anthropics/skills under skills/pdf at 3f2a9c1, source fetched 2026-09-22T10:00:00Z: 4 placements
+  claude-code  symlink  ~/.claude/skills/pdf -> ~/.agents/skills/pdf
+  codex        library  ~/.agents/skills/pdf
+  cursor       symlink  ~/.cursor/skills/pdf -> ~/.agents/skills/pdf
+  gemini-cli   library  ~/.agents/skills/pdf
+  always available to universal clients: codex, gemini-cli
+```
+
+See [`agentx skill`](/cli/skill) to place, update, revert and remove skills.
+
+## Key terms
+
+- **Agent client**: an AI coding tool that reads skills, such as Claude Code, Codex or Cursor. Its setup directory, such as `~/.claude`, is a **configuration**.
+- **Skill**: a directory with a `SKILL.md` file that an agent client can load.
+- **Library**: `~/.agents/skills`, the one directory that holds every skill agentx manages.
+- **Source**: a git repository that holds one or more skills you install from.
+- **Placement**: how a client sees a library skill: a link or copy in its own skills directory, or the library entry itself.
+- **Universal client**: a client, such as Codex or Gemini CLI, that reads the library directly and so sees every skill in it.
+- **agentx home**: `~/.agentx`, where agentx keeps its own state, including the **account repo**, a git repository that records where each skill came from and which version you installed.
+
+## Learn more
 
 - [`agentx scan`](/cli/scan): list every agent configuration on this machine and the skills each one sees.
-- [`agentx source`](/cli/source): add the git repositories you install skills from, fetch them again, list their skills, and remove them.
-- [`agentx skill`](/cli/skill): install skills into your library, one at a time or a whole source at once, place them in your agent clients, put their placements back, see and revert your changes to them, check them for updates and apply them, remove them again, and list what you have.
-- [`agentx adopt`](/cli/adopt): take over the skills the vercel skills CLI installed, without reinstalling them.
-- [`agentx version`](/cli/version): print the CLI version and its output schema version.
-- [`agentx doctor`](/cli/doctor): check that this machine can run agentx.
-- [`agentx config`](/cli/config): list, get and set this machine's settings.
-- [`agentx machine`](/cli/machine): show this machine's id and label, rename it or reset the id.
-- [`agentx export` and `agentx import`](/cli/export): copy this machine's settings to another machine, with a list of the skills to bring back.
 - [`agentx serve`](/cli/serve): keep watching this machine and stream a snapshot whenever it changes.
-
-See [Output and exit codes](/cli/output) for `--json`, logs and what each exit code means.
+- [`agentx skill`](/cli/skill): install, place, update, revert and remove skills, and list your library.
+- [`agentx source`](/cli/source): add the git repositories you install skills from, fetch them again, list their skills, and remove them.
+- [`agentx adopt`](/cli/adopt): take over the skills the vercel skills CLI installed, without reinstalling them.
+- [`agentx machine`](/cli/machine): show this machine's id and label, rename it or reset the id.
+- [`agentx config`](/cli/config): list, get and set this machine's settings.
+- [`agentx export` and `agentx import`](/cli/export): copy this machine's settings to another machine, with a list of the skills to bring back.
+- [`agentx doctor`](/cli/doctor): check that this machine can run agentx.
+- [Output and exit codes](/cli/output): colours, logs and what each exit code means.
+- [`agentx version`](/cli/version): print the CLI version and its output schema version.

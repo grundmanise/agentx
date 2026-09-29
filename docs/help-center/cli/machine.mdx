@@ -46,17 +46,4 @@ agentx machine reset-id
 
 Use this when two machines report the same id, for example after cloning a virtual machine. The new id is random and stays in use even though the platform id still exists. Delete `machine.json` in agentx home to go back to the platform-derived id.
 
-## Script it
-
-Add `--json` to get a `machine` event with `id`, `label` and `derivation`:
-
-```sh
-agentx --json machine
-```
-
-```json
-{"type":"machine","schema_version":1,"id":"3ea501b8fb5db1ad3cc85268972d7012","label":"my-laptop","derivation":"platform"}
-{"type":"result","schema_version":1,"ok":true}
-```
-
-`rename` and `reset-id` emit the same event with the new values. If another agentx command is running, both exit with code 7 at once; retry when it finishes.
+If another agentx command is running, `rename` and `reset-id` exit with code 7 at once; retry when it finishes.
