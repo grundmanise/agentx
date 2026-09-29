@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
@@ -26,7 +25,6 @@ func TestMain(m *testing.M) {
 	setParallel()
 	home.SkipFlushesInTests()
 	gitx.SkipFlushesInTests()
-	skipRaceExitSleep()
 	os.Exit(func() int {
 		if _, err := exec.LookPath("go"); err != nil {
 			mcpServerErr = err
@@ -44,18 +42,4 @@ func TestMain(m *testing.M) {
 		}
 		return m.Run()
 	}())
-}
-
-// skipRaceExitSleep passes GORACE=atexit_sleep_ms=0 on to every run of the
-// test binary that a test starts as a child process. A binary built with
-// -race that exits with status 0 while other goroutines still run sleeps
-// for a second first, in case one of them races with the exit, and no test
-// needs that second. The race runtime reads GORACE as the process starts, so
-// setting it here reaches only the children; `make test` sets it for the
-// test binaries go test starts. A GORACE that names atexit_sleep_ms itself
-// is left as it is.
-func skipRaceExitSleep() {
-	if gorace := os.Getenv("GORACE"); !strings.Contains(gorace, "atexit_sleep_ms") {
-		_ = os.Setenv("GORACE", strings.TrimSpace(gorace+" atexit_sleep_ms=0"))
-	}
 }

@@ -31,20 +31,9 @@ tidy-check:
 build:
 	cd $(CLI) && CGO_ENABLED=$(CGO_ENABLED) go build ./...
 
-# The race detector is on unless RACE is empty. `make check` keeps it, as
-# does the Linux job in CI. The macOS job runs `make test RACE=`: it is there
-# for the serve watcher's FSEvents backend (cgo), which only builds on macOS,
-# and the Linux job finds the data races, while -race costs the most on the
-# slower macOS runners.
+# `make test RACE=` runs the tests without the race detector. CI does that on
+# macOS, since the Linux job already finds data races.
 RACE ?= -race
-# The CLI package's tests can run for longer than go test's default ten
-# minutes on a slow runner, so allow more.
-TEST_FLAGS = $(RACE) -count=1 -timeout 30m
-# A binary built with -race that exits with status 0 sleeps for a second
-# first, in case a goroutine still running races with the exit: every test
-# binary would. The CLI's TestMain passes this on to the test binary's runs
-# as a child process.
-GORACE ?= atexit_sleep_ms=0
 
 test:
-	cd $(CLI) && GORACE='$(GORACE)' go test $(TEST_FLAGS) ./...
+	cd $(CLI) && go test $(RACE) -count=1 ./...
