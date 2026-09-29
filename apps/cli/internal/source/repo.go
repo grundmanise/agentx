@@ -117,24 +117,16 @@ func refspecOnto(s Source, dst string) string {
 // Configure writes the source's remote into the account repo: its
 // canonical URL, the refspec above, no tags, and the promisor and
 // blob:none filter settings of a partial clone. It is safe to repeat and
-// updates an existing remote. A remote the account repo does not hold yet,
-// which is what an add writes, is one new section of its config, written
-// in one go where it can be (see gitx.AddRemoteConfig); every other is set
-// by git config, one key at a time, as is every remote of a run that is
-// stopping, which git config refuses to write.
+// updates an existing remote.
 func Configure(ctx context.Context, r *gitx.Runner, gitDir string, s Source) error {
 	name := RemoteName(s.ID())
-	settings := [][2]string{
+	for _, kv := range [][2]string{
 		{"url", s.URL},
 		{"fetch", Refspec(s)},
 		{"tagOpt", "--no-tags"},
 		{"promisor", "true"},
 		{"partialclonefilter", "blob:none"},
-	}
-	if ctx.Err() == nil && gitx.AddRemoteConfig(gitDir, name, settings) {
-		return nil
-	}
-	for _, kv := range settings {
+	} {
 		if _, err := r.Isolated(ctx, gitDir, "config", "remote."+name+"."+kv[0], kv[1]); err != nil {
 			return err
 		}
