@@ -34,13 +34,21 @@ With `--json`, serve also tells you when a skill in your library changes state. 
 {"type":"drift","schema_version":1,"instance_id":"...","scan_counter":4,"name":"pdf","kind":"managed","state":"modified","drift":[],"previous_state":"current","previous_drift":[]}
 ```
 
-`state` and `drift` are the skill's states now, `previous_state` and `previous_drift` what the snapshot before showed, and `scan_counter` names the snapshot the change is in. Save an edit to a skill that was `current` and the `drift` line follows within a second, right after the snapshot that shows it; later edits to the same skill leave it `modified` and bring no new `drift` line. Saving a file git ignores, such as a `.DS_Store` or an editor's swap file, brings no `drift` line: see [Files that do not count](/cli/skill#files-that-do-not-count). The states are those of [`agentx skill list`](/cli/skill#list-your-skills).
+- `state` and `drift` are the skill's states now.
+- `previous_state` and `previous_drift` are what the snapshot before showed.
+- `scan_counter` names the snapshot the change is in.
+
+The states are those of [`agentx skill list`](/cli/skill#list-your-skills). Save an edit to a skill that was `current`, and the `drift` line follows within a second, right after the snapshot that shows it. Later edits to the same skill leave it `modified` and bring no new `drift` line. Saving a file git ignores, such as a `.DS_Store` or an editor's swap file, brings no `drift` line: see [Files that do not count](/cli/skill#files-that-do-not-count).
 
 A `drift` line is a notification: the snapshot before it already holds the skill as it now is. The first snapshot, and a skill that is new in the library or gone from it, bring no `drift` line. If a managed skill's directory is deleted from the library, the snapshot's `warnings` names the skill, with the commands that install it again or stop managing it; see [A skill whose library directory is gone](/cli/skill#a-skill-whose-library-directory-is-gone).
 
 ## Update checks
 
-Serve checks your managed skills for updates as [`agentx skill check`](/cli/skill#check-for-updates) does: once when it starts, right after the first snapshot, and then every thirty minutes. Each check also fetches every source you added, including the ones you have not installed anything from, as [`agentx source fetch --all`](/cli/source#fetch-a-source-again) would, so that search results and updates follow what your sources hold now. With `--json`, each check prints one `update_available` line per skill that has an update, the same event `skill check` prints, with serve's `instance_id` added:
+Serve checks your managed skills for updates as [`agentx skill check`](/cli/skill#check-for-updates) does: once when it starts, right after the first snapshot, and then every thirty minutes.
+
+Each check also fetches every source you added, even the ones you have not installed anything from, as [`agentx source fetch --all`](/cli/source#fetch-a-source-again) would. That keeps search results and updates in step with what your sources hold now.
+
+With `--json`, each check prints one `update_available` line per skill that has an update. It is the same event `skill check` prints, with serve's `instance_id` added:
 
 ```json
 {"type":"update_available","schema_version":1,"instance_id":"...","name":"pdf","kind":"managed","source":"https://github.com/anthropics/skills","subpath":"skills/pdf",...,"files":[{"path":"SKILL.md","status":"modified"}]}
@@ -48,7 +56,7 @@ Serve checks your managed skills for updates as [`agentx skill check`](/cli/skil
 
 A machine without any source has nothing to fetch, and serve runs no git for it. Every check lists every available update again, so the lines repeat on every check while the update is available. A check records what it found, so the snapshot that follows shows each skill's `candidate` and any `upstream removed` state. Nothing is ever applied.
 
-A source that cannot be fetched, because you are offline or the repository moved, is a warning starting `update check:` that names it and any skills it left unchecked. Serve warns once, not on every check: it warns again only when the reason changes, and when the source can be fetched again it says so on a line of its own:
+A source that cannot be fetched, because you are offline or the repository moved, is a warning starting `update check:` that names it and any skills it left unchecked. Serve warns once, not on every check. It warns again only when the reason changes, and it says so on a line of its own when the source can be fetched again:
 
 ```text
 warning: update check: https://github.com/me/skills: git fetch: fatal: unable to access 'https://github.com/me/skills/': Could not resolve host: github.com; not checked: pdf
@@ -91,9 +99,13 @@ Serve answers with a `search` line carrying your `request_id`, the `query` and `
 
 Pass a result's `source` and `subpath` to an install to take that skill.
 
-Serve answers from memory, so a search is immediate: it reaches neither git nor the network, and it does not wait for a scan in progress. It lists the skills of each source when it starts and again whenever you add, re-fetch or remove one, so results follow `agentx source add`, `agentx source fetch` and `agentx source remove` on their own. Its [update checks](#update-checks) fetch every source too, so a skill added upstream shows up in results within one check interval.
+Serve answers from memory, so a search is immediate: it reaches neither git nor the network, and it does not wait for a scan in progress. It lists the skills of each source when it starts, and again whenever you add, re-fetch or remove one, so results follow `agentx source add`, `agentx source fetch` and `agentx source remove` on their own. Its [update checks](#update-checks) fetch every source too, so a skill added upstream shows up in results within one check interval.
 
-A source you have not fetched has no skills to search, and serve says so once as a warning, not again each time an update check brings another source new skills. Its next [update check](#update-checks) fetches it when it can, and otherwise warns about that too, once. It cannot fetch a source that [`agentx import`](/cli/export#import-onto-another-machine) brought until you add it again. Run `agentx source add <url>` to fetch it, or `agentx source add <url>#<pin>` for a pinned source so that it stays pinned. A source serve could not read is warned about on every scan until it can read it, since each scan tries it again, so it comes back without your having to restart serve.
+A source you have not fetched has no skills to search. Serve warns about it once, not again each time an update check brings another source new skills. Its next [update check](#update-checks) fetches the source when it can, and otherwise warns about that once too.
+
+Serve cannot fetch a source that [`agentx import`](/cli/export#import-onto-another-machine) brought back until you add it again. Run `agentx source add <url>` to fetch it, or `agentx source add <url>#<pin>` for a pinned source so that it stays pinned.
+
+A source serve could not read is warned about on every scan until serve can read it. Each scan tries again, so the source comes back without restarting serve.
 
 A search without a `request_id` or without a `query` gets an `error` line; serve keeps running.
 

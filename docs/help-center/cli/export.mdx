@@ -57,7 +57,7 @@ Replace the settings in ~/.agentx/settings.json with those of my-laptop from ~/a
 
 Import writes your settings and nothing else. It creates no account repo, fetches nothing, installs nothing and places nothing.
 
-Your source list comes back with its pins, but no source is fetched. Before you install anything from a source, run the `agentx source add` line import prints for it, which it prints even when the export lists no skills. For a pinned source that line is `agentx source add <url>#<pin>`: `agentx source add <url>` alone unpins the source.
+Your source list comes back with its pins, but no source is fetched. Before you install anything from a source, run the `agentx source add` line import prints for it. Import prints these lines even when the export lists no skills. For a pinned source the line is `agentx source add <url>#<pin>`; running `agentx source add <url>` alone would unpin the source.
 
 When the URL or the pin holds anything but letters, digits and `._/:@%+=,#-`, import puts it in single quotes, so the line runs as printed in a POSIX shell such as bash or zsh. The export file supplies both, and quoting keeps a `$`, `&` or quote in them from running as a command.
 
@@ -87,7 +87,7 @@ Use `--yes` in scripts and wherever there is no terminal. Without it, and withou
 4. Run each `agentx source add` line the import printed, exactly as printed. It names the pin of a pinned source, `<url>#<pin>`, and `agentx source list` shows the pins too.
 5. Install what the listing calls missing with `agentx skill add <source>`.
 
-Import restores the settings and nothing else, so the sources it lists are not yet on the new machine. Until you add one again, `agentx source fetch` and `agentx skill add` exit with code 5, say the source was not fetched and name the same `agentx source add` line, pin included, so following that hint keeps the pin too.
+Import restores the settings and nothing else, so the sources it lists are not yet on the new machine. Until you add a source again, `agentx source fetch` and `agentx skill add` exit with code 5 and say the source was not fetched. They name the same `agentx source add` line, pin included, so following that hint keeps the pin too.
 
 ## Script it
 

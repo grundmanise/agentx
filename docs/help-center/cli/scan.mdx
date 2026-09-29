@@ -3,7 +3,7 @@ title: "agentx scan"
 description: "See every agent configuration with the skills, MCP servers and plugins each one has."
 ---
 
-`agentx scan` reads your agent clients' directories, their MCP configuration files and the library and prints what it finds. It writes nothing and never starts a server unless you ask for a handshake.
+`agentx scan` reads your agent clients' directories, their MCP configuration files and your skill library, then prints what it finds. It writes nothing, and it never starts an MCP server unless you ask for a [handshake](#handshake-the-servers).
 
 ## Scan the machine
 
@@ -41,13 +41,17 @@ Cursor (cursor)  /home/me/.cursor  enabled  2 skills, 2 servers, 1 plugin
     thermos  9f86d081884c7d659a2feaa0c55ad015a3bf4f1b
 ```
 
-The first line counts the machine: configurations, skills, servers and plugins, each once however many configurations share it. Then one section per agent configuration, headed by the client name, its id, its configuration directory, whether it is enabled and how many skills, servers and plugins it has. A `skills:` block lists every skill the configuration can see, one per line: the skill name, the kind of placement, the scope and the path the client reads. A skill that comes from a plugin ends with the plugin's name.
+How to read it:
 
-Then, when the configuration declares MCP servers, a `servers:` block with one line per server: its name, its transport (`stdio`, `sse` or `streamable-http`) and its command line or URL. Then, when the configuration has plugins, a `plugins:` block with one line per plugin: its name, its version, how many skills and servers the plugin provides in this configuration, and `(disabled)` when the client has turned it off.
+- The first line counts the whole machine. A skill, server or plugin that several configurations share counts once.
+- Each agent configuration then gets a section. Its first line shows the client name, its id, its configuration directory, whether it is enabled, and how many skills, servers and plugins it has.
+- `skills:` lists every skill the configuration can see, one per line: the skill name, the kind of placement, the scope and the path the client reads. A skill that comes from a plugin ends with the plugin's name.
+- `servers:` appears when the configuration declares MCP servers, one per line: the name, the transport (`stdio`, `sse` or `streamable-http`) and the command line or URL.
+- `plugins:` appears when the configuration has plugins, one per line: the name, the version, how many skills and servers the plugin provides here, and `(disabled)` when the client has turned it off.
 
 In a terminal the names are bold, the block labels cyan, the kind and scope dim, `enabled` green, `(disabled)` yellow and a plugin marker magenta, so the names and states stand out from the paths.
 
-A skill's name and a server's command line come from files agentx did not write, so they are printed with control characters replaced by spaces, and a path holding one is printed in quotes with escapes. See [Output and exit codes](/cli/output). Read the values as they are on disk with `--json`.
+Skill names and server command lines come from files agentx did not write. agentx replaces any control characters in them with spaces, and prints a path that holds one in quotes with escapes; see [Output and exit codes](/cli/output). To read the values exactly as they are on disk, use `--json`.
 
 A configuration is detected when its configuration directory exists, such as `~/.claude` for Claude Code or `~/.cursor` for Cursor.
 
@@ -85,12 +89,13 @@ agentx scan --handshake
     stripe    streamable-http  https://mcp.stripe.com        9 tools
 ```
 
-Starts or connects to every MCP server and records the tools, prompts and resources it exposes. Each server gets ten seconds. agentx runs each server the way the client that declares it does:
+A handshake starts or connects to every MCP server and records the tools, prompts and resources it offers. Each server gets ten seconds. agentx runs each server the way the client that declares it does:
 
 - A local server starts in its declared `cwd`, with the environment variables its declaration sets. A relative `cwd` resolves against the plugin's directory for a plugin's server, else against the directory you run agentx in.
-- Placeholders such as `${API_KEY}` are filled in from your environment, in the syntax of the client that declares the server: `${VAR}` for Claude Code, `${env:VAR}` for Cursor and Windsurf, `$VAR` or `${VAR}` for Gemini CLI and Copilot CLI. The inventory shows the declaration as written. Credentials Claude Code never sends to a remote server, such as `AWS_SECRET_ACCESS_KEY`, agentx doesn't send either, nor any `ANTHROPIC_*` or `CLAUDE_*` variable. Run with `--verbose` to see which variables were withheld.
+- Placeholders such as `${API_KEY}` are filled in from your environment, in the syntax of the client that declares the server: `${VAR}` for Claude Code, `${env:VAR}` for Cursor and Windsurf, `$VAR` or `${VAR}` for Gemini CLI and Copilot CLI. The inventory shows the declaration as written.
+- agentx does not send the credentials Claude Code never sends to a remote server, such as `AWS_SECRET_ACCESS_KEY`, nor any `ANTHROPIC_*` or `CLAUDE_*` variable. Run with `--verbose` to see which variables were held back.
 - A remote server receives its declared headers at its declared URL. agentx never tries another URL. For Codex, `env_http_headers` and `bearer_token_env_var` are read from your environment.
-- A server on the legacy `sse` transport is handshaken over SSE. A streamable HTTP server that refuses the opening request with 400, 404 or 405, and no MCP error, is tried once more over SSE at the same URL.
+- A server on the older `sse` transport is handshaken over SSE. A streamable HTTP server that refuses the opening request with 400, 404 or 405, and no MCP error, is tried once more over SSE at the same URL.
 - A server you turned off in its client, shown with `(disabled)`, is never started. agentx reads this from Codex (`enabled = false`), Gemini CLI (`mcp.excluded`, `mcp.allowed` and `gemini mcp disable`) and Copilot CLI (`/mcp disable`). Claude Code, Cursor and Windsurf keep it outside the files agentx reads.
 
 No environment value or header is ever printed.
@@ -164,7 +169,18 @@ Delete the listed links to clear the warning.
 
 ## Script it
 
-Add `--json` to get one `snapshot` event with the machine, every configuration, every skill, MCP server and plugin with its occurrences, the edges between them and the warnings. It also lists the skills of your library under `library`, each as [`agentx skill list`](/cli/skill) reports it: what agentx knows it as, where it came from, whether it was edited since, whether a client's placement was replaced or is missing (`displaced`, `missing`), whether its source is still added (`source removed` when it is not), whether its source still holds it (`upstream removed` when the last update check found it gone), the newer version the last update check found (`candidate`), whether an update left a merge of your edits pending (`pending_merge`), its placements and the universal clients that see it whatever its placements.
+Add `--json` to get one `snapshot` event with the machine, every configuration, every skill, MCP server and plugin with its occurrences, the edges between them and the warnings.
+
+The snapshot also lists your library's skills under `library`, each as [`agentx skill list`](/cli/skill) reports it:
+
+- what agentx knows it as, and where it came from;
+- whether it was edited since it was installed;
+- whether a client's placement was replaced or is missing (`displaced`, `missing`);
+- whether its source is still added (`source removed` when it is not);
+- whether its source still holds it (`upstream removed` when the last update check found it gone);
+- the newer version the last update check found (`candidate`);
+- whether an update left a merge of your edits pending (`pending_merge`);
+- its placements, and the universal clients that see it whatever its placements.
 
 ```sh
 agentx --json scan

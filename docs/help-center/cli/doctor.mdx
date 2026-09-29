@@ -38,7 +38,15 @@ When a row is `warn` or `fail`, the report ends with an issues block instead, re
           hint: wait for it to finish
 ```
 
-The `source_remotes` and `staged_imports` rows appear only once the account repo exists; on a fresh machine there is nothing to read. The rows are grouped by what they check: `System` is git and the home directory, `App` is agentx's own state, `Clients` is every detected agent configuration, with the count in the title. In a terminal the rows are coloured by status: green for `ok`, yellow for `warn`, red for `fail`, blue for `info`. Read the last block first: it repeats every warning and failure with its fix.
+Read the last block first: it repeats every warning and failure with its fix.
+
+The rows are grouped by what they check:
+
+- `System`: git and the home directory.
+- `App`: agentx's own state.
+- `Clients`: every detected agent configuration, with the count in the title.
+
+In a terminal the rows are coloured by status: green for `ok`, yellow for `warn`, red for `fail`, blue for `info`. The `source_remotes` and `staged_imports` rows appear only once the account repo exists; on a fresh machine there is nothing to read.
 
 ## What it checks
 

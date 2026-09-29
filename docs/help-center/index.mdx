@@ -4,13 +4,13 @@ sidebarTitle: "Introduction"
 description: "Inventory the agent clients, skills, MCP servers and plugins on your machine from one command line."
 ---
 
-`agentx` is a command line tool that finds every agent client on your machine and the skills, MCP servers and plugins each one sees, then installs and updates skills across all of them at once. Run it from a terminal or script it with `--json`.
+`agentx` is a command line tool for the AI agents on your machine. It finds every agent client, such as Claude Code or Cursor, and lists the skills, MCP servers and plugins each one sees. It also installs and updates skills in all of them at once. Run it from a terminal, or script it with `--json`.
 
 ## Highlights
 
-- Lists every agent configuration on this machine. agentx supports 75 agents; Claude Code, Codex, Cursor, Gemini CLI, Windsurf and GitHub Copilot are read in full – skills, MCP servers and plugins – and the others for skills.
+- Supports 75 agents. For Claude Code, Codex, Cursor, Gemini CLI, Windsurf and GitHub Copilot it reads skills, MCP servers and plugins; for the others, skills only.
 - Installs skills from any git repository into one library, `~/.agents/skills`, and links them into each agent client, so one update reaches every client.
-- Shows what you changed in a skill, reverts it, or merges your edits into the next update.
+- Shows what you changed in a skill, and can undo it or keep your edits when you update.
 - Takes over the skills the vercel skills CLI installed, without reinstalling them.
 - Copies this machine's settings to another machine, with a list of the skills to bring back.
 
@@ -23,9 +23,11 @@ git clone https://github.com/grundmanise/agentx.git
 cd agentx/apps/cli && go build -o agentx .
 ```
 
-agentx runs your own `git`, 2.40 or later, found on your `PATH`. Run [`agentx doctor`](/cli/doctor) to check that this machine is ready.
+agentx also needs `git` 2.40 or later on your `PATH`. Run [`agentx doctor`](/cli/doctor) to check that this machine is ready.
 
 ## See what your agents have
+
+List every agent client on this machine and what each one sees:
 
 ```console
 $ agentx scan
@@ -52,6 +54,8 @@ See [`agentx scan`](/cli/scan) for every field and the `--json` shape.
 
 ## Install a skill in every client
 
+Install a skill once, and agentx links it into each client:
+
 ```console
 $ agentx skill add anthropics/skills --skill pdf
 ✓ added https://github.com/anthropics/skills at 8c41d07: 17 skills
@@ -65,11 +69,21 @@ $ agentx skill add anthropics/skills --skill pdf
 
 See [`agentx skill`](/cli/skill) to place, update, revert and remove skills.
 
+## Key terms
+
+- **Agent client**: an AI coding tool that reads skills, such as Claude Code, Codex or Cursor. Its setup directory, such as `~/.claude`, is a **configuration**.
+- **Skill**: a directory with a `SKILL.md` file that an agent client can load.
+- **Library**: `~/.agents/skills`, the one directory that holds every skill agentx manages.
+- **Source**: a git repository that holds one or more skills you install from.
+- **Placement**: how a client sees a library skill: a link or copy in its own skills directory, or the library entry itself.
+- **Universal client**: a client, such as Codex or Gemini CLI, that reads the library directly and so sees every skill in it.
+- **agentx home**: `~/.agentx`, where agentx keeps its own state, including the **account repo**, a git repository that records where each skill came from and which version you installed.
+
 ## Learn more
 
 - [`agentx scan`](/cli/scan): list every agent configuration on this machine and the skills each one sees.
 - [`agentx serve`](/cli/serve): keep watching this machine and stream a snapshot whenever it changes.
-- [`agentx skill`](/cli/skill): install skills into your library, one at a time or a whole source at once, place them in your agent clients, put their placements back, see and revert your changes to them, check them for updates and apply them, remove them again, and list what you have.
+- [`agentx skill`](/cli/skill): install, place, update, revert and remove skills, and list your library.
 - [`agentx source`](/cli/source): add the git repositories you install skills from, fetch them again, list their skills, and remove them.
 - [`agentx adopt`](/cli/adopt): take over the skills the vercel skills CLI installed, without reinstalling them.
 - [`agentx machine`](/cli/machine): show this machine's id and label, rename it or reset the id.

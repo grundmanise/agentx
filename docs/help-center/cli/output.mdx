@@ -11,7 +11,12 @@ Without `--json`, every command prints aligned text for you to read. Tables pad 
 ✓ label is now work laptop
 ```
 
-Text that comes from somewhere else is cleaned before it is printed: tabs, newlines and other control characters become spaces, so one item stays one row and nothing can drive your terminal. That covers the name and description a source writes for its skills and the directory it keeps each one in, the name of a directory in your library or your client's configuration, the command line an MCP server is declared with, and what agentx relays of what something else said, including the messages a git server sends back when you add a source.
+Text that comes from somewhere else is cleaned before it is printed: tabs, newlines and other control characters become spaces, so one item stays one row and nothing can take over your terminal. That covers:
+
+- the name and description a source writes for its skills, and the directory it keeps each one in;
+- the name of a directory in your library or your client's configuration;
+- the command line an MCP server is declared with;
+- what agentx passes on from other programs, including the messages a git server sends back when you add a source.
 
 Paths are quoted instead of cleaned, so you can still copy one. A path holding a control character is printed in double quotes with escapes, the way `git status` prints such a path:
 
@@ -79,7 +84,9 @@ error: interrupted
 hint: run the command again; 'agentx doctor' names anything the stop left behind
 ```
 
-A change that had already started is finished before the run stops, and one that had not started leaves nothing behind. The exception is a stop sent to the whole process group agentx runs in, most commonly Ctrl-C in a terminal. Such a stop also reaches the git command agentx is running, so a change caught while it was being written to the account repo can stop part way. That is safe: agentx writes down what it is about to do before it does it, the next agentx command finishes or rolls it back, and `agentx doctor` tells you one is waiting. Run the command again when you are ready.
+A change that had already started is finished before the run stops, and one that had not started leaves nothing behind.
+
+The exception is a stop sent to the whole process group agentx runs in, most commonly Ctrl-C in a terminal. Such a stop also reaches the git command agentx is running, so a change caught while it was being written to the account repo can stop part way. That is safe: agentx writes down what it is about to do before it does it, the next agentx command finishes or rolls it back, and `agentx doctor` tells you one is waiting. Run the command again when you are ready.
 
 Press Ctrl-C a second time to kill the run outright. That is safe for the same reason: the next agentx command finishes or rolls back what the killed run left, and `agentx doctor` shows whether anything is waiting.
 

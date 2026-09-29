@@ -3,7 +3,7 @@ title: "agentx config"
 description: "List, get and set the settings of one machine."
 ---
 
-Machine settings live in `settings.json` in agentx home. They never leave the machine.
+Machine settings live in `settings.json` in agentx home, `~/.agentx` by default. They never leave the machine.
 
 ## List every setting
 
@@ -54,7 +54,12 @@ agentx config set auto_push true
 ✓ label is now work laptop
 ```
 
-Set `label`, `auto_push`, `accept_operations` or `ignore_system_files`. The booleans take `true` or `false`. A label is one non-empty line of at most 256 bytes with no control character in it. Any other value, an unknown key, or a key this command cannot change exits with code 1.
+You can set `label`, `auto_push`, `accept_operations` and `ignore_system_files`:
+
+- `auto_push`, `accept_operations` and `ignore_system_files` take `true` or `false`.
+- A label is one non-empty line of at most 256 bytes with no control character in it.
+
+Any other value, an unknown key, or a key this command cannot change exits with code 1.
 
 The write is atomic: the file is replaced whole, or not at all. If another agentx command is running, the command exits with code 7 at once; retry when it finishes.
 
@@ -91,7 +96,7 @@ Each skill is placed as a symlink, except in a configuration where agentx alread
 
 The setting and every placement it implies are one change, written down before anything on disk moves. A run interrupted part way is finished by the next agentx command rather than undone.
 
-A placement agentx cannot make does not fail the run. If something you put there yourself is already at one of the paths, or agentx cannot write the client's skills directory, it leaves that path alone and names it, places the rest, and still succeeds, so the client can end up enabled with part of the library in it:
+A placement agentx cannot make does not fail the run. Something you put there yourself may already be at one of the paths, or agentx may be unable to write the client's skills directory. Either way, agentx leaves that path alone and names it, places the rest, and still succeeds. The client can then end up enabled with only part of the library in it:
 
 ```text
 warning: ~/.cursor/skills/pdf is not this skill and was left as it is; no placement was made for cursor
