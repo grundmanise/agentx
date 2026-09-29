@@ -1,0 +1,13 @@
+/*
+ * Mintlify fills its buttons with colors.dark and sets their text white, which
+ * is unreadable on the lime accent, for example on the cookie banner. DESIGN.md
+ * puts #0b0b0c text on lime.
+ *
+ * The rule sits in Tailwind's base layer: an !important declaration in an
+ * earlier layer beats the !important text-white utility.
+ */
+@layer base {
+  :is(.bg-primary-dark, .bg-primary-dark\!, .bg-primary, .bg-primary\!):is(.text-white, .text-white\!) {
+    color: #0b0b0c !important;
+  }
+}
