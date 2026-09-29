@@ -20,19 +20,12 @@ func shareLock(t *testing.T, path string) {
 		t.Fatal(err)
 	}
 	lockFile := info.Sys().(*syscall.Stat_t)
-	// Find them all before duplicating any: a copy takes the lowest free
-	// descriptor, above the one it copies, and a scan that met its own
-	// copies would copy them again, up to the end of the range, crowding a
-	// parallel test's lock out of it.
-	var open []int
+	shared := 0
 	for fd := 0; fd < 1024; fd++ {
 		var st syscall.Stat_t
-		if syscall.Fstat(fd, &st) == nil && st.Dev == lockFile.Dev && st.Ino == lockFile.Ino {
-			open = append(open, fd)
+		if syscall.Fstat(fd, &st) != nil || st.Dev != lockFile.Dev || st.Ino != lockFile.Ino {
+			continue
 		}
-	}
-	shared := 0
-	for _, fd := range open {
 		// Close-on-exec, so that no process a parallel test starts keeps
 		// the copy past its own exec.
 		syscall.ForkLock.RLock()
