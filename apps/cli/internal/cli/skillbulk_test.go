@@ -173,10 +173,23 @@ func TestSkillAddAllAddsASourceThatIsNotAdded(t *testing.T) {
 	added := other.run("--verbose", "source", "add", s.url)
 	installed := other.run("--verbose", "skill", "add", s.url, "--all", "--except", "beta")
 	equal(t, "exit of the separate add", added.exit+installed.exit, 0)
-	equal(t, "fetches", fetches(out.stderr), fetches(added.stderr)+fetches(installed.stderr))
+	equal(t, "fetches", fetches(debugLines(h, out.stderr)), fetches(added.stderr)+fetches(installed.stderr))
 	if fetches(added.stderr) == 0 || fetches(installed.stderr) == 0 {
 		t.Errorf("the counts say nothing: %d fetches to add, %d to install", fetches(added.stderr), fetches(installed.stderr))
 	}
+}
+
+// debugLines is the debug log events of a JSON run as the lines a text run
+// writes them, which is what fetches reads.
+func debugLines(h *harness, stderr string) string {
+	h.t.Helper()
+	var b strings.Builder
+	for _, e := range h.eventsOfType(stderr, "log") {
+		if e["level"] == "debug" {
+			b.WriteString("debug: " + e["message"].(string) + "\n")
+		}
+	}
+	return b.String()
 }
 
 // TestSkillAddInstallsTheRestWhenOneSkillIsBroken is the partial outcome: a
