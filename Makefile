@@ -32,7 +32,8 @@ build:
 	cd $(CLI) && CGO_ENABLED=$(CGO_ENABLED) go build ./...
 
 # `make test RACE=` runs the tests without the race detector. CI does that on
-# macOS, since the Linux job already finds data races.
+# macOS, where the race detector makes the tests take too long; the Linux job
+# still finds data races.
 RACE ?= -race
 
 test:
