@@ -54,21 +54,9 @@ default – so `agentx serve` watches through `FSEvents`; a macOS binary built w
 
 agentx runs your own `git`, 2.40 or later, found on your `PATH`.
 
-## Commands
+## Documentation
 
-| Command | What it does |
-| --- | --- |
-| [`agentx scan`](docs/help-center/cli/scan.mdx) | List every agent configuration on this machine and the skills, servers and plugins each one sees |
-| [`agentx source`](docs/help-center/cli/source.mdx) | Add the git repositories you install skills from, list their skills, remove them |
-| [`agentx skill`](docs/help-center/cli/skill.mdx) | Install skills, place them in agent clients, update, remove, and list your library |
-| [`agentx adopt`](docs/help-center/cli/adopt.mdx) | Import skills installed with the Vercel skills CLI |
-| [`agentx serve`](docs/help-center/cli/serve.mdx) | Keep watching this machine and stream a snapshot whenever it changes |
-| [`agentx doctor`](docs/help-center/cli/doctor.mdx) | Check that this machine can run agentx |
-| [`agentx config`](docs/help-center/cli/config.mdx) | List, get and set this machine's settings |
-| [`agentx machine`](docs/help-center/cli/machine.mdx) | Show this machine's id and label, rename it, reset the id |
-| [`agentx export`](docs/help-center/cli/export.mdx) | Write this machine's settings and a list of its skills to a file |
-| [`agentx import`](docs/help-center/cli/export.mdx) | Restore the settings from an export and list the skills this machine can bring back |
-| [`agentx version`](docs/help-center/cli/version.mdx) | Print the CLI version and its output schema version |
+Read the [documentation](https://docs.agentx.wtf) for every command, its flags and its output.
 
 ## Status
 
@@ -80,43 +68,27 @@ Other agents support skills management only at this time.
 
 > Under active development. On a single machine, the command-line tool already:
 >
-> - inventories every agent configuration and what it sees: [`agentx scan`](docs/help-center/cli/scan.mdx)
-> - installs skills from git sources and places them in your agent clients: [`agentx skill add`](docs/help-center/cli/skill.mdx#install-a-skill)
-> - checks for newer versions and applies them, merging your own edits into each update: [`agentx skill check`](docs/help-center/cli/skill.mdx#check-for-updates), [`agentx skill update`](docs/help-center/cli/skill.mdx#update-a-skill)
-> - takes over the skills the vercel skills CLI installed, so agentx can update them too: [`agentx adopt`](docs/help-center/cli/adopt.mdx)
+> - inventories every agent configuration and what it sees: [`agentx scan`](https://docs.agentx.wtf/cli/scan)
+> - installs skills from git sources and places them in your agent clients: [`agentx skill add`](https://docs.agentx.wtf/cli/skill#install-a-skill)
+> - checks for newer versions and applies them, merging your own edits into each update: [`agentx skill check`](https://docs.agentx.wtf/cli/skill#check-for-updates), [`agentx skill update`](https://docs.agentx.wtf/cli/skill#update-a-skill)
+> - takes over the skills the vercel skills CLI installed, so agentx can update them too: [`agentx adopt`](https://docs.agentx.wtf/cli/adopt)
 >
 > Forking and editing skills, syncing across machines and the desktop app are in progress.
 
-## Documentation
+## Project docs
 
 | | |
 | --- | --- |
 | [`CONTEXT.md`](CONTEXT.md) | The vocabulary |
 | [`docs/adr`](docs/adr) | Architecture decisions |
 | [`docs/spec`](docs/spec) | Contracts & Specs |
-| [`docs/help-center`](docs/help-center) | User documentation |
+| [`docs/help-center`](docs/help-center) | Source of the [documentation](https://docs.agentx.wtf) |
 
-## Development
+## Contributing
 
-`make check` runs what CI runs on every pull request, in the same order, against the Go module in
-`apps/cli`. A green `make check` means a green pull request.
-
-| Target | Command |
-| --- | --- |
-| `fmt` | `gofmt -w .` |
-| `fmt-check` | `gofmt -l .`, fails when any file is listed |
-| `lint` | `golangci-lint run ./...` with `apps/cli/.golangci.yml`, including `go vet` |
-| `tidy-check` | `go mod tidy`, fails when `go.mod` or `go.sum` change |
-| `build` | `go build ./...`, `CGO_ENABLED=0` on Linux and `1` on macOS |
-| `test` | `go test -race -count=1 ./...` |
-| `check` | `fmt-check lint tidy-check build test` |
-
-`golangci-lint` needs no install: its version is pinned in `apps/cli/.golangci-lint-version`, and
-`make lint` builds that release into the build cache on first use through `go run`, locally and in
-CI alike. The build uses the Go version `apps/cli/go.mod` specifies.
-
-Commands are [cobra](https://github.com/spf13/cobra) commands; the tree is built in
-`apps/cli/internal/cli/run.go`, and every test drives `cli.Run` against a temporary home.
+Contributions are welcome. [`CONTRIBUTING.md`](CONTRIBUTING.md) covers setting up your machine, the
+checks to run and how to open a pull request. Everyone taking part follows the
+[Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 

@@ -1,0 +1,16 @@
+name: Something else
+description: A question, feedback, a documentation fix or anything else that isn't a bug or a feature
+labels: [needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search the [existing issues](https://github.com/grundmanise/agentx/issues) first, in case it's already raised.
+
+  - type: textarea
+    id: details
+    attributes:
+      label: What's on your mind
+      description: Give enough context for someone else to understand and act on it.
+    validations:
+      required: true

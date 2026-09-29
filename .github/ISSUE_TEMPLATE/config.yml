@@ -1,0 +1,9 @@
+# Every issue goes through a form, so each one gets its labels.
+blank_issues_enabled: false
+contact_links:
+  - name: Documentation
+    url: https://docs.agentx.wtf
+    about: How every command works, its flags and its output.
+  - name: Report a security vulnerability
+    url: https://github.com/grundmanise/agentx/security/advisories/new
+    about: Report it privately, not in a public issue.
