@@ -16,6 +16,8 @@ Single-context: `CONTEXT.md` at the root, ADRs in `docs/adr/`, specs in `docs/sp
 
 Mintlify is used for the user-facing documentation. Keep the Help Center up to date. Whenever there's a new feature or a change in functionality, update the relevant user-facing documentation in `docs/help-center`. Keep the language clear, structured, and concise. Use an imperative tone.
 
+Mintlify publishes every file under `docs/help-center`, whether or not `docs.json` lists it, so treat anything you add there as public.
+
 ## PRs and commits
 
 ### Titles
