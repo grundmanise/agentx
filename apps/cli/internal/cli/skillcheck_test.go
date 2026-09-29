@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
@@ -25,9 +27,11 @@ func checkHarness(t *testing.T) (*harness, *sourceRepo, string) {
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	s := h.newSourceRepo("skills", true)
-	s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes\n"})
-	s.skill("skills/beta", "beta", "The second skill", nil)
-	first := s.commit("first version")
+	first := s.advance("checkHarness", func(s *sourceRepo) []string {
+		s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes\n"})
+		s.skill("skills/beta", "beta", "The second skill", nil)
+		return []string{s.commit("first version")}
+	})[0]
 	h.mustRun("source", "add", s.url)
 	h.mustRun("skill", "add", s.url, "--all")
 	return h, s, first
@@ -64,6 +68,31 @@ func files(e jsonEvent) string {
 func (h *harness) ref(name string) string {
 	h.t.Helper()
 	return h.accountGit("for-each-ref", "--format=%(objectname)", name)
+}
+
+// refLines is every ref of the account repo with what it holds, one
+// "<ref> <object>" line each, read with plain git in one for-each-ref; a
+// home with no account repo holds none, which is read with no git at all.
+func (h *harness) refLines() string {
+	h.t.Helper()
+	if _, err := os.Stat(gitx.AccountRepoPath(h.agentx)); err != nil {
+		return ""
+	}
+	return h.accountGit("for-each-ref", "--format=%(refname) %(objectname)")
+}
+
+// refMap is refLines by ref, for a test that reads several refs at one
+// point: one git process for all of them, where ref is one each. A ref the
+// account repo does not hold reads "", as ref reads it.
+func (h *harness) refMap() map[string]string {
+	h.t.Helper()
+	refs := map[string]string{}
+	for _, line := range strings.Split(h.refLines(), "\n") {
+		if name, id, ok := strings.Cut(line, " "); ok {
+			refs[name] = id
+		}
+	}
+	return refs
 }
 
 // TestSkillCheckReportsAnUpdateAndPinsIt is the check on a machine with two
@@ -176,7 +205,8 @@ func TestSkillCheckLeavesAnUnreachableSourcesSkillsAsTheyAre(t *testing.T) {
 	s.run("rm", "-r", "--quiet", "skills/beta")
 	second := s.commit("alpha revised, beta removed")
 	h.mustRun("skill", "check")
-	candidate, marker := h.ref(lineage.CandidateRef("alpha")), h.ref(lineage.UpstreamRemovedRef("beta"))
+	refs := h.refMap()
+	candidate, marker := refs[lineage.CandidateRef("alpha")], refs[lineage.UpstreamRemovedRef("beta")]
 	if candidate == "" || marker == "" {
 		t.Fatalf("candidate %q and marker %q before the source went", candidate, marker)
 	}
@@ -195,8 +225,9 @@ func TestSkillCheckLeavesAnUnreachableSourcesSkillsAsTheyAre(t *testing.T) {
 	if got := h.eventsOfType(out.stdout, "update_available"); len(got) != 0 {
 		t.Errorf("update_available events from a source that could not be fetched: %v", got)
 	}
-	equal(t, "alpha's candidate", h.ref(lineage.CandidateRef("alpha")), candidate)
-	equal(t, "beta's marker", h.ref(lineage.UpstreamRemovedRef("beta")), marker)
+	refs = h.refMap()
+	equal(t, "alpha's candidate", refs[lineage.CandidateRef("alpha")], candidate)
+	equal(t, "beta's marker", refs[lineage.UpstreamRemovedRef("beta")], marker)
 	equal(t, "the settings", string(readFile(t, filepath.Join(h.agentx, "settings.json"))), settings)
 	equal(t, "mutations", mutationVersion(t, h), before)
 	equal(t, "beta's drift", drift(h.listed("beta")), "upstream removed")
@@ -213,7 +244,9 @@ func TestSkillCheckLeavesAnUnreachableSourcesSkillsAsTheyAre(t *testing.T) {
 // exit code is the one they all agree on, or the source-level one when
 // they do not. The hint of a fetch of several sources goes with it only
 // when every failure is a source's. What could be checked is pinned all
-// the same.
+// the same, and nothing is pinned for a skill whose newer version is
+// refused. Every other mix of failures is TestCheckRefusal's, and two
+// skills refused TestSkillCheckClearsUpstreamRemovedForAVersionItCannotTake's.
 func TestSkillCheckWithSeveralFailures(t *testing.T) {
 	t.Parallel()
 	// withOther is checkHarness plus a second source, other, holding gamma,
@@ -260,23 +293,13 @@ func TestSkillCheckWithSeveralFailures(t *testing.T) {
 		if !source || !skill {
 			t.Errorf("the warnings do not name the source and the skill: %q", warned)
 		}
-		equal(t, "beta's candidate", h.ref(lineage.CandidateRef("beta")), h.updateOf(out.stdout, "beta")["candidate"])
-	})
-
-	t.Run("two skills", func(t *testing.T) {
-		t.Parallel()
-		h, s, _ := checkHarness(t)
-		for _, name := range []string{"alpha", "beta"} {
-			s.write("skills/"+name+"/we\\ird.md", "a backslash in a name\n")
+		contains(t, "alpha's refusal", strings.Join(warned, "\n"), `we\\ird.md`)
+		refs := h.refMap()
+		equal(t, "alpha's candidate", refs[lineage.CandidateRef("alpha")], "")
+		equal(t, "beta's candidate", refs[lineage.CandidateRef("beta")], h.updateOf(out.stdout, "beta")["candidate"])
+		if got := h.eventsOfType(out.stdout, "update_available"); len(got) != 1 {
+			t.Errorf("update_available events = %v, want beta's alone", got)
 		}
-		s.commit("both break")
-		out := h.run("--json", "skill", "check")
-		equal(t, "exit", out.exit, 6)
-		e := h.one(out.stdout, "error")
-		equal(t, "code", e["code"], "refused")
-		equal(t, "message", e["message"], "could not check alpha, beta")
-		equal(t, "hint", e["hint"], "the warnings name each failure")
-		equal(t, "warnings", len(warnings(h, out.stderr)), 2)
 	})
 
 	t.Run("two sources", func(t *testing.T) {
@@ -297,6 +320,68 @@ func TestSkillCheckWithSeveralFailures(t *testing.T) {
 		equal(t, "hint", e["hint"], "the warnings name each failure; "+refusalHint(exitSource))
 		equal(t, "warnings", len(warnings(h, out.stderr)), 2)
 	})
+}
+
+// TestCheckRefusal is how a check ends for every mix of what it could not
+// check. One failure is the refusal that source or skill would end with
+// on its own, named. Several name every source with the skills it left
+// unchecked and every skill, in the order they failed in, with the code
+// they all agree on or the source-level one when they disagree; the hint
+// says the warnings name each failure, and adds what a fetch of several
+// sources says only when every failure is a source's and the code is one
+// such a fetch ends with.
+func TestCheckRefusal(t *testing.T) {
+	t.Parallel()
+	const (
+		one, two = "https://example.com/one.git", "https://example.com/two.git"
+		warned   = "the warnings name each failure"
+	)
+	unreachable := func(url string, skills ...string) checkFailure {
+		return checkFailure{source: url, fetch: true, skills: skills, f: refuse(exitSource, url+": cannot reach it", "check the network")}
+	}
+	missing := func(url string, skills ...string) checkFailure {
+		return checkFailure{source: url, fetch: true, skills: skills, f: refuse(exitNotFound, url+": no such repository", "check the URL")}
+	}
+	broken := func(url string, skills ...string) checkFailure {
+		return checkFailure{source: url, skills: skills, f: refuse(exitAccountRepo, url+": cannot read it", "run 'agentx doctor'")}
+	}
+	refused := func(name string) checkFailure {
+		return checkFailure{source: one, skill: true, skills: []string{name}, f: refuse(exitRefused, "we\\ird.md is no path agentx lays out", "ask the source")}
+	}
+	for _, c := range []struct {
+		name          string
+		failures      []checkFailure
+		status        status
+		message, hint string
+	}{
+		{"a source", []checkFailure{unreachable(one, "alpha", "beta")}, exitSource,
+			"could not check " + one + ": cannot reach it; not checked: alpha, beta", "check the network"},
+		{"a skill", []checkFailure{refused("alpha")}, exitRefused,
+			"could not check alpha: we\\ird.md is no path agentx lays out", "ask the source"},
+		{"two sources that agree", []checkFailure{unreachable(one, "alpha"), unreachable(two, "gamma")}, exitSource,
+			"could not check " + one + " (alpha), " + two + " (gamma)", warned + "; " + refusalHint(exitSource)},
+		{"two sources not found", []checkFailure{missing(one, "alpha"), missing(two, "gamma")}, exitNotFound,
+			"could not check " + one + " (alpha), " + two + " (gamma)", warned + "; " + refusalHint(exitNotFound)},
+		{"two sources whose account repo reads failed", []checkFailure{broken(one, "alpha"), broken(two, "gamma")}, exitAccountRepo,
+			"could not check " + one + " (alpha), " + two + " (gamma)", warned + "; " + refusalHint(exitAccountRepo)},
+		{"two sources that disagree", []checkFailure{missing(one, "alpha"), broken(two, "gamma")}, exitSource,
+			"could not check " + one + " (alpha), " + two + " (gamma)", warned + "; " + refusalHint(exitSource)},
+		{"two skills", []checkFailure{refused("alpha"), refused("beta")}, exitRefused,
+			"could not check alpha, beta", warned},
+		{"a source and a skill", []checkFailure{unreachable(two, "gamma"), refused("alpha")}, exitSource,
+			"could not check " + two + " (gamma), alpha", warned},
+		{"a skill and a source that agree on nothing but the code", []checkFailure{refused("alpha"), {source: two, skills: []string{"gamma"}, f: refuse(exitRefused, "no", "")}}, exitRefused,
+			"could not check alpha, " + two + " (gamma)", warned},
+	} {
+		err := checkRefusal(c.failures)
+		var f *failure
+		if !errors.As(err, &f) {
+			t.Fatalf("%s: %v is no refusal", c.name, err)
+		}
+		equal(t, c.name+": code", f.status, c.status)
+		equal(t, c.name+": message", f.message, c.message)
+		equal(t, c.name+": hint", f.hint, c.hint)
+	}
 }
 
 // TestSkillCheckReadsTheUpstreamDirectory covers the two skills whose
@@ -368,9 +453,10 @@ func TestSkillCheckReadsAHiddenSkillDirectory(t *testing.T) {
 		t.Fatalf("updates before the source changed: %v", got)
 	}
 	equal(t, "summary", h.one(out.stdout, "result")["summary"], "checked 2 skills from 1 source: no update available")
+	refs := h.refMap()
 	for _, name := range []string{"secret", "pkg"} {
 		equal(t, name+"'s drift", drift(h.listed(name)), "")
-		equal(t, name+"'s marker", h.ref(lineage.UpstreamRemovedRef(name)), "")
+		equal(t, name+"'s marker", refs[lineage.UpstreamRemovedRef(name)], "")
 	}
 
 	s.write(".hidden/secret/notes.md", "n2\n")
@@ -380,37 +466,13 @@ func TestSkillCheckReadsAHiddenSkillDirectory(t *testing.T) {
 	equal(t, "subpath", up["subpath"], ".hidden/secret")
 	equal(t, "upstream commit", up["candidate_upstream_commit"], second)
 	equal(t, "files", files(up), "modified notes.md")
-	equal(t, "secret's candidate", h.ref(lineage.CandidateRef("secret")), up["candidate"])
 	if got := h.eventsOfType(out.stdout, "update_available"); len(got) != 1 {
 		t.Errorf("update_available events = %v, want secret's alone", got)
 	}
-	equal(t, "pkg's candidate", h.ref(lineage.CandidateRef("pkg")), "")
-	equal(t, "pkg's marker", h.ref(lineage.UpstreamRemovedRef("pkg")), "")
-}
-
-// TestSkillCheckReportsAnUpdateItCannotTake: a newer version holding an
-// entry agentx will not lay out is refused for its skill alone, as an
-// install refuses it. The check names the skill and the reason, pins
-// nothing for it and exits with the install's code, and the update of the
-// skill beside it is pinned all the same.
-func TestSkillCheckReportsAnUpdateItCannotTake(t *testing.T) {
-	t.Parallel()
-	h, s, _ := checkHarness(t)
-	s.write("skills/alpha/we\\ird.md", "a backslash in a name\n")
-	s.skill("skills/beta", "beta", "The second skill, revised", nil)
-	s.commit("alpha breaks, beta moves on")
-	out := h.run("--json", "skill", "check")
-	equal(t, "exit", out.exit, 6)
-	e := h.one(out.stdout, "error")
-	equal(t, "code", e["code"], "refused")
-	contains(t, "message", e["message"].(string), "could not check alpha: ")
-	contains(t, "message", e["message"].(string), `we\\ird.md`)
-	contains(t, "the warning", strings.Join(warnings(h, out.stderr), "\n"), "alpha: ")
-	equal(t, "alpha's candidate", h.ref(lineage.CandidateRef("alpha")), "")
-	equal(t, "beta's candidate", h.ref(lineage.CandidateRef("beta")), h.updateOf(out.stdout, "beta")["candidate"])
-	if got := h.eventsOfType(out.stdout, "update_available"); len(got) != 1 {
-		t.Errorf("update_available events = %v, want beta's alone", got)
-	}
+	refs = h.refMap()
+	equal(t, "secret's candidate", refs[lineage.CandidateRef("secret")], up["candidate"])
+	equal(t, "pkg's candidate", refs[lineage.CandidateRef("pkg")], "")
+	equal(t, "pkg's marker", refs[lineage.UpstreamRemovedRef("pkg")], "")
 }
 
 // TestSkillCheckTextOutput is what a person reads: the summary, one line per
@@ -503,8 +565,9 @@ func TestSkillCheckMarksAndClearsUpstreamRemoved(t *testing.T) {
 	out := h.mustRun("skill", "check")
 	contains(t, "stdout", out.stdout, "✓ checked 3 skills from 1 source: no update available, 2 upstream removed\n")
 	contains(t, "stdout", out.stdout, "  beta  upstream removed  "+s.url+"/skills/beta at "+short(gone)+"\n")
+	refs := h.refMap()
 	for _, name := range []string{"beta", "gamma"} {
-		equal(t, name+"'s marker", h.ref(lineage.UpstreamRemovedRef(name)), gone)
+		equal(t, name+"'s marker", refs[lineage.UpstreamRemovedRef(name)], gone)
 		listed := h.listed(name)
 		equal(t, name+"'s drift", drift(listed), "upstream removed")
 		equal(t, name+"'s state", listed["state"], stateCurrent)
@@ -512,15 +575,16 @@ func TestSkillCheckMarksAndClearsUpstreamRemoved(t *testing.T) {
 			t.Errorf("%s left the library: %v", name, err)
 		}
 	}
-	equal(t, "beta's candidate", h.ref(lineage.CandidateRef("beta")), "")
+	equal(t, "beta's candidate", refs[lineage.CandidateRef("beta")], "")
 	contains(t, "skill list", h.mustRun("skill", "list").stdout, "  beta   managed  current, upstream removed  ")
 
 	s.skill("skills/beta", "beta", "The second skill", nil)
 	s.skill("skills/gamma", "gamma", "A third skill", nil)
 	s.commit("both back")
 	h.mustRun("skill", "check")
+	refs = h.refMap()
 	for _, name := range []string{"beta", "gamma"} {
-		equal(t, name+"'s marker once it is back", h.ref(lineage.UpstreamRemovedRef(name)), "")
+		equal(t, name+"'s marker once it is back", refs[lineage.UpstreamRemovedRef(name)], "")
 		equal(t, name+"'s drift once it is back", drift(h.listed(name)), "")
 	}
 
@@ -545,7 +609,7 @@ func TestSkillRemoveOfAnAbsentSkillDropsWhatTheCheckLeft(t *testing.T) {
 	s.run("rm", "-r", "--quiet", "skills/beta")
 	s.commit("alpha revised, beta removed")
 	h.mustRun("skill", "check")
-	if h.ref(lineage.CandidateRef("alpha")) == "" || h.ref(lineage.UpstreamRemovedRef("beta")) == "" {
+	if refs := h.refMap(); refs[lineage.CandidateRef("alpha")] == "" || refs[lineage.UpstreamRemovedRef("beta")] == "" {
 		t.Fatal("no candidate for alpha or no marker for beta before the removals")
 	}
 
@@ -553,10 +617,13 @@ func TestSkillRemoveOfAnAbsentSkillDropsWhatTheCheckLeft(t *testing.T) {
 		remove(t, filepath.Join(h.library, name))
 		out := h.mustRun("--json", "skill", "remove", name)
 		contains(t, name+"'s removal", h.one(out.stdout, "result")["summary"].(string), "which the library no longer held")
-		equal(t, name+"'s import branch", h.ref(lineage.ManagedRef(name)), "")
 	}
-	equal(t, "alpha's candidate", h.ref(lineage.CandidateRef("alpha")), "")
-	equal(t, "beta's marker", h.ref(lineage.UpstreamRemovedRef("beta")), "")
+	refs := h.refMap()
+	for _, name := range []string{"alpha", "beta"} {
+		equal(t, name+"'s import branch", refs[lineage.ManagedRef(name)], "")
+	}
+	equal(t, "alpha's candidate", refs[lineage.CandidateRef("alpha")], "")
+	equal(t, "beta's marker", refs[lineage.UpstreamRemovedRef("beta")], "")
 	equal(t, "refs under refs/agentx", h.agentxRefs(), source.Ref(source.ID(s.url)))
 }
 
@@ -573,7 +640,8 @@ func TestSkillCheckClearsUpstreamRemovedForAVersionItCannotTake(t *testing.T) {
 	s.run("rm", "-r", "--quiet", "skills/beta")
 	s.commit("alpha revised, beta removed")
 	h.mustRun("skill", "check")
-	candidate, marker := h.ref(lineage.CandidateRef("alpha")), h.ref(lineage.UpstreamRemovedRef("beta"))
+	refs := h.refMap()
+	candidate, marker := refs[lineage.CandidateRef("alpha")], refs[lineage.UpstreamRemovedRef("beta")]
 	if candidate == "" || marker == "" {
 		t.Fatalf("candidate %q and marker %q before beta came back", candidate, marker)
 	}
@@ -594,10 +662,11 @@ func TestSkillCheckClearsUpstreamRemovedForAVersionItCannotTake(t *testing.T) {
 			t.Errorf("warning %d = %q, want %s's refusal", i, warned[i], name)
 		}
 	}
-	equal(t, "beta's marker", h.ref(lineage.UpstreamRemovedRef("beta")), "")
+	refs = h.refMap()
+	equal(t, "beta's marker", refs[lineage.UpstreamRemovedRef("beta")], "")
 	equal(t, "beta's drift", drift(h.listed("beta")), "")
-	equal(t, "beta's candidate", h.ref(lineage.CandidateRef("beta")), "")
-	equal(t, "alpha's candidate", h.ref(lineage.CandidateRef("alpha")), candidate)
+	equal(t, "beta's candidate", refs[lineage.CandidateRef("beta")], "")
+	equal(t, "alpha's candidate", refs[lineage.CandidateRef("alpha")], candidate)
 	if got := h.eventsOfType(out.stdout, "update_available"); len(got) != 0 {
 		t.Errorf("update_available events from a check that checked nothing: %v", got)
 	}
@@ -616,7 +685,8 @@ func TestSkillCheckSkipsARemovedSource(t *testing.T) {
 	s.run("rm", "-r", "--quiet", "skills/beta")
 	s.commit("alpha revised, beta removed")
 	h.mustRun("skill", "check")
-	candidate, marker := h.ref(lineage.CandidateRef("alpha")), h.ref(lineage.UpstreamRemovedRef("beta"))
+	refs := h.refMap()
+	candidate, marker := refs[lineage.CandidateRef("alpha")], refs[lineage.UpstreamRemovedRef("beta")]
 	if candidate == "" || marker == "" {
 		t.Fatalf("candidate %q and marker %q before the source was removed", candidate, marker)
 	}
@@ -628,8 +698,9 @@ func TestSkillCheckSkipsARemovedSource(t *testing.T) {
 	out := h.mustRun("--verbose", "skill", "check")
 	equal(t, "stdout", out.stdout, "Nothing to check: no managed skill comes from a source added on this machine.\n")
 	equal(t, "fetches", fetches(out.stderr), 0)
-	equal(t, "the candidate", h.ref(lineage.CandidateRef("alpha")), candidate)
-	equal(t, "the marker", h.ref(lineage.UpstreamRemovedRef("beta")), marker)
+	refs = h.refMap()
+	equal(t, "the candidate", refs[lineage.CandidateRef("alpha")], candidate)
+	equal(t, "the marker", refs[lineage.UpstreamRemovedRef("beta")], marker)
 	equal(t, "alpha's drift", drift(h.listed("alpha")), "source removed")
 	equal(t, "beta's drift", drift(h.listed("beta")), "source removed,upstream removed")
 }
@@ -670,9 +741,10 @@ func TestSkillCheckSkipsAFork(t *testing.T) {
 		"nothing to check: no managed skill comes from a source added on this machine")
 	equal(t, "progress events", len(h.eventsOfType(out.stdout, "progress")), 0)
 	equal(t, "update_available events", len(h.eventsOfType(out.stdout, "update_available")), 0)
-	equal(t, "the source ref", h.ref(source.Ref(source.ID(s.url))), fetched)
-	equal(t, "alpha's marker", h.ref(lineage.UpstreamRemovedRef("alpha")), "")
-	equal(t, "beta's candidate", h.ref(lineage.CandidateRef("beta")), candidate)
+	refs := h.refMap()
+	equal(t, "the source ref", refs[source.Ref(source.ID(s.url))], fetched)
+	equal(t, "alpha's marker", refs[lineage.UpstreamRemovedRef("alpha")], "")
+	equal(t, "beta's candidate", refs[lineage.CandidateRef("beta")], candidate)
 }
 
 // TestSkillCheckSkipsASkillWhoseLibraryDirectoryIsGone: a managed skill
@@ -702,8 +774,9 @@ func TestSkillCheckSkipsASkillWhoseLibraryDirectoryIsGone(t *testing.T) {
 	out = h.mustRun("--json", "skill", "check")
 	equal(t, "summary once beta is removed upstream", h.one(out.stdout, "result")["summary"],
 		"checked 1 skill from 1 source: 1 update available")
-	equal(t, "beta's marker", h.ref(lineage.UpstreamRemovedRef("beta")), "")
-	equal(t, "beta's candidate once it is removed upstream", h.ref(lineage.CandidateRef("beta")), "")
+	refs := h.refMap()
+	equal(t, "beta's marker", refs[lineage.UpstreamRemovedRef("beta")], "")
+	equal(t, "beta's candidate once it is removed upstream", refs[lineage.CandidateRef("beta")], "")
 }
 
 // gateImport holds the fast-import that writes a run's import commits. In
@@ -763,88 +836,69 @@ done`)
 	equal(t, "the check's exit", check.exit, 0)
 	equal(t, "the fetch's exit", fetch.exit, 0)
 	equal(t, "the fetch's warnings", strings.Join(warnings(h, fetch.stderr), "\n"), "")
-	equal(t, "alpha's candidate", h.ref(lineage.CandidateRef("alpha")), h.updateOf(check.stdout, "alpha")["candidate"])
-	equal(t, "the source ref", h.ref(source.Ref(source.ID(s.url))), second)
+	refs := h.refMap()
+	equal(t, "alpha's candidate", refs[lineage.CandidateRef("alpha")], h.updateOf(check.stdout, "alpha")["candidate"])
+	equal(t, "the source ref", refs[source.Ref(source.ID(s.url))], second)
 	equal(t, "staging refs", h.accountGit("for-each-ref", "--format=%(refname)", source.StagingRefPrefix), "")
 }
 
 // TestSkillCheckBesideASourceRemoval removes a source while a check is
-// fetching it. The fetch is held after its network and before it reads
-// what it staged, which the removal takes away with the source's remote,
-// so the fetch fails. That is no failure of the check's: it leaves the
-// skills of a removed source alone, so it warns about nothing and exits 0,
-// and the candidate and the marker the source's skills got from an earlier
-// check stay as they are. A check whose only source went says there is
-// nothing to check; one beside another source checks and pins that one.
+// fetching it, beside another source. The fetch is held after its network
+// and before it reads what it staged, which the removal takes away with
+// the source's remote, so the fetch fails. That is no failure of the
+// check's: it leaves the skills of a removed source alone, so it warns
+// about nothing and exits 0, and the candidate and the marker the source's
+// skills got from an earlier check stay as they are. It checks and pins
+// the source beside it all the same.
 func TestSkillCheckBesideASourceRemoval(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct {
-		name  string
-		other bool
-	}{
-		{"the only source", false},
-		{"beside another source", true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			h, s, _ := checkHarness(t)
-			var other *sourceRepo
-			if tc.other {
-				other = h.newSourceRepo("other", true)
-				other.skill("gamma", "gamma", "A skill of the other source", nil)
-				other.commit("gamma")
-				h.mustRun("skill", "add", other.url)
-			}
-			s.skill("skills/alpha", "alpha", "The first skill, revised", nil)
-			s.run("rm", "-r", "--quiet", "skills/beta")
-			s.commit("alpha revised, beta removed")
-			h.mustRun("skill", "check")
-			candidate, marker := h.ref(lineage.CandidateRef("alpha")), h.ref(lineage.UpstreamRemovedRef("beta"))
-			if candidate == "" || marker == "" {
-				t.Fatalf("candidate %q and marker %q before the source was removed", candidate, marker)
-			}
-			s.skill("skills/alpha", "alpha", "The first skill, revised again", nil)
-			s.commit("alpha revised again")
-			var revised string
-			if tc.other {
-				other.skill("gamma", "gamma", "A skill of the other source, revised", nil)
-				revised = other.commit("gamma revised")
-			}
+	h, s, _ := checkHarness(t)
+	other := h.newSourceRepo("other", true)
+	other.skill("gamma", "gamma", "A skill of the other source", nil)
+	other.commit("gamma")
+	h.mustRun("skill", "add", other.url)
+	s.skill("skills/alpha", "alpha", "The first skill, revised", nil)
+	s.run("rm", "-r", "--quiet", "skills/beta")
+	s.commit("alpha revised, beta removed")
+	h.mustRun("skill", "check")
+	refs := h.refMap()
+	candidate, marker := refs[lineage.CandidateRef("alpha")], refs[lineage.UpstreamRemovedRef("beta")]
+	if candidate == "" || marker == "" {
+		t.Fatalf("candidate %q and marker %q before the source was removed", candidate, marker)
+	}
+	s.skill("skills/alpha", "alpha", "The first skill, revised again", nil)
+	s.commit("alpha revised again")
+	other.skill("gamma", "gamma", "A skill of the other source, revised", nil)
+	revised := other.commit("gamma revised")
 
-			arm := gateGit(t, h, `sub=
+	arm := gateGit(t, h, `sub=
 for arg in "$@"; do
 	case "$arg" in
 	for-each-ref) sub=for-each-ref ;;
 	`+source.StagingRefPrefix+`*/`+source.ID(s.url)+`) [ "$sub" = for-each-ref ] && gate=1 ;;
 	esac
 done`)
-			reached, release := arm()
-			done := make(chan outcome, 1)
-			go func() { done <- h.run("--json", "skill", "check") }()
-			reached()
-			h.mustRun("source", "remove", s.url)
-			release()
-			out := <-done
+	reached, release := arm()
+	done := make(chan outcome, 1)
+	go func() { done <- h.run("--json", "skill", "check") }()
+	reached()
+	h.mustRun("source", "remove", s.url)
+	release()
+	out := <-done
 
-			equal(t, "exit", out.exit, 0)
-			equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "")
-			summary := h.one(out.stdout, "result")["summary"]
-			if tc.other {
-				equal(t, "summary", summary, "checked 1 skill from 1 source: 1 update available")
-				up := h.updateOf(out.stdout, "gamma")
-				equal(t, "gamma's upstream", up["candidate_upstream_commit"], revised)
-				equal(t, "gamma's candidate", h.ref(lineage.CandidateRef("gamma")), up["candidate"])
-			} else {
-				equal(t, "summary", summary, "nothing to check: no managed skill comes from a source added on this machine")
-			}
-			if got := len(h.eventsOfType(out.stdout, "update_available")); got != map[bool]int{false: 0, true: 1}[tc.other] {
-				t.Errorf("%d update_available events:\n%s", got, out.stdout)
-			}
-			equal(t, "alpha's candidate", h.ref(lineage.CandidateRef("alpha")), candidate)
-			equal(t, "beta's marker", h.ref(lineage.UpstreamRemovedRef("beta")), marker)
-			equal(t, "alpha's drift", drift(h.listed("alpha")), "source removed")
-		})
+	equal(t, "exit", out.exit, 0)
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "")
+	equal(t, "summary", h.one(out.stdout, "result")["summary"], "checked 1 skill from 1 source: 1 update available")
+	if got := len(h.eventsOfType(out.stdout, "update_available")); got != 1 {
+		t.Errorf("%d update_available events, want gamma's alone:\n%s", got, out.stdout)
 	}
+	up := h.updateOf(out.stdout, "gamma")
+	equal(t, "gamma's upstream", up["candidate_upstream_commit"], revised)
+	refs = h.refMap()
+	equal(t, "gamma's candidate", refs[lineage.CandidateRef("gamma")], up["candidate"])
+	equal(t, "alpha's candidate", refs[lineage.CandidateRef("alpha")], candidate)
+	equal(t, "beta's marker", refs[lineage.UpstreamRemovedRef("beta")], marker)
+	equal(t, "alpha's drift", drift(h.listed("alpha")), "source removed")
 }
 
 // TestSkillCheckBesideTheRemovalOfAnotherSource removes a source while a
@@ -929,8 +983,9 @@ func TestSkillCheckRecordsNothingForWhatChangedMidRun(t *testing.T) {
 				t.Errorf("an update_available for %s: %v", name, e)
 			}
 		}
-		equal(t, name+"'s candidate", h.ref(lineage.CandidateRef(name)), "")
-		equal(t, name+"'s marker", h.ref(lineage.UpstreamRemovedRef(name)), "")
+		refs := h.refMap()
+		equal(t, name+"'s candidate", refs[lineage.CandidateRef(name)], "")
+		equal(t, name+"'s marker", refs[lineage.UpstreamRemovedRef(name)], "")
 	}
 
 	t.Run("the skill is removed", func(t *testing.T) {
@@ -950,7 +1005,8 @@ func TestSkillCheckRecordsNothingForWhatChangedMidRun(t *testing.T) {
 		h, s, _ := checkHarness(t)
 		revised(s, "alpha")
 		h.mustRun("skill", "check")
-		tip, pinned := h.ref(lineage.ManagedRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
+		refs := h.refMap()
+		tip, pinned := refs[lineage.ManagedRef("alpha")], refs[lineage.CandidateRef("alpha")]
 		if pinned == "" {
 			t.Fatal("no candidate for alpha before the run")
 		}
@@ -965,8 +1021,9 @@ func TestSkillCheckRecordsNothingForWhatChangedMidRun(t *testing.T) {
 		})
 		equal(t, "exit", out.exit, 0)
 		nothingFor(t, h, out, "alpha")
-		equal(t, "alpha's branch", h.ref(lineage.ManagedRef("alpha")), pinned)
-		equal(t, "beta's candidate", h.ref(lineage.CandidateRef("beta")), h.updateOf(out.stdout, "beta")["candidate"])
+		refs = h.refMap()
+		equal(t, "alpha's branch", refs[lineage.ManagedRef("alpha")], pinned)
+		equal(t, "beta's candidate", refs[lineage.CandidateRef("beta")], h.updateOf(out.stdout, "beta")["candidate"])
 		equal(t, "summary", h.one(out.stdout, "result")["summary"], "checked 1 skill from 1 source: 1 update available")
 		// The write still carries last_fetched, in one mutation.
 		equal(t, "mutations", mutationVersion(t, h), before+1)
@@ -1009,17 +1066,6 @@ func TestSkillCheckRecordsNothingForWhatChangedMidRun(t *testing.T) {
 // last_fetched and no mutation.
 func TestSkillCheckRefusesAHeldLock(t *testing.T) {
 	t.Parallel()
-	// lastFetched is the last_fetched the settings hold for url.
-	lastFetched := func(t *testing.T, h *harness, url string) any {
-		t.Helper()
-		for _, e := range readSettingsFile(t, h)["sources"].([]any) {
-			if m := e.(map[string]any); m["url"] == url {
-				return m["last_fetched"]
-			}
-		}
-		t.Fatalf("no source %s in the settings", url)
-		return nil
-	}
 	for _, tc := range []struct {
 		name string
 		run  func(h *harness) outcome
@@ -1046,7 +1092,8 @@ func TestSkillCheckRefusesAHeldLock(t *testing.T) {
 			s.skill("skills/alpha", "alpha", "The first skill, revised", nil)
 			s.commit("second version")
 			before := mutationVersion(t, h)
-			candidate, marker := h.ref(lineage.CandidateRef("alpha")), h.ref(lineage.UpstreamRemovedRef("alpha"))
+			refs := h.refMap()
+			candidate, marker := refs[lineage.CandidateRef("alpha")], refs[lineage.UpstreamRemovedRef("alpha")]
 			fetched := lastFetched(t, h, s.url)
 
 			out := tc.run(h)
@@ -1060,8 +1107,9 @@ func TestSkillCheckRefusesAHeldLock(t *testing.T) {
 					t.Errorf("progress events of a check that fetched nothing: %v", got)
 				}
 			}
-			equal(t, "alpha's candidate", h.ref(lineage.CandidateRef("alpha")), candidate)
-			equal(t, "alpha's marker", h.ref(lineage.UpstreamRemovedRef("alpha")), marker)
+			refs = h.refMap()
+			equal(t, "alpha's candidate", refs[lineage.CandidateRef("alpha")], candidate)
+			equal(t, "alpha's marker", refs[lineage.UpstreamRemovedRef("alpha")], marker)
 			equal(t, "staging refs of the import", h.accountGit("for-each-ref", "--format=%(refname)", lineage.ImportingPrefix), "")
 			equal(t, "mutations", mutationVersion(t, h), before)
 			equal(t, "last_fetched", lastFetched(t, h, s.url), fetched)
@@ -1195,21 +1243,24 @@ func TestSkillCheckWithNothingToCheck(t *testing.T) {
 	equal(t, "fetches", fetches(out.stderr), 0)
 }
 
-// TestSkillCheckSpawnsBoundedGit counts the git processes of a check over a
-// hundred managed skills: with no upstream change, and with a few and with
+// TestSkillCheckSpawnsBoundedGit counts the git processes of a check over
+// twenty managed skills: with no upstream change, and with a few and with
 // many changed skills, whose count does not depend on how many changed.
 // Nothing is read per skill: the fetch lists every skill directory's tree,
 // the lineage every branch's, the changed ones are read and written
-// together, and what each update changes is read in one diff-tree.
+// together, and what each update changes is read in one diff-tree. The
+// count is this test's own, read from its own git wrapper, so it runs
+// beside the rest of the suite.
 func TestSkillCheckSpawnsBoundedGit(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	s := h.newSourceRepo("many", true)
-	const skills = 100
+	const skills = 20
 	for i := range skills {
 		s.skill(fmt.Sprintf("skills/s%03d", i), fmt.Sprintf("s%03d", i), "Skill number "+fmt.Sprint(i), map[string]string{"notes.md": "notes\n"})
 	}
-	s.commit("a hundred skills")
+	s.commit("twenty skills")
 	h.mustRun("source", "add", s.url)
 	h.mustRun("skill", "add", s.url, "--all")
 
@@ -1234,16 +1285,16 @@ func TestSkillCheckSpawnsBoundedGit(t *testing.T) {
 	unchanged := count("no change")
 	change(0, 3)
 	few := count("3 changed")
-	change(10, 60)
-	many := count("60 changed")
-	t.Logf("git processes: %d with no change, %d with 3 changed, %d with 60 changed", unchanged, few, many)
+	change(5, 12)
+	many := count("12 changed")
+	t.Logf("git processes: %d with no change, %d with 3 changed, %d with 12 changed", unchanged, few, many)
 	// The bounds leave room for a git that fetches in another way; a count
-	// per skill would be a hundred at least.
+	// per skill would add twenty at least, which they leave no room for.
 	if unchanged > 30 {
 		t.Errorf("a check with no change spawned %d git processes", unchanged)
 	}
 	if many != few {
-		t.Errorf("a check of 60 changed skills spawned %d git processes and one of 3 spawned %d: the count grows with the skills", many, few)
+		t.Errorf("a check of 12 changed skills spawned %d git processes and one of 3 spawned %d: the count grows with the skills", many, few)
 	}
 	if few > 45 {
 		t.Errorf("a check of changed skills spawned %d git processes", few)
@@ -1258,7 +1309,7 @@ func TestSkillCheckSpawnsBoundedGit(t *testing.T) {
 			updates++
 		}
 	}
-	equal(t, "skills with an update", updates, 63)
+	equal(t, "skills with an update", updates, 15)
 }
 
 // checkChildEnv marks the child process of TestSkillCheckRecoversFromAKilledRun.
@@ -1403,27 +1454,6 @@ func TestServeChecksForUpdates(t *testing.T) {
 		t.Fatalf("the last snapshot's alpha carries no candidate: %v", entry)
 	}
 	equal(t, "the snapshot's candidate", cand["upstream_commit"], third)
-	equal(t, "exit", p.close(), 0)
-}
-
-// TestServeChecksAtLaunch runs serve on an interval no test waits out: the
-// update it announces comes from the check serve runs at launch, not from
-// one on the timer. That check's one write, the candidate and last_fetched,
-// bumps the version file once, which is what makes serve rescan and put the
-// candidate in the snapshot; serve's other holds of the lock bump nothing.
-func TestServeChecksAtLaunch(t *testing.T) {
-	t.Parallel()
-	h, s, _ := checkHarness(t)
-	s.skill("skills/alpha", "alpha", "The first skill, revised", nil)
-	second := s.commit("second version")
-	h.env["AGENTX_CHECK_INTERVAL"] = "1h"
-	before := mutationVersion(t, h)
-	p := h.serve(t, "--json")
-	p.next("snapshot")
-	update, _ := p.nextUpdate(func(e jsonEvent) bool { return e["candidate_upstream_commit"] == second })
-	equal(t, "mutations", mutationVersion(t, h), before+1)
-	equal(t, "name", update["name"], "alpha")
-	equal(t, "the candidate", h.ref(lineage.CandidateRef("alpha")), update["candidate"])
 	equal(t, "exit", p.close(), 0)
 }
 
@@ -1576,47 +1606,6 @@ func TestServeWarnsAboutASourceItCannotCheck(t *testing.T) {
 		t.Errorf("the warning = %q, want the failure of %s and the skill it left unchecked", w, other.url)
 	}
 	equal(t, "gamma's candidate", h.ref(lineage.CandidateRef("gamma")), "")
-}
-
-// TestServeCheckBesideASourceRemoval removes a source while the check serve
-// runs at launch is fetching it, which makes that fetch fail. Serve logs no
-// warning for it, since the check leaves the skills of a removed source
-// alone, and the source beside it is checked and announced.
-func TestServeCheckBesideASourceRemoval(t *testing.T) {
-	t.Parallel()
-	h, s, _ := checkHarness(t)
-	other := h.newSourceRepo("other", true)
-	other.skill("gamma", "gamma", "A skill of the other source", nil)
-	other.commit("gamma")
-	h.mustRun("skill", "add", other.url)
-	s.skill("skills/alpha", "alpha", "The first skill, revised", nil)
-	s.commit("second version")
-	other.skill("gamma", "gamma", "A skill of the other source, revised", nil)
-	revised := other.commit("gamma revised")
-
-	arm := gateGit(t, h, `sub=
-for arg in "$@"; do
-	case "$arg" in
-	for-each-ref) sub=for-each-ref ;;
-	`+source.StagingRefPrefix+`*/`+source.ID(s.url)+`) [ "$sub" = for-each-ref ] && gate=1 ;;
-	esac
-done`)
-	reached, release := arm()
-	h.env["AGENTX_CHECK_INTERVAL"] = "1h"
-	p := h.serve(t, "--json")
-	p.next("snapshot")
-	reached()
-	h.mustRun("source", "remove", s.url)
-	release()
-	update, _ := p.nextUpdate(func(e jsonEvent) bool { return e["candidate_upstream_commit"] == revised })
-	equal(t, "name", update["name"], "gamma")
-	equal(t, "exit", p.close(), 0)
-	for _, w := range warnings(h, p.stderr.String()) {
-		if strings.HasPrefix(w, "update check:") {
-			t.Errorf("a check warned: %s", w)
-		}
-	}
-	equal(t, "alpha's candidate", h.ref(lineage.CandidateRef("alpha")), "")
 }
 
 // TestServeRefusesABadCheckInterval: the interval is a positive duration

@@ -16,9 +16,7 @@ func installHarness(t *testing.T) (*harness, *sourceRepo) {
 	t.Helper()
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude", ".cursor", ".codex", ".gemini"}})
-	s, _, _ := h.standardSource(true)
-	s.executable("skills/alpha/scripts/run.sh") // a source holds modes too
-	s.commit("an executable script")
+	s := h.executableSource()
 	if out := h.run("source", "add", s.url); out.exit != 0 {
 		t.Fatalf("source add: exit %d\n%s", out.exit, out.stderr)
 	}

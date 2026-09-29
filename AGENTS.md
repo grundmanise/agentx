@@ -20,6 +20,19 @@ Mintlify publishes every file under `docs/help-center`, so treat anything you ad
 
 Mintlify spellchecks the pages a PR changes. When it flags a product term, add the term to `docs/help-center/styles/config/vocabularies/agentx/accept.txt`.
 
+## Tests
+
+The CLI's tests drive real `git`, and starting a process is what they spend their time on, several times more on macOS than on Linux. Test each behavior once, at the cheapest level that shows it:
+
+- **End to end** (through the harness, with a real home and git): one happy path per command or flag family, and one case per distinct user-visible refusal or warning, that is, a different message or exit code. Not one case per input that reaches the same branch.
+- **Unit tests** for the edge cases of a pure function (names, URLs, paths, selections, overlap rules, refusal order, formatting), as a table over that function.
+- **Crash recovery** at every journal boundary is tested once, without git, in `internal/home`. A command's own recovery test checks the steps it journals and stops it at no more than two boundaries.
+- **Fixtures:** refusals that change nothing share one home, and a test builds only what it uses.
+- **Assertions:** check the fact that matters (the exit code, a distinctive substring, an event field). One test pins an exact output or a long hint; the others check a substring.
+- **Parallelism:** call `t.Parallel()` unless the test uses `t.Setenv` or `t.Chdir`, swaps a package variable, or measures time.
+
+Before adding a test, find the one that already covers the path, and extend it instead.
+
 ## PRs and commits
 
 ### Titles

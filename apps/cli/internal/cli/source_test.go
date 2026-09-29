@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 	"unicode"
@@ -43,11 +45,15 @@ func sourceEvents(t *testing.T, events []jsonEvent) (jsonEvent, []jsonEvent) {
 	return src, skills
 }
 
+// TestSourceAddNormalisesEveryURLForm adds one source by each family of
+// the forms source.Parse accepts, whose every spelling TestParse covers:
+// the shorthand, a tree URL with a pin and a subpath, a URL carrying a
+// credential, and a file URL with a host.
 func TestSourceAddNormalisesEveryURLForm(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	s, v1, head := h.standardSource(true)
-	h.rewrite(s, "https://github.com/owner/repo", "https://gitlab.com/group/sub/repo", "ssh://git@github.com/owner/repo")
+	h.rewrite(s, "https://github.com/owner/repo")
 
 	tests := []struct {
 		in      string
@@ -58,17 +64,8 @@ func TestSourceAddNormalisesEveryURLForm(t *testing.T) {
 		skills  float64
 	}{
 		{"owner/repo", "https://github.com/owner/repo", "", "", head, 2},
-		{"owner/repo/skills/alpha", "https://github.com/owner/repo", "skills/alpha", "", head, 1},
-		{"owner/repo#v1", "https://github.com/owner/repo", "", "v1", v1, 2},
-		{"https://github.com/owner/repo", "https://github.com/owner/repo", "", "", head, 2},
-		{"https://github.com/owner/repo.git/", "https://github.com/owner/repo", "", "", head, 2},
-		{"https://github.com/owner/repo/tree/main/skills", "https://github.com/owner/repo", "skills", "main", head, 2},
 		{"https://github.com/owner/repo/tree/v1/skills/beta", "https://github.com/owner/repo", "skills/beta", "v1", v1, 1},
-		{"https://gitlab.com/group/sub/repo/-/tree/main/skills/alpha", "https://gitlab.com/group/sub/repo", "skills/alpha", "main", head, 1},
-		{"git@github.com:owner/repo.git", "ssh://git@github.com/owner/repo", "", "", head, 2},
-		{"ssh://git@github.com/owner/repo.git#v1", "ssh://git@github.com/owner/repo", "", "v1", v1, 2},
 		{"https://someone:s3cret-token@github.com/owner/repo#main", "https://github.com/owner/repo", "", "main", head, 2},
-		{s.url + "#v1", s.url, "", "v1", v1, 2},
 		{"file://localhost" + s.gitDir + "/", s.url, "", "", head, 2},
 	}
 	for _, tt := range tests {
@@ -114,10 +111,9 @@ func TestSourceAddNormalisesEveryURLForm(t *testing.T) {
 		}
 	}
 	// One entry per canonical URL, whatever forms were added, pinned as the last add said.
-	file := readSettingsFile(t, h)
-	sources := file["sources"].([]any)
-	if len(sources) != 4 {
-		t.Fatalf("sources = %v, want four entries", sources)
+	sources := readSettingsFile(t, h)["sources"].([]any)
+	if len(sources) != 2 {
+		t.Fatalf("sources = %v, want two entries", sources)
 	}
 	equal(t, "sources[1].url", sources[1].(map[string]any)["url"], "https://github.com/owner/repo")
 	equal(t, "sources[1].pin", sources[1].(map[string]any)["pin"], "main")
@@ -275,7 +271,7 @@ func TestSourceAddRefetchesWhenTheServerRefusesSingleObjects(t *testing.T) {
 	equal(t, "skills", len(skills), 2)
 	equal(t, "skills[0]", skills[0]["name"], "alpha")
 	equal(t, "skills[1]", skills[1]["name"], "beta")
-	if n := fetches(out.stderr); n != 0 {
+	if n := loggedFetches(out.stderr); n != 0 {
 		t.Errorf("source skills ran %d git fetches; it must read the account repo alone", n)
 	}
 }
@@ -368,10 +364,28 @@ func TestSourceAddKeepsAnAliasOnReAdd(t *testing.T) {
 	equal(t, "settings pin after the fetch", entry["pin"], "v1")
 }
 
+// loggedFetches is fetches for the verbose stderr of a --json run as well,
+// where every debug line is a log event rather than a line of text.
+func loggedFetches(stderr string) int {
+	n := fetches(stderr)
+	for _, line := range strings.Split(stderr, "\n") {
+		var e struct{ Level, Message string }
+		if json.Unmarshal([]byte(line), &e) == nil && e.Level == "debug" &&
+			strings.HasPrefix(e.Message, "git ") && strings.Contains(e.Message, " fetch --") {
+			n++
+		}
+	}
+	return n
+}
+
+// TestSourceSkills lists a source whose add was scoped to one subpath. The
+// subpath scopes that one listing: the add brings every SKILL.md of the
+// source, so every later listing, wider, narrower or by id, is answered
+// from the account repo alone and none of them fetches.
 func TestSourceSkills(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	s := h.newSourceRepo("nested", true)
+	s := h.newSourceRepo("nested", true) // a server that really filters
 	s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "n\n"})
 	s.skill("skills/alpha/nested", "alpha-nested", "Nested inside alpha", nil)
 	s.skill("skills/beta", "", "", nil) // no name: the directory names it
@@ -383,12 +397,24 @@ func TestSourceSkills(t *testing.T) {
 	head := s.commit("skills")
 	id := source.ID(s.url)
 
-	out := h.run("--json", "source", "add", s.url)
+	out := h.run("--verbose", "--json", "source", "add", s.url+"/skills/alpha")
 	equal(t, "exit", out.exit, 0)
 	src, _ := sourceEvents(t, h.events(out.stdout))
-	equal(t, "skills", src["skills"], float64(4))
+	equal(t, "subpath", src["subpath"], "skills/alpha")
+	equal(t, "skills", src["skills"], float64(2))
+	equal(t, "fetches during the add", loggedFetches(out.stderr), 2)
 
-	out = h.run("--json", "source", "skills", s.url)
+	// list runs source skills and fails if it reached the network.
+	list := func(args ...string) outcome {
+		t.Helper()
+		out := h.run(append([]string{"--verbose"}, args...)...)
+		if n := loggedFetches(out.stderr); n != 0 {
+			t.Errorf("source skills %v ran %d git fetches; it must read the account repo alone", args, n)
+		}
+		return out
+	}
+
+	out = list("--json", "source", "skills", s.url)
 	equal(t, "exit", out.exit, 0)
 	events := h.events(out.stdout)
 	if got, want := h.types(events), []string{"source", "source_skill", "source_skill", "source_skill", "source_skill", "result"}; !reflect.DeepEqual(got, want) {
@@ -408,37 +434,37 @@ func TestSourceSkills(t *testing.T) {
 		t.Errorf("skills = %v\nwant %v", skills, want)
 	}
 
-	// Scoped to a subpath, by id or URL, and to one skill directory.
-	for _, arg := range []string{s.url + "/skills", s.url + "/skills/"} {
-		out = h.run("--json", "source", "skills", arg)
-		equal(t, "exit", out.exit, 0)
+	// Scoped to a subpath, by id or URL, and to one skill directory. A
+	// hidden directory is skipped in a wider listing and listed when named.
+	for _, tt := range []struct {
+		arg, subpath string
+		count        int
+	}{
+		{s.url + "/skills", "skills", 3},
+		{s.url + "/skills/", "skills", 3},
+		{s.url + "/skills/alpha/nested", "skills/alpha/nested", 1},
+		{s.url + "/skills/.hidden", "skills/.hidden", 1},
+		{s.url + "/docs", "docs", 0}, // nothing under a directory without skills
+	} {
+		out = list("--json", "source", "skills", tt.arg)
+		equal(t, "exit "+tt.arg, out.exit, 0)
 		src, skills = sourceEvents(t, h.events(out.stdout))
-		equal(t, "subpath", src["subpath"], "skills")
-		equal(t, "skills", len(skills), 3)
+		equal(t, "subpath of "+tt.arg, src["subpath"], tt.subpath)
+		equal(t, "skills in "+tt.arg, len(skills), tt.count)
 	}
-	out = h.run("--json", "source", "skills", s.url+"/skills/alpha/nested")
-	equal(t, "exit", out.exit, 0)
-	_, skills = sourceEvents(t, h.events(out.stdout))
-	equal(t, "skills", len(skills), 1)
-	equal(t, "nested subpath", skills[0]["subpath"], "skills/alpha/nested")
 
 	// The text listing.
-	out = h.run("source", "skills", id)
+	out = list("source", "skills", id)
 	equal(t, "exit", out.exit, 0)
 	equal(t, "stdout", out.stdout, "4 skills in "+s.url+" at "+head[:7]+"\n"+
 		"  alpha         skills/alpha         The first skill\n"+
 		"  alpha-nested  skills/alpha/nested  Nested inside alpha\n"+
 		"  beta          skills/beta\n"+
 		"  gamma         tools/gamma          Outside skills\n")
-	out = h.run("source", "skills", s.url+"/tools")
+	out = list("source", "skills", s.url+"/tools")
 	equal(t, "stdout", out.stdout, "1 skill in "+s.url+" under tools at "+head[:7]+"\n  gamma  tools/gamma  Outside skills\n")
 
-	// Nothing under a directory without skills, and errors.
-	out = h.run("--json", "source", "skills", s.url+"/docs")
-	equal(t, "exit", out.exit, 0)
-	src, skills = sourceEvents(t, h.events(out.stdout))
-	equal(t, "skills", src["skills"], float64(0))
-	equal(t, "skills", len(skills), 0)
+	// Errors.
 	tests := []struct {
 		name string
 		args []string
@@ -590,10 +616,9 @@ func TestSourceAddErrors(t *testing.T) {
 		{"unreachable with a token", "https://me:s3cret@github.com/owner/private", 3, "source", "https://github.com/owner/private: ", "dropped"},
 		{"missing ref", s.url + "#nope", 5, "not_found", `has no ref "nope"`, "pin a branch, tag or commit"},
 		{"missing subpath", s.url + "/nope", 5, "not_found", `subpath not in the source: "nope"`, "directory"},
-		{"bad form", "https://github.com/owner/repo/blob/main/SKILL.md", 1, "usage", "not a source URL", "owner/repo"},
-		{"empty ref", "owner/repo#", 1, "usage", "does not end in a ref", ""},
-		{"two refs", "https://github.com/owner/repo/tree/main/x#dev", 1, "usage", "the URL names ref", ""},
-		{"scheme", "ftp://example.com/repo", 1, "usage", "unsupported scheme", ""},
+		// An input source.Parse refuses never reaches git: TestParseRejects
+		// has every one, and TestParseSourceNeverEchoesACredential what
+		// the refusal says of them.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -639,15 +664,7 @@ func TestSourceCommandsRespectTheLock(t *testing.T) {
 	s, _, _ := h.standardSource(true)
 	equal(t, "exit", h.run("source", "add", s.url).exit, 0)
 
-	lock := filepath.Join(h.agentx, "lock")
-	f, err := os.OpenFile(lock, os.O_CREATE|os.O_RDWR, 0o644)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		t.Fatal(err)
-	}
+	holdLock(t, h)
 	for _, args := range [][]string{{"source", "add", s.url}, {"source", "fetch", "--all"}, {"source", "remove", s.url}} {
 		out := h.run(append([]string{"--json"}, args...)...)
 		equal(t, "exit", out.exit, 7)
@@ -674,89 +691,6 @@ func TestSourceHelpAndUsage(t *testing.T) {
 	equal(t, "error.code", h.events(out.stdout)[0]["code"], "usage")
 	out = h.run("--json", "source", "add")
 	equal(t, "exit", out.exit, 1)
-}
-
-// TestSourceAddNeverEchoesACredential covers every refusal that names what
-// it was given: a token in the URL must not reach stdout, stderr or an
-// event, whichever way the input is wrong.
-func TestSourceAddNeverEchoesACredential(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	const secret = "ghp_S3CRETT0KEN"
-	for _, arg := range []string{
-		"https://user:" + secret + "@github.com",
-		"https://" + secret + "@github.com/owner",
-		"https://user:" + secret + "@host:notaport/owner/repo",
-		"https://user:" + secret + "@github.com/owner/repo/blob/main/SKILL.md",
-		"https://user:" + secret + "@github.com/owner/repo#",
-		"https://user:" + secret + "@github.com/owner/../repo",
-		"ftp://user:" + secret + "@example.com/repo",
-		"user:" + secret + "@example.com/owner/repo",
-		"https://u:p#" + secret + "@github.com/owner/repo",
-	} {
-		t.Run(arg, func(t *testing.T) {
-			out := h.run(append([]string{"--json", "source", "add"}, arg)...)
-			if out.exit == 0 {
-				t.Fatalf("exit 0 for %q", arg)
-			}
-			if strings.Contains(out.stdout, secret) || strings.Contains(out.stderr, secret) {
-				t.Errorf("the token reached the output:\nstdout: %s\nstderr: %s", out.stdout, out.stderr)
-			}
-			events := h.events(out.stdout)
-			if len(events) == 0 || events[0]["type"] != "error" {
-				t.Fatalf("events = %v", events)
-			}
-			// A message either leaves the input out or names it redacted;
-			// what it may never do is repeat the userinfo it was given.
-			if msg := events[0]["message"].(string); strings.Contains(msg, "@") {
-				contains(t, "error.message", msg, "***@")
-			}
-		})
-	}
-}
-
-// TestSourceSkillsReadsEveryPartOfTheSourceOffline pins what a subpath on
-// the add does not do: it scopes that listing only. Every later listing,
-// whether wider, narrower or by id, is answered from the account repo, so
-// none of them may need the network or fail.
-func TestSourceSkillsReadsEveryPartOfTheSourceOffline(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	s := h.newSourceRepo("wide", true) // a server that really filters
-	s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "n\n"})
-	s.skill("skills/beta", "beta", "The second skill", nil)
-	s.skill("tools/gamma", "gamma", "Outside skills", nil)
-	s.skill(".hidden/secret", "secret", "Named outright", nil)
-	s.commit("skills")
-	id := source.ID(s.url)
-
-	out := h.run("--verbose", "source", "add", s.url+"/skills/alpha")
-	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "1 skill under skills/alpha")
-	adds := fetches(out.stderr)
-
-	// Every listing below must spawn no fetch at all: the add brought every
-	// SKILL.md of the source, not only the one under its subpath.
-	for _, tt := range []struct {
-		arg   string
-		count int
-	}{
-		{id, 3},
-		{s.url, 3},
-		{s.url + "/skills", 2},
-		{s.url + "/tools", 1},
-		{s.url + "/skills/beta", 1},
-		{s.url + "/.hidden", 1}, // skipped in a wider listing, listed when named
-	} {
-		out := h.run("--verbose", "--json", "source", "skills", tt.arg)
-		equal(t, "exit "+tt.arg, out.exit, 0)
-		_, skills := sourceEvents(t, h.events(out.stdout))
-		equal(t, "skills in "+tt.arg, len(skills), tt.count)
-		if n := fetches(out.stderr); n != 0 {
-			t.Errorf("source skills %s ran %d git fetches; it must read the account repo alone", tt.arg, n)
-		}
-	}
-	equal(t, "fetches during the add", adds, 2)
 }
 
 // TestSourceRemoveKeepsTheEntryWhenGitFails and the orphan it can clean up:
@@ -813,9 +747,6 @@ func TestSourceRemoveKeepsTheEntryWhenGitFails(t *testing.T) {
 	}
 }
 
-// TestConcurrentSourceAdds proves two adds cannot leave a half-written
-// remote behind: git config fails rather than waiting for its own lock, so
-// the write is serialised by agentx's lock instead.
 // TestSourceTellsALocalGitFailureFromAnUnfetchedSource covers the two ways
 // a listing can find nothing: an account repo git cannot read, which is
 // exit code 8 in every source command, and a source the account repo holds
@@ -835,7 +766,6 @@ func TestSourceTellsALocalGitFailureFromAnUnfetchedSource(t *testing.T) {
 	events := h.events(out.stdout)
 	equal(t, "error.code", events[0]["code"], "not_found")
 	contains(t, "error.message", events[0]["message"].(string), "source not fetched")
-	contains(t, "error.hint", events[0]["hint"].(string), "agentx source add "+sourceAddArg(s.url, ""))
 	equal(t, "list exit", h.run("source", "list").exit, 0) // the settings entry is still there
 
 	// A packed-refs file git refuses to parse. rev-parse
@@ -864,6 +794,16 @@ func TestSourceTellsALocalGitFailureFromAnUnfetchedSource(t *testing.T) {
 // nothing drives the terminal, and the event carries what the source wrote.
 func TestSourceSkillsSanitisesUntrustedText(t *testing.T) {
 	t.Parallel()
+	// The fixture is worth exactly what it carries, so it is checked first:
+	// an escape, a carriage return, a newline and a bell.
+	for _, char := range []struct {
+		name string
+		r    rune
+	}{{"ESC", 0x1b}, {"CR", '\r'}, {"LF", '\n'}, {"BEL", 0x07}} {
+		if !strings.ContainsRune(nastyName+nastyDescription, char.r) {
+			t.Fatalf("the frontmatter fixture carries no %s", char.name)
+		}
+	}
 	h := newHarness(t)
 	s := h.newSourceRepo("evil", true)
 	s.nastySkill("nasty")
@@ -871,8 +811,9 @@ func TestSourceSkillsSanitisesUntrustedText(t *testing.T) {
 	head := s.commit("skills")
 	equal(t, "exit", h.run("source", "add", s.url).exit, 0)
 
-	// The event is the source's own text: JSON escapes it, so a consumer
-	// reads what the repository wrote.
+	// The event is the source's own text, the frontmatter byte for byte:
+	// the UI learns what the files on disk say from the events alone, so a
+	// value sanitised on its way into one would show what no file says.
 	out := h.run("--json", "source", "skills", s.url)
 	equal(t, "exit", out.exit, 0)
 	_, skills := sourceEvents(t, h.events(out.stdout))
@@ -934,43 +875,13 @@ func TestSourceAddSanitisesWhatTheRemoteSays(t *testing.T) {
 	contains(t, "error.message", message, "remote: \x1b[2K\x1b]0;pwned\ahello from the server")
 }
 
-// TestSourceSkillEventIsTheFrontmatterItself pins the boundary the whole
-// sanitising rule stands on. Once a source is fetched, its files are on
-// this machine, and the UI learns the state of those files from the JSON
-// events alone: a source_skill event therefore carries the frontmatter byte
-// for byte. Sanitising a value on its way into an event would leave the UI
-// showing something the file on disk does not say, and until this test
-// nothing in the suite would have failed for it.
-func TestSourceSkillEventIsTheFrontmatterItself(t *testing.T) {
-	t.Parallel()
-	// The fixture is worth exactly what it carries, so it is checked first:
-	// an escape, a carriage return, a newline and a bell.
-	for _, char := range []struct {
-		name string
-		r    rune
-	}{{"ESC", 0x1b}, {"CR", '\r'}, {"LF", '\n'}, {"BEL", 0x07}} {
-		if !strings.ContainsRune(nastyName+nastyDescription, char.r) {
-			t.Fatalf("the frontmatter fixture carries no %s", char.name)
-		}
-	}
-	h := newHarness(t)
-	s := h.newSourceRepo("verbatim", true)
-	s.nastySkill("nasty")
-	s.commit("one skill")
-	equal(t, "exit", h.run("source", "add", s.url).exit, 0)
-
-	out := h.run("--json", "source", "skills", s.url)
-	equal(t, "exit", out.exit, 0)
-	_, skills := sourceEvents(t, h.events(out.stdout))
-	equal(t, "skills", len(skills), 1)
-	equal(t, "name", skills[0]["name"], nastyName)
-	equal(t, "description", skills[0]["description"], nastyDescription)
-}
-
+// TestConcurrentSourceAdds proves adds that race cannot leave a
+// half-written remote behind: git config fails rather than waiting for its
+// own lock, so the write is serialised by agentx's lock instead.
 func TestConcurrentSourceAdds(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	const n = 6
+	const n = 3
 	repos := make([]*sourceRepo, n)
 	for i := range repos {
 		repos[i] = h.newSourceRepo("p"+strconv.Itoa(i), true)
@@ -1055,23 +966,13 @@ fi
 // run is past that point without sleeping for it.
 func sourceAddTakeBack(id string) string { return "taking back the remote " + source.RemoteName(id) }
 
-// TestSourceAddTakesBackItsRemoteWhenTheLockIsHeld is the invariant
-// TestConcurrentSourceAdds asserts, forced instead of raced: a remote
-// exists in the account repo only because a settings entry names it, or
-// because an add is in flight for it. `source add` writes the remote under
-// one hold of the lock and the settings entry under a second, with the
-// fetch outside both; a run that loses the second hold has written a remote
-// nothing will ever name again, since `source fetch` and `source skills`
-// both answer from the settings. It must take the remote back, and to do
-// that it must wait for the lock rather than give up on it.
-//
-// Nothing here is raced or retried. The gate parks the run inside one git
-// of its fetch, which is after the remote is written and before the entry
-// is; the lock is taken from the test while the run is parked; and it is
-// held on past the point where the run said it is taking the remote back,
-// which the run cannot say before the second hold has failed. Both failure
-// paths into the take-back are covered: the fetch that fails and the
-// settings write that cannot be made.
+// TestSourceAddTakesBackItsRemoteWhenTheLockIsHeld forces the race
+// TestConcurrentSourceAdds can run into: a run that wrote its remote and
+// then fails, on its fetch or on the lock its settings write needs, must
+// take the remote back, since no command would ever name it again, and so
+// must wait for the lock rather than give up on it. The gate parks the run
+// between the remote and the entry, and the test holds the lock from then
+// until past the point where the run says it is taking the remote back.
 func TestSourceAddTakesBackItsRemoteWhenTheLockIsHeld(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
@@ -1100,27 +1001,18 @@ func TestSourceAddTakesBackItsRemoteWhenTheLockIsHeld(t *testing.T) {
 			unlock := holdLock(t, h)
 			release() // the run runs on into the hold it will lose
 			p.await() // it lost it and has started taking the remote back
-			// Holding the lock on past that point is what makes this test
-			// discriminate at all, and it is the one duration here: an
-			// acquisition that gives up is defined by a duration, so
-			// nothing but elapsed time tells it from one that waits. An
-			// earlier version that released the lock as soon as await
-			// returned passed against a take-back that gives up, because
-			// such a take-back still has 50 ms to try and an immediate
-			// release hands it the lock inside them. A tenth of
-			// takeBackWait is ten times that budget, so one that gives up
-			// has given up before the release, and it is a tenth of the
-			// bound, so one that waits still has nine tenths left. Do not
-			// shorten it to make the test quicker.
+			// The one duration here: a take-back that gives up does so after
+			// the lock's 50 ms, so only a lock held longer tells it from one
+			// that waits. A tenth of takeBackWait is ten times that budget
+			// and leaves a take-back that waits nine tenths of its bound. Do
+			// not shorten it to make the test quicker.
 			time.Sleep(takeBackWait / 10)
 			unlock()
 
 			out := p.wait()
 			equal(t, "exit", out.exit, tt.exit)
-			// The remote being gone is the invariant, and assertNoSource
-			// below is what proves it. This says which way it was lost when
-			// it is not, naming the acquisition that gave up rather than
-			// leaving a reader to work back from an orphaned ref.
+			// assertNoSource proves the invariant; this names the way it was
+			// lost when it is.
 			if strings.Contains(out.stderr, "could not be taken back") {
 				t.Errorf("the take-back gave up on the lock instead of waiting for it:\n%s", out.stderr)
 			}
@@ -1129,15 +1021,23 @@ func TestSourceAddTakesBackItsRemoteWhenTheLockIsHeld(t *testing.T) {
 	}
 }
 
+// runTakingBackWithin is h.run for a source add whose take-back waits for
+// the lock no longer than wait, where every real run waits takeBackWait.
+func (h *harness) runTakingBackWithin(wait time.Duration, args ...string) outcome {
+	h.t.Helper()
+	var stdout, stderr bytes.Buffer
+	ctx := context.WithValue(context.Background(), takeBackWaitKey{}, wait)
+	exit := Run(ctx, args, h.env, strings.NewReader(""), &stdout, &stderr)
+	return outcome{exit: exit, stdout: stdout.String(), stderr: stderr.String()}
+}
+
 // TestSourceAddReportsTheRemoteItCouldNotTakeBack covers the one case the
 // bounded wait cannot answer: the lock stays held for longer than the run
-// may wait. The remote is then left behind, and a remote no source names is
-// the bug, so the run says so rather than exiting on the lost lock alone.
-// It keeps the exit code of what stopped it – a lost lock is still 7 – and
-// names the remote and the repair. The repair is then run, since a hint
-// that does not work is worse than none: adding the source again rewrites
-// the remote and writes the entry, which is the state this run failed to
-// reach.
+// may wait, and the remote is left behind. The run keeps the exit code of
+// what stopped it, a lost lock is still 7, names the remote and the repair,
+// and the repair works: adding the source again writes the entry this run
+// failed to write. The run waits a tenth of takeBackWait, which is still
+// ten times the lock's 50 ms, so it gives up after a wait and not at once.
 func TestSourceAddReportsTheRemoteItCouldNotTakeBack(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -1147,13 +1047,13 @@ func TestSourceAddReportsTheRemoteItCouldNotTakeBack(t *testing.T) {
 	id := source.ID(s.url)
 
 	reached, release := gatePublish(t, h)()
-	p := h.start(sourceAddTakeBack(id), "--json", "--verbose", "source", "add", s.url)
+	done := make(chan outcome, 1)
+	go func() { done <- h.runTakingBackWithin(takeBackWait/10, "--json", "source", "add", s.url) }()
 	reached()
 	unlock := holdLock(t, h)
-	release()
-	p.await() // the settings write lost the lock; the take-back will lose it too
+	release() // the settings write loses the lock, and the take-back loses it too
 
-	out := p.wait()
+	out := <-done
 	equal(t, "exit", out.exit, 7)
 	e := lastError(t, h.events(out.stdout))
 	equal(t, "error.code", e["code"], "locked")

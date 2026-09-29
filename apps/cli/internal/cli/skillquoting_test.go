@@ -4,6 +4,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -95,12 +96,19 @@ func quotingCases() []quotingCase {
 // later update, revert and fork merge restores from, so a name lost here
 // is lost for good, and the content hash would name a tree the commit does
 // not hold.
+//
+// Every skill is taken in one run: a batch writes the trees of every skill
+// together, one mktree per level, which is the mktree a run of one skill
+// writes too. A record framed the wrong way then does not cost that one
+// skill, it ends the definition every later skill's entries belong to, so
+// the whole run fails and the library is left empty.
 func TestImportKeepsNamesGitWouldQuote(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	s := h.newSourceRepo("quoting", true)
 	cases := quotingCases()
+	var skills []string
 	for _, c := range cases {
 		s.skill(c.dir, c.skill, "Holds a name git would quote", c.files)
 		for name, target := range c.links {
@@ -112,18 +120,16 @@ func TestImportKeepsNamesGitWouldQuote(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
+		skills = append(skills, c.skill)
 	}
 	s.commit("skills whose names need quoting")
-	if out := h.run("source", "add", s.url); out.exit != 0 {
-		t.Fatalf("source add: exit %d\n%s", out.exit, out.stderr)
-	}
+	h.mustRun("source", "add", s.url)
+	h.mustRun("skill", "add", s.url, "--all")
+	slices.Sort(skills)
+	equal(t, "the library", strings.Join(installedNames(t, h), ","), strings.Join(skills, ","))
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			out := h.run("skill", "add", s.url, "--skill", c.skill)
-			if out.exit != 0 {
-				t.Fatalf("skill add %s: exit %d\n%s\n%s", c.skill, out.exit, out.stdout, out.stderr)
-			}
 			ref := "refs/heads/managed/" + c.skill
 			upstream := s.treeOf(c.dir)
 
@@ -213,70 +219,4 @@ func entryName(record string) string {
 func entryMode(record string) string {
 	mode, _, _ := strings.Cut(record, " ")
 	return mode
-}
-
-// TestImportKeepsNamesGitWouldQuoteInABatch is the same names taken in one
-// run: a batch writes the trees of every skill together, so one name git
-// would quote travels through the same mktree as every other skill's. A
-// record framed the wrong way does not cost that one skill here, it ends
-// the definition every later skill's entries belong to, so the whole run
-// fails and the library is left empty.
-func TestImportKeepsNamesGitWouldQuoteInABatch(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude"}})
-	s := h.newSourceRepo("quotingbulk", true)
-	s.skill("skills/plain", "plain", "A name nothing quotes", nil)
-	s.skill("skills/quoted", "quoted", "A quoted file name", map[string]string{`"weird".md`: "weird\n"})
-	s.skill("skills/newline", "newlined", "A newline in a file name", map[string]string{"one\ntwo.md": "two lines in one name\n"})
-	s.skill(`skills/"odd"dir`, "oddir", "A quoted directory name", nil)
-	// A symlink in each rewritten skill, so its own tree cannot be reused
-	// and the names go through mktree rather than travelling with the tree.
-	for _, dir := range []string{"skills/quoted", "skills/newline"} {
-		if err := os.Symlink("SKILL.md", filepath.Join(s.work, filepath.FromSlash(dir), "alias.md")); err != nil {
-			t.Fatal(err)
-		}
-	}
-	s.commit("four skills, three of them named awkwardly")
-	if out := h.run("source", "add", s.url); out.exit != 0 {
-		t.Fatalf("source add: exit %d\n%s", out.exit, out.stderr)
-	}
-
-	out := h.run("skill", "add", s.url, "--all")
-	if out.exit != 0 {
-		t.Fatalf("skill add --all: exit %d\n%s\n%s", out.exit, out.stdout, out.stderr)
-	}
-	if got := strings.Join(installedNames(t, h), ","); got != "newlined,oddir,plain,quoted" {
-		t.Errorf("the library holds %q, want every skill of the batch", got)
-	}
-	// Every skill's import tree is named for its upstream directory and
-	// holds the upstream's own bytes, whatever the rest of the batch held.
-	for _, c := range []struct{ skill, dir, file string }{
-		{"plain", "plain", "SKILL.md"},
-		{"quoted", "quoted", `"weird".md`},
-		{"newlined", "newline", "one\ntwo.md"},
-		{"oddir", `"odd"dir`, "SKILL.md"},
-	} {
-		ref := "refs/heads/managed/" + c.skill
-		root := treeRecords(t, h.accountGit("ls-tree", "-z", ref))
-		if len(root) != 1 {
-			t.Fatalf("%s: the import tree holds %d entries, want 1: %q", c.skill, len(root), root)
-		}
-		if got := entryName(root[0]); got != c.dir {
-			t.Errorf("%s: the import tree's entry is named %q, want %q", c.skill, got, c.dir)
-		}
-		want := c.dir + "/" + c.file
-		var found bool
-		for _, rec := range treeRecords(t, h.accountGit("ls-tree", "-r", "-t", "-z", ref)) {
-			if entryName(rec) == want {
-				found = true
-			}
-		}
-		if !found {
-			t.Errorf("%s: the import tree holds no %q", c.skill, want)
-		}
-		if _, err := os.Lstat(filepath.Join(h.library, c.skill, filepath.FromSlash(c.file))); err != nil {
-			t.Errorf("%s: the library holds no %q: %v", c.skill, c.file, err)
-		}
-	}
 }

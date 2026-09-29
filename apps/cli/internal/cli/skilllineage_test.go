@@ -10,18 +10,17 @@ import (
 // nastySubpaths are skill directories a source may perfectly well hold and
 // an import commit cannot record: the subpath is one line of a trailer, and
 // the reader takes that line with the whitespace around it trimmed off. A
-// control character is a line the reader refuses outright; a newline is a
-// line that ends early, so the trailer would be read as the directory above;
-// a leading or trailing space is a line read back as a neighbouring
-// directory, without anything going wrong at all.
+// control character is a line the reader refuses outright; a leading space
+// is a line read back as a neighbouring directory, without anything going
+// wrong at all. Every other such directory is lineage.ValidPath's, which
+// TestValidPath holds.
 var nastySubpaths = []struct {
 	name    string // the frontmatter name, which is the library directory
 	subpath string
+	quoted  string // how a refusal names the directory
 }{
-	{"escaped", "na\x1b[31msty"},
-	{"broken", "tools/od\nd"},
-	{"opens", " leading"},
-	{"closes", "trailing "},
+	{"escaped", "na\x1b[31msty", `"na\x1b[31msty"`},
+	{"opens", " leading", `" leading"`},
 }
 
 // TestInstallRefusesASubpathItCannotRecord is the install side of the rule
@@ -31,6 +30,11 @@ var nastySubpaths = []struct {
 // and nothing said so: the import commit exists to be the base version
 // every later update, revert and fork merge works from, and one no reader
 // accepts leaves a skill that can never be updated or reverted again.
+//
+// The refusal costs only its own skill, as every other refusal of an
+// install does, and names the directory as it is: the space around a name
+// is invisible on a terminal and a control character is obeyed by one, so
+// the directory is quoted rather than printed.
 func TestInstallRefusesASubpathItCannotRecord(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -41,61 +45,36 @@ func TestInstallRefusesASubpathItCannotRecord(t *testing.T) {
 	}
 	s.skill("plain", "plain", "A skill under a directory a trailer carries", nil)
 	s.commit("skill directories a trailer cannot carry")
-	if out := h.run("source", "add", s.url); out.exit != 0 {
-		t.Fatalf("source add: exit %d\n%s", out.exit, out.stderr)
-	}
+	h.mustRun("source", "add", s.url)
 
-	for _, c := range nastySubpaths {
-		t.Run(c.name, func(t *testing.T) {
-			out := h.run("--json", "skill", "add", s.url, "--skill", c.name)
-			equal(t, "exit", out.exit, exitRefused.exit)
-			ev := lastError(t, h.events(out.stdout))
-			contains(t, "the refusal", ev["message"].(string), "is not a directory the account repo can record")
-
-			// Nothing was written for it: no import branch, no library
-			// directory, and so nothing for a later command to trip over.
-			if _, err := h.accountGitErr("rev-parse", "--verify", "refs/heads/managed/"+c.name); err == nil {
-				t.Errorf("%s has an import branch after a refused install", c.name)
-			}
-			if _, err := os.Lstat(filepath.Join(h.library, c.name)); err == nil {
-				t.Errorf("%s has a library directory after a refused install", c.name)
-			}
-		})
-	}
-}
-
-// TestARefusedSubpathCostsOnlyItsOwnSkill holds the refusal to the rule
-// every other one of an install keeps: a skill that cannot be installed
-// costs itself and not the run.
-func TestARefusedSubpathCostsOnlyItsOwnSkill(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude"}})
-	s := h.newSourceRepo("subpaths", true)
-	for _, c := range nastySubpaths {
-		s.skill(c.subpath, c.name, "A skill under a directory no trailer carries", nil)
-	}
-	s.skill("plain", "plain", "A skill under a directory a trailer carries", nil)
-	s.commit("skill directories a trailer cannot carry")
-	if out := h.run("source", "add", s.url); out.exit != 0 {
-		t.Fatalf("source add: exit %d\n%s", out.exit, out.stderr)
-	}
+	alone := h.run("--json", "skill", "add", s.url, "--skill", nastySubpaths[0].name)
+	equal(t, "exit of the skill alone", alone.exit, exitRefused.exit)
+	contains(t, "the refusal", lastError(t, h.events(alone.stdout))["message"].(string), "is not a directory the account repo can record")
 
 	out := h.run("skill", "add", s.url, "--all")
-	equal(t, "exit", out.exit, exitRefused.exit)
+	equal(t, "exit of the batch", out.exit, exitRefused.exit)
 	for _, c := range nastySubpaths {
 		contains(t, "the warnings", out.stderr, c.name+": ")
+		contains(t, "the warnings", out.stderr, c.quoted)
+		// Nothing was written for it: no import branch, no library
+		// directory, and so nothing for a later command to trip over.
+		if _, err := h.accountGitErr("rev-parse", "--verify", "refs/heads/managed/"+c.name); err == nil {
+			t.Errorf("%s has an import branch after a refused install", c.name)
+		}
+		if _, err := os.Lstat(filepath.Join(h.library, c.name)); err == nil {
+			t.Errorf("%s has a library directory after a refused install", c.name)
+		}
 	}
-	if _, err := os.Stat(filepath.Join(h.library, "plain", "SKILL.md")); err != nil {
-		t.Fatalf("the skill the run could record was not installed: %v", err)
+	// Nothing is painted into a pipe, so an escape on this stream could only
+	// be one the source wrote.
+	if strings.ContainsRune(out.stderr, 0x1b) {
+		t.Errorf("the refusal carries an escape of the source's: %q", out.stderr)
 	}
 
 	// What the run did install reads back whole: the account repo records
 	// the lineage and the listing gives it again, which is the agreement
 	// the refusal exists to keep.
-	list := h.run("--json", "skill", "list")
-	equal(t, "exit", list.exit, 0)
-	ev := h.one(list.stdout, "library_skill")
+	ev := h.one(h.mustRun("--json", "skill", "list").stdout, "library_skill")
 	equal(t, "name", ev["name"], "plain")
 	equal(t, "kind", ev["kind"], "managed")
 	equal(t, "source", ev["source"], s.url)
@@ -134,37 +113,6 @@ func TestAdoptRefusesASubpathItCannotRecord(t *testing.T) {
 	h.lockUnchanged(h.lockPath(), lock)
 	if _, err := h.accountGitErr("rev-parse", "--verify", "refs/heads/managed/alpha"); err == nil {
 		t.Error("alpha has an import branch after a refused adoption")
-	}
-}
-
-// TestTheRefusalNamesTheDirectoryAsItIs checks that the message shows what
-// it is about. A path is the one thing a reader has to see exactly: the
-// space around a name is invisible on a terminal and a control character is
-// obeyed by one, so the directory is quoted rather than printed, and the
-// quoting is what puts the padding and the escape on the page.
-func TestTheRefusalNamesTheDirectoryAsItIs(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude"}})
-	s := h.newSourceRepo("quoted", true)
-	s.skill(" leading", "opens", "A skill under a padded directory", nil)
-	s.skill("na\x1b[31msty", "escaped", "A skill under an escaped directory", nil)
-	s.commit("directories a message has to quote")
-	if out := h.run("source", "add", s.url); out.exit != 0 {
-		t.Fatalf("source add: exit %d\n%s", out.exit, out.stderr)
-	}
-	for _, c := range []struct{ skill, quoted string }{
-		{"opens", `" leading"`},
-		{"escaped", `"na\x1b[31msty"`},
-	} {
-		out := h.run("skill", "add", s.url, "--skill", c.skill)
-		equal(t, "exit", out.exit, exitRefused.exit)
-		contains(t, "the refusal", out.stderr, c.quoted)
-		// Nothing is painted into a pipe, so an escape on this stream
-		// could only be one the source wrote.
-		if strings.ContainsRune(out.stderr, 0x1b) {
-			t.Errorf("the refusal carries an escape of the source's: %q", out.stderr)
-		}
 	}
 }
 

@@ -12,10 +12,14 @@ import (
 
 // TestSkillAddToOverridesTheTargets places into the configurations --to
 // names and no others, a disabled one included, since naming a
-// configuration is asking for it.
+// configuration is asking for it. A --to naming no detected configuration
+// is refused, and names the ones there are.
 func TestSkillAddToOverridesTheTargets(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
+	unknown := h.run("skill", "add", s.url, "--skill", "alpha", "--to", "nowhere")
+	equal(t, "exit of an unknown configuration", unknown.exit, 5)
+	contains(t, "stderr of an unknown configuration", unknown.stderr, "detected configurations:")
 	equal(t, "exit", h.run("config", "disable", "cursor").exit, 0)
 
 	out := h.run("--json", "skill", "add", s.url, "--skill", "alpha", "--to", "cursor")
@@ -46,14 +50,6 @@ func TestSkillAddSkipsDisabledConfigurations(t *testing.T) {
 	if _, err := os.Lstat(filepath.Join(h.home, ".cursor", "skills", "alpha")); err != nil {
 		t.Errorf("an enabled configuration has no placement: %v", err)
 	}
-}
-
-func TestSkillAddRefusesAnUnknownConfiguration(t *testing.T) {
-	t.Parallel()
-	h, s := installHarness(t)
-	out := h.run("skill", "add", s.url, "--skill", "alpha", "--to", "nowhere")
-	equal(t, "exit", out.exit, 5)
-	contains(t, "stderr", out.stderr, "detected configurations:")
 }
 
 // TestSkillAddCopyPlacesCopies makes copies instead of symlinks and records
@@ -103,17 +99,10 @@ func TestSkillAddAdoptsAPlacementOfTheSameVersion(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	// A directory holding the version already, as a skill installed by hand
-	// would be: copy it out of an install of the same source in another home.
-	other := newHarness(t)
-	other.build(t, fixture{dirs: []string{".claude"}})
-	if out := other.run("source", "add", s.url); out.exit != 0 {
-		t.Fatalf("source add: exit %d\n%s", out.exit, out.stderr)
-	}
-	if out := other.run("skill", "add", s.url, "--skill", "alpha"); out.exit != 0 {
-		t.Fatalf("skill add: exit %d\n%s", out.exit, out.stderr)
-	}
+	// would be: copy it out of the source's work tree, which holds the
+	// version the install takes.
 	same := filepath.Join(h.home, ".claude", "skills", "alpha")
-	copyTree(t, filepath.Join(other.library, "alpha"), same)
+	copyTree(t, filepath.Join(s.work, "skills", "alpha"), same)
 	// And a directory holding something else.
 	other2 := filepath.Join(h.home, ".cursor", "skills", "alpha")
 	if err := os.MkdirAll(other2, 0o755); err != nil {
@@ -267,46 +256,11 @@ func TestSkillAddNamesTheSkillToInstall(t *testing.T) {
 	}
 }
 
-// TestSkillAddMatchesTheNameInAnyCase names a skill by its frontmatter
-// name in any case, and by its directory name only when the frontmatter
-// has no name. The library directory keeps the frontmatter's spelling.
-func TestSkillAddMatchesTheNameInAnyCase(t *testing.T) {
-	t.Parallel()
-	h, s := installHarness(t)
-	equal(t, "exit", h.run("skill", "add", s.url, "--skill", "ALPHA").exit, 0)
-	if _, err := os.Stat(filepath.Join(h.library, "alpha", "SKILL.md")); err != nil {
-		t.Errorf("--skill ALPHA did not install alpha: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(h.library, "beta")); !os.IsNotExist(err) {
-		t.Errorf("--skill ALPHA installed beta: %v", err)
-	}
-
-	o := newHarness(t)
-	o.build(t, fixture{dirs: []string{".claude"}})
-	r := o.newSourceRepo("renamed", true)
-	r.skill("skills/on-disk", "fancy", "Named otherwise in its frontmatter", nil)
-	r.skill("skills/nameless", "", "No name in its frontmatter", nil)
-	r.commit("two skills")
-	equal(t, "exit of source add", o.run("source", "add", r.url).exit, 0)
-
-	byDir := o.run("skill", "add", r.url, "--skill", "on-disk")
-	equal(t, "exit of the directory name", byDir.exit, 5)
-	contains(t, "stderr", byDir.stderr, `has no skill called "on-disk"`)
-	contains(t, "stderr", byDir.stderr, "fancy, nameless")
-
-	equal(t, "exit of the frontmatter name", o.run("skill", "add", r.url, "--skill", "Fancy").exit, 0)
-	if _, err := os.Stat(filepath.Join(o.library, "fancy", "SKILL.md")); err != nil {
-		t.Errorf("--skill Fancy did not install fancy: %v", err)
-	}
-	equal(t, "exit of the fallback name", o.run("skill", "add", r.url, "--skill", "NameLess").exit, 0)
-	if _, err := os.Stat(filepath.Join(o.library, "nameless", "SKILL.md")); err != nil {
-		t.Errorf("--skill NameLess did not install nameless: %v", err)
-	}
-}
-
 // TestSkillAddAddsASourceThatIsNotAdded installs from a URL this machine has
-// no source for. The run adds it exactly as source add would, fetching it
-// once, and keeps it when the install that follows fails.
+// no source for. The run adds it exactly as source add would, and keeps it
+// when the install that follows fails. That it fetches no more than a
+// source add and an install would is counted in
+// TestSkillAddAllAddsASourceThatIsNotAdded.
 func TestSkillAddAddsASourceThatIsNotAdded(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -330,22 +284,6 @@ func TestSkillAddAddsASourceThatIsNotAdded(t *testing.T) {
 		t.Errorf("the skill was not installed: %v", err)
 	}
 
-	// Fetched once: the run makes the fetches of a source add and of an
-	// install from the added source, and no more.
-	counted := newHarness(t)
-	counted.build(t, fixture{dirs: []string{".claude"}})
-	auto := counted.run("--verbose", "skill", "add", s.url, "--skill", "alpha")
-	equal(t, "exit of the counted add", auto.exit, 0)
-	other := newHarness(t)
-	other.build(t, fixture{dirs: []string{".claude"}})
-	added := other.run("--verbose", "source", "add", s.url)
-	installed := other.run("--verbose", "skill", "add", s.url, "--skill", "alpha")
-	equal(t, "exit of the separate add", added.exit+installed.exit, 0)
-	equal(t, "fetches", fetches(auto.stderr), fetches(added.stderr)+fetches(installed.stderr))
-	if fetches(installed.stderr) == 0 || fetches(added.stderr) == 0 {
-		t.Errorf("the counts say nothing: %d fetches to add, %d to install", fetches(added.stderr), fetches(installed.stderr))
-	}
-
 	// An install that fails after the add keeps the source it added.
 	third := newHarness(t)
 	third.build(t, fixture{dirs: []string{".claude"}})
@@ -353,32 +291,6 @@ func TestSkillAddAddsASourceThatIsNotAdded(t *testing.T) {
 	equal(t, "exit", none.exit, 5)
 	contains(t, "stdout", none.stdout, "added "+s.url)
 	equal(t, "the source kept", third.one(third.run("--json", "source", "list").stdout, "source")["url"], s.url)
-}
-
-// TestSkillAddRefusesAUsageErrorBeforeTheSource refuses a selection the
-// command cannot take before it adds or fetches anything: a URL this
-// machine has not added stays unadded and the settings are not touched.
-func TestSkillAddRefusesAUsageErrorBeforeTheSource(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude"}})
-	s, _, _ := h.standardSource(true)
-	settings := filepath.Join(h.agentx, "settings.json")
-	before, errBefore := os.ReadFile(settings)
-
-	out := h.run("skill", "add", s.url, "--all", "--skill", "alpha")
-	equal(t, "exit", out.exit, 1)
-	contains(t, "stderr", out.stderr, "--all and --skill cannot both be given")
-	if strings.Contains(out.stdout, "added") {
-		t.Errorf("a usage error added the source:\n%s", out.stdout)
-	}
-	after, errAfter := os.ReadFile(settings)
-	if string(after) != string(before) || os.IsNotExist(errAfter) != os.IsNotExist(errBefore) {
-		t.Errorf("a usage error touched the settings:\nbefore %q (%v)\nafter  %q (%v)", before, errBefore, after, errAfter)
-	}
-	if list := h.run("--json", "source", "list"); len(h.eventsOfType(list.stdout, "source")) > 0 {
-		t.Errorf("a usage error added a source:\n%s", list.stdout)
-	}
 }
 
 // TestSkillAddResolvesAnAddedSource covers what skill add does not add: an
@@ -501,15 +413,13 @@ func TestSkillAddSkipsAForeignSymlink(t *testing.T) {
 	t.Parallel()
 	for _, mode := range []struct{ name, flag string }{{"symlink", ""}, {"copy", "--copy"}} {
 		t.Run(mode.name, func(t *testing.T) {
+			t.Parallel()
 			h, s := installHarness(t)
 			// A directory of exactly this version, somewhere of the user's
-			// own, with the placement path a symlink to it.
-			other := newHarness(t)
-			other.build(t, fixture{dirs: []string{".claude"}})
-			other.mustRun("source", "add", s.url)
-			other.mustRun("skill", "add", s.url, "--skill", "alpha")
+			// own, copied from the source's work tree, with the placement
+			// path a symlink to it.
 			mine := filepath.Join(h.home, "my-skills", "alpha")
-			copyTree(t, filepath.Join(other.library, "alpha"), mine)
+			copyTree(t, filepath.Join(s.work, "skills", "alpha"), mine)
 			place := filepath.Join(h.home, ".claude", "skills", "alpha")
 			if err := os.MkdirAll(filepath.Dir(place), 0o755); err != nil {
 				t.Fatal(err)

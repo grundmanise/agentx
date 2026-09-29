@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -557,6 +556,18 @@ func readJournal(t *testing.T, h *harness) []journalStep {
 	return j.Steps
 }
 
+// journalKinds is readJournal with the kinds of its steps in order, comma
+// separated: the step list a command's recovery test pins.
+func journalKinds(t *testing.T, h *harness) ([]journalStep, string) {
+	t.Helper()
+	steps := readJournal(t, h)
+	kinds := make([]string, len(steps))
+	for i, s := range steps {
+		kinds[i] = s.Kind
+	}
+	return steps, strings.Join(kinds, ", ")
+}
+
 // applySteps does what a process that went on would have done with the
 // first n path steps of the journal, which is what one killed after the nth
 // of them leaves: the live paths part way through, the journal as it was
@@ -589,57 +600,46 @@ func applySteps(t *testing.T, steps []journalStep, n int) {
 }
 
 // TestSkillRevertRecoversAtEveryBoundary kills a revert with SIGKILL once its
-// journal is on disk, then leaves the machine as a process killed after
-// each later step would: nothing applied, the library directory retained,
-// the base published, the copy retained, the copy refreshed, and every live
-// path done with the journal not yet told. The next command recovers each
-// one, and the revert is then whole: the library and the copy hold the
-// base and each keeps its own .DS_Store, the import branch is where it
-// was, and nothing staged or retained is left behind.
+// journal is on disk, before any path changed. The journal holds the
+// revert's steps in the order it applies them, and every later boundary is
+// one of the journal's, which home.TestReplacementRecoversFromEveryBoundary
+// replays without git. The next command recovers it, and the revert is
+// then whole: the library and the copy hold the base and each keeps its
+// own .DS_Store, the import branch is where it was, and nothing staged or
+// retained is left behind.
 func TestSkillRevertRecoversAtEveryBoundary(t *testing.T) {
 	t.Parallel()
-	const pathSteps = 4 // the library's remove and publish, then the copy's
-	for stop := 0; stop <= pathSteps; stop++ {
-		t.Run(fmt.Sprintf("after %d steps", stop), func(t *testing.T) {
-			t.Parallel()
-			h, s := installHarness(t)
-			h.mustRun("skill", "add", s.url, "--skill", "alpha")
-			lib := filepath.Join(h.library, "alpha")
-			cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
-			base := libraryTree(t, lib)
-			branch := h.accountGit("rev-parse", "refs/heads/managed/alpha")
-			editLibrary(t, h, "alpha", "notes.md", "alpha notes, edited\n")
-			h.mustRun("skill", "remove", "alpha", "--from", "cursor")
-			h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
-			writeFile(t, filepath.Join(lib, ".DS_Store"), "the library's\n")
-			writeFile(t, filepath.Join(cursor, ".DS_Store"), "the copy's\n")
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	lib := filepath.Join(h.library, "alpha")
+	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	base := libraryTree(t, lib)
+	branch := h.accountGit("rev-parse", "refs/heads/managed/alpha")
+	editLibrary(t, h, "alpha", "notes.md", "alpha notes, edited\n")
+	h.mustRun("skill", "remove", "alpha", "--from", "cursor")
+	h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
+	writeFile(t, filepath.Join(lib, ".DS_Store"), "the library's\n")
+	writeFile(t, filepath.Join(cursor, ".DS_Store"), "the copy's\n")
 
-			out := killedRevert(t, h, "alpha")
-			steps := readJournal(t, h)
-			var kinds []string
-			for _, s := range steps {
-				kinds = append(kinds, s.Kind)
-			}
-			equal(t, "the journal's steps", strings.Join(kinds, ", "), "ref, remove, publish, remove, publish")
-			sameTree(t, "the library when the revert was killed", libraryTree(t, lib), map[string]string{
-				"SKILL.md": base["SKILL.md"], "notes.md": "alpha notes, edited\n", "scripts/run.sh": base["scripts/run.sh"], ".DS_Store": "the library's\n",
-			})
-			applySteps(t, steps, stop)
+	out := killedRevert(t, h, "alpha")
+	_, kinds := journalKinds(t, h)
+	equal(t, "the journal's steps", kinds, "ref, remove, publish, remove, publish")
+	sameTree(t, "the library when the revert was killed", libraryTree(t, lib), map[string]string{
+		"SKILL.md": base["SKILL.md"], "notes.md": "alpha notes, edited\n", "scripts/run.sh": base["scripts/run.sh"], ".DS_Store": "the library's\n",
+	})
 
-			if got := h.run("config", "set", "label", "recovered"); got.exit != 0 {
-				t.Fatalf("the command after the killed revert: exit %d\n%s\nthe killed run:\n%s", got.exit, got.stderr, out)
-			}
-			equal(t, "journals after recovery", journalCount(t, h), 0)
-			sameTree(t, "the library directory", libraryTree(t, lib), withFile(base, ".DS_Store", "the library's\n"))
-			sameTree(t, "cursor's copy", libraryTree(t, cursor), withFile(base, ".DS_Store", "the copy's\n"))
-			if !executable(t, filepath.Join(lib, "scripts", "run.sh")) {
-				t.Error("scripts/run.sh is not executable after recovery")
-			}
-			equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), branch)
-			for _, dir := range []string{h.library, filepath.Dir(cursor)} {
-				equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
-			}
-			equal(t, "state", h.listed("alpha")["state"], stateCurrent)
-		})
+	if got := h.run("config", "set", "label", "recovered"); got.exit != 0 {
+		t.Fatalf("the command after the killed revert: exit %d\n%s\nthe killed run:\n%s", got.exit, got.stderr, out)
 	}
+	equal(t, "journals after recovery", journalCount(t, h), 0)
+	sameTree(t, "the library directory", libraryTree(t, lib), withFile(base, ".DS_Store", "the library's\n"))
+	sameTree(t, "cursor's copy", libraryTree(t, cursor), withFile(base, ".DS_Store", "the copy's\n"))
+	if !executable(t, filepath.Join(lib, "scripts", "run.sh")) {
+		t.Error("scripts/run.sh is not executable after recovery")
+	}
+	equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), branch)
+	for _, dir := range []string{h.library, filepath.Dir(cursor)} {
+		equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
+	}
+	equal(t, "state", h.listed("alpha")["state"], stateCurrent)
 }

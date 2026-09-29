@@ -15,48 +15,47 @@ import (
 	"time"
 )
 
-// The suite drives every command in this one process, which nothing else
-// does: a real agentx run is a process of its own, and the only thing two
-// of them share is the home they name. Here they also share a process, and
-// so they share file descriptors. An flock belongs to an open file
-// description, fork duplicates it and only exec drops it again, so from the
-// fork of any child in this binary until that child execs, every lock every
-// other test holds is held by one process more. The lock answers a held
-// lock after 50 ms, which the contract fixes, and a test that forks
-// hundreds of git processes can push an unrelated test's next command past
-// it. The failure then reads "another agentx command holds the lock" in a
-// test that is not about locking at all. The same inheritance makes a shim
-// a test has just written fail to exec with ETXTBSY, which is why
-// writeShim waits for that to clear.
+// suiteParallel is how many tests of this package run at once when go test
+// is not given -parallel; a run that gives it gets what it asked for. go
+// test's own default is one test per CPU, which fits tests that keep a CPU
+// busy, but a test here mostly waits on the git processes it starts, and
+// four tests on four CPUs left about a quarter of the CPU time unused. On
+// that machine the suite took about 12% less time at eight tests at once
+// than at six and 24% less than at four; ten took less again, twelve no
+// less than ten. Eight rather than ten leaves room for the three CPUs of a
+// macOS runner, where starting a process costs more. The count is fixed
+// rather than derived from the machine so that a laptop, a sixteen-core
+// runner and CI run the same number of tests beside each other.
 //
-// So the suite bounds what runs beside what, rather than the lock waiting
-// longer. Two rules, and any package that drives commands in-process can
-// take both:
+// Every test calls t.Parallel() unless it cannot share the process with
+// another test for one of these reasons:
 //
-//   - suiteParallel bounds how many tests run at once, whatever -parallel
-//     and the machine say, so a sixteen-core runner does not run four times
-//     as much of this at once as a four-core laptop and CI does not behave
-//     differently from a desk.
-//   - a test that forks far more than the rest, or that measures what a run
-//     costs, does not call t.Parallel() at all. go test runs every test
-//     that has not asked to be parallel before it resumes the ones that
-//     have, one after another, so such a test has the suite to itself
-//     without anything having to be locked. Locking it instead deadlocks:
-//     a parallel test holds what it took until after its parallel subtests
-//     have run, and those subtests need the slots the tests waiting on it
-//     are holding.
-const suiteParallel = 4
+//   - it calls t.Setenv or t.Chdir, which change the process for every test;
+//   - it swaps a package variable for the length of a run;
+//   - it measures how long a run takes, which tests running beside it would
+//     change.
+//
+// go test runs every test that has not asked to be parallel before it
+// resumes the ones that have, one after another, so such a test has the
+// process to itself.
+//
+// Tests share one process, where every real agentx run is a process of its
+// own, and so they share file descriptors: a fork duplicates every
+// descriptor open in the process until the child execs. home.Unlock
+// releases the lock of agentx home through its descriptor for that reason,
+// so a lock does not outlive its holder in another test's child. A file
+// that another test's child still holds open for writing cannot be run,
+// though, which is why writeShim waits for ETXTBSY to clear.
+const suiteParallel = 8
 
-// capParallel lowers -parallel to suiteParallel. It never raises it: a run
-// that asks for less than the suite bounds meant it.
-func capParallel() {
+// setParallel runs suiteParallel tests at once unless -parallel says how
+// many.
+func setParallel() {
 	flag.Parse()
-	f := flag.Lookup("test.parallel")
-	if f == nil {
-		return
-	}
-	if n, err := strconv.Atoi(f.Value.String()); err == nil && n > suiteParallel {
-		_ = f.Value.Set(strconv.Itoa(suiteParallel))
+	given := false
+	flag.Visit(func(f *flag.Flag) { given = given || f.Name == "test.parallel" })
+	if !given {
+		_ = flag.Set("test.parallel", strconv.Itoa(suiteParallel))
 	}
 }
 

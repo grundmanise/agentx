@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -201,7 +202,6 @@ func Fetch(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listin
 	id := s.ID()
 	name := RemoteName(id)
 	staging := stagingRunRef(newFetchRun(), id)
-	previous, _ := r.Isolated(ctx, gitDir, "rev-parse", "--verify", "--quiet", Ref(id)+"^{commit}")
 	// The refspec is built from the pin this call was given, which is the
 	// pin the settings hold, rather than left to remote.<name>.fetch: a
 	// remote a run was interrupted before it could write tracks a ref the
@@ -228,7 +228,7 @@ func Fetch(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listin
 		}
 		return Listing{}, fmt.Errorf("%w: %v", ErrUnreachable, err)
 	}
-	fetched, commit, err := staged(ctx, r, gitDir, staging)
+	fetched, commit, previous, err := stagedAndPrevious(ctx, r, gitDir, staging, Ref(id))
 	if err != nil || commit == "" {
 		// The fetch landed, so this is the ref itself: a pin that names a
 		// tag pointing at something other than a commit, never a network or
@@ -298,18 +298,88 @@ func Fetch(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listin
 // walked from. The commit is empty for a ref that names no commit, an
 // annotated tag on a tree included, and for a ref that is not there.
 func staged(ctx context.Context, r *gitx.Runner, gitDir, ref string) (object, commit string, err error) {
-	out, err := r.Isolated(ctx, gitDir, "for-each-ref", "--format=%(objectname) %(objecttype) %(*objectname) %(*objecttype)", ref)
+	refs, err := peeledRefs(ctx, r, gitDir, ref)
 	if err != nil {
 		return "", "", err
 	}
-	fields := strings.Fields(out)
-	switch {
-	case len(fields) >= 4 && fields[1] == "tag" && fields[3] == "commit": // an annotated tag: the ref holds it, the listing reads what it peels to
-		return fields[0], fields[2], nil
-	case len(fields) >= 2 && fields[1] == "commit":
-		return fields[0], fields[0], nil
+	object, commit = refs[ref].ofCommit()
+	return object, commit, nil
+}
+
+// stagedAndPrevious is staged for the staging ref of a fetch, and reads in
+// the same for-each-ref the commit the source ref holds, which the listing
+// reports as the one the fetch moved the ref from. It is read once the
+// fetch has arrived rather than before it began, which is the same commit
+// unless another fetch of the same source published meanwhile; the source
+// ref moves at the end of a fetch and nowhere else.
+//
+// previous is what rev-parse --verify --quiet <ref>^{commit} answers, as
+// it was read before: empty for a source ref that is not there or that
+// peels to no commit. A ref for-each-ref cannot peel to a commit in one
+// step is left to rev-parse, which peels all the way; and since
+// for-each-ref fails outright on a ref whose object the account repo
+// lacks, where rev-parse only answers nothing, a failure reads the two
+// refs apart, so that a broken source ref still leaves the fetch to repair
+// it.
+func stagedAndPrevious(ctx context.Context, r *gitx.Runner, gitDir, staging, source string) (object, commit, previous string, err error) {
+	peelCommit := func() string {
+		id, _ := r.Isolated(ctx, gitDir, "rev-parse", "--verify", "--quiet", source+"^{commit}")
+		return id
 	}
-	return "", "", nil
+	refs, err := peeledRefs(ctx, r, gitDir, staging, source)
+	if err != nil {
+		previous = peelCommit()
+		object, commit, err = staged(ctx, r, gitDir, staging)
+		return object, commit, previous, err
+	}
+	if held, ok := refs[source]; ok {
+		if previous = held.commit; previous == "" {
+			previous = peelCommit()
+		}
+	}
+	object, commit = refs[staging].ofCommit()
+	return object, commit, previous, nil
+}
+
+// peeled is what a ref holds: the object it names and the commit that
+// object is or, for an annotated tag, peels to in one step; commit is empty
+// for anything else.
+type peeled struct{ object, commit string }
+
+// ofCommit is the object and the commit of a ref, both empty unless it
+// names a commit.
+func (p peeled) ofCommit() (object, commit string) {
+	if p.commit == "" {
+		return "", ""
+	}
+	return p.object, p.commit
+}
+
+// peeledRefs reads what each of refs holds in one for-each-ref. A ref that
+// is not there has no entry, and one given as a pattern answers only for
+// itself, not for the refs below it.
+func peeledRefs(ctx context.Context, r *gitx.Runner, gitDir string, refs ...string) (map[string]peeled, error) {
+	args := append([]string{"for-each-ref", "--format=%(refname) %(objectname) %(objecttype) %(*objectname) %(*objecttype)"}, refs...)
+	out, err := r.Isolated(ctx, gitDir, args...)
+	if err != nil {
+		return nil, err
+	}
+	held := map[string]peeled{}
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 3 || !slices.Contains(refs, fields[0]) {
+			continue
+		}
+		p := peeled{object: fields[1]}
+		switch {
+		case len(fields) >= 5 && fields[2] == "tag" && fields[4] == "commit": // an annotated tag: the ref holds it, the listing reads what it peels to
+			p.commit = fields[3]
+		case fields[2] == "commit":
+			p.commit = fields[1]
+		}
+		held[fields[0]] = p
+	}
+	return held, nil
 }
 
 // List builds the listing of an already fetched source from the account
@@ -614,16 +684,9 @@ type skillEntry struct {
 // fetch needs so that a later listing of a directory named outright still
 // reads from the account repo alone.
 func skillEntries(ctx context.Context, r *gitx.Runner, gitDir, commit, subpath string, skip bool) ([]skillEntry, error) {
-	treeish := commit + "^{tree}"
-	if subpath != "" {
-		treeish = commit + ":" + subpath
-	}
-	root, err := r.Isolated(ctx, gitDir, "rev-parse", "--verify", "--quiet", treeish)
-	if err != nil || root == "" {
-		return nil, fmt.Errorf("%w: %q", ErrNoSubpath, subpath)
-	}
-	if typ, err := r.Isolated(ctx, gitDir, "cat-file", "-t", root); err != nil || typ != "tree" {
-		return nil, fmt.Errorf("%w: %q is not a directory", ErrNoSubpath, subpath)
+	root, err := subtree(ctx, r, gitDir, commit, subpath)
+	if err != nil {
+		return nil, err
 	}
 	listed, err := ReadTree(ctx, r, gitDir, root)
 	if err != nil {
@@ -652,6 +715,54 @@ func skillEntries(ctx context.Context, r *gitx.Runner, gitDir, commit, subpath s
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].dir < entries[j].dir })
 	return entries, nil
+}
+
+// subtree is the id of the tree at subpath in commit, the whole of its tree
+// for "": ErrNoSubpath when commit holds nothing there, or something other
+// than a directory. One cat-file --batch-check names the object and its
+// type. It cannot tell a path commit does not hold from one whose object
+// the account repo lacks, a blob a partial clone never fetched, and says
+// "missing" for both, so only then, or when git fails, do the two reads
+// that tell them apart run: rev-parse resolves the path, then cat-file -t
+// reads the object's type. A path a line of input cannot carry goes to
+// those two reads as well.
+func subtree(ctx context.Context, r *gitx.Runner, gitDir, commit, subpath string) (string, error) {
+	treeish := commit + "^{tree}"
+	if subpath != "" {
+		treeish = commit + ":" + subpath
+	}
+	if !strings.ContainsAny(treeish, "\r\n") {
+		out, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(treeish+"\n"), "cat-file", "--batch-check=%(objectname) %(objecttype)")
+		id, typ, _ := strings.Cut(strings.TrimSuffix(out, "\n"), " ")
+		switch {
+		case err != nil || !objectID(id):
+		case typ == "tree":
+			return id, nil
+		case typ == "blob", typ == "commit", typ == "tag":
+			return "", fmt.Errorf("%w: %q is not a directory", ErrNoSubpath, subpath)
+		}
+	}
+	root, err := r.Isolated(ctx, gitDir, "rev-parse", "--verify", "--quiet", treeish)
+	if err != nil || root == "" {
+		return "", fmt.Errorf("%w: %q", ErrNoSubpath, subpath)
+	}
+	if typ, err := r.Isolated(ctx, gitDir, "cat-file", "-t", root); err != nil || typ != "tree" {
+		return "", fmt.Errorf("%w: %q is not a directory", ErrNoSubpath, subpath)
+	}
+	return root, nil
+}
+
+// objectID reports whether s has the shape of an object id, sha1 or sha256.
+func objectID(s string) bool {
+	if len(s) != 40 && len(s) != 64 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 // filterSkipped drops the entries a listing does not show, for the listing

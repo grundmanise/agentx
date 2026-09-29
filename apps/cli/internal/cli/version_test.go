@@ -6,6 +6,7 @@ import (
 )
 
 func TestVersionHuman(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	out := h.run("version")
 	equal(t, "exit", out.exit, 0)
@@ -16,6 +17,7 @@ func TestVersionHuman(t *testing.T) {
 }
 
 func TestVersionJSON(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	for _, args := range [][]string{{"--json", "version"}, {"version", "--json"}} {
 		out := h.run(args...)

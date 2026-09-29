@@ -50,6 +50,8 @@ Run these from the repository root. Each target runs against the Go module in `a
 | `make test` | Runs every test with the race detector, never from cache | `go test -race -count=1 ./...` |
 | `make check` | Runs all the checks CI runs, in the same order | `fmt-check lint tidy-check build test` |
 
+To run the tests without the race detector, as CI does on macOS, use `make test RACE=`.
+
 `golangci-lint` needs no install: its version is pinned in `apps/cli/.golangci-lint-version`, and
 `make lint` builds that release into the build cache on first use through `go run`, locally and in
 CI alike. The build uses the Go version `apps/cli/go.mod` specifies.

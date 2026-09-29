@@ -74,11 +74,11 @@ func TestSkillAddShowsOneRowPerClient(t *testing.T) {
 		"  cursor       symlink  "+cursor+" -> "+lib+"\n"+
 		"  always available to universal clients: codex, gemini-cli\n")
 
-	j, js := universalHarness(t, ".cursor")
-	installed := j.mustRun("--json", "skill", "add", js.url, "--skill", "alpha", "--to", "claude-code", "--to", "cursor")
-	jclaude := filepath.Join(j.home, ".claude", "skills", "alpha")
-	equal(t, "the paths of the event", strings.Join(pathsOf(t, j.one(installed.stdout, "library_skill")), ";"),
-		"claude-code "+jclaude+";cursor "+jclaude+";cursor "+filepath.Join(j.home, ".cursor", "skills", "alpha"))
+	// The same install again is the same rescan, and its event is read from
+	// it rather than from a second home.
+	installed := h.mustRun("--json", "skill", "add", s.url, "--skill", "alpha", "--to", "claude-code", "--to", "cursor")
+	equal(t, "the paths of the event", strings.Join(pathsOf(t, h.one(installed.stdout, "library_skill")), ";"),
+		"claude-code "+claude+";cursor "+claude+";cursor "+cursor)
 }
 
 // TestSkillListCountsEachClientOnce: after an install into every client the
@@ -119,14 +119,16 @@ func TestConfigEnablePlaceAllShowsOneRowPerSkill(t *testing.T) {
 		"  alpha  symlink  "+filepath.Join(cursor, "alpha")+" -> "+filepath.Join(h.library, "alpha")+"\n"+
 		"  beta   symlink  "+filepath.Join(cursor, "beta")+" -> "+filepath.Join(h.library, "beta")+"\n")
 
-	j, js := universalHarness(t, ".cursor")
-	j.mustRun("config", "disable", "cursor")
-	j.mustRun("skill", "add", js.url, "--all")
-	enabled := j.mustRun("--json", "config", "enable", "cursor", "--place-all")
-	for _, ev := range j.eventsOfType(enabled.stdout, "library_skill") {
+	// Disabled and enabled again, the placements are already there, and the
+	// events of the run that finds them are read from this home.
+	h.mustRun("config", "disable", "cursor")
+	enabled := h.mustRun("--json", "config", "enable", "cursor", "--place-all")
+	events := h.eventsOfType(enabled.stdout, "library_skill")
+	equal(t, "library_skill events", len(events), 2)
+	for _, ev := range events {
 		name := ev["name"].(string)
 		equal(t, "the paths of the event of "+name, strings.Join(pathsOf(t, ev), ";"),
-			"cursor "+filepath.Join(j.home, ".claude", "skills", name)+";cursor "+filepath.Join(j.home, ".cursor", "skills", name))
+			"cursor "+filepath.Join(h.home, ".claude", "skills", name)+";cursor "+filepath.Join(cursor, name))
 	}
 }
 

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -79,14 +80,19 @@ func adoptHarness(t *testing.T) (*harness, *sourceRepo, string, string) {
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	s := h.newSourceRepo("skills", true)
-	s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes\n"})
-	s.write("README.md", "# skills\n")
-	v1 := s.commit("the version the other tool installed")
-	installed := s.treeAt(v1, "skills/alpha")
+	ids := s.advance("adoptHarness", func(s *sourceRepo) []string {
+		s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes\n"})
+		s.write("README.md", "# skills\n")
+		v1 := s.commit("the version the other tool installed")
+		return []string{v1, s.treeAt(v1, "skills/alpha")}
+	})
 	vercelInstall(t, h, s, "skills/alpha", "alpha")
-	s.skill("skills/alpha", "alpha", "The first skill, revised", map[string]string{"notes.md": "alpha notes, revised\n"})
-	s.commit("a version nobody on this machine has")
-	return h, s, v1, installed
+	s.advance("adoptHarness, revised", func(s *sourceRepo) []string {
+		s.skill("skills/alpha", "alpha", "The first skill, revised", map[string]string{"notes.md": "alpha notes, revised\n"})
+		s.commit("a version nobody on this machine has")
+		return nil
+	})
+	return h, s, ids[0], ids[1]
 }
 
 // editLibrary changes a file of a library directory by hand, the way a user
@@ -142,7 +148,8 @@ func sameTree(t *testing.T, what string, got, want map[string]string) {
 // leave the directory exactly as it is, and leave the edit out of the
 // import commit: an edit that entered the import commit would be upstream
 // content from then on, and no later update or revert could tell the two
-// apart.
+// apart. The listing then calls the skill managed and modified against
+// that base, and adopting again changes nothing.
 func TestAdoptRecordsTheInstalledVersionAndNotTheDirectory(t *testing.T) {
 	t.Parallel()
 	h, s, v1, installed := adoptHarness(t)
@@ -185,38 +192,26 @@ func TestAdoptRecordsTheInstalledVersionAndNotTheDirectory(t *testing.T) {
 	if ev["base_hash"] == ev["content_hash"] {
 		t.Errorf("the base version and the directory hash are the same: %v", ev)
 	}
-}
 
-// TestAdoptedSkillIsTheSameImportAnInstallWrites checks that adoption and
-// installation agree on what a version is: the same upstream version gives
-// the same import commit, whichever command wrote it. Adopting at a version
-// the source has moved past is an install of that version in every way but
-// the directory it leaves alone.
-func TestAdoptedSkillIsTheSameImportAnInstallWrites(t *testing.T) {
-	t.Parallel()
-	h, s, v1, installed := adoptHarness(t)
-	h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
-		Source: "owner/repo", SourceType: "github", SourceURL: s.url,
-		SkillPath: "skills/alpha", SkillFolderHash: installed,
-	}})
-	equal(t, "exit", h.run("adopt", "--all").exit, 0)
-	adopted := h.accountGit("rev-parse", "refs/heads/managed/alpha")
+	// What the user sees afterwards: the listing names the upstream and
+	// says the directory is modified, which is the whole point of a base.
+	listed := h.one(h.mustRun("--json", "skill", "list").stdout, "library_skill")
+	equal(t, "kind", listed["kind"], "managed")
+	equal(t, "listed state", listed["state"], stateModified)
+	equal(t, "source", listed["source"], s.url)
+	equal(t, "subpath", listed["subpath"], "skills/alpha")
+	equal(t, "listed upstream_commit", listed["upstream_commit"], v1)
 
-	// A second machine installs that same version outright.
-	second := newHarness(t)
-	second.build(t, fixture{dirs: []string{".claude"}})
-	if out := second.run("source", "add", s.url+"#"+v1); out.exit != 0 {
-		t.Fatalf("source add: exit %d\n%s", out.exit, out.stderr)
-	}
-	if out := second.run("skill", "add", s.url+"#"+v1, "--skill", "alpha"); out.exit != 0 {
-		t.Fatalf("skill add: exit %d\n%s", out.exit, out.stderr)
-	}
-	installedCommit := second.accountGit("rev-parse", "refs/heads/managed/alpha")
-	if adopted != installedCommit {
-		t.Errorf("adoption wrote %s and an install of the same version wrote %s", adopted, installedCommit)
-		t.Logf("adopted:\n%s", h.accountGit("cat-file", "commit", adopted))
-		t.Logf("installed:\n%s", second.accountGit("cat-file", "commit", installedCommit))
-	}
+	// A skill agentx already manages is reported as managed and left
+	// where it is, so running the command twice is running it once.
+	branch := h.accountGit("rev-parse", "refs/heads/managed/alpha")
+	version := readVersionFile(t, h)
+	again := h.run("--json", "adopt", "--all")
+	equal(t, "exit of the second run", again.exit, 0)
+	equal(t, "state of the second run", h.one(again.stdout, "adoption")["state"], adoptManaged)
+	equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), branch)
+	equal(t, "the mutation counter", readVersionFile(t, h), version)
+	h.lockUnchanged(h.lockPath(), lock)
 }
 
 // TestAdoptLeavesASkillUnmanagedWhenItsVersionCannotBeEstablished is the
@@ -264,59 +259,6 @@ func TestAdoptLeavesASkillUnmanagedWhenItsVersionCannotBeEstablished(t *testing.
 			list := h.run("--json", "skill", "list")
 			equal(t, "kind", h.one(list.stdout, "library_skill")["kind"], "unmanaged")
 		})
-	}
-}
-
-// TestAdoptTakesTheDirectoryAsTheVersionOnlyWhenItIsOne covers the one
-// route on which what is on disk decides: a directory that holds exactly
-// the version the source has now is that version, not an edit of one, so
-// adopting it records an upstream version after all. The content hash is
-// the whole of the check.
-func TestAdoptTakesTheDirectoryAsTheVersionOnlyWhenItIsOne(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude"}})
-	s := h.newSourceRepo("skills", true)
-	s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes\n"})
-	head := s.commit("the only version")
-	vercelInstall(t, h, s, "skills/alpha", "alpha")
-	lock := h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
-		Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/alpha", SkillFolderHash: "",
-	}})
-
-	out := h.run("--json", "adopt", "--all")
-	equal(t, "exit", out.exit, 0)
-	h.lockUnchanged(h.lockPath(), lock)
-	ev := h.one(out.stdout, "adoption")
-	equal(t, "state", ev["state"], adoptAdopted)
-	equal(t, "modified", ev["modified"], false)
-	equal(t, "upstream_commit", ev["upstream_commit"], head)
-	equal(t, "the base hash", ev["base_hash"], ev["content_hash"])
-	equal(t, "the import tree", h.accountGit("ls-tree", "refs/heads/managed/alpha^{tree}"),
-		"040000 tree "+s.tree("skills/alpha")+"\talpha")
-}
-
-// TestAdoptRefusesADirectoryThatIsNotAVersionOfTheSource is the same route
-// with one line changed by hand. The directory is no longer the version the
-// source has, nothing else says which version it was, and the run must
-// leave it alone rather than import the edit.
-func TestAdoptRefusesADirectoryThatIsNotAVersionOfTheSource(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude"}})
-	s := h.newSourceRepo("skills", true)
-	s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes\n"})
-	s.commit("the only version")
-	vercelInstall(t, h, s, "skills/alpha", "alpha")
-	editLibrary(t, h, "alpha", "notes.md", "a line of mine\n")
-	h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
-		Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/alpha", SkillFolderHash: "",
-	}})
-
-	out := h.run("--json", "adopt", "--all")
-	equal(t, "exit", out.exit, exitRefused.exit)
-	if _, err := h.accountGitErr("rev-parse", "--verify", "refs/heads/managed/alpha"); err == nil {
-		t.Error("an edited directory of an unknown version was recorded as an upstream version")
 	}
 }
 
@@ -458,49 +400,6 @@ func progressPhases(events []jsonEvent) []string {
 	return phases
 }
 
-// TestAdoptedSkillsShowAsManaged is what the user sees afterwards: the
-// listing calls the skill managed, names its upstream and says the
-// directory is modified, which is the whole point of having a base.
-func TestAdoptedSkillsShowAsManaged(t *testing.T) {
-	t.Parallel()
-	h, s, v1, installed := adoptHarness(t)
-	editLibrary(t, h, "alpha", "notes.md", "an edit of mine\n")
-	h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
-		Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/alpha", SkillFolderHash: installed,
-	}})
-	equal(t, "exit", h.run("adopt", "--all").exit, 0)
-
-	out := h.run("--json", "skill", "list")
-	equal(t, "exit", out.exit, 0)
-	ev := h.one(out.stdout, "library_skill")
-	equal(t, "kind", ev["kind"], "managed")
-	equal(t, "state", ev["state"], stateModified)
-	equal(t, "source", ev["source"], s.url)
-	equal(t, "subpath", ev["subpath"], "skills/alpha")
-	equal(t, "upstream_commit", ev["upstream_commit"], v1)
-	contains(t, "the text listing", h.run("skill", "list").stdout, "alpha")
-}
-
-// TestAdoptAgainChangesNothing: a skill agentx already manages is reported
-// as managed and left where it is, so running the command twice is the same
-// as running it once.
-func TestAdoptAgainChangesNothing(t *testing.T) {
-	t.Parallel()
-	h, s, _, installed := adoptHarness(t)
-	h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
-		Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/alpha", SkillFolderHash: installed,
-	}})
-	equal(t, "exit", h.run("adopt", "--all").exit, 0)
-	branch := h.accountGit("rev-parse", "refs/heads/managed/alpha")
-	version := readVersionFile(t, h)
-
-	out := h.run("--json", "adopt", "--all")
-	equal(t, "exit", out.exit, 0)
-	equal(t, "state", h.one(out.stdout, "adoption")["state"], adoptManaged)
-	equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), branch)
-	equal(t, "the mutation counter", readVersionFile(t, h), version)
-}
-
 func readVersionFile(t *testing.T, h *harness) string {
 	t.Helper()
 	b, err := os.ReadFile(filepath.Join(h.agentx, "version"))
@@ -530,20 +429,48 @@ func TestAdoptRefusesAName(t *testing.T) {
 	}
 }
 
-// TestAdoptFlagsThatAskForTwoThings covers the combinations that contradict
-// themselves, each a usage error before anything is read.
+// TestAdoptSelectionCheck covers the combinations of flags that contradict
+// themselves, each a usage error before anything is read, and the ones
+// that do not.
+func TestAdoptSelectionCheck(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		sel  adoptSelection
+		says string // "" for a selection that is sound
+	}{
+		{"a preview", adoptSelection{}, ""},
+		{"every skill", adoptSelection{all: true}, ""},
+		{"two skills", adoptSelection{names: []string{"alpha", "beta"}}, ""},
+		{"one skill at a base", adoptSelection{names: []string{"alpha"}, base: "v1.2.0"}, ""},
+		{"every skill and one", adoptSelection{all: true, names: []string{"alpha"}}, "--all and --skill"},
+		{"every skill at a base", adoptSelection{all: true, base: "HEAD"}, "one skill"},
+		{"a base of no skill", adoptSelection{base: "HEAD"}, "one skill"},
+		{"a base of two skills", adoptSelection{names: []string{"alpha", "beta"}, base: "HEAD"}, "one skill"},
+		{"a base git refuses", adoptSelection{names: []string{"alpha"}, base: "--not-a-ref"}, "not a commit or ref git accepts"},
+	} {
+		err := tc.sel.check()
+		if tc.says == "" {
+			if err != nil {
+				t.Errorf("%s: %v, want none", tc.name, err)
+			}
+			continue
+		}
+		var f *failure
+		if !errors.As(err, &f) || f.status != exitUsage {
+			t.Errorf("%s: %v, want a usage error", tc.name, err)
+			continue
+		}
+		contains(t, tc.name, f.message, tc.says)
+	}
+}
+
+// TestAdoptFlagsThatAskForTwoThings is that check as the command answers
+// it: a usage error before the lock file is read.
 func TestAdoptFlagsThatAskForTwoThings(t *testing.T) {
 	t.Parallel()
-	h, _, _, _ := adoptHarness(t)
-	for _, args := range [][]string{
-		{"adopt", "--all", "--skill", "alpha"},
-		{"adopt", "--all", "--base", "HEAD"},
-		{"adopt", "--base", "HEAD"},
-		{"adopt", "--skill", "alpha", "--skill", "beta", "--base", "HEAD"},
-		{"adopt", "--skill", "alpha", "--base", "--not-a-ref"},
-	} {
-		if out := h.run(args...); out.exit != exitUsage.exit {
-			t.Errorf("%v: exit %d, want %d\n%s", args, out.exit, exitUsage.exit, out.stderr)
-		}
-	}
+	h := newHarness(t)
+	out := h.run("--json", "adopt", "--all", "--skill", "alpha")
+	equal(t, "exit", out.exit, exitUsage.exit)
+	equal(t, "error.code", lastError(t, h.events(out.stdout))["code"], "usage")
 }

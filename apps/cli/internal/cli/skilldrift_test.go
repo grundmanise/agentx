@@ -19,11 +19,14 @@ func driftHarness(t *testing.T) (*harness, *sourceRepo) {
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude", ".cursor", ".codex", ".gemini"}})
 	s := h.newSourceRepo("tools", true)
-	s.skill("tools/pdf-tools", "pdf", "Named by its frontmatter", map[string]string{
-		"a.md": "the same bytes\n", "b.md": "the same bytes\n", "c.md": "a third file\n", "bin/run.sh": "#!/bin/sh\necho run\n",
+	s.advance("driftHarness", func(s *sourceRepo) []string {
+		s.skill("tools/pdf-tools", "pdf", "Named by its frontmatter", map[string]string{
+			"a.md": "the same bytes\n", "b.md": "the same bytes\n", "c.md": "a third file\n", "bin/run.sh": "#!/bin/sh\necho run\n",
+		})
+		s.executable("tools/pdf-tools/bin/run.sh")
+		s.commit("pdf")
+		return nil
 	})
-	s.executable("tools/pdf-tools/bin/run.sh")
-	s.commit("pdf")
 	h.mustRun("source", "add", s.url)
 	h.mustRun("skill", "add", s.url, "--skill", "pdf")
 	return h, s
@@ -159,12 +162,17 @@ func TestPlacementDriftIsReadAtEachConfigurationsOwnPlace(t *testing.T) {
 	expect("a link of the user's", "")
 	remove(t, cursor)
 
-	// Every word at once, sorted, and in the text listing after the state.
+	// Every word at once, sorted, and in the text listing after the state,
+	// beside an edit: source removed stands in for no edit, and an edit
+	// for no drift.
 	remove(t, claude)
 	copyTree(t, lib, claude)
 	h.mustRun("source", "remove", s.url)
-	expect("all of them", "displaced,missing,source removed")
-	contains(t, "skill list", h.mustRun("skill", "list").stdout, "current, displaced, missing, source removed")
+	writeFile(t, filepath.Join(lib, "notes.md"), "edited by hand\n")
+	ev := h.listed("alpha")
+	equal(t, "all of them", drift(ev), "displaced,missing,source removed")
+	equal(t, "the state beside all of them", ev["state"], stateModified)
+	contains(t, "skill list", h.mustRun("skill", "list").stdout, "modified, displaced, missing, source removed")
 }
 
 // TestACopyIsDisplacedByALinkAndNeverMissing: copy_mode records a copy, so
@@ -368,10 +376,13 @@ func words(v any) string {
 
 // TestServeEmitsADriftEventOnEachTransition runs serve while a managed skill
 // goes through every state: edited in an editor, missing a placement,
-// displaced from another, reverted, and left without its branch. Each
-// change is followed by one drift event, after the snapshot that shows it
-// and naming that snapshot, with the state and drift before and after; the
-// first snapshot is where every state starts and is followed by none.
+// displaced from another, reverted, its source removed and added again,
+// and left without its branch. Each change is followed by one drift event,
+// after the snapshot that shows it and naming that snapshot, with the
+// state and drift before and after; the first snapshot is where every
+// state starts and is followed by none. A source removed and added again
+// changes the settings alone, and serve follows them as it follows the
+// library.
 func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -436,6 +447,10 @@ func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 		"managed", stateModified, "displaced,missing", stateModified, "missing")
 	expect(change("reverted", func() { h.runBesideServe("skill", "revert", "alpha") }),
 		"managed", stateCurrent, "displaced,missing", stateModified, "displaced,missing")
+	expect(change("source-removed", func() { h.runBesideServe("source", "remove", s.url) }),
+		"managed", stateCurrent, "displaced,missing,source removed", stateCurrent, "displaced,missing")
+	expect(change("source-added", func() { h.runBesideServe("source", "add", s.url) }),
+		"managed", stateCurrent, "displaced,missing", stateCurrent, "displaced,missing,source removed")
 
 	// A skill that arrives in the library is no transition, of its own or
 	// of the skill beside it: the snapshot says so itself.

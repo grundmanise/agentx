@@ -11,56 +11,29 @@ import (
 )
 
 // TestImportCommitIsTheSameEverywhere installs one version of one skill in
-// a second home that differs from the first in one way a commit id could
-// depend on, and then in every way at once. The import branch must end up
-// at the same commit each time, which is what lets two machines that accept
+// a second home that differs from the first in every way a commit id could
+// depend on at once: its time zone, a user git configuration full of what
+// most often changes a commit, and its machine id. The import branch must
+// end up at the same commit, which is what lets two machines that accept
 // the same upstream version share one object.
 func TestImportCommitIsTheSameEverywhere(t *testing.T) {
-	// Not parallel, for the reason harness_test.go gives above
-	// suiteParallel: two homes, two sources and a version installed every
-	// way there is make it the heaviest forker in the suite by an order of
-	// magnitude.
+	t.Parallel()
 	first, s := installHarness(t)
 	first.env["TZ"] = "UTC"
 	equal(t, "exit", first.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
 	want := first.accountGit("rev-parse", "refs/heads/managed/alpha")
 
-	for _, c := range []struct {
-		name          string
-		tz, machineID string
-		userConfig    bool
-	}{
-		{name: "another time zone", tz: "Asia/Kathmandu"}, // a zone with a 45-minute offset
-		{name: "a user git configuration", userConfig: true},
-		{name: "another machine id", machineID: "fedcba9876543210fedcba9876543210"},
-		{name: "all of them at once", tz: "Pacific/Chatham", machineID: "00112233445566778899aabbccddeeff", userConfig: true},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			t.Parallel()
-			second := newHarness(t)
-			second.build(t, fixture{dirs: []string{".claude"}})
-			if c.tz != "" {
-				second.env["TZ"] = c.tz
-			}
-			if c.machineID != "" {
-				writeFile(t, filepath.Join(second.agentx, "machine.json"), `{"id": "`+c.machineID+`"}`+"\n")
-			}
-			if c.userConfig {
-				spoilTheGitConfig(t, second)
-			}
-			if out := second.run("source", "add", s.url); out.exit != 0 {
-				t.Fatalf("source add in the second home: exit %d\n%s", out.exit, out.stderr)
-			}
-			if out := second.run("skill", "add", s.url, "--skill", "alpha"); out.exit != 0 {
-				t.Fatalf("skill add in the second home: exit %d\n%s", out.exit, out.stderr)
-			}
-			got := second.accountGit("rev-parse", "refs/heads/managed/alpha")
-			if got != want {
-				t.Errorf("the import branch is at %s with %s and %s without", got, c.name, want)
-				t.Logf("first:\n%s", first.accountGit("cat-file", "commit", want))
-				t.Logf("second:\n%s", second.accountGit("cat-file", "commit", got))
-			}
-		})
+	second := newHarness(t)
+	second.build(t, fixture{dirs: []string{".claude"}})
+	second.env["TZ"] = "Pacific/Chatham" // an offset of 12:45, and 13:45 in summer
+	writeFile(t, filepath.Join(second.agentx, "machine.json"), `{"id": "00112233445566778899aabbccddeeff"}`+"\n")
+	spoilTheGitConfig(t, second)
+	second.mustRun("source", "add", s.url)
+	second.mustRun("skill", "add", s.url, "--skill", "alpha")
+	if got := second.accountGit("rev-parse", "refs/heads/managed/alpha"); got != want {
+		t.Errorf("the import branch is at %s in the second home and %s in the first", got, want)
+		t.Logf("first:\n%s", first.accountGit("cat-file", "commit", want))
+		t.Logf("second:\n%s", second.accountGit("cat-file", "commit", got))
 	}
 }
 
@@ -84,18 +57,6 @@ func spoilTheGitConfig(t *testing.T, h *harness) {
 		"[gpg]", "\tprogram = /nonexistent/gpg",
 		"",
 	}, "\n"))
-}
-
-// TestImportCommitReusesTheUpstreamTree checks that an install writes the
-// commit over the objects the source already put in the account repo: the
-// entry of the import tree is the upstream tree itself.
-func TestImportCommitReusesTheUpstreamTree(t *testing.T) {
-	t.Parallel()
-	h, s := installHarness(t)
-	equal(t, "exit", h.run("skill", "add", s.url, "--skill", "beta").exit, 0)
-	tree := h.accountGit("rev-parse", "refs/heads/managed/beta^{tree}")
-	entry := h.accountGit("ls-tree", tree)
-	equal(t, "the import tree", entry, "040000 tree "+s.tree("skills/beta")+"\tbeta")
 }
 
 // TestImportLeavesOutWhatIsNotAFile installs a skill whose directory holds
@@ -329,59 +290,6 @@ func TestImportCommitMatchesTheSubpathLiterally(t *testing.T) {
 		equal(t, name+": exit", h.run("skill", "add", s.url, "--skill", name).exit, 0)
 		contains(t, name+": the import commit", h.accountGit("cat-file", "commit", "refs/heads/managed/"+name), "Agentx-Upstream-Commit: "+touched)
 	}
-}
-
-// TestBulkImportCommitsDoNotDependOnTheFetchedTip installs a whole source
-// on two machines that fetched it at different commits, the later one past
-// a commit and a merge that touch none of its skills. Every skill gets the
-// same import commit on both, recorded at the last commit that touched it,
-// and a skill installed on its own gets the one it got in the bulk install.
-func TestBulkImportCommitsDoNotDependOnTheFetchedTip(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude"}})
-	s := h.newSourceRepo("drift", true)
-	for _, name := range []string{"alpha", "beta", "gamma"} {
-		s.skill("skills/"+name, name, "The "+name+" skill", map[string]string{"notes.md": name + " notes\n"})
-	}
-	first := s.commitAt("three skills", "1700000000 +0000")
-	s.skill("skills/gamma", "gamma", "The gamma skill, revised", nil)
-	gamma := s.commitAt("gamma moves on", "1710000000 +0000")
-	s.write("README.md", "# skills\n")
-	s.commitAt("a readme", "1720000000 +0000")
-	equal(t, "exit of source add", h.run("source", "add", s.url).exit, 0)
-	equal(t, "exit of skill add --all", h.run("skill", "add", s.url, "--all").exit, 0)
-	want := map[string]string{}
-	for name, upstream := range map[string]string{"alpha": first, "beta": first, "gamma": gamma} {
-		want[name] = h.accountGit("rev-parse", "refs/heads/managed/"+name)
-		contains(t, name+"'s import commit", h.accountGit("cat-file", "commit", want[name]), "Agentx-Upstream-Commit: "+upstream)
-	}
-
-	// The source moves on without touching a skill: a commit on its branch,
-	// and a merge of a side branch whose first parent is that commit.
-	s.write("README.md", "# skills, revised\n")
-	main := s.commitAt("the readme moves on", "1730000000 +0000")
-	s.write("docs/side.md", "side work\n")
-	s.run("add", "--all")
-	tree := s.run("write-tree")
-	side := s.run("commit-tree", tree, "-p", first, "-m", "side work")
-	merge := s.run("commit-tree", tree, "-p", main, "-p", side, "-m", "merge the side work")
-	s.run("update-ref", "refs/heads/main", merge)
-
-	later := newHarness(t)
-	later.build(t, fixture{dirs: []string{".claude"}})
-	equal(t, "exit of the later source add", later.run("source", "add", s.url).exit, 0)
-	equal(t, "the later fetch", later.accountGit("rev-parse", "refs/agentx/sources/"+source.ID(s.url)), merge)
-	equal(t, "exit of the later skill add --all", later.run("skill", "add", s.url, "--all").exit, 0)
-	one := newHarness(t)
-	one.build(t, fixture{dirs: []string{".claude"}})
-	equal(t, "exit of the single install", one.run("skill", "add", s.url, "--skill", "gamma").exit, 0)
-	for name, head := range want {
-		if got := later.accountGit("rev-parse", "refs/heads/managed/"+name); got != head {
-			t.Errorf("%s: the import branch is at %s in a home that fetched %s, %s in one that fetched before it", name, got, short(merge), head)
-		}
-	}
-	equal(t, "gamma installed on its own", one.accountGit("rev-parse", "refs/heads/managed/gamma"), want["gamma"])
 }
 
 // TestUpstreamCommitIsTheOneGitLogNames installs a whole source whose

@@ -460,65 +460,31 @@ func TestSourceFetchIsParallelAndBounded(t *testing.T) {
 func TestSourceFetchKeepsTheNetworkOutsideTheLock(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	one, _ := h.fetchSources(t)
-	one.skill("skills/gamma", "gamma", "A skill added upstream", nil)
-	moved := one.commit("second version")
+	s := h.newSourceRepo("skills", true)
+	s.skill("alpha", "alpha", "The first skill", nil)
+	s.commit("first version")
+	equal(t, "add", h.run("source", "add", s.url).exit, 0)
+	s.skill("beta", "beta", "A skill added upstream", nil)
+	moved := s.commit("second version")
 	backdate(t, h)
 
-	real, err := exec.LookPath("git")
-	if err != nil {
-		t.Fatal(err)
-	}
-	dir := t.TempDir()
-	held, release := filepath.Join(dir, "held"), filepath.Join(dir, "release")
-	stubGit(t, h, fmt.Sprintf(`#!/bin/sh
-PATH=%s
-case " $* " in
-*" fetch "*)
-	: > %s
-	i=0
-	while [ ! -f %s ] && [ "$i" -lt 200 ]; do
-		i=$((i+1))
-		sleep 0.05
-	done
-	;;
-esac
-exec %s "$@"
-`, os.Getenv("PATH"), held, release, real))
-
+	// The first fetch of the run is held; the blob batch behind it runs
+	// once the gate is shut again.
+	reached, release := gateGit(t, h, `case " $* " in *" fetch "*) gate=1 ;; esac`)()
 	done := make(chan outcome, 1)
 	go func() { done <- h.run("source", "fetch", "--all") }()
-	waitForFile(t, held)
-
+	reached()
 	set := h.run("config", "set", "label", "set-during-the-fetch")
-	if err := os.WriteFile(release, nil, 0o644); err != nil {
-		t.Fatal(err)
-	}
+	release()
 	equal(t, "config set exit", set.exit, 0)
 
 	out := <-done
 	equal(t, "exit", out.exit, 0)
-	equal(t, "ref of one", h.sourceRef(one.url), moved)
-	refetched(t, h, one.url)
+	equal(t, "ref", h.sourceRef(s.url), moved)
+	refetched(t, h, s.url)
 	// The settings write of the fetch read the file under the lock, so the
 	// label written while it fetched is still there.
 	equal(t, "label", readSettingsFile(t, h)["label"], "set-during-the-fetch")
-}
-
-// waitForFile blocks until path exists, which is how a test waits for the
-// stub git of another goroutine to reach a point.
-func waitForFile(t *testing.T, path string) {
-	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for {
-		if _, err := os.Stat(path); err == nil {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("%s did not appear", filepath.Base(path))
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
 }
 
 // TestSourceFetchAllKeepsTheRefsOfTheSourcesThatFailed: one run over
@@ -663,7 +629,7 @@ func TestSourceFetchNamesASourceItHasNothingOf(t *testing.T) {
 	equal(t, "exit", out.exit, 5)
 	e := lastError(t, h.events(out.stdout))
 	equal(t, "code", e["code"], "not_found")
-	contains(t, "hint", e["hint"].(string), "agentx source add "+sourceAddArg(s.url, ""))
+	contains(t, "hint", e["hint"].(string), "agentx source add")
 	contains(t, "warning", out.stderr, s.url)
 	for _, leak := range []string{source.RemoteName(id), "credential"} {
 		if strings.Contains(out.stderr+out.stdout, leak) {

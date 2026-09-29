@@ -4,9 +4,18 @@ import (
 	"context"
 	"fmt"
 	"math/rand/v2"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
+
+// lastChangeSeeds names the environment variable that sets how many
+// random histories TestLastChangeAgreesWithGitLog checks. Each one costs
+// some thirty git processes, most of them the git log it is checked
+// against, so a run checks one unless it asks for more.
+const lastChangeSeeds = "AGENTX_TEST_LASTCHANGE_SEEDS"
 
 // TestLastChangeAgreesWithGitLog builds histories full of merges, taken
 // back changes and equal committer times, and checks that the one walk
@@ -14,7 +23,11 @@ import (
 // "git log -1 --no-renames <tip> -- :(literal)<subpath>" names for it.
 func TestLastChangeAgreesWithGitLog(t *testing.T) {
 	t.Parallel()
-	for seed := range uint64(3) {
+	seeds := uint64(1)
+	if n, err := strconv.ParseUint(os.Getenv(lastChangeSeeds), 10, 64); err == nil && n > 0 {
+		seeds = n
+	}
+	for seed := range seeds {
 		t.Run(fmt.Sprint("seed ", seed), func(t *testing.T) {
 			t.Parallel()
 			checkLastChangeAgainstGit(t, seed)
@@ -31,38 +44,38 @@ func checkLastChangeAgainstGit(t *testing.T, seed uint64) {
 	for i := range subpaths {
 		subpaths[i] = fmt.Sprintf("skills/s%d", i)
 	}
-	// A skill is absent (-1) or one of a few versions, so that a change is
-	// often taken back, or made the same way on two lines.
-	trees := make([]string, variants)
-	for v := range trees {
-		blob := s.hashObject(fmt.Sprintf("---\nname: s\ndescription: version %d\n---\n", v))
-		trees[v] = s.mktree("100644 blob " + blob + "\tSKILL.md")
-	}
+	// The whole history is one fast-import stream, one git process rather
+	// than four per commit. A skill is absent (-1) or one of a few
+	// versions, so that a change is often taken back, or made the same way
+	// on two lines.
+	var stream strings.Builder
+	data := func(content string) { fmt.Fprintf(&stream, "data %d\n%s\n", len(content), content) }
 	type made struct {
-		id    string
+		mark  int
 		state []int
 	}
+	marks := 0
 	build := func(state []int, when int, message string, parents []made) made {
-		var entries []string
+		marks++
+		fmt.Fprintf(&stream, "commit refs/heads/random\nmark :%d\ncommitter A U Thor <author@example.com> %d +0000\n", marks, 1700000000+when)
+		data(message)
+		for i, p := range parents {
+			verb := "merge"
+			if i == 0 {
+				verb = "from"
+			}
+			fmt.Fprintf(&stream, "%s :%d\n", verb, p.mark)
+		}
+		stream.WriteString("deleteall\n")
 		for i, v := range state {
 			if v >= 0 {
-				entries = append(entries, fmt.Sprintf("040000 tree %s\ts%d", trees[v], i))
+				fmt.Fprintf(&stream, "M 100644 inline skills/s%d/SKILL.md\n", i)
+				data(fmt.Sprintf("---\nname: s\ndescription: version %d\n---\n", v))
 			}
 		}
-		root := []string{}
-		if len(entries) > 0 {
-			root = append(root, "040000 tree "+s.mktree(entries...)+"\tskills")
-		}
-		root = append(root, "100644 blob "+s.hashObject(message)+"\tREADME.md")
-		args := []string{"commit-tree", s.mktree(root...), "-m", message}
-		for _, p := range parents {
-			args = append(args, "-p", p.id)
-		}
-		out, err := s.git.IsolatedAt(context.Background(), s.gitDir, fmt.Sprintf("%d +0000", 1700000000+when), args...)
-		if err != nil {
-			t.Fatalf("git commit-tree: %v", err)
-		}
-		return made{id: strings.TrimSpace(out), state: state}
+		stream.WriteString("M 100644 inline README.md\n")
+		data(message)
+		return made{mark: marks, state: state}
 	}
 	start := make([]int, skills)
 	for i := range start {
@@ -84,9 +97,20 @@ func checkLastChangeAgainstGit(t *testing.T, seed uint64) {
 		// Committer times that repeat and go back as often as they go on.
 		history = append(history, build(state, rng.IntN(n/2+1), fmt.Sprint("commit ", n), parents))
 	}
+	exported := filepath.Join(t.TempDir(), "marks")
+	if _, err := s.git.IsolatedInput(context.Background(), s.gitDir, strings.NewReader(stream.String()),
+		"fast-import", "--quiet", "--export-marks="+exported); err != nil {
+		t.Fatalf("git fast-import: %v", err)
+	}
+	ids := map[string]string{}
+	for _, line := range strings.Split(strings.TrimSpace(readText(t, exported)), "\n") {
+		mark, id, _ := strings.Cut(line, " ")
+		ids[mark] = id
+	}
 
 	for _, tip := range history[len(history)-5:] {
-		out, err := s.git.Isolated(context.Background(), s.gitDir, historyRead(tip.id, subpaths)...)
+		id := ids[fmt.Sprint(":", tip.mark)]
+		out, err := s.git.Isolated(context.Background(), s.gitDir, historyRead(id, subpaths)...)
 		if err != nil {
 			t.Fatalf("the walk: %v", err)
 		}
@@ -95,21 +119,11 @@ func checkLastChangeAgainstGit(t *testing.T, seed uint64) {
 			t.Fatal(err)
 		}
 		for _, p := range subpaths {
-			want := s.bare("log", "-1", "--no-renames", "--format=%H", tip.id, "--", ":(literal)"+p)
-			got, _ := walked.lastChange(tip.id, p)
+			want := s.bare("log", "-1", "--no-renames", "--format=%H", id, "--", ":(literal)"+p)
+			got, _ := walked.lastChange(id, p)
 			if got != want {
-				t.Errorf("from %s, %s: the walk names %q, git log -1 %q", short(tip.id), p, got, want)
+				t.Errorf("from %s, %s: the walk names %q, git log -1 %q", short(id), p, got, want)
 			}
 		}
 	}
-}
-
-// hashObject writes content into the source as a blob and returns its id.
-func (s *sourceRepo) hashObject(content string) string {
-	s.t.Helper()
-	out, err := s.git.IsolatedInput(context.Background(), s.gitDir, strings.NewReader(content), "hash-object", "-w", "--stdin")
-	if err != nil {
-		s.t.Fatalf("git hash-object: %v", err)
-	}
-	return strings.TrimSpace(out)
 }

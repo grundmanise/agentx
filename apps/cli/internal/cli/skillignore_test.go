@@ -18,12 +18,15 @@ func ignoreHarness(t *testing.T) *harness {
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	s := h.newSourceRepo("tools", true)
-	s.skill("tools/pdf", "pdf", "Plain files", map[string]string{"a.md": "the same bytes\n"})
-	s.skill("tools/web", "web", "Ships ignore rules of its own", map[string]string{
-		".gitignore": "node_modules/\n", "a.md": "the same bytes\n", "SKILL.md~": "a backup the upstream ships\n",
+	s.advance("ignoreHarness", func(s *sourceRepo) []string {
+		s.skill("tools/pdf", "pdf", "Plain files", map[string]string{"a.md": "the same bytes\n"})
+		s.skill("tools/web", "web", "Ships ignore rules of its own", map[string]string{
+			".gitignore": "node_modules/\n", "a.md": "the same bytes\n", "SKILL.md~": "a backup the upstream ships\n",
+		})
+		s.skill("tools/mac", "mac", "Keeps its Finder file", map[string]string{".gitignore": "!.DS_Store\n"})
+		s.commit("three skills")
+		return nil
 	})
-	s.skill("tools/mac", "mac", "Keeps its Finder file", map[string]string{".gitignore": "!.DS_Store\n"})
-	s.commit("three skills")
 	h.mustRun("source", "add", s.url)
 	h.mustRun("skill", "add", s.url, "--skill", "pdf", "--skill", "web", "--skill", "mac")
 	return h

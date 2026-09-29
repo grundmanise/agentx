@@ -6,18 +6,29 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 )
 
-// TestSkillAddSpawnsABoundedNumberOfGitProcesses counts the git processes
-// of one install over a source with many skills and a skill with many
-// files: the count follows neither. The reads that do not depend on each
-// other run at once, so the gate that holds two of them open at the same
-// time is passed, and the count is the same whether they do or not.
+// TestSkillAddSpawnsABoundedNumberOfGitProcesses counts what an install
+// costs. One install over a source with many skills and a skill with many
+// files runs a bounded number of git processes, and a batch of thirty
+// skills runs no more than that one skill: every read, every tree write,
+// every commit and every branch of a run is one git process for the whole
+// run. The reads that do not depend on each other run at once, so the gate
+// that holds two of them open at the same time is passed.
+//
+// Both runs install into a library that already holds skills they do not
+// touch, and both read that library once. Reading it hashes every
+// directory it holds, so reading it once per installed skill would make a
+// batch super-linear in its size and every later install pay for the ones
+// before it. The reads are counted rather than timed: a count is the same
+// on a fast machine and a loaded one.
 func TestSkillAddSpawnsABoundedNumberOfGitProcesses(t *testing.T) {
-	// Not parallel, for the reason harness_test.go gives above
-	// suiteParallel: it counts processes over three homes, one of thirty
-	// skills, and must not share a machine with other tests' forks.
+	// Not parallel: libraryReads swaps a package variable for the length of
+	// a run.
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude", ".cursor", ".codex", ".gemini"}})
 	s := h.newSourceRepo("many", true)
@@ -31,13 +42,15 @@ func TestSkillAddSpawnsABoundedNumberOfGitProcesses(t *testing.T) {
 	s.skill("skills/big", "big", "A skill of many files", files)
 	s.commit("a source of many skills")
 	equal(t, "exit", h.run("source", "add", s.url).exit, 0)
+	libraryDecoys(t, h, 4)
 
 	// The wrapper goes on the PATH only now: the add above must not open the
 	// gate the install has to open for itself. Two reads of the account repo
 	// that do not depend on each other pass through it together.
 	counts := gatedGitOn(t, h, 2, `*" rev-list "*|*" log "*`)
-	out := h.run("skill", "add", s.url, "--skill", "big")
-	equal(t, "exit", out.exit, 0)
+	one := libraryReads(t, func() {
+		equal(t, "exit", h.run("skill", "add", s.url, "--skill", "big").exit, 0)
+	})
 	peak, total := counts()
 	if peak < 2 {
 		t.Errorf("at most %d git processes ran at once: the independent reads were run one after another", peak)
@@ -45,23 +58,10 @@ func TestSkillAddSpawnsABoundedNumberOfGitProcesses(t *testing.T) {
 	if bound := 18; total > bound {
 		t.Errorf("%d git processes for one install, want at most %d", total, bound)
 	}
-	// The same install from a source with one small skill costs the same:
-	// nothing here is per skill of the source or per file of the skill.
-	small := newHarness(t)
-	small.build(t, fixture{dirs: []string{".claude", ".cursor", ".codex", ".gemini"}})
-	tiny := small.newSourceRepo("one", true)
-	tiny.skill("only", "only", "The one skill", map[string]string{"notes.md": "one note\n"})
-	tiny.commit("one skill")
-	equal(t, "exit", small.run("source", "add", tiny.url).exit, 0)
-	tinyCounts := countingGit(t, small)
-	equal(t, "exit", small.run("skill", "add", tiny.url).exit, 0)
-	if got := len(tinyCounts()); got != total {
-		t.Errorf("a small install ran %d git processes and a large one %d", got, total)
+	if one == 0 {
+		t.Fatal("installing one skill read the library no times at all: the count is not seeing the read it is there to count")
 	}
 
-	// And the bound is not per skill: a batch of thirty skills costs exactly
-	// what one skill costs, because every read, every tree write, every
-	// commit and every branch of a run is one git process for the whole run.
 	bulk := newHarness(t)
 	bulk.build(t, fixture{dirs: []string{".claude", ".cursor", ".codex", ".gemini"}})
 	many := bulk.newSourceRepo("thirty", true)
@@ -71,9 +71,16 @@ func TestSkillAddSpawnsABoundedNumberOfGitProcesses(t *testing.T) {
 	}
 	many.commit("thirty skills")
 	equal(t, "exit", bulk.run("source", "add", many.url).exit, 0)
+	libraryDecoys(t, bulk, 4)
 	bulkCounts := countingGit(t, bulk)
-	bulkOut := bulk.run("skill", "add", many.url, "--all")
-	equal(t, "exit", bulkOut.exit, 0)
+	thirty := libraryReads(t, func() {
+		equal(t, "exit", bulk.run("skill", "add", many.url, "--all").exit, 0)
+	})
+	if thirty != one {
+		t.Errorf("installing one skill read the library %d time(s) and installing thirty read it %d:"+
+			" the library is being read once per installed skill, not once for the run", one, thirty)
+	}
+	t.Logf("library reads: %d installing one skill, %d installing thirty", one, thirty)
 	calls := bulkCounts()
 	if len(calls) > total {
 		t.Errorf("%d git processes for thirty skills, want at most the %d one skill costs:\n%s", len(calls), total, strings.Join(calls, "\n"))
@@ -104,6 +111,35 @@ func TestSkillAddSpawnsABoundedNumberOfGitProcesses(t *testing.T) {
 			t.Errorf("the library holds no %s: %v", name, err)
 		}
 	}
+}
+
+// libraryDecoys fills the library with n skills the run under test does not
+// install: a read of the library is a read of every directory it holds, so
+// the cost a run puts on the library is a cost it puts on skills it has
+// nothing to do with.
+func libraryDecoys(t *testing.T, h *harness, n int) {
+	t.Helper()
+	for i := range n {
+		name := fmt.Sprintf("decoy%02d", i)
+		writeFile(t, mkdirs(t, filepath.Join(h.library, name), "SKILL.md"), skill(name, "a decoy"))
+	}
+}
+
+// libraryReads runs fn with every read of the library counted and answers
+// how many it made. readLibrary is the one way this package reads the
+// library, so this counts the reads of a run whatever asked for them.
+// Swapping it is safe only in a test that does not call t.Parallel.
+func libraryReads(t *testing.T, fn func()) int64 {
+	t.Helper()
+	real := readLibrary
+	defer func() { readLibrary = real }()
+	var n atomic.Int64
+	readLibrary = func(dir string) ([]scan.LibrarySkill, []string) {
+		n.Add(1)
+		return real(dir)
+	}
+	fn()
+	return n.Load()
 }
 
 // TestSkillAddFetchesTheBlobsInOneBatch checks that the files of the skill

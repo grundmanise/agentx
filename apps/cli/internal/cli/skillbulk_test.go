@@ -19,10 +19,13 @@ func bulkHarness(t *testing.T) (*harness, *sourceRepo) {
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude", ".cursor", ".codex", ".gemini"}})
 	s := h.newSourceRepo("bulk", true)
-	for _, name := range bulkSkills {
-		s.skill("skills/"+name, name, "The "+name+" skill", map[string]string{"notes.md": name + " notes\n"})
-	}
-	s.commit("three skills")
+	s.advance("bulkHarness", func(s *sourceRepo) []string {
+		for _, name := range bulkSkills {
+			s.skill("skills/"+name, name, "The "+name+" skill", map[string]string{"notes.md": name + " notes\n"})
+		}
+		s.commit("three skills")
+		return nil
+	})
 	if out := h.run("source", "add", s.url); out.exit != 0 {
 		t.Fatalf("source add: exit %d\n%s", out.exit, out.stderr)
 	}
@@ -49,7 +52,9 @@ func installedNames(t *testing.T, h *harness) []string {
 
 // TestSkillAddAllSelectsEverySkill takes a whole source in one command:
 // every skill lands in the library, every one is placed, and one event and
-// one branch answer for each.
+// one branch answer for each. The progress events count three steps per
+// skill and one for the rescan that ends the run, from one to the total
+// without a gap.
 func TestSkillAddAllSelectsEverySkill(t *testing.T) {
 	t.Parallel()
 	h, s := bulkHarness(t)
@@ -81,95 +86,53 @@ func TestSkillAddAllSelectsEverySkill(t *testing.T) {
 	fetched, _ := h.one(out.stdout, "source")["last_fetched"].(string)
 	equal(t, "summary", result["summary"], "installed alpha, beta, gamma from "+s.url+" in 4 configurations, source fetched "+fetched+
 		"; always available to universal clients: codex, gemini-cli")
-}
 
-// TestSkillAddExceptDeselects leaves out what --except names and installs
-// the rest, and repeated --skill selects several by name, a name given
-// twice installing one skill.
-func TestSkillAddExceptDeselects(t *testing.T) {
-	t.Parallel()
-	h, s := bulkHarness(t)
-	out := h.run("--json", "skill", "add", s.url, "--all", "--except", "beta")
-	equal(t, "exit", out.exit, 0)
-	equal(t, "the skills in the library", strings.Join(installedNames(t, h), ","), "alpha,gamma")
-
-	other, second := bulkHarness(t)
-	again := other.run("--json", "skill", "add", second.url, "--skill", "gamma", "--skill", "alpha", "--skill", "alpha")
-	equal(t, "exit", again.exit, 0)
-	// The listing's order decides, not the order the flags were given, so a
-	// run installs the same skills in the same order however they are named.
-	equal(t, "the skills in the library", strings.Join(installedNames(t, other), ","), "alpha,gamma")
-	names := []string{}
-	for _, ev := range other.eventsOfType(again.stdout, "library_skill") {
-		names = append(names, ev["name"].(string))
+	var got []string
+	for i, ev := range h.eventsOfType(out.stdout, "progress") {
+		equal(t, "current", ev["current"], float64(i+1))
+		equal(t, "total", ev["total"], float64(3*len(bulkSkills)+1))
+		got = append(got, ev["phase"].(string)+" "+fmt.Sprint(ev["subject"]))
 	}
-	equal(t, "the skill events", strings.Join(names, ","), "alpha,gamma")
+	want := []string{
+		"blobs alpha", "blobs beta", "blobs gamma",
+		"import alpha", "import beta", "import gamma",
+		"install alpha", "install beta", "install gamma",
+		"rescan <nil>",
+	}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("progress = %v,\nwant %v", got, want)
+	}
 }
 
 // TestSkillAddMatchesNamesInAnyCase selects by the frontmatter name in any
 // case for --skill and --except alike, falling back to the directory name
-// only when the frontmatter has no name. The library directory keeps the
-// frontmatter's spelling.
+// only when the frontmatter has no name, which the source listing decides.
+// The library directory keeps the frontmatter's spelling. Every other rule
+// of a selection is TestSelectionCheck and TestSelectSkills.
 func TestSkillAddMatchesNamesInAnyCase(t *testing.T) {
 	t.Parallel()
-	h, s := bulkHarness(t)
-	out := h.run("skill", "add", s.url, "--skill", "GAMMA", "--skill", "Alpha", "--skill", "alpha")
-	equal(t, "exit of --skill", out.exit, 0)
-	equal(t, "the skills --skill installed", strings.Join(installedNames(t, h), ","), "alpha,gamma")
-
-	e, es := bulkHarness(t)
-	out = e.run("skill", "add", es.url, "--all", "--except", "BeTa")
-	equal(t, "exit of --except", out.exit, 0)
-	equal(t, "the skills --except left", strings.Join(installedNames(t, e), ","), "alpha,gamma")
-
-	o := newHarness(t)
-	o.build(t, fixture{dirs: []string{".claude"}})
-	r := o.newSourceRepo("renamed", true)
-	r.skill("skills/on-disk", "fancy", "Named otherwise in its frontmatter", nil)
-	r.skill("skills/nameless", "", "No name in its frontmatter", nil)
-	r.skill("skills/plain", "plain", "Named after its directory", nil)
-	r.commit("three skills")
-	equal(t, "exit of source add", o.run("source", "add", r.url).exit, 0)
+	h := newHarness(t)
+	h.build(t, fixture{dirs: []string{".claude"}})
+	s := h.newSourceRepo("renamed", true)
+	s.skill("skills/on-disk", "fancy", "Named otherwise in its frontmatter", nil)
+	s.skill("skills/nameless", "", "No name in its frontmatter", nil)
+	s.skill("skills/plain", "plain", "Named after its directory", nil)
+	s.commit("three skills")
+	equal(t, "exit of source add", h.run("source", "add", s.url).exit, 0)
 	for _, args := range [][]string{
 		{"--skill", "plain", "--skill", "on-disk"},
 		{"--all", "--except", "on-disk"},
 	} {
-		out := o.run(append([]string{"skill", "add", r.url}, args...)...)
+		out := h.run(append([]string{"skill", "add", s.url}, args...)...)
 		equal(t, fmt.Sprint(args, ": exit"), out.exit, 5)
 		contains(t, fmt.Sprint(args, ": stderr"), out.stderr, `has no skill called "on-disk"`)
 	}
-	equal(t, "nothing installed by a missing name", len(installedNames(t, o)), 0)
-	out = o.run("skill", "add", r.url, "--all", "--except", "FANCY", "--except", "NameLess")
+	equal(t, "nothing installed by a missing name", len(installedNames(t, h)), 0)
+	out := h.run("skill", "add", s.url, "--all", "--except", "FANCY", "--except", "NameLess")
 	equal(t, "exit of --except by frontmatter and fallback names", out.exit, 0)
-	equal(t, "the skills left", strings.Join(installedNames(t, o), ","), "plain")
-}
-
-// TestSkillAddRefusesAContradictorySelection refuses the flag combinations
-// that cannot mean anything, and an --except that names no skill of the
-// source, which would otherwise install more than was asked for.
-func TestSkillAddRefusesAContradictorySelection(t *testing.T) {
-	t.Parallel()
-	h, s := bulkHarness(t)
-	for _, c := range []struct {
-		what string
-		args []string
-		exit int
-		says string
-	}{
-		{"--all with --skill", []string{"--all", "--skill", "alpha"}, 1, "--all and --skill cannot both be given"},
-		{"--except without --all", []string{"--skill", "alpha", "--except", "beta"}, 1, "--except needs --all"},
-		{"--except alone", []string{"--except", "beta"}, 1, "--except needs --all"},
-		{"--except nothing of the source", []string{"--all", "--except", "delta"}, 5, `has no skill called "delta"`},
-		{"--except everything", []string{"--all", "--except", "alpha", "--except", "beta", "--except", "gamma"}, 1, "--except left no skill to install"},
-		{"--skill nothing of the source", []string{"--skill", "alpha", "--skill", "delta"}, 5, `has no skill called "delta"`},
-	} {
-		out := h.run(append([]string{"skill", "add", s.url}, c.args...)...)
-		equal(t, c.what+": exit", out.exit, c.exit)
-		contains(t, c.what+": stderr", out.stderr, c.says)
-	}
-	if names := installedNames(t, h); len(names) > 0 {
-		t.Errorf("a refused selection installed %v", names)
-	}
+	equal(t, "the skills left", strings.Join(installedNames(t, h), ","), "plain")
+	equal(t, "exit of --skill in another case", h.run("skill", "add", s.url, "--skill", "FANCY").exit, 0)
+	equal(t, "the library after it", strings.Join(installedNames(t, h), ","), "fancy,plain")
 }
 
 // TestSkillAddAllAddsASourceThatIsNotAdded takes a whole source this
@@ -194,7 +157,7 @@ func TestSkillAddAllAddsASourceThatIsNotAdded(t *testing.T) {
 		}
 	}
 
-	out := h.run("--json", "skill", "add", s.url, "--all", "--except", "beta")
+	out := h.run("--json", "--verbose", "skill", "add", s.url, "--all", "--except", "beta")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "the skills in the library", strings.Join(installedNames(t, h), ","), "alpha,gamma")
 	equal(t, "source events", len(h.eventsOfType(out.stdout, "source")), 1)
@@ -205,45 +168,28 @@ func TestSkillAddAllAddsASourceThatIsNotAdded(t *testing.T) {
 
 	// Fetched once: what a source add and an install from the added source
 	// fetch between them, and no more.
-	counted := newHarness(t)
-	counted.build(t, fixture{dirs: []string{".claude"}})
-	auto := counted.run("--verbose", "skill", "add", s.url, "--all", "--except", "beta")
-	equal(t, "exit of the counted install", auto.exit, 0)
 	other := newHarness(t)
 	other.build(t, fixture{dirs: []string{".claude"}})
 	added := other.run("--verbose", "source", "add", s.url)
 	installed := other.run("--verbose", "skill", "add", s.url, "--all", "--except", "beta")
 	equal(t, "exit of the separate add", added.exit+installed.exit, 0)
-	equal(t, "fetches", fetches(auto.stderr), fetches(added.stderr)+fetches(installed.stderr))
+	equal(t, "fetches", fetches(debugLines(h, out.stderr)), fetches(added.stderr)+fetches(installed.stderr))
 	if fetches(added.stderr) == 0 || fetches(installed.stderr) == 0 {
 		t.Errorf("the counts say nothing: %d fetches to add, %d to install", fetches(added.stderr), fetches(installed.stderr))
 	}
 }
 
-// TestSkillAddReportsProgressPerStepPerSkill checks the progress events of
-// a batch: three per skill and one for the rescan that ends the run,
-// counting from one to the total without a gap.
-func TestSkillAddReportsProgressPerStepPerSkill(t *testing.T) {
-	t.Parallel()
-	h, s := bulkHarness(t)
-	out := h.run("--json", "skill", "add", s.url, "--all")
-	equal(t, "exit", out.exit, 0)
-
-	var got []string
-	for i, ev := range h.eventsOfType(out.stdout, "progress") {
-		equal(t, "current", ev["current"], float64(i+1))
-		equal(t, "total", ev["total"], float64(3*len(bulkSkills)+1))
-		got = append(got, ev["phase"].(string)+" "+fmt.Sprint(ev["subject"]))
+// debugLines is the debug log events of a JSON run as the lines a text run
+// writes them, which is what fetches reads.
+func debugLines(h *harness, stderr string) string {
+	h.t.Helper()
+	var b strings.Builder
+	for _, e := range h.eventsOfType(stderr, "log") {
+		if e["level"] == "debug" {
+			b.WriteString("debug: " + e["message"].(string) + "\n")
+		}
 	}
-	want := []string{
-		"blobs alpha", "blobs beta", "blobs gamma",
-		"import alpha", "import beta", "import gamma",
-		"install alpha", "install beta", "install gamma",
-		"rescan <nil>",
-	}
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Errorf("progress = %v,\nwant %v", got, want)
-	}
+	return b.String()
 }
 
 // TestSkillAddInstallsTheRestWhenOneSkillIsBroken is the partial outcome: a
@@ -323,6 +269,7 @@ func TestSkillAddDropsASkillTheLibraryCannotName(t *testing.T) {
 	} {
 		contains(t, "the result", summary, want)
 	}
+	equal(t, "journals", journalCount(t, h), 0)
 }
 
 // TestSkillAddKeepsTheBatchEdgeCasesApart puts every collision the contract
@@ -334,13 +281,10 @@ func TestSkillAddDropsASkillTheLibraryCannotName(t *testing.T) {
 func TestSkillAddKeepsTheBatchEdgeCasesApart(t *testing.T) {
 	t.Parallel()
 	h, s := bulkHarness(t)
-	// alpha is already in the library, installed from the same source in
-	// another home, so this run must adopt it rather than write it again.
-	other, second := bulkHarness(t)
-	if out := other.run("skill", "add", second.url, "--all"); out.exit != 0 {
-		t.Fatalf("the other install: exit %d\n%s", out.exit, out.stderr)
-	}
-	copyTree(t, filepath.Join(other.library, "alpha"), filepath.Join(h.library, "alpha"))
+	// alpha is already in the library at this version, as another machine
+	// or a cp of the source's own directory leaves it, so this run must adopt
+	// it rather than write it again.
+	copyTree(t, filepath.Join(s.work, "skills", "alpha"), filepath.Join(h.library, "alpha"))
 	// beta's library entry is a fork's placement whose worktree is gone.
 	if err := os.Symlink(filepath.Join(h.agentx, "worktrees", "beta"), filepath.Join(h.library, "beta")); err != nil {
 		t.Fatal(err)
@@ -348,7 +292,7 @@ func TestSkillAddKeepsTheBatchEdgeCasesApart(t *testing.T) {
 	// gamma's placement in Claude Code already holds exactly this version,
 	// and its placement in Cursor holds something else.
 	claude := filepath.Join(h.home, ".claude", "skills", "gamma")
-	copyTree(t, filepath.Join(other.library, "gamma"), claude)
+	copyTree(t, filepath.Join(s.work, "skills", "gamma"), claude)
 	cursor := filepath.Join(h.home, ".cursor", "skills", "gamma")
 	if err := os.MkdirAll(cursor, 0o755); err != nil {
 		t.Fatal(err)
@@ -391,9 +335,8 @@ func TestSkillAddKeepsTheBatchEdgeCasesApart(t *testing.T) {
 // no half-built library directory, no staged directory and no journal that
 // would refuse the next command.
 func TestSkillAddRefusesAConcurrentInstallOfOneName(t *testing.T) {
-	// Not parallel, for the reason harness_test.go gives above
-	// suiteParallel: it races two installs over one home and counts how
-	// many won, so a lock another test's fork was holding would decide it.
+	// Not parallel: it races two installs over one home and counts how many
+	// won, and tests running beside it would change how the race plays out.
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	sources := map[string]*sourceRepo{}
@@ -532,14 +475,12 @@ func TestSkillAddRefusesTwoSkillsOfOneName(t *testing.T) {
 	contains(t, "the result", h.one(out.stdout, "result")["summary"].(string),
 		"twin: twin is also the name of the skill under skills/first, which this run installs")
 
-	// Naming it resolves to one skill, as it always has, so the same source
-	// installs without a word when the skill is asked for by name. The
-	// second machine reads the same repository through a home of its own.
-	other := newHarness(t)
-	other.build(t, fixture{dirs: []string{".claude"}})
-	equal(t, "exit", other.run("source", "add", s.url).exit, 0)
-	equal(t, "exit", other.run("skill", "add", s.url, "--skill", "twin").exit, 0)
-	equal(t, "the skills in the library", strings.Join(installedNames(t, other), ","), "twin")
+	// Naming it resolves to one skill, as it always has: the first, which
+	// is the one the library holds, so asking for it by name is that version
+	// again and not a second one.
+	again := h.run("skill", "add", s.url, "--skill", "twin")
+	equal(t, "exit of the install by name", again.exit, 0)
+	equal(t, "stderr of the install by name", again.stderr, "")
 }
 
 // TestSkillAddSignalsNothingWhenNothingInstalls leaves the version file,
@@ -569,36 +510,6 @@ func TestSkillAddSignalsNothingWhenNothingInstalls(t *testing.T) {
 	}
 	equal(t, "the change signal", string(after), string(before))
 	assertNothingLeftBehind(t, h)
-}
-
-// TestSkillAddBatchAndSingleAgreeOnTheCommit installs one skill on its own
-// on one machine and the same skill among three on another, and compares
-// the branch they end at. The two runs stream different numbers of commits
-// through fast-import; if how a run is batched reached a commit at all,
-// the ids would part here and the two machines would disagree about what
-// "the version you have" means. What such a commit is compared against
-// outside agentx altogether is TestWriteAllMatchesCommitTree, which holds
-// it up to git commit-tree.
-func TestSkillAddBatchAndSingleAgreeOnTheCommit(t *testing.T) {
-	t.Parallel()
-	alone, s := bulkHarness(t)
-	equal(t, "exit", alone.run("skill", "add", s.url, "--skill", "beta").exit, 0)
-
-	// The second machine is a home of its own, with its own library and its
-	// own account repo, reading the same source.
-	together := newHarness(t)
-	together.build(t, fixture{dirs: []string{".claude", ".cursor", ".codex", ".gemini"}})
-	equal(t, "exit", together.run("source", "add", s.url).exit, 0)
-	equal(t, "exit", together.run("skill", "add", s.url, "--all").exit, 0)
-
-	single := alone.accountGit("rev-parse", "refs/heads/managed/beta")
-	batch := together.accountGit("rev-parse", "refs/heads/managed/beta")
-	if single == "" {
-		t.Fatal("no import branch was written")
-	}
-	if single != batch {
-		t.Errorf("installed alone beta is %s, installed in a batch %s", single, batch)
-	}
 }
 
 // TestSkillAddDropsASkillTheSourceCannotServe is the one per-skill refusal
@@ -644,24 +555,6 @@ func TestSkillAddDropsASkillTheSourceCannotServe(t *testing.T) {
 	equal(t, "hint", failed["hint"], "run 'agentx source fetch "+s.url+"' to fetch it again")
 }
 
-// stagedLeftovers names the .agentx-staged-* entries a directory holds,
-// which is what a mutation stages beside the live path before its journal
-// exists.
-func stagedLeftovers(t *testing.T, dir string) []string {
-	t.Helper()
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
-	var left []string
-	for _, e := range entries {
-		if strings.HasPrefix(e.Name(), ".agentx-staged-") {
-			left = append(left, filepath.Join(dir, e.Name()))
-		}
-	}
-	return left
-}
-
 // TestSkillAddLeavesNothingStagedWhenItGivesUpLate refuses a run after
 // every skill of it is staged: the copies are on disk beside the live
 // paths, the journal that would recover them does not exist yet, and the
@@ -686,7 +579,7 @@ func TestSkillAddLeavesNothingStagedWhenItGivesUpLate(t *testing.T) {
 	equal(t, "exit", out.exit, 10)
 	equal(t, "the skills in the library", strings.Join(installedNames(t, h), ","), "")
 	for _, dir := range []string{h.library, filepath.Join(h.home, ".claude", "skills"), filepath.Join(h.home, ".cursor", "skills")} {
-		if left := stagedLeftovers(t, dir); len(left) > 0 {
+		if left := stagingIn(t, dir); len(left) > 0 {
 			t.Errorf("the run that gave up left %d staged entries in %s: %v", len(left), dir, left)
 		}
 	}

@@ -152,27 +152,20 @@ func TestAdoptDropsACredentialInTheURL(t *testing.T) {
 
 // TestAdoptRefusesALockFileItCannotRead: a file that is not a lock file is
 // not an empty lock file, since a user asking to adopt what it holds may
-// not be told that it holds nothing.
+// not be told that it holds nothing. vercel.TestReadFileRefusesWhatIsNotALockFile
+// has every shape of one.
 func TestAdoptRefusesALockFileItCannotRead(t *testing.T) {
 	t.Parallel()
-	for _, c := range []struct{ name, content string }{
-		{"truncated JSON", `{"version": 3, "skills": {`},
-		{"no skills map", `{"version": 3}`},
-		{"a null skills map", `{"version": 3, "skills": null}`},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			t.Parallel()
-			h, _, _, _ := adoptHarness(t)
-			if err := os.MkdirAll(filepath.Dir(h.lockPath()), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			writeFile(t, h.lockPath(), c.content)
-			out := h.run("--json", "adopt", "--all")
-			equal(t, "exit", out.exit, exitInternal.exit)
-			h.lockUnchanged(h.lockPath(), []byte(c.content))
-			contains(t, "the error", lastError(t, h.events(out.stdout))["message"].(string), h.lockPath())
-		})
+	h := newHarness(t)
+	const content = `{"version": 3, "skills": {`
+	if err := os.MkdirAll(filepath.Dir(h.lockPath()), 0o755); err != nil {
+		t.Fatal(err)
 	}
+	writeFile(t, h.lockPath(), content)
+	out := h.run("--json", "adopt", "--all")
+	equal(t, "exit", out.exit, exitInternal.exit)
+	h.lockUnchanged(h.lockPath(), []byte(content))
+	contains(t, "the error", lastError(t, h.events(out.stdout))["message"].(string), h.lockPath())
 }
 
 // TestAdoptReadsBothLocations: with XDG_STATE_HOME set, the lock file that
@@ -207,7 +200,7 @@ func TestAdoptReadsBothLocations(t *testing.T) {
 // that tool has nothing to adopt, which is not a failure.
 func TestAdoptWithNoLockFile(t *testing.T) {
 	t.Parallel()
-	h, _, _, _ := adoptHarness(t)
+	h := newHarness(t)
 	out := h.run("adopt")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "No skill of the vercel skills lock file is in the library")
@@ -243,6 +236,8 @@ func TestAdoptRefusesAFork(t *testing.T) {
 // TestAdoptOneSkillOfSeveral covers a run that adopts what it can and says
 // what it could not: the skills that landed are managed and the one that
 // could not be established is unmanaged, with the run answering for it.
+// The run reports one adoption event per skill in name order, whichever
+// order the flags named them in.
 func TestAdoptOneSkillOfSeveral(t *testing.T) {
 	t.Parallel()
 	h, s, _, installed := adoptHarness(t)
@@ -255,9 +250,14 @@ func TestAdoptOneSkillOfSeveral(t *testing.T) {
 		"beta":  {Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/beta", SkillFolderHash: ""},
 	})
 
-	out := h.run("--json", "adopt", "--all")
+	out := h.run("--json", "adopt", "--skill", "beta", "--skill", "alpha")
 	equal(t, "exit", out.exit, exitRefused.exit)
 	contains(t, "stderr", out.stderr, "beta: the version beta was installed at cannot be established")
+	var events []string
+	for _, ev := range h.eventsOfType(out.stdout, "adoption") {
+		events = append(events, ev["name"].(string)+" "+ev["state"].(string))
+	}
+	equal(t, "the adoption events", strings.Join(events, ", "), "alpha "+adoptAdopted+", beta "+adoptRefused)
 	if _, err := h.accountGitErr("rev-parse", "--verify", "refs/heads/managed/beta"); err == nil {
 		t.Error("beta was adopted although its version could not be established")
 	}

@@ -7,6 +7,7 @@ import (
 )
 
 func TestUsageErrors(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	tests := []struct {
 		name    string
@@ -42,6 +43,7 @@ func TestUsageErrors(t *testing.T) {
 }
 
 func TestHelp(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	for _, args := range [][]string{nil, {"help"}, {"--help"}, {"-h"}, {"version", "--help"}} {
 		out := h.run(args...)
@@ -74,6 +76,7 @@ func TestHelp(t *testing.T) {
 }
 
 func TestVerboseLogsDirectories(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 
 	quiet := h.run("version")
@@ -98,6 +101,7 @@ func TestVerboseLogsDirectories(t *testing.T) {
 }
 
 func TestDirectoriesDefaultFromHome(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	delete(h.env, "AGENTX_HOME")
 	delete(h.env, "AGENTX_LIBRARY")
@@ -111,6 +115,7 @@ func TestDirectoriesDefaultFromHome(t *testing.T) {
 }
 
 func TestMissingHomeIsUsageError(t *testing.T) {
+	t.Parallel()
 	h := newHarness(t)
 	delete(h.env, "HOME")
 

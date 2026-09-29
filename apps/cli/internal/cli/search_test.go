@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
-	"syscall"
 	"testing"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
@@ -152,14 +151,7 @@ func TestServeAnswersSearchWhileAScanWaits(t *testing.T) {
 	p.send(`{"type":"refresh","request_id":"settled"}`)
 	p.until("settled")
 
-	f, err := os.OpenFile(filepath.Join(h.agentx, "lock"), os.O_CREATE|os.O_RDWR, 0o644)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-		t.Fatal(err)
-	}
+	unlock := holdLock(t, h)
 	// No scan can finish while the lock is held, so nothing else runs git
 	// and what the wrapper records next is the searches alone.
 	before := len(calls())
@@ -175,32 +167,9 @@ func TestServeAnswersSearchWhileAScanWaits(t *testing.T) {
 	}
 
 	// The refresh waited for the lock all along.
-	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_UN); err != nil {
-		t.Fatal(err)
-	}
+	unlock()
 	equal(t, "request_id", p.next("refresh_complete")["request_id"], "r1")
 	equal(t, "exit", p.close(), 0)
-}
-
-func TestServeSearchIsEmptyWithoutSources(t *testing.T) {
-	t.Parallel()
-	h := serveHarness(t)
-	calls := countingGit(t, h)
-	p := h.serve(t, "--json")
-	p.next("snapshot")
-	p.send(`{"type":"search","request_id":"s1","query":"commit"}`)
-	e := p.next("search")
-	equal(t, "request_id", e["request_id"], "s1")
-	if got := e["results"]; !reflect.DeepEqual(got, []any{}) {
-		t.Errorf("results = %#v, want []", got)
-	}
-	equal(t, "exit", p.close(), 0)
-	// The startup gate runs git --version once; a home with no source
-	// reaches git no other time, however many scans and searches it serves.
-	if got, want := calls(), []string{"--version"}; !reflect.DeepEqual(got, want) {
-		t.Errorf("git spawned with %q, want %q", got, want)
-	}
-	equal(t, "stderr", p.stderr.String(), "")
 }
 
 // TestServeReindexesWhenSourcesChange covers the change signal: a source
@@ -263,40 +232,6 @@ func TestServeReindexesWhenSourcesChange(t *testing.T) {
 	}
 	equal(t, "exit", p.close(), 0)
 	equal(t, "stderr", p.stderr.String(), "")
-}
-
-// TestServeWarnsAboutAnUnfetchedSource covers a settings entry whose ref
-// the account repo does not hold, which a removal cut short leaves behind
-// with the remote already gone. The index warns that it holds nothing of
-// the source, and the check serve runs at launch, which cannot fetch a
-// source without its remote, warns that it could not.
-func TestServeWarnsAboutAnUnfetchedSource(t *testing.T) {
-	t.Parallel()
-	h := serveHarness(t)
-	requireGit(t)
-	s := h.newSourceRepo("skills", true)
-	s.skill("commit", "commit", "Write a commit message", nil)
-	s.commit("first")
-	equal(t, "exit", h.run("source", "add", s.url).exit, 0)
-	h.accountGit("remote", "remove", source.RemoteName(source.ID(s.url)))
-	h.accountGit("update-ref", "-d", "refs/agentx/sources/"+source.ID(s.url))
-
-	p := h.serve(t, "--json")
-	p.next("snapshot")
-	if got := p.search("s1", "commit"); len(got) != 0 {
-		t.Errorf("results = %q, want none", got)
-	}
-	p.awaitLogged("warn", "update check: ", 1)
-	equal(t, "exit", p.close(), 0)
-	events := h.events(p.stderr.String())
-	if len(events) != 2 {
-		t.Fatalf("stderr events = %v, want two warnings", events)
-	}
-	for _, e := range events {
-		equal(t, "log.level", e["level"], "warn")
-	}
-	contains(t, "the index's warning", events[0]["message"].(string), s.url+" has not been fetched")
-	contains(t, "the check's warning", events[1]["message"].(string), "update check: source not fetched: "+s.url)
 }
 
 func TestServePrintsSearchLines(t *testing.T) {

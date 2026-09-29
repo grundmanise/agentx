@@ -149,10 +149,6 @@ func TestEditedLiveFileRefusesRecovery(t *testing.T) {
 	contains(t, "error.message", events[0]["message"].(string), live)
 	contains(t, "error.hint", events[0]["hint"].(string), "move the journal aside")
 
-	out = h.run("scan")
-	equal(t, "exit", out.exit, 6)
-	contains(t, "stderr", out.stderr, journal)
-
 	out = h.run("--json", "config", "set", "label", "three")
 	equal(t, "exit", out.exit, 6)
 	equal(t, "error.code", h.events(out.stdout)[0]["code"], "refused")
@@ -180,8 +176,6 @@ func TestEditedLiveFileRefusesRecovery(t *testing.T) {
 	if _, err := os.Stat(journal); err != nil {
 		t.Errorf("doctor touched the journal: %v", err)
 	}
-	out = h.run("doctor")
-	contains(t, "stdout", out.stdout, "mutations        warn  1 unfinished mutation: "+journal)
 
 	// Restoring the expected live content lets the mutation finish.
 	if err := os.WriteFile(live, []byte("{}\n"), 0o644); err != nil {

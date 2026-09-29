@@ -37,18 +37,6 @@ func TestColorResolve(t *testing.T) {
 	}
 }
 
-// A pipe gets bare text: every human line a test asserts on is unpainted.
-func TestColorOffOnPipe(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	for _, args := range [][]string{{"version"}, {"doctor"}, {"config", "list"}, {"help"}, {"bogus"}} {
-		out := h.run(args...)
-		if escapes.MatchString(out.stdout) || escapes.MatchString(out.stderr) {
-			t.Errorf("%v: output is painted on a pipe:\n%s%s", args, out.stdout, out.stderr)
-		}
-	}
-}
-
 func TestColorAlwaysPaintsEveryStream(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -80,12 +68,17 @@ func TestColorAlwaysPaintsEveryStream(t *testing.T) {
 	h.events(out.stdout)
 }
 
-// Painting changes nothing but the escape sequences: columns stay aligned.
+// A pipe gets bare text, so every human line a test asserts on is
+// unpainted, and painting changes nothing but the escape sequences: columns
+// stay aligned.
 func TestColorKeepsAlignment(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	for _, args := range [][]string{{"config", "list"}, {"doctor"}, {"help"}, {"machine"}} {
+	for _, args := range [][]string{{"version"}, {"config", "list"}, {"doctor"}, {"help"}, {"machine"}, {"bogus"}} {
 		plain := h.run(args...)
+		if escapes.MatchString(plain.stdout) || escapes.MatchString(plain.stderr) {
+			t.Errorf("%v: output is painted on a pipe:\n%s%s", args, plain.stdout, plain.stderr)
+		}
 		painted := h.run(append([]string{"--color=on"}, args...)...)
 		if got := escapes.ReplaceAllString(painted.stdout, ""); got != plain.stdout {
 			t.Errorf("%v: painted output, escapes stripped, differs from plain:\n%s\n%s", args, got, plain.stdout)

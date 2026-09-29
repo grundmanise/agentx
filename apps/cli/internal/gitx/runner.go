@@ -392,6 +392,27 @@ func (r *Runner) lookPath() (string, error) {
 	return "", ErrMissing
 }
 
+// testConfig is configuration every git process carries in tests only; see
+// SkipFlushesInTests.
+var testConfig [][2]string
+
+// SkipFlushesInTests makes every git process a runner starts, in either
+// environment, flush nothing to the disk and start no automatic
+// maintenance, for the rest of the process, along with the git processes
+// that one starts in its own repository, such as the index-pack of a
+// fetch. A test stops a process at most, never the machine, while on macOS
+// each of git's flushes drains the disk's own cache (F_FULLFSYNC), and the
+// CLI's tests fetch and import thousands of times. The configuration goes
+// in GIT_CONFIG_COUNT, which git passes on to those processes and which
+// leaves the command line as it is. Call it before any test runs.
+func SkipFlushesInTests() {
+	testConfig = [][2]string{
+		{"core.fsync", "none"},
+		{"maintenance.auto", "false"},
+		{"gc.auto", "0"},
+	}
+}
+
 // childEnv builds the environment of one git process from the environment
 // map. The isolated environment drops every GIT_ variable of the user's,
 // fixes configuration, author and committer, reads no attributes of the
@@ -435,6 +456,15 @@ func (r *Runner) childEnv(isolated bool, dates string) []string {
 		env["GIT_TERMINAL_PROMPT"] = "0"
 		env["GIT_SSH_COMMAND"] = ssh + " -o BatchMode=yes"
 		env["GIT_ASKPASS"] = "/bin/false"
+	}
+	if len(testConfig) > 0 {
+		n, _ := strconv.Atoi(env["GIT_CONFIG_COUNT"])
+		for _, kv := range testConfig {
+			env["GIT_CONFIG_KEY_"+strconv.Itoa(n)] = kv[0]
+			env["GIT_CONFIG_VALUE_"+strconv.Itoa(n)] = kv[1]
+			n++
+		}
+		env["GIT_CONFIG_COUNT"] = strconv.Itoa(n)
 	}
 	list := make([]string, 0, len(env))
 	for k, v := range env {

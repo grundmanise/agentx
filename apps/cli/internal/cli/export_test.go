@@ -116,11 +116,22 @@ func TestExportCarriesCoordinatesAndNoContent(t *testing.T) {
 // TestExportListsTheBranchesAndNotTheLibrary is the shape of the listing:
 // one record per branch of the account repo, sorted by name, whatever this
 // machine's library happens to hold. A directory nothing manages is no
-// lineage record and is left out.
+// lineage record and is left out. A record tells a skill the machine placed
+// somewhere from one it only holds in the library, which is what tells a
+// reader what that machine was actually using. And the document is a pure
+// function of the machine's state: nothing about the run, not a date and
+// not an order, reaches it, so two exports of an unchanged machine are one
+// file.
 func TestExportListsTheBranchesAndNotTheLibrary(t *testing.T) {
 	t.Parallel()
-	h, s := installHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--all").exit, 0)
+	h := newHarness(t)
+	// Claude Code and Cursor keep their own skills directories, so a skill
+	// with no placement is seen by no client at all.
+	h.build(t, fixture{dirs: []string{".claude", ".cursor"}})
+	s, _, _ := h.standardSource(true)
+	h.mustRun("source", "add", s.url)
+	h.mustRun("skill", "add", s.url, "--all")
+	h.mustRun("skill", "remove", "beta", "--from", "claude-code", "--from", "cursor")
 	// A fork branch, which nothing creates yet, and a directory put in the
 	// library by hand, which no branch knows about.
 	h.accountGit("update-ref", "refs/heads/skills/zeta", h.accountGit("rev-parse", "refs/heads/managed/alpha"))
@@ -130,92 +141,26 @@ func TestExportListsTheBranchesAndNotTheLibrary(t *testing.T) {
 	}
 	writeFile(t, filepath.Join(byHand, "SKILL.md"), "---\nname: mine\ndescription: made here\n---\n\nmine\n")
 
-	file := h.exportPath("export.json")
-	equal(t, "exit", h.run("export", file).exit, 0)
-	doc := h.readExportFile(file)
-	var names []string
-	for _, entry := range doc["skills"].([]any) {
-		names = append(names, entry.(map[string]any)["name"].(string))
-	}
-	equal(t, "the records", strings.Join(names, ","), "alpha,beta,zeta")
-
-	kinds := map[string]string{}
-	for _, entry := range doc["skills"].([]any) {
-		rec := entry.(map[string]any)
-		kinds[rec["name"].(string)] = rec["kind"].(string)
-	}
-	equal(t, "alpha", kinds["alpha"], "managed")
-	equal(t, "zeta", kinds["zeta"], "fork")
-}
-
-// TestExportReportsWhetherASkillIsPlaced tells a skill the machine placed
-// somewhere from one it only holds in the library, which is what tells a
-// reader of the export what that machine was actually using.
-func TestExportReportsWhetherASkillIsPlaced(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	// Claude Code and Cursor keep their own skills directories, so a skill
-	// with no placement is seen by no client at all.
-	h.build(t, fixture{dirs: []string{".claude", ".cursor"}})
-	s, _, _ := h.standardSource(true)
-	equal(t, "source add", h.run("source", "add", s.url).exit, 0)
-	equal(t, "add", h.run("skill", "add", s.url, "--all").exit, 0)
-	equal(t, "remove", h.run("skill", "remove", "beta", "--from", "claude-code", "--from", "cursor").exit, 0)
-
-	file := h.exportPath("export.json")
-	equal(t, "exit", h.run("export", file).exit, 0)
-	placed := map[string]any{}
-	for _, entry := range h.readExportFile(file)["skills"].([]any) {
-		rec := entry.(map[string]any)
-		placed[rec["name"].(string)] = rec["placed"]
-	}
-	equal(t, "alpha placed", placed["alpha"], true)
-	equal(t, "beta placed", placed["beta"], false)
-}
-
-// TestExportIsTheSameTwice keeps the document a pure function of the
-// machine's state: nothing about the run, not a date and not an order,
-// reaches it, so two exports of an unchanged machine are one file.
-func TestExportIsTheSameTwice(t *testing.T) {
-	t.Parallel()
-	h, s := installHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--all").exit, 0)
 	first, second := h.exportPath("first.json"), h.exportPath("second.json")
 	equal(t, "first", h.run("export", first).exit, 0)
 	equal(t, "second", h.run("export", second).exit, 0)
-	a, err := os.ReadFile(first)
-	if err != nil {
-		t.Fatal(err)
-	}
-	b, err := os.ReadFile(second)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(a, b) {
+	if a, b := readText(t, first), readText(t, second); a != b {
 		t.Errorf("two exports of one machine differ:\n%s\n%s", a, b)
 	}
-}
 
-// TestExportKeepsAFileItWasNotAskedToReplace: the path is an argument, and
-// what it already holds is not agentx's to lose.
-func TestExportKeepsAFileItWasNotAskedToReplace(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude"}})
-	file := h.exportPath("export.json")
-	writeFile(t, file, "not an export\n")
-
-	out := h.run("export", file)
-	equal(t, "exit", out.exit, 6)
-	contains(t, "stderr", out.stderr, "--force")
-	b, err := os.ReadFile(file)
-	if err != nil {
-		t.Fatal(err)
+	var names []string
+	kinds, placed := map[string]any{}, map[string]any{}
+	for _, entry := range h.readExportFile(first)["skills"].([]any) {
+		rec := entry.(map[string]any)
+		names = append(names, rec["name"].(string))
+		kinds[rec["name"].(string)] = rec["kind"]
+		placed[rec["name"].(string)] = rec["placed"]
 	}
-	equal(t, "the file", string(b), "not an export\n")
-
-	equal(t, "forced", h.run("export", file, "--force").exit, 0)
-	equal(t, "schema_version", h.readExportFile(file)["schema_version"], float64(1))
+	equal(t, "the records", strings.Join(names, ","), "alpha,beta,zeta")
+	equal(t, "alpha", kinds["alpha"], "managed")
+	equal(t, "zeta", kinds["zeta"], "fork")
+	equal(t, "alpha placed", placed["alpha"], true)
+	equal(t, "beta placed", placed["beta"], false)
 }
 
 // TestExportWithoutAnAccountRepo is a machine that has installed nothing:
@@ -307,11 +252,14 @@ func TestExportRefusesADirectoryWithAHintThatHelps(t *testing.T) {
 			t.Errorf("the hint offers a flag that cannot help:\n%s", out.stderr)
 		}
 	}
-	// A file that is already there still names --force, which does help.
+	// A file that is already there still names --force, which does help,
+	// and what the file holds is not agentx's to lose until it is given.
 	file := h.exportPath("export.json")
-	equal(t, "export", h.run("export", file).exit, 0)
+	writeFile(t, file, "not an export\n")
 	again := h.run("export", file)
 	equal(t, "exit", again.exit, 6)
 	contains(t, "stderr", again.stderr, "pass --force to overwrite it")
+	equal(t, "the file", readText(t, file), "not an export\n")
 	equal(t, "with --force", h.run("export", file, "--force").exit, 0)
+	equal(t, "schema_version", h.readExportFile(file)["schema_version"], float64(1))
 }

@@ -52,6 +52,9 @@ func TestAdoptFindsAVersionWhoseDirectoryIsGoneFromTheSource(t *testing.T) {
 // and 'agentx skill add' adopts this same directory.
 func TestAdoptTakesTheDirectoryWhenTheFolderHashNamesNothing(t *testing.T) {
 	t.Parallel()
+	s := newHarness(t).newSourceRepo("skills", true) // one source, read by every case
+	s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes\n"})
+	head := s.commit("the only version")
 	for _, c := range []struct{ name, hash string }{
 		{"the vercel CLI's own folder digest", strings.Repeat("7", 64)},
 		{"a tree id the source does not have", strings.Repeat("a", 40)},
@@ -61,9 +64,6 @@ func TestAdoptTakesTheDirectoryWhenTheFolderHashNamesNothing(t *testing.T) {
 			t.Parallel()
 			h := newHarness(t)
 			h.build(t, fixture{dirs: []string{".claude"}})
-			s := h.newSourceRepo("skills", true)
-			s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes\n"})
-			head := s.commit("the only version")
 			vercelInstall(t, h, s, "skills/alpha", "alpha")
 			lock := h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
 				Source: "owner/repo", SourceType: "github", SourceURL: s.url,
@@ -84,82 +84,31 @@ func TestAdoptTakesTheDirectoryWhenTheFolderHashNamesNothing(t *testing.T) {
 	}
 }
 
-// TestAdoptDatesAVersionByTheCommitThatTookIt is the cross-machine identity
-// the import commit exists to provide. Three machines hold the same
-// directory and the same lock entry and fetched the same source at three
-// different commits; the version is one version, so all three must record
-// the commit at which the directory took that content and write the same
-// import commit. A machine that recorded the commit it happened to fetch
-// would give one skill two unrelated parentless commits.
-func TestAdoptDatesAVersionByTheCommitThatTookIt(t *testing.T) {
-	t.Parallel()
-	first := newHarness(t)
-	first.build(t, fixture{dirs: []string{".claude"}})
-	s := first.newSourceRepo("skills", true)
-	s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes\n"})
-	s.write("README.md", "# skills\n")
-	c1 := s.commit("alpha arrives")
-	installed := s.treeAt(c1, "skills/alpha")
-
-	machines := []*harness{first, newHarness(t), newHarness(t)}
-	for _, m := range machines[1:] {
-		m.build(t, fixture{dirs: []string{".claude"}})
-	}
-	for _, m := range machines {
-		vercelInstall(t, m, s, "skills/alpha", "alpha")
-		m.writeLock(m.lockPath(), map[string]lockEntry{"alpha": {
-			Source: "owner/repo", SourceType: "github", SourceURL: s.url,
-			SkillPath: "skills/alpha", SkillFolderHash: installed,
-		}})
-	}
-	s.write("README.md", "# skills, with a line more\n")
-	c2 := s.commit("a commit that does not touch alpha")
-	s.skill("skills/alpha", "alpha", "The first skill, revised", map[string]string{"notes.md": "alpha notes, revised\n"})
-	s.commit("alpha is revised")
-
-	// Each machine fetched the source at a different commit: two pins and
-	// the branch the source follows, which is the third commit.
-	for i, pin := range []string{"#" + c1, "#" + c2, ""} {
-		if out := machines[i].run("source", "add", s.url+pin); out.exit != 0 {
-			t.Fatalf("machine %d: source add: exit %d\n%s", i, out.exit, out.stderr)
-		}
-	}
-	var imports []string
-	for i, m := range machines {
-		out := m.run("--json", "adopt", "--all")
-		equal(t, "exit", out.exit, 0)
-		ev := m.one(out.stdout, "adoption")
-		if ev["upstream_commit"] != c1 {
-			t.Errorf("machine %d recorded upstream_commit %v, want %s, the commit alpha took that content at", i, ev["upstream_commit"], c1)
-		}
-		imports = append(imports, m.accountGit("rev-parse", "refs/heads/managed/alpha"))
-	}
-	for i, got := range imports {
-		if got != imports[0] {
-			t.Errorf("machine %d wrote the import commit %s and machine 0 wrote %s: one version, two identities", i, got, imports[0])
-			t.Logf("machine %d:\n%s", i, machines[i].accountGit("cat-file", "commit", got))
-			t.Logf("machine 0:\n%s", machines[0].accountGit("cat-file", "commit", imports[0]))
-		}
-	}
-}
-
 // TestAdoptRecordsTheCommitAnInstallRecords holds every route to the commit
 // an install of the same version records: the last commit that touched the
 // skill's directory, reachable from the commit the version was read at. The
-// source moved past the version on a commit that does not touch alpha, and
-// each machine reads the version its own way: by the directory at either
-// commit, by the folder hash, by --base naming the later commit, and by an
-// install at that commit. One version, one import commit.
+// source moves past the version on a commit that does not touch alpha and
+// then revises alpha, and each machine holds the same directory and reads
+// its version its own way: by the directory at either of the first two
+// commits, by the folder hash at the second or past the revision, by --base
+// naming the second, and by an install at the second. One version is one
+// import commit, whichever machine wrote it: a machine that recorded the
+// commit it happened to fetch would give one skill two unrelated
+// parentless commits.
 func TestAdoptRecordsTheCommitAnInstallRecords(t *testing.T) {
 	t.Parallel()
-	first := newHarness(t)
-	first.build(t, fixture{dirs: []string{".claude"}})
-	s := first.newSourceRepo("skills", true)
+	s := newHarness(t).newSourceRepo("skills", true) // one source, read by every machine
 	s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes\n"})
 	c1 := s.commitAt("alpha arrives", "1700000000 +0000")
 	installed := s.treeAt(c1, "skills/alpha")
+	dir := t.TempDir() // the directory the other tool installed, as it was at c1
+	if err := copyTreeTo(filepath.Join(s.work, "skills", "alpha"), dir); err != nil {
+		t.Fatal(err)
+	}
 	s.write("README.md", "# skills\n")
 	c2 := s.commitAt("a commit that does not touch alpha", "1710000000 +0000")
+	s.skill("skills/alpha", "alpha", "The first skill, revised", map[string]string{"notes.md": "alpha notes, revised\n"})
+	s.commitAt("alpha is revised", "1720000000 +0000")
 
 	machines := []struct {
 		name, pin, hash string
@@ -167,20 +116,26 @@ func TestAdoptRecordsTheCommitAnInstallRecords(t *testing.T) {
 	}{
 		{"the directory, fetched at the commit that took it", c1, "", []string{"--all"}},
 		{"the directory, fetched past it", c2, "", []string{"--all"}},
-		{"the vercel CLI's own digest, fetched past it", c2, strings.Repeat("7", 64), []string{"--all"}},
 		{"the folder hash, fetched past it", c2, installed, []string{"--all"}},
+		{"the folder hash, fetched past a revision", "", installed, []string{"--all"}},
 		{"--base naming a commit past it", c2, "", []string{"--skill", "alpha", "--base", c2}},
 	}
 	var imports []string
 	for _, m := range machines {
 		h := newHarness(t)
 		h.build(t, fixture{dirs: []string{".claude"}})
-		vercelInstall(t, h, s, "skills/alpha", "alpha")
+		if err := copyTreeTo(dir, filepath.Join(h.library, "alpha")); err != nil {
+			t.Fatal(err)
+		}
 		h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
 			Source: "owner/repo", SourceType: "github", SourceURL: s.url,
 			SkillPath: "skills/alpha", SkillFolderHash: m.hash,
 		}})
-		if out := h.run("source", "add", s.url+"#"+m.pin); out.exit != 0 {
+		arg := s.url
+		if m.pin != "" {
+			arg += "#" + m.pin
+		}
+		if out := h.run("source", "add", arg); out.exit != 0 {
 			t.Fatalf("%s: source add: exit %d\n%s", m.name, out.exit, out.stderr)
 		}
 		out := h.run(append([]string{"--json", "adopt"}, m.adopt...)...)
@@ -243,56 +198,18 @@ func TestAdoptFindsEveryUpstreamCommitInOneWalk(t *testing.T) {
 	}
 }
 
-// TestAdoptFindsAMergedVersionWhereAnInstallDoes: the version the lock file
-// recorded reached the source's branch through a merge. The history search
-// walks first parents and finds the version at the merge, and the commit
-// recorded is still the one an install records: the side branch commit that
-// changed the skill's directory, which the merge took unchanged.
-func TestAdoptFindsAMergedVersionWhereAnInstallDoes(t *testing.T) {
+// TestAdoptRecordsABackMergedVersionWhereAnInstallDoes: the change to
+// alpha reached the branch through a back-merge whose first parent predates
+// it, and the source moved on past that merge. A machine that fetched the
+// later tip adopts by the folder hash, and its history search, which walks
+// first parents, finds the version at the back-merge. It records the
+// commit that changed alpha, which is what an install at that tip records,
+// and both write one import commit.
+func TestAdoptRecordsABackMergedVersionWhereAnInstallDoes(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	s := h.newSourceRepo("skills", true)
-	s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes\n"})
-	base := s.commitAt("alpha arrives", "1700000000 +0000")
-	s.write("README.md", "# skills\n")
-	main := s.commitAt("the branch moves on", "1710000000 +0000")
-	s.skill("skills/alpha", "alpha", "The first skill, revised", map[string]string{"notes.md": "revised on a side branch\n"})
-	s.run("add", "--all")
-	tree := s.run("write-tree")
-	side := s.run("commit-tree", s.run("rev-parse", base+":"), "-p", base, "-m", "side work")
-	side = s.run("commit-tree", tree, "-p", side, "-m", "alpha is revised on the side")
-	merge := s.run("commit-tree", tree, "-p", main, "-p", side, "-m", "merge the side work")
-	s.run("update-ref", "refs/heads/main", merge)
-	vercelInstall(t, h, s, "skills/alpha", "alpha")
-	h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
-		Source: "owner/repo", SourceType: "github", SourceURL: s.url,
-		SkillPath: "skills/alpha", SkillFolderHash: s.treeAt(merge, "skills/alpha"),
-	}})
-
-	out := h.run("--json", "adopt", "--all")
-	equal(t, "exit", out.exit, 0)
-	equal(t, "upstream_commit", h.one(out.stdout, "adoption")["upstream_commit"], side)
-	adopted := h.accountGit("rev-parse", "refs/heads/managed/alpha")
-
-	install := newHarness(t)
-	install.build(t, fixture{dirs: []string{".claude"}})
-	equal(t, "exit of skill add", install.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
-	equal(t, "the import commit an install writes", install.accountGit("rev-parse", "refs/heads/managed/alpha"), adopted)
-}
-
-// TestAdoptRecordsABackMergedVersionWhereAnInstallDoes: the change to
-// alpha reached the branch through a back-merge whose first parent predates
-// it, and the source moved on past that merge. One machine fetched the
-// commit that made the change and another the later tip, and both adopt by
-// the folder hash; the second one's history search finds the version at the
-// back-merge. Both record the commit that changed alpha, which is what an
-// install at the later tip records, and all three write one import commit.
-func TestAdoptRecordsABackMergedVersionWhereAnInstallDoes(t *testing.T) {
-	t.Parallel()
-	first := newHarness(t)
-	first.build(t, fixture{dirs: []string{".claude"}})
-	s := first.newSourceRepo("skills", true)
 	s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes\n"})
 	base := s.commitAt("alpha arrives", "1700000000 +0000")
 	s.skill("skills/alpha", "alpha", "The first skill, revised", map[string]string{"notes.md": "revised\n"})
@@ -302,44 +219,24 @@ func TestAdoptRecordsABackMergedVersionWhereAnInstallDoes(t *testing.T) {
 	s.run("update-ref", "refs/heads/main", backMerge)
 	s.write("README.md", "# skills\n")
 	tip := s.commitAt("a commit that does not touch alpha", "1730000000 +0000")
-	revised := s.treeAt(change, "skills/alpha")
 	if found := s.run("rev-list", "--first-parent", "-1", tip, "--", ":(literal)skills/alpha"); found != backMerge {
 		t.Fatalf("the first-parent line changes alpha last at %s, want the back-merge %s", found, backMerge)
 	}
-
-	var imports []string
-	for _, pin := range []string{change, tip} {
-		h := newHarness(t)
-		h.build(t, fixture{dirs: []string{".claude"}})
-		vercelInstall(t, h, s, "skills/alpha", "alpha")
-		h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
-			Source: "owner/repo", SourceType: "github", SourceURL: s.url,
-			SkillPath: "skills/alpha", SkillFolderHash: revised,
-		}})
-		if out := h.run("source", "add", s.url+"#"+pin); out.exit != 0 {
-			t.Fatalf("source add at %s: exit %d\n%s", short(pin), out.exit, out.stderr)
-		}
-		out := h.run("--json", "adopt", "--all")
-		equal(t, "exit of adopt at "+short(pin), out.exit, 0)
-		equal(t, "upstream_commit at "+short(pin), h.one(out.stdout, "adoption")["upstream_commit"], change)
-		imports = append(imports, h.accountGit("rev-parse", "refs/heads/managed/alpha"))
-	}
+	vercelInstall(t, h, s, "skills/alpha", "alpha")
+	h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
+		Source: "owner/repo", SourceType: "github", SourceURL: s.url,
+		SkillPath: "skills/alpha", SkillFolderHash: s.treeAt(change, "skills/alpha"),
+	}})
+	out := h.run("--json", "adopt", "--all")
+	equal(t, "exit", out.exit, 0)
+	equal(t, "upstream_commit", h.one(out.stdout, "adoption")["upstream_commit"], change)
+	adopted := h.accountGit("rev-parse", "refs/heads/managed/alpha")
 
 	install := newHarness(t)
 	install.build(t, fixture{dirs: []string{".claude"}})
-	if out := install.run("source", "add", s.url+"#"+tip); out.exit != 0 {
-		t.Fatalf("source add: exit %d\n%s", out.exit, out.stderr)
-	}
-	if out := install.run("skill", "add", s.url+"#"+tip, "--skill", "alpha"); out.exit != 0 {
-		t.Fatalf("skill add: exit %d\n%s", out.exit, out.stderr)
-	}
+	equal(t, "exit of skill add", install.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
 	contains(t, "the import commit an install writes", install.accountGit("cat-file", "commit", "refs/heads/managed/alpha"), "Agentx-Upstream-Commit: "+change)
-	want := install.accountGit("rev-parse", "refs/heads/managed/alpha")
-	for i, got := range imports {
-		if got != want {
-			t.Errorf("the adoption at %s wrote the import commit %s and an install at %s wrote %s", short([]string{change, tip}[i]), got, short(tip), want)
-		}
-	}
+	equal(t, "the import commit an install writes", install.accountGit("rev-parse", "refs/heads/managed/alpha"), adopted)
 }
 
 // TestAdoptBaseTakesABranchOrATag is the escape hatch every refusal names.
@@ -349,6 +246,17 @@ func TestAdoptRecordsABackMergedVersionWhereAnInstallDoes(t *testing.T) {
 // fetch writes one ref and no tags at all, so nothing else would find it.
 func TestAdoptBaseTakesABranchOrATag(t *testing.T) {
 	t.Parallel()
+	s := newHarness(t).newSourceRepo("skills", true) // one source, read by every case
+	s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes\n"})
+	v1 := s.commit("the version the other tool installed")
+	s.tag("v1.2.0")
+	s.annotatedTag("release-1", "the first release")
+	dir := t.TempDir() // the directory the other tool installed, at v1
+	if err := copyTreeTo(filepath.Join(s.work, "skills", "alpha"), dir); err != nil {
+		t.Fatal(err)
+	}
+	s.skill("skills/alpha", "alpha", "The first skill, revised", map[string]string{"notes.md": "revised\n"})
+	head := s.commit("a version nobody on this machine has")
 	for _, c := range []struct{ name, base string }{
 		{"a tag", "v1.2.0"},
 		{"a tag by its full ref", "refs/tags/v1.2.0"},
@@ -359,14 +267,9 @@ func TestAdoptBaseTakesABranchOrATag(t *testing.T) {
 			t.Parallel()
 			h := newHarness(t)
 			h.build(t, fixture{dirs: []string{".claude"}})
-			s := h.newSourceRepo("skills", true)
-			s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes\n"})
-			v1 := s.commit("the version the other tool installed")
-			s.tag("v1.2.0")
-			s.annotatedTag("release-1", "the first release")
-			vercelInstall(t, h, s, "skills/alpha", "alpha")
-			s.skill("skills/alpha", "alpha", "The first skill, revised", map[string]string{"notes.md": "revised\n"})
-			head := s.commit("a version nobody on this machine has")
+			if err := copyTreeTo(dir, filepath.Join(h.library, "alpha")); err != nil {
+				t.Fatal(err)
+			}
 			editLibrary(t, h, "alpha", "notes.md", "an edit of mine\n")
 			lock := h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
 				Source: "owner/repo", SourceType: "github", SourceURL: s.url,
@@ -414,6 +317,17 @@ func TestAdoptBaseNamesNothingOfTheSource(t *testing.T) {
 // by --all and by --base alike.
 func TestAdoptRefusesAnEmptyDirectoryAloneAndAdoptsTheRest(t *testing.T) {
 	t.Parallel()
+	s := newHarness(t).newSourceRepo("skills", true) // one source, read by every case
+	s.skill("skills/alpha", "alpha", "The first skill", nil)
+	s.commit("one skill")
+	blank, err := s.git.IsolatedInput(context.Background(), s.gitDir, strings.NewReader(""), "hash-object", "-t", "tree", "-w", "--stdin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	empty := strings.TrimSpace(blank)
+	skills := s.mktree(s.replaced("HEAD:skills", "empty", empty)...)
+	root := s.mktree(s.replaced("HEAD^{tree}", "skills", skills)...)
+	s.bare("update-ref", "refs/heads/main", s.bare("commit-tree", root, "-p", "HEAD", "-m", "an empty skill directory"))
 	for _, c := range []struct {
 		name string
 		args []string
@@ -425,18 +339,7 @@ func TestAdoptRefusesAnEmptyDirectoryAloneAndAdoptsTheRest(t *testing.T) {
 			t.Parallel()
 			h := newHarness(t)
 			h.build(t, fixture{dirs: []string{".claude"}})
-			s := h.newSourceRepo("skills", true)
-			s.skill("skills/alpha", "alpha", "The first skill", nil)
-			s.commit("one skill")
 			vercelInstall(t, h, s, "skills/alpha", "alpha")
-			blank, err := s.git.IsolatedInput(context.Background(), s.gitDir, strings.NewReader(""), "hash-object", "-t", "tree", "-w", "--stdin")
-			if err != nil {
-				t.Fatal(err)
-			}
-			empty := strings.TrimSpace(blank)
-			skills := s.mktree(s.replaced("HEAD:skills", "empty", empty)...)
-			root := s.mktree(s.replaced("HEAD^{tree}", "skills", skills)...)
-			s.bare("update-ref", "refs/heads/main", s.bare("commit-tree", root, "-p", "HEAD", "-m", "an empty skill directory"))
 			if err := os.MkdirAll(filepath.Join(h.library, "empty"), 0o755); err != nil {
 				t.Fatal(err)
 			}
