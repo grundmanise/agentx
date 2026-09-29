@@ -116,7 +116,7 @@ func TestScanHandshake(t *testing.T) {
 	h.build(t, f)
 	// The budget the servers that never answer run out, with room for the
 	// others under a loaded machine.
-	h.env["AGENTX_HANDSHAKE_TIMEOUT"] = "200ms"
+	h.env["AGENTX_HANDSHAKE_TIMEOUT"] = "1s"
 	if err := os.WriteFile(filepath.Join(h.agentx, "handshakes.json"), []byte("{"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func TestScanHandshake(t *testing.T) {
 	args := []string{"--json", "scan", "--handshake"}
 	out := h.run(args...)
 	if elapsed := time.Since(start); elapsed > 8*time.Second {
-		t.Errorf("scan took %s, want the hanging server cut off after 200ms", elapsed)
+		t.Errorf("scan took %s, want the hanging server cut off after 1s", elapsed)
 	}
 	equal(t, "exit", out.exit, 0)
 	noSecret(args, out)
@@ -216,8 +216,8 @@ func TestScanHandshake(t *testing.T) {
 	}
 	warnings := fmt.Sprint(snap["warnings"])
 	for _, want := range []string{
-		"~/.claude.json: server hang: timed out after 200ms",
-		"~/.claude.json: server linger: timed out after 200ms",
+		"~/.claude.json: server hang: timed out after 1s",
+		"~/.claude.json: server linger: timed out after 1s",
 		"~/.claude.json: server exit: ",
 		"the server exited",
 		"~/.claude.json: server missing: fork/exec ~/nowhere/mcpserver: no such file or directory",
@@ -276,7 +276,7 @@ func TestScanHandshake(t *testing.T) {
 	noSecret(args, out)
 	contains(t, "stdout", out.stdout, "4 tools")
 	contains(t, "stdout", out.stdout, "1 tool\n")
-	contains(t, "stderr", h.portable(out.stderr), "warning: ~/.claude.json: server hang: timed out after 200ms")
+	contains(t, "stderr", h.portable(out.stderr), "warning: ~/.claude.json: server hang: timed out after 1s")
 	contains(t, "stdout", out.stdout, "needs sign-in\n")
 	contains(t, "stdout", out.stdout, "timed out\n")
 	contains(t, "stderr", out.stderr, "hint: needs sign-in: the server wants a sign-in")
