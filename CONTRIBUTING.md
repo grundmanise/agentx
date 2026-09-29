@@ -10,17 +10,19 @@ Everyone taking part is expected to follow the [Code of Conduct](CODE_OF_CONDUCT
 
 ## Report a bug or request a feature
 
-Open a [GitHub issue](https://github.com/grundmanise/agentx/issues). For a bug, include:
+Search the [existing issues](https://github.com/grundmanise/agentx/issues) first, then open one with a
+form:
 
-- what you ran and what you expected
-- what happened instead, with the full output
-- the output of `agentx version` and `agentx doctor`
-- your operating system and the agent clients involved
+- [Bug report](https://github.com/grundmanise/agentx/issues/new?template=bug_report.yml): asks what you
+  ran, what you expected, what happened instead, the output of `agentx version` and `agentx doctor`,
+  your operating system and the agent clients involved.
+- [Feature request](https://github.com/grundmanise/agentx/issues/new?template=feature_request.yml):
+  asks for the problem you want solved and the change you propose.
 
 New issues are labelled `needs-triage` until a maintainer looks at them.
 
-Don't report a security vulnerability in a public issue. Report it privately through the repository's
-[Security tab](https://github.com/grundmanise/agentx/security) instead.
+Don't report a security vulnerability in a public issue.
+[Report it privately](https://github.com/grundmanise/agentx/security/advisories/new) instead.
 
 ## Set up your machine
 
@@ -39,8 +41,22 @@ cd agentx
 make check
 ```
 
-`golangci-lint` needs no install: `make lint` builds the pinned version on first use. See
-[Development](README.md#development) in the README for every Makefile target.
+`make check` runs what CI runs on every pull request, in the same order, against the Go module in
+`apps/cli`. A green `make check` means a green pull request.
+
+| Target | Command |
+| --- | --- |
+| `fmt` | `gofmt -w .` |
+| `fmt-check` | `gofmt -l .`, fails when any file is listed |
+| `lint` | `golangci-lint run ./...` with `apps/cli/.golangci.yml`, including `go vet` |
+| `tidy-check` | `go mod tidy`, fails when `go.mod` or `go.sum` change |
+| `build` | `go build ./...`, `CGO_ENABLED=0` on Linux and `1` on macOS |
+| `test` | `go test -race -count=1 ./...` |
+| `check` | `fmt-check lint tidy-check build test` |
+
+`golangci-lint` needs no install: its version is pinned in `apps/cli/.golangci-lint-version`, and
+`make lint` builds that release into the build cache on first use through `go run`, locally and in
+CI alike. The build uses the Go version `apps/cli/go.mod` specifies.
 
 ## Find your way around
 
@@ -66,8 +82,8 @@ Read the ADRs and specs that touch the area you're changing before you start.
 - **Update the Help Center.** When you add a feature or change how one works, update the matching page
   in [`docs/help-center`](docs/help-center). Keep it clear, structured and concise, in an imperative
   tone.
-- **Run `make check`.** It runs what CI runs, in the same order. A green `make check` means a green pull
-  request. Run `make fmt` to fix formatting.
+- **Run `make check`.** A green `make check` means a green pull request. Run `make fmt` to fix
+  formatting.
 
 ## Open a pull request
 
@@ -77,10 +93,13 @@ Read the ADRs and specs that touch the area you're changing before you start.
   `feat(skill): check managed skills for upstream updates`. Pull requests are squash
   merged, so the title becomes the commit on `main`.
 - **Description**: in an imperative style, summarize what changed for users and why. Describe the
-  implementation only where it's needed to understand the change.
+  implementation only where it's needed to understand the change. For how to write a good commit
+  message, read [How to Write a Git Commit Message](https://cbea.ms/git-commit/); where its rules for
+  the subject line differ, the Conventional Commits title above wins.
 - **Visual evidence**: if the change affects functionality, include a screenshot, a recording or, for
   CLI-only changes, the relevant CLI output.
-- **Writing style**: don't use em dashes (`—`) anywhere; use en dashes (`–`) or hyphens (`-`).
+- **Writing style**: don't use em dashes (`—`) anywhere; use en dashes (`–`), hyphens (`-`) or another
+  suitable punctuation.
 
 Keep each pull request to one change. A maintainer reviews it once CI is green.
 

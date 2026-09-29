@@ -1,0 +1,73 @@
+name: Bug report
+description: Report something in agentx that doesn't work as documented
+labels: [bug, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Search the [existing issues](https://github.com/grundmanise/agentx/issues) first, in case it's already known.
+
+        Don't report a security vulnerability here. [Report it privately](https://github.com/grundmanise/agentx/security/advisories/new) instead.
+
+        Command output can include paths, usernames and server URLs from your machine. Remove anything you don't want to be public before you submit.
+
+  - type: textarea
+    id: ran
+    attributes:
+      label: What you ran
+      description: The commands, in order, that lead to the problem.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead
+      description: Paste the full output, including any error.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: version
+    attributes:
+      label: Output of `agentx version`
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `agentx doctor`
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: macOS 26.0, Ubuntu 24.04
+    validations:
+      required: true
+
+  - type: input
+    id: clients
+    attributes:
+      label: Agent clients involved
+      placeholder: Claude Code, Cursor
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: Screenshots, logs or other context that helps reproduce the problem.

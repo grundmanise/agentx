@@ -1,0 +1,35 @@
+name: Feature request
+description: Propose a new feature or a change to how agentx works
+labels: [enhancement, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. Search the [existing issues](https://github.com/grundmanise/agentx/issues) first, in case it's already proposed.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you're trying to do, and what gets in the way today.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: The change you propose
+      description: How agentx could solve it. Include example commands or output if it helps.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Other solutions or workarounds, and why they fall short.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
