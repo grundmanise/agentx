@@ -51,3 +51,26 @@ jobs:
       # watcher's FSEvents backend; the Linux job finds the data races, and
       # `make check` keeps -race locally.
       - run: make test ${{ runner.os == 'macOS' && 'RACE=' || '' }}
+        if: runner.os != 'macOS'
+      # TEMPORARY: time the CLI tests on one macOS runner with the temporary
+      # directory on disk and on a RAM disk, at several parallelisms.
+      - if: runner.os == 'macOS'
+        working-directory: apps/cli
+        run: |
+          sysctl -n hw.ncpu hw.memsize machdep.cpu.brand_string
+          dev=$(hdiutil attach -nomount ram://4194304 | awk '{print $1}')
+          diskutil erasevolume APFS ramdisk "$dev" > /dev/null
+          mkdir -p /Volumes/ramdisk/tmp
+          go test -count=1 ./internal/gitx ./internal/home ./internal/interrupt ./internal/lineage ./internal/mcp ./internal/scan ./internal/serve ./internal/source ./internal/treeid ./internal/vercel
+          go test -c -o "$RUNNER_TEMP/cli.test" ./internal/cli
+          cd internal/cli
+          failed=0
+          for run in disk:8 ram:8 disk:12 ram:12 ram:16 disk:8; do
+            where=${run%%:*}; n=${run##*:}
+            tmp=$TMPDIR; [ "$where" = ram ] && tmp=/Volumes/ramdisk/tmp
+            start=$(date +%s)
+            if TMPDIR=$tmp "$RUNNER_TEMP/cli.test" -test.count=1 -test.timeout=30m -test.parallel=$n > "$RUNNER_TEMP/$where-$n.log" 2>&1; then status=ok; else status=FAIL; failed=1; fi
+            echo "$where parallel=$n: $(( $(date +%s) - start )) s $status"
+            [ $status = ok ] || grep -E -- "--- FAIL|panic" "$RUNNER_TEMP/$where-$n.log" | head -20
+          done
+          exit $failed
