@@ -2,7 +2,7 @@
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
   "name": "agentx",
-  "description": "Inventory the agent clients, skills, MCP servers and plugins on your machine, and install skills into all of them from one command line.",
+  "description": "The inventory manager for your agents. View, manage and sync skills, MCP servers and plugins across machines.",
   "colors": {
     "primary": "#d4ff4f",
     "light": "#d4ff4f",
