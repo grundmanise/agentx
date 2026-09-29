@@ -16,20 +16,22 @@ import (
 // and Gemini CLI read the library itself.
 func bulkHarness(t *testing.T) (*harness, *sourceRepo) {
 	t.Helper()
-	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude", ".cursor", ".codex", ".gemini"}})
-	s := h.newSourceRepo("bulk", true)
-	s.advance("bulkHarness", func(s *sourceRepo) []string {
+	h, s, _ := bulkHome.copy(t)
+	return h, s
+}
+
+// bulkHome is the home bulkHarness hands out.
+var bulkHome = &fixtureHome{
+	source: "bulk",
+	dirs:   []string{".claude", ".cursor", ".codex", ".gemini"},
+	build: func(h *harness, s *sourceRepo) []string {
 		for _, name := range bulkSkills {
 			s.skill("skills/"+name, name, "The "+name+" skill", map[string]string{"notes.md": name + " notes\n"})
 		}
 		s.commit("three skills")
+		h.mustRun("source", "add", s.url)
 		return nil
-	})
-	if out := h.run("source", "add", s.url); out.exit != 0 {
-		t.Fatalf("source add: exit %d\n%s", out.exit, out.stderr)
-	}
-	return h, s
+	},
 }
 
 var bulkSkills = []string{"alpha", "beta", "gamma"}

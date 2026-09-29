@@ -24,17 +24,22 @@ import (
 // commits one.
 func checkHarness(t *testing.T) (*harness, *sourceRepo, string) {
 	t.Helper()
-	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude"}})
-	s := h.newSourceRepo("skills", true)
-	first := s.advance("checkHarness", func(s *sourceRepo) []string {
+	h, s, ids := checkHome.copy(t)
+	return h, s, ids[0]
+}
+
+// checkHome is the home checkHarness hands out; its id is the first commit.
+var checkHome = &fixtureHome{
+	source: "skills",
+	dirs:   []string{".claude"},
+	build: func(h *harness, s *sourceRepo) []string {
 		s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes\n"})
 		s.skill("skills/beta", "beta", "The second skill", nil)
-		return []string{s.commit("first version")}
-	})[0]
-	h.mustRun("source", "add", s.url)
-	h.mustRun("skill", "add", s.url, "--all")
-	return h, s, first
+		first := s.commit("first version")
+		h.mustRun("source", "add", s.url)
+		h.mustRun("skill", "add", s.url, "--all")
+		return []string{first}
+	},
 }
 
 // updateOf is the one update_available event of the named skill in a run,

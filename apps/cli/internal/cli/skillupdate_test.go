@@ -24,17 +24,24 @@ import (
 // update a test applies.
 func updateHarness(t *testing.T) (h *harness, s *sourceRepo, first string) {
 	t.Helper()
-	h = newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude", ".cursor"}})
-	s = h.newSourceRepo("skills", true)
-	s.skill("skills/alpha-dir", "alpha", "The first skill", map[string]string{
-		"notes.md": "alpha notes\n", "old.md": "a file the update deletes\n", "scripts/run.sh": "#!/bin/sh\necho run\n",
-	})
-	s.skill("skills/beta", "beta", "The second skill", map[string]string{"notes.md": "beta notes\n"})
-	first = s.commit("first version")
-	h.mustRun("source", "add", s.url)
-	h.mustRun("skill", "add", s.url, "--all", "--copy")
-	return h, s, first
+	h, s, ids := updateHome.copy(t)
+	return h, s, ids[0]
+}
+
+// updateHome is the home updateHarness hands out; its id is the first commit.
+var updateHome = &fixtureHome{
+	source: "skills",
+	dirs:   []string{".claude", ".cursor"},
+	build: func(h *harness, s *sourceRepo) []string {
+		s.skill("skills/alpha-dir", "alpha", "The first skill", map[string]string{
+			"notes.md": "alpha notes\n", "old.md": "a file the update deletes\n", "scripts/run.sh": "#!/bin/sh\necho run\n",
+		})
+		s.skill("skills/beta", "beta", "The second skill", map[string]string{"notes.md": "beta notes\n"})
+		first := s.commit("first version")
+		h.mustRun("source", "add", s.url)
+		h.mustRun("skill", "add", s.url, "--all", "--copy")
+		return []string{first}
+	},
 }
 
 // newVersion commits the second version of alpha: a changed file, an added
@@ -225,24 +232,31 @@ func TestSkillUpdateCountsASystemFileWhenTheSettingIsOff(t *testing.T) {
 // leaves alone; gamma gone from the source; and delta as it was.
 func mixedHarness(t *testing.T) (h *harness, s *sourceRepo, first, second string) {
 	t.Helper()
-	h = newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude"}})
-	s = h.newSourceRepo("skills", true)
-	for _, name := range []string{"alpha", "beta", "gamma", "delta", "epsilon"} {
-		s.skill("skills/"+name, name, "The skill "+name, map[string]string{"notes.md": name + " notes\n", "usage.md": name + " usage\n"})
-	}
-	first = s.commit("first version")
-	h.mustRun("source", "add", s.url)
-	h.mustRun("skill", "add", s.url, "--all")
-	s.write("skills/alpha/notes.md", "alpha notes, revised\n")
-	s.write("skills/beta/notes.md", "beta notes, revised\n")
-	s.write("skills/epsilon/notes.md", "epsilon notes, revised\n")
-	s.run("rm", "-r", "--quiet", "skills/gamma")
-	second = s.commit("second version")
-	h.mustRun("skill", "check")
-	editLibrary(t, h, "beta", "notes.md", "beta notes, edited here\n")
-	editLibrary(t, h, "epsilon", "usage.md", "epsilon usage, edited here\n")
-	return h, s, first, second
+	h, s, ids := mixedHome.copy(t)
+	return h, s, ids[0], ids[1]
+}
+
+// mixedHome is the home mixedHarness hands out; its ids are the two commits.
+var mixedHome = &fixtureHome{
+	source: "skills",
+	dirs:   []string{".claude"},
+	build: func(h *harness, s *sourceRepo) []string {
+		for _, name := range []string{"alpha", "beta", "gamma", "delta", "epsilon"} {
+			s.skill("skills/"+name, name, "The skill "+name, map[string]string{"notes.md": name + " notes\n", "usage.md": name + " usage\n"})
+		}
+		first := s.commit("first version")
+		h.mustRun("source", "add", s.url)
+		h.mustRun("skill", "add", s.url, "--all")
+		s.write("skills/alpha/notes.md", "alpha notes, revised\n")
+		s.write("skills/beta/notes.md", "beta notes, revised\n")
+		s.write("skills/epsilon/notes.md", "epsilon notes, revised\n")
+		s.run("rm", "-r", "--quiet", "skills/gamma")
+		second := s.commit("second version")
+		h.mustRun("skill", "check")
+		editLibrary(h.t, h, "beta", "notes.md", "beta notes, edited here\n")
+		editLibrary(h.t, h, "epsilon", "usage.md", "epsilon usage, edited here\n")
+		return []string{first, second}
+	},
 }
 
 // TestSkillUpdateAllMergesEditsAndLeavesConflictsPending runs update --all

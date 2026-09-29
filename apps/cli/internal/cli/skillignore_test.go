@@ -15,21 +15,25 @@ import (
 // takes .DS_Store back from the list.
 func ignoreHarness(t *testing.T) *harness {
 	t.Helper()
-	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude"}})
-	s := h.newSourceRepo("tools", true)
-	s.advance("ignoreHarness", func(s *sourceRepo) []string {
+	h, _, _ := ignoreHome.copy(t)
+	return h
+}
+
+// ignoreHome is the home ignoreHarness hands out.
+var ignoreHome = &fixtureHome{
+	source: "tools",
+	dirs:   []string{".claude"},
+	build: func(h *harness, s *sourceRepo) []string {
 		s.skill("tools/pdf", "pdf", "Plain files", map[string]string{"a.md": "the same bytes\n"})
 		s.skill("tools/web", "web", "Ships ignore rules of its own", map[string]string{
 			".gitignore": "node_modules/\n", "a.md": "the same bytes\n", "SKILL.md~": "a backup the upstream ships\n",
 		})
 		s.skill("tools/mac", "mac", "Keeps its Finder file", map[string]string{".gitignore": "!.DS_Store\n"})
 		s.commit("three skills")
+		h.mustRun("source", "add", s.url)
+		h.mustRun("skill", "add", s.url, "--skill", "pdf", "--skill", "web", "--skill", "mac")
 		return nil
-	})
-	h.mustRun("source", "add", s.url)
-	h.mustRun("skill", "add", s.url, "--skill", "pdf", "--skill", "web", "--skill", "mac")
-	return h
+	},
 }
 
 // diffPaths is what skill diff says differs, one "path status" per file.
@@ -99,6 +103,8 @@ func TestTheGlobalIgnoreFileApplies(t *testing.T) {
 	equal(t, "state with the default ignore file", h.listed("pdf")["state"], stateCurrent)
 
 	remove(t, filepath.Join(lib, "debug.log"))
+	// Replacing the configuration drops the mapping of the fixture source's
+	// URL; nothing below fetches.
 	writeFile(t, filepath.Join(h.home, ".gitconfig"), "[core]\n\texcludesFile = ~/my-ignore\n")
 	writeFile(t, filepath.Join(h.home, "my-ignore"), "*.tmp\n")
 	writeFile(t, filepath.Join(lib, "scratch.tmp"), "scratch\n")
