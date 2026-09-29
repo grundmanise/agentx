@@ -135,7 +135,7 @@ Every directory with a `SKILL.md` is a skill. Hidden directories and `node_modul
 
 Give a path to see one part of the repository, for example `anthropics/skills/skills/pdf`, or give the source id instead of the URL. The command reads what the last `source add` fetched and never touches the network, whichever part of the source you ask for.
 
-Names and descriptions come from the repository, so agentx replaces any control characters in them with spaces, keeping one skill to a row. `--json` gives you each value as it was written.
+Names and descriptions come from the repository, so agentx replaces any control characters in them with spaces, keeping one skill to a row.
 
 ## Remove a source
 
@@ -172,27 +172,6 @@ hint: run 'agentx source add https://github.com/anthropics/skills' to add it aga
 ```
 
 Once you take the last of those skills off the machine, with [`agentx skill remove <name>`](/cli/skill) or its `--from universal` form, nothing on this machine records the source's URL any more, and the id is refused like any other. Add the source again by its URL.
-
-## Script it
-
-Add `--json` to get a `source` event per source, and from `source skills` a `source_skill` event per skill:
-
-```sh
-agentx --json source skills anthropics/skills
-```
-
-```json
-{"type":"source","schema_version":1,"id":"1c9d0b7e4a2f6d38","url":"https://github.com/anthropics/skills","last_fetched":"2026-09-20T10:00:00Z","commit":"3f2a9c1e...","skills":12}
-{"type":"source_skill","schema_version":1,"source":"1c9d0b7e4a2f6d38","subpath":"skills/docx","name":"docx","description":"Create and edit Word documents","tree":"9a8b7c6d..."}
-{"type":"result","schema_version":1,"ok":true}
-```
-
-`source fetch` emits one `progress` event per source as that source finishes, then one `source` event per source that fetched, in the order you named them. A `source` event carries `previous_commit` when the fetch moved the source, so a script can tell a real change from a no-op:
-
-```json
-{"type":"progress","schema_version":1,"phase":"fetch","subject":"https://github.com/anthropics/skills","current":1,"total":2}
-{"type":"source","schema_version":1,"id":"1c9d0b7e4a2f6d38","url":"https://github.com/anthropics/skills","last_fetched":"2026-09-21T09:00:00Z","commit":"9c1d0ab...","previous_commit":"3f2a9c1...","skills":13}
-```
 
 ## Exit codes
 

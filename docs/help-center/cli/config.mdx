@@ -90,7 +90,7 @@ agentx config enable cursor --place-all
   xlsx  symlink  ~/.cursor/skills/xlsx -> ~/.agents/skills/xlsx
 ```
 
-Each skill placed gets one row: its placement in Cursor's own skills directory. A skill Claude Code also holds is one row too, although Cursor reads Claude Code's skills directory as well; `--json` lists both paths.
+Each skill placed gets one row: its placement in Cursor's own skills directory. A skill Claude Code also holds is one row too, although Cursor reads Claude Code's skills directory as well.
 
 Each skill is placed as a symlink, except in a configuration where agentx already keeps a copy of it: that one gets a copy again, as with [`agentx skill place`](/cli/skill).
 
@@ -130,19 +130,6 @@ A client that reads the library directly, such as Codex, already sees every libr
 ✓ codex reads the library and already sees 2 skills; nothing was placed
   pdf   library  ~/.agents/skills/pdf
   xlsx  library  ~/.agents/skills/xlsx
-```
-
-## Script it
-
-Add `--json` to any `config` command to get a `settings` event with every setting as an object:
-
-```sh
-agentx --json config set auto_push true
-```
-
-```json
-{"type":"settings","schema_version":1,"settings":{"schema_version":1,"label":"work laptop","auto_push":true,"accept_operations":false,"ignore_system_files":true,"disabled_configurations":[],"sources":[],"copy_mode":{}}}
-{"type":"result","schema_version":1,"ok":true}
 ```
 
 ## Fix a broken file

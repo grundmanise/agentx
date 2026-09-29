@@ -1,11 +1,11 @@
 ---
 title: "Output and exit codes"
-description: "Read agentx output from a script and act on its exit codes."
+description: "Read agentx output, logs and exit codes."
 ---
 
 ## Text output
 
-Without `--json`, every command prints aligned text for you to read. Tables pad their columns, a row that reports a state starts with a glyph (`✓` ok, `!` warning, `✗` failure, `•` information), and a command that changes something confirms it on one line:
+Every command prints aligned text for you to read. Tables pad their columns, a row that reports a state starts with a glyph (`✓` ok, `!` warning, `✗` failure, `•` information), and a command that changes something confirms it on one line:
 
 ```text
 ✓ label is now work laptop
@@ -24,8 +24,6 @@ Paths are quoted instead of cleaned, so you can still copy one. A path holding a
     nasty  directory  user  "~/.claude/skills/na\033[31msty"
 ```
 
-Read any value exactly as it was written with `--json`, which escapes it instead of cleaning it.
-
 ## Colour
 
 Text output is coloured when it goes to a terminal. Each colour means one thing everywhere: green for ok and enabled, yellow for a warning, a hint and disabled, red for a failure and an error, blue for information, cyan for a key or a flag name, and dim for secondary detail.
@@ -37,43 +35,33 @@ agentx --color on doctor | less -R
 agentx --color off scan
 ```
 
-Set the `NO_COLOR` environment variable to any value to turn colour off in every terminal. `--json` output is never coloured.
-
-## JSON output
-
-Add `--json` before or after any command to get one JSON object per line on stdout. Every object has a `type` and an integer `schema_version`. The last line is always a `result` with `ok` set to `true` or `false`.
-
-```sh
-agentx --json version
-```
-
-Parse each line on its own. Read the exit code before trusting the output.
+Set the `NO_COLOR` environment variable to any value to turn colour off in every terminal.
 
 ## Logs
 
-Logs go to stderr, never to stdout. A line starting `warning:` is something to look at, and one starting `info:` is a note that asks nothing of you, such as a failure warned about earlier that has ended. Add `--verbose` to see debug lines too, such as which agentx home and library the command used. With `--json`, log lines are JSON objects too, and each one's `level` is `warn`, `info` or `debug`. More levels may be added later, so show one you do not know as it is written.
+Logs go to stderr, never to stdout. A line starting `warning:` is something to look at, and one starting `info:` is a note that asks nothing of you, such as a failure warned about earlier that has ended. Add `--verbose` to see debug lines too, such as which agentx home and library the command used.
 
-Some warnings put what to do on a second line, indented under the warning. With `--json`, such a warning is still one `log` event, and its `message` holds both lines joined by `; `.
+Some warnings put what to do on a second line, indented under the warning.
 
 ## Errors
 
-A failed command prints `error: ...` and, when there is a fix, `hint: ...` on stderr. With `--json` it emits an `error` event with `code`, `message` and `hint` instead, followed by a `result` with `ok: false`.
+A failed command prints `error: ...` and, when there is a fix, `hint: ...` on stderr.
 
 ## Exit codes
 
-| Exit code | Code | Meaning |
-|---|---|---|
-| 0 | `ok` | Success. |
-| 1 | `usage` | Unknown command, bad flag or missing argument. Run `agentx help`. |
-| 2 | `git` | Git is missing or older than 2.40. Install or upgrade git. |
-| 3 | `source` | A source is unreachable or authentication failed. |
-| 4 | `pending_merge` | A pending merge blocks the action, or `skill update` left one pending because [your edits conflict with the update](/cli/skill#when-your-edits-conflict), or found files of one still to resolve. |
-| 5 | `not_found` | The skill, source or configuration does not exist. |
-| 6 | `refused` | A collision or an unmet precondition. |
-| 7 | `locked` | Another agentx command is running. Retry when it finishes. |
-| 8 | `account_repo` | The account repo is unusable. |
-| 9 | `interrupted` | You stopped the run with Ctrl-C, or something sent it a `SIGTERM`. |
-| 10 | `internal` | An internal error. The message names the file or command involved. |
+| Exit code | Meaning |
+|---|---|
+| 0 | Success. |
+| 1 | Unknown command, bad flag or missing argument. Run `agentx help`. |
+| 2 | Git is missing or older than 2.40. Install or upgrade git. |
+| 3 | A source is unreachable or authentication failed. |
+| 4 | A pending merge blocks the action, or `skill update` left one pending because [your edits conflict with the update](/cli/skill#when-your-edits-conflict), or found files of one still to resolve. |
+| 5 | The skill, source or configuration does not exist. |
+| 6 | A collision or an unmet precondition. |
+| 7 | Another agentx command is running. Retry when it finishes. |
+| 8 | The account repo is unusable. |
+| 9 | You stopped the run with Ctrl-C, or something sent it a `SIGTERM`. |
+| 10 | An internal error. The message names the file or command involved. |
 
 ## Stop a run
 
@@ -102,3 +90,7 @@ Run agentx in the background from a script and Ctrl-C in that terminal leaves it
 | `AGENTX_LIBRARY` | `~/.agents/skills` | The library of skills agentx manages. |
 
 Set either to move that directory. `agentx` reads `HOME` and `XDG_CONFIG_HOME` to find your agent clients.
+
+## JSON output
+
+Add `--json` to any command to get one JSON object per line instead of text. The agentx desktop app reads this output; you do not need it to use agentx from a terminal.

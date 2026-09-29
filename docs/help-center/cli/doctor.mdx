@@ -68,25 +68,11 @@ In a terminal the rows are coloured by status: green for `ok`, yellow for `warn`
 
 Each row is `ok`, `warn`, `fail` or `info`, marked `✓`, `!`, `✗` or `•`. Every `warn` and `fail` row is listed again at the end under `<n> issues`, with its fix as a `hint:` line under the detail.
 
+Add `--verbose` to see every git command doctor ran and what git printed.
+
 ## Exit codes
 
 - `2`: git is missing or older than 2.40. The hint names the fix; on Ubuntu 22.04, which ships git 2.34, install a newer git or upgrade the distribution. Every other command except `version` refuses to run until git is fixed.
 - `8`: `account.git` in agentx home exists but is not a repository git can read. Check the directory, or move it aside.
 - `9`: you stopped the run with Ctrl-C. See [Output and exit codes](/cli/output).
 - `0`: everything else, warnings included.
-
-## Script it
-
-Add `--json` to get one `doctor` event per check with `check`, `status`, `detail` and, when there is a fix, `hint`:
-
-```sh
-agentx --json doctor
-```
-
-```json
-{"type":"doctor","schema_version":1,"check":"git","status":"ok","detail":"git 2.43.0"}
-{"type":"doctor","schema_version":1,"check":"lock","status":"warn","detail":"held by process 4242: /home/me/.agentx/lock","hint":"wait for it to finish"}
-{"type":"result","schema_version":1,"ok":true}
-```
-
-Add `--verbose` to see every git command doctor ran and what git printed.

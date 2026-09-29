@@ -89,27 +89,6 @@ Use `--yes` in scripts and wherever there is no terminal. Without it, and withou
 
 Import restores the settings and nothing else, so the sources it lists are not yet on the new machine. Until you add a source again, `agentx source fetch` and `agentx skill add` exit with code 5 and say the source was not fetched. They name the same `agentx source add` line, pin included, so following that hint keeps the pin too.
 
-## Script it
-
-Add `--json` to get events instead of text. Import needs `--yes` in JSON mode, since it cannot ask.
-
-```sh
-agentx --json export ~/agentx-export.json
-```
-
-```json
-{"type":"export","schema_version":1,"path":"/home/me/agentx-export.json","skills":12}
-{"type":"result","schema_version":1,"ok":true,"summary":"exported the settings and 12 lineage records to /home/me/agentx-export.json"}
-```
-
-```sh
-agentx --json import ~/agentx-export.json --yes
-```
-
-The run emits a `settings` event with the settings it wrote, then one `import_skill` event per record with its `state`, then `result`.
-
-A record names a version and never carries one. Its `base_hash` is the version the skill was installed at, the same field under the same name that `agentx skill list` reports. An export holds no `content_hash`: that name always means what a machine holds right now, and an export reads no library directory.
-
 ## When an import is refused
 
 | Exit code | Cause |

@@ -51,7 +51,7 @@ How to read it:
 
 In a terminal the names are bold, the block labels cyan, the kind and scope dim, `enabled` green, `(disabled)` yellow and a plugin marker magenta, so the names and states stand out from the paths.
 
-Skill names and server command lines come from files agentx did not write. agentx replaces any control characters in them with spaces, and prints a path that holds one in quotes with escapes; see [Output and exit codes](/cli/output). To read the values exactly as they are on disk, use `--json`.
+Skill names and server command lines come from files agentx did not write. agentx replaces any control characters in them with spaces, and prints a path that holds one in quotes with escapes; see [Output and exit codes](/cli/output).
 
 A configuration is detected when its configuration directory exists, such as `~/.claude` for Claude Code or `~/.cursor` for Cursor.
 
@@ -71,7 +71,7 @@ A client can read other clients' directories. Cursor reads `~/.claude/skills` an
 
 agentx reads the user-scope MCP configuration of Claude Code (`~/.claude.json`), Codex (`~/.codex/config.toml`), Cursor (`~/.cursor/mcp.json`), Gemini CLI (`~/.gemini/settings.json`), Windsurf (`~/.codeium/windsurf/mcp_config.json`) and GitHub Copilot (`~/.copilot/mcp-config.json`). Other clients contribute skills only.
 
-The inventory shows the command and arguments of a local server and the URL of a remote one. It never shows the values of environment variables or headers, in any output mode: a scan does not print your secrets. In JSON output only their names appear, as `env_keys` and `header_keys`.
+The inventory shows the command and arguments of a local server and the URL of a remote one. It never shows the values of environment variables or headers, so a scan does not print your secrets.
 
 The same server declared in two clients is one server with two occurrences: agentx recognises a remote server by its address and a local `npx`, `uvx`, `pipx` or `docker` server by its package or image, whatever the version. A server that cannot be identified that way is unique to this machine.
 
@@ -100,9 +100,9 @@ A handshake starts or connects to every MCP server and records the tools, prompt
 
 No environment value or header is ever printed.
 
-What a server exposed becomes its signature. Two servers with the same command or address but different tools get different signatures, so the inventory tells them apart; the same server declared in two clients with the same tools stays one server. In JSON output the node carries the `signature`, when it was taken as `signature_at`, and the `tools` list.
+What a server exposed becomes its signature. Two servers with the same command or address but different tools get different signatures, so the inventory tells them apart; the same server declared in two clients with the same tools stays one server.
 
-The signatures are kept in `handshakes.json` in agentx home. A later scan without `--handshake` shows them until the next handshake replaces them; each occurrence's `handshake` field says whether that scan handshook the server itself.
+The signatures are kept in `handshakes.json` in agentx home. A later scan without `--handshake` shows them until the next handshake replaces them.
 
 ### Fix a failed handshake
 
@@ -121,8 +121,6 @@ A server that fails its handshake shows no tool count. Its row says why, a warni
 | `command not found` | Check the command in the declaration. A bare name is looked up on your `PATH`. A relative path resolves against the declared `cwd`, else against the directory you run agentx in. |
 | `timed out` | Raise the budget, for example `AGENTX_HANDSHAKE_TIMEOUT=30s agentx scan --handshake`. |
 | `handshake failed` | The server exited or answered badly. Run its command or request its URL by hand. |
-
-In JSON output the occurrence carries `handshake_error` with `reason`, `message` and `hint`.
 
 ## Read the plugins
 
@@ -166,26 +164,3 @@ warning: /home/me/.qwen/skills: 3 broken symlinks (audit, polish, shape), skippe
 ```
 
 Delete the listed links to clear the warning.
-
-## Script it
-
-Add `--json` to get one `snapshot` event with the machine, every configuration, every skill, MCP server and plugin with its occurrences, the edges between them and the warnings.
-
-The snapshot also lists your library's skills under `library`, each as [`agentx skill list`](/cli/skill) reports it:
-
-- what agentx knows it as, and where it came from;
-- whether it was edited since it was installed;
-- whether a client's placement was replaced or is missing (`displaced`, `missing`);
-- whether its source is still added (`source removed` when it is not);
-- whether its source still holds it (`upstream removed` when the last update check found it gone);
-- the newer version the last update check found (`candidate`);
-- whether an update left a merge of your edits pending (`pending_merge`);
-- its placements, and the universal clients that see it whatever its placements.
-
-```sh
-agentx --json scan
-```
-
-If agentx cannot read its account repo, the scan still lists everything else, but `library` is empty and a warning names the repo and gives git's error. Read that error, run `agentx doctor`, and check the account repo the warning names: doctor does not catch every way a repo can break.
-
-Every node carries a stable identity, and two scans of an unchanged machine are byte-identical apart from `instance_id`. Set `AGENTX_INSTANCE_ID` to fix that too.

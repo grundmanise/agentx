@@ -21,7 +21,7 @@ agentx skill add anthropics/skills --skill pdf
   always available to universal clients: codex, gemini-cli
 ```
 
-Each row is one client's placement: the link or copy in its own skills directory, or the library entry itself for a client that reads the library. Cursor also reads Claude Code's skills directory, so it sees the skill there too; that path is Claude Code's row. `--json` lists every path each client sees the skill through.
+Each row is one client's placement: the link or copy in its own skills directory, or the library entry itself for a client that reads the library. Cursor also reads Claude Code's skills directory, so it sees the skill there too; that path is Claude Code's row.
 
 If the source is not on this machine yet, `skill add` adds it first, as [`agentx source add`](/cli/source) would. The source stays added even if the install then fails. Name the source by its URL for this: a source id only works for a source you already added.
 
@@ -147,8 +147,6 @@ Installing the skill again keeps and skips a copy you edited the same way, with 
 The summary counts the copy as a skipped placement. agentx does not record what a copy held when it placed it, so the warning does not say which side changed.
 
 To replace the copy with the library version, run the commands on the second line of the warning. Removing the copy deletes what it holds, so save anything you want to keep first. `--copy` makes the new placement a copy again, as agentx had recorded for that client. For a skill whose name starts with `-`, the commands put the name last, after `--`, for example `agentx skill remove --from cursor -- -pdf`.
-
-With `--json`, the warning is one `log` event whose `message` holds both lines, joined by `; `.
 
 ### What is left out of the import
 
@@ -405,7 +403,7 @@ index 0000000..2f1c9e0
 +My own notes.
 ```
 
-There is one diff per file, and every path is relative to the skill's directory. A file you moved shows as one deleted and one added. A skill that holds exactly its base version prints `pdf matches its base version at 3f2a9c1`. A file that is not UTF-8 text prints as the bytes it holds. Control characters other than the tab, such as the carriage return of a Windows line ending, print as a space, so nothing in a file can control your terminal. Use `--json` to get the patch exactly as git wrote it.
+There is one diff per file, and every path is relative to the skill's directory. A file you moved shows as one deleted and one added. A skill that holds exactly its base version prints `pdf matches its base version at 3f2a9c1`. A file that is not UTF-8 text prints as the bytes it holds. Control characters other than the tab, such as the carriage return of a Windows line ending, print as a space, so nothing in a file can control your terminal.
 
 The diff only reads your library: nothing is written to it. A file git ignores is never in the diff, and a file the skill's `.gitattributes` converts, for example to other line endings, is compared as git converts it: see [Files that do not count](#files-that-do-not-count).
 
@@ -750,75 +748,6 @@ This removes the worktree and whatever you resolved in it. Your library director
 - A skill that holds something git cannot record, such as a repository nested in it, stops with exit code 6 and names it: an update would discard it with no record of it anywhere. Move it out of the skill, then update again. With `--all` this skill is counted as not updated.
 
 With `--all`, a skill that is not updated does not stop the others: agentx names it and still updates the rest, then exits with the code those skills share, or 6 when they differ. A skill whose source you removed is skipped rather than counted, so it leaves the exit code at 0.
-
-## Script it
-
-Add `--json` to get one `library_skill` event per skill:
-
-```sh
-agentx --json skill list
-```
-
-```json
-{"type":"library_skill","schema_version":1,"name":"pdf","kind":"managed","source":"https://github.com/anthropics/skills","subpath":"skills/pdf","upstream_commit":"3f2a9c1e...","base_hash":"9a8b7c6d...","content_hash":"9a8b7c6d...","state":"current","placements":[{"configuration":"claude-code","path":"/home/me/.claude/skills/pdf","mode":"symlink","kind":"symlink"},{"configuration":"codex","path":"/home/me/.agents/skills/pdf","mode":"library","kind":"library"},{"configuration":"cursor","path":"/home/me/.claude/skills/pdf","mode":"symlink","kind":"symlink"},{"configuration":"cursor","path":"/home/me/.cursor/skills/pdf","mode":"symlink","kind":"symlink"},{"configuration":"gemini-cli","path":"/home/me/.agents/skills/pdf","mode":"library","kind":"library"}],"universal":["codex","gemini-cli"]}
-{"type":"result","schema_version":1,"ok":true}
-```
-
-`placements` lists every path each client sees the skill through, so Cursor, which also reads Claude Code's skills directory, appears twice. The text of `skill list` counts Cursor once, and that of `skill add` and `skill place` shows one row per client.
-
-`skill place` and `skill remove --from <client>` emit one `library_skill` event too, whose placements are what the rescan found in the clients the command covered; `skill remove` without `--from`, or with `--from universal`, emits none, the skill being gone. `skill add` emits a `source` event for the source it installed from, whose `last_fetched` says when it was fetched, then a `progress` event per step per skill (`blobs`, `import` and `install`), then one for the `rescan` at the end, then one `library_skill` event per skill it installed, then `result` with a one-line summary. `total` counts the steps the run planned; a skill it has to skip takes its remaining steps out of that count, so the run always ends on its total.
-
-`universal` lists every universal client on this machine, whether or not the command placed into it, and is `[]` when none is installed. `skill add` and `skill place` end their `result` summary with the same `always available to universal clients:` words as their text. After `--force`, the summary of `skill place` adds `; discarded what <path>, ... held` before them, naming every directory it discarded.
-
-The event carries two content hashes at its top level: `base_hash` is the version the skill was installed at, and `content_hash` is what the library directory holds now. Both names mean the same at the top level of every event and snapshot entry agentx emits; inside `candidate`, described below, `content_hash` names the newer version instead. `state` compares the files themselves, their permissions and symlinks included, so a skill whose only change is a file made executable is `modified` while its two hashes still agree.
-
-`drift` lists every other way a managed skill has drifted, beside its `state`, and is absent when there is none. Its values are `displaced`, `missing`, `source removed` and `upstream removed`:
-
-```json
-{"type":"library_skill","schema_version":1,"name":"docx","kind":"managed","source":"https://github.com/me/skills","subpath":"docx","upstream_commit":"8b1e0f4a...","base_hash":"5e4d3c2b...","content_hash":"0f9e8d7c...","state":"modified","drift":["source removed"],"placements":[...],"universal":["codex","gemini-cli"]}
-```
-
-Read `drift` as a list: more values will join it, and a skill can be in several at once. The snapshot of [`agentx scan`](/cli/scan) and [`agentx serve`](/cli/serve) lists every library skill the same way, under `library`, and `agentx serve` tells you when a skill's state changes, see [Drift](/cli/serve#drift).
-
-`skill diff` emits one `diff` event per file, sorted by path, with the file's `path` relative to the skill's directory, its `status` (`added`, `modified` or `deleted`) and the `patch` git wrote for it:
-
-```json
-{"type":"diff","schema_version":1,"name":"pdf","path":"notes.md","status":"added","patch":"diff --git a/notes.md b/notes.md\nnew file mode 100644\n..."}
-```
-
-`path` and `patch` are JSON strings, which hold UTF-8 only: a byte that is not valid UTF-8, in a file name or in a file that is not UTF-8 text, arrives as `U+FFFD`. Such a patch is for display; the text output prints the bytes as they are.
-
-`skill revert` emits one `library_skill` event for the skill, with every placement, as `skill list` does.
-
-A skill with an update carries `candidate`, the newer version the last check found, by its own `upstream_commit` and `content_hash`. Inside `candidate` both name that newer version, not the version you installed and not what the library holds:
-
-```json
-{"type":"library_skill","schema_version":1,"name":"pdf","kind":"managed",...,"state":"current","candidate":{"upstream_commit":"8b1e0f4a...","content_hash":"4c3b2a19..."},"placements":[...],"universal":["codex","gemini-cli"]}
-```
-
-`skill check` emits a `progress` event per source it fetched, then one `update_available` event per skill with an update, sorted by name, then `result`:
-
-```json
-{"type":"update_available","schema_version":1,"name":"pdf","kind":"managed","source":"https://github.com/anthropics/skills","subpath":"skills/pdf","base_hash":"9a8b7c6d...","upstream_commit":"3f2a9c1e...","candidate":"5e1f0a2b...","candidate_hash":"4c3b2a19...","candidate_upstream_commit":"8b1e0f4a...","files":[{"path":"SKILL.md","status":"modified"},{"path":"forms.md","status":"added"}]}
-```
-
-`upstream_commit` and `base_hash` are the version you have, `candidate_upstream_commit` and `candidate_hash` the newer one, and `candidate` the commit agentx recorded for it, the one installing that version would write. `files` lists what the update changes, in the words of `skill diff`. `upstream_name` appears when the newer version names the skill otherwise; the skill keeps its name. `skill diff --update` emits one `diff` event per file.
-
-`skill update` emits one `library_skill` event per skill it updated, sorted by name, with every placement, as `skill list` does. The updated skill has no `candidate`, and its `upstream_commit` and `base_hash` now name the version it was updated to; a skill whose edits were merged is still `modified`. The `result` summary says what the run did, as in `updated pdf from 3f2a9c1 to 8b1e0f4, 1 copy placement refreshed`, `updated docx from 3f2a9c1 to 8b1e0f4 and merged its edits cleanly`, or with `--all`, `updated 2 skills, 1 edited skill merged cleanly, 1 copy placement refreshed`, which adds up what the update did to the copies of every skill and ends with the skills it skipped, as in `1 skill from a removed source skipped`.
-
-For each skill whose edits conflict with its update, `skill update` emits one `conflict` event after the `library_skill` events, then the `error`:
-
-```json
-{"type":"conflict","schema_version":1,"name":"docx","kind":"managed","base":"5e1f0a2b...","mine":"a4c3d2e1...","theirs":"9f8e7d6c...","files":[{"path":"SKILL.md","base":"1a2b3c4d...","mine":"5e6f7a8b...","theirs":"9c0d1e2f..."},{"path":"logo.png","base":"3b4c5d6e...","mine":"7f8a9b0c...","theirs":"1d2e3f4a..."}]}
-```
-
-`base`, `mine` and `theirs` at the top are the three versions merged: the commit of the version you installed, your library directory as git records it, without the files your ignore rules name, and the update. They are the base, the `HEAD` and the `MERGE_HEAD` of the merge in `~/.agentx/merges/<name>`. Each file is one that conflicts there and names the blob each version holds, `null` for one that has no file there: to show a file, feed two of its versions to a diff tool. Every `path` is a path of the skill, relative to its directory.
-
-A skill with a merge pending carries `pending_merge: true` in its `library_skill` event and in the snapshot:
-
-```json
-{"type":"library_skill","schema_version":1,"name":"docx","kind":"managed",...,"state":"modified","candidate":{"upstream_commit":"8b1e0f4a...","content_hash":"4c3b2a19..."},"pending_merge":true,"placements":[...],"universal":["codex","gemini-cli"]}
-```
 
 ## Where it is recorded
 
