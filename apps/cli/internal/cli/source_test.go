@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -271,7 +270,7 @@ func TestSourceAddRefetchesWhenTheServerRefusesSingleObjects(t *testing.T) {
 	equal(t, "skills", len(skills), 2)
 	equal(t, "skills[0]", skills[0]["name"], "alpha")
 	equal(t, "skills[1]", skills[1]["name"], "beta")
-	if n := loggedFetches(out.stderr); n != 0 {
+	if n := fetches(out.stderr); n != 0 {
 		t.Errorf("source skills ran %d git fetches; it must read the account repo alone", n)
 	}
 }
@@ -364,20 +363,6 @@ func TestSourceAddKeepsAnAliasOnReAdd(t *testing.T) {
 	equal(t, "settings pin after the fetch", entry["pin"], "v1")
 }
 
-// loggedFetches is fetches for the verbose stderr of a --json run as well,
-// where every debug line is a log event rather than a line of text.
-func loggedFetches(stderr string) int {
-	n := fetches(stderr)
-	for _, line := range strings.Split(stderr, "\n") {
-		var e struct{ Level, Message string }
-		if json.Unmarshal([]byte(line), &e) == nil && e.Level == "debug" &&
-			strings.HasPrefix(e.Message, "git ") && strings.Contains(e.Message, " fetch --") {
-			n++
-		}
-	}
-	return n
-}
-
 // TestSourceSkills lists a source whose add was scoped to one subpath. The
 // subpath scopes that one listing: the add brings every SKILL.md of the
 // source, so every later listing, wider, narrower or by id, is answered
@@ -402,13 +387,13 @@ func TestSourceSkills(t *testing.T) {
 	src, _ := sourceEvents(t, h.events(out.stdout))
 	equal(t, "subpath", src["subpath"], "skills/alpha")
 	equal(t, "skills", src["skills"], float64(2))
-	equal(t, "fetches during the add", loggedFetches(out.stderr), 2)
+	equal(t, "fetches during the add", fetches(out.stderr), 2)
 
 	// list runs source skills and fails if it reached the network.
 	list := func(args ...string) outcome {
 		t.Helper()
 		out := h.run(append([]string{"--verbose"}, args...)...)
-		if n := loggedFetches(out.stderr); n != 0 {
+		if n := fetches(out.stderr); n != 0 {
 			t.Errorf("source skills %v ran %d git fetches; it must read the account repo alone", args, n)
 		}
 		return out
