@@ -103,7 +103,8 @@ form:
 New issues are labelled `needs-triage` until a maintainer looks at them.
 
 Don't report a security vulnerability in a public issue.
-[Report it privately](https://github.com/grundmanise/agentx/security/advisories/new) instead.
+[Report it privately](https://github.com/grundmanise/agentx/security/advisories/new) instead, as the
+[security policy](SECURITY.md) describes.
 
 ## License
 
