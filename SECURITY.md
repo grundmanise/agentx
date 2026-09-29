@@ -23,8 +23,8 @@ Include as much of this as you can:
 
 - We acknowledge your report within 7 days.
 - We keep you updated while we investigate and fix it.
-- Once a fix is released, we publish a security advisory when the issue affects users, and credit you in
-  it, unless you'd rather stay anonymous.
+- Once a fix is released, we publish a security advisory and credit you, unless you'd rather stay
+  anonymous.
 
 Please give us a reasonable time to release a fix before you disclose the vulnerability publicly.
 
