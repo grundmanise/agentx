@@ -96,6 +96,11 @@ Other agents support skills management only at this time.
 | [`docs/spec`](docs/spec) | Contracts & Specs |
 | [`docs/help-center`](docs/help-center) | User documentation |
 
+## Contributing
+
+Contributions are welcome. Read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a pull request, and
+follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## Development
 
 `make check` runs what CI runs on every pull request, in the same order, against the Go module in
