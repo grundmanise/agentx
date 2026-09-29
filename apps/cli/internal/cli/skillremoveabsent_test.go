@@ -17,12 +17,22 @@ import (
 // placements are what is left of the skill.
 func absentHarness(t *testing.T) (h *harness, claude, cursor string) {
 	t.Helper()
-	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
-	h.mustRun("skill", "remove", "alpha", "--from", "cursor")
-	h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
-	remove(t, filepath.Join(h.library, "alpha"))
+	h, _, _ = absentHome.copy(t)
 	return h, filepath.Join(h.home, ".claude", "skills", "alpha"), filepath.Join(h.home, ".cursor", "skills", "alpha")
+}
+
+// absentHome is the home absentHarness hands out.
+var absentHome = &fixtureHome{
+	source: installHome.source,
+	dirs:   installHome.dirs,
+	build: func(h *harness, s *sourceRepo) []string {
+		installHome.build(h, s)
+		h.mustRun("skill", "add", s.url, "--skill", "alpha")
+		h.mustRun("skill", "remove", "alpha", "--from", "cursor")
+		h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
+		remove(h.t, filepath.Join(h.library, "alpha"))
+		return nil
+	},
 }
 
 // refValue is what a ref of the account repo holds, empty when it holds

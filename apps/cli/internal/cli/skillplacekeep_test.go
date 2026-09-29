@@ -20,9 +20,19 @@ import (
 // library entry itself for Codex and Gemini CLI.
 func everywhereHarness(t *testing.T) (h *harness, lib, claude, cursor string) {
 	t.Helper()
-	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h, _, _ = everywhereHome.copy(t)
 	return h, filepath.Join(h.library, "alpha"), filepath.Join(h.home, ".claude", "skills", "alpha"), filepath.Join(h.home, ".cursor", "skills", "alpha")
+}
+
+// everywhereHome is the home everywhereHarness hands out.
+var everywhereHome = &fixtureHome{
+	source: installHome.source,
+	dirs:   installHome.dirs,
+	build: func(h *harness, s *sourceRepo) []string {
+		installHome.build(h, s)
+		h.mustRun("skill", "add", s.url, "--skill", "alpha")
+		return nil
+	},
 }
 
 // displace replaces the placement at place with a real directory holding a
