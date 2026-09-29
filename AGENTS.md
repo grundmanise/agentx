@@ -14,11 +14,9 @@ Single-context: `CONTEXT.md` at the root, ADRs in `docs/adr/`, specs in `docs/sp
 
 ## Help center
 
-Mintlify is used for the user-facing documentation. Keep the Help Center up to date. Whenever there's a new feature or a change in functionality, update the relevant user-facing documentation in `docs/help-center`. Keep the language clear, structured, and concise. Use an imperative tone.
+Keep the Help Center up to date. Whenever there's a new feature or a change in functionality, update the relevant user-facing documentation in `docs/help-center`. Keep the language clear, structured, and concise. Use an imperative tone.
 
-Mintlify publishes every file under `docs/help-center`, whether or not `docs.json` lists it, so treat anything you add there as public.
-
-Mention `--json` only briefly in the help center: the desktop app reads it, and `docs/spec/cli-contract.md` defines its events.
+Mintlify publishes every file under `docs/help-center`, so treat anything you add there as public.
 
 Mintlify spellchecks the pages a PR changes. When it flags a product term, add the term to `docs/help-center/styles/config/vocabularies/agentx/accept.txt`.
 
