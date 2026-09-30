@@ -3,6 +3,8 @@
   "theme": "mint",
   "name": "agentx",
   "description": "The inventory manager for your agents. View, manage and sync skills, MCP servers and plugins across machines.",
+  "favicon": "/favicon.svg",
+  "logo": "/logo.svg",
   "colors": {
     "primary": "#d4ff4f",
     "light": "#d4ff4f",
