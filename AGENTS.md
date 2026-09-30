@@ -39,6 +39,8 @@ Before adding a test, find the one that already covers the path, and extend it i
 
 PR and commit titles should follow the conventional commit format. We squash merge PRs, so the first commit message becomes the PR title.
 
+The type decides the release notes section: `feat` for something new, `change` for a change to how an existing feature behaves, `fix` for a bug fix. See "Release notes" in `CONTRIBUTING.md`.
+
 ### Descriptions
 
 PR and commit descriptions should use an imperative style and provide a clear, concise summary of the changes made. They should focus on how the changes affect end users – what changed and why – rather than on how it was implemented, unless that’s essential for understanding the changes.

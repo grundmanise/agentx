@@ -33,6 +33,7 @@ cd agentx
 | [`docs/adr`](docs/adr) | Architecture decisions |
 | [`docs/spec`](docs/spec) | Contracts and specs, such as the CLI's output contract |
 | [`docs/help-center`](docs/help-center) | The user documentation, built with Mintlify |
+| [`scripts/install.sh`](scripts/install.sh), [`packaging`](packaging) | The install script and the Homebrew formula template |
 
 Read the ADRs and specs that touch the area you're changing before you start.
 
@@ -77,7 +78,8 @@ CI alike. The build uses the Go version `apps/cli/go.mod` specifies.
   `feat/source-removed-drift`.
 - **Title**: use the [Conventional Commits](https://www.conventionalcommits.org/) format, such as
   `feat(skill): check managed skills for upstream updates`. Pull requests are squash
-  merged, so the title becomes the commit on `main`.
+  merged, so the title becomes the commit on `main`, and its type decides where the change appears in
+  the [release notes](#release-notes).
 - **Description**: in an imperative style, summarize what changed for users and why. Describe the
   implementation only where it's needed to understand the change. For how to write a good commit
   message, read [How to Write a Git Commit Message](https://cbea.ms/git-commit/); where its rules for
@@ -88,6 +90,23 @@ CI alike. The build uses the Go version `apps/cli/go.mod` specifies.
   suitable punctuation.
 
 Keep each pull request to one change. A maintainer reviews it once CI is green.
+
+### Release notes
+
+The release notes list the commits that change `apps/cli`, by the type of their title:
+
+| Type | Section |
+| --- | --- |
+| `feat`: a new command, flag or capability | New |
+| `change`: a change to how an existing feature behaves or reads | Changes |
+| `perf`, `revert` | Changes |
+| `fix` | Fixes |
+| `docs`, `test`, `refactor`, `style`, `chore`, `ci` | Left out |
+
+A breaking change, marked `!` after the type or with a `BREAKING CHANGE:` footer, is marked
+**Breaking:** in its section, and listed under Changes if its type is one that is left out, such as
+`refactor!`. The title's description becomes the entry, so write it for someone who uses agentx. Preview the notes with [git-cliff](https://git-cliff.org):
+`git cliff v0.1.0..main`.
 
 ## Open an issue
 
@@ -107,6 +126,40 @@ New issues are labelled `needs-triage` until a maintainer looks at them.
 Don't report a security vulnerability in a public issue.
 [Report it privately](https://github.com/grundmanise/agentx/security/advisories/new) instead, as the
 [security policy](SECURITY.md) describes.
+
+## Releases
+
+Maintainers release through the Release workflow in
+[`.github/workflows/release.yml`](.github/workflows/release.yml). Every release builds the CLI for
+Linux and macOS on amd64 and arm64 and publishes the archives and their checksums to
+[GitHub Releases](https://github.com/grundmanise/agentx/releases).
+
+- **Nightly**: every night at 03:17 UTC, the workflow releases the head of `main` as a prerelease, such
+  as `v0.3.0-nightly.20261001`, when `apps/cli` changed since the last nightly and CI passed on it. The
+  version is the next release the commits call for: a breaking change bumps the minor version (the
+  major from 1.0 on), a `feat` or `change` the minor, anything else the patch. The 14 newest nightlies
+  are kept.
+- **Stable**: run the Release workflow from the Actions tab. By default it promotes the newest nightly:
+  it tags that nightly's commit, such as `v0.3.0`, and builds it again, so `agentx version` prints the
+  release version. Give `ref` to release another nightly, a commit or `main`, and `version` to choose
+  the version. The workflow refuses a commit that isn't on `main`, is older than the latest release or
+  hasn't passed CI. It then updates the Homebrew formula.
+
+The install script is served from `https://agentx.wtf/install`, which redirects to
+[`scripts/install.sh`](scripts/install.sh) on `main`. The Homebrew formula lives in
+[grundmanise/homebrew-tap](https://github.com/grundmanise/homebrew-tap), generated from
+[`packaging/homebrew/agentx.rb`](packaging/homebrew/agentx.rb). To let the workflow push it, create a
+deploy key once:
+
+1. Run `ssh-keygen -t ed25519 -N "" -C "agentx release" -f homebrew_tap`.
+2. In `grundmanise/homebrew-tap`, go to **Settings > Deploy keys**, add the contents of
+   `homebrew_tap.pub` and select **Allow write access**.
+3. In this repository, go to **Settings > Secrets and variables > Actions** and add a secret named
+   `HOMEBREW_TAP_DEPLOY_KEY` with the contents of `homebrew_tap`.
+4. Delete both files.
+
+Without the secret, a stable release skips the formula with a warning. To publish the formula for that
+release later, re-run the Publish job of its workflow run once the secret is added.
 
 ## License
 

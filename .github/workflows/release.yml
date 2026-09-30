@@ -1,0 +1,294 @@
+name: Release
+
+# Nightly: every night, a prerelease of main, when the CLI changed since the last nightly.
+# Stable: run by hand from the Actions tab. It promotes a nightly, or another commit on
+# main, by tagging that commit vX.Y.Z and building it again with the stable version.
+# See "Releases" in CONTRIBUTING.md.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: "stable releases a nightly as vX.Y.Z; nightly publishes main now"
+        type: choice
+        options: [stable, nightly]
+        default: stable
+      ref:
+        description: "Stable only: the nightly tag or commit to release. Empty: the newest nightly"
+        required: false
+      version:
+        description: "Stable only: the version, such as 0.2.0. Empty: the version the commits call for"
+        required: false
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  GIT_CLIFF_VERSION: 2.14.2
+  GIT_CLIFF_SHA512: 26d1f7c8ea2400f2ccb0b2e7f321635f600b583bf4cd1f7afaa5e8c24068ad1088a2504e0a4d9f4333d4bb20a80329327d9462634343ee3af91e1a7fbdc6f18a
+
+jobs:
+  plan:
+    name: Plan
+    # Forks don't publish.
+    if: github.repository == 'grundmanise/agentx'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read # CI results of the commit to release
+    outputs:
+      publish: ${{ steps.plan.outputs.publish }}
+      channel: ${{ steps.plan.outputs.channel }}
+      sha: ${{ steps.plan.outputs.sha }}
+      version: ${{ steps.plan.outputs.version }}
+      tag: ${{ steps.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install git-cliff
+        run: |
+          archive=git-cliff-$GIT_CLIFF_VERSION-x86_64-unknown-linux-gnu.tar.gz
+          curl -fsSLO "https://github.com/orhun/git-cliff/releases/download/v$GIT_CLIFF_VERSION/$archive"
+          echo "$GIT_CLIFF_SHA512  $archive" | sha512sum -c -
+          tar -xzf "$archive"
+          sudo install "git-cliff-$GIT_CLIFF_VERSION/git-cliff" /usr/local/bin/git-cliff
+
+      - name: Choose the commit, version and notes
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # A scheduled run has no inputs, so it is a nightly.
+          CHANNEL: ${{ inputs.channel || 'nightly' }}
+          REF: ${{ inputs.ref }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          skip() { echo "::notice title=Nothing released::$1"; echo "publish=false" >> "$GITHUB_OUTPUT"; exit 0; }
+          fail() { echo "::error title=Release refused::$1"; exit 1; }
+          stable_tag() { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; }
+          ci_passed() {
+            [ "$(gh run list --workflow ci.yml --commit "$1" --event push --limit 1 --json conclusion --jq '.[0].conclusion // ""')" = success ]
+          }
+
+          latest_stable=$(git tag --list 'v*' --sort=-v:refname | stable_tag | sed -n 1p)
+          latest_nightly=$(git tag --list 'v*-nightly.*' --sort=-v:refname | sed -n 1p)
+
+          # The version after the latest stable release, from the types of the CLI commits
+          # up to $1: a breaking change bumps the major version (the minor before 1.0), a
+          # feat or change the minor, anything else the patch.
+          next_version() {
+            current=${latest_stable#v}
+            IFS=. read -r major minor patch <<< "${current:-0.0.0}"
+            log=$(git log --format='%s%n%b' ${latest_stable:+"$latest_stable.."}"$1" -- apps/cli)
+            breaking='^[a-z]+(\([^)]*\))?!:|^BREAKING[ -]CHANGE:'
+            if [ "$major" -gt 0 ] && grep -qE "$breaking" <<< "$log"; then
+              echo "$((major + 1)).0.0"
+            elif grep -qE "$breaking|^(feat|change)(\([^)]*\))?:" <<< "$log"; then
+              echo "$major.$((minor + 1)).0"
+            else
+              echo "$major.$minor.$((patch + 1))"
+            fi
+          }
+
+          if [ "$CHANNEL" = nightly ]; then
+            sha=$(git rev-parse origin/main)
+            short=$(git rev-parse --short "$sha")
+            if [ -n "$latest_nightly" ] && git diff --quiet "$latest_nightly" "$sha" -- apps/cli; then
+              skip "the CLI has not changed since $latest_nightly"
+            fi
+            released=$(git tag --points-at "$sha" | stable_tag)
+            [ -z "$released" ] || skip "$short is already released as $released"
+            ci_passed "$sha" || skip "CI has not passed on $short, the head of main"
+            version=$(next_version "$sha")-nightly.$(date -u +%Y%m%d)
+            tag=v$version
+            if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then
+              skip "$tag already exists, the next nightly runs tomorrow"
+            fi
+            previous=${latest_nightly:-$latest_stable}
+          else
+            ref=${REF:-$latest_nightly}
+            [ -n "$ref" ] || fail "there is no nightly to promote yet: pass main or a commit as ref"
+            sha=$(git rev-parse -q --verify "$ref^{commit}" || git rev-parse -q --verify "origin/$ref^{commit}") ||
+              fail "$ref is not a tag, branch or commit"
+            short=$(git rev-parse --short "$sha")
+            git merge-base --is-ancestor "$sha" origin/main || fail "$short is not on main"
+            released=$(git tag --points-at "$sha" | stable_tag)
+            [ -z "$released" ] || fail "$short is already released as $released"
+            if [ -n "$latest_stable" ]; then
+              git merge-base --is-ancestor "$latest_stable" "$sha" || fail "$short is older than $latest_stable"
+              if git diff --quiet "$latest_stable" "$sha" -- apps/cli; then fail "the CLI has not changed since $latest_stable"; fi
+            fi
+            ci_passed "$sha" || fail "CI has not passed on $short"
+            version=${VERSION#v}
+            version=${version:-$(next_version "$sha")}
+            [[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "$version is not a version such as 0.2.0"
+            tag=v$version
+            if git rev-parse -q --verify "refs/tags/$tag" > /dev/null; then fail "$tag already exists"; fi
+            if [ -n "$latest_stable" ] && [ "$(printf '%s\n' "$latest_stable" "$tag" | sort -V | tail -n1)" != "$tag" ]; then
+              fail "$tag is not newer than $latest_stable"
+            fi
+            previous=$latest_stable
+          fi
+
+          # The notes cover the commits since the previous release of this channel, or the
+          # whole history for the first, grouped by this run's cliff.toml.
+          cp cliff.toml "$RUNNER_TEMP/cliff.toml"
+          git checkout -q "$sha"
+          {
+            if [ "$CHANNEL" = nightly ]; then
+              echo "Nightly build of main at $short. Install it with \`curl -fsSL https://agentx.wtf/install | sh -s -- --nightly\`."
+              echo
+            fi
+            notes=$(git-cliff --config "$RUNNER_TEMP/cliff.toml" ${previous:+"$previous..HEAD"} | sed '/./,$!d')
+            echo "${notes:-No user-facing changes.}"
+            if [ -n "$previous" ]; then
+              echo
+              echo "**Full changelog**: https://github.com/$GITHUB_REPOSITORY/compare/$previous...$tag"
+            fi
+          } > "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md" >> "$GITHUB_STEP_SUMMARY"
+
+          {
+            echo "publish=true"
+            echo "channel=$CHANNEL"
+            echo "sha=$sha"
+            echo "version=$version"
+            echo "tag=$tag"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v7
+        if: steps.plan.outputs.publish == 'true'
+        with:
+          name: notes
+          path: ${{ runner.temp }}/notes.md
+          if-no-files-found: error
+
+  build:
+    name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+    needs: plan
+    if: needs.plan.outputs.publish == 'true'
+    strategy:
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64, runner: ubuntu-latest }
+          - { goos: linux, goarch: arm64, runner: ubuntu-latest }
+          - { goos: darwin, goarch: amd64, runner: macos-latest }
+          - { goos: darwin, goarch: arm64, runner: macos-latest }
+    runs-on: ${{ matrix.runner }}
+    env:
+      NAME: agentx_${{ matrix.goos }}_${{ matrix.goarch }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: apps/cli/go.mod
+          cache-dependency-path: apps/cli/go.sum
+
+      # Static on Linux; cgo on macOS for the FSEvents watcher, as in the Makefile.
+      # Both macOS architectures build on one runner: Go passes -arch to clang.
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: ${{ matrix.goos == 'darwin' && '1' || '0' }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          COPYFILE_DISABLE: 1 # no AppleDouble files in the macOS archives
+        run: |
+          mkdir -p "dist/$NAME"
+          (cd apps/cli && go build -trimpath \
+            -ldflags "-s -w -X github.com/grundmanise/agentx/apps/cli/internal/cli.cliVersion=$VERSION" \
+            -o "../../dist/$NAME/agentx" .)
+          cp LICENSE README.md "dist/$NAME/"
+          tar -C "dist/$NAME" -czf "dist/$NAME.tar.gz" agentx LICENSE README.md
+
+      - name: Check the version it reports
+        if: matrix.goarch == (runner.arch == 'ARM64' && 'arm64' || 'amd64')
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          "dist/$NAME/agentx" version --json | tee /dev/stderr | grep -F "\"cli_version\":\"$VERSION\""
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.NAME }}
+          path: dist/${{ env.NAME }}.tar.gz
+          if-no-files-found: error
+
+  publish:
+    name: Publish
+    needs: [plan, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      CHANNEL: ${{ needs.plan.outputs.channel }}
+      SHA: ${{ needs.plan.outputs.sha }}
+      TAG: ${{ needs.plan.outputs.tag }}
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      # Creating the release creates the tag at the commit. A tag pushed with this
+      # workflow's token starts no other workflow, which is why the build runs above.
+      # A re-run of this job finds the release and goes on to the steps below.
+      - name: Publish the release
+        working-directory: dist
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "::notice title=Already published::$TAG"
+            exit 0
+          fi
+          sha256sum agentx_*.tar.gz > checksums.txt
+          if [ "$CHANNEL" = nightly ]; then latest=(--prerelease --latest=false); else latest=(--latest); fi
+          gh release create "$TAG" agentx_*.tar.gz checksums.txt \
+            --target "$SHA" --title "$TAG" --notes-file notes.md "${latest[@]}"
+
+      # The formula lives in grundmanise/homebrew-tap, which this workflow's token cannot
+      # write to. A deploy key with write access to that one repository can.
+      - name: Update the Homebrew formula
+        if: env.CHANNEL == 'stable'
+        env:
+          DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
+        run: |
+          if [ -z "$DEPLOY_KEY" ]; then
+            echo "::warning title=Homebrew formula not updated::add the HOMEBREW_TAP_DEPLOY_KEY secret, see Releases in CONTRIBUTING.md"
+            exit 0
+          fi
+          source_sha=$(curl -fsSL "https://github.com/$GH_REPO/archive/refs/tags/$TAG.tar.gz" | sha256sum | cut -d' ' -f1)
+          mkdir -p ~/.ssh
+          gh api meta --jq '.ssh_keys[] | "github.com " + .' > ~/.ssh/known_hosts
+          (umask 077 && printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/homebrew_tap)
+          export GIT_SSH_COMMAND="ssh -i $HOME/.ssh/homebrew_tap -o IdentitiesOnly=yes"
+          git clone --depth 1 git@github.com:grundmanise/homebrew-tap.git "$RUNNER_TEMP/tap"
+          mkdir -p "$RUNNER_TEMP/tap/Formula"
+          sed -e "s/@VERSION@/$VERSION/g" -e "s/@SHA256@/$source_sha/g" packaging/homebrew/agentx.rb > "$RUNNER_TEMP/tap/Formula/agentx.rb"
+          cd "$RUNNER_TEMP/tap"
+          git add Formula/agentx.rb
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -m "agentx $VERSION"
+          git push origin HEAD:main
+
+      - name: Keep the 14 newest nightlies
+        if: env.CHANNEL == 'nightly'
+        run: |
+          gh release list --limit 100 --json tagName,createdAt \
+            --jq '[.[] | select(.tagName | contains("-nightly."))] | sort_by(.createdAt) | reverse | .[14:][].tagName' |
+            while read -r tag; do gh release delete "$tag" --cleanup-tag --yes; done

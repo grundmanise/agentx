@@ -1,0 +1,33 @@
+# Release notes for the CLI, written by git-cliff in .github/workflows/release.yml.
+# The commit type picks the section: see "Release notes" in CONTRIBUTING.md.
+# Preview the notes for a range: git cliff v0.1.0..main
+
+[changelog]
+body = """
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim }}
+{% for commit in commits %}
+- {% if commit.breaking %}**Breaking:** {% endif %}{{ commit.message | split(pat="\n") | first | trim | upper_first }}\
+{% endfor %}
+{% endfor %}
+"""
+trim = true
+
+[git]
+# Only commits that change the CLI.
+include_paths = ["apps/cli/**"]
+# The workflow passes the range since the previous release, so a tag inside it,
+# such as a stable release among nightlies, doesn't split the list.
+ignore_tags = ".*"
+conventional_commits = true
+filter_unconventional = true
+filter_commits = true
+sort_commits = "oldest"
+commit_parsers = [
+  { message = "^feat", group = "<!-- 0 -->New" },
+  { message = "^(change|perf|revert)", group = "<!-- 1 -->Changes" },
+  { message = "^fix", group = "<!-- 2 -->Fixes" },
+  # A breaking change of any other type, such as refactor!, is listed under Changes.
+  { field = "breaking", pattern = "true", group = "<!-- 1 -->Changes" },
+  { message = ".*", skip = true },
+]

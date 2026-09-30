@@ -16,14 +16,19 @@ description: "The inventory manager for your agents. View, manage and sync skill
 
 ## Install
 
-There are no binary releases yet. Build from source with Go 1.27 or later:
+Install with Homebrew on macOS or Linux:
 
 ```sh
-git clone https://github.com/grundmanise/agentx.git
-cd agentx/apps/cli && go build -o agentx .
+brew install grundmanise/tap/agentx
 ```
 
-agentx also needs `git` 2.40 or later on your `PATH`. Run [`agentx doctor`](/cli/doctor) to check that this machine is ready.
+Or install the latest release with the install script:
+
+```sh
+curl -fsSL https://agentx.wtf/install | sh
+```
+
+agentx also needs `git` 2.40 or later on your `PATH`. Run [`agentx doctor`](/cli/doctor) to check that this machine is ready. See [Install and update](/install) for nightly builds, updates and building from source.
 
 ## See what your agents have
 
