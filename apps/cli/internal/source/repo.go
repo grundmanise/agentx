@@ -222,7 +222,7 @@ func Fetch(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listin
 		drop := "delete " + staging + "\ndelete " + StagingRef(id) + "\n"
 		_, _ = r.IsolatedInput(context.WithoutCancel(ctx), gitDir, strings.NewReader(drop), "update-ref", "--stdin")
 	}()
-	if _, err := r.User(ctx, gitDir, append(fetchArgs, noRefmap, "--filter=blob:none", name, refspec)...); err != nil {
+	if _, err := r.User(ctx, gitDir, append(append(promisor(name), fetchArgs...), noRefmap, "--filter=blob:none", name, refspec)...); err != nil {
 		if strings.Contains(err.Error(), "couldn't find remote ref") {
 			return Listing{}, fmt.Errorf("%w: %v", ErrRefNotFound, err)
 		}
@@ -823,9 +823,23 @@ func fetchIDs(ctx context.Context, r *gitx.Runner, gitDir, remote string, ids []
 	// The flags are the ref fetch's, without --no-show-forced-updates: this
 	// fetch names objects rather than refs and updates none, so there is no
 	// forced update for git to work out and none to suppress.
-	_, err := r.UserInput(ctx, gitDir, strings.NewReader(b.String()), "-c", "fetch.negotiationAlgorithm=noop",
+	args := append(promisor(remote), "-c", "fetch.negotiationAlgorithm=noop",
 		"fetch", "--quiet", "--no-tags", "--no-write-fetch-head", "--recurse-submodules=no", noRefmap, "--filter=blob:none", "--stdin", remote)
+	_, err := r.UserInput(ctx, gitDir, strings.NewReader(b.String()), args...)
 	return err
+}
+
+// promisor gives the remote its promisor settings on the command line of a
+// fetch that filters. Such a fetch runs outside the lock, and git writes
+// these settings into the account repo's config, and moves
+// repositoryformatversion to 1, when the config lacks them: a remote source
+// remove deleted while the fetch ran, or one a killed add had begun to
+// write. That write could fail another command's git config, which does
+// not wait for git's lock file, and would leave a remote with no URL
+// behind. Given here, the remote is a promisor already and git writes
+// nothing.
+func promisor(remote string) []string {
+	return []string{"-c", "remote." + remote + ".promisor=true", "-c", "remote." + remote + ".partialclonefilter=blob:none"}
 }
 
 // missingBlob names the directory of the first entry whose SKILL.md the
