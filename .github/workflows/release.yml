@@ -28,6 +28,9 @@ concurrency:
 permissions:
   contents: read
 
+# Hardening, since the publish job holds a write token and the tap's deploy key: the
+# actions are pinned to commits (Dependabot updates them), no checkout keeps the token
+# in .git/config, and every value reaches a script through env, never ${{ }} inside run.
 env:
   GIT_CLIFF_VERSION: 2.14.2
   GIT_CLIFF_SHA512: 26d1f7c8ea2400f2ccb0b2e7f321635f600b583bf4cd1f7afaa5e8c24068ad1088a2504e0a4d9f4333d4bb20a80329327d9462634343ee3af91e1a7fbdc6f18a
@@ -48,9 +51,10 @@ jobs:
       version: ${{ steps.plan.outputs.version }}
       tag: ${{ steps.plan.outputs.tag }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install git-cliff
         run: |
@@ -162,7 +166,7 @@ jobs:
             echo "tag=$tag"
           } >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: steps.plan.outputs.publish == 'true'
         with:
           name: notes
@@ -184,14 +188,17 @@ jobs:
     env:
       NAME: agentx_${{ matrix.goos }}_${{ matrix.goarch }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.plan.outputs.sha }}
+          persist-credentials: false
 
-      - uses: actions/setup-go@v7
+      # No cache: a release is built only from the commit and the module proxy, never
+      # from build output another workflow run saved.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: apps/cli/go.mod
-          cache-dependency-path: apps/cli/go.sum
+          cache: false
 
       # Static on Linux; cgo on macOS for the FSEvents watcher, as in the Makefile.
       # Both macOS architectures build on one runner: Go passes -arch to clang.
@@ -217,7 +224,7 @@ jobs:
         run: |
           "dist/$NAME/agentx" version --json | tee /dev/stderr | grep -F "\"cli_version\":\"$VERSION\""
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ env.NAME }}
           path: dist/${{ env.NAME }}.tar.gz
@@ -237,11 +244,12 @@ jobs:
       TAG: ${{ needs.plan.outputs.tag }}
       VERSION: ${{ needs.plan.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.plan.outputs.sha }}
+          persist-credentials: false
 
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: dist
           merge-multiple: true
