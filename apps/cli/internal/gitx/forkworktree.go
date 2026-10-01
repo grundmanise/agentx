@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 )
 
 // ForkReason is the lock reason of a fork's worktree. A pending merge's
@@ -74,31 +76,33 @@ func (r *Runner) Worktrees(ctx context.Context, gitDir string) ([]Worktree, erro
 	return ParseWorktrees(out)
 }
 
-// AddForkWorktree adds path, absent or an empty directory, as a linked
-// worktree of the repository at gitDir on branch, the short name of a
-// fork's branch such as skills/pdf, locked with ForkReason and with nothing
-// checked out: the fork's content is laid out in it by the command, and
-// ResetIndex then aligns the index. The branch is passed by its short name,
-// since git detaches HEAD at a full ref name.
+// AddForkWorktree adds path as a linked worktree of the repository at
+// gitDir on branch, the short name of a fork's branch such as skills/pdf,
+// locked with ForkReason and with nothing checked out: the fork's content
+// is laid out in it by the command, and ResetIndex then aligns the index.
+// The branch is passed by its short name, since git detaches HEAD at a full
+// ref name.
 //
-// Registrations whose directory is gone are pruned first, which a locked
-// worktree survives. A locked registration of path itself whose directory
-// is gone, which is what a fork's worktree removed by hand leaves, is
-// reused with the doubled -f git asks for. A branch checked out at another
-// existing path is refused, as git refuses it.
+// The path is absent, an empty directory, or holds nothing but a .git file.
+// What a fork's worktree removed by hand, or an add killed part way, left
+// of path is cleared first, see clearForkWorktree. Registrations whose
+// directory is gone are then pruned, which a locked worktree survives. A
+// branch checked out at another existing path is refused, as git refuses
+// it.
 func (r *Runner) AddForkWorktree(ctx context.Context, gitDir, path, branch string) error {
+	if err := clearForkWorktree(gitDir, path); err != nil {
+		return err
+	}
 	list, err := r.Worktrees(ctx, gitDir)
 	if err != nil {
 		return err
 	}
-	force, prune := false, false
+	prune := false
 	for _, w := range list {
 		switch {
 		case w.Prunable:
 			prune = true
 		case w.Bare:
-		case samePath(w.Path, path):
-			force = w.Locked && gone(w.Path)
 		case w.Branch == "refs/heads/"+branch && !gone(w.Path):
 			return fmt.Errorf("%s is checked out at %s already", branch, w.Path)
 		}
@@ -108,13 +112,64 @@ func (r *Runner) AddForkWorktree(ctx context.Context, gitDir, path, branch strin
 			return err
 		}
 	}
-	args := []string{"worktree", "add"}
-	if force {
-		args = append(args, "-f", "-f")
-	}
-	args = append(args, "--no-checkout", "--lock", "--reason", ForkReason, path, branch)
-	_, err = r.Isolated(ctx, gitDir, args...)
+	_, err = r.Isolated(ctx, gitDir, "worktree", "add", "--no-checkout", "--lock", "--reason", ForkReason, path, branch)
 	return err
+}
+
+// clearForkWorktree removes what an earlier worktree of path left, with
+// files alone, since git refuses to clear most of it. git worktree add
+// writes, in order, the admin directory and its lock, the worktree's
+// directory, the admin directory's gitdir, the worktree's .git file, then
+// HEAD and commondir, and a SIGKILL or a power loss can stop it after any
+// of them. git worktree remove then fails validation, and a plain add
+// refuses the locked registration or the .git file. So:
+//
+//   - a .git file that is all path holds goes;
+//   - a registration whose gitdir names path goes, which is also what a
+//     fork's worktree removed by hand leaves, locked so that a prune keeps
+//     it;
+//   - an admin directory with no gitdir goes when it holds nothing else but
+//     a fork's lock, since it can only be an add stopped before it wrote
+//     the gitdir, and nothing else would ever remove it: git skips it when
+//     it lists or prunes worktrees, and the next add takes another name.
+func clearForkWorktree(gitDir, path string) error {
+	if entries, err := os.ReadDir(path); err == nil && len(entries) == 1 && entries[0].Name() == ".git" && entries[0].Type().IsRegular() {
+		if err := os.Remove(filepath.Join(path, ".git")); err != nil {
+			return err
+		}
+	}
+	admins := filepath.Join(gitDir, "worktrees")
+	entries, err := os.ReadDir(admins)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		admin := filepath.Join(admins, e.Name())
+		if e.IsDir() && (home.NamesBack(admin, path) || unwritten(admin)) {
+			if err := os.RemoveAll(admin); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// unwritten reports whether the admin directory is one a fork's worktree
+// add stopped in before it wrote the gitdir: empty, or holding a fork's
+// lock alone.
+func unwritten(admin string) bool {
+	entries, err := os.ReadDir(admin)
+	if err != nil || len(entries) > 1 {
+		return false
+	}
+	if len(entries) == 0 {
+		return true
+	}
+	b, err := os.ReadFile(filepath.Join(admin, "locked"))
+	return err == nil && strings.TrimRight(string(b), "\n") == ForkReason
 }
 
 // ResetIndex sets the index of the worktree at path to its branch tip and
@@ -171,18 +226,6 @@ func (r *Runner) relativeWorktrees(ctx context.Context, gitDir string) (bool, er
 func gone(path string) bool {
 	_, err := os.Lstat(path)
 	return errors.Is(err, fs.ErrNotExist)
-}
-
-// samePath compares two spellings of one path, resolving symlinks in their
-// directories when they differ as written.
-func samePath(a, b string) bool {
-	a, b = filepath.Clean(a), filepath.Clean(b)
-	if a == b {
-		return true
-	}
-	ra, errA := filepath.EvalSymlinks(filepath.Dir(a))
-	rb, errB := filepath.EvalSymlinks(filepath.Dir(b))
-	return errA == nil && errB == nil && filepath.Join(ra, filepath.Base(a)) == filepath.Join(rb, filepath.Base(b))
 }
 
 // CheckBranchName asks git whether name is a valid branch name, as git

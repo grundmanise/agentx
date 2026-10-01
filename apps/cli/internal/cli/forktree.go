@@ -111,6 +111,8 @@ func exposedRepos(unrecordable, ignored []string) []string {
 	return exposed
 }
 
+// hasGitComponent reports whether a component of the slash-separated path
+// p is .git in any case, as a case-insensitive file system would match it.
 func hasGitComponent(p string) bool {
 	for _, part := range strings.Split(p, "/") {
 		if strings.EqualFold(part, ".git") {
@@ -120,6 +122,8 @@ func hasGitComponent(p string) bool {
 	return false
 }
 
+// underIgnored reports whether p is one of the paths of ignored, or lies
+// inside one, whether that path is written with its trailing slash or not.
 func underIgnored(p string, ignored []string) bool {
 	for _, i := range ignored {
 		dir := strings.TrimSuffix(i, "/")

@@ -21,7 +21,7 @@ import (
 // skills/pdf.
 func WorktreeAt(path, branch string) bool {
 	admin, ok := AdminDirOf(path)
-	if !ok || !namesBack(admin, path) {
+	if !ok || !NamesBack(admin, path) {
 		return false
 	}
 	return headIs(admin, branch)
@@ -60,7 +60,7 @@ func PointersMoved(path string) bool {
 	if _, err := os.Stat(admin); err != nil {
 		return true
 	}
-	return !namesBack(admin, path)
+	return !NamesBack(admin, path)
 }
 
 // AdminDirOf is the admin directory the .git file at path's root names,
@@ -80,9 +80,10 @@ func AdminDirOf(path string) (string, bool) {
 	return filepath.Clean(target), true
 }
 
-// namesBack reports whether the admin directory's gitdir file names the
-// .git file at path's root.
-func namesBack(admin, path string) bool {
+// NamesBack reports whether the admin directory's gitdir file names the
+// .git file at path's root, which is how a registration names the worktree
+// it is for.
+func NamesBack(admin, path string) bool {
 	b, err := os.ReadFile(filepath.Join(admin, "gitdir"))
 	if err != nil {
 		return false
@@ -91,12 +92,14 @@ func namesBack(admin, path string) bool {
 	if !filepath.IsAbs(named) {
 		named = filepath.Join(admin, named)
 	}
-	return samePath(filepath.Clean(named), filepath.Join(path, ".git"))
+	return SamePath(named, filepath.Join(path, ".git"))
 }
 
-// samePath compares two spellings of one path, resolving symlinks in their
+// SamePath compares two spellings of one path, resolving symlinks in their
 // directories when they differ as written, as /var and /private/var do.
-func samePath(a, b string) bool {
+// The path itself need not exist.
+func SamePath(a, b string) bool {
+	a, b = filepath.Clean(a), filepath.Clean(b)
 	if a == b {
 		return true
 	}

@@ -140,16 +140,15 @@ type RefUpdater interface {
 // recovery refuses a worktree step it is handed no git for, as it refuses a
 // ref step.
 type Worktrees interface {
-	// AddWorktree makes path, absent or an empty directory, a linked
-	// worktree of the repository at gitDir, on branch, a short branch name
-	// such as skills/pdf, locked and with no files checked out.
+	// AddWorktree makes path a linked worktree of the repository at gitDir,
+	// on branch, a short branch name such as skills/pdf, locked and with no
+	// files checked out. The path is absent, an empty directory, or holds
+	// nothing but the .git file of an add stopped half way, which it clears
+	// together with the registration that add left in gitDir.
 	AddWorktree(gitDir, path, branch string) error
 	// ResetIndex sets the index of the worktree at path to its branch tip,
 	// touching no file in it. It is safe to repeat.
 	ResetIndex(path string) error
-	// RemoveWorktree removes the worktree at path, its directory and its
-	// registration in gitDir, locked or not.
-	RemoveWorktree(gitDir, path string) error
 }
 
 // Mutation collects one command's changes into one journal: the state files
@@ -604,13 +603,12 @@ func (r refusedRef) Unwrap() error { return ErrRecovery }
 // it ran. What the path holds decides the rest, as for every step:
 //
 //   - the worktree already, on the branch: only the index is aligned;
-//   - nothing but a .git file whose registration is not on the branch: a
-//     worktree add stopped half way, which git cleans up after a signal it
-//     can catch and not after SIGKILL or a power loss, having written the
-//     admin directory and the .git file before HEAD names the branch. The
-//     path holds nothing of the user's, so the half-made worktree is
-//     removed and added again;
-//   - nothing, or an empty directory: the worktree is added;
+//   - nothing, an empty directory, or nothing but a .git file whose
+//     registration is not on the branch: the worktree is added. The .git
+//     file alone is what a worktree add stopped half way leaves, which git
+//     cleans up after a signal it can catch and not after SIGKILL or a
+//     power loss, and adding the worktree clears it with whatever else of
+//     that add the repository kept;
 //   - anything else is not what the mutation expected and refuses.
 func applyWorktree(s step, u RefUpdater) (bool, error) {
 	w, ok := u.(Worktrees)
@@ -620,16 +618,7 @@ func applyWorktree(s step, u RefUpdater) (bool, error) {
 	branch := strings.TrimPrefix(s.New, worktreeOn)
 	added := false
 	if !WorktreeAt(s.Path, branch) {
-		if HalfMade(s.Path, branch) {
-			if err := w.RemoveWorktree(s.GitDir, s.Path); err != nil {
-				return false, err
-			}
-			// A registration git no longer knows leaves the .git file behind.
-			if err := os.Remove(filepath.Join(s.Path, ".git")); err != nil && !errors.Is(err, fs.ErrNotExist) {
-				return false, err
-			}
-		}
-		if !emptyOrAbsent(s.Path) {
+		if !emptyOrAbsent(s.Path) && !HalfMade(s.Path, branch) {
 			return false, fmt.Errorf("%w: %s holds neither what the mutation expected nor what it was to become", ErrRecovery, s.Path)
 		}
 		if err := w.AddWorktree(s.GitDir, s.Path, branch); err != nil {

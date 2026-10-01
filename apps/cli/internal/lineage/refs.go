@@ -68,6 +68,7 @@ type Record struct {
 	Tree            string // the root tree of that commit: for an import commit, the upstream directory as its one entry
 	Import          Import
 	HasImport       bool
+	Parentless      bool         // the commit has no parent, as an import commit never has
 	Candidate       *Candidate   // the update candidate, nil when the account repo holds none
 	UpstreamRemoved string       // the source commit the upstream-removed marker names, "" when there is none
 	Fork            *ForkLineage // a fork's lineage, read by ReadForks; nil for a managed skill and until then
@@ -139,7 +140,7 @@ func List(ctx context.Context, r *gitx.Runner, gitDir string) (map[string]Record
 	const recordEnd = "\x01"
 	markers := strings.TrimSuffix(UpstreamRemovedPrefix, "/")
 	out, err := r.Isolated(ctx, gitDir,
-		"for-each-ref", "--format=%(refname)%00%(objectname)%00%(tree)%00"+
+		"for-each-ref", "--format=%(refname)%00%(objectname)%00%(tree)%00%(parent)%00"+
 			"%(if:notequals="+markers+")%(refname:rstrip=1)%(then)%(contents)%(end)"+recordEnd,
 		ManagedPrefix, ForkPrefix, CandidatePrefix, UpstreamRemovedPrefix)
 	if err != nil {
@@ -153,11 +154,11 @@ func List(ctx context.Context, r *gitx.Runner, gitDir string) (map[string]Record
 		if strings.TrimSpace(entry) == "" {
 			continue
 		}
-		fields := strings.SplitN(entry, "\x00", 4)
-		if len(fields) != 4 {
+		fields := strings.SplitN(entry, "\x00", 5)
+		if len(fields) != 5 {
 			continue
 		}
-		rec := Record{Ref: fields[0], Commit: fields[1], Tree: fields[2]}
+		rec := Record{Ref: fields[0], Commit: fields[1], Tree: fields[2], Parentless: fields[3] == ""}
 		switch {
 		case strings.HasPrefix(rec.Ref, ManagedPrefix):
 			rec.Name, rec.Kind = strings.TrimPrefix(rec.Ref, ManagedPrefix), KindManaged
@@ -165,7 +166,7 @@ func List(ctx context.Context, r *gitx.Runner, gitDir string) (map[string]Record
 			rec.Name, rec.Kind = strings.TrimPrefix(rec.Ref, ForkPrefix), KindFork
 		case strings.HasPrefix(rec.Ref, CandidatePrefix):
 			c := Candidate{Commit: rec.Commit, Tree: rec.Tree}
-			if imported, err := Parse(fields[3]); err == nil {
+			if imported, err := Parse(fields[4]); err == nil {
 				c.Import, c.HasImport = imported, true
 			}
 			candidates[strings.TrimPrefix(rec.Ref, CandidatePrefix)] = c
@@ -176,7 +177,7 @@ func List(ctx context.Context, r *gitx.Runner, gitDir string) (map[string]Record
 		default:
 			continue
 		}
-		if imported, err := Parse(fields[3]); err == nil {
+		if imported, err := Parse(fields[4]); err == nil {
 			rec.Import, rec.HasImport = imported, true
 		}
 		if have, ok := records[rec.Name]; !ok || have.Kind == KindFork && rec.Kind == KindManaged {

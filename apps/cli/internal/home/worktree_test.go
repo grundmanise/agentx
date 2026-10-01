@@ -15,6 +15,16 @@ import (
 // and the lock, and the .git file at the worktree's root naming it.
 
 func (r refs) AddWorktree(gitDir, path, branch string) error {
+	if !emptyOrAbsent(path) {
+		// What an add stopped half way left is cleared, as the contract
+		// says; anything else is refused, as git refuses it.
+		if entries, _ := os.ReadDir(path); len(entries) != 1 || entries[0].Name() != ".git" {
+			return errors.New(path + " already exists")
+		}
+		if err := os.Remove(filepath.Join(path, ".git")); err != nil {
+			return err
+		}
+	}
 	admin := filepath.Join(gitDir, "worktrees", filepath.Base(path))
 	if err := halfAdd(gitDir, path); err != nil {
 		return err
@@ -28,15 +38,6 @@ func (r refs) ResetIndex(path string) error {
 		return errors.New("not a worktree: " + path)
 	}
 	return os.WriteFile(filepath.Join(admin, "index"), []byte("index\n"), 0o644)
-}
-
-func (r refs) RemoveWorktree(gitDir, path string) error {
-	if admin, ok := AdminDirOf(path); ok {
-		if err := os.RemoveAll(admin); err != nil {
-			return err
-		}
-	}
-	return os.RemoveAll(path)
 }
 
 // halfAdd is what a worktree add killed part way leaves: the admin
@@ -162,9 +163,8 @@ func TestCreationRecoversFromEveryBoundary(t *testing.T) {
 
 // TestWorktreeStepClearsAHalfMadeWorktree is a creation killed inside git's
 // worktree add, which leaves the admin directory and the .git file and no
-// HEAD on the branch. Nothing of the user's is there, so recovery removes
-// it and adds the worktree again rather than refusing the path for holding
-// something.
+// HEAD on the branch. Nothing of the user's is there, so recovery adds the
+// worktree over it rather than refusing the path for holding something.
 func TestWorktreeStepClearsAHalfMadeWorktree(t *testing.T) {
 	t.Parallel()
 	c, u := newCreation(t)

@@ -84,38 +84,69 @@ func TestLibraryLink(t *testing.T) {
 	}
 }
 
+// TestExposedRepos is the choice of the nested repositories a fork commit
+// refuses: a .git component in any case, under no ignored path, a directory
+// matched with or without its trailing slash and only at a path boundary.
+func TestExposedRepos(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		path    string
+		ignored []string
+		exposed bool
+	}{
+		{"vendor/.git", nil, true},
+		{"vendor/.GIT", nil, true},
+		{"vendor/lib/.git/config", []string{}, true},
+		{"vendor/git", nil, false},
+		{"vendor/.gitignore", nil, false},
+		{"vendor/.git", []string{"vendor/"}, false},
+		{"vendor/.git", []string{"vendor"}, false},
+		{"vendor/.git", []string{"vendor/.git"}, false},
+		{"vendor2/.git", []string{"vendor/"}, true},
+		{"vendor/.git", []string{"vend"}, true},
+	} {
+		got := exposedRepos([]string{tc.path}, tc.ignored)
+		if exposed := len(got) == 1; exposed != tc.exposed {
+			t.Errorf("exposedRepos(%q, %q) = %q, want exposed %v", tc.path, tc.ignored, got, tc.exposed)
+		}
+	}
+}
+
 func TestSkillTemplate(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		description string
-		plain       bool
+		name, description string
+		plain             bool // the description is written as a plain scalar
 	}{
-		{"Fill in PDF forms, and merge them.", true},
-		{"Use it when: a PDF needs filling", false},
-		{`Say "hello" to the user`, false},
-		{"- a list item?", false},
-		{"# not a comment", false},
-		{"yes", false},
-		{"Back\\slash", false},
-		{"x", true},
-		{"ends with a space ", false},
+		{"pdf", "Fill in PDF forms, and merge them.", true},
+		{"pdf", "Use it when: a PDF needs filling", false},
+		{"pdf", `Say "hello" to the user`, false},
+		{"pdf", "- a list item?", false},
+		{"pdf", "# not a comment", false},
+		{"pdf", "yes", false},
+		{"pdf", "Back\\slash", false},
+		{"pdf", "x", true},
+		{"pdf", "ends with a space ", false},
+		{"null", "Notes", true},
+		{"123", "Notes", true},
 	} {
-		text := string(skillTemplate("pdf", tc.description))
+		text := string(skillTemplate(tc.name, tc.description))
 		block, _, ok := strings.Cut(strings.TrimPrefix(text, "---\n"), "\n---\n")
-		if !ok || !strings.HasPrefix(text, "---\nname: pdf\n") || !strings.HasSuffix(text, "\n") {
-			t.Errorf("%q: the template is\n%s", tc.description, text)
+		if !ok || !strings.HasPrefix(text, "---\nname: ") || !strings.HasSuffix(text, "\n# "+tc.name+"\n\n"+
+			"Write here the instructions an agent follows when it uses this skill.\n") {
+			t.Errorf("%s, %q: the template is\n%s", tc.name, tc.description, text)
 			continue
 		}
 		var fields map[string]any
 		if err := yaml.Unmarshal([]byte(block), &fields); err != nil {
-			t.Errorf("%q: the frontmatter does not parse: %v", tc.description, err)
+			t.Errorf("%s, %q: the frontmatter does not parse: %v", tc.name, tc.description, err)
 			continue
 		}
-		if fields["description"] != tc.description || fields["name"] != "pdf" {
-			t.Errorf("%q: the frontmatter reads back as %v", tc.description, fields)
+		if fields["description"] != tc.description || fields["name"] != tc.name {
+			t.Errorf("%s, %q: the frontmatter reads back as %v", tc.name, tc.description, fields)
 		}
 		if plain := strings.Contains(text, "\ndescription: "+tc.description+"\n"); plain != tc.plain {
-			t.Errorf("%q: written plain %v, want %v:\n%s", tc.description, plain, tc.plain, text)
+			t.Errorf("%s, %q: written plain %v, want %v:\n%s", tc.name, tc.description, plain, tc.plain, text)
 		}
 	}
 }

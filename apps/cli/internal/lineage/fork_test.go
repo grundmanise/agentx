@@ -156,9 +156,10 @@ func TestResolveWalksFirstParents(t *testing.T) {
 	}
 }
 
-// TestReadForksWalksOnceForEveryFork reads two forks sharing a history and
-// one faked as its own import commit, with the lineage read back from what
-// git wrote.
+// TestReadForksWalksOnceForEveryFork reads two forks sharing a history,
+// one faked as its own import commit, and one whose tip copies an import's
+// message onto a commit with a parent, which is no import, with the lineage
+// read back from what git wrote.
 func TestReadForksWalksOnceForEveryFork(t *testing.T) {
 	t.Parallel()
 	requireGit(t)
@@ -179,10 +180,12 @@ func TestReadForksWalksOnceForEveryFork(t *testing.T) {
 	base := commitOf(imp.Message())
 	first := commitOf("Fork pdf\n\nAgentx-Fork-ID: "+aForkID+"\n", base)
 	second := commitOf("Fork pdf2\n\nAgentx-Fork-ID: fedcba98-7654-4321-8fed-cba987654321\n", first)
+	copied := commitOf(imp.Message(), first)
 	recs := map[string]Record{
 		"pdf":    {Name: "pdf", Kind: KindFork, Commit: first},
 		"pdf2":   {Name: "pdf2", Kind: KindFork, Commit: second},
-		"faked":  {Name: "faked", Kind: KindFork, Commit: base, Tree: "t", Import: imp, HasImport: true},
+		"faked":  {Name: "faked", Kind: KindFork, Commit: base, Tree: "t", Import: imp, HasImport: true, Parentless: true},
+		"copied": {Name: "copied", Kind: KindFork, Commit: copied, Import: imp, HasImport: true},
 		"manage": {Name: "manage", Kind: KindManaged, Commit: base, Import: imp, HasImport: true},
 	}
 	cache := map[string]ForkLineage{}
@@ -198,10 +201,13 @@ func TestReadForksWalksOnceForEveryFork(t *testing.T) {
 	if l := recs["faked"].Fork; l == nil || l.ID != "" || l.Base != base || l.BaseTree != "t" {
 		t.Errorf("a fork whose tip is an import reads %+v", l)
 	}
+	if l := recs["copied"].Fork; l == nil || l.ID != aForkID || l.Base != base {
+		t.Errorf("a fork whose tip copies an import's message reads %+v", l)
+	}
 	if recs["manage"].Fork != nil {
 		t.Error("a managed record was given a fork lineage")
 	}
-	if len(cache) != 2 {
-		t.Errorf("the cache holds %d tips, want the two walked", len(cache))
+	if len(cache) != 3 {
+		t.Errorf("the cache holds %d tips, want the three walked", len(cache))
 	}
 }

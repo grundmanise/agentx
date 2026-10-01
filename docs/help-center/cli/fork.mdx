@@ -46,7 +46,7 @@ agentx refuses the name, and changes nothing, when:
 
 - The branch is `skills/<name>` in the account repo. Plain `git` reads it: `git --git-dir ~/.agentx/account.git log skills/release-notes`.
 - The branch is checked out as a Git worktree in `~/.agentx/worktrees/<name>`, locked so that `git worktree prune` never removes it. The skill is the worktree's one directory, so Git's `.git` file sits next to the skill and never inside it: no client ever sees a `.git` entry in a skill.
-- Your library holds a symlink to the skill. When the library and agentx home share a parent directory, as `~/.agents` and `~/.agentx` do, the symlink is relative, so it keeps working if your home directory moves.
+- Your library holds a symlink to the skill. When the library and agentx home sit under the same top-level directory, as `~/.agents` and `~/.agentx` do, the symlink is relative, so it keeps working if your home directory moves.
 
 The first commit holds the template and records the skill's id in an `Agentx-Fork-ID` trailer. Every commit agentx writes on the branch names the machine that wrote it in an `Agentx-Machine` trailer, and carries your Git identity, `user.name` and `user.email`, as its author. If you set none, agentx uses the machine's label and an address of its own. agentx never changes a commit once it is written.
 

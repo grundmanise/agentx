@@ -261,25 +261,32 @@ func (inv *invocation) reportCreated(ctx context.Context, name string, targets [
 	return nil
 }
 
-// plainScalar is a description the template can write as a plain YAML
-// scalar and every YAML reader reads back as the same string: it starts
-// with a letter, holds none of the characters that would start a comment,
-// a mapping or a quoted or escaped form, and is not a word YAML reads as
-// something other than a string.
+// plainScalar is a value the template can write as a plain YAML scalar
+// and every YAML reader reads back as the same string: it starts with a
+// letter, so that no reader takes it for a number or a date, holds none of
+// the characters that would start a comment, a mapping or a quoted or
+// escaped form, and is not a word YAML reads as something other than a
+// string.
 var plainScalar = regexp.MustCompile(`^[A-Za-z][^:#"'\\\x60{}\[\]|>&*!%@]*[^:#"'\\\x60{}\[\]|>&*!%@\s]$|^[A-Za-z]$`)
 
 // yamlWords are the plain scalars YAML reads as a boolean or as null.
 var yamlWords = map[string]bool{"y": true, "n": true, "yes": true, "no": true, "true": true, "false": true, "on": true, "off": true, "null": true}
 
+// yamlString writes s as a YAML scalar that reads back as the string s: a
+// plain scalar when that does, and double-quoted otherwise.
+func yamlString(s string) string {
+	if plainScalar.MatchString(s) && !yamlWords[strings.ToLower(s)] {
+		return s
+	}
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"`
+}
+
 // skillTemplate is the SKILL.md a greenfield skill starts with: the Agent
 // Skills frontmatter, with the name and the description, and a heading and
-// a line that asks for the instructions. The description is written as a
-// plain scalar when that reads back as itself, and double-quoted otherwise.
+// a line that asks for the instructions. Both values are written so that
+// they read back as strings, which a name such as null or 123 would not
+// as a plain scalar.
 func skillTemplate(name, description string) []byte {
-	value := description
-	if !plainScalar.MatchString(description) || yamlWords[strings.ToLower(description)] {
-		value = `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(description) + `"`
-	}
-	return []byte("---\nname: " + name + "\ndescription: " + value + "\n---\n\n# " + name + "\n\n" +
+	return []byte("---\nname: " + yamlString(name) + "\ndescription: " + yamlString(description) + "\n---\n\n# " + name + "\n\n" +
 		"Write here the instructions an agent follows when it uses this skill.\n")
 }

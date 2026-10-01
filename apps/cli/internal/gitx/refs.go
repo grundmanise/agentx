@@ -134,12 +134,3 @@ func (x refs) ResetIndex(path string) error {
 	}
 	return nil
 }
-
-// RemoveWorktree removes a worktree the journal's worktree step found half
-// made, see RemoveCheckout.
-func (x refs) RemoveWorktree(gitDir, path string) error {
-	if err := x.r.RemoveCheckout(x.ctx, gitDir, path); err != nil {
-		return fmt.Errorf("%w: %w", ErrAccountRepo, err)
-	}
-	return nil
-}

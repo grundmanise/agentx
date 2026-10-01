@@ -147,8 +147,10 @@ func Walk(ctx context.Context, r *gitx.Runner, gitDir string, tips []string) (ma
 }
 
 // ReadForks fills the Fork of every fork record of recs. A fork whose tip
-// is itself an import commit, which List read the trailers of already, is
-// its own base and costs no git; the others are read in one Walk. cache,
+// is itself an import commit, parentless with the trailers List read
+// already, is its own base and costs no git; the others are read in one
+// Walk, which also takes a tip that carries an import's trailers and has a
+// parent, since such a commit is never an import. cache,
 // when not nil, holds lineages by tip from an earlier read and is filled
 // with this one's, so that a serve rescan walks only the tips that moved.
 func ReadForks(ctx context.Context, r *gitx.Runner, gitDir string, recs map[string]Record, cache map[string]ForkLineage) error {
@@ -157,7 +159,7 @@ func ReadForks(ctx context.Context, r *gitx.Runner, gitDir string, recs map[stri
 	for _, rec := range recs {
 		switch {
 		case rec.Kind != KindFork:
-		case rec.HasImport:
+		case rec.HasImport && rec.Parentless:
 			known[rec.Commit] = ForkLineage{Base: rec.Commit, BaseTree: rec.Tree, Import: rec.Import}
 		default:
 			if l, ok := cache[rec.Commit]; ok {

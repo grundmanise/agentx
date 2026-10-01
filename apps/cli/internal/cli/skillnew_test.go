@@ -44,7 +44,7 @@ func TestSkillNewCreatesAForkFromTheTemplate(t *testing.T) {
 	}
 	f.Close()
 	a.env["GIT_CONFIG_NOSYSTEM"] = "1" // no identity of the test machine's own
-	ids := map[*harness]string{}
+	ids, machines := map[*harness]string{}, map[*harness]string{}
 	for _, h := range []*harness{a, b} {
 		out := h.run("--json", "skill", "new", "notes", "--description", "Keep notes for the user.")
 		equal(t, "exit", out.exit, 0)
@@ -64,6 +64,7 @@ func TestSkillNewCreatesAForkFromTheTemplate(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		machines[h] = machine
 		equal(t, "the machine trailer", h.trailer(tip, lineage.TrailerMachine), machine)
 		equal(t, "the subject", h.accountGit("log", "-1", "--format=%s", tip), "Create notes")
 
@@ -98,35 +99,37 @@ func TestSkillNewCreatesAForkFromTheTemplate(t *testing.T) {
 		equal(t, "what is left beside the worktree", strings.Join(hiddenEntries(t, filepath.Join(h.agentx, "worktrees")), " "), "")
 	}
 	equal(t, "the fallback author", a.accountGit("log", "-1", "--format=%an <%ae>", "refs/heads/skills/notes"),
-		"test-host <machine-"+mustMachine(t, a)[:12]+"@agentx.invalid>")
+		"test-host <machine-"+machines[a][:12]+"@agentx.invalid>")
 	equal(t, "the user's author", b.accountGit("log", "-1", "--format=%an <%ae>|%cn <%ce>", "refs/heads/skills/notes"),
 		"Ada Lovelace <ada@example.com>|Ada Lovelace <ada@example.com>")
 	if ids[a] == ids[b] || !regexp.MustCompile(`^[0-9a-f-]{36}$`).MatchString(ids[a]) {
 		t.Errorf("the two machines' fork ids are %q and %q", ids[a], ids[b])
 	}
-	text := a.mustRun("skill", "new", "other")
-	contains(t, "the text output", text.stdout, "✓ created other in "+filepath.Join(a.library, "other")+": 4 placements\n")
-}
-
-func mustMachine(t *testing.T, h *harness) string {
-	t.Helper()
-	id, _, err := home.MachineID(h.agentx, h.env, nil)
-	if err != nil {
+	// A library symlink left into the worktrees directory by a fork whose
+	// worktree is gone is replaced.
+	if err := os.Symlink(filepath.Join(a.agentx, "worktrees", "other", "other"), filepath.Join(a.library, "other")); err != nil {
 		t.Fatal(err)
 	}
-	return id
+	text := a.mustRun("skill", "new", "other")
+	contains(t, "the text output", text.stdout, "✓ created other in "+filepath.Join(a.library, "other")+": 4 placements\n")
+	if link, _ := os.Readlink(filepath.Join(a.library, "other")); link != "../../../agentx/worktrees/other/other" {
+		t.Errorf("the dangling library symlink was left as %q", link)
+	}
 }
 
 // TestSkillNewRefusals refuses, in one home and changing nothing, a name
 // outside the grammar, a name the account repo holds a branch of in
-// another case, a name the library holds a directory of, and a
-// description of more than one line.
+// another case, a name the library holds a directory of, a name whose
+// worktree path is taken, and a description of more than one line.
 func TestSkillNewRefusals(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--skill", "alpha")
 	h.accountGit("update-ref", "refs/heads/managed/Shout", h.ref(lineage.ManagedRef("alpha")))
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "taken"), "SKILL.md"), skill("taken", "mine"))
+	if err := os.MkdirAll(filepath.Join(h.agentx, "worktrees", "held"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	refs := h.accountGit("for-each-ref")
 	for _, tc := range []struct {
 		args []string
@@ -136,6 +139,7 @@ func TestSkillNewRefusals(t *testing.T) {
 		{[]string{"My_Skill"}, exitRefused, "My_Skill is not a valid skill name: " + forkNameRule},
 		{[]string{"shout"}, exitRefused, "the account repo already holds Shout as a managed skill, which differs from shout only by case"},
 		{[]string{"taken"}, exitRefused, "the library already holds"},
+		{[]string{"held"}, exitRefused, "worktrees/held already exists"},
 		{[]string{"fine", "--description", "two\nlines"}, exitUsage, "--description must be one line"},
 	} {
 		out := h.run(append([]string{"--json", "skill", "new"}, tc.args...)...)
@@ -143,8 +147,8 @@ func TestSkillNewRefusals(t *testing.T) {
 		contains(t, strings.Join(tc.args, " ")+": error", h.one(out.stdout, "error")["message"].(string), tc.says)
 	}
 	equal(t, "the refs", h.accountGit("for-each-ref"), refs)
-	if _, err := os.Lstat(filepath.Join(h.agentx, "worktrees")); err == nil {
-		t.Error("a refused creation made the worktrees directory")
+	if entries, _ := os.ReadDir(filepath.Join(h.agentx, "worktrees")); len(entries) != 1 {
+		t.Errorf("a refused creation left %d entries in the worktrees directory, want the one it found", len(entries))
 	}
 }
 

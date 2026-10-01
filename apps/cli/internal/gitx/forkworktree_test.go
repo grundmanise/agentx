@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
@@ -42,7 +43,8 @@ func TestParseWorktrees(t *testing.T) {
 // TestForkWorktreeAddsResetsAndComesBack adds a fork's worktree, locked and
 // with nothing checked out, aligns its index, and adds it again once its
 // directory was removed by hand, which leaves a locked registration git
-// keeps through a prune.
+// keeps through a prune, and over what an add killed after each of its
+// writes leaves, which git refuses to remove or to add over.
 func TestForkWorktreeAddsResetsAndComesBack(t *testing.T) {
 	t.Parallel()
 	r, gitDir, commit := checkoutRepo(t)
@@ -64,7 +66,7 @@ func TestForkWorktreeAddsResetsAndComesBack(t *testing.T) {
 		}
 		var found bool
 		for _, w := range list {
-			if samePath(w.Path, path) {
+			if home.SamePath(w.Path, path) {
 				found = w.Branch == "refs/heads/skills/notes" && w.Locked && w.LockReason == ForkReason
 			}
 		}
@@ -81,8 +83,44 @@ func TestForkWorktreeAddsResetsAndComesBack(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := r.AddForkWorktree(ctx, gitDir, path, "skills/notes"); err != nil {
-		t.Fatal(err)
+	admins := filepath.Join(gitDir, "worktrees")
+	admin := filepath.Join(admins, "notes")
+	writes := []struct{ what, file, content string }{
+		{"its lock", filepath.Join(admin, "locked"), ForkReason + "\n"},
+		{"the worktree's directory", path, ""},
+		{"the gitdir", filepath.Join(admin, "gitdir"), filepath.Join(path, ".git") + "\n"},
+		{"the .git file", filepath.Join(path, ".git"), "gitdir: " + admin + "\n"},
+		{"HEAD", filepath.Join(admin, "HEAD"), strings.Repeat("0", 40) + "\n"},
+		{"commondir", filepath.Join(admin, "commondir"), "../..\n"},
+	}
+	for i, stop := range writes {
+		for _, dir := range []string{path, admins} {
+			if err := os.RemoveAll(dir); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.MkdirAll(admin, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for _, w := range writes[:i+1] {
+			write := func() error { return os.WriteFile(w.file, []byte(w.content), 0o644) }
+			if w.file == path {
+				write = func() error { return os.Mkdir(path, 0o755) }
+			}
+			if err := write(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := r.AddForkWorktree(ctx, gitDir, path, "skills/notes"); err != nil {
+			t.Errorf("an add stopped after %s: %v", stop.what, err)
+			continue
+		}
+		if !home.WorktreeAt(path, "skills/notes") {
+			t.Errorf("an add stopped after %s: the worktree was not added over it", stop.what)
+		}
+		if entries, _ := os.ReadDir(admins); len(entries) != 1 {
+			t.Errorf("an add stopped after %s: %d admin directories are left, want the worktree's alone", stop.what, len(entries))
+		}
 	}
 	if err := r.AddForkWorktree(ctx, gitDir, filepath.Join(t.TempDir(), "other"), "skills/notes"); err == nil || !strings.Contains(err.Error(), "checked out") {
 		t.Errorf("a branch checked out at an existing path was added again: %v", err)

@@ -30,7 +30,7 @@ An empty setting shows as `(none)`. In a terminal the keys are cyan and `true` i
 | `label` | The machine label. Until you set it, it is the hostname. |
 | `auto_push` | Whether published forks are pushed automatically. |
 | `accept_operations` | Whether the machine executes operations queued for it. |
-| `ignore_system_files` | Whether the files your operating system or editor leaves in a skill, such as `.DS_Store`, `Thumbs.db`, `*.swp` and `*~` backups, are ignored when agentx compares, diffs and reverts it. On by default. See [Files that do not count](/cli/skill#files-that-do-not-count). |
+| `ignore_system_files` | Whether the files your operating system or editor leaves in a skill, such as `.DS_Store`, `Thumbs.db`, `*.swp` and `*~` backups, are ignored when agentx compares, diffs and reverts it, and never committed in a skill you created. On by default. See [Files that do not count](/cli/skill#files-that-do-not-count) and [Files that stay local](/cli/fork#files-that-stay-local). |
 | `disabled_configurations` | The agent configurations left out of placements by default. Every other detected configuration is enabled. |
 | `sources` | The sources skills are installed from, managed with [`agentx source`](/cli/source). |
 | `copy_mode` | The skills placed as a copy instead of a symlink, per configuration. Written by `agentx skill add --copy` and `agentx skill place --copy`, and cleared by `agentx skill remove`. |

@@ -30,7 +30,7 @@ type forkWriter struct {
 	gitDir  string
 	ident   gitx.Ident
 	machine string // the machine id, which every commit carries in its Agentx-Machine trailer
-	label   string // the machine label, which a generated subject names
+	label   string // the machine label, the author's name when the user set no identity
 	env     map[string]string
 }
 
