@@ -41,7 +41,22 @@ Cursor (cursor)  /home/me/.cursor  enabled  2 skills, 2 servers, 1 plugin
 
 ## Install
 
-No binary releases yet. Build from source with Go `1.27` or later:
+With [Homebrew](https://brew.sh), on macOS or Linux:
+
+```sh
+brew install grundmanise/tap/agentx
+```
+
+Or with the install script, which puts the latest release in `~/.local/bin`:
+
+```sh
+curl -fsSL https://agentx.wtf/install | sh
+```
+
+For the newest nightly build, end the command with `sh -s -- --nightly`. See
+[Install and update](https://docs.agentx.wtf/install) for updates, options and uninstalling.
+
+To build from source instead, use Go `1.27` or later:
 
 ```sh
 git clone https://github.com/grundmanise/agentx.git
