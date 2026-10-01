@@ -28,9 +28,6 @@ concurrency:
 permissions:
   contents: read
 
-# Hardening, since the publish job holds a write token and the tap's deploy key: the
-# actions are pinned to commits (Dependabot updates them), no checkout keeps the token
-# in .git/config, and every value reaches a script through env, never ${{ }} inside run.
 env:
   GIT_CLIFF_VERSION: 2.14.2
   GIT_CLIFF_SHA512: 26d1f7c8ea2400f2ccb0b2e7f321635f600b583bf4cd1f7afaa5e8c24068ad1088a2504e0a4d9f4333d4bb20a80329327d9462634343ee3af91e1a7fbdc6f18a
