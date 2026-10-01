@@ -2,11 +2,14 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
 // driftHarness is a machine with four configurations and one managed skill
@@ -644,4 +647,64 @@ func TestPlaceKeyTellsOnePlaceInTwoSpellings(t *testing.T) {
 	equal(t, "a place in no directory, spelled the same", keyAt(gone).is(keyAt(gone)), true)
 	equal(t, "a place in no directory, spelled otherwise", keyAt(gone).is(keyAt(filepath.Join(root, "gone", "skills2", "pdf"))), false)
 	equal(t, "the spelling keyOf resolves", keyOf(spelled).real, place)
+}
+
+// nextOf returns the next stdout event of type typ, passing over every
+// event of another type before it.
+func (p *serveProc) nextOf(typ string) jsonEvent {
+	p.t.Helper()
+	deadline := time.After(serveDeadline)
+	for {
+		select {
+		case line, ok := <-p.lines:
+			if !ok {
+				p.t.Fatalf("serve ended before a %s event", typ)
+			}
+			var e jsonEvent
+			if err := json.Unmarshal([]byte(line), &e); err != nil {
+				p.t.Fatalf("not a JSON event: %q: %v", line, err)
+			}
+			if e["type"] == typ {
+				return e
+			}
+		case <-deadline:
+			p.t.Fatalf("no %s event within %s", typ, serveDeadline)
+		}
+	}
+}
+
+// TestServeReportsForkDrift runs serve over a greenfield skill and changes
+// it three ways, each reaching serve through the watcher alone: an edit
+// saved through the library makes the fork modified, skill commit makes it
+// current, and, after another edit, so does a commit made with git in the
+// fork's worktree, which writes nothing serve reads but the branch's
+// reflog in the account repo. Serve itself never commits an edit.
+func TestServeReportsForkDrift(t *testing.T) {
+	t.Parallel()
+	h, _ := installHarness(t)
+	h.mustRun("skill", "new", "notes")
+	p := h.serve(t, "--json")
+	first := p.next("snapshot")["library"].([]any)
+	equal(t, "the fork's first state", first[0].(map[string]any)["state"], stateCurrent)
+	p.send(`{"type":"refresh","request_id":"start"}`)
+	equal(t, "the event after the first snapshot", p.next("refresh_complete")["request_id"], "start")
+	expect := func(what, state, previous string) {
+		t.Helper()
+		e := p.nextOf("drift")
+		got := fmt.Sprint(e["name"], " ", e["kind"], " ", e["state"], " ", e["previous_state"], " [", words(e["drift"]), "]")
+		equal(t, what, got, "notes fork "+state+" "+previous+" []")
+	}
+
+	tip := h.ref(lineage.ForkRef("notes"))
+	replaceFile(t, filepath.Join(h.library, "notes", "SKILL.md"), skill("notes", "Edited in an editor"))
+	expect("an edit", stateModified, stateCurrent)
+	equal(t, "the branch while serve runs", h.ref(lineage.ForkRef("notes")), tip) // serve never commits
+	h.runBesideServe("skill", "commit", "notes")
+	expect("skill commit", stateCurrent, stateModified)
+	replaceFile(t, filepath.Join(h.library, "notes", "SKILL.md"), skill("notes", "Edited again"))
+	expect("another edit", stateModified, stateCurrent)
+	gitIn(t, h, filepath.Join(h.agentx, "worktrees", "notes"),
+		"-c", "user.name=Grace Hopper", "-c", "user.email=grace@example.com", "commit", "-q", "-a", "-m", "By hand")
+	expect("a commit made with git", stateCurrent, stateModified)
+	equal(t, "exit", p.close(), 0)
 }

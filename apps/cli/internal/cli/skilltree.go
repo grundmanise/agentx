@@ -140,34 +140,48 @@ func (inv *invocation) excludesFile(ctx context.Context, gitDir string) string {
 // directory holds its base version. It never fails: a directory that
 // cannot be read, or that git cannot compare, is modified. Under serve,
 // git's verdict is kept until the directory's tree id, the version or the
-// setting changes.
+// setting changes, see verdict.
 func (inv *invocation) holdsBase(ctx context.Context, lib scan.LibrarySkill, rec lineage.Record) bool {
 	tree, err := treeid.Read(lib.ResolvedPath)
 	if err != nil || len(tree.Unrecordable) > 0 {
 		return false
 	}
 	v := baseVersion(rec)
+	return inv.verdict(lib.Name, "its base version", tree, v, func() (bool, error) {
+		j, err := inv.judgeDir(ctx, gitx.AccountRepoPath(inv.dirs.Home), lib.ResolvedPath, tree, v, false)
+		return j.holds, err
+	})
+}
+
+// verdict is whether the directory of the library skill called name, read
+// as tree, holds v, the version drift compares it with: by the fast path,
+// then by git's verdict, which judge reaches. A judge that fails is a
+// directory that does not hold it, said at debug level, against naming the
+// version. Serve keeps git's verdict by skill, with the tree id, the
+// version and the setting it was reached on, so a rescan asks git again
+// only about a directory, or a version, that changed since.
+func (inv *invocation) verdict(name, against string, tree treeid.Tree, v version, judge func() (bool, error)) bool {
 	ignoreSystem := inv.systemFilesIgnored()
 	if fastHolds(tree, ignoreSystem, v) {
 		return true
 	}
 	key := verdictKey{id: tree.ID, load: v.load, ignoreSystem: ignoreSystem}
-	if kept, ok := inv.verdicts[lib.Name]; ok && kept.key == key {
+	if kept, ok := inv.verdicts[name]; ok && kept.key == key {
 		return kept.holds
 	}
-	j, err := inv.judgeDir(ctx, gitx.AccountRepoPath(inv.dirs.Home), lib.ResolvedPath, tree, v, false)
+	holds, err := judge()
 	if err != nil {
-		inv.out.debugf("cannot compare %s with its base version: %v", lib.Name, err)
+		inv.out.debugf("cannot compare %s with %s: %v", name, against, err)
 		return false
 	}
 	if inv.verdicts != nil {
-		inv.verdicts[lib.Name] = keptVerdict{key: key, holds: j.holds}
+		inv.verdicts[name] = keptVerdict{key: key, holds: holds}
 	}
-	return j.holds
+	return holds
 }
 
-// keptVerdict is git's verdict on one managed skill, kept by serve, and
-// verdictKey what it was reached on.
+// keptVerdict is git's verdict on one managed skill or fork, kept by
+// serve, and verdictKey what it was reached on.
 type keptVerdict struct {
 	key   verdictKey
 	holds bool

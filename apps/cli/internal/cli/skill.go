@@ -38,7 +38,10 @@ const (
 
 // The two states a managed skill is listed with: its library directory
 // holds the version it was installed at, or it was edited since. Nothing
-// here decides whether an upstream moved, which a later command does.
+// here decides whether an upstream moved, which a later command does. A
+// fork is listed with the same two against its branch tip: current when
+// its skill directory holds what the tip records, modified while it holds
+// edits nobody committed.
 //
 // The two are told apart the way skilltree.go compares a directory with a
 // version, so a file git ignores is no edit. A mode is content to git, so
@@ -86,13 +89,14 @@ const mergePending = "merge pending"
 func newSkillCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "skill",
-		Short:       "Install, create, place, compare, revert, update and remove skills, check them for updates, and list what the library holds",
+		Short:       "Install, create, commit, place, compare, revert, update and remove skills, check them for updates, and list what the library holds",
 		Annotations: map[string]string{annotationGroup: "true"},
 		Args:        cobra.NoArgs,
 		RunE:        needSubcommand(inv, "no skill command given", "run 'agentx skill --help' to list commands"),
 	}
 	cmd.AddCommand(newSkillAddCommand(inv))
 	cmd.AddCommand(newSkillNewCommand(inv))
+	cmd.AddCommand(newSkillCommitCommand(inv))
 	cmd.AddCommand(newSkillPlaceCommand(inv))
 	cmd.AddCommand(newSkillRemoveCommand(inv))
 	cmd.AddCommand(newSkillDiffCommand(inv))
@@ -321,9 +325,20 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 		subpath := base.Path
 		ev.Source, ev.Subpath, ev.UpstreamCommit, ev.BaseHash = base.Source, &subpath, base.Commit, base.Hash
 	}
+	// A fork is compared with its own branch tip: modified while it has
+	// edits nobody committed. Its drift is its placements', since what
+	// the source drift states say of a managed skill is not true of a
+	// fork, see driftOf.
+	if rec.Kind == lineage.KindFork && obs.judged {
+		ev.State = stateCurrent
+		if obs.modified {
+			ev.State = stateModified
+		}
+		ev.Drift = driftOf(obs, false, false)
+		ev.PendingMerge = obs.pending
+	}
 	// A managed skill's base version is the import commit its branch points
-	// at, so the directory can be compared with that commit's tree; a fork's
-	// is compared with its own branch tip, which a later command reads.
+	// at, so the directory can be compared with that commit's tree.
 	if rec.Kind == lineage.KindManaged && rec.HasImport {
 		ev.State = stateCurrent
 		if obs.modified {

@@ -309,9 +309,16 @@ var perAttempt = regexp.MustCompile(` after [0-9]+ (ms|milliseconds)\b` +
 // home and the account repo is a tree: an edit anywhere inside a skill is a
 // signal too, wherever the scan reads that skill from. A skills directory a
 // client shares with another, and the library itself, are watched once.
+//
+// The reflogs of the fork branches are a tree too: a commit made with git
+// in a fork's worktree writes nothing in the worktree or in agentx home,
+// only in the account repo, where it appends to its branch's reflog, so
+// that is how serve learns the fork is current again. The worktrees' own
+// admin directories are not watched: git writes an index there on every
+// status, which would be a signal of its own.
 func (inv *invocation) watchedDirs() (dirs, trees []string) {
 	h := inv.dirs.Home
-	trees = []string{filepath.Join(h, "worktrees"), inv.dirs.Library}
+	trees = []string{filepath.Join(h, "worktrees"), inv.dirs.Library, filepath.Join(gitx.AccountRepoPath(h), "logs", "refs", "heads", "skills")}
 	for _, dir := range scan.UserSkillsDirs(inv.dirs) {
 		if !slices.Contains(trees, dir) {
 			trees = append(trees, dir)

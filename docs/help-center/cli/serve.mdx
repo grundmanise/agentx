@@ -7,7 +7,7 @@ description: "Keep watching and report whenever something changes."
 
 ## What counts as a change
 
-Serve watches agentx itself, the library and every skills directory an agent client reads, including the ones clients keep under their own configuration such as `~/.claude/skills`. An edit inside a skill counts, not only a skill added or removed. Edit a skill with any editor or another tool and the next snapshot shows it.
+Serve watches agentx itself, the library and every skills directory an agent client reads, including the ones clients keep under their own configuration such as `~/.claude/skills`. An edit inside a skill counts, not only a skill added or removed. Edit a skill with any editor or another tool and the next snapshot shows it. A fork shows as `modified` as soon as you edit it, and as `current` again once you commit, with `agentx skill commit` or with `git commit` in its worktree. Serve never commits for you.
 
 A change outside the inventory, such as a skill in a directory no installed client reads, causes a rescan that prints nothing.
 

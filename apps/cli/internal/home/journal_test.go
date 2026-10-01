@@ -226,7 +226,7 @@ func TestBatchRefsMoveTogether(t *testing.T) {
 	u[in.gitDir+" refs/heads/managed/beta"] = "someone else"
 	m := in.plan(t, "one\n", batch...)
 	err := m.Apply(u)
-	if !errors.Is(err, ErrMovedBeforeApply) || !strings.Contains(err.Error(), "refs/heads/managed/beta") {
+	if !errors.Is(err, ErrMovedBeforeApply) || MovedRef(err) != "refs/heads/managed/beta" || !strings.Contains(err.Error(), "refs/heads/managed/beta") {
 		t.Fatalf("apply = %v, want it abandoned naming the ref that moved", err)
 	}
 	for _, name := range []string{"alpha", "gamma"} {

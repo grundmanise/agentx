@@ -198,18 +198,9 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 	// until it is finished the skill reads as already updated while the
 	// library still holds the version replaced, or holds no directory once
 	// that was retained, and the run would answer for a machine halfway
-	// through its own change. The lock is taken for it only when there is
-	// a journal to finish, and nothing is written beyond what the recovery
-	// writes, its own bump of the version file included, as for the
-	// recovery a scan runs.
-	switch journals, err := home.Journals(inv.dirs.Home); {
-	case err != nil:
-		return mutationFailure(err)
-	case len(journals) > 0:
-		inv.out.debugf("recovering %s", strings.Join(journals, ", "))
-		if err := home.MutateQuiet(inv.dirs.Home, inv.refs(ctx), func() error { return nil }); err != nil {
-			return mutationFailure(err)
-		}
+	// through its own change.
+	if err := inv.finishJournals(ctx); err != nil {
+		return err
 	}
 	records := map[string]lineage.Record{}
 	if exists {
@@ -268,6 +259,25 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 		inv.out.print(inv.summary)
 	}
 	return r.failure()
+}
+
+// finishJournals finishes any unfinished journal before a command reads
+// what it works on, for a command whose reads would otherwise answer for a
+// machine halfway through an earlier change. The lock is taken for it only
+// when there is a journal to finish, and nothing is written beyond what
+// the recovery writes, its own bump of the version file included, as for
+// the recovery a scan runs.
+func (inv *invocation) finishJournals(ctx context.Context) error {
+	switch journals, err := home.Journals(inv.dirs.Home); {
+	case err != nil:
+		return mutationFailure(err)
+	case len(journals) > 0:
+		inv.out.debugf("recovering %s", strings.Join(journals, ", "))
+		if err := home.MutateQuiet(inv.dirs.Home, inv.refs(ctx), func() error { return nil }); err != nil {
+			return mutationFailure(err)
+		}
+	}
+	return nil
 }
 
 // selection is the skills a run sets out to update, in name order, with

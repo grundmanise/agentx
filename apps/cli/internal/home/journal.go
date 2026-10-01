@@ -30,6 +30,24 @@ var ErrRecovery = errors.New("recovery required")
 // it had found the change itself.
 var ErrMovedBeforeApply = errors.New("a ref moved before the mutation changed anything")
 
+// movedRef is ErrMovedBeforeApply for the ref that moved.
+type movedRef struct{ ref string }
+
+func (m movedRef) Error() string { return ErrMovedBeforeApply.Error() + ": " + m.ref }
+
+func (m movedRef) Unwrap() error { return ErrMovedBeforeApply }
+
+// MovedRef is the ref an ErrMovedBeforeApply names, so that a command
+// whose mutation moves several branches can say which one moved; "" for
+// any other error.
+func MovedRef(err error) string {
+	var m movedRef
+	if errors.As(err, &m) {
+		return m.ref
+	}
+	return ""
+}
+
 func MutationsDir(dir string) string { return filepath.Join(dir, "mutations") }
 
 // journal is one mutations/<id>.json: a mutation that replaces live files
@@ -374,7 +392,7 @@ func apply(journalPath string, j journal, u RefUpdater) error {
 			if rmErr := os.Remove(journalPath); rmErr != nil {
 				return err // still on disk, so it is recovery's, as any refusal
 			}
-			return fmt.Errorf("%w: %s", ErrMovedBeforeApply, refused.ref)
+			return movedRef(refused)
 		}
 		return err
 	}

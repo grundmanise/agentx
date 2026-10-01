@@ -54,9 +54,33 @@ The first commit holds the template and records the skill's id in an `Agentx-For
 
 A commit of a fork records what Git would record in any repository: files your `.gitignore`, your global Git ignore file or the [`ignore_system_files`](/cli/config) list cover stay on your machine and are never committed. A Git repository inside the skill is refused rather than committed, unless the skill's `.gitignore` covers it.
 
+## Commit your edits
+
+Edit a fork in any editor or agent, through your library. `agentx skill list` shows it as `modified` until you commit the edits. agentx never commits on its own.
+
+```sh
+agentx skill commit release-notes
+```
+
+```text
+✓ committed release-notes as 4c2e9a1: release-notes: edit SKILL.md and add examples.md (laptop)
+```
+
+- Leave out the name to commit every fork with edits, one commit each.
+- Give your own message with `-m`: `agentx skill commit release-notes -m "Cover reverted pull requests"`. Its first line is the subject. Without `-m`, agentx names the skill, the files you changed and the machine.
+- Commit with Git instead if you prefer: run `git commit` in `~/.agentx/worktrees/<name>`. agentx keeps that commit as it is and finds nothing left to commit.
+- Committing never pushes anything.
+
+The commit records what Git would record, so the [files that stay local](#files-that-stay-local) are never committed, and a fork that holds a Git repository its `.gitignore` does not cover is refused.
+
+### Uncommitted edits block branch moves
+
+A command that would move a fork's branch, such as an update or a merge, stops with exit code 6 while the fork has uncommitted edits, and names the fork. Commit them with `agentx skill commit <name>`, then run the command again. Files Git ignores never count as edits.
+
 ## Exit codes
 
-- `1`: the description is more than one line, holds a control character or is longer than 1024 bytes.
-- `6`: the name breaks the naming rule, the account repo already holds a skill of that name in any case, or the library or `~/.agentx/worktrees` already holds something under it.
+- `1`: the description is more than one line, holds a control character or is longer than 1024 bytes; `-m` is empty.
+- `5`: `skill commit` names a skill your library does not hold.
+- `6`: the name breaks the naming rule, the account repo already holds a skill of that name in any case, or the library or `~/.agentx/worktrees` already holds something under it. For `skill commit`: the skill is not a fork, the fork's worktree is missing or needs repair, the fork holds a Git repository its `.gitignore` does not cover, or the fork changed while it was being committed. For a command that moves a fork's branch: the fork has uncommitted edits.
 - `7`: another agentx command is running. Retry when it finishes.
 - `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.

@@ -35,14 +35,7 @@ func TestSkillNewCreatesAForkFromTheTemplate(t *testing.T) {
 	t.Parallel()
 	a, _ := installHarness(t)
 	b, _ := installHarness(t)
-	f, err := os.OpenFile(filepath.Join(b.home, ".gitconfig"), os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.WriteString("[user]\n\tname = Ada Lovelace\n\temail = ada@example.com\n"); err != nil {
-		t.Fatal(err)
-	}
-	f.Close()
+	b.withIdentity("Ada Lovelace", "ada@example.com")
 	a.env["GIT_CONFIG_NOSYSTEM"] = "1" // no identity of the test machine's own
 	ids, machines := map[*harness]string{}, map[*harness]string{}
 	for _, h := range []*harness{a, b} {

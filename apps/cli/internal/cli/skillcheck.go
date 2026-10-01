@@ -42,23 +42,23 @@ func newSkillCheckCommand(inv *invocation) *cobra.Command {
 // child emits the same event, carrying its instance id.
 type updateAvailableEvent struct {
 	event
-	InstanceID              string       `json:"instance_id,omitempty"` // serve only
-	Name                    string       `json:"name"`
-	Kind                    string       `json:"kind"`
-	Source                  string       `json:"source"`
-	Subpath                 string       `json:"subpath"`
-	BaseHash                string       `json:"base_hash"`
-	UpstreamCommit          string       `json:"upstream_commit"`
-	Candidate               string       `json:"candidate"`
-	CandidateHash           string       `json:"candidate_hash"`
-	CandidateUpstreamCommit string       `json:"candidate_upstream_commit"`
-	Files                   []updateFile `json:"files"`
-	UpstreamName            string       `json:"upstream_name,omitempty"` // present when the upstream names the skill otherwise
+	InstanceID              string        `json:"instance_id,omitempty"` // serve only
+	Name                    string        `json:"name"`
+	Kind                    string        `json:"kind"`
+	Source                  string        `json:"source"`
+	Subpath                 string        `json:"subpath"`
+	BaseHash                string        `json:"base_hash"`
+	UpstreamCommit          string        `json:"upstream_commit"`
+	Candidate               string        `json:"candidate"`
+	CandidateHash           string        `json:"candidate_hash"`
+	CandidateUpstreamCommit string        `json:"candidate_upstream_commit"`
+	Files                   []changedFile `json:"files"`
+	UpstreamName            string        `json:"upstream_name,omitempty"` // present when the upstream names the skill otherwise
 }
 
-// updateFile is one file an update changes, with what it does to it, in
-// the words of a diff event.
-type updateFile struct {
+// changedFile is one file a change of a skill touches, an update or a
+// commit, with what the change does to it, in the words of a diff event.
+type changedFile struct {
 	Path   string `json:"path"`
 	Status string `json:"status"`
 }
@@ -753,7 +753,7 @@ func (inv *invocation) describeCandidates(ctx context.Context, gitDir string, re
 		ev := updateAvailableEvent{
 			event: newEvent("update_available"), Name: rec.Name, Kind: rec.Kind,
 			Source: rec.Import.Source, Subpath: rec.Import.Path, BaseHash: rec.Import.Hash, UpstreamCommit: rec.Import.Commit,
-			Candidate: c.Commit, CandidateHash: c.Import.Hash, CandidateUpstreamCommit: c.Import.Commit, Files: []updateFile{},
+			Candidate: c.Commit, CandidateHash: c.Import.Hash, CandidateUpstreamCommit: c.Import.Commit, Files: []changedFile{},
 		}
 		prefix := rec.Import.Dir() + "/"
 		for _, f := range changes[rec.Tree+" "+c.Tree] {
@@ -796,15 +796,15 @@ func renameWarning(name, upstream string) string {
 // status and a path per file, each ended by a NUL. A status is a capital
 // letter and an object id starts with a lower-case hex digit, which is how
 // the next pair is told from the next file.
-func parsePairDiffs(out string) (map[string][]updateFile, error) {
-	changes := map[string][]updateFile{}
+func parsePairDiffs(out string) (map[string][]changedFile, error) {
+	changes := map[string][]changedFile{}
 	for out != "" {
 		pair, rest, ok := strings.Cut(out, "\n")
 		if !ok || strings.Count(pair, " ") != 1 {
 			return nil, fmt.Errorf("git diff-tree: cannot read the pair of trees at %q", pair)
 		}
 		out = rest
-		files := []updateFile{}
+		files := []changedFile{}
 		for out != "" && !isHexDigit(out[0]) {
 			status, rest, ok := strings.Cut(out, "\x00")
 			if !ok {
@@ -814,7 +814,7 @@ func parsePairDiffs(out string) (map[string][]updateFile, error) {
 			if !ok {
 				return nil, fmt.Errorf("git diff-tree: truncated path after status %q", status)
 			}
-			f := updateFile{Path: file, Status: diffModified}
+			f := changedFile{Path: file, Status: diffModified}
 			switch status {
 			case "A":
 				f.Status = diffAdded

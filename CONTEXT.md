@@ -112,7 +112,7 @@ The git remote per account that account repos push to and fetch from once the ma
 _Avoid_: cloud, server, origin
 
 **Publish**:
-An explicit user action that pushes one fork's or greenfield skill's branch from the account repo to the account remote. After publishing it is an upstream like any other and reaches other machines through install and update. Local commits happen on their own; publishing does not.
+An explicit user action that pushes one fork's or greenfield skill's branch from the account repo to the account remote. After publishing it is an upstream like any other and reaches other machines through install and update. Commits are explicit, made by the user with agentx or with git, and publishing pushes commits only.
 _Avoid_: sync, share, upload
 
 **Update check**:
@@ -132,7 +132,7 @@ The merge an update of a modified skill leaves when the edits and the update can
 _Avoid_: merge ref, conflict state
 
 **Modified skill**:
-A managed skill whose on-disk content no longer matches its base version because it was edited outside agentx, by hand or by any other tool. Decided as git decides for a work tree: git records the library directory over an index loaded from the base version, and the skill is modified when the tree it writes differs from the base version's, so a changed file mode or symlink counts as an edit and a file git ignores does not. Shown as drift, local to one machine, never synced. Can be reverted, updated by merging its edits with the update, or converted to a fork.
+A managed skill whose on-disk content no longer matches its base version because it was edited outside agentx, by hand or by any other tool. Decided as git decides for a work tree: git records the library directory over an index loaded from the base version, and the skill is modified when the tree it writes differs from the base version's, so a changed file mode or symlink counts as an edit and a file git ignores does not. Shown as drift, local to one machine, never synced. Can be reverted, updated by merging its edits with the update, or converted to a fork. A fork is modified while it has uncommitted edits: its skill directory, compared the same way with the tip of its branch, differs from what the tip records. It stays modified until the edits are committed or reverted, and a command that would move its branch refuses until then.
 _Avoid_: dirty, drifted, changed
 
 **Lineage record**:

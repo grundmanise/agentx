@@ -2,10 +2,17 @@ package cli
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
+	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
@@ -25,6 +32,123 @@ func (inv *invocation) worktreesDir() string { return filepath.Join(inv.dirs.Hom
 // worktreeRoot is the worktree of the fork called name.
 func (inv *invocation) worktreeRoot(name string) string {
 	return filepath.Join(inv.worktreesDir(), name)
+}
+
+// forkSite is one fork as a command that works on its worktree finds it:
+// its branch as the command read it, and where its worktree, its skill
+// directory and its library entry are.
+type forkSite struct {
+	name     string
+	gitDir   string
+	rec      lineage.Record // the fork's branch, its tip and that tip's tree
+	branch   string         // the branch's short name, skills/<name>, as the worktree's HEAD names it
+	dir      string         // the skill's directory in the branch's tree, which never changes
+	root     string         // the worktree, worktreeRoot(name)
+	skillDir string         // root/dir, the directory the library entry leads to
+	libPath  string
+}
+
+// forkVersion is the tip of a fork's branch as a version its skill
+// directory dir is compared with: the directory holds it when its tree id,
+// wrapped under dir as the branch's tree wraps it, is the tip's tree. That
+// is the fast path, the in-process tree id against the tip's skill
+// subtree, which the for-each-ref that read the branch read with it, so a
+// fork whose directory holds its tip costs no git process.
+func forkVersion(rec lineage.Record, dir string) version {
+	return version{load: rec.Commit + ":" + dir, holds: func(id string) bool { return treeid.Wrap(dir, id) == rec.Tree }}
+}
+
+// version is the fork's tip, see forkVersion.
+func (f forkSite) version() version { return forkVersion(f.rec, f.dir) }
+
+// forkSiteOf finds the fork whose branch is rec checked out on this
+// machine, refusing one whose worktree git cannot run in, see
+// worktreeHealth, before anything runs git inside it. The skill's
+// directory is where the library entry leads, which costs no git, or, when
+// the entry leads elsewhere, the one directory the tip's tree holds.
+func (inv *invocation) forkSiteOf(ctx context.Context, gitDir string, rec lineage.Record) (forkSite, error) {
+	f := forkSite{
+		name: rec.Name, gitDir: gitDir, rec: rec, branch: strings.TrimPrefix(rec.Ref, "refs/heads/"),
+		root: inv.worktreeRoot(rec.Name), libPath: inv.libraryPath(rec.Name),
+	}
+	if err := worktreeHealth(f.name, f.root, f.branch); err != nil {
+		return f, err
+	}
+	if real, err := filepath.EvalSymlinks(f.libPath); err == nil {
+		f.dir, _ = inv.placedForkDir(f.name, real)
+	}
+	if f.dir == "" {
+		out, err := inv.git.Isolated(ctx, gitDir, "ls-tree", "-z", "-d", "--name-only", rec.Commit)
+		if err != nil {
+			return f, accountRepoFailure(err)
+		}
+		var dirs []string
+		for _, d := range strings.Split(out, "\x00") {
+			if d != "" {
+				dirs = append(dirs, d)
+			}
+		}
+		if len(dirs) != 1 {
+			return f, fail(exitAccountRepo, fmt.Sprintf("the branch %s holds %d directories at its root, not the one skill directory a fork's branch holds", rec.Ref, len(dirs)),
+				"run 'agentx doctor' and check the account repo it names")
+		}
+		f.dir = dirs[0]
+	}
+	f.skillDir = filepath.Join(f.root, f.dir)
+	return f, nil
+}
+
+// placedForkDir is the skill directory of the fork called name when real,
+// where its library entry leads, is a directory of the fork's worktree,
+// as the library symlink of a placed fork leads, and false otherwise. It
+// reads the filesystem alone.
+func (inv *invocation) placedForkDir(name, real string) (string, bool) {
+	root, err := filepath.EvalSymlinks(inv.worktreeRoot(name))
+	if err != nil || filepath.Dir(real) != root {
+		return "", false
+	}
+	return filepath.Base(real), true
+}
+
+// worktreeHealth refuses a fork's worktree that git cannot work in, from
+// the files alone, before a command journals anything that runs git there:
+// one that is gone, one whose pointers no longer meet, as moving agentx
+// home leaves them, and one checked out on another branch than the fork's.
+// Each is exit code 6, since nothing is wrong with the account repo.
+func worktreeHealth(name, root, branch string) error {
+	where := sanitised(name) + "'s worktree " + quotedPath(root)
+	place := "run '" + skillCommand("place", name) + "'"
+	switch _, err := os.Lstat(root); {
+	case errors.Is(err, fs.ErrNotExist):
+		return fail(exitRefused, where+" is missing", place+" to check it out again")
+	case err != nil:
+		return fail(exitRefused, err.Error(), "run 'agentx doctor' and check agentx home")
+	case home.PointersMoved(root):
+		return fail(exitRefused, where+" needs repair", place+" to repair it")
+	case !home.WorktreeAt(root, branch):
+		return fail(exitRefused, where+" is not on its branch "+branch,
+			"run 'git -C "+shellWord(root)+" switch "+branch+"' to put it back on its branch")
+	}
+	return nil
+}
+
+// holdsTip is drift's verdict on a placed fork: whether its skill
+// directory, the one its library entry leads to, holds its branch tip, as
+// git status in the worktree would say of it with no file listed. It never
+// fails: a directory that cannot be read, or that git cannot compare, is
+// modified, and so is one holding a nested repository git would record as
+// a link. Under serve, git's verdict is kept until the directory's tree
+// id, the tip or the setting changes, see verdict.
+func (inv *invocation) holdsTip(ctx context.Context, lib scan.LibrarySkill, rec lineage.Record, dir string) bool {
+	tree, err := treeid.Read(lib.ResolvedPath)
+	if err != nil {
+		return false
+	}
+	v := forkVersion(rec, dir)
+	return inv.verdict(lib.Name, "its branch tip", tree, v, func() (bool, error) {
+		j, err := inv.judgeForkTree(ctx, gitx.AccountRepoPath(inv.dirs.Home), lib.ResolvedPath, tree, v, false)
+		return j.clean, err
+	})
 }
 
 // forkJudged is how a fork's skill directory compares with a version of
@@ -58,6 +182,11 @@ func (inv *invocation) judgeFork(ctx context.Context, gitDir, dir string, v vers
 	if err != nil {
 		return forkJudged{}, err
 	}
+	return inv.judgeForkTree(ctx, gitDir, dir, t, v, wantIgnored)
+}
+
+// judgeForkTree is judgeFork of a directory already read as t.
+func (inv *invocation) judgeForkTree(ctx context.Context, gitDir, dir string, t treeid.Tree, v version, wantIgnored bool) (forkJudged, error) {
 	if len(t.Unrecordable) == 0 && !wantIgnored && fastHolds(t, inv.systemFilesIgnored(), v) {
 		return forkJudged{clean: true}, nil
 	}

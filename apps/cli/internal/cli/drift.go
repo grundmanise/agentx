@@ -39,20 +39,34 @@ const (
 // library under, and every other report reads it with the rest of what it
 // reports on.
 type observation struct {
-	modified bool     // the directory does not hold its base version, see holdsBase
+	judged   bool     // the skill has a state: a managed skill with a base version, or a fork whose library entry leads into its worktree
+	modified bool     // the directory does not hold its base version, see holdsBase, or its branch tip, see holdsTip
 	placed   []string // the drift states of the placements, sorted
 	pending  bool     // an update left a merge pending for the skill, see pendingMerges
 }
 
-// observe reads what a managed skill's drift is judged from, and nothing for
-// any other: a fork's drift is decided by its own history and an unmanaged
-// skill has no base to drift from.
+// observe reads what a skill's drift is judged from: a managed skill's
+// directory against its base version, a fork's skill directory against its
+// branch tip, and the places of either. An unmanaged skill has nothing to
+// drift from, and nor does a fork whose library entry does not lead into
+// its worktree: a directory of its own there, or one the fork has no
+// worktree for, is not the fork's checkout, and comparing it with the
+// branch would call edits what may be someone else's files.
 func (sc skillContext) observe(ctx context.Context, inv *invocation, lib scan.LibrarySkill) observation {
 	rec, ok := sc.records[lib.Name]
-	if !ok || rec.Kind != lineage.KindManaged || !rec.HasImport {
+	switch {
+	case !ok:
 		return observation{}
+	case rec.Kind == lineage.KindManaged && rec.HasImport:
+		return observation{judged: true, modified: !inv.holdsBase(ctx, lib, rec), placed: sc.placementDrift(inv, lib), pending: sc.merges[lib.Name]}
+	case rec.Kind == lineage.KindFork:
+		dir, ok := inv.placedForkDir(lib.Name, lib.ResolvedPath)
+		if !ok {
+			return observation{}
+		}
+		return observation{judged: true, modified: !inv.holdsTip(ctx, lib, rec, dir), placed: sc.placementDrift(inv, lib), pending: sc.merges[lib.Name]}
 	}
-	return observation{modified: !inv.holdsBase(ctx, lib, rec), placed: sc.placementDrift(inv, lib), pending: sc.merges[lib.Name]}
+	return observation{}
 }
 
 // observeAll reads the observation of every skill of the library ahead of
@@ -74,8 +88,8 @@ func (sc skillContext) observationOf(ctx context.Context, inv *invocation, lib s
 	return sc.observe(ctx, inv, lib)
 }
 
-// placementDrift is what the configurations' own places say about a managed
-// skill: the drift word of every place drift asks about, see ownPlaces and
+// placementDrift is what the configurations' own places say about a
+// managed skill or a fork: the drift word of every place drift asks about, see ownPlaces and
 // placeSite.drift, each once, sorted.
 //
 // The rule is literal: a skill placed with --to, or taken out of one
@@ -227,9 +241,10 @@ func (p placeSite) drift(libPath string) string {
 	return ""
 }
 
-// driftOf is the drift list of a managed skill: the states of its
-// placements, source removed and upstream removed, sorted, or nil when it
-// is in none.
+// driftOf is the drift list of a skill: the states of its placements,
+// source removed and upstream removed, sorted, or nil when it is in none. A
+// fork is never source removed or upstream removed: the source that
+// matters to it is the account remote, and nothing marks its upstream.
 func driftOf(obs observation, sourceRemoved, upstreamRemoved bool) []string {
 	drift := append([]string(nil), obs.placed...)
 	if sourceRemoved {

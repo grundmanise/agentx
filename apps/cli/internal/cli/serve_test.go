@@ -315,7 +315,9 @@ func TestWatchedDirsCoverEverySkillsDirectoryOnce(t *testing.T) {
 	if got, want := dirs[2:], trees; !reflect.DeepEqual(got, want) {
 		t.Errorf("dirs after the flat ones = %v, want the trees %v", got, want)
 	}
-	if got, want := trees[:3], []string{"/u/.agentx/worktrees", "/u/.agents/skills", "/u/.claude/skills"}; !reflect.DeepEqual(got, want) {
+	// The reflogs of the fork branches are where a commit made with git in
+	// a fork's worktree shows.
+	if got, want := trees[:4], []string{"/u/.agentx/worktrees", "/u/.agents/skills", gitx.AccountRepoPath("/u/.agentx") + "/logs/refs/heads/skills", "/u/.claude/skills"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("first trees = %v, want %v", got, want)
 	}
 	seen := map[string]bool{}
