@@ -1,5 +1,6 @@
-# Template for Formula/agentx.rb in grundmanise/homebrew-tap. On every stable release, the
-# release workflow fills in the version and checksum placeholders below and pushes the result.
+# Source: packaging/homebrew/agentx.rb in grundmanise/agentx. Each stable release fills in the
+# version and checksum and copies it to Formula/agentx.rb in grundmanise/homebrew-tap.
+# Edit the source, not the copy in the tap: the next release overwrites the copy.
 class Agentx < Formula
   desc "Inventory manager for your agents' skills, MCP servers and plugins"
   homepage "https://docs.agentx.wtf"
