@@ -2,6 +2,7 @@ package gitx
 
 import (
 	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,13 +51,21 @@ func (w *WorkTree) Close() error { return os.RemoveAll(filepath.Dir(w.index)) }
 // the directory itself, since git lists only what is below the directory
 // it runs in. Line-ending warnings are kept off stderr.
 func (w *WorkTree) run(ctx context.Context, args ...string) (string, error) {
+	return w.r.run(ctx, w.call(nil), append(w.global(), args...)...)
+}
+
+// global is what every git over the work tree is given before its
+// subcommand, and call the environment it runs in.
+func (w *WorkTree) global() []string {
 	full := append(isolatedConfig(), "-c", "core.safecrlf=false")
 	if w.excludesFile != "" {
 		full = append(full, "-c", "core.excludesFile="+w.excludesFile)
 	}
-	full = append(full, "--git-dir="+w.gitDir, "--work-tree="+w.dir)
-	c := call{isolated: true, env: map[string]string{"GIT_INDEX_FILE": w.index}, dir: w.dir}
-	return w.r.run(ctx, c, append(full, args...)...)
+	return append(full, "--git-dir="+w.gitDir, "--work-tree="+w.dir)
+}
+
+func (w *WorkTree) call(stdin io.Reader) call {
+	return call{isolated: true, env: map[string]string{"GIT_INDEX_FILE": w.index}, dir: w.dir, stdin: stdin}
 }
 
 // Load reads treeish, a tree the repository holds or a <commit>:<path>,
@@ -118,4 +127,26 @@ func (r *Runner) UserExcludesFile(ctx context.Context, gitDir string) string {
 		return ""
 	}
 	return out
+}
+
+// CheckIgnore is those of paths, relative to the directory with / as the
+// separator, that git's ignore rules cover, whether git would list them or
+// not: a repository nested in the directory is never listed, since git does
+// not look inside it, and is ignored all the same when a rule covers it.
+func (w *WorkTree) CheckIgnore(ctx context.Context, paths []string) ([]string, error) {
+	if len(paths) == 0 {
+		return nil, nil
+	}
+	stdin := strings.NewReader(strings.Join(paths, "\x00") + "\x00")
+	out, _, err := w.r.runStatus(ctx, w.call(stdin), 1, append(w.global(), "check-ignore", "--no-index", "-z", "--stdin")...)
+	if err != nil {
+		return nil, err
+	}
+	var ignored []string
+	for _, p := range strings.Split(out, "\x00") {
+		if p != "" {
+			ignored = append(ignored, p)
+		}
+	}
+	return ignored, nil
 }

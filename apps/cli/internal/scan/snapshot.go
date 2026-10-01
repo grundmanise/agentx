@@ -81,6 +81,7 @@ type Occurrence struct {
 type LibraryEntry struct {
 	Name           string             `json:"name"`
 	Kind           string             `json:"kind"`              // managed, fork or unmanaged
+	ForkID         string             `json:"fork_id,omitempty"` // a fork's permanent id, from the commit that created it
 	Source         string             `json:"source,omitempty"`  // the canonical URL of the upstream
 	Subpath        *string            `json:"subpath,omitempty"` // the directory in the source, "" for its root
 	UpstreamCommit string             `json:"upstream_commit,omitempty"`

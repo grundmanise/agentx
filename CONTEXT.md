@@ -40,7 +40,7 @@ The fleet-wide identity of a skill or MCP server. For a managed skill its upstre
 _Avoid_: skill id, key
 
 **Fork id**:
-The permanent identity assigned when a fork or greenfield skill is created. Installing that published fork elsewhere preserves it; independently creating another fork assigns a different identity, even from the same upstream version.
+The permanent identity assigned when a fork or greenfield skill is created, carried by the commit that creates it, which is never amended. Installing that published fork elsewhere preserves it; independently creating another fork assigns a different identity, even from the same upstream version.
 
 **Physical asset**:
 One logical asset on one machine in one version, the version being the content hash for a skill and the tool signature for a server. The unit drift is evaluated on and machine views count.
@@ -84,7 +84,7 @@ A skill derived from an upstream skill and edited by the user, keeping the upstr
 _Avoid_: copy, variant, override
 
 **Greenfield skill**:
-A skill created from scratch in agentx with no upstream. Behaves as a fork with nothing to merge from.
+A skill created from scratch in agentx with no upstream, with `agentx skill new`. Behaves as a fork with nothing to merge from, and is listed with kind `fork`.
 _Avoid_: custom skill, new skill
 
 **Account repo**:
@@ -140,7 +140,7 @@ What ties a fork, greenfield or managed skill to its upstream, meaning a source,
 _Avoid_: metadata
 
 **Lineage trailers**:
-The `Agentx-` commit trailers in the account repo: source, path, upstream commit and content hash on every imported upstream version, and the id of the current base on every merge agentx makes. How a fork's provenance reaches every clone by fetch, with no file in the branch tree.
+The `Agentx-` commit trailers in the account repo: source, path, upstream commit and content hash on every imported upstream version, the id of the current base on every merge agentx makes, the fork id on the commit that creates a fork, and the machine on every commit agentx writes on a fork's branch. How a fork's provenance reaches every clone by fetch, with no file in the branch tree.
 _Avoid_: manifest, metadata file, provenance file
 
 **Library**:

@@ -725,8 +725,11 @@ func (sc skillContext) librarySkillEventFor(ctx context.Context, inv *invocation
 	return skillFromLibrary(lib, rec, managed, sc.sources, places, universalClients(snap), sc.observationOf(ctx, inv, lib))
 }
 
-// lineageRecords are the branches of the account repo by skill name, empty
+// lineageRecords are the branches of the account repo by skill name, a
+// fork's with the lineage its history holds, see lineage.ReadForks, empty
 // when this machine has no account repo yet: a listing never creates one.
+// Serve keeps the lineages it read by branch tip, so a rescan walks only the
+// forks whose branch moved.
 // Either failure names the account repo, as the check of it does, since
 // what git says of refs it cannot read need not, and the hint and a scan's
 // warning both send the reader to that repo.
@@ -739,6 +742,9 @@ func (inv *invocation) lineageRecords(ctx context.Context) (map[string]lineage.R
 		return map[string]lineage.Record{}, nil
 	}
 	records, err := lineage.List(ctx, inv.git, gitDir)
+	if err == nil {
+		err = lineage.ReadForks(ctx, inv.git, gitDir, records, inv.forkWalks)
+	}
 	if err != nil {
 		return nil, accountRepoFailure(fmt.Errorf("account repo %s: %w", gitDir, err))
 	}

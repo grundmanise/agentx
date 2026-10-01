@@ -14,6 +14,7 @@ import (
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
+	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 	"github.com/grundmanise/agentx/apps/cli/internal/serve"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
@@ -145,6 +146,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 			defer home.Unlock(lock)
 			inv.instanceID() // fixed here, before two goroutines report it
 			inv.verdicts = map[string]keptVerdict{}
+			inv.forkWalks = map[string]lineage.ForkLineage{}
 			dirs, trees := inv.watchedDirs()
 			// The library of the last snapshot emitted, which the next one's
 			// drift is told against. Snapshots are reported from the loop's

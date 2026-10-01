@@ -15,6 +15,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/interrupt"
+	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
 // invocation is what every command shares for one run.
@@ -29,7 +30,8 @@ type invocation struct {
 
 	excludes     sync.Once // reads excludesPath, the user's core.excludesFile; see excludesFile
 	excludesPath string
-	verdicts     map[string]keptVerdict // serve's verdicts on managed skills, by name; nil keeps none, see holdsBase
+	verdicts     map[string]keptVerdict         // serve's verdicts on managed skills, by name; nil keeps none, see holdsBase
+	forkWalks    map[string]lineage.ForkLineage // serve's fork lineages, by branch tip; nil keeps none, see lineageRecords
 }
 
 // refs is what the mutation journal needs to apply and recover the lineage
@@ -65,6 +67,21 @@ type journalRefs struct {
 func (j journalRefs) Warn(message string) { j.out.warn(message) }
 
 func (j journalRefs) Prune() error { return j.prune() }
+
+// The worktree steps of a journal run git through the same updater; the
+// embedded interface does not carry them, so they are passed on here.
+
+func (j journalRefs) AddWorktree(gitDir, path, branch string) error {
+	return j.RefUpdater.(home.Worktrees).AddWorktree(gitDir, path, branch)
+}
+
+func (j journalRefs) ResetIndex(path string) error {
+	return j.RefUpdater.(home.Worktrees).ResetIndex(path)
+}
+
+func (j journalRefs) RemoveWorktree(gitDir, path string) error {
+	return j.RefUpdater.(home.Worktrees).RemoveWorktree(gitDir, path)
+}
 
 // Main is Run for a real process: it watches the stop signals first, so
 // that a Ctrl-C or a SIGTERM ends the run through its own error path
@@ -216,6 +233,11 @@ func finish(ctx context.Context, inv *invocation, err error) int {
 	case errors.As(err, &f):
 	case errors.Is(err, home.ErrLocked):
 		f = &failure{status: exitLocked, message: err.Error(), hint: "wait for the command holding " + home.LockPath(inv.dirs.Home) + " to finish, then retry"}
+	case errors.Is(err, home.ErrMovedBeforeApply):
+		// A command that knows what moved says so in its own words; one
+		// that does not still changed nothing, and running it again is the
+		// way on.
+		f = &failure{status: exitRefused, message: err.Error() + ", so nothing was changed", hint: "run the command again"}
 	case errors.Is(err, home.ErrRecovery):
 		f = &failure{status: exitRefused, message: err.Error(), hint: "restore the file to let the change finish, or move the journal aside to keep the file as it is"}
 	case errors.Is(err, gitx.ErrAccountRepo):

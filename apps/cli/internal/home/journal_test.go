@@ -216,21 +216,29 @@ func TestInstallRecoversFromEveryBoundary(t *testing.T) {
 
 // TestBatchRefsMoveTogether checks the transaction a journal's refs are
 // applied in: a batch whose second ref is claimed by something else moves
-// none of them, so that recovery finds the branches either all written or
-// all absent rather than a run's skills split between the two.
+// none of them, so that the branches are either all written or all absent
+// rather than a run's skills split between the two. Since the refusal came
+// before anything was applied, the journal is abandoned with what it staged
+// instead of being left for a recovery that would refuse it every time.
 func TestBatchRefsMoveTogether(t *testing.T) {
 	t.Parallel()
 	in, u := newInstall(t)
 	u[in.gitDir+" refs/heads/managed/beta"] = "someone else"
 	m := in.plan(t, "one\n", batch...)
 	err := m.Apply(u)
-	if !errors.Is(err, ErrRecovery) {
-		t.Fatalf("apply = %v, want it refused", err)
+	if !errors.Is(err, ErrMovedBeforeApply) || !strings.Contains(err.Error(), "refs/heads/managed/beta") {
+		t.Fatalf("apply = %v, want it abandoned naming the ref that moved", err)
 	}
 	for _, name := range []string{"alpha", "gamma"} {
 		if value := u[in.gitDir+" refs/heads/managed/"+name]; value != "" {
 			t.Errorf("%s was written to %q although the batch was refused", name, value)
 		}
+	}
+	if left, _ := Journals(in.dir); len(left) != 0 || m.Journaled() {
+		t.Errorf("%d journals left, journaled %v, want the journal abandoned", len(left), m.Journaled())
+	}
+	if hidden, _ := filepath.Glob(filepath.Join(in.library, ".agentx-*")); len(hidden) != 0 {
+		t.Errorf("the abandoned journal left %v staged", hidden)
 	}
 }
 

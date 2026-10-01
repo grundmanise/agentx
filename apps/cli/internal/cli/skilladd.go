@@ -1259,17 +1259,38 @@ func holdsSkillFile(path string) bool {
 }
 
 // intoWorktrees reports whether the symlink at path points into the agentx
-// worktrees directory, which is where a fork's placement points.
+// worktrees directory, which is where a fork's library symlink points. A
+// relative link is read from the directory it really sits in, and agentx
+// home is compared by its real path too, so that no spelling of either
+// through a symlink hides it.
 func (inv *invocation) intoWorktrees(path string) bool {
 	link, err := os.Readlink(path)
 	if err != nil {
 		return false
 	}
 	if !filepath.IsAbs(link) {
-		link = filepath.Join(filepath.Dir(path), link)
+		dir := filepath.Dir(path)
+		if real, err := filepath.EvalSymlinks(dir); err == nil {
+			dir = real
+		}
+		link = filepath.Join(dir, link)
 	}
-	worktrees := filepath.Join(inv.dirs.Home, "worktrees")
-	return strings.HasPrefix(filepath.Clean(link), worktrees+string(filepath.Separator))
+	link = filepath.Clean(link)
+	for _, h := range []string{inv.dirs.Home, realPath(inv.dirs.Home)} {
+		if strings.HasPrefix(link, filepath.Join(h, "worktrees")+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
+}
+
+// realPath is path with its symlinks resolved, or path itself when it
+// cannot be.
+func realPath(path string) string {
+	if real, err := filepath.EvalSymlinks(path); err == nil {
+		return real
+	}
+	return path
 }
 
 // mutationFailure keeps the refusals of a mutating skill command as they
@@ -1280,7 +1301,7 @@ func mutationFailure(err error) error {
 	switch {
 	case errors.As(err, &f):
 		return err
-	case errors.Is(err, home.ErrRecovery), errors.Is(err, home.ErrLocked):
+	case errors.Is(err, home.ErrRecovery), errors.Is(err, home.ErrLocked), errors.Is(err, home.ErrMovedBeforeApply):
 		return err
 	case errors.Is(err, gitx.ErrAccountRepo):
 		return accountRepoFailure(err)

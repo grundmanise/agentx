@@ -54,10 +54,12 @@ func ForkRef(name string) string { return ForkPrefix + name }
 
 // Record is what the account repo holds for one skill name: the branch, the
 // commit it points at, that commit's tree and, when that commit carries
-// them, the four lineage trailers. A fork's tip carries the trailers of the
-// last upstream version merged into it, and may carry none at all. What the
-// last update check found for the skill comes with it: the candidate it
-// pinned, and the source commit it found without the skill.
+// them, the four lineage trailers. A managed skill's tip is its import
+// commit. A fork's tip is a commit of its own history, whose lineage
+// ReadForks reads into Fork; Import and HasImport then describe the tip
+// alone and say nothing of the fork's base. What the last update check
+// found for the skill comes with it: the candidate it pinned, and the
+// source commit it found without the skill.
 type Record struct {
 	Name            string
 	Kind            string // managed or fork
@@ -66,8 +68,9 @@ type Record struct {
 	Tree            string // the root tree of that commit: for an import commit, the upstream directory as its one entry
 	Import          Import
 	HasImport       bool
-	Candidate       *Candidate // the update candidate, nil when the account repo holds none
-	UpstreamRemoved string     // the source commit the upstream-removed marker names, "" when there is none
+	Candidate       *Candidate   // the update candidate, nil when the account repo holds none
+	UpstreamRemoved string       // the source commit the upstream-removed marker names, "" when there is none
+	Fork            *ForkLineage // a fork's lineage, read by ReadForks; nil for a managed skill and until then
 }
 
 // Candidate is an update candidate: the import commit of a newer upstream

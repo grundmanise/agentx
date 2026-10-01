@@ -1,0 +1,62 @@
+---
+title: "Forks"
+description: "Create skills of your own, each with a history in the account repo."
+---
+
+A fork is a skill with a history of its own. agentx keeps that history as a branch in the account repo, `~/.agentx/account.git`, and checks the branch out for you, so every client sees the skill as it sees any other. A skill you create with agentx is a fork with no upstream.
+
+## Create a skill
+
+```sh
+agentx skill new release-notes --description "Write release notes from the merged pull requests."
+```
+
+```text
+✓ created release-notes in ~/.agents/skills/release-notes: 4 placements
+  claude-code  symlink  ~/.claude/skills/release-notes -> ~/.agents/skills/release-notes
+  codex        library  ~/.agents/skills/release-notes
+  cursor       symlink  ~/.cursor/skills/release-notes -> ~/.agents/skills/release-notes
+  gemini-cli   library  ~/.agents/skills/release-notes
+  always available to universal clients: codex, gemini-cli
+```
+
+The skill starts from a template: a `SKILL.md` with the name and the description in its frontmatter and a line that asks for the instructions. Open it from your library and write them. Leave out `--description` to fill it in later.
+
+agentx places the skill in every enabled client, as [`agentx skill add`](/cli/skill#install-a-skill) places a skill it installs. Clients that read the library directly, such as Codex and Gemini CLI, see it there and get no link of their own.
+
+`agentx skill list` shows the skill as a `fork` with no upstream. With `--json`, its `fork_id` is the skill's permanent id: it never changes, and two skills created separately never share one, even under the same name on two machines.
+
+### Choose a name
+
+Use 1 to 64 lowercase letters, digits and hyphens, with no hyphen at the start or end and no two in a row, such as `release-notes`. These names work as Git branch names everywhere, including on file systems that ignore case.
+
+agentx refuses the name, and changes nothing, when:
+
+- it breaks the rule above;
+- the account repo already holds a skill of that name, in any case: `Notes` and `notes` count as the same name;
+- your library already holds something under that name.
+
+## Where a fork lives
+
+```text
+~/.agentx/worktrees/release-notes/.git                Git's pointer to the account repo
+~/.agentx/worktrees/release-notes/release-notes/      the skill
+~/.agents/skills/release-notes -> ../../.agentx/worktrees/release-notes/release-notes
+```
+
+- The branch is `skills/<name>` in the account repo. Plain `git` reads it: `git --git-dir ~/.agentx/account.git log skills/release-notes`.
+- The branch is checked out as a Git worktree in `~/.agentx/worktrees/<name>`, locked so that `git worktree prune` never removes it. The skill is the worktree's one directory, so Git's `.git` file sits next to the skill and never inside it: no client ever sees a `.git` entry in a skill.
+- Your library holds a symlink to the skill. When the library and agentx home share a parent directory, as `~/.agents` and `~/.agentx` do, the symlink is relative, so it keeps working if your home directory moves.
+
+The first commit holds the template and records the skill's id in an `Agentx-Fork-ID` trailer. Every commit agentx writes on the branch names the machine that wrote it in an `Agentx-Machine` trailer, and carries your Git identity, `user.name` and `user.email`, as its author. If you set none, agentx uses the machine's label and an address of its own. agentx never changes a commit once it is written.
+
+### Files that stay local
+
+A commit of a fork records what Git would record in any repository: files your `.gitignore`, your global Git ignore file or the [`ignore_system_files`](/cli/config) list cover stay on your machine and are never committed. A Git repository inside the skill is refused rather than committed, unless the skill's `.gitignore` covers it.
+
+## Exit codes
+
+- `1`: the description is more than one line, holds a control character or is longer than 1024 bytes.
+- `6`: the name breaks the naming rule, the account repo already holds a skill of that name in any case, or the library or `~/.agentx/worktrees` already holds something under it.
+- `7`: another agentx command is running. Retry when it finishes.
+- `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.

@@ -86,12 +86,13 @@ const mergePending = "merge pending"
 func newSkillCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "skill",
-		Short:       "Install, place, compare, revert, update and remove skills, check them for updates, and list what the library holds",
+		Short:       "Install, create, place, compare, revert, update and remove skills, check them for updates, and list what the library holds",
 		Annotations: map[string]string{annotationGroup: "true"},
 		Args:        cobra.NoArgs,
 		RunE:        needSubcommand(inv, "no skill command given", "run 'agentx skill --help' to list commands"),
 	}
 	cmd.AddCommand(newSkillAddCommand(inv))
+	cmd.AddCommand(newSkillNewCommand(inv))
 	cmd.AddCommand(newSkillPlaceCommand(inv))
 	cmd.AddCommand(newSkillRemoveCommand(inv))
 	cmd.AddCommand(newSkillDiffCommand(inv))
@@ -306,14 +307,23 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 		return ev
 	}
 	ev.Kind = rec.Kind
-	if rec.HasImport {
-		subpath := rec.Import.Path
-		ev.Source, ev.Subpath, ev.UpstreamCommit, ev.BaseHash = rec.Import.Source, &subpath, rec.Import.Commit, rec.Import.Hash
+	// The coordinates are the base version's: a managed skill's is the
+	// import commit its branch points at, and a fork's the import commit its
+	// history names, read by the walk, which a greenfield skill has none of.
+	// A fork's logical identity is its fork id, which its creation commit
+	// carries, not its root commit.
+	base, hasBase := rec.Import, rec.HasImport
+	if rec.Kind == lineage.KindFork && rec.Fork != nil {
+		base, hasBase = rec.Fork.Import, rec.Fork.Base != ""
+		ev.ForkID = rec.Fork.ID
+	}
+	if hasBase {
+		subpath := base.Path
+		ev.Source, ev.Subpath, ev.UpstreamCommit, ev.BaseHash = base.Source, &subpath, base.Commit, base.Hash
 	}
 	// A managed skill's base version is the import commit its branch points
 	// at, so the directory can be compared with that commit's tree; a fork's
-	// base is the last version merged into it, which a later command reads
-	// from its history.
+	// is compared with its own branch tip, which a later command reads.
 	if rec.Kind == lineage.KindManaged && rec.HasImport {
 		ev.State = stateCurrent
 		if obs.modified {

@@ -23,5 +23,5 @@ stdout
 streamable
 unmanaged
 vercel
-worktree
+worktrees?
 [Rr]escans?

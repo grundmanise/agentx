@@ -127,9 +127,11 @@ func TestSkillListWithoutALibrary(t *testing.T) {
 // pending merge; beta displaced in one configuration, missing from another,
 // removed upstream, and holding a file the system-file list names; a skill
 // of the user's own; and a managed branch with no library directory and no
-// lineage, which a warning names. All of it comes from one for-each-ref and
-// the filesystem: only the edited skill asks git, with a read-tree, an add
-// and a write-tree, and the user's global ignore file is read once.
+// lineage, which a warning names; and a greenfield skill, whose lineage its
+// own history holds. All of it comes from one for-each-ref, one walk of the
+// forks' histories and the filesystem: only the edited skill asks git, with
+// a read-tree, an add and a write-tree, and the user's global ignore file is
+// read once.
 func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -154,6 +156,7 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	// one.
 	h.accountGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", pendingReason,
 		pendingCheckout(h, "alpha"), h.ref(lineage.ManagedRef("alpha")))
+	h.mustRun("skill", "new", "fresh")
 	equal(t, "alpha's state", h.listed("alpha")["state"], stateModified)
 	if h.listed("alpha")["candidate"] == nil {
 		t.Error("alpha carries no candidate")
@@ -172,6 +175,8 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 			case strings.Contains(call, "--version"), strings.Contains(call, "rev-parse --is-bare-repository"):
 			case strings.Contains(call, "for-each-ref"):
 				ran = append(ran, "for-each-ref")
+			case strings.Contains(call, " log --stdin "):
+				ran = append(ran, "log")
 			case strings.HasSuffix(call, "config --path --get core.excludesFile"):
 				ran = append(ran, "config")
 			case inAlpha != "":
@@ -181,7 +186,7 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 			}
 		}
 		sort.Strings(ran)
-		equal(t, what+": git runs", strings.Join(ran, " "), "add config for-each-ref read-tree write-tree")
+		equal(t, what+": git runs", strings.Join(ran, " "), "add config for-each-ref log read-tree write-tree")
 	}
 	ghost := "ghost is managed in the account repo but the library holds no skill directory for it;" +
 		" run 'agentx skill add <source> --skill ghost' to install it again, or 'agentx skill remove ghost' to stop managing it"

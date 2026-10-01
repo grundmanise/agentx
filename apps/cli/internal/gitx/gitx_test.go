@@ -162,6 +162,9 @@ func TestOpenAccountRepoCreatesOnceWithAgentxConfig(t *testing.T) {
 		t.Fatalf("OpenAccountRepo = %q, %v, %v", gitDir, created, err)
 	}
 	want := map[string]string{"core.bare": "true", "gc.auto": "0", "core.logAllRefUpdates": "true", "merge.conflictStyle": "zdiff3"}
+	if v, err := r.Version(ctx); err == nil && v.AtLeast(2, 48) {
+		want["worktree.useRelativePaths"] = "true"
+	}
 	for key, value := range want {
 		if got, err := r.Isolated(ctx, gitDir, "config", "--get", key); err != nil || got != value {
 			t.Errorf("%s = %q, %v; want %q", key, got, err, value)
