@@ -595,3 +595,34 @@ func TestStaleForkRegistrations(t *testing.T) {
 		t.Errorf("stale registrations = %q, want %q", got, "relative removed")
 	}
 }
+
+// TestSamePath compares the spellings of a path under a symlinked
+// directory, as /var and /private/var are on macOS, with the path itself,
+// its directory or more of it gone, as they are once a worktree was
+// removed by hand.
+func TestSamePath(t *testing.T) {
+	t.Parallel()
+	real := t.TempDir()
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(real, "worktrees", "notes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		a, b string
+		want bool
+	}{
+		{filepath.Join(link, "worktrees", "notes", ".git"), filepath.Join(real, "worktrees", "notes", ".git"), true},
+		{filepath.Join(link, "worktrees", "gone", ".git"), filepath.Join(real, "worktrees", "gone", ".git"), true},
+		{filepath.Join(link, "gone", "deeper", ".git"), filepath.Join(real, "gone", "deeper", ".git"), true},
+		{filepath.Join(link, "worktrees", "gone", "..", "notes"), filepath.Join(real, "worktrees", "notes"), true},
+		{filepath.Join(link, "worktrees", "notes"), filepath.Join(real, "worktrees", "other"), false},
+		{filepath.Join(link, "gone", "a"), filepath.Join(real, "gone", "b"), false},
+	} {
+		if got := SamePath(tc.a, tc.b); got != tc.want {
+			t.Errorf("SamePath(%s, %s) = %v, want %v", tc.a, tc.b, got, tc.want)
+		}
+	}
+}

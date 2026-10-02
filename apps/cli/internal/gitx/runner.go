@@ -296,9 +296,18 @@ func (r *Runner) run(ctx context.Context, c call, args ...string) (string, error
 // "" to keep it, unless that directory is gone, as it is for a shell left
 // in a merge checkout a pull completed and removed. git started there
 // fails before it reads any argument, so it runs at the root instead; a
-// call that names no directory names its repository with --git-dir.
+// call that names no directory names its repository with --git-dir. Not
+// every system fails getcwd for a removed directory, macOS may still give
+// its old path, so the path must also still be the directory the process
+// is in.
 func workDir() string {
-	if _, err := os.Getwd(); err != nil {
+	wd, err := os.Getwd()
+	if err != nil {
+		return string(filepath.Separator)
+	}
+	named, errNamed := os.Stat(wd)
+	here, errHere := os.Stat(".")
+	if errNamed != nil || errHere != nil || !os.SameFile(named, here) {
 		return string(filepath.Separator)
 	}
 	return ""

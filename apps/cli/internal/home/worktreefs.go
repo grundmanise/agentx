@@ -173,15 +173,27 @@ func NamesBack(admin, path string) bool {
 
 // SamePath compares two spellings of one path, resolving symlinks in their
 // directories when they differ as written, as /var and /private/var do.
-// The path itself need not exist.
+// The path need not exist, nor need its directory: a worktree removed by
+// hand is still named by its registration, under a directory that is gone
+// too, so each is resolved as far as it exists.
 func SamePath(a, b string) bool {
 	a, b = filepath.Clean(a), filepath.Clean(b)
-	if a == b {
-		return true
+	return a == b || resolved(a) == resolved(b)
+}
+
+// resolved is path with the symlinks of its longest existing ancestor
+// resolved and the rest joined on as written.
+func resolved(path string) string {
+	rest := ""
+	for dir := path; ; dir = filepath.Dir(dir) {
+		if r, err := filepath.EvalSymlinks(dir); err == nil {
+			return filepath.Join(r, rest)
+		}
+		if dir == filepath.Dir(dir) {
+			return path
+		}
+		rest = filepath.Join(filepath.Base(dir), rest)
 	}
-	ra, errA := filepath.EvalSymlinks(filepath.Dir(a))
-	rb, errB := filepath.EvalSymlinks(filepath.Dir(b))
-	return errA == nil && errB == nil && filepath.Join(ra, filepath.Base(a)) == filepath.Join(rb, filepath.Base(b))
 }
 
 // headIs reports whether the admin directory's HEAD is on the branch.
