@@ -310,7 +310,7 @@ func (m *Mutation) Worktree(gitDir, path, branch string) {
 // nothing is yet. The directory is renamed, never copied, so from and to
 // must be on one file system. Nothing of from is staged or retained, and
 // nothing discards it: it is the user's content, and recovery moves it
-// only while it still holds what was captured.
+// while it is still a directory, edited since or not.
 func (m *Mutation) Move(from, to, fp string) {
 	m.j.Steps = append(m.j.Steps, step{Kind: stepMove, Path: to, From: from, Old: absent, New: dirOf + fp})
 }
@@ -670,10 +670,14 @@ func applyWorktree(s step, u RefUpdater) (bool, error) {
 }
 
 // applyMove brings a move step's path to the directory it records. The
-// path holding it already is done; anything at the path but nothing is not
-// what the mutation expected; and the directory is renamed only while it
-// still holds what was captured, so content changed or put there since is
-// never moved into a place the journal does not describe.
+// path holding it already is done, and anything at the path but nothing is
+// not what the mutation expected. The source is renamed while it is still
+// a directory, whatever it holds now: a move only takes the user's own
+// directory to the place the journal names, which loses nothing even when
+// it was edited since it was captured, and refusing it would leave the
+// skill half moved with no command to finish it. A source that is gone,
+// or that is a symlink or a file now, is not the directory the journal
+// captured, and is left alone.
 func applyMove(s step) (bool, error) {
 	live, err := liveState(s.Path)
 	switch {
@@ -688,8 +692,8 @@ func applyMove(s step) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if from != s.New {
-		return false, fmt.Errorf("%w: %s changed or is gone since the mutation was to move it to %s", ErrRecovery, s.From, s.Path)
+	if !strings.HasPrefix(from, dirOf) {
+		return false, fmt.Errorf("%w: %s is no longer a directory since the mutation was to move it to %s", ErrRecovery, s.From, s.Path)
 	}
 	if err := os.Rename(s.From, s.Path); err != nil {
 		return false, err

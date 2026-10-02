@@ -245,9 +245,10 @@ func (fk *forking) except() string {
 // inPlaceRoom refuses a fork in the skill's place that the move into its
 // worktree cannot make: a library entry that is a symlink of the user's,
 // which the move would take for the directory and which leads to files
-// that are not the library's to move, a worktree path that is taken, and a
-// library on another file system than agentx home, where the directory
-// could only be copied, not moved.
+// that are not the library's to move, a skill directory that is itself a
+// Git repository, a worktree path that is taken, and a library on another
+// file system than agentx home, where the directory could only be copied,
+// not moved.
 func (inv *invocation) inPlaceRoom(fk *forking) error {
 	name, libPath := fk.src.name, inv.libraryPath(fk.src.name)
 	state, err := home.State(libPath)
@@ -258,6 +259,13 @@ func (inv *invocation) inPlaceRoom(fk *forking) error {
 	if target, isLink := home.LinkTarget(state); isLink {
 		return fail(exitRefused, fmt.Sprintf("%s is a symlink to %s; forking %s in its place moves the library directory into the fork's worktree and would move the link rather than the files it leads to", quotedPath(libPath), quotedPath(target), sanitised(name)),
 			"replace the link with the directory it points to, then run '"+skillCommand("fork", name)+"' again, or "+beside)
+	}
+	// A skill that is itself a Git repository would take its .git into the
+	// worktree with it, ignored or not, and git run in the skill would find
+	// that repository rather than the fork's branch.
+	if own := filepath.Join(libPath, ".git"); lexists(own) {
+		return fail(exitRefused, sanitised(name)+" is itself a Git repository, at "+quotedPath(own)+"; forking it in its place would move that repository into the fork's worktree, where git would take it for the fork",
+			"move its .git out of the skill, then run '"+skillCommand("fork", name)+"' again, or "+beside)
 	}
 	if root := inv.worktreeRoot(name); lexists(root) {
 		return fail(exitRefused, quotedPath(root)+" already exists", "move it aside, then run '"+skillCommand("fork", name)+"' again")
@@ -286,13 +294,18 @@ func existingAncestor(path string) string {
 // skill's directory is judged against its import commit and keeps the
 // upstream's directory name; an unmanaged skill's and a plugin's are
 // judged against nothing and named after the fork; a fork is forked from
-// its tip as it is, which checkForking found clean. Git's ignore rules
+// its tip, which checkForking found clean, its skill directory alone, see
+// skillDirAlone. Git's ignore rules
 // decide what is recorded, and a repository nested in the directory that
 // they do not cover is refused, since git would record it as a link.
 func (inv *invocation) forkContent(ctx context.Context, fk *forking) (string, []string, error) {
 	src := fk.src
 	if src.kind == lineage.KindFork {
-		return src.rec.Tree, []string{src.rec.Commit}, nil
+		root, err := inv.skillDirAlone(ctx, fk.gitDir, src.rec, fk.dir)
+		if err != nil {
+			return "", nil, err
+		}
+		return root, []string{src.rec.Commit}, nil
 	}
 	if fk.inPlace {
 		// What the library directory holds is captured before git reads it,
@@ -324,6 +337,45 @@ func (inv *invocation) forkContent(ctx context.Context, fk *forking) (string, []
 		return "", nil, accountRepoFailure(err)
 	}
 	return root, parents, nil
+}
+
+// skillDirAlone is the root tree of rec's tip, a fork's, with the skill
+// directory dir as its one entry: the tip's own tree when that is all it
+// holds, as it is for a fork agentx alone committed to, and otherwise a
+// tree without the entries a commit made with git put beside the skill
+// directory, such as a README at the worktree's root. A fork's branch holds
+// its skill directory and nothing else, so a fork of a fork starts without
+// them, and its creation commit is where they are deleted.
+func (inv *invocation) skillDirAlone(ctx context.Context, gitDir string, rec lineage.Record, dir string) (string, error) {
+	out, err := inv.git.Isolated(ctx, gitDir, "ls-tree", "-z", rec.Commit)
+	if err != nil {
+		return "", accountRepoFailure(err)
+	}
+	var subtree string
+	others := 0
+	for _, record := range strings.Split(out, "\x00") {
+		meta, path, ok := strings.Cut(record, "\t")
+		if !ok {
+			continue
+		}
+		if fields := strings.Fields(meta); path == dir && len(fields) == 3 && fields[1] == "tree" {
+			subtree = fields[2]
+		} else {
+			others++
+		}
+	}
+	if subtree == "" {
+		return "", fail(exitAccountRepo, fmt.Sprintf("the branch %s holds no directory %s at its root", rec.Ref, dir),
+			"run 'agentx doctor' and check the account repo it names")
+	}
+	if others == 0 {
+		return rec.Tree, nil
+	}
+	root, err := inv.git.ReplaceEntry(ctx, gitDir, "", dir, subtree)
+	if err != nil {
+		return "", accountRepoFailure(err)
+	}
+	return root, nil
 }
 
 // renameSkill is root with the name in the frontmatter of the SKILL.md in
@@ -382,7 +434,9 @@ func forkSubject(src forkSource, target string) string {
 // configuration that has a placement of the source at its own place,
 // copies where copy_mode records them, and for a plugin's skill into every
 // enabled configuration that has the plugin. A client that reads the
-// library sees the fork whatever it is placed in, and is said to.
+// library sees the fork whatever it is placed in, and is said to; a
+// disabled configuration that has the plugin and does not read the library
+// sees no fork, and gets no note.
 func (inv *invocation) planBeside(fk *forking, snap scan.Snapshot) error {
 	ids := map[string]bool{}
 	src := fk.src
@@ -395,12 +449,23 @@ func (inv *invocation) planBeside(fk *forking, snap scan.Snapshot) error {
 		if err != nil {
 			return err
 		}
+		// A configuration has the fork beside the plugin's copy when the fork
+		// is placed into it or its client reads the library; one agentx
+		// leaves alone, which has the plugin all the same, gets no note.
+		universal := universalClients(snap)
+		var sees []string
 		for _, t := range enabled {
 			if ids[t.id] {
 				fk.targets = append(fk.targets, t)
+				sees = append(sees, t.id)
 			}
 		}
-		fk.notes = pluginForkNotes(fk.target, src.plugin, pluginConfigurations(snap, src.plugin), universalClients(snap))
+		for _, id := range universal {
+			if ids[id] && !containsString(sees, id) {
+				sees = append(sees, id)
+			}
+		}
+		fk.notes = pluginForkNotes(fk.target, src.plugin, sees, universal)
 		return nil
 	case src.held:
 		s, err := inv.loadSettings()

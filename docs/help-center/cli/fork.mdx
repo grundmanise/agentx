@@ -53,7 +53,7 @@ agentx skill fork pdf
 - A fork of an installed skill remembers the version it came from, so `agentx skill list` still shows its upstream.
 - [Files that stay local](#files-that-stay-local), such as a `.DS_Store`, move with the skill and stay uncommitted.
 
-agentx refuses, with exit code 6 and nothing changed, a library entry that is a symlink of your own, and a library on a different file system than agentx home: the skill can only be moved, not copied. Fork it under a new name instead.
+agentx refuses, with exit code 6 and nothing changed, a library entry that is a symlink of your own, a skill that is itself a Git repository, with a `.git` of its own, and a library on a different file system than agentx home: the skill can only be moved, not copied. Fork it under a new name instead, or move the skill's `.git` out of it first.
 
 ### Fork under a new name
 
@@ -73,11 +73,14 @@ agentx skill fork pdf --name my-pdf
 - The fork sits beside the skill, which stays exactly as it was.
 - agentx writes the new name into the fork's `SKILL.md`, as part of the fork's first commit.
 - The fork goes into the same clients as the skill, with a copy wherever the skill has a copy.
+- A fork of an installed skill keeps the upstream's folder name inside its worktree, so the skill sits at `~/.agentx/worktrees/my-pdf/pdf/`.
 - Use a new name to fork a skill whose own name breaks the [naming rule](#choose-a-name), such as `My_Skill`.
 
 ### Fork a fork
 
 A fork already owns its name, so fork it under a new one: `agentx skill fork my-pdf --name pdf-letters`. The new fork starts from the fork's last commit and keeps its history. Commit the fork's edits first: a fork with uncommitted edits is refused.
+
+The new fork holds the skill's folder alone. A file you committed with Git next to the folder, such as a `README.md` at the root of the worktree, stays with the original fork. A fork whose library entry is gone goes into no client: place the new fork with [`agentx skill place`](/cli/skill#place-a-skill-you-already-have).
 
 ### Fork a plugin's skill
 
@@ -96,7 +99,7 @@ agentx skill fork format
 ```
 
 - agentx never touches the plugin. The fork goes into your library and into the enabled clients that have the plugin, and nowhere else.
-- Each line before the result says how a client treats the fork next to the plugin's own copy. agentx cannot turn the plugin's copy off.
+- Each line before the result says how a client that gets the fork treats it next to the plugin's own copy. agentx cannot turn the plugin's copy off.
 - When several plugins provide a skill of the same name, name the plugin: `agentx skill fork formatter:format`.
 
 ## Where a fork lives
@@ -111,7 +114,7 @@ agentx skill fork format
 - The branch is checked out as a Git worktree in `~/.agentx/worktrees/<name>`, locked so that `git worktree prune` never removes it. The skill is the worktree's one directory, so Git's `.git` file sits next to the skill and never inside it: no client ever sees a `.git` entry in a skill.
 - Your library holds a symlink to the skill. When the library and agentx home sit under the same top-level directory, as `~/.agents` and `~/.agentx` do, the symlink is relative, so it keeps working if your home directory moves.
 
-The first commit holds the template and records the skill's id in an `Agentx-Fork-ID` trailer. Every commit agentx writes on the branch names the machine that wrote it in an `Agentx-Machine` trailer, and carries your Git identity, `user.name` and `user.email`, as its author. If you set none, agentx uses the machine's label and an address of its own. agentx never changes a commit once it is written.
+The commit that creates the fork holds the template for a new skill, or the skill as it was for a fork, and records the fork's id in an `Agentx-Fork-ID` trailer. Every commit agentx writes on the branch names the machine that wrote it in an `Agentx-Machine` trailer, and carries your Git identity, `user.name` and `user.email`, as its author. If you set none, agentx uses the machine's label and an address of its own. agentx never changes a commit once it is written.
 
 ### Files that stay local
 
@@ -145,6 +148,6 @@ A command that would move a fork's branch stops with exit code 6 while the fork 
 - `1`: the description is more than one line, holds a control character or is longer than 1024 bytes; `-m` is empty.
 - `4`: the skill you fork has a merge pending. Finish or abort it with `agentx skill update <name>` first.
 - `5`: `skill commit` names a skill your library does not hold; `skill fork` names a skill neither your library nor a plugin holds.
-- `6`: the name breaks the naming rule, the account repo already holds a skill of that name in any case, or the library or `~/.agentx/worktrees` already holds something under it. For `skill commit`: the skill is not a fork; the fork's worktree is missing, needs repair or is not on its branch; a Git command you ran there, such as a merge, waits for you to finish or abort it; Git is running there; the fork's skill directory is missing; the fork holds a Git repository its `.gitignore` does not cover; or the fork changed while it was being committed. For `skill fork`: the skill is already a fork and no new name is given; several plugins provide the name; the library entry is a symlink of your own or sits on another file system than agentx home; the skill holds a Git repository its `.gitignore` does not cover; its `SKILL.md` cannot take the new name; or the skill changed while it was being forked. For a command that moves a fork's branch, and for forking a fork: the fork has uncommitted edits.
+- `6`: the name breaks the naming rule, the account repo already holds a skill of that name in any case, or the library or `~/.agentx/worktrees` already holds something under it. For `skill commit`: the skill is not a fork; the fork's worktree is missing, needs repair or is not on its branch; a Git command you ran there, such as a merge, waits for you to finish or abort it; Git is running there; the fork's skill directory is missing; the fork holds a Git repository its `.gitignore` does not cover; or the fork changed while it was being committed. For `skill fork`: the skill is already a fork and no new name is given; several plugins provide the name; the library entry is a symlink of your own or sits on another file system than agentx home; the skill is itself a Git repository; the skill holds a Git repository its `.gitignore` does not cover; its `SKILL.md` cannot take the new name; or the skill changed while it was being forked. For a command that moves a fork's branch, and for forking a fork: the fork has uncommitted edits.
 - `7`: another agentx command is running. Retry when it finishes.
 - `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.

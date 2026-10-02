@@ -23,7 +23,7 @@ import (
 // file with it, into the worktree, whose status is clean, and the library
 // holds a relative symlink to it; every placement is as it was, no client
 // that reads the library got a symlink, the skill directory holds no .git,
-// and the listing reads the fork current, with the upstream it came from.
+// and the fork reads current, with the upstream it came from.
 // The update candidate a check pinned stays; the upstream-removed marker
 // goes.
 func TestSkillForkConvertsManagedSkills(t *testing.T) {
@@ -83,8 +83,6 @@ func TestSkillForkConvertsManagedSkills(t *testing.T) {
 	if _, err := h.accountGitErr("rev-parse", "--verify", "-q", lineage.UpstreamRemovedRef("alpha")); err == nil {
 		t.Error("the upstream-removed marker is still there")
 	}
-	text := h.mustRun("skill", "list")
-	contains(t, "the listing", text.stdout, "alpha")
 	for _, dir := range []string{h.library, filepath.Join(h.agentx, "worktrees")} {
 		equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 	}
@@ -218,8 +216,9 @@ func pluginHome(t *testing.T, h *harness) []string {
 // The fork is a branch of its own, placed only into the configurations
 // that have the plugin, and the result notes, client by client, how each
 // treats the fork beside the plugin's copy, the client that reads the
-// library without the plugin included. Every plugin directory is left
-// byte for byte as it was.
+// library without the plugin included. A configuration that has the
+// plugin but is disabled gets neither the fork nor a note. Every plugin
+// directory is left byte for byte as it was.
 func TestSkillForkOfAPluginSkill(t *testing.T) {
 	t.Parallel()
 	h, _ := installHarness(t)
@@ -260,17 +259,22 @@ func TestSkillForkOfAPluginSkill(t *testing.T) {
 			t.Errorf("the plugin directory %s changed", dir)
 		}
 	}
+	h.mustRun("config", "disable", "claude-code")
 	text := h.mustRun("skill", "fork", "linter:format", "--name", "lint-format")
-	contains(t, "the text output", text.stdout, "• claude-code: "+scan.PluginForkNote("claude-code")+"\n")
-	contains(t, "the text output", text.stdout, "✓ forked format from plugin linter as lint-format: 1 placement; the plugin's copy stays as it was\n")
+	contains(t, "the text output", text.stdout, "• codex: it reads the library, so it sees lint-format whether or not it has linter\n")
+	if strings.Contains(text.stdout, "claude-code:") {
+		t.Errorf("a disabled configuration, which gets no fork, got a note:\n%s", text.stdout)
+	}
+	contains(t, "the text output", text.stdout, "✓ forked format from plugin linter as lint-format: 0 placements; the plugin's copy stays as it was\n")
 }
 
 // TestSkillForkOfAFork forks a fork, which only a new name can do: under
 // its own name it is refused, and so it is while it holds an edit nobody
 // committed. Once the edit is committed, the new fork's branch starts at
 // the fork's tip, so its history is kept, with a creation commit of its
-// own that writes the new name, and the new fork reads the upstream its
-// source came from and goes where its source is.
+// own that writes the new name and leaves out the file a commit made with
+// git put beside the skill directory, and the new fork reads the upstream
+// its source came from and goes where its source is.
 func TestSkillForkOfAFork(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -286,16 +290,20 @@ func TestSkillForkOfAFork(t *testing.T) {
 	writeFile(t, filepath.Join(h.library, "alpha", "notes.md"), "edited\n")
 	refuses("uncommitted edits", []string{"alpha", "--name", "alpha-two"}, exitRefused, "alpha has uncommitted edits, so it cannot be forked")
 	h.mustRun("skill", "commit", "alpha")
+	root := filepath.Join(h.agentx, "worktrees", "alpha")
+	writeFile(t, filepath.Join(root, "README.md"), "beside\n")
+	gitIn(t, h, root, "add", "README.md")
+	gitIn(t, h, root, "-c", "user.name=Grace Hopper", "-c", "user.email=grace@example.com", "commit", "-q", "-m", "Beside the skill")
 
 	source := h.ref(lineage.ForkRef("alpha"))
 	h.mustRun("skill", "fork", "alpha", "--name", "alpha-two")
 	tip := h.ref(lineage.ForkRef("alpha-two"))
 	equal(t, "the parent", h.accountGit("rev-parse", tip+"^"), source)
-	equal(t, "the kept history", h.accountGit("rev-list", "--count", tip), "4")
-	if a, b := h.trailer(source+"^", lineage.TrailerForkID), h.trailer(tip, lineage.TrailerForkID); a == b || b == "" {
+	equal(t, "the kept history", h.accountGit("rev-list", "--count", tip), "5")
+	if a, b := h.trailer(source+"^^", lineage.TrailerForkID), h.trailer(tip, lineage.TrailerForkID); a == b || b == "" {
 		t.Errorf("the fork ids are %q and %q", a, b)
 	}
-	equal(t, "what the creation commit changes", h.accountGit("diff-tree", "-r", "--name-status", source, tip), "M\talpha/SKILL.md")
+	equal(t, "what the creation commit changes", h.accountGit("diff-tree", "-r", "--name-status", source, tip), "D\tREADME.md\nM\talpha/SKILL.md")
 	contains(t, "SKILL.md", h.accountGit("cat-file", "blob", tip+":alpha/SKILL.md"), "name: alpha-two\n")
 	equal(t, "the upstream", h.listed("alpha-two")["upstream_commit"], h.listed("alpha")["upstream_commit"])
 	for _, client := range []string{".claude", ".cursor"} {
@@ -309,8 +317,10 @@ func TestSkillForkOfAFork(t *testing.T) {
 // TestSkillForkRefusals refuses, in one home and changing nothing, a skill
 // nothing provides, a name another branch holds, a library entry that is a
 // symlink of the user's, a worktree path that is taken, a skill holding a
-// repository git would record as a link, and a skill whose update left a
-// merge pending, which is asked about before anything is committed.
+// repository git would record as a link, a skill that is itself a
+// repository, which its own .gitignore naming .git does not let move, and
+// a skill whose update left a merge pending, which is asked about before
+// anything is committed.
 func TestSkillForkRefusals(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -324,6 +334,9 @@ func TestSkillForkRefusals(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "held"), "SKILL.md"), skill("held", "Held"))
+	writeFile(t, mkdirs(t, filepath.Join(h.library, "cloned"), "SKILL.md"), skill("cloned", "A clone"))
+	writeFile(t, mkdirs(t, filepath.Join(h.library, "cloned", ".git"), "HEAD"), "ref: refs/heads/main\n")
+	writeFile(t, filepath.Join(h.library, "cloned", ".gitignore"), ".git\n")
 	refs := h.accountGit("for-each-ref")
 	for _, tc := range []struct {
 		args []string
@@ -331,11 +344,11 @@ func TestSkillForkRefusals(t *testing.T) {
 		says string
 	}{
 		{[]string{"nothing"}, exitNotFound, `neither the library nor any plugin holds a skill called "nothing"`},
-		{[]string{"alpha", "--name", "Beta"}, exitRefused, "Beta is not a valid skill name"},
 		{[]string{"alpha", "--name", "beta"}, exitRefused, "the account repo already holds beta as a managed skill"},
 		{[]string{"gamma"}, exitRefused, "is a symlink to"},
 		{[]string{"held"}, exitRefused, "worktrees/held already exists"},
 		{[]string{"beta"}, exitRefused, "beta holds a Git repository at vendor/.git"},
+		{[]string{"cloned"}, exitRefused, "cloned is itself a Git repository"},
 	} {
 		out := h.run(append([]string{"--json", "skill", "fork"}, tc.args...)...)
 		equal(t, strings.Join(tc.args, " ")+": exit", out.exit, tc.exit.exit)

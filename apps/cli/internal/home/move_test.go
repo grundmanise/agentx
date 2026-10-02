@@ -106,29 +106,56 @@ func TestConversionRecoversFromEveryBoundary(t *testing.T) {
 	}
 }
 
-// TestRecoveryRefusesAMoveWhoseSourceChanged is the move step's guard: a
-// directory edited after the journal captured it is not moved anywhere the
-// journal does not describe, and it and the journal are kept as they are.
-func TestRecoveryRefusesAMoveWhoseSourceChanged(t *testing.T) {
+// TestRecoveryMovesTheDirectoryAsItIs stops a conversion before its move
+// and changes the library directory. One edited since the journal captured
+// it is moved all the same, edit and all, since the move only takes the
+// user's own directory where the journal says, and the conversion is
+// finished. One replaced by a symlink is not the directory the journal
+// captured: recovery refuses, naming it, and the link and the journal are
+// kept as they are.
+func TestRecoveryMovesTheDirectoryAsItIs(t *testing.T) {
 	t.Parallel()
-	c, u := newConversion(t, "alpha")
-	m := c.conversionOf(t, "alpha")
-	if err := m.stopAfter(2, u); err != nil { // the branch and the worktree
-		t.Fatal(err)
-	}
-	lib := filepath.Join(c.library, "alpha")
-	if err := os.WriteFile(filepath.Join(lib, "notes.md"), []byte("mine\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	err := recoverJournals(c.dir, u)
-	if !errors.Is(err, ErrRecovery) || !strings.Contains(err.Error(), lib) {
-		t.Fatalf("recovery = %v, want it refused naming %s", err, lib)
-	}
-	if b, err := os.ReadFile(filepath.Join(lib, "notes.md")); err != nil || string(b) != "mine\n" {
-		t.Errorf("the edited directory holds %q, %v, want it where it was", b, err)
-	}
-	if left, _ := Journals(c.dir); len(left) != 1 {
-		t.Errorf("%d journals left, want the refused one kept", len(left))
+	for _, replaced := range []bool{false, true} {
+		t.Run(fmt.Sprintf("replaced by a symlink %v", replaced), func(t *testing.T) {
+			t.Parallel()
+			c, u := newConversion(t, "alpha")
+			m := c.conversionOf(t, "alpha")
+			if err := m.stopAfter(2, u); err != nil { // the branch and the worktree
+				t.Fatal(err)
+			}
+			lib := filepath.Join(c.library, "alpha")
+			if !replaced {
+				if err := os.WriteFile(filepath.Join(lib, "notes.md"), []byte("mine\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				if err := recoverJournals(c.dir, u); err != nil {
+					t.Fatalf("recovery = %v, want the edited directory moved", err)
+				}
+				if missing := c.converted(u, "alpha"); len(missing) > 0 {
+					t.Errorf("after recovery: %s", strings.Join(missing, ", "))
+				}
+				if b, err := os.ReadFile(filepath.Join(c.root("alpha"), "upstream-dir", "notes.md")); err != nil || string(b) != "mine\n" {
+					t.Errorf("the moved directory holds %q, %v, want the edit", b, err)
+				}
+				return
+			}
+			if err := os.Rename(lib, lib+"-mine"); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(lib+"-mine", lib); err != nil {
+				t.Fatal(err)
+			}
+			err := recoverJournals(c.dir, u)
+			if !errors.Is(err, ErrRecovery) || !strings.Contains(err.Error(), lib) {
+				t.Fatalf("recovery = %v, want it refused naming %s", err, lib)
+			}
+			if target, err := os.Readlink(lib); err != nil || target != lib+"-mine" {
+				t.Errorf("the link reads %q, %v, want it as it was", target, err)
+			}
+			if left, _ := Journals(c.dir); len(left) != 1 {
+				t.Errorf("%d journals left, want the refused one kept", len(left))
+			}
+		})
 	}
 }
 
