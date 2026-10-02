@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/interrupt"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
@@ -98,6 +99,8 @@ func (inv *invocation) readForkMerge(ctx context.Context, dir string) (forkPendi
 // commit in the checkout, or the one the fork commit writer writes here,
 // with the tree of the checkout's index, the tip the merge started from and
 // what it merged as its parents, and the merge's MERGE_MSG as its message.
+// A user's commit whose message names no base is written again the same
+// way, with the base added to its message.
 //
 // When the fork's branch still holds that tip, the branch moves to the
 // commit, see applyFork. When it moved on, because commits were made in
@@ -141,12 +144,26 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 		return nil, failureOf(accountRepoFailure(err))
 	}
 	mine := walked[p.mine]
+	resolved := len(p.unmerged) == 0 && (p.tree != "" || p.merged != "")
+	// A merge committed in the checkout with a message of the user's own, as
+	// git commit -m writes it, or one whose MERGE_MSG was edited, names no
+	// base. The base is then the one the merge was started to record: what
+	// it merges, an import, or the base the completed merge it merges again
+	// records. The commit that completes it is written again with that base
+	// added to the user's message, see keptMessage, so that the fork does
+	// not stay on the old base and take the same update, and conflict,
+	// again.
+	next := walked[recorded]
+	rewrite := resolved && recorded == "" && walked[p.theirs].Base != ""
+	if rewrite {
+		recorded, next = walked[p.theirs].Base, walked[p.theirs]
+	}
 	u.rec = lineage.Record{Name: name, Kind: lineage.KindFork, Commit: mine.Base, Import: mine.Import}
-	u.next = lineage.Record{Name: name, Kind: lineage.KindFork, Commit: recorded, Import: walked[recorded].Import}
+	u.next = lineage.Record{Name: name, Kind: lineage.KindFork, Commit: recorded, Import: next.Import}
 	// A merge whose theirs is no import commit is a completed merge merged
 	// again with the commits made while it was pending.
 	u.fork.remerge = p.theirs != "" && walked[p.theirs].Base != p.theirs
-	if len(p.unmerged) > 0 || p.tree == "" && p.merged == "" {
+	if !resolved {
 		u.merge = lineage.Merge{Base: mine.Base, Mine: p.mine, Theirs: p.theirs}
 		if u.fork.remerge {
 			if u.merge.Base, err = inv.git.Isolated(ctx, gitDir, "merge-base", p.mine, p.theirs); err != nil {
@@ -170,9 +187,21 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 	if u.fork.judged, f = inv.cleanSite(ctx, site); f != nil {
 		return nil, f
 	}
-	merged := p.merged
+	merged, tree, message := p.merged, p.tree, p.message
+	if rewrite {
+		merged = ""
+		if tree == "" {
+			tree, err = inv.git.Isolated(ctx, gitDir, "rev-parse", "--verify", p.merged+"^{tree}")
+		}
+		if err == nil {
+			message, err = w.keptMessage(p.message, recorded)
+		}
+		if err != nil {
+			return nil, failureOf(accountRepoFailure(err))
+		}
+	}
 	if merged == "" {
-		if merged, err = w.commitText(ctx, p.tree, []string{p.mine, p.theirs}, p.message); err != nil {
+		if merged, err = w.commitText(ctx, tree, []string{p.mine, p.theirs}, message); err != nil {
 			return nil, failureOf(accountRepoFailure(err))
 		}
 	}
@@ -196,7 +225,7 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 	if u.merged, err = mergeVersions(ctx, inv.git, gitDir, u.merge); err != nil {
 		return nil, failureOf(accountRepoFailure(err))
 	}
-	subject, _, _ := strings.Cut(p.message, "\n")
+	subject, _, _ := strings.Cut(message, "\n")
 	if u.merged.conflicted {
 		files, err := conflictFiles(u.merged.stages, site.dir)
 		if err == nil {
@@ -218,9 +247,30 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 
 // remergeIn sets a merge up again in the checkout at dir, under the lock:
 // the completed merge, in.theirs, merged with the fork's tip, in.mine,
-// which the checkout's HEAD is moved to first, so that the checkout is that
-// merge in progress, see mergeIn.
+// which the checkout's HEAD is moved to, so that the checkout is that merge
+// in progress, see mergeIn. The checkout holds a resolved merge until
+// then, which the next update would complete, so it is made to hold none
+// before anything else changes: MERGE_HEAD goes first, and ORIG_HEAD names
+// the tip, which no commit the checkout's HEAD can be at has as its first
+// parent. A re-merge stopped part way, by git failing on an index the
+// user's own git holds or by the process being killed, then leaves a
+// checkout with no merge in progress, whose conflict the next update
+// reports again until the merge is given up, never one that reads as
+// resolved with the new merge's conflict markers in its index. MERGE_HEAD
+// is written again last, by mergeIn. Once started, it is not stopped by
+// an interrupt, as startMerge's clean-up is not.
 func (inv *invocation) remergeIn(ctx context.Context, dir string, in mergeStart) error {
+	ctx = interrupt.Uninterruptible(ctx)
+	paths, err := inv.gitPaths(ctx, dir, "MERGE_HEAD", "ORIG_HEAD")
+	if err != nil {
+		return accountRepoFailure(err)
+	}
+	if err := os.Remove(paths[0]); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	if err := os.WriteFile(paths[1], []byte(in.mine+"\n"), 0o644); err != nil {
+		return err
+	}
 	if _, err := inv.git.InCheckout(ctx, dir, "update-ref", "--no-deref", "HEAD", in.mine); err != nil {
 		return accountRepoFailure(err)
 	}

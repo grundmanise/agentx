@@ -456,7 +456,7 @@ func TestServeWarnsOnceAboutSourcesAnImportBrought(t *testing.T) {
 	}
 	equal(t, "the version file", mutationVersion(t, h), version)
 	equal(t, "skill check", h.mustRun("skill", "check").stdout,
-		"Nothing to check: no managed skill comes from a source added on this machine.\n")
+		"Nothing to check: no managed skill or fork comes from a source added on this machine.\n")
 
 	h.mustRun("source", "add", one.url)
 	backdate(t, h)

@@ -240,7 +240,7 @@ release-notes conflicts with its update from 1a2b3c4 to 5d6e7f8 in 1 file
 notes.md: both modified
 ```
 
-1. Resolve each file with Git in `~/.agentx/merges/<name>/<folder>`: edit it, or run `git checkout --ours <file>` or `git checkout --theirs <file>`, then `git add` it. Running `git commit` there is optional.
+1. Resolve each file with Git in `~/.agentx/merges/<name>/<folder>`: edit it, or run `git checkout --ours <file>` or `git checkout --theirs <file>`, then `git add` it. Running `git commit` there is optional, with any message: agentx still records which upstream version the fork now has.
 2. Run `agentx skill update <name>` again. agentx commits the merge on the fork's branch and lays it out in your fork.
 
 - Conflict markers are longer than any line of your skill that looks like one, such as a `=======` rule, so you can tell them apart.

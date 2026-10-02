@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
@@ -119,6 +120,19 @@ func (w *forkWriter) mergeMessage(subject, base string) (string, error) {
 // identity, with no hook, editor or clean-up of the message.
 func (w *forkWriter) commitText(ctx context.Context, rootTree string, parents []string, message string) (string, error) {
 	return w.git.CommitTreeAs(ctx, w.gitDir, w.ident, gitDate(time.Now(), w.env["TZ"]), rootTree, parents, message)
+}
+
+// keptMessage is the message of the commit that completes a pending merge
+// the user committed with a message of their own that names no base, as
+// git commit -m writes it: their subject and body, with the trailers of a
+// merge, see mergeMessage, added. A message that carries an agentx trailer
+// of its own, which agentx would not read back, keeps its subject alone.
+func (w *forkWriter) keptMessage(message, base string) (string, error) {
+	subject, body, _ := strings.Cut(strings.TrimSpace(message), "\n")
+	if kept, err := lineage.ForkMessage(subject, body, lineage.ForkTrailers{Base: base, Machine: w.machine}); err == nil {
+		return kept, nil
+	}
+	return w.mergeMessage(subject, base)
 }
 
 // upstreamMergeSubject is the subject of the commit that merges an update

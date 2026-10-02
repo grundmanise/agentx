@@ -125,11 +125,11 @@ type removedSkill struct {
 // checkReport is what one update check found and did, for skill check to
 // print and for the serve child to emit.
 type checkReport struct {
-	// idle is a check with nothing to fetch: no managed skill comes from a
-	// source this machine has, no source at all for the serve child, or
-	// every one the check set out to fetch was removed while it ran. A serve
-	// child whose settings name sources it has no account repo for is not
-	// idle, each of them being a failure.
+	// idle is a check with nothing to fetch: no managed skill or fork comes
+	// from a source this machine has, no source at all for the serve child,
+	// or every one the check set out to fetch was removed while it ran. A
+	// serve child whose settings name sources it has no account repo for is
+	// not idle, each of them being a failure.
 	idle      bool
 	refreshed map[string]bool // the sources that were fetched and that the settings still hold, by canonical URL
 	checked   int             // the managed skills the check recorded a verdict for
@@ -150,8 +150,8 @@ func (inv *invocation) skillCheck(ctx context.Context) error {
 	}
 	out := inv.out
 	if rep.idle {
-		inv.summary = "nothing to check: no managed skill comes from a source added on this machine"
-		out.print("Nothing to check: no managed skill comes from a source added on this machine.")
+		inv.summary = "nothing to check: no managed skill or fork comes from a source added on this machine"
+		out.print("Nothing to check: no managed skill or fork comes from a source added on this machine.")
 		return nil
 	}
 	for _, cf := range rep.failures {
@@ -666,13 +666,14 @@ func (c *checkRun) writeCandidates(ctx context.Context, run string) error {
 // nothing: it was compared with something it no longer is. A fork's is the
 // base its history names, read again with it, so a fork whose base an
 // update moved meanwhile gets nothing either, while one its own commits
-// moved is checked all the same. A fork gets no upstream-removed marker. Every other
-// skill gets its candidate ref and its upstream-removed marker, each
-// written, moved or deleted with the value it holds now as its expected old
-// value, so that a ref something else moved is refused rather than
-// overwritten: an update of the skill's own, or a removal, deletes the
-// candidate with its value just the same. The settings get last_fetched for
-// every source that fetched, and the write bumps the version file once.
+// moved is checked all the same. A fork gets no upstream-removed marker.
+// Every other skill gets its candidate ref and its upstream-removed
+// marker, each written, moved or deleted with the value it holds now as
+// its expected old value, so that a ref something else moved is refused
+// rather than overwritten: an update of the skill's own, or a removal,
+// deletes the candidate with its value just the same. The settings get
+// last_fetched for every source that fetched, and the write bumps the
+// version file once.
 func (inv *invocation) recordCheck(ctx context.Context, gitDir string, wait bool, findings []finding, fetched map[string]bool, records map[string]lineage.Record) (
 	live map[string]lineage.Record, added, moved map[string]bool, journaled bool, err error,
 ) {
@@ -762,7 +763,8 @@ func (inv *invocation) recordCheck(ctx context.Context, gitDir string, wait bool
 // costs what one that finds one costs: one diff-tree reading every pair of
 // trees from its standard input, each base version's against its
 // candidate's, and one cat-file of every candidate's SKILL.md, whose name
-// is the one an install of that version would take.
+// is the one an install of that version would take, and of a fork's base
+// version's.
 func (inv *invocation) describeCandidates(ctx context.Context, gitDir string, recs []lineage.Record) ([]updateAvailableEvent, error) {
 	if len(recs) == 0 {
 		return nil, nil
@@ -776,6 +778,17 @@ func (inv *invocation) describeCandidates(ctx context.Context, gitDir string, re
 		}
 		blobs.WriteString(rec.Candidate.Commit + ":" + rec.Candidate.Import.Dir() + "/SKILL.md\n")
 	}
+	// A fork keeps the name it was forked under whatever its SKILL.md says,
+	// and its SKILL.md takes the upstream's through the merge, so the
+	// upstream renames it only when the candidate names it otherwise than
+	// the base version did: the base's SKILL.md is read in the same batch.
+	baseAt, n := map[int]int{}, len(recs)
+	for i, rec := range recs {
+		if rec.Kind == lineage.KindFork {
+			blobs.WriteString(rec.Commit + ":" + rec.Import.Dir() + "/SKILL.md\n")
+			baseAt[i], n = n, n+1
+		}
+	}
 	out, err := inv.git.IsolatedInput(ctx, gitDir, strings.NewReader(pairs.String()), "diff-tree", "--stdin", "-r", "-z", "--no-renames", "--name-status")
 	if err != nil {
 		return nil, accountRepoFailure(err)
@@ -788,7 +801,7 @@ func (inv *invocation) describeCandidates(ctx context.Context, gitDir string, re
 	if err != nil {
 		return nil, accountRepoFailure(err)
 	}
-	bodies, err := batchInOrder(out, len(recs))
+	bodies, err := batchInOrder(out, n)
 	if err != nil {
 		return nil, accountRepoFailure(err)
 	}
@@ -807,7 +820,14 @@ func (inv *invocation) describeCandidates(ctx context.Context, gitDir string, re
 		}
 		sort.Slice(ev.Files, func(i, j int) bool { return ev.Files[i].Path < ev.Files[j].Path })
 		name, _, _ := scan.SkillFrontmatter(bodies[i])
-		ev.UpstreamName = upstreamRename(rec.Name, name, c.Import.Dir())
+		was := rec.Name
+		if j, ok := baseAt[i]; ok {
+			was, _, _ = scan.SkillFrontmatter(bodies[j])
+			if was == "" {
+				was = rec.Import.Dir()
+			}
+		}
+		ev.UpstreamName = upstreamRename(was, name, c.Import.Dir())
 		events[i] = ev
 	}
 	return events, nil

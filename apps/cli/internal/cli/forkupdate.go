@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
@@ -215,15 +214,11 @@ func (inv *invocation) layFork(ctx context.Context, u *updating, commit string) 
 // journaled: the fork's worktree and branch stay as they are. One that
 // completed a pending merge and conflicts with commits made meanwhile is
 // set up again in the same checkout, see remergeIn. Anything else is one
-// journal: the branch moved from the tip to the new commit, the skill
-// directory retained in the worktrees directory and replaced by the new
-// commit's, laid out beside the worktree with the files git ignores in the
-// directory carried in, but for a path the new commit holds, whose file
-// replaces the ignored one as git checkout replaces it; the worktree's
-// index reset to the branch; every copy placement that held the tip
-// refreshed; the checkout of a pending merge it completes removed; and the
-// candidate ref deleted, last, when it still names the import the new
-// commit records as the fork's base.
+// journal, see layTipJournal: the branch moved from the tip to the new
+// commit, the commit laid out in the worktree and every copy placement
+// that held the tip refreshed; then the checkout of a pending merge it
+// completes removed; and the candidate ref deleted, last, when it still
+// names the import the new commit records as the fork's base.
 func (r *updateRun) applyFork(ctx context.Context, u *updating) error {
 	inv := r.inv
 	err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error { return inv.applyForkUpdate(ctx, r.gitDir, u) })
@@ -285,56 +280,27 @@ func (inv *invocation) applyForkUpdate(ctx context.Context, gitDir string, u *up
 		}
 		return inv.startMerge(ctx, gitDir, name, start)
 	}
-	// An update killed before its journal was written left what it staged
-	// with nothing to name it: in the worktrees directory, and beside each
-	// copy it was refreshing. All of it is swept before anything is staged.
-	edit, err := inv.beginSettings()
-	if err != nil {
-		return err
-	}
-	recorded := edit.copiesOf(name)
-	sweepStaged(inv.worktreesDir())
-	for _, t := range inv.detectedTargets() {
-		if !t.readsLibrary && slices.Contains(recorded, t.id) {
-			sweepStaged(t.dir)
-		}
-	}
-	m := home.NewMutation(inv.dirs.Home)
-	m.Ref(gitDir, site.rec.Ref, site.rec.Commit, u.fork.commit)
-	// The content is staged beside the worktree, in the worktrees
-	// directory, never inside it, where git would see it as a file of the
-	// branch.
-	staged := m.Sibling(site.root, "staged")
-	fingerprint, err := stageVersion(staged, u.fork.lay, u.fork.laid, site.skillDir, append(slices.Clip(now.ignored), kept...))
-	if err == nil {
-		err = m.RemoveInto(site.skillDir, now.captured, inv.worktreesDir())
-	}
-	if err != nil {
-		_ = home.RemoveTree(staged)
-		m.Discard()
-		return libraryFailure(site.root, err)
-	}
-	m.Publish(site.skillDir, staged, fingerprint)
-	m.Worktree(gitDir, site.root, site.branch)
-	if len(recorded) > 0 {
+	m, discard, err := inv.layTipJournal(ctx, site, tipLaying{
+		commit: u.fork.commit, laid: u.fork.laid, lay: u.fork.lay, now: now, kept: kept, done: &u.done,
 		// A copy that holds the tip's skill directory holds what agentx
 		// placed there, and is refreshed; one holding anything else was
 		// edited where it is, and is kept.
-		sub, err := inv.git.Isolated(ctx, gitDir, "rev-parse", "--verify", "--quiet", site.rec.Commit+":"+site.dir)
-		if err != nil {
-			_ = home.RemoveTree(staged)
-			m.Discard()
-			return accountRepoFailure(err)
-		}
-		u.done = placements{}
-		inv.refreshCopies(ctx, m, gitDir, name, u.fork.laid, []version{treeVersion(strings.TrimSpace(sub))}, u.fork.lay, recorded, &u.done)
+		placed: func() ([]version, error) {
+			sub, err := inv.git.Isolated(ctx, gitDir, "rev-parse", "--verify", "--quiet", site.rec.Commit+":"+site.dir)
+			if err != nil {
+				return nil, accountRepoFailure(err)
+			}
+			return []version{treeVersion(strings.TrimSpace(sub))}, nil
+		},
+	})
+	if err != nil {
+		return err
 	}
 	if u.checkout != "" {
 		inv.leaveCheckout(u.checkout)
 		checkout, err := home.State(u.checkout)
 		if err != nil {
-			_ = home.RemoveTree(staged)
-			m.Discard()
+			discard()
 			return err
 		}
 		m.Remove(u.checkout, checkout)

@@ -199,15 +199,9 @@ func revertSubject(name, label, commit string) string {
 // appeared or changed meanwhile, such as a .DS_Store, is carried over as
 // any ignored file is.
 //
-// One journal holds a ref step, which moves the branch to the new commit
-// or, for a revert of the edits, holds it at its tip, so that recovery puts
-// back the version the branch still names and no other; the removal of
-// the skill directory, retained in the worktrees directory until the
-// mutation is verified; the publish of the version laid out there, with
-// the files git ignores in the directory carried in; the worktree step,
-// which resets its index to the branch, so that git status there is clean;
-// and the refresh of every copy placement that held what the library
-// held.
+// It is one journal, see layTipJournal, which moves the branch to the new
+// commit or, for a revert of the edits, holds it at its tip, and lays that
+// commit out in the worktree.
 func (inv *invocation) applyForkRevert(ctx context.Context, r *forkReverting, done *placements) error {
 	f := r.site
 	if inv.mergePending(f.name) {
@@ -250,51 +244,16 @@ func (inv *invocation) applyForkRevert(ctx context.Context, r *forkReverting, do
 	if len(lost) > 0 {
 		return unrecordableRefusal(f.name, f.skillDir, lost, "a revert", "revert")
 	}
-	// A revert killed before its journal was written left what it staged
-	// with nothing to name it: in the worktrees directory, and beside each
-	// copy it was refreshing. All of it is swept before anything is staged.
-	edit, err := inv.beginSettings()
-	if err != nil {
-		return err
-	}
-	recorded := edit.copiesOf(f.name)
-	sweepStaged(inv.worktreesDir())
-	for _, t := range inv.detectedTargets() {
-		if !t.readsLibrary && slices.Contains(recorded, t.id) {
-			sweepStaged(t.dir)
-		}
-	}
 	moved := r.commit
 	if moved == "" {
 		moved = f.rec.Commit // held at its tip
 	}
-	m := home.NewMutation(inv.dirs.Home)
-	m.Ref(f.gitDir, f.rec.Ref, f.rec.Commit, moved)
-	// The content is staged beside the worktree, in the worktrees directory,
-	// never inside it, where git would see it as a file of the branch.
-	staged := m.Sibling(f.root, "staged")
-	fingerprint, err := stageVersion(staged, r.lay, r.laid, f.skillDir, append(slices.Clip(now.ignored), kept...))
+	m, _, err := inv.layTipJournal(ctx, f, tipLaying{
+		commit: moved, laid: r.laid, lay: r.lay, now: now, kept: kept, done: done,
+		placed: func() ([]version, error) { return inv.placedFork(ctx, r, now) },
+	})
 	if err != nil {
-		_ = home.RemoveTree(staged)
-		m.Discard()
-		return libraryFailure(f.root, err)
-	}
-	if err := m.RemoveInto(f.skillDir, now.captured, inv.worktreesDir()); err != nil {
-		_ = home.RemoveTree(staged)
-		m.Discard()
-		return libraryFailure(f.root, err)
-	}
-	m.Publish(f.skillDir, staged, fingerprint)
-	m.Worktree(f.gitDir, f.root, f.branch)
-	if len(recorded) > 0 {
-		placed, err := inv.placedFork(ctx, r, now)
-		if err != nil {
-			_ = home.RemoveTree(staged)
-			m.Discard()
-			return err
-		}
-		*done = placements{}
-		inv.refreshCopies(ctx, m, f.gitDir, f.name, r.laid, placed, r.lay, recorded, done)
+		return err
 	}
 	back := reenterReplaced(f.skillDir)
 	defer back()

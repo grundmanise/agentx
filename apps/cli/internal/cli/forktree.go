@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
@@ -375,6 +376,81 @@ func (inv *invocation) forkLayout(ctx context.Context, gitDir, commit, dir strin
 	target := base.ID()
 	laid := version{load: commit + ":" + dir, holds: func(id string) bool { return id == target }}
 	return laid, func(dest string) error { return materialise(dest, base, bodies) }, nil
+}
+
+// tipLaying is what a command that moves a fork's branch to a new tip lays
+// out in the fork's worktree, see layTipJournal.
+type tipLaying struct {
+	commit string // the commit the branch moves to; the tip itself holds it there
+	laid   version
+	lay    func(dest string) error
+	now    siteJudged // the skill directory as it was judged under the lock
+	kept   []string   // what git cannot record in it that is carried over all the same, see splitUnrecordable
+	// placed is what a copy placement holds when it holds what the library
+	// held before the command, which is refreshed: it is read only when the
+	// fork has copy placements.
+	placed func() ([]version, error)
+	done   *placements // the copies refreshed, once the journal is applied
+}
+
+// layTipJournal starts the one journal of a command, under the lock, that
+// moves the branch of the fork at f to t.commit and lays that commit's
+// skill directory out in the worktree: a ref step, which moves the branch
+// or holds it at its tip, so that recovery puts back the version the
+// branch still names and no other; the removal of the skill directory,
+// retained in the worktrees directory until the mutation is verified; the
+// publish of the new content, staged beside the worktree with the files
+// git ignores in the directory and t.kept carried in, but for a path the
+// commit holds, whose file replaces the ignored one as git checkout
+// replaces it; the worktree step, which resets its index to the branch, so
+// that git status there is clean; and the refresh of every copy placement
+// that held what the library held. It returns the mutation, for the
+// command to add steps of its own to and apply, and discard, which gives
+// it up with what it staged when the command fails before applying it.
+func (inv *invocation) layTipJournal(ctx context.Context, f forkSite, t tipLaying) (*home.Mutation, func(), error) {
+	// A command killed before its journal was written left what it staged
+	// with nothing to name it: in the worktrees directory, and beside each
+	// copy it was refreshing. All of it is swept before anything is staged.
+	edit, err := inv.beginSettings()
+	if err != nil {
+		return nil, nil, err
+	}
+	recorded := edit.copiesOf(f.name)
+	sweepStaged(inv.worktreesDir())
+	for _, target := range inv.detectedTargets() {
+		if !target.readsLibrary && slices.Contains(recorded, target.id) {
+			sweepStaged(target.dir)
+		}
+	}
+	m := home.NewMutation(inv.dirs.Home)
+	m.Ref(f.gitDir, f.rec.Ref, f.rec.Commit, t.commit)
+	// The content is staged beside the worktree, in the worktrees directory,
+	// never inside it, where git would see it as a file of the branch.
+	staged := m.Sibling(f.root, "staged")
+	discard := func() {
+		_ = home.RemoveTree(staged)
+		m.Discard()
+	}
+	fingerprint, err := stageVersion(staged, t.lay, t.laid, f.skillDir, append(slices.Clip(t.now.ignored), t.kept...))
+	if err == nil {
+		err = m.RemoveInto(f.skillDir, t.now.captured, inv.worktreesDir())
+	}
+	if err != nil {
+		discard()
+		return nil, nil, libraryFailure(f.root, err)
+	}
+	m.Publish(f.skillDir, staged, fingerprint)
+	m.Worktree(f.gitDir, f.root, f.branch)
+	if len(recorded) > 0 {
+		placed, err := t.placed()
+		if err != nil {
+			discard()
+			return nil, nil, err
+		}
+		*t.done = placements{}
+		inv.refreshCopies(ctx, m, f.gitDir, f.name, t.laid, placed, t.lay, recorded, t.done)
+	}
+	return m, discard, nil
 }
 
 // libraryLink is what the library symlink of a fork records: the path of

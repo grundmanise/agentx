@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -223,10 +224,16 @@ func TestSkillUpdateOfAForkConflicts(t *testing.T) {
 	renamed := "---\nname: other\ndescription: The first skill, revised\n---\n\n# alpha\n"
 	writeFile(t, filepath.Join(pendingCheckout(h, "other"), "alpha", "SKILL.md"), renamed)
 	checkoutGit(t, h, "other", "add", "alpha/SKILL.md")
-	checkoutGit(t, h, "other", "commit", "--quiet", "--no-edit")
-	h.mustRun("skill", "update", "other")
+	// git commit -m drops the message agentx wrote, and with it the base;
+	// the completion writes the commit again with the base added.
+	checkoutGit(t, h, "other", "commit", "--quiet", "-m", "resolve other")
+	completed := h.mustRun("skill", "update", "other")
+	contains(t, "stdout of the renamed fork's completion", completed.stdout, " to "+short(second)+" with the merge you resolved")
+	otherTip := h.ref(lineage.ForkRef("other"))
 	equal(t, "the renamed fork's SKILL.md", fileBody(t, filepath.Join(h.forkDir("other", "alpha"), "SKILL.md")), renamed)
-	equal(t, "the renamed fork's base", h.trailer(h.ref(lineage.ForkRef("other")), lineage.TrailerBase), otherCandidate)
+	equal(t, "the renamed fork's base", h.trailer(otherTip, lineage.TrailerBase), otherCandidate)
+	equal(t, "the renamed fork's subject", h.accountGit("log", "-1", "--format=%s", otherTip), "resolve other")
+	equal(t, "the renamed fork's candidate", h.ref(lineage.CandidateRef("other")), "")
 }
 
 // TestForkCompletionAfterTheTipMoved: a commit made in the fork while its
@@ -240,23 +247,8 @@ func TestSkillUpdateOfAForkConflicts(t *testing.T) {
 // after finds nothing to merge again.
 func TestForkCompletionAfterTheTipMoved(t *testing.T) {
 	t.Parallel()
-	h, s, _ := forkUpdateHarness(t)
-	h.mustRun("skill", "fork", "alpha")
+	h, old, candidate, tip := movedWhilePending(t)
 	alpha := h.forkDir("alpha", "alpha")
-	writeFile(t, filepath.Join(alpha, "notes.md"), forkNotes("seven", "seven, mine"))
-	h.mustRun("skill", "commit", "alpha")
-	s.write("skills/alpha/notes.md", forkNotes("one", "one, upstream", "seven", "seven, upstream"))
-	s.commit("second version")
-	h.mustRun("skill", "check")
-	old, candidate := h.ref(lineage.ForkRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
-	if out := h.run("skill", "update", "alpha"); out.exit != 4 {
-		t.Fatalf("the update that should conflict: exit %d\n%s", out.exit, out.stderr)
-	}
-	writeFile(t, filepath.Join(pendingCheckout(h, "alpha"), "alpha", "notes.md"), forkNotes("one", "one, upstream", "seven", "seven, resolved"))
-	checkoutGit(t, h, "alpha", "add", "alpha/notes.md")
-	writeFile(t, filepath.Join(alpha, "notes.md"), forkNotes("one", "one, meanwhile", "seven", "seven, mine"))
-	h.mustRun("skill", "commit", "alpha")
-	tip := h.ref(lineage.ForkRef("alpha"))
 
 	out := h.run("--json", "skill", "update", "alpha")
 	equal(t, "exit", out.exit, 4)
@@ -278,6 +270,7 @@ func TestForkCompletionAfterTheTipMoved(t *testing.T) {
 
 	checkoutGit(t, h, "alpha", "checkout", "--ours", "alpha/notes.md")
 	checkoutGit(t, h, "alpha", "add", "alpha/notes.md")
+	checkoutGit(t, h, "alpha", "commit", "--quiet", "--no-edit")
 	h.mustRun("skill", "update", "alpha")
 	final := h.ref(lineage.ForkRef("alpha"))
 	equal(t, "the final merge's parents", h.parents(final), tip+"\n"+finished)
@@ -287,6 +280,59 @@ func TestForkCompletionAfterTheTipMoved(t *testing.T) {
 	noCheckout(t, h, "alpha")
 	check := h.mustRun("--json", "skill", "check")
 	equal(t, "a check right after", h.one(check.stdout, "result")["summary"], "checked 2 skills from 1 source: no update available")
+}
+
+// movedWhilePending is a home whose fork alpha has its update's merge
+// pending and resolved, but not completed, and a commit made in the fork
+// meanwhile on a line the resolution changed too. It returns the tip the
+// merge started from, the candidate and the fork's tip now.
+func movedWhilePending(t *testing.T) (h *harness, old, candidate, tip string) {
+	t.Helper()
+	h, s, _ := forkUpdateHarness(t)
+	h.mustRun("skill", "fork", "alpha")
+	alpha := h.forkDir("alpha", "alpha")
+	writeFile(t, filepath.Join(alpha, "notes.md"), forkNotes("seven", "seven, mine"))
+	h.mustRun("skill", "commit", "alpha")
+	s.write("skills/alpha/notes.md", forkNotes("one", "one, upstream", "seven", "seven, upstream"))
+	s.commit("second version")
+	h.mustRun("skill", "check")
+	old, candidate = h.ref(lineage.ForkRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
+	if out := h.run("skill", "update", "alpha"); out.exit != 4 {
+		t.Fatalf("the update that should conflict: exit %d\n%s", out.exit, out.stderr)
+	}
+	writeFile(t, filepath.Join(pendingCheckout(h, "alpha"), "alpha", "notes.md"), forkNotes("one", "one, upstream", "seven", "seven, resolved"))
+	checkoutGit(t, h, "alpha", "add", "alpha/notes.md")
+	writeFile(t, filepath.Join(alpha, "notes.md"), forkNotes("one", "one, meanwhile", "seven", "seven, mine"))
+	h.mustRun("skill", "commit", "alpha")
+	return h, old, candidate, h.ref(lineage.ForkRef("alpha"))
+}
+
+// TestAnInterruptedRemergeIsNotCompleted: a re-merge of a completed merge
+// with the commits made meanwhile that stops part way, here with git
+// failing to write the stages of the file that conflicts once the merged
+// tree, conflict markers and all, is in the checkout's index, leaves the
+// checkout with no merge in progress, never one that reads as resolved:
+// the next update reports the conflict with the candidate again and
+// commits nothing, and the merge can be given up.
+func TestAnInterruptedRemergeIsNotCompleted(t *testing.T) {
+	t.Parallel()
+	h, _, candidate, tip := movedWhilePending(t)
+	real, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := h.env["PATH"]
+	stubGit(t, h, "#!/bin/sh\ncase \" $* \" in\n*\" --index-info \"*) exit 1 ;;\nesac\nexec "+shellWord(real)+" \"$@\"\n")
+	failed := h.run("skill", "update", "alpha")
+	h.env["PATH"] = path
+	equal(t, "exit of the re-merge git stopped", failed.exit, 8)
+
+	out := h.run("--json", "skill", "update", "alpha")
+	equal(t, "exit", out.exit, 4)
+	equal(t, "theirs", h.one(out.stdout, "conflict")["theirs"], candidate)
+	equal(t, "the branch", h.ref(lineage.ForkRef("alpha")), tip)
+	h.mustRun("skill", "update", "alpha", "--abort")
+	equal(t, "the branch once given up", h.ref(lineage.ForkRef("alpha")), tip)
 }
 
 // TestARevertSurvivesTheNextUpdate: a fork that took an update and then
@@ -314,12 +360,13 @@ func TestARevertSurvivesTheNextUpdate(t *testing.T) {
 // TestForkUpdateRecoversWhereItWasKilled kills a fork's clean update with
 // SIGKILL at two boundaries: once its journal is on disk, before anything
 // was applied, and right after its last live write, the deletion of the
-// candidate. Every boundary between them is the journal's, which
-// home.TestForkRevertRecoversFromEveryBoundary replays without git for the
-// same steps. The next command finishes the update: the branch at the
-// merge, the skill directory holding it with the ignored file kept, git
-// status in the worktree clean, the candidate gone and nothing staged or
-// retained left.
+// candidate. Every boundary between them is the journal's:
+// home.TestForkRevertRecoversFromEveryBoundary replays the same ref,
+// remove, publish and worktree steps without git, and the final deletion
+// of the candidate is an ordinary ref step. The next command finishes the
+// update: the branch at the merge, the skill directory holding it with the
+// ignored file kept, git status in the worktree clean, the candidate gone
+// and nothing staged or retained left.
 func TestForkUpdateRecoversWhereItWasKilled(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ name, script string }{

@@ -701,7 +701,7 @@ func TestSkillCheckSkipsARemovedSource(t *testing.T) {
 	s.skill("skills/beta", "beta", "The second skill", nil)
 	s.commit("both changed")
 	out := h.mustRun("--verbose", "skill", "check")
-	equal(t, "stdout", out.stdout, "Nothing to check: no managed skill comes from a source added on this machine.\n")
+	equal(t, "stdout", out.stdout, "Nothing to check: no managed skill or fork comes from a source added on this machine.\n")
 	equal(t, "fetches", fetches(out.stderr), 0)
 	refs = h.refMap()
 	equal(t, "the candidate", refs[lineage.CandidateRef("alpha")], candidate)
@@ -717,18 +717,21 @@ func TestSkillCheckSkipsARemovedSource(t *testing.T) {
 // checked at all. A newer upstream version is pinned as the fork's
 // candidate and reported with kind fork, the coordinates of its base and
 // the files it changes there, which skill list shows and skill diff
-// --update reads back. Once the upstream no longer holds the skill, the
-// fork just has no update: the candidate goes, no upstream-removed marker
-// is written and none is counted.
+// --update reads back. A fork named otherwise than its upstream is not
+// reported as renamed by an update that keeps the upstream's name. Once
+// the upstream no longer holds the skill, the fork just has no update: the
+// candidate goes, no upstream-removed marker is written and none is
+// counted.
 func TestSkillCheckFindsAForkUpdate(t *testing.T) {
 	t.Parallel()
 	h, s, first := checkHarness(t)
 	h.mustRun("skill", "fork", "alpha")
+	h.mustRun("skill", "fork", "alpha", "--name", "other")
 	writeFile(t, filepath.Join(h.library, "alpha", "notes.md"), "alpha notes, forked\n")
 	h.mustRun("skill", "commit", "alpha")
 	h.mustRun("skill", "new", "mine")
 	out := h.mustRun("--json", "skill", "check")
-	equal(t, "summary of a fork with a commit of its own", h.one(out.stdout, "result")["summary"], "checked 2 skills from 1 source: no update available")
+	equal(t, "summary of a fork with a commit of its own", h.one(out.stdout, "result")["summary"], "checked 3 skills from 1 source: no update available")
 
 	s.skill("skills/alpha", "alpha", "The first skill, revised", nil)
 	second := s.commit("alpha revised")
@@ -739,6 +742,10 @@ func TestSkillCheckFindsAForkUpdate(t *testing.T) {
 	equal(t, "upstream_commit", up["upstream_commit"], first)
 	equal(t, "candidate_upstream_commit", up["candidate_upstream_commit"], second)
 	equal(t, "files", files(up), "modified SKILL.md")
+	equal(t, "the renamed fork's upstream_name", h.updateOf(out.stdout, "other")["upstream_name"], nil)
+	if strings.Contains(out.stderr, "names the skill") {
+		t.Errorf("a rename warning for a fork named otherwise:\n%s", out.stderr)
+	}
 	equal(t, "the candidate ref", h.ref(lineage.CandidateRef("alpha")), up["candidate"])
 	candidate, _ := h.listed("alpha")["candidate"].(map[string]any)
 	equal(t, "the listed candidate", candidate["upstream_commit"], second)
@@ -752,7 +759,7 @@ func TestSkillCheckFindsAForkUpdate(t *testing.T) {
 	s.run("rm", "-r", "--quiet", "skills/alpha")
 	s.commit("alpha removed")
 	out = h.mustRun("--json", "skill", "check")
-	equal(t, "summary once the upstream removed it", h.one(out.stdout, "result")["summary"], "checked 2 skills from 1 source: no update available")
+	equal(t, "summary once the upstream removed it", h.one(out.stdout, "result")["summary"], "checked 3 skills from 1 source: no update available")
 	refs := h.refMap()
 	equal(t, "the candidate once the upstream removed it", refs[lineage.CandidateRef("alpha")], "")
 	equal(t, "the marker", refs[lineage.UpstreamRemovedRef("alpha")], "")
@@ -1243,7 +1250,7 @@ func TestSkillCheckWithNothingToCheck(t *testing.T) {
 	h := newHarness(t)
 	calls := countingGit(t, h)
 	out := h.mustRun("--json", "skill", "check")
-	equal(t, "summary", h.one(out.stdout, "result")["summary"], "nothing to check: no managed skill comes from a source added on this machine")
+	equal(t, "summary", h.one(out.stdout, "result")["summary"], "nothing to check: no managed skill or fork comes from a source added on this machine")
 	equal(t, "git calls", strings.Join(calls(), "|"), "--version")
 
 	s := h.newSourceRepo("skills", true)
@@ -1251,7 +1258,7 @@ func TestSkillCheckWithNothingToCheck(t *testing.T) {
 	s.commit("alpha")
 	h.mustRun("source", "add", s.url)
 	out = h.mustRun("--verbose", "skill", "check")
-	equal(t, "stdout", out.stdout, "Nothing to check: no managed skill comes from a source added on this machine.\n")
+	equal(t, "stdout", out.stdout, "Nothing to check: no managed skill or fork comes from a source added on this machine.\n")
 	equal(t, "fetches", fetches(out.stderr), 0)
 }
 

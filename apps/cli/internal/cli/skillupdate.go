@@ -344,18 +344,17 @@ func (r *updateRun) selection(name string, records map[string]lineage.Record) ([
 // judgeForkUpdate instead. It refuses, in this order: a name the library
 // does not hold and no lineage names, an unmanaged skill, a managed skill
 // whose library directory is gone and one whose import branch agentx
-// cannot read; a skill whose source was
-// removed from this machine, which is exit code 5 as installing from it
-// is; a skill the last update check found its source no longer holds,
-// which is kept as it is and never updated; and, having found an update
-// for it, a skill whose library entry is a symlink, whatever it leads to,
-// and one that holds something git cannot record, which the update would
-// discard with no record of it and which a revert refuses too. A skill
-// with no update is neither: u and f are then both nil. A skill edited
-// since it was installed is no refusal: its update merges the edits, and
-// u says so. A skill with a merge pending is judged by its checkout, see
-// judgePending, and its library directory must still hold the mine the
-// merge started from.
+// cannot read; a skill whose source was removed from this machine, which
+// is exit code 5 as installing from it is; a skill the last update check
+// found its source no longer holds, which is kept as it is and never
+// updated; and, having found an update for it, a skill whose library
+// entry is a symlink, whatever it leads to, and one that holds something
+// git cannot record, which the update would discard with no record of it
+// and which a revert refuses too. A skill with no update is neither: u
+// and f are then both nil. A skill edited since it was installed is no
+// refusal: its update merges the edits, and u says so. A skill with a
+// merge pending is judged by its checkout, see judgePending, and its
+// library directory must still hold the mine the merge started from.
 //
 // Edited is decided as drift decides it, by git over a throwaway index
 // loaded from the base version, with the in-process tree id as the fast

@@ -227,9 +227,10 @@ func (inv *invocation) readMerge(ctx context.Context, dir string) (pendingState,
 // the lock: git removes its checkout, the directory and git's registration
 // of it, whatever was resolved there. The library directory, every
 // placement, the import branch and the candidate stay exactly as they
-// were, and so do a fork's worktree and branch, so nothing is journaled; a removal stopped part way leaves what
-// the next command that changes anything prunes, see pruneMerges. The
-// skill is reported as it now stands.
+// were, and so do a fork's worktree and branch, so nothing is journaled;
+// a removal stopped part way leaves what the next command that changes
+// anything prunes, see pruneMerges. The skill is reported as it now
+// stands.
 func (inv *invocation) abortMerge(ctx context.Context, name string) error {
 	gitDir, _, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
