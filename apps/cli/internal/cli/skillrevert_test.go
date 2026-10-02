@@ -365,6 +365,8 @@ func TestSkillRevertRefusesALibraryEntryThatIsASymlink(t *testing.T) {
 // content was captured and before the lock is taken, to a managed skill's
 // library directory and to a fork's skill directory; each revert then
 // refuses, and the edit is there afterwards, not discarded with the rest.
+// A file git ignores that appears meanwhile in the fork's directory is no
+// edit: that revert goes ahead and carries the file over.
 func TestSkillRevertGuardsAnEditMadeWhileItRuns(t *testing.T) {
 	t.Parallel()
 	h, _ := driftHarness(t)
@@ -397,6 +399,19 @@ exec `+real+` "$@"
 		contains(t, name+": a.md", string(b), "an edit\nan edit made meanwhile\n")
 		equal(t, name+": journals", journalCount(t, h), 0)
 	}
+
+	finder := filepath.Join(filepath.Dir(files["notes"]), ".DS_Store")
+	stubGit(t, h, `#!/bin/sh
+case " $* " in
+*" ls-tree "*) printf 'finder\n' > `+shellWord(finder)+` ;;
+esac
+exec `+real+` "$@"
+`)
+	h.mustRun("skill", "revert", "notes")
+	if _, err := os.Lstat(files["notes"]); !os.IsNotExist(err) {
+		t.Errorf("notes: a.md was not discarded: %v", err)
+	}
+	equal(t, "notes: .DS_Store", fileBody(t, finder), "finder\n")
 	for _, dir := range []string{h.library, filepath.Join(h.agentx, "worktrees")} {
 		equal(t, "what is left in "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 	}

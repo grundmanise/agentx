@@ -73,7 +73,7 @@ agentx skill fork pdf --name my-pdf
 - The fork sits beside the skill, which stays exactly as it was.
 - agentx writes the new name into the fork's `SKILL.md`, as part of the fork's first commit.
 - The fork goes into the same clients as the skill, with a copy wherever the skill has a copy.
-- A fork of an installed skill keeps the upstream's folder name inside its worktree, so the skill sits at `~/.agentx/worktrees/my-pdf/pdf/`.
+- A fork of an installed skill keeps the folder name upstream uses inside its worktree, so the skill sits at `~/.agentx/worktrees/my-pdf/pdf/`.
 - Use a new name to fork a skill whose own name breaks the [naming rule](#choose-a-name), such as `My_Skill`.
 
 ### Fork a fork
@@ -192,7 +192,7 @@ agentx skill revert release-notes
 - A copy placement that held your edits goes back too. A copy you edited on its own is kept and named.
 - An edit made while the command runs stops it with exit code 6, and nothing is discarded. Run `agentx skill diff <name>` to see the edit, then revert again.
 - If you deleted the whole skill folder, the command stops with exit code 6 and names the `git restore` command that puts it back.
-- Changes you staged with Git outside the skill folder are unstaged. Their files stay as they are.
+- Changes you staged with Git outside the skill folder are no longer staged. Their files stay as they are.
 
 ### Go back to an earlier commit
 

@@ -1236,7 +1236,7 @@ func sweepStaged(dir string) {
 	}
 	for _, e := range entries {
 		if strings.HasPrefix(e.Name(), ".agentx-staged-") {
-			os.RemoveAll(filepath.Join(dir, e.Name()))
+			_ = home.RemoveTree(filepath.Join(dir, e.Name()))
 		}
 	}
 }

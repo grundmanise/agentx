@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"errors"
-	"os"
 	"slices"
 	"strings"
 
@@ -57,13 +56,16 @@ type forkReverting struct {
 // the mutation runs is kept as well.
 //
 // A fork with a merge pending is refused first, exit code 4, before its
-// directory is read, and even when it has no edits to discard: the merge
-// holds the fork's tip as it was. A directory holding something git cannot record
-// that no ignore rule covers, such as a repository nested in it, is
-// refused too, since the revert would discard it with no record of it
-// anywhere; one an ignore rule covers stays where it is, as any ignored
-// file does.
+// worktree or directory is read, and even when it has no edits to discard:
+// the merge holds the fork's tip as it was. A directory holding something
+// git cannot record that no ignore rule covers, such as a repository
+// nested in it, is refused too, since the revert would discard it with no
+// record of it anywhere; one an ignore rule covers stays where it is, as
+// any ignored file does.
 func (inv *invocation) forkRevert(ctx context.Context, gitDir string, rec lineage.Record, to string) error {
+	if inv.mergePending(rec.Name) {
+		return forkPendingRefusal(rec.Name, revertRefusal(to))
+	}
 	f, err := inv.forkSiteOf(ctx, gitDir, rec)
 	if err != nil {
 		return err
@@ -77,9 +79,6 @@ func (inv *invocation) forkRevert(ctx context.Context, gitDir string, rec lineag
 			return inv.reportForkReverted(ctx, r, placements{})
 		}
 	} else {
-		if inv.mergePending(f.name) {
-			return forkPendingRefusal(f.name, "reverted")
-		}
 		if r.judged, err = inv.judgeSite(ctx, f, true); err != nil {
 			return err
 		}
@@ -104,6 +103,15 @@ func (inv *invocation) forkRevert(ctx context.Context, gitDir string, rec lineag
 	return inv.reportForkReverted(ctx, r, done)
 }
 
+// revertRefusal is what a revert, to the commit to names or of the edits
+// when to is "", refuses for as the words of the refusals that name it.
+func revertRefusal(to string) string {
+	if to != "" {
+		return revertTo
+	}
+	return "reverted"
+}
+
 // splitUnrecordable sorts the paths of a fork's skill directory, as j
 // judged it, that git cannot record: the .git of a repository nested in
 // the directory that an ignore rule covers is no part of the fork and is
@@ -123,17 +131,14 @@ func splitUnrecordable(j forkJudged) (kept, lost []string) {
 }
 
 // forkRevertTo plans a revert of the fork to the commit r.to names, before
-// the lock: a merge pending is refused first, before anything is written;
-// the commit has to be the tip or one of its ancestors and hold the fork's
-// skill directory; the fork has to have no uncommitted edits, exit code 6;
-// and the new commit is written, the tip's tree with the skill directory
+// the lock, once forkRevert has refused a merge pending: the commit has to
+// be the tip or one of its ancestors and hold the fork's skill directory;
+// the fork has to have no uncommitted edits, exit code 6; and the new
+// commit is written, the tip's tree with the skill directory
 // that commit holds, the tip its one parent. A commit whose directory the
 // tip holds already leaves nothing to commit, r.commit "".
 func (inv *invocation) forkRevertTo(ctx context.Context, r *forkReverting) error {
 	f := r.site
-	if inv.mergePending(f.name) {
-		return forkPendingRefusal(f.name, revertTo)
-	}
 	c, err := inv.resolveForkCommit(ctx, f, r.to, true)
 	if err != nil {
 		return err
@@ -184,11 +189,15 @@ func revertSubject(name, label, commit string) string {
 }
 
 // applyForkRevert records and applies a revert under the lock, once
-// everything it was planned from is read again: the branch has to hold the
-// tip the revert was planned on, the worktree has to be one git can work
-// in, no merge may be pending, and the skill directory has to hold what it
-// held when it was judged, which for a revert to an earlier commit is its
-// tip, so an edit made meanwhile refuses it as uncommitted.
+// everything it was planned from is read again: no merge may be pending,
+// the branch has to hold the tip the revert was planned on, the worktree
+// has to be one git can work in, and the skill directory has to hold what
+// it held when it was judged, which for a revert to an earlier commit is
+// its tip, so an edit made meanwhile refuses it as uncommitted. For a
+// revert of the edits, a directory that changed since is judged again, and
+// only a change to what git records refuses it: a file git ignores that
+// appeared or changed meanwhile, such as a .DS_Store, is carried over as
+// any ignored file is.
 //
 // One journal holds a ref step, which moves the branch to the new commit
 // or, for a revert of the edits, holds it at its tip, so that recovery puts
@@ -201,6 +210,9 @@ func revertSubject(name, label, commit string) string {
 // held.
 func (inv *invocation) applyForkRevert(ctx context.Context, r *forkReverting, done *placements) error {
 	f := r.site
+	if inv.mergePending(f.name) {
+		return forkPendingRefusal(f.name, revertRefusal(r.to))
+	}
 	values, err := inv.git.Refs(ctx).RefValues(f.gitDir, []string{f.rec.Ref})
 	if err != nil {
 		return accountRepoFailure(err)
@@ -218,16 +230,20 @@ func (inv *invocation) applyForkRevert(ctx context.Context, r *forkReverting, do
 			return err
 		}
 	} else {
-		if inv.mergePending(f.name) {
-			return forkPendingRefusal(f.name, "reverted")
-		}
 		live, err := home.State(f.skillDir)
 		if err != nil {
 			return libraryFailure(f.root, err)
 		}
 		if live != r.judged.captured {
-			return fail(exitRefused, sanitised(f.name)+" changed while it was being reverted, so nothing was discarded",
-				"run '"+skillCommand("diff", f.name)+"' to see the change, then revert again to discard it too")
+			// The edits are compared as git wrote them, so a change to an
+			// ignored file alone leaves the tree it wrote as it was.
+			if now, err = inv.judgeSite(ctx, f, true); err != nil {
+				return err
+			}
+			if now.clean || now.written == "" || now.written != r.judged.written {
+				return fail(exitRefused, sanitised(f.name)+" changed while it was being reverted, so nothing was discarded",
+					"run '"+skillCommand("diff", f.name)+"' to see the change, then revert again to discard it too")
+			}
 		}
 	}
 	kept, lost := splitUnrecordable(now.forkJudged)
@@ -259,12 +275,12 @@ func (inv *invocation) applyForkRevert(ctx context.Context, r *forkReverting, do
 	staged := m.Sibling(f.root, "staged")
 	fingerprint, err := stageVersion(staged, r.lay, r.laid, f.skillDir, append(slices.Clip(now.ignored), kept...))
 	if err != nil {
-		os.RemoveAll(staged)
+		_ = home.RemoveTree(staged)
 		m.Discard()
 		return libraryFailure(f.root, err)
 	}
 	if err := m.RemoveInto(f.skillDir, now.captured, inv.worktreesDir()); err != nil {
-		os.RemoveAll(staged)
+		_ = home.RemoveTree(staged)
 		m.Discard()
 		return libraryFailure(f.root, err)
 	}
@@ -273,7 +289,7 @@ func (inv *invocation) applyForkRevert(ctx context.Context, r *forkReverting, do
 	if len(recorded) > 0 {
 		placed, err := inv.placedFork(ctx, r, now)
 		if err != nil {
-			os.RemoveAll(staged)
+			_ = home.RemoveTree(staged)
 			m.Discard()
 			return err
 		}

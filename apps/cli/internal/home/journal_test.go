@@ -357,15 +357,22 @@ func TestRecoveryRefusesContentThatChanged(t *testing.T) {
 
 // TestRemoveRetainsWhatItDisplaces keeps the content a placement held until
 // the mutation is through, and drops it only once every live path is where
-// it should be.
+// it should be, a read-only directory in it included.
 func TestRemoveRetainsWhatItDisplaces(t *testing.T) {
 	t.Parallel()
 	in, u := newInstall(t)
 	live := filepath.Join(in.place, "alpha")
-	if err := os.MkdirAll(live, 0o755); err != nil {
+	readOnly := filepath.Join(live, "cache", "ro")
+	if err := os.MkdirAll(readOnly, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(live, "SKILL.md"), []byte("displaced\n"), 0o644); err != nil {
+	t.Cleanup(func() { _ = RemoveTree(in.place) })
+	for path, body := range map[string]string{filepath.Join(live, "SKILL.md"): "displaced\n", filepath.Join(readOnly, "f"): "x\n"} {
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Chmod(readOnly, 0o555); err != nil {
 		t.Fatal(err)
 	}
 	state, err := State(live)

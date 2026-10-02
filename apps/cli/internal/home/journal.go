@@ -375,7 +375,7 @@ func discardStaged(j journal) {
 	for _, s := range j.Steps {
 		for _, path := range []string{s.Staged, s.Retained} {
 			if path != "" {
-				os.RemoveAll(path)
+				_ = RemoveTree(path)
 			}
 		}
 	}
@@ -490,7 +490,7 @@ func applyStep(s step, u RefUpdater) (bool, error) {
 		// plan exactly this – two publishes of one path, the second of them
 		// already done – so the leak is an ordinary run's, not a crash's.
 		if s.Staged != "" {
-			os.RemoveAll(s.Staged)
+			_ = RemoveTree(s.Staged)
 		}
 		return false, nil
 	}
@@ -896,7 +896,7 @@ func recoverJournals(dir string, u RefUpdater) error {
 		return err
 	}
 	for _, staged := range orphans {
-		os.RemoveAll(staged)
+		_ = RemoveTree(staged)
 	}
 	return nil
 }
@@ -1034,7 +1034,8 @@ func holdsNew(s step) (bool, error) {
 // the journal captured: locks coordinate agentx commands, not editors, and
 // content that changed under us is kept and named, since it is the user's
 // and nothing else will ever mention it – the sweep of the next install
-// covers staging directories alone, by design.
+// covers staging directories alone, by design. Content that cannot be
+// removed is named the same way.
 func discardRetained(j journal, u RefUpdater) {
 	for _, s := range j.Steps {
 		if s.Kind != stepRemove || s.Retained == "" {
@@ -1043,7 +1044,9 @@ func discardRetained(j journal, u RefUpdater) {
 		fp, err := Fingerprint(s.Retained)
 		switch {
 		case err == nil && dirOf+fp == s.Old:
-			os.RemoveAll(s.Retained)
+			if err := RemoveTree(s.Retained); err != nil {
+				warn(u, "what "+s.Path+" held could not be removed and is kept at "+s.Retained+": "+err.Error())
+			}
 		case err == nil:
 			warn(u, "what "+s.Path+" held changed while the change was unfinished and is kept at "+s.Retained)
 		}

@@ -3,7 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -235,7 +234,7 @@ func (inv *invocation) stageRevert(ctx context.Context, m *home.Mutation, gitDir
 	staged := m.Sibling(libPath, "staged")
 	fingerprint, err := stageVersion(staged, lay, laidOut, libPath, j.ignored)
 	if err != nil {
-		os.RemoveAll(staged)
+		_ = home.RemoveTree(staged)
 		return libraryFailure(inv.dirs.Library, err)
 	}
 	m.Remove(libPath, captured)

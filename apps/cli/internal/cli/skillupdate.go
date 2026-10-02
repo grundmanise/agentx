@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -759,7 +758,7 @@ func (inv *invocation) stageUpdate(ctx context.Context, m *home.Mutation, gitDir
 	staged := m.Sibling(u.libPath, "staged")
 	fingerprint, err := stageVersion(staged, lay, u.target, u.libPath, u.ignored)
 	if err != nil {
-		os.RemoveAll(staged)
+		_ = home.RemoveTree(staged)
 		return libraryFailure(inv.dirs.Library, err)
 	}
 	u.done = placements{}
