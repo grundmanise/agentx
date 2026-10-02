@@ -426,10 +426,15 @@ func (inv *invocation) remoteSelection(ctx context.Context, name string, records
 	refusal := sanitised(name) + what + ", so it is never " + verb + "ed: only forks travel through the account remote"
 	// A fork the account remote holds of the name takes the place of what
 	// is here; a fork of it made here would be another fork of the name,
-	// which a publish refuses.
+	// which a publish refuses. A symlink at the library path is never
+	// moved into the fork, so it has to go first.
 	if inv.remoteHolds(ctx, name) {
+		libPath := inv.libraryPath(name)
+		if state, err := home.State(libPath); err == nil && home.IsLink(state) {
+			return nil, fail(exitRefused, refusal, "remove the link "+quotedPath(libPath)+", then install the account remote's fork in its place with '"+fromAccountCommand(name)+"'")
+		}
 		var flags []string
-		if !ok && isDir(inv.libraryPath(name)) {
+		if !ok && isDir(libPath) {
 			flags = []string{"--keep-local"}
 		}
 		return nil, fail(exitRefused, refusal, "install the account remote's fork in its place with '"+fromAccountCommand(name, flags...)+"'")

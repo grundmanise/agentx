@@ -31,9 +31,9 @@ import (
 type installableForkEvent struct {
 	event
 	Name           string  `json:"name"`
-	ForkID         string  `json:"fork_id,omitempty"` // the fork's permanent id, "" when its history records none
-	Commit         string  `json:"commit"`            // the remote tip
-	Source         string  `json:"source,omitempty"`  // the canonical URL of the upstream, for a fork with a base version
+	ForkID         string  `json:"fork_id"`          // the fork's permanent id; a branch whose history records none is not listed
+	Commit         string  `json:"commit"`           // the remote tip
+	Source         string  `json:"source,omitempty"` // the canonical URL of the upstream, for a fork with a base version
 	Subpath        *string `json:"subpath,omitempty"`
 	UpstreamCommit string  `json:"upstream_commit,omitempty"`
 	BaseHash       string  `json:"base_hash,omitempty"`
@@ -46,14 +46,16 @@ const installRemoteRow = "installable"
 // installableForks reads the forks the account remote holds that records,
 // the account repo's branches, hold no fork branch of, sorted by name, with
 // the provenance of each read by one walk of their remote tips. A branch
-// whose name agentx would never give a fork is left out, with a warning
-// each: installing it could not create the local branch.
+// whose name agentx would never give a fork, or whose history records no
+// fork id, is left out, with a warning each: installing the one could not
+// create the local branch, and the other could never be pulled or
+// published, since nothing would tell that the two branches are one fork.
 func (inv *invocation) installableForks(ctx context.Context, gitDir string, records map[string]lineage.Record) ([]installableForkEvent, []string, error) {
 	tips, err := lineage.ListRemote(ctx, inv.git, gitDir)
 	if err != nil {
 		return nil, nil, accountRepoFailure(err)
 	}
-	var names, warnings []string
+	var candidates, warnings []string
 	var walk []string
 	for name, tip := range tips {
 		switch {
@@ -61,16 +63,24 @@ func (inv *invocation) installableForks(ctx context.Context, gitDir string, reco
 		case forkNameRefusal(name) != "":
 			warnings = append(warnings, "the account remote's branch skills/"+sanitised(name)+" is not listed, since it cannot be installed: "+forkNameRefusal(name))
 		default:
-			names = append(names, name)
+			candidates = append(candidates, name)
 			walk = append(walk, tip)
 		}
 	}
-	sort.Strings(names)
-	sort.Strings(warnings)
 	walked, err := lineage.Walk(ctx, inv.git, gitDir, walk)
 	if err != nil {
 		return nil, nil, accountRepoFailure(err)
 	}
+	var names []string
+	for _, name := range candidates {
+		if walked[tips[name]].ID == "" {
+			warnings = append(warnings, "the account remote's branch skills/"+sanitised(name)+" is not listed, since its history records no fork id")
+			continue
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	sort.Strings(warnings)
 	events := make([]installableForkEvent, 0, len(names))
 	for _, name := range names {
 		l := walked[tips[name]]
@@ -244,11 +254,13 @@ func installFlags(in *accountInstall) []string {
 // judgeAccountInstall reads what installing the fork called name from the
 // account remote takes, after the fetch and before the lock, and refuses
 // what it cannot do, changing nothing: a fork the account remote does not
-// hold, exit code 5; one this machine has a branch of already, a name
-// another branch holds whatever its case, a worktree directory in the way,
-// and a library path fromAccountPlan refuses, exit code 6; and a managed
-// skill it would take the place of whose update merge is pending, exit
-// code 4.
+// hold, and a content to install that holds no SKILL.md, exit code 5; one
+// this machine has a branch of already, a name another branch holds
+// whatever its case, a remote history that records no fork id, a worktree
+// directory in the way, and a library path fromAccountPlan refuses, exit
+// code 6; and a managed skill it would take the place of whose update
+// merge is pending, exit code 4. Every refusal comes before the fork's
+// upstream source is added, which is a change of its own.
 func (inv *invocation) judgeAccountInstall(ctx context.Context, gitDir, name string, keepLocal bool) (*accountInstall, error) {
 	tips, err := lineage.ListRemote(ctx, inv.git, gitDir)
 	if err != nil {
@@ -283,6 +295,13 @@ func (inv *invocation) judgeAccountInstall(ctx context.Context, gitDir, name str
 		return nil, accountRepoFailure(err)
 	}
 	in.there = walked[tip]
+	if in.there.ID == "" {
+		// A pull and a publish refuse a fork whose two histories do not
+		// both record its id, so a fork installed from this branch could
+		// never sync.
+		return nil, fail(exitRefused, "the history of the account remote's skills/"+sanitised(name)+" records no fork id, so nothing tells that it is a fork and "+sanitised(name)+" cannot be installed",
+			"publish it from a fork agentx made, one 'agentx skill new' or 'agentx skill fork' creates, on the machine that holds it")
+	}
 	rec := lineage.Record{Name: name, Kind: lineage.KindFork, Ref: lineage.ForkRef(name), Commit: tip, Fork: &in.there}
 	f := inv.forkPlace(gitDir, rec)
 	if f.dir, err = inv.tipDir(ctx, gitDir, rec); err != nil {
@@ -314,8 +333,28 @@ func (inv *invocation) judgeAccountInstall(ctx context.Context, gitDir, name str
 		if err := inv.movableLibrary(in); err != nil {
 			return nil, err
 		}
+		if !holdsSkillFile(f.libPath) {
+			return nil, noAccountSkill(f, in)
+		}
+	} else if ok, err := inv.tipHoldsSkill(ctx, gitDir, tip, f.dir); err != nil {
+		return nil, err
+	} else if !ok {
+		return nil, noAccountSkill(f, in)
 	}
 	return in, nil
+}
+
+// tipHoldsSkill reports whether the commit tip holds a SKILL.md file in
+// its directory dir, read with one ls-tree: what makes the directory laid
+// out from it a skill.
+func (inv *invocation) tipHoldsSkill(ctx context.Context, gitDir, tip, dir string) (bool, error) {
+	out, err := inv.git.Isolated(ctx, gitDir, "ls-tree", "-z", tip, "--", dir+"/SKILL.md")
+	if err != nil {
+		return false, accountRepoFailure(err)
+	}
+	meta, _, _ := strings.Cut(strings.TrimSuffix(out, "\x00"), "\t")
+	fields := strings.Fields(meta)
+	return len(fields) == 3 && fields[1] == "blob" && (fields[0] == "100644" || fields[0] == "100755"), nil
 }
 
 // installedRefusal refuses to install a fork this machine has a branch of
@@ -532,9 +571,9 @@ func (inv *invocation) applyAccountInstall(ctx context.Context, in *accountInsta
 		from = staged
 	}
 	m.Link(f.libPath, link)
-	if !holdsSkillFile(from) {
+	if !holdsSkillFile(from) { // judged before the lock, and read again for a directory changed since
 		m.Discard()
-		return noAccountSkill(f, in, from)
+		return noAccountSkill(f, in)
 	}
 	if place {
 		edit, err := inv.beginSettings()
@@ -576,10 +615,11 @@ func (inv *invocation) applyAccountInstall(ctx context.Context, in *accountInsta
 	return m.Apply(inv.refs(ctx))
 }
 
-// noAccountSkill refuses to install the fork f when the directory it would
-// be installed from, dir, holds no SKILL.md: no listing would show it as a
+// noAccountSkill refuses to install the fork f when what it would be
+// installed from, the remote tip's skill directory or with --keep-local
+// the library directory, holds no SKILL.md: no listing would show it as a
 // skill. Nothing is changed.
-func noAccountSkill(f forkSite, in *accountInstall, dir string) error {
+func noAccountSkill(f forkSite, in *accountInstall) error {
 	if in.action == installKeepLocal {
 		return fail(exitNotFound, quotedPath(f.libPath)+" holds no SKILL.md, so "+sanitised(f.name)+" was not installed and nothing was changed",
 			"add a SKILL.md to "+quotedPath(f.libPath)+", then run '"+fromAccountCommand(f.name, "--keep-local")+"' again")

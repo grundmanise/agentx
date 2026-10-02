@@ -23,6 +23,8 @@ agentx skill add anthropics/skills --skill pdf
 
 Each row is one client's placement: the link or copy in its own skills directory, or the library entry itself for a client that reads the library. Cursor also reads Claude Code's skills directory, so it sees the skill there too; that path is Claude Code's row.
 
+To install a fork that another machine published to your account remote, run `agentx skill add --from-account <name>`. See [Install a fork on another machine](/cli/remote#install-a-fork-on-another-machine).
+
 If the source is not on this machine yet, `skill add` adds it first, as [`agentx source add`](/cli/source) would. The source stays added even if the install then fails. Name the source by its URL for this: a source id only works for a source you already added.
 
 If you removed the source and a skill installed from it is still in your library, installing by its id tells you the command that adds it again:
@@ -756,6 +758,8 @@ With `--all`, a skill that is not updated does not stop the others: agentx names
 The account repo is a Git repository in agentx home, `~/.agentx/account.git`, that plain `git` can read. Every install writes one commit per skill in it: the version's files, the source it came from, the last upstream commit that changed the skill and its content hash. That commit is the same on every machine that installs the same version, however recently each one fetched the source, so your machines agree on what "the version you have" means without sending anything anywhere. A skill installed on its own and the same skill installed as part of a bulk install get the same commit.
 
 ## Exit codes
+
+For `skill add --from-account`, see the [account remote's exit codes](/cli/remote#exit-codes).
 
 - `1`: a usage error:
   - the command line names no skill to install;

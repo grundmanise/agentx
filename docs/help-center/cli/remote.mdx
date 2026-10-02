@@ -61,6 +61,7 @@ Install one with agentx skill add --from-account <name>.
 
 - `--remote` fetches the remote first. A remote Git cannot reach stops with exit code 3.
 - Each row names the upstream the fork's own commits record, or `(none)` for a skill you created with `agentx skill new`.
+- A branch on the remote that agentx cannot install as a fork is left out with a warning: one whose name is not a valid skill name, or whose history records no fork id.
 
 Install one:
 
@@ -132,7 +133,7 @@ hint: rename yours: fork it under a new name with 'agentx skill fork release-not
 - `1`: the URL is not one Git reaches as it is, carries a password or a token, or names a ref with `#`; `publish` is given both a name and `--all`, or neither; `skill add --from-account` is given no name, a source, `--skill`, `--all`, `--except` or `--fetch`; or `--keep-local` is given without `--from-account`.
 - `3`: Git cannot reach the account remote.
 - `4`: a fork has a merge waiting, or the pull or publish left one waiting for you to [resolve](#resolve-a-conflict); or the managed skill a fork would take the place of has an update merge pending.
-- `5`: the name is not a skill of this machine, or the remote holds no fork of that name to install.
+- `5`: the name is not a skill of this machine; the remote holds no fork of that name to install; or the fork to install, or the folder `--keep-local` keeps, has no `SKILL.md`.
 - `6`: no account remote is set; the skill is not a fork; the fork to install is installed already, or the library holds a symlink, edits or a folder of its own at its name; the remote's branch of that name is [another fork](#two-forks-with-one-name), names no fork id, or shares no commit with yours; the fork has uncommitted edits and the remote has something new; the remote rejected the push; the fork's worktree is missing, needs repair or is not on its branch; or the fork, or its branch on the remote, changed while it was being pulled or published.
 - `7`: another agentx command is running. Retry when it finishes.
 - `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.
