@@ -300,7 +300,8 @@ func TestRemoveIntoRetainsInTheGivenDirectory(t *testing.T) {
 }
 
 // TestWorktreeFilesTellAWorktreeApart is the reading of a worktree's two
-// pointer files, absolute and relative, on and off the branch, and moved.
+// pointer files, absolute and relative, on and off the branch, and moved;
+// and of what its admin directory says git is in the middle of.
 func TestWorktreeFilesTellAWorktreeApart(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -326,6 +327,39 @@ func TestWorktreeFilesTellAWorktreeApart(t *testing.T) {
 	check("absolute", true, false, false)
 	if WorktreeAt(path, "skills/beta") {
 		t.Error("a worktree reads as on a branch it is not on")
+	}
+	if got := Unfinished(path) + IndexLock(path); got != "" {
+		t.Errorf("a worktree git is idle in reads as busy: %q", got)
+	}
+	for _, tc := range []struct{ file, want string }{
+		{"MERGE_HEAD", "merge"}, {"CHERRY_PICK_HEAD", "cherry-pick"}, {"REVERT_HEAD", "revert"},
+		{"rebase-merge/", "rebase"}, {"rebase-apply/", "rebase"}, {"rebase-apply/applying", "am"},
+	} {
+		dir, file := filepath.Split(admin + "/" + tc.file)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if file != "" {
+			if err := os.WriteFile(filepath.Join(dir, file), nil, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if got := Unfinished(path); got != tc.want {
+			t.Errorf("with %s: Unfinished = %q, want %q", tc.file, got, tc.want)
+		}
+		if err := os.RemoveAll(filepath.Join(admin, strings.Split(tc.file, "/")[0])); err != nil {
+			t.Fatal(err)
+		}
+	}
+	lock := filepath.Join(admin, "index.lock")
+	if err := os.WriteFile(lock, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := IndexLock(path); got != lock {
+		t.Errorf("IndexLock = %q, want %q", got, lock)
+	}
+	if err := os.Remove(lock); err != nil {
+		t.Fatal(err)
 	}
 	rel, _ := filepath.Rel(path, admin)
 	back, _ := filepath.Rel(admin, filepath.Join(path, ".git"))

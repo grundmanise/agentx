@@ -89,8 +89,8 @@ func (sc skillContext) observationOf(ctx context.Context, inv *invocation, lib s
 }
 
 // placementDrift is what the configurations' own places say about a
-// managed skill or a fork: the drift word of every place drift asks about, see ownPlaces and
-// placeSite.drift, each once, sorted.
+// managed skill or a fork: the drift word of every place drift asks
+// about, see ownPlaces and placeSite.drift, each once, sorted.
 //
 // The rule is literal: a skill placed with --to, or taken out of one
 // configuration with --from, is missing from every other enabled one, which

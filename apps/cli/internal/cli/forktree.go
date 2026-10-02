@@ -49,13 +49,16 @@ type forkSite struct {
 }
 
 // forkVersion is the tip of a fork's branch as a version its skill
-// directory dir is compared with: the directory holds it when its tree id,
-// wrapped under dir as the branch's tree wraps it, is the tip's tree. That
-// is the fast path, the in-process tree id against the tip's skill
-// subtree, which the for-each-ref that read the branch read with it, so a
-// fork whose directory holds its tip costs no git process.
+// directory dir is compared with. git loads the tip's whole tree, since a
+// fork's directory is judged in its worktree, see judgeTip. holds is the
+// fast path: the directory's in-process tree id, wrapped under dir as the
+// branch's tree wraps it, against the tip's tree, which the for-each-ref
+// that read the branch read with it, so a fork whose directory holds its
+// tip costs no git process. A tip whose tree holds an entry beside the
+// skill directory, as a commit made with git may put there, never passes
+// it, and git decides.
 func forkVersion(rec lineage.Record, dir string) version {
-	return version{load: rec.Commit + ":" + dir, holds: func(id string) bool { return treeid.Wrap(dir, id) == rec.Tree }}
+	return version{load: rec.Commit, holds: func(id string) bool { return treeid.Wrap(dir, id) == rec.Tree }}
 }
 
 // version is the fork's tip, see forkVersion.
@@ -113,8 +116,11 @@ func (inv *invocation) placedForkDir(name, real string) (string, bool) {
 // worktreeHealth refuses a fork's worktree that git cannot work in, from
 // the files alone, before a command journals anything that runs git there:
 // one that is gone, one whose pointers no longer meet, as moving agentx
-// home leaves them, and one checked out on another branch than the fork's.
-// Each is exit code 6, since nothing is wrong with the account repo.
+// home leaves them, one where a git command the user ran stopped part way,
+// such as a merge with conflicts, whose state resetting the index would
+// lose, one whose index a running git holds, and one checked out on
+// another branch than the fork's. Each is exit code 6, since nothing is
+// wrong with the account repo.
 func worktreeHealth(name, root, branch string) error {
 	where := sanitised(name) + "'s worktree " + quotedPath(root)
 	place := "run '" + skillCommand("place", name) + "'"
@@ -125,7 +131,16 @@ func worktreeHealth(name, root, branch string) error {
 		return fail(exitRefused, err.Error(), "run 'agentx doctor' and check agentx home")
 	case home.PointersMoved(root):
 		return fail(exitRefused, where+" needs repair", place+" to repair it")
-	case !home.WorktreeAt(root, branch):
+	}
+	if command := home.Unfinished(root); command != "" {
+		return fail(exitRefused, where+" is in the middle of a git "+command,
+			"finish it with git, or run 'git -C "+shellWord(root)+" "+command+" --abort' to give it up, then run the command again")
+	}
+	if lock := home.IndexLock(root); lock != "" {
+		return fail(exitRefused, "git is running in "+where,
+			"run the command again once it finishes; if no git is running, remove "+quotedPath(lock))
+	}
+	if !home.WorktreeAt(root, branch) {
 		return fail(exitRefused, where+" is not on its branch "+branch,
 			"run 'git -C "+shellWord(root)+" switch "+branch+"' to put it back on its branch")
 	}
@@ -144,9 +159,10 @@ func (inv *invocation) holdsTip(ctx context.Context, lib scan.LibrarySkill, rec 
 	if err != nil {
 		return false
 	}
-	v := forkVersion(rec, dir)
-	return inv.verdict(lib.Name, "its branch tip", tree, v, func() (bool, error) {
-		j, err := inv.judgeForkTree(ctx, gitx.AccountRepoPath(inv.dirs.Home), lib.ResolvedPath, tree, v, false)
+	f := forkSite{name: lib.Name, gitDir: gitx.AccountRepoPath(inv.dirs.Home), rec: rec, dir: dir,
+		root: filepath.Dir(lib.ResolvedPath), skillDir: lib.ResolvedPath}
+	return inv.verdict(lib.Name, "its branch tip", tree, f.version(), func() (bool, error) {
+		j, err := inv.judgeTip(ctx, f, tree, false)
 		return j.clean, err
 	})
 }
@@ -154,22 +170,26 @@ func (inv *invocation) holdsTip(ctx context.Context, lib scan.LibrarySkill, rec 
 // forkJudged is how a fork's skill directory compares with a version of
 // it, the branch tip as a rule.
 type forkJudged struct {
-	clean   bool     // the directory holds the version, as git records it
-	written string   // the tree git wrote of the directory; "" when no git ran or a repository stopped it
-	ignored []string // the files git ignores in it, when asked for
+	clean bool // the directory holds the version, as git records it
+	// written is the tree git wrote: of the directory, or, for a fork
+	// judged against its tip, of its worktree as a whole, which is the
+	// root tree a commit of the fork records. It is "" when no git ran or
+	// a repository stopped it.
+	written string
+	ignored []string // the files git ignores in the directory, when asked for
 	exposed []string // the nested repositories git would record as links rather than as their files
 }
 
-// judgeFork compares a fork's skill directory with v as judgeDir compares a
-// managed skill's: the in-process tree id first, then git, with the
-// directory as a work tree of the account repo over a throwaway index. So
-// the tree it writes follows Git's ignore rules: the skill's own .gitignore
-// files, the user's global ignore file, whether at git's default place or
-// at the core.excludesFile they set, and the list ignore_system_files keeps
-// in the account repo's info/exclude while the setting is on. Attributes
-// come from the skill's own .gitattributes files alone. That tree is what a
-// commit of the fork records, so a file git ignores stays on disk and is
-// never committed.
+// judgeFork compares a directory a fork's branch is to hold with v as
+// judgeDir compares a managed skill's: the in-process tree id first, then
+// git, with the directory as a work tree of the account repo over a
+// throwaway index. So the tree it writes follows Git's ignore rules: the
+// skill's own .gitignore files, the user's global ignore file, whether at
+// git's default place or at the core.excludesFile they set, and the list
+// ignore_system_files keeps in the account repo's info/exclude while the
+// setting is on. Attributes come from the skill's own .gitattributes files
+// alone. That tree is what a commit of the fork records, so a file git
+// ignores stays on disk and is never committed.
 //
 // A Git repository nested in the directory is the one thing that differs:
 // git would record it as a link to a commit of its own rather than as its
@@ -182,15 +202,30 @@ func (inv *invocation) judgeFork(ctx context.Context, gitDir, dir string, v vers
 	if err != nil {
 		return forkJudged{}, err
 	}
-	return inv.judgeForkTree(ctx, gitDir, dir, t, v, wantIgnored)
+	return inv.judgeForkTree(ctx, gitDir, dir, dir, t, v, v.holds, wantIgnored)
 }
 
-// judgeForkTree is judgeFork of a directory already read as t.
-func (inv *invocation) judgeForkTree(ctx context.Context, gitDir, dir string, t treeid.Tree, v version, wantIgnored bool) (forkJudged, error) {
+// judgeTip compares the skill directory of the fork f, read as t, with its
+// tip as git status in the worktree compares it, under the rules judgeFork
+// follows: git runs in the skill directory with the worktree as its work
+// tree, over a throwaway index loaded from the tip's whole tree. So a
+// .gitignore at the worktree's root counts as it counts for git status, an
+// entry beside the skill directory, which a commit made with git may have
+// put there, stays as the tip holds it, and the tree git writes is the
+// root tree a commit of the fork records, which holds the tip when it is
+// the tip's tree.
+func (inv *invocation) judgeTip(ctx context.Context, f forkSite, t treeid.Tree, wantIgnored bool) (forkJudged, error) {
+	return inv.judgeForkTree(ctx, f.gitDir, f.root, f.skillDir, t, f.version(), func(written string) bool { return written == f.rec.Tree }, wantIgnored)
+}
+
+// judgeForkTree judges dir, read as t, inside top, the work tree git runs
+// over: v's fast path on t first, then git, whose tree holds the version
+// when holds says so.
+func (inv *invocation) judgeForkTree(ctx context.Context, gitDir, top, dir string, t treeid.Tree, v version, holds func(string) bool, wantIgnored bool) (forkJudged, error) {
 	if len(t.Unrecordable) == 0 && !wantIgnored && fastHolds(t, inv.systemFilesIgnored(), v) {
 		return forkJudged{clean: true}, nil
 	}
-	wt, err := inv.openWorkTree(ctx, gitDir, dir)
+	wt, err := inv.openWorkTreeWithin(ctx, gitDir, top, dir)
 	if err != nil {
 		return forkJudged{}, err
 	}
@@ -221,7 +256,7 @@ func (inv *invocation) judgeForkTree(ctx context.Context, gitDir, dir string, t 
 	if j.written, err = wt.WriteTree(ctx); err != nil {
 		return forkJudged{}, err
 	}
-	j.clean = v.holds(j.written)
+	j.clean = holds(j.written)
 	return j, nil
 }
 

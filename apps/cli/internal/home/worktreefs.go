@@ -63,6 +63,51 @@ func PointersMoved(path string) bool {
 	return !NamesBack(admin, path)
 }
 
+// gitStops are the files git keeps in a worktree's admin directory while a
+// command it stopped part way waits for the user, each with the command
+// that finishes or aborts it, in the order they are asked about.
+var gitStops = []struct{ file, command string }{
+	{"MERGE_HEAD", "merge"},
+	{"CHERRY_PICK_HEAD", "cherry-pick"},
+	{"REVERT_HEAD", "revert"},
+	{"rebase-merge", "rebase"},
+	{"rebase-apply/applying", "am"},
+	{"rebase-apply", "rebase"},
+}
+
+// Unfinished is the git command that stopped part way in the worktree at
+// path and waits for the user to finish or abort it: merge, cherry-pick,
+// revert, rebase or am, as the files in the worktree's admin directory
+// say, and "" when none did. Its index may hold conflicts, and resetting
+// it would lose the command's state.
+func Unfinished(path string) string {
+	admin, ok := AdminDirOf(path)
+	if !ok {
+		return ""
+	}
+	for _, s := range gitStops {
+		if _, err := os.Lstat(filepath.Join(admin, filepath.FromSlash(s.file))); err == nil {
+			return s.command
+		}
+	}
+	return ""
+}
+
+// IndexLock is the lock file of the index of the worktree at path while a
+// git holds it, such as a git commit waiting for its message in an
+// editor, and "" when none does.
+func IndexLock(path string) string {
+	admin, ok := AdminDirOf(path)
+	if !ok {
+		return ""
+	}
+	lock := filepath.Join(admin, "index.lock")
+	if _, err := os.Lstat(lock); err != nil {
+		return ""
+	}
+	return lock
+}
+
 // AdminDirOf is the admin directory the .git file at path's root names,
 // made absolute, and false when path has no such file.
 func AdminDirOf(path string) (string, bool) {

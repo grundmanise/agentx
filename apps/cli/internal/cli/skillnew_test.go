@@ -237,11 +237,7 @@ func TestForkTreeFollowsTheIgnoreRules(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	ctx := context.Background()
-	inv := func() *invocation {
-		var sink strings.Builder
-		return &invocation{env: h.env, dirs: home.Dirs{Home: h.agentx, Library: h.library, Config: h.config},
-			git: gitx.New(h.env, false, func(string, ...any) {}), out: &writer{stdout: &sink, stderr: &sink, env: h.env}}
-	}
+	inv := h.invocation
 	gitDir, _, err := gitx.OpenAccountRepo(ctx, inv().git, h.agentx)
 	if err != nil {
 		t.Fatal(err)

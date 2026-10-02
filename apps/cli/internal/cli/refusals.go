@@ -25,6 +25,7 @@ type brokenSkill struct {
 type refusals struct {
 	broken []brokenSkill
 	verb   string // what the skills could not be: installed, adopted, updated
+	noun   string // what the run calls what it works on, "skill" when empty
 	mixed  string // the hint of a run whose causes disagree
 }
 
@@ -53,9 +54,13 @@ func (r *refusals) failure(selected, done int) *failure {
 		}
 		reasons = append(reasons, s.subject+": "+s.fail.message)
 	}
+	noun := r.noun
+	if noun == "" {
+		noun = "skill"
+	}
 	return &failure{
 		status:  status,
-		message: fmt.Sprintf("%d of %s could not be %s: %s", len(r.broken), plural(selected, "skill"), r.verb, strings.Join(reasons, "; ")),
+		message: fmt.Sprintf("%d of %s could not be %s: %s", len(r.broken), plural(selected, noun), r.verb, strings.Join(reasons, "; ")),
 		hint:    hint,
 	}
 }

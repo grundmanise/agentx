@@ -24,7 +24,7 @@ import (
 // passed explicitly: no hook runs, nothing signs it, and no attribute or
 // setting of theirs changes the tree. The tree is the caller's, built over
 // the fork's skill directory by git with the ignore rules applied, see
-// judgeFork.
+// judgeFork and judgeTip.
 type forkWriter struct {
 	git     *gitx.Runner
 	gitDir  string

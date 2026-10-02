@@ -18,7 +18,8 @@ import (
 type WorkTree struct {
 	r            *Runner
 	gitDir       string
-	dir          string
+	top          string // the work tree git runs over: dir itself, or a directory holding it
+	dir          string // where git runs, so what it adds, lists and checks is what dir holds
 	index        string
 	excludesFile string
 }
@@ -30,6 +31,18 @@ type WorkTree struct {
 // paths are made absolute, since git runs in dir. The caller loads the
 // index and closes the work tree.
 func (r *Runner) NewWorkTree(gitDir, dir, excludesFile string) (*WorkTree, error) {
+	return r.NewWorkTreeWithin(gitDir, dir, dir, excludesFile)
+}
+
+// NewWorkTreeWithin opens top as a work tree of the repository at gitDir,
+// as NewWorkTree does, with git running in dir, a directory inside it: what
+// git adds, lists and checks is what dir holds, named relative to dir, and
+// the ignore rules of the .gitignore files from top down to dir count as
+// they count for git status run in dir. The index holds top's whole tree,
+// so the tree WriteTree writes is top's, every entry outside dir as Load
+// put it there. Both paths are made absolute with their symlinks resolved,
+// so that git finds dir inside top whichever way the caller spelled them.
+func (r *Runner) NewWorkTreeWithin(gitDir, top, dir, excludesFile string) (*WorkTree, error) {
 	var err error
 	if gitDir, err = filepath.Abs(gitDir); err != nil {
 		return nil, err
@@ -37,11 +50,22 @@ func (r *Runner) NewWorkTree(gitDir, dir, excludesFile string) (*WorkTree, error
 	if dir, err = filepath.Abs(dir); err != nil {
 		return nil, err
 	}
+	if top, err = filepath.Abs(top); err != nil {
+		return nil, err
+	}
+	if top != dir {
+		if top, err = filepath.EvalSymlinks(top); err != nil {
+			return nil, err
+		}
+		if dir, err = filepath.EvalSymlinks(dir); err != nil {
+			return nil, err
+		}
+	}
 	tmp, err := os.MkdirTemp("", "agentx-index-")
 	if err != nil {
 		return nil, err
 	}
-	return &WorkTree{r: r, gitDir: gitDir, dir: dir, index: filepath.Join(tmp, "index"), excludesFile: excludesFile}, nil
+	return &WorkTree{r: r, gitDir: gitDir, top: top, dir: dir, index: filepath.Join(tmp, "index"), excludesFile: excludesFile}, nil
 }
 
 // Close removes the index.
@@ -61,7 +85,7 @@ func (w *WorkTree) global() []string {
 	if w.excludesFile != "" {
 		full = append(full, "-c", "core.excludesFile="+w.excludesFile)
 	}
-	return append(full, "--git-dir="+w.gitDir, "--work-tree="+w.dir)
+	return append(full, "--git-dir="+w.gitDir, "--work-tree="+w.top)
 }
 
 func (w *WorkTree) call(stdin io.Reader) call {
@@ -78,9 +102,10 @@ func (w *WorkTree) Load(ctx context.Context, treeish string) error {
 }
 
 // AddAll records in the index what the directory holds that git does not
-// ignore, and drops from it what the directory no longer holds.
+// ignore, and drops from it what the directory no longer holds. The
+// pathspec keeps it to the directory when the work tree is larger.
 func (w *WorkTree) AddAll(ctx context.Context) error {
-	_, err := w.run(ctx, "add", "-A")
+	_, err := w.run(ctx, "add", "-A", "--", ".")
 	return err
 }
 

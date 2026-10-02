@@ -284,6 +284,13 @@ func exists(path string) bool {
 	return err == nil
 }
 
+// lexists reports whether path holds an entry, a symlink that leads
+// nowhere included.
+func lexists(path string) bool {
+	_, err := os.Lstat(path)
+	return err == nil
+}
+
 // failureOf returns the failure behind err; a plain error becomes an internal one.
 func failureOf(err error) *failure {
 	var f *failure

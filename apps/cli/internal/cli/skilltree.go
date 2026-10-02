@@ -104,10 +104,16 @@ func (inv *invocation) judgeDir(ctx context.Context, gitDir, dir string, t treei
 // openWorkTree opens dir as a work tree of the account repo, with
 // info/exclude brought in line with ignore_system_files first.
 func (inv *invocation) openWorkTree(ctx context.Context, gitDir, dir string) (*gitx.WorkTree, error) {
+	return inv.openWorkTreeWithin(ctx, gitDir, dir, dir)
+}
+
+// openWorkTreeWithin is openWorkTree of top with git running in dir, a
+// directory inside it, see gitx.NewWorkTreeWithin.
+func (inv *invocation) openWorkTreeWithin(ctx context.Context, gitDir, top, dir string) (*gitx.WorkTree, error) {
 	if err := home.SyncExclude(gitDir, inv.systemFilesIgnored()); err != nil {
 		return nil, err
 	}
-	return inv.git.NewWorkTree(gitDir, dir, inv.excludesFile(ctx, gitDir))
+	return inv.git.NewWorkTreeWithin(gitDir, top, dir, inv.excludesFile(ctx, gitDir))
 }
 
 // writeWorkTree loads v into the work tree's index, adds the directory to

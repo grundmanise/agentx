@@ -177,7 +177,7 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fork := "--work-tree=" + edited + " "
+	fork := "--work-tree=" + filepath.Dir(edited) + " "
 	count := func(what string, calls []string) {
 		t.Helper()
 		var ran []string

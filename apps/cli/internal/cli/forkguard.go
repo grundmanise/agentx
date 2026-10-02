@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
+	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
 // A command that moves a fork's branch refuses while the fork has a merge
@@ -32,52 +33,69 @@ func uncommittedRefusal(name, what string) *failure {
 		"run '"+skillCommand("commit", name)+"' to keep them, or '"+skillCommand("revert", name)+"' to discard them, then run the command again")
 }
 
+// siteJudged is a fork's skill directory as judgeSite found it: the
+// fingerprint captured before git read it, as a journal compares it, and
+// how it compared with the fork's tip, with the files git ignores in it
+// when the caller asked for them.
+type siteJudged struct {
+	forkJudged
+	captured    string
+	wantIgnored bool
+}
+
 // judgeSite captures what the fork's skill directory holds, as the
 // fingerprint a journal compares, and then judges it against the fork's
 // tip, in that order, so that an edit made while git reads the directory
-// shows as a fingerprint that no longer holds.
-func (inv *invocation) judgeSite(ctx context.Context, f forkSite, wantIgnored bool) (string, forkJudged, error) {
+// shows as a fingerprint that no longer holds. A caller that will lay a
+// new tip out over the directory asks for its ignored files, wantIgnored,
+// which the new layout carries over.
+func (inv *invocation) judgeSite(ctx context.Context, f forkSite, wantIgnored bool) (siteJudged, error) {
 	captured, err := home.State(f.skillDir)
 	if err != nil {
-		return "", forkJudged{}, libraryFailure(f.root, err)
+		return siteJudged{}, libraryFailure(f.root, err)
 	}
 	if home.IsAbsent(captured) {
-		return "", forkJudged{}, fail(exitRefused, sanitised(f.name)+"'s skill directory "+quotedPath(f.skillDir)+" is missing",
+		return siteJudged{}, fail(exitRefused, sanitised(f.name)+"'s skill directory "+quotedPath(f.skillDir)+" is missing",
 			"run 'git -C "+shellWord(f.root)+" restore "+shellWord(f.dir)+"' to put it back as the branch holds it")
 	}
-	j, err := inv.judgeFork(ctx, f.gitDir, f.skillDir, f.version(), wantIgnored)
+	t, err := treeid.Read(f.skillDir)
 	if err != nil {
-		return "", forkJudged{}, accountRepoFailure(err)
+		return siteJudged{}, libraryFailure(f.root, err)
 	}
-	return captured, j, nil
+	j, err := inv.judgeTip(ctx, f, t, wantIgnored)
+	if err != nil {
+		return siteJudged{}, accountRepoFailure(err)
+	}
+	return siteJudged{forkJudged: j, captured: captured, wantIgnored: wantIgnored}, nil
 }
 
 // forkGuards runs, under the lock, the refusals of a command that would do
 // what to the fork f: a merge pending first, and then, when the command
 // moves the fork's branch, needsClean, edits nobody committed. pre is how
-// the skill directory compared with the tip before the lock, when it held
-// what captured fingerprints; a directory that changed since is judged
-// again. It returns the fingerprint the directory holds now, which the
-// command's journal expects.
-func (inv *invocation) forkGuards(ctx context.Context, f forkSite, captured string, pre forkJudged, what string, needsClean bool) (string, error) {
+// judgeSite found the skill directory before the lock; a directory that
+// changed since is judged again, as pre was. It returns the directory as
+// it is now: the fingerprint the command's journal expects, and, for a
+// caller that asked for them, the ignored files it is to carry over.
+func (inv *invocation) forkGuards(ctx context.Context, f forkSite, pre siteJudged, what string, needsClean bool) (siteJudged, error) {
 	if inv.mergePending(f.name) {
-		return "", forkPendingRefusal(f.name, what)
+		return siteJudged{}, forkPendingRefusal(f.name, what)
 	}
 	live, err := home.State(f.skillDir)
 	if err != nil {
-		return "", libraryFailure(f.root, err)
+		return siteJudged{}, libraryFailure(f.root, err)
 	}
-	if !needsClean {
-		return live, nil
-	}
-	j := pre
-	if live != captured {
-		if live, j, err = inv.judgeSite(ctx, f, false); err != nil {
-			return "", err
+	now := pre
+	if live != pre.captured {
+		if !needsClean && !pre.wantIgnored {
+			now.captured = live
+			return now, nil
+		}
+		if now, err = inv.judgeSite(ctx, f, pre.wantIgnored); err != nil {
+			return siteJudged{}, err
 		}
 	}
-	if !j.clean {
-		return "", uncommittedRefusal(f.name, what)
+	if needsClean && !now.clean {
+		return siteJudged{}, uncommittedRefusal(f.name, what)
 	}
-	return live, nil
+	return now, nil
 }

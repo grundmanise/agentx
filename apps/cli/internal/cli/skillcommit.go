@@ -105,7 +105,7 @@ func (inv *invocation) skillCommit(ctx context.Context, name, message string) er
 	if len(names) == 0 {
 		return inv.reportNothingToCommit(name)
 	}
-	r := &refusals{verb: "committed", mixed: "run 'agentx skill list' to see which forks are modified, then commit the rest one at a time"}
+	r := &refusals{verb: "committed", noun: "fork", mixed: "run 'agentx skill list' to see which forks are modified, then commit the rest one at a time"}
 	drop := func(n string, f *failure) {
 		r.add(n, f)
 		if name == "" && len(names) > 1 {
@@ -132,8 +132,11 @@ func (inv *invocation) skillCommit(ctx context.Context, name, message string) er
 			ready = append(ready, c)
 		}
 	}
+	// The forks the run sets out to commit are those with edits, and those
+	// it could not judge, which may have some.
+	selected := len(ready) + len(r.broken)
 	if len(ready) == 0 {
-		if f := r.failure(len(names), 0); f != nil {
+		if f := r.failure(selected, 0); f != nil {
 			return f
 		}
 		return inv.reportNothingToCommit(name)
@@ -150,20 +153,22 @@ func (inv *invocation) skillCommit(ctx context.Context, name, message string) er
 			return err
 		}
 	}
-	if f := r.failure(len(names), len(applied)); f != nil {
+	if f := r.failure(selected, len(applied)); f != nil {
 		return f
 	}
 	return nil
 }
 
-// commitSelection is the forks a run of skill commit sets out to commit,
-// by name: the one it was given, which has to be a fork, or every fork the
-// account repo holds.
+// commitSelection is the forks a run of skill commit sets out to judge, by
+// name: the one it was given, which has to be a fork, or every fork the
+// account repo holds that is placed on this machine. A fork with neither a
+// worktree nor a library entry here holds no edit to commit, and is left
+// out rather than refused.
 func (inv *invocation) commitSelection(name string, records map[string]lineage.Record) ([]string, error) {
 	if name == "" {
 		var names []string
 		for n, rec := range records {
-			if rec.Kind == lineage.KindFork {
+			if rec.Kind == lineage.KindFork && (lexists(inv.worktreeRoot(n)) || lexists(inv.libraryPath(n))) {
 				names = append(names, n)
 			}
 		}
@@ -190,14 +195,15 @@ func (inv *invocation) commitSelection(name string, records map[string]lineage.R
 // and a directory that holds its tip has nothing to commit, nil. A
 // repository nested in it that the ignore rules do not cover is refused,
 // since git would record it as a link rather than its files. The root tree
-// of the commit is the tip's with the skill's directory replaced, so an
-// entry beside it that a commit made with git put there stays.
+// of the commit is the one git wrote of the worktree, the tip's with the
+// skill's directory as it is now, so an entry beside it that a commit made
+// with git put there stays.
 func (inv *invocation) judgeCommit(ctx context.Context, gitDir string, rec lineage.Record) (*committing, error) {
 	f, err := inv.forkSiteOf(ctx, gitDir, rec)
 	if err != nil {
 		return nil, err
 	}
-	captured, j, err := inv.judgeSite(ctx, f, false)
+	j, err := inv.judgeSite(ctx, f, false)
 	switch {
 	case err != nil:
 		return nil, err
@@ -206,14 +212,7 @@ func (inv *invocation) judgeCommit(ctx context.Context, gitDir string, rec linea
 	case j.clean:
 		return nil, nil
 	}
-	root, err := inv.git.ReplaceEntry(ctx, gitDir, rec.Commit, f.dir, j.written)
-	if err != nil {
-		return nil, accountRepoFailure(err)
-	}
-	if root == rec.Tree {
-		return nil, nil
-	}
-	return &committing{site: f, captured: captured, root: root}, nil
+	return &committing{site: f, captured: j.captured, root: j.written}, nil
 }
 
 // writeCommits writes the commit of every fork of ready, before the lock:

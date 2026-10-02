@@ -28,6 +28,14 @@ func (h *harness) withIdentity(name, email string) {
 	}
 }
 
+// invocation is an invocation of agentx for h's user, for a test that calls
+// what a command runs directly, with its output discarded.
+func (h *harness) invocation() *invocation {
+	var sink strings.Builder
+	return &invocation{env: h.env, dirs: home.Dirs{Home: h.agentx, Library: h.library, Config: h.config},
+		git: gitx.New(h.env, false, func(string, ...any) {}), out: &writer{stdout: &sink, stderr: &sink, env: h.env}}
+}
+
 // TestSkillCommitCommitsEachEditedFork edits two of three greenfield skills,
 // one of them beside a file the system-file list names, and commits every
 // fork with edits: one commit each, on the tip it found, by the user's own
@@ -36,7 +44,8 @@ func (h *harness) withIdentity(name, email string) {
 // worktree's status is clean afterwards, and the fork with no edit is left
 // as it is. Then -m gives the message of a second commit, which is a new
 // commit and not an amended one, and a commit made with git directly in
-// the worktree is kept as it is, with nothing left to commit after it.
+// the worktree is kept as it is, with nothing left to commit after it,
+// even once it puts files beside the skill directory.
 func TestSkillCommitCommitsEachEditedFork(t *testing.T) {
 	t.Parallel()
 	h, _ := installHarness(t)
@@ -114,14 +123,32 @@ func TestSkillCommitCommitsEachEditedFork(t *testing.T) {
 	equal(t, "the result after it", h.one(again.stdout, "result")["summary"], "nothing to commit")
 	equal(t, "alpha's branch after it", h.ref(lineage.ForkRef("alpha")), mine)
 	equal(t, "a named fork with nothing to commit", h.mustRun("skill", "commit", "beta").stdout, "✓ beta has nothing to commit\n")
+
+	// Entries a commit made with git put beside the skill directory are the
+	// branch's too: the fork still holds its tip, a .gitignore among them
+	// counts as it counts for git status, and a commit keeps them.
+	writeFile(t, filepath.Join(root, "README.md"), "readme\n")
+	writeFile(t, filepath.Join(root, ".gitignore"), "*.log\n")
+	gitIn(t, h, root, "add", "-A")
+	gitIn(t, h, root, "-c", "user.name=Grace Hopper", "-c", "user.email=grace@example.com", "commit", "-q", "-m", "Beside the skill")
+	writeFile(t, filepath.Join(h.library, "alpha", "debug.log"), "ignored by the worktree's .gitignore\n")
+	equal(t, "the state beside root entries", h.listed("alpha")["state"], stateCurrent)
+	equal(t, "a commit beside root entries", h.mustRun("skill", "commit", "alpha").stdout, "✓ alpha has nothing to commit\n")
+	writeFile(t, filepath.Join(h.library, "alpha", "SKILL.md"), skill("alpha", "Edited beside the README"))
+	h.mustRun("skill", "commit", "alpha")
+	equal(t, "the tree beside root entries", h.accountGit("ls-tree", "-r", "--name-only", lineage.ForkRef("alpha")),
+		".gitignore\nREADME.md\nalpha/SKILL.md\nalpha/notes.md")
+	equal(t, "the state after that commit", h.listed("alpha")["state"], stateCurrent)
+	equal(t, "git status after that commit", gitIn(t, h, root, "status", "--porcelain"), "")
 }
 
 // TestSkillCommitRefusals refuses, in one home and committing nothing, a
 // managed skill, an unmanaged one, a name the library does not hold, an
-// empty -m, a fork holding a nested repository git would record as a link
-// and a fork whose worktree is gone, then every fork at once, which names
-// both forks. Once the skill's .gitignore covers the nested repository, the
-// fork commits without it.
+// empty -m, a fork holding a nested repository git would record as a link,
+// the same fork while a merge the user ran with git waits for them and
+// while a git holds its index, and a fork whose worktree is gone, then
+// every fork at once, which names both forks. Once the skill's .gitignore
+// covers the nested repository, the fork commits without it.
 func TestSkillCommitRefusals(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -134,23 +161,34 @@ func TestSkillCommitRefusals(t *testing.T) {
 	remove(t, filepath.Join(h.agentx, "worktrees", "gone"))
 	refs := h.accountGit("for-each-ref")
 	gone := filepath.Join(h.agentx, "worktrees", "gone")
+	notes := filepath.Join(h.agentx, "worktrees", "notes")
+	admin := filepath.Join(gitx.AccountRepoPath(h.agentx), "worktrees", "notes")
 	for _, tc := range []struct {
 		args []string
+		held string // a file of notes' worktree admin directory the case alone holds
 		exit status
 		says string
 	}{
-		{[]string{"alpha"}, exitRefused, "alpha is managed, not a fork, so it has no history to commit to"},
-		{[]string{"mine"}, exitRefused, "mine is not a fork, so it has no history to commit to"},
-		{[]string{"absent"}, exitNotFound, `the library holds no skill called "absent"`},
-		{[]string{"notes", "-m", " "}, exitUsage, "-m needs a message"},
-		{[]string{"notes"}, exitRefused, "notes holds a Git repository at vendor/.git, which git would record as a link rather than its files"},
-		{[]string{"gone"}, exitRefused, "gone's worktree " + gone + " is missing"},
-		{nil, exitRefused, "2 of 2 skills could not be committed: gone: gone's worktree"},
+		{[]string{"alpha"}, "", exitRefused, "alpha is managed, not a fork, so it has no history to commit to"},
+		{[]string{"mine"}, "", exitRefused, "mine is not a fork, so it has no history to commit to"},
+		{[]string{"absent"}, "", exitNotFound, `the library holds no skill called "absent"`},
+		{[]string{"notes", "-m", " "}, "", exitUsage, "-m needs a message"},
+		{[]string{"notes"}, "", exitRefused, "notes holds a Git repository at vendor/.git, which git would record as a link rather than its files"},
+		{[]string{"notes"}, "MERGE_HEAD", exitRefused, "notes's worktree " + notes + " is in the middle of a git merge"},
+		{[]string{"notes"}, "index.lock", exitRefused, "git is running in notes's worktree " + notes},
+		{[]string{"gone"}, "", exitRefused, "gone's worktree " + gone + " is missing"},
+		{nil, "", exitRefused, "2 of 2 forks could not be committed: gone: gone's worktree"},
 	} {
+		if tc.held != "" {
+			writeFile(t, filepath.Join(admin, tc.held), "")
+		}
 		out := h.run(append([]string{"--json", "skill", "commit"}, tc.args...)...)
-		what := strings.Join(tc.args, " ")
+		what := strings.Join(tc.args, " ") + " " + tc.held
 		equal(t, what+": exit", out.exit, tc.exit.exit)
 		contains(t, what+": error", h.one(out.stdout, "error")["message"].(string), tc.says)
+		if tc.held != "" {
+			remove(t, filepath.Join(admin, tc.held))
+		}
 	}
 	equal(t, "the refs", h.accountGit("for-each-ref"), refs)
 
@@ -228,6 +266,58 @@ exec ` + real + ` "$@"
 	}
 }
 
+// commitChildEnv marks the process TestSkillCommitRecoversWhereItWasKilled
+// starts, which commits the fork it names and is killed part way.
+const commitChildEnv = "AGENTX_TEST_COMMIT_CHILD"
+
+// TestCommitChildProcess is not a test: it is the body of that process. It
+// does nothing when the variable that marks it is not set.
+func TestCommitChildProcess(t *testing.T) {
+	name := os.Getenv(commitChildEnv)
+	if name == "" {
+		t.Skip("not the skill commit child process")
+	}
+	env := map[string]string{}
+	for _, kv := range os.Environ() {
+		if k, v, ok := strings.Cut(kv, "="); ok {
+			env[k] = v
+		}
+	}
+	os.Exit(Run(context.Background(), []string{"skill", "commit", name}, env, strings.NewReader(""), os.Stdout, os.Stderr))
+}
+
+// TestSkillCommitRecoversWhereItWasKilled kills a commit with SIGKILL right
+// after its branch moved and before the worktree's index followed it, the
+// one boundary between the two steps it journals. The next command
+// finishes it: the branch on the commit, the index on the branch, so git
+// status in the worktree is clean, and no journal left.
+func TestSkillCommitRecoversWhereItWasKilled(t *testing.T) {
+	t.Parallel()
+	h, _ := installHarness(t)
+	h.mustRun("skill", "new", "notes")
+	tip := h.ref(lineage.ForkRef("notes"))
+	writeFile(t, filepath.Join(h.library, "notes", "SKILL.md"), skill("notes", "Edited"))
+	out := killedChild(t, h, "TestCommitChildProcess", commitChildEnv, "notes", `
+case " $* " in
+*" update-ref --stdin "*)
+	%GIT% "$@"
+	kill -9 $PPID
+	exit 1 ;;
+esac
+exec %GIT% "$@"
+`)
+	_, kinds := journalKinds(t, h)
+	equal(t, "the journal's steps", kinds, "ref, worktree")
+	if got := h.run("skill", "list"); got.exit != 0 {
+		t.Fatalf("the command after the killed commit: exit %d\n%s\nthe killed run:\n%s", got.exit, got.stderr, out)
+	}
+	equal(t, "journals after recovery", journalCount(t, h), 0)
+	committed := h.ref(lineage.ForkRef("notes"))
+	equal(t, "the commit's parent", h.accountGit("rev-parse", committed+"^"), tip)
+	equal(t, "git status in the worktree", gitIn(t, h, filepath.Join(h.agentx, "worktrees", "notes"), "status", "--porcelain"), "")
+	equal(t, "the state", h.listed("notes")["state"], stateCurrent)
+}
+
 // TestForkGuardsRefuseUncommittedEdits is the refusal every command that
 // moves a fork's branch runs under the lock: none for a fork whose skill
 // directory holds its tip, or holds beside it only a file git ignores;
@@ -240,9 +330,7 @@ func TestForkGuardsRefuseUncommittedEdits(t *testing.T) {
 	h, _ := installHarness(t)
 	h.mustRun("skill", "new", "notes")
 	ctx := context.Background()
-	var sink strings.Builder
-	inv := &invocation{env: h.env, dirs: home.Dirs{Home: h.agentx, Library: h.library, Config: h.config},
-		git: gitx.New(h.env, false, func(string, ...any) {}), out: &writer{stdout: &sink, stderr: &sink, env: h.env}}
+	inv := h.invocation()
 	gitDir := gitx.AccountRepoPath(h.agentx)
 	records, err := lineage.List(ctx, inv.git, gitDir)
 	if err != nil {
@@ -254,11 +342,11 @@ func TestForkGuardsRefuseUncommittedEdits(t *testing.T) {
 	}
 	guard := func(needsClean bool) error {
 		t.Helper()
-		captured, pre, err := inv.judgeSite(ctx, f, false)
+		pre, err := inv.judgeSite(ctx, f, false)
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = inv.forkGuards(ctx, f, captured, pre, "merged", needsClean)
+		_, err = inv.forkGuards(ctx, f, pre, "merged", needsClean)
 		return err
 	}
 	refused := func(what string, err error, st status, message string) {
@@ -281,12 +369,21 @@ func TestForkGuardsRefuseUncommittedEdits(t *testing.T) {
 	}
 	// An edit made after the judgement, found by the fingerprint alone.
 	remove(t, filepath.Join(f.skillDir, "notes.md"))
-	captured, pre, err := inv.judgeSite(ctx, f, false)
+	pre, err := inv.judgeSite(ctx, f, true)
 	if err != nil || !pre.clean {
 		t.Fatalf("the clean fork judged %+v, %v", pre, err)
 	}
+	equal(t, "the ignored files before the lock", strings.Join(pre.ignored, " "), ".DS_Store")
+	// An ignored file made after the judgement is one the caller carries
+	// over: the directory is judged again, and its list is the one returned.
+	writeFile(t, filepath.Join(f.skillDir, "Thumbs.db"), "explorer\n")
+	now, err := inv.forkGuards(ctx, f, pre, "merged", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	equal(t, "the ignored files under the lock", strings.Join(now.ignored, " "), ".DS_Store Thumbs.db")
 	writeFile(t, filepath.Join(f.skillDir, "SKILL.md"), skill("notes", "Edited meanwhile"))
-	_, err = inv.forkGuards(ctx, f, captured, pre, "merged", true)
+	_, err = inv.forkGuards(ctx, f, now, "merged", true)
 	refused("an edit made after the judgement", err, exitRefused, "notes has uncommitted edits, so it cannot be merged until they are committed or reverted")
 	if err := os.MkdirAll(filepath.Join(h.agentx, "merges", "notes"), 0o755); err != nil {
 		t.Fatal(err)

@@ -50,6 +50,7 @@ func TestParseForkAndForkMessage(t *testing.T) {
 		{"creation", "Create pdf", "", ForkTrailers{ForkID: aForkID, Machine: aMachine}, false},
 		{"merge with a body", "pdf: merge", "two lines\nof body", ForkTrailers{Base: commitID, Machine: aMachine}, false},
 		{"a body ending in a trailer of its own", "s", "Agentx-Machine: " + aMachine, ForkTrailers{}, true},
+		{"a body ending in the user's trailers", "s", "why\n\nSigned-off-by: Ada <ada@example.com>\n  continued", ForkTrailers{Machine: aMachine}, false},
 		{"a value git would not read back", "s", "", ForkTrailers{Machine: "not hex"}, true},
 	} {
 		m, err := ForkMessage(tc.subject, tc.body, tc.t)
@@ -66,6 +67,16 @@ func TestParseForkAndForkMessage(t *testing.T) {
 	}
 	if m, _ := ForkMessage("Create pdf", "", ForkTrailers{ForkID: aForkID, Machine: aMachine}); m != "Create pdf\n\nAgentx-Fork-ID: "+aForkID+"\nAgentx-Machine: "+aMachine+"\n" {
 		t.Errorf("a creation message reads %q", m)
+	}
+	// The user's trailers and agentx's make one block, which git reads as a
+	// whole; a paragraph that only looks like one in part stays apart.
+	for body, want := range map[string]string{
+		"Signed-off-by: Ada <ada@example.com>": "Fix\n\nSigned-off-by: Ada <ada@example.com>\nAgentx-Machine: " + aMachine + "\n",
+		"See: the notes\nfor why":              "Fix\n\nSee: the notes\nfor why\n\nAgentx-Machine: " + aMachine + "\n",
+	} {
+		if m, _ := ForkMessage("Fix", body, ForkTrailers{Machine: aMachine}); m != want {
+			t.Errorf("with the body %q the message reads %q, want %q", body, m, want)
+		}
 	}
 }
 
