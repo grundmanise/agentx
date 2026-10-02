@@ -45,9 +45,9 @@ const (
 	pathNotWritten = "this machine cannot write to "
 )
 
-// CheckRemote is the remote an access check, a read of a source's default
-// branch and a read of the configuration for a source name: one given on
-// the command line in a throwaway repository, see targetRemote.
+// CheckRemote is the remote an access check and a read of a source's
+// default branch name: one given on the command line in a throwaway
+// repository, see targetRemote.
 const CheckRemote = "agentx"
 
 // checkPushRemote is a second remote of the throwaway repository whose URL
@@ -104,7 +104,9 @@ func throwawayRepo() (gitDir string, remove func(), err error) {
 //
 // The check is a side step of the command, never what the user asked for,
 // so it runs unattended (see call.unattended) and within AccessBudget, with
-// no hook, no push certificate, no negotiation and no lazy fetch.
+// no hook, no push certificate, no negotiation, no push option and no lazy
+// fetch: a push option the user sets for their own pushes makes git give
+// up on any server that does not take push options, before it answers.
 //
 // A dry run over a path proves nothing, since git checks no permission
 // before it would write: a writable answer over a path is refined by
@@ -115,7 +117,7 @@ func (r *Runner) ProbeAccess(ctx context.Context, url, pushURL string) Access {
 		return Access{Access: home.AccessUnknown, Reason: firstLine(err.Error())}
 	}
 	defer remove()
-	args := append(networkConfig(), "-c", "push.negotiate=false")
+	args := append(networkConfig(), "-c", "push.negotiate=false", "-c", "push.pushOption=")
 	args = append(args, targetRemote(url, pushURL)...)
 	args = append(args, "--git-dir="+gitDir)
 	args = append(args, ProbeArgs(CheckRemote)...)
@@ -250,9 +252,8 @@ var noPrompt = anyOf(
 // key authorised for an organisation, or an IP allow list, on any line,
 // since over SSH GitHub writes it with no "remote:", is unknown with that
 // line as the reason and says so (Authorise), since the user can fix it;
-// so is a 403 that names
-// no denial, a credential that was not available without asking, and a
-// server that cannot be reached. Pure.
+// so is a 403 that names no denial, a credential that was not available
+// without asking, and a server that cannot be reached. Pure.
 func ClassifyAccess(status int, stdout, stderr string) Access {
 	if status == 0 {
 		for _, line := range strings.Split(stdout, "\n") {
@@ -431,53 +432,6 @@ func unwritable(path string) string {
 func firstLine(text string) string {
 	line, _, _ := strings.Cut(strings.TrimSpace(text), "\n")
 	return line
-}
-
-// TargetConfig is the configuration of the user's that applies to pushes to
-// one source and to commits written for it.
-type TargetConfig struct {
-	SSHCommand string            // core.sshCommand
-	Values     map[string]string // every key read, by its lower-case name; the last value wins
-}
-
-// targetKeys are the keys TargetConfig reads: the identity and signing
-// settings a commit for the source is written with, and the SSH command
-// pushes to it run.
-const targetKeys = `^(user\.(name|email|signingkey)|gpg\..*|commit\.gpgsign|core\.sshcommand)$`
-
-// TargetConfig reads the user's configuration as it applies to the source
-// fetched from url and pushed to at pushURL, "" when pushes go to url, and
-// to nothing else: git runs in a throwaway repository with a remote of
-// those URLs given on the command line, so that only the includes keyed on
-// them apply (see throwawayRepo).
-func (r *Runner) TargetConfig(ctx context.Context, url, pushURL string) (TargetConfig, error) {
-	gitDir, remove, err := throwawayRepo()
-	if err != nil {
-		return TargetConfig{}, err
-	}
-	defer remove()
-	args := append(targetRemote(url, pushURL), "--git-dir="+gitDir, "config", "-z", "--get-regexp", targetKeys)
-	out, _, err := r.runStatus(ctx, call{}, 1, args...)
-	if err != nil {
-		return TargetConfig{}, err
-	}
-	return ParseTargetConfig(out), nil
-}
-
-// ParseTargetConfig reads what git config -z --get-regexp prints: records
-// ended by NUL, each a key, a newline and the value, or a key alone for a
-// key set with no value. Pure.
-func ParseTargetConfig(out string) TargetConfig {
-	t := TargetConfig{Values: map[string]string{}}
-	for _, record := range strings.Split(out, "\x00") {
-		if record == "" {
-			continue
-		}
-		key, value, _ := strings.Cut(record, "\n")
-		t.Values[strings.ToLower(key)] = value
-	}
-	t.SSHCommand = t.Values["core.sshcommand"]
-	return t
 }
 
 // DefaultBranch is the branch the HEAD of the repository at url names,

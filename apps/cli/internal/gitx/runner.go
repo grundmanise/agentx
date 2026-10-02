@@ -381,8 +381,28 @@ func (r *Runner) runStatus(ctx context.Context, c call, upTo int, args ...string
 	// process has exited and only a child it left behind can still hold a
 	// pipe open.
 	cmd.WaitDelay = waitDelay
+	stop := syscall.SIGKILL
 	if c.terminate {
-		cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
+		stop = syscall.SIGTERM
+	}
+	switch {
+	case unattended:
+		// git leads the session it was started in, and so the process
+		// group, which is the one its transport, ssh or a remote helper,
+		// runs in too. With no terminal's Ctrl-C to reach that group, the
+		// whole group is what a cancelled context stops, so that no ssh
+		// waiting on a host that does not answer outlives the run.
+		cmd.Cancel = func() error {
+			if err := syscall.Kill(-cmd.Process.Pid, stop); err != nil {
+				if errors.Is(err, syscall.ESRCH) {
+					return os.ErrProcessDone
+				}
+				return err
+			}
+			return nil
+		}
+	case c.terminate:
+		cmd.Cancel = func() error { return cmd.Process.Signal(stop) }
 	}
 	err = cmd.Run()
 	if stderr.Len() > 0 {

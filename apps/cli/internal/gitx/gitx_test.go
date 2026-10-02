@@ -3,13 +3,16 @@ package gitx
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 )
 
 // stubGit puts a git script on a fresh PATH that prints its arguments on the
@@ -298,6 +301,75 @@ func TestGitRunsFromADeletedDirectory(t *testing.T) {
 	}
 	if out, err := r.Isolated(context.Background(), gitDir, "rev-parse", commit); err != nil || strings.TrimSpace(out) != strings.TrimSpace(commit) {
 		t.Errorf("rev-parse from a deleted directory = %q, %v; want %s", out, err, commit)
+	}
+}
+
+// TestCancellingAnUnattendedGitStopsItsTransport: an unattended git runs in
+// a session of its own, out of reach of a terminal's Ctrl-C, so a cancelled
+// run has to stop what git started as well as git: an ssh waiting on a host
+// that does not answer would otherwise outlive the run by minutes. The
+// stand-in transport holds the write end of a FIFO, so the reader sees its
+// end exactly when the transport is gone.
+func TestCancellingAnUnattendedGitStopsItsTransport(t *testing.T) {
+	t.Parallel()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sleeper, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fifo, ready := filepath.Join(dir, "transport"), filepath.Join(dir, "ready")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeShim(t, filepath.Join(dir, "git"), "#!/bin/sh\n[ \"$1\" = --version ] && exit 0\n"+
+		sleeper+" 300 > "+fifo+" &\necho $! > "+ready+"\nwait\n")
+	r := New(map[string]string{"PATH": dir, "HOME": dir}, false, func(string, ...any) {})
+
+	opened, ended := make(chan struct{}), make(chan error, 1)
+	go func() {
+		f, err := os.Open(fifo) // returns once the transport has opened its end
+		close(opened)
+		if err != nil {
+			ended <- err
+			return
+		}
+		defer f.Close()
+		_, err = io.Copy(io.Discard, f)
+		ended <- err
+	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	ran := make(chan error, 1)
+	go func() {
+		_, err := r.run(ctx, call{unattended: true}, "fetch")
+		ran <- err
+	}()
+	<-opened
+	// The transport's pid, for a failure to clean up after, is written
+	// once it has started.
+	for deadline := time.Now().Add(30 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		if info, err := os.Stat(ready); (err == nil && info.Size() > 0) || time.Now().After(deadline) {
+			break
+		}
+	}
+	cancel()
+	if err := <-ran; err == nil {
+		t.Error("a cancelled git answered no error")
+	}
+	select {
+	case err := <-ended:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(30 * time.Second):
+		if b, err := os.ReadFile(ready); err == nil {
+			if pid, err := strconv.Atoi(strings.TrimSpace(string(b))); err == nil {
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+			}
+		}
+		t.Fatal("the transport git started outlived the cancelled run")
 	}
 }
 

@@ -481,13 +481,17 @@ func (inv *invocation) addForkSource(ctx context.Context, name string, there lin
 		return
 	}
 	if _, _, err := inv.addSource(ctx, source.Source{URL: url}, pushChoice{}); err != nil {
+		again := "; run 'agentx source add " + shellWord(url) + "' to receive its updates"
+		if ctx.Err() != nil { // a stop, not the upstream, is what kept it out
+			inv.out.warn(sanitised(name) + "'s upstream " + sanitised(url) + " was not added because the run was stopped" + again)
+			return
+		}
 		reason := err.Error()
 		var f *failure
 		if errors.As(err, &f) {
 			reason = f.message
 		}
-		inv.out.warn(sanitised(name) + "'s upstream " + sanitised(url) + " could not be fetched, so it was not added: " + reason +
-			"; run 'agentx source add " + shellWord(url) + "' to receive its updates")
+		inv.out.warn(sanitised(name) + "'s upstream " + sanitised(url) + " could not be fetched, so it was not added: " + reason + again)
 	}
 }
 

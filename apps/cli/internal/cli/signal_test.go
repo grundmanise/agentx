@@ -12,7 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
+	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
 // The variables the child process of the stop-signal tests reads: it runs
@@ -209,6 +211,38 @@ func TestASignalDuringAnAddStillTakesTheRemoteBack(t *testing.T) {
 	}
 	rows, _ := doctorRows(t, h.events(h.mustRun("--json", "doctor").stdout))
 	equal(t, "source_remotes.status after the stopped add", rows["source_remotes"]["status"], "ok")
+	killLeftover(t, ready)
+}
+
+// TestASignalDuringTheAccessCheckOfAReAddLeavesTheSourceAsItWas: a re-add
+// that changes the pin has already published its fetch when the access
+// check runs, and the check can take a while on a slow host, which is when
+// a Ctrl-C comes. The stop takes the add back whole: the settings keep the
+// old pin, and the source ref goes back to the commit that pin fetched, so
+// that source skills does not list skills of a branch the settings do not
+// follow.
+func TestASignalDuringTheAccessCheckOfAReAddLeavesTheSourceAsItWas(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	s, v1, _ := h.standardSource(true)
+	h.mustRun("source", "add", s.url+"#v1")
+	ref := source.Ref(source.ID(s.url))
+	held := h.accountGit("rev-parse", ref)
+	ready := filepath.Join(t.TempDir(), "checking")
+	hangingGit(t, h, "push", ready)
+
+	code, stderr := signalled(t, h, stopRun{ready: ready, sigs: []syscall.Signal{syscall.SIGINT},
+		args: []string{"source", "add", s.url, "--color", "off"}})
+
+	equal(t, "the exit code of a stopped re-add", code, exitInterrupted.exit)
+	contains(t, "stderr", stderr, "error: interrupted")
+	equal(t, "the source ref after the stopped re-add", h.accountGit("rev-parse", ref), held)
+	equal(t, "the commit it names", h.accountGit("rev-parse", ref+"^{commit}"), v1)
+	settings, err := home.LoadSettings(h.agentx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	equal(t, "the pin after the stopped re-add", settings.Sources[settings.FindSource(s.url)].Pin, "v1")
 	killLeftover(t, ready)
 }
 

@@ -94,6 +94,10 @@ type Listing struct {
 	Previous string
 	Skills   []Skill // sorted by subpath
 	Trees    map[string]string
+	// published is the object the fetch put on the source ref, and held
+	// the object the ref held before it, "" for none: what Unpublish takes
+	// back. Both are empty for a listing List built.
+	published, held string
 }
 
 // Refspec is what remote.src-<id>.fetch holds for the source: its pinned
@@ -282,7 +286,7 @@ func Fetch(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listin
 		}
 		return Listing{}, fmt.Errorf("%w: %v", ErrUnreachable, err)
 	}
-	fetched, commit, previous, err := stagedAndPrevious(ctx, r, gitDir, staging, Ref(id))
+	fetched, commit, previous, held, err := stagedAndPrevious(ctx, r, gitDir, staging, Ref(id))
 	if err != nil || commit == "" {
 		// The fetch landed, so this is the ref itself: a pin that names a
 		// tag pointing at something other than a commit, never a network or
@@ -342,7 +346,33 @@ func Fetch(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listin
 	if _, err := r.Isolated(ctx, gitDir, "update-ref", Ref(id), fetched); err != nil {
 		return Listing{}, err
 	}
-	return Listing{Commit: commit, Previous: previous, Skills: skills, Trees: trees}, nil
+	return Listing{Commit: commit, Previous: previous, Skills: skills, Trees: trees, published: fetched, held: held}, nil
+}
+
+// Unpublish puts the source ref of s back to what it held before the fetch
+// that answered listing, for an add that published a fetch and then did
+// not go through: the ref goes back to the object it held, or goes when
+// the fetch was the source's first. It goes back only while it still holds
+// what that fetch published, so that a later fetch is never undone. A
+// listing that published nothing changes nothing.
+func Unpublish(ctx context.Context, r *gitx.Runner, gitDir string, s Source, listing Listing) error {
+	if listing.published == "" {
+		return nil
+	}
+	ref := Ref(s.ID())
+	args := []string{"update-ref", ref, listing.held, listing.published}
+	if listing.held == "" {
+		args = []string{"update-ref", "-d", ref, listing.published}
+	}
+	if _, err := r.Isolated(ctx, gitDir, args...); err != nil {
+		// The ref moved since: another fetch published over this one,
+		// and what it holds now is no longer this add's to take back.
+		if now, _ := r.Isolated(ctx, gitDir, "for-each-ref", "--format=%(objectname)", ref); now != listing.published {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 // staged reads what a fetch put on the staging ref in one for-each-ref: the
@@ -375,7 +405,11 @@ func staged(ctx context.Context, r *gitx.Runner, gitDir, ref string) (object, co
 // lacks, where rev-parse only answers nothing, a failure reads the two
 // refs apart, so that a broken source ref still leaves the fetch to repair
 // it.
-func stagedAndPrevious(ctx context.Context, r *gitx.Runner, gitDir, staging, source string) (object, commit, previous string, err error) {
+//
+// held is the object the source ref names, tag or commit, for Unpublish to
+// put back: empty for a ref that is not there, and for a broken one, which
+// a take-back removes rather than restores.
+func stagedAndPrevious(ctx context.Context, r *gitx.Runner, gitDir, staging, source string) (object, commit, previous, held string, err error) {
 	peelCommit := func() string {
 		id, _ := r.Isolated(ctx, gitDir, "rev-parse", "--verify", "--quiet", source+"^{commit}")
 		return id
@@ -384,15 +418,16 @@ func stagedAndPrevious(ctx context.Context, r *gitx.Runner, gitDir, staging, sou
 	if err != nil {
 		previous = peelCommit()
 		object, commit, err = staged(ctx, r, gitDir, staging)
-		return object, commit, previous, err
+		return object, commit, previous, held, err
 	}
-	if held, ok := refs[source]; ok {
-		if previous = held.commit; previous == "" {
+	if was, ok := refs[source]; ok {
+		held = was.object
+		if previous = was.commit; previous == "" {
 			previous = peelCommit()
 		}
 	}
 	object, commit = refs[staging].ofCommit()
-	return object, commit, previous, nil
+	return object, commit, previous, held, nil
 }
 
 // peeled is what a ref holds: the object it names and the commit that

@@ -223,8 +223,10 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source, push pu
 	// that gets no further: a source that was not there before goes
 	// altogether, ref and all, and one that was goes back to the pin the
 	// settings still hold, which is what they will still say when the next
-	// command reads them. It writes the git config of the account repo, so
-	// every caller holds the lock while it runs.
+	// command reads them, and its source ref back to the commit it held
+	// before this add's fetch, so that what source skills lists is still
+	// what that pin fetched. It writes the git config of the account repo,
+	// so every caller holds the lock while it runs.
 	//
 	// undo is the command's context with the stop signals taken off it. A
 	// take-back is work the run has already committed to, so a Ctrl-C may
@@ -237,7 +239,10 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source, push pu
 		if existing < 0 { // nothing of a source that was never added is kept
 			return source.Remove(undo, inv.git, gitDir, src.ID())
 		} // else the remote goes back to the pin and the push URL the settings still hold
-		return source.Configure(undo, inv.git, gitDir, before.Sources[existing])
+		if err := source.Configure(undo, inv.git, gitDir, before.Sources[existing]); err != nil {
+			return err
+		}
+		return source.Unpublish(undo, inv.git, gitDir, src, listing)
 	}
 	// left answers for a take-back: cause, the failure that stopped the
 	// run, when the remote went back, and the refusal that names what stayed
@@ -280,7 +285,8 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source, push pu
 	// What this machine may do at the source is asked once it is fetched,
 	// so that a URL that cannot be read is refused for that first, and
 	// outside the lock, since it is network. Its answer goes into the one
-	// settings write below. A stop during the check stops the add.
+	// settings write below. A stop during the check stops the add, and
+	// the take-back puts the source ref back where this fetch found it.
 	check := inv.checkSource(ctx, want)
 	if err := ctx.Err(); err != nil {
 		return listing, entry, takeBack(err)
