@@ -268,6 +268,14 @@ func contains(t *testing.T, what, text, sub string) {
 	}
 }
 
+// excludes fails the test when text holds sub.
+func excludes(t *testing.T, what, text, sub string) {
+	t.Helper()
+	if strings.Contains(text, sub) {
+		t.Errorf("%s contains %q:\n%s", what, sub, text)
+	}
+}
+
 // serveProc is one `agentx serve` run in a goroutine, driven through pipes.
 // Every wait on stdout is a channel or a pipe read, never a sleep: send
 // writes a request line, next reads the next stdout event, close ends stdin

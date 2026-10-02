@@ -278,8 +278,8 @@ func TestSkillForkOfAPluginSkill(t *testing.T) {
 	contains(t, "the text output", text.stdout, "✓ forked format from plugin linter as lint-format: 0 placements; the plugin's copy stays as it was\n")
 }
 
-// TestSkillForkOfAFork forks a fork, which only a new name can do: under
-// its own name it is refused, and so it is while it holds an edit nobody
+// TestSkillForkOfAFork forks a fork, which only a new name can do: with
+// no name or its own it is refused, and so it is while it holds an edit nobody
 // committed. Once the edit is committed, the new fork's branch starts at
 // the fork's tip, so its history is kept, with a creation commit of its
 // own that writes the new name and leaves out the file a commit made with
@@ -296,7 +296,8 @@ func TestSkillForkOfAFork(t *testing.T) {
 		equal(t, what+": exit", out.exit, st.exit)
 		contains(t, what+": error", h.one(out.stdout, "error")["message"].(string), says)
 	}
-	refuses("its own name", []string{"alpha"}, exitRefused, "alpha is already a fork")
+	refuses("no new name", []string{"alpha"}, exitRefused, "alpha is already a fork")
+	refuses("its own name", []string{"alpha", "--name", "alpha"}, exitRefused, "the fork is already called alpha")
 	writeFile(t, filepath.Join(h.library, "alpha", "notes.md"), "edited\n")
 	refuses("uncommitted edits", []string{"alpha", "--name", "alpha-two"}, exitRefused, "alpha has uncommitted edits, so it cannot be forked")
 	h.mustRun("skill", "commit", "alpha")

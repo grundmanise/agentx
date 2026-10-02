@@ -8,6 +8,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
+	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
 // Removing a fork takes it off this machine as one journaled mutation:
@@ -171,6 +172,54 @@ func (inv *invocation) runForkRemoval(ctx context.Context, r *forkRemoval, done 
 	return deleted
 }
 
+// committedCopy reports, for a copy of the fork r removes that differs
+// from the library, whether it holds what a commit of the fork's branch
+// holds in its skill directory: a copy a later commit left behind, which is
+// out of date but holds nothing the branch lacks. The branch's trees are
+// read once, with two git runs, the first time a copy asks.
+func (inv *invocation) committedCopy(ctx context.Context, r *forkRemoval) func(path string) bool {
+	var trees map[string]bool
+	return func(path string) bool {
+		if trees == nil {
+			trees = inv.branchTrees(ctx, r)
+		}
+		t, err := treeid.Read(path)
+		return err == nil && fastHolds(t, inv.systemFilesIgnored(), version{holds: func(id string) bool { return trees[id] }})
+	}
+}
+
+// branchTrees is the set of trees the skill directory of r's fork had in
+// every commit of its branch. One that cannot be read is empty, and every
+// copy that differs from the library is then said to.
+func (inv *invocation) branchTrees(ctx context.Context, r *forkRemoval) map[string]bool {
+	trees := map[string]bool{}
+	dir, err := inv.forkDir(ctx, r.gitDir, lineage.Record{Name: r.name, Ref: lineage.ForkRef(r.name), Commit: r.tip})
+	if err != nil {
+		inv.out.debugf("%s: %v", r.name, err)
+		return trees
+	}
+	commits, err := inv.git.Isolated(ctx, r.gitDir, "rev-list", r.tip)
+	if err != nil {
+		inv.out.debugf("%s: %v", r.name, err)
+		return trees
+	}
+	var query strings.Builder
+	for _, c := range strings.Fields(commits) {
+		query.WriteString(c + ":" + dir + "\n")
+	}
+	out, err := inv.git.IsolatedInput(ctx, r.gitDir, strings.NewReader(query.String()), "cat-file", "--batch-check=%(objectname) %(objecttype)")
+	if err != nil {
+		inv.out.debugf("%s: %v", r.name, err)
+		return trees
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if fields := strings.Fields(line); len(fields) == 2 && fields[1] == "tree" {
+			trees[fields[0]] = true
+		}
+	}
+	return trees
+}
+
 // forkBranch is the short name of the fork branch of the skill called
 // name, as git push and a person name it: skills/<name>.
 func forkBranch(name string) string {
@@ -241,7 +290,8 @@ func (inv *invocation) applyForkRemoval(ctx context.Context, r *forkRemoval) (re
 		judge := copyJudge{against: "the library"}
 		lib, inLibrary := librarySkill(inv.dirs.Library, r.name)
 		if inLibrary && ours && lib.ContentHash != "" {
-			judge.differs = func(path string) bool { return contentHashAt(path) != lib.ContentHash }
+			committed := inv.committedCopy(ctx, r)
+			judge.differs = func(path string) bool { return contentHashAt(path) != lib.ContentHash && !committed(path) }
 		}
 		// A library entry that leads nowhere, its worktree gone, gave no
 		// client the skill, so no client that reads the library is said to

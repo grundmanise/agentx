@@ -60,6 +60,7 @@ type forking struct {
 	src     forkSource
 	target  string // the fork's name
 	inPlace bool   // the fork takes the source's place: its library directory moves into the worktree
+	rename  bool   // the fork is the first step of skill rename, which removes the source next
 	gitDir  string
 	dir     string // the skill's directory in the fork's branch, which never changes
 	// captured is what the source's library directory held before git read
@@ -96,7 +97,7 @@ type forking struct {
 // the configurations the source is placed in, or, for a plugin's skill,
 // into the enabled configurations that have the plugin.
 func (inv *invocation) skillFork(ctx context.Context, arg, newName string) error {
-	fk, err := inv.planFork(ctx, arg, newName)
+	fk, err := inv.planFork(ctx, arg, newName, false)
 	if err != nil {
 		return err
 	}
@@ -105,8 +106,9 @@ func (inv *invocation) skillFork(ctx context.Context, arg, newName string) error
 
 // planFork finds the skill arg names and runs every refusal of its fork
 // under newName, see checkForking, before anything is written: the part of
-// a fork that skill rename runs before either of its steps.
-func (inv *invocation) planFork(ctx context.Context, arg, newName string) (*forking, error) {
+// a fork that skill rename runs before either of its steps, saying so in
+// rename.
+func (inv *invocation) planFork(ctx context.Context, arg, newName string, rename bool) (*forking, error) {
 	if err := inv.finishJournals(ctx); err != nil {
 		return nil, err
 	}
@@ -120,7 +122,7 @@ func (inv *invocation) planFork(ctx context.Context, arg, newName string) (*fork
 			return nil, accountRepoFailure(err)
 		}
 	}
-	fk := &forking{gitDir: gitDir}
+	fk := &forking{gitDir: gitDir, rename: rename}
 	fk.scanned = func() (scan.Snapshot, error) {
 		if fk.snap == nil {
 			s, err := inv.scan(ctx, lockWait, "", false)
@@ -206,6 +208,9 @@ func (inv *invocation) makeFork(ctx context.Context, fk *forking) error {
 func (inv *invocation) checkForking(ctx context.Context, fk *forking, records map[string]lineage.Record, named bool) error {
 	src := fk.src
 	if src.kind == lineage.KindFork && fk.target == src.name {
+		if named {
+			return fail(exitRefused, "the fork is already called "+sanitised(src.name), fk.takenHint())
+		}
 		return fail(exitRefused, sanitised(src.name)+" is already a fork",
 			"fork it under a new name with '"+skillCommand("fork", src.name, "--name", "<new>")+"'")
 	}
@@ -216,7 +221,7 @@ func (inv *invocation) checkForking(ctx context.Context, fk *forking, records ma
 		}
 		return fail(exitRefused, refusal, hint)
 	}
-	if err := inv.checkForkName(ctx, records, fk.target, fk.except(), "choose another name with --name <new>"); err != nil {
+	if err := inv.checkForkName(ctx, records, fk.target, fk.except(), fk.takenHint()); err != nil {
 		return err
 	}
 	if src.kind == lineage.KindManaged && !src.rec.HasImport {
@@ -253,6 +258,15 @@ func (inv *invocation) checkForking(ctx context.Context, fk *forking, records ma
 	}
 	fk.site, fk.dir = f, f.dir
 	return nil
+}
+
+// takenHint is the hint of a name the fork cannot take because a skill
+// already has it, in the words of the command that gave the name.
+func (fk *forking) takenHint() string {
+	if fk.rename {
+		return "choose another name with '" + skillCommand("rename", fk.src.name, "<new>") + "'"
+	}
+	return "choose another name with --name <new>"
 }
 
 // except is the branch the fork's name may already be held by: a managed
@@ -555,7 +569,7 @@ func (inv *invocation) applyFork(ctx context.Context, fk *forking, done *placeme
 	if err != nil {
 		return accountRepoFailure(err)
 	}
-	if err := takenRefusal(records, fk.target, fk.except(), "choose another name with --name <new>"); err != nil {
+	if err := takenRefusal(records, fk.target, fk.except(), fk.takenHint()); err != nil {
 		return err
 	}
 	changed := fail(exitRefused, sanitised(src.name)+" changed while it was being forked, so nothing was changed", "run the command again")
@@ -676,9 +690,15 @@ func (inv *invocation) reportForked(ctx context.Context, fk *forking, done place
 		line += ", " + out.paint(warnStyle, plural(n, "placement")+" skipped")
 		inv.summary += ", " + plural(n, "placement") + " skipped"
 	}
-	out.done(line + "; " + stays)
+	if fk.rename {
+		// The rename removes the source next, and says so itself.
+		out.done(line)
+	} else {
+		out.done(line + "; " + stays)
+		inv.summary += "; " + stays
+	}
 	inv.printPlacementRows(fk.target, rows)
 	inv.printUniversal(ev.Universal)
-	inv.summary += "; " + stays + universalClause(ev.Universal)
+	inv.summary += universalClause(ev.Universal)
 	return nil
 }

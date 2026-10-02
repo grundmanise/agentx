@@ -35,7 +35,7 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 		says           string
 	}{
 		{"a name outside the grammar", "alpha", "Renamed", 6, "Renamed"},
-		{"a name taken", "alpha", "beta", 6, "beta"},
+		{"a name taken", "alpha", "beta", 6, "choose another name with 'agentx skill rename alpha <new>'"},
 		{"no fork", "mine", "yours", 6, "mine is not a fork, so it cannot be renamed"},
 		{"uncommitted edits", "alpha", "renamed", 6, "alpha has uncommitted edits"},
 		{"a merge pending", "alpha", "renamed", 4, "alpha has a merge pending"},
@@ -62,6 +62,9 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 
 	out := a.run("--json", "skill", "rename", "alpha", "renamed")
 	equal(t, "exit", out.exit, 0)
+	// The copy holds alpha's previous commit, which the renamed fork's
+	// history keeps, so nothing of the user's is said to be lost.
+	excludes(t, "the copy left behind by a commit", out.stdout+out.stderr, "deleted those changes")
 	equal(t, "summary", a.one(out.stdout, "result")["summary"],
 		"renamed alpha to renamed; removed alpha from the library, 1 placement, its worktree and its branch")
 	renamed := a.ref(lineage.ForkRef("renamed"))
@@ -89,7 +92,16 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 		t.Error("b lost its alpha")
 	}
 
-	a.mustRun("skill", "rename", "beta", "gamma", "--remote")
+	// A commit b published and a never pulled would go with the remote
+	// branch, and be in neither fork.
+	b.commitFork("beta", "b's commit\n")
+	b.mustRun("publish", "beta")
+	refused := a.run("skill", "rename", "beta", "gamma", "--remote")
+	equal(t, "a rename over an unpulled commit: exit", refused.exit, 6)
+	contains(t, "a rename over an unpulled commit: hint", refused.stderr, "run 'agentx pull beta' first")
+	a.mustRun("pull", "beta")
+	renamedOut := a.mustRun("skill", "rename", "beta", "gamma", "--remote")
+	excludes(t, "the fork step's line in a rename", renamedOut.stdout, "stays as it was")
 	equal(t, "the remote's beta", remoteGit(t, a, remote, "for-each-ref", "--format=%(refname)", "refs/heads/skills/beta"), "")
 }
 

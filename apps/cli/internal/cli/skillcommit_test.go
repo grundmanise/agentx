@@ -190,9 +190,12 @@ func TestSkillCommitRefusals(t *testing.T) {
 			remove(t, filepath.Join(admin, tc.held))
 		}
 	}
+	writeFile(t, filepath.Join(h.library, "notes", ".gitignore"), "vendor/\n")
+	out := h.run("--json", "skill", "commit", "notes", "-m", "subject\n\nAgentx-Fork-ID: 11111111-2222-4333-8444-555555555555")
+	equal(t, "a trailer of agentx's in -m: exit", out.exit, exitUsage.exit)
+	contains(t, "a trailer of agentx's in -m: error", h.one(out.stdout, "error")["message"].(string), "-m may not end in a trailer agentx writes itself")
 	equal(t, "the refs", h.accountGit("for-each-ref"), refs)
 
-	writeFile(t, filepath.Join(h.library, "notes", ".gitignore"), "vendor/\n")
 	h.mustRun("skill", "commit", "notes")
 	equal(t, "the tree without the ignored repository", h.accountGit("ls-tree", "-r", "--name-only", lineage.ForkRef("notes")),
 		"notes/.gitignore\nnotes/SKILL.md")

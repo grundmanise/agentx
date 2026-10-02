@@ -244,7 +244,13 @@ func (inv *invocation) writeCommits(ctx context.Context, w *forkWriter, gitDir s
 			subject, body, _ = strings.Cut(text, "\n")
 		}
 		c.subject = strings.TrimSpace(subject)
-		if c.commit, err = w.commit(ctx, c.root, []string{c.site.rec.Commit}, forkMessage{subject: subject, body: body}); err != nil {
+		c.commit, err = w.commit(ctx, c.root, []string{c.site.rec.Commit}, forkMessage{subject: subject, body: body})
+		switch {
+		case err != nil && strings.TrimSpace(message) != "" && errors.Is(err, lineage.ErrForkTrailer):
+			// Only a message the user gave can carry a trailer of agentx's.
+			return fail(exitUsage, "-m may not end in a trailer agentx writes itself: "+lineage.TrailerBase+", "+lineage.TrailerForkID+" or "+lineage.TrailerMachine,
+				"leave those lines out of the message, or move them out of its last paragraph")
+		case err != nil:
 			return accountRepoFailure(err)
 		}
 	}
