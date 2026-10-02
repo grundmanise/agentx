@@ -274,7 +274,7 @@ func carryFile(src, dst string) error {
 		if err != nil {
 			return err
 		}
-		if err := os.MkdirAll(dst, info.Mode().Perm()); err != nil {
+		if err := os.MkdirAll(dst, 0o755); err != nil { // writable until it is filled
 			return err
 		}
 		for _, e := range entries {
