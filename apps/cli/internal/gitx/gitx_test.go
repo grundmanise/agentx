@@ -78,23 +78,26 @@ func TestEnvironments(t *testing.T) {
 	}
 	expect(t, "user", out,
 		[]string{"--git-dir=/repo.git fetch origin", "GIT_AUTHOR_NAME=Someone", "GIT_SSH_COMMAND=ssh -i /home/someone/key", "HOME=/home/someone"},
-		[]string{"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_ATTR_NOSYSTEM=1", "GIT_NO_LAZY_FETCH=1", "AGENTX_LEAK=from the process", "GIT_ASKPASS=/bin/false"})
+		[]string{"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_ATTR_NOSYSTEM=1", "GIT_NO_LAZY_FETCH=1", "AGENTX_LEAK=from the process", "GIT_ASKPASS=/bin/false", "SSH_ASKPASS_REQUIRE=never"})
 
 	serve := New(env, true, logf)
 	out, err = serve.run(ctx, call{}, "fetch")
 	if err != nil {
 		t.Fatal(err)
 	}
-	expect(t, "serve user", out,
-		[]string{"GIT_TERMINAL_PROMPT=0", "GIT_SSH_COMMAND=ssh -i /home/someone/key -o BatchMode=yes", "GIT_ASKPASS=/bin/false"},
-		nil)
+	// The serve child never prompts, and leaves the user's SSH command as
+	// it is: appending options to it would break a command that is not ssh
+	// itself, and replacing it would drop a core.sshCommand of theirs.
+	unattended := []string{"GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS=/bin/false", "SSH_ASKPASS_REQUIRE=never", "GCM_INTERACTIVE=never"}
+	expect(t, "serve user", out, append([]string{"GIT_SSH_COMMAND=ssh -i /home/someone/key"}, unattended...), nil)
 	out, err = serve.Isolated(ctx, "/repo.git", "commit")
 	if err != nil {
 		t.Fatal(err)
 	}
-	expect(t, "serve isolated", out,
-		[]string{"GIT_TERMINAL_PROMPT=0", "GIT_SSH_COMMAND=ssh -o BatchMode=yes", "GIT_ASKPASS=/bin/false", "GIT_CONFIG_GLOBAL=/dev/null"},
-		nil)
+	expect(t, "serve isolated", out, append([]string{"GIT_CONFIG_GLOBAL=/dev/null"}, unattended...), nil)
+	if strings.Contains(out, "GIT_SSH_COMMAND=") {
+		t.Errorf("serve isolated: an SSH command was set:\n%s", out)
+	}
 }
 
 func TestVersion(t *testing.T) {

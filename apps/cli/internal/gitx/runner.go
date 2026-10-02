@@ -42,7 +42,7 @@ const (
 // inherited from the process.
 type Runner struct {
 	env     map[string]string
-	serve   bool // the serve child: git must fail instead of prompting
+	serve   bool // the serve child: every git runs unattended, see call.unattended
 	logf    func(format string, args ...any)
 	version *Version // cached after the first Version call
 	// stopped records that a stop signal killed one of this runner's git
@@ -53,9 +53,10 @@ type Runner struct {
 	stopped atomic.Bool
 }
 
-// New returns a runner over env. Under serve every git call has terminal
-// prompts disabled, SSH in batch mode and an askpass that fails. logf receives
-// every command line and its stderr.
+// New returns a runner over env. Under serve every git call runs
+// unattended: in a session of its own with no terminal and every prompt
+// off, see call.unattended. logf receives every command line and its
+// stderr.
 func New(env map[string]string, serve bool, logf func(format string, args ...any)) *Runner {
 	return &Runner{env: env, serve: serve, logf: logf}
 }
@@ -282,6 +283,27 @@ type call struct {
 	// context is cancelled, so that git removes the lock files it holds
 	// on its way out; waitDelay later, a git still running is killed.
 	terminate bool
+	// unattended runs git where nothing can ask the user anything: in a
+	// new session, so that neither git nor the ssh it starts has a
+	// controlling terminal to open, and with every prompt git, ssh and a
+	// credential manager know of turned off, see unattendedEnv. A
+	// credential helper that answers without asking, and a running SSH
+	// agent, still answer; the user's own SSH command is left as it is.
+	// The serve child runs every git this way, and a command runs a check
+	// the user did not ask for, such as the access check of a source, this
+	// way too.
+	unattended bool
+}
+
+// unattendedEnv is what an unattended git has on top of its environment:
+// git's terminal prompt and askpass off, ssh's askpass never used, and a
+// credential manager told not to open a window, so that a prompt becomes a
+// failure rather than a hang.
+var unattendedEnv = map[string]string{
+	"GIT_TERMINAL_PROMPT": "0",
+	"GIT_ASKPASS":         "/bin/false",
+	"SSH_ASKPASS_REQUIRE": "never",
+	"GCM_INTERACTIVE":     "never",
 }
 
 // run executes git with args; a call that is not isolated runs in the
@@ -324,9 +346,17 @@ func (r *Runner) runStatus(ctx context.Context, c call, upTo int, args ...string
 	}
 	r.logf("git %s", strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, git, args...)
-	cmd.Env = r.childEnv(c.isolated, c.dates)
+	unattended := c.unattended || r.serve
+	cmd.Env = r.childEnv(c.isolated, unattended, c.dates)
 	for k, v := range c.env {
 		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+	if unattended {
+		// A session of its own has no controlling terminal, and ssh and a
+		// pinentry ask on /dev/tty rather than on stdin, which is the null
+		// device already. It also keeps a terminal's Ctrl-C from reaching
+		// git: the run's cancelled context stops it instead.
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	}
 	cmd.Dir = c.dir
 	if cmd.Dir == "" {
@@ -476,10 +506,10 @@ func SkipFlushesInTests() {
 // names none, and GIT_ATTR_NOSYSTEM drops the system's), and forbids the
 // lazy fetch of a missing object (git 2.45 and newer honour the variable),
 // since it never touches the network; the user environment is the map as
-// is. Under serve, both fail instead of prompting. dates, when it is not
-// empty, replaces the fixed author and committer dates for this one
-// process.
-func (r *Runner) childEnv(isolated bool, dates string) []string {
+// is. An unattended process, see call.unattended, has every prompt off on
+// top of either. dates, when it is not empty, replaces the fixed author and
+// committer dates for this one process.
+func (r *Runner) childEnv(isolated, unattended bool, dates string) []string {
 	env := make(map[string]string, len(r.env)+12)
 	for k, v := range r.env {
 		if isolated && strings.HasPrefix(k, "GIT_") {
@@ -502,14 +532,10 @@ func (r *Runner) childEnv(isolated bool, dates string) []string {
 			env["GIT_"+who+"_DATE"] = when
 		}
 	}
-	if r.serve {
-		ssh := env["GIT_SSH_COMMAND"]
-		if ssh == "" {
-			ssh = "ssh"
+	if unattended {
+		for k, v := range unattendedEnv {
+			env[k] = v
 		}
-		env["GIT_TERMINAL_PROMPT"] = "0"
-		env["GIT_SSH_COMMAND"] = ssh + " -o BatchMode=yes"
-		env["GIT_ASKPASS"] = "/bin/false"
 	}
 	if len(testConfig) > 0 {
 		n, _ := strconv.Atoi(env["GIT_CONFIG_COUNT"])
