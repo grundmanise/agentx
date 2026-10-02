@@ -278,8 +278,14 @@ func stringsOf(v any) []string {
 // moveTo moves the harness's whole root, agentx home, the library and the
 // user's home with it, to root, as a user moves a home directory to
 // another disk, and points the harness there. Nothing in it is rewritten.
+// The new root is taken on its real path, as newHarness takes the first.
 func (h *harness) moveTo(t *testing.T, root string) {
 	t.Helper()
+	parent, err := filepath.EvalSymlinks(filepath.Dir(root))
+	if err != nil {
+		t.Fatal(err)
+	}
+	root = filepath.Join(parent, filepath.Base(root))
 	from := filepath.Dir(h.home)
 	if err := os.Rename(from, root); err != nil {
 		t.Fatal(err)
