@@ -56,8 +56,9 @@ type forkReverting struct {
 // retains is dropped only when it still hashes to it, so an edit made while
 // the mutation runs is kept as well.
 //
-// A fork with a merge pending is refused, exit code 4: the merge holds the
-// fork's tip as it was. A directory holding something git cannot record
+// A fork with a merge pending is refused first, exit code 4, before its
+// directory is read, and even when it has no edits to discard: the merge
+// holds the fork's tip as it was. A directory holding something git cannot record
 // that no ignore rule covers, such as a repository nested in it, is
 // refused too, since the revert would discard it with no record of it
 // anywhere; one an ignore rule covers stays where it is, as any ignored
@@ -76,6 +77,9 @@ func (inv *invocation) forkRevert(ctx context.Context, gitDir string, rec lineag
 			return inv.reportForkReverted(ctx, r, placements{})
 		}
 	} else {
+		if inv.mergePending(f.name) {
+			return forkPendingRefusal(f.name, "reverted")
+		}
 		if r.judged, err = inv.judgeSite(ctx, f, true); err != nil {
 			return err
 		}

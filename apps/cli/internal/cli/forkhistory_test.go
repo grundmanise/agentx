@@ -17,8 +17,8 @@ import (
 // history: every commit newest first, the one made with git foreign, with
 // its author and its whole message, the two agentx wrote carrying the
 // machine, and the import at the root, with every file it holds added.
-// Paths are relative to the skill's directory, and a file beside it keeps
-// its own. A managed
+// Paths are relative to the skill's directory, a file beside it starting
+// with ../. A managed
 // skill, an unmanaged one and a name the library does not hold are
 // refused, each in its own words.
 func TestSkillHistoryMarksImportsAndForeignCommits(t *testing.T) {
@@ -57,7 +57,7 @@ func TestSkillHistoryMarksImportsAndForeignCommits(t *testing.T) {
 		commit, parents, subject, machine, files string
 		imported, foreign                        bool
 	}{
-		{foreign, committed, "By hand", "", "README.md added,extra.md modified", false, true},
+		{foreign, committed, "By hand", "", "../README.md added,extra.md modified", false, true},
 		{committed, created, "alpha: add extra.md (test-host)", machine, "extra.md added", false, false},
 		{created, imported, h.accountGit("log", "-1", "--format=%s", created), machine, "SKILL.md modified", false, false},
 		{imported, "", h.accountGit("log", "-1", "--format=%s", imported), "", strings.Join(importFiles, ","), true, false},

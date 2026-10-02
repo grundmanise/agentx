@@ -158,7 +158,7 @@ func (inv *invocation) reportHistory(name, dir string, commits []forkLogCommit) 
 		}
 		ev.Foreign = !ev.Import && ev.Machine == ""
 		for _, f := range c.files {
-			f.Path = strings.TrimPrefix(f.Path, dir+"/")
+			f.Path = historyPath(f.Path, dir)
 			ev.Files = append(ev.Files, f)
 		}
 		out.emit(ev)
@@ -172,6 +172,17 @@ func (inv *invocation) reportHistory(name, dir string, commits []forkLogCommit) 
 		out.print(append(line, "  ", out.paint(muted, plural(len(ev.Files), "file")))...)
 	}
 	inv.summary = sanitised(name) + " has " + plural(len(commits), "commit")
+}
+
+// historyPath is the path p of a commit's tree relative to the skill
+// directory dir: an entry beside the directory, such as a README.md
+// committed with git at the worktree's root, starts with ../, so it is
+// never taken for the skill's own file of that name. Pure.
+func historyPath(p, dir string) string {
+	if rel, ok := strings.CutPrefix(p, dir+"/"); ok {
+		return rel
+	}
+	return "../" + p
 }
 
 // historyDate is an author time git wrote in strict ISO 8601 as the text

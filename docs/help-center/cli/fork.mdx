@@ -157,7 +157,8 @@ e07d5b2  2026-10-01 09:12  Create release-notes  1 file
 
 - Commits are listed newest first, each with the files it changes in the skill.
 - `foreign` marks a commit made with Git directly, or by an agent running Git, rather than by agentx.
-- `import` marks the upstream version a fork of an installed skill started from.
+- `import` marks the upstream version a fork of an installed skill started from. Its date is always `2000-01-01 00:00`, so the same version has the same commit on every machine.
+- A file outside the skill folder, such as a `README.md` you committed with Git at the root of the worktree, starts with `../`.
 - With `--json`, each commit is a `history` event with its full message, its author and the machine that wrote it.
 
 ## See what changed
@@ -190,6 +191,8 @@ agentx skill revert release-notes
 - [Files that stay local](#files-that-stay-local), such as a `.DS_Store`, stay as they are.
 - A copy placement that held your edits goes back too. A copy you edited on its own is kept and named.
 - An edit made while the command runs stops it with exit code 6, and nothing is discarded. Run `agentx skill diff <name>` to see the edit, then revert again.
+- If you deleted the whole skill folder, the command stops with exit code 6 and names the `git restore` command that puts it back.
+- Changes you staged with Git outside the skill folder are unstaged. Their files stay as they are.
 
 ### Go back to an earlier commit
 

@@ -2,9 +2,12 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
@@ -247,18 +250,48 @@ func stageVersion(dest string, lay func(dest string) error, v version, from stri
 // file with its bytes and permission bits, a symlink with its target, and a
 // directory, as git lists a repository nested in the directory that an
 // ignore rule covers, with everything in it. A path the new content in to
-// holds already is the new content's, and is not carried.
+// holds already is the new content's, and is not carried, and so is a path
+// under a file or a symlink the new content holds where the ignored file's
+// directory was: git checkout drops such a file, and carrying it would write
+// through the link, perhaps outside the skill.
 func carryIgnored(from, to string, paths []string) error {
 	for _, p := range paths {
-		dst := filepath.Join(to, filepath.FromSlash(p))
-		if _, err := os.Lstat(dst); err == nil {
+		held, err := heldByNewContent(to, p)
+		if err != nil {
+			return err
+		}
+		if held {
 			continue
 		}
+		dst := filepath.Join(to, filepath.FromSlash(p))
 		if err := carryFile(filepath.Join(from, filepath.FromSlash(p)), dst); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// heldByNewContent reports whether the content laid out in to owns the
+// slash-separated path p: it holds p itself, or holds something other than
+// a directory at one of p's parents. Each component is read without
+// following a link, so a symlink in the new content is never resolved.
+func heldByNewContent(to, p string) (bool, error) {
+	parts := strings.Split(strings.TrimSuffix(p, "/"), "/")
+	at := to
+	for i, part := range parts {
+		at = filepath.Join(at, part)
+		info, err := os.Lstat(at)
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, nil // the rest is the carry's to make
+		}
+		if err != nil {
+			return false, err
+		}
+		if i == len(parts)-1 || !info.IsDir() {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func carryFile(src, dst string) error {

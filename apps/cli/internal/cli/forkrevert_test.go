@@ -131,7 +131,8 @@ func TestSkillRevertOfAFork(t *testing.T) {
 // TestSkillRevertToACommit restores a fork from an earlier commit of its
 // history. In one home, refused first and changing nothing: uncommitted
 // edits, exit code 6; a commit outside the fork's history; and a merge
-// pending, exit code 4, for a revert to a commit and for one of the edits.
+// pending, exit code 4, for a revert to a commit and for one of the edits,
+// which is refused with no edits to discard too.
 // Then the revert writes a new commit on top of the tip, with the earlier
 // commit's skill directory and the machine, and keeps the history it was
 // written on. That commit tracked a file at a path the system-file list
@@ -172,6 +173,7 @@ func TestSkillRevertToACommit(t *testing.T) {
 	} {
 		if c.exit == 4 && !lexists(pending) {
 			h.accountGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", pendingReason, pending, tip)
+			remove(t, filepath.Join(lib, "extra.md"))
 		}
 		out := h.run(append([]string{"--json", "skill", "revert", "notes"}, c.args...)...)
 		equal(t, c.name+": exit", out.exit, c.exit)
@@ -179,7 +181,6 @@ func TestSkillRevertToACommit(t *testing.T) {
 		equal(t, c.name+": the branch", h.ref(lineage.ForkRef("notes")), tip)
 	}
 	h.accountGit("worktree", "remove", "-f", "-f", pending)
-	remove(t, filepath.Join(lib, "extra.md"))
 
 	machine, _, err := home.MachineID(h.agentx, h.env, nil)
 	if err != nil {
