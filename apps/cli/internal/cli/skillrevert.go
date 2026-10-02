@@ -16,20 +16,30 @@ import (
 )
 
 func newSkillRevertCommand(inv *invocation) *cobra.Command {
-	return &cobra.Command{
+	var to string
+	cmd := &cobra.Command{
 		Use:   "revert <name>",
-		Short: "Put a managed skill back to the version it was installed at",
+		Short: "Put a managed skill back to its base version, or discard a fork's edits",
 		Long: "Put the library directory of a managed skill back to its base version, the\n" +
 			"version it was installed at, discarding every edit made to it since: files added\n" +
 			"are deleted, files changed or deleted are restored, and files git ignores are kept.\n" +
 			"A copy placement that holds the edited content is put back too; a copy edited on\n" +
 			"its own is kept and named. Run 'agentx skill diff <name>' first to see what the\n" +
-			"revert discards.",
+			"revert discards.\n\n" +
+			"For a fork, discard its uncommitted edits, putting its skill directory back to\n" +
+			"the last commit of its branch; nothing is committed. With --to <commit>, restore\n" +
+			"the skill directory from that earlier commit of its history as a new commit on\n" +
+			"top; history is never rewritten, and a fork with uncommitted edits is refused.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return inv.skillRevert(cmd.Context(), args[0])
+			if cmd.Flags().Changed("to") && strings.TrimSpace(to) == "" {
+				return fail(exitUsage, "--to needs a commit", "name a commit by its id, such as one 'agentx skill history' lists")
+			}
+			return inv.skillRevert(cmd.Context(), args[0], to)
 		},
 	}
+	cmd.Flags().StringVar(&to, "to", "", "restore a fork from this earlier commit, as a new commit on top")
+	return cmd
 }
 
 // skillRevert puts a managed skill's library directory back to its base
@@ -58,13 +68,30 @@ func newSkillRevertCommand(inv *invocation) *cobra.Command {
 // same mutation moves it, from the commit it holds, to the commit an
 // install of that version writes today, which is all a revert of a library
 // directory that already holds the base's files does.
-func (inv *invocation) skillRevert(ctx context.Context, name string) error {
+//
+// A fork is reverted to its last commit, or to the commit to names, see
+// forkRevert. Either way, a journal an earlier command left unfinished is
+// finished first, so that what the revert reads is what that command
+// left.
+func (inv *invocation) skillRevert(ctx context.Context, name, to string) error {
+	if err := inv.finishJournals(ctx); err != nil {
+		return err
+	}
+	gitDir, rec, held, err := inv.accountRecord(ctx, name)
+	if err != nil {
+		return err
+	}
+	if held && rec.Kind == lineage.KindFork {
+		return inv.forkRevert(ctx, gitDir, rec, to)
+	}
 	lib, ok := librarySkill(inv.dirs.Library, name)
 	if !ok {
 		return inv.noLibrarySkill(name)
 	}
-	gitDir, rec, err := inv.managedRecord(ctx, name, "revert to")
-	if err != nil {
+	if to != "" {
+		return notAForkRefusal(name, "revert to", "revert", held)
+	}
+	if err := managedRefusal(name, "revert to", rec, held); err != nil {
 		return err
 	}
 	libPath := inv.libraryPath(name)

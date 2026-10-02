@@ -10,28 +10,38 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
+	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
 func newSkillDiffCommand(inv *invocation) *cobra.Command {
 	var update bool
+	var commit string
 	cmd := &cobra.Command{
 		Use:   "diff <name>",
-		Short: "Show how a managed skill differs from the version it was installed at",
+		Short: "Show how a skill differs from its base version, or a fork from its last commit",
 		Long: "Show how the library directory of a managed skill differs from its base version,\n" +
 			"the version it was installed at, as one unified diff per file. Every edit counts,\n" +
 			"whatever tool made it, a file made executable and a file turned into a symlink\n" +
 			"included. Files git ignores do not. Nothing is written to the library. With\n" +
 			"--update, show instead what the update 'agentx skill check' found changes in\n" +
-			"the base version.",
+			"the base version.\n\n" +
+			"For a fork, show its uncommitted edits: how its skill directory differs from the\n" +
+			"last commit of its branch, or, with --commit <id>, from that commit.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if update {
+			switch {
+			case update && commit != "":
+				return fail(exitUsage, "--update and --commit cannot be given together", "compare with the update or with a commit, one at a time")
+			case cmd.Flags().Changed("commit") && strings.TrimSpace(commit) == "":
+				return fail(exitUsage, "--commit needs a commit", "name a commit by its id, such as one 'agentx skill history' lists")
+			case update:
 				return inv.skillDiffUpdate(cmd.Context(), args[0])
 			}
-			return inv.skillDiff(cmd.Context(), args[0])
+			return inv.skillDiff(cmd.Context(), args[0], commit)
 		},
 	}
 	cmd.Flags().BoolVar(&update, "update", false, "compare the base version with the update the last check found")
+	cmd.Flags().StringVar(&commit, "commit", "", "compare a fork with this commit instead of its last one")
 	return cmd
 }
 
@@ -74,13 +84,25 @@ type fileDiff struct {
 // tree, in a form no directory holds: git finds no file that differs, and
 // the command says the difference is where the version is stored, and
 // that a revert stores it again without touching a file.
-func (inv *invocation) skillDiff(ctx context.Context, name string) error {
+//
+// A fork is compared with its last commit, or with the commit given, see
+// forkDiff.
+func (inv *invocation) skillDiff(ctx context.Context, name, commit string) error {
+	gitDir, rec, held, err := inv.accountRecord(ctx, name)
+	if err != nil {
+		return err
+	}
+	if held && rec.Kind == lineage.KindFork {
+		return inv.forkDiff(ctx, gitDir, rec, commit)
+	}
 	lib, ok := librarySkill(inv.dirs.Library, name)
 	if !ok {
 		return inv.noLibrarySkill(name)
 	}
-	gitDir, rec, err := inv.managedRecord(ctx, name, "compare with")
-	if err != nil {
+	if commit != "" {
+		return notAForkRefusal(name, "compare with", "diff", held)
+	}
+	if err := managedRefusal(name, "compare with", rec, held); err != nil {
 		return err
 	}
 	tree, err := inv.readLibraryTree(lib.Path)

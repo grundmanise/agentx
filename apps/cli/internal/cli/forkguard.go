@@ -55,8 +55,7 @@ func (inv *invocation) judgeSite(ctx context.Context, f forkSite, wantIgnored bo
 		return siteJudged{}, libraryFailure(f.root, err)
 	}
 	if home.IsAbsent(captured) {
-		return siteJudged{}, fail(exitRefused, sanitised(f.name)+"'s skill directory "+quotedPath(f.skillDir)+" is missing",
-			"run 'git -C "+shellWord(f.root)+" restore "+shellWord(f.dir)+"' to put it back as the branch holds it")
+		return siteJudged{}, skillDirMissing(f)
 	}
 	t, err := treeid.Read(f.skillDir)
 	if err != nil {
@@ -67,6 +66,13 @@ func (inv *invocation) judgeSite(ctx context.Context, f forkSite, wantIgnored bo
 		return siteJudged{}, accountRepoFailure(err)
 	}
 	return siteJudged{forkJudged: j, captured: captured, wantIgnored: wantIgnored}, nil
+}
+
+// skillDirMissing refuses a fork whose worktree holds no skill directory,
+// which git restores from the branch.
+func skillDirMissing(f forkSite) error {
+	return fail(exitRefused, sanitised(f.name)+"'s skill directory "+quotedPath(f.skillDir)+" is missing",
+		"run 'git -C "+shellWord(f.root)+" restore "+shellWord(f.dir)+"' to put it back as the branch holds it")
 }
 
 // forkGuards runs, under the lock, the refusals of a command that would do

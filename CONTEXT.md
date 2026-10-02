@@ -132,7 +132,7 @@ The merge an update of a modified skill leaves when the edits and the update can
 _Avoid_: merge ref, conflict state
 
 **Modified skill**:
-A managed skill or a fork whose on-disk content differs from what it is compared with: a managed skill's base version, a fork's branch tip. It was edited outside agentx, by hand or by any other tool. Decided as git decides for a work tree: git records the directory over an index loaded from that version, and the skill is modified when the tree it writes differs from the version's, so a changed file mode or symlink counts as an edit and a file git ignores does not. For a fork that is what git status in its worktree says of the skill directory. Shown as drift, local to one machine, never synced. A managed skill can be reverted, updated by merging its edits with the update, or converted to a fork. A fork stays modified until its edits are committed, and a command that would move its branch refuses until then.
+A managed skill or a fork whose on-disk content differs from what it is compared with: a managed skill's base version, a fork's branch tip. It was edited outside agentx, by hand or by any other tool. Decided as git decides for a work tree: git records the directory over an index loaded from that version, and the skill is modified when the tree it writes differs from the version's, so a changed file mode or symlink counts as an edit and a file git ignores does not. For a fork that is what git status in its worktree says of the skill directory. Shown as drift, local to one machine, never synced. A managed skill can be reverted, updated by merging its edits with the update, or converted to a fork. A fork stays modified until its edits are committed or reverted, and a command that would move its branch refuses until then.
 _Avoid_: dirty, drifted, changed
 
 **Lineage record**:
@@ -142,6 +142,10 @@ _Avoid_: metadata
 **Lineage trailers**:
 The `Agentx-` commit trailers in the account repo: source, path, upstream commit and content hash on every imported upstream version, the id of the current base on every merge agentx makes, the fork id on the commit that creates a fork, and the machine on every commit agentx writes on a fork's branch. How a fork's provenance reaches every clone by fetch, with no file in the branch tree.
 _Avoid_: manifest, metadata file, provenance file
+
+**Foreign commit**:
+A commit on a fork's branch that agentx did not write: one made with git directly in the fork's worktree, by the user or an agent. It carries no `Agentx-Machine` trailer. agentx never rewrites it, and shows it as foreign in the fork's history.
+_Avoid_: external commit, manual commit
 
 **Library**:
 One machine's canonical directory for skills managed by agentx at ~/.agents/skills. Installing there makes a skill available to every agent client that reads this universal location, regardless of placement choices.

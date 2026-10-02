@@ -244,9 +244,10 @@ func stageVersion(dest string, lay func(dest string) error, v version, from stri
 
 // carryIgnored copies each of paths, files git ignores in the directory
 // from, into to, as git checkout keeps the ignored files of a work tree: a
-// file with its bytes and permission bits, a symlink with its target. A
-// path the new content in to holds already is the new content's, and is
-// not carried.
+// file with its bytes and permission bits, a symlink with its target, and a
+// directory, as git lists a repository nested in the directory that an
+// ignore rule covers, with everything in it. A path the new content in to
+// holds already is the new content's, and is not carried.
 func carryIgnored(from, to string, paths []string) error {
 	for _, p := range paths {
 		dst := filepath.Join(to, filepath.FromSlash(p))
@@ -267,6 +268,24 @@ func carryFile(src, dst string) error {
 	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
+	}
+	if info.IsDir() {
+		entries, err := os.ReadDir(src)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(dst, info.Mode().Perm()); err != nil {
+			return err
+		}
+		for _, e := range entries {
+			if err := carryFile(filepath.Join(src, e.Name()), filepath.Join(dst, e.Name())); err != nil {
+				return err
+			}
+		}
+		return os.Chmod(dst, info.Mode().Perm())
+	}
+	if !info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0 {
+		return fmt.Errorf("%s is neither a file, a directory nor a symlink, and cannot be carried over", src)
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
 		target, err := os.Readlink(src)

@@ -360,35 +360,46 @@ func TestSkillRevertRefusesALibraryEntryThatIsASymlink(t *testing.T) {
 }
 
 // TestSkillRevertGuardsAnEditMadeWhileItRuns: what a revert discards is
-// what the directory held when the command began. A git wrapper makes an
-// edit of the library while the revert reads the base version, after the
-// content was captured and before the lock is taken; the revert then
+// what the directory held when the command began. A git wrapper adds an
+// edit each time the revert reads the version it lays out, after the
+// content was captured and before the lock is taken, to a managed skill's
+// library directory and to a fork's skill directory; each revert then
 // refuses, and the edit is there afterwards, not discarded with the rest.
 func TestSkillRevertGuardsAnEditMadeWhileItRuns(t *testing.T) {
 	t.Parallel()
 	h, _ := driftHarness(t)
-	file := filepath.Join(h.library, "pdf", "a.md")
-	writeFile(t, file, "an edit\n")
+	h.mustRun("skill", "new", "notes")
+	files := map[string]string{
+		"pdf":   filepath.Join(h.library, "pdf", "a.md"),
+		"notes": filepath.Join(h.agentx, "worktrees", "notes", "notes", "a.md"),
+	}
+	for _, file := range files {
+		writeFile(t, file, "an edit\n")
+	}
 	real, err := exec.LookPath("git")
 	if err != nil {
 		t.Fatal(err)
 	}
 	stubGit(t, h, `#!/bin/sh
 case " $* " in
-*" ls-tree "*) printf 'an edit made meanwhile\n' > `+shellWord(file)+` ;;
+*" ls-tree "*) for f in `+shellWord(files["pdf"])+` `+shellWord(files["notes"])+`; do printf 'an edit made meanwhile\n' >> "$f"; done ;;
 esac
 exec `+real+` "$@"
 `)
-	out := h.run("--json", "skill", "revert", "pdf")
-	equal(t, "exit", out.exit, 6)
-	contains(t, "message", h.one(out.stdout, "error")["message"].(string), "pdf changed while it was being reverted, so nothing was discarded")
-	b, err := os.ReadFile(file)
-	if err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"pdf", "notes"} {
+		out := h.run("--json", "skill", "revert", name)
+		equal(t, name+": exit", out.exit, 6)
+		contains(t, name+": message", h.one(out.stdout, "error")["message"].(string), name+" changed while it was being reverted, so nothing was discarded")
+		b, err := os.ReadFile(files[name])
+		if err != nil {
+			t.Fatal(err)
+		}
+		contains(t, name+": a.md", string(b), "an edit\nan edit made meanwhile\n")
+		equal(t, name+": journals", journalCount(t, h), 0)
 	}
-	equal(t, "a.md", string(b), "an edit made meanwhile\n")
-	equal(t, "journals", journalCount(t, h), 0)
-	equal(t, "what is left beside the library", strings.Join(hiddenEntries(t, h.library), " "), "")
+	for _, dir := range []string{h.library, filepath.Join(h.agentx, "worktrees")} {
+		equal(t, "what is left in "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
+	}
 }
 
 // TestSkillRevertRefusesWhenTheImportBranchMoves: the base a revert lays

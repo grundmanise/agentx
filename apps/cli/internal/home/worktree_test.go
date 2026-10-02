@@ -161,6 +161,102 @@ func TestCreationRecoversFromEveryBoundary(t *testing.T) {
 	}
 }
 
+// forkRevertOf is the shape of a revert of a fork, created first: its
+// branch moved to the new commit, its skill directory, edited since,
+// retained in the worktrees directory and filled again with content staged
+// there, never inside the worktree, and the worktree's index reset to the
+// branch. A revert of the edits alone has the same steps, its ref step
+// holding the branch where it is.
+func (c creation) forkRevertOf(t *testing.T, u refs, name string) *Mutation {
+	t.Helper()
+	if err := c.creationOf(t, name).Apply(u); err != nil {
+		t.Fatal(err)
+	}
+	skill := filepath.Join(c.root(name), name)
+	if err := os.WriteFile(filepath.Join(skill, "SKILL.md"), []byte("edited\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	admin, _ := AdminDirOf(c.root(name))
+	if err := os.Remove(filepath.Join(admin, "index")); err != nil {
+		t.Fatal(err)
+	}
+	old, err := State(skill)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewMutation(c.dir)
+	staged := m.Sibling(c.root(name), "staged")
+	if err := os.MkdirAll(staged, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(staged, "SKILL.md"), []byte("reverted\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fingerprint, err := Fingerprint(staged)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.Ref(c.gitDir, "refs/heads/skills/"+name, "c0ffee-"+name, "revert-"+name)
+	if err := m.RemoveInto(skill, old, c.worktrees); err != nil {
+		t.Fatal(err)
+	}
+	m.Publish(skill, staged, fingerprint)
+	m.Worktree(c.gitDir, c.root(name), "skills/"+name)
+	return m
+}
+
+// reverted reports what of a fork's revert is not in place.
+func (c creation) reverted(u refs, name string) []string {
+	var missing []string
+	if u[c.gitDir+" refs/heads/skills/"+name] != "revert-"+name {
+		missing = append(missing, "the branch")
+	}
+	if admin, _ := AdminDirOf(c.root(name)); !WorktreeAt(c.root(name), "skills/"+name) || !exists(filepath.Join(admin, "index")) {
+		missing = append(missing, "the worktree's index")
+	}
+	if b, err := os.ReadFile(filepath.Join(c.root(name), name, "SKILL.md")); err != nil || string(b) != "reverted\n" {
+		missing = append(missing, "the skill directory")
+	}
+	if entries, _ := os.ReadDir(c.root(name)); len(entries) != 2 {
+		missing = append(missing, "a worktree holding its .git and the skill directory alone")
+	}
+	if hidden, _ := filepath.Glob(filepath.Join(c.worktrees, ".agentx-*")); len(hidden) > 0 {
+		missing = append(missing, "the staged or retained content is still there")
+	}
+	if left, _ := Journals(c.dir); len(left) > 0 {
+		missing = append(missing, "the journal is still there")
+	}
+	return missing
+}
+
+// TestForkRevertRecoversFromEveryBoundary stops the revert of a fork after
+// each step and checks that recovery finishes it, twice over without
+// repeating anything, the edited directory it retained dropped at the end.
+func TestForkRevertRecoversFromEveryBoundary(t *testing.T) {
+	t.Parallel()
+	for stop := 0; stop <= 4; stop++ {
+		t.Run(fmt.Sprintf("after %d steps", stop), func(t *testing.T) {
+			t.Parallel()
+			c, u := newCreation(t)
+			m := c.forkRevertOf(t, u, "alpha")
+			if stop == 0 && m.steps() != 4 {
+				t.Fatalf("%d steps, want 4", m.steps())
+			}
+			if err := m.stopAfter(stop, u); err != nil {
+				t.Fatalf("stopping after %d steps: %v", stop, err)
+			}
+			for _, pass := range []string{"recovery", "recovery run again"} {
+				if err := recoverJournals(c.dir, u); err != nil {
+					t.Fatalf("%s after %d steps: %v", pass, stop, err)
+				}
+				if missing := c.reverted(u, "alpha"); len(missing) > 0 {
+					t.Errorf("after %s from step %d: %s", pass, stop, strings.Join(missing, ", "))
+				}
+			}
+		})
+	}
+}
+
 // TestWorktreeStepClearsAHalfMadeWorktree is a creation killed inside git's
 // worktree add, which leaves the admin directory and the .git file and no
 // HEAD on the branch. Nothing of the user's is there, so recovery adds the

@@ -126,6 +126,19 @@ func (w *WorkTree) DiffCached(ctx context.Context, base string) (status, patch s
 	return status, patch, err
 }
 
+// DiffCachedHere is DiffCached kept to the directory git runs in, with
+// every path relative to it: what a work tree larger than the directory
+// holds beside it is left out, and the diff names a file of the directory
+// as the directory's own, a/SKILL.md rather than a/<dir>/SKILL.md. For a
+// work tree that is the directory itself it is DiffCached.
+func (w *WorkTree) DiffCachedHere(ctx context.Context, base string) (status, patch string, err error) {
+	if status, err = w.run(ctx, "diff", "--cached", "--relative", "-z", "--no-renames", "--name-status", base); err != nil {
+		return "", "", err
+	}
+	patch, err = w.run(ctx, "diff", "--cached", "--relative", "-p", "--no-renames", "--no-color", base)
+	return status, patch, err
+}
+
 // Ignored lists the files of the directory that git ignores and the index
 // does not track, relative to the directory with / as the separator.
 func (w *WorkTree) Ignored(ctx context.Context) ([]string, error) {

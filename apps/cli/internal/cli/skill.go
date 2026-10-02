@@ -98,6 +98,7 @@ func newSkillCommand(inv *invocation) *cobra.Command {
 	cmd.AddCommand(newSkillNewCommand(inv))
 	cmd.AddCommand(newSkillForkCommand(inv))
 	cmd.AddCommand(newSkillCommitCommand(inv))
+	cmd.AddCommand(newSkillHistoryCommand(inv))
 	cmd.AddCommand(newSkillPlaceCommand(inv))
 	cmd.AddCommand(newSkillRemoveCommand(inv))
 	cmd.AddCommand(newSkillDiffCommand(inv))

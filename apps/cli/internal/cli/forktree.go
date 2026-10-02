@@ -66,39 +66,62 @@ func (f forkSite) version() version { return forkVersion(f.rec, f.dir) }
 
 // forkSiteOf finds the fork whose branch is rec checked out on this
 // machine, refusing one whose worktree git cannot run in, see
-// worktreeHealth, before anything runs git inside it. The skill's
-// directory is where the library entry leads, which costs no git, or, when
-// the entry leads elsewhere, the one directory the tip's tree holds.
+// worktreeHealth, before anything runs git inside it.
 func (inv *invocation) forkSiteOf(ctx context.Context, gitDir string, rec lineage.Record) (forkSite, error) {
-	f := forkSite{
-		name: rec.Name, gitDir: gitDir, rec: rec, branch: strings.TrimPrefix(rec.Ref, "refs/heads/"),
-		root: inv.worktreeRoot(rec.Name), libPath: inv.libraryPath(rec.Name),
-	}
+	f := inv.forkPlace(gitDir, rec)
 	if err := worktreeHealth(f.name, f.root, f.branch); err != nil {
 		return f, err
 	}
-	if real, err := filepath.EvalSymlinks(f.libPath); err == nil {
-		f.dir, _ = inv.placedForkDir(f.name, real)
+	return f, inv.findForkDir(ctx, &f)
+}
+
+// forkPlace is where the fork whose branch is rec is checked out on this
+// machine, its skill directory still to be found, see findForkDir.
+func (inv *invocation) forkPlace(gitDir string, rec lineage.Record) forkSite {
+	return forkSite{
+		name: rec.Name, gitDir: gitDir, rec: rec, branch: strings.TrimPrefix(rec.Ref, "refs/heads/"),
+		root: inv.worktreeRoot(rec.Name), libPath: inv.libraryPath(rec.Name),
 	}
-	if f.dir == "" {
-		out, err := inv.git.Isolated(ctx, gitDir, "ls-tree", "-z", "-d", "--name-only", rec.Commit)
-		if err != nil {
-			return f, accountRepoFailure(err)
-		}
-		var dirs []string
-		for _, d := range strings.Split(out, "\x00") {
-			if d != "" {
-				dirs = append(dirs, d)
-			}
-		}
-		if len(dirs) != 1 {
-			return f, fail(exitAccountRepo, fmt.Sprintf("the branch %s holds %d directories at its root, not the one skill directory a fork's branch holds", rec.Ref, len(dirs)),
-				"run 'agentx doctor' and check the account repo it names")
-		}
-		f.dir = dirs[0]
+}
+
+// findForkDir fills in the skill directory of f: where its library entry
+// leads, which costs no git, or, when the entry leads elsewhere, the one
+// directory the tip's tree holds.
+func (inv *invocation) findForkDir(ctx context.Context, f *forkSite) error {
+	dir, err := inv.forkDir(ctx, f.gitDir, f.rec)
+	if err != nil {
+		return err
 	}
-	f.skillDir = filepath.Join(f.root, f.dir)
-	return f, nil
+	f.dir, f.skillDir = dir, filepath.Join(f.root, dir)
+	return nil
+}
+
+// forkDir is the skill's directory in the tree of the fork whose branch is
+// rec: the directory its library entry leads to in its worktree, which
+// costs no git, or the one directory the tip's tree holds, read with one
+// ls-tree. A tip holding no directory or several, beside which nothing
+// tells the skill's, is the account repo's to sort out, exit code 8.
+func (inv *invocation) forkDir(ctx context.Context, gitDir string, rec lineage.Record) (string, error) {
+	if real, err := filepath.EvalSymlinks(inv.libraryPath(rec.Name)); err == nil {
+		if dir, ok := inv.placedForkDir(rec.Name, real); ok {
+			return dir, nil
+		}
+	}
+	out, err := inv.git.Isolated(ctx, gitDir, "ls-tree", "-z", "-d", "--name-only", rec.Commit)
+	if err != nil {
+		return "", accountRepoFailure(err)
+	}
+	var dirs []string
+	for _, d := range strings.Split(out, "\x00") {
+		if d != "" {
+			dirs = append(dirs, d)
+		}
+	}
+	if len(dirs) != 1 {
+		return "", fail(exitAccountRepo, fmt.Sprintf("the branch %s holds %d directories at its root, not the one skill directory a fork's branch holds", rec.Ref, len(dirs)),
+			"run 'agentx doctor' and check the account repo it names")
+	}
+	return dirs[0], nil
 }
 
 // placedForkDir is the skill directory of the fork called name when real,
@@ -122,15 +145,12 @@ func (inv *invocation) placedForkDir(name, real string) (string, bool) {
 // another branch than the fork's. Each is exit code 6, since nothing is
 // wrong with the account repo.
 func worktreeHealth(name, root, branch string) error {
+	if err := worktreeMissing(name, root); err != nil {
+		return err
+	}
 	where := sanitised(name) + "'s worktree " + quotedPath(root)
-	place := "run '" + skillCommand("place", name) + "'"
-	switch _, err := os.Lstat(root); {
-	case errors.Is(err, fs.ErrNotExist):
-		return fail(exitRefused, where+" is missing", place+" to check it out again")
-	case err != nil:
-		return fail(exitRefused, err.Error(), "run 'agentx doctor' and check agentx home")
-	case home.PointersMoved(root):
-		return fail(exitRefused, where+" needs repair", place+" to repair it")
+	if home.PointersMoved(root) {
+		return fail(exitRefused, where+" needs repair", "run '"+skillCommand("place", name)+"' to repair it")
 	}
 	if command := home.Unfinished(root); command != "" {
 		return fail(exitRefused, where+" is in the middle of a git "+command,
@@ -143,6 +163,20 @@ func worktreeHealth(name, root, branch string) error {
 	if !home.WorktreeAt(root, branch) {
 		return fail(exitRefused, where+" is not on its branch "+branch,
 			"run 'git -C "+shellWord(root)+" switch "+branch+"' to put it back on its branch")
+	}
+	return nil
+}
+
+// worktreeMissing refuses a fork's worktree that is not there at all, the
+// one thing a command that only reads the fork's skill directory cannot
+// do without.
+func worktreeMissing(name, root string) error {
+	switch _, err := os.Lstat(root); {
+	case errors.Is(err, fs.ErrNotExist):
+		return fail(exitRefused, sanitised(name)+"'s worktree "+quotedPath(root)+" is missing",
+			"run '"+skillCommand("place", name)+"' to check it out again")
+	case err != nil:
+		return fail(exitRefused, err.Error(), "run 'agentx doctor' and check agentx home")
 	}
 	return nil
 }
@@ -178,6 +212,9 @@ type forkJudged struct {
 	written string
 	ignored []string // the files git ignores in the directory, when asked for
 	exposed []string // the nested repositories git would record as links rather than as their files
+	// unrecordable is every path of the directory git cannot record, the
+	// .git of a nested repository or a named pipe, ignored or not.
+	unrecordable []string
 }
 
 // judgeFork compares a directory a fork's branch is to hold with v as
@@ -235,7 +272,7 @@ func (inv *invocation) judgeForkTree(ctx context.Context, gitDir, top, dir strin
 			return forkJudged{}, err
 		}
 	}
-	var j forkJudged
+	j := forkJudged{unrecordable: t.Unrecordable}
 	if wantIgnored {
 		if j.ignored, err = wt.Ignored(ctx); err != nil {
 			return forkJudged{}, err
@@ -307,23 +344,37 @@ func nestedRepoRefusal(name string, exposed []string) error {
 }
 
 // stageForkContent lays the skill directory dir that commit holds out at
-// dest, byte for byte as the account repo stores it, exactly as a managed
-// skill's base version is laid out: every file with the mode git records,
-// every symlink as a symlink, and nothing else. What is laid out is held to
-// the tree the commit holds, the files git ignores in from are carried in,
-// and the fingerprint a publish of dest expects is returned.
+// dest, see forkLayout. What is laid out is held to the tree the commit
+// holds, the files git ignores in from are carried in, and the fingerprint
+// a publish of dest expects is returned.
 func (inv *invocation) stageForkContent(ctx context.Context, gitDir, commit, dir, dest, from string, ignored []string) (string, error) {
-	base, err := lineage.ReadMerged(ctx, inv.git, gitDir, commit, dir)
+	laid, lay, err := inv.forkLayout(ctx, gitDir, commit, dir)
 	if err != nil {
 		return "", err
 	}
+	return stageVersion(dest, lay, laid, from, ignored)
+}
+
+// forkLayout is the skill directory dir that commit holds, as a version a
+// directory is compared with, and lay, which lays it out at a destination
+// byte for byte as the account repo stores it, exactly as a managed skill's
+// base version is laid out: every file with the mode git records, every
+// symlink as a symlink, and nothing else. It is read in one ls-tree of
+// commit:dir and one cat-file of its blobs, whatever the commit holds
+// beside the directory, as a commit made with git may hold a file there.
+func (inv *invocation) forkLayout(ctx context.Context, gitDir, commit, dir string) (version, func(dest string) error, error) {
+	entries, err := source.ReadTree(ctx, inv.git, gitDir, commit+":"+dir)
+	if err != nil {
+		return version{}, nil, err
+	}
+	base := lineage.Base{Entries: entries}
 	bodies, err := source.ReadBlobs(ctx, inv.git, gitDir, baseBlobs(base))
 	if err != nil {
-		return "", err
+		return version{}, nil, err
 	}
 	target := base.ID()
 	laid := version{load: commit + ":" + dir, holds: func(id string) bool { return id == target }}
-	return stageVersion(dest, func(dest string) error { return materialise(dest, base, bodies) }, laid, from, ignored)
+	return laid, func(dest string) error { return materialise(dest, base, bodies) }, nil
 }
 
 // libraryLink is what the library symlink of a fork records: the path of

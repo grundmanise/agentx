@@ -169,26 +169,33 @@ func TestSkillDiffNamesWhatGitCannotRecord(t *testing.T) {
 }
 
 // TestSkillDiffAndRevertRefuseWhatHasNoBase: a name the library does not
-// hold, an unmanaged skill and a fork each have no base version this
-// command can read.
+// hold and an unmanaged skill each have no base version this command can
+// read, and a managed skill no commit of its own to name with --commit or
+// --to. A fork is not refused for having no base: its versions are its
+// own commits, and one whose worktree is gone, as a branch made with git
+// over a library directory has none, is refused for that.
 func TestSkillDiffAndRevertRefuseWhatHasNoBase(t *testing.T) {
 	t.Parallel()
 	h, _ := driftHarness(t)
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "mine"), "SKILL.md"), skill("mine", "My own"))
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "forked"), "SKILL.md"), skill("forked", "A fork"))
 	h.accountGit("update-ref", "refs/heads/skills/forked", h.accountGit("rev-parse", "refs/heads/managed/pdf"))
-	for _, verb := range []string{"diff", "revert"} {
+	for verb, flag := range map[string]string{"diff": "--commit", "revert": "--to"} {
 		for _, c := range []struct {
-			name, message string
-			exit          int
+			args    []string
+			message string
+			exit    int
 		}{
-			{"nowhere", `the library holds no skill called "nowhere"`, 5},
-			{"mine", "mine is not managed by agentx, so it has no base version to", 6},
-			{"forked", "forked is a fork on this machine", 6},
+			{[]string{"nowhere"}, `the library holds no skill called "nowhere"`, 5},
+			{[]string{"mine"}, "mine is not managed by agentx, so it has no base version to", 6},
+			{[]string{"forked"}, "forked's worktree " + quotedPath(filepath.Join(h.agentx, "worktrees", "forked")) + " is missing", 6},
+			{[]string{"pdf", flag, "HEAD"}, "pdf is managed, not a fork, so it has no commit of its own to", 6},
+			{[]string{"mine", flag, "HEAD"}, "mine is not a fork, so it has no commit to", 6},
 		} {
-			out := h.run("--json", "skill", verb, c.name)
-			equal(t, verb+" "+c.name+": exit", out.exit, c.exit)
-			contains(t, verb+" "+c.name+": message", h.one(out.stdout, "error")["message"].(string), c.message)
+			what := verb + " " + strings.Join(c.args, " ")
+			out := h.run(append([]string{"--json", "skill", verb}, c.args...)...)
+			equal(t, what+": exit", out.exit, c.exit)
+			contains(t, what+": message", h.one(out.stdout, "error")["message"].(string), c.message)
 		}
 	}
 	sameTree(t, "the unmanaged skill", libraryTree(t, filepath.Join(h.library, "mine")), map[string]string{"SKILL.md": skill("mine", "My own")})
