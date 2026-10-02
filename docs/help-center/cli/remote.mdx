@@ -69,7 +69,9 @@ agentx skill add --from-account release-notes
 ```
 
 ```text
+✓ added https://github.com/acme/skills at 7d1e0b2: 3 skills
 ✓ installed release-notes from the account remote at 4c2e9a1: 1 placement
+  claude-code  symlink  ~/.claude/skills/release-notes -> ~/.agents/skills/release-notes
 ```
 
 - It is the same fork, with its id and its whole history. Commit here and publish, and the commits go to the same branch.
@@ -78,7 +80,8 @@ agentx skill add --from-account release-notes
 
 ### When the library already holds the name
 
-- **A managed copy of the same upstream, unedited**: the fork takes its place. Its placements stay as they are and now lead to the fork. Files Git ignores in it, such as a `.DS_Store`, move into the fork.
+- **A managed copy of the same upstream, unedited**: the fork takes its place. Its placements stay as they are: symlinks now lead to the fork, and a copy keeps the managed version until `agentx skill place <name>` refreshes it. Files Git ignores in it, such as a `.DS_Store`, move into the fork.
+- **A managed skill with an update merge pending**: agentx stops with exit code 4. Finish the merge, or give it up with `agentx skill update <name> --abort`, then install again.
 - **A managed copy with your edits, or any other folder**: agentx stops with exit code 6 and changes nothing. Pass `--keep-local` to move the folder into the fork as it is: its content becomes the fork's uncommitted edits, and files Git ignores stay with it. Then keep the edits with [`agentx skill commit`](/cli/fork#commit-your-edits), or drop them with [`agentx skill revert`](/cli/fork#undo-edits).
 - **A symlink**: agentx stops with exit code 6, even with `--keep-local`. Remove the link, then install again.
 
@@ -126,9 +129,9 @@ hint: rename yours: fork it under a new name with 'agentx skill fork release-not
 
 ## Exit codes
 
-- `1`: the URL is not one Git reaches as it is, carries a password or a token, or names a ref with `#`; `publish` is given both a name and `--all`, or neither.
+- `1`: the URL is not one Git reaches as it is, carries a password or a token, or names a ref with `#`; `publish` is given both a name and `--all`, or neither; `skill add --from-account` is given no name, a source, `--skill`, `--all`, `--except` or `--fetch`; or `--keep-local` is given without `--from-account`.
 - `3`: Git cannot reach the account remote.
-- `4`: a fork has a merge waiting, or the pull or publish left one waiting for you to [resolve](#resolve-a-conflict).
+- `4`: a fork has a merge waiting, or the pull or publish left one waiting for you to [resolve](#resolve-a-conflict); or the managed skill a fork would take the place of has an update merge pending.
 - `5`: the name is not a skill of this machine, or the remote holds no fork of that name to install.
 - `6`: no account remote is set; the skill is not a fork; the fork to install is installed already, or the library holds a symlink, edits or a folder of its own at its name; the remote's branch of that name is [another fork](#two-forks-with-one-name), names no fork id, or shares no commit with yours; the fork has uncommitted edits and the remote has something new; the remote rejected the push; the fork's worktree is missing, needs repair or is not on its branch; or the fork, or its branch on the remote, changed while it was being pulled or published.
 - `7`: another agentx command is running. Retry when it finishes.

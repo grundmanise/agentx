@@ -61,6 +61,9 @@ func newSkillAddCommand(inv *invocation) *cobra.Command {
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cmd.Flags().Changed("from-account") {
+				if fromAccount == "" {
+					return fail(exitUsage, "--from-account needs the name of a fork", "run 'agentx skill list --remote' to see the forks the account remote holds")
+				}
 				for _, other := range []string{"skill", "all", "except", "fetch"} {
 					if cmd.Flags().Changed(other) {
 						return fail(exitUsage, "--from-account installs one fork and takes no --"+other, "run '"+fromAccountCommand(fromAccount)+"'")

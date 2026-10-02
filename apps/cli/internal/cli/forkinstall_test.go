@@ -24,7 +24,8 @@ import (
 // enabled configuration. It adds the fork's upstream source, which b
 // lacked, so that b's update check finds the source's next version for
 // alpha. Listed again, the account remote holds two forks b has not
-// installed, and alpha is refused as installed already.
+// installed, and alpha is refused as installed already, with skill place
+// named once its worktree and library entry are gone.
 func TestInstallAForkFromTheAccount(t *testing.T) {
 	t.Parallel()
 	a, b, s, _ := accountHomes(t)
@@ -92,6 +93,16 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 	out = b.run("--json", "skill", "add", "--from-account", "alpha")
 	equal(t, "installing alpha again: exit", out.exit, 6)
 	contains(t, "its error", b.one(out.stdout, "error")["message"].(string), "alpha is already installed on this machine")
+
+	// Without its worktree and library entry, the branch is the fork's
+	// alone, and skill place lays it out.
+	if err := os.Remove(filepath.Join(b.library, "alpha")); err != nil {
+		t.Fatal(err)
+	}
+	b.accountGit("worktree", "remove", "--force", "--force", filepath.Join(b.agentx, "worktrees", "alpha"))
+	out = b.run("--json", "skill", "add", "--from-account", "alpha")
+	equal(t, "an unplaced fork: exit", out.exit, 6)
+	contains(t, "its hint", b.one(out.stdout, "error")["hint"].(string), "agentx skill place alpha")
 }
 
 // sortedKeys is the keys of m in order.
@@ -112,7 +123,8 @@ func sortedKeys(m map[string]jsonEvent) []string {
 // its update candidate and the library directory go, the library entry is
 // the symlink into the fork's worktree, which holds the .DS_Store, and the
 // placements are as they were, Claude Code's leading to the fork and
-// Cursor still without one.
+// Cursor still without one. A pull of the managed alpha before names the
+// install, not a fork of b's own.
 func TestFromAccountSupersedesAnUnmodifiedCopy(t *testing.T) {
 	t.Parallel()
 	_, b, s, _ := accountHomes(t)
@@ -130,6 +142,9 @@ func TestFromAccountSupersedesAnUnmodifiedCopy(t *testing.T) {
 	}
 	claude := filepath.Join(b.home, ".claude", "skills", "alpha")
 	before, _ := os.Readlink(claude)
+	pulled := b.run("--json", "pull", "alpha")
+	equal(t, "a pull of the managed alpha: exit", pulled.exit, 6)
+	contains(t, "its hint", b.one(pulled.stdout, "error")["hint"].(string), "agentx skill add --from-account alpha")
 
 	out := b.mustRun("--json", "skill", "add", "--from-account", "alpha")
 	equal(t, "the import branch", b.ref(lineage.ManagedRef("alpha")), "")
@@ -166,8 +181,9 @@ func stateOf(t *testing.T, path string) string {
 // machine b over what its library holds. Each refusal changes nothing: a
 // fork the account remote does not hold, exit 5; an unmanaged directory at
 // alpha's library path, exit 6; a symlink at beta's, exit 6 with
-// --keep-local too; and an edited managed copy of beta's upstream, exit 6;
-// --keep-local without --from-account is exit 1. With --keep-local, the
+// --keep-local too; an edited managed copy of beta's upstream whose update
+// merge is pending, exit 4, and once it is aborted, exit 6; --keep-local
+// without --from-account, and --from-account without a name, are exit 1. With --keep-local, the
 // unmanaged directory is moved into alpha's worktree and the edited copy
 // into beta's, with its import branch gone: each content is uncommitted
 // edits of the fork at the remote tip, nothing discarded, and a file git
@@ -194,6 +210,7 @@ func TestFromAccountRefusesAndKeepsLocal(t *testing.T) {
 		{[]string{"--from-account", "alpha"}, 6, "the library already holds"},
 		{[]string{"--from-account", "beta", "--keep-local"}, 6, "a symlink, so beta was not installed"},
 		{[]string{s.url, "--keep-local"}, 1, "--keep-local applies to --from-account only"},
+		{[]string{"--from-account", ""}, 1, "--from-account needs the name of a fork"},
 	} {
 		out := b.run(append([]string{"--json", "skill", "add"}, tc.args...)...)
 		equal(t, strings.Join(tc.args, " ")+": exit", out.exit, tc.exit)
@@ -213,15 +230,29 @@ func TestFromAccountRefusesAndKeepsLocal(t *testing.T) {
 		t.Fatal(err)
 	}
 	b.mustRun("skill", "add", s.url, "--skill", "beta")
-	writeFile(t, filepath.Join(betaLib, "notes.md"), "mine\n")
+	mine := forkNotes("seven", "seven, mine")
+	writeFile(t, filepath.Join(betaLib, "notes.md"), mine)
+	// An update merge pending comes first: neither --keep-local nor a
+	// revert gets past it.
+	s.skill("skills/beta", "beta", "The second skill", map[string]string{"notes.md": forkNotes("seven", "seven, upstream")})
+	s.commit("second version")
+	b.mustRun("skill", "check")
+	if out := b.run("skill", "update", "beta"); out.exit != 4 {
+		t.Fatalf("beta's update: exit %d, want a conflict\n%s", out.exit, out.stderr)
+	}
 	out := b.run("--json", "skill", "add", "--from-account", "beta")
+	equal(t, "a pending merge: exit", out.exit, 4)
+	contains(t, "its error", b.one(out.stdout, "error")["message"].(string), "replaced by the fork")
+	b.mustRun("skill", "update", "beta", "--abort")
+	out = b.run("--json", "skill", "add", "--from-account", "beta")
 	equal(t, "an edited copy: exit", out.exit, 6)
 	contains(t, "its error", b.one(out.stdout, "error")["message"].(string), "beta holds edits at")
 	contains(t, "its hint", b.one(out.stdout, "error")["hint"].(string), "--keep-local")
 	b.mustRun("skill", "add", "--from-account", "beta", "--keep-local")
 	equal(t, "beta's import branch", b.ref(lineage.ManagedRef("beta")), "")
+	equal(t, "beta's update candidate", b.ref(lineage.CandidateRef("beta")), "")
 	equal(t, "beta's uncommitted edits", gitIn(t, b, filepath.Join(b.agentx, "worktrees", "beta"), "status", "--porcelain"), " M beta/notes.md\n")
-	equal(t, "the kept notes", fileBody(t, filepath.Join(b.forkDir("beta", "beta"), "notes.md")), "mine\n")
+	equal(t, "the kept notes", fileBody(t, filepath.Join(b.forkDir("beta", "beta"), "notes.md")), mine)
 }
 
 // TestFromAccountPlan is what an install from the account remote does
@@ -301,6 +332,7 @@ exec %GIT% "$@"
 				t.Errorf("claude-code's placement points at %q", target)
 			}
 			equal(t, "kind", b.listed("alpha")["kind"], lineage.KindFork)
+			equal(t, "the branch's tracking", b.accountGit("config", "--get", "branch.skills/alpha.remote"), "origin")
 			for _, dir := range []string{b.library, filepath.Join(b.agentx, "worktrees")} {
 				equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 			}

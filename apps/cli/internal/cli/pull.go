@@ -408,22 +408,41 @@ func (inv *invocation) remoteSelection(ctx context.Context, name string, records
 		return names, nil
 	}
 	rec, ok := records[name]
-	switch {
-	case ok && rec.Kind == lineage.KindFork:
+	if ok && rec.Kind == lineage.KindFork {
 		return []string{name}, nil
-	case ok:
-		return nil, fail(exitRefused, sanitised(name)+" is managed, not a fork, so it is never "+verb+"ed: only forks travel through the account remote",
-			"fork it first with '"+skillCommand("fork", name)+"'")
 	}
-	if _, held := librarySkill(inv.dirs.Library, name); held {
-		return nil, fail(exitRefused, sanitised(name)+" is not a fork, so it is never "+verb+"ed: only forks travel through the account remote",
-			"fork it first with '"+skillCommand("fork", name)+"'")
+	_, held := librarySkill(inv.dirs.Library, name)
+	if !ok && !held {
+		if inv.remoteHolds(ctx, name) {
+			return nil, fail(exitNotFound, sanitised(name)+" is a fork of the account remote that this machine has not installed, so there is nothing of it here to "+verb,
+				"install it with '"+fromAccountCommand(name)+"'")
+		}
+		return nil, inv.noLibrarySkill(name)
 	}
-	if tips, err := lineage.ListRemote(ctx, inv.git, gitx.AccountRepoPath(inv.dirs.Home)); err == nil && tips[name] != "" {
-		return nil, fail(exitNotFound, sanitised(name)+" is a fork of the account remote that this machine has not installed, so there is nothing of it here to "+verb,
-			"install it with '"+fromAccountCommand(name)+"'")
+	what := " is not a fork"
+	if ok {
+		what = " is managed, not a fork"
 	}
-	return nil, inv.noLibrarySkill(name)
+	refusal := sanitised(name) + what + ", so it is never " + verb + "ed: only forks travel through the account remote"
+	// A fork the account remote holds of the name takes the place of what
+	// is here; a fork of it made here would be another fork of the name,
+	// which a publish refuses.
+	if inv.remoteHolds(ctx, name) {
+		var flags []string
+		if !ok && isDir(inv.libraryPath(name)) {
+			flags = []string{"--keep-local"}
+		}
+		return nil, fail(exitRefused, refusal, "install the account remote's fork in its place with '"+fromAccountCommand(name, flags...)+"'")
+	}
+	return nil, fail(exitRefused, refusal, "fork it first with '"+skillCommand("fork", name)+"'")
+}
+
+// remoteHolds reports whether the account remote held a fork called name
+// at the last fetch, by its remote-tracking branch; a read that fails says
+// it does not.
+func (inv *invocation) remoteHolds(ctx context.Context, name string) bool {
+	tips, err := lineage.ListRemote(ctx, inv.git, gitx.AccountRepoPath(inv.dirs.Home))
+	return err == nil && tips[name] != ""
 }
 
 // reportSync reports what a pull did to one fork: a pull event, a line,

@@ -188,8 +188,8 @@ type accountInstall struct {
 // upstream-removed marker are deleted last. The fork's upstream source is
 // added first when the settings lack it, as source add adds one, so that
 // update checks cover the fork here as on the machine that published it.
-// The branch is set to track the account remote's once the journal is
-// applied.
+// The branch is set to track the account remote's just before the journal
+// is written.
 func (inv *invocation) installFromAccount(ctx context.Context, name string, to []string, asCopy, keepLocal bool) error {
 	if refusal := forkNameRefusal(name); refusal != "" {
 		return fail(exitRefused, refusal, "run 'agentx skill list --remote' to see the forks the account remote holds")
@@ -266,10 +266,14 @@ func (inv *invocation) judgeAccountInstall(ctx context.Context, gitDir, name str
 	in := &accountInstall{keepLocal: keepLocal}
 	if rec, ok := records[name]; ok {
 		if rec.Kind == lineage.KindFork {
-			return nil, fail(exitRefused, sanitised(name)+" is already installed on this machine",
-				"run '"+pullCommand(name)+"' to take in what the account remote holds of it")
+			return nil, inv.installedRefusal(gitDir, rec)
 		}
 		in.managed = &rec
+		// A pending merge comes before what the library holds: until it is
+		// finished or aborted, neither --keep-local nor a revert can help.
+		if inv.mergePending(name) {
+			return nil, pendingMergeRefusal(name, "replaced by the fork")
+		}
 	}
 	if err := inv.checkForkName(ctx, records, name, name, "remove it first, then run '"+fromAccountCommand(name)+"' again"); err != nil {
 		return nil, err
@@ -306,15 +310,25 @@ func (inv *invocation) judgeAccountInstall(ctx context.Context, gitDir, name str
 		return nil, f2
 	}
 	in.action = action
-	if in.managed != nil && inv.mergePending(name) {
-		return nil, pendingMergeRefusal(name, "replaced by the fork")
-	}
 	if action == installKeepLocal {
 		if err := inv.movableLibrary(in); err != nil {
 			return nil, err
 		}
 	}
 	return in, nil
+}
+
+// installedRefusal refuses to install a fork this machine has a branch of
+// already, exit code 6: a pull takes in what the account remote holds of
+// it, and skill place lays out one that was never placed here.
+func (inv *invocation) installedRefusal(gitDir string, rec lineage.Record) error {
+	name := rec.Name
+	if classifyFork(inv.forkFactsOf(inv.forkPlace(gitDir, rec))).outcome == outcomeInstallable {
+		return fail(exitRefused, sanitised(name)+" is already installed on this machine, but not placed",
+			"run '"+skillCommand("place", name)+"' to place it")
+	}
+	return fail(exitRefused, sanitised(name)+" is already installed on this machine",
+		"run '"+pullCommand(name)+"' to take in what the account remote holds of it")
 }
 
 // tipDir is the skill directory a fork's tip holds at its root: the one
@@ -550,16 +564,16 @@ func (inv *invocation) applyAccountInstall(ctx context.Context, in *accountInsta
 			m.Ref(f.gitDir, lineage.UpstreamRemovedRef(f.name), in.managed.UpstreamRemoved, "")
 		}
 	}
-	if err := m.Apply(inv.refs(ctx)); err != nil {
-		return err
-	}
 	// The branch tracks the account remote's, for git status in the
-	// worktree; agentx reads the remote-tracking branch by its name and
-	// never needs it, so a failure is a warning and the install stands.
+	// worktree. It is set before the journal is written, so that an
+	// install a later command finishes tracks it too; a section left for a
+	// branch the journal never makes is harmless and set again by the next
+	// install. agentx reads the remote-tracking branch by its name and never
+	// needs it, so a failure is a warning and the install goes on.
 	if err := inv.git.SetTracking(ctx, f.gitDir, f.branch); err != nil {
 		inv.out.warn("could not set " + f.branch + " to track the account remote's branch: " + trimGit(err.Error()))
 	}
-	return nil
+	return m.Apply(inv.refs(ctx))
 }
 
 // noAccountSkill refuses to install the fork f when the directory it would
