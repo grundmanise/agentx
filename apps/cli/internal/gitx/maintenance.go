@@ -2,9 +2,11 @@ package gitx
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // PackObjects runs the object tasks of git maintenance over the repository
@@ -16,14 +18,13 @@ import (
 // fails on a repository with no pack at all, as a new one is, so it runs
 // only once a pack is there.
 func (r *Runner) PackObjects(ctx context.Context, gitDir string) error {
-	if _, err := r.Isolated(ctx, gitDir, "maintenance", "run", "--task=loose-objects"); err != nil {
+	if err := r.maintain(ctx, gitDir, "maintenance", "run", "--task=loose-objects"); err != nil {
 		return err
 	}
 	if !hasPack(gitDir) {
 		return nil
 	}
-	_, err := r.Isolated(ctx, gitDir, "maintenance", "run", "--task=incremental-repack")
-	return err
+	return r.maintain(ctx, gitDir, "maintenance", "run", "--task=incremental-repack")
 }
 
 // PackRefs gathers the loose refs of the repository at gitDir into its
@@ -33,11 +34,44 @@ func (r *Runner) PackObjects(ctx context.Context, gitDir string) error {
 // repository's packed-refs lock, so the caller holds agentx's own lock,
 // under which every ref write of agentx is made.
 func (r *Runner) PackRefs(ctx context.Context, gitDir string) error {
-	_, err := r.Isolated(ctx, gitDir, "maintenance", "run", "--task=pack-refs")
+	err := r.maintain(ctx, gitDir, "maintenance", "run", "--task=pack-refs")
 	if err != nil && strings.Contains(err.Error(), "not a valid task") {
-		_, err = r.Isolated(ctx, gitDir, "pack-refs", "--all")
+		err = r.maintain(ctx, gitDir, "pack-refs", "--all")
 	}
 	return err
+}
+
+// ErrMaintenanceRunning is the answer of a maintenance task to a
+// repository whose maintenance lock is taken: git would skip the task and
+// exit 0 having done nothing, so the task is not run, and is not done.
+var ErrMaintenanceRunning = errors.New("git maintenance is already running in the account repo")
+
+// maintain runs one maintenance git over the repository at gitDir, in the
+// isolated environment, unless git maintenance holds the repository's
+// maintenance lock, see ErrMaintenanceRunning. A cancelled context stops
+// it with SIGTERM, on which git removes the lock files it took: a lock
+// left behind by a git killed outright would make every later maintenance
+// skip its work, and a packed-refs lock would fail every ref deletion.
+func (r *Runner) maintain(ctx context.Context, gitDir string, args ...string) error {
+	if _, err := os.Lstat(filepath.Join(gitDir, "objects", "maintenance.lock")); err == nil {
+		return ErrMaintenanceRunning
+	}
+	_, err := r.run(ctx, call{isolated: true, terminate: true}, isolatedArgs(gitDir, args)...)
+	return err
+}
+
+// LeftLocks are the lock files maintenance takes in the repository at
+// gitDir, its maintenance lock and its packed-refs lock, that were last
+// modified before before: ones no git still running holds, but a git
+// killed outright, which had no chance to remove them, left behind.
+func LeftLocks(gitDir string, before time.Time) []string {
+	var left []string
+	for _, lock := range []string{filepath.Join(gitDir, "objects", "maintenance.lock"), filepath.Join(gitDir, "packed-refs.lock")} {
+		if info, err := os.Lstat(lock); err == nil && info.ModTime().Before(before) {
+			left = append(left, lock)
+		}
+	}
+	return left
 }
 
 // hasPack reports whether the repository at gitDir holds a pack file.

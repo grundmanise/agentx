@@ -106,8 +106,11 @@ func TestSkillPlaceRepairsAFork(t *testing.T) {
 	equal(t, "git status once reverted", gitIn(t, h, root, "status", "--porcelain"), "")
 	equal(t, "state once reverted", h.listed("notes")["state"], stateCurrent)
 
-	local := filepath.Join(skillDir, ".DS_Store")
-	writeFile(t, local, "finder\n")
+	// A file git ignores is the user's, but a .DS_Store Finder left is not.
+	writeFile(t, filepath.Join(skillDir, ".DS_Store"), "finder\n")
+	writeFile(t, filepath.Join(root, ".gitignore"), ".env\n")
+	local := filepath.Join(skillDir, ".env")
+	writeFile(t, local, "TOKEN=1\n")
 	remove(t, lib)
 	writeFile(t, mkdirs(t, lib, "SKILL.md"), "instructions edited in the library\n")
 	out = h.run("--json", "skill", "place", "notes", "--force")
@@ -115,6 +118,17 @@ func TestSkillPlaceRepairsAFork(t *testing.T) {
 	contains(t, "message", h.one(out.stdout, "error")["message"].(string), " holds what git does not record, "+local+", and adopting "+lib+" in its place would delete it")
 	if !lexists(local) || !isDir(lib) {
 		t.Error("the refused adoption changed the skill directory or the library entry")
+	}
+
+	// A fork whose content is no skill, with no SKILL.md, is not placed.
+	remove(t, local)
+	remove(t, filepath.Join(lib, "SKILL.md"))
+	writeFile(t, filepath.Join(lib, "notes.md"), "no instructions\n")
+	out = h.run("--json", "skill", "place", "notes", "--force")
+	equal(t, "exit", out.exit, 5)
+	contains(t, "message", h.one(out.stdout, "error")["message"].(string), lib+" holds no SKILL.md, so notes is no skill to place")
+	if !isDir(lib) || !lexists(filepath.Join(skillDir, ".DS_Store")) {
+		t.Error("the refused place changed the skill directory or the library entry")
 	}
 }
 

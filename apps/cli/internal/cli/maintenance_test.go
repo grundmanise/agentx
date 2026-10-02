@@ -8,11 +8,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 )
 
 // TestServeRunsMaintenance starts serve over a home whose account repo
-// holds an install and has no record of a maintenance. It runs one off its
+// holds an install, has no record of a maintenance and holds a maintenance
+// lock a killed git left behind. It removes the lock and runs one off its
 // loop, after its snapshot: the loose-objects and incremental-repack
 // tasks, then the pack-refs task, and never git maintenance start. When a
 // run is due is maintenanceDue's, see TestMaintenanceIsDueOnceADay; every
@@ -31,6 +33,14 @@ func TestServeRunsMaintenance(t *testing.T) {
 		t.Fatal(err)
 	}
 	stubGit(t, h, "#!/bin/sh\nPATH="+os.Getenv("PATH")+"\ncase \" $* \" in *\" maintenance \"*) all=\"$*\"; echo \"${all##* maintenance }\" >> "+log+" ;; esac\nexec "+real+" \"$@\"\n")
+	// A lock a killed maintenance left behind would make git skip its
+	// work; one an hour old is no running git's, and serve removes it.
+	lock := filepath.Join(gitx.AccountRepoPath(h.agentx), "objects", "maintenance.lock")
+	writeFile(t, lock, "")
+	left := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(lock, left, left); err != nil {
+		t.Fatal(err)
+	}
 	since := time.Now()
 	p := h.serve(t, "--json")
 	p.next("snapshot")
@@ -39,6 +49,9 @@ func TestServeRunsMaintenance(t *testing.T) {
 		return ok && !last.Before(since.Truncate(time.Second))
 	})
 	equal(t, "exit", p.close(), 0)
+	if lexists(lock) {
+		t.Error("the lock a killed maintenance left behind is still there")
+	}
 	b, _ := os.ReadFile(log)
 	equal(t, "maintenance", strings.TrimSuffix(string(b), "\n"), "run --task=loose-objects\nrun --task=incremental-repack\nrun --task=pack-refs")
 }

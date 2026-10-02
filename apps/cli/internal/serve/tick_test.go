@@ -11,13 +11,13 @@ import (
 )
 
 // TestTicksRunEachOnItsOwn drives Run with two ticks beside the update
-// check: one that starts with serve and holds on, on a timer far shorter
-// than it runs, and one that waits a whole interval first. The first never
-// overlaps itself, its ticks skipped while it runs, and does not keep the
-// second from running beside it; the second does not run at start; both
-// report on the loop's goroutine, which is where a report and a snapshot
-// are never made at once. It measures how long the second tick waited, so
-// it runs on its own.
+// check: one that starts with serve and holds on, and one that waits a
+// whole interval first. The held tick does not keep the second from
+// running beside it, and the second does not run at start. That a tick
+// never overlaps itself and reports on the loop's goroutine is the update
+// check's test, see TestTheCheckRunsOffTheLoopAndNeverOverlaps, since the
+// check is a tick too. It measures how long the second tick waited, so it
+// runs on its own.
 func TestTicksRunEachOnItsOwn(t *testing.T) {
 	stdinR, stdinW, err := os.Pipe()
 	if err != nil {
@@ -26,27 +26,18 @@ func TestTicksRunEachOnItsOwn(t *testing.T) {
 	defer stdinW.Close()
 	defer stdinR.Close()
 
-	var held, heldRunning, overlapped, later atomic.Int32
-	var reporting atomic.Bool // a report or a snapshot is being made
+	var held, later atomic.Int32
 	release := make(chan struct{})
 	reported := make(chan string, 8)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	enter := func() {
-		if !reporting.CompareAndSwap(false, true) {
-			t.Error("a report was made beside another, off the loop's goroutine")
-		}
-	}
-	// report is one tick's report: a send that never blocks the loop, since
-	// the held tick, once let go, reports on every tick until serve ends.
+	// report is one tick's report: a send that never blocks the loop.
 	report := func(what string) func() {
 		return func() {
-			enter()
 			select {
 			case reported <- what:
 			default:
 			}
-			reporting.Store(false)
 		}
 	}
 	start := time.Now()
@@ -56,17 +47,13 @@ func TestTicksRunEachOnItsOwn(t *testing.T) {
 		done <- Run(ctx, Options{
 			Scan:            func(context.Context) (scan.Snapshot, error) { return scan.Snapshot{}, nil },
 			Stdin:           stdinR,
-			Snapshot:        func(scan.Snapshot) { enter(); reporting.Store(false) },
+			Snapshot:        func(scan.Snapshot) {},
 			RefreshComplete: func(string, int, error) {},
 			BadRequest:      func(string, string) {},
 			Warn:            func(string) {},
 			Ticks: []Tick{
-				{Every: 2 * time.Millisecond, AtStart: true, Run: func(ctx context.Context) func() {
+				{Every: time.Hour, AtStart: true, Run: func(ctx context.Context) func() {
 					held.Add(1)
-					if heldRunning.Add(1) > 1 {
-						overlapped.Add(1)
-					}
-					defer heldRunning.Add(-1)
 					select {
 					case <-release:
 					case <-ctx.Done():
@@ -108,7 +95,6 @@ func TestTicksRunEachOnItsOwn(t *testing.T) {
 	if err := <-done; err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	equalTick(t, "overlapping runs of one tick", overlapped.Load(), int32(0))
 }
 
 // equalTick reports a value of the test that is not what it should be.

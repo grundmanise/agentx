@@ -265,6 +265,10 @@ type call struct {
 	stdin    io.Reader
 	env      map[string]string // set on top of the environment built, such as GIT_INDEX_FILE
 	dir      string            // git's working directory; "" keeps the process's
+	// terminate stops git with SIGTERM rather than SIGKILL when the
+	// context is cancelled, so that git removes the lock files it holds
+	// on its way out; waitDelay later, a git still running is killed.
+	terminate bool
 }
 
 // run executes git with args; a call that is not isolated runs in the
@@ -304,6 +308,9 @@ func (r *Runner) runStatus(ctx context.Context, c call, upTo int, args ...string
 	// process has exited and only a child it left behind can still hold a
 	// pipe open.
 	cmd.WaitDelay = waitDelay
+	if c.terminate {
+		cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
+	}
 	err = cmd.Run()
 	if stderr.Len() > 0 {
 		r.logf("git stderr: %s", strings.TrimRight(stderr.String(), "\n"))

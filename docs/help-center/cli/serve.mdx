@@ -7,7 +7,7 @@ description: "Keep watching and report whenever something changes."
 
 ## What serve repairs at start
 
-When serve starts, before its first snapshot, it checks every skill against what is on disk and reports one line per skill that is not as it was left:
+When serve starts, before its first snapshot, it checks every skill against what is on disk and reports one line for every skill that is not `restored`:
 
 ```text
 reconcile beta: modified

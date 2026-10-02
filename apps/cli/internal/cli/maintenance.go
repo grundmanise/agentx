@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"errors"
+	"os"
 	"time"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
@@ -15,9 +17,13 @@ import (
 // home, see home.Maintained, and every serve child asks it at start and
 // then every maintenanceAsked, so that a run falls due within that much of
 // the day passing, whenever the serve child started.
+//
+// maintenanceLeft is how old a lock file of git maintenance is when no git
+// still holds it, see clearLeftLocks.
 const (
 	maintenanceEvery = 24 * time.Hour
 	maintenanceAsked = time.Hour
+	maintenanceLeft  = time.Hour
 )
 
 // maintenanceTick is the serve child's maintenance of the account repo, on
@@ -62,6 +68,11 @@ func (inv *invocation) maintenanceTick() serve.Tick {
 // update check does and without the change signal, since packed refs hold
 // what loose ones held. A machine with no account repo has nothing to
 // maintain and runs no git.
+//
+// Serve stopping stops a run part way with SIGTERM, on which git removes
+// its lock files, and the run is due again at the next start. A run that
+// finds git's maintenance lock taken is not done either: git would skip
+// its work and say it succeeded.
 func (inv *invocation) serveMaintenance(ctx context.Context) error {
 	if last, ok := home.Maintained(inv.dirs.Home); !maintenanceDue(last, ok, time.Now()) {
 		return nil
@@ -70,14 +81,45 @@ func (inv *invocation) serveMaintenance(ctx context.Context) error {
 	if err != nil || !exists {
 		return err
 	}
-	if err := inv.git.PackObjects(ctx, gitDir); err != nil {
+	if err := inv.clearLeftLocks(ctx, gitDir); err != nil {
 		return err
 	}
+	err = inv.git.PackObjects(ctx, gitDir)
+	if err == nil {
+		err = home.MutateQuietWaiting(ctx, inv.dirs.Home, inv.refs(ctx), func() error {
+			if err := inv.git.PackRefs(ctx, gitDir); err != nil {
+				return err
+			}
+			return home.SetMaintained(inv.dirs.Home, time.Now())
+		})
+	}
+	if errors.Is(err, gitx.ErrMaintenanceRunning) {
+		// Another serve child's maintenance, most likely: the run is
+		// still due, and the next ask makes it once that one is done.
+		inv.out.debugf("maintenance: %v", err)
+		return nil
+	}
+	return err
+}
+
+// clearLeftLocks removes the lock files maintenance takes in the account
+// repo at gitDir that are older than maintenanceLeft, under agentx's lock:
+// a git maintenance killed outright, by a crash or a forced quit, has no
+// chance to remove its own, and git would then skip every later run and
+// fail every ref deletion. No maintenance runs that long, and agentx's
+// lock keeps every ref write of agentx's away meanwhile.
+func (inv *invocation) clearLeftLocks(ctx context.Context, gitDir string) error {
+	if len(gitx.LeftLocks(gitDir, time.Now().Add(-maintenanceLeft))) == 0 {
+		return nil
+	}
 	return home.MutateQuietWaiting(ctx, inv.dirs.Home, inv.refs(ctx), func() error {
-		if err := inv.git.PackRefs(ctx, gitDir); err != nil {
-			return err
+		for _, lock := range gitx.LeftLocks(gitDir, time.Now().Add(-maintenanceLeft)) {
+			if err := os.Remove(lock); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			inv.out.debugf("maintenance: removed %s, left behind by a git that was killed", lock)
 		}
-		return home.SetMaintained(inv.dirs.Home, time.Now())
+		return nil
 	})
 }
 

@@ -41,6 +41,38 @@ type forkPlacing struct {
 // beside its placements.
 func (p forkPlacing) changes() bool { return p.v.repairs() || p.adoptRoot || p.adoptLib }
 
+// contentAt is the directory the placements of the fork f are made from
+// under the plan, as it is before the plan is carried out, or "" when the
+// plan lays the content out from the branch tip, which is only on disk once
+// it is staged.
+func (p forkPlacing) contentAt(f forkSite) string {
+	switch {
+	case p.adoptLib:
+		return f.libPath
+	case p.v.content:
+		return ""
+	}
+	return f.skillDir
+}
+
+// noForkSkill refuses to place the fork f when the directory its placements
+// would be made from, dir, holds no SKILL.md: it is no skill by the rule the
+// library lists one by, so a placement of it would be one no listing shows.
+// When the plan lays the content out from the branch tip, dir is where it
+// was staged, and the branch is what lacks the file.
+func noForkSkill(f forkSite, plan forkPlacing, dir string, flags []string) error {
+	if plan.adoptRoot || plan.adoptLib {
+		flags = append(slices.Clip(flags), "--force")
+	}
+	name, again := sanitised(f.name), "run '"+skillCommand("place", f.name, flags...)+"' again"
+	if plan.v.content {
+		return fail(exitNotFound, name+"'s branch "+sanitised(f.branch)+" holds no SKILL.md in "+sanitised(f.dir)+", so there is no skill to place and nothing was changed",
+			"commit a SKILL.md to "+sanitised(f.dir)+" on "+sanitised(f.branch)+" in "+quotedPath(f.gitDir)+", then "+again)
+	}
+	return fail(exitNotFound, quotedPath(dir)+" holds no SKILL.md, so "+name+" is no skill to place and nothing was changed",
+		"add a SKILL.md to "+quotedPath(dir)+", then "+again)
+}
+
 // placeFork places a fork, and first puts back what it needs to be placed
 // on this machine, as reconciliation at serve start does: a worktree whose
 // pointers moved with agentx home is repaired with git, and a missing
@@ -70,8 +102,12 @@ func (inv *invocation) placeFork(ctx context.Context, rec lineage.Record, target
 	// A worktree whose pointers moved is repaired under the lock before it
 	// is judged: what it holds is known only once git can read it.
 	if facts := inv.forkFactsOf(f); facts.root != rootMoved {
-		if _, err := inv.planForkPlace(ctx, f, facts, force, flags); err != nil {
+		plan, err := inv.planForkPlace(ctx, f, facts, force, flags)
+		if err != nil {
 			return err
+		}
+		if dir := plan.contentAt(f); dir != "" && !holdsSkillFile(dir) {
+			return noForkSkill(f, plan, dir, flags)
 		}
 	}
 	var done placements
@@ -111,6 +147,10 @@ func (inv *invocation) placeFork(ctx context.Context, rec lineage.Record, target
 		if err != nil {
 			m.Discard()
 			return err
+		}
+		if !holdsSkillFile(from) {
+			m.Discard()
+			return noForkSkill(f, plan, from, flags)
 		}
 		edit, err := inv.beginSettings()
 		if err != nil {
@@ -248,7 +288,8 @@ func (inv *invocation) adoptableLibrary(f forkSite) error {
 // nothing. One with edits of its own is refused, since only one of the two
 // can be the fork's, and so is one holding files git ignores, such as a
 // local .env, or cannot record, each named: they would go with the
-// directory it replaces.
+// directory it replaces. The files ignore_system_files ignores while it is
+// on, a .DS_Store Finder left, are no user's and go with it.
 func (inv *invocation) retirable(ctx context.Context, f forkSite, again string) (string, error) {
 	state, err := home.State(f.skillDir)
 	if err != nil {
@@ -262,7 +303,11 @@ func (inv *invocation) retirable(ctx context.Context, f forkSite, again string) 
 	if err != nil {
 		return "", accountRepoFailure(err)
 	}
-	if kept := append(slices.Clip(j.ignored), j.unrecordable...); j.clean && len(kept) > 0 {
+	ignored := j.ignored
+	if inv.systemFilesIgnored() {
+		ignored = slices.DeleteFunc(slices.Clone(ignored), inSystemFile)
+	}
+	if kept := append(ignored, j.unrecordable...); j.clean && len(kept) > 0 {
 		named := make([]string, len(kept))
 		for i, p := range kept {
 			named[i] = quotedPath(filepath.Join(f.skillDir, filepath.FromSlash(p)))
@@ -275,6 +320,13 @@ func (inv *invocation) retirable(ctx context.Context, f forkSite, again string) 
 			"commit or revert the fork's edits with '"+skillCommand("commit", f.name)+"' or '"+skillCommand("revert", f.name)+"', or move "+quotedPath(f.libPath)+" aside, then "+again)
 	}
 	return state, nil
+}
+
+// inSystemFile reports whether the slash-separated path p is, or lies in,
+// one of the files an operating system or an editor leaves on its own, see
+// home.SystemFiles.
+func inSystemFile(p string) bool {
+	return slices.ContainsFunc(strings.Split(p, "/"), home.IsSystemFile)
 }
 
 // adoptableRoot is what the skill directory of the orphaned worktree of

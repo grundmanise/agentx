@@ -397,7 +397,8 @@ func TestRemoveIntoRetainsInTheGivenDirectory(t *testing.T) {
 
 // TestWorktreeFilesTellAWorktreeApart is the reading of a worktree's two
 // pointer files, absolute and relative, on and off the branch, copied and
-// moved; and of what its admin directory says git is in the middle of.
+// moved; of what its admin directory says git is in the middle of; and of
+// whether a repository registers it, its directory there or deleted.
 func TestWorktreeFilesTellAWorktreeApart(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -408,8 +409,14 @@ func TestWorktreeFilesTellAWorktreeApart(t *testing.T) {
 		t.Fatal(err)
 	}
 	admin := filepath.Join(gitDir, "worktrees", "alpha")
-	check := func(what string, at, half, moved bool) {
+	check := func(what string, at, half, moved, registered bool) {
 		t.Helper()
+		if got := Registered(gitDir, path); got != registered {
+			t.Errorf("%s: Registered = %v, want %v", what, got, registered)
+		}
+		if got := RegisteredIn(gitDir, path); got != registered {
+			t.Errorf("%s: RegisteredIn = %v, want %v", what, got, registered)
+		}
 		if got := WorktreeAt(path, "skills/alpha"); got != at {
 			t.Errorf("%s: WorktreeAt = %v, want %v", what, got, at)
 		}
@@ -420,7 +427,20 @@ func TestWorktreeFilesTellAWorktreeApart(t *testing.T) {
 			t.Errorf("%s: PointersMoved = %v, want %v", what, got, moved)
 		}
 	}
-	check("absolute", true, false, false)
+	check("absolute", true, false, false, true)
+	if other := filepath.Join(root, "other.git"); Registered(other, path) || RegisteredIn(other, path) {
+		t.Error("a worktree reads as registered by another repository")
+	}
+	gone := path + ".gone"
+	if err := os.Rename(path, gone); err != nil {
+		t.Fatal(err)
+	}
+	if !Registered(gitDir, path) || RegisteredIn(gitDir, path) {
+		t.Error("a worktree deleted by hand does not read as registered and gone")
+	}
+	if err := os.Rename(gone, path); err != nil {
+		t.Fatal(err)
+	}
 	if WorktreeAt(path, "skills/beta") {
 		t.Error("a worktree reads as on a branch it is not on")
 	}
@@ -478,13 +498,13 @@ func TestWorktreeFilesTellAWorktreeApart(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(admin, "gitdir"), []byte(back+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	check("relative", true, false, false)
+	check("relative", true, false, false, true)
 	if err := os.WriteFile(filepath.Join(admin, "gitdir"), []byte("/elsewhere/.git\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	check("named elsewhere", false, false, true)
+	check("named elsewhere", false, false, true, false)
 	if err := os.RemoveAll(admin); err != nil {
 		t.Fatal(err)
 	}
-	check("admin directory gone", false, true, true)
+	check("admin directory gone", false, true, true, false)
 }

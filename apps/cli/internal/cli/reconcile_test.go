@@ -100,6 +100,64 @@ func (p *serveProc) reconciled() (events []jsonEvent, snapshot jsonEvent) {
 	}
 }
 
+// TestForkWarningsSayWhatIsMissing is what a listing warns of a fork whose
+// worktree is missing, one row per case worktreeMissingWarning tells apart,
+// and what skill place refuses of an adopt candidate without --force, one
+// row per case of adoptRefusal. The worktree that git is running in holds
+// a .git file naming an admin directory that holds an index lock.
+func TestForkWarningsSayWhatIsMissing(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	root := filepath.Join(dir, "worktrees", "notes")
+	admin := filepath.Join(dir, "account.git", "worktrees", "notes")
+	writeFile(t, mkdirs(t, root, ".git"), "gitdir: "+admin+"\n")
+	writeFile(t, mkdirs(t, admin, "index.lock"), "")
+	f := forkSite{name: "notes", branch: "skills/notes", root: root, skillDir: filepath.Join(root, "notes"), libPath: filepath.Join(dir, "skills", "notes")}
+	place := "run 'agentx skill place notes'"
+	present := forkFacts{root: rootWorktree, registered: true, onBranch: true, skillDir: true}
+	with := func(change func(*forkFacts)) forkFacts {
+		facts := present
+		change(&facts)
+		return facts
+	}
+	for _, tc := range []struct {
+		what  string
+		facts forkFacts
+		want  string
+	}{
+		{"pointers moved", with(func(x *forkFacts) { x.root = rootMoved }),
+			"notes's worktree " + root + " needs repair; " + place + " to repair it"},
+		{"worktree gone", with(func(x *forkFacts) { x.root = rootAbsent }),
+			"notes's worktree " + root + " is missing; " + place + " to check it out again from its branch"},
+		{"git running", with(func(x *forkFacts) { x.busy, x.skillDir = true, false }),
+			"notes's skill directory " + f.skillDir + " is missing from its worktree, where git is running; " + place + " once it finishes; if no git is running, remove " + filepath.Join(admin, "index.lock")},
+		{"off its branch", with(func(x *forkFacts) { x.onBranch, x.skillDir = false, false }),
+			"notes's worktree " + root + " holds no skill directory and is not on its branch skills/notes; run 'git -C " + root + " switch skills/notes', then " + place},
+		{"skill directory gone", with(func(x *forkFacts) { x.skillDir = false }),
+			"notes's skill directory " + f.skillDir + " is missing from its worktree; " + place + " to lay it out again from its branch"},
+		{"library symlink gone", with(func(x *forkFacts) { x.lib = libAbsent }),
+			"notes's library symlink " + f.libPath + " is missing or leads nowhere; " + place + " to put it back"},
+	} {
+		equal(t, tc.what, worktreeMissingWarning(f, tc.facts), tc.want)
+	}
+
+	adopt := "run 'agentx skill place notes --force' to adopt it: its content becomes uncommitted edits of the fork, which 'agentx skill revert notes' discards"
+	for _, tc := range []struct {
+		what, inWay      string
+		lib              libKind
+		wantWhat, wayOut string
+	}{
+		{"a directory at the worktree", "worktree", libOwn, root + " is in the way of notes's worktree", adopt},
+		{"a directory at the library entry", "library symlink", libDir, f.libPath + " is in the way of notes's library symlink", adopt},
+		{"a symlink of the user's", "library symlink", libForeign, f.libPath + " is in the way of notes's library symlink",
+			"run 'agentx skill place notes --force' to replace it with the fork's library symlink"},
+	} {
+		what, wayOut := adoptRefusal(f, forkVerdict{outcome: outcomeAdoptCandidate, inWay: tc.inWay}, forkFacts{lib: tc.lib})
+		equal(t, tc.what, what, tc.wantWhat)
+		equal(t, tc.what+", the way out", wayOut, tc.wayOut)
+	}
+}
+
 // TestServeReconcilesAtStart starts serve over a home built by earlier
 // commands, as agentx installed again over an existing agentx home finds
 // it, and reads one reconcile event per skill name, sorted, before the

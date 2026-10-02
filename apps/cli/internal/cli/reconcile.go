@@ -175,7 +175,7 @@ func (inv *invocation) forkFactsOf(f forkSite) forkFacts {
 	default:
 		facts.lib = libForeign
 	}
-	_, facts.registered = home.Registration(f.gitDir, f.root)
+	facts.registered = home.Registered(f.gitDir, f.root)
 	switch {
 	case !lexists(f.root):
 		facts.root = rootAbsent

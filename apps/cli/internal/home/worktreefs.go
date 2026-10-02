@@ -190,24 +190,23 @@ func headIs(admin, branch string) bool {
 	return err == nil && strings.TrimRight(string(b), "\r\n") == "ref: refs/heads/"+branch
 }
 
-// Registration is the admin directory of the repository at gitDir whose
-// gitdir names the worktree at path, read from the files of its admin
-// directories, and false when none does. A registration outlives the
-// worktree's directory: a locked worktree deleted by hand keeps it, which
-// is how a worktree that was there is told from one never made.
-func Registration(gitDir, path string) (string, bool) {
+// Registered reports whether the repository at gitDir holds an admin
+// directory whose gitdir names the worktree at path, read from the files
+// of its admin directories. A registration outlives the worktree's
+// directory: a locked worktree deleted by hand keeps it, which is how a
+// worktree that was there is told from one never made.
+func Registered(gitDir, path string) bool {
 	admins := filepath.Join(gitDir, "worktrees")
 	entries, err := os.ReadDir(admins)
 	if err != nil {
-		return "", false
+		return false
 	}
 	for _, e := range entries {
-		admin := filepath.Join(admins, e.Name())
-		if e.IsDir() && NamesBack(admin, path) {
-			return admin, true
+		if e.IsDir() && NamesBack(filepath.Join(admins, e.Name()), path) {
+			return true
 		}
 	}
-	return "", false
+	return false
 }
 
 // RegisteredIn reports whether the worktree at path is a worktree the
