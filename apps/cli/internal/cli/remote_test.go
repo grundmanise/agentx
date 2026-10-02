@@ -397,14 +397,14 @@ func TestRemoteSetShowUnset(t *testing.T) {
 	h.mustRun("publish", "notes")
 	other := newAccountRemote(t, h)
 	h.mustRun("remote", "set", remote) // setting it again is no change
-	equal(t, "the remote-tracking branch", h.ref(lineage.RemoteForkRef("notes")), h.ref(lineage.ForkRef("notes")))
+	equal(t, "the remote-tracking branch", h.ref(lineage.RemoteForkRef(gitx.OriginRemote, "notes")), h.ref(lineage.ForkRef("notes")))
 	out = h.mustRun("--json", "remote", "set", other)
 	ev := h.one(out.stdout, "remote")
 	equal(t, "url", ev["url"], other)
-	equal(t, "fetch", ev["fetch"], gitx.ForkRefspec)
-	equal(t, "fetch refspecs", h.accountGit("config", "--get-all", "remote.origin.fetch"), gitx.ForkRefspec)
+	equal(t, "fetch", ev["fetch"], gitx.ForkRefspec(gitx.OriginRemote))
+	equal(t, "fetch refspecs", h.accountGit("config", "--get-all", "remote.origin.fetch"), gitx.ForkRefspec(gitx.OriginRemote))
 	equal(t, "tags", h.accountGit("config", "--get", "remote.origin.tagOpt"), "--no-tags")
-	equal(t, "what the first remote held", h.ref(lineage.RemoteForkRef("notes")), "")
+	equal(t, "what the first remote held", h.ref(lineage.RemoteForkRef(gitx.OriginRemote, "notes")), "")
 	out = h.mustRun("remote", "show")
 	equal(t, "show", strings.TrimSpace(out.stdout), "origin  "+other)
 

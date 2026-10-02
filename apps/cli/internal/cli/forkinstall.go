@@ -43,15 +43,16 @@ type installableForkEvent struct {
 // in the state column the library's rows use.
 const installRemoteRow = "installable"
 
-// installableForks reads the forks the account remote holds that records,
-// the account repo's branches, hold no fork branch of, sorted by name, with
-// the provenance of each read by one walk of their remote tips. A branch
+// installableForks reads the forks the account remote, the git remote
+// called remote, holds that records, the account repo's branches, hold no
+// fork branch of, sorted by name, with the provenance of each read by one
+// walk of their remote tips. A branch
 // whose name agentx would never give a fork, or whose history records no
 // fork id, is left out, with a warning each: installing the one could not
 // create the local branch, and the other could never be pulled or
 // published, since nothing would tell that the two branches are one fork.
-func (inv *invocation) installableForks(ctx context.Context, gitDir string, records map[string]lineage.Record) ([]installableForkEvent, []string, error) {
-	tips, err := lineage.ListRemote(ctx, inv.git, gitDir)
+func (inv *invocation) installableForks(ctx context.Context, gitDir, remote string, records map[string]lineage.Record) ([]installableForkEvent, []string, error) {
+	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
 	if err != nil {
 		return nil, nil, accountRepoFailure(err)
 	}
@@ -185,6 +186,7 @@ type accountInstall struct {
 	libState  string          // what the library path held, as captured before it was judged
 	ignored   []string        // the files git ignores in a superseded copy, carried into the worktree
 	keepLocal bool
+	remote    string // the account remote's git remote, which the fork's branch tracks
 }
 
 // installFromAccount is skill add --from-account: it fetches the account
@@ -208,20 +210,20 @@ func (inv *invocation) installFromAccount(ctx context.Context, name string, to [
 	if err != nil {
 		return err
 	}
-	gitDir, url, err := inv.accountRemote(ctx)
+	gitDir, entry, remote, err := inv.accountRemote(ctx)
 	if err != nil {
 		return err
 	}
 	if err := inv.finishJournals(ctx); err != nil {
 		return err
 	}
-	if err := inv.fetchRemote(ctx, gitDir, url); err != nil {
+	if err := inv.fetchRemote(ctx, gitDir, remote, entry.URL); err != nil {
 		return err
 	}
 	if err := home.SyncExclude(gitDir, inv.systemFilesIgnored()); err != nil {
 		return accountRepoFailure(err)
 	}
-	in, err := inv.judgeAccountInstall(ctx, gitDir, name, keepLocal)
+	in, err := inv.judgeAccountInstall(ctx, gitDir, remote, name, keepLocal)
 	if err != nil {
 		return err
 	}
@@ -252,17 +254,18 @@ func installFlags(in *accountInstall) []string {
 }
 
 // judgeAccountInstall reads what installing the fork called name from the
-// account remote takes, after the fetch and before the lock, and refuses
-// what it cannot do, changing nothing: a fork the account remote does not
-// hold, and a content to install that holds no SKILL.md, exit code 5; one
-// this machine has a branch of already, a name another branch holds
-// whatever its case, a remote history that records no fork id, a worktree
-// directory in the way, and a library path fromAccountPlan refuses, exit
-// code 6; and a managed skill it would take the place of whose update
-// merge is pending, exit code 4. Every refusal comes before the fork's
-// upstream source is added, which is a change of its own.
-func (inv *invocation) judgeAccountInstall(ctx context.Context, gitDir, name string, keepLocal bool) (*accountInstall, error) {
-	tips, err := lineage.ListRemote(ctx, inv.git, gitDir)
+// account remote, the git remote called remote, takes, after the fetch and
+// before the lock, and refuses what it cannot do, changing nothing: a fork
+// the account remote does not hold, and a content to install that holds no
+// SKILL.md, exit code 5; one this machine has a branch of already, a name
+// another branch holds whatever its case, a remote history that records no
+// fork id, a worktree directory in the way, and a library path
+// fromAccountPlan refuses, exit code 6; and a managed skill it would take
+// the place of whose update merge is pending, exit code 4. Every refusal
+// comes before the fork's upstream source is added, which is a change of
+// its own.
+func (inv *invocation) judgeAccountInstall(ctx context.Context, gitDir, remote, name string, keepLocal bool) (*accountInstall, error) {
+	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
 	if err != nil {
 		return nil, accountRepoFailure(err)
 	}
@@ -275,7 +278,7 @@ func (inv *invocation) judgeAccountInstall(ctx context.Context, gitDir, name str
 	if err != nil {
 		return nil, accountRepoFailure(err)
 	}
-	in := &accountInstall{keepLocal: keepLocal}
+	in := &accountInstall{keepLocal: keepLocal, remote: remote}
 	if rec, ok := records[name]; ok {
 		if rec.Kind == lineage.KindFork {
 			return nil, inv.installedRefusal(gitDir, rec)
@@ -609,7 +612,7 @@ func (inv *invocation) applyAccountInstall(ctx context.Context, in *accountInsta
 	// branch the journal never makes is harmless and set again by the next
 	// install. agentx reads the remote-tracking branch by its name and never
 	// needs it, so a failure is a warning and the install goes on.
-	if err := inv.git.SetTracking(ctx, f.gitDir, f.branch); err != nil {
+	if err := inv.git.SetTracking(ctx, f.gitDir, in.remote, f.branch); err != nil {
 		inv.out.warn("could not set " + f.branch + " to track the account remote's branch: " + trimGit(err.Error()))
 	}
 	return m.Apply(inv.refs(ctx))

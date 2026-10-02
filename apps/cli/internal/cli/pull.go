@@ -92,15 +92,16 @@ func remoteCommand(verb, name string) string {
 // by name, and the lineage of every remote tip the fork's own branch does
 // not hold already, read in one walk.
 type remoteForks struct {
+	remote string // the account remote's git remote, whose remote-tracking branches were read
 	tips   map[string]string
 	walked map[string]lineage.ForkLineage
 }
 
-// readRemoteForks reads the remote-tracking branches, then walks the
-// remote tips of names that differ from the local ones, all in two git
-// processes.
-func (inv *invocation) readRemoteForks(ctx context.Context, gitDir string, records map[string]lineage.Record, names []string) (remoteForks, error) {
-	tips, err := lineage.ListRemote(ctx, inv.git, gitDir)
+// readRemoteForks reads the remote-tracking branches of the git remote
+// called remote, then walks the remote tips of names that differ from the
+// local ones, all in two git processes.
+func (inv *invocation) readRemoteForks(ctx context.Context, gitDir, remote string, records map[string]lineage.Record, names []string) (remoteForks, error) {
+	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
 	if err != nil {
 		return remoteForks{}, accountRepoFailure(err)
 	}
@@ -114,7 +115,7 @@ func (inv *invocation) readRemoteForks(ctx context.Context, gitDir string, recor
 	if err != nil {
 		return remoteForks{}, accountRepoFailure(err)
 	}
-	return remoteForks{tips: tips, walked: walked}, nil
+	return remoteForks{remote: remote, tips: tips, walked: walked}, nil
 }
 
 // forkSync is what a pull, a publish or the account step of an update made
@@ -192,7 +193,7 @@ func (inv *invocation) syncFork(ctx context.Context, gitDir string, rec lineage.
 func (inv *invocation) judgePull(ctx context.Context, gitDir string, rec lineage.Record, remote remoteForks, doing string) (string, *updating, *failure) {
 	name := rec.Name
 	theirs := remote.tips[name]
-	fork := &forkUpdate{pull: true, doing: doing, theirsRef: lineage.RemoteForkRef(name), theirs: theirs, with: "the account remote"}
+	fork := &forkUpdate{pull: true, doing: doing, theirsRef: lineage.RemoteForkRef(remote.remote, name), theirs: theirs, with: "the account remote"}
 	if inv.mergePending(name) {
 		u, f := inv.judgeForkCompletion(ctx, gitDir, rec, true)
 		switch {
@@ -324,21 +325,21 @@ func accountMergeSubject(name, label string) string {
 // goes on with the others; the run then answers for all of them, see
 // refusals. An unfinished journal is finished before anything is read.
 func (inv *invocation) pull(ctx context.Context, name string) error {
-	gitDir, url, err := inv.accountRemote(ctx)
+	gitDir, entry, account, err := inv.accountRemote(ctx)
 	if err != nil {
 		return err
 	}
 	if err := inv.finishJournals(ctx); err != nil {
 		return err
 	}
-	if err := inv.fetchRemote(ctx, gitDir, url); err != nil {
+	if err := inv.fetchRemote(ctx, gitDir, account, entry.URL); err != nil {
 		return err
 	}
 	records, err := inv.forkRecords(ctx, gitDir)
 	if err != nil {
 		return err
 	}
-	names, err := inv.remoteSelection(ctx, name, records, true, "pull")
+	names, err := inv.remoteSelection(ctx, account, name, records, true, "pull")
 	if err != nil {
 		return err
 	}
@@ -347,7 +348,7 @@ func (inv *invocation) pull(ctx context.Context, name string) error {
 		inv.out.print("No fork to pull: no fork is placed on this machine.")
 		return nil
 	}
-	remote, err := inv.readRemoteForks(ctx, gitDir, records, names)
+	remote, err := inv.readRemoteForks(ctx, gitDir, account, records, names)
 	if err != nil {
 		return err
 	}
@@ -395,8 +396,8 @@ func (inv *invocation) forkRecords(ctx context.Context, gitDir string) (map[stri
 // the one name it was given, which has to be a fork of this machine, or
 // with none every fork, only those placed on this machine, a worktree or a
 // library entry of theirs there, when placed is set. verb is the command,
-// as its refusals name it.
-func (inv *invocation) remoteSelection(ctx context.Context, name string, records map[string]lineage.Record, placed bool, verb string) ([]string, error) {
+// as its refusals name it, and remote the account remote's git remote.
+func (inv *invocation) remoteSelection(ctx context.Context, remote, name string, records map[string]lineage.Record, placed bool, verb string) ([]string, error) {
 	if name == "" {
 		var names []string
 		for n, rec := range records {
@@ -413,7 +414,7 @@ func (inv *invocation) remoteSelection(ctx context.Context, name string, records
 	}
 	_, held := librarySkill(inv.dirs.Library, name)
 	if !ok && !held {
-		if inv.remoteHolds(ctx, name) {
+		if inv.remoteHolds(ctx, remote, name) {
 			return nil, fail(exitNotFound, sanitised(name)+" is a fork of the account remote that this machine has not installed, so there is nothing of it here to "+verb,
 				"install it with '"+fromAccountCommand(name)+"'")
 		}
@@ -428,7 +429,7 @@ func (inv *invocation) remoteSelection(ctx context.Context, name string, records
 	// is here; a fork of it made here would be another fork of the name,
 	// which a publish refuses. A symlink at the library path is never
 	// moved into the fork, so it has to go first.
-	if inv.remoteHolds(ctx, name) {
+	if inv.remoteHolds(ctx, remote, name) {
 		libPath := inv.libraryPath(name)
 		if state, err := home.State(libPath); err == nil && home.IsLink(state) {
 			return nil, fail(exitRefused, refusal, "remove the link "+quotedPath(libPath)+", then install the account remote's fork in its place with '"+fromAccountCommand(name)+"'")
@@ -442,11 +443,11 @@ func (inv *invocation) remoteSelection(ctx context.Context, name string, records
 	return nil, fail(exitRefused, refusal, "fork it first with '"+skillCommand("fork", name)+"'")
 }
 
-// remoteHolds reports whether the account remote held a fork called name
-// at the last fetch, by its remote-tracking branch; a read that fails says
-// it does not.
-func (inv *invocation) remoteHolds(ctx context.Context, name string) bool {
-	tips, err := lineage.ListRemote(ctx, inv.git, gitx.AccountRepoPath(inv.dirs.Home))
+// remoteHolds reports whether the account remote, the git remote called
+// remote, held a fork called name at the last fetch, by its remote-tracking
+// branch; a read that fails says it does not.
+func (inv *invocation) remoteHolds(ctx context.Context, remote, name string) bool {
+	tips, err := lineage.ListRemote(ctx, inv.git, gitx.AccountRepoPath(inv.dirs.Home), remote)
 	return err == nil && tips[name] != ""
 }
 

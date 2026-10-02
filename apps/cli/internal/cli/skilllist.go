@@ -43,16 +43,16 @@ func newSkillListCommand(inv *invocation) *cobra.Command {
 // in the listing reaches the network.
 func (inv *invocation) skillList(ctx context.Context, remote bool) error {
 	inv.forksWarned = true // the warnings after the rows name them
-	gitDir := ""
+	gitDir, account := "", ""
 	if remote {
-		var url string
-		var err error
-		if gitDir, url, err = inv.accountRemote(ctx); err != nil {
+		dir, entry, name, err := inv.accountRemote(ctx)
+		if err != nil {
 			return err
 		}
-		if err := inv.fetchRemote(ctx, gitDir, url); err != nil {
+		if err := inv.fetchRemote(ctx, dir, name, entry.URL); err != nil {
 			return err
 		}
+		gitDir, account = dir, name
 	}
 	snap, err := inv.scan(ctx, lockWait, "", false)
 	if err != nil {
@@ -67,7 +67,7 @@ func (inv *invocation) skillList(ctx context.Context, remote bool) error {
 	var installable []installableForkEvent
 	if remote {
 		var skipped []string
-		if installable, skipped, err = inv.installableForks(ctx, gitDir, sc.records); err != nil {
+		if installable, skipped, err = inv.installableForks(ctx, gitDir, account, sc.records); err != nil {
 			return err
 		}
 		warnings = append(warnings, skipped...)

@@ -126,14 +126,16 @@ func (inv *invocation) autoPush(ctx context.Context, st *autoPushState) []publis
 		st.warn(inv, "settings", err.Error())
 		return nil
 	}
-	url := ""
+	url, remote, ok := "", "", false
 	if s.AutoPush {
-		if url, err = inv.remoteURL(ctx); err != nil {
+		entry, name, found, err := inv.accountSource(ctx)
+		if err != nil {
 			st.warn(inv, "remote", err.Error())
 			return nil
 		}
+		url, remote, ok = entry.URL, name, found
 	}
-	if url == "" {
+	if !ok {
 		clear(st.seen)
 		clear(st.behind)
 		return nil
@@ -144,7 +146,7 @@ func (inv *invocation) autoPush(ctx context.Context, st *autoPushState) []publis
 		st.warn(inv, "account repo", err.Error())
 		return nil
 	}
-	tracked, err := lineage.ListRemote(ctx, inv.git, gitDir)
+	tracked, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
 	if err != nil {
 		st.warn(inv, "account repo", err.Error())
 		return nil
@@ -176,12 +178,12 @@ func (inv *invocation) autoPush(ctx context.Context, st *autoPushState) []publis
 		return nil
 	}
 	sort.Strings(due)
-	if err := inv.git.FetchRemote(ctx, gitDir); err != nil {
+	if err := inv.git.FetchRemote(ctx, gitDir, remote); err != nil {
 		st.warn(inv, "fetch", unreachableRemote(url, err).message)
 		return nil
 	}
 	delete(st.warned, "fetch")
-	if tracked, err = lineage.ListRemote(ctx, inv.git, gitDir); err != nil {
+	if tracked, err = lineage.ListRemote(ctx, inv.git, gitDir, remote); err != nil {
 		st.warn(inv, "account repo", err.Error())
 		return nil
 	}
@@ -224,7 +226,7 @@ func (inv *invocation) autoPush(ctx context.Context, st *autoPushState) []publis
 	if len(tips) == 0 {
 		return nil
 	}
-	statuses, err := inv.git.PushTips(ctx, gitDir, tips)
+	statuses, err := inv.git.PushTips(ctx, gitDir, remote, tips)
 	if err != nil {
 		st.warn(inv, "push", unreachableRemote(url, err).message)
 		return nil

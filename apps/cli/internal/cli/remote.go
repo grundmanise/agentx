@@ -15,13 +15,14 @@ import (
 )
 
 // The account remote is a Git repository the user owns, attached to the
-// account repo as its one remote, origin, with one fetch refspec: every
-// fork branch onto a remote-tracking branch of the same name. Only fork
-// branches travel, both ways: import branches, update candidates,
-// upstream-removed markers and source refs stay on the machine that wrote
-// them, and tags are never fetched. Every git that reaches the remote runs
-// in the user's own environment, where their credential helpers, SSH keys
-// and URL rewrites apply, but with no hook of theirs, see gitx.FetchRemote.
+// account repo as its one remote of fork branches, origin, see
+// accountSource, with one fetch refspec: every fork branch onto a
+// remote-tracking branch of the same name. Only fork branches travel, both
+// ways: import branches, update candidates, upstream-removed markers and
+// source refs stay on the machine that wrote them, and tags are never
+// fetched. Every git that reaches the remote runs in the user's own
+// environment, where their credential helpers, SSH keys and URL rewrites
+// apply, but with no hook of theirs, see gitx.FetchRemote.
 
 // remoteEvent is the account remote as the account repo records it.
 type remoteEvent struct {
@@ -144,13 +145,14 @@ func (inv *invocation) remoteSet(ctx context.Context, raw string) error {
 	if err != nil {
 		return accountRepoFailure(err)
 	}
+	remote := gitx.OriginRemote
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
-		previous, err := inv.git.RemoteURL(ctx, gitDir)
+		previous, err := inv.git.RemoteURL(ctx, gitDir, remote)
 		if err == nil {
-			err = inv.git.SetRemote(ctx, gitDir, raw)
+			err = inv.git.SetRemote(ctx, gitDir, remote, raw)
 		}
 		if err == nil && previous != "" && previous != raw {
-			err = inv.git.DropRemoteRefs(ctx, gitDir)
+			err = inv.git.DropRemoteRefs(ctx, gitDir, remote)
 		}
 		if err != nil {
 			return accountRepoFailure(err)
@@ -160,14 +162,14 @@ func (inv *invocation) remoteSet(ctx context.Context, raw string) error {
 	if err != nil {
 		return mutationFailure(err)
 	}
-	if err := inv.fetchRemote(ctx, gitDir, raw); err != nil {
+	if err := inv.fetchRemote(ctx, gitDir, remote, raw); err != nil {
 		return err
 	}
-	tips, err := lineage.ListRemote(ctx, inv.git, gitDir)
+	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
 	if err != nil {
 		return accountRepoFailure(err)
 	}
-	inv.out.emit(remoteEvent{event: newEvent("remote"), Name: gitx.RemoteName, URL: raw, Fetch: gitx.ForkRefspec})
+	inv.out.emit(remoteEvent{event: newEvent("remote"), Name: remote, URL: raw, Fetch: gitx.ForkRefspec(remote)})
 	holds := "; it holds " + plural(len(tips), "fork")
 	inv.summary = "the account remote is now " + shownURL(raw) + holds
 	inv.out.done("the account remote is now " + inv.out.paint(heading, shownURL(raw)) + holds)
@@ -177,21 +179,19 @@ func (inv *invocation) remoteSet(ctx context.Context, raw string) error {
 // remoteShow reports the account remote, or that none is set, which is no
 // failure.
 func (inv *invocation) remoteShow(ctx context.Context) error {
-	u, err := inv.remoteURL(ctx)
+	entry, remote, ok, err := inv.accountSource(ctx)
 	if err != nil {
 		return err
 	}
-	ev := remoteEvent{event: newEvent("remote"), Name: gitx.RemoteName, URL: u}
-	if u == "" {
-		inv.out.emit(ev)
+	if !ok {
+		inv.out.emit(remoteEvent{event: newEvent("remote"), Name: gitx.OriginRemote})
 		inv.summary = "no account remote is set"
 		inv.out.print("No account remote is set. Attach one with ", inv.out.paint(label, "agentx remote set <url>"), ".")
 		return nil
 	}
-	ev.Fetch = gitx.ForkRefspec
-	inv.out.emit(ev)
-	inv.summary = "the account remote is " + shownURL(u)
-	inv.out.print(inv.out.paint(heading, gitx.RemoteName), "  ", shownURL(u))
+	inv.out.emit(remoteEvent{event: newEvent("remote"), Name: remote, URL: entry.URL, Fetch: gitx.ForkRefspec(remote)})
+	inv.summary = "the account remote is " + shownURL(entry.URL)
+	inv.out.print(inv.out.paint(heading, remote), "  ", shownURL(entry.URL))
 	return nil
 }
 
@@ -200,44 +200,59 @@ func (inv *invocation) remoteShow(ctx context.Context) error {
 // stay as they are, and nothing on the remote changes. With no remote set
 // there is nothing to do, which is no failure.
 func (inv *invocation) remoteUnset(ctx context.Context) error {
-	u, err := inv.remoteURL(ctx)
+	entry, remote, ok, err := inv.accountSource(ctx)
 	if err != nil {
 		return err
 	}
-	if u != "" {
-		gitDir := gitx.AccountRepoPath(inv.dirs.Home)
-		if err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
-			if err := inv.git.UnsetRemote(ctx, gitDir); err != nil {
-				return accountRepoFailure(err)
-			}
-			return nil
-		}); err != nil {
-			return mutationFailure(err)
-		}
-	}
-	inv.out.emit(remoteEvent{event: newEvent("remote"), Name: gitx.RemoteName})
-	if u == "" {
+	if !ok {
+		inv.out.emit(remoteEvent{event: newEvent("remote"), Name: gitx.OriginRemote})
 		inv.summary = "no account remote is set"
 		inv.out.print("No account remote is set; nothing to detach.")
 		return nil
 	}
-	inv.summary = "the account remote " + shownURL(u) + " is no longer set; the forks of this machine are as they were"
-	inv.out.done("the account remote " + inv.out.paint(heading, shownURL(u)) + " is no longer set; the forks of this machine are as they were")
+	gitDir := gitx.AccountRepoPath(inv.dirs.Home)
+	if err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
+		if err := inv.git.UnsetRemote(ctx, gitDir, remote); err != nil {
+			return accountRepoFailure(err)
+		}
+		return nil
+	}); err != nil {
+		return mutationFailure(err)
+	}
+	inv.out.emit(remoteEvent{event: newEvent("remote"), Name: remote})
+	u := shownURL(entry.URL)
+	inv.summary = "the account remote " + u + " is no longer set; the forks of this machine are as they were"
+	inv.out.done("the account remote " + inv.out.paint(heading, u) + " is no longer set; the forks of this machine are as they were")
 	return nil
 }
 
-// remoteURL is the account remote's URL, "" when no remote is set or when
-// this machine has no account repo at all.
-func (inv *invocation) remoteURL(ctx context.Context) (string, error) {
+// accountSource is the account remote as this machine records it: its
+// entry, and the name of its git remote in the account repo, which every
+// command that reads, fetches or pushes the account remote's fork branches
+// works with. ok is false when no account remote is set, or when this
+// machine has no account repo at all.
+func (inv *invocation) accountSource(ctx context.Context) (entry home.Source, remote string, ok bool, err error) {
 	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil || !exists {
-		return "", accountRepoFailureOrNil(err)
+		return home.Source{}, "", false, accountRepoFailureOrNil(err)
 	}
-	u, err := inv.git.RemoteURL(ctx, gitDir)
+	return inv.accountSourceIn(ctx, gitDir)
+}
+
+// accountSourceIn is accountSource for a command that has read the
+// account repo at gitDir already. The account remote is the account repo's
+// remote origin, as agentx remote set records it, and its entry is read
+// from there: the URL as the remote records it, as given, a fork layout and
+// the account flag.
+func (inv *invocation) accountSourceIn(ctx context.Context, gitDir string) (entry home.Source, remote string, ok bool, err error) {
+	u, err := inv.git.RemoteURL(ctx, gitDir, gitx.OriginRemote)
 	if err != nil {
-		return "", accountRepoFailure(err)
+		return home.Source{}, "", false, accountRepoFailure(err)
 	}
-	return u, nil
+	if u == "" {
+		return home.Source{}, "", false, nil
+	}
+	return home.Source{URL: u, Layout: home.LayoutFork, Account: true}, gitx.OriginRemote, true, nil
 }
 
 // accountRepoFailureOrNil is accountRepoFailure for an error that may be nil.
@@ -248,16 +263,18 @@ func accountRepoFailureOrNil(err error) error {
 	return accountRepoFailure(err)
 }
 
-// accountRemote is the account repo and its remote's URL, for a command
-// that works with the remote, refusing, exit code 6, when no remote is set.
-func (inv *invocation) accountRemote(ctx context.Context) (gitDir, url string, err error) {
-	if url, err = inv.remoteURL(ctx); err != nil {
-		return "", "", err
+// accountRemote is the account repo and the account remote, see
+// accountSource, for a command that works with the remote, refusing, exit
+// code 6, when no remote is set.
+func (inv *invocation) accountRemote(ctx context.Context) (gitDir string, entry home.Source, remote string, err error) {
+	entry, remote, ok, err := inv.accountSource(ctx)
+	if err != nil {
+		return "", home.Source{}, "", err
 	}
-	if url == "" {
-		return "", "", noRemoteRefusal()
+	if !ok {
+		return "", home.Source{}, "", noRemoteRefusal()
 	}
-	return gitx.AccountRepoPath(inv.dirs.Home), url, nil
+	return gitx.AccountRepoPath(inv.dirs.Home), entry, remote, nil
 }
 
 // noRemoteRefusal refuses a command that works with the account remote on
@@ -266,11 +283,12 @@ func noRemoteRefusal() *failure {
 	return refuse(exitRefused, "no account remote is set", "run 'agentx remote set <url>' to attach a Git repository you own")
 }
 
-// fetchRemote fetches the account remote's fork branches, see
-// gitx.FetchRemote, outside the lock, and reports it as one progress event.
-// A remote git cannot reach is exit code 3.
-func (inv *invocation) fetchRemote(ctx context.Context, gitDir, url string) error {
-	if err := inv.git.FetchRemote(ctx, gitDir); err != nil {
+// fetchRemote fetches the fork branches of the account remote, the git
+// remote called remote at url, see gitx.FetchRemote, outside the lock, and
+// reports it as one progress event. A remote git cannot reach is exit code
+// 3.
+func (inv *invocation) fetchRemote(ctx context.Context, gitDir, remote, url string) error {
+	if err := inv.git.FetchRemote(ctx, gitDir, remote); err != nil {
 		return unreachableRemote(url, err)
 	}
 	inv.out.emit(progressEvent{event: newEvent("progress"), Phase: "fetch", Subject: shownURL(url), Current: 1, Total: 1})

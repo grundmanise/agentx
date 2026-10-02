@@ -98,21 +98,21 @@ type publishing struct {
 // then its publish event, which says whether it holds uncommitted edits,
 // which publishing leaves where they are, and the result names them.
 func (inv *invocation) publish(ctx context.Context, name string) error {
-	gitDir, url, err := inv.accountRemote(ctx)
+	gitDir, entry, account, err := inv.accountRemote(ctx)
 	if err != nil {
 		return err
 	}
 	if err := inv.finishJournals(ctx); err != nil {
 		return err
 	}
-	if err := inv.fetchRemote(ctx, gitDir, url); err != nil {
+	if err := inv.fetchRemote(ctx, gitDir, account, entry.URL); err != nil {
 		return err
 	}
 	records, err := inv.forkRecords(ctx, gitDir)
 	if err != nil {
 		return err
 	}
-	names, err := inv.remoteSelection(ctx, name, records, false, "publish")
+	names, err := inv.remoteSelection(ctx, account, name, records, false, "publish")
 	if err != nil {
 		return err
 	}
@@ -121,7 +121,7 @@ func (inv *invocation) publish(ctx context.Context, name string) error {
 		inv.out.print("No fork to publish. Create one with ", inv.out.paint(label, "agentx skill new <name>"), " or ", inv.out.paint(label, "agentx skill fork <name>"), ".")
 		return nil
 	}
-	remote, err := inv.readRemoteForks(ctx, gitDir, records, names)
+	remote, err := inv.readRemoteForks(ctx, gitDir, account, records, names)
 	if err != nil {
 		return err
 	}
@@ -135,7 +135,7 @@ func (inv *invocation) publish(ctx context.Context, name string) error {
 		list = append(list, p)
 	}
 	if len(branches) > 0 {
-		if err := inv.pushForks(ctx, gitDir, url, list, branches); err != nil {
+		if err := inv.pushForks(ctx, gitDir, account, entry.URL, list, branches); err != nil {
 			return err
 		}
 	}
@@ -222,11 +222,12 @@ func (inv *invocation) forkUncommitted(ctx context.Context, gitDir string, rec l
 	return !j.clean
 }
 
-// pushForks pushes branches in one push and reads what the account remote
-// answered for each, see gitx.Push, then what its branches hold now. A
-// push git could not make at all is exit code 3, as a fetch is.
-func (inv *invocation) pushForks(ctx context.Context, gitDir, url string, list []*publishing, branches []string) error {
-	statuses, err := inv.git.Push(ctx, gitDir, branches)
+// pushForks pushes branches in one push to the account remote, the git
+// remote called remote at url, and reads what it answered for each, see
+// gitx.Push, then what its branches hold now. A push git could not make at
+// all is exit code 3, as a fetch is.
+func (inv *invocation) pushForks(ctx context.Context, gitDir, remote, url string, list []*publishing, branches []string) error {
+	statuses, err := inv.git.Push(ctx, gitDir, remote, branches)
 	if err != nil {
 		return unreachableRemote(url, err)
 	}
@@ -234,7 +235,7 @@ func (inv *invocation) pushForks(ctx context.Context, gitDir, url string, list [
 	for i, s := range statuses {
 		answered[strings.TrimPrefix(s.To, "refs/heads/")] = i
 	}
-	tips, err := lineage.ListRemote(ctx, inv.git, gitDir)
+	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
 	if err != nil {
 		return accountRepoFailure(err)
 	}

@@ -1,7 +1,12 @@
 package gitx
 
 import (
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -39,5 +44,67 @@ func TestParsePushPorcelain(t *testing.T) {
 				t.Errorf("ParsePushPorcelain = %#v, want %#v", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestUnsetRemoteTakesOutOnlyTheRemoteItNames: two remotes of fork
+// branches in one account repo, each with a fork branch tracking it and a
+// remote-tracking branch, and unsetting one leaves the other's
+// configuration, tracking and remote-tracking branch as they were.
+func TestUnsetRemoteTakesOutOnlyTheRemoteItNames(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	ctx := context.Background()
+	gitDir := filepath.Join(t.TempDir(), "account.git")
+	r := New(map[string]string{"PATH": os.Getenv("PATH"), "HOME": t.TempDir()}, false, func(string, ...any) {})
+	if _, err := r.Isolated(ctx, gitDir, "init", "--bare", "--quiet", gitDir); err != nil {
+		t.Fatal(err)
+	}
+	empty, err := r.Isolated(ctx, gitDir, "hash-object", "-t", "tree", "-w", "--stdin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	commit, err := r.IsolatedAt(ctx, gitDir, "1700000000 +0000", "commit-tree", empty, "-m", "one")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const kept, gone = OriginRemote, "src-0123456789abcdef"
+	for _, rb := range [][2]string{{kept, "skills/a"}, {gone, "skills/b"}} {
+		remote, branch := rb[0], rb[1]
+		if err := r.SetRemote(ctx, gitDir, remote, "file:///srv/"+remote+".git"); err != nil {
+			t.Fatal(err)
+		}
+		if err := r.SetTracking(ctx, gitDir, remote, branch); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := r.Isolated(ctx, gitDir, "update-ref", TrackingPrefix(remote)+branch, commit); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := r.UnsetRemote(ctx, gitDir, gone); err != nil {
+		t.Fatal(err)
+	}
+	config, err := r.Isolated(ctx, gitDir, "config", "--local", "--get-regexp", `^(remote|branch)\.`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"remote.origin.url file:///srv/origin.git",
+		"remote.origin.fetch " + ForkRefspec(kept),
+		"remote.origin.tagopt --no-tags",
+		"branch.skills/a.remote origin",
+		"branch.skills/a.merge refs/heads/skills/a",
+	}
+	if got := strings.Split(config, "\n"); !reflect.DeepEqual(got, want) {
+		t.Errorf("configuration after unsetting %s = %q, want %q", gone, got, want)
+	}
+	refs, err := r.Isolated(ctx, gitDir, "for-each-ref", "--format=%(refname)", "refs/remotes/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if refs != TrackingPrefix(kept)+"skills/a" {
+		t.Errorf("remote-tracking branches after unsetting %s = %q, want only %s's", gone, refs, kept)
 	}
 }

@@ -186,11 +186,11 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 			// remote-tracking branch holds is what a pull merged, whichever
 			// command reports the merge again and however far the remote
 			// moved on since.
-			on, err := inv.git.Isolated(ctx, gitDir, "for-each-ref", "--format=%(refname)", "--contains", p.theirs, lineage.RemoteForkRef(name))
+			with, err := inv.mergedWithAccount(ctx, gitDir, name, p.theirs)
 			if err != nil {
-				return nil, failureOf(accountRepoFailure(err))
+				return nil, failureOf(err)
 			}
-			if on != "" {
+			if with {
 				u.fork.with = "the account remote"
 			}
 		} else if p.theirs != "" {
@@ -272,6 +272,22 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 		return nil, failureOf(accountRepoFailure(err))
 	}
 	return u, inv.layFork(ctx, u, commit)
+}
+
+// mergedWithAccount reports whether theirs, what a pending merge of the
+// fork called name merged, is on the account remote's remote-tracking
+// branch of the fork, as a pull's merge is: false on a machine with no
+// account remote.
+func (inv *invocation) mergedWithAccount(ctx context.Context, gitDir, name, theirs string) (bool, error) {
+	_, remote, ok, err := inv.accountSourceIn(ctx, gitDir)
+	if err != nil || !ok {
+		return false, err
+	}
+	on, err := inv.git.Isolated(ctx, gitDir, "for-each-ref", "--format=%(refname)", "--contains", theirs, lineage.RemoteForkRef(remote, name))
+	if err != nil {
+		return false, accountRepoFailure(err)
+	}
+	return on != "", nil
 }
 
 // remergeIn sets a merge up again in the checkout at dir, under the lock:

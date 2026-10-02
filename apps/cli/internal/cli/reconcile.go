@@ -551,11 +551,15 @@ func (inv *invocation) prepareWorktrees(ctx context.Context, gitDir string, root
 			}
 		}
 	}
-	tips, err := lineage.ListRemote(ctx, inv.git, gitDir)
+	remote = map[string]bool{}
+	_, account, ok, err := inv.accountSourceIn(ctx, gitDir)
+	if err != nil || !ok {
+		return remote, repointed, err
+	}
+	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, account)
 	if err != nil {
 		return nil, nil, accountRepoFailure(err)
 	}
-	remote = map[string]bool{}
 	for name := range tips {
 		remote[name] = true
 	}

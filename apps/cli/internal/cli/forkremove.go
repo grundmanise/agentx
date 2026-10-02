@@ -30,7 +30,10 @@ type forkRemoval struct {
 	tip    string // what the fork's branch held when it was judged; "" when this machine has no fork of the name
 	remote bool   // the account remote's branch goes too
 	url    string // the account remote's, with remote
-	there  string // what the account remote's branch held at the fetch; "" when it holds none
+	// account is the account remote's git remote in the account repo,
+	// with remote.
+	account string
+	there   string // what the account remote's branch held at the fetch; "" when it holds none
 	// guard is the fork's skill directory as it was judged clean, when the
 	// removal must find it still clean under its lock: skill rename
 	// removes the fork it has just forked, and an edit made in between
@@ -104,13 +107,15 @@ func (inv *invocation) judgeForkRemoval(ctx context.Context, name string, remote
 				"remove it from this machine with '"+skillCommand("remove", name)+"'")
 		}
 	}
-	if gitDir, r.url, err = inv.accountRemote(ctx); err != nil {
+	var entry home.Source
+	if gitDir, entry, r.account, err = inv.accountRemote(ctx); err != nil {
 		return nil, err
 	}
-	if err := inv.fetchRemote(ctx, gitDir, r.url); err != nil {
+	r.url = entry.URL
+	if err := inv.fetchRemote(ctx, gitDir, r.account, r.url); err != nil {
 		return nil, err
 	}
-	tips, err := lineage.ListRemote(ctx, inv.git, gitDir)
+	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, r.account)
 	if err != nil {
 		return nil, accountRepoFailure(err)
 	}
@@ -402,7 +407,7 @@ func libraryKept(libPath, state, name string, targets []placeTarget) string {
 // failure says first. A push git could not make, and a deletion the remote
 // refused, are exit code 3, as for a fetch.
 func (inv *invocation) deleteRemoteFork(ctx context.Context, r *forkRemoval, done string) error {
-	s, err := inv.git.DeleteRemoteBranch(ctx, r.gitDir, strings.TrimPrefix(lineage.ForkRef(r.name), "refs/heads/"), r.there)
+	s, err := inv.git.DeleteRemoteBranch(ctx, r.gitDir, r.account, strings.TrimPrefix(lineage.ForkRef(r.name), "refs/heads/"), r.there)
 	if err != nil {
 		return refuse(exitSource, remoteStillHolds(r.name, done)+": "+trimGit(err.Error()),
 			"check that you can reach "+shownURL(r.url)+" with git, then run '"+skillCommand("remove", r.name, "--remote")+"' again")

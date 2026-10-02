@@ -9,38 +9,43 @@ import (
 	"strings"
 )
 
-// RemoteName is the account remote's name in the account repo: the one
-// remote agentx gives it, which the user attaches with agentx remote set.
-const RemoteName = "origin"
+// OriginRemote is the name agentx remote set gives the account remote in
+// the account repo. Every function here that works with a remote of fork
+// branches takes the remote's name, so that the account remote is not
+// bound to it.
+const OriginRemote = "origin"
 
-// ForkRefspec is the account remote's one fetch refspec: every fork branch
-// it holds, onto the remote-tracking branch of the same name. Nothing else
-// travels: import branches, update candidates, upstream-removed markers and
-// source refs are this machine's own, and tags are never fetched.
-const ForkRefspec = "+refs/heads/skills/*:refs/remotes/origin/skills/*"
+// ForkRefspec is the one fetch refspec of the remote of fork branches
+// called remote: every fork branch it holds, onto the remote-tracking
+// branch of the same name. Nothing else travels: import branches, update
+// candidates, upstream-removed markers and source refs are this machine's
+// own, and tags are never fetched.
+func ForkRefspec(remote string) string {
+	return "+refs/heads/skills/*:" + TrackingPrefix(remote) + "skills/*"
+}
 
-// remoteTrackingPrefix is where a fetch of the account remote writes what it
-// holds, every ref under it this remote's.
-const remoteTrackingPrefix = "refs/remotes/" + RemoteName + "/"
+// TrackingPrefix is where a fetch of the remote called remote writes what
+// it holds, every ref under it this remote's.
+func TrackingPrefix(remote string) string { return "refs/remotes/" + remote + "/" }
 
-// RemoteURL is the URL of the account remote as the account repo records
-// it, "" when no remote is set.
-func (r *Runner) RemoteURL(ctx context.Context, gitDir string) (string, error) {
-	out, _, err := r.IsolatedStatus(ctx, gitDir, 1, "config", "--get", "remote."+RemoteName+".url")
+// RemoteURL is the URL of the remote called remote as the account repo
+// records it, "" when no such remote is set.
+func (r *Runner) RemoteURL(ctx context.Context, gitDir, remote string) (string, error) {
+	out, _, err := r.IsolatedStatus(ctx, gitDir, 1, "config", "--get", "remote."+remote+".url")
 	return strings.TrimRight(out, "\n"), err
 }
 
-// SetRemote records url as the account remote, with ForkRefspec as its one
-// fetch refspec and tags off, in the account repo's own configuration. It
-// is written key by key with git config rather than git remote add, which
-// would refuse a remote that is there already and write the default
-// refspec, which fetches every branch. It runs under the lock, since git
-// config fails rather than waits for its own lock file.
-func (r *Runner) SetRemote(ctx context.Context, gitDir, url string) error {
-	section := "remote." + RemoteName + "."
+// SetRemote records url as the remote of fork branches called remote, with
+// its ForkRefspec as its one fetch refspec and tags off, in the account
+// repo's own configuration. It is written key by key with git config rather
+// than git remote add, which would refuse a remote that is there already
+// and write the default refspec, which fetches every branch. It runs under
+// the lock, since git config fails rather than waits for its own lock file.
+func (r *Runner) SetRemote(ctx context.Context, gitDir, remote, url string) error {
+	section := "remote." + remote + "."
 	for _, args := range [][]string{
 		{"config", section + "url", url},
-		{"config", "--replace-all", section + "fetch", ForkRefspec},
+		{"config", "--replace-all", section + "fetch", ForkRefspec(remote)},
 		{"config", section + "tagOpt", "--no-tags"},
 	} {
 		if _, err := r.Isolated(ctx, gitDir, args...); err != nil {
@@ -51,15 +56,15 @@ func (r *Runner) SetRemote(ctx context.Context, gitDir, url string) error {
 }
 
 // SetTracking records that the local branch, a short name such as
-// skills/pdf, tracks the branch of the same name on the account remote, as
-// git branch --track records it, so that git status in the fork's worktree
-// says how the two stand. Writing it again is harmless. It is no lineage:
-// agentx itself reads the remote-tracking branch of the same name, whatever
-// the configuration says. Under the lock, as SetRemote.
-func (r *Runner) SetTracking(ctx context.Context, gitDir, branch string) error {
+// skills/pdf, tracks the branch of the same name on the remote called
+// remote, as git branch --track records it, so that git status in the
+// fork's worktree says how the two stand. Writing it again is harmless. It
+// is no lineage: agentx itself reads the remote-tracking branch of the same
+// name, whatever the configuration says. Under the lock, as SetRemote.
+func (r *Runner) SetTracking(ctx context.Context, gitDir, remote, branch string) error {
 	section := "branch." + branch + "."
 	for _, args := range [][]string{
-		{"config", section + "remote", RemoteName},
+		{"config", section + "remote", remote},
 		{"config", section + "merge", "refs/heads/" + branch},
 	} {
 		if _, err := r.Isolated(ctx, gitDir, args...); err != nil {
@@ -83,17 +88,17 @@ func (r *Runner) UnsetTracking(ctx context.Context, gitDir, branch string) error
 	return err
 }
 
-// UnsetRemote takes the account remote out of the account repo: its
+// UnsetRemote takes the remote called remote out of the account repo: its
 // configuration section, the tracking configuration of every fork branch
 // that names it, and every remote-tracking branch a fetch of it wrote. No
 // local branch is touched. Under the lock, as SetRemote. The remote-tracking
 // branches go first: one stopped part way leaves the remote set, which a
 // second unset takes out in turn, never branches of a remote no longer set.
-func (r *Runner) UnsetRemote(ctx context.Context, gitDir string) error {
-	if err := r.DropRemoteRefs(ctx, gitDir); err != nil {
+func (r *Runner) UnsetRemote(ctx context.Context, gitDir, remote string) error {
+	if err := r.DropRemoteRefs(ctx, gitDir, remote); err != nil {
 		return err
 	}
-	out, _, err := r.IsolatedStatus(ctx, gitDir, 1, "config", "-z", "--get-regexp", `^(remote\.`+RemoteName+`|branch\.skills/.*)\.`)
+	out, _, err := r.IsolatedStatus(ctx, gitDir, 1, "config", "-z", "--get-regexp", `^(remote\.`+regexp.QuoteMeta(remote)+`|branch\.skills/.*)\.`)
 	if err != nil {
 		return err
 	}
@@ -102,9 +107,9 @@ func (r *Runner) UnsetRemote(ctx context.Context, gitDir string) error {
 		key, value, _ := strings.Cut(record, "\n")
 		section := key[:max(strings.LastIndex(key, "."), 0)]
 		switch {
-		case strings.HasPrefix(key, "remote."+RemoteName+"."):
+		case strings.HasPrefix(key, "remote."+remote+"."):
 			sections[section] = true
-		case strings.HasPrefix(key, "branch.") && strings.HasSuffix(key, ".remote") && value == RemoteName:
+		case strings.HasPrefix(key, "branch.") && strings.HasSuffix(key, ".remote") && value == remote:
 			sections[section] = true
 		}
 	}
@@ -121,11 +126,11 @@ func (r *Runner) UnsetRemote(ctx context.Context, gitDir string) error {
 	return nil
 }
 
-// DropRemoteRefs deletes every remote-tracking ref of the account remote,
-// in one transaction: what a fetch of a remote no longer set, or of another
-// one, wrote says nothing about the remote set now.
-func (r *Runner) DropRemoteRefs(ctx context.Context, gitDir string) error {
-	out, err := r.Isolated(ctx, gitDir, "for-each-ref", "--format=%(refname)", remoteTrackingPrefix)
+// DropRemoteRefs deletes every remote-tracking ref of the remote called
+// remote, in one transaction: what a fetch of a remote no longer set, or of
+// another URL, wrote says nothing about the remote set now.
+func (r *Runner) DropRemoteRefs(ctx context.Context, gitDir, remote string) error {
+	out, err := r.Isolated(ctx, gitDir, "for-each-ref", "--format=%(refname)", TrackingPrefix(remote))
 	if err != nil || strings.TrimSpace(out) == "" {
 		return err
 	}
@@ -160,18 +165,18 @@ func (r *Runner) ProbeRemote(ctx context.Context, url string) error {
 	return err
 }
 
-// FetchRemote fetches the account remote's fork branches into their
-// remote-tracking branches, in the user's environment: quiet, no tags, no
-// FETCH_HEAD, no submodules, and a remote-tracking branch whose fork branch
-// the remote no longer holds is deleted. An object the account repo lacks
-// is never fetched lazily from a source along the way. ForkRefspec is given
-// on the command line, with --refmap=, so that it is the only refspec the
-// fetch follows and prunes: the user's environment merges every
-// remote.origin.fetch their configuration holds, a global one meant for
-// their projects included.
-func (r *Runner) FetchRemote(ctx context.Context, gitDir string) error {
+// FetchRemote fetches the fork branches of the remote called remote into
+// their remote-tracking branches, in the user's environment: quiet, no
+// tags, no FETCH_HEAD, no submodules, and a remote-tracking branch whose
+// fork branch the remote no longer holds is deleted. An object the account
+// repo lacks is never fetched lazily from a source along the way. The
+// remote's ForkRefspec is given on the command line, with --refmap=, so
+// that it is the only refspec the fetch follows and prunes: the user's
+// environment merges every remote.<name>.fetch their configuration holds,
+// a global one meant for their projects included.
+func (r *Runner) FetchRemote(ctx context.Context, gitDir, remote string) error {
 	args := append(networkConfig(), "--git-dir="+gitDir,
-		"fetch", "--quiet", "--no-tags", "--no-write-fetch-head", "--prune", "--recurse-submodules=no", "--refmap=", RemoteName, ForkRefspec)
+		"fetch", "--quiet", "--no-tags", "--no-write-fetch-head", "--prune", "--recurse-submodules=no", "--refmap=", remote, ForkRefspec(remote))
 	_, err := r.run(ctx, call{env: map[string]string{"GIT_NO_LAZY_FETCH": "1"}}, args...)
 	return err
 }
@@ -203,14 +208,15 @@ func (s PushStatus) Why() string {
 }
 
 // Push pushes each fork branch named by its short name, such as
-// "skills/pdf", to the account remote's branch of the same name, never
+// "skills/pdf", to the branch of the same name on the remote called
+// remote, never
 // forced, in one git push of the user's environment with no hook of theirs,
 // see networkConfig, and the remote's answer for each ref read from
 // --porcelain. A ref the remote rejects is a status, not an error: git
 // exits 1 for it, and the push of the others stands. git moves the
 // remote-tracking branch of every ref it pushed itself.
-func (r *Runner) Push(ctx context.Context, gitDir string, branches []string) ([]PushStatus, error) {
-	args := append(networkConfig(), "--git-dir="+gitDir, "push", "--porcelain", "--no-verify", "--no-recurse-submodules", RemoteName)
+func (r *Runner) Push(ctx context.Context, gitDir, remote string, branches []string) ([]PushStatus, error) {
+	args := append(networkConfig(), "--git-dir="+gitDir, "push", "--porcelain", "--no-verify", "--no-recurse-submodules", remote)
 	for _, b := range branches {
 		args = append(args, "refs/heads/"+b+":refs/heads/"+b)
 	}
@@ -221,8 +227,8 @@ func (r *Runner) Push(ctx context.Context, gitDir string, branches []string) ([]
 	return ParsePushPorcelain(out)
 }
 
-// PushTip is one branch PushTips pushes: the commit the account remote's
-// branch is to hold, and what it must hold until then.
+// PushTip is one branch PushTips pushes: the commit the remote's branch
+// is to hold, and what it must hold until then.
 type PushTip struct {
 	Branch string // the short name, such as "skills/pdf"
 	Commit string // what is pushed
@@ -234,12 +240,12 @@ type PushTip struct {
 // it holds by the time git runs, and one another machine moved or deleted
 // since the fetch is not overwritten or put back, but rejected as stale.
 // The caller has made sure each commit descends from what it expects.
-func (r *Runner) PushTips(ctx context.Context, gitDir string, tips []PushTip) ([]PushStatus, error) {
+func (r *Runner) PushTips(ctx context.Context, gitDir, remote string, tips []PushTip) ([]PushStatus, error) {
 	args := append(networkConfig(), "--git-dir="+gitDir, "push", "--porcelain", "--no-verify", "--no-recurse-submodules")
 	for _, t := range tips {
 		args = append(args, "--force-with-lease=refs/heads/"+t.Branch+":"+t.Expect)
 	}
-	args = append(args, RemoteName)
+	args = append(args, remote)
 	for _, t := range tips {
 		args = append(args, t.Commit+":refs/heads/"+t.Branch)
 	}
@@ -250,8 +256,8 @@ func (r *Runner) PushTips(ctx context.Context, gitDir string, tips []PushTip) ([
 	return ParsePushPorcelain(out)
 }
 
-// DeleteRemoteBranch deletes the account remote's branch, named by its
-// short name such as "skills/pdf", in one git push of the user's
+// DeleteRemoteBranch deletes the branch of the remote called remote, named
+// by its short name such as "skills/pdf", in one git push of the user's
 // environment with no hook of theirs, see networkConfig, and returns the
 // remote's answer for it. The deletion is leased on expect, the commit the
 // last fetch read the branch at: a branch another machine moved since is
@@ -259,10 +265,10 @@ func (r *Runner) PushTips(ctx context.Context, gitDir string, tips []PushTip) ([
 // refuses to delete, as a hosting service refuses its default branch, is
 // a rejected status too, not an error. git drops the remote-tracking
 // branch of a branch it deleted itself.
-func (r *Runner) DeleteRemoteBranch(ctx context.Context, gitDir, branch, expect string) (PushStatus, error) {
+func (r *Runner) DeleteRemoteBranch(ctx context.Context, gitDir, remote, branch, expect string) (PushStatus, error) {
 	ref := "refs/heads/" + branch
 	args := append(networkConfig(), "--git-dir="+gitDir, "push", "--porcelain", "--no-verify", "--no-recurse-submodules",
-		"--force-with-lease="+ref+":"+expect, RemoteName, ":"+ref)
+		"--force-with-lease="+ref+":"+expect, remote, ":"+ref)
 	out, _, err := r.runStatus(ctx, call{}, 1, args...)
 	if err != nil {
 		return PushStatus{}, err

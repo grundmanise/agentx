@@ -349,19 +349,19 @@ func (r *updateRun) accountStep(ctx context.Context, names []string, records map
 	if len(forks) == 0 {
 		return nil, nil, nil
 	}
-	url, err := inv.git.RemoteURL(ctx, r.gitDir)
-	if err != nil || url == "" {
-		return nil, nil, accountRepoFailureOrNil(err)
+	entry, account, ok, err := inv.accountSourceIn(ctx, r.gitDir)
+	if err != nil || !ok {
+		return nil, nil, err
 	}
-	if err := inv.git.FetchRemote(ctx, r.gitDir); err != nil {
+	if err := inv.git.FetchRemote(ctx, r.gitDir, account); err != nil {
 		what := sanitised(forks[0]) + " is"
 		if len(forks) > 1 {
 			what = "forks are"
 		}
-		inv.out.warn("could not fetch the account remote " + shownURL(url) + ", so " + what + " updated from upstream only: " + trimGit(err.Error()))
+		inv.out.warn("could not fetch the account remote " + shownURL(entry.URL) + ", so " + what + " updated from upstream only: " + trimGit(err.Error()))
 		return nil, nil, nil
 	}
-	remote, err := inv.readRemoteForks(ctx, r.gitDir, records, forks)
+	remote, err := inv.readRemoteForks(ctx, r.gitDir, account, records, forks)
 	if err != nil {
 		return nil, nil, err
 	}

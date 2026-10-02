@@ -429,11 +429,11 @@ func restoreStates(skills []exportSkill, records map[string]lineage.Record, remo
 // fetch left it, see lineage.ListRemote: none on a machine with no account
 // repo, or whose account repo has no remote set.
 func (inv *invocation) remoteTips(ctx context.Context) (map[string]string, error) {
-	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
-	if err != nil || !exists {
-		return nil, accountRepoFailureOrNil(err)
+	_, remote, ok, err := inv.accountSource(ctx)
+	if err != nil || !ok {
+		return nil, err
 	}
-	tips, err := lineage.ListRemote(ctx, inv.git, gitDir)
+	tips, err := lineage.ListRemote(ctx, inv.git, gitx.AccountRepoPath(inv.dirs.Home), remote)
 	if err != nil {
 		return nil, accountRepoFailure(err)
 	}

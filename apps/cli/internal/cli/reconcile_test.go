@@ -201,6 +201,8 @@ func TestServeReconcilesAtStart(t *testing.T) {
 	remove(t, admin)
 	orphanTree := libraryTree(t, orphan)
 	tip := h.ref(lineage.ForkRef("kept"))
+	// The account remote's branches, as a fetch of it leaves them.
+	h.accountGit("config", "remote.origin.url", "file:///nowhere/skills.git")
 	h.accountGit("update-ref", "refs/remotes/origin/skills/far", tip)
 	h.accountGit("update-ref", "refs/remotes/origin/skills/mine", tip)
 	stray := filepath.Join(t.TempDir(), "stray")
