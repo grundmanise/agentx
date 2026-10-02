@@ -122,6 +122,9 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 		if src.Ref != "" && src.Ref != entry.Pin {
 			return pinMismatch(src, entry)
 		}
+		if entry.Layout == home.LayoutFork {
+			return forkSourceIs(entry.URL, entry)
+		}
 	case errors.Is(err, errNotAdded) && !source.IsID(arg):
 		// A URL the settings do not hold is a source to add, exactly as
 		// source add adds it. An id cannot be: it names no URL to fetch.

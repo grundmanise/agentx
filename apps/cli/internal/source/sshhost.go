@@ -2,12 +2,12 @@ package source
 
 import (
 	"context"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 )
 
 // sshHostWait bounds one ssh -G. It reads configuration files and opens no
@@ -25,7 +25,7 @@ const sshHostWait = 5 * time.Second
 // concurrent use.
 func SSHHosts(ctx context.Context, env map[string]string) func(host string) string {
 	known := map[string]string{}
-	ssh := program(env["PATH"], "ssh")
+	ssh := gitx.FindProgram(env, "ssh")
 	vars := make([]string, 0, len(env))
 	for k, v := range env {
 		vars = append(vars, k+"="+v)
@@ -64,21 +64,6 @@ func sshHostname(out string) string {
 		key, value, ok := strings.Cut(strings.TrimSpace(line), " ")
 		if ok && key == "hostname" {
 			return strings.TrimSpace(value)
-		}
-	}
-	return ""
-}
-
-// program is the path of the executable called name in the first directory
-// of path that holds one, "" when none does.
-func program(path, name string) string {
-	for _, dir := range filepath.SplitList(path) {
-		if dir == "" {
-			continue
-		}
-		p := filepath.Join(dir, name)
-		if info, err := os.Stat(p); err == nil && info.Mode().IsRegular() && info.Mode()&0o111 != 0 {
-			return p
 		}
 	}
 	return ""

@@ -357,8 +357,11 @@ func (inv *invocation) sourceIndex(ctx context.Context, prev *source.Index) (idx
 		if err != nil {
 			return err
 		}
-		urls := make([]string, 0, len(s.Sources))
-		for _, src := range s.Sources {
+		// A fork source holds forks rather than skills on one branch, and
+		// is never fetched as a tree, so it has nothing to search.
+		trees := treeSources(s.Sources)
+		urls := make([]string, 0, len(trees))
+		for _, src := range trees {
 			urls = append(urls, src.URL)
 		}
 		idx, warnings, err = source.BuildIndex(ctx, inv.git, gitx.AccountRepoPath(inv.dirs.Home), urls, prev)

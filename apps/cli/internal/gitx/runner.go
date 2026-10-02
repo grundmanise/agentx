@@ -424,16 +424,26 @@ func subcommand(args []string) string {
 
 // lookPath finds git in the PATH of the environment map, never the process's.
 func (r *Runner) lookPath() (string, error) {
-	for _, dir := range filepath.SplitList(r.env["PATH"]) {
+	if path := FindProgram(r.env, "git"); path != "" {
+		return path, nil
+	}
+	return "", ErrMissing
+}
+
+// FindProgram is the path of the executable called name in the first
+// directory of the PATH of env, the user's environment, that holds one, ""
+// when none does. The process's own PATH is never read.
+func FindProgram(env map[string]string, name string) string {
+	for _, dir := range filepath.SplitList(env["PATH"]) {
 		if dir == "" {
 			continue
 		}
-		path := filepath.Join(dir, "git")
+		path := filepath.Join(dir, name)
 		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Mode()&0o111 != 0 {
-			return path, nil
+			return path
 		}
 	}
-	return "", ErrMissing
+	return ""
 }
 
 // testConfig is configuration every git process carries in tests only; see

@@ -684,18 +684,17 @@ func TestSourceFetchDropsASourceRemovedMidRun(t *testing.T) {
 	equal(t, "sources", len(readSettingsFile(t, h)["sources"].([]any)), 0)
 }
 
-// TestSourceFetchRealignsARemoteWithThePin: the settings hold the pin and
-// the remote's refspec is derived from it, so a run interrupted between the
-// two leaves a remote recording a ref the settings do not name – what a
-// `source add <url>#main` killed after the remote was written and before
-// the settings were leaves over a source pinned to v1. A fetch answers for
-// the pin the settings hold whatever the remote says, and brings the remote
+// TestSourceRemoteFollowsThePinAndThePushURL: the settings hold the pin and
+// the push URL, and the remote is derived from them, so a run interrupted
+// between the two writes leaves a remote recording what the settings do
+// not name – what a `source add <url>#main` killed after the remote was
+// written and before the settings were leaves over a source pinned to v1.
+// The test adds a pinned source with a push URL on another host, breaks
+// its refspec and push URL by hand, and fetches: the fetch answers for the
+// pin the settings hold whatever the remote says, and brings the remote
 // back in line, so that a remote left behind does not outlive one run.
-// TestSourceRemoteFollowsThePinAndThePushURL adds a pinned source with a
-// push URL on another host, breaks its remote the way an interrupted run
-// can, and fetches: the settings decide the pin and the push URL, and the
-// remote records them again. Adding the source with --push-url= then
-// takes the push URL off the entry and the remote.
+// Adding the source with --push-url= then takes the push URL off the entry
+// and the remote.
 func TestSourceRemoteFollowsThePinAndThePushURL(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)

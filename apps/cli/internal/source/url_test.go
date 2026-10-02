@@ -111,6 +111,7 @@ func parseCases() []parseCase {
 		{"/srv/a%b?c/skills", "file:///srv/a%25b%3Fc/skills", "", "", false},
 		{"git.example.com:team/repo.git", "ssh://git.example.com/team/repo", "", "", false},
 		{"git.example.com:/srv/repo.git#main", "ssh://git.example.com/srv/repo", "", "main", false},
+		{"git.example.com:skills@2.git", "ssh://git.example.com/skills@2", "", "", false},
 		{"git+ssh://git@github.com/owner/repo.git", "ssh://git@github.com/owner/repo", "", "", false},
 		{"SSH+GIT://github.com:22/owner/repo", "ssh://github.com/owner/repo", "", "", false},
 	}
@@ -201,7 +202,7 @@ func TestParseRejects(t *testing.T) {
 		"https://github.com/owner/repo/tree/main/x#dev", "https://gitlab.com/group/repo/-/blob/main/x",
 		"https://gitlab.com/-/tree/main", "ftp://example.com/repo", "https:///repo", "https://example.com/",
 		"https://github.com/owner/../repo", "file://", "file:///", "not a url", "C:\\repo", "c:\\skills\\repo", "/", "/srv/../repo", "host:",
-		"git+ssh://", "git+https://github.com/owner/repo", "user:tok@example.com/owner/repo",
+		"git+ssh://", "git+https://github.com/owner/repo", "user:tok@example.com/owner/repo", "user:tok@example.com:8443/owner/repo",
 		"ssh://::/0", "https://[:]/team/repo", "http://%25/team/repo", "https://a%20b/team/repo",
 		"0/..git", "https://github.com/owner/..git", "https://git.example.com/team/..git/skills",
 		"0/.git.git", "https://github.com/owner/.git.git",

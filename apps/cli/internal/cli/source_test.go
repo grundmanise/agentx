@@ -655,7 +655,9 @@ func TestSourceAddErrors(t *testing.T) {
 // account remote: a push URL with a credential or naming another
 // repository, exit 1, and a tree source naming the fork source's
 // repository, exit 6, which source fetch and source skills give for the
-// fork source too. None of them creates the account repo.
+// fork source too, and skill add of it; source fetch --all says it found
+// no tree source. None of them creates the account repo, or says where
+// pushes go.
 func TestSourceAddRefusesAPushURLAndAForkSource(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -683,10 +685,11 @@ func TestSourceAddRefusesAPushURLAndAForkSource(t *testing.T) {
 			"the push URL carries a password or a token", "credential helper"},
 		{"a push URL of another repository", []string{"source", "add", "acme/skills", "--push-url", "git@github.com:acme/other.git"}, 1,
 			"the push URL git@github.com:acme/other.git names another repository than https://github.com/acme/skills", "at the same path"},
-		{"the fork source's repository", []string{"source", "add", "ssh://git@example.invalid/me/forks.git#main"}, 6,
+		{"the fork source's repository", []string{"source", "add", "ssh://git@example.invalid/me/forks.git#main", "--push-url", "git@other.example:me/forks.git"}, 6,
 			"ssh://git@example.invalid/me/forks is the fork source " + forks + ": it holds one branch per fork", "agentx remote set " + forks},
 		{"a fetch of the fork source", []string{"source", "fetch", forks}, 6, forks + " is a fork source", "agentx skill add --from-account <name>"},
 		{"a listing of the fork source", []string{"source", "skills", source.ID(forks)}, 6, forks + " is a fork source", "agentx remote set"},
+		{"an install from the fork source", []string{"skill", "add", forks}, 6, forks + " is a fork source", "agentx skill add --from-account <name>"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out := h.run(append([]string{"--json"}, tc.args...)...)
@@ -700,8 +703,15 @@ func TestSourceAddRefusesAPushURLAndAForkSource(t *testing.T) {
 			if strings.Contains(out.stdout+out.stderr, "s3cret") {
 				t.Errorf("the token leaked into the output:\n%s%s", out.stdout, out.stderr)
 			}
+			if strings.Contains(out.stderr, "agentx pushes to") {
+				t.Errorf("a refused add said where pushes go:\n%s", out.stderr)
+			}
 		})
 	}
+	// Fetching every source finds no tree source and says why.
+	out := h.run("source", "fetch", "--all")
+	equal(t, "fetch --all exit", out.exit, 0)
+	contains(t, "fetch --all", out.stdout, "No tree sources to fetch. "+forks+" is a fork source")
 	if !reflect.DeepEqual(readSettingsFile(t, h), before) {
 		t.Errorf("a refusal changed the settings: %v", readSettingsFile(t, h))
 	}

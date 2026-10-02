@@ -49,6 +49,10 @@ var ErrForm = errors.New("not a source URL")
 // scpLike is [user@]host:path, the SSH shorthand git accepts.
 var scpLike = regexp.MustCompile(`^(?:([A-Za-z0-9._-]+)@)?([A-Za-z0-9._-]+):(.*)$`)
 
+// hostAndPath is what follows the @ of user:token@host[:port]/path, a URL
+// written without its scheme.
+var hostAndPath = regexp.MustCompile(`^[A-Za-z0-9.-]+(:[0-9]+)?/`)
+
 // shorthand is owner/repo with an optional subpath, resolved to GitHub.
 var shorthand = regexp.MustCompile(`^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+(/.*)?$`)
 
@@ -67,15 +71,15 @@ var githubPages = map[string]bool{
 // [user@]host:path SSH shorthand, file:// URLs and absolute paths, which
 // read as file:// URLs, and any of these with a #ref fragment. A ref of
 // HEAD names the remote's default branch, which is what no ref follows, so
-// it is no pin. On GitHub the repository is
-// owner/repo and what follows is the subpath; elsewhere the repository
-// path ends at /-/ or at a segment named *.git, and what follows is the
-// subpath. The host is lowercased and loses its trailing dot and a port
-// that is its scheme's default, a .git suffix and a trailing slash are
-// dropped, the path keeps its percent escapes, and an embedded user or
-// token is removed. Anything else is an ErrForm. The canonical URL of what
-// Parse accepts parses back to itself: it is the source's identity, printed
-// by source list and read back by source remove and source skills.
+// it is no pin. On GitHub the repository is owner/repo and what follows is
+// the subpath; elsewhere the repository path ends at /-/ or at a segment
+// named *.git, and what follows is the subpath. The host is lowercased and
+// loses its trailing dot and a port that is its scheme's default, a .git
+// suffix and a trailing slash are dropped, the path keeps its percent
+// escapes, and an embedded user or token is removed. Anything else is an
+// ErrForm. The canonical URL of what Parse accepts parses back to itself:
+// it is the source's identity, printed by source list and read back by
+// source remove and source skills.
 func Parse(input string) (Source, error) {
 	var s Source
 	raw := strings.TrimSpace(input)
@@ -107,10 +111,12 @@ func Parse(input string) (Source, error) {
 		}
 	case scpLike.MatchString(raw):
 		m := scpLike.FindStringSubmatch(raw)
-		if user, _, ok := strings.Cut(raw, "@"); m[1] == "" && ok && !strings.Contains(user, "/") {
+		if user, rest, ok := strings.Cut(raw, "@"); m[1] == "" && ok && !strings.Contains(user, "/") && hostAndPath.MatchString(rest) {
 			// user:token@host/path is a URL without its scheme, and what
 			// the shorthand would read as a host is a user, the path a token
-			// and a host.
+			// and a host. A shorthand whose path holds an @ before its first
+			// slash and a host-like name after it, host:team@2/skills, is
+			// refused with it: no reading of it is safe to guess.
 			return s, fmt.Errorf("%w: a user and a password without a scheme: %s", ErrForm, safe)
 		}
 		if m[1] == "" && strings.Contains(m[3], "\\") {
@@ -159,12 +165,12 @@ func redact(input string) string {
 
 // ValidRef accepts the refs a pin can be: the names git check-ref-format
 // --allow-onelevel allows for a branch or tag, one level or several, plus a
-// commit id. A ref git refuses
-// is a usage error; accepting it here would defer it to a fetch error with
-// an unrelated hint about credential helpers, so the rules are git's own,
-// neither wider nor narrower: a commit id, release/1.x and a unicode name
-// are all refs git allows. It is also what a command that hands a ref of
-// someone else's choosing to git checks first, a leading dash included.
+// commit id. A ref git refuses is a usage error; accepting it here would
+// defer it to a fetch error with an unrelated hint about credential
+// helpers, so the rules are git's own, neither wider nor narrower: a commit
+// id, release/1.x and a unicode name are all refs git allows. It is also
+// what a command that hands a ref of someone else's choosing to git checks
+// first, a leading dash included.
 func ValidRef(ref string) bool {
 	if ref == "" || ref == "@" {
 		return false

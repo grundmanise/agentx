@@ -166,7 +166,7 @@ func TestForkSourceRefusal(t *testing.T) {
 		{"the fork source itself", home.Source{URL: forks}, forks + " is a fork source"},
 		{"its SSH URL", home.Source{URL: "ssh://git@github.com/me/forks"}, "ssh://git@github.com/me/forks is the fork source " + forks},
 		{"its push URL's alias", home.Source{URL: "ssh://git@github-work/me/forks"}, "is the fork source " + forks},
-		{"a push URL naming it", home.Source{URL: "https://example.com/me/forks", PushURL: "git@github.com:me/forks.git"}, "is the fork source " + forks},
+		{"a push URL naming it", home.Source{URL: "https://example.com/me/forks", PushURL: "git@github.com:me/forks.git"}, "the push URL git@github.com:me/forks.git is the fork source " + forks},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := forkSourceRefusal(s, tc.src, resolve)

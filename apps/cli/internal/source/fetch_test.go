@@ -3,6 +3,7 @@ package source_test
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -70,7 +71,7 @@ func TestAFetchWritesNoConfig(t *testing.T) {
 // as a tree source with a push URL, as one without, and as a fork source,
 // in turn, and reads each back as the entry wants it: a key the layout or
 // the entry does not have goes, and a key a user gave a second value is set
-// to one again.
+// to one again. A key git cannot unset fails the write.
 func TestConfigureWritesTheRemoteOfEachLayout(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -103,5 +104,18 @@ func TestConfigureWritesTheRemoteOfEachLayout(t *testing.T) {
 		if tag, err := git.Isolated(ctx, gitDir, "config", "--get", key+"tagOpt"); err != nil || tag != "--no-tags" {
 			t.Errorf("%s: tagOpt = %q, %v", tc.name, tag, err)
 		}
+	}
+	// A key git cannot unset, exit 4 for a config file it cannot write,
+	// fails the write: only exit 5, the key is not there, is the state
+	// asked for.
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := t.TempDir()
+	source.WriteShim(t, filepath.Join(bin, "git"), "#!/bin/sh\ncase \"$*\" in *--unset-all*) exit 4;; esac\nexec '"+gitPath+"' \"$@\"\n")
+	failing := gitx.New(map[string]string{"PATH": bin, "HOME": t.TempDir()}, false, func(string, ...any) {})
+	if err := source.Configure(ctx, failing, gitDir, home.Source{URL: url}); err == nil {
+		t.Error("Configure succeeded although git could not unset the push URL")
 	}
 }

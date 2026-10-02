@@ -173,15 +173,21 @@ func Configure(ctx context.Context, r *gitx.Runner, gitDir string, entry home.So
 	} {
 		// --replace-all, since a key a user added a second value to cannot
 		// be set to one value otherwise; --unset-all exits 5 for a key that
-		// is not there, which is the state it is asked for.
-		var err error
+		// is not there, which is the state it is asked for. Every other
+		// status, such as 3 for a config file git cannot read or 4 for one
+		// it cannot write, is a failure.
 		if kv[1] != "" {
-			_, err = r.Isolated(ctx, gitDir, "config", "--replace-all", name+kv[0], kv[1])
-		} else {
-			_, _, err = r.IsolatedStatus(ctx, gitDir, 5, "config", "--unset-all", name+kv[0])
+			if _, err := r.Isolated(ctx, gitDir, "config", "--replace-all", name+kv[0], kv[1]); err != nil {
+				return err
+			}
+			continue
 		}
+		_, status, err := r.IsolatedStatus(ctx, gitDir, 5, "config", "--unset-all", name+kv[0])
 		if err != nil {
 			return err
+		}
+		if status != 0 && status != 5 {
+			return fmt.Errorf("git config --unset-all %s%s exited %d", name, kv[0], status)
 		}
 	}
 	return nil

@@ -58,7 +58,16 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 	if err != nil {
 		return err
 	}
-	if len(targets) == 0 { // --all on a machine that has no source
+	if len(targets) == 0 { // --all on a machine that has no tree source
+		s, err := inv.loadSettings()
+		if err != nil {
+			return err
+		}
+		if len(s.Sources) > 0 { // only fork sources, which a tree fetch never reaches
+			inv.out.print("No tree sources to fetch. ", inv.out.paint(heading, s.Sources[0].URL), " is a fork source: run ",
+				inv.out.paint(label, "agentx remote set <url>"), " to fetch its forks.")
+			return nil
+		}
 		inv.out.print("No sources. Add one with ", inv.out.paint(label, "agentx source add <url>"), ".")
 		return nil
 	}

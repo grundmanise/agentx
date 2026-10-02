@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
@@ -238,7 +239,8 @@ func TestServeWarnsOnceAboutASourceItCannotFetch(t *testing.T) {
 // source's ref writes, and the rescan that write sets off rebuilds the
 // source index, but the second source is no different from one rebuild to
 // the next: the index warns once that it has not been fetched, and the
-// checks warn once that they could not fetch it.
+// checks warn once that they could not fetch it. A fork source, which is
+// never fetched as a tree, is warned about by neither.
 func TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -246,6 +248,17 @@ func TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves(t *testing.T) {
 	one, two := h.fetchSources(t)
 	h.accountGit("remote", "remove", source.RemoteName(source.ID(two.url)))
 	h.accountGit("update-ref", "-d", source.Ref(source.ID(two.url)))
+	err := home.Mutate(h.agentx, nil, func() error {
+		settings, err := home.LoadSettings(h.agentx)
+		if err != nil {
+			return err
+		}
+		settings.SetSource(home.Source{URL: "https://example.invalid/me/forks", Layout: home.LayoutFork, Account: true})
+		return home.SaveSettings(h.agentx, settings)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	h.env["AGENTX_CHECK_INTERVAL"] = quickChecks
 	p := h.serve(t, "--json")

@@ -150,10 +150,12 @@ func addresses(src home.Source) []source.Address {
 
 // pushChoice is what an add was told about the push URL: nothing, so that
 // an entry it adds again keeps the push URL it has, or a URL to record, ""
-// clearing it.
+// clearing it. warning is what pushURLFor had to say about the URL, which
+// the add prints once the entry is written, since it says where pushes go.
 type pushChoice struct {
-	set bool
-	url string
+	set     bool
+	url     string
+	warning string
 }
 
 // pushURLFor decides what --push-url records for the source at canonical,
@@ -203,18 +205,24 @@ func pushURLFor(raw, canonical string, resolve func(host string) string) (record
 
 // forkSourceRefusal is why src, a tree source an add is about to write,
 // cannot be one, nil when it can: a fork source of s already names its
-// repository, by url or push URL, through resolve.
+// repository, by url or push URL, through resolve. The message names the
+// URL of src that does, its push URL when only that one does.
 func forkSourceRefusal(s home.Settings, src home.Source, resolve func(host string) string) *failure {
 	for _, fork := range s.Sources {
-		if fork.Layout == home.LayoutFork && (fork.URL == src.URL || sameRepository(src, fork, resolve)) {
-			return forkSourceIs(src.URL, fork)
+		if fork.Layout != home.LayoutFork || (fork.URL != src.URL && !sameRepository(src, fork, resolve)) {
+			continue
 		}
+		if fork.URL != src.URL && !sameRepository(home.Source{URL: src.URL}, fork, resolve) {
+			return forkSourceIs("the push URL "+sanitised(src.PushURL), fork)
+		}
+		return forkSourceIs(src.URL, fork)
 	}
 	return nil
 }
 
 // forkSourceIs refuses to fetch url, which names the repository of the fork
-// source fork, as a tree source, exit 6. A fork source holds one branch per
+// source fork, as a tree source, exit 6; url is the start of the message,
+// so it may name a push URL as such. A fork source holds one branch per
 // fork, and fetching it as a tree as well would bring its objects in
 // without their blobs, which a fork's history then lacks. Its forks are
 // fetched whole by the account remote's commands, and installing one is

@@ -61,7 +61,7 @@ agentx source add https://github.com/acme/skills --push-url git@github-work:acme
 
 The push URL must name the same repository. agentx reads a host alias from your SSH configuration, so `github-work` in `~/.ssh/config` counts as the `github.com` it stands for. If the hosts still differ, agentx records the push URL and warns you. A push URL with a token in it, or one naming another repository, is refused.
 
-Adding the source again keeps its push URL. Clear it with `--push-url=`. While a source has a push URL, git ignores your `pushInsteadOf` rewrites for it.
+Adding the source again keeps its push URL. Clear it with `--push-url=`, or with a push URL that only spells the source's own URL another way. While a source has a push URL, git ignores your `pushInsteadOf` rewrites for it.
 
 ### What is fetched
 
@@ -194,7 +194,7 @@ Once you take the last of those skills off the machine, with [`agentx skill remo
 - `1`: the URL is not one of the accepted forms, the pin and the tree URL name different refs, the push URL carries a token, is not a URL git can push to or names another repository, or `source fetch` was given neither a source nor `--all`.
 - `3`: the source cannot be reached, is not a git repository, or needs credentials git does not have. The hint names the fix. From `source fetch` over several sources, it also means they failed for different reasons; read the warnings.
 - `5`: the pinned ref or the path does not exist in the source, the source is not on this machine, or what this machine holds of it is incomplete. For an id of a source you removed, the hint names the `agentx source add` command that brings it back.
-- `6`: the URL names the repository of your account remote. Fetch its forks with `agentx remote set <url>` and install one with `agentx skill add --from-account <name>`.
+- `6`: the URL names the repository of a fork source in your settings, such as an account remote imported from another machine. Fetch its forks with `agentx remote set <url>` and install one with `agentx skill add --from-account <name>`.
 - `7`: another agentx command is running. Retry when it finishes. An add that could not take its own half-done work back says what it left and how to clear it.
 - `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.
 

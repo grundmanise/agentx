@@ -166,10 +166,7 @@ func (inv *invocation) sourceAdd(ctx context.Context, arg string, push pushChoic
 		if f != nil {
 			return f
 		}
-		if warning != "" {
-			inv.out.warn(warning)
-		}
-		push.url = record
+		push.url, push.warning = record, warning
 	}
 	_, _, err = inv.addSource(ctx, src, push)
 	return err
@@ -189,7 +186,8 @@ func (inv *invocation) sshHosts(ctx context.Context) func(host string) string {
 // source's remote, fetches it, records it in the settings as a mutation of
 // its own and confirms it, then returns the listing of the fetch and the
 // entry it wrote. push is the push URL to record, already held to its
-// rules; without one an entry added again keeps the push URL it has. skill
+// rules, and its warning is printed only once the entry is written; without
+// one an entry added again keeps the push URL it has. skill
 // add runs it too, for a source this machine does not have yet and for
 // --fetch, so that the source is fetched once and the install reads the
 // listing that fetch built. A fork source of the settings naming the
@@ -320,6 +318,9 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source, push pu
 			return listing, entry, takeBack(err)
 		}
 		return listing, entry, err
+	}
+	if push.warning != "" {
+		inv.out.warn(push.warning)
 	}
 	n := len(listing.Skills)
 	inv.out.emit(sourceEvent{event: newEvent("source"), ID: src.ID(), URL: src.URL, Alias: entry.Alias, PushURL: entry.PushURL, Pin: src.Ref, Subpath: src.Subpath,
