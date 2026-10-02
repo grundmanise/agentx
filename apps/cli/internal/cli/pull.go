@@ -198,9 +198,6 @@ func (inv *invocation) judgePull(ctx context.Context, gitDir string, rec lineage
 		case f != nil:
 			return "", nil, f
 		case u.merged.conflicted && !u.fork.start:
-			if u.merge.Theirs == theirs {
-				u.fork.with = fork.with
-			}
 			return pullConflict, u, nil
 		}
 		u.fork.doing = doing

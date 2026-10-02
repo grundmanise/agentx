@@ -38,7 +38,9 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 			"updated from as the merge base, so its own commits are kept, and the merge is\n" +
 			"committed on its branch. Commit or revert its uncommitted edits first. A conflict\n" +
 			"waits as for a managed skill, and the fork's worktree and branch stay as they are\n" +
-			"until it is applied.\n\n" +
+			"until it is applied. With an account remote set, what your other machines\n" +
+			"published of the fork is taken in first, as 'agentx pull' takes it in, as a\n" +
+			"commit of its own.\n\n" +
 			"Pass --all instead of a name to update every managed skill and fork the last check\n" +
 			"found an update for. Read an update before you apply it with\n" +
 			"'agentx skill diff <name> --update'.",
@@ -331,12 +333,11 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 // is fetched once for the run. A fork with a merge pending is left to the
 // update, which completes it; one whose remote branch holds nothing it
 // lacks, or that the remote holds no branch of, is left as it is, with
-// nothing reported. A fork
-// whose account step conflicts, and so is left pending, or is refused, is
-// dropped from the run, see drop, and its update from upstream waits:
-// dropped names them. pulled names the forks whose branch it moved, in
-// name order. A remote git cannot reach is a warning, and the update from
-// upstream goes on without it.
+// nothing reported. A fork whose account step conflicts, and so is left
+// pending, or is refused, is dropped from the run, see drop, and its
+// update from upstream waits: dropped names them. pulled names the forks
+// whose branch it moved, in name order. A remote git cannot reach is a
+// warning, and the update from upstream goes on without it.
 func (r *updateRun) accountStep(ctx context.Context, names []string, records map[string]lineage.Record) (pulled []string, dropped map[string]bool, err error) {
 	inv := r.inv
 	var forks []string
@@ -970,15 +971,15 @@ func conflictFailure(name, path string, files int) *failure {
 // conflictHintAt is the hint of an update that left the merge of the skill
 // called name pending, path being the skill's directory in the checkout.
 func conflictHintAt(name, path string) string {
-	return conflictHintRunning(name, path, skillCommand("update", name))
+	return conflictHintRunning(name, path, "run '"+skillCommand("update", name)+"' again to apply it")
 }
 
-// conflictHintRunning is conflictHintAt for a merge that the command line
-// again completes once it is resolved, such as agentx pull <name> for a
-// merge a pull left pending.
-func conflictHintRunning(name, path, again string) string {
+// conflictHintRunning is conflictHintAt with then saying how the merge is
+// completed once it is resolved, such as running agentx pull <name> again
+// for a merge a pull left pending.
+func conflictHintRunning(name, path, then string) string {
 	return "resolve it with git in " + quotedPath(path) + " ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), " +
-		"then run '" + again + "' again to apply it, or '" + skillCommand("update", name, "--abort") + "' to give it up"
+		"then " + then + ", or '" + skillCommand("update", name, "--abort") + "' to give it up"
 }
 
 // reportApplied is report's part for the skills the run updated.

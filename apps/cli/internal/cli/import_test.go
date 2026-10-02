@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
+	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
 // readText reads a file the test compares byte for byte.
@@ -447,6 +448,37 @@ func TestImportListsWhatTheAccountRepoHas(t *testing.T) {
 	contains(t, "stdout", text.stdout, "3 skills in the export: 1 present, 1 missing, 1 at a different version")
 	contains(t, "stdout", text.stdout, "  alpha  managed  present")
 	contains(t, "stdout", text.stdout, "  gamma  managed  missing")
+}
+
+// TestRestoreStates: a branch of the name decides the state whatever the
+// account remote holds, and the remote's branch stands in only for a fork
+// the account repo holds no branch of, never for a managed skill.
+func TestRestoreStates(t *testing.T) {
+	t.Parallel()
+	fork := func(commit string) lineage.Record { return lineage.Record{Kind: lineage.KindFork, Commit: commit} }
+	cases := []struct {
+		name    string
+		kind    string
+		records map[string]lineage.Record
+		remote  map[string]string
+		want    string
+		local   string
+	}{
+		{"local branch only", lineage.KindFork, map[string]lineage.Record{"notes": fork("c1")}, nil, restorePresent, "c1"},
+		{"remote branch at its commit", lineage.KindFork, nil, map[string]string{"notes": "c1"}, restorePresent, "c1"},
+		{"remote branch at another commit", lineage.KindFork, nil, map[string]string{"notes": "c2"}, restoreDifferent, "c2"},
+		{"the local branch decides", lineage.KindFork, map[string]lineage.Record{"notes": fork("c2")}, map[string]string{"notes": "c1"}, restoreDifferent, "c2"},
+		{"a managed record is not matched against the remote", lineage.KindManaged, nil, map[string]string{"notes": "c1"}, restoreMissing, ""},
+		{"neither", lineage.KindFork, nil, nil, restoreMissing, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			got := restoreStates([]exportSkill{{Name: "notes", Kind: c.kind, Commit: "c1"}}, c.records, c.remote)
+			equal(t, "state", got[0].State, c.want)
+			equal(t, "local commit", got[0].LocalCommit, c.local)
+		})
+	}
 }
 
 // TestImportOntoAMachineWithNoAccountRepo: everything the export lists is

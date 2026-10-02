@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
@@ -27,11 +28,16 @@ func forkPendingRefusal(name, what string) *failure {
 
 // uncommittedRefusal refuses to do what to the fork called name while its
 // skill directory holds edits its branch does not record. A file git
-// ignores is no such edit, since no commit would record it either.
+// ignores is no such edit, since no commit would record it either. The
+// refusal wraps errUncommitted.
 func uncommittedRefusal(name, what string) *failure {
 	return refuse(exitRefused, sanitised(name)+" has uncommitted edits, so it cannot be "+what+" until they are committed or reverted",
-		"run '"+skillCommand("commit", name)+"' to keep them, or '"+skillCommand("revert", name)+"' to discard them, then run the command again")
+		"run '"+skillCommand("commit", name)+"' to keep them, or '"+skillCommand("revert", name)+"' to discard them, then run the command again").wrap(errUncommitted)
 }
+
+// errUncommitted is what a refusal for uncommitted edits wraps, so that a
+// command reporting the edits on their own does not name them twice.
+var errUncommitted = errors.New("uncommitted edits")
 
 // siteJudged is a fork's skill directory as judgeSite found it: the
 // fingerprint captured before git read it, as a journal compares it, and

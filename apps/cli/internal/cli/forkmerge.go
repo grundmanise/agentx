@@ -172,14 +172,26 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 	}
 	u.rec = lineage.Record{Name: name, Kind: lineage.KindFork, Commit: mine.Base, Import: mine.Import}
 	u.next = lineage.Record{Name: name, Kind: lineage.KindFork, Commit: recorded, Import: next.Import}
-	// A merge whose theirs is no import commit is a completed merge merged
-	// again with the commits made while it was pending.
+	// A merge whose theirs is no import commit is a merge of two histories:
+	// a completed merge merged again with the commits made while it was
+	// pending, or a pull's merge with what the account remote held.
 	u.fork.remerge = p.theirs != "" && walked[p.theirs].Base != p.theirs
 	if !resolved {
 		u.merge = lineage.Merge{Base: mine.Base, Mine: p.mine, Theirs: p.theirs}
 		if u.fork.remerge {
 			if u.merge.Base, err = inv.git.Isolated(ctx, gitDir, "merge-base", p.mine, p.theirs); err != nil {
 				return nil, failureOf(accountRepoFailure(err))
+			}
+			// A completed merge is only ever written here, so a theirs the
+			// remote-tracking branch holds is what a pull merged, whichever
+			// command reports the merge again and however far the remote
+			// moved on since.
+			on, err := inv.git.Isolated(ctx, gitDir, "for-each-ref", "--format=%(refname)", "--contains", p.theirs, lineage.RemoteForkRef(name))
+			if err != nil {
+				return nil, failureOf(accountRepoFailure(err))
+			}
+			if on != "" {
+				u.fork.with = "the account remote"
 			}
 		} else if p.theirs != "" {
 			u.next = lineage.Record{Name: name, Kind: lineage.KindFork, Commit: p.theirs, Import: walked[p.theirs].Import}

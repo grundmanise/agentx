@@ -119,6 +119,18 @@ func (f *forkUpdate) again(name string) (command, verb string) {
 	return skillCommand("update", name), "update"
 }
 
+// complete is how the fork's merge is completed once it is resolved, as
+// the hint of its conflict says it: by running the command that started it
+// again, but for a merge a publish started, which a pull completes, since
+// a publish never completes a pending merge.
+func (f *forkUpdate) complete(name string) string {
+	if f.doing == "published" {
+		return "run '" + pullCommand(name) + "' to complete it before publishing again"
+	}
+	command, _ := f.again(name)
+	return "run '" + command + "' again to apply it"
+}
+
 // forkBaseRecord is the record of the fork rec's base version, see
 // lineage.Record.ForkBase, refusing a fork that has none to update from:
 // one whose history does not say, which is the account repo's to sort
@@ -433,7 +445,6 @@ func forkConflictFailure(u *updating, checkout string) *failure {
 		with = "the commits made while its merge was pending"
 	}
 	name := u.name
-	again, _ := u.fork.again(name)
 	return refuse(exitPendingMerge, sanitised(name)+" conflicts with "+with+" in "+plural(len(u.conflict.Files), "file")+", so the merge is pending and the fork's worktree and branch were left as they are",
-		conflictHintRunning(name, filepath.Join(checkout, u.fork.site.dir), again))
+		conflictHintRunning(name, filepath.Join(checkout, u.fork.site.dir), u.fork.complete(name)))
 }

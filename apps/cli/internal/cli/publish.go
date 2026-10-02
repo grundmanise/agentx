@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -258,9 +259,9 @@ func (inv *invocation) pushForks(ctx context.Context, gitDir, url string, list [
 // reportPublished reports every fork of the publish, in name order: one
 // progress event each, a merge it made first as a pull reports it, its
 // publish event and its line, then one library_skill event for each fork
-// the merge moved, a warning for each fork published or up to date with
-// uncommitted edits, and the result, which answers for every fork that was
-// not published, see refusals.
+// the merge moved, a warning for each fork with uncommitted edits but one
+// refused for them, whose refusal names them, and the result, which
+// answers for every fork that was not published, see refusals.
 func (inv *invocation) reportPublished(ctx context.Context, list []*publishing) error {
 	out := inv.out
 	run := refusals{verb: "published", noun: "fork", mixed: "run 'agentx skill list' to see the state of each fork, then publish the rest one at a time"}
@@ -283,9 +284,9 @@ func (inv *invocation) reportPublished(ctx context.Context, list []*publishing) 
 		case publishUpToDate:
 			out.print(name, " is up to date on the account remote")
 		}
-		// A fork refused is not published at all, as its refusal says,
-		// whatever it holds uncommitted.
-		if p.uncommitted && p.outcome != publishRefused {
+		// A fork refused for its uncommitted edits says so in its refusal;
+		// any other fork that holds some is named with them.
+		if p.uncommitted && (p.f == nil || !errors.Is(p.f, errUncommitted)) {
 			dirty = append(dirty, p.name)
 		}
 		if p.f != nil {
