@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
@@ -178,14 +179,19 @@ func forkBranch(name string) string {
 // once everything it was judged on is read again under the lock: the
 // branch still holds the commit judged, no merge is pending since, and,
 // for skill rename, the skill directory is still as clean as it was. It
-// records, in the order they apply: the placement agentx made in every
-// detected configuration, by the rule every removal deletes by, see
-// planRemoval; whatever the library path holds, the fork's symlink or what
-// is left of it; the worktree, retained until the journal is complete;
+// records, in the order they apply: a step that holds the branch to that
+// commit, which the journal's first transaction checks before any path
+// changes, since git run in the worktree moves the branch without the
+// lock; the placement agentx made in every detected configuration, by the
+// rule every removal deletes by, see planRemoval; the library symlink,
+// dangling or not, or the directory an install of the name made, when its
+// import branch is left; the worktree, retained until the journal is complete;
 // copy_mode; and last the branch, the import branch of the name if one is
 // left, the update candidate and the upstream-removed marker, each with the
-// value it holds now. Once the journal is applied, git's registration of
-// the worktree is dropped.
+// value it holds now. Any other directory or file at the library path is
+// not agentx's, as skill place and skill list say of it, and is left where
+// it is and named. Once the journal is applied, git's registration of the
+// worktree is dropped.
 func (inv *invocation) applyForkRemoval(ctx context.Context, r *forkRemoval) (removalPlan, error) {
 	targets := inv.detectedTargets()
 	plan := removalPlan{name: r.name, whole: true, fork: true, from: targetIDs(targets)}
@@ -200,8 +206,7 @@ func (inv *invocation) applyForkRemoval(ctx context.Context, r *forkRemoval) (re
 			return err
 		}
 		if values[lineage.ForkRef(r.name)] != r.tip {
-			return fail(exitRefused, sanitised(r.name)+" changed while it was being removed, so nothing was removed",
-				"run '"+skillCommand("remove", r.name)+"' again")
+			return movedWhileRemoved(r.name)
 		}
 		if inv.mergePending(r.name) {
 			return forkPendingRefusal(r.name, "removed")
@@ -215,35 +220,49 @@ func (inv *invocation) applyForkRemoval(ctx context.Context, r *forkRemoval) (re
 		if err != nil {
 			return err
 		}
+		libState, err := home.State(libPath)
+		if err != nil {
+			return err
+		}
+		// The library entry is the fork's symlink, dangling or not, or,
+		// when the name has an import branch left beside the fork's, the
+		// directory that install made; anything else there is the user's.
+		ours := home.IsAbsent(libState) || home.IsLink(libState) || (home.IsDir(libState) && values[lineage.ManagedRef(r.name)] != "")
 		m := home.NewMutation(inv.dirs.Home)
+		m.Ref(r.gitDir, lineage.ForkRef(r.name), r.tip, r.tip)
 		plan.deleted, plan.kept, plan.library, plan.dropped = nil, nil, nil, nil
 		judge := copyJudge{against: "the library"}
 		lib, inLibrary := librarySkill(inv.dirs.Library, r.name)
-		if inLibrary && lib.ContentHash != "" {
+		if inLibrary && ours && lib.ContentHash != "" {
 			judge.differs = func(path string) bool { return contentHashAt(path) != lib.ContentHash }
 		}
 		// A library entry that leads nowhere, its worktree gone, gave no
 		// client the skill, so no client that reads the library is said to
-		// lose it.
-		plan.absent = !inLibrary
+		// lose it; nor does one that is not the fork's symlink, which
+		// stays.
+		plan.absent = !inLibrary || !ours
 		copies := edit.copiesOf(r.name)
-		gone := removalDeletes(targets, r.name, libPath, copies, true)
+		gone := removalDeletes(targets, r.name, libPath, copies, ours)
 		if err := inv.stageRemovals(m, &plan, targets, libPath, judge, copies, gone); err != nil {
 			m.Discard()
 			return err
 		}
-		for _, path := range []string{libPath, root} {
-			state, err := home.State(path)
-			if err != nil {
-				m.Discard()
-				return err
+		if ours {
+			if !home.IsAbsent(libState) {
+				m.Remove(libPath, libState)
 			}
-			if !home.IsAbsent(state) {
-				m.Remove(path, state)
-			}
-			if path == root {
-				plan.worktree = !home.IsAbsent(state)
-			}
+		} else {
+			step := removalStep{path: libPath, mode: modeLibrary, state: libState, why: libraryKept(libPath, libState, r.name, targets)}
+			plan.kept = append(plan.kept, step)
+			inv.out.warn(step.why)
+		}
+		state, err := home.State(root)
+		if err != nil {
+			m.Discard()
+			return err
+		}
+		if plan.worktree = !home.IsAbsent(state); plan.worktree {
+			m.Remove(root, state)
 		}
 		plan.branch = r.tip
 		m.Ref(r.gitDir, lineage.ForkRef(r.name), r.tip, "")
@@ -260,6 +279,9 @@ func (inv *invocation) applyForkRemoval(ctx context.Context, r *forkRemoval) (re
 		return m.Apply(inv.refs(ctx))
 	})
 	back()
+	if errors.Is(err, home.ErrMovedBeforeApply) {
+		return plan, movedWhileRemoved(r.name)
+	}
 	if err != nil {
 		return plan, mutationFailure(err)
 	}
@@ -269,6 +291,38 @@ func (inv *invocation) applyForkRemoval(ctx context.Context, r *forkRemoval) (re
 		inv.out.debugf("%s: %v", r.name, err)
 	}
 	return plan, nil
+}
+
+// movedWhileRemoved refuses the removal of the fork called name whose
+// branch moved after it was judged, a commit made with git in its worktree
+// for one: nothing was removed.
+func movedWhileRemoved(name string) error {
+	return fail(exitRefused, sanitised(name)+" changed while it was being removed, so nothing was removed",
+		"run '"+skillCommand("remove", name)+"' again")
+}
+
+// libraryKept is the line a fork's removal reports a directory or a file
+// at its library path with, state being what the path holds: it is not the
+// symlink agentx made, and it stays. A directory is a skill to every
+// client of targets that reads the library, which still sees it.
+func libraryKept(libPath, state, name string, targets []placeTarget) string {
+	if !home.IsDir(state) {
+		return libPath + " is not " + sanitised(name) + "'s library symlink and was left as it is"
+	}
+	var readers []string
+	for _, t := range targets {
+		if t.readsLibrary {
+			readers = append(readers, t.id)
+		}
+	}
+	line := libPath + " is a directory agentx did not place there and was left as it is"
+	switch len(readers) {
+	case 0:
+		return line
+	case 1:
+		return line + "; " + readers[0] + " still sees it"
+	}
+	return line + "; " + andList(readers) + " still see it"
 }
 
 // deleteRemoteFork deletes the account remote's branch of the fork r
@@ -306,10 +360,7 @@ func remoteStillHolds(name, done string) string {
 // branch another machine moved since the fetch is rejected as stale, and
 // running the command again fetches it anew. Pure.
 func remoteDeleteRefusal(name, done string, s gitx.PushStatus) *failure {
-	reason := s.Summary
-	if s.Reason != "" {
-		reason = s.Reason
-	}
+	reason := s.Why()
 	again := "run '" + skillCommand("remove", name, "--remote") + "' again"
 	hint := again
 	switch {

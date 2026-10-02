@@ -11,17 +11,21 @@ import (
 
 // TestServeAutoPushesAfterTheQuietPeriod runs one serve over a published
 // fork with a commit the account remote lacks and an edit nobody
-// committed, with a quiet period of a few milliseconds. With auto_push off,
-// as it is by default, nothing is pushed however many quiet periods pass.
-// Turned on while serve runs, the commit is pushed once the branch stood
-// still for a quiet period, reported as a publish of this serve process
-// that names the uncommitted edit, which stays uncommitted: auto-push
-// never commits, and the branch holds the commit it held. A fork the
+// committed, and a fork never published, with a quiet period of a few
+// milliseconds. With auto_push off, as it is by default, nothing is pushed
+// however many quiet periods pass. Turned on while serve runs, the commit
+// is pushed once the branch stood still for a quiet period, reported as a
+// publish of this serve process that names the uncommitted edit, which
+// stays uncommitted: auto-push never commits, and the branch holds the
+// commit it held. The fork never published is not pushed: a branch the
+// account remote does not hold is for agentx publish to make. A fork the
 // account remote holds commits of that it lacks is not pushed, and is
-// warned about once.
+// warned about once, and nor is one whose branch there is another fork,
+// by its fork id, although the push would fast-forward it.
 func TestServeAutoPushesAfterTheQuietPeriod(t *testing.T) {
 	t.Parallel()
 	h, _, skillDir, _ := forkHarness(t)
+	h.mustRun("skill", "new", "drafts")
 	remote := newAccountRemote(t, h)
 	h.mustRun("remote", "set", remote)
 	h.mustRun("publish", "notes")
@@ -61,6 +65,16 @@ func TestServeAutoPushesAfterTheQuietPeriod(t *testing.T) {
 	warned := p.awaitLogged("warn", "auto-push: ", 1)
 	equal(t, "the warning", warned[0], "auto-push: notes was not pushed, since the account remote holds commits it lacks; run 'agentx publish notes' to take them in and publish it")
 	equal(t, "the remote's notes, diverged", remoteTip(), theirs)
+
+	// This machine's notes becomes another fork of the name, as renaming
+	// it away and back makes it, on top of the remote's: the push would be
+	// a fast-forward, and is not made.
+	other := h.accountGit("commit-tree", h.ref(lineage.ForkRef("notes"))+"^{tree}", "-p", theirs, "-m", "Fork notes\n\nAgentx-Fork-ID: fedcba98-7654-4321-8fed-cba987654321")
+	h.accountGit("update-ref", lineage.ForkRef("notes"), other)
+	warned = p.awaitLogged("warn", "auto-push: ", 2)
+	equal(t, "the second warning", warned[1], "auto-push: the account remote's skills/notes is a different fork than notes on this machine, so notes cannot be published; rename yours with 'agentx skill rename notes <new>', then publish that one")
+	equal(t, "the remote's notes, another fork", remoteTip(), theirs)
 	equal(t, "exit", p.close(), 0)
-	equal(t, "warnings", len(p.logged("warn", "auto-push: ")), 1)
+	equal(t, "warnings", len(p.logged("warn", "auto-push: ")), 2)
+	equal(t, "the remote's drafts", remoteGit(t, h, remote, "for-each-ref", "refs/heads/skills/drafts"), "")
 }

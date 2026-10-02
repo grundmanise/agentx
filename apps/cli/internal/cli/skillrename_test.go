@@ -88,25 +88,30 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 
 // TestSkillRenameNamesTheCommandThatFinishesIt: a removal that fails once
 // the fork is made says so and names the command that finishes the rename.
-// A git wrapper moves the old fork's branch while the new fork's worktree
-// is added, so the removal, which holds the branch to the commit the fork
-// was made from, refuses rather than delete a commit the new fork lacks.
+// A git wrapper moves the old fork's branch at the last moment it can, as
+// a commit made with git in its worktree would: after the removal read it
+// under its lock, at the journal's first transaction, which holds the
+// branch to the commit the fork was made from. The removal refuses there,
+// before anything of the old fork goes, rather than delete a commit the
+// new fork lacks, and leaves no journal for every later command to refuse
+// at.
 func TestSkillRenameNamesTheCommandThatFinishesIt(t *testing.T) {
 	t.Parallel()
 	real, err := exec.LookPath("git")
 	if err != nil {
 		t.Fatal(err)
 	}
-	h, _, _, _ := forkHarness(t)
+	h, root, skillDir, lib := forkHarness(t)
 	tip := h.ref(lineage.ForkRef("notes"))
 	moved := h.accountGit("commit-tree", tip+"^{tree}", "-p", tip, "-m", "made with git")
+	marker := filepath.Join(t.TempDir(), "moved")
 	stubGit(t, h, `#!/bin/sh
 case " $* " in
-*" worktree add "*)
-	`+real+` "$@"
-	status=$?
-	`+real+` --git-dir=`+shellWord(gitx.AccountRepoPath(h.agentx))+` update-ref refs/heads/skills/notes `+moved+`
-	exit $status ;;
+*" for-each-ref --format=%(refname)%00%(objectname) refs/heads/skills/notes ")
+	if [ ! -e `+shellWord(marker)+` ]; then
+		: > `+shellWord(marker)+`
+		`+real+` --git-dir=`+shellWord(gitx.AccountRepoPath(h.agentx))+` update-ref refs/heads/skills/notes `+moved+` || exit 1
+	fi ;;
 esac
 exec `+real+` "$@"
 `)
@@ -120,4 +125,7 @@ exec `+real+` "$@"
 	}
 	equal(t, "the old branch", h.ref(lineage.ForkRef("notes")), moved)
 	equal(t, "journals", journalCount(t, h), 0)
+	if _, ok := isSymlink(t, lib); !ok || !lexists(filepath.Join(skillDir, "SKILL.md")) || len(hiddenEntries(t, filepath.Dir(root))) > 0 {
+		t.Error("the refused removal took something of the old fork")
+	}
 }

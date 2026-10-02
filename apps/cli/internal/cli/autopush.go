@@ -16,10 +16,13 @@ import (
 // still for the quiet period, so that a run of commits goes out as one
 // push. It pushes commits and nothing else: it never commits, so edits
 // nobody committed stay where they are, and it reads no identity. It only
-// ever fast-forwards the account remote's branch: a fork whose branch
-// there holds commits it lacks, another machine's or another fork's, is
-// left for an explicit publish, which takes them in first, so that serve
-// never starts a merge on its own.
+// ever fast-forwards a branch the account remote already holds: a fork
+// published nowhere yet, or whose branch there was deleted, is left for
+// an explicit publish, so that serve never puts back a branch another
+// machine removed; and a fork whose branch there holds commits it lacks,
+// another machine's, or is another fork, is left for an explicit publish
+// too, which takes them in first or refuses, so that serve never starts a
+// merge on its own.
 
 // pushQuiet is how long a fork's branch has to stand still before serve
 // pushes it: a minute, or AGENTX_PUSH_QUIET, a duration such as 30s, for
@@ -43,11 +46,12 @@ func (inv *invocation) pushQuietPeriod() (time.Duration, error) {
 
 // autoPushState is what the auto-push tick remembers from one run to the
 // next, in the serve process alone: the tip of each fork the last run saw,
-// the forks it could not push, as no fast-forward or as rejected, by the
-// tip and the remote tip it found them at, so that it neither fetches for
-// them again nor pushes them until either moves, and the cause of each
-// failure it last warned about. Runs of one tick never overlap, and the report of each is made
-// before the next starts, so nothing else touches it.
+// the forks it could not push, as no fast-forward, as another fork or as
+// rejected, by the tip and the remote tip it found them at, so that it
+// neither fetches for them again nor pushes them until either moves, and
+// the cause of each failure it last warned about. Runs of one tick never
+// overlap, and the report of each is made before the next starts, so
+// nothing else touches it.
 type autoPushState struct {
 	seen    map[string]string // fork name -> tip at the last run
 	behind  map[string]string // fork name -> "<tip> <remote tip>" it could not be pushed at
@@ -94,14 +98,17 @@ func (st *autoPushState) warn(inv *invocation, what, message string) {
 // remote, it does nothing and forgets what it saw, so that turning it on
 // waits a whole quiet period. Otherwise a fork is due when its branch
 // holds the commit the last run saw, so that it stood still for a quiet
-// period, it has no merge pending, and its remote-tracking branch is not
-// that commit. The account remote is fetched once when a fork is due, and
-// a due fork whose branch there is gone or an ancestor of its tip is
-// pushed, every one in one push, see gitx.Push; one whose branch there
-// holds commits it lacks, or that the remote rejected, is left alone, with
-// a warning naming the publish that takes them in, until its tip or its
-// remote-tracking branch moves. It returns a publish event for every fork
-// the account remote now holds the tip of.
+// period, it has no merge pending, and its remote-tracking branch is there
+// and is not that commit: a fork the account remote holds no branch of,
+// as far as the last fetch knows, is published by agentx publish alone.
+// The account remote is fetched once when a fork is due, and a due fork
+// whose branch there is still there, is the same fork by its fork id and
+// is an ancestor of its tip is pushed, every one in one push, see
+// gitx.Push; one whose branch there is another fork, holds commits it
+// lacks, or that the remote rejected, is left alone, with a warning naming
+// what to run, until its tip or its remote-tracking branch moves. It
+// returns a publish event for every fork the account remote now holds the
+// tip of.
 func (inv *invocation) autoPush(ctx context.Context, st *autoPushState) []publishEvent {
 	s, err := inv.loadSettings()
 	if err != nil {
@@ -138,7 +145,8 @@ func (inv *invocation) autoPush(ctx context.Context, st *autoPushState) []publis
 			continue
 		}
 		seen[name] = rec.Commit
-		if st.seen[name] == rec.Commit && tracked[name] != rec.Commit && st.behind[name] != rec.Commit+" "+tracked[name] && !inv.mergePending(name) {
+		there := tracked[name]
+		if st.seen[name] == rec.Commit && there != "" && there != rec.Commit && st.behind[name] != rec.Commit+" "+there && !inv.mergePending(name) {
 			due = append(due, name)
 		}
 	}
@@ -156,23 +164,31 @@ func (inv *invocation) autoPush(ctx context.Context, st *autoPushState) []publis
 		st.warn(inv, "account repo", err.Error())
 		return nil
 	}
+	ids, walked, err := inv.autoPushLineage(ctx, gitDir, due, seen, tracked)
+	if err != nil {
+		st.warn(inv, "account repo", err.Error())
+		return nil
+	}
 	var branches []string
 	for _, name := range due {
 		tip, there := seen[name], tracked[name]
-		switch {
-		case there == tip:
-			continue // published meanwhile
-		case there != "":
-			_, status, err := inv.git.IsolatedStatus(ctx, gitDir, 1, "merge-base", "--is-ancestor", there, tip)
-			if err != nil {
-				st.warn(inv, name, sanitised(name)+": "+err.Error())
-				continue
-			}
-			if status != 0 {
-				st.behind[name] = tip + " " + there
-				st.warn(inv, name, sanitised(name)+" was not pushed, since the account remote holds commits it lacks; run '"+publishCommand(name)+"' to take them in and publish it")
-				continue
-			}
+		if there == "" || there == tip {
+			continue // deleted or published meanwhile
+		}
+		if f := sameForkRefusal(ids[name], walked[there], "published"); f != nil {
+			st.behind[name] = tip + " " + there
+			st.warn(inv, name, f.message+"; "+f.hint)
+			continue
+		}
+		_, status, err := inv.git.IsolatedStatus(ctx, gitDir, 1, "merge-base", "--is-ancestor", there, tip)
+		if err != nil {
+			st.warn(inv, name, sanitised(name)+": "+err.Error())
+			continue
+		}
+		if status != 0 {
+			st.behind[name] = tip + " " + there
+			st.warn(inv, name, sanitised(name)+" was not pushed, since the account remote holds commits it lacks; run '"+publishCommand(name)+"' to take them in and publish it")
+			continue
 		}
 		delete(st.behind, name)
 		branches = append(branches, strings.TrimPrefix(lineage.ForkRef(name), "refs/heads/"))
@@ -191,12 +207,8 @@ func (inv *invocation) autoPush(ctx context.Context, st *autoPushState) []publis
 		name := strings.TrimPrefix(ps.To, "refs/heads/skills/")
 		switch {
 		case ps.Rejected():
-			reason := ps.Summary
-			if ps.Reason != "" {
-				reason = ps.Reason
-			}
 			st.behind[name] = seen[name] + " " + tracked[name]
-			st.warn(inv, name, "the account remote rejected "+forkBranch(name)+": "+sanitised(reason)+"; run '"+publishCommand(name)+"'")
+			st.warn(inv, name, "the account remote rejected "+forkBranch(name)+": "+sanitised(ps.Why())+"; run '"+publishCommand(name)+"'")
 		case ps.Flag == '=':
 		default:
 			delete(st.warned, name)
@@ -205,4 +217,30 @@ func (inv *invocation) autoPush(ctx context.Context, st *autoPushState) []publis
 		}
 	}
 	return pushed
+}
+
+// autoPushLineage reads what tells the due forks from another fork of
+// their name on the account remote, as a publish does: every fork's record
+// with its fork id, and the history of each remote branch, as the fetch
+// left it, that is neither gone nor the fork's tip. Nothing is read when
+// no due fork needs it.
+func (inv *invocation) autoPushLineage(ctx context.Context, gitDir string, due []string, seen, tracked map[string]string) (map[string]lineage.Record, map[string]lineage.ForkLineage, error) {
+	var tips []string
+	for _, name := range due {
+		if there := tracked[name]; there != "" && there != seen[name] {
+			tips = append(tips, there)
+		}
+	}
+	if len(tips) == 0 {
+		return nil, nil, nil
+	}
+	records, err := inv.forkRecords(ctx, gitDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	walked, err := lineage.Walk(ctx, inv.git, gitDir, tips)
+	if err != nil {
+		return nil, nil, accountRepoFailure(err)
+	}
+	return records, walked, nil
 }

@@ -419,7 +419,7 @@ func replaceFile(dir, path string, data []byte) error {
 // staged content are removed, and the answer is ErrMovedBeforeApply.
 func apply(journalPath string, j journal, u RefUpdater) error {
 	early, late := refPhases(j.Steps)
-	if moved, err := applyRefs(early, u); err != nil {
+	if moved, err := applyRefs(early, late, u); err != nil {
 		var refused refusedRef
 		if !moved && errors.As(err, &refused) {
 			discardStaged(j)
@@ -443,7 +443,7 @@ func apply(journalPath string, j journal, u RefUpdater) error {
 			return unfinished(journalPath, step{Kind: "replace", Path: r.Path}, err)
 		}
 	}
-	if _, err := applyRefs(late, u); err != nil {
+	if _, err := applyRefs(late, nil, u); err != nil {
 		return err
 	}
 	j.Progress = "applied"
@@ -485,7 +485,7 @@ func unfinished(journalPath string, s step, err error) error {
 func applyStep(s step, u RefUpdater) (bool, error) {
 	switch s.Kind {
 	case stepRef:
-		return applyRefs([]step{s}, u)
+		return applyRefs([]step{s}, nil, u)
 	case stepWorktree:
 		return applyWorktree(s, u)
 	case stepMove:
@@ -590,7 +590,16 @@ func refPhases(steps []step) (early, late []step) {
 // one, so that a journal of thirty skills is two git processes and one
 // transaction rather than sixty processes and thirty chances to stop
 // halfway.
-func applyRefs(steps []step, u RefUpdater) (bool, error) {
+//
+// later is the steps of the phase that runs after this one. A ref this
+// phase names and a later step moves on is done too once it holds what
+// that later step leaves: a step whose old and new values are the same
+// moves nothing and holds the journal to a ref, so that a removal that
+// deletes a fork's branch last refuses in its first transaction, before
+// any path changed, when git run in the worktree moved the branch, and a
+// recovery that finds the branch already deleted by the removal's last
+// transaction must not refuse the check that came first.
+func applyRefs(steps, later []step, u RefUpdater) (bool, error) {
 	byDir := map[string][]step{}
 	var dirs []string // the repositories in the order the journal names them
 	for _, s := range steps {
@@ -622,7 +631,7 @@ func applyRefs(steps []step, u RefUpdater) (bool, error) {
 		var updates []RefUpdate
 		for _, s := range byDir[dir] {
 			switch have := live[s.Ref]; {
-			case have == s.New: // done already, by this run or an earlier one
+			case have == s.New, movedOnTo(later, s, have): // done already, by this run or an earlier one
 			case have != s.Old:
 				return moved, refusedRef{ref: s.Ref}
 			default:
@@ -638,6 +647,17 @@ func applyRefs(steps []step, u RefUpdater) (bool, error) {
 		moved = true
 	}
 	return moved, nil
+}
+
+// movedOnTo reports whether a step of later moves the ref of s on to
+// have, which then holds what the journal leaves there.
+func movedOnTo(later []step, s step, have string) bool {
+	for _, l := range later {
+		if l.GitDir == s.GitDir && l.Ref == s.Ref && l.New == have {
+			return true
+		}
+	}
+	return false
 }
 
 // refusedRef is the refusal of a ref that holds neither what the mutation
@@ -941,7 +961,7 @@ func recoverJournal(dir, journalPath string, u RefUpdater) error {
 		return fmt.Errorf("%w: %s is not a mutation journal", ErrRecovery, journalPath)
 	}
 	early, late := refPhases(j.Steps)
-	resumed, err := applyRefs(early, u)
+	resumed, err := applyRefs(early, late, u)
 	if err != nil {
 		return err
 	}
@@ -1008,7 +1028,7 @@ func recoverJournal(dir, journalPath string, u RefUpdater) error {
 	for _, r := range j.Replace {
 		os.Remove(r.Staged) // left behind when the live file already held the new content
 	}
-	moved, err := applyRefs(late, u)
+	moved, err := applyRefs(late, nil, u)
 	if err != nil {
 		return err
 	}

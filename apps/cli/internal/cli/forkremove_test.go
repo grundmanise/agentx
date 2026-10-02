@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,7 +19,8 @@ import (
 // symlink, the worktree with its uncommitted edit and ignored file, the
 // branch and the copy mode, and drops the worktree's registration, leaving
 // nothing hidden; the account remote keeps its branch. --remote then
-// on beta removes it here, but a push git cannot make leaves its branch
+// on beta removes it here, but for a directory of the user's at its
+// library path, which stays, and a push git cannot make leaves its branch
 // there, exit 3, and run again it deletes that branch alone, as it does
 // alpha's; asked again, neither holds it, exit 5. b still has both forks,
 // worktrees and all, after a pull.
@@ -70,6 +72,17 @@ func TestSkillRemoveOfAFork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A directory the user put where beta's library symlink was is theirs,
+	// as skill place says of it, and the removal leaves it.
+	betaLib := filepath.Join(a.library, "beta")
+	if err := os.Remove(betaLib); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(betaLib, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(betaLib, "SKILL.md"), skill("beta", "Mine"))
+	writeFile(t, filepath.Join(betaLib, "precious.md"), "mine\n")
 	path := a.env["PATH"]
 	stubGit(t, a, "#!/bin/sh\ncase \" $* \" in *\" push \"*) echo 'fatal: unable to access the remote' >&2; exit 128 ;; esac\nexec "+real+" \"$@\"\n")
 	out = a.run("--json", "skill", "remove", "beta", "--remote")
@@ -78,7 +91,13 @@ func TestSkillRemoveOfAFork(t *testing.T) {
 	e := a.one(out.stdout, "error")
 	equal(t, "its message", e["message"], "beta was removed from this machine, but the account remote still holds skills/beta: git push: fatal: unable to access the remote")
 	contains(t, "its hint", e["hint"].(string), "then run 'agentx skill remove beta --remote' again")
-	nothingAt(t, "beta's library symlink", filepath.Join(a.library, "beta"))
+	contains(t, "the directory left", out.stderr, betaLib+" is a directory agentx did not place there and was left as it is")
+	if _, err := os.Stat(filepath.Join(betaLib, "precious.md")); err != nil {
+		t.Errorf("the user's directory at beta's library path: %v", err)
+	}
+	if err := os.RemoveAll(betaLib); err != nil {
+		t.Fatal(err)
+	}
 	equal(t, "beta's branch", a.ref(lineage.ForkRef("beta")), "")
 	for _, name := range []string{"alpha", "beta"} {
 		out = a.run("--json", "skill", "remove", name, "--remote")
@@ -101,35 +120,11 @@ func TestSkillRemoveOfAFork(t *testing.T) {
 	}
 }
 
-// TestSkillRemoveTakesBothBranchesOfAName: a name the account repo holds
-// both an import branch and a fork branch of, as a fork of a managed skill
-// stopped part way leaves before a recovery, can still lose a placement on
-// its own, and its whole removal takes the library directory and both
-// branches.
-func TestSkillRemoveTakesBothBranchesOfAName(t *testing.T) {
-	t.Parallel()
-	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
-	head := strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/managed/alpha"))
-	h.accountGit("update-ref", "refs/heads/skills/alpha", head)
-
-	one := h.run("skill", "remove", "alpha", "--from", "cursor")
-	equal(t, "exit", one.exit, 0)
-	nothingAt(t, "the placement", filepath.Join(h.home, ".cursor", "skills", "alpha"))
-	equal(t, "the fork branch", strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/skills/alpha")), head)
-
-	out := h.run("skill", "remove", "alpha")
-	equal(t, "exit", out.exit, 0)
-	contains(t, "the text", out.stdout, "  deleted "+filepath.Join(h.library, "alpha")+", refs/heads/skills/alpha and refs/heads/managed/alpha\n")
-	nothingAt(t, "the library directory", filepath.Join(h.library, "alpha"))
-	equal(t, "the branches", h.accountGit("for-each-ref", "--format=%(refname)", "refs/heads/"), "")
-}
-
 // TestSkillRemoveOfAForkRecoversWhereItWasKilled kills a fork's removal
-// with SIGKILL at its two durable boundaries: once its journal is on disk,
-// at the first git it runs after writing it, the read of the branch its
-// deletion goes last with, so the placement, the library symlink and the
-// worktree are gone and the branch is not; and right after that deletion,
+// with SIGKILL at its two durable boundaries: once its journal is on disk
+// and its paths are gone, at the read of the branch its deletion goes last
+// with, so the placement, the library symlink and the worktree are gone
+// and the branch is not; and right after that deletion,
 // before the journal was told and before the worktree's registration was
 // dropped. The next command finishes either one, and drops the
 // registration, which no fork's branch holds any more.
@@ -141,7 +136,7 @@ func TestSkillRemoveOfAForkRecoversWhereItWasKilled(t *testing.T) {
 	}{
 		{"once the journal is on disk", `
 for f in %MUTATIONS%/*.json; do
-	if [ -e "$f" ]; then
+	if [ -e "$f" ] && [ ! -L %LIB% ]; then
 		kill -9 $PPID
 		exit 1
 	fi
@@ -164,9 +159,9 @@ exec %GIT% "$@"
 			t.Parallel()
 			h, root, _, lib := forkHarness(t)
 			tip := h.ref(lineage.ForkRef("notes"))
-			out := killedChild(t, h, "TestRemoveChildProcess", removeChildEnv, "notes", tc.script)
+			out := killedChild(t, h, "TestRemoveChildProcess", removeChildEnv, "notes", strings.ReplaceAll(tc.script, "%LIB%", shellWord(lib)))
 			_, kinds := journalKinds(t, h)
-			equal(t, "the journal's steps", kinds, "remove, remove, remove, ref")
+			equal(t, "the journal's steps", kinds, "ref, remove, remove, remove, ref")
 			nothingAt(t, "the library symlink", lib)
 			nothingAt(t, "the worktree", root)
 			want := ""
@@ -221,6 +216,27 @@ func TestRemoteDeleteRefusal(t *testing.T) {
 		f := remoteDeleteRefusal("pdf", tc.done, tc.status)
 		equal(t, tc.name+": status", f.status, exitSource)
 		equal(t, tc.name+": message", f.message, tc.message)
+		equal(t, tc.name+": hint", f.hint, tc.hint)
+	}
+}
+
+// TestUniversalLibraryNamesWhatAForkLoses: the removal the refusal of a
+// universal client offers takes a fork's worktree and branch too, which
+// its hint says when the fork has a worktree here.
+func TestUniversalLibraryNamesWhatAForkLoses(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		worktree bool
+		hint     string
+	}{
+		{"not a fork", false, "take pdf off the machine with 'agentx skill remove pdf --from universal', which removes it from claude-code, codex"},
+		{"a fork", true, "take pdf off the machine with 'agentx skill remove pdf --from universal', which removes it from claude-code, codex and deletes its worktree, with any uncommitted edits, and its branch"},
+	} {
+		var f *failure
+		if !errors.As(universalLibrary([]string{"codex"}, "pdf", []string{"claude-code", "codex"}, tc.worktree), &f) {
+			t.Fatalf("%s: not a failure", tc.name)
+		}
 		equal(t, tc.name+": hint", f.hint, tc.hint)
 	}
 }

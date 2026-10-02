@@ -242,11 +242,7 @@ func (inv *invocation) pushForks(ctx context.Context, gitDir, url string, list [
 			p.outcome, p.f = publishRejected, refuse(exitSource, "git push said nothing of "+branch+", so whether the account remote took it is not known",
 				"run '"+publishCommand(p.name)+"' again")
 		case statuses[i].Rejected():
-			reason := statuses[i].Summary
-			if statuses[i].Reason != "" {
-				reason = statuses[i].Reason
-			}
-			p.outcome, p.f = publishRejected, refuse(exitRefused, "the account remote rejected "+branch+": "+sanitised(reason),
+			p.outcome, p.f = publishRejected, refuse(exitRefused, "the account remote rejected "+branch+": "+sanitised(statuses[i].Why()),
 				"run '"+pullCommand(p.name)+"' to take in what it holds, then publish again; agentx never forces a push")
 		case statuses[i].Flag == '=':
 			p.outcome, p.commit = publishUpToDate, tips[p.name]

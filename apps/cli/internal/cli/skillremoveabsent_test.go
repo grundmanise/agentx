@@ -142,10 +142,10 @@ func TestSkillRemoveOfAnAbsentSkillWithNoLineageSaysEveryCopyWent(t *testing.T) 
 // git wrapper changes one of them right after its read of the refs before
 // the lock, the second read of the run, the first being the one that
 // tells whether the name is a fork: the library comes to hold the skill
-// again, or a fork of the name appears, which the second read of the refs refuses as it refuses the
-// import branch moving. The removal then refuses before it writes a
-// journal, and every placement, the copy mode and whatever the other writer
-// wrote stay as they were.
+// again, or a fork of the name appears, which the second read of the refs
+// refuses as it refuses the import branch moving. The removal then refuses
+// before it writes a journal, and every placement, the copy mode and
+// whatever the other writer wrote stay as they were.
 func TestSkillRemoveOfAnAbsentSkillRefusesWhatChangedUnderTheLock(t *testing.T) {
 	t.Parallel()
 	real, err := exec.LookPath("git")

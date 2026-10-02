@@ -178,6 +178,15 @@ type PushStatus struct {
 // remote's said no.
 func (s PushStatus) Rejected() bool { return s.Flag == '!' }
 
+// Why is what git said of the ref: its reason, or its summary when it gave
+// none, as a rejection is explained to the user.
+func (s PushStatus) Why() string {
+	if s.Reason != "" {
+		return s.Reason
+	}
+	return s.Summary
+}
+
 // Push pushes each fork branch named by its short name, such as
 // "skills/pdf", to the account remote's branch of the same name, never
 // forced, in one git push of the user's environment with no hook of theirs,

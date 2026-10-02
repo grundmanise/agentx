@@ -77,7 +77,12 @@ With [auto-push](/cli/remote#push-automatically) on, serve publishes a fork's co
 auto-push release-notes: pushed 4c2e9a1
 ```
 
-It pushes commits only, never commits your edits, and never merges: a fork whose branch on the account remote holds commits you do not have is left for [`agentx publish`](/cli/remote#publish-a-fork), with one warning starting `auto-push:`. A remote it cannot reach is warned about the same way.
+It pushes commits only, never commits your edits, and never merges. It leaves these forks for [`agentx publish`](/cli/remote#publish-a-fork):
+
+- A fork the account remote holds no branch of, because you never published it or its branch was deleted.
+- A fork whose branch on the account remote holds commits you do not have, or is a different fork of the same name. Serve warns about it once, with a line starting `auto-push:`.
+
+A remote it cannot reach is warned about the same way.
 
 To wait longer or shorter, set `AGENTX_PUSH_QUIET` to a duration such as `30s` or `5m` before starting serve. Serve refuses to start with exit code 1 when it is not a positive duration.
 

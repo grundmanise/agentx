@@ -452,7 +452,7 @@ func (inv *invocation) refuseUniversal(named []string, name string) error {
 	if err != nil {
 		return err
 	}
-	return universalLibrary(named, name, reach)
+	return universalLibrary(named, name, reach, lexists(inv.worktreeRoot(name)))
 }
 
 // wholeRemovalReach names every configuration the whole removal would take
@@ -718,11 +718,16 @@ func (inv *invocation) whyKept(path, state, libPath, id, name string, gone map[s
 // skill from every client that sees it, which is the removal --from
 // universal asks for by name. The hint offers that removal and names every
 // configuration it would take the skill from, reach, so the user sees what
-// the request that can be done costs before making it.
-func universalLibrary(named []string, name string, reach []string) error {
-	return fail(exitRefused, universalRefusal(named, name),
-		"take "+name+" off the machine with 'agentx skill remove "+name+" --from "+fromUniversal+"', which removes it from "+
-			strings.Join(reach, ", "))
+// the request that can be done costs before making it. For a fork, worktree
+// set when it has one here, that removal deletes the worktree too, with
+// any edits nobody committed, and the fork's branch, which the hint says.
+func universalLibrary(named []string, name string, reach []string, worktree bool) error {
+	hint := "take " + name + " off the machine with 'agentx skill remove " + name + " --from " + fromUniversal + "', which removes it from " +
+		strings.Join(reach, ", ")
+	if worktree {
+		hint += " and deletes its worktree, with any uncommitted edits, and its branch"
+	}
+	return fail(exitRefused, universalRefusal(named, name), hint)
 }
 
 // universalRefusal is what a --from naming universal clients is refused
@@ -744,11 +749,14 @@ func (inv *invocation) reportRemoved(ctx context.Context, plan removalPlan, targ
 		return err
 	}
 	lib, stillThere := librarySkill(inv.dirs.Library, plan.name)
+	// A fork's removal that left a directory of the user's at the library
+	// path reports it as what the library holds now, as a removal of
+	// placements alone reports the skill.
 	switch {
-	case plan.whole && stillThere:
+	case plan.whole && stillThere && !plan.keptLibrary():
 		return fail(exitInternal, "the library still holds "+plan.name+" at "+inv.libraryPath(plan.name)+" after removing it",
 			"run 'agentx doctor' and check the library it names")
-	case !plan.whole && stillThere:
+	case stillThere:
 		sc, err := inv.skillContext(ctx)
 		if err != nil {
 			return err
@@ -800,6 +808,17 @@ func (inv *invocation) warnStillSeen(snap scan.Snapshot, plan removalPlan, cover
 	}
 }
 
+// keptLibrary reports whether a fork's removal left what its library path
+// holds, a directory or a file that is not the fork's symlink.
+func (plan removalPlan) keptLibrary() bool {
+	for _, s := range plan.kept {
+		if s.mode == modeLibrary {
+			return true
+		}
+	}
+	return false
+}
+
 // removedPlacements is how many ways of seeing the skill the removal took
 // away: the placements it deleted and, when the skill left the library, the
 // library entry every client that reads it directly saw it through.
@@ -813,6 +832,8 @@ func (inv *invocation) printRemoved(plan removalPlan) {
 	out := inv.out
 	where := " from " + out.paint(heading, "the library")
 	switch {
+	case plan.keptLibrary():
+		where = ""
 	case plan.absent:
 		where = ", which the library no longer held"
 	case !plan.whole:
@@ -874,7 +895,9 @@ func removeSummary(plan removalPlan) string {
 		}
 		parts = append(parts, "its branch")
 		summary = "removed " + plan.name + " from the library, " + andList(parts)
-		if plan.absent {
+		if plan.keptLibrary() {
+			summary = "removed " + plan.name + ": " + andList(parts)
+		} else if plan.absent {
 			summary = "removed " + plan.name + ", which the library no longer held: " + andList(parts)
 		}
 	case plan.absent:

@@ -483,10 +483,14 @@ func newRemoval(t *testing.T, name string) (install, refs) {
 // removalOf plans the removal of one installed skill: the import branch and
 // the candidate ref deleted, the symlink placement unlinked, the copy
 // placement taken away with its content retained, the library directory
-// taken away, and the settings rewritten last.
+// taken away, and the settings rewritten last. The branch is also held to
+// what it holds, a step that moves nothing, as a fork's removal holds its
+// branch, so that the journal refuses in its first transaction when the
+// branch moved, and recovery after the deletion is not refused by it.
 func (in install) removalOf(t *testing.T, name string) *Mutation {
 	t.Helper()
 	m := NewMutation(in.dir)
+	m.Ref(in.gitDir, "refs/heads/managed/"+name, "c0ffee-"+name, "c0ffee-"+name)
 	m.Ref(in.gitDir, "refs/heads/managed/"+name, "c0ffee-"+name, "")
 	m.Ref(in.gitDir, "refs/agentx/candidate/"+name, "cand-"+name, "")
 	for _, path := range []string{filepath.Join(in.place, name), in.copyPlace(name), filepath.Join(in.library, name)} {
@@ -601,6 +605,24 @@ func TestRemovalRecoversFromEveryBoundary(t *testing.T) {
 				t.Errorf("recovery run again left %s", strings.Join(left, ", "))
 			}
 		})
+	}
+}
+
+// TestApplyAbandonsARemovalWhoseHeldBranchMoved is a branch moved by git
+// after the command read it under the lock, and before the removal that
+// deletes it last ran: the step that holds it refuses in the first
+// transaction, so nothing of the removal happens and no journal is left
+// for every later command to refuse at.
+func TestApplyAbandonsARemovalWhoseHeldBranchMoved(t *testing.T) {
+	t.Parallel()
+	in, u := newRemoval(t, "alpha")
+	m := in.removalOf(t, "alpha")
+	u[in.gitDir+" refs/heads/managed/alpha"] = "committed meanwhile"
+	if err := m.Apply(u); !errors.Is(err, ErrMovedBeforeApply) {
+		t.Fatalf("apply = %v, want it abandoned", err)
+	}
+	if left := in.removed(t, u, "alpha"); strings.Join(left, ", ") != "the candidate ref, the copy placement, the import branch, the library directory, the symlink placement" {
+		t.Errorf("what is left of alpha: %s", strings.Join(left, ", "))
 	}
 }
 

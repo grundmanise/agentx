@@ -246,7 +246,12 @@ const standsAloneHint = "hint: --from universal asks for the removal without --f
 //     too.
 //   - --from universal beside a client that is not universal is the usage
 //     error it is for any skill.
-//   - --from universal is the whole removal, which removes the fork.
+//   - --from naming a client that is not universal takes that placement
+//     alone, and the fork's branch stays.
+//   - --from universal is the whole removal, which removes the fork, here
+//     one the account repo holds both an import branch and a fork branch
+//     of, as a fork of a managed skill stopped part way leaves before a
+//     recovery: the library directory and both branches go.
 func TestSkillRemoveFromTheUniversalClientsOfAFork(t *testing.T) {
 	t.Parallel()
 	h, s := universalHarness(t)
@@ -270,10 +275,15 @@ func TestSkillRemoveFromTheUniversalClientsOfAFork(t *testing.T) {
 	contains(t, "stderr of --from universal beside claude-code", usage.stderr, "error: --from universal and --from claude-code cannot both be given\n"+standsAloneHint)
 	equal(t, "mutations", mutationVersion(t, h), before)
 
+	one := h.run("skill", "remove", "alpha", "--from", "claude-code")
+	equal(t, "exit of --from claude-code", one.exit, 0)
+	nothingAt(t, "the claude-code placement", filepath.Join(h.home, ".claude", "skills", "alpha"))
+	equal(t, "the fork branch", strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/skills/alpha")), head)
+
 	whole := h.run("skill", "remove", "alpha", "--from", "universal")
 	equal(t, "exit of --from universal", whole.exit, 0)
+	contains(t, "the text", whole.stdout, "  deleted "+filepath.Join(h.library, "alpha")+", refs/heads/skills/alpha and refs/heads/managed/alpha\n")
 	nothingAt(t, "the library directory", filepath.Join(h.library, "alpha"))
-	nothingAt(t, "the claude-code placement", filepath.Join(h.home, ".claude", "skills", "alpha"))
 	equal(t, "the branches", h.accountGit("for-each-ref", "--format=%(refname)", "refs/heads/"), "")
 }
 
