@@ -93,13 +93,13 @@ func (inv *invocation) readForkMerge(ctx context.Context, dir string) (forkPendi
 // fork whose branch is rec, for an update or, when pull is set, a pull, as
 // the user left it resolving it with git, see readForkMerge. A merge with
 // files still unmerged, or none in progress, is left as it is and reported
-// again, exit code 4. One resolved, in
-// progress or committed, is completed, once the fork's skill directory is
-// found to hold no uncommitted edits, exit code 6 otherwise, as for the
-// update that started it: the commit that completes it is the user's own
-// commit in the checkout, or the one the fork commit writer writes here,
-// with the tree of the checkout's index, the tip the merge started from and
-// what it merged as its parents, and the merge's MERGE_MSG as its message.
+// again, exit code 4. One resolved, in progress or committed, is
+// completed, once the fork's skill directory is found to hold no
+// uncommitted edits, exit code 6 otherwise, as for the update that started
+// it: the commit that completes it is the user's own commit in the
+// checkout, or the one the fork commit writer writes here, with the tree
+// of the checkout's index, the tip the merge started from and what it
+// merged as its parents, and the merge's MERGE_MSG as its message.
 // A user's commit whose message names no base is written again the same
 // way, with the base added to its message.
 //
@@ -210,6 +210,7 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 	}
 	u.fork.base = recorded
 	if rec.Commit == p.mine {
+		u.fork.stale = inv.staleCandidate(ctx, gitDir, rec, u.fork.base, u.next.Import)
 		return u, inv.layFork(ctx, u, merged)
 	}
 	_, status, err := inv.git.IsolatedStatus(ctx, gitDir, 1, "merge-base", "--is-ancestor", p.mine, rec.Commit)
@@ -244,6 +245,7 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 		u.fork.start, u.fork.remerge = true, true
 		return u, nil
 	}
+	u.fork.stale = inv.staleCandidate(ctx, gitDir, rec, u.fork.base, u.next.Import)
 	commit, err := w.commit(ctx, u.merged.tree, []string{rec.Commit, merged}, forkMessage{subject: subject, trailers: lineage.ForkTrailers{Base: u.fork.base}})
 	if err != nil {
 		return nil, failureOf(accountRepoFailure(err))

@@ -62,6 +62,8 @@ agentx pull release-notes
 
 A fork remembers the upstream version it was last updated from, so that its next update merges correctly. When two machines took the same version, the merge keeps it. When they took different versions of the same upstream, the merge records the newer one, but only when the source's history on this machine proves it newer: run [`agentx source fetch`](/cli/source) first to fetch that history. Otherwise the merge keeps this machine's version. At worst, the next update then conflicts where both versions changed the same lines. No content is lost.
 
+When a pull brings a newer upstream version than the update your last [`agentx skill check`](/cli/skill) found, agentx drops that update, so `agentx skill update` never takes the fork back to the older version. Run `agentx skill check` again to look for anything newer.
+
 ### Resolve a conflict
 
 When both machines changed the same lines, your fork stays as it is, folder and branch alike, and the merge waits in a Git worktree, `~/.agentx/merges/<name>`. The pull exits with code 4 and lists the files:

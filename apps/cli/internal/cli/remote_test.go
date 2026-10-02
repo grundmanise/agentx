@@ -184,7 +184,7 @@ func TestPullFastForwardsMergesAndConflicts(t *testing.T) {
 // TestPublishMergesFirstAndNamesUncommittedForks publishes from machine b
 // while machine a published alpha first. With an uncommitted edit, b's
 // publish of alpha would have to merge a's commit, and is refused, exit 6,
-// nothing pushed. Once the edit is reverted, the publish merges a's commit
+// nothing pushed, the refusal saying so once. Once the edit is reverted, the publish merges a's commit
 // first, as a pull does, and pushes the merge; beta, committed on b and
 // not named, stays unpushed. A publish with nothing to take in pushes
 // alpha's commits even though alpha holds an uncommitted edit, and names
@@ -204,6 +204,9 @@ func TestPublishMergesFirstAndNamesUncommittedForks(t *testing.T) {
 	out := b.run("--json", "publish", "alpha")
 	equal(t, "exit", out.exit, 6)
 	contains(t, "the error", b.one(out.stdout, "error")["message"].(string), "alpha has uncommitted edits, so it cannot be published")
+	if strings.Contains(out.stderr, "which were not published") {
+		t.Errorf("the refusal is warned about again: %s", out.stderr)
+	}
 	equal(t, "the remote's alpha", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/alpha"), theirs)
 
 	b.mustRun("skill", "revert", "alpha")
@@ -396,6 +399,13 @@ func TestRemoteURLRefusal(t *testing.T) {
 // machine a published a commit of and whose upstream has a new version: the
 // update takes in a's commit first, as a merge of its own with b's commit,
 // then merges the upstream version on top of it, two commits on b's branch.
+//
+// Then b's check pins a third version for both forks, and a takes a fourth
+// into alpha and publishes it. b's update of every fork fast-forwards alpha
+// to a's commit, whose base is newer than the candidate b pinned: the
+// candidate goes with the pull, so the update never merges the older
+// version back over the newer one, and alpha is left as a published it
+// while beta, which the remote has nothing new for, takes its own update.
 func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	t.Parallel()
 	a, b, s, _ := twoHomes(t)
@@ -426,6 +436,29 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 			equal(t, "the exported subpath", r["subpath"], "skills/alpha")
 		}
 	}
+
+	b.mustRun("publish", "alpha")
+	a.mustRun("pull", "alpha")
+	s.write("skills/alpha/notes.md", forkNotes("seven", "seven, third"))
+	s.write("skills/beta/notes.md", forkNotes("six", "six, third"))
+	s.commit("third version")
+	b.mustRun("skill", "check")
+	betaCandidate := b.ref(lineage.CandidateRef("beta"))
+	s.write("skills/alpha/notes.md", forkNotes("seven", "seven, fourth", "eight", "eight, fourth"))
+	s.commit("fourth version")
+	a.mustRun("skill", "check")
+	a.mustRun("skill", "update", "alpha")
+	a.mustRun("publish", "alpha")
+	published := a.ref(lineage.ForkRef("alpha"))
+
+	out = b.mustRun("--json", "skill", "update", "--all")
+	equal(t, "pull outcome", b.one(out.stdout, "pull")["outcome"], pullFastForward)
+	equal(t, "alpha's tip", b.ref(lineage.ForkRef("alpha")), published)
+	equal(t, "alpha's candidate", b.ref(lineage.CandidateRef("alpha")), "")
+	equal(t, "alpha's notes", fileBody(t, filepath.Join(b.forkDir("alpha", "alpha"), "notes.md")),
+		forkNotes("one", "one, a", "three", "three, b", "seven", "seven, fourth", "eight", "eight, fourth"))
+	equal(t, "beta's base", b.trailer(b.ref(lineage.ForkRef("beta")), lineage.TrailerBase), betaCandidate)
+	equal(t, "beta's notes", fileBody(t, filepath.Join(b.forkDir("beta", "beta"), "notes.md")), forkNotes("six", "six, third"))
 }
 
 // pullChildEnv names the fork TestPullChildProcess pulls.

@@ -134,7 +134,7 @@ func (s forkSync) moved() bool {
 // syncFork pulls the fork whose branch is rec, see judgePull, and applies
 // what the pull found, in a hold of the lock and a journal of its own, see
 // applyForkUpdate. doing is what the command does, as its refusals say it:
-// pulled, or published.
+// pulled, published, or updated for the account step of an update.
 func (inv *invocation) syncFork(ctx context.Context, gitDir string, rec lineage.Record, remote remoteForks, doing string) forkSync {
 	s := forkSync{name: rec.Name}
 	s.outcome, s.u, s.f = inv.judgePull(ctx, gitDir, rec, remote, doing)
@@ -239,6 +239,7 @@ func (inv *invocation) judgePull(ctx context.Context, gitDir string, rec lineage
 			return "", nil, f
 		}
 		fork.judged, fork.base = judged, there.Base
+		fork.stale = inv.staleCandidate(ctx, gitDir, rec, there.Base, there.Import)
 		if f := inv.layFork(ctx, u, theirs); f != nil {
 			return "", nil, f
 		}
@@ -275,6 +276,9 @@ func (inv *invocation) judgePull(ctx context.Context, gitDir string, rec lineage
 		u.conflict, fork.start = conflictOfSkill(name, lineage.KindFork, u.merge, files), true
 		return pullConflict, u, nil
 	}
+	// The base the merge records is the fork's own or the remote's, which
+	// is the one that can pass the candidate.
+	fork.stale = inv.staleCandidate(ctx, gitDir, rec, fork.base, there.Import)
 	commit, err := w.commit(ctx, u.merged.tree, []string{rec.Commit, theirs}, forkMessage{subject: subject, trailers: lineage.ForkTrailers{Base: fork.base}})
 	if err != nil {
 		return "", nil, failureOf(accountRepoFailure(err))

@@ -44,19 +44,31 @@ func comparable(local, remote ForkLineage) bool {
 }
 
 // PickBase is the base a merge of the local and the remote side of one fork
-// records, see chooseBase. The order of two comparable versions is proved
-// in the isolated environment, at most two git processes: one rev-list
-// that finds whether both upstream commits are in the account repo at all,
-// without reaching any remote for one that is not, and, when they are, one
-// merge-base --is-ancestor. Any failure is no proof.
+// records, see chooseBase, the order of two comparable versions proved by
+// Newer.
 func PickBase(ctx context.Context, r *gitx.Runner, gitDir string, local, remote ForkLineage) string {
 	if local.Base == remote.Base || !comparable(local, remote) {
 		return chooseBase(local, remote, false)
 	}
-	a, b := local.Import.Commit, remote.Import.Commit
+	return chooseBase(local, remote, Newer(ctx, r, gitDir, local.Import, remote.Import))
+}
+
+// Newer reports whether the source history proves newer a later version of
+// the same upstream skill than older: both from one source and directory,
+// and newer's upstream commit a descendant of older's. It is proved in the
+// isolated environment, at most two git processes: one rev-list that finds
+// whether both upstream commits are in the account repo at all, without
+// reaching any remote for one that is not, and, when they are, one
+// merge-base --is-ancestor. The same version, and any failure, is no
+// proof.
+func Newer(ctx context.Context, r *gitx.Runner, gitDir string, older, newer Import) bool {
+	a, b := older.Commit, newer.Commit
+	if a == "" || b == "" || a == b || older.Source != newer.Source || older.Path != newer.Path {
+		return false
+	}
 	if _, err := r.Isolated(ctx, gitDir, "rev-list", "--missing=print", "--no-walk", a, b); err != nil {
-		return chooseBase(local, remote, false)
+		return false
 	}
 	_, status, err := r.IsolatedStatus(ctx, gitDir, 1, "merge-base", "--is-ancestor", a, b)
-	return chooseBase(local, remote, err == nil && status == 0)
+	return err == nil && status == 0
 }

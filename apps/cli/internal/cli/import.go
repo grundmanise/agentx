@@ -420,11 +420,10 @@ func validRecords(path string, skills []exportSkill) error {
 // it. A fork the repo holds no branch of is also held when the account
 // remote holds it, as remote lists the remote-tracking branches by name: a
 // machine that set the account remote and fetched it holds every fork
-// published there, which it can install from there, so such a record reads
-// present when its remote-tracking branch is at its commit and different
-// when that is at another. A machine with no account
-// repo holds nothing, and creating one is not this command's to do, so
-// every record is then missing.
+// published there, so such a record reads present when its remote-tracking
+// branch is at its commit and different when that is at another. A
+// machine with no account repo holds nothing, and creating one is not this
+// command's to do, so every record is then missing.
 func restoreStates(skills []exportSkill, records map[string]lineage.Record, remote map[string]string) []importSkillEvent {
 	states := make([]importSkillEvent, 0, len(skills))
 	for _, rec := range skills {
@@ -515,7 +514,7 @@ func (inv *invocation) printImported(path string, doc exportDocument, states []i
 	}
 	present, missing, different := restoreCounts(states)
 	out.print(out.paint(heading, plural(len(states), "skill")+" in the export"), ": ",
-		fmt.Sprintf("%d in the account repo, %d missing, %d at a different version", present, missing, different))
+		fmt.Sprintf("%d present, %d missing, %d at a different version", present, missing, different))
 	t := &table{}
 	for _, st := range states {
 		t.add(importRow(out, st)...)
@@ -615,6 +614,6 @@ func importSummary(path string, states []importSkillEvent) string {
 		return "imported the settings from " + path + ": the export lists no skills"
 	}
 	present, missing, different := restoreCounts(states)
-	return fmt.Sprintf("imported the settings from %s: %d of %s in the account repo, %d missing, %d at a different version",
+	return fmt.Sprintf("imported the settings from %s: %d of %s present, %d missing, %d at a different version",
 		path, present, plural(len(states), "skill"), missing, different)
 }

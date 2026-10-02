@@ -269,6 +269,8 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 		switch {
 		case f != nil:
 			r.drop(n, f)
+		case u == nil && r.all: // a fork whose account step took in the update its candidate named
+			continue
 		case u == nil: // a name the last check found no update for, which only a run of one name asks about
 			inv.summary = n + " is up to date as of the last update check; run 'agentx skill check' to look again"
 			if len(pulled) > 0 {
@@ -314,6 +316,9 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 	} else if r.all && len(r.broken) == 0 {
 		skips, _ := r.skippedNote(inv.out)
 		inv.summary = "no skill was updated" + skips
+		if len(pulled) > 0 {
+			inv.summary = "no skill was updated from upstream" + skips
+		}
 		inv.out.print(inv.summary)
 	}
 	return r.failure()
@@ -363,7 +368,7 @@ func (r *updateRun) accountStep(ctx context.Context, names []string, records map
 		if tip := remote.tips[n]; tip == "" || tip == records[n].Commit {
 			continue
 		}
-		s := inv.syncFork(ctx, r.gitDir, records[n], remote, "pulled")
+		s := inv.syncFork(ctx, r.gitDir, records[n], remote, "updated")
 		inv.reportSync(s)
 		switch {
 		case s.f != nil:
@@ -963,8 +968,9 @@ func conflictHintAt(name, path string) string {
 	return conflictHintRunning(name, path, skillCommand("update", name))
 }
 
-// conflictHintRunning is conflictHintAt for a merge that again, the command that
-// left it pending, applies once it is resolved.
+// conflictHintRunning is conflictHintAt for a merge that the command line
+// again completes once it is resolved, such as agentx pull <name> for a
+// merge a pull left pending.
 func conflictHintRunning(name, path, again string) string {
 	return "resolve it with git in " + quotedPath(path) + " ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), " +
 		"then run '" + again + "' again to apply it, or '" + skillCommand("update", name, "--abort") + "' to give it up"

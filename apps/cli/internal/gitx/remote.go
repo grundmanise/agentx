@@ -125,10 +125,14 @@ func (r *Runner) ProbeRemote(ctx context.Context, url string) error {
 // remote-tracking branches, in the user's environment: quiet, no tags, no
 // FETCH_HEAD, no submodules, and a remote-tracking branch whose fork branch
 // the remote no longer holds is deleted. An object the account repo lacks
-// is never fetched lazily from a source along the way.
+// is never fetched lazily from a source along the way. ForkRefspec is given
+// on the command line, with --refmap=, so that it is the only refspec the
+// fetch follows and prunes: the user's environment merges every
+// remote.origin.fetch their configuration holds, a global one meant for
+// their projects included.
 func (r *Runner) FetchRemote(ctx context.Context, gitDir string) error {
 	args := append(networkConfig(), "--git-dir="+gitDir,
-		"fetch", "--quiet", "--no-tags", "--no-write-fetch-head", "--prune", "--recurse-submodules=no", RemoteName)
+		"fetch", "--quiet", "--no-tags", "--no-write-fetch-head", "--prune", "--recurse-submodules=no", "--refmap=", RemoteName, ForkRefspec)
 	_, err := r.run(ctx, call{env: map[string]string{"GIT_NO_LAZY_FETCH": "1"}}, args...)
 	return err
 }

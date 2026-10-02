@@ -55,12 +55,42 @@ type forkUpdate struct {
 	// with is what a merge left pending merges, as the line that reports it
 	// names it, see updating.conflictsWith; "" for an update from upstream.
 	with string
-	// pull is set for a pull from the account remote, a publish's included,
-	// which says so in its refusals and names its own command in their
-	// hints, and doing is "published" for a publish's; an update from
-	// upstream leaves both unset.
+	// pull is set for a pull from the account remote, a publish's and an
+	// update's account step included, which says so in its refusals and
+	// names its own command in their hints, and doing is "published" for a
+	// publish's and "updated" for an update's; an update from upstream
+	// leaves both unset.
 	pull  bool
 	doing string
+	// stale is the update candidate the fork's new base passed: when the
+	// commit moves the base to another import than the candidate, a
+	// candidate the source history does not prove newer than that import
+	// would take the fork back to an older version, so it is deleted with
+	// the rest, see staleCandidate. "" when the candidate stays.
+	stale string
+}
+
+// staleCandidate is the update candidate of the fork rec that a commit
+// recording base, the import commit imp names, as the fork's new base
+// leaves behind, see forkUpdate.stale: "" when the base stays as it is,
+// when the fork has no candidate agentx can read, when the candidate is
+// the new base, which the update deletes anyway, and when the source
+// history proves the candidate newer, see lineage.Newer, which is then
+// still an update. Anything else, an older version, one on another branch
+// of the source or one whose order nothing proves, is the candidate's
+// commit: the next update check pins the update again against the new
+// base.
+func (inv *invocation) staleCandidate(ctx context.Context, gitDir string, rec lineage.Record, base string, imp lineage.Import) string {
+	c := rec.Candidate
+	switch {
+	case base == "" || c == nil || !c.HasImport || c.Commit == base:
+		return ""
+	case rec.Fork != nil && rec.Fork.Base == base:
+		return ""
+	case lineage.Newer(ctx, inv.git, gitDir, imp, c.Import):
+		return ""
+	}
+	return c.Commit
 }
 
 // what is what the command does to the fork, as its refusals say it cannot
@@ -81,6 +111,8 @@ func (f *forkUpdate) again(name string) (command, verb string) {
 	switch {
 	case f.doing == "published":
 		return publishCommand(name), "publish"
+	case f.doing == "updated":
+		return skillCommand("update", name), "update"
 	case f.pull:
 		return pullCommand(name), "pull"
 	}
@@ -272,7 +304,8 @@ func (inv *invocation) layFork(ctx context.Context, u *updating, commit string) 
 // commit, the commit laid out in the worktree and every copy placement
 // that held the tip refreshed; then the checkout of a pending merge it
 // completes removed; and the candidate ref deleted, last, when it still
-// names the import the new commit records as the fork's base.
+// names the import the new commit records as the fork's base, or the
+// candidate that base passed, see forkUpdate.stale.
 func (r *updateRun) applyFork(ctx context.Context, u *updating) error {
 	inv := r.inv
 	err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error { return inv.applyForkUpdate(ctx, r.gitDir, u) })
@@ -370,8 +403,8 @@ func (inv *invocation) applyForkUpdate(ctx context.Context, gitDir string, u *up
 		}
 		m.Remove(u.checkout, checkout)
 	}
-	if u.fork.base != "" && values[candidate] == u.fork.base {
-		m.Ref(gitDir, candidate, u.fork.base, "")
+	if now := values[candidate]; now != "" && (now == u.fork.base || now == u.fork.stale) {
+		m.Ref(gitDir, candidate, now, "")
 	}
 	back := reenterReplaced(site.skillDir)
 	err = m.Apply(inv.refs(ctx))

@@ -38,6 +38,8 @@ For a merge of two histories of one fork:
 
 A wrong base costs at most a conflict on the next upstream update. No content is lost over it, since the merge itself is Git's.
 
+A pull that moves the fork's base to another import also drops the update candidate this machine's last check pinned, unless the same proof shows the candidate newer than the new base. A candidate pinned against the old base can be older than the version the other machine took, and merging it over the new base would take the fork back to that older version. The next check pins an update against the new base.
+
 ## Deterministic parentless imports
 
 Every upstream version becomes a commit with no parent whose id is a pure function of the version and its coordinates, identical on every machine. So two machines that took the same upstream version merge clean, and two that took different versions merge clean where the versions changed different lines and conflict where both changed the same lines, as Git merges any two histories.
@@ -52,6 +54,7 @@ Ancestry is never inferred: no grafts, no replacement refs, no ordering by impor
 - Different upstream versions merge clean where they changed different lines and conflict where both changed the same lines; the conflict is resolved like any other.
 - The recorded `Agentx-Base` follows the base rule above, never a timestamp.
 - A rollback of an upstream line on one machine survives a pull on the other, or surfaces as a conflict; it is never silently undone.
+- An update never takes a fork back to an upstream version older than the one a pull brought it.
 - Custom content is never silently lost.
 - Source aliases, a cross-subpath candidate, unavailable or force-pushed source history, file modes, binary files and symlinks behave as specified.
 - A different fork of the same name on the remote is refused, by its fork id.

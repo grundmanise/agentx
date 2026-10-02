@@ -109,7 +109,7 @@ func TestImportRestoresTheSettingsByteForByte(t *testing.T) {
 		t.Errorf("the settings were not restored byte for byte:\nexported:\n%s\nimported:\n%s", before, after)
 	}
 	contains(t, "stdout", out.stdout, "imported the settings of first-laptop")
-	contains(t, "stdout", out.stdout, "2 skills in the export: 0 in the account repo, 2 missing, 0 at a different version")
+	contains(t, "stdout", out.stdout, "2 skills in the export: 0 present, 2 missing, 0 at a different version")
 	contains(t, "stdout", out.stdout, "  alpha  managed  missing  "+fixtureURL("skills")+"/skills/alpha")
 	contains(t, "stdout", out.stdout, "  beta   managed  missing  "+fixtureURL("skills")+"/skills/beta")
 	contains(t, "stdout", out.stdout, "only the settings were written")
@@ -441,10 +441,10 @@ func TestImportListsWhatTheAccountRepoHas(t *testing.T) {
 		t.Error("a missing skill carries a local commit")
 	}
 	equal(t, "summary", h.one(out.stdout, "result")["summary"],
-		"imported the settings from "+file+": 1 of 3 skills in the account repo, 1 missing, 1 at a different version")
+		"imported the settings from "+file+": 1 of 3 skills present, 1 missing, 1 at a different version")
 
 	text := h.run("import", file, "--yes")
-	contains(t, "stdout", text.stdout, "3 skills in the export: 1 in the account repo, 1 missing, 1 at a different version")
+	contains(t, "stdout", text.stdout, "3 skills in the export: 1 present, 1 missing, 1 at a different version")
 	contains(t, "stdout", text.stdout, "  alpha  managed  present")
 	contains(t, "stdout", text.stdout, "  gamma  managed  missing")
 }

@@ -74,12 +74,12 @@ type mergeResult struct {
 // mergeVersions merges the three versions m names in the isolated
 // environment: one merge-tree with the base given, so that git finds
 // nothing else to merge from, or, for a merge of two histories of one fork
-// with no base given, with the merge base git finds in them, git's rules for files added, deleted or
-// renamed on either side, and conflicts written in zdiff3 style, so that
-// each carries the base between mine and theirs. git's detection of a
-// renamed directory is off, so that a file added on one side inside a
-// directory the other side renamed stays where it was added rather than
-// being moved, or conflicting, on a guess.
+// with no base given, with the merge base git finds in them; git's rules
+// for files added, deleted or renamed on either side; and conflicts
+// written in zdiff3 style, so that each carries the base between mine and
+// theirs. git's detection of a renamed directory is off, so that a file
+// added on one side inside a directory the other side renamed stays where
+// it was added rather than being moved, or conflicting, on a guess.
 //
 // The conflict markers are sized to the files: a merge that conflicts in a
 // file holding a line that starts with a run of seven or more of the

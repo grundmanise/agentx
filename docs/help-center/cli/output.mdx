@@ -54,8 +54,8 @@ A failed command prints `error: ...` and, when there is a fix, `hint: ...` on st
 | 0 | Success. |
 | 1 | Unknown command, bad flag or missing argument. Run `agentx help`. |
 | 2 | Git is missing or older than 2.40. Install or upgrade git. |
-| 3 | A source is unreachable or authentication failed. |
-| 4 | A pending merge blocks the action, or `skill update` left one pending because [your edits conflict with the update](/cli/skill#when-your-edits-conflict), or found files of one still to resolve. |
+| 3 | A source or the [account remote](/cli/remote) is unreachable, or authentication failed. |
+| 4 | A pending merge blocks the action, or `skill update` left one pending because [your edits conflict with the update](/cli/skill#when-your-edits-conflict), or found files of one still to resolve. `pull` and `publish` leave one pending when [a fork conflicts with the account remote](/cli/remote#resolve-a-conflict). |
 | 5 | The skill, source or configuration does not exist. |
 | 6 | A collision or an unmet precondition. |
 | 7 | Another agentx command is running. Retry when it finishes. |
