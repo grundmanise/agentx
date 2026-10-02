@@ -327,7 +327,7 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool) (checkRep
 		rep.idle = true
 		return rep, nil
 	}
-	results, err := inv.fetchSources(ctx, gitDir, targets, serving, !serving)
+	results, err := inv.fetchSources(ctx, gitDir, targets, serving, !serving, nil)
 	if err != nil {
 		return rep, err
 	}
@@ -704,7 +704,7 @@ func (inv *invocation) recordCheck(ctx context.Context, gitDir string, wait bool
 		for url := range fetched {
 			stamped[url] = true
 		}
-		if err := inv.stampFetched(ctx, m, gitDir, s, stamped, now); err != nil {
+		if err := inv.stampFetched(ctx, m, gitDir, s, stamped, nil, now); err != nil {
 			m.Discard()
 			return err
 		}

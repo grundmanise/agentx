@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -100,7 +101,12 @@ func plainExport(t *testing.T) (*harness, string) {
 func TestImportRestoresTheSettingsByteForByte(t *testing.T) {
 	t.Parallel()
 	from, file := exportedFrom(t)
-	before := readText(t, home.SettingsPath(from.agentx))
+	// Access is what this machine may do at a source, so an import resets it
+	// and every other byte comes back.
+	before := regexp.MustCompile(`(?m)^ *"access(_checked)?": .*\n`).ReplaceAllString(readText(t, home.SettingsPath(from.agentx)), "")
+	if strings.Contains(before, `"access`) {
+		t.Fatalf("the access fields are still in\n%s", before)
+	}
 
 	to := newHarness(t)
 	to.build(t, fixture{dirs: []string{".claude"}})

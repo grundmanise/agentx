@@ -174,8 +174,9 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 			return sourceFailure(err, pinned)
 		}
 		n := len(listing.Skills)
-		inv.out.emit(sourceEvent{event: newEvent("source"), ID: src.ID(), URL: src.URL, Alias: entry.Alias, Pin: entry.Pin, Subpath: src.Subpath,
-			LastFetched: entry.LastFetched, Commit: listing.Commit, Skills: &n})
+		ev := entryEvent(entry)
+		ev.Subpath, ev.Commit, ev.Skills = src.Subpath, listing.Commit, &n
+		inv.out.emit(ev)
 	}
 	skills, err := selectSkills(listing, sel, src)
 	if err != nil {

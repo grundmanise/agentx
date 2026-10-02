@@ -25,3 +25,5 @@ unmanaged
 vercel
 worktrees?
 [Rr]escans?
+[Aa]uthorise
+organisation

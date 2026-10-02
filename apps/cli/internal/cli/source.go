@@ -20,16 +20,22 @@ import (
 // holds of it.
 type sourceEvent struct {
 	event
-	ID          string `json:"id"`
-	URL         string `json:"url"`
-	Alias       string `json:"alias,omitempty"`
-	PushURL     string `json:"push_url,omitempty"`
-	Pin         string `json:"pin,omitempty"`
-	Subpath     string `json:"subpath,omitempty"` // the scope of this listing, not stored
-	LastFetched string `json:"last_fetched,omitempty"`
-	Commit      string `json:"commit,omitempty"`          // the fetched commit; absent when the account repo holds no ref
-	Previous    string `json:"previous_commit,omitempty"` // what the ref held before this fetch, when the fetch moved it
-	Skills      *int   `json:"skills,omitempty"`          // how many skills the listing found; only after a listing
+	ID            string `json:"id"`
+	URL           string `json:"url"`
+	Alias         string `json:"alias,omitempty"`
+	Layout        string `json:"layout,omitempty"`  // tree or fork; absent on a removal's event, which says only what went
+	Account       bool   `json:"account,omitempty"` // the account remote
+	PushURL       string `json:"push_url,omitempty"`
+	Pin           string `json:"pin,omitempty"`
+	Access        string `json:"access,omitempty"`         // writable, read-only or unknown; absent where Layout is
+	AccessChecked string `json:"access_checked,omitempty"` // when access was last checked
+	AccessReason  string `json:"access_reason,omitempty"`  // why access is not writable, in the run that checked it only
+	DefaultBranch string `json:"default_branch,omitempty"` // the branch the remote's HEAD named at the last look; shown, never followed
+	Subpath       string `json:"subpath,omitempty"`        // the scope of this listing, not stored
+	LastFetched   string `json:"last_fetched,omitempty"`
+	Commit        string `json:"commit,omitempty"`          // the fetched commit; absent when the account repo holds no ref
+	Previous      string `json:"previous_commit,omitempty"` // what the ref held before this fetch, when the fetch moved it
+	Skills        *int   `json:"skills,omitempty"`          // how many skills the listing found; only after a listing
 }
 
 // sourceSkillEvent is one installable skill of a source.
@@ -271,7 +277,16 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source, push pu
 	if err != nil {
 		return listing, entry, takeBack(sourceFailure(err, src))
 	}
+	// What this machine may do at the source is asked once it is fetched,
+	// so that a URL that cannot be read is refused for that first, and
+	// outside the lock, since it is network. Its answer goes into the one
+	// settings write below. A stop during the check stops the add.
+	check := inv.checkSource(ctx, gitDir, want)
+	if err := ctx.Err(); err != nil {
+		return listing, entry, takeBack(err)
+	}
 	entry = home.Source{URL: src.URL, Pin: src.Ref, LastFetched: time.Now().UTC().Format(time.RFC3339)}
+	check.apply(&entry)
 	// The remote went in under an earlier hold of the lock. Left behind by
 	// a run that gets no further, it is a remote for a source the machine
 	// does not know about, and since `source fetch` and `source skills`
@@ -322,10 +337,13 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source, push pu
 	if push.warning != "" {
 		inv.out.warn(push.warning)
 	}
+	check.report(inv, src.URL)
 	n := len(listing.Skills)
-	inv.out.emit(sourceEvent{event: newEvent("source"), ID: src.ID(), URL: src.URL, Alias: entry.Alias, PushURL: entry.PushURL, Pin: src.Ref, Subpath: src.Subpath,
-		LastFetched: entry.LastFetched, Commit: listing.Commit, Previous: movedFrom(listing), Skills: &n})
-	inv.out.done(inv.addLine(added, src, listing) + ": " + inv.out.paint(noteStyle, plural(n, "skill")) + under(inv.out, src.Subpath) + pushesTo(inv.out, entry.PushURL))
+	ev := entryEvent(entry)
+	ev.Subpath, ev.Commit, ev.Previous, ev.Skills, ev.AccessReason = src.Subpath, listing.Commit, movedFrom(listing), &n, check.reason()
+	inv.out.emit(ev)
+	inv.out.done(inv.addLine(added, src, listing) + ": " + inv.out.paint(noteStyle, plural(n, "skill")) + under(inv.out, src.Subpath) +
+		pushesTo(inv.out, entry.PushURL) + accessPhrase(inv.out, entry.AccessName()))
 	return listing, entry, nil
 }
 
@@ -381,16 +399,27 @@ func (inv *invocation) sourceList(ctx context.Context) error {
 	t := &table{}
 	for _, src := range s.Sources {
 		id := source.ID(src.URL)
-		out.emit(sourceEvent{event: newEvent("source"), ID: id, URL: src.URL, Alias: src.Alias, PushURL: src.PushURL, Pin: src.Pin, LastFetched: src.LastFetched, Commit: commits[id]})
-		pin := c("(unpinned)", muted)
-		if src.Pin != "" {
-			pin = c(src.Pin, plain)
+		ev := entryEvent(src)
+		ev.Commit = commits[id]
+		out.emit(ev)
+		name := "  " + src.URL
+		if src.Account {
+			name += " (account)"
+		}
+		// The branch the source follows: its pin, else the branch its HEAD
+		// named at the last look, dimmed since it is only what was seen.
+		branch := c("(unpinned)", muted)
+		switch {
+		case src.Pin != "":
+			branch = c(src.Pin, plain)
+		case src.DefaultBranch != "":
+			branch = c(src.DefaultBranch, muted)
 		}
 		commit := c("not fetched", warnStyle)
 		if commits[id] != "" {
 			commit = c(short(commits[id]), muted)
 		}
-		t.add(c("  "+src.URL, heading), pin, commit, c(src.LastFetched, muted), c(id, label))
+		t.add(c(name, heading), c(src.LayoutName(), muted), accessWord(src.Access), branch, commit, c(src.LastFetched, muted), c(id, label))
 	}
 	out.render(t, "")
 	return nil
@@ -427,8 +456,9 @@ func (inv *invocation) sourceSkills(ctx context.Context, arg string) error {
 	out := inv.out
 	n := len(listing.Skills)
 	id := src.ID()
-	out.emit(sourceEvent{event: newEvent("source"), ID: id, URL: src.URL, Alias: entry.Alias, PushURL: entry.PushURL, Pin: entry.Pin, Subpath: src.Subpath,
-		LastFetched: entry.LastFetched, Commit: listing.Commit, Skills: &n})
+	ev := entryEvent(entry)
+	ev.Subpath, ev.Commit, ev.Skills = src.Subpath, listing.Commit, &n
+	out.emit(ev)
 	out.print(out.paint(heading, plural(n, "skill")), " in ", out.paint(heading, src.URL), under(out, src.Subpath), " at ", short(listing.Commit))
 	t := &table{}
 	for _, sk := range listing.Skills {

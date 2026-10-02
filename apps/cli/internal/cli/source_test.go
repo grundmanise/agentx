@@ -136,7 +136,7 @@ func TestSourceAddFetchesBloblessAndSkillFilesInOneBatch(t *testing.T) {
 
 	out := h.run("--verbose", "source", "add", s.url)
 	equal(t, "exit", out.exit, 0)
-	equal(t, "stdout", out.stdout, "✓ added "+s.url+" at "+head[:7]+": 2 skills\n")
+	equal(t, "stdout", out.stdout, "✓ added "+s.url+" at "+head[:7]+": 2 skills; you can write to it\n")
 	equal(t, "fetches", fetches(out.stderr), 2)
 
 	// The remote: promisor, blob:none, no tags, and one refspec recording
@@ -189,6 +189,13 @@ func TestSourceAddFetchesBloblessAndSkillFilesInOneBatch(t *testing.T) {
 	}
 	if _, err := time.Parse(time.RFC3339, entry["last_fetched"].(string)); err != nil {
 		t.Errorf("last_fetched %v: %v", entry["last_fetched"], err)
+	}
+	// The add checked what this machine may do at the source, a path it can
+	// write, and read the branch the source's HEAD names.
+	equal(t, "access", entry["access"], "writable")
+	equal(t, "default_branch", entry["default_branch"], "main")
+	if _, err := time.Parse(time.RFC3339, fmt.Sprint(entry["access_checked"])); err != nil {
+		t.Errorf("access_checked %v: %v", entry["access_checked"], err)
 	}
 	equal(t, "version", readVersion(t, h), 2) // the account repo's creation, then the settings
 
@@ -334,7 +341,7 @@ func TestSourceAddKeepsAnAliasOnReAdd(t *testing.T) {
 		}
 		entry := settings.Sources[at]
 		entry.Alias = alias
-		entry.PushURL, entry.Access, entry.AccessChecked, entry.DefaultBranch = "ssh://git@example.com/skills", home.AccessWritable, "2026-10-02T10:00:00Z", "main"
+		entry.PushURL, entry.Access, entry.AccessChecked, entry.DefaultBranch = s.gitDir, home.AccessReadOnly, "2026-10-02T10:00:00Z", "trunk"
 		settings.SetSource(entry)
 		return home.SaveSettings(h.agentx, settings)
 	})
@@ -352,10 +359,15 @@ func TestSourceAddKeepsAnAliasOnReAdd(t *testing.T) {
 	entry := readSettingsFile(t, h)["sources"].([]any)[0].(map[string]any)
 	equal(t, "settings alias", entry["alias"], alias)
 	equal(t, "settings pin", entry["pin"], "v1")
-	equal(t, "settings push_url", entry["push_url"], "ssh://git@example.com/skills")
+	equal(t, "settings push_url", entry["push_url"], s.gitDir)
+	// The add checks access again, at the push URL, and records what it
+	// found; a pinned source's default branch is not read, so the one the
+	// entry knew stays.
 	equal(t, "settings access", entry["access"], home.AccessWritable)
-	equal(t, "settings access_checked", entry["access_checked"], "2026-10-02T10:00:00Z")
-	equal(t, "settings default_branch", entry["default_branch"], "main")
+	if entry["access_checked"] == "2026-10-02T10:00:00Z" {
+		t.Error("the add did not record its access check")
+	}
+	equal(t, "settings default_branch", entry["default_branch"], "trunk")
 
 	// The listing carries it too, and so does a fetch, which rewrites the
 	// entry's last_fetched and nothing else.
@@ -517,9 +529,14 @@ func TestSourceListAndRemove(t *testing.T) {
 	equal(t, "0.commit", events[0]["commit"], bHead)
 	equal(t, "0.pin", events[0]["pin"], nil)
 	equal(t, "0.skills", events[0]["skills"], nil)
+	equal(t, "0.layout", events[0]["layout"], "tree")
+	equal(t, "0.access", events[0]["access"], "writable")
+	equal(t, "0.default_branch", events[0]["default_branch"], "main")
+	equal(t, "0.access_reason", events[0]["access_reason"], nil) // only the run that checked says why
 	equal(t, "1.url", events[1]["url"], a.url)
 	equal(t, "1.pin", events[1]["pin"], "v1")
 	equal(t, "1.commit", events[1]["commit"], v1)
+	equal(t, "1.default_branch", events[1]["default_branch"], nil) // pinned: not read
 	// Each source carries its own fetch time: two adds a second apart must
 	// not be asserted against one timestamp.
 	bFetched := events[0]["last_fetched"].(string)
@@ -531,10 +548,10 @@ func TestSourceListAndRemove(t *testing.T) {
 	if len(lines) != 3 || lines[0] != "2 sources" {
 		t.Fatalf("source list printed:\n%s", out.stdout)
 	}
-	if got, want := strings.Fields(lines[1]), []string{b.url, "(unpinned)", bHead[:7], bFetched, bID}; !reflect.DeepEqual(got, want) {
+	if got, want := strings.Fields(lines[1]), []string{b.url, "tree", "writable", "main", bHead[:7], bFetched, bID}; !reflect.DeepEqual(got, want) {
 		t.Errorf("row 1 = %q, want %q", got, want)
 	}
-	if got, want := strings.Fields(lines[2]), []string{a.url, "v1", v1[:7], aFetched, aID}; !reflect.DeepEqual(got, want) {
+	if got, want := strings.Fields(lines[2]), []string{a.url, "tree", "writable", "v1", v1[:7], aFetched, aID}; !reflect.DeepEqual(got, want) {
 		t.Errorf("row 2 = %q, want %q", got, want)
 	}
 	contains(t, "stdout", out.stdout, "  "+b.url+"  ")
@@ -648,6 +665,63 @@ func TestSourceAddErrors(t *testing.T) {
 	equal(t, "exit", out.exit, 3)
 	contains(t, "stderr", out.stderr, "error: "+missing.url+": git fetch: ")
 	contains(t, "stderr", out.stderr, "hint: check the URL")
+}
+
+// TestSourceAccessFollowsWhatTheSourceAnswers adds a source whose
+// receive-pack answers as GitHub does to a user who may only read it, then
+// fetches it while the host wants single sign-on, then while it takes
+// pushes: each run checks again and records what it found. The receive-pack
+// is set for this source alone through the command environment, as a
+// user's configuration would set it, so that fetches still work.
+func TestSourceAccessFollowsWhatTheSourceAnswers(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	s, _, _ := h.standardSource(true)
+	id := source.ID(s.url)
+	dir := t.TempDir()
+	denied, sso := filepath.Join(dir, "denied"), filepath.Join(dir, "sso")
+	writeShim(t, denied, "#!/bin/sh\necho 'ERROR: Permission to acme/skills.git denied to someone.' >&2\nexit 128\n")
+	writeShim(t, sso, "#!/bin/sh\necho \"remote: The 'acme' organization has enabled or enforced SAML SSO.\" >&2\nexit 128\n")
+	receivePack := func(shim string) {
+		h.env["GIT_CONFIG_COUNT"] = "1"
+		h.env["GIT_CONFIG_KEY_0"] = "remote." + source.RemoteName(id) + ".receivepack"
+		h.env["GIT_CONFIG_VALUE_0"] = shim
+	}
+	settingsEntry := func() map[string]any {
+		return readSettingsFile(t, h)["sources"].([]any)[0].(map[string]any)
+	}
+
+	receivePack(denied)
+	out := h.run("--json", "source", "add", s.url)
+	equal(t, "exit", out.exit, 0)
+	src, _ := sourceEvents(t, h.events(out.stdout))
+	equal(t, "access", src["access"], "read-only")
+	equal(t, "access_reason", src["access_reason"], "ERROR: Permission to acme/skills.git denied to someone.")
+	equal(t, "stderr", out.stderr, "")
+	equal(t, "settings access", settingsEntry()["access"], "read-only")
+
+	// An organisation's single sign-on is something the user can fix, so it
+	// is no answer about their rights: unknown, and a warning says what to do.
+	receivePack(sso)
+	out = h.run("source", "fetch", s.url)
+	equal(t, "exit", out.exit, 0)
+	contains(t, "stdout", out.stdout, ": 2 skills; write access unknown\n")
+	contains(t, "stderr", out.stderr, "warning: "+s.url+": remote: The 'acme' organization has enabled or enforced SAML SSO.")
+	contains(t, "stderr", out.stderr, "authorise your token or key for the organisation, then run 'agentx source fetch "+s.url+"'")
+	entry := settingsEntry()
+	equal(t, "settings access after sign-on", entry["access"], nil)
+	if entry["access_checked"] == nil {
+		t.Error("an unknown answer did not record when it was checked")
+	}
+
+	for _, k := range []string{"GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"} {
+		delete(h.env, k)
+	}
+	out = h.run("source", "fetch", s.url)
+	equal(t, "exit", out.exit, 0)
+	contains(t, "stdout", out.stdout, ": 2 skills; you can write to it\n")
+	equal(t, "settings access at last", settingsEntry()["access"], "writable")
+	contains(t, "source list", h.run("source", "list").stdout, "  tree  writable  main  ")
 }
 
 // TestSourceAddRefusesAPushURLAndAForkSource is every refusal source add

@@ -293,6 +293,9 @@ type call struct {
 	// the user did not ask for, such as the access check of a source, this
 	// way too.
 	unattended bool
+	// stderr, when it is not nil, receives what git wrote on stderr, for a
+	// caller that reads git's answer out of it rather than an error.
+	stderr *string
 }
 
 // unattendedEnv is what an unattended git has on top of its environment:
@@ -381,6 +384,9 @@ func (r *Runner) runStatus(ctx context.Context, c call, upTo int, args ...string
 	err = cmd.Run()
 	if stderr.Len() > 0 {
 		r.logf("git stderr: %s", strings.TrimRight(stderr.String(), "\n"))
+	}
+	if c.stderr != nil {
+		*c.stderr = stderr.String()
 	}
 	if err != nil {
 		if ctx.Err() != nil {

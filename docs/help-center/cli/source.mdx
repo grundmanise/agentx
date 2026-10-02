@@ -12,7 +12,7 @@ agentx source add anthropics/skills
 ```
 
 ```text
-✓ added https://github.com/anthropics/skills at 3f2a9c1: 12 skills
+✓ added https://github.com/anthropics/skills at 3f2a9c1: 12 skills; write access unknown
 ```
 
 Paste the URL in whatever form you have:
@@ -33,8 +33,8 @@ A path after the repository, such as `owner/repo/skills`, scopes the listing to 
 Adding a source you already have fetches it again and sets the pin to what you typed this time. The confirmation then tells you what moved:
 
 ```text
-✓ re-fetched https://github.com/anthropics/skills, now at 9c1d0ab, was 3f2a9c1: 12 skills
-✓ re-fetched https://github.com/anthropics/skills, already at 9c1d0ab: 12 skills
+✓ re-fetched https://github.com/anthropics/skills, now at 9c1d0ab, was 3f2a9c1: 12 skills; write access unknown
+✓ re-fetched https://github.com/anthropics/skills, already at 9c1d0ab: 12 skills; write access unknown
 ```
 
 ### Credentials
@@ -56,12 +56,35 @@ agentx source add https://github.com/acme/skills --push-url git@github-work:acme
 ```
 
 ```text
-✓ added https://github.com/acme/skills at 3f2a9c1: 12 skills; pushes go to git@github-work:acme/skills.git
+✓ added https://github.com/acme/skills at 3f2a9c1: 12 skills; pushes go to git@github-work:acme/skills.git; you can write to it
 ```
 
 The push URL must name the same repository. agentx reads a host alias from your SSH configuration, so `github-work` in `~/.ssh/config` counts as the `github.com` it stands for. If the hosts still differ, agentx records the push URL and warns you. A push URL with a token in it, or one naming another repository, is refused.
 
 Adding the source again keeps its push URL. Clear it with `--push-url=`, or with a push URL that only spells the source's own URL another way. While a source has a push URL, git ignores your `pushInsteadOf` rewrites for it.
+
+### Write access
+
+After every add and every fetch, agentx asks git whether you may push to the source, and the line ends with the answer:
+
+| Line ends with | Means |
+|---|---|
+| `; you can write to it` | git accepts a push from you |
+| `; read-only for you` | the server said you may read the source and not write to it |
+| `; write access unknown` | git could not tell, for example because pushing needs a password git may not ask for, or the server did not answer |
+
+The check pushes nothing: it is a dry run of deleting a branch that does not exist, made with your own git, credentials and SSH configuration, through the push URL when the source has one. It never asks for a password or passphrase, and gives up after 30 seconds. An answer that does not come never fails the command.
+
+A `writable` source can still refuse a push to a protected branch, or one a server hook rejects: a dry run does not reach those rules.
+
+If your organisation uses single sign-on or an IP allow list, the server may refuse to say until you authorise your token or key. agentx warns you:
+
+```text
+warning: https://github.com/acme/skills: remote: The 'acme' organization has enabled or enforced SAML SSO.
+  authorise your token or key for the organisation, then run 'agentx source fetch https://github.com/acme/skills'
+```
+
+Authorise it with your host, then fetch the source again to check once more. `agentx skill check` and the desktop app's background process never check access.
 
 ### What is fetched
 
@@ -89,10 +112,10 @@ agentx source fetch anthropics/skills
 ```
 
 ```text
-✓ re-fetched https://github.com/anthropics/skills, now at 9c1d0ab, was 3f2a9c1: 13 skills
+✓ re-fetched https://github.com/anthropics/skills, now at 9c1d0ab, was 3f2a9c1: 13 skills; write access unknown
 ```
 
-A fetch updates what agentx knows about a source: the commit it holds and the skills inside it. Run it when you want to see what changed upstream now.
+A fetch updates what agentx knows about a source: the commit it holds, the skills inside it, and whether you may write to it. Run it when you want to see what changed upstream now.
 
 You often do not need to. [`agentx skill check`](/cli/skill#check-for-updates) fetches the sources your managed skills came from on its own. While the desktop app is open, its [background process](/cli/serve#update-checks) fetches every source you added when it starts and every thirty minutes, including the ones you have not installed anything from yet.
 
@@ -106,8 +129,8 @@ agentx source fetch --all
 Sources are fetched in parallel, a few at a time, and each one gets a line that says what moved:
 
 ```text
-✓ re-fetched https://github.com/anthropics/skills, now at 9c1d0ab, was 3f2a9c1: 13 skills
-✓ re-fetched https://github.com/me/skills, already at 8b1e0f4: 4 skills
+✓ re-fetched https://github.com/anthropics/skills, now at 9c1d0ab, was 3f2a9c1: 13 skills; write access unknown
+✓ re-fetched https://github.com/me/skills, already at 8b1e0f4: 4 skills; you can write to it
 ```
 
 A source that fails is a warning naming it and does not stop the others. Every source that did fetch is recorded, and the command then fails, naming the ones that did not. If they all failed for the same reason, the exit code is the one that source would give on its own; if the reasons differ, it is `3`.
@@ -128,11 +151,11 @@ agentx source list
 
 ```text
 2 sources
-  https://github.com/anthropics/skills  (unpinned)  3f2a9c1  2026-09-20T10:00:00Z  1c9d0b7e4a2f6d38
-  https://github.com/me/skills          v2          8b1e0f4  2026-09-19T18:30:00Z  7a3b5c9e1f2d4a60
+  https://github.com/anthropics/skills  tree  unknown   main  3f2a9c1  2026-09-20T10:00:00Z  1c9d0b7e4a2f6d38
+  https://github.com/me/skills          tree  writable  v2    8b1e0f4  2026-09-19T18:30:00Z  7a3b5c9e1f2d4a60
 ```
 
-Each row shows the canonical URL, the pin, the fetched commit, when it was last fetched and the source id. The id is accepted wherever a URL is.
+Each row shows the canonical URL, the layout, your write access as the last add or fetch found it, the branch, the fetched commit, when it was last fetched and the source id. The branch is the pin, or for an unpinned source the default branch the repository named at the last add or fetch, or `(unpinned)` while agentx has not seen one. The id is accepted wherever a URL is.
 
 ## List the skills of a source
 

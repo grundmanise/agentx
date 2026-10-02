@@ -151,7 +151,7 @@ func TestSourceFetchByURLByIDAndAll(t *testing.T) {
 	before = readVersion(t, h)
 	out = h.run("source", "fetch", source.ID(two.url))
 	equal(t, "exit", out.exit, 0)
-	equal(t, "stdout", out.stdout, "✓ re-fetched "+two.url+", already at "+twoHead[:7]+": 1 skill\n")
+	equal(t, "stdout", out.stdout, "✓ re-fetched "+two.url+", already at "+twoHead[:7]+": 1 skill; you can write to it\n")
 	refetched(t, h, two.url)
 	equal(t, "last_fetched of one", lastFetched(t, h, one.url), backdated)
 	equal(t, "version", readVersion(t, h), before+1)
@@ -446,9 +446,10 @@ func TestSourceFetchIsParallelAndBounded(t *testing.T) {
 	// landed there, three to walk the trees, the blob batch, the
 	// batch-check that proves the blobs arrived, the cat-file that reads
 	// them, the update-ref that publishes the fetch and the one that drops
-	// the staging ref. The run adds the version check and the account repo
-	// probe. Nothing here is per skill.
-	if bound := 12*sources + 4; total > bound {
+	// the staging ref. The check after it adds two: the access check's dry
+	// run and the read of the default branch. The run adds the version
+	// check and the account repo probe. Nothing here is per skill.
+	if bound := 14*sources + 4; total > bound {
 		t.Errorf("%d git processes for %d sources, want at most %d", total, sources, bound)
 	}
 }

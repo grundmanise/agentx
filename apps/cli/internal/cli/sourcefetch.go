@@ -78,11 +78,17 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 	if !exists { // settings name sources the account repo has nothing of
 		return sourceFailure(source.NotFetched(targets[0].src.URL), targets[0].src)
 	}
-	results, err := inv.fetchSources(ctx, gitDir, targets, false, true)
+	// Each source that fetched is checked again in the worker that fetched
+	// it: a fetch the user asked for is the moment to find out whether
+	// what this machine may do there has changed.
+	checks := make([]sourceCheck, len(targets))
+	results, err := inv.fetchSources(ctx, gitDir, targets, false, true, func(i int) {
+		checks[i] = inv.checkSource(ctx, gitDir, targets[i].entry)
+	})
 	if err != nil {
 		return err
 	}
-	return inv.reportFetched(ctx, gitDir, targets, results)
+	return inv.reportFetched(ctx, gitDir, targets, results, checks)
 }
 
 // fetchSources fetches targets, sources the settings hold, in parallel and
@@ -95,7 +101,9 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 // the serve child, which never exits for one, runs the same fetch. wait
 // takes the lock as the serve child does, waiting for a holder rather than
 // giving up, and progress reports one progress event per source as its
-// fetch ends.
+// fetch ends. then, when it is not nil, runs in the worker of each target
+// that fetched, with its index, before its progress event, see
+// source.FetchAll.
 //
 // The lock is taken before the network and released again: an unfinished
 // mutation journal is recovered, and a run that could not write the
@@ -110,7 +118,7 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 // git process and only one that disagrees is written, which changes no pin
 // and no push URL: those are what the settings say, and only source add
 // sets them.
-func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets []fetchTarget, wait, progress bool) ([]source.Result, error) {
+func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets []fetchTarget, wait, progress bool, then func(i int)) ([]source.Result, error) {
 	if err := inv.holdLock(ctx, wait, false, func() error { return inv.alignRemotes(ctx, gitDir, targets) }); err != nil {
 		return nil, accountRepoFailure(err)
 	}
@@ -124,7 +132,7 @@ func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets 
 			inv.out.emit(progressEvent{event: newEvent("progress"), Phase: "fetch", Subject: s.URL, Current: finished, Total: len(srcs)})
 		}
 	}
-	results := source.FetchAll(ctx, inv.git, gitDir, srcs, done)
+	results := source.FetchAll(ctx, inv.git, gitDir, srcs, then, done)
 	// A source whose remote the account repo no longer holds, which an
 	// interrupted removal leaves behind, cannot be fetched at all. git
 	// reports that as a repository it cannot find and names the remote,
@@ -184,20 +192,24 @@ func (inv *invocation) alignRemotes(ctx context.Context, gitDir string, targets 
 }
 
 // reportFetched records the sources that fetched in one settings write,
-// then reports every result in the order the command named them, so that
-// the parallel work leaves no trace in the output. A source that failed is
-// one warning naming it; the run then refuses, naming them all.
-func (inv *invocation) reportFetched(ctx context.Context, gitDir string, targets []fetchTarget, results []source.Result) error {
+// with what checks, one per target, found out about each, then reports
+// every result in the order the command named them, so that the parallel
+// work leaves no trace in the output. A source that failed is one warning
+// naming it; the run then refuses, naming them all.
+func (inv *invocation) reportFetched(ctx context.Context, gitDir string, targets []fetchTarget, results []source.Result, checks []sourceCheck) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	fetched := make(map[string]bool, len(results))
+	checked := make(map[string]sourceCheck, len(results))
 	var failed []source.Result
-	for _, res := range results {
+	for i, res := range results {
 		if res.Err == nil {
 			fetched[res.Source.URL] = true
+			checked[res.Source.URL] = checks[i]
 		} else {
 			failed = append(failed, res)
 		}
 	}
+	written := map[string]home.Source{}
 	if len(fetched) > 0 {
 		// One write for the whole run, under the lock, on the settings as
 		// they are now; see stampFetched.
@@ -207,9 +219,12 @@ func (inv *invocation) reportFetched(ctx context.Context, gitDir string, targets
 				return err
 			}
 			m := home.NewMutation(inv.dirs.Home)
-			if err := inv.stampFetched(ctx, m, gitDir, s, fetched, now); err != nil {
+			if err := inv.stampFetched(ctx, m, gitDir, s, fetched, checked, now); err != nil {
 				m.Discard()
 				return err
+			}
+			for _, entry := range s.Sources {
+				written[entry.URL] = entry
 			}
 			return m.Apply(inv.refs(ctx))
 		}); err != nil {
@@ -225,11 +240,13 @@ func (inv *invocation) reportFetched(ctx context.Context, gitDir string, targets
 		if !fetched[res.Source.URL] {
 			continue // removed while this run fetched
 		}
-		entry, listing := targets[i].entry, res.Listing
+		entry, listing, check := written[res.Source.URL], res.Listing, checks[i]
+		check.report(inv, res.Source.URL)
 		n := len(listing.Skills)
-		inv.out.emit(sourceEvent{event: newEvent("source"), ID: res.Source.ID(), URL: res.Source.URL, Alias: entry.Alias, PushURL: entry.PushURL, Pin: entry.Pin,
-			LastFetched: now, Commit: listing.Commit, Previous: movedFrom(listing), Skills: &n})
-		inv.out.done(inv.addLine(false, res.Source, listing) + ": " + inv.out.paint(noteStyle, plural(n, "skill")))
+		ev := entryEvent(entry)
+		ev.Commit, ev.Previous, ev.Skills, ev.AccessReason = listing.Commit, movedFrom(listing), &n, check.reason()
+		inv.out.emit(ev)
+		inv.out.done(inv.addLine(false, res.Source, listing) + ": " + inv.out.paint(noteStyle, plural(n, "skill")) + accessPhrase(inv.out, entry.AccessName()))
 	}
 	if len(failed) == 0 {
 		return nil
@@ -240,15 +257,18 @@ func (inv *invocation) reportFetched(ctx context.Context, gitDir string, targets
 // stampFetched stages the settings write that ends a fetch run, under the
 // lock the caller holds, on s as the settings are now: last_fetched, now,
 // for every source of fetched, which are the canonical URLs of the sources
-// that fetched. A source removed while the run fetched is not written back,
+// that fetched, and what checked, by the same URLs, found out about those
+// it checked; nil checks none. s is updated in place, so that the caller
+// reports the entries as written. A source removed while the run fetched is not written back,
 // and is taken out of fetched, so that nothing says a source is present and
 // fresh once it is gone. The file is written whatever it holds, as one
 // write of the whole run.
-func (inv *invocation) stampFetched(ctx context.Context, m *home.Mutation, gitDir string, s home.Settings, fetched map[string]bool, now string) error {
+func (inv *invocation) stampFetched(ctx context.Context, m *home.Mutation, gitDir string, s home.Settings, fetched map[string]bool, checked map[string]sourceCheck, now string) error {
 	var removed []string
 	for url := range fetched {
 		if i := s.FindSource(url); i >= 0 {
 			s.Sources[i].LastFetched = now
+			checked[url].apply(&s.Sources[i])
 		} else {
 			delete(fetched, url)
 			removed = append(removed, url)
