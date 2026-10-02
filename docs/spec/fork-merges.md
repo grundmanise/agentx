@@ -6,7 +6,7 @@ A fork takes in two kinds of change: a newer version of its upstream, and what a
 
 ## Required behavior
 
-- Verify fork identity by `Agentx-Fork-ID`, the id of the commit that created the fork, read along first parents from each tip. A branch of the same name whose history names another id, or names none, is refused rather than merged: two forks of one name are never tangled, and neither is published over the other.
+- Verify fork identity by `Agentx-Fork-ID`, the permanent id the commit that created the fork records, read along first parents from each tip. A branch of the same name whose history names another id, or names none, is refused rather than merged: two forks of one name are never tangled, and neither is published over the other.
 - Verify the canonical source and subpath: an upstream version is merged into a fork only when it holds the skill under the same source and directory as the fork's base.
 - Refuse while the fork has uncommitted edits, as `git merge` refuses over a work tree with changes it would overwrite. Ignored files are never edits.
 - Follow the [mutation-safety](mutation-safety.md) contract: a branch moves with its old tip as the expected value, and the worktree follows through the mutation journal.
