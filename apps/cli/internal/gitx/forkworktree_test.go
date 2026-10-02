@@ -138,9 +138,7 @@ func TestRepairWorktreesNamesItsPaths(t *testing.T) {
 		"*--version*) echo \"git version $VER\" ;;\n" +
 		"*\"config --type=bool --get worktree.useRelativePaths\"*) [ -n \"$REL\" ] && echo true && exit 0; exit 1 ;;\n" +
 		"*) echo \"$*\" >> \"$LOG\" ;;\nesac\n"
-	if err := os.WriteFile(filepath.Join(dir, "git"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	writeShim(t, filepath.Join(dir, "git"), script)
 	ctx := context.Background()
 	for _, tc := range []struct {
 		version, relative string

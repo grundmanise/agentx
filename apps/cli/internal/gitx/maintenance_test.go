@@ -17,10 +17,8 @@ func TestMaintenanceLeavesNoLockBehind(t *testing.T) {
 	t.Parallel()
 	dir, gitDir := t.TempDir(), t.TempDir()
 	started, stopped := filepath.Join(dir, "started"), filepath.Join(dir, "stopped")
-	script := "#!/bin/sh\ntrap 'touch " + stopped + "; exit 143' TERM\ntouch " + started + "\nwhile :; do sleep 0.05; done\n"
-	if err := os.WriteFile(filepath.Join(dir, "git"), []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	script := "#!/bin/sh\n[ \"$1\" = --version ] && exit 0\ntrap 'touch " + stopped + "; exit 143' TERM\ntouch " + started + "\nwhile :; do sleep 0.05; done\n"
+	writeShim(t, filepath.Join(dir, "git"), script)
 	r := New(map[string]string{"PATH": dir + string(os.PathListSeparator) + os.Getenv("PATH")}, false, func(string, ...any) {})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()

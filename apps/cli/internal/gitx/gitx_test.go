@@ -6,7 +6,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -354,4 +356,23 @@ func checkoutRepo(t *testing.T) (*Runner, string, string) {
 		t.Fatal(err)
 	}
 	return r, gitDir, commit
+}
+
+// writeShim writes a git shell script a parallel test is about to run and
+// waits until it can be run. The suite forks in parallel with itself and a
+// fork duplicates the write descriptor of a file being written, so running
+// the script can fail with ETXTBSY until the child that inherited that
+// descriptor execs; it is run with --version until it starts, which every
+// script given answers at once.
+func writeShim(t *testing.T, path, script string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		if err := exec.Command(path, "--version").Run(); !errors.Is(err, syscall.ETXTBSY) {
+			return
+		}
+		runtime.Gosched()
+	}
 }
