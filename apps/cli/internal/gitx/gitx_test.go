@@ -246,11 +246,19 @@ func TestIsolatedStatusAnswersWithTheExitStatus(t *testing.T) {
 
 // TestAddCheckoutLocksWithTheReason: a checkout is added detached at the
 // commit given and locked with the reason, which git worktree list shows,
-// so that git's own pruning never takes it.
+// so that git's own pruning never takes it, and a registration whose
+// directory is gone is pruned first.
 func TestAddCheckoutLocksWithTheReason(t *testing.T) {
 	t.Parallel()
 	r, gitDir, commit := checkoutRepo(t)
 	ctx := context.Background()
+	stale := filepath.Join(t.TempDir(), "stale")
+	if _, err := r.Isolated(ctx, gitDir, "worktree", "add", "--detach", stale, commit); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(stale); err != nil {
+		t.Fatal(err)
+	}
 	path := filepath.Join(t.TempDir(), "merges", "alpha")
 	if err := r.AddCheckout(ctx, gitDir, path, commit, "a reason of its own"); err != nil {
 		t.Fatal(err)
@@ -262,8 +270,29 @@ func TestAddCheckoutLocksWithTheReason(t *testing.T) {
 	if want := "HEAD " + commit + "\ndetached\nlocked a reason of its own"; !strings.Contains(list, want) {
 		t.Errorf("worktree list says\n%s\nwant it to hold %q", list, want)
 	}
+	if strings.Contains(list, stale) {
+		t.Errorf("worktree list still names the stale registration:\n%s", list)
+	}
 	if top, err := r.InCheckout(ctx, path, "rev-parse", "HEAD"); err != nil || strings.TrimSpace(top) != commit {
 		t.Errorf("HEAD in the checkout = %q, %v; want %s", top, err, commit)
+	}
+}
+
+// TestGitRunsFromADeletedDirectory: a process whose working directory was
+// removed, a shell left in a merge checkout a pull completed, still reads
+// the repository it names. Not parallel: it changes the working directory.
+func TestGitRunsFromADeletedDirectory(t *testing.T) {
+	r, gitDir, commit := checkoutRepo(t)
+	gone := filepath.Join(t.TempDir(), "gone")
+	if err := os.Mkdir(gone, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(gone)
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := r.Isolated(context.Background(), gitDir, "rev-parse", commit); err != nil || strings.TrimSpace(out) != strings.TrimSpace(commit) {
+		t.Errorf("rev-parse from a deleted directory = %q, %v; want %s", out, err, commit)
 	}
 }
 

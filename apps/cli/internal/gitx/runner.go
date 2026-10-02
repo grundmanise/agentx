@@ -170,9 +170,22 @@ func (r *Runner) InCheckoutInput(ctx context.Context, dir string, stdin io.Reade
 
 // AddCheckout adds a linked worktree of the repository at gitDir at path,
 // detached at commit and locked with reason, so that git's own pruning of
-// worktrees never takes it, whatever becomes of its directory.
+// worktrees never takes it, whatever becomes of its directory. Registrations
+// git lists as prunable are pruned first, as AddForkWorktree prunes them.
 func (r *Runner) AddCheckout(ctx context.Context, gitDir, path, commit, reason string) error {
-	_, err := r.Isolated(ctx, gitDir, "worktree", "add", "--detach", "--lock", "--reason", reason, path, commit)
+	list, err := r.Worktrees(ctx, gitDir)
+	if err != nil {
+		return err
+	}
+	for _, w := range list {
+		if w.Prunable {
+			if err := r.PruneWorktrees(ctx, gitDir); err != nil {
+				return err
+			}
+			break
+		}
+	}
+	_, err = r.Isolated(ctx, gitDir, "worktree", "add", "--detach", "--lock", "--reason", reason, path, commit)
 	return err
 }
 
@@ -279,6 +292,18 @@ func (r *Runner) run(ctx context.Context, c call, args ...string) (string, error
 	return out, err
 }
 
+// workDir is the directory a git given none runs in: the process's own,
+// "" to keep it, unless that directory is gone, as it is for a shell left
+// in a merge checkout a pull completed and removed. git started there
+// fails before it reads any argument, so it runs at the root instead; a
+// call that names no directory names its repository with --git-dir.
+func workDir() string {
+	if _, err := os.Getwd(); err != nil {
+		return string(filepath.Separator)
+	}
+	return ""
+}
+
 // runStatus is run that answers an exit status from 1 to upTo with stdout
 // and that status rather than with an error, for a git that exits non-zero
 // to say what it found. A git killed by a signal has no such status and is
@@ -295,6 +320,9 @@ func (r *Runner) runStatus(ctx context.Context, c call, upTo int, args ...string
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
 	cmd.Dir = c.dir
+	if cmd.Dir == "" {
+		cmd.Dir = workDir()
+	}
 	cmd.Stdin = c.stdin
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
