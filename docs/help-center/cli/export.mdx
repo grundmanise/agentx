@@ -65,11 +65,11 @@ The listing says what this machine's account repo has of each skill:
 
 | State | Meaning |
 |---|---|
-| `present` | This machine holds that skill at that version: as a branch of its account repo, or, for a fork, on the [account remote](/cli/remote) you set. When the library still holds the skill, place it with [`agentx skill place`](/cli/skill). A managed skill the library no longer holds comes back with [`agentx skill add`](/cli/skill). A fork only the account remote holds cannot be installed on this machine yet. |
+| `present` | This machine holds that skill at that version: as a branch of its account repo, or, for a fork, on the [account remote](/cli/remote) you set. When the library still holds the skill, place it with [`agentx skill place`](/cli/skill). A managed skill the library no longer holds comes back with [`agentx skill add`](/cli/skill). Install a fork only the account remote holds with [`agentx skill add --from-account <name>`](/cli/remote#install-a-fork-on-another-machine). |
 | `missing` | Neither the account repo nor the account remote has a branch for it. Add its source with [`agentx source add`](/cli/source), then install it again with [`agentx skill add`](/cli/skill). |
 | `different` | The account repo holds that name at another version, or as a fork where the export had a managed skill, or the account remote holds that fork at another version, as when it was published again after the export. |
 
-A fresh machine has no account repo, so every skill reads `missing` there. Set your account remote before you import, with `agentx remote set <url>`, and the forks you published read `present`: the listing then tells which of your forks the remote keeps for you. agentx cannot install a fork from the account remote yet.
+A fresh machine has no account repo, so every skill reads `missing` there. Set your account remote before you import, with `agentx remote set <url>`, and the forks you published read `present`: the listing then tells which of your forks the remote keeps for you. Install each one with `agentx skill add --from-account <name>`.
 
 ## Confirm without a terminal
 

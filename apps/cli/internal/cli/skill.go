@@ -105,12 +105,7 @@ func newSkillCommand(inv *invocation) *cobra.Command {
 	cmd.AddCommand(newSkillRevertCommand(inv))
 	cmd.AddCommand(newSkillCheckCommand(inv))
 	cmd.AddCommand(newSkillUpdateCommand(inv))
-	cmd.AddCommand(&cobra.Command{
-		Use:   "list",
-		Short: "List the skills in the library with their upstream and placements",
-		Args:  cobra.NoArgs,
-		RunE:  func(cmd *cobra.Command, args []string) error { return inv.skillList(cmd.Context()) },
-	})
+	cmd.AddCommand(newSkillListCommand(inv))
 	return cmd
 }
 

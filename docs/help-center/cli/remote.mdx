@@ -42,6 +42,46 @@ agentx publish release-notes
 - When another machine published commits of the fork first, agentx takes them in before it pushes, as [`agentx pull`](#pull-what-another-machine-published) does. Commit or discard your edits first: a fork with uncommitted edits stops with exit code 6.
 - agentx never forces a push. When the remote rejects one, for example because another machine published meanwhile, run `agentx pull <name>`, then publish again.
 
+## Install a fork on another machine
+
+On a second machine, attach the same remote, then list the forks it holds that this machine has not installed:
+
+```sh
+agentx skill list --remote
+```
+
+```text
+1 skill
+  pdf  managed  current  https://github.com/anthropics/skills/skills/pdf  4 placements
+2 installable forks on the account remote
+  release-notes  fork  installable  https://github.com/acme/skills/release-notes
+  standup        fork  installable  (none)
+Install one with agentx skill add --from-account <name>.
+```
+
+- `--remote` fetches the remote first. A remote Git cannot reach stops with exit code 3.
+- Each row names the upstream the fork's own commits record, or `(none)` for a skill you created with `agentx skill new`.
+
+Install one:
+
+```sh
+agentx skill add --from-account release-notes
+```
+
+```text
+✓ installed release-notes from the account remote at 4c2e9a1: 1 placement
+```
+
+- It is the same fork, with its id and its whole history. Commit here and publish, and the commits go to the same branch.
+- agentx places it into every enabled configuration, as `agentx skill add` does. Pass `--to <configuration>` to choose, and `--copy` for copies.
+- When this machine has not added the fork's upstream source, agentx adds it, so that [`agentx skill check`](/cli/skill) finds the fork's updates here too. A source it cannot fetch does not stop the install: run the `agentx source add` line the warning prints.
+
+### When the library already holds the name
+
+- **A managed copy of the same upstream, unedited**: the fork takes its place. Its placements stay as they are and now lead to the fork. Files Git ignores in it, such as a `.DS_Store`, move into the fork.
+- **A managed copy with your edits, or any other folder**: agentx stops with exit code 6 and changes nothing. Pass `--keep-local` to move the folder into the fork as it is: its content becomes the fork's uncommitted edits, and files Git ignores stay with it. Then keep the edits with [`agentx skill commit`](/cli/fork#commit-your-edits), or drop them with [`agentx skill revert`](/cli/fork#undo-edits).
+- **A symlink**: agentx stops with exit code 6, even with `--keep-local`. Remove the link, then install again.
+
 ## Pull what another machine published
 
 ```sh
@@ -89,7 +129,7 @@ hint: rename yours: fork it under a new name with 'agentx skill fork release-not
 - `1`: the URL is not one Git reaches as it is, carries a password or a token, or names a ref with `#`; `publish` is given both a name and `--all`, or neither.
 - `3`: Git cannot reach the account remote.
 - `4`: a fork has a merge waiting, or the pull or publish left one waiting for you to [resolve](#resolve-a-conflict).
-- `5`: the name is not a skill of this machine.
-- `6`: no account remote is set; the skill is not a fork; the remote's branch of that name is [another fork](#two-forks-with-one-name), names no fork id, or shares no commit with yours; the fork has uncommitted edits and the remote has something new; the remote rejected the push; the fork's worktree is missing, needs repair or is not on its branch; or the fork, or its branch on the remote, changed while it was being pulled or published.
+- `5`: the name is not a skill of this machine, or the remote holds no fork of that name to install.
+- `6`: no account remote is set; the skill is not a fork; the fork to install is installed already, or the library holds a symlink, edits or a folder of its own at its name; the remote's branch of that name is [another fork](#two-forks-with-one-name), names no fork id, or shares no commit with yours; the fork has uncommitted edits and the remote has something new; the remote rejected the push; the fork's worktree is missing, needs repair or is not on its branch; or the fork, or its branch on the remote, changed while it was being pulled or published.
 - `7`: another agentx command is running. Retry when it finishes.
 - `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.

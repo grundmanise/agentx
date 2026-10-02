@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
@@ -337,7 +338,7 @@ func (inv *invocation) pull(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	names, err := inv.remoteSelection(name, records, true, "pull")
+	names, err := inv.remoteSelection(ctx, name, records, true, "pull")
 	if err != nil {
 		return err
 	}
@@ -395,7 +396,7 @@ func (inv *invocation) forkRecords(ctx context.Context, gitDir string) (map[stri
 // with none every fork, only those placed on this machine, a worktree or a
 // library entry of theirs there, when placed is set. verb is the command,
 // as its refusals name it.
-func (inv *invocation) remoteSelection(name string, records map[string]lineage.Record, placed bool, verb string) ([]string, error) {
+func (inv *invocation) remoteSelection(ctx context.Context, name string, records map[string]lineage.Record, placed bool, verb string) ([]string, error) {
 	if name == "" {
 		var names []string
 		for n, rec := range records {
@@ -417,6 +418,10 @@ func (inv *invocation) remoteSelection(name string, records map[string]lineage.R
 	if _, held := librarySkill(inv.dirs.Library, name); held {
 		return nil, fail(exitRefused, sanitised(name)+" is not a fork, so it is never "+verb+"ed: only forks travel through the account remote",
 			"fork it first with '"+skillCommand("fork", name)+"'")
+	}
+	if tips, err := lineage.ListRemote(ctx, inv.git, gitx.AccountRepoPath(inv.dirs.Home)); err == nil && tips[name] != "" {
+		return nil, fail(exitNotFound, sanitised(name)+" is a fork of the account remote that this machine has not installed, so there is nothing of it here to "+verb,
+			"install it with '"+fromAccountCommand(name)+"'")
 	}
 	return nil, inv.noLibrarySkill(name)
 }

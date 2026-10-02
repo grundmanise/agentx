@@ -36,21 +36,46 @@ const namesInAHint = 12
 func newSkillAddCommand(inv *invocation) *cobra.Command {
 	var sel selection
 	var to []string
-	var asCopy, fetch bool
+	var asCopy, fetch, keepLocal bool
+	var fromAccount string
 	cmd := &cobra.Command{
-		Use:   "add <source>[/<subpath>]",
-		Short: "Install skills from a source into the library and place them",
+		Use:   "add <source>[/<subpath>] | --from-account <name>",
+		Short: "Install skills from a source, or a fork from the account remote, into the library and place them",
 		Long: "Install skills from a source into the library and place them in every enabled\n" +
 			"configuration. A source URL this machine has not added yet is added first, as\n" +
 			"'agentx source add' would; an added source is installed from as it was last\n" +
 			"fetched, unless --fetch fetches it again. Name the skills with --skill, once for\n" +
 			"each, or take the whole source with --all and leave out what you do not want\n" +
-			"with --except.",
-		Args: cobra.ExactArgs(1),
+			"with --except.\n\n" +
+			"With --from-account, install the fork called <name> that another machine\n" +
+			"published to the account remote: the same fork, with its history, whose commits\n" +
+			"you publish back to the same branch. 'agentx skill list --remote' lists them. A\n" +
+			"managed copy of the fork's upstream that holds its base version gives way to the\n" +
+			"fork and keeps its placements; any other directory in the library is refused\n" +
+			"unless --keep-local moves it into the fork as uncommitted edits.",
+		Args: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("from-account") {
+				return cobra.NoArgs(cmd, args)
+			}
+			return cobra.ExactArgs(1)(cmd, args)
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("from-account") {
+				for _, other := range []string{"skill", "all", "except", "fetch"} {
+					if cmd.Flags().Changed(other) {
+						return fail(exitUsage, "--from-account installs one fork and takes no --"+other, "run '"+fromAccountCommand(fromAccount)+"'")
+					}
+				}
+				return inv.installFromAccount(cmd.Context(), fromAccount, to, asCopy, keepLocal)
+			}
+			if keepLocal {
+				return fail(exitUsage, "--keep-local applies to --from-account only", "run 'agentx skill add --from-account <name> --keep-local'")
+			}
 			return inv.skillAdd(cmd.Context(), args[0], sel, to, asCopy, fetch)
 		},
 	}
+	cmd.Flags().StringVar(&fromAccount, "from-account", "", "install the fork of this name from the account remote")
+	cmd.Flags().BoolVar(&keepLocal, "keep-local", false, "with --from-account, keep the directory the library holds as the fork's uncommitted edits")
 	cmd.Flags().StringArrayVar(&sel.names, "skill", nil, "the skill to install, by its name in the source; give it again for each")
 	cmd.Flags().BoolVar(&sel.all, "all", false, "install every skill the source holds")
 	cmd.Flags().StringArrayVar(&sel.except, "except", nil, "with --all, a skill to leave out; give it again for each")

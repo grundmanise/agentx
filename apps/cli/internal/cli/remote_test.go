@@ -37,21 +37,12 @@ func remoteGit(t *testing.T, h *harness, remote string, args ...string) string {
 	return out
 }
 
-// placeRemoteFork gives h the fork called name the account remote holds,
-// as an install of it from there does: its branch at the remote-tracking
-// branch, checked out and placed by skill place.
-func (h *harness) placeRemoteFork(name string) {
-	h.t.Helper()
-	h.accountGit("update-ref", lineage.ForkRef(name), lineage.RemoteForkRef(name))
-	h.mustRun("skill", "place", name)
-}
-
-// twoHomes is two machines of one user with one account remote: a, with
-// alpha and beta installed from a source at its first commit and forked,
-// both published, and b, a machine with the same source added that took
-// both forks from the account remote. Each has a git identity of its own.
-// It returns the source and the remote.
-func twoHomes(t *testing.T) (a, b *harness, s *sourceRepo, remote string) {
+// accountHomes is two machines of one user with one account remote: a,
+// with alpha and beta installed from a source at its first commit and
+// forked, both published, and b, a machine with the remote set that has
+// installed nothing and added no source. Each has a git identity of its
+// own. It returns the source and the remote.
+func accountHomes(t *testing.T) (a, b *harness, s *sourceRepo, remote string) {
 	t.Helper()
 	a, s, _ = forkUpdateHarness(t)
 	a.withIdentity("Machine A", "a@example.com")
@@ -65,10 +56,17 @@ func twoHomes(t *testing.T) (a, b *harness, s *sourceRepo, remote string) {
 	b.build(t, fixture{dirs: []string{".claude"}})
 	b.rewrite(s)
 	b.withIdentity("Machine B", "b@example.com")
-	b.mustRun("source", "add", s.url)
 	b.mustRun("remote", "set", remote)
-	b.placeRemoteFork("alpha")
-	b.placeRemoteFork("beta")
+	return a, b, s, remote
+}
+
+// twoHomes is accountHomes with both forks installed on b from the account
+// remote, which adds their source to b too.
+func twoHomes(t *testing.T) (a, b *harness, s *sourceRepo, remote string) {
+	t.Helper()
+	a, b, s, remote = accountHomes(t)
+	b.mustRun("skill", "add", "--from-account", "alpha")
+	b.mustRun("skill", "add", "--from-account", "beta")
 	return a, b, s, remote
 }
 

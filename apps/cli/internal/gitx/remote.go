@@ -49,6 +49,25 @@ func (r *Runner) SetRemote(ctx context.Context, gitDir, url string) error {
 	return nil
 }
 
+// SetTracking records that the local branch, a short name such as
+// skills/pdf, tracks the branch of the same name on the account remote, as
+// git branch --track records it, so that git status in the fork's worktree
+// says how the two stand. Writing it again is harmless. It is no lineage:
+// agentx itself reads the remote-tracking branch of the same name, whatever
+// the configuration says. Under the lock, as SetRemote.
+func (r *Runner) SetTracking(ctx context.Context, gitDir, branch string) error {
+	section := "branch." + branch + "."
+	for _, args := range [][]string{
+		{"config", section + "remote", RemoteName},
+		{"config", section + "merge", "refs/heads/" + branch},
+	} {
+		if _, err := r.Isolated(ctx, gitDir, args...); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // UnsetRemote takes the account remote out of the account repo: its
 // configuration section, the tracking configuration of every fork branch
 // that names it, and every remote-tracking branch a fetch of it wrote. No

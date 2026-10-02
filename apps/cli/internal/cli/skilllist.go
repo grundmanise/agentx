@@ -3,7 +3,25 @@ package cli
 import (
 	"context"
 	"strings"
+
+	"github.com/spf13/cobra"
 )
+
+func newSkillListCommand(inv *invocation) *cobra.Command {
+	var remote bool
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List the skills in the library with their upstream and placements",
+		Long: "List the skills in the library with their upstream and placements. With --remote,\n" +
+			"fetch the account remote first and list after them the forks it holds that this\n" +
+			"machine has not installed, each with the upstream its history records; install\n" +
+			"one with 'agentx skill add --from-account <name>'.",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error { return inv.skillList(cmd.Context(), remote) },
+	}
+	cmd.Flags().BoolVar(&remote, "remote", false, "fetch the account remote and list the forks it holds that this machine has not installed")
+	return cmd
+}
 
 // skillList reports the skills of the library: what each one is, where it
 // came from and where it is seen from. The lineage comes from the branches
@@ -18,8 +36,24 @@ import (
 // nothing to list, compare or place. It is named in a warning of its own
 // after the rows, see absentWarnings, so that a branch the account repo
 // still holds is never silently left out.
-func (inv *invocation) skillList(ctx context.Context) error {
+//
+// With remote, the account remote is fetched first, outside the lock, and
+// every fork it holds that this machine has no branch of is listed after
+// the library's skills as installable, see installableForks. Nothing else
+// in the listing reaches the network.
+func (inv *invocation) skillList(ctx context.Context, remote bool) error {
 	inv.forksWarned = true // the warnings after the rows name them
+	gitDir := ""
+	if remote {
+		var url string
+		var err error
+		if gitDir, url, err = inv.accountRemote(ctx); err != nil {
+			return err
+		}
+		if err := inv.fetchRemote(ctx, gitDir, url); err != nil {
+			return err
+		}
+	}
 	snap, err := inv.scan(ctx, lockWait, "", false)
 	if err != nil {
 		return err
@@ -30,26 +64,53 @@ func (inv *invocation) skillList(ctx context.Context) error {
 	}
 	skills, warnings := readLibrary(inv.dirs.Library)
 	warnings = append(warnings, sc.absentWarnings(inv, skills)...)
+	var installable []installableForkEvent
+	if remote {
+		var skipped []string
+		if installable, skipped, err = inv.installableForks(ctx, gitDir, sc.records); err != nil {
+			return err
+		}
+		warnings = append(warnings, skipped...)
+	}
 	out := inv.out
 	if len(skills) == 0 {
 		out.print("No skills in the library. Install one with ", out.paint(label, "agentx skill add <source>"), ".")
-		for _, w := range warnings {
-			out.warn(w)
+	} else {
+		out.print(out.paint(heading, plural(len(skills), "skill")))
+		t := &table{}
+		for _, lib := range skills {
+			ev := sc.librarySkillEventFor(ctx, inv, snap, lib, nil) // every placement, not only a command's own
+			out.emit(ev)
+			t.add(row(out, ev)...)
 		}
-		return nil
+		out.render(t, "")
 	}
-	out.print(out.paint(heading, plural(len(skills), "skill")))
-	t := &table{}
-	for _, lib := range skills {
-		ev := sc.librarySkillEventFor(ctx, inv, snap, lib, nil) // every placement, not only a command's own
-		out.emit(ev)
-		t.add(row(out, ev)...)
+	if remote {
+		inv.printInstallable(installable)
 	}
-	out.render(t, "")
 	for _, w := range warnings {
 		out.warn(w)
 	}
 	return nil
+}
+
+// printInstallable reports the forks the account remote holds that this
+// machine has not installed: one installable_fork event each, and a table
+// of them after the library's, with the command that installs one.
+func (inv *invocation) printInstallable(installable []installableForkEvent) {
+	out := inv.out
+	if len(installable) == 0 {
+		out.print("The account remote holds no fork this machine has not installed.")
+		return
+	}
+	out.print(out.paint(heading, plural(len(installable), "installable fork")+" on the account remote"))
+	t := &table{}
+	for _, ev := range installable {
+		out.emit(ev)
+		t.add(installableRow(out, ev)...)
+	}
+	out.render(t, "")
+	out.print("Install one with ", out.paint(label, "agentx skill add --from-account <name>"), ".")
 }
 
 // row is one line of the human listing: the name, what agentx knows it as,

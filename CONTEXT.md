@@ -100,7 +100,7 @@ The branch `managed/<name>` in the account repo that points at a managed skill's
 _Avoid_: managed branch, shadow branch, cache branch
 
 **Adopt into fork**:
-Installing a published fork over a directory that already exists in the library under that name, keeping the directory's content as pending changes on the fork.
+Installing a published fork with `skill add --from-account <name> --keep-local` over a directory that already exists in the library under that name, keeping the directory's content as pending changes on the fork. A managed copy of the fork's upstream that still holds its base version needs no adoption: the fork supersedes it.
 _Avoid_: overwrite, take over
 
 **Adopt candidate**:
@@ -122,6 +122,10 @@ _Avoid_: sync, share, upload
 **Pull**:
 Taking in what another machine published of a fork to the account remote: a plain Git merge of the two histories, a fast-forward when this machine has nothing of its own, whose conflict becomes a pending merge like any other. A branch of the same name that is another fork, by its fork id, is refused.
 _Avoid_: sync, download
+
+**Installable fork**:
+A fork the account remote holds that this machine's account repo has no branch of, as the last fetch of the remote found it. Listed by `skill list --remote` and installed with `skill add --from-account`, which creates the local branch at the remote's commit: the same fork, with its fork id and its history.
+_Avoid_: remote skill, available fork
 
 **Update check**:
 Fetching the sources the managed skills and forks came from and comparing each skill's base version with what its source holds now, by tree id; a fork's base version is the import commit its history names, whatever its own commits changed. It records what it found and never applies anything: a newer version becomes the skill's update candidate. Run by hand, and by the desktop app on launch and on a timer, where the same pass also fetches every other added source, so that browsing and search see what the sources hold now.

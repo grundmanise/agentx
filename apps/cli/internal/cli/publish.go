@@ -110,7 +110,7 @@ func (inv *invocation) publish(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	names, err := inv.remoteSelection(name, records, false, "publish")
+	names, err := inv.remoteSelection(ctx, name, records, false, "publish")
 	if err != nil {
 		return err
 	}
