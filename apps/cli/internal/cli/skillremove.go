@@ -286,7 +286,7 @@ func (inv *invocation) removeAbsent(ctx context.Context, name string, from []str
 		}
 		// The base version a copy is judged against: the tree and the
 		// trailers of the commit the branch holds, read for that commit.
-		records, err := lineage.List(ctx, inv.git, gitDir)
+		records, err := inv.listLineage(ctx, gitDir)
 		if err != nil {
 			return accountRepoFailure(err)
 		}

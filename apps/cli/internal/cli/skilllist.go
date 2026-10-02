@@ -19,6 +19,7 @@ import (
 // after the rows, see absentWarnings, so that a branch the account repo
 // still holds is never silently left out.
 func (inv *invocation) skillList(ctx context.Context) error {
+	inv.forksWarned = true // the warnings after the rows name them
 	snap, err := inv.scan(ctx, lockWait, "", false)
 	if err != nil {
 		return err

@@ -13,17 +13,21 @@ import (
 // day. A serve child lives as long as the desktop app that holds it open,
 // often far less than a day, so the time of the last run is kept in agentx
 // home, see home.Maintained, and every serve child asks it at start and
-// then once a day.
-const maintenanceEvery = 24 * time.Hour
+// then every maintenanceAsked, so that a run falls due within that much of
+// the day passing, whenever the serve child started.
+const (
+	maintenanceEvery = 24 * time.Hour
+	maintenanceAsked = time.Hour
+)
 
 // maintenanceTick is the serve child's maintenance of the account repo, on
-// a timer of its own: at start and then once a day, see serveMaintenance.
-// What it could not do is warned about once per cause, as a source the
-// update check cannot fetch is: the same failure on the next day's run is a
-// debug line.
+// a timer of its own: at start and then every hour, running once a day,
+// see serveMaintenance. What it could not do is warned about once per
+// cause, as a source the update check cannot fetch is: the same failure on
+// the next run is a debug line.
 func (inv *invocation) maintenanceTick() serve.Tick {
 	var last string // the cause of the last run's failure, "" after one that worked
-	return serve.Tick{Every: maintenanceEvery, AtStart: true, Run: func(ctx context.Context) func() {
+	return serve.Tick{Every: maintenanceAsked, AtStart: true, Run: func(ctx context.Context) func() {
 		err := inv.serveMaintenance(ctx)
 		return func() {
 			cause := ""
@@ -59,7 +63,7 @@ func (inv *invocation) maintenanceTick() serve.Tick {
 // what loose ones held. A machine with no account repo has nothing to
 // maintain and runs no git.
 func (inv *invocation) serveMaintenance(ctx context.Context) error {
-	if !inv.maintenanceDue(time.Now()) {
+	if last, ok := home.Maintained(inv.dirs.Home); !maintenanceDue(last, ok, time.Now()) {
 		return nil
 	}
 	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
@@ -78,11 +82,11 @@ func (inv *invocation) serveMaintenance(ctx context.Context) error {
 }
 
 // maintenanceDue reports whether the account repo is due for maintenance
-// at now: the file that says when it was last maintained is missing, does
-// not hold a time, or holds one a day or more before now. A time in the
+// at now, last being when it was last maintained, as home.Maintained reads
+// it, and ok false when the file that says so is missing or does not hold
+// a time: then, or when last is a day or more before now. A time in the
 // future, as a clock set back leaves, is due too, so a wrong clock never
 // stops maintenance for good.
-func (inv *invocation) maintenanceDue(now time.Time) bool {
-	last, ok := home.Maintained(inv.dirs.Home)
+func maintenanceDue(last time.Time, ok bool, now time.Time) bool {
 	return !ok || now.Sub(last) >= maintenanceEvery || last.After(now)
 }

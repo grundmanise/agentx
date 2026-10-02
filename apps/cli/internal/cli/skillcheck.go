@@ -309,7 +309,7 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool) (checkRep
 		}
 		return rep, nil
 	}
-	records, err := lineage.List(ctx, inv.git, gitDir)
+	records, err := inv.listLineage(ctx, gitDir)
 	if err != nil {
 		return rep, accountRepoFailure(fmt.Errorf("account repo %s: %w", gitDir, err))
 	}
@@ -653,7 +653,7 @@ func (inv *invocation) recordCheck(ctx context.Context, gitDir string, wait bool
 	now := time.Now().UTC().Format(time.RFC3339)
 	err = inv.holdLock(ctx, wait, true, func() error {
 		var err error
-		if live, err = lineage.List(ctx, inv.git, gitDir); err != nil {
+		if live, err = inv.listLineage(ctx, gitDir); err != nil {
 			return accountRepoFailure(fmt.Errorf("account repo %s: %w", gitDir, err))
 		}
 		s, err := inv.loadSettings()

@@ -38,6 +38,10 @@ func TestClassifyFork(t *testing.T) {
 			repair(true, true, true)},
 		{"skill directory deleted, worktree on another branch", forkFacts{lib: libDangling, root: rootWorktree, registered: true},
 			forkVerdict{outcome: outcomeWorktreeMissing}},
+		{"skill directory deleted, a git merge stopped in the worktree", forkFacts{lib: libDangling, root: rootWorktree, registered: true, onBranch: true, busy: true},
+			forkVerdict{outcome: outcomeWorktreeMissing}},
+		{"library symlink deleted, a git merge stopped in the worktree", forkFacts{lib: libAbsent, root: rootWorktree, registered: true, onBranch: true, skillDir: true, busy: true},
+			repair(false, false, true)},
 		{"worktree deleted, its registration kept", forkFacts{lib: libDangling, root: rootAbsent, registered: true},
 			repair(true, true, true)},
 		{"worktree and registration gone, symlink left", forkFacts{lib: libDangling, root: rootAbsent},
@@ -102,13 +106,17 @@ func (p *serveProc) reconciled() (events []jsonEvent, snapshot jsonEvent) {
 // first snapshot: a managed skill that holds its base, a .DS_Store of its
 // own beside it, is restored, an edited one modified, one whose library
 // directory went installable, and so is a fork only the account remote's
-// branches hold; a fork placed as it was is restored, one whose worktree
-// was deleted by hand is checked out again and repaired, and one whose
-// registration was removed by hand, its worktree then a directory git
-// does not know, is an adopt candidate left as it is; a directory of the
-// library no branch names is unmanaged. Before that, git's registration of
-// a worktree whose directory is gone is pruned, while a pending merge's
-// locked checkout stays; the repair rewrites the version file.
+// branches hold; a fork placed as it was is restored, and stays its
+// worktree's owner beside a copy of the worktree, one whose worktree was
+// deleted by hand is checked out again and repaired, one whose skill
+// directory was deleted while a git merge waits in its worktree is
+// worktree missing, the merge kept, and one whose registration was
+// removed by hand, its worktree then a directory git does not know, is an
+// adopt candidate left as it is; a directory of the library no branch
+// names is unmanaged, even when the account remote holds a fork of its
+// name. Before that, git's registration of a worktree whose directory is
+// gone is pruned, while a pending merge's locked checkout stays; the
+// repair rewrites the version file.
 func TestServeReconcilesAtStart(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -119,17 +127,23 @@ func TestServeReconcilesAtStart(t *testing.T) {
 	writeFile(t, filepath.Join(h.library, "beta", "notes.md"), "my notes\n")
 	remove(t, filepath.Join(h.library, "gamma"))
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "mine"), "SKILL.md"), skill("mine", "A skill of my own"))
-	for _, name := range []string{"kept", "gone", "orphan"} {
+	for _, name := range []string{"kept", "gone", "orphan", "busy"} {
 		h.mustRun("skill", "new", name)
 	}
 	worktrees := filepath.Join(h.agentx, "worktrees")
-	gone, orphan := filepath.Join(worktrees, "gone"), filepath.Join(worktrees, "orphan")
+	gone, orphan, kept, busy := filepath.Join(worktrees, "gone"), filepath.Join(worktrees, "orphan"), filepath.Join(worktrees, "kept"), filepath.Join(worktrees, "busy")
 	remove(t, gone)
+	copyTree(t, kept, filepath.Join(worktrees, "kept-copy"))
+	busyAdmin, _ := home.AdminDirOf(busy)
+	mergeHead := filepath.Join(busyAdmin, "MERGE_HEAD")
+	writeFile(t, mergeHead, h.ref(lineage.ForkRef("busy"))+"\n")
+	remove(t, filepath.Join(busy, "busy"))
 	admin, _ := home.AdminDirOf(orphan)
 	remove(t, admin)
 	orphanTree := libraryTree(t, orphan)
 	tip := h.ref(lineage.ForkRef("kept"))
 	h.accountGit("update-ref", "refs/remotes/origin/skills/far", tip)
+	h.accountGit("update-ref", "refs/remotes/origin/skills/mine", tip)
 	stray := filepath.Join(t.TempDir(), "stray")
 	h.accountGit("worktree", "add", "--quiet", "--detach", stray, tip)
 	remove(t, stray)
@@ -150,6 +164,7 @@ func TestServeReconcilesAtStart(t *testing.T) {
 	equal(t, "the reconcile events", strings.Join(got, "\n"), strings.Join([]string{
 		"alpha managed restored",
 		"beta managed modified",
+		"busy fork worktree missing " + busy,
 		"far fork installable",
 		"gamma managed installable",
 		"gone fork repaired",
@@ -164,6 +179,12 @@ func TestServeReconcilesAtStart(t *testing.T) {
 	}
 	equal(t, "git status in the repaired worktree", gitIn(t, h, gone, "status", "--porcelain"), "")
 	forkLinked(t, filepath.Join(h.library, "gone"), filepath.Join(gone, "gone"))
+	if !home.RegisteredIn(gitDirOf(h), kept) {
+		t.Error("the copy of a worktree took its registration")
+	}
+	if !lexists(mergeHead) {
+		t.Error("the merge waiting in a worktree was lost")
+	}
 	sameTree(t, "the adopt candidate", libraryTree(t, orphan), orphanTree)
 	if home.RegisteredIn(gitDirOf(h), orphan) {
 		t.Error("the adopt candidate was registered")

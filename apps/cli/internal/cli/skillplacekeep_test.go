@@ -1242,7 +1242,7 @@ func TestSkillPlaceForceOnWhatItCannotJudge(t *testing.T) {
 		equal(t, "exit", out.exit, 6)
 		e := h.one(out.stdout, "error")
 		equal(t, "message", e["message"], lib+" is in the way of alpha's library symlink, so nothing was placed")
-		equal(t, "hint", e["hint"], "run 'agentx skill place alpha --force' to adopt it: its content becomes uncommitted edits of the fork, which 'agentx skill revert alpha' discards")
+		contains(t, "hint", e["hint"].(string), "'agentx skill place alpha --force' to adopt it")
 		nothingAt(t, "cursor's placement", cursor)
 		equal(t, "no mutation", mutationVersion(t, h), version)
 

@@ -305,7 +305,7 @@ func (sc skillContext) absentWarnings(inv *invocation, libs []scan.LibrarySkill)
 		what, wayOut := sc.absentNotice(inv, name)
 		warnings = append(warnings, what+"; "+wayOut)
 	}
-	return append(warnings, sc.forkWarnings(inv)...)
+	return append(warnings, inv.forkWarnings(sc.records, "")...)
 }
 
 // absentNotice is what is said of one managed skill the library no longer

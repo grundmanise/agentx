@@ -199,9 +199,13 @@ func targetIDs(targets []placeTarget) []string {
 // library's content, and what it needs to be placed on this machine is put
 // back first, see placeFork.
 func (inv *invocation) skillPlace(ctx context.Context, name string, to []string, asCopy, force bool) error {
+	inv.forksWarned = true // the fork it places is put back rather than warned of
 	sc, err := inv.skillContext(ctx)
 	if err != nil {
 		return err
+	}
+	for _, w := range inv.forkWarnings(sc.records, name) {
+		inv.out.warn(w)
 	}
 	flags := placeFlags(to, asCopy)
 	lib, rec, managed, err := inv.placeRecord(sc, name)
@@ -704,7 +708,7 @@ func (inv *invocation) lineageRecords(ctx context.Context) (map[string]lineage.R
 	if !exists {
 		return map[string]lineage.Record{}, nil
 	}
-	records, err := lineage.List(ctx, inv.git, gitDir)
+	records, err := inv.listLineage(ctx, gitDir)
 	if err == nil {
 		err = lineage.ReadForks(ctx, inv.git, gitDir, records, inv.forkWalks)
 	}

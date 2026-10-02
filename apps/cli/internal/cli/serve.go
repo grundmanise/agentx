@@ -147,6 +147,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 			inv.instanceID() // fixed here, before two goroutines report it
 			inv.verdicts = map[string]keptVerdict{}
 			inv.forkWalks = map[string]lineage.ForkLineage{}
+			inv.forksWarned = true // reconciliation and every snapshot name them
 			if !once {
 				// Reconciliation reports and repairs before the first scan,
 				// so the snapshot shows what it put back. One that cannot

@@ -721,7 +721,7 @@ func (inv *invocation) writeAdoptions(ctx context.Context, run *adoptRun, ready 
 	}
 	journaled := false
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
-		records, err := lineage.List(ctx, inv.git, gitDir)
+		records, err := inv.listLineage(ctx, gitDir)
 		if err != nil {
 			return accountRepoFailure(err)
 		}

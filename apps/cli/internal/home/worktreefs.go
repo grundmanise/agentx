@@ -63,6 +63,37 @@ func PointersMoved(path string) bool {
 	return !NamesBack(admin, path)
 }
 
+// HeldBy is the worktree that holds the registration the .git file at
+// path's root names, when that is another worktree that is still there:
+// the admin directory names another path, whose own .git file names the
+// same admin directory back. That is what copying a worktree leaves, not
+// moving it, and repairing the copy's pointers would take the registration
+// from the worktree it belongs to. It is false for a worktree whose
+// pointers meet, and for one whose registration is gone or names a path
+// that is not a worktree of it, as moving agentx home leaves it.
+func HeldBy(path string) (string, bool) {
+	admin, ok := AdminDirOf(path)
+	if !ok {
+		return "", false
+	}
+	b, err := os.ReadFile(filepath.Join(admin, "gitdir"))
+	if err != nil {
+		return "", false
+	}
+	named := strings.TrimRight(string(b), "\r\n")
+	if !filepath.IsAbs(named) {
+		named = filepath.Join(admin, named)
+	}
+	if named == "" || SamePath(named, filepath.Join(path, ".git")) {
+		return "", false
+	}
+	other := filepath.Dir(filepath.Clean(named))
+	if back, ok := AdminDirOf(other); !ok || !SamePath(back, admin) {
+		return "", false
+	}
+	return other, true
+}
+
 // gitStops are the files git keeps in a worktree's admin directory while a
 // command it stopped part way waits for the user, each with the command
 // that finishes or aborts it, in the order they are asked about.

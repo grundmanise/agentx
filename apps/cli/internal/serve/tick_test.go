@@ -16,9 +16,9 @@ import (
 // overlaps itself, its ticks skipped while it runs, and does not keep the
 // second from running beside it; the second does not run at start; both
 // report on the loop's goroutine, which is where a report and a snapshot
-// are never made at once.
+// are never made at once. It measures how long the second tick waited, so
+// it runs on its own.
 func TestTicksRunEachOnItsOwn(t *testing.T) {
-	t.Parallel()
 	stdinR, stdinW, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -111,6 +111,7 @@ func TestTicksRunEachOnItsOwn(t *testing.T) {
 	equalTick(t, "overlapping runs of one tick", overlapped.Load(), int32(0))
 }
 
+// equalTick reports a value of the test that is not what it should be.
 func equalTick[T comparable](t *testing.T, what string, got, want T) {
 	t.Helper()
 	if got != want {

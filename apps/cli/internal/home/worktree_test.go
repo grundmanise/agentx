@@ -396,8 +396,8 @@ func TestRemoveIntoRetainsInTheGivenDirectory(t *testing.T) {
 }
 
 // TestWorktreeFilesTellAWorktreeApart is the reading of a worktree's two
-// pointer files, absolute and relative, on and off the branch, and moved;
-// and of what its admin directory says git is in the middle of.
+// pointer files, absolute and relative, on and off the branch, copied and
+// moved; and of what its admin directory says git is in the middle of.
 func TestWorktreeFilesTellAWorktreeApart(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -456,6 +456,19 @@ func TestWorktreeFilesTellAWorktreeApart(t *testing.T) {
 	}
 	if err := os.Remove(lock); err != nil {
 		t.Fatal(err)
+	}
+	copied := filepath.Join(root, "worktrees", "alpha-copy")
+	if err := os.MkdirAll(copied, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(copied, ".git"), []byte("gitdir: "+admin+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := HeldBy(copied); !ok || !SamePath(got, path) {
+		t.Errorf("HeldBy(a copy) = %q, %v, want %q", got, ok, path)
+	}
+	if got, ok := HeldBy(path); ok {
+		t.Errorf("HeldBy(the worktree itself) = %q, want none", got)
 	}
 	rel, _ := filepath.Rel(path, admin)
 	back, _ := filepath.Rel(admin, filepath.Join(path, ".git"))

@@ -90,6 +90,7 @@ type forkFacts struct {
 	registered bool // a registration of the account repo names the worktree, whatever is there now
 	onBranch   bool // rootWorktree: its HEAD is the fork's branch
 	skillDir   bool // rootWorktree: it holds the skill's directory
+	busy       bool // rootWorktree: a git command the user ran stopped part way in it, or a running git holds its index
 }
 
 // forkVerdict is what reconciliation makes of a fork's facts: the outcome
@@ -120,7 +121,10 @@ func (v forkVerdict) repairs() bool { return v.pointers || v.worktree || v.conte
 // skill directory, laid out from the branch tip, and the library symlink.
 // A registered worktree on another branch than the fork's keeps whatever
 // it holds: agentx lays nothing out where git would compare it with
-// another branch.
+// another branch. Nor is anything laid out in one where a git command the
+// user ran stopped part way, such as a merge with conflicts, or that a
+// running git holds: aligning its index with the branch would lose the
+// command's state.
 func classifyFork(f forkFacts) forkVerdict {
 	switch {
 	case f.lib == libDir || f.lib == libForeign:
@@ -133,7 +137,7 @@ func classifyFork(f forkFacts) forkVerdict {
 		return forkVerdict{outcome: outcomeInstallable}
 	case f.root == rootAbsent || f.root == rootEmpty:
 		return forkVerdict{outcome: outcomeWorktreeMissing, worktree: true, content: true, link: true}
-	case !f.skillDir && !f.onBranch:
+	case !f.skillDir && (!f.onBranch || f.busy):
 		return forkVerdict{outcome: outcomeWorktreeMissing}
 	}
 	v := forkVerdict{outcome: outcomeRestored, worktree: !f.skillDir, content: !f.skillDir, link: f.lib != libOwn}
@@ -180,6 +184,7 @@ func (inv *invocation) forkFactsOf(f forkSite) forkFacts {
 	case home.RegisteredIn(f.gitDir, f.root):
 		facts.root = rootWorktree
 		facts.onBranch = home.WorktreeAt(f.root, f.branch)
+		facts.busy = home.Unfinished(f.root) != "" || home.IndexLock(f.root) != ""
 		facts.skillDir = f.dir == "" || isDir(f.skillDir)
 	case loneGitFile(f.root):
 		facts.root = rootEmpty
@@ -195,10 +200,15 @@ func (inv *invocation) forkFactsOf(f forkSite) forkFacts {
 // names another path, or, when that directory is not there, as moving
 // agentx home as a whole leaves it, the one of the same name in the account
 // repo at gitDir. A worktree whose registration is gone either way, as one
-// removed by hand leaves it, is a directory git does not know.
+// removed by hand leaves it, is a directory git does not know, and so is a
+// copy of another worktree, whose registration names that worktree, which
+// names it back: repairing the copy would take the registration from it.
 func repairable(gitDir, root string) bool {
 	admin, ok := home.AdminDirOf(root)
 	if !ok {
+		return false
+	}
+	if _, held := home.HeldBy(root); held {
 		return false
 	}
 	return lexists(admin) || lexists(filepath.Join(gitDir, "worktrees", filepath.Base(admin)))
@@ -248,6 +258,12 @@ func worktreeMissingWarning(f forkSite, facts forkFacts) string {
 		return name + "'s worktree " + quotedPath(f.root) + " needs repair; " + place + " to repair it"
 	case facts.root == rootAbsent || facts.root == rootEmpty:
 		return name + "'s worktree " + quotedPath(f.root) + " is missing; " + place + " to check it out again from its branch"
+	case facts.busy && !facts.skillDir:
+		where := name + "'s skill directory " + quotedPath(f.skillDir) + " is missing from its worktree, "
+		if command := home.Unfinished(f.root); command != "" {
+			return where + "where a git " + command + " stopped part way; finish it with git, or run 'git -C " + shellWord(f.root) + " " + command + " --abort' to give it up, then " + place
+		}
+		return where + "where git is running; " + place + " once it finishes; if no git is running, remove " + quotedPath(home.IndexLock(f.root))
 	case !facts.onBranch:
 		return name + "'s worktree " + quotedPath(f.root) + " holds no skill directory and is not on its branch " + f.branch + "; run 'git -C " + shellWord(f.root) + " switch " + f.branch + "', then " + place
 	case !facts.skillDir:
@@ -274,30 +290,73 @@ func adoptRefusal(f forkSite, v forkVerdict, facts forkFacts) (what, wayOut stri
 	return what, force + " to adopt it: its content becomes uncommitted edits of the fork, which '" + skillCommand("revert", f.name) + "' discards"
 }
 
-// forkWarnings are the warnings a listing gives of the forks of records,
-// sorted by name: one per fork whose worktree is missing or that has
-// something in the way, see forkWarning. A fork's skill directory is named
-// only when its library symlink leads into its worktree, since finding it
-// otherwise takes git, and no listing runs git for a warning.
-func (sc skillContext) forkWarnings(inv *invocation) []string {
+// forkWarnings are the warnings a listing gives of the forks of records
+// but the one called except, sorted by name: one per fork whose worktree
+// is missing or that has something in the way, see forkWarning. A fork's
+// skill directory is named only when its library symlink leads into its
+// worktree, or names a directory at the worktree's root that is gone,
+// since finding it otherwise takes git, and no listing runs git for a
+// warning.
+func (inv *invocation) forkWarnings(records map[string]lineage.Record, except string) []string {
 	gitDir := gitx.AccountRepoPath(inv.dirs.Home)
 	var warnings []string
-	for _, name := range slices.Sorted(maps.Keys(sc.records)) {
-		rec := sc.records[name]
-		if rec.Kind != lineage.KindFork {
+	for _, name := range slices.Sorted(maps.Keys(records)) {
+		rec := records[name]
+		if rec.Kind != lineage.KindFork || name == except {
 			continue
 		}
 		f := inv.forkPlace(gitDir, rec)
-		if real, err := filepath.EvalSymlinks(f.libPath); err == nil {
-			if dir, ok := inv.placedForkDir(name, real); ok {
-				f.dir, f.skillDir = dir, filepath.Join(f.root, dir)
-			}
+		if dir, ok := inv.linkedForkDir(name); ok {
+			f.dir, f.skillDir = dir, filepath.Join(f.root, dir)
 		}
 		if w := inv.forkWarning(f); w != "" {
 			warnings = append(warnings, w)
 		}
 	}
 	return warnings
+}
+
+// linkedForkDir is the skill directory the library symlink of the fork
+// called name leads to in the fork's worktree, read from the filesystem
+// alone, and false when it leads elsewhere: where it leads, or, when that
+// is gone, as a skill directory deleted from the worktree leaves it, what
+// the symlink names, when that is a directory at the worktree's root.
+func (inv *invocation) linkedForkDir(name string) (string, bool) {
+	libPath := inv.libraryPath(name)
+	if real, err := filepath.EvalSymlinks(libPath); err == nil {
+		return inv.placedForkDir(name, real)
+	}
+	link, err := os.Readlink(libPath)
+	if err != nil {
+		return "", false
+	}
+	if !filepath.IsAbs(link) {
+		link = filepath.Join(filepath.Dir(canonicalPath(libPath)), link)
+	}
+	link = filepath.Clean(link)
+	root := inv.worktreeRoot(name)
+	if dir := filepath.Dir(link); dir != root && dir != canonicalPath(root) {
+		return "", false
+	}
+	return filepath.Base(link), true
+}
+
+// listLineage is lineage.List for a command, which reads the branches of
+// the account repo at gitDir, and, the first time this run reads them,
+// warns of every fork the listing would warn of, see forkWarnings, so that
+// a fork whose worktree is missing is named by whatever command runs next,
+// not only by skill list. It reads files alone for the warnings. A command
+// whose own output carries them, skill list, a snapshot and serve, or that
+// puts the fork back, skill place, sets forksWarned first.
+func (inv *invocation) listLineage(ctx context.Context, gitDir string) (map[string]lineage.Record, error) {
+	records, err := lineage.List(ctx, inv.git, gitDir)
+	if err == nil && !inv.forksWarned {
+		inv.forksWarned = true
+		for _, w := range inv.forkWarnings(records, "") {
+			inv.out.warn(w)
+		}
+	}
+	return records, err
 }
 
 // serveReconcile reconciles agentx home when a long-running serve starts,
@@ -345,15 +404,21 @@ func (inv *invocation) reconcile(ctx context.Context) ([]reconcileEvent, error) 
 	if err != nil {
 		return nil, accountRepoFailure(err)
 	}
-	remote, repointed := map[string]bool{}, map[string]bool{}
-	if exists {
-		if remote, repointed, err = inv.prepareWorktrees(ctx, gitDir); err != nil {
-			return nil, err
-		}
-	}
 	sc, err := inv.skillContext(ctx)
 	if err != nil {
 		return nil, err
+	}
+	remote, repointed := map[string]bool{}, map[string]bool{}
+	if exists {
+		var roots []string
+		for _, name := range slices.Sorted(maps.Keys(sc.records)) {
+			if sc.records[name].Kind == lineage.KindFork {
+				roots = append(roots, inv.worktreeRoot(name))
+			}
+		}
+		if remote, repointed, err = inv.prepareWorktrees(ctx, gitDir, roots); err != nil {
+			return nil, err
+		}
 	}
 	libs := librarySkills(inv.dirs.Library)
 	names := map[string]bool{}
@@ -392,7 +457,7 @@ func (inv *invocation) reconcile(ctx context.Context) ([]reconcileEvent, error) 
 			default:
 				ev.Outcome = outcomeRestored
 			}
-		case remote[name]:
+		case remote[name] && !inLibrary:
 			ev.Kind, ev.Outcome = lineage.KindFork, outcomeInstallable
 		default:
 			ev.Kind, ev.Outcome = lineage.KindUnmanaged, outcomeUnmanaged
@@ -452,11 +517,14 @@ func verdictPath(f forkSite, v forkVerdict) string {
 // for reconciliation, and reads the fork branches the account remote
 // holds, by name, in one for-each-ref: registrations whose directory is
 // gone are pruned, which every locked worktree survives, and the pointers
-// of every worktree in the worktrees directory that no longer meet, as
-// moving agentx home leaves them, are repaired, each path named; repointed
-// are the names of the worktrees the repair put right. A repair git cannot
-// make leaves the worktree as it is, for the classification to find.
-func (inv *invocation) prepareWorktrees(ctx context.Context, gitDir string) (remote, repointed map[string]bool, err error) {
+// of every fork's worktree of roots that no longer meet, as moving agentx
+// home leaves them, are repaired, each path named; repointed are the names
+// of the worktrees the repair put right. A directory of the worktrees
+// directory that is no fork's worktree is never repaired, nor is a copy of
+// another worktree, see repairable: git would hand it that worktree's
+// registration. A repair git cannot make leaves the worktree as it is, for
+// the classification to find.
+func (inv *invocation) prepareWorktrees(ctx context.Context, gitDir string, roots []string) (remote, repointed map[string]bool, err error) {
 	list, err := inv.git.Worktrees(ctx, gitDir)
 	if err != nil {
 		return nil, nil, accountRepoFailure(err)
@@ -466,14 +534,9 @@ func (inv *invocation) prepareWorktrees(ctx context.Context, gitDir string) (rem
 			return nil, nil, accountRepoFailure(err)
 		}
 	}
-	entries, err := os.ReadDir(inv.worktreesDir())
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return nil, nil, libraryFailure(inv.worktreesDir(), err)
-	}
 	var moved []string
-	for _, e := range entries {
-		root := filepath.Join(inv.worktreesDir(), e.Name())
-		if !strings.HasPrefix(e.Name(), ".") && e.IsDir() && home.PointersMoved(root) {
+	for _, root := range roots {
+		if isDir(root) && home.PointersMoved(root) && repairable(gitDir, root) {
 			moved = append(moved, root)
 		}
 	}

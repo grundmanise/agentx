@@ -94,7 +94,7 @@ func (inv *invocation) skillCommit(ctx context.Context, name, message string) er
 	}
 	records := map[string]lineage.Record{}
 	if exists {
-		if records, err = lineage.List(ctx, inv.git, gitDir); err != nil {
+		if records, err = inv.listLineage(ctx, gitDir); err != nil {
 			return accountRepoFailure(err)
 		}
 	}

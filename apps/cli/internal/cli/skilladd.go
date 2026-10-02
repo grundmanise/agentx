@@ -986,7 +986,7 @@ func (inv *invocation) install(ctx context.Context, b *batch, gitDir string, ver
 				sweepStaged(t.dir)
 			}
 		}
-		records, err := lineage.List(ctx, inv.git, gitDir)
+		records, err := inv.listLineage(ctx, gitDir)
 		if err != nil {
 			return accountRepoFailure(err)
 		}

@@ -203,7 +203,7 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 	}
 	records := map[string]lineage.Record{}
 	if exists {
-		if records, err = lineage.List(ctx, inv.git, gitDir); err != nil {
+		if records, err = inv.listLineage(ctx, gitDir); err != nil {
 			return accountRepoFailure(fmt.Errorf("account repo %s: %w", gitDir, err))
 		}
 	}

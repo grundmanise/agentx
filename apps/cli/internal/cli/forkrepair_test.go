@@ -31,12 +31,17 @@ func forkLinked(t *testing.T, lib, skillDir string) {
 
 // TestSkillPlaceRepairsAFork puts one fork back each way skill place does,
 // in order. A worktree deleted by hand, its library symlink left leading
-// nowhere, is named in skill list's warnings and checked out again from
-// the branch, symlink and all. A worktree whose pointers no longer meet,
-// as moving agentx home leaves them, is repaired with git. A worktree whose
+// nowhere, is named in skill list's warnings, and once in those of any
+// other command that reads the lineage, and checked out again from the
+// branch, symlink and all. A worktree whose pointers no longer meet, as
+// moving agentx home leaves them, is repaired with git. A skill directory
+// deleted while a git merge waits in the worktree is named, and skill
+// place refuses to lay it out until the merge is over. A worktree whose
 // registration was removed by hand, holding an edit, is in the way: skill
 // place refuses it, naming --force, which adopts it in place with the edit
-// left uncommitted, and skill revert then discards the edit.
+// left uncommitted, and skill revert then discards the edit. A library
+// directory is not adopted over a skill directory holding a file git
+// ignores, which would go with it.
 func TestSkillPlaceRepairsAFork(t *testing.T) {
 	t.Parallel()
 	h, root, skillDir, lib := forkHarness(t)
@@ -46,6 +51,8 @@ func TestSkillPlaceRepairsAFork(t *testing.T) {
 	list := h.mustRun("--json", "skill", "list")
 	contains(t, "skill list's warnings", strings.Join(warnings(h, list.stderr), "\n"),
 		"notes's worktree "+root+" is missing; run 'agentx skill place notes' to check it out again from its branch")
+	history := h.mustRun("skill", "history", "notes")
+	equal(t, "skill history's warnings", strings.Count(history.stderr, "notes's worktree "+root+" is missing"), 1)
 	out := h.mustRun("--json", "skill", "place", "notes")
 	if !home.WorktreeAt(root, "skills/notes") {
 		t.Fatal("the worktree is not checked out on its branch")
@@ -62,6 +69,21 @@ func TestSkillPlaceRepairsAFork(t *testing.T) {
 		t.Error("the worktree's pointers were not repaired")
 	}
 	contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), "; repaired the pointers of notes's worktree")
+
+	mergeHead := filepath.Join(admin, "MERGE_HEAD")
+	writeFile(t, mergeHead, h.ref("refs/heads/skills/notes")+"\n")
+	remove(t, skillDir)
+	contains(t, "skill list's warnings", strings.Join(warnings(h, h.mustRun("--json", "skill", "list").stderr), "\n"),
+		"notes's skill directory "+skillDir+" is missing from its worktree, where a git merge stopped part way")
+	out = h.run("--json", "skill", "place", "notes")
+	equal(t, "exit", out.exit, 6)
+	equal(t, "message", h.one(out.stdout, "error")["message"], "notes's worktree "+root+" is in the middle of a git merge")
+	if !lexists(mergeHead) {
+		t.Fatal("the merge waiting in the worktree was lost")
+	}
+	remove(t, mergeHead)
+	out = h.mustRun("--json", "skill", "place", "notes")
+	contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), "; checked notes's worktree out again from its branch")
 
 	writeFile(t, filepath.Join(skillDir, "SKILL.md"), "my own instructions\n")
 	remove(t, admin)
@@ -83,6 +105,17 @@ func TestSkillPlaceRepairsAFork(t *testing.T) {
 	h.mustRun("skill", "revert", "notes")
 	equal(t, "git status once reverted", gitIn(t, h, root, "status", "--porcelain"), "")
 	equal(t, "state once reverted", h.listed("notes")["state"], stateCurrent)
+
+	local := filepath.Join(skillDir, ".DS_Store")
+	writeFile(t, local, "finder\n")
+	remove(t, lib)
+	writeFile(t, mkdirs(t, lib, "SKILL.md"), "instructions edited in the library\n")
+	out = h.run("--json", "skill", "place", "notes", "--force")
+	equal(t, "exit", out.exit, 6)
+	contains(t, "message", h.one(out.stdout, "error")["message"].(string), " holds what git does not record, "+local+", and adopting "+lib+" in its place would delete it")
+	if !lexists(local) || !isDir(lib) {
+		t.Error("the refused adoption changed the skill directory or the library entry")
+	}
 }
 
 // TestForkRepairRecoversWhereItWasKilled kills skill place with SIGKILL at

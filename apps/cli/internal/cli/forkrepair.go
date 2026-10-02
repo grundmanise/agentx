@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
@@ -84,17 +85,17 @@ func (inv *invocation) placeFork(ctx context.Context, rec lineage.Record, target
 		if values[rec.Ref] != rec.Commit {
 			return fail(exitRefused, rec.Name+" changed while it was being placed, so nothing was changed", "run '"+skillCommand("place", rec.Name, flags...)+"' again")
 		}
-		if home.PointersMoved(f.root) {
+		facts := inv.forkFactsOf(f)
+		if facts.root == rootMoved {
 			// git's own repair, safe to repeat, so it runs outside the
 			// journal; one git cannot make leaves the worktree as it is.
 			if err := inv.git.RepairWorktrees(ctx, gitDir, []string{f.root}); err != nil {
 				inv.out.debugf("worktree repair: %v", err)
 			}
 			repointed = !home.PointersMoved(f.root)
-		}
-		facts := inv.forkFactsOf(f)
-		if facts.root == rootMoved {
-			facts.root = rootOrphan // git could not repair it, so it is a directory of the user's
+			if facts = inv.forkFactsOf(f); facts.root == rootMoved {
+				facts.root = rootOrphan // git could not repair it, so it is a directory of the user's
+			}
 		}
 		if plan, err = inv.planForkPlace(ctx, f, facts, force, flags); err != nil {
 			return err
@@ -188,7 +189,9 @@ func (inv *invocation) planForkPlace(ctx context.Context, f forkSite, facts fork
 		case facts.root == rootOrphan:
 			return plan, fail(exitRefused, quotedPath(f.libPath)+" and "+quotedPath(f.root)+" are both in the way of "+name+", and only one of them can be adopted",
 				"move one of them aside, then "+again)
-		case facts.root == rootWorktree && !facts.onBranch:
+		case facts.root == rootWorktree && (!facts.onBranch || facts.busy):
+			// Adding the worktree again aligns its index with the
+			// branch, which a git stopped part way in it would lose.
 			return plan, worktreeHealth(f.name, f.root, f.branch)
 		case facts.root == rootWorktree && facts.skillDir:
 			if plan.retire, err = inv.retirable(ctx, f, again); err != nil {
@@ -200,6 +203,9 @@ func (inv *invocation) planForkPlace(ctx context.Context, f forkSite, facts fork
 	}
 	rv := classifyFork(rest)
 	if rv.outcome != outcomeAdoptCandidate {
+		if rv.outcome == outcomeWorktreeMissing && !rv.repairs() {
+			return plan, worktreeHealth(f.name, f.root, f.branch)
+		}
 		if rv.outcome == outcomeInstallable {
 			rv = forkVerdict{outcome: outcomeWorktreeMissing, worktree: true, content: true}
 		}
@@ -237,9 +243,12 @@ func (inv *invocation) adoptableLibrary(f forkSite) error {
 }
 
 // retirable is what the skill directory of the fork f holds when it holds
-// the branch tip, as git status in the worktree would say, so that a
-// library directory adopted in its place loses nothing; one with edits of
-// its own is refused, since only one of the two can be the fork's.
+// the branch tip, as git status in the worktree would say, and nothing git
+// does not record, so that a library directory adopted in its place loses
+// nothing. One with edits of its own is refused, since only one of the two
+// can be the fork's, and so is one holding files git ignores, such as a
+// local .env, or cannot record, each named: they would go with the
+// directory it replaces.
 func (inv *invocation) retirable(ctx context.Context, f forkSite, again string) (string, error) {
 	state, err := home.State(f.skillDir)
 	if err != nil {
@@ -249,9 +258,17 @@ func (inv *invocation) retirable(ctx context.Context, f forkSite, again string) 
 	if err != nil {
 		return "", libraryFailure(inv.worktreesDir(), err)
 	}
-	j, err := inv.judgeTip(ctx, f, t, false)
+	j, err := inv.judgeTip(ctx, f, t, true)
 	if err != nil {
 		return "", accountRepoFailure(err)
+	}
+	if kept := append(slices.Clip(j.ignored), j.unrecordable...); j.clean && len(kept) > 0 {
+		named := make([]string, len(kept))
+		for i, p := range kept {
+			named[i] = quotedPath(filepath.Join(f.skillDir, filepath.FromSlash(p)))
+		}
+		return "", fail(exitRefused, sanitised(f.name)+"'s skill directory "+quotedPath(f.skillDir)+" holds what git does not record, "+strings.Join(named, ", ")+", and adopting "+quotedPath(f.libPath)+" in its place would delete it",
+			"move what you want to keep into "+quotedPath(f.libPath)+" or elsewhere, then "+again)
 	}
 	if !j.clean {
 		return "", fail(exitRefused, sanitised(f.name)+"'s worktree holds uncommitted edits at "+quotedPath(f.skillDir)+" and "+quotedPath(f.libPath)+" holds a directory of its own, and only one of them can be the fork's",
@@ -275,7 +292,15 @@ func (inv *invocation) adoptableRoot(f forkSite, again string) (string, error) {
 	for _, e := range entries {
 		switch {
 		case e.Name() == f.dir && e.IsDir():
+			if own := filepath.Join(f.skillDir, ".git"); lexists(own) {
+				return "", fail(exitRefused, quotedPath(f.skillDir)+" is itself a Git repository, at "+quotedPath(own)+", which git would take for the fork",
+					"move its .git out of the directory, then "+again)
+			}
 		case e.Name() == ".git" && e.Type().IsRegular():
+			if holder, held := home.HeldBy(f.root); held {
+				return "", fail(exitRefused, quotedPath(filepath.Join(f.root, ".git"))+" names the registration of the worktree "+quotedPath(holder)+", so "+quotedPath(f.root)+" is a copy of it and cannot be adopted",
+					"move "+quotedPath(f.root)+" or "+quotedPath(holder)+" aside, then "+again)
+			}
 			if admin, ok := home.AdminDirOf(f.root); ok && lexists(admin) {
 				return "", fail(exitRefused, quotedPath(filepath.Join(f.root, ".git"))+" names "+quotedPath(admin)+", a registration git could not repair, so "+quotedPath(f.root)+" cannot be adopted",
 					"run 'git --git-dir="+shellWord(f.gitDir)+" worktree repair "+shellWord(f.root)+"' to see why, then "+again)

@@ -38,7 +38,7 @@ func (inv *invocation) accountRecord(ctx context.Context, name string) (string, 
 	}
 	records := map[string]lineage.Record{}
 	if exists {
-		if records, err = lineage.List(ctx, inv.git, gitDir); err != nil {
+		if records, err = inv.listLineage(ctx, gitDir); err != nil {
 			return "", lineage.Record{}, false, accountRepoFailure(fmt.Errorf("account repo %s: %w", gitDir, err))
 		}
 	}

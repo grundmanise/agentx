@@ -78,7 +78,7 @@ func (inv *invocation) skillNew(ctx context.Context, name, description string) e
 	if err := home.SyncExclude(gitDir, inv.systemFilesIgnored()); err != nil {
 		return accountRepoFailure(err)
 	}
-	records, err := lineage.List(ctx, inv.git, gitDir)
+	records, err := inv.listLineage(ctx, gitDir)
 	if err != nil {
 		return accountRepoFailure(err)
 	}
@@ -142,7 +142,7 @@ func (inv *invocation) newSkillRoom(libPath, root string) error {
 // branches, for a name another command took meanwhile, and the library and
 // worktree paths.
 func (inv *invocation) createFork(ctx context.Context, gitDir, name, dir, commit, copiesOf string, targets []placeTarget, done *placements) error {
-	records, err := lineage.List(ctx, inv.git, gitDir)
+	records, err := inv.listLineage(ctx, gitDir)
 	if err != nil {
 		return accountRepoFailure(err)
 	}

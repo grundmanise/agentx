@@ -11,13 +11,13 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 )
 
-// TestServeRunsMaintenanceOnceADay starts serve three times over one home
-// whose account repo holds an install. The first serve finds no record of
-// a maintenance and runs it off its loop, after its snapshot: the
-// loose-objects and incremental-repack tasks, then the pack-refs task,
-// and never git maintenance start. The second, within the day, runs none.
-// The third finds the last maintenance a day old and runs it again.
-func TestServeRunsMaintenanceOnceADay(t *testing.T) {
+// TestServeRunsMaintenance starts serve over a home whose account repo
+// holds an install and has no record of a maintenance. It runs one off its
+// loop, after its snapshot: the loose-objects and incremental-repack
+// tasks, then the pack-refs task, and never git maintenance start. When a
+// run is due is maintenanceDue's, see TestMaintenanceIsDueOnceADay; every
+// other serve of the tests finds a fresh record and runs none.
+func TestServeRunsMaintenance(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--skill", "alpha")
@@ -31,41 +31,38 @@ func TestServeRunsMaintenanceOnceADay(t *testing.T) {
 		t.Fatal(err)
 	}
 	stubGit(t, h, "#!/bin/sh\nPATH="+os.Getenv("PATH")+"\ncase \" $* \" in *\" maintenance \"*) all=\"$*\"; echo \"${all##* maintenance }\" >> "+log+" ;; esac\nexec "+real+" \"$@\"\n")
-	maintenance := func(from int) []string {
-		b, _ := os.ReadFile(log)
-		lines := strings.Split(strings.TrimSuffix(string(b), "\n"), "\n")
-		if len(b) == 0 || from >= len(lines) {
-			return nil
-		}
-		return lines[from:]
-	}
-	serveUntilMaintained := func(since time.Time) {
-		t.Helper()
-		p := h.serve(t, "--json")
-		p.next("snapshot")
-		awaitTrue(t, "maintenance", func() bool {
-			last, ok := home.Maintained(h.agentx)
-			return ok && !last.Before(since.Truncate(time.Second))
-		})
-		equal(t, "exit", p.close(), 0)
-	}
-	want := "run --task=loose-objects\nrun --task=incremental-repack\nrun --task=pack-refs"
-
-	serveUntilMaintained(time.Now())
-	equal(t, "the first serve's maintenance", strings.Join(maintenance(0), "\n"), want)
-
-	n := len(maintenance(0))
+	since := time.Now()
 	p := h.serve(t, "--json")
 	p.next("snapshot")
-	p.send(`{"type":"refresh","request_id":"r1"}`)
-	p.next("refresh_complete")
+	awaitTrue(t, "maintenance", func() bool {
+		last, ok := home.Maintained(h.agentx)
+		return ok && !last.Before(since.Truncate(time.Second))
+	})
 	equal(t, "exit", p.close(), 0)
-	equal(t, "the second serve's maintenance", strings.Join(maintenance(n), "\n"), "")
+	b, _ := os.ReadFile(log)
+	equal(t, "maintenance", strings.TrimSuffix(string(b), "\n"), "run --task=loose-objects\nrun --task=incremental-repack\nrun --task=pack-refs")
+}
 
-	if err := home.SetMaintained(h.agentx, time.Now().Add(-maintenanceEvery)); err != nil {
-		t.Fatal(err)
+// TestMaintenanceIsDueOnceADay is when serve maintains the account repo:
+// with no record of a run, or one a day old or more, and, so that a clock
+// set back never stops it for good, one in the future.
+func TestMaintenanceIsDueOnceADay(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 10, 2, 12, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		what string
+		last time.Time
+		ok   bool
+		want bool
+	}{
+		{"no record", time.Time{}, false, true},
+		{"an hour old", now.Add(-time.Hour), true, false},
+		{"a minute short of a day", now.Add(-maintenanceEvery + time.Minute), true, false},
+		{"a day old", now.Add(-maintenanceEvery), true, true},
+		{"in the future", now.Add(time.Hour), true, true},
+	} {
+		if got := maintenanceDue(tc.last, tc.ok, now); got != tc.want {
+			t.Errorf("%s: due = %v, want %v", tc.what, got, tc.want)
+		}
 	}
-	n = len(maintenance(0))
-	serveUntilMaintained(time.Now())
-	equal(t, "the third serve's maintenance", strings.Join(maintenance(n), "\n"), want)
 }

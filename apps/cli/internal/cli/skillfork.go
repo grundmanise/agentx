@@ -101,7 +101,7 @@ func (inv *invocation) skillFork(ctx context.Context, arg, newName string) error
 	}
 	records := map[string]lineage.Record{}
 	if exists {
-		if records, err = lineage.List(ctx, inv.git, gitDir); err != nil {
+		if records, err = inv.listLineage(ctx, gitDir); err != nil {
 			return accountRepoFailure(err)
 		}
 	}
@@ -529,7 +529,7 @@ func pluginForkNotes(name, plugin string, withPlugin, universal []string) []fork
 // new fork beside its source, created as skill new creates one.
 func (inv *invocation) applyFork(ctx context.Context, fk *forking, done *placements) error {
 	src := fk.src
-	records, err := lineage.List(ctx, inv.git, fk.gitDir)
+	records, err := inv.listLineage(ctx, fk.gitDir)
 	if err != nil {
 		return accountRepoFailure(err)
 	}
