@@ -330,7 +330,8 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 // its own, before the update from upstream merges on top of it. The remote
 // is fetched once for the run. A fork with a merge pending is left to the
 // update, which completes it; one whose remote branch holds nothing it
-// lacks, or that the remote holds no branch of, is left as it is. A fork
+// lacks, or that the remote holds no branch of, is left as it is, with
+// nothing reported. A fork
 // whose account step conflicts, and so is left pending, or is refused, is
 // dropped from the run, see drop, and its update from upstream waits:
 // dropped names them. pulled names the forks whose branch it moved, in
@@ -369,6 +370,9 @@ func (r *updateRun) accountStep(ctx context.Context, names []string, records map
 			continue
 		}
 		s := inv.syncFork(ctx, r.gitDir, records[n], remote, "updated")
+		if s.outcome == pullUpToDate || s.outcome == pullNoBranch {
+			continue // the remote is behind: the account step took nothing in
+		}
 		inv.reportSync(s)
 		switch {
 		case s.f != nil:
@@ -938,7 +942,8 @@ func (r *updateRun) report(ctx context.Context) error {
 
 // conflictsWith is what the merge left pending for u's skill merged the
 // skill with, as the line that reports it names it: its update, from the
-// upstream commit of its base to the candidate's, or, for a fork whose
+// upstream commit of its base to the candidate's; for a fork's merge with
+// the account remote, what forkUpdate.with names it; or, for a fork whose
 // completed merge was merged again with commits made while it was pending,
 // those commits.
 func (u *updating) conflictsWith() string {
@@ -1009,6 +1014,9 @@ func (r *updateRun) reportApplied(ctx context.Context) error {
 		u := r.applied[0]
 		moved := " from " + short(u.rec.Import.Commit) + " to " + short(u.next.Import.Commit)
 		switch {
+		case u.checkout != "" && u.fork != nil && u.rec.Import.Commit == u.next.Import.Commit:
+			// A merge a pull left pending moves no upstream version.
+			moved = " with the merge you resolved"
 		case u.checkout != "":
 			moved += " with the merge you resolved"
 		case u.edited:

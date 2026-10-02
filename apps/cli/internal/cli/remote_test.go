@@ -93,8 +93,11 @@ func (h *harness) commitFork(name, notes string) string {
 // is left pending in its checkout under the merges directory, exit 4,
 // while alpha, which holds an uncommitted edit, is refused, exit 6, and
 // the run says both; the fork's worktree and branch stay as they were,
-// with no conflict marker in the worktree. Resolved with git in the
-// checkout, the next pull completes beta's merge.
+// with no conflict marker in the worktree. b took the source's third
+// version into beta first, while a's beta stayed on the first: resolved
+// in the checkout, the merge is not completed by a publish, exit 4, but,
+// committed with git commit -m, by the next pull, and it keeps b's newer
+// base.
 func TestPullFastForwardsMergesAndConflicts(t *testing.T) {
 	t.Parallel()
 	a, b, s, _ := twoHomes(t)
@@ -138,6 +141,11 @@ func TestPullFastForwardsMergesAndConflicts(t *testing.T) {
 	b.mustRun("pull", "alpha")
 	equal(t, "the base, proved newer", b.trailer(b.ref(lineage.ForkRef("alpha")), lineage.TrailerBase), importTwo)
 
+	s.write("skills/beta/extra.md", "extra\n")
+	s.commit("third version")
+	b.mustRun("skill", "check")
+	b.mustRun("skill", "update", "beta")
+	betaTwo := b.accountGit("rev-parse", lineage.ForkRef("beta")+"^2")
 	a.commitFork("beta", forkNotes("six", "six, a"))
 	a.mustRun("publish", "beta")
 	betaTip := b.commitFork("beta", forkNotes("six", "six, b"))
@@ -170,10 +178,15 @@ func TestPullFastForwardsMergesAndConflicts(t *testing.T) {
 
 	writeFile(t, filepath.Join(pendingCheckout(b, "beta"), "beta", "notes.md"), forkNotes("six", "six, a and b"))
 	checkoutGit(t, b, "beta", "add", "beta/notes.md")
+	out = b.run("--json", "publish", "beta")
+	equal(t, "a publish of the resolved merge: exit", out.exit, 4)
+	contains(t, "its hint", b.one(out.stdout, "error")["hint"].(string), "run 'agentx pull beta' to complete it, then publish again")
+	checkoutGit(t, b, "beta", "commit", "--quiet", "-m", "resolve")
 	out = b.mustRun("--json", "pull", "beta")
 	equal(t, "outcome", b.one(out.stdout, "pull")["outcome"], pullMerged)
 	done := b.ref(lineage.ForkRef("beta"))
 	equal(t, "the completed merge's parents", b.parents(done), betaTip+"\n"+a.ref(lineage.ForkRef("beta")))
+	equal(t, "the completed merge's base, b's newer one", b.trailer(done, lineage.TrailerBase), betaTwo)
 	equal(t, "b's beta notes", fileBody(t, filepath.Join(betaB, "notes.md")), forkNotes("six", "six, a and b"))
 	noCheckout(t, b, "beta")
 	if _, err := os.Stat(filepath.Join(b.agentx, "merges", "beta")); err == nil {
@@ -184,12 +197,14 @@ func TestPullFastForwardsMergesAndConflicts(t *testing.T) {
 // TestPublishMergesFirstAndNamesUncommittedForks publishes from machine b
 // while machine a published alpha first. With an uncommitted edit, b's
 // publish of alpha would have to merge a's commit, and is refused, exit 6,
-// nothing pushed, the refusal saying so once. Once the edit is reverted, the publish merges a's commit
-// first, as a pull does, and pushes the merge; beta, committed on b and
-// not named, stays unpushed. A publish with nothing to take in pushes
-// alpha's commits even though alpha holds an uncommitted edit, and names
-// it: publishing never commits. The push carries the fork branches alone:
-// the remote holds no import branch, update candidate or other ref.
+// nothing pushed, the refusal saying so once. Once the edit is reverted,
+// the publish merges a's commit first, as a pull does, and pushes the
+// merge; beta, committed on b and not named, stays unpushed. A publish
+// with nothing to take in pushes alpha's commits even though alpha holds
+// an uncommitted edit, and names it: publishing never commits. The push
+// carries the fork branches alone: the remote holds no import branch,
+// update candidate or other ref. A push the remote rejects is reported,
+// exit 6, and never forced.
 func TestPublishMergesFirstAndNamesUncommittedForks(t *testing.T) {
 	t.Parallel()
 	a, b, _, remote := twoHomes(t)
@@ -246,6 +261,19 @@ func TestPublishMergesFirstAndNamesUncommittedForks(t *testing.T) {
 	equal(t, "the remote's alpha", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/alpha"), tip)
 	equal(t, "fork progress", len(b.eventsOfType(out.stdout, "progress")), 3)
 	equal(t, "the remote's refs", remoteGit(t, b, remote, "for-each-ref", "--format=%(refname)"), "refs/heads/skills/alpha\nrefs/heads/skills/beta")
+
+	writeFile(t, filepath.Join(remote, "hooks", "pre-receive"), "#!/bin/sh\nexit 1\n")
+	if err := os.Chmod(filepath.Join(remote, "hooks", "pre-receive"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	b.commitFork("alpha", forkNotes("nine", "nine, b"))
+	out = b.run("--json", "publish", "alpha")
+	equal(t, "a rejected push: exit", out.exit, 6)
+	equal(t, "its outcome", b.one(out.stdout, "publish")["outcome"], publishRejected)
+	e := b.one(out.stdout, "error")
+	contains(t, "its message", e["message"].(string), "the account remote rejected skills/alpha: ")
+	contains(t, "its hint", e["hint"].(string), "agentx never forces a push")
+	equal(t, "the remote's alpha, kept", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/alpha"), tip)
 }
 
 // TestPublishRefusesADifferentFork creates a skill of the same name on two

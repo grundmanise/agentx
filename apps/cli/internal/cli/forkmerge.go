@@ -152,14 +152,23 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 	// git commit -m writes it, or one whose MERGE_MSG was edited, names no
 	// base. The base is then the one the merge was started to record: what
 	// it merges, an import, or the base the completed merge it merges again
-	// records. The commit that completes it is written again with that base
-	// added to the user's message, see keptMessage, so that the fork does
-	// not stay on the old base and take the same update, and conflict,
-	// again.
+	// records. A merge of two histories of the fork, as a pull starts, or a
+	// completed merge merged again records what the base rule picks of the
+	// two sides' bases instead, see lineage.PickBase, as the merge's
+	// MERGE_MSG did: a pull never takes the fork back to an older version
+	// than the one this machine holds. The commit that completes it is
+	// written again with that base added to the user's message, see
+	// keptMessage, so that the fork does not stay on the old base and take
+	// the same update, and conflict, again.
 	next := walked[recorded]
 	rewrite := resolved && recorded == "" && walked[p.theirs].Base != ""
 	if rewrite {
 		recorded, next = walked[p.theirs].Base, walked[p.theirs]
+		if recorded != p.theirs {
+			if base := lineage.PickBase(ctx, inv.git, gitDir, mine, next); base != recorded {
+				recorded, next = base, mine
+			}
+		}
 	}
 	u.rec = lineage.Record{Name: name, Kind: lineage.KindFork, Commit: mine.Base, Import: mine.Import}
 	u.next = lineage.Record{Name: name, Kind: lineage.KindFork, Commit: recorded, Import: next.Import}

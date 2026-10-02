@@ -167,7 +167,7 @@ func (inv *invocation) judgePublish(ctx context.Context, gitDir string, rec line
 		p.push = true
 		return p
 	case inv.mergePending(n):
-		p.outcome, p.f = publishRefused, forkPendingRefusal(n, "published")
+		p.outcome, p.f = publishRefused, publishPendingRefusal(n, inv.checkoutPath(n))
 		return p
 	}
 	s := inv.syncFork(ctx, gitDir, rec, remote, "published")
@@ -183,6 +183,17 @@ func (inv *invocation) judgePublish(ctx context.Context, gitDir string, rec line
 		p.outcome, p.f = publishRefused, s.f
 	}
 	return p
+}
+
+// publishPendingRefusal refuses to publish the fork called name while it
+// has a merge pending and the account remote holds commits it lacks: the
+// publish would have to take them in, and it never completes a pending
+// merge, resolved or not. A pull completes it once it is resolved in its
+// checkout, at checkout.
+func publishPendingRefusal(name, checkout string) *failure {
+	return refuse(exitPendingMerge, sanitised(name)+" has a merge pending, so it cannot be published until the merge is completed or given up",
+		"resolve it with git in "+quotedPath(checkout)+" and run '"+pullCommand(name)+"' to complete it, then publish again, or run '"+
+			skillCommand("update", name, "--abort")+"' to give the merge up")
 }
 
 // forkUncommitted reports whether the fork whose branch is rec holds edits

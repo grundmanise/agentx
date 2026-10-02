@@ -83,7 +83,8 @@ func remoteURLRefusal(raw string) *failure {
 	credential := refuse(exitUsage, "the URL carries a password or a token, and agentx never stores credentials",
 		"put them in a git credential helper (git config credential.helper) or use an SSH key, and give the URL without them")
 	if strings.Contains(raw, "#") {
-		return refuse(exitUsage, raw+" names a ref, and the account remote holds every fork branch", "give the URL of the repository alone")
+		// The URL is not repeated: no credential check has read it yet.
+		return refuse(exitUsage, "the URL names a ref with #, and the account remote holds every fork branch", "give the URL of the repository alone")
 	}
 	switch {
 	case strings.Contains(raw, "://"):

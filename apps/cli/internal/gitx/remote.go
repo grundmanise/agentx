@@ -52,8 +52,13 @@ func (r *Runner) SetRemote(ctx context.Context, gitDir, url string) error {
 // UnsetRemote takes the account remote out of the account repo: its
 // configuration section, the tracking configuration of every fork branch
 // that names it, and every remote-tracking branch a fetch of it wrote. No
-// local branch is touched. Under the lock, as SetRemote.
+// local branch is touched. Under the lock, as SetRemote. The remote-tracking
+// branches go first: one stopped part way leaves the remote set, which a
+// second unset takes out in turn, never branches of a remote no longer set.
 func (r *Runner) UnsetRemote(ctx context.Context, gitDir string) error {
+	if err := r.DropRemoteRefs(ctx, gitDir); err != nil {
+		return err
+	}
 	out, _, err := r.IsolatedStatus(ctx, gitDir, 1, "config", "-z", "--get-regexp", `^(remote\.`+RemoteName+`|branch\.skills/.*)\.`)
 	if err != nil {
 		return err
@@ -79,7 +84,7 @@ func (r *Runner) UnsetRemote(ctx context.Context, gitDir string) error {
 			return err
 		}
 	}
-	return r.DropRemoteRefs(ctx, gitDir)
+	return nil
 }
 
 // DropRemoteRefs deletes every remote-tracking ref of the account remote,

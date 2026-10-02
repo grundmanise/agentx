@@ -73,7 +73,7 @@ release-notes conflicts with the account remote in 1 file
 notes.md: both modified
 ```
 
-Resolve it as you resolve an update's conflict: fix each file with Git in `~/.agentx/merges/<name>/<folder>` and `git add` it, then run `agentx pull <name>` again. `agentx skill update <name>` completes it too. Give the merge up with `agentx skill update <name> --abort`. See [Resolve a conflict](/cli/fork#resolve-a-conflict).
+Resolve it as you resolve an update's conflict: fix each file with Git in `~/.agentx/merges/<name>/<folder>` and `git add` it, then run `agentx pull <name>` again. `agentx skill update <name>` completes it too, but `agentx publish` does not: while the merge waits and the remote has something new, publishing stops with exit code 4, so complete the merge with `agentx pull <name>` first, then publish. Give the merge up with `agentx skill update <name> --abort`. See [Resolve a conflict](/cli/fork#resolve-a-conflict).
 
 ## Two forks with one name
 
@@ -90,6 +90,6 @@ hint: rename yours: fork it under a new name with 'agentx skill fork release-not
 - `3`: Git cannot reach the account remote.
 - `4`: a fork has a merge waiting, or the pull or publish left one waiting for you to [resolve](#resolve-a-conflict).
 - `5`: the name is not a skill of this machine.
-- `6`: no account remote is set; the skill is not a fork; the remote's branch of that name is [another fork](#two-forks-with-one-name); the fork has uncommitted edits and the remote has something new; the remote rejected the push; the fork's worktree is missing, needs repair or is not on its branch; or the fork changed while it was being pulled.
+- `6`: no account remote is set; the skill is not a fork; the remote's branch of that name is [another fork](#two-forks-with-one-name), or shares no commit with yours; the fork has uncommitted edits and the remote has something new; the remote rejected the push; the fork's worktree is missing, needs repair or is not on its branch; or the fork changed while it was being pulled.
 - `7`: another agentx command is running. Retry when it finishes.
 - `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.
