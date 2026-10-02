@@ -54,7 +54,7 @@ agentx config set auto_push true
 - The desktop app's background process, [`agentx serve`](/cli/serve), pushes a fork's commits once you stop committing to it for a minute, so a run of commits goes out as one push.
 - It pushes commits only. It never commits your edits for you: commit them with `agentx skill commit` when you want them published.
 - It only pushes forks the remote already holds. Publish a new fork the first time with `agentx publish <name>`. A fork whose branch was deleted from the remote, for example with `agentx skill remove <name> --remote` on another machine, is not pushed again until you publish it.
-- It never merges. When the remote holds commits of the fork that you do not have, it leaves the fork alone and warns you once: run `agentx publish <name>` to take them in and publish.
+- It never merges. When the remote holds commits of the fork that you do not have, and you have commits it lacks, it leaves the fork alone and warns you once: run `agentx publish <name>` to take them in and publish.
 - It never pushes over a different fork of the same name. It warns you once instead: rename yours with `agentx skill rename <name> <new>`, then publish that one.
 - Auto-push is off by default. Turn it off again with `agentx config set auto_push false`.
 

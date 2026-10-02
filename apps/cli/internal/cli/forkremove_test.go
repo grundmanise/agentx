@@ -9,13 +9,15 @@ import (
 	"testing"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
 // TestSkillRemoveOfAFork takes a fork off machine a, which published it,
 // while machine b, which installed it, keeps it. A merge pending refuses
 // the removal, exit 4, and --remote beside --from is a usage error, both
-// changing nothing. Then the removal takes the placements, the library
+// changing nothing, as does a git running in the worktree, exit 6, which
+// could commit to the branch at any moment. Then the removal takes the placements, the library
 // symlink, the worktree with its uncommitted edit and ignored file, the
 // branch and the copy mode, and drops the worktree's registration, leaving
 // nothing hidden; the account remote keeps its branch. --remote then
@@ -23,7 +25,8 @@ import (
 // library path, which stays, and a push git cannot make leaves its branch
 // there, exit 3, and run again it deletes that branch alone, as it does
 // alpha's; asked again, neither holds it, exit 5. b still has both forks,
-// worktrees and all, after a pull.
+// worktrees and all, after a pull, and its removal of one drops the
+// tracking configuration its install from the account wrote.
 func TestSkillRemoveOfAFork(t *testing.T) {
 	t.Parallel()
 	a, b, _, remote := twoHomes(t)
@@ -43,6 +46,13 @@ func TestSkillRemoveOfAFork(t *testing.T) {
 	out = a.run("skill", "remove", "alpha", "--remote", "--from", "claude-code")
 	equal(t, "--remote with --from: exit", out.exit, 1)
 	contains(t, "--remote with --from: stderr", out.stderr, "--remote and --from claude-code cannot both be given")
+	admin, _ := home.AdminDirOf(root)
+	lock := filepath.Join(admin, "index.lock")
+	writeFile(t, lock, "")
+	out = a.run("skill", "remove", "alpha")
+	equal(t, "git running: exit", out.exit, 6)
+	contains(t, "git running: stderr", out.stderr, "git is running in alpha's worktree")
+	remove(t, lock)
 	equal(t, "the branch, refused", a.ref(lineage.ForkRef("alpha")), tip)
 	if _, ok := isSymlink(t, lib); !ok {
 		t.Fatal("a refused removal took the library symlink")
@@ -117,6 +127,14 @@ func TestSkillRemoveOfAFork(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(b.forkDir(name, name), "SKILL.md")); err != nil {
 			t.Errorf("b's %s: %v", name, err)
 		}
+	}
+	// b installed both from the account, which made their branches track
+	// the account remote's: a removal takes that tracking with the branch,
+	// so that a later fork of the name tracks nothing.
+	contains(t, "b's tracking", b.accountGit("config", "--get-regexp", `^branch\.`), "branch.skills/alpha.remote")
+	b.mustRun("skill", "remove", "alpha")
+	if tracking := b.accountGit("config", "--get-regexp", `^branch\.`); strings.Contains(tracking, "skills/alpha") || !strings.Contains(tracking, "skills/beta") {
+		t.Errorf("b's tracking after alpha's removal:\n%s", tracking)
 	}
 }
 

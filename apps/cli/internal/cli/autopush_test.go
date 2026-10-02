@@ -18,10 +18,12 @@ import (
 // publish of this serve process that names the uncommitted edit, which
 // stays uncommitted: auto-push never commits, and the branch holds the
 // commit it held. The fork never published is not pushed: a branch the
-// account remote does not hold is for agentx publish to make. A fork the
-// account remote holds commits of that it lacks is not pushed, and is
-// warned about once, and nor is one whose branch there is another fork,
-// by its fork id, although the push would fast-forward it.
+// account remote does not hold is for agentx publish to make. A fork whose
+// branch there holds its tip and more has nothing to push, and is not
+// warned about. A fork the account remote holds commits of that it lacks,
+// and that holds commits of its own, is not pushed, and is warned about
+// once, and nor is one whose branch there is another fork, by its fork id,
+// although the push would fast-forward it.
 func TestServeAutoPushesAfterTheQuietPeriod(t *testing.T) {
 	t.Parallel()
 	h, _, skillDir, _ := forkHarness(t)
@@ -56,11 +58,16 @@ func TestServeAutoPushesAfterTheQuietPeriod(t *testing.T) {
 	equal(t, "the branch", h.ref(lineage.ForkRef("notes")), tip)
 	equal(t, "git status", strings.TrimSpace(gitIn(t, h, filepath.Join(h.agentx, "worktrees", "notes"), "status", "--porcelain")), "?? notes/draft.md")
 
-	// Another machine publishes a commit this one lacks, and this one
-	// commits one of its own: the push would not be a fast-forward, so
-	// auto-push leaves it to a publish, once, with a warning that names it.
+	// Another machine publishes a commit this one lacks, which a fetch
+	// brings here: notes has nothing to push, and nothing is said of it.
+	// Then this one commits one of its own: the push would not be a
+	// fast-forward, so auto-push leaves it to a publish, once, with a
+	// warning that names it.
 	theirs := h.accountGit("commit-tree", tip+"^{tree}", "-p", tip, "-m", "made on another machine")
 	h.accountGit("push", "--quiet", remote, theirs+":refs/heads/skills/notes")
+	h.mustRun("skill", "list", "--remote")
+	time.Sleep(100 * time.Millisecond) // five quiet periods behind the remote
+	equal(t, "warnings, behind", len(p.logged("warn", "auto-push: ")), 0)
 	h.mustRun("skill", "commit", "notes")
 	warned := p.awaitLogged("warn", "auto-push: ", 1)
 	equal(t, "the warning", warned[0], "auto-push: notes was not pushed, since the account remote holds commits it lacks; run 'agentx publish notes' to take them in and publish it")

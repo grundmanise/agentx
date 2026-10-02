@@ -46,8 +46,9 @@ func (inv *invocation) pushQuietPeriod() (time.Duration, error) {
 
 // autoPushState is what the auto-push tick remembers from one run to the
 // next, in the serve process alone: the tip of each fork the last run saw,
-// the forks it could not push, as no fast-forward, as another fork or as
-// rejected, by the tip and the remote tip it found them at, so that it
+// the forks it found nothing to push of, their remote branch holding the
+// tip already, or could not push, as no fast-forward, as another fork or
+// as rejected, by the tip and the remote tip it found them at, so that it
 // neither fetches for them again nor pushes them until either moves, and
 // the cause of each failure it last warned about. Runs of one tick never
 // overlap, and the report of each is made before the next starts, so
@@ -102,17 +103,21 @@ func (st *autoPushState) warn(inv *invocation, what, message string) {
 // waits a whole quiet period. Otherwise a fork is due when its branch
 // holds the commit the last run saw, so that it stood still for a quiet
 // period, it has no merge pending, and its remote-tracking branch is there
-// and is not that commit: a fork the account remote holds no branch of,
-// as far as the last fetch knows, is published by agentx publish alone.
+// and lacks commits of that commit: a fork the account remote holds no
+// branch of, as far as the last fetch knows, is published by agentx
+// publish alone, and one whose branch there holds its tip, as a fetch of
+// another machine's publish leaves it, has nothing to push.
 // The account remote is fetched once when a fork is due. A due fork whose
 // branch there is still there, is the same fork by its fork id and is an
 // ancestor of its tip is pushed, every one in one push of the tip judged,
 // leased on what the fetch read, see gitx.PushTips: a commit made
 // meanwhile waits for a quiet period of its own, and a branch another
 // machine moved or deleted since is rejected rather than overwritten or
-// put back. One whose branch there is another fork, holds commits it
-// lacks, or that the remote rejected, is left alone, with a warning naming
-// what to run, until its tip or its remote-tracking branch moves. It
+// put back. One whose branch there now holds its tip is left alone
+// quietly, and one whose branch there is another fork, holds commits it
+// lacks and lacks some of its own, or that the remote rejected, is left
+// alone with a warning naming what to run, each until its tip or its
+// remote-tracking branch moves. It
 // returns a publish event for every fork the account remote now holds the
 // tip of.
 func (inv *invocation) autoPush(ctx context.Context, st *autoPushState) []publishEvent {
@@ -152,7 +157,17 @@ func (inv *invocation) autoPush(ctx context.Context, st *autoPushState) []publis
 		}
 		seen[name] = rec.Commit
 		there := tracked[name]
-		if st.seen[name] == rec.Commit && there != "" && there != rec.Commit && st.behind[name] != rec.Commit+" "+there && !inv.mergePending(name) {
+		if st.seen[name] != rec.Commit || there == "" || there == rec.Commit || st.behind[name] == rec.Commit+" "+there || inv.mergePending(name) {
+			continue
+		}
+		// A tip its remote-tracking branch already holds, as another
+		// machine's publish fetched here leaves it, has nothing to push.
+		switch lags, err := inv.isAncestor(ctx, gitDir, rec.Commit, there); {
+		case err != nil:
+			st.warn(inv, name, sanitised(name)+": "+err.Error())
+		case lags:
+			st.behind[name] = rec.Commit + " " + there
+		default:
 			due = append(due, name)
 		}
 	}
@@ -186,12 +201,19 @@ func (inv *invocation) autoPush(ctx context.Context, st *autoPushState) []publis
 			st.warn(inv, name, f.message+"; "+f.hint)
 			continue
 		}
-		_, status, err := inv.git.IsolatedStatus(ctx, gitDir, 1, "merge-base", "--is-ancestor", there, tip)
-		if err != nil {
+		ff, err := inv.isAncestor(ctx, gitDir, there, tip)
+		lags := false
+		if err == nil && !ff {
+			lags, err = inv.isAncestor(ctx, gitDir, tip, there)
+		}
+		switch {
+		case err != nil:
 			st.warn(inv, name, sanitised(name)+": "+err.Error())
 			continue
-		}
-		if status != 0 {
+		case lags:
+			st.behind[name] = tip + " " + there // published meanwhile, and more on top
+			continue
+		case !ff:
 			st.behind[name] = tip + " " + there
 			st.warn(inv, name, sanitised(name)+" was not pushed, since the account remote holds commits it lacks; run '"+publishCommand(name)+"' to take them in and publish it")
 			continue
@@ -249,4 +271,11 @@ func (inv *invocation) autoPushLineage(ctx context.Context, gitDir string, due [
 		return nil, nil, accountRepoFailure(err)
 	}
 	return records, walked, nil
+}
+
+// isAncestor is whether the commit a is b or one b's history holds, as
+// git merge-base --is-ancestor says.
+func (inv *invocation) isAncestor(ctx context.Context, gitDir, a, b string) (bool, error) {
+	_, status, err := inv.git.IsolatedStatus(ctx, gitDir, 1, "merge-base", "--is-ancestor", a, b)
+	return err == nil && status == 0, err
 }

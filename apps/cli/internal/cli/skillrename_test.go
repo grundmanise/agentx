@@ -15,7 +15,8 @@ import (
 // another skill has, a skill that is no fork, uncommitted edits and a merge
 // pending. The rename is then a fork of the fork under the new name, with
 // a fork id of its own and the old branch's commits as its history, placed
-// where the old one was with its copy mode, and the old fork's removal;
+// where the old one was with its copy mode, even once a commit left the
+// copy behind, and the old fork's removal;
 // the account remote keeps the old branch. Published, the renamed fork is
 // a new fork b can install, and b keeps the old one. A rename with
 // --remote deletes the old branch from the account remote too.
@@ -52,6 +53,12 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 		equal(t, tc.name+": refs", a.refLines(), before)
 	}
 	a.accountGit("worktree", "remove", "-f", "-f", pending)
+	// A commit leaves the copy behind the library, which a listing no
+	// longer counts as a placement; the rename keeps it all the same.
+	writeFile(t, filepath.Join(a.forkDir("alpha", "alpha"), "notes.md"), "committed after the copy\n")
+	a.mustRun("skill", "commit", "alpha")
+	published := old
+	old = a.ref(lineage.ForkRef("alpha"))
 
 	out := a.run("--json", "skill", "rename", "alpha", "renamed")
 	equal(t, "exit", out.exit, 0)
@@ -70,7 +77,7 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 	}
 	equal(t, "the old branch", a.ref(lineage.ForkRef("alpha")), "")
 	nothingAt(t, "the old library entry", filepath.Join(a.library, "alpha"))
-	equal(t, "the remote's old branch", remoteGit(t, a, remote, "rev-parse", "refs/heads/skills/alpha"), old)
+	equal(t, "the remote's old branch", remoteGit(t, a, remote, "rev-parse", "refs/heads/skills/alpha"), published)
 
 	a.mustRun("publish", "renamed")
 	listed := b.mustRun("--json", "skill", "list", "--remote")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -66,6 +67,20 @@ func (r *Runner) SetTracking(ctx context.Context, gitDir, branch string) error {
 		}
 	}
 	return nil
+}
+
+// UnsetTracking takes the tracking configuration of branch out of the
+// account repo, the section SetTracking wrote, for a removal that deletes
+// the branch: a later branch of the name would otherwise track the
+// remote branch of another. A branch with none has nothing to take out.
+func (r *Runner) UnsetTracking(ctx context.Context, gitDir, branch string) error {
+	section := "branch." + branch
+	_, status, err := r.IsolatedStatus(ctx, gitDir, 1, "config", "--get-regexp", "^"+regexp.QuoteMeta(section)+`\.`)
+	if err != nil || status != 0 {
+		return err
+	}
+	_, err = r.Isolated(ctx, gitDir, "config", "--remove-section", section)
+	return err
 }
 
 // UnsetRemote takes the account remote out of the account repo: its

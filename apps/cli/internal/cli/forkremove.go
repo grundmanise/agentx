@@ -179,8 +179,9 @@ func forkBranch(name string) string {
 
 // applyForkRemoval removes the fork r judged as one journaled mutation,
 // once everything it was judged on is read again under the lock: the
-// branch still holds the commit judged, no merge is pending since, and,
-// for skill rename, the skill directory is still as clean as it was. It
+// branch still holds the commit judged, no merge is pending since, no git
+// holds the worktree's index, as a git commit waiting in an editor does,
+// and, for skill rename, the skill directory is still as clean as it was. It
 // records, in the order they apply: a step that holds the branch to that
 // commit, which the journal's first transaction checks before any path
 // changes, since git run in the worktree moves the branch without the
@@ -192,8 +193,9 @@ func forkBranch(name string) string {
 // left, the update candidate and the upstream-removed marker, each with the
 // value it holds now. Any other directory or file at the library path is
 // not agentx's, as skill place and skill list say of it, and is left where
-// it is and named. Once the journal is applied, git's registration of the
-// worktree is dropped.
+// it is and named. Once the journal is applied, and before the lock is
+// released, git's registration of the worktree is dropped, and so is the
+// branch's tracking configuration.
 func (inv *invocation) applyForkRemoval(ctx context.Context, r *forkRemoval) (removalPlan, error) {
 	targets := inv.detectedTargets()
 	plan := removalPlan{name: r.name, whole: true, fork: true, from: targetIDs(targets)}
@@ -212,6 +214,9 @@ func (inv *invocation) applyForkRemoval(ctx context.Context, r *forkRemoval) (re
 		}
 		if inv.mergePending(r.name) {
 			return forkPendingRefusal(r.name, "removed")
+		}
+		if err := gitRunning(r.name, root); err != nil {
+			return err
 		}
 		if r.guard != nil {
 			if _, err := inv.forkGuards(ctx, r.guard.site, r.guard.judged, "removed", true); err != nil {
@@ -278,7 +283,21 @@ func (inv *invocation) applyForkRemoval(ctx context.Context, r *forkRemoval) (re
 			m.Discard()
 			return err
 		}
-		return m.Apply(inv.refs(ctx))
+		if err := m.Apply(inv.refs(ctx)); err != nil {
+			return err
+		}
+		// Still under the lock, so that no worktree another command makes
+		// at root meanwhile goes with it. What is left of the registration
+		// goes with the next mutation, see pruneMerges; the tracking
+		// configuration skill add --from-account wrote goes here alone.
+		back()
+		if err := inv.git.RemoveCheckout(ctx, r.gitDir, root); err != nil {
+			inv.out.debugf("%s: %v", r.name, err)
+		}
+		if err := inv.git.UnsetTracking(ctx, r.gitDir, strings.TrimPrefix(lineage.ForkRef(r.name), "refs/heads/")); err != nil {
+			inv.out.debugf("%s: %v", r.name, err)
+		}
+		return nil
 	})
 	back()
 	if errors.Is(err, home.ErrMovedBeforeApply) {
@@ -286,11 +305,6 @@ func (inv *invocation) applyForkRemoval(ctx context.Context, r *forkRemoval) (re
 	}
 	if err != nil {
 		return plan, mutationFailure(err)
-	}
-	if err := inv.git.RemoveCheckout(ctx, r.gitDir, root); err != nil {
-		// What is left of the registration goes with the next mutation,
-		// see pruneMerges.
-		inv.out.debugf("%s: %v", r.name, err)
 	}
 	return plan, nil
 }

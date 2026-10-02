@@ -80,7 +80,7 @@ auto-push release-notes: pushed 4c2e9a1
 It pushes commits only, never commits your edits, and never merges. It leaves these forks for [`agentx publish`](/cli/remote#publish-a-fork):
 
 - A fork the account remote holds no branch of, because you never published it or its branch was deleted.
-- A fork whose branch on the account remote holds commits you do not have, or is a different fork of the same name. Serve warns about it once, with a line starting `auto-push:`.
+- A fork whose branch on the account remote holds commits you do not have while you have commits it lacks, or is a different fork of the same name. Serve warns about it once, with a line starting `auto-push:`.
 
 A remote it cannot reach is warned about the same way.
 

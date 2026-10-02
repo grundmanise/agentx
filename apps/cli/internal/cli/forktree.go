@@ -157,13 +157,23 @@ func worktreeHealth(name, root, branch string) error {
 		return fail(exitRefused, where+" is in the middle of a git "+command,
 			"finish it with git, or run 'git -C "+shellWord(root)+" "+command+" --abort' to give it up, then run the command again")
 	}
-	if lock := home.IndexLock(root); lock != "" {
-		return fail(exitRefused, "git is running in "+where,
-			"run the command again once it finishes; if no git is running, remove "+quotedPath(lock))
+	if err := gitRunning(name, root); err != nil {
+		return err
 	}
 	if !home.WorktreeAt(root, branch) {
 		return fail(exitRefused, where+" is not on its branch "+branch,
 			"run 'git -C "+shellWord(root)+" switch "+branch+"' to put it back on its branch")
+	}
+	return nil
+}
+
+// gitRunning refuses a fork's worktree whose index a running git holds,
+// such as a git commit waiting for its message in an editor, which could
+// move the fork's branch at any moment.
+func gitRunning(name, root string) error {
+	if lock := home.IndexLock(root); lock != "" {
+		return fail(exitRefused, "git is running in "+sanitised(name)+"'s worktree "+quotedPath(root),
+			"run the command again once it finishes; if no git is running, remove "+quotedPath(lock))
 	}
 	return nil
 }

@@ -3,6 +3,8 @@ package cli
 import (
 	"context"
 	"errors"
+	"os"
+	"slices"
 
 	"github.com/spf13/cobra"
 
@@ -51,6 +53,9 @@ func (inv *invocation) skillRename(ctx context.Context, old, newName string, rem
 		return fail(exitRefused, sanitised(old)+" is not a fork, so it cannot be renamed",
 			"fork it under the new name with '"+skillCommand("fork", old, "--name", newName)+"', then remove it with '"+skillCommand("remove", old)+"'")
 	}
+	if err := inv.keepCopies(fk); err != nil {
+		return err
+	}
 	renameHere := skillCommand("rename", old, newName)
 	r, err := inv.judgeForkRemoval(ctx, old, remote, "rename it on this machine alone with '"+renameHere+"'")
 	if err != nil {
@@ -79,6 +84,40 @@ func (inv *invocation) skillRename(ctx context.Context, old, newName string, rem
 	}
 	inv.summary = "renamed " + sanitised(old) + " to " + sanitised(newName) + "; " + inv.summary
 	inv.out.done("renamed " + inv.out.paint(heading, sanitised(old)) + " to " + inv.out.paint(heading, sanitised(newName)))
+	return nil
+}
+
+// keepCopies adds to the configurations the new fork fk plans is placed
+// into every one where copy_mode records a copy of the fork it is made
+// from, and that copy is still there. The fork goes where its source is,
+// see planBeside, and a copy only counts as a placement while it holds the
+// library's content, which it stops doing at the fork's next commit; the
+// rename removes the copy all the same, so the new fork takes its place
+// as a copy, up to date.
+func (inv *invocation) keepCopies(fk *forking) error {
+	s, err := inv.loadSettings()
+	if err != nil {
+		return err
+	}
+	modes, err := inv.copyModes(s)
+	if err != nil {
+		return err
+	}
+	planned := map[string]bool{}
+	for _, t := range fk.targets {
+		planned[t.id] = true
+	}
+	var targets []placeTarget
+	for _, t := range inv.detectedTargets() {
+		if !planned[t.id] && !t.readsLibrary && slices.Contains(modes[fk.src.name], t.id) {
+			_, err := os.Lstat(t.ownPlace(inv.dirs.Library, fk.src.name))
+			planned[t.id] = err == nil
+		}
+		if planned[t.id] {
+			targets = append(targets, t)
+		}
+	}
+	fk.targets = targets
 	return nil
 }
 
