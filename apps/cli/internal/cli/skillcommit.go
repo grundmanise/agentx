@@ -109,7 +109,7 @@ func (inv *invocation) skillCommit(ctx context.Context, name, message string) er
 	drop := func(n string, f *failure) {
 		r.add(n, f)
 		if name == "" && len(names) > 1 {
-			inv.out.warn(n + ": " + f.message)
+			inv.out.warn(namedReason(n, f.message))
 		}
 	}
 	// The writer reads the user's identity and their core.excludesFile in

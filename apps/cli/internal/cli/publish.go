@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -60,7 +61,7 @@ func newPublishCommand(inv *invocation) *cobra.Command {
 			case all && len(args) > 0:
 				return fail(exitUsage, "publish takes a fork name or --all, not both", hint)
 			case !all && len(args) == 0:
-				return fail(exitUsage, "no fork to publish", hint)
+				return fail(exitUsage, "publish needs a fork name or --all", hint)
 			case all:
 				return inv.publish(cmd.Context(), "")
 			}
@@ -169,7 +170,13 @@ func (inv *invocation) judgePublish(ctx context.Context, gitDir string, rec line
 		p.push = true
 		return p
 	case inv.mergePending(n):
-		p.outcome, p.f = publishRefused, publishPendingRefusal(n, inv.checkoutPath(n))
+		// The skill directory in the checkout, as the conflict that left
+		// the merge pending named it.
+		checkout := inv.checkoutPath(n)
+		if dir, err := inv.forkDir(ctx, gitDir, rec); err == nil {
+			checkout = filepath.Join(checkout, dir)
+		}
+		p.outcome, p.f = publishRefused, publishPendingRefusal(n, checkout)
 		return p
 	}
 	s := inv.syncFork(ctx, gitDir, rec, remote, "published")
@@ -289,7 +296,7 @@ func (inv *invocation) reportPublished(ctx context.Context, list []*publishing) 
 		if p.f != nil {
 			run.add(p.name, p.f)
 			if len(list) > 1 {
-				out.warn(p.name + ": " + p.f.message)
+				out.warn(namedReason(p.name, p.f.message))
 			}
 		}
 	}

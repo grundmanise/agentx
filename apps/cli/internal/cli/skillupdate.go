@@ -146,7 +146,7 @@ func (r *updateRun) drop(name string, f *failure) {
 	}
 	r.add(name, f)
 	if r.all && r.selected > 1 {
-		r.inv.out.warn(name + ": " + f.message)
+		r.inv.out.warn(namedReason(name, f.message))
 	}
 }
 

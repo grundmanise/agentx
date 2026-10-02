@@ -300,10 +300,10 @@ func TestSkillUpdateAllMergesEditsAndLeavesConflictsPending(t *testing.T) {
 	equal(t, "the conflict's skill", conflict["name"], "beta")
 	equal(t, "the conflict's files", conflictPaths(conflict), "notes.md")
 	refusal := "beta conflicts with its update in 1 file, so the merge is pending and the library directory was left as it is"
-	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "beta: "+refusal)
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), refusal)
 	e := h.one(out.stdout, "error")
 	equal(t, "code", e["code"], "pending_merge")
-	equal(t, "message", e["message"], "1 of 3 skills could not be updated: beta: "+refusal)
+	equal(t, "message", e["message"], "1 of 3 skills could not be updated: "+refusal)
 	equal(t, "hint", e["hint"], conflictHint(h, "beta", "beta"))
 	equal(t, "alpha's notes", fileBody(t, filepath.Join(h.library, "alpha", "notes.md")), "alpha notes, revised\n")
 	equal(t, "epsilon's notes", fileBody(t, filepath.Join(h.library, "epsilon", "notes.md")), "epsilon notes, revised\n")
@@ -360,7 +360,7 @@ func TestSkillUpdateAllTextOfAMixedRun(t *testing.T) {
 		"  epsilon  "+moved+"  edits merged cleanly\n"+
 		"beta conflicts with its update from "+first[:7]+" to "+second[:7]+" in 1 file\n"+
 		"notes.md: both modified\n")
-	contains(t, "stderr", out.stderr, "error: 1 of 3 skills could not be updated: beta: beta conflicts with its update in 1 file")
+	contains(t, "stderr", out.stderr, "error: 1 of 3 skills could not be updated: beta conflicts with its update in 1 file")
 }
 
 // TestSkillUpdateAllReportsConflictsInNameOrder: a merge still pending
@@ -379,7 +379,7 @@ func TestSkillUpdateAllReportsConflictsInNameOrder(t *testing.T) {
 	}
 	equal(t, "the conflicts' skills", strings.Join(names, " "), "alpha beta")
 	refusal := " conflicts with its update in 1 file, so the merge is pending and the library directory was left as it is"
-	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "alpha: alpha"+refusal+"\nbeta: beta"+refusal)
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "alpha"+refusal+"\nbeta"+refusal)
 }
 
 // otherSourceHarness is updateHarness with a second source holding gamma,
@@ -513,10 +513,10 @@ func TestSkillUpdateAllReportsEachRefusalAndGoesOn(t *testing.T) {
 	epsilon := "epsilon holds " + nested + ", which git cannot record"
 	beta := `not an import commit: refs/heads/managed/beta holds "delta" beside beta`
 	gamma := "gamma was installed from " + other.url + ", which was removed from this machine, so it is not updated; run 'agentx source add " + other.url + "' to add it again"
-	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), strings.Join([]string{"delta: " + delta, "epsilon: " + epsilon, gamma, "beta: " + beta}, "\n"))
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), strings.Join([]string{delta, epsilon, gamma, "beta: " + beta}, "\n"))
 	e := h.one(out.stdout, "error")
 	equal(t, "code", e["code"], "refused")
-	equal(t, "message", e["message"], "3 of 5 skills could not be updated: delta: "+delta+"; epsilon: "+epsilon+"; beta: "+beta)
+	equal(t, "message", e["message"], "3 of 5 skills could not be updated: "+delta+"; "+epsilon+"; beta: "+beta)
 	equal(t, "hint", e["hint"], "run 'agentx skill list' to see which skills have an update, then update the rest one at a time")
 	// The result of a run that refused a skill is its error, with no copy
 	// counts: what it did for the skills it updated is in their
@@ -1093,9 +1093,9 @@ exec `+realGit(t)+` "$@"
 	out := h.run("--json", "skill", "update", "--all")
 	equal(t, "exit", out.exit, 6)
 	refusal := "alpha changed while it was being updated, so nothing was changed"
-	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), "alpha: "+refusal)
+	equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), refusal)
 	e := h.one(out.stdout, "error")
-	equal(t, "message", e["message"], "1 of 2 skills could not be updated: alpha: "+refusal)
+	equal(t, "message", e["message"], "1 of 2 skills could not be updated: "+refusal)
 	equal(t, "hint", e["hint"], "run 'agentx skill update alpha' again to update it as it is now")
 	equal(t, "updated", updatedNames(h, out.stdout), "beta")
 

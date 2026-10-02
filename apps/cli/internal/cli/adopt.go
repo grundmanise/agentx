@@ -408,7 +408,7 @@ func (r *adoptRun) drop(c *candidate, f *failure) {
 	r.total--
 	r.add(c.entry.Name, f)
 	if r.selected > 1 {
-		r.inv.out.warn(c.entry.Name + ": " + f.message)
+		r.inv.out.warn(namedReason(c.entry.Name, f.message))
 	}
 }
 

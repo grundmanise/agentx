@@ -364,7 +364,7 @@ func (inv *invocation) pull(ctx context.Context, name string) error {
 		if s.f != nil {
 			run.add(n, s.f)
 			if len(names) > 1 {
-				inv.out.warn(n + ": " + s.f.message)
+				inv.out.warn(namedReason(n, s.f.message))
 			}
 		}
 	}

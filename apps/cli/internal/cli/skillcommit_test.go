@@ -177,7 +177,7 @@ func TestSkillCommitRefusals(t *testing.T) {
 		{[]string{"notes"}, "MERGE_HEAD", exitRefused, "notes's worktree " + notes + " is in the middle of a git merge"},
 		{[]string{"notes"}, "index.lock", exitRefused, "git is running in notes's worktree " + notes},
 		{[]string{"gone"}, "", exitRefused, "gone's worktree " + gone + " is missing"},
-		{nil, "", exitRefused, "2 of 2 forks could not be committed: gone: gone's worktree"},
+		{nil, "", exitRefused, "2 of 2 forks could not be committed: gone's worktree"},
 	} {
 		if tc.held != "" {
 			writeFile(t, filepath.Join(admin, tc.held), "")

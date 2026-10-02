@@ -280,7 +280,7 @@ func (b *batch) drop(subject string, remaining int, f *failure) {
 	b.total -= remaining
 	b.add(subject, f)
 	if b.selected > 1 {
-		b.inv.out.warn(subject + ": " + f.message)
+		b.inv.out.warn(namedReason(subject, f.message))
 	}
 }
 

@@ -157,13 +157,13 @@ func fromAccountPlan(name, libPath string, holds libraryHolds, keepLocal bool) (
 	case holdsEditedCopy:
 		if !keepLocal {
 			return 0, refuse(exitRefused, sanitised(name)+" holds edits at "+quotedPath(libPath)+" that installing the fork would lose, so nothing was changed",
-				again+" to keep them as uncommitted edits of the fork, or '"+skillCommand("revert", name)+"' to discard them first")
+				again+" to make that directory's whole content the fork's uncommitted content, then check it with '"+skillCommand("diff", name)+"' before you commit, or '"+skillCommand("revert", name)+"' to discard the edits first")
 		}
 		return installKeepLocal, nil
 	case holdsDirectory:
 		if !keepLocal {
 			return 0, refuse(exitRefused, "the library already holds "+quotedPath(libPath)+", so "+sanitised(name)+" was not installed",
-				again+" to keep its content as uncommitted edits of the fork, or move it aside and run the command again")
+				again+" to make its whole content the fork's uncommitted content, then check it with '"+skillCommand("diff", name)+"' before you commit, or move it aside and run the command again")
 		}
 		return installKeepLocal, nil
 	case holdsLink:
@@ -658,7 +658,7 @@ func (inv *invocation) reportAccountInstall(ctx context.Context, in *accountInst
 	var kept string
 	switch {
 	case in.action == installKeepLocal:
-		kept = quotedPath(f.libPath) + " was moved into its worktree, and its content is uncommitted edits of the fork"
+		kept = quotedPath(f.libPath) + " was moved into its worktree, and its content replaces the fork's as uncommitted edits; check them with '" + skillCommand("diff", f.name) + "' before you commit"
 	case in.managed != nil:
 		kept = "the fork replaces the managed skill wherever it was"
 	}

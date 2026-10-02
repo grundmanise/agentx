@@ -462,7 +462,7 @@ func TestSkillAddRefusesTwoSkillsOfOneName(t *testing.T) {
 	equal(t, "exit", out.exit, 6)
 	equal(t, "the skills in the library", strings.Join(installedNames(t, h), ","), "other,twin")
 	contains(t, "the result", h.one(out.stdout, "result")["summary"].(string),
-		"twin: twin is also the name of the skill under skills/first, which this run installs")
+		"twin is also the name of the skill under skills/first, which this run installs")
 
 	// Naming it resolves to one skill, as it always has: the first, which
 	// is the one the library holds, so asking for it by name is that version
@@ -538,7 +538,7 @@ func TestSkillAddDropsASkillTheSourceCannotServe(t *testing.T) {
 	result := h.one(out.stdout, "result")
 	equal(t, "ok", result["ok"], false)
 	contains(t, "the result", result["summary"].(string),
-		"1 of 2 skills could not be installed: alpha: alpha holds a file the source did not serve: notes.md")
+		"1 of 2 skills could not be installed: alpha holds a file the source did not serve: notes.md")
 	failed := lastError(t, h.events(out.stdout))
 	equal(t, "error code", failed["code"], "not_found")
 	equal(t, "hint", failed["hint"], "run 'agentx source fetch "+s.url+"' to fetch it again")

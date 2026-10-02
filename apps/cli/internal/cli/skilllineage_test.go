@@ -54,7 +54,7 @@ func TestInstallRefusesASubpathItCannotRecord(t *testing.T) {
 	out := h.run("skill", "add", s.url, "--all")
 	equal(t, "exit of the batch", out.exit, exitRefused.exit)
 	for _, c := range nastySubpaths {
-		contains(t, "the warnings", out.stderr, c.name+": ")
+		contains(t, "the warnings", out.stderr, "warning: "+c.name+" comes from ")
 		contains(t, "the warnings", out.stderr, c.quoted)
 		// Nothing was written for it: no import branch, no library
 		// directory, and so nothing for a later command to trip over.

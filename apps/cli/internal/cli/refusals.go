@@ -52,7 +52,7 @@ func (r *refusals) failure(selected, done int) *failure {
 		if s.fail.hint != hint {
 			hint = r.mixed
 		}
-		reasons = append(reasons, s.subject+": "+s.fail.message)
+		reasons = append(reasons, namedReason(s.subject, s.fail.message))
 	}
 	noun := r.noun
 	if noun == "" {
@@ -63,4 +63,15 @@ func (r *refusals) failure(selected, done int) *failure {
 		message: fmt.Sprintf("%d of %s could not be %s: %s", len(r.broken), plural(selected, noun), r.verb, strings.Join(reasons, "; ")),
 		hint:    hint,
 	}
+}
+
+// namedReason is message as a run over several skills names it for the
+// skill subject: prefixed with "<subject>: ", unless the message already
+// starts with the subject, as in "beta conflicts with ..." or "beta's
+// worktree ...", which would then name it twice. Pure.
+func namedReason(subject, message string) string {
+	if rest, ok := strings.CutPrefix(message, subject); ok && (strings.HasPrefix(rest, " ") || strings.HasPrefix(rest, "'s ")) {
+		return message
+	}
+	return subject + ": " + message
 }

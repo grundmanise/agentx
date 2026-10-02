@@ -159,8 +159,8 @@ func TestPullFastForwardsMergesAndConflicts(t *testing.T) {
 	}
 	equal(t, "alpha", outcomes["alpha"], pullRefused)
 	equal(t, "beta", outcomes["beta"], pullConflict)
-	contains(t, "the error", b.one(out.stdout, "error")["message"].(string), "alpha: alpha has uncommitted edits, so it cannot be pulled")
-	contains(t, "the error", b.one(out.stdout, "error")["message"].(string), "beta: beta conflicts with the account remote in 1 file")
+	contains(t, "the error", b.one(out.stdout, "error")["message"].(string), "could not be pulled: alpha has uncommitted edits, so it cannot be pulled")
+	contains(t, "the error", b.one(out.stdout, "error")["message"].(string), "; beta conflicts with the account remote in 1 file")
 	conflict := b.one(out.stdout, "conflict")
 	equal(t, "kind", conflict["kind"], lineage.KindFork)
 	equal(t, "mine", conflict["mine"], betaTip)
@@ -271,6 +271,9 @@ func TestPublishMergesFirstAndNamesUncommittedForks(t *testing.T) {
 	out = a.run("--json", "skill", "update", "beta")
 	equal(t, "the merge reported again: exit", out.exit, 4)
 	contains(t, "its message", a.one(out.stdout, "error")["message"].(string), "beta conflicts with the account remote in 1 file")
+	out = a.run("--json", "publish", "beta")
+	equal(t, "a publish over the pending merge: exit", out.exit, 4)
+	contains(t, "its hint", a.one(out.stdout, "error")["hint"].(string), "resolve it with git in "+filepath.Join(a.agentx, "merges", "beta", "beta")+" and run")
 
 	writeFile(t, filepath.Join(remote, "hooks", "pre-receive"), "#!/bin/sh\nexit 1\n")
 	if err := os.Chmod(filepath.Join(remote, "hooks", "pre-receive"), 0o755); err != nil {
