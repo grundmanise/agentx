@@ -23,7 +23,9 @@ import (
 // warned about. A fork the account remote holds commits of that it lacks,
 // and that holds commits of its own, is not pushed, and is warned about
 // once, and nor is one whose branch there is another fork, by its fork id,
-// although the push would fast-forward it.
+// although the push would fast-forward it. Last, with a longer quiet
+// period, a commit serve finds at start and one made right after are
+// pushed as one, the second, once the branch stood still.
 func TestServeAutoPushesAfterTheQuietPeriod(t *testing.T) {
 	t.Parallel()
 	h, _, skillDir, _ := forkHarness(t)
@@ -84,4 +86,32 @@ func TestServeAutoPushesAfterTheQuietPeriod(t *testing.T) {
 	equal(t, "exit", p.close(), 0)
 	equal(t, "warnings", len(p.logged("warn", "auto-push: ")), 2)
 	equal(t, "the remote's drafts", remoteGit(t, h, remote, "for-each-ref", "refs/heads/skills/drafts"), "")
+
+	// A commit serve finds at start, and another right after, go out as
+	// one push of the second, once the branch stood still for a quiet
+	// period: the first is never pushed, and nothing is pushed sooner.
+	h.mustRun("publish", "drafts")
+	drafts := h.forkDir("drafts", "drafts")
+	draftsTip := func() string { return remoteGit(t, h, remote, "rev-parse", "refs/heads/skills/drafts") }
+	before := draftsTip()
+	writeFile(t, filepath.Join(drafts, "one.md"), "first\n")
+	h.mustRun("skill", "commit", "drafts")
+	h.env["AGENTX_PUSH_QUIET"] = "750ms"
+	started := time.Now()
+	p = h.serve(t, "--json")
+	p.next("snapshot")
+	writeFile(t, filepath.Join(drafts, "two.md"), "second\n")
+	h.mustRun("skill", "commit", "drafts")
+	second := h.ref(lineage.ForkRef("drafts"))
+	equal(t, "the remote's drafts before the quiet period", draftsTip(), before)
+	ev = p.nextOf("publish")
+	// A lower bound, which a loaded machine cannot break: no tick before
+	// serve started can have seen either commit.
+	if waited := time.Since(started); waited < 750*time.Millisecond {
+		t.Errorf("the push came %s after serve started, within the quiet period", waited)
+	}
+	equal(t, "the pushed fork", ev["name"], "drafts")
+	equal(t, "the commit pushed, the second", ev["commit"], second)
+	equal(t, "the remote's drafts", draftsTip(), second)
+	equal(t, "exit of the second serve", p.close(), 0)
 }

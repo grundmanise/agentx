@@ -89,9 +89,9 @@ func (h *harness) commitFork(name, notes string) string {
 // the two records the newer version as the base. Last, a pull of every
 // fork in one run: beta, whose line both machines changed, conflicts and
 // is left pending in its checkout under the merges directory, exit 4,
-// while alpha, which holds an uncommitted edit, is refused, exit 6, and
-// the run says both; the fork's worktree and branch stay as they were,
-// with no conflict marker in the worktree. b took the source's third
+// while alpha, where b added a file of its own, merges all the same, and
+// the run says both; beta's worktree and branch stay as they were, with
+// no conflict marker in the worktree. b took the source's third
 // version into beta first, while a's beta stayed on the first: resolved
 // in the checkout, the merge is not completed by a publish, exit 4, but,
 // committed with git commit -m, by the next pull, and it keeps b's newer
@@ -147,24 +147,25 @@ func TestPullFastForwardsMergesAndConflicts(t *testing.T) {
 	a.commitFork("beta", forkNotes("six", "six, a"))
 	a.mustRun("publish", "beta")
 	betaTip := b.commitFork("beta", forkNotes("six", "six, b"))
-	a.commitFork("alpha", forkNotes("one", "one, a", "seven", "seven, upstream", "four", "four, a", "three", "three, a"))
+	a.commitFork("alpha", forkNotes("one", "one, a", "seven", "seven, upstream", "four", "four, a", "six", "six, a"))
 	a.mustRun("publish", "alpha")
+	writeFile(t, filepath.Join(alphaB, "b.md"), "b's own file\n")
+	b.mustRun("skill", "commit", "alpha")
 	alphaTip := b.ref(lineage.ForkRef("alpha"))
-	writeFile(t, filepath.Join(alphaB, "notes.md"), "uncommitted\n")
 	out = b.run("--json", "pull")
-	equal(t, "exit", out.exit, 6)
+	equal(t, "exit", out.exit, 4)
 	outcomes := map[string]any{}
 	for _, e := range b.eventsOfType(out.stdout, "pull") {
 		outcomes[e["name"].(string)] = e["outcome"]
 	}
-	equal(t, "alpha", outcomes["alpha"], pullRefused)
+	equal(t, "alpha", outcomes["alpha"], pullMerged)
 	equal(t, "beta", outcomes["beta"], pullConflict)
-	contains(t, "the error", b.one(out.stdout, "error")["message"].(string), "could not be pulled: alpha has uncommitted edits, so it cannot be pulled")
-	contains(t, "the error", b.one(out.stdout, "error")["message"].(string), "; beta conflicts with the account remote in 1 file")
+	equal(t, "the error", b.one(out.stdout, "error")["message"].(string), "1 of 2 forks could not be pulled: beta conflicts with the account remote in 1 file, so the merge is pending and the fork's worktree and branch were left as they are")
 	conflict := b.one(out.stdout, "conflict")
 	equal(t, "kind", conflict["kind"], lineage.KindFork)
 	equal(t, "mine", conflict["mine"], betaTip)
-	equal(t, "b's alpha", b.ref(lineage.ForkRef("alpha")), alphaTip)
+	equal(t, "b's alpha, merged", b.parents(b.ref(lineage.ForkRef("alpha"))), alphaTip+"\n"+a.ref(lineage.ForkRef("alpha")))
+	b.librarySkill(out.stdout, "alpha")
 	equal(t, "b's beta", b.ref(lineage.ForkRef("beta")), betaTip)
 	betaB := b.forkDir("beta", "beta")
 	equal(t, "b's beta notes", fileBody(t, filepath.Join(betaB, "notes.md")), forkNotes("six", "six, b"))
@@ -476,7 +477,7 @@ func TestRemoteURLRefusal(t *testing.T) {
 // while beta, which the remote has nothing new for, takes its own update.
 func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	t.Parallel()
-	a, b, s, _ := twoHomes(t)
+	a, b, s, remote := twoHomes(t)
 	theirs := a.commitFork("alpha", forkNotes("one", "one, a"))
 	a.mustRun("publish", "alpha")
 	mine := b.commitFork("alpha", forkNotes("three", "three, b"))
@@ -527,6 +528,20 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 		forkNotes("one", "one, a", "three", "three, b", "seven", "seven, fourth", "eight", "eight, fourth"))
 	equal(t, "beta's base", b.trailer(b.ref(lineage.ForkRef("beta")), lineage.TrailerBase), betaCandidate)
 	equal(t, "beta's notes", fileBody(t, filepath.Join(b.forkDir("beta", "beta"), "notes.md")), forkNotes("six", "six, third"))
+
+	// An account remote git cannot reach leaves the upstream's version to
+	// take in, with a warning.
+	s.write("skills/beta/notes.md", forkNotes("six", "six, fifth"))
+	s.commit("fifth version")
+	b.mustRun("skill", "check")
+	before := b.ref(lineage.ForkRef("beta"))
+	if err := os.Rename(remote, remote+".gone"); err != nil {
+		t.Fatal(err)
+	}
+	out = b.mustRun("skill", "update", "beta")
+	contains(t, "the warning", out.stderr, "so beta is updated from upstream only")
+	equal(t, "beta's first parent", b.accountGit("rev-parse", b.ref(lineage.ForkRef("beta"))+"^1"), before)
+	equal(t, "beta's notes after the upstream-only update", fileBody(t, filepath.Join(b.forkDir("beta", "beta"), "notes.md")), forkNotes("six", "six, fifth"))
 }
 
 // pullChildEnv names the fork TestPullChildProcess pulls.

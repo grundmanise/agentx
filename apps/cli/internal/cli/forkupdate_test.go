@@ -366,26 +366,42 @@ func TestARevertSurvivesTheNextUpdate(t *testing.T) {
 // of the candidate is an ordinary ref step. The next command finishes the
 // update: the branch at the merge, the skill directory holding it with the
 // ignored file kept, git status in the worktree clean, the candidate gone
-// and nothing staged or retained left.
+// and nothing staged or retained left. The fork's .gitignore names build/,
+// and the update brings a build/x of its own: killed after its last live
+// write, the journal still holds the local build/x it replaced, and the
+// recovery leaves the update's.
 func TestForkUpdateRecoversWhereItWasKilled(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct{ name, script string }{
-		{"once the journal is on disk", killedUpdateScript},
-		{"after its last live write", lastWriteScript},
+	for _, tc := range []struct {
+		name, script string
+		applied      bool // the replacement of the skill directory was applied
+	}{
+		{"once the journal is on disk", killedUpdateScript, false},
+		{"after its last live write", lastWriteScript, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			h, s, _ := forkUpdateHarness(t)
 			h.mustRun("skill", "fork", "alpha")
 			alpha := h.forkDir("alpha", "alpha")
+			writeFile(t, filepath.Join(alpha, ".gitignore"), "build/\n")
+			h.mustRun("skill", "commit", "alpha")
 			writeFile(t, filepath.Join(alpha, ".DS_Store"), "finder\n")
+			writeFile(t, mkdirs(t, filepath.Join(alpha, "build"), "x"), "local build\n")
 			s.write("skills/alpha/notes.md", forkNotes("seven", "seven, upstream"))
+			s.write("skills/alpha/build/x", "upstream build\n")
 			s.commit("second version")
 			h.mustRun("skill", "check")
 			tip, candidate := h.ref(lineage.ForkRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
 			out := killedChild(t, h, "TestUpdateChildProcess", updateChildEnv, "alpha", tc.script)
 			_, kinds := journalKinds(t, h)
 			equal(t, "the journal's steps", kinds, "ref, remove, publish, worktree, ref")
+			if tc.applied {
+				held, _ := filepath.Glob(filepath.Join(h.agentx, "worktrees", ".agentx-retained-*", "build", "x"))
+				if len(held) != 1 || fileBody(t, held[0]) != "local build\n" {
+					t.Errorf("the journal holds %v, want the local build/x", held)
+				}
+			}
 			if got := h.run("skill", "list"); got.exit != 0 {
 				t.Fatalf("the command after the killed update: exit %d\n%s\nthe killed run:\n%s", got.exit, got.stderr, out)
 			}
@@ -393,6 +409,7 @@ func TestForkUpdateRecoversWhereItWasKilled(t *testing.T) {
 			equal(t, "the merge's parents", h.parents(h.ref(lineage.ForkRef("alpha"))), tip+"\n"+candidate)
 			equal(t, "the notes", fileBody(t, filepath.Join(alpha, "notes.md")), forkNotes("seven", "seven, upstream"))
 			equal(t, "the ignored file", fileBody(t, filepath.Join(alpha, ".DS_Store")), "finder\n")
+			equal(t, "the update's build/x", fileBody(t, filepath.Join(alpha, "build", "x")), "upstream build\n")
 			equal(t, "git status in the worktree", gitIn(t, h, filepath.Join(h.agentx, "worktrees", "alpha"), "status", "--porcelain"), "")
 			equal(t, "the candidate", h.ref(lineage.CandidateRef("alpha")), "")
 			equal(t, "what is left in the worktrees directory", strings.Join(hiddenEntries(t, filepath.Join(h.agentx, "worktrees")), " "), "")

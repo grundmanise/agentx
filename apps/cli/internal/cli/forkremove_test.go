@@ -60,8 +60,14 @@ func TestSkillRemoveOfAFork(t *testing.T) {
 
 	writeFile(t, filepath.Join(root, "alpha", "notes.md"), "edited, never committed\n")
 	writeFile(t, filepath.Join(root, "alpha", ".DS_Store"), "ignored\n")
+	// An update candidate a check pinned goes with its fork, and no other.
+	a.accountGit("update-ref", lineage.CandidateRef("alpha"), tip)
+	a.accountGit("update-ref", lineage.CandidateRef("beta"), tip)
 	out = a.run("skill", "remove", "alpha")
 	equal(t, "exit", out.exit, 0)
+	equal(t, "alpha's candidate", a.ref(lineage.CandidateRef("alpha")), "")
+	equal(t, "beta's candidate", a.ref(lineage.CandidateRef("beta")), tip)
+	a.accountGit("update-ref", "-d", lineage.CandidateRef("beta"))
 	equal(t, "the text", out.stdout, "✓ removed alpha from the library: 1 placement\n"+
 		"  claude-code  copy  "+claude+"\n"+
 		"  deleted "+lib+", "+root+" and refs/heads/skills/alpha\n")
