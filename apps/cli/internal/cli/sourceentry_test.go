@@ -49,6 +49,8 @@ func TestSourcesRefusal(t *testing.T) {
 			"the push_url of " + repo + " carries a password or a token"},
 		{"a push URL with a user over HTTPS", with(tree, func(s *home.Source) { s.PushURL = "https://" + importToken + "@github.com/acme/skills" }),
 			"carries a password or a token"},
+		{"a push URL with a token in its query", with(tree, func(s *home.Source) { s.PushURL = "http://github.com/acme/skills?access_token=" + importToken }),
+			"the push_url of " + repo + " is not a URL git can push to: holds a query"},
 		{"a push URL naming a ref", with(tree, func(s *home.Source) { s.PushURL = "git@github.com:acme/skills#main" }), "names a ref"},
 		{"a push URL over a helper", with(tree, func(s *home.Source) { s.PushURL = "hg::https://github.com/acme/skills" }), "not a URL git can push to"},
 		{"a push URL over git://", with(tree, func(s *home.Source) { s.PushURL = "git://github.com/acme/skills" }), "over which nothing can be pushed"},

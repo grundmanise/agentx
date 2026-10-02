@@ -27,6 +27,8 @@ func TestParseAddress(t *testing.T) {
 		{"file://localhost/srv/skills", Address{Scheme: "file", Path: "srv/skills"}},
 		{"/srv/skills.git", Address{Scheme: "file", Path: "srv/skills"}},
 		{"https://example.com/Team/Re%20po", Address{Scheme: "https", Host: "example.com", Path: "Team/Re po"}},
+		{"/srv/acme skills/repo", Address{Scheme: "file", Path: "srv/acme skills/repo"}},
+		{"git@host:a?x=1", Address{Scheme: "ssh", User: "git", Host: "host", Path: "a?x=1"}},
 	} {
 		t.Run(tc.in, func(t *testing.T) {
 			got, err := ParseAddress(tc.in)
@@ -42,6 +44,10 @@ func TestParseAddress(t *testing.T) {
 		{"https://host/a#main", "ref"},
 		{"hg::https://host/a", "unsupported scheme"},
 		{"s3://bucket/a", "unsupported scheme"},
+		{"ext::ssh -o x host %S", "unsupported scheme"},
+		{"https://host/a?access_token=ghp_secret", "holds a query"},
+		{"https://host/a?", "holds a query"},
+		{"ssh://git@host/a?x=1", "holds a query"},
 		{"https:///a", "no host"},
 		{"https://host/", "no repository path"},
 		{"https://host/a/../b", `".."`},

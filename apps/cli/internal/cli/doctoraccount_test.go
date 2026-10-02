@@ -87,7 +87,8 @@ func TestDoctorNamesARemoteTheSettingsDoNotName(t *testing.T) {
 // TestDoctorSendsUnreadableSettingsBackToTheSettings: when the settings do
 // not parse, source_remotes cannot compare the remotes with them, and its
 // hint names the settings file to fix, not the account repo, which the row
-// above has just reported as fine.
+// above has just reported as fine; for settings a later agentx wrote, it
+// gives the settings row's hint to upgrade.
 func TestDoctorSendsUnreadableSettingsBackToTheSettings(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -102,6 +103,15 @@ func TestDoctorSendsUnreadableSettingsBackToTheSettings(t *testing.T) {
 	equal(t, "account_repo.status", rows["account_repo"]["status"], "ok")
 	equal(t, "source_remotes.status", rows["source_remotes"]["status"], "fail")
 	equal(t, "source_remotes.hint", rows["source_remotes"]["hint"], "fix "+settings+", then run doctor again")
+
+	// A file a later agentx wrote is read by that version, not fixed: both
+	// rows give the settings row's hint.
+	if err := os.WriteFile(settings, []byte(`{"schema_version":2,"sources":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rows, _ = doctorRows(t, h.events(h.mustRun("--json", "doctor").stdout))
+	equal(t, "settings.hint", rows["settings"]["hint"], "upgrade agentx to the version that wrote it")
+	equal(t, "source_remotes.hint", rows["source_remotes"]["hint"], "upgrade agentx to the version that wrote it")
 }
 
 // TestDoctorNamesStagingRefsOfAnInterruptedInstall: an install writes its

@@ -31,26 +31,40 @@ var ErrCredential = errors.New("the URL carries a password or a token")
 // slash; git reads a colon after a slash as part of a path on disk.
 var scpAddress = regexp.MustCompile(`^(?:([^@/:\s]+)@)?([^@/:\s]+):(.+)$`)
 
+// helperAddress is git's <transport>::<address>, which hands the address
+// to the remote helper git-remote-<transport>: the transport is the
+// characters a URL leaves unescaped, as git reads it.
+var helperAddress = regexp.MustCompile(`^[A-Za-z0-9._~-]+::`)
+
 // ParseAddress reads raw as git reads the URL of a remote: a URL with a
-// scheme, the SSH shorthand [user@]host:path or an absolute path. It never
+// scheme, the SSH shorthand [user@]host:path or an absolute path. A space
+// inside raw is read as git reads it, as part of the path, and one at
+// either end is refused. A URL with a query is refused: git reads a query
+// over SSH and on disk as part of the path and sends one over HTTP before
+// the path it appends, and a query is where a token rides. It never
 // repeats raw in an error, since what it refuses can be a credential.
 // Pure.
 func ParseAddress(raw string) (Address, error) {
 	switch {
 	case raw == "" || strings.TrimSpace(raw) != raw || strings.IndexFunc(raw, unicode.IsControl) >= 0:
-		return Address{}, fmt.Errorf("%w: empty, or holds a space or a control character", ErrForm)
+		return Address{}, fmt.Errorf("%w: empty, has a space at either end, or holds a control character", ErrForm)
 	case strings.HasPrefix(raw, "-"):
 		return Address{}, fmt.Errorf("%w: starts with a dash", ErrForm)
 	case strings.Contains(raw, "#"):
 		return Address{}, fmt.Errorf("%w: names a ref with #", ErrForm)
+	case helperAddress.MatchString(raw):
+		return Address{}, fmt.Errorf("%w: unsupported scheme, the address of a remote helper", ErrForm)
 	}
 	var a Address
 	var path string
 	switch {
 	case strings.Contains(raw, "://"):
 		u, err := url.Parse(raw)
-		if err != nil {
+		switch {
+		case err != nil || u.Opaque != "":
 			return Address{}, fmt.Errorf("%w: not a URL git reads", ErrForm)
+		case u.RawQuery != "" || u.ForceQuery:
+			return Address{}, fmt.Errorf("%w: holds a query", ErrForm)
 		}
 		a.Scheme = strings.ToLower(u.Scheme)
 		switch a.Scheme {

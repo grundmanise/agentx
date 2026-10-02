@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -39,9 +40,15 @@ func (d *doctor) sourceRemotes(ctx context.Context, gitDir string) {
 	if err != nil {
 		// The settings row above already said what is wrong with the file;
 		// this one says only that it could not be compared with, and its
-		// hint names that file: the account repo itself opened fine.
-		d.row("source_remotes", "fail", "cannot read the settings to compare the remotes with",
-			"fix "+home.SettingsPath(d.inv.dirs.Home)+", then run doctor again")
+		// hint names that file: the account repo itself opened fine. A file
+		// a later agentx wrote is not to be fixed but read by that version,
+		// so the hint then repeats the settings row's.
+		hint := "fix " + home.SettingsPath(d.inv.dirs.Home) + ", then run doctor again"
+		var newer *home.NewerSettingsError
+		if errors.As(err, &newer) {
+			hint = failureOf(err).hint
+		}
+		d.row("source_remotes", "fail", "cannot read the settings to compare the remotes with", hint)
 		return
 	}
 	named := make(map[string]bool, len(settings.Sources))

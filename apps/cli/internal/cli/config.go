@@ -254,7 +254,7 @@ func (inv *invocation) loadSettings() (home.Settings, error) {
 	case errors.As(err, &newer):
 		// Deleting the file would lose what the later version keeps in it,
 		// so the hint does not offer it.
-		return s, fail(exitInternal, err.Error(), "upgrade agentx to the version that wrote it")
+		return s, refuse(exitInternal, err.Error(), "upgrade agentx to the version that wrote it").wrap(err)
 	case err != nil:
 		return s, fail(exitInternal, err.Error(), "fix "+home.SettingsPath(inv.dirs.Home)+" or delete it to start from defaults")
 	}

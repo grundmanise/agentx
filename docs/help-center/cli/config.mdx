@@ -135,3 +135,5 @@ A client that reads the library directly, such as Codex, already sees every libr
 ## Fix a broken file
 
 If `settings.json` cannot be parsed, every `config` command exits with code 10 and names the file. Fix the JSON, or delete the file to start again from defaults.
+
+If a later version of agentx wrote `settings.json`, every command that reads it exits with code 10 and says which schema version the file has. Upgrade agentx to that version instead of deleting the file: deleting it loses the sources and settings the later version keeps there. `agentx doctor` fails its `settings` row with the same hint.
