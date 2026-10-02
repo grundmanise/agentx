@@ -157,31 +157,38 @@ exec `+real+` "$@"
 // raises: a run that is waiting on the network has to answer a Ctrl-C at
 // once, say so, and take its git child with it. Before there was a handler
 // the process died where it stood, printing nothing, and the git it had
-// started was reparented to init and went on fetching.
+// started was reparented to init and went on fetching. The access check
+// that follows each fetch is waited on the same way, and a stop there is a
+// stop too, not a run that finished with the access it had before.
 func TestASignalStopsAFetchAndTearsDownItsGit(t *testing.T) {
 	t.Parallel()
-	h := newHarness(t)
-	s, _, _ := h.standardSource(true)
-	h.mustRun("source", "add", s.url)
+	for _, sub := range []string{"fetch", "push"} {
+		t.Run(sub, func(t *testing.T) {
+			t.Parallel()
+			h := newHarness(t)
+			s, _, _ := h.standardSource(true)
+			h.mustRun("source", "add", s.url)
 
-	ready := filepath.Join(t.TempDir(), "fetching")
-	hangingGit(t, h, "fetch", ready)
-	code, stderr := signalled(t, h, stopRun{ready: ready, sigs: []syscall.Signal{syscall.SIGTERM},
-		args: []string{"source", "fetch", "--all", "--color", "off"}})
+			ready := filepath.Join(t.TempDir(), "waiting")
+			hangingGit(t, h, sub, ready)
+			code, stderr := signalled(t, h, stopRun{ready: ready, sigs: []syscall.Signal{syscall.SIGTERM},
+				args: []string{"source", "fetch", "--all", "--color", "off"}})
 
-	equal(t, "the exit code of an interrupted fetch", code, exitInterrupted.exit)
-	if !strings.Contains(stderr, "error: interrupted") {
-		t.Errorf("the run said nothing about the stop:\n%s", stderr)
-	}
-	if !strings.Contains(stderr, "hint: ") {
-		t.Errorf("the stop came with no hint:\n%s", stderr)
-	}
-	gitPID := readPID(t, ready)
-	if err := syscall.Kill(gitPID, 0); err == nil {
-		_ = syscall.Kill(gitPID, syscall.SIGKILL) // do not leave it behind either
-		t.Errorf("the git child %d outlived the run it belonged to", gitPID)
-	} else if !errors.Is(err, syscall.ESRCH) {
-		t.Errorf("git %d: %v", gitPID, err)
+			equal(t, "the exit code of an interrupted fetch", code, exitInterrupted.exit)
+			if !strings.Contains(stderr, "error: interrupted") {
+				t.Errorf("the run said nothing about the stop:\n%s", stderr)
+			}
+			if !strings.Contains(stderr, "hint: ") {
+				t.Errorf("the stop came with no hint:\n%s", stderr)
+			}
+			gitPID := readPID(t, ready)
+			if err := syscall.Kill(gitPID, 0); err == nil {
+				_ = syscall.Kill(gitPID, syscall.SIGKILL) // do not leave it behind either
+				t.Errorf("the git child %d outlived the run it belonged to", gitPID)
+			} else if !errors.Is(err, syscall.ESRCH) {
+				t.Errorf("git %d: %v", gitPID, err)
+			}
+		})
 	}
 }
 

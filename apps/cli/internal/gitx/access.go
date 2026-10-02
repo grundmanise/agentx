@@ -232,14 +232,21 @@ var denials = anyOf(
 )
 
 // noPrompt are the lines git and ssh write when a credential was needed and
-// asking for one was not allowed, or when the host was not trusted yet.
+// asking for one was not allowed.
 var noPrompt = anyOf(
 	has("could not read Username"),
 	has("could not read Password"),
 	has("terminal prompts disabled"),
-	has("Authentication failed"),
 	has("returned error: 401"),
 	has("Permission denied (publickey"),
+)
+
+// untrusted are the lines git and ssh write when a credential was offered and
+// refused, an expired token, or when ssh does not trust the host yet: the
+// user has something to renew or a host to trust, and not a credential to
+// find, so the line itself is the reason.
+var untrusted = anyOf(
+	has("Authentication failed"),
 	has("Host key verification failed"),
 )
 
@@ -252,8 +259,9 @@ var noPrompt = anyOf(
 // key authorised for an organisation, or an IP allow list, on any line,
 // since over SSH GitHub writes it with no "remote:", is unknown with that
 // line as the reason and says so (Authorise), since the user can fix it;
-// so is a 403 that names no denial, a credential that was not available
-// without asking, and a server that cannot be reached. Pure.
+// so is a 403 that names no denial, a credential that was refused or not
+// available without asking, a host not trusted yet, and a server that
+// cannot be reached. Pure.
 func ClassifyAccess(status int, stdout, stderr string) Access {
 	if status == 0 {
 		for _, line := range strings.Split(stdout, "\n") {
@@ -284,6 +292,7 @@ func ClassifyAccess(status int, stdout, stderr string) Access {
 			}
 			return line
 		}},
+		{match: untrusted, access: home.AccessUnknown},
 		{match: noPrompt, access: home.AccessUnknown, reason: func(string) string { return noCredentials }},
 	}
 	for i, rule := range rules {

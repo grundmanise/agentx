@@ -361,8 +361,9 @@ func (r *Runner) runStatus(ctx context.Context, c call, upTo int, args ...string
 		// A session of its own has no controlling terminal, and ssh and a
 		// pinentry ask on /dev/tty rather than on stdin, which is the null
 		// device already. It also keeps a terminal's Ctrl-C from reaching
-		// git: the run's cancelled context stops it instead.
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+		// git: the run's cancelled context stops it instead, and on Linux
+		// the death of agentx, see unattendedAttr.
+		cmd.SysProcAttr = unattendedAttr()
 	}
 	cmd.Dir = c.dir
 	if cmd.Dir == "" {

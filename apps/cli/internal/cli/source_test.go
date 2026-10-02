@@ -701,6 +701,10 @@ func TestSourceAccessFollowsWhatTheSourceAnswers(t *testing.T) {
 
 	// An organisation's single sign-on is something the user can fix, so it
 	// is no answer about their rights: unknown, and a warning says what to do.
+	// The source's HEAD names a branch no pin may name from here on, which
+	// is not recorded as its default branch: import would refuse it.
+	s.bare("update-ref", "refs/heads/-x", "HEAD")
+	s.bare("symbolic-ref", "HEAD", "refs/heads/-x")
 	receivePack(sso)
 	out = h.run("source", "fetch", s.url)
 	equal(t, "exit", out.exit, 0)

@@ -88,7 +88,18 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 	if err != nil {
 		return err
 	}
-	return inv.reportFetched(ctx, gitDir, targets, results, checks)
+	err = inv.reportFetched(ctx, gitDir, targets, results, checks)
+	if err == nil {
+		for i, res := range results {
+			if res.Err == nil && !checks[i].ok {
+				// Every fetch finished and is recorded, but a stop cut this
+				// check short and it answered nothing, so the run did not
+				// do all it was asked and answers for the stop.
+				return interruptedFailure()
+			}
+		}
+	}
+	return err
 }
 
 // fetchSources fetches targets, sources the settings hold, in parallel and

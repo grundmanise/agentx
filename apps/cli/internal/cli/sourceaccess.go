@@ -35,10 +35,16 @@ func (inv *invocation) checkSource(ctx context.Context, entry home.Source) sourc
 	}
 	if entry.Pin == "" && entry.Layout != home.LayoutFork && ctx.Err() == nil {
 		branch, err := inv.git.DefaultBranch(ctx, remote.URL)
-		if err != nil {
+		switch {
+		case err != nil:
 			inv.out.debugf("reading the default branch of %s: %v", entry.URL, err)
+		case branch != "" && !source.ValidRef(branch):
+			// The server names any branch it likes; one no pin may name
+			// is not recorded, so that no export holds what import refuses.
+			inv.out.debugf("the default branch of %s, %q, is not a ref agentx accepts", entry.URL, branch)
+		default:
+			c.defaultBranch = branch
 		}
-		c.defaultBranch = branch
 	}
 	c.ok = ctx.Err() == nil
 	c.checked = time.Now().UTC().Format(time.RFC3339)
