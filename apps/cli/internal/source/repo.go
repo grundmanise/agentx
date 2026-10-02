@@ -350,11 +350,11 @@ func Fetch(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listin
 }
 
 // Unpublish puts the source ref of s back to what it held before the fetch
-// that answered listing, for an add that published a fetch and then did
-// not go through: the ref goes back to the object it held, or goes when
-// the fetch was the source's first. It goes back only while it still holds
-// what that fetch published, so that a later fetch is never undone. A
-// listing that published nothing changes nothing.
+// that answered listing, for an add at another pin that published a fetch
+// and then did not go through: the ref goes back to the object it held, or
+// goes when the fetch was the source's first. It goes back only while it
+// still holds what that fetch published, so that a later fetch is never
+// undone. A listing that published nothing changes nothing.
 func Unpublish(ctx context.Context, r *gitx.Runner, gitDir string, s Source, listing Listing) error {
 	if listing.published == "" {
 		return nil

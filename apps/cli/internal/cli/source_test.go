@@ -1163,6 +1163,37 @@ func TestSourceAddTakesBackItsRemoteWhenTheLockIsHeld(t *testing.T) {
 	}
 }
 
+// TestAReAddAtTheSamePinThatLosesTheLockKeepsItsFetch: an add of a known
+// source at the pin the settings hold publishes a later commit of the
+// branch they follow, then loses the lock for its settings write to a
+// reader, as it does to the serve scan its own fetch sets off. Its
+// take-back puts the remote back and leaves the source ref on that
+// commit, so that the add run again finds the ref where it is: moving it
+// again would have serve list the source again under the shared lock just
+// as that run wants the lock, which on a slow machine lost it every time.
+func TestAReAddAtTheSamePinThatLosesTheLockKeepsItsFetch(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	s := h.newSourceRepo("skills", true)
+	s.skill("skills/alpha", "alpha", "The first skill", nil)
+	s.commit("first version")
+	h.mustRun("source", "add", s.url)
+	id := source.ID(s.url)
+	s.skill("skills/beta", "beta", "The second skill", nil)
+	second := s.commit("second version")
+
+	reached, release := gatePublish(t, h)()
+	p := h.start(sourceAddTakeBack(id), "--verbose", "source", "add", s.url)
+	reached() // the fetch is in and not yet published
+	unlock := holdReadLock(t, h)
+	release() // the run publishes, checks access and loses the lock
+	p.await() // it has started taking the remote back
+	unlock()
+
+	equal(t, "exit", p.wait().exit, 7)
+	equal(t, "the source ref after the refused re-add", h.accountGit("rev-parse", source.Ref(id)), second)
+}
+
 // runTakingBackWithin is h.run for a source add whose take-back waits for
 // the lock no longer than wait, where every real run waits takeBackWait.
 func (h *harness) runTakingBackWithin(wait time.Duration, args ...string) outcome {

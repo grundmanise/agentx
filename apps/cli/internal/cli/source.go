@@ -274,10 +274,17 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source, push pu
 	// that gets no further: a source that was not there before goes
 	// altogether, ref and all, and one that was goes back to the pin the
 	// settings still hold, which is what they will still say when the next
-	// command reads them, and its source ref back to the commit it held
-	// before this add's fetch, so that what source skills lists is still
-	// what that pin fetched. It writes the git config of the account repo,
-	// so every caller holds the lock while it runs.
+	// command reads them. An add at another pin also puts the source ref
+	// back on the commit it held before this add's fetch, so that what
+	// source skills lists is still what the settings' pin fetched. An add
+	// at the same pin leaves the ref on what it fetched, a later commit of
+	// the branch the settings follow, as source fetch would. Taking that
+	// back too would have the add, run again after a lost lock, move the
+	// ref again, and serve, seeing it move, would list the source again
+	// under the shared lock just as that run wants the lock for its
+	// settings write: on a slow machine every run again lost it the same
+	// way. It writes the git config of the account repo, so every caller
+	// holds the lock while it runs.
 	//
 	// undo is the command's context with the stop signals taken off it. A
 	// take-back is work the run has already committed to, so a Ctrl-C may
@@ -292,6 +299,9 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source, push pu
 		} // else the remote goes back to the pin and the push URL the settings still hold
 		if err := source.Configure(undo, inv.git, gitDir, before.Sources[existing]); err != nil {
 			return err
+		}
+		if src.Ref == before.Sources[existing].Pin {
+			return nil
 		}
 		return source.Unpublish(undo, inv.git, gitDir, src, listing)
 	}
@@ -337,7 +347,8 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source, push pu
 	// so that a URL that cannot be read is refused for that first, and
 	// outside the lock, since it is network. Its answer goes into the one
 	// settings write below. A stop during the check stops the add, and
-	// the take-back puts the source ref back where this fetch found it.
+	// the take-back of an add at another pin puts the source ref back
+	// where this fetch found it.
 	check := inv.checkSource(ctx, want)
 	if err := ctx.Err(); err != nil {
 		return listing, entry, takeBack(err)
