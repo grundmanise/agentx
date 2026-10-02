@@ -37,7 +37,9 @@ func TestClassifyAccess(t *testing.T) {
 			home.AccessUnknown, "remote: The 'acme' organization has enabled or enforced SAML SSO.", true},
 		{"an IP allow list", 128, "",
 			"remote: Although you appear to have the correct authorization credentials,\nremote: the `acme` organization has an IP allow list enabled.\nfatal: unable to access 'https://github.com/acme/skills/': The requested URL returned error: 403\n",
-			home.AccessUnknown, "remote: Although you appear to have the correct authorization credentials,", true},
+			home.AccessUnknown, "remote: the `acme` organization has an IP allow list enabled.", true},
+		{"GitHub single sign-on over SSH", 128, "", "ERROR: The 'acme' organization has enabled or enforced SAML SSO. To access this repository, you must use the HTTPS remote with a personal access token or SSH key and authorize it for this organization.\n" + sshRead,
+			home.AccessUnknown, "ERROR: The 'acme' organization has enabled or enforced SAML SSO. To access this repository, you must use the HTTPS remote with a personal access token or SSH key and authorize it for this organization.", true},
 		{"a 403 naming no denial", 128, "", "fatal: unable to access 'https://git.example.com/skills/': The requested URL returned error: 403\n",
 			home.AccessUnknown, "fatal: unable to access 'https://git.example.com/skills/': The requested URL returned error: 403", false},
 		{"a 403 with a remote line", 128, "", "remote: Forbidden\nfatal: unable to access 'https://git.example.com/skills/': The requested URL returned error: 403\n",
@@ -100,35 +102,27 @@ func TestProbeAccessRunsADryRunAndNothingElse(t *testing.T) {
 			commands = append(commands, args[0].(string))
 		}
 	}
-	got := New(env, false, logf).ProbeAccess(context.Background(), "/acct.git", "src-0123456789abcdef", "https://github.com/acme/skills", "git@github-work:acme/skills.git")
+	got := New(env, false, logf).ProbeAccess(context.Background(), "https://github.com/acme/skills", "git@github-work:acme/skills.git")
 	if got.Access != home.AccessUnknown { // the stub prints no ref's status
 		t.Errorf("access = %+v", got)
 	}
-	if len(commands) != 2 {
-		t.Fatalf("commands = %q, want the configuration read and the push", commands)
+	if len(commands) != 1 {
+		t.Fatalf("commands = %q, want the push alone", commands)
 	}
-	equalString(t, "configuration read", commands[0],
-		"-c remote.agentx.url=https://github.com/acme/skills -c remote.agentx.url=git@github-work:acme/skills.git config -z --get-regexp "+targetKeys)
-	push := strings.Fields(commands[1])
-	for _, flag := range []string{"--dry-run", "--porcelain", "--no-signed", "--no-verify", "--no-recurse-submodules", "--no-follow-tags", "push.negotiate=false", "core.hooksPath=/dev/null"} {
+	push := strings.Fields(commands[0])
+	for _, flag := range []string{"--dry-run", "--porcelain", "--no-signed", "--no-verify", "--no-recurse-submodules", "--no-follow-tags", "push.negotiate=false", "core.hooksPath=/dev/null",
+		"remote.agentx.url=https://github.com/acme/skills", "remote.agentx.pushurl=git@github-work:acme/skills.git", "remote.agentx-push.url=git@github-work:acme/skills.git"} {
 		if !contains(push, flag) {
-			t.Errorf("push %q lacks %s", commands[1], flag)
+			t.Errorf("push %q lacks %s", commands[0], flag)
 		}
 	}
 	for _, word := range push {
 		if word == "--force" || word == "--mirror" || word == "--all" || word == "--tags" || strings.HasPrefix(word, "+") || strings.HasPrefix(word, "--force-with-lease") {
-			t.Errorf("push %q carries %s", commands[1], word)
+			t.Errorf("push %q carries %s", commands[0], word)
 		}
 	}
-	if want := []string{"src-0123456789abcdef", ":" + AccessCheckRef}; !reflect.DeepEqual(push[len(push)-2:], want) {
+	if want := []string{CheckRemote, ":" + AccessCheckRef}; !reflect.DeepEqual(push[len(push)-2:], want) {
 		t.Errorf("push ends %q, want %q", push[len(push)-2:], want)
-	}
-
-	// Over paths no SSH command applies, and the configuration is not read.
-	commands = nil
-	New(env, false, logf).ProbeAccess(context.Background(), "/acct.git", "src-0123456789abcdef", "file:///srv/skills.git")
-	if len(commands) != 1 || !strings.Contains(commands[0], " push --dry-run ") {
-		t.Errorf("commands over a path = %q, want the push alone", commands)
 	}
 }
 
@@ -148,34 +142,58 @@ func equalString(t *testing.T, what, got, want string) {
 	}
 }
 
-// TestTargetConfigAppliesTheIncludesOfOneURL checks the reason
-// TargetConfig exists: a setting the user keys on a remote's URL applies to
-// that URL alone, whichever of the source's URLs it names.
+// TestTargetConfigAppliesTheIncludesOfOneURL checks why the access check
+// and TargetConfig run in a repository of their own: a setting the user
+// keys on a remote's URL applies to that URL alone, whichever of the
+// source's URLs it names, and never to another source, as it would inside
+// the account repo, which holds every source's remote.
 func TestTargetConfigAppliesTheIncludesOfOneURL(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Each SSH command answers as GitHub does to a key of another account,
+	// naming the one it stands for, so the answer tells which one ran.
+	for _, name := range []string{"work", "personal"} {
+		writeShim(t, filepath.Join(dir, name+"-ssh"), "#!/bin/sh\necho 'ERROR: Permission to x.git denied to "+name+".' >&2\nexit 128\n")
+	}
 	work := filepath.Join(dir, "work.gitconfig")
-	write(t, work, "[core]\n\tsshCommand = ssh -i ~/.ssh/work\n[user]\n\temail = me@work.example\n")
+	write(t, work, "[core]\n\tsshCommand = "+filepath.Join(dir, "work-ssh")+"\n[user]\n\temail = me@work.example\n")
 	global := filepath.Join(dir, "gitconfig")
 	write(t, global, "[user]\n\tname = Someone\n\temail = me@home.example\n"+
 		"[includeIf \"hasconfig:remote.*.url:git@github-work:*/**\"]\n\tpath = "+work+"\n")
-	r := New(map[string]string{"PATH": os.Getenv("PATH"), "HOME": dir, "GIT_CONFIG_GLOBAL": global, "GIT_CONFIG_NOSYSTEM": "1"}, false, func(string, ...any) {})
+	env := map[string]string{"PATH": os.Getenv("PATH"), "HOME": dir, "GIT_CONFIG_GLOBAL": global, "GIT_CONFIG_NOSYSTEM": "1"}
+	r := New(env, false, func(string, ...any) {})
 	ctx := context.Background()
 
 	work1, err := r.TargetConfig(ctx, "https://github.com/acme/skills", "git@github-work:acme/skills.git")
 	if err != nil {
 		t.Fatal(err)
 	}
-	equalString(t, "sshCommand for work", work1.SSHCommand, "ssh -i ~/.ssh/work")
+	equalString(t, "sshCommand for work", work1.SSHCommand, filepath.Join(dir, "work-ssh"))
 	equalString(t, "email for work", work1.Values["user.email"], "me@work.example")
 	equalString(t, "name for work", work1.Values["user.name"], "Someone")
 
-	other, err := r.TargetConfig(ctx, "https://github.com/someone/skills")
+	other, err := r.TargetConfig(ctx, "https://github.com/someone/skills", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	equalString(t, "sshCommand elsewhere", other.SSHCommand, "")
 	equalString(t, "email elsewhere", other.Values["user.email"], "me@home.example")
+
+	// The access check of each source runs the SSH command the user's
+	// configuration names for it, the work one for the source the include
+	// is keyed on and the user's own for every other.
+	write(t, global, "[core]\n\tsshCommand = "+filepath.Join(dir, "personal-ssh")+"\n"+
+		"[includeIf \"hasconfig:remote.*.url:git@github-work:*/**\"]\n\tpath = "+work+"\n")
+	for _, c := range []struct{ url, pushURL, who string }{
+		{"https://github.com/acme/skills", "git@github-work:acme/skills.git", "work"},
+		{"git@github.com:me/skills.git", "", "personal"},
+	} {
+		got := r.ProbeAccess(ctx, c.url, c.pushURL)
+		equalString(t, "reason of "+c.url, got.Reason, "ERROR: Permission to x.git denied to "+c.who+".")
+	}
 }
 
 func write(t *testing.T, path, text string) {

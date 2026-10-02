@@ -301,10 +301,13 @@ type call struct {
 // unattendedEnv is what an unattended git has on top of its environment:
 // git's terminal prompt and askpass off, ssh's askpass never used, and a
 // credential manager told not to open a window, so that a prompt becomes a
-// failure rather than a hang.
+// failure rather than a hang. ssh before OpenSSH 8.4 knows no
+// SSH_ASKPASS_REQUIRE and, with no terminal and a display, runs
+// SSH_ASKPASS, so that is a program that answers nothing too.
 var unattendedEnv = map[string]string{
 	"GIT_TERMINAL_PROMPT": "0",
 	"GIT_ASKPASS":         "/bin/false",
+	"SSH_ASKPASS":         "/bin/false",
 	"SSH_ASKPASS_REQUIRE": "never",
 	"GCM_INTERACTIVE":     "never",
 }

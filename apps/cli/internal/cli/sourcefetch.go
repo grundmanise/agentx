@@ -83,7 +83,7 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 	// what this machine may do there has changed.
 	checks := make([]sourceCheck, len(targets))
 	results, err := inv.fetchSources(ctx, gitDir, targets, false, true, func(i int) {
-		checks[i] = inv.checkSource(ctx, gitDir, targets[i].entry)
+		checks[i] = inv.checkSource(ctx, targets[i].entry)
 	})
 	if err != nil {
 		return err

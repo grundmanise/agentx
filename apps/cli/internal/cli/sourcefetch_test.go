@@ -706,7 +706,7 @@ func TestSourceRemoteFollowsThePinAndThePushURL(t *testing.T) {
 	s.tag("v1")
 	s.skill("gamma", "gamma", "Only on the default branch", nil)
 	s.commit("main version")
-	push := "ssh://git@push.example" + s.gitDir
+	push := "ssh://git@push.invalid" + s.gitDir
 	out := h.run("source", "add", s.url+"#v1", "--push-url", push)
 	equal(t, "add", out.exit, 0)
 	contains(t, "add line", out.stdout, "; pushes go to "+push)

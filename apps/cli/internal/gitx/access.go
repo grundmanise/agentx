@@ -45,37 +45,80 @@ const (
 	pathNotWritten = "this machine cannot write to "
 )
 
-// ProbeAccess asks the source whose remote in the account repo at gitDir is
-// remote whether this machine may push to it, without pushing anything: a
-// dry run of deleting AccessCheckRef, through the remote's name so that its
-// push URL and the user's URL rewrites apply as they would to a real push.
-// It needs no object and sends no pack, so it works on an empty repository
-// and from a blobless account repo alike.
+// CheckRemote is the remote an access check, a read of a source's default
+// branch and a read of the configuration for a source name: one given on
+// the command line in a throwaway repository, see targetRemote.
+const CheckRemote = "agentx"
+
+// checkPushRemote is a second remote of the throwaway repository whose URL
+// is the source's push URL. Git keys includeIf "hasconfig:remote.*.url:..."
+// on remote.<name>.url alone, never on a push URL, so it is the one through
+// which a setting the user keys on the push URL applies.
+const checkPushRemote = "agentx-push"
+
+// targetRemote is the configuration, as -c options, of CheckRemote for a
+// source fetched from url and pushed to at pushURL, "" for none.
+func targetRemote(url, pushURL string) []string {
+	args := []string{"-c", "remote." + CheckRemote + ".url=" + url}
+	if pushURL != "" {
+		args = append(args, "-c", "remote."+CheckRemote+".pushurl="+pushURL, "-c", "remote."+checkPushRemote+".url="+pushURL)
+	}
+	return args
+}
+
+// throwawayRepo makes an empty git directory in the temporary directory,
+// for a git run that must see the user's configuration as it applies to
+// one source and nothing of the account repo's: a HEAD, objects and refs,
+// all git asks of a repository, and no config file. Users key settings on a
+// remote's URL with includeIf "hasconfig:remote.*.url:...", and inside the
+// account repo every source's URL matches at once, so that a setting
+// included for one source, an SSH command, a credential or a proxy, would
+// apply to every other. remove deletes the directory.
+func throwawayRepo() (gitDir string, remove func(), err error) {
+	dir, err := os.MkdirTemp("", "agentx-target-*")
+	if err != nil {
+		return "", nil, err
+	}
+	remove = func() { os.RemoveAll(dir) }
+	for _, sub := range []string{"objects", "refs"} {
+		if err := os.Mkdir(filepath.Join(dir, sub), 0o755); err != nil {
+			remove()
+			return "", nil, err
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "HEAD"), []byte("ref: refs/heads/main\n"), 0o644); err != nil {
+		remove()
+		return "", nil, err
+	}
+	return dir, remove, nil
+}
+
+// ProbeAccess asks the source fetched from url and pushed to at pushURL,
+// "" when pushes go to url, whether this machine may push to it, without
+// pushing anything: a dry run of deleting AccessCheckRef, through a remote
+// of those URLs so that the user's URL rewrites apply as they would to a
+// real push. It needs no object and sends no pack, so it runs from an empty
+// throwaway repository (see throwawayRepo), where the user's configuration
+// applies as it does to this source alone: an SSH command, a credential or
+// any other setting the user keys on another source's URL does not.
 //
 // The check is a side step of the command, never what the user asked for,
 // so it runs unattended (see call.unattended) and within AccessBudget, with
-// no hook, no push certificate, no negotiation and no lazy fetch. urls are
-// the source's URLs, its canonical one and the one pushes go to: the
-// configuration of the user's that applies to them alone is resolved first
-// (see TargetConfig), and an SSH command it names is the one the check
-// uses, since inside the account repo a configuration included for one
-// source's URL would apply to every source at once.
+// no hook, no push certificate, no negotiation and no lazy fetch.
 //
 // A dry run over a path proves nothing, since git checks no permission
 // before it would write: a writable answer over a path is refined by
 // whether this machine may write the repository's directories.
-func (r *Runner) ProbeAccess(ctx context.Context, gitDir, remote string, urls ...string) Access {
-	args := append(networkConfig(), "-c", "push.negotiate=false")
-	if !allPaths(urls) {
-		target, err := r.TargetConfig(ctx, urls...)
-		if err != nil {
-			r.logf("reading the configuration for %s: %v", strings.Join(urls, ", "), err)
-		} else if target.SSHCommand != "" {
-			args = append(args, "-c", "core.sshCommand="+target.SSHCommand)
-		}
+func (r *Runner) ProbeAccess(ctx context.Context, url, pushURL string) Access {
+	gitDir, remove, err := throwawayRepo()
+	if err != nil {
+		return Access{Access: home.AccessUnknown, Reason: firstLine(err.Error())}
 	}
+	defer remove()
+	args := append(networkConfig(), "-c", "push.negotiate=false")
+	args = append(args, targetRemote(url, pushURL)...)
 	args = append(args, "--git-dir="+gitDir)
-	args = append(args, ProbeArgs(remote)...)
+	args = append(args, ProbeArgs(CheckRemote)...)
 	budget, cancel := context.WithTimeout(ctx, AccessBudget)
 	defer cancel()
 	var stderr string
@@ -134,10 +177,15 @@ func has(parts ...string) func(string) bool {
 // remoteHas matches a line the host sent, "remote: ...", holding any of parts
 // in any case.
 func remoteHas(parts ...string) func(string) bool {
+	inAnyCase := anyCase(parts...)
 	return func(line string) bool {
-		if !strings.HasPrefix(line, "remote:") {
-			return false
-		}
+		return strings.HasPrefix(line, "remote:") && inAnyCase(line)
+	}
+}
+
+// anyCase matches a line holding any of parts in any case.
+func anyCase(parts ...string) func(string) bool {
+	return func(line string) bool {
 		lower := strings.ToLower(line)
 		for _, p := range parts {
 			if strings.Contains(lower, strings.ToLower(p)) {
@@ -199,8 +247,10 @@ var noPrompt = anyOf(
 // alone decides nothing. Writable is exit 0 with a status line for the ref
 // that is not a rejection. Read-only needs a known denial, see denials.
 // Everything else is unknown, with a reason: a host that wants a token or
-// key authorised for an organisation, or an IP allow list, is unknown and
-// says so (Authorise), since the user can fix it; so is a 403 that names
+// key authorised for an organisation, or an IP allow list, on any line,
+// since over SSH GitHub writes it with no "remote:", is unknown with that
+// line as the reason and says so (Authorise), since the user can fix it;
+// so is a 403 that names
 // no denial, a credential that was not available without asking, and a
 // server that cannot be reached. Pure.
 func ClassifyAccess(status int, stdout, stderr string) Access {
@@ -225,7 +275,7 @@ func ClassifyAccess(status int, stdout, stderr string) Access {
 		}
 	}
 	rules := []accessRule{
-		{match: remoteHas("SAML SSO", "IP allow list"), access: home.AccessUnknown, reason: func(string) string { return firstRemote }},
+		{match: anyCase("SAML SSO", "IP allow list"), access: home.AccessUnknown},
 		{match: denials, access: home.AccessReadOnly},
 		{match: has("returned error: 403"), access: home.AccessUnknown, reason: func(line string) string {
 			if firstRemote != "" {
@@ -294,17 +344,6 @@ func LocalPath(raw string) (path string, ok bool) {
 		return "", false
 	}
 	return raw, true
-}
-
-// allPaths reports whether every one of urls is reached over a path
-// transport, where no SSH command or credential applies.
-func allPaths(urls []string) bool {
-	for _, u := range urls {
-		if _, ok := LocalPath(u); !ok {
-			return false
-		}
-	}
-	return len(urls) > 0
 }
 
 // RepoDirs are the directories a push to the repository at a path writes:
@@ -406,27 +445,19 @@ type TargetConfig struct {
 // pushes to it run.
 const targetKeys = `^(user\.(name|email|signingkey)|gpg\..*|commit\.gpgsign|core\.sshcommand)$`
 
-// TargetConfig reads the user's configuration as it applies to a repository
-// whose remote has urls, and to nothing else. Users key settings on a
-// remote's URL with includeIf "hasconfig:remote.*.url:...", and inside the
-// account repo every source's URL matches at once, so that the last include
-// would win for all of them. git runs instead in a directory of its own
-// outside any repository, with a remote of those URLs given on the command
-// line, so that only the includes keyed on them apply.
-func (r *Runner) TargetConfig(ctx context.Context, urls ...string) (TargetConfig, error) {
-	dir, err := os.MkdirTemp("", "agentx-target-*")
+// TargetConfig reads the user's configuration as it applies to the source
+// fetched from url and pushed to at pushURL, "" when pushes go to url, and
+// to nothing else: git runs in a throwaway repository with a remote of
+// those URLs given on the command line, so that only the includes keyed on
+// them apply (see throwawayRepo).
+func (r *Runner) TargetConfig(ctx context.Context, url, pushURL string) (TargetConfig, error) {
+	gitDir, remove, err := throwawayRepo()
 	if err != nil {
 		return TargetConfig{}, err
 	}
-	defer os.RemoveAll(dir)
-	var args []string
-	for _, u := range urls {
-		args = append(args, "-c", "remote.agentx.url="+u)
-	}
-	args = append(args, "config", "-z", "--get-regexp", targetKeys)
-	// The ceiling keeps git from finding a repository above the directory,
-	// whose configuration would apply as well.
-	out, _, err := r.runStatus(ctx, call{dir: dir, env: map[string]string{"GIT_CEILING_DIRECTORIES": filepath.Dir(dir)}}, 1, args...)
+	defer remove()
+	args := append(targetRemote(url, pushURL), "--git-dir="+gitDir, "config", "-z", "--get-regexp", targetKeys)
+	out, _, err := r.runStatus(ctx, call{}, 1, args...)
 	if err != nil {
 		return TargetConfig{}, err
 	}
@@ -449,14 +480,21 @@ func ParseTargetConfig(out string) TargetConfig {
 	return t
 }
 
-// DefaultBranch is the branch the HEAD of the remote called remote names,
-// read with ls-remote --symref in the user's environment, unattended and
-// within AccessBudget as the access check is: "" when the remote's HEAD is
-// no branch, or names none. It is shown to the user and decides nothing.
-func (r *Runner) DefaultBranch(ctx context.Context, gitDir, remote string) (string, error) {
+// DefaultBranch is the branch the HEAD of the repository at url names,
+// read with ls-remote --symref in the user's environment, from a throwaway
+// repository, unattended and within AccessBudget as the access check is:
+// "" when the remote's HEAD is no branch, or names none. It is shown to the
+// user and decides nothing.
+func (r *Runner) DefaultBranch(ctx context.Context, url string) (string, error) {
+	gitDir, remove, err := throwawayRepo()
+	if err != nil {
+		return "", err
+	}
+	defer remove()
 	budget, cancel := context.WithTimeout(ctx, AccessBudget)
 	defer cancel()
-	args := append(networkConfig(), "--git-dir="+gitDir, "ls-remote", "--symref", remote, "HEAD")
+	args := append(networkConfig(), targetRemote(url, "")...)
+	args = append(args, "--git-dir="+gitDir, "ls-remote", "--symref", CheckRemote, "HEAD")
 	out, err := r.run(budget, call{unattended: true}, args...)
 	if err != nil {
 		if budget.Err() != nil && ctx.Err() == nil {

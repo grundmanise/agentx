@@ -671,20 +671,19 @@ func TestSourceAddErrors(t *testing.T) {
 // receive-pack answers as GitHub does to a user who may only read it, then
 // fetches it while the host wants single sign-on, then while it takes
 // pushes: each run checks again and records what it found. The receive-pack
-// is set for this source alone through the command environment, as a
-// user's configuration would set it, so that fetches still work.
+// is set through the command environment on the remote the check pushes
+// to, which no fetch uses.
 func TestSourceAccessFollowsWhatTheSourceAnswers(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	s, _, _ := h.standardSource(true)
-	id := source.ID(s.url)
 	dir := t.TempDir()
 	denied, sso := filepath.Join(dir, "denied"), filepath.Join(dir, "sso")
 	writeShim(t, denied, "#!/bin/sh\necho 'ERROR: Permission to acme/skills.git denied to someone.' >&2\nexit 128\n")
 	writeShim(t, sso, "#!/bin/sh\necho \"remote: The 'acme' organization has enabled or enforced SAML SSO.\" >&2\nexit 128\n")
 	receivePack := func(shim string) {
 		h.env["GIT_CONFIG_COUNT"] = "1"
-		h.env["GIT_CONFIG_KEY_0"] = "remote." + source.RemoteName(id) + ".receivepack"
+		h.env["GIT_CONFIG_KEY_0"] = "remote." + gitx.CheckRemote + ".receivepack"
 		h.env["GIT_CONFIG_VALUE_0"] = shim
 	}
 	settingsEntry := func() map[string]any {

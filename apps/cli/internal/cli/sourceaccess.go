@@ -20,25 +20,21 @@ type sourceCheck struct {
 	defaultBranch string // "" when it was not read or names no branch
 }
 
-// checkSource asks the source of entry, whose remote the account repo at
-// gitDir holds, what this machine may do there (see gitx.ProbeAccess) and,
-// for an unpinned tree source, which branch its HEAD names, outside the
-// lock. The two run one after the other, so that a run that checks in its
+// checkSource asks the source of entry what this machine may do there (see
+// gitx.ProbeAccess) and, for an unpinned tree source, which branch its HEAD
+// names, outside the lock, through the URLs the account repo's remote for
+// it has. The two run one after the other, so that a run that checks in its
 // fetch workers keeps to their bound. Neither can fail the command: an
 // answer that does not come is an unknown access and no default branch.
-func (inv *invocation) checkSource(ctx context.Context, gitDir string, entry home.Source) sourceCheck {
-	remote := source.RemoteName(source.ID(entry.URL))
-	urls := []string{entry.URL}
-	if entry.PushURL != "" {
-		urls = append(urls, entry.PushURL)
-	}
+func (inv *invocation) checkSource(ctx context.Context, entry home.Source) sourceCheck {
+	remote := source.RemoteOf(entry)
 	var c sourceCheck
-	c.access = inv.git.ProbeAccess(ctx, gitDir, remote, urls...)
+	c.access = inv.git.ProbeAccess(ctx, remote.URL, remote.PushURL)
 	if c.access.Access != home.AccessWritable {
 		inv.out.debugf("access to %s: %s: %s", entry.URL, c.access.Access, c.access.Reason)
 	}
 	if entry.Pin == "" && entry.Layout != home.LayoutFork && ctx.Err() == nil {
-		branch, err := inv.git.DefaultBranch(ctx, gitDir, remote)
+		branch, err := inv.git.DefaultBranch(ctx, remote.URL)
 		if err != nil {
 			inv.out.debugf("reading the default branch of %s: %v", entry.URL, err)
 		}

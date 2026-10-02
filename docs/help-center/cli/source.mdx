@@ -73,7 +73,7 @@ After every add and every fetch, agentx asks git whether you may push to the sou
 | `; read-only for you` | the server said you may read the source and not write to it |
 | `; write access unknown` | git could not tell, for example because pushing needs a password git may not ask for, or the server did not answer |
 
-The check pushes nothing: it is a dry run of deleting a branch that does not exist, made with your own git, credentials and SSH configuration, through the push URL when the source has one. It never asks for a password or passphrase, and gives up after 30 seconds. An answer that does not come never fails the command.
+The check pushes nothing: it is a dry run of deleting a branch that does not exist, made with your own git, credentials and SSH configuration, through the push URL when the source has one. A setting you key on a source's URL with `includeIf "hasconfig:remote.*.url:..."`, such as the SSH key of a work account, applies to that source's check alone. It never asks for a password or passphrase, and gives up after 30 seconds. An answer that does not come never fails the command.
 
 A `writable` source can still refuse a push to a protected branch, or one a server hook rejects: a dry run does not reach those rules.
 

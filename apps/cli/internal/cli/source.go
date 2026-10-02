@@ -281,7 +281,7 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source, push pu
 	// so that a URL that cannot be read is refused for that first, and
 	// outside the lock, since it is network. Its answer goes into the one
 	// settings write below. A stop during the check stops the add.
-	check := inv.checkSource(ctx, gitDir, want)
+	check := inv.checkSource(ctx, want)
 	if err := ctx.Err(); err != nil {
 		return listing, entry, takeBack(err)
 	}

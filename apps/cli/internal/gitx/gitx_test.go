@@ -88,7 +88,7 @@ func TestEnvironments(t *testing.T) {
 	// The serve child never prompts, and leaves the user's SSH command as
 	// it is: appending options to it would break a command that is not ssh
 	// itself, and replacing it would drop a core.sshCommand of theirs.
-	unattended := []string{"GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS=/bin/false", "SSH_ASKPASS_REQUIRE=never", "GCM_INTERACTIVE=never"}
+	unattended := []string{"GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS=/bin/false", "SSH_ASKPASS=/bin/false", "SSH_ASKPASS_REQUIRE=never", "GCM_INTERACTIVE=never"}
 	expect(t, "serve user", out, append([]string{"GIT_SSH_COMMAND=ssh -i /home/someone/key"}, unattended...), nil)
 	out, err = serve.Isolated(ctx, "/repo.git", "commit")
 	if err != nil {
