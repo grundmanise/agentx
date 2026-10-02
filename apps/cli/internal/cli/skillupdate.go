@@ -237,12 +237,30 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 		return nil
 	}
 
+	pulled, dropped, err := r.accountStep(ctx, names, records)
+	if err != nil {
+		return err
+	}
+	if len(pulled) > 0 {
+		if records, err = inv.forkRecords(ctx, gitDir); err != nil {
+			return err
+		}
+	}
 	for _, n := range names {
+		if dropped[n] {
+			continue
+		}
 		lib, held := libs[n]
 		rec, managed := records[n]
 		var u *updating
 		var f *failure
 		fork := managed && rec.Kind == lineage.KindFork
+		if fork && slices.Contains(pulled, n) && rec.Fork != nil && rec.Fork.Greenfield {
+			// A fork with no upstream is up to date once its account step
+			// took in what the account remote held.
+			inv.summary = "pulled " + n + " from the account remote; it has no upstream to update from"
+			continue
+		}
 		if fork {
 			u, f = inv.judgeForkUpdate(ctx, gitDir, rec, sources)
 		} else {
@@ -253,9 +271,12 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 			r.drop(n, f)
 		case u == nil: // a name the last check found no update for, which only a run of one name asks about
 			inv.summary = n + " is up to date as of the last update check; run 'agentx skill check' to look again"
+			if len(pulled) > 0 {
+				inv.summary = "pulled " + n + " from the account remote; it is up to date with its upstream as of the last update check"
+			}
 			inv.out.print(inv.out.paint(heading, sanitised(n)), " is up to date as of the last update check; run ",
 				inv.out.paint(label, "agentx skill check"), " to look again")
-			return nil
+			return inv.reportForks(ctx, pulled)
 		case u.merged.conflicted && (u.fork == nil || !u.fork.start): // a merge pending with files still to resolve, left as it is
 			r.pending = append(r.pending, u)
 		case fork:
@@ -277,6 +298,15 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 			return err
 		}
 	}
+	var onlyPulled []string
+	for _, n := range pulled {
+		if !slices.ContainsFunc(r.applied, func(u *updating) bool { return u.name == n }) {
+			onlyPulled = append(onlyPulled, n)
+		}
+	}
+	if err := inv.reportForks(ctx, onlyPulled); err != nil {
+		return err
+	}
 	if len(r.applied) > 0 || len(r.pending) > 0 {
 		if err := r.report(ctx); err != nil {
 			return err
@@ -287,6 +317,63 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 		inv.out.print(inv.summary)
 	}
 	return r.failure()
+}
+
+// accountStep is the first step of a fork's update when the account repo
+// has a remote: what another machine published of the fork is taken in
+// first, exactly as agentx pull takes it in, see syncFork, as a commit of
+// its own, before the update from upstream merges on top of it. The remote
+// is fetched once for the run. A fork with a merge pending is left to the
+// update, which completes it; one whose remote branch holds nothing it
+// lacks, or that the remote holds no branch of, is left as it is. A fork
+// whose account step conflicts, and so is left pending, or is refused, is
+// dropped from the run, see drop, and its update from upstream waits:
+// dropped names them. pulled names the forks whose branch it moved, in
+// name order. A remote git cannot reach is a warning, and the update from
+// upstream goes on without it.
+func (r *updateRun) accountStep(ctx context.Context, names []string, records map[string]lineage.Record) (pulled []string, dropped map[string]bool, err error) {
+	inv := r.inv
+	var forks []string
+	for _, n := range names {
+		if rec, ok := records[n]; ok && rec.Kind == lineage.KindFork && !inv.mergePending(n) {
+			forks = append(forks, n)
+		}
+	}
+	if len(forks) == 0 {
+		return nil, nil, nil
+	}
+	url, err := inv.git.RemoteURL(ctx, r.gitDir)
+	if err != nil || url == "" {
+		return nil, nil, accountRepoFailureOrNil(err)
+	}
+	if err := inv.git.FetchRemote(ctx, r.gitDir); err != nil {
+		what := sanitised(forks[0]) + " is"
+		if len(forks) > 1 {
+			what = "forks are"
+		}
+		inv.out.warn("could not fetch the account remote " + shownURL(url) + ", so " + what + " updated from upstream only: " + trimGit(err.Error()))
+		return nil, nil, nil
+	}
+	remote, err := inv.readRemoteForks(ctx, r.gitDir, records, forks)
+	if err != nil {
+		return nil, nil, err
+	}
+	dropped = map[string]bool{}
+	for _, n := range forks {
+		if tip := remote.tips[n]; tip == "" || tip == records[n].Commit {
+			continue
+		}
+		s := inv.syncFork(ctx, r.gitDir, records[n], remote, "pulled")
+		inv.reportSync(s)
+		switch {
+		case s.f != nil:
+			dropped[n] = true
+			r.drop(n, s.f)
+		case s.moved():
+			pulled = append(pulled, n)
+		}
+	}
+	return pulled, dropped, nil
 }
 
 // finishJournals finishes any unfinished journal before a command reads
@@ -850,7 +937,10 @@ func (r *updateRun) report(ctx context.Context) error {
 // completed merge was merged again with commits made while it was pending,
 // those commits.
 func (u *updating) conflictsWith() string {
-	if u.fork != nil && u.fork.remerge {
+	switch {
+	case u.fork != nil && u.fork.with != "":
+		return u.fork.with
+	case u.fork != nil && u.fork.remerge:
 		return "the commits made while its merge was pending"
 	}
 	return "its update from " + short(u.rec.Import.Commit) + " to " + short(u.next.Import.Commit)
@@ -870,8 +960,14 @@ func conflictFailure(name, path string, files int) *failure {
 // conflictHintAt is the hint of an update that left the merge of the skill
 // called name pending, path being the skill's directory in the checkout.
 func conflictHintAt(name, path string) string {
+	return conflictHintRunning(name, path, skillCommand("update", name))
+}
+
+// conflictHintRunning is conflictHintAt for a merge that again, the command that
+// left it pending, applies once it is resolved.
+func conflictHintRunning(name, path, again string) string {
 	return "resolve it with git in " + quotedPath(path) + " ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), " +
-		"then run '" + skillCommand("update", name) + "' again to apply it, or '" + skillCommand("update", name, "--abort") + "' to give it up"
+		"then run '" + again + "' again to apply it, or '" + skillCommand("update", name, "--abort") + "' to give it up"
 }
 
 // reportApplied is report's part for the skills the run updated.

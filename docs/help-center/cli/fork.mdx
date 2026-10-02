@@ -141,7 +141,7 @@ The commit records what Git would record, so the [files that stay local](#files-
 
 ### Uncommitted edits block branch moves
 
-A command that would move a fork's branch, such as [`agentx skill revert <name> --to <commit>`](#go-back-to-an-earlier-commit), stops with exit code 6 while the fork has uncommitted edits, and names the fork. Commit them with `agentx skill commit <name>`, or [discard them](#discard-uncommitted-edits) with `agentx skill revert <name>`, then run the command again. Files Git ignores never count as edits.
+A command that would move a fork's branch, such as [`agentx skill revert <name> --to <commit>`](#go-back-to-an-earlier-commit) or [`agentx pull`](/cli/remote#pull-what-another-machine-published), stops with exit code 6 while the fork has uncommitted edits, and names the fork. Commit them with `agentx skill commit <name>`, or [discard them](#discard-uncommitted-edits) with `agentx skill revert <name>`, then run the command again. Files Git ignores never count as edits.
 
 ## Read a fork's history
 
@@ -225,7 +225,8 @@ agentx skill update release-notes
 ```
 
 - agentx always merges the new version into your fork, with the version you were last at as the base. Your commits are kept, a line you put back stays as you put it, and what changed upstream alone comes in clean.
-- The merge is committed on the fork's branch, as `release-notes: merge upstream 5d6e7f8 (laptop)`. Nothing is pushed.
+- The merge is committed on the fork's branch, as `release-notes: merge upstream 5d6e7f8 (laptop)`. Nothing is pushed: [publish](/cli/remote#publish-a-fork) it when you are ready.
+- With an [account remote](/cli/remote) set, agentx first takes in what your other machines published of the fork, as `agentx pull` does, then merges the new version on top, as two commits. If Git cannot reach the remote, agentx warns and takes the upstream version alone.
 - Commit or discard your edits first: a fork with uncommitted edits stops with exit code 6.
 - [Files that stay local](#files-that-stay-local) are kept. If the new version holds a file at a path your ignore rules cover, that file replaces your local one, as `git checkout` does.
 - `agentx skill update --all` updates every managed skill and fork with an update.

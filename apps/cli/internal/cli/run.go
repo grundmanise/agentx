@@ -187,6 +187,9 @@ func newRoot(inv *invocation) *cobra.Command {
 	root.AddCommand(newServeCommand(inv))
 	root.AddCommand(newExportCommand(inv))
 	root.AddCommand(newImportCommand(inv))
+	root.AddCommand(newRemoteCommand(inv))
+	root.AddCommand(newPullCommand(inv))
+	root.AddCommand(newPublishCommand(inv))
 	return root
 }
 

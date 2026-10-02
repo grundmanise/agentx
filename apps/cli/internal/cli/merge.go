@@ -73,7 +73,8 @@ type mergeResult struct {
 
 // mergeVersions merges the three versions m names in the isolated
 // environment: one merge-tree with the base given, so that git finds
-// nothing else to merge from, git's rules for files added, deleted or
+// nothing else to merge from, or, for a merge of two histories of one fork
+// with no base given, with the merge base git finds in them, git's rules for files added, deleted or
 // renamed on either side, and conflicts written in zdiff3 style, so that
 // each carries the base between mine and theirs. git's detection of a
 // renamed directory is off, so that a file added on one side inside a
@@ -115,8 +116,11 @@ func mergeVersions(ctx context.Context, r *gitx.Runner, gitDir string, m lineage
 // settings, given after its own.
 func mergeTree(ctx context.Context, r *gitx.Runner, gitDir string, m lineage.Merge, config ...string) (mergeResult, error) {
 	args := append([]string{"-c", "merge.directoryRenames=false", "-c", "merge.conflictStyle=zdiff3"}, config...)
-	out, status, err := r.IsolatedStatus(ctx, gitDir, 1, append(args,
-		"merge-tree", "--write-tree", "-z", "--no-messages", "--merge-base="+m.Base, m.Mine, m.Theirs)...)
+	args = append(args, "merge-tree", "--write-tree", "-z", "--no-messages")
+	if m.Base != "" {
+		args = append(args, "--merge-base="+m.Base)
+	}
+	out, status, err := r.IsolatedStatus(ctx, gitDir, 1, append(args, m.Mine, m.Theirs)...)
 	if err != nil {
 		return mergeResult{}, err
 	}

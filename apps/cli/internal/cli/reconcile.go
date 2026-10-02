@@ -551,22 +551,16 @@ func (inv *invocation) prepareWorktrees(ctx context.Context, gitDir string, root
 			}
 		}
 	}
-	out, err := inv.git.Isolated(ctx, gitDir, "for-each-ref", "--format=%(refname)", remoteForkPrefix)
+	tips, err := lineage.ListRemote(ctx, inv.git, gitDir)
 	if err != nil {
 		return nil, nil, accountRepoFailure(err)
 	}
 	remote = map[string]bool{}
-	for _, ref := range strings.Split(out, "\n") {
-		if name, ok := strings.CutPrefix(ref, remoteForkPrefix); ok && name != "" {
-			remote[name] = true
-		}
+	for name := range tips {
+		remote[name] = true
 	}
 	return remote, repointed, nil
 }
-
-// remoteForkPrefix is where the account repo keeps the fork branches its
-// remote holds, as a fetch of the remote writes them.
-const remoteForkPrefix = "refs/remotes/origin/skills/"
 
 // repairForks repairs, in one journal under the lock its caller holds,
 // every fork of sites whose worktree is missing, read again first, and

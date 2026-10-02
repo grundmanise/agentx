@@ -17,6 +17,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
@@ -84,7 +85,11 @@ func (inv *invocation) importSettings(ctx context.Context, path string, yes bool
 	if err != nil {
 		return err
 	}
-	states := restoreStates(doc.Skills, records)
+	remote, err := inv.remoteTips(ctx)
+	if err != nil {
+		return err
+	}
+	states := restoreStates(doc.Skills, records, remote)
 	if err := inv.confirmImport(path, doc, in, yes); err != nil {
 		return err
 	}
@@ -412,13 +417,23 @@ func validRecords(path string, skills []exportSkill) error {
 // the same commit is the version the export names; a name the repo does not
 // hold at all is missing; a name it holds otherwise, at another commit or in
 // the other namespace, is different, and what it holds is reported beside
-// it. A machine with no account repo holds nothing, and creating one is not
-// this command's to do, so every record is then missing.
-func restoreStates(skills []exportSkill, records map[string]lineage.Record) []importSkillEvent {
+// it. A fork the repo holds no branch of is also held when the account
+// remote holds it, as remote lists the remote-tracking branches by name: a
+// machine that set the account remote and fetched it holds every fork
+// published there, which it can install from there, so such a record reads
+// present when its remote-tracking branch is at its commit and different
+// when that is at another. A machine with no account
+// repo holds nothing, and creating one is not this command's to do, so
+// every record is then missing.
+func restoreStates(skills []exportSkill, records map[string]lineage.Record, remote map[string]string) []importSkillEvent {
 	states := make([]importSkillEvent, 0, len(skills))
 	for _, rec := range skills {
 		st := importSkillEvent{event: newEvent("import_skill"), exportSkill: rec, State: restoreMissing}
-		if have, ok := records[rec.Name]; ok {
+		have, local := records[rec.Name]
+		if there := remote[rec.Name]; !local && there != "" && rec.Kind == lineage.KindFork {
+			have, local = lineage.Record{Kind: lineage.KindFork, Commit: there}, true
+		}
+		if local {
 			st.LocalKind, st.LocalCommit = have.Kind, have.Commit
 			st.State = restoreDifferent
 			if have.Kind == rec.Kind && have.Commit == rec.Commit {
@@ -428,6 +443,21 @@ func restoreStates(skills []exportSkill, records map[string]lineage.Record) []im
 		states = append(states, st)
 	}
 	return states
+}
+
+// remoteTips is what the account remote held of every fork as the last
+// fetch left it, see lineage.ListRemote: none on a machine with no account
+// repo, or whose account repo has no remote set.
+func (inv *invocation) remoteTips(ctx context.Context) (map[string]string, error) {
+	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	if err != nil || !exists {
+		return nil, accountRepoFailureOrNil(err)
+	}
+	tips, err := lineage.ListRemote(ctx, inv.git, gitDir)
+	if err != nil {
+		return nil, accountRepoFailure(err)
+	}
+	return tips, nil
 }
 
 // confirmImport asks before the settings are replaced. An import overwrites

@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
+	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
 // exportSchemaVersion is the version of the export document. It is the
@@ -195,14 +196,28 @@ func (inv *invocation) exportRecords(ctx context.Context) ([]exportSkill, error)
 			continue
 		}
 		e := exportSkill{Name: rec.Name, Kind: rec.Kind, Commit: rec.Commit, Placed: placed[name]}
-		if rec.HasImport {
-			subpath := rec.Import.Path
-			e.Source, e.Subpath = rec.Import.Source, &subpath
-			e.UpstreamCommit, e.BaseHash = rec.Import.Commit, rec.Import.Hash
+		if imported, ok := exportedImport(rec); ok {
+			subpath := imported.Path
+			e.Source, e.Subpath = imported.Source, &subpath
+			e.UpstreamCommit, e.BaseHash = imported.Commit, imported.Hash
 		}
 		records = append(records, e)
 	}
 	return records, nil
+}
+
+// exportedImport is the upstream version a record names: a managed skill's
+// import, and a fork's base, the import its history names, which its tip
+// is not once the fork has commits of its own. A fork with no upstream, or
+// whose history does not say, names none.
+func exportedImport(rec lineage.Record) (lineage.Import, bool) {
+	if rec.Kind == lineage.KindFork {
+		if rec.Fork == nil || rec.Fork.Base == "" {
+			return lineage.Import{}, false
+		}
+		return rec.Fork.Import, true
+	}
+	return rec.Import, rec.HasImport
 }
 
 // placedSkills reports, per library directory, whether this machine has a

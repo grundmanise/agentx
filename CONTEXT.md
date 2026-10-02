@@ -112,12 +112,16 @@ Retiring a fork in favour of an upstream version: the fork's branch is archived 
 _Avoid_: delete fork, downgrade
 
 **Account remote**:
-The git remote per account that account repos push to and fetch from once the machine is signed in. Hosted by agentx, or a repository the user supplies.
+The git remote per account that account repos push forks to and fetch them from. In the MVP it is a Git repository the user owns, attached with `agentx remote set`; later, hosted by agentx once the machine is signed in. Only fork branches travel through it.
 _Avoid_: cloud, server, origin
 
 **Publish**:
-An explicit user action that pushes one fork's or greenfield skill's branch from the account repo to the account remote. After publishing it is an upstream like any other and reaches other machines through install and update. Commits are explicit, made by the user with agentx or with git, and publishing pushes commits only.
+An explicit user action that pushes one fork's or greenfield skill's branch from the account repo to the account remote, after taking in, as a pull does, what another machine published there first. Another machine with the same remote installs it from there, and takes later versions in with a pull, a plain Git merge. Commits are explicit, made by the user with agentx or with git, and publishing pushes commits only.
 _Avoid_: sync, share, upload
+
+**Pull**:
+Taking in what another machine published of a fork to the account remote: a plain Git merge of the two histories, a fast-forward when this machine has nothing of its own, whose conflict becomes a pending merge like any other. A branch of the same name that is another fork, by its fork id, is refused.
+_Avoid_: sync, download
 
 **Update check**:
 Fetching the sources the managed skills and forks came from and comparing each skill's base version with what its source holds now, by tree id; a fork's base version is the import commit its history names, whatever its own commits changed. It records what it found and never applies anything: a newer version becomes the skill's update candidate. Run by hand, and by the desktop app on launch and on a timer, where the same pass also fetches every other added source, so that browsing and search see what the sources hold now.
@@ -132,7 +136,7 @@ Applying a managed skill's update candidate, only ever at the user's request: th
 _Avoid_: upgrade, pull, sync
 
 **Pending merge**:
-The merge an update of a modified skill or a fork leaves when the edits and the update candidate conflict: an ordinary Git merge in progress in a Git worktree of the account repo under agentx home, resolved with Git. The library directory, or a fork's worktree and branch, and so every agent, keeps its content until the next update applies the resolved merge, or the merge is given up with `skill update --abort`. While it exists the skill is not reverted or removed. Survives restarts.
+The merge an update of a modified skill or a fork leaves when the edits and the update candidate conflict, or a pull of a fork when its commits and the account remote's conflict: an ordinary Git merge in progress in a Git worktree of the account repo under agentx home, resolved with Git. The library directory, or a fork's worktree and branch, and so every agent, keeps its content until the next update, or pull, applies the resolved merge, or the merge is given up with `skill update --abort`. While it exists the skill is not reverted or removed. Survives restarts.
 _Avoid_: merge ref, conflict state
 
 **Modified skill**:

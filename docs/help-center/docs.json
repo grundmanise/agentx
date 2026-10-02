@@ -34,7 +34,7 @@
       {
         "group": "Skills",
         "icon": "wand-sparkles",
-        "pages": ["cli/skill", "cli/fork", "cli/source", "cli/adopt"]
+        "pages": ["cli/skill", "cli/fork", "cli/remote", "cli/source", "cli/adopt"]
       },
       {
         "group": "This machine",

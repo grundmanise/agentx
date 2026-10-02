@@ -90,9 +90,10 @@ func (inv *invocation) readForkMerge(ctx context.Context, dir string) (forkPendi
 }
 
 // judgeForkCompletion judges, before the lock, the merge pending for the
-// fork whose branch is rec, as the user left it resolving it with git, see
-// readForkMerge. A merge with files still unmerged, or none in progress,
-// is left as it is and reported again, exit code 4. One resolved, in
+// fork whose branch is rec, for an update or, when pull is set, a pull, as
+// the user left it resolving it with git, see readForkMerge. A merge with
+// files still unmerged, or none in progress, is left as it is and reported
+// again, exit code 4. One resolved, in
 // progress or committed, is completed, once the fork's skill directory is
 // found to hold no uncommitted edits, exit code 6 otherwise, as for the
 // update that started it: the commit that completes it is the user's own
@@ -109,19 +110,21 @@ func (inv *invocation) readForkMerge(ctx context.Context, dir string) (forkPendi
 // base being the tip the merge started from, so that only where the new
 // commits and the completed merge overlap can conflict. That merge records
 // the base the completed one records, unless the commits made meanwhile
-// brought the fork a base of its own, which it keeps. A clean result is
+// brought the fork a base of its own: then it records the newer of the two
+// where the source history proves it, and the fork's own otherwise, as a
+// merge of two histories does, see lineage.PickBase. A clean result is
 // committed and applied; one that conflicts is set up again in the same
 // checkout under the lock, showing only the overlap, and is completed in
 // turn. A branch that no longer holds the tip the merge started from at
 // all was moved outside agentx, and the merge cannot be applied, exit code
 // 6, until it is given up.
-func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, rec lineage.Record) (*updating, *failure) {
+func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, rec lineage.Record, pull bool) (*updating, *failure) {
 	name := rec.Name
 	site, err := inv.forkSiteOf(ctx, gitDir, rec)
 	if err != nil {
 		return nil, failureOf(err)
 	}
-	u := &updating{name: name, libPath: site.libPath, checkout: inv.checkoutPath(name), fork: &forkUpdate{site: site}}
+	u := &updating{name: name, libPath: site.libPath, checkout: inv.checkoutPath(name), fork: &forkUpdate{site: site, pull: pull}}
 	p, err := inv.readForkMerge(ctx, u.checkout)
 	if err != nil {
 		return nil, failureOf(accountRepoFailure(err))
@@ -184,7 +187,7 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 		return nil, failureOf(err)
 	}
 	var f *failure
-	if u.fork.judged, f = inv.cleanSite(ctx, site); f != nil {
+	if u.fork.judged, f = inv.cleanSite(ctx, site, u.fork); f != nil {
 		return nil, f
 	}
 	merged, tree, message := p.merged, p.tree, p.message
@@ -218,8 +221,11 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 			"run '"+skillCommand("update", name, "--abort")+"' to give it up, then update again")
 	}
 	if rec.Fork != nil && rec.Fork.Base != mine.Base {
-		u.fork.base = rec.Fork.Base
-		u.next = lineage.Record{Name: name, Kind: lineage.KindFork, Commit: rec.Fork.Base, Import: rec.Fork.Import}
+		completed := lineage.ForkLineage{Base: u.fork.base, Import: u.next.Import}
+		if base := lineage.PickBase(ctx, inv.git, gitDir, *rec.Fork, completed); base != u.fork.base {
+			u.fork.base = base
+			u.next = lineage.Record{Name: name, Kind: lineage.KindFork, Commit: base, Import: rec.Fork.Import}
+		}
 	}
 	u.merge = lineage.Merge{Base: p.mine, Mine: rec.Commit, Theirs: merged}
 	if u.merged, err = mergeVersions(ctx, inv.git, gitDir, u.merge); err != nil {

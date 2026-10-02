@@ -46,6 +46,45 @@ type forkUpdate struct {
 	start   bool
 	remerge bool
 	message string // the message of the commit that completes a merge left pending, its MERGE_MSG
+	// theirsRef is the ref the commit the fork takes in was read from, which
+	// has to hold theirs still under the lock: the update candidate for an
+	// update, the remote-tracking branch for a pull; "" for a merge pending
+	// being completed, which takes in what it merged, whatever the ref
+	// holds now.
+	theirsRef, theirs string
+	// with is what a merge left pending merges, as the line that reports it
+	// names it, see updating.conflictsWith; "" for an update from upstream.
+	with string
+	// pull is set for a pull from the account remote, a publish's included,
+	// which says so in its refusals and names its own command in their
+	// hints, and doing is "published" for a publish's; an update from
+	// upstream leaves both unset.
+	pull  bool
+	doing string
+}
+
+// what is what the command does to the fork, as its refusals say it cannot
+// be done: pulled, published or updated.
+func (f *forkUpdate) what() string {
+	switch {
+	case f.doing != "":
+		return f.doing
+	case f.pull:
+		return "pulled"
+	}
+	return "updated"
+}
+
+// again is the command that does it again for the fork called name, and
+// what it does, as the hints of its refusals name them.
+func (f *forkUpdate) again(name string) (command, verb string) {
+	switch {
+	case f.doing == "published":
+		return publishCommand(name), "publish"
+	case f.pull:
+		return pullCommand(name), "pull"
+	}
+	return skillCommand("update", name), "update"
 }
 
 // forkBaseRecord is the record of the fork rec's base version, see
@@ -104,7 +143,7 @@ func (inv *invocation) forkBaseOf(ctx context.Context, gitDir string, rec lineag
 func (inv *invocation) judgeForkUpdate(ctx context.Context, gitDir string, rec lineage.Record, sources map[string]bool) (*updating, *failure) {
 	name := rec.Name
 	if inv.mergePending(name) {
-		return inv.judgeForkCompletion(ctx, gitDir, rec)
+		return inv.judgeForkCompletion(ctx, gitDir, rec, false)
 	}
 	base, f := forkBaseRecord(rec)
 	if f != nil {
@@ -135,14 +174,16 @@ func (inv *invocation) judgeForkUpdate(ctx context.Context, gitDir string, rec l
 	if err != nil {
 		return nil, failureOf(err)
 	}
-	pre, f := inv.cleanSite(ctx, site)
+	fork := &forkUpdate{site: site, base: next.Commit, theirsRef: lineage.CandidateRef(name), theirs: next.Commit}
+	pre, f := inv.cleanSite(ctx, site, fork)
 	if f != nil {
 		return nil, f
 	}
+	fork.judged = pre
 	u := &updating{
 		name: name, rec: base, next: next, libPath: site.libPath,
 		merge: lineage.Merge{Base: base.Commit, Mine: rec.Commit, Theirs: next.Commit},
-		fork:  &forkUpdate{site: site, judged: pre, base: next.Commit},
+		fork:  fork,
 	}
 	if u.merged, err = mergeVersions(ctx, inv.git, gitDir, u.merge); err != nil {
 		return nil, failureOf(accountRepoFailure(err))
@@ -173,8 +214,9 @@ func (inv *invocation) judgeForkUpdate(ctx context.Context, gitDir string, rec l
 // that lays a new tip out over it, with the files git ignores in it, which
 // the new layout carries over: a repository nested in it that no ignore
 // rule covers, uncommitted edits and anything else git cannot record that
-// no rule covers are refused, exit code 6, before anything is written.
-func (inv *invocation) cleanSite(ctx context.Context, site forkSite) (siteJudged, *failure) {
+// no rule covers are refused, exit code 6, before anything is written, in
+// the words of the command that would, see forkUpdate.what.
+func (inv *invocation) cleanSite(ctx context.Context, site forkSite, fork *forkUpdate) (siteJudged, *failure) {
 	pre, err := inv.judgeSite(ctx, site, true)
 	switch {
 	case err != nil:
@@ -182,12 +224,24 @@ func (inv *invocation) cleanSite(ctx context.Context, site forkSite) (siteJudged
 	case len(pre.exposed) > 0:
 		return siteJudged{}, failureOf(nestedRepoRefusal(site.name, pre.exposed))
 	case !pre.clean:
-		return siteJudged{}, uncommittedRefusal(site.name, "updated")
+		return siteJudged{}, uncommittedRefusal(site.name, fork.what())
 	}
 	if _, lost := splitUnrecordable(pre.forkJudged); len(lost) > 0 {
-		return siteJudged{}, unrecordableRefusal(site.name, site.skillDir, lost, "an update", "update")
+		return siteJudged{}, fork.unrecordable(site, lost)
 	}
 	return pre, nil
+}
+
+// unrecordable refuses the fork of site, whose skill directory holds lost,
+// what git cannot record and no ignore rule covers, which laying a new tip
+// out over it would discard, see unrecordableRefusal.
+func (f *forkUpdate) unrecordable(site forkSite, lost []string) *failure {
+	command, _ := f.again(site.name)
+	what := "an update"
+	if f.pull {
+		what = "taking in what the account remote holds"
+	}
+	return unrecordableAt(site.name, site.skillDir, lost, what, command)
 }
 
 // layFork sets what u's fork is updated to: commit, its branch's new tip,
@@ -242,36 +296,47 @@ func (r *updateRun) applyFork(ctx context.Context, u *updating) error {
 // applyForkUpdate is applyFork's work under the lock.
 func (inv *invocation) applyForkUpdate(ctx context.Context, gitDir string, u *updating) error {
 	site, name := u.fork.site, u.name
+	what := u.fork.what()
+	again, verb := u.fork.again(name)
 	candidate := lineage.CandidateRef(name)
 	switch pending := inv.mergePending(name); {
 	case u.checkout == "" && pending:
-		return forkPendingRefusal(name, "updated")
+		return forkPendingRefusal(name, what)
 	case u.checkout != "" && !pending:
 		return refuse(exitRefused, "the merge of "+sanitised(name)+" was given up while it was being applied, so nothing was changed",
-			"run '"+skillCommand("update", name)+"' to merge its update again")
+			"run '"+again+"' to merge it again")
 	}
-	values, err := inv.git.Refs(ctx).RefValues(gitDir, []string{site.rec.Ref, candidate})
+	refs := []string{site.rec.Ref, candidate}
+	if u.fork.theirsRef != "" && u.fork.theirsRef != candidate {
+		refs = append(refs, u.fork.theirsRef)
+	}
+	values, err := inv.git.Refs(ctx).RefValues(gitDir, refs)
 	if err != nil {
 		return accountRepoFailure(err)
 	}
 	if values[site.rec.Ref] != site.rec.Commit {
-		return refuse(exitRefused, sanitised(name)+" changed while it was being updated, so nothing was changed",
-			"run '"+skillCommand("update", name)+"' again to update it as it is now")
+		return refuse(exitRefused, sanitised(name)+" changed while it was being "+what+", so nothing was changed",
+			"run '"+again+"' again to "+verb+" it as it is now")
 	}
-	if u.checkout == "" && values[candidate] != u.next.Commit {
+	switch {
+	case u.checkout != "" || u.fork.theirsRef == "" || values[u.fork.theirsRef] == u.fork.theirs:
+	case u.fork.theirsRef == candidate:
 		return refuse(exitRefused, "the update candidate "+candidate+" moved while "+sanitised(name)+" was being updated, so nothing was changed",
-			"run '"+skillCommand("update", name)+"' again to apply the update the last check found")
+			"run '"+again+"' again to apply the update the last check found")
+	default:
+		return refuse(exitRefused, "the account remote's "+site.branch+" moved while "+sanitised(name)+" was being "+what+", so nothing was changed",
+			"run '"+again+"' again to "+verb+" it as it is now")
 	}
 	if err := worktreeHealth(name, site.root, site.branch); err != nil {
 		return err
 	}
-	now, err := inv.siteNow(ctx, site, u.fork.judged, "updated", true)
+	now, err := inv.siteNow(ctx, site, u.fork.judged, what, true)
 	if err != nil {
 		return err
 	}
 	kept, lost := splitUnrecordable(now.forkJudged)
 	if len(lost) > 0 {
-		return unrecordableRefusal(name, site.skillDir, lost, "an update", "update")
+		return u.fork.unrecordable(site, lost)
 	}
 	if u.merged.conflicted {
 		start := mergeStart{mine: u.merge.Mine, theirs: u.merge.Theirs, merged: u.merged, message: u.fork.message}
@@ -328,10 +393,14 @@ func (inv *invocation) applyForkUpdate(ctx context.Context, gitDir string, u *up
 // there, as for a managed skill, see conflictFailure.
 func forkConflictFailure(u *updating, checkout string) *failure {
 	with := "its update"
-	if u.fork.remerge {
+	switch {
+	case u.fork.with != "":
+		with = u.fork.with
+	case u.fork.remerge:
 		with = "the commits made while its merge was pending"
 	}
 	name := u.name
+	again, _ := u.fork.again(name)
 	return refuse(exitPendingMerge, sanitised(name)+" conflicts with "+with+" in "+plural(len(u.conflict.Files), "file")+", so the merge is pending and the fork's worktree and branch were left as they are",
-		conflictHintAt(name, filepath.Join(checkout, u.fork.site.dir)))
+		conflictHintRunning(name, filepath.Join(checkout, u.fork.site.dir), again))
 }
