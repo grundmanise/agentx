@@ -5,6 +5,26 @@ description: "Keep watching and report whenever something changes."
 
 `agentx serve` is what the desktop app runs in the background. It scans the machine once, then rescans whenever anything it inventories changes, and reports again only when the inventory changed. It also checks your skills for updates. You rarely need to run it yourself.
 
+## What serve repairs at start
+
+When serve starts, before its first snapshot, it checks every skill against what is on disk and reports one line per skill that is not as it was left:
+
+```text
+reconcile beta: modified
+reconcile release-notes: repaired
+snapshot 1: 3 configurations, 6 skills
+```
+
+- A fork whose worktree or library symlink went missing is checked out again from its branch: `repaired`. So is a fork whose Git pointers broke because `~/.agentx` moved.
+- A folder in a fork's way is reported as an `adopt candidate` and left as it is. Adopt it with [`agentx skill place <name> --force`](/cli/fork#something-in-the-way).
+- A managed skill you edited is `modified`; one whose folder is gone is `installable`, as is a fork you have not placed on this machine. A skill no source manages is `unmanaged`.
+
+Serve never deletes or overwrites anything to repair it. A skill that is fine is `restored` and prints no line.
+
+## Maintenance
+
+Once a day, serve tidies the account repo in `~/.agentx/account.git` in the background: it packs loose objects and refs with `git maintenance run`. It deletes nothing and never registers a scheduled job with your system.
+
 ## What counts as a change
 
 Serve watches agentx itself, the library and every skills directory an agent client reads, including the ones clients keep under their own configuration such as `~/.claude/skills`. An edit inside a skill counts, not only a skill added or removed. Edit a skill with any editor or another tool and the next snapshot shows it. A fork shows as `modified` as soon as you edit it, and as `current` again once you commit, with `agentx skill commit` or with `git commit` in its worktree. Serve never commits for you.
@@ -54,7 +74,7 @@ To check more or less often, set `AGENTX_CHECK_INTERVAL` to a duration such as `
 agentx serve --once
 ```
 
-Scans once, prints the snapshot and exits. It runs no update check. For an inventory to read, run [`agentx scan`](/cli/scan) instead.
+Scans once, prints the snapshot and exits. It repairs nothing and runs no update check or maintenance. For an inventory to read, run [`agentx scan`](/cli/scan) instead.
 
 ## One serve per home
 

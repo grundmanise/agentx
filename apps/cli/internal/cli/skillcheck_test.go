@@ -1499,14 +1499,15 @@ func TestServeChecksInTextMode(t *testing.T) {
 }
 
 // gateCheckLineage holds the lineage read an update check makes before its
-// network, outside the lock. A scan reads the lineage with the same git, so
-// the gate lets the first such read by, which is the initial scan's, and
-// holds the second, which is the read of the check serve starts once that
-// scan's snapshot is out.
+// network, outside the lock. The reconciliation serve starts with and a
+// scan read the lineage with the same git, so the gate lets the first two
+// such reads by, which are the reconciliation's and the initial scan's,
+// and holds the third, which is the read of the check serve starts once
+// that scan's snapshot is out.
 func gateCheckLineage(t *testing.T, h *harness) (arm func() (reached, release func())) {
 	t.Helper()
 	dir := t.TempDir()
-	first, second := filepath.Join(dir, "first"), filepath.Join(dir, "second")
+	first, second, third := filepath.Join(dir, "first"), filepath.Join(dir, "second"), filepath.Join(dir, "third")
 	return gateGit(t, h, `sub= ; lineage=
 for arg in "$@"; do
 	case "$arg" in
@@ -1514,8 +1515,8 @@ for arg in "$@"; do
 	`+lineage.UpstreamRemovedPrefix+`) [ "$sub" = for-each-ref ] && lineage=1 ;;
 	esac
 done
-if [ -n "$lineage" ] && ! (set -C; : > `+first+`) 2>/dev/null; then
-	(set -C; : > `+second+`) 2>/dev/null && gate=1
+if [ -n "$lineage" ] && ! (set -C; : > `+first+`) 2>/dev/null && ! (set -C; : > `+second+`) 2>/dev/null; then
+	(set -C; : > `+third+`) 2>/dev/null && gate=1
 fi`)
 }
 

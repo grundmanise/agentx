@@ -103,6 +103,10 @@ _Avoid_: managed branch, shadow branch, cache branch
 Installing a published fork over a directory that already exists in the library under that name, keeping the directory's content as pending changes on the fork.
 _Avoid_: overwrite, take over
 
+**Adopt candidate**:
+Something of the user's where a fork placed on this machine belongs: a directory at the fork's worktree that Git does not register, or a directory or a symlink of the user's at its library entry. Reported and left as it is; `skill place --force` adopts it, every file kept as an uncommitted edit of the fork.
+_Avoid_: orphan, stray directory
+
 **Unfork**:
 Retiring a fork in favour of an upstream version: the fork's branch is archived and the library gets a managed skill again.
 _Avoid_: delete fork, downgrade
@@ -162,6 +166,10 @@ _Avoid_: broken link, overwritten
 **Missing placement**:
 A placement a library skill lacks in an enabled configuration: nothing is at that configuration's own placement path, whether the skill was never placed there or the placement went. Reported as drift, for information only; `skill place` places it again when the user asks. A universal client and a disabled configuration never have one.
 _Avoid_: unplaced, orphaned
+
+**Worktree missing**:
+A fork placed on this machine whose worktree, the skill directory in it or its library symlink is gone, and was not yet put back from the fork's branch. Not a missing placement, which is a configuration's absent place.
+_Avoid_: missing fork, broken fork
 
 **Universal client**:
 An agent client that reads the library as one of its own skills directories, such as Codex and Gemini CLI, or one of whose skills directories is the library through a symlink: Cursor, which reads Claude Code's skills directory, is one once that directory is linked to the library. It sees every library skill whether or not its agent configuration is enabled and whatever the placements, since the library entry is its placement. A skill leaves it only by leaving the library, which takes the skill from every agent client.

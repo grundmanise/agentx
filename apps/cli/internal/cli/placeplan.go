@@ -562,12 +562,15 @@ func (d *placements) copiedAt(place plannedPlace) {
 
 // placeRecord is the library skill skill place works on, its lineage, and
 // whether an import branch manages it. It refuses a name the library does
-// not hold, a managed skill whose library directory is gone, which has no
-// content to place, and a fork given --force: a fork's placements are
-// placed as they always were, and never judged against the library's
-// content.
-func (inv *invocation) placeRecord(sc skillContext, name string, force bool, flags []string) (lib scan.LibrarySkill, rec lineage.Record, managed bool, err error) {
+// not hold, and a managed skill whose library directory is gone, which has
+// no content to place. A fork is found by its branch alone, whatever its
+// library entry is: putting that entry back is part of placing it, see
+// placeFork.
+func (inv *invocation) placeRecord(sc skillContext, name string) (lib scan.LibrarySkill, rec lineage.Record, managed bool, err error) {
 	rec, ok := sc.records[name]
+	if ok && rec.Kind == lineage.KindFork {
+		return lib, rec, false, nil
+	}
 	lib, held := librarySkill(inv.dirs.Library, name)
 	managed = ok && rec.Kind == lineage.KindManaged
 	switch {
@@ -576,9 +579,6 @@ func (inv *invocation) placeRecord(sc skillContext, name string, force bool, fla
 		err = fail(exitRefused, what+", so there is no skill to place", wayOut)
 	case !held:
 		err = inv.noLibrarySkill(name)
-	case ok && rec.Kind == lineage.KindFork && force:
-		err = fail(exitRefused, name+" is a fork on this machine, which --force does not apply to",
-			"place it without --force with '"+skillCommand("place", name, flags...)+"'")
 	}
 	return lib, rec, managed, err
 }

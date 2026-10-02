@@ -32,7 +32,11 @@ func newSkillPlaceCommand(inv *invocation) *cobra.Command {
 			"holds exactly the library's content, and reported as adopted. When it holds\n" +
 			"anything else, the command stops and changes nothing: --force replaces the\n" +
 			"directory with the placement and deletes what it held. To keep that content,\n" +
-			"move the directory elsewhere first.",
+			"move the directory elsewhere first.\n\n" +
+			"For a fork, it first puts back what the fork needs on this machine: its worktree,\n" +
+			"checked out again from its branch, and its library symlink. A directory in the\n" +
+			"way of either stops the command: --force adopts it, keeping every file as an\n" +
+			"uncommitted edit of the fork, which 'agentx skill revert <name>' discards.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return inv.skillPlace(cmd.Context(), args[0], to, asCopy, force)
@@ -41,7 +45,7 @@ func newSkillPlaceCommand(inv *invocation) *cobra.Command {
 	cmd.Flags().StringArrayVar(&to, "to", nil, "the configuration to place the skill in, instead of every enabled one; give it again for each")
 	cmd.Flags().BoolVar(&asCopy, "copy", false, "place a copy instead of a symlink")
 	cmd.Flags().BoolVar(&force, "force", false,
-		"replace a displaced directory whose content differs from the library with the expected placement, deleting what the directory holds")
+		"replace a displaced directory whose content differs from the library with the expected placement, deleting what the directory holds; for a fork, adopt what is in the way of its worktree or library symlink")
 	return cmd
 }
 
@@ -191,15 +195,16 @@ func targetIDs(targets []placeTarget) []string {
 // they retain is dropped only when it still hashes to it, so a change made
 // while the mutation runs is kept as well.
 //
-// A fork is placed as it always was, see placeEach: its placements are not
-// judged against the library's content.
+// A fork is placed as it always was, its placements not judged against the
+// library's content, and what it needs to be placed on this machine is put
+// back first, see placeFork.
 func (inv *invocation) skillPlace(ctx context.Context, name string, to []string, asCopy, force bool) error {
 	sc, err := inv.skillContext(ctx)
 	if err != nil {
 		return err
 	}
 	flags := placeFlags(to, asCopy)
-	lib, rec, managed, err := inv.placeRecord(sc, name, force, flags)
+	lib, rec, managed, err := inv.placeRecord(sc, name)
 	if err != nil {
 		return err
 	}
@@ -208,7 +213,7 @@ func (inv *invocation) skillPlace(ctx context.Context, name string, to []string,
 		return err
 	}
 	if rec.Kind == lineage.KindFork {
-		return inv.placeEach(ctx, name, targets, asCopy)
+		return inv.placeFork(ctx, rec, targets, asCopy, force, flags)
 	}
 	plan, err := inv.planPlace(lib, sc.targets, targetIDs(targets), sc.modes[name], asCopy)
 	if err != nil {
@@ -290,48 +295,6 @@ func (inv *invocation) skillPlace(ctx context.Context, name string, to []string,
 		// changes nothing has nothing to hold.
 		if managed && !m.Empty() {
 			m.Ref(gitDir, lineage.ManagedRef(name), rec.Commit, rec.Commit)
-		}
-		return m.Apply(inv.refs(ctx))
-	})
-	if err != nil {
-		return mutationFailure(err)
-	}
-	return inv.reportPlaced(ctx, name, targets, done)
-}
-
-// placeEach places a fork, as skill place always placed a skill: into each
-// of targets on its own, by the staging an install places with, skipping
-// what it finds at a place that is not the placement.
-func (inv *invocation) placeEach(ctx context.Context, name string, targets []placeTarget, asCopy bool) error {
-	var done placements
-	err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
-		// Every input is read again under the lock: the library may have
-		// changed between the check above and this mutation.
-		lib, ok := librarySkill(inv.dirs.Library, name)
-		if !ok {
-			return inv.noLibrarySkill(name)
-		}
-		for _, t := range targets {
-			if !t.readsLibrary {
-				sweepStaged(t.dir)
-			}
-		}
-		m := home.NewMutation(inv.dirs.Home)
-		edit, err := inv.beginSettings()
-		if err != nil {
-			return err
-		}
-		done = placements{}
-		p := libraryPlaceable(lib)
-		for _, t := range targets {
-			// A placement this machine cannot make is skipped and counted,
-			// not a failure of the run: stagePlacement decides that itself.
-			inv.stagePlacement(m, p, t, lib.Path, asCopy, edit.copiesOf(name), &done)
-		}
-		edit.addCopies(name, done.copies)
-		if err := edit.stage(m, inv.dirs.Home); err != nil {
-			m.Discard()
-			return err
 		}
 		return m.Apply(inv.refs(ctx))
 	})

@@ -1,0 +1,589 @@
+package cli
+
+import (
+	"context"
+	"errors"
+	"io/fs"
+	"maps"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
+	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
+)
+
+// Reconciliation matches the branches of the account repo against what is
+// on disk, so that agentx installed again over an existing agentx home, or
+// a fork's worktree deleted by mistake, comes back as it was: every skill
+// is recognised from its branch and its library entry, a fork whose
+// worktree went is checked out again from its branch, and nothing is
+// deleted or overwritten. The outcomes, one per skill name, are these.
+const (
+	// outcomeRestored is a skill found as its branch leaves it: a managed
+	// skill whose library directory holds its base version, or a fork
+	// whose library symlink leads into its registered worktree.
+	outcomeRestored = "restored"
+	// outcomeRepaired is a fork whose worktree, skill directory or library
+	// symlink was missing, and was put back from its branch.
+	outcomeRepaired = "repaired"
+	// outcomeWorktreeMissing is a fork that was placed on this machine and
+	// whose worktree, the skill directory in it, or the library symlink
+	// into it, is gone or leads nowhere, and was not put back. It is not
+	// drift's missing, which is a configuration's place with nothing at it.
+	outcomeWorktreeMissing = "worktree missing"
+	// outcomeAdoptCandidate is a fork with something of its own in the
+	// way: a directory where its worktree belongs that is not registered as
+	// one, or a directory or a foreign symlink where its library symlink
+	// belongs. It is reported and left as it is.
+	outcomeAdoptCandidate = "adopt candidate"
+	// outcomeModified is a managed skill whose library directory does not
+	// hold its base version.
+	outcomeModified = "modified"
+	// outcomeInstallable is a skill the account repo holds and the library
+	// does not: a managed skill whose library directory is gone, a fork
+	// never placed on this machine, and a fork only the account remote's
+	// branches hold.
+	outcomeInstallable = "installable"
+	// outcomeUnmanaged is a skill of the library no branch names.
+	outcomeUnmanaged = "unmanaged"
+)
+
+// reconcileEvent is the outcome of one skill name, emitted by a
+// long-running serve before its first snapshot.
+type reconcileEvent struct {
+	event
+	Name    string `json:"name"`
+	Kind    string `json:"kind"`
+	Outcome string `json:"outcome"`
+	Path    string `json:"path,omitempty"` // what is in the way of an adopt candidate, the worktree of one whose worktree is missing
+}
+
+// libKind is what a fork's library entry is.
+type libKind int
+
+const (
+	libAbsent   libKind = iota // nothing
+	libOwn                     // a symlink leading into the fork's own worktree
+	libDangling                // a symlink into the worktrees directory that leads nowhere
+	libDir                     // a real directory
+	libForeign                 // anything else: a symlink to elsewhere, a file
+)
+
+// rootKind is what is at a fork's worktree.
+type rootKind int
+
+const (
+	rootAbsent   rootKind = iota // nothing
+	rootEmpty                    // an empty directory, or one holding nothing but a .git file that is not registered: what a worktree add stopped part way leaves
+	rootWorktree                 // a worktree the account repo registers, whatever branch it is on
+	rootMoved                    // a .git file whose pointers no longer meet, as moving agentx home leaves them; git can repair it
+	rootOrphan                   // a directory holding more than a lone .git file that is not a registered worktree
+)
+
+// forkFacts are what reconciliation reads of one fork, from files alone.
+type forkFacts struct {
+	lib        libKind
+	root       rootKind
+	registered bool // a registration of the account repo names the worktree, whatever is there now
+	onBranch   bool // rootWorktree: its HEAD is the fork's branch
+	skillDir   bool // rootWorktree: it holds the skill's directory
+}
+
+// forkVerdict is what reconciliation makes of a fork's facts: the outcome
+// before any repair, what is in the way of an adopt candidate, and what a
+// repair does. A fork with anything to repair is worktree missing until
+// the repair is made, and repaired once it is.
+type forkVerdict struct {
+	outcome  string
+	inWay    string // "worktree" or "library symlink": what an adopt candidate's path is in the way of
+	pointers bool   // the worktree's pointers are repaired with git first, and the fork read again
+	worktree bool   // the worktree is added, or its index aligned with the branch
+	content  bool   // the skill's directory is laid out from the branch tip
+	link     bool   // the library symlink is written, a dangling one removed first
+}
+
+// repairs reports whether the verdict has anything to repair.
+func (v forkVerdict) repairs() bool { return v.pointers || v.worktree || v.content || v.link }
+
+// classifyFork is the rule reconciliation, the listing's warnings and skill
+// place share. Something of the user's in the way, a directory or a
+// foreign symlink at the library entry, or a directory at the worktree
+// that is not registered, makes an adopt candidate, which only skill place
+// --force adopts. A fork with neither a worktree, nor a registration of
+// one, nor a library symlink into the worktrees directory was never placed
+// on this machine, and is installable. Every other fork is restored when
+// its library symlink leads into its registered worktree, and worktree
+// missing otherwise, with what a repair puts back: the worktree and the
+// skill directory, laid out from the branch tip, and the library symlink.
+// A registered worktree on another branch than the fork's keeps whatever
+// it holds: agentx lays nothing out where git would compare it with
+// another branch.
+func classifyFork(f forkFacts) forkVerdict {
+	switch {
+	case f.lib == libDir || f.lib == libForeign:
+		return forkVerdict{outcome: outcomeAdoptCandidate, inWay: "library symlink"}
+	case f.root == rootOrphan:
+		return forkVerdict{outcome: outcomeAdoptCandidate, inWay: "worktree"}
+	case f.root == rootMoved:
+		return forkVerdict{outcome: outcomeWorktreeMissing, pointers: true}
+	case f.root == rootAbsent && f.lib == libAbsent && !f.registered:
+		return forkVerdict{outcome: outcomeInstallable}
+	case f.root == rootAbsent || f.root == rootEmpty:
+		return forkVerdict{outcome: outcomeWorktreeMissing, worktree: true, content: true, link: true}
+	case !f.skillDir && !f.onBranch:
+		return forkVerdict{outcome: outcomeWorktreeMissing}
+	}
+	v := forkVerdict{outcome: outcomeRestored, worktree: !f.skillDir, content: !f.skillDir, link: f.lib != libOwn}
+	if v.repairs() {
+		v.outcome = outcomeWorktreeMissing
+	}
+	return v
+}
+
+// forkFactsOf reads the facts of the fork f from files alone. Its skill
+// directory is looked for only when f names it: a listing, which reads no
+// git, leaves it unnamed when the library symlink does not lead into the
+// worktree.
+func (inv *invocation) forkFactsOf(f forkSite) forkFacts {
+	var facts forkFacts
+	info, err := os.Lstat(f.libPath)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		facts.lib = libAbsent
+	case err != nil:
+		facts.lib = libForeign
+	case info.Mode()&os.ModeSymlink != 0:
+		real, err := filepath.EvalSymlinks(f.libPath)
+		_, own := inv.placedForkDir(f.name, real)
+		switch {
+		case err == nil && own:
+			facts.lib = libOwn
+		case err != nil && inv.intoWorktrees(f.libPath):
+			facts.lib = libDangling
+		default:
+			facts.lib = libForeign
+		}
+	case info.IsDir():
+		facts.lib = libDir
+	default:
+		facts.lib = libForeign
+	}
+	_, facts.registered = home.Registration(f.gitDir, f.root)
+	switch {
+	case !lexists(f.root):
+		facts.root = rootAbsent
+	case home.PointersMoved(f.root) && repairable(f.gitDir, f.root):
+		facts.root = rootMoved
+	case home.RegisteredIn(f.gitDir, f.root):
+		facts.root = rootWorktree
+		facts.onBranch = home.WorktreeAt(f.root, f.branch)
+		facts.skillDir = f.dir == "" || isDir(f.skillDir)
+	case loneGitFile(f.root):
+		facts.root = rootEmpty
+	default:
+		facts.root = rootOrphan
+	}
+	return facts
+}
+
+// repairable reports whether git can repair the pointers of the worktree
+// at root, which no longer meet, as git worktree repair finds the
+// registration: the admin directory its .git file names, whose gitdir then
+// names another path, or, when that directory is not there, as moving
+// agentx home as a whole leaves it, the one of the same name in the account
+// repo at gitDir. A worktree whose registration is gone either way, as one
+// removed by hand leaves it, is a directory git does not know.
+func repairable(gitDir, root string) bool {
+	admin, ok := home.AdminDirOf(root)
+	if !ok {
+		return false
+	}
+	return lexists(admin) || lexists(filepath.Join(gitDir, "worktrees", filepath.Base(admin)))
+}
+
+// loneGitFile reports whether the directory at path is empty, or holds
+// nothing but a .git file: what a worktree add stopped part way, or a
+// worktree emptied by hand, leaves, which adding the worktree again
+// clears.
+func loneGitFile(path string) bool {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return false
+	}
+	return len(entries) == 0 || len(entries) == 1 && entries[0].Name() == ".git" && entries[0].Type().IsRegular()
+}
+
+// isDir reports whether path is a directory, not following a symlink.
+func isDir(path string) bool {
+	info, err := os.Lstat(path)
+	return err == nil && info.IsDir()
+}
+
+// forkWarning is what a listing says of a fork reconciliation would not
+// call restored or installable, "" when it says nothing: the one line
+// that names what is wrong and the skill place that puts it right. It
+// reads files alone.
+func (inv *invocation) forkWarning(f forkSite) string {
+	facts := inv.forkFactsOf(f)
+	v := classifyFork(facts)
+	switch {
+	case v.outcome == outcomeAdoptCandidate:
+		what, wayOut := adoptRefusal(f, v, facts)
+		return what + "; " + wayOut
+	case v.outcome != outcomeWorktreeMissing:
+		return ""
+	}
+	return worktreeMissingWarning(f, facts)
+}
+
+// worktreeMissingWarning names what is missing of a fork whose worktree is
+// missing, and the skill place that puts it back.
+func worktreeMissingWarning(f forkSite, facts forkFacts) string {
+	name, place := sanitised(f.name), "run '"+skillCommand("place", f.name)+"'"
+	switch {
+	case facts.root == rootMoved:
+		return name + "'s worktree " + quotedPath(f.root) + " needs repair; " + place + " to repair it"
+	case facts.root == rootAbsent || facts.root == rootEmpty:
+		return name + "'s worktree " + quotedPath(f.root) + " is missing; " + place + " to check it out again from its branch"
+	case !facts.onBranch:
+		return name + "'s worktree " + quotedPath(f.root) + " holds no skill directory and is not on its branch " + f.branch + "; run 'git -C " + shellWord(f.root) + " switch " + f.branch + "', then " + place
+	case !facts.skillDir:
+		return name + "'s skill directory " + quotedPath(f.skillDir) + " is missing from its worktree; " + place + " to lay it out again from its branch"
+	}
+	return name + "'s library symlink " + quotedPath(f.libPath) + " is missing or leads nowhere; " + place + " to put it back"
+}
+
+// adoptRefusal is what skill place says of an adopt candidate it was not
+// given --force for, and how a listing warns of one: what is in the way of
+// what, and how to adopt it. Adopting keeps every file: a directory's
+// content becomes uncommitted edits of the fork, which skill revert then
+// discards, and a symlink, which holds nothing, is replaced.
+func adoptRefusal(f forkSite, v forkVerdict, facts forkFacts) (what, wayOut string) {
+	path := f.root
+	if v.inWay == "library symlink" {
+		path = f.libPath
+	}
+	what = quotedPath(path) + " is in the way of " + sanitised(f.name) + "'s " + v.inWay
+	force := "run '" + skillCommand("place", f.name, "--force") + "'"
+	if facts.lib == libForeign && v.inWay == "library symlink" {
+		return what, force + " to replace it with the fork's library symlink"
+	}
+	return what, force + " to adopt it: its content becomes uncommitted edits of the fork, which '" + skillCommand("revert", f.name) + "' discards"
+}
+
+// forkWarnings are the warnings a listing gives of the forks of records,
+// sorted by name: one per fork whose worktree is missing or that has
+// something in the way, see forkWarning. A fork's skill directory is named
+// only when its library symlink leads into its worktree, since finding it
+// otherwise takes git, and no listing runs git for a warning.
+func (sc skillContext) forkWarnings(inv *invocation) []string {
+	gitDir := gitx.AccountRepoPath(inv.dirs.Home)
+	var warnings []string
+	for _, name := range slices.Sorted(maps.Keys(sc.records)) {
+		rec := sc.records[name]
+		if rec.Kind != lineage.KindFork {
+			continue
+		}
+		f := inv.forkPlace(gitDir, rec)
+		if real, err := filepath.EvalSymlinks(f.libPath); err == nil {
+			if dir, ok := inv.placedForkDir(name, real); ok {
+				f.dir, f.skillDir = dir, filepath.Join(f.root, dir)
+			}
+		}
+		if w := inv.forkWarning(f); w != "" {
+			warnings = append(warnings, w)
+		}
+	}
+	return warnings
+}
+
+// serveReconcile reconciles agentx home when a long-running serve starts,
+// before its first scan, and emits one reconcile event per skill name, by
+// name. It holds the lock throughout, waiting for it as the update check
+// does: the recovery and pruning every mutation starts with, then git's
+// registrations of worktrees whose directory is gone, which a locked
+// worktree, a fork's or a pending merge's, survives; then the pointers of
+// every fork's worktree that moved with agentx home, repaired with git,
+// each path named; then the classification, see classifyFork, and one
+// journal that repairs every fork whose worktree is missing. Adopt
+// candidates are reported and left as they are. The version file is
+// rewritten only when something was repaired. A repair that fails is a
+// warning, and its forks stay worktree missing.
+//
+// A pending merge's checkout under merges/ is never classified or repaired
+// as a fork: the recovery every mutation starts with prunes a checkout
+// that is not registered, and a registration with no checkout.
+func (inv *invocation) serveReconcile(ctx context.Context) error {
+	var events []reconcileEvent
+	err := home.MutateQuietWaiting(ctx, inv.dirs.Home, inv.refs(ctx), func() (err error) {
+		events, err = inv.reconcile(ctx)
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	for _, ev := range events {
+		inv.out.emit(ev)
+		if ev.Outcome != outcomeRestored {
+			style := noteStyle
+			if ev.Outcome == outcomeAdoptCandidate || ev.Outcome == outcomeWorktreeMissing {
+				style = warnStyle
+			}
+			inv.out.print(inv.out.paint(heading, "reconcile "+sanitised(ev.Name)), ": ", inv.out.paint(style, ev.Outcome))
+		}
+	}
+	return nil
+}
+
+// reconcile is serveReconcile's work under the lock: what it repairs, and
+// the events it reports.
+func (inv *invocation) reconcile(ctx context.Context) ([]reconcileEvent, error) {
+	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	if err != nil {
+		return nil, accountRepoFailure(err)
+	}
+	remote, repointed := map[string]bool{}, map[string]bool{}
+	if exists {
+		if remote, repointed, err = inv.prepareWorktrees(ctx, gitDir); err != nil {
+			return nil, err
+		}
+	}
+	sc, err := inv.skillContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	libs := librarySkills(inv.dirs.Library)
+	names := map[string]bool{}
+	for name := range sc.records {
+		names[name] = true
+	}
+	for name := range libs {
+		names[name] = true
+	}
+	for name := range remote {
+		names[name] = true
+	}
+	var events []reconcileEvent
+	var repairs []forkSite
+	for _, name := range slices.Sorted(maps.Keys(names)) {
+		ev := reconcileEvent{event: newEvent("reconcile"), Name: name}
+		rec, held := sc.records[name]
+		lib, inLibrary := libs[name]
+		switch {
+		case held && rec.Kind == lineage.KindFork:
+			f, v := inv.reconcileFork(ctx, gitDir, rec)
+			ev.Kind, ev.Outcome, ev.Path = lineage.KindFork, v.outcome, verdictPath(f, v)
+			if v.outcome == outcomeRestored && repointed[name] {
+				ev.Outcome = outcomeRepaired
+			}
+			if v.repairs() && !v.pointers {
+				repairs = append(repairs, f)
+			}
+		case held:
+			ev.Kind = lineage.KindManaged
+			switch {
+			case !inLibrary:
+				ev.Outcome = outcomeInstallable
+			case sc.observe(ctx, inv, lib).modified:
+				ev.Outcome = outcomeModified
+			default:
+				ev.Outcome = outcomeRestored
+			}
+		case remote[name]:
+			ev.Kind, ev.Outcome = lineage.KindFork, outcomeInstallable
+		default:
+			ev.Kind, ev.Outcome = lineage.KindUnmanaged, outcomeUnmanaged
+		}
+		events = append(events, ev)
+	}
+	repaired := map[string]bool{}
+	if len(repairs) > 0 {
+		if repaired, err = inv.repairForks(ctx, repairs); err != nil {
+			inv.out.warn("reconcile: " + err.Error() + "; run 'agentx skill place <name>' for each fork whose worktree is missing")
+		}
+	}
+	for i := range events {
+		if repaired[events[i].Name] {
+			events[i].Outcome, events[i].Path = outcomeRepaired, ""
+		}
+	}
+	if len(repaired) == 0 && len(repointed) == 0 {
+		return events, nil
+	}
+	return events, home.BumpVersion(inv.dirs.Home)
+}
+
+// reconcileFork finds and classifies the fork whose branch is rec. Its
+// skill directory is where the library symlink leads or, when the symlink
+// leads elsewhere, the one directory its tip holds; a tip that does not
+// tell is no reason to keep serve from starting, so the fork is then
+// classified without one, and repairForks leaves it as it is. A worktree
+// whose pointers still do not meet is one git could not repair, a
+// directory of the user's in the way.
+func (inv *invocation) reconcileFork(ctx context.Context, gitDir string, rec lineage.Record) (forkSite, forkVerdict) {
+	f := inv.forkPlace(gitDir, rec)
+	if err := inv.findForkDir(ctx, &f); err != nil {
+		inv.out.debugf("reconcile %s: %v", rec.Name, err)
+	}
+	facts := inv.forkFactsOf(f)
+	if facts.root == rootMoved {
+		facts.root = rootOrphan // prepareWorktrees asked git to repair it, and git could not
+	}
+	return f, classifyFork(facts)
+}
+
+// verdictPath is the path a reconcile event names: what is in the way of
+// an adopt candidate, and the worktree of a fork whose worktree is
+// missing.
+func verdictPath(f forkSite, v forkVerdict) string {
+	switch {
+	case v.inWay == "library symlink":
+		return f.libPath
+	case v.outcome == outcomeAdoptCandidate || v.outcome == outcomeWorktreeMissing:
+		return f.root
+	}
+	return ""
+}
+
+// prepareWorktrees readies git's worktrees of the account repo at gitDir
+// for reconciliation, and reads the fork branches the account remote
+// holds, by name, in one for-each-ref: registrations whose directory is
+// gone are pruned, which every locked worktree survives, and the pointers
+// of every worktree in the worktrees directory that no longer meet, as
+// moving agentx home leaves them, are repaired, each path named; repointed
+// are the names of the worktrees the repair put right. A repair git cannot
+// make leaves the worktree as it is, for the classification to find.
+func (inv *invocation) prepareWorktrees(ctx context.Context, gitDir string) (remote, repointed map[string]bool, err error) {
+	list, err := inv.git.Worktrees(ctx, gitDir)
+	if err != nil {
+		return nil, nil, accountRepoFailure(err)
+	}
+	if slices.ContainsFunc(list, func(w gitx.Worktree) bool { return w.Prunable }) {
+		if err := inv.git.PruneWorktrees(ctx, gitDir); err != nil {
+			return nil, nil, accountRepoFailure(err)
+		}
+	}
+	entries, err := os.ReadDir(inv.worktreesDir())
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, nil, libraryFailure(inv.worktreesDir(), err)
+	}
+	var moved []string
+	for _, e := range entries {
+		root := filepath.Join(inv.worktreesDir(), e.Name())
+		if !strings.HasPrefix(e.Name(), ".") && e.IsDir() && home.PointersMoved(root) {
+			moved = append(moved, root)
+		}
+	}
+	repointed = map[string]bool{}
+	if len(moved) > 0 {
+		if err := inv.git.RepairWorktrees(ctx, gitDir, moved); err != nil {
+			inv.out.debugf("worktree repair: %v", err)
+		}
+		for _, root := range moved {
+			if !home.PointersMoved(root) {
+				repointed[filepath.Base(root)] = true
+			}
+		}
+	}
+	out, err := inv.git.Isolated(ctx, gitDir, "for-each-ref", "--format=%(refname)", remoteForkPrefix)
+	if err != nil {
+		return nil, nil, accountRepoFailure(err)
+	}
+	remote = map[string]bool{}
+	for _, ref := range strings.Split(out, "\n") {
+		if name, ok := strings.CutPrefix(ref, remoteForkPrefix); ok && name != "" {
+			remote[name] = true
+		}
+	}
+	return remote, repointed, nil
+}
+
+// remoteForkPrefix is where the account repo keeps the fork branches its
+// remote holds, as a fetch of the remote writes them.
+const remoteForkPrefix = "refs/remotes/origin/skills/"
+
+// repairForks repairs, in one journal under the lock its caller holds,
+// every fork of sites whose worktree is missing, read again first, and
+// returns the names of the forks it repaired: the worktree added, the
+// skill's directory laid out from the branch tip and the library symlink
+// written, as stageForkRepair plans them. Placements are not touched: they
+// lead to the library entry, which the symlink puts back.
+func (inv *invocation) repairForks(ctx context.Context, sites []forkSite) (map[string]bool, error) {
+	sweepStaged(inv.worktreesDir())
+	m := home.NewMutation(inv.dirs.Home)
+	repaired := map[string]bool{}
+	for _, f := range sites {
+		v := classifyFork(inv.forkFactsOf(f))
+		if v.outcome != outcomeWorktreeMissing || v.pointers || f.dir == "" {
+			continue
+		}
+		if _, err := inv.stageForkRepair(ctx, m, f, v); err != nil {
+			m.Discard()
+			return nil, err
+		}
+		repaired[f.name] = true
+	}
+	if err := m.Apply(inv.refs(ctx)); err != nil {
+		return nil, mutationFailure(err)
+	}
+	return repaired, nil
+}
+
+// stageForkRepair plans into m the repair of the fork f, as v says: the
+// worktree added, or its index aligned with the branch, the skill's
+// directory laid out from the branch tip, staged in the worktrees
+// directory, and the library symlink written, a dangling one removed
+// first. It returns the directory the fork's content is at before the
+// journal is applied, for a copy placed from it: the staged content when
+// it lays the directory out, and the skill directory otherwise.
+func (inv *invocation) stageForkRepair(ctx context.Context, m *home.Mutation, f forkSite, v forkVerdict) (string, error) {
+	from := f.skillDir
+	if v.worktree {
+		if err := os.MkdirAll(inv.worktreesDir(), 0o755); err != nil {
+			return "", libraryFailure(inv.worktreesDir(), err)
+		}
+		m.Worktree(f.gitDir, f.root, f.branch)
+	}
+	if v.content {
+		staged := m.Sibling(f.root, "staged")
+		fp, err := inv.stageForkContent(ctx, f.gitDir, f.rec.Commit, f.dir, staged, "", nil)
+		if err != nil {
+			_ = home.RemoveTree(staged)
+			return "", accountRepoFailure(err)
+		}
+		m.Publish(f.skillDir, staged, fp)
+		from = staged
+	}
+	if v.link {
+		if err := inv.stageForkLink(m, f); err != nil {
+			return "", err
+		}
+	}
+	return from, nil
+}
+
+// stageForkLink plans into m the library symlink of the fork f, the entry
+// at the library path removed first when it is a symlink: one that leads
+// nowhere, or a foreign one skill place --force replaces. Neither holds
+// anything.
+func (inv *invocation) stageForkLink(m *home.Mutation, f forkSite) error {
+	state, err := home.State(f.libPath)
+	if err != nil {
+		return libraryFailure(inv.dirs.Library, err)
+	}
+	if err := os.MkdirAll(inv.dirs.Library, 0o755); err != nil {
+		return libraryFailure(inv.dirs.Library, err)
+	}
+	link, err := inv.forkLink(f.libPath, f.skillDir)
+	if err != nil {
+		return libraryFailure(inv.dirs.Library, err)
+	}
+	if home.IsLink(state) {
+		m.Remove(f.libPath, state)
+	}
+	m.Link(f.libPath, link)
+	return nil
+}

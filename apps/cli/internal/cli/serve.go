@@ -147,6 +147,17 @@ func newServeCommand(inv *invocation) *cobra.Command {
 			inv.instanceID() // fixed here, before two goroutines report it
 			inv.verdicts = map[string]keptVerdict{}
 			inv.forkWalks = map[string]lineage.ForkLineage{}
+			if !once {
+				// Reconciliation reports and repairs before the first scan,
+				// so the snapshot shows what it put back. One that cannot
+				// run leaves serve to report what the scan finds.
+				if err := inv.serveReconcile(cmd.Context()); err != nil {
+					if cmd.Context().Err() != nil {
+						return nil
+					}
+					inv.out.warn("reconcile: " + err.Error())
+				}
+			}
 			dirs, trees := inv.watchedDirs()
 			// The library of the last snapshot emitted, which the next one's
 			// drift is told against. Snapshots are reported from the loop's
@@ -164,6 +175,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 				Stdin:      cmd.InOrStdin(),
 				Check:      func(ctx context.Context) func() { return inv.serveCheck(ctx, failing) },
 				CheckEvery: every,
+				Ticks:      []serve.Tick{inv.maintenanceTick()},
 				Snapshot: func(snap scan.Snapshot) {
 					inv.out.emit(snapshotEvent{event: newEvent("snapshot"), Snapshot: snap})
 					inv.out.print(inv.out.paint(heading, fmt.Sprintf("snapshot %d", snap.ScanCounter)), ": ",

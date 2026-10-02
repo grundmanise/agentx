@@ -295,13 +295,17 @@ func (sc skillContext) absentManaged(libs []scan.LibrarySkill) []string {
 // and a snapshot carries them, so the user and the desktop app both learn
 // that the skill is gone. Whether the path is taken is read from the
 // filesystem; nothing here runs git or reads a source.
+//
+// A fork reconciliation would not call restored is named the same way,
+// after them: one whose worktree is missing, and one with something of the
+// user's in the way, see forkWarnings.
 func (sc skillContext) absentWarnings(inv *invocation, libs []scan.LibrarySkill) []string {
 	var warnings []string
 	for _, name := range sc.absentManaged(libs) {
 		what, wayOut := sc.absentNotice(inv, name)
 		warnings = append(warnings, what+"; "+wayOut)
 	}
-	return warnings
+	return append(warnings, sc.forkWarnings(inv)...)
 }
 
 // absentNotice is what is said of one managed skill the library no longer

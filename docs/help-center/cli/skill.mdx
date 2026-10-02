@@ -525,7 +525,7 @@ Only what the directories held when you ran the command is replaced. If a direct
 
 ### What stops it
 
-A fork is placed as `skill add` places it: a directory that differs is left where it is with a warning, and `--force` stops with exit code 6. A managed skill whose library directory is gone stops with exit code 6: install it again with `agentx skill add`, or stop managing it with `agentx skill remove`, as the error says.
+A fork is placed as `skill add` places it: a directory that differs is left where it is with a warning. `skill place` also puts back a fork's worktree and library symlink, and `--force` adopts what is in a fork's way: see [Recover a fork](/cli/fork#recover-a-fork). A managed skill whose library directory is gone stops with exit code 6: install it again with `agentx skill add`, or stop managing it with `agentx skill remove`, as the error says.
 
 `skill place` changes nothing, with or without `--force`, when symlinks make what it would change overlap something it must leave alone. It stops with exit code 6 and names the paths when:
 

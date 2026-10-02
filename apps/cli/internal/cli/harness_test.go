@@ -13,6 +13,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 )
 
 // suiteParallel is how many tests of this package run at once when go test
@@ -68,6 +70,11 @@ type harness struct {
 	agentx  string // AGENTX_HOME
 	library string // AGENTX_LIBRARY
 	config  string // XDG_CONFIG_HOME
+	// maintain lets serve maintain the account repo when it starts. Serve
+	// does once a day, and a test's serve is told the home was maintained
+	// just now unless the test is about maintenance, so that the git
+	// processes a test counts are its own.
+	maintain bool
 }
 
 func newHarness(t *testing.T) *harness {
@@ -301,6 +308,11 @@ const serveDeadline = 10 * time.Second
 
 func (h *harness) serve(t *testing.T, args ...string) *serveProc {
 	t.Helper()
+	if !h.maintain {
+		if err := home.SetMaintained(h.agentx, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
 	inR, inW, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -341,29 +353,36 @@ func (p *serveProc) send(line string) {
 	}
 }
 
-// next returns the next stdout event, which must be of type typ.
+// next returns the next stdout event, which must be of type typ. The
+// reconcile events a serve starts with are passed over unless typ asks for
+// one: most tests are about what comes after them.
 func (p *serveProc) next(typ string) jsonEvent {
 	p.t.Helper()
-	select {
-	case line, ok := <-p.lines:
-		if !ok {
-			p.t.Fatalf("serve ended before a %s event", typ)
+	deadline := time.After(serveDeadline)
+	for {
+		select {
+		case line, ok := <-p.lines:
+			if !ok {
+				p.t.Fatalf("serve ended before a %s event", typ)
+			}
+			var e jsonEvent
+			if err := json.Unmarshal([]byte(line), &e); err != nil {
+				p.t.Fatalf("not a JSON event: %q: %v", line, err)
+			}
+			if e["schema_version"] != float64(1) {
+				p.t.Errorf("event %v: schema_version = %v, want 1", e, e["schema_version"])
+			}
+			if e["type"] == "reconcile" && typ != "reconcile" {
+				continue
+			}
+			if e["type"] != typ {
+				p.t.Fatalf("next event = %v, want type %s", e, typ)
+			}
+			return e
+		case <-deadline:
+			p.t.Fatalf("no %s event within %s", typ, serveDeadline)
 		}
-		var e jsonEvent
-		if err := json.Unmarshal([]byte(line), &e); err != nil {
-			p.t.Fatalf("not a JSON event: %q: %v", line, err)
-		}
-		if e["schema_version"] != float64(1) {
-			p.t.Errorf("event %v: schema_version = %v, want 1", e, e["schema_version"])
-		}
-		if e["type"] != typ {
-			p.t.Fatalf("next event = %v, want type %s", e, typ)
-		}
-		return e
-	case <-time.After(serveDeadline):
-		p.t.Fatalf("no %s event within %s", typ, serveDeadline)
 	}
-	return nil
 }
 
 // line reads the next stdout line, which must be want: the text output of

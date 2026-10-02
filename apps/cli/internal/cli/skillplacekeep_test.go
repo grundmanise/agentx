@@ -1211,15 +1211,20 @@ func TestSkillPlaceSkipsAPlaceItCannotWrite(t *testing.T) {
 	cleanAfterPlace(t, h, h.library, skills, filepath.Dir(cursor))
 }
 
-// TestSkillPlaceForceOnWhatItCannotJudge: a fork is placed as it always
-// was, a directory that differs left in place and counted as skipped, and
-// --force on it stops with exit 6 and changes nothing. A skill agentx does
-// not manage is judged like a managed one: a directory that differs stops
-// the run until --force discards it. A managed skill whose library
-// directory is gone has nothing to place, and one whose import branch
-// records no version agentx can read is placed all the same, since --force
-// judges nothing against the base. A name the library does not hold is
-// not found, --force or not, see TestSkillPlaceRefusesWhatItCannotFind.
+// TestSkillPlaceForceOnWhatItCannotJudge: a fork whose library entry is a
+// directory of its own, as a fork's branch written by hand over an
+// installed skill leaves it, is an adopt candidate: skill place refuses it
+// and changes nothing, naming --force, which moves the directory into the
+// fork's worktree, its edit kept as an uncommitted edit of the fork, and
+// places the fork as it always was, a directory that differs left in place
+// and counted as skipped. Once nothing is in the way, --force has nothing
+// to adopt and stops with exit 6. A skill agentx does not manage is judged
+// like a managed one: a directory that differs stops the run until --force
+// discards it. A managed skill whose library directory is gone has nothing
+// to place, and one whose import branch records no version agentx can read
+// is placed all the same, since --force judges nothing against the base. A
+// name the library does not hold is not found, --force or not, see
+// TestSkillPlaceRefusesWhatItCannotFind.
 func TestSkillPlaceForceOnWhatItCannotJudge(t *testing.T) {
 	t.Parallel()
 	t.Run("a fork", func(t *testing.T) {
@@ -1230,22 +1235,37 @@ func TestSkillPlaceForceOnWhatItCannotJudge(t *testing.T) {
 		h.accountGit("update-ref", "-d", "refs/heads/managed/alpha")
 		remove(t, cursor)
 		displace(t, lib, claude, true)
+		writeFile(t, filepath.Join(lib, "notes.md"), "alpha notes, edited in the library\n")
 		kept := libraryTree(t, claude)
 		version := mutationVersion(t, h)
-		out := h.run("--json", "skill", "place", "alpha", "--force")
+		out := h.run("--json", "skill", "place", "alpha")
 		equal(t, "exit", out.exit, 6)
 		e := h.one(out.stdout, "error")
-		equal(t, "message", e["message"], "alpha is a fork on this machine, which --force does not apply to")
-		equal(t, "hint", e["hint"], "place it without --force with 'agentx skill place alpha'")
+		equal(t, "message", e["message"], lib+" is in the way of alpha's library symlink, so nothing was placed")
+		equal(t, "hint", e["hint"], "run 'agentx skill place alpha --force' to adopt it: its content becomes uncommitted edits of the fork, which 'agentx skill revert alpha' discards")
 		nothingAt(t, "cursor's placement", cursor)
 		equal(t, "no mutation", mutationVersion(t, h), version)
 
-		out = h.mustRun("--json", "skill", "place", "alpha")
+		out = h.mustRun("--json", "skill", "place", "alpha", "--force")
+		root := filepath.Join(h.agentx, "worktrees", "alpha")
+		real, err := filepath.EvalSymlinks(lib)
+		if err != nil || real != filepath.Join(root, "alpha") {
+			t.Errorf("the library entry leads to %q, %v, not into the worktree", real, err)
+		}
+		equal(t, "git status in the worktree", gitIn(t, h, root, "status", "--porcelain"), " M alpha/notes.md\n")
 		sameTree(t, "claude's directory", libraryTree(t, claude), kept)
 		linksToLibrary(t, "cursor's placement", cursor, lib)
-		contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), ", 1 placement skipped")
+		summary := h.one(out.stdout, "result")["summary"].(string)
+		contains(t, "summary", summary, ", 1 placement skipped")
+		contains(t, "summary", summary, "; moved "+lib+" into alpha's worktree; its content is uncommitted edits of the fork")
 		equal(t, "the fork", h.accountGit("rev-parse", "refs/heads/skills/alpha"), commit)
-		cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor))
+		cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor), filepath.Dir(root))
+
+		out = h.run("--json", "skill", "place", "alpha", "--force")
+		equal(t, "exit", out.exit, 6)
+		e = h.one(out.stdout, "error")
+		equal(t, "message", e["message"], "alpha is a fork with nothing in the way of its worktree or its library symlink, so --force has nothing to adopt")
+		equal(t, "hint", e["hint"], "place it without --force with 'agentx skill place alpha'")
 	})
 
 	t.Run("an unmanaged skill", func(t *testing.T) {

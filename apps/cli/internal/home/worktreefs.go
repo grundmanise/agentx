@@ -158,3 +158,31 @@ func headIs(admin, branch string) bool {
 	b, err := os.ReadFile(filepath.Join(admin, "HEAD"))
 	return err == nil && strings.TrimRight(string(b), "\r\n") == "ref: refs/heads/"+branch
 }
+
+// Registration is the admin directory of the repository at gitDir whose
+// gitdir names the worktree at path, read from the files of its admin
+// directories, and false when none does. A registration outlives the
+// worktree's directory: a locked worktree deleted by hand keeps it, which
+// is how a worktree that was there is told from one never made.
+func Registration(gitDir, path string) (string, bool) {
+	admins := filepath.Join(gitDir, "worktrees")
+	entries, err := os.ReadDir(admins)
+	if err != nil {
+		return "", false
+	}
+	for _, e := range entries {
+		admin := filepath.Join(admins, e.Name())
+		if e.IsDir() && NamesBack(admin, path) {
+			return admin, true
+		}
+	}
+	return "", false
+}
+
+// RegisteredIn reports whether the worktree at path is a worktree the
+// repository at gitDir registers: its .git file names an admin directory
+// of that repository, and the admin directory names it back.
+func RegisteredIn(gitDir, path string) bool {
+	admin, ok := AdminDirOf(path)
+	return ok && NamesBack(admin, path) && SamePath(filepath.Dir(admin), filepath.Join(gitDir, "worktrees"))
+}
