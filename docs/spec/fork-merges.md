@@ -42,7 +42,7 @@ A pull that moves the fork's base to another import also drops the update candid
 
 ## Deterministic parentless imports
 
-Every upstream version becomes a commit with no parent whose id is a pure function of the version and its coordinates, identical on every machine. So two machines that took the same upstream version merge clean when neither has edited since, and two that took different versions merge clean where the versions changed different lines and conflict where both changed the same lines, as Git merges any two histories. Two machines that each took the same version share its import commit as a merge base beside the last commit they shared. The two bases have no common ancestor, so Git merges over a virtual base of its own, in which every line the version changed conflicts. Until the two machines have synced once since taking the version, a commit on either one that edits a line the version changed, or a line next to one, conflicts on the other's pull or publish, even when the other edited nothing: a line put back to the older upstream text conflicts rather than being taken back without a word, and any other edit there conflicts too. Once either machine has merged the other's commits, that merge is their one base, and later edits merge as any others do.
+Every upstream version becomes a commit with no parent whose id is a pure function of the version and its coordinates, identical on every machine. So two machines that took the same upstream version merge clean when neither has edited since, and two that took different versions merge clean where the versions changed different lines and conflict where both changed the same lines, as Git merges any two histories. Two machines that each took the same version share its import commit as a merge base beside the last commit they shared. The two bases have no common ancestor, so Git merges over a virtual base of its own, in which every line where the two bases differ conflicts: each line the version changed, and each line the fork had changed from upstream before it took the version. Until the two machines have synced once since taking the version, a commit on either one that edits such a line, or a line next to one, conflicts on the other's pull or publish, even when the other edited nothing: a line put back to the older upstream text conflicts rather than being taken back without a word, and any other edit there conflicts too. Once either machine has merged the other's commits, that merge is their one base, and later edits merge as any others do.
 
 ## No inferred ancestry
 
@@ -50,7 +50,7 @@ Ancestry is never inferred: no grafts, no replacement refs, no ordering by impor
 
 ## Acceptance
 
-- The same upstream version on two machines merges clean. Until the two have synced once, an edit on either machine to a line the version changed, or a line next to one, conflicts on the other's pull.
+- The same upstream version on two machines merges clean. Until the two have synced once, an edit on either machine to a line the version changed or the fork had changed from upstream, or to a line next to one, conflicts on the other's pull or publish.
 - Different upstream versions merge clean where they changed different lines and conflict where both changed the same lines; the conflict is resolved like any other.
 - The recorded `Agentx-Base` follows the base rule above, never a timestamp.
 - A rollback of an upstream line on one machine survives a pull on the other, or surfaces as a conflict; it is never silently undone.

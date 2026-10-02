@@ -36,15 +36,17 @@ func scenarioMachines(t *testing.T) (a, b *harness, s *sourceRepo, remote string
 	return a, b, s, remote
 }
 
-// scenarioHomes is scenarioMachines with both forks installed on b from the
-// account remote alone, which adds their source to b, so every import
-// commit b writes of a version it takes is its own, and has to come out as
-// the one a writes of that version for the two to merge as one history.
-func scenarioHomes(t *testing.T) (a, b *harness, s *sourceRepo, remote string) {
+// scenarioHomes is scenarioMachines with the forks called names installed
+// on b from the account remote alone, which adds their source to b, so
+// every import commit b writes of a version it takes is its own, and has to
+// come out as the one a writes of that version for the two to merge as one
+// history.
+func scenarioHomes(t *testing.T, names ...string) (a, b *harness, s *sourceRepo, remote string) {
 	t.Helper()
 	a, b, s, remote = scenarioMachines(t)
-	b.mustRun("skill", "add", "--from-account", "alpha")
-	b.mustRun("skill", "add", "--from-account", "beta")
+	for _, name := range names {
+		b.mustRun("skill", "add", "--from-account", name)
+	}
 	return a, b, s, remote
 }
 
@@ -137,7 +139,7 @@ func besideConflicts(body string) (merged, conflicts string) {
 // TestPublishMergesFirstAndNamesUncommittedForks.
 func TestScenarioDisjointEditsMergeClean(t *testing.T) {
 	t.Parallel()
-	a, b, _, remote := scenarioHomes(t)
+	a, b, _, remote := scenarioHomes(t, "alpha")
 	equal(t, "b's fork id", forkIDOf(b, "alpha"), forkIDOf(a, "alpha"))
 	alphaB := b.forkDir("alpha", "alpha")
 
@@ -185,7 +187,7 @@ func TestScenarioDisjointEditsMergeClean(t *testing.T) {
 // up leaves both machines' branches and worktrees as they were.
 func TestScenarioSameVersionMergesClean(t *testing.T) {
 	t.Parallel()
-	a, b, s, remote := scenarioHomes(t)
+	a, b, s, remote := scenarioHomes(t, "alpha", "beta")
 	a.commitFork("beta", forkNotes("one", "one, a", "six", "six, a"))
 	b.commitFork("beta", forkNotes("one", "one, b", "eight", "eight, b"))
 	s.write("skills/alpha/notes.md", forkNotes("four", "four, v2"))
@@ -233,30 +235,35 @@ func TestScenarioSameVersionMergesClean(t *testing.T) {
 
 // TestScenarioARevertIsNeverUndone has both machines take the source's
 // second version into alpha; then a puts back one line the version changed
-// and b edits another. The two histories share the version's import
-// commit, which has no ancestor in common with the commit they last
-// shared, so git merges them over both, and b's pull does not take a's line
-// back to the version's text: it conflicts, a's side whole in the checkout,
-// and b's worktree and branch stay as they were. Resolved with a's line
-// kept, the next pull completes the merge. Then a reverts alpha to the
-// commit it was forked as, and b, which committed nothing since, takes that
-// by a fast-forward.
+// and b edits another, away from the version's changes. The two histories
+// share the version's import commit, which has no ancestor in common with
+// the commit they last shared, so git merges them over both, and b's pull
+// does not take a's line back to the version's text: it conflicts, a's
+// put-back line in the conflict and a's side whole in the checkout, and b's
+// worktree and branch stay as they were. Resolved with a's line kept, the
+// next pull completes the merge. Then a reverts alpha to the commit it was
+// forked as, and b, which committed nothing since, takes that by a
+// fast-forward.
 //
-// Over the same two merge bases, an edit is enough: a edits beta's line
-// beside the one the version changed, b edits nothing, and b's pull of
-// beta conflicts all the same, a's side whole in the checkout.
+// Over the same two merge bases, an edit is enough, and not only to the
+// version's lines: in beta, a edits again a line of the fork's own that
+// both machines held before they took the version, b edits nothing, and
+// b's pull of beta conflicts all the same, a's side whole in the checkout.
 func TestScenarioARevertIsNeverUndone(t *testing.T) {
 	t.Parallel()
-	a, b, s, _ := scenarioHomes(t)
+	a, b, s, _ := scenarioHomes(t, "alpha", "beta")
+	a.commitFork("beta", forkNotes("one", "one, x"))
+	a.mustRun("publish", "beta")
+	b.mustRun("pull", "beta")
 	s.write("skills/alpha/notes.md", forkNotes("two", "two, v2", "seven", "seven, v2"))
-	s.write("skills/beta/notes.md", forkNotes("four", "four, v2"))
+	s.write("skills/beta/notes.md", forkNotes("seven", "seven, v2"))
 	s.commit("second version")
 	takeVersion(a)
 	takeVersion(b)
 	a.commitFork("alpha", forkNotes("seven", "seven, v2"))
-	a.commitFork("beta", forkNotes("three", "three, a", "four", "four, v2"))
+	a.commitFork("beta", forkNotes("one", "one, x and more", "seven", "seven, v2"))
 	a.mustRun("publish", "--all")
-	b.commitFork("alpha", forkNotes("two", "two, v2", "seven", "seven, v2", "eight", "eight, b"))
+	b.commitFork("alpha", forkNotes("two", "two, v2", "four", "four, b", "seven", "seven, v2"))
 
 	mine, theirs := b.ref(lineage.ForkRef("alpha")), a.ref(lineage.ForkRef("alpha"))
 	out := b.run("--json", "pull", "alpha")
@@ -264,15 +271,19 @@ func TestScenarioARevertIsNeverUndone(t *testing.T) {
 	equal(t, "the conflicted file", conflictPaths(b.one(out.stdout, "conflict")), "notes.md")
 	keptInConflict(t, b, "alpha", "alpha", "notes.md", mine, theirs)
 	equal(t, "a's side", b.accountGit("show", theirs+":alpha/notes.md"), strings.TrimSuffix(forkNotes("seven", "seven, v2"), "\n"))
+	// a's side closes the conflict, its put-back line first; the merge
+	// base git writes between the sides holds those lines too, but never
+	// right before a closing marker.
+	contains(t, "the conflict", fileBody(t, filepath.Join(pendingCheckout(b, "alpha"), "alpha", "notes.md")), "\ntwo\nthree\nfour\n>>>>>>>")
 	equal(t, "b's alpha", b.ref(lineage.ForkRef("alpha")), mine)
 	noMarkers(t, "b's worktree", filepath.Join(b.forkDir("alpha", "alpha"), "notes.md"))
 
-	writeFile(t, filepath.Join(pendingCheckout(b, "alpha"), "alpha", "notes.md"), forkNotes("seven", "seven, v2", "eight", "eight, b"))
+	writeFile(t, filepath.Join(pendingCheckout(b, "alpha"), "alpha", "notes.md"), forkNotes("four", "four, b", "seven", "seven, v2"))
 	checkoutGit(t, b, "alpha", "add", "alpha/notes.md")
 	out = b.mustRun("--json", "pull", "alpha")
 	equal(t, "the completion", b.one(out.stdout, "pull")["outcome"], pullMerged)
 	equal(t, "the merge's parents", b.parents(b.ref(lineage.ForkRef("alpha"))), mine+"\n"+theirs)
-	equal(t, "b's notes", fileBody(t, filepath.Join(b.forkDir("alpha", "alpha"), "notes.md")), forkNotes("seven", "seven, v2", "eight", "eight, b"))
+	equal(t, "b's notes", fileBody(t, filepath.Join(b.forkDir("alpha", "alpha"), "notes.md")), forkNotes("four", "four, b", "seven", "seven, v2"))
 
 	b.mustRun("publish", "alpha")
 	a.mustRun("pull", "alpha")
@@ -313,7 +324,7 @@ func TestScenarioARevertIsNeverUndone(t *testing.T) {
 // included, as it was.
 func TestScenarioDifferentVersionsOtherLines(t *testing.T) {
 	t.Parallel()
-	a, b, s, remote := scenarioHomes(t)
+	a, b, s, remote := scenarioHomes(t, "alpha", "beta")
 	s.write("skills/alpha/notes.md", forkNotes("two", "two, v2"))
 	s.write("skills/beta/notes.md", forkNotes("two", "two, v2"))
 	s.commit("second version")
@@ -417,7 +428,7 @@ func pendingBase(t *testing.T, h *harness, name string) string {
 // the newer.
 func TestScenarioDifferentVersionsSameLines(t *testing.T) {
 	t.Parallel()
-	a, b, s, _ := scenarioHomes(t)
+	a, b, s, _ := scenarioHomes(t, "alpha", "beta")
 	s.write("skills/alpha/notes.md", forkNotes("two", "two, v2"))
 	s.write("skills/beta/notes.md", forkNotes("two", "two, v2"))
 	s.commit("second version")
@@ -489,7 +500,7 @@ func TestScenarioDifferentVersionsSameLines(t *testing.T) {
 // changing a line: nothing was lost over it.
 func TestScenarioUnprovableOrderKeepsTheLocalBase(t *testing.T) {
 	t.Parallel()
-	a, b, s, _ := scenarioHomes(t)
+	a, b, s, _ := scenarioHomes(t, "alpha")
 	first := s.run("rev-parse", "HEAD")
 	s.write("skills/alpha/notes.md", forkNotes("two", "two, v2"))
 	s.commit("second version")
@@ -529,7 +540,7 @@ func TestScenarioUnprovableOrderKeepsTheLocalBase(t *testing.T) {
 // as they were.
 func TestScenarioIgnoredFilesStayLocal(t *testing.T) {
 	t.Parallel()
-	a, b, _, remote := scenarioHomes(t)
+	a, b, _, remote := scenarioHomes(t, "alpha")
 	alphaA, alphaB := a.forkDir("alpha", "alpha"), b.forkDir("alpha", "alpha")
 	writeFile(t, mkdirs(t, filepath.Join(a.config, "git"), "ignore"), "*.local\n")
 	writeFile(t, filepath.Join(alphaA, ".gitignore"), "*.log\n")
