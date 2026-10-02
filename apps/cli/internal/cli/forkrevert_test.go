@@ -126,6 +126,21 @@ func TestSkillRevertOfAFork(t *testing.T) {
 	h.mustRun("skill", "revert", "notes")
 	sameTree(t, "the skill directory beside an ignored repository", libraryTree(t, skillDir), withFile(withFile(withFile(want,
 		".DS_Store", "finder\n"), "vendor/lib.js", "x\n"), "vendor/.git/HEAD", "ref: refs/heads/main\n"))
+
+	// A real repository, which git lists as the one ignored entry vendor/,
+	// keeps its files when the commit restored holds vendor/ itself.
+	remove(t, filepath.Join(lib, "vendor"))
+	writeFile(t, mkdirs(t, filepath.Join(lib, "vendor"), "a.md"), "tracked\n")
+	gitIn(t, h, root, "add", "-f", "notes/vendor/a.md")
+	gitIn(t, h, root, "commit", "-q", "-m", "Track vendor/a.md")
+	held := h.ref(lineage.ForkRef("notes"))
+	gitIn(t, h, root, "rm", "-q", "--cached", "notes/vendor/a.md")
+	gitIn(t, h, root, "commit", "-q", "-m", "Keep vendor local again")
+	gitIn(t, h, filepath.Join(lib, "vendor"), "init", "-q")
+	writeFile(t, filepath.Join(lib, "vendor", "x.txt"), "local\n")
+	h.mustRun("skill", "revert", "notes", "--to", held)
+	equal(t, "the restored vendor/a.md", fileBody(t, filepath.Join(lib, "vendor", "a.md")), "tracked\n")
+	equal(t, "the nested repository's own file", fileBody(t, filepath.Join(lib, "vendor", "x.txt")), "local\n")
 }
 
 // TestSkillRevertToACommit restores a fork from an earlier commit of its
