@@ -29,8 +29,3 @@ func Maintained(dir string) (time.Time, bool) {
 func SetMaintained(dir string, t time.Time) error {
 	return writeAtomic(maintainedPath(dir), []byte(t.UTC().Format(time.RFC3339)+"\n"))
 }
-
-// BumpVersion rewrites the version file of agentx home dir, the change
-// signal every mutation ends with, for a hold of the lock taken without it
-// that turned out to change something. Call it under the exclusive lock.
-func BumpVersion(dir string) error { return bumpVersion(dir) }

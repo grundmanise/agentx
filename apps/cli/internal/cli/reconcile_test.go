@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
@@ -237,14 +238,14 @@ func TestServeReconcilesAtStart(t *testing.T) {
 	}
 	equal(t, "git status in the repaired worktree", gitIn(t, h, gone, "status", "--porcelain"), "")
 	forkLinked(t, filepath.Join(h.library, "gone"), filepath.Join(gone, "gone"))
-	if !home.RegisteredIn(gitDirOf(h), kept) {
+	if !home.RegisteredIn(gitx.AccountRepoPath(h.agentx), kept) {
 		t.Error("the copy of a worktree took its registration")
 	}
 	if !lexists(mergeHead) {
 		t.Error("the merge waiting in a worktree was lost")
 	}
 	sameTree(t, "the adopt candidate", libraryTree(t, orphan), orphanTree)
-	if home.RegisteredIn(gitDirOf(h), orphan) {
+	if home.RegisteredIn(gitx.AccountRepoPath(h.agentx), orphan) {
 		t.Error("the adopt candidate was registered")
 	}
 	contains(t, "the snapshot's warnings", strings.Join(stringsOf(snap["warnings"]), "\n"),
@@ -261,9 +262,6 @@ func TestServeReconcilesAtStart(t *testing.T) {
 		t.Error("the repair did not rewrite the version file")
 	}
 }
-
-// gitDirOf is the harness's account repo.
-func gitDirOf(h *harness) string { return filepath.Join(h.agentx, "account.git") }
 
 // stringsOf is a JSON array of strings as Go strings.
 func stringsOf(v any) []string {

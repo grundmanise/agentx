@@ -181,6 +181,14 @@ func (r *Runner) ResetIndex(ctx context.Context, path string) error {
 	return err
 }
 
+// CheckOutEntries writes the entries names at the root of the worktree at
+// path from its index, which ResetIndex sets to the branch tip, and touches
+// nothing else. Each name is taken literally, whatever characters it holds.
+func (r *Runner) CheckOutEntries(ctx context.Context, path string, names []string) error {
+	_, err := r.InCheckout(ctx, path, append([]string{"--literal-pathspecs", "checkout", "-q", "--"}, names...)...)
+	return err
+}
+
 // PruneWorktrees drops the registrations of worktrees whose directory is
 // gone. A locked worktree survives it, a fork's and a pending merge's
 // checkout alike.

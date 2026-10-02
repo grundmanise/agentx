@@ -80,6 +80,10 @@ func (j journalRefs) ResetIndex(path string) error {
 	return j.RefUpdater.(home.Worktrees).ResetIndex(path)
 }
 
+func (j journalRefs) CheckOut(path string, names []string) error {
+	return j.RefUpdater.(home.Worktrees).CheckOut(path, names)
+}
+
 // Main is Run for a real process: it watches the stop signals first, so
 // that a Ctrl-C or a SIGTERM ends the run through its own error path
 // instead of killing it where it stands. It is the one seam that reads the

@@ -40,6 +40,17 @@ func (r refs) ResetIndex(path string) error {
 	return os.WriteFile(filepath.Join(admin, "index"), []byte("index\n"), 0o644)
 }
 
+// CheckOut writes each entry as the branch tip holds it in these tests: a
+// file reading "tip".
+func (r refs) CheckOut(path string, names []string) error {
+	for _, name := range names {
+		if err := os.WriteFile(filepath.Join(path, name), []byte("tip\n"), 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // halfAdd is what a worktree add killed part way leaves: the admin
 // directory, locked, and the .git file, with no HEAD on the branch yet.
 func halfAdd(gitDir, path string) error {
@@ -279,6 +290,35 @@ func TestWorktreeStepClearsAHalfMadeWorktree(t *testing.T) {
 	}
 	if missing := c.created(u, "alpha"); len(missing) > 0 {
 		t.Errorf("after recovery: %s", strings.Join(missing, ", "))
+	}
+}
+
+// TestWorktreeStepChecksOutWhatIsBesideTheSkill is a fork's worktree put
+// back with a file its branch holds beside the skill directory, stopped
+// after the add and before that file was checked out: recovery checks out
+// what is absent and leaves what is there as it is.
+func TestWorktreeStepChecksOutWhatIsBesideTheSkill(t *testing.T) {
+	t.Parallel()
+	c, u := newCreation(t)
+	m := NewMutation(c.dir)
+	m.Worktree(c.gitDir, c.root("alpha"), "skills/alpha", ".gitignore", "README.md")
+	if err := m.stopAfter(1, u); err != nil {
+		t.Fatal(err)
+	}
+	ignore, readme := filepath.Join(c.root("alpha"), ".gitignore"), filepath.Join(c.root("alpha"), "README.md")
+	if err := os.Remove(ignore); err != nil {
+		t.Fatalf("the step checked out no .gitignore: %v", err)
+	}
+	if err := os.WriteFile(readme, []byte("mine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := recoverJournals(c.dir, u); err != nil {
+		t.Fatalf("recovery: %v", err)
+	}
+	for path, want := range map[string]string{ignore: "tip\n", readme: "mine\n"} {
+		if b, err := os.ReadFile(path); err != nil || string(b) != want {
+			t.Errorf("%s holds %q, %v; want %q", filepath.Base(path), b, err, want)
+		}
 	}
 }
 

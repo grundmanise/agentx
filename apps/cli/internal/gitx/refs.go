@@ -134,3 +134,12 @@ func (x refs) ResetIndex(path string) error {
 	}
 	return nil
 }
+
+// CheckOut writes the entries a fork's branch holds beside its skill
+// directory for the journal's worktree step, see Runner.CheckOutEntries.
+func (x refs) CheckOut(path string, names []string) error {
+	if err := x.r.CheckOutEntries(x.ctx, path, names); err != nil {
+		return fmt.Errorf("%w: %w", ErrAccountRepo, err)
+	}
+	return nil
+}

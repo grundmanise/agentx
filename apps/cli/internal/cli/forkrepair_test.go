@@ -46,6 +46,11 @@ func TestSkillPlaceRepairsAFork(t *testing.T) {
 	t.Parallel()
 	h, root, skillDir, lib := forkHarness(t)
 	claude := filepath.Join(h.home, ".claude", "skills", "notes")
+	// The branch holds a .gitignore beside the skill directory, committed
+	// with git, which comes back with the worktree and goes on ignoring.
+	writeFile(t, filepath.Join(root, ".gitignore"), ".env\n")
+	gitIn(t, h, root, "add", ".gitignore")
+	gitIn(t, h, root, "commit", "-q", "-m", "Ignore secrets")
 
 	remove(t, root)
 	list := h.mustRun("--json", "skill", "list")
@@ -58,6 +63,9 @@ func TestSkillPlaceRepairsAFork(t *testing.T) {
 		t.Fatal("the worktree is not checked out on its branch")
 	}
 	equal(t, "git status in the worktree", gitIn(t, h, root, "status", "--porcelain"), "")
+	writeFile(t, filepath.Join(skillDir, ".env"), "TOKEN=1\n")
+	equal(t, "git status with an ignored file", gitIn(t, h, root, "status", "--porcelain"), "")
+	remove(t, filepath.Join(skillDir, ".env"))
 	forkLinked(t, lib, skillDir)
 	linksToLibrary(t, "claude's placement", claude, lib)
 	contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), "; checked notes's worktree out again from its branch")
@@ -93,6 +101,11 @@ func TestSkillPlaceRepairsAFork(t *testing.T) {
 	equal(t, "message", e["message"], root+" is in the way of notes's worktree, so nothing was placed")
 	equal(t, "hint", e["hint"], "run 'agentx skill place notes --force' to adopt it: its content becomes uncommitted edits of the fork, which 'agentx skill revert notes' discards")
 
+	ignore := filepath.Join(root, ".gitignore")
+	out = h.run("--json", "skill", "place", "notes", "--force")
+	equal(t, "exit", out.exit, 6)
+	contains(t, "message", h.one(out.stdout, "error")["message"].(string), root+" holds "+ignore+" beside notes's skill directory notes")
+	remove(t, ignore)
 	out = h.mustRun("--json", "skill", "place", "notes", "--force")
 	if !home.WorktreeAt(root, "skills/notes") {
 		t.Fatal("the adopted worktree is not checked out on its branch")
@@ -108,7 +121,6 @@ func TestSkillPlaceRepairsAFork(t *testing.T) {
 
 	// A file git ignores is the user's, but a .DS_Store Finder left is not.
 	writeFile(t, filepath.Join(skillDir, ".DS_Store"), "finder\n")
-	writeFile(t, filepath.Join(root, ".gitignore"), ".env\n")
 	local := filepath.Join(skillDir, ".env")
 	writeFile(t, local, "TOKEN=1\n")
 	remove(t, lib)

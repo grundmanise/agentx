@@ -86,6 +86,10 @@ type step struct {
 	New      string `json:"new"`                // what it leaves behind
 	Staged   string `json:"staged,omitempty"`   // the directory publish renames into place
 	Retained string `json:"retained,omitempty"` // where remove keeps the content it displaced
+	// Beside names the entries a worktree step checks out at the root of
+	// its worktree when they are absent: what the branch tip holds there
+	// beside the skill directory, which the mutation publishes itself.
+	Beside []string `json:"beside,omitempty"`
 }
 
 // The step kinds.
@@ -173,6 +177,10 @@ type Worktrees interface {
 	// ResetIndex sets the index of the worktree at path to its branch tip,
 	// touching no file in it. It is safe to repeat.
 	ResetIndex(path string) error
+	// CheckOut writes the entries names, at the root of the worktree at
+	// path, from its index, which ResetIndex has just set to the branch
+	// tip. Each is absent when it is called.
+	CheckOut(path string, names []string) error
 }
 
 // Mutation collects one command's changes into one journal: the state files
@@ -301,8 +309,14 @@ func sameDevice(a, b string) (bool, error) {
 // checked out: the content is published into it by a later step. A path
 // that already is that worktree only has its index aligned again, which is
 // how a command that moved the branch brings the worktree along.
-func (m *Mutation) Worktree(gitDir, path, branch string) {
-	m.j.Steps = append(m.j.Steps, step{Kind: stepWorktree, Path: path, GitDir: gitDir, Old: absent, New: worktreeOn + branch})
+//
+// The entries beside, names at the worktree's root that the branch tip
+// holds beside the skill directory, are checked out with it, each one that
+// is absent: a worktree put back from its branch comes back with the files
+// a commit made with git keeps there, such as a .gitignore, rather than
+// with them reading as deleted. One that is there is left as it is.
+func (m *Mutation) Worktree(gitDir, path, branch string, beside ...string) {
+	m.j.Steps = append(m.j.Steps, step{Kind: stepWorktree, Path: path, GitDir: gitDir, Old: absent, New: worktreeOn + branch, Beside: beside})
 }
 
 // Move records that the live directory from, whose fingerprint is fp as
@@ -650,6 +664,10 @@ func (r refusedRef) Unwrap() error { return ErrRecovery }
 //     power loss, and adding the worktree clears it with whatever else of
 //     that add the repository kept;
 //   - anything else is not what the mutation expected and refuses.
+//
+// The entries the step names beside the skill directory are then checked
+// out, each one still absent, which is also done again: a run stopped
+// between the add and the checkout leaves them absent for recovery.
 func applyWorktree(s step, u RefUpdater) (bool, error) {
 	w, ok := u.(Worktrees)
 	if !ok {
@@ -666,7 +684,19 @@ func applyWorktree(s step, u RefUpdater) (bool, error) {
 		}
 		added = true
 	}
-	return added, w.ResetIndex(s.Path)
+	if err := w.ResetIndex(s.Path); err != nil {
+		return added, err
+	}
+	var missing []string
+	for _, name := range s.Beside {
+		if _, err := os.Lstat(filepath.Join(s.Path, name)); errors.Is(err, fs.ErrNotExist) {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) == 0 {
+		return added, nil
+	}
+	return true, w.CheckOut(s.Path, missing)
 }
 
 // applyMove brings a move step's path to the directory it records. The

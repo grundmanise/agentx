@@ -765,7 +765,7 @@ The account repo is a Git repository in agentx home, `~/.agentx/account.git`, th
 - `4`: `skill update` found your edits conflicting with the update and left the merge pending, or found files of a pending merge still to resolve, or a merge already pending blocks `skill revert`, `skill fork` or a `skill remove` that takes the skill off the machine. See [When your edits conflict](#when-your-edits-conflict).
 - `5`: something the command names does not exist:
   - a source id names no source on this machine (for a source you removed, the hint names the `agentx source add` command that brings it back), the source did not serve a skill's files, the path or a skill named by `--skill` or `--except` does not exist in the source, or `--to` or `--from` names a configuration that is not detected;
-  - `skill place`, `skill diff`, `skill revert` and `skill update` (except with `--abort`): also a name the library does not hold as a skill;
+  - `skill place`, `skill diff`, `skill revert` and `skill update` (except with `--abort`): also a name the library does not hold as a skill, other than a fork's for `skill place`, which [puts the fork back](/cli/fork#recover-a-fork);
   - `skill update`: also a skill whose source you removed;
   - `skill remove`: a name that is neither a skill of the library nor a managed skill whose library directory is gone;
   - `skill check`: also a source added on this machine that it has never fetched, such as one `agentx import` brought back; `agentx source add` fetches it.

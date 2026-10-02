@@ -334,7 +334,10 @@ func inSystemFile(p string) bool {
 // that directory and at most a .git file beside it, a file whose
 // registration is gone, as a worktree whose registration was removed by
 // hand leaves it. Anything else at the worktree is refused, named, even
-// with --force: it is not the fork's.
+// with --force: git adds a worktree only into a directory that holds
+// nothing, and a journal moves directories alone. What the fork's branch
+// holds there, such as a committed .gitignore, the adoption checks out
+// from the branch once it is moved aside.
 func (inv *invocation) adoptableRoot(f forkSite, again string) (string, error) {
 	entries, err := os.ReadDir(f.root)
 	if err != nil {
@@ -363,7 +366,7 @@ func (inv *invocation) adoptableRoot(f forkSite, again string) (string, error) {
 	}
 	if len(other) > 0 {
 		return "", fail(exitRefused, quotedPath(f.root)+" holds "+strings.Join(other, ", ")+" beside "+sanitised(f.name)+"'s skill directory "+sanitised(f.dir)+", so it cannot be adopted",
-			"move what is not the skill's out of it, then "+again)
+			"move them out of it, then "+again+"; what the fork's branch holds beside its skill directory is checked out from the branch")
 	}
 	state, err := home.State(f.skillDir)
 	if err != nil {
@@ -395,7 +398,9 @@ func (inv *invocation) stageForkPlace(ctx context.Context, m *home.Mutation, f f
 		fp, _ := home.DirFingerprint(plan.dirState)
 		aside := m.Sibling(f.root, "adopting")
 		m.Move(f.skillDir, aside, fp)
-		m.Worktree(f.gitDir, f.root, f.branch)
+		if err := inv.stageForkWorktree(ctx, m, f, true); err != nil {
+			return "", err
+		}
 		m.Move(aside, f.skillDir, fp)
 		if plan.v.link {
 			if err := inv.stageForkLink(m, f); err != nil {
@@ -411,7 +416,9 @@ func (inv *invocation) stageForkPlace(ctx context.Context, m *home.Mutation, f f
 		if err != nil {
 			return "", libraryFailure(inv.dirs.Library, err)
 		}
-		m.Worktree(f.gitDir, f.root, f.branch)
+		if err := inv.stageForkWorktree(ctx, m, f, true); err != nil {
+			return "", err
+		}
 		if plan.retire != "" {
 			if err := m.RemoveInto(f.skillDir, plan.retire, inv.worktreesDir()); err != nil {
 				return "", libraryFailure(inv.worktreesDir(), err)

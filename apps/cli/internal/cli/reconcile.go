@@ -599,16 +599,18 @@ func (inv *invocation) repairForks(ctx context.Context, sites []forkSite) (map[s
 // worktree added, or its index aligned with the branch, the skill's
 // directory laid out from the branch tip, staged in the worktrees
 // directory, and the library symlink written, a dangling one removed
-// first. It returns the directory the fork's content is at before the
-// journal is applied, for a copy placed from it: the staged content when
-// it lays the directory out, and the skill directory otherwise.
+// first. A worktree added, or one that holds nothing but its .git file,
+// also gets back what the branch tip holds beside the skill directory, see
+// stageForkWorktree. It returns the directory the fork's content is at
+// before the journal is applied, for a copy placed from it: the staged
+// content when it lays the directory out, and the skill directory
+// otherwise.
 func (inv *invocation) stageForkRepair(ctx context.Context, m *home.Mutation, f forkSite, v forkVerdict) (string, error) {
 	from := f.skillDir
-	if v.worktree {
-		if err := os.MkdirAll(inv.worktreesDir(), 0o755); err != nil {
-			return "", libraryFailure(inv.worktreesDir(), err)
+	if v.worktree || v.content && loneGitFile(f.root) {
+		if err := inv.stageForkWorktree(ctx, m, f, v.worktree); err != nil {
+			return "", err
 		}
-		m.Worktree(f.gitDir, f.root, f.branch)
 	}
 	if v.content {
 		staged := m.Sibling(f.root, "staged")
@@ -626,6 +628,49 @@ func (inv *invocation) stageForkRepair(ctx context.Context, m *home.Mutation, f 
 		}
 	}
 	return from, nil
+}
+
+// stageForkWorktree plans into m the worktree step of the fork f, which
+// adds its worktree or aligns its index with the branch. A worktree that
+// is added, or that holds nothing but its .git file, has the entries the
+// branch tip holds at its root beside the skill directory checked out with
+// it: a commit made with git keeps files there, such as a .gitignore whose
+// rules the skill's files are judged by, and a worktree put back without
+// them would show them as deleted and stop ignoring what they ignore. When
+// the worktree is there already and the tip holds nothing beside the
+// skill directory, the step is planned only when always is set.
+func (inv *invocation) stageForkWorktree(ctx context.Context, m *home.Mutation, f forkSite, always bool) error {
+	if err := os.MkdirAll(inv.worktreesDir(), 0o755); err != nil {
+		return libraryFailure(inv.worktreesDir(), err)
+	}
+	var beside []string
+	if !home.WorktreeAt(f.root, f.branch) || loneGitFile(f.root) {
+		names, err := inv.besideSkillDir(ctx, f.gitDir, f.rec.Commit, f.dir)
+		if err != nil {
+			return err
+		}
+		beside = names
+	}
+	if always || len(beside) > 0 {
+		m.Worktree(f.gitDir, f.root, f.branch, beside...)
+	}
+	return nil
+}
+
+// besideSkillDir is the names of the entries commit holds at its root
+// beside the skill directory dir, read in one ls-tree.
+func (inv *invocation) besideSkillDir(ctx context.Context, gitDir, commit, dir string) ([]string, error) {
+	out, err := inv.git.Isolated(ctx, gitDir, "ls-tree", "-z", "--name-only", commit)
+	if err != nil {
+		return nil, accountRepoFailure(err)
+	}
+	var names []string
+	for _, name := range strings.Split(out, "\x00") {
+		if name != "" && name != dir {
+			names = append(names, name)
+		}
+	}
+	return names, nil
 }
 
 // stageForkLink plans into m the library symlink of the fork f, the entry
