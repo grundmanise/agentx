@@ -46,11 +46,11 @@ const installRemoteRow = "installable"
 // installableForks reads the forks the account remote, the git remote
 // called remote, holds that records, the account repo's branches, hold no
 // fork branch of, sorted by name, with the provenance of each read by one
-// walk of their remote tips. A branch
-// whose name agentx would never give a fork, or whose history records no
-// fork id, is left out, with a warning each: installing the one could not
-// create the local branch, and the other could never be pulled or
-// published, since nothing would tell that the two branches are one fork.
+// walk of their remote tips. A branch whose name agentx would never give
+// a fork, or whose history records no fork id, is left out, with a warning
+// each: installing the one could not create the local branch, and the
+// other could never be pulled or published, since nothing would tell that
+// the two branches are one fork.
 func (inv *invocation) installableForks(ctx context.Context, gitDir, remote string, records map[string]lineage.Record) ([]installableForkEvent, []string, error) {
 	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
 	if err != nil {

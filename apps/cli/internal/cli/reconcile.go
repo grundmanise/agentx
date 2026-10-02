@@ -514,12 +514,12 @@ func verdictPath(f forkSite, v forkVerdict) string {
 }
 
 // prepareWorktrees readies git's worktrees of the account repo at gitDir
-// for reconciliation, and reads the fork branches the account remote
-// holds, by name, in one for-each-ref: registrations whose directory is
-// gone are pruned, which every locked worktree survives, and the pointers
-// of every fork's worktree of roots that no longer meet, as moving agentx
-// home leaves them, are repaired, each path named; repointed are the names
-// of the worktrees the repair put right. A directory of the worktrees
+// for reconciliation, and, while an account remote is set, reads the fork
+// branches it holds, by name: registrations whose directory is gone are
+// pruned, which every locked worktree survives, and the pointers of every
+// fork's worktree of roots that no longer meet, as moving agentx home
+// leaves them, are repaired, each path named; repointed are the names of
+// the worktrees the repair put right. A directory of the worktrees
 // directory that is no fork's worktree is never repaired, nor is a copy of
 // another worktree, see repairable: git would hand it that worktree's
 // registration. A repair git cannot make leaves the worktree as it is, for
@@ -553,8 +553,11 @@ func (inv *invocation) prepareWorktrees(ctx context.Context, gitDir string, root
 	}
 	remote = map[string]bool{}
 	_, account, ok, err := inv.accountSourceIn(ctx, gitDir)
-	if err != nil || !ok {
-		return remote, repointed, err
+	if err != nil {
+		return nil, nil, err
+	}
+	if !ok {
+		return remote, repointed, nil
 	}
 	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, account)
 	if err != nil {

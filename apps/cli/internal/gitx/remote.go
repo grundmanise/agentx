@@ -209,12 +209,11 @@ func (s PushStatus) Why() string {
 
 // Push pushes each fork branch named by its short name, such as
 // "skills/pdf", to the branch of the same name on the remote called
-// remote, never
-// forced, in one git push of the user's environment with no hook of theirs,
-// see networkConfig, and the remote's answer for each ref read from
-// --porcelain. A ref the remote rejects is a status, not an error: git
-// exits 1 for it, and the push of the others stands. git moves the
-// remote-tracking branch of every ref it pushed itself.
+// remote, never forced, in one git push of the user's environment with no
+// hook of theirs, see networkConfig, and the remote's answer for each ref
+// read from --porcelain. A ref the remote rejects is a status, not an
+// error: git exits 1 for it, and the push of the others stands. git moves
+// the remote-tracking branch of every ref it pushed itself.
 func (r *Runner) Push(ctx context.Context, gitDir, remote string, branches []string) ([]PushStatus, error) {
 	args := append(networkConfig(), "--git-dir="+gitDir, "push", "--porcelain", "--no-verify", "--no-recurse-submodules", remote)
 	for _, b := range branches {
