@@ -292,10 +292,14 @@ func (h *harness) moveTo(t *testing.T, root string) {
 // TestServeRepairsWorktreesOfAMovedHome moves a home with a fork as a
 // whole, which leaves the worktree's pointers naming where it was, so that
 // no git runs in it, and starts serve there: it repairs them with git,
-// naming the worktree's path, and reports the fork repaired.
+// naming the worktree's path, and reports the fork repaired. The account
+// repo is one a git older than 2.48 made, which writes absolute pointers:
+// a newer git makes the repo write them relative, and a move breaks none.
 func TestServeRepairsWorktreesOfAMovedHome(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
+	h.mustRun("remote", "set", newAccountRemote(t, h))
+	_, _ = h.accountGitErr("config", "--unset", "worktree.useRelativePaths") // unset already on an older git
 	h.mustRun("skill", "new", "notes")
 	h.moveTo(t, filepath.Join(t.TempDir(), "moved"))
 	root := filepath.Join(h.agentx, "worktrees", "notes")
