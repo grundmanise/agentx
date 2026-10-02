@@ -95,9 +95,9 @@ func TestSkillForkConvertsManagedSkills(t *testing.T) {
 // skill writes its name into SKILL.md, keeps the upstream's directory in
 // its branch and is placed as the skill is, the copy included, which
 // stays as it was. Forked in its place on the second machine too, the
-// skill is a third fork of the version, with an id of its own: once the
-// first machine published its fork of that name, the second's publish of
-// its own is refused, exit 6, and the account remote keeps the first's.
+// skill is a third fork of the version, with an id of its own, though its
+// name is the first machine's: a publish of one over the other is refused,
+// see TestPublishRefusesADifferentFork.
 func TestForksOfOneVersionShareTheImport(t *testing.T) {
 	t.Parallel()
 	a, s := installHarness(t)
@@ -145,14 +145,6 @@ func TestForksOfOneVersionShareTheImport(t *testing.T) {
 	if idA, idB := a.trailer(tipA, lineage.TrailerForkID), b.trailer(tipB, lineage.TrailerForkID); idA == idB {
 		t.Errorf("both machines' alpha have the fork id %q", idA)
 	}
-	remote := newAccountRemote(t, a)
-	a.mustRun("remote", "set", remote)
-	a.mustRun("publish", "alpha")
-	b.mustRun("remote", "set", remote)
-	out = b.run("--json", "publish", "alpha")
-	equal(t, "b's publish of its alpha: exit", out.exit, 6)
-	contains(t, "its message", b.one(out.stdout, "error")["message"].(string), "the account remote's skills/alpha is a different fork than alpha on this machine")
-	equal(t, "the remote's alpha", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/alpha"), tipA)
 }
 
 // TestSkillForkOfAnUnmanagedSkill forks two skills the library holds that

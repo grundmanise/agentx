@@ -129,10 +129,12 @@ func besideConflicts(body string) (merged, conflicts string) {
 // TestScenarioDisjointEditsMergeClean syncs one fork a published and b
 // installed from the account remote, under the fork id a gave it. Each
 // machine edits other lines and commits. An uncommitted edit on b refuses
-// both a pull and a publish, which would have to merge a's commit, exit 6,
-// naming the fork, and changes nothing; once b commits it, the same pull
-// merges clean, b publishes the merge and a's pull fast-forwards to it, so
-// both machines hold every line either edited.
+// the pull, exit 6, naming the fork, and changes nothing on either
+// machine or the remote; once b commits it, the same pull merges clean, b
+// publishes the merge and a's pull fast-forwards to it, so both machines
+// hold every line either edited. The publish that an uncommitted edit
+// refuses when the remote is ahead is
+// TestPublishMergesFirstAndNamesUncommittedForks.
 func TestScenarioDisjointEditsMergeClean(t *testing.T) {
 	t.Parallel()
 	a, b, _, remote := scenarioHomes(t)
@@ -143,21 +145,19 @@ func TestScenarioDisjointEditsMergeClean(t *testing.T) {
 	a.mustRun("publish", "alpha")
 	mine := b.commitFork("alpha", forkNotes("eight", "eight, b"))
 	writeFile(t, filepath.Join(alphaB, "draft.md"), "a draft\n")
-	for _, cmd := range []string{"pull", "publish"} {
-		out := b.run("--json", cmd, "alpha")
-		equal(t, cmd+" with an uncommitted edit: exit", out.exit, 6)
-		verb := map[string]string{"pull": "pulled", "publish": "published"}[cmd]
-		contains(t, cmd+": the message", b.one(out.stdout, "error")["message"].(string), "alpha has uncommitted edits, so it cannot be "+verb)
-		equal(t, cmd+": b's alpha", b.ref(lineage.ForkRef("alpha")), mine)
-		equal(t, cmd+": the remote's alpha", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/alpha"), theirs)
-		equal(t, cmd+": b's notes", fileBody(t, filepath.Join(alphaB, "notes.md")), forkNotes("eight", "eight, b"))
-		equal(t, cmd+": b's draft", fileBody(t, filepath.Join(alphaB, "draft.md")), "a draft\n")
-		noCheckout(t, b, "alpha")
-	}
+	out := b.run("--json", "pull", "alpha")
+	equal(t, "the pull with an uncommitted edit: exit", out.exit, 6)
+	contains(t, "its message", b.one(out.stdout, "error")["message"].(string), "alpha has uncommitted edits, so it cannot be pulled")
+	equal(t, "b's alpha", b.ref(lineage.ForkRef("alpha")), mine)
+	equal(t, "a's alpha", a.ref(lineage.ForkRef("alpha")), theirs)
+	equal(t, "the remote's alpha", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/alpha"), theirs)
+	equal(t, "b's notes", fileBody(t, filepath.Join(alphaB, "notes.md")), forkNotes("eight", "eight, b"))
+	equal(t, "b's draft", fileBody(t, filepath.Join(alphaB, "draft.md")), "a draft\n")
+	noCheckout(t, b, "alpha")
 
 	b.mustRun("skill", "commit", "alpha")
 	committed := b.ref(lineage.ForkRef("alpha"))
-	out := b.mustRun("--json", "pull", "alpha")
+	out = b.mustRun("--json", "pull", "alpha")
 	equal(t, "the pull", b.one(out.stdout, "pull")["outcome"], pullMerged)
 	merged := b.ref(lineage.ForkRef("alpha"))
 	equal(t, "the merge's parents", b.parents(merged), committed+"\n"+theirs)
@@ -241,15 +241,21 @@ func TestScenarioSameVersionMergesClean(t *testing.T) {
 // kept, the next pull completes the merge. Then a reverts alpha to the
 // commit it was forked as, and b, which committed nothing since, takes that
 // by a fast-forward.
+//
+// Over the same two merge bases, an edit is enough: a edits beta's line
+// beside the one the version changed, b edits nothing, and b's pull of
+// beta conflicts all the same, a's side whole in the checkout.
 func TestScenarioARevertIsNeverUndone(t *testing.T) {
 	t.Parallel()
 	a, b, s, _ := scenarioHomes(t)
 	s.write("skills/alpha/notes.md", forkNotes("two", "two, v2", "seven", "seven, v2"))
+	s.write("skills/beta/notes.md", forkNotes("four", "four, v2"))
 	s.commit("second version")
 	takeVersion(a)
 	takeVersion(b)
 	a.commitFork("alpha", forkNotes("seven", "seven, v2"))
-	a.mustRun("publish", "alpha")
+	a.commitFork("beta", forkNotes("three", "three, a", "four", "four, v2"))
+	a.mustRun("publish", "--all")
 	b.commitFork("alpha", forkNotes("two", "two, v2", "seven", "seven, v2", "eight", "eight, b"))
 
 	mine, theirs := b.ref(lineage.ForkRef("alpha")), a.ref(lineage.ForkRef("alpha"))
@@ -281,6 +287,13 @@ func TestScenarioARevertIsNeverUndone(t *testing.T) {
 	equal(t, "b's alpha", b.ref(lineage.ForkRef("alpha")), reverted)
 	equal(t, "b's notes, as forked", fileBody(t, filepath.Join(b.forkDir("alpha", "alpha"), "notes.md")), forkNotes())
 	equal(t, "b's status", worktreeStatus(b, "alpha"), "")
+
+	mine, theirs = b.ref(lineage.ForkRef("beta")), a.ref(lineage.ForkRef("beta"))
+	out = b.run("--json", "pull", "beta")
+	equal(t, "beta's pull: exit", out.exit, 4)
+	equal(t, "beta's conflicted file", conflictPaths(b.one(out.stdout, "conflict")), "notes.md")
+	keptInConflict(t, b, "beta", "beta", "notes.md", mine, theirs)
+	equal(t, "b's beta", b.ref(lineage.ForkRef("beta")), mine)
 }
 
 // TestScenarioDifferentVersionsOtherLines has a take the source's second
@@ -290,8 +303,9 @@ func TestScenarioARevertIsNeverUndone(t *testing.T) {
 // version the source history proves the newer one. For alpha, a's account
 // repo has never fetched the third version, so nothing proves its order
 // and a's own base, the second version, stays; for beta, a fetched the
-// source first, and the merge records the third. a's next check then finds the third version as alpha's update,
-// whose merge changes no line: nothing was lost over the older base.
+// source first, and the merge records the third. a's next check then
+// finds the third version as alpha's update, whose merge changes no line:
+// nothing was lost over the older base.
 //
 // Once both machines are in step again, a plain git clone of the remote
 // reads the same upstream version and base off the trailers as agentx
@@ -360,7 +374,9 @@ func TestScenarioDifferentVersionsOtherLines(t *testing.T) {
 		equal(t, name+": the fork id", l.ID, listed[name]["fork_id"])
 		equal(t, name+": the upstream commit", l.Import.Commit, listed[name]["upstream_commit"])
 		equal(t, name+": the base hash", l.Import.Hash, listed[name]["base_hash"])
-		equal(t, name+": the base trailer", remoteGit(t, b, clone, "log", "-1", "--format=%(trailers:key="+lineage.TrailerBase+",valueonly)", tip), b.trailer(tip, lineage.TrailerBase))
+		base := remoteGit(t, b, clone, "log", "-1", "--format=%(trailers:key="+lineage.TrailerBase+",valueonly)", tip)
+		equal(t, name+": the base's upstream commit, read by git", remoteGit(t, b, clone, "log", "-1", "--format=%(trailers:key="+lineage.TrailerCommit+",valueonly)", base), listed[name]["upstream_commit"])
+		equal(t, name+": the base's hash, read by git", remoteGit(t, b, clone, "log", "-1", "--format=%(trailers:key="+lineage.TrailerHash+",valueonly)", base), listed[name]["base_hash"])
 	}
 	equal(t, "beta's state", listed["beta"]["state"], stateModified)
 
@@ -596,7 +612,7 @@ func TestScenarioEdgeCases(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeFile(t, filepath.Join(alphaA, "logo.png"), "\x89PNG\r\n\x1a\n\x00a's logo")
-	symlink(t, "notes.md", filepath.Join(alphaA, "link.md"))
+	link(t, "notes.md", filepath.Join(alphaA, "link.md"))
 	a.mustRun("skill", "commit", "alpha")
 	a.mustRun("publish", "--all")
 	b.commitFork("alpha", forkNotes("four", "four, v2", "eight", "eight, b"))
@@ -616,18 +632,16 @@ func TestScenarioEdgeCases(t *testing.T) {
 
 	betaA, betaB := a.forkDir("beta", "beta"), b.forkDir("beta", "beta")
 	writeFile(t, filepath.Join(betaA, "logo.png"), "\x89PNG\r\n\x1a\n\x00the logo")
-	symlink(t, "SKILL.md", filepath.Join(betaA, "link.md"))
+	link(t, "SKILL.md", filepath.Join(betaA, "link.md"))
 	a.mustRun("skill", "commit", "beta")
 	a.mustRun("publish", "beta")
 	b.mustRun("pull", "beta")
 	writeFile(t, filepath.Join(betaA, "logo.png"), "\x89PNG\r\n\x1a\n\x00a's logo")
-	remove(t, filepath.Join(betaA, "link.md"))
-	symlink(t, "notes.md", filepath.Join(betaA, "link.md"))
+	swapForLink(t, filepath.Join(betaA, "link.md"), "notes.md")
 	a.mustRun("skill", "commit", "beta")
 	a.mustRun("publish", "beta")
 	writeFile(t, filepath.Join(betaB, "logo.png"), "\x89PNG\r\n\x1a\n\x00b's logo")
-	remove(t, filepath.Join(betaB, "link.md"))
-	symlink(t, "SKILL.md.orig", filepath.Join(betaB, "link.md"))
+	swapForLink(t, filepath.Join(betaB, "link.md"), "SKILL.md.orig")
 	b.mustRun("skill", "commit", "beta")
 	mine, theirs := b.ref(lineage.ForkRef("beta")), a.ref(lineage.ForkRef("beta"))
 	out = b.run("--json", "pull", "beta")
@@ -648,14 +662,6 @@ func TestScenarioEdgeCases(t *testing.T) {
 	equal(t, "b's logo, resolved", fileBody(t, filepath.Join(betaB, "logo.png")), "\x89PNG\r\n\x1a\n\x00a's logo")
 	equal(t, "b's link, resolved", readLink(t, filepath.Join(betaB, "link.md")), "notes.md")
 	equal(t, "b's beta status", worktreeStatus(b, "beta"), "")
-}
-
-// symlink makes a symlink at path to target.
-func symlink(t *testing.T, target, path string) {
-	t.Helper()
-	if err := os.Symlink(target, path); err != nil {
-		t.Fatal(err)
-	}
 }
 
 // readLink is the target of the symlink at path.
