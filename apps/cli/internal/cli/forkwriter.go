@@ -102,3 +102,29 @@ func gitDate(t time.Time, tz string) string {
 
 // creationSubject is the subject of a greenfield skill's creation commit.
 func creationSubject(name string) string { return "Create " + name }
+
+// mergeMessage is the message of a merge commit on a fork's branch: subject
+// and the trailers of a merge, base, the import commit the merge records as
+// the fork's base, when it records one, and the machine. A merge that
+// conflicts is left pending with it as its MERGE_MSG, and the commit that
+// completes it carries it as it is, see commitText.
+func (w *forkWriter) mergeMessage(subject, base string) (string, error) {
+	return lineage.ForkMessage(subject, "", lineage.ForkTrailers{Base: base, Machine: w.machine})
+}
+
+// commitText is commit for a message written already, mergeMessage's as a
+// pending merge holds it: the commit that completes the merge is written
+// with the writer's identity and the message the merge was started with,
+// the same commit git commit in the checkout would write with that
+// identity, with no hook, editor or clean-up of the message.
+func (w *forkWriter) commitText(ctx context.Context, rootTree string, parents []string, message string) (string, error) {
+	return w.git.CommitTreeAs(ctx, w.gitDir, w.ident, gitDate(time.Now(), w.env["TZ"]), rootTree, parents, message)
+}
+
+// upstreamMergeSubject is the subject of the commit that merges an update
+// into a fork: the skill, the upstream commit of the version merged and
+// the label of the machine it was merged on, as in "pdf: merge upstream
+// 1a2b3c4 (laptop)".
+func upstreamMergeSubject(name, label, upstream string) string {
+	return name + ": merge upstream " + short(upstream) + " (" + sanitised(label) + ")"
+}

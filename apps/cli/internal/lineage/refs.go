@@ -106,6 +106,36 @@ func (rec Record) AtCandidate() (Record, bool) {
 	return Record{Name: rec.Name, Kind: rec.Kind, Ref: rec.Ref, Commit: c.Commit, Tree: c.Tree, Import: c.Import, HasImport: true}, true
 }
 
+// ForkBase is the record of a fork's base version, the import commit its
+// history names, as the import branch of a managed skill at that version
+// would read: that commit, its tree and its trailers, with the fork's own
+// name, kind and candidate. It is what a fork's update is judged against,
+// by the same rules as a managed skill's, since a fork's update is a newer
+// version of the upstream its base came from. ok is false for a fork
+// whose lineage was not read, one with no base, as a greenfield skill has
+// none, and one whose history does not say which it is.
+func (rec Record) ForkBase() (Record, bool) {
+	l := rec.Fork
+	if rec.Kind != KindFork || l == nil || l.Base == "" || l.Problem != "" {
+		return Record{}, false
+	}
+	return Record{Name: rec.Name, Kind: rec.Kind, Ref: rec.Ref, Commit: l.Base, Tree: l.BaseTree, Import: l.Import, HasImport: true,
+		Parentless: true, Candidate: rec.Candidate}, true
+}
+
+// ForkCandidate is the update of a fork, read as AtCandidate reads a
+// managed skill's against the fork's base version: the candidate's import
+// commit, when agentx can read its lineage and it is not the base the
+// fork already holds. Whatever the fork's own commits hold, a candidate
+// that is its base is no update.
+func (rec Record) ForkCandidate() (Record, bool) {
+	base, ok := rec.ForkBase()
+	if !ok {
+		return Record{}, false
+	}
+	return base.AtCandidate()
+}
+
 // CandidateCommit is the commit the skill's candidate ref holds, "" when it
 // holds none.
 func (rec Record) CandidateCommit() string {

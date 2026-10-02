@@ -12,20 +12,6 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
-// managedRecord is the lineage of the managed skill a command compares with
-// or puts back to its base version, read in the one for-each-ref a listing
-// reads, see managedRefusal.
-func (inv *invocation) managedRecord(ctx context.Context, name, what string) (string, lineage.Record, error) {
-	gitDir, rec, ok, err := inv.accountRecord(ctx, name)
-	if err != nil {
-		return "", lineage.Record{}, err
-	}
-	if err := managedRefusal(name, what, rec, ok); err != nil {
-		return "", lineage.Record{}, err
-	}
-	return gitDir, rec, nil
-}
-
 // accountRecord is the branch the account repo holds for the skill called
 // name, read in the one for-each-ref a listing reads, and false when it
 // holds none, as an account repo that does not exist yet holds none. A

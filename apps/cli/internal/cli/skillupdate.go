@@ -23,7 +23,7 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 	var all, abort bool
 	cmd := &cobra.Command{
 		Use:   "update [<name>] [--abort]",
-		Short: "Apply the update the last check found to a managed skill",
+		Short: "Apply the update the last check found to a managed skill or a fork",
 		Long: "Replace the library directory of a managed skill with the newer upstream version\n" +
 			"'agentx skill check' found for it, and record that version as the one the skill\n" +
 			"is at. A skill edited since it was installed keeps its edits: they are merged\n" +
@@ -33,9 +33,14 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 			"resolve with git. Run the update again once it is resolved to apply it, or pass\n" +
 			"--abort to give it up. Files git ignores in the skill, such as a .DS_Store or an\n" +
 			"ignored build directory, are not edits, and stay. A copy placement that holds the\n" +
-			"version replaced is refreshed; a copy edited on its own is kept and named. Pass\n" +
-			"--all instead of a name to update every managed skill the last check found an\n" +
-			"update for. Read an update before you apply it with\n" +
+			"version replaced is refreshed; a copy edited on its own is kept and named.\n\n" +
+			"A fork's update is always merged, with the upstream version it was last forked or\n" +
+			"updated from as the merge base, so its own commits are kept, and the merge is\n" +
+			"committed on its branch. Commit or revert its uncommitted edits first. A conflict\n" +
+			"waits as for a managed skill, and the fork's worktree and branch stay as they are\n" +
+			"until it is applied.\n\n" +
+			"Pass --all instead of a name to update every managed skill and fork the last check\n" +
+			"found an update for. Read an update before you apply it with\n" +
 			"'agentx skill diff <name> --update'.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -57,8 +62,8 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 			return inv.skillUpdate(cmd.Context(), name)
 		},
 	}
-	cmd.Flags().BoolVar(&all, "all", false, "update every managed skill the last check found an update for")
-	cmd.Flags().BoolVar(&abort, "abort", false, "give up the merge pending for the skill; the library directory stays as it is")
+	cmd.Flags().BoolVar(&all, "all", false, "update every managed skill and fork the last check found an update for")
+	cmd.Flags().BoolVar(&abort, "abort", false, "give up the merge pending for the skill; the library directory, or a fork's worktree and branch, stay as they are")
 	return cmd
 }
 
@@ -95,6 +100,11 @@ type updating struct {
 	conflict     conflictEvent // the conflicts of the merge left pending
 	upstreamName string        // the name the candidate's SKILL.md gives the skill, when it is not name
 	done         placements    // the copies the mutation refreshed or kept
+	// fork is what the update of a fork reads and applies besides, see
+	// judgeForkUpdate; nil for a managed skill. For a fork, rec is the
+	// record of its base version and next the candidate's, or, for a merge
+	// it completes, of the base the merge records.
+	fork *forkUpdate
 }
 
 // updateRun is one run of agentx skill update, for one name or for --all:
@@ -109,6 +119,7 @@ type updateRun struct {
 	selected   int               // the skills the run set out to update
 	sourceless []string          // the skills --all skipped because their source was removed, by name
 	ready      []*updating       // the skills judged ready to update, by name
+	forks      []*updating       // the forks judged ready to update, by name, each applied on its own
 	bodies     map[string]string // what the files of every version staged hold, by blob id
 	applied    []*updating       // the skills whose update the mutation applied, by name
 	pending    []*updating       // the skills whose merge the mutation left pending, by name
@@ -203,7 +214,11 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 	}
 	records := map[string]lineage.Record{}
 	if exists {
-		if records, err = inv.listLineage(ctx, gitDir); err != nil {
+		records, err = inv.listLineage(ctx, gitDir)
+		if err == nil {
+			err = lineage.ReadForks(ctx, inv.git, gitDir, records, inv.forkWalks)
+		}
+		if err != nil {
 			return accountRepoFailure(fmt.Errorf("account repo %s: %w", gitDir, err))
 		}
 	}
@@ -216,8 +231,8 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 	names, libs := r.selection(name, records)
 	r.selected = len(names)
 	if r.all && len(names) == 0 {
-		inv.summary = "nothing to update: no managed skill has an update as of the last update check; run 'agentx skill check' to look again"
-		inv.out.print("Nothing to update: no managed skill has an update as of the last update check. Run ",
+		inv.summary = "nothing to update: no managed skill or fork has an update as of the last update check; run 'agentx skill check' to look again"
+		inv.out.print("Nothing to update: no managed skill or fork has an update as of the last update check. Run ",
 			inv.out.paint(label, "agentx skill check"), " to look again.")
 		return nil
 	}
@@ -225,7 +240,14 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 	for _, n := range names {
 		lib, held := libs[n]
 		rec, managed := records[n]
-		u, f := inv.judgeUpdate(ctx, gitDir, n, rec, managed, lib, held, sources)
+		var u *updating
+		var f *failure
+		fork := managed && rec.Kind == lineage.KindFork
+		if fork {
+			u, f = inv.judgeForkUpdate(ctx, gitDir, rec, sources)
+		} else {
+			u, f = inv.judgeUpdate(ctx, gitDir, n, rec, managed, lib, held, sources)
+		}
 		switch {
 		case f != nil:
 			r.drop(n, f)
@@ -234,8 +256,10 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 			inv.out.print(inv.out.paint(heading, sanitised(n)), " is up to date as of the last update check; run ",
 				inv.out.paint(label, "agentx skill check"), " to look again")
 			return nil
-		case u.merged.conflicted: // a merge pending with files still to resolve, left as it is
+		case u.merged.conflicted && (u.fork == nil || !u.fork.start): // a merge pending with files still to resolve, left as it is
 			r.pending = append(r.pending, u)
+		case fork:
+			r.forks = append(r.forks, u)
 		default:
 			r.ready = append(r.ready, u)
 		}
@@ -245,6 +269,11 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 	}
 	if len(r.ready) > 0 {
 		if err := r.apply(ctx); err != nil {
+			return err
+		}
+	}
+	for _, u := range r.forks {
+		if err := r.applyFork(ctx, u); err != nil {
 			return err
 		}
 	}
@@ -282,9 +311,11 @@ func (inv *invocation) finishJournals(ctx context.Context) error {
 // selection is the skills a run sets out to update, in name order, with
 // what the library holds of each: the one name it was given, or with --all
 // every managed skill with an update, a candidate agentx can read that its
-// branch does not already hold (see lineage.Record.AtCandidate). A skill
-// with no candidate has nothing to update, an upstream-removed one
-// included, since the check that marks a skill deletes its candidate.
+// branch does not already hold (see lineage.Record.AtCandidate), and every
+// fork with one, a candidate other than its base version (see
+// lineage.Record.ForkCandidate). A skill with no candidate has nothing to
+// update, an upstream-removed one included, since the check that marks a
+// skill deletes its candidate.
 func (r *updateRun) selection(name string, records map[string]lineage.Record) ([]string, map[string]scan.LibrarySkill) {
 	libs := map[string]scan.LibrarySkill{}
 	if !r.all {
@@ -295,7 +326,9 @@ func (r *updateRun) selection(name string, records map[string]lineage.Record) ([
 	}
 	var names []string
 	for n, rec := range records {
-		if _, ok := rec.AtCandidate(); ok && rec.Kind == lineage.KindManaged {
+		_, managed := rec.AtCandidate()
+		_, fork := rec.ForkCandidate()
+		if managed && rec.Kind == lineage.KindManaged || fork {
 			names = append(names, n)
 		}
 	}
@@ -307,10 +340,11 @@ func (r *updateRun) selection(name string, records map[string]lineage.Record) ([
 }
 
 // judgeUpdate decides, before the lock, whether the skill called name can
-// be updated, and reads what the mutation replaces. It refuses, in this
-// order: a name the library does not hold and no lineage names, an
-// unmanaged skill, a fork, a managed skill whose library directory is gone
-// and one whose import branch agentx cannot read; a skill whose source was
+// be updated, and reads what the mutation replaces. A fork is judged by
+// judgeForkUpdate instead. It refuses, in this order: a name the library
+// does not hold and no lineage names, an unmanaged skill, a managed skill
+// whose library directory is gone and one whose import branch agentx
+// cannot read; a skill whose source was
 // removed from this machine, which is exit code 5 as installing from it
 // is; a skill the last update check found its source no longer holds,
 // which is kept as it is and never updated; and, having found an update
@@ -337,9 +371,6 @@ func (inv *invocation) judgeUpdate(ctx context.Context, gitDir, name string, rec
 	case !managed:
 		return nil, refuse(exitRefused, name+" is not managed by agentx, so it has no upstream to update from",
 			"run 'agentx skill list' to see which skills are managed")
-	case rec.Kind == lineage.KindFork:
-		return nil, refuse(exitRefused, name+" is a fork on this machine",
-			"a fork's versions are its own history; this command works on a managed skill")
 	case !held:
 		sc := skillContext{records: map[string]lineage.Record{name: rec}}
 		what, wayOut := sc.absentNotice(inv, name)
@@ -430,7 +461,7 @@ func (inv *invocation) judgePending(ctx context.Context, gitDir string, u *updat
 		if err != nil {
 			return failureOf(accountRepoFailure(err))
 		}
-		u.merged.conflicted, u.conflict = true, conflictOfSkill(u.name, u.merge, files)
+		u.merged.conflicted, u.conflict = true, conflictOfSkill(u.name, lineage.KindManaged, u.merge, files)
 		return nil
 	}
 	if s.base != u.rec.Commit {
@@ -549,7 +580,7 @@ func (r *updateRun) merge(ctx context.Context, u *updating) *failure {
 			if err != nil {
 				return failureOf(accountRepoFailure(err))
 			}
-			u.conflict = conflictOfSkill(u.name, u.merge, files)
+			u.conflict = conflictOfSkill(u.name, lineage.KindManaged, u.merge, files)
 			return nil
 		}
 	}
@@ -804,10 +835,26 @@ func (r *updateRun) report(ctx context.Context) error {
 	}
 	slices.SortFunc(r.pending, func(a, b *updating) int { return strings.Compare(a.name, b.name) })
 	for _, u := range r.pending {
-		r.inv.printConflicts(u.conflict, short(u.rec.Import.Commit), short(u.next.Import.Commit))
+		r.inv.printConflicts(u.conflict, u.conflictsWith())
+		if u.fork != nil {
+			r.drop(u.name, forkConflictFailure(u, r.inv.checkoutPath(u.name)))
+			continue
+		}
 		r.drop(u.name, conflictFailure(u.name, filepath.Join(r.inv.checkoutPath(u.name), u.rec.Import.Dir()), len(u.conflict.Files)))
 	}
 	return nil
+}
+
+// conflictsWith is what the merge left pending for u's skill merged the
+// skill with, as the line that reports it names it: its update, from the
+// upstream commit of its base to the candidate's, or, for a fork whose
+// completed merge was merged again with commits made while it was pending,
+// those commits.
+func (u *updating) conflictsWith() string {
+	if u.fork != nil && u.fork.remerge {
+		return "the commits made while its merge was pending"
+	}
+	return "its update from " + short(u.rec.Import.Commit) + " to " + short(u.next.Import.Commit)
 }
 
 // conflictFailure is how an update answers for a skill whose merge it left
@@ -818,13 +865,20 @@ func (r *updateRun) report(ctx context.Context) error {
 // it up.
 func conflictFailure(name, path string, files int) *failure {
 	return refuse(exitPendingMerge, name+" conflicts with its update in "+plural(files, "file")+", so the merge is pending and the library directory was left as it is",
-		"resolve it with git in "+quotedPath(path)+" ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), "+
-			"then run '"+skillCommand("update", name)+"' again to apply it, or '"+skillCommand("update", name, "--abort")+"' to give it up")
+		conflictHintAt(name, path))
+}
+
+// conflictHintAt is the hint of an update that left the merge of the skill
+// called name pending, path being the skill's directory in the checkout.
+func conflictHintAt(name, path string) string {
+	return "resolve it with git in " + quotedPath(path) + " ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), " +
+		"then run '" + skillCommand("update", name) + "' again to apply it, or '" + skillCommand("update", name, "--abort") + "' to give it up"
 }
 
 // reportApplied is report's part for the skills the run updated.
 func (r *updateRun) reportApplied(ctx context.Context) error {
 	inv := r.inv
+	slices.SortFunc(r.applied, func(a, b *updating) int { return strings.Compare(a.name, b.name) })
 	snap, err := inv.scan(ctx, lockWait, "", false)
 	if err != nil {
 		return err
@@ -841,7 +895,10 @@ func (r *updateRun) reportApplied(ctx context.Context) error {
 	}
 	for _, u := range r.applied {
 		lib, ok := libs[u.name]
-		if !ok {
+		switch {
+		case !ok && u.fork != nil: // a fork whose library entry is elsewhere has nothing in the library to report
+			continue
+		case !ok:
 			return fail(exitInternal, "the library holds no "+u.name+" after updating it", "run 'agentx doctor' and check the library it names")
 		}
 		inv.out.emit(sc.librarySkillEventFor(ctx, inv, snap, lib, nil))
@@ -855,6 +912,9 @@ func (r *updateRun) reportApplied(ctx context.Context) error {
 			moved += " with the merge you resolved"
 		case u.edited:
 			moved += " and merged its edits cleanly"
+		}
+		if u.fork != nil {
+			moved += ", committed as " + short(u.fork.commit)
 		}
 		plain, painted := copiesNote(out, len(u.done.copies), len(u.done.skipped))
 		inv.summary = "updated " + u.name + moved + plain
@@ -881,6 +941,9 @@ func (r *updateRun) reportApplied(ctx context.Context) error {
 	t := &table{}
 	for _, u := range r.applied {
 		notes, _ := copiesNote(out, len(u.done.copies), len(u.done.skipped))
+		if u.fork != nil {
+			notes = ", committed as " + short(u.fork.commit) + notes
+		}
 		switch {
 		case u.checkout != "":
 			notes = ", the merge you resolved" + notes

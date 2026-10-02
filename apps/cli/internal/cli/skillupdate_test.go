@@ -697,12 +697,12 @@ func TestSkillUpdateRefusesInOrder(t *testing.T) {
 			name: "what has no update to apply", source: true,
 			cases: []refusal{
 				{
-					name: "a fork", skill: "forky", exit: 6,
+					name: "a fork with no upstream", skill: "forky", exit: 6,
 					setup: func(t *testing.T, h *harness, _ *sourceRepo) {
-						h.accountGit("update-ref", lineage.ForkRef("forky"), h.ref(lineage.ManagedRef("alpha")))
-						writeFile(t, mkdirs(t, filepath.Join(h.library, "forky"), "SKILL.md"), skill("forky", "A fork"))
+						h.mustRun("skill", "new", "forky")
 					},
-					message: "forky is a fork on this machine", hint: "a fork's versions are its own history; this command works on a managed skill",
+					message: "forky has no upstream to update from",
+					hint:    "a skill created with 'agentx skill new', or forked from an unmanaged or a plugin's skill, has no upstream version; its versions are its own commits",
 				},
 				{
 					name: "an edited skill with no update", skill: "alpha", exit: 0,
@@ -1373,7 +1373,7 @@ func TestSkillUpdateRunAgainFinishesTheUpdateThatStopped(t *testing.T) {
 		summary string
 	}{
 		{[]string{"skill", "update", "alpha"}, 2, upToDate("alpha")},
-		{[]string{"skill", "update", "--all"}, 1, "nothing to update: no managed skill has an update as of the last update check; run 'agentx skill check' to look again"},
+		{[]string{"skill", "update", "--all"}, 1, "nothing to update: no managed skill or fork has an update as of the last update check; run 'agentx skill check' to look again"},
 	} {
 		t.Run(fmt.Sprintf("%s after %d steps", strings.Join(c.args, " "), c.stop), func(t *testing.T) {
 			t.Parallel()

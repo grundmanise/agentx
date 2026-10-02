@@ -25,21 +25,24 @@ import (
 func newSkillCheckCommand(inv *invocation) *cobra.Command {
 	return &cobra.Command{
 		Use:   "check",
-		Short: "Look for newer upstream versions of the managed skills",
-		Long: "Fetch every added source a managed skill came from and report which skills have a\n" +
-			"newer upstream version, with the files each one changes; skills from a source you\n" +
-			"removed are skipped. Nothing is applied: apply an update with\n" +
-			"'agentx skill update <name>', or read it first with 'agentx skill diff <name> --update'.",
+		Short: "Look for newer upstream versions of the managed skills and forks",
+		Long: "Fetch every added source a managed skill or a fork came from and report which skills\n" +
+			"have a newer upstream version, with the files each one changes; skills from a source\n" +
+			"you removed are skipped. A fork is compared by the upstream version it was last\n" +
+			"forked or updated from, whatever its own commits changed. Nothing is applied:\n" +
+			"apply an update with 'agentx skill update <name>', or read it first with\n" +
+			"'agentx skill diff <name> --update'.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error { return inv.skillCheck(cmd.Context()) },
 	}
 }
 
-// updateAvailableEvent is one managed skill whose source holds a newer
-// version than its base version: where it came from, the version it is at,
-// the version the check pinned as its candidate and every file that
-// version changes, each path relative to the skill's directory. The serve
-// child emits the same event, carrying its instance id.
+// updateAvailableEvent is one managed skill or fork whose source holds a
+// newer version than its base version: where it came from, the version it
+// is at, a fork's being the last import merged into it, the version the
+// check pinned as its candidate and every file that version changes, each
+// path relative to the skill's directory. The serve child emits the same
+// event, carrying its instance id.
 type updateAvailableEvent struct {
 	event
 	InstanceID              string        `json:"instance_id,omitempty"` // serve only
@@ -309,9 +312,9 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool) (checkRep
 		}
 		return rep, nil
 	}
-	records, err := inv.listLineage(ctx, gitDir)
+	records, err := inv.checkLineage(ctx, gitDir)
 	if err != nil {
-		return rep, accountRepoFailure(fmt.Errorf("account repo %s: %w", gitDir, err))
+		return rep, err
 	}
 	bySource := inv.checkable(records, s)
 	var targets []fetchTarget
@@ -385,7 +388,7 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool) (checkRep
 			continue // a failure names the skill as not checked; the write only cleared its marker
 		}
 		checked[fd.name] = true
-		if fd.verdict == verdictRemoved {
+		if fd.verdict == verdictRemoved && rec.Kind == lineage.KindManaged {
 			rep.removed = append(rep.removed, removedSkill{name: fd.name, source: rec.Import.Source, subpath: rec.Import.Path, commit: fd.marker})
 		}
 		if fd.verdict == verdictUpdate && moved[fd.name] {
@@ -415,19 +418,51 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool) (checkRep
 	return rep, nil
 }
 
-// checkable are the managed skills an update check covers, by the canonical
-// URL of their source, each source's by name: every managed skill whose
-// lineage agentx can read, whose source the settings hold and whose
-// directory the library holds. One whose source was removed is left as it
-// is, since nothing names its source to fetch; one whose directory is gone
-// has nothing to update, and skill list names it in a warning instead. A
-// fork is not checked: its base version is the last one merged into it,
-// which its own history holds and this check does not read.
+// checkLineage is the lineage an update check works from, read in the one
+// for-each-ref a listing reads: every managed skill's import branch, and
+// for every fork with a base version the record of that version, see
+// lineage.Record.ForkBase, so that a fork is checked exactly as a managed
+// skill at its base would be. A fork's base is the import commit its
+// history names, read in one walk of the forks' histories, which serve
+// keeps by tip. A fork with no base, a greenfield skill or a fork of an
+// unmanaged or a plugin's skill, has no upstream to check and is left out,
+// as is one whose history does not say which import is its base.
+func (inv *invocation) checkLineage(ctx context.Context, gitDir string) (map[string]lineage.Record, error) {
+	records, err := inv.listLineage(ctx, gitDir)
+	if err == nil {
+		err = lineage.ReadForks(ctx, inv.git, gitDir, records, inv.forkWalks)
+	}
+	if err != nil {
+		return nil, accountRepoFailure(fmt.Errorf("account repo %s: %w", gitDir, err))
+	}
+	for name, rec := range records {
+		if rec.Kind != lineage.KindFork {
+			continue
+		}
+		if base, ok := rec.ForkBase(); ok {
+			records[name] = base
+		} else {
+			delete(records, name)
+		}
+	}
+	return records, nil
+}
+
+// checkable are the skills an update check covers, by the canonical URL of
+// their source, each source's by name: every managed skill whose lineage
+// agentx can read, and every fork with a base version, see checkLineage,
+// whose source the settings hold and whose directory the library holds. A
+// fork is compared by its base version, the last import merged into it,
+// whatever its own commits changed since: an update is a newer version of
+// the upstream, and merging it is what keeps those commits. One whose
+// source was removed is left as it is, since nothing names its source to
+// fetch; one whose directory is gone has nothing to update, and skill list
+// names it in a warning instead.
 func (inv *invocation) checkable(records map[string]lineage.Record, s home.Settings) map[string][]lineage.Record {
 	added := sourceURLs(s)
 	bySource := map[string][]lineage.Record{}
 	for _, rec := range records {
-		if rec.Kind != lineage.KindManaged || !rec.HasImport || !added[rec.Import.Source] || !inv.holdsSkill(rec.Name) {
+		if !rec.HasImport || !added[rec.Import.Source] || !inv.holdsSkill(rec.Name) {
 			continue
 		}
 		bySource[rec.Import.Source] = append(bySource[rec.Import.Source], rec)
@@ -628,7 +663,10 @@ func (c *checkRun) writeCandidates(ctx context.Context, run string) error {
 //
 // The lineage is read again under the lock. A skill whose branch no longer
 // names the import commit it was compared with, or that is gone, gets
-// nothing: it was compared with something it no longer is. Every other
+// nothing: it was compared with something it no longer is. A fork's is the
+// base its history names, read again with it, so a fork whose base an
+// update moved meanwhile gets nothing either, while one its own commits
+// moved is checked all the same. A fork gets no upstream-removed marker. Every other
 // skill gets its candidate ref and its upstream-removed marker, each
 // written, moved or deleted with the value it holds now as its expected old
 // value, so that a ref something else moved is refused rather than
@@ -653,8 +691,8 @@ func (inv *invocation) recordCheck(ctx context.Context, gitDir string, wait bool
 	now := time.Now().UTC().Format(time.RFC3339)
 	err = inv.holdLock(ctx, wait, true, func() error {
 		var err error
-		if live, err = inv.listLineage(ctx, gitDir); err != nil {
-			return accountRepoFailure(fmt.Errorf("account repo %s: %w", gitDir, err))
+		if live, err = inv.checkLineage(ctx, gitDir); err != nil {
+			return err
 		}
 		s, err := inv.loadSettings()
 		if err != nil {
@@ -673,7 +711,7 @@ func (inv *invocation) recordCheck(ctx context.Context, gitDir string, wait bool
 		sort.Slice(findings, func(i, j int) bool { return findings[i].name < findings[j].name })
 		for _, fd := range findings {
 			rec, ok := live[fd.name]
-			if !ok || rec.Kind != lineage.KindManaged || rec.Commit != fd.tip || !added[fd.source] {
+			if !ok || rec.Commit != fd.tip || !added[fd.source] {
 				continue
 			}
 			candidate, marker := rec.CandidateCommit(), rec.UpstreamRemoved
@@ -685,6 +723,13 @@ func (inv *invocation) recordCheck(ctx context.Context, gitDir string, wait bool
 				setMarker = fd.marker
 			case verdictPresent: // the candidate stays as it is, whatever else was found for the skill
 				setCandidate = candidate
+			}
+			if rec.Kind == lineage.KindFork {
+				// A fork's upstream is only where newer versions come from,
+				// so its removal there marks nothing: the fork just has no
+				// update, and a candidate pinned earlier goes, as for a skill
+				// found current.
+				setMarker = marker
 			}
 			if candidate != setCandidate {
 				m.Ref(gitDir, lineage.CandidateRef(fd.name), candidate, setCandidate)

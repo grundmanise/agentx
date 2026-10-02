@@ -86,6 +86,15 @@ func (inv *invocation) forkGuards(ctx context.Context, f forkSite, pre siteJudge
 	if inv.mergePending(f.name) {
 		return siteJudged{}, forkPendingRefusal(f.name, what)
 	}
+	return inv.siteNow(ctx, f, pre, what, needsClean)
+}
+
+// siteNow is forkGuards with no merge pending to refuse: the skill
+// directory of f as it is now, judged again when it changed since pre,
+// and refused when needsClean and it holds uncommitted edits. Completing
+// a fork's pending merge asks it, since the merge it completes is the one
+// pending.
+func (inv *invocation) siteNow(ctx context.Context, f forkSite, pre siteJudged, what string, needsClean bool) (siteJudged, error) {
 	live, err := home.State(f.skillDir)
 	if err != nil {
 		return siteJudged{}, libraryFailure(f.root, err)

@@ -710,46 +710,53 @@ func TestSkillCheckSkipsARemovedSource(t *testing.T) {
 	equal(t, "beta's drift", drift(h.listed("beta")), "source removed,upstream removed")
 }
 
-// TestSkillCheckSkipsAFork: a fork is not checked, although its branch
-// still names the source it came from, since its base version is the last
-// one merged into it. Beside a managed skill of the same source only that
-// one is checked and counted, and the fork gets no candidate; with forks
-// alone the check has nothing to check, and fetches nothing. Nothing
-// creates forks yet; the branches are made with plain git.
-func TestSkillCheckSkipsAFork(t *testing.T) {
+// TestSkillCheckFindsAForkUpdate: a fork is checked against its base
+// version, the import its history names, and not against its own commits,
+// so a fork with a commit of its own and an upstream that holds its base
+// has no update, and a greenfield skill, which has no upstream, is not
+// checked at all. A newer upstream version is pinned as the fork's
+// candidate and reported with kind fork, the coordinates of its base and
+// the files it changes there, which skill list shows and skill diff
+// --update reads back. Once the upstream no longer holds the skill, the
+// fork just has no update: the candidate goes, no upstream-removed marker
+// is written and none is counted.
+func TestSkillCheckFindsAForkUpdate(t *testing.T) {
 	t.Parallel()
-	h, s, _ := checkHarness(t)
-	fork := func(name string) {
-		h.accountGit("update-ref", lineage.ForkRef(name), h.ref(lineage.ManagedRef(name)))
-		h.accountGit("update-ref", "-d", lineage.ManagedRef(name))
-		equal(t, name+"'s kind", h.listed(name)["kind"], "fork")
-	}
-	fork("alpha")
-	s.skill("skills/alpha", "alpha", "The first skill, revised", nil)
-	s.skill("skills/beta", "beta", "The second skill, revised", nil)
-	s.commit("both revised")
+	h, s, first := checkHarness(t)
+	h.mustRun("skill", "fork", "alpha")
+	writeFile(t, filepath.Join(h.library, "alpha", "notes.md"), "alpha notes, forked\n")
+	h.mustRun("skill", "commit", "alpha")
+	h.mustRun("skill", "new", "mine")
 	out := h.mustRun("--json", "skill", "check")
-	equal(t, "summary", h.one(out.stdout, "result")["summary"], "checked 1 skill from 1 source: 1 update available")
-	if got := h.eventsOfType(out.stdout, "update_available"); len(got) != 1 {
-		t.Errorf("%d update_available events, want beta's alone:\n%s", len(got), out.stdout)
-	}
-	candidate := h.updateOf(out.stdout, "beta")["candidate"]
-	equal(t, "alpha's candidate", h.ref(lineage.CandidateRef("alpha")), "")
+	equal(t, "summary of a fork with a commit of its own", h.one(out.stdout, "result")["summary"], "checked 2 skills from 1 source: no update available")
 
-	fork("beta")
-	s.run("rm", "-r", "--quiet", "skills/alpha")
-	s.skill("skills/beta", "beta", "The second skill, revised again", nil)
-	s.commit("alpha removed, beta revised again")
-	fetched := h.ref(source.Ref(source.ID(s.url)))
+	s.skill("skills/alpha", "alpha", "The first skill, revised", nil)
+	second := s.commit("alpha revised")
 	out = h.mustRun("--json", "skill", "check")
-	equal(t, "summary with forks alone", h.one(out.stdout, "result")["summary"],
-		"nothing to check: no managed skill comes from a source added on this machine")
-	equal(t, "progress events", len(h.eventsOfType(out.stdout, "progress")), 0)
-	equal(t, "update_available events", len(h.eventsOfType(out.stdout, "update_available")), 0)
+	up := h.updateOf(out.stdout, "alpha")
+	equal(t, "kind", up["kind"], lineage.KindFork)
+	equal(t, "subpath", up["subpath"], "skills/alpha")
+	equal(t, "upstream_commit", up["upstream_commit"], first)
+	equal(t, "candidate_upstream_commit", up["candidate_upstream_commit"], second)
+	equal(t, "files", files(up), "modified SKILL.md")
+	equal(t, "the candidate ref", h.ref(lineage.CandidateRef("alpha")), up["candidate"])
+	candidate, _ := h.listed("alpha")["candidate"].(map[string]any)
+	equal(t, "the listed candidate", candidate["upstream_commit"], second)
+	diff := h.mustRun("--json", "skill", "diff", "alpha", "--update")
+	equal(t, "the diff of the update", h.one(diff.stdout, "result")["summary"],
+		"the update of alpha at "+short(second)+" differs from its base version at "+short(first)+" in 1 file")
+	refused := h.run("--json", "skill", "diff", "mine", "--update")
+	equal(t, "exit of a greenfield skill's update diff", refused.exit, 6)
+	equal(t, "message", h.one(refused.stdout, "error")["message"], "mine has no upstream to update from")
+
+	s.run("rm", "-r", "--quiet", "skills/alpha")
+	s.commit("alpha removed")
+	out = h.mustRun("--json", "skill", "check")
+	equal(t, "summary once the upstream removed it", h.one(out.stdout, "result")["summary"], "checked 2 skills from 1 source: no update available")
 	refs := h.refMap()
-	equal(t, "the source ref", refs[source.Ref(source.ID(s.url))], fetched)
-	equal(t, "alpha's marker", refs[lineage.UpstreamRemovedRef("alpha")], "")
-	equal(t, "beta's candidate", refs[lineage.CandidateRef("beta")], candidate)
+	equal(t, "the candidate once the upstream removed it", refs[lineage.CandidateRef("alpha")], "")
+	equal(t, "the marker", refs[lineage.UpstreamRemovedRef("alpha")], "")
+	equal(t, "the drift", drift(h.listed("alpha")), "")
 }
 
 // TestSkillCheckSkipsASkillWhoseLibraryDirectoryIsGone: a managed skill

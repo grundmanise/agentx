@@ -339,6 +339,11 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 		ev.Drift = driftOf(obs, false, false)
 		ev.PendingMerge = obs.pending
 	}
+	// A fork's update is a newer version of the upstream its base came
+	// from, judged against that base, whatever its own commits hold.
+	if next, ok := rec.ForkCandidate(); ok {
+		ev.Candidate = &scan.LibraryCandidate{UpstreamCommit: next.Import.Commit, ContentHash: next.Import.Hash}
+	}
 	// A managed skill's base version is the import commit its branch points
 	// at, so the directory can be compared with that commit's tree.
 	if rec.Kind == lineage.KindManaged && rec.HasImport {

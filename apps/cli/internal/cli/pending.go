@@ -108,8 +108,11 @@ func (inv *invocation) startMerge(ctx context.Context, gitDir, name string, in m
 // the checkout's index and work tree, and the stages it listed for each
 // conflicted file take the place of that file in the index, as git's own
 // merge leaves them. Then git's own merge state is written where git keeps
-// it for the checkout, MERGE_MSG and then MERGE_HEAD, the candidate, so
-// that the checkout is a merge in progress git knows how to complete.
+// it for the checkout, MERGE_MSG, ORIG_HEAD, mine, as git merge writes it,
+// and then MERGE_HEAD, the candidate, so that the checkout is a merge in
+// progress git knows how to complete. A fork's completion reads mine from
+// ORIG_HEAD, since a fork's tip may itself be a merge, which HEAD's
+// parents would not tell from the merge committed.
 func (inv *invocation) mergeIn(ctx context.Context, dir string, in mergeStart) error {
 	if _, err := inv.git.InCheckout(ctx, dir, "read-tree", "--reset", "-u", in.merged.tree); err != nil {
 		return err
@@ -129,14 +132,17 @@ func (inv *invocation) mergeIn(ctx context.Context, dir string, in mergeStart) e
 	if _, err := inv.git.InCheckoutInput(ctx, dir, strings.NewReader(removed.String()+stages.String()), "update-index", "-z", "--index-info"); err != nil {
 		return err
 	}
-	paths, err := inv.gitPaths(ctx, dir, "MERGE_MSG", "MERGE_HEAD")
+	paths, err := inv.gitPaths(ctx, dir, "MERGE_MSG", "ORIG_HEAD", "MERGE_HEAD")
 	if err != nil {
 		return err
 	}
 	if err := os.WriteFile(paths[0], []byte(in.message), 0o644); err != nil {
 		return err
 	}
-	return os.WriteFile(paths[1], []byte(in.theirs+"\n"), 0o644)
+	if err := os.WriteFile(paths[1], []byte(in.mine+"\n"), 0o644); err != nil {
+		return err
+	}
+	return os.WriteFile(paths[2], []byte(in.theirs+"\n"), 0o644)
 }
 
 // gitPaths are where git keeps the files called names for the checkout at
@@ -221,7 +227,7 @@ func (inv *invocation) readMerge(ctx context.Context, dir string) (pendingState,
 // the lock: git removes its checkout, the directory and git's registration
 // of it, whatever was resolved there. The library directory, every
 // placement, the import branch and the candidate stay exactly as they
-// were, so nothing is journaled; a removal stopped part way leaves what
+// were, and so do a fork's worktree and branch, so nothing is journaled; a removal stopped part way leaves what
 // the next command that changes anything prunes, see pruneMerges. The
 // skill is reported as it now stands.
 func (inv *invocation) abortMerge(ctx context.Context, name string) error {
@@ -229,11 +235,17 @@ func (inv *invocation) abortMerge(ctx context.Context, name string) error {
 	if err != nil {
 		return accountRepoFailure(err)
 	}
+	fork := false
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		if !inv.mergePending(name) {
 			return refuse(exitRefused, name+" has no merge pending",
 				"a merge is left pending by '"+skillCommand("update", name)+"' when your edits conflict with the update; run 'agentx skill list' to see which skills have one")
 		}
+		values, err := inv.git.Refs(ctx).RefValues(gitDir, []string{lineage.ForkRef(name)})
+		if err != nil {
+			return accountRepoFailure(err)
+		}
+		fork = values[lineage.ForkRef(name)] != ""
 		path := inv.checkoutPath(name)
 		inv.leaveCheckout(path)
 		if err := inv.git.RemoveCheckout(ctx, gitDir, path); err != nil {
@@ -244,7 +256,10 @@ func (inv *invocation) abortMerge(ctx context.Context, name string) error {
 	if err != nil {
 		return mutationFailure(err)
 	}
-	const kept = "; the library directory is as it was"
+	kept := "; the library directory is as it was"
+	if fork {
+		kept = "; the fork's worktree and branch are as they were"
+	}
 	inv.summary = "gave up the merge of " + name + kept
 	if lib, ok := librarySkill(inv.dirs.Library, name); ok {
 		snap, err := inv.scan(ctx, lockWait, "", false)

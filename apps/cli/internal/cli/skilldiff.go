@@ -155,12 +155,24 @@ func (inv *invocation) skillDiff(ctx context.Context, name, commit string) error
 // what the source holds now. A skill with no candidate, or with one its
 // branch already holds, has nothing to show, and the refusal says how to
 // look for an update.
+//
+// A fork's update is compared with the fork's base version, the import
+// commit its history names, exactly as a managed skill's: what the update
+// changes upstream, which is what merging it brings in, and not how it
+// differs from the fork's own commits.
 func (inv *invocation) skillDiffUpdate(ctx context.Context, name string) error {
 	if _, ok := librarySkill(inv.dirs.Library, name); !ok {
 		return inv.noLibrarySkill(name)
 	}
-	gitDir, rec, err := inv.managedRecord(ctx, name, "compare with")
+	gitDir, rec, held, err := inv.accountRecord(ctx, name)
 	if err != nil {
+		return err
+	}
+	if held && rec.Kind == lineage.KindFork {
+		if rec, err = inv.forkBaseOf(ctx, gitDir, rec); err != nil {
+			return err
+		}
+	} else if err := managedRefusal(name, "compare with", rec, held); err != nil {
 		return err
 	}
 	c, ok := rec.AtCandidate()
