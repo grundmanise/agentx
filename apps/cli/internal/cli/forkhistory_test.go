@@ -18,9 +18,8 @@ import (
 // its author and its whole message, the two agentx wrote carrying the
 // machine, and the import at the root, with every file it holds added.
 // Paths are relative to the skill's directory, a file beside it starting
-// with ../. A managed
-// skill, an unmanaged one and a name the library does not hold are
-// refused, each in its own words.
+// with ../. A managed skill, an unmanaged one and a name the library does
+// not hold are refused, each in its own words.
 func TestSkillHistoryMarksImportsAndForeignCommits(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)

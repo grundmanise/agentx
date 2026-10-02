@@ -70,9 +70,9 @@ func managedRefusal(name, what string, rec lineage.Record, ok bool) error {
 // notAForkRefusal refuses a flag that names one of a fork's commits, given
 // for the skill called name, which has no commits of its own: a managed
 // skill, ok being whether the account repo holds its branch, whose one
-// version is its base, or an unmanaged one. what says what the flag would have done
-// with the commit: "compare with", "revert to"; and verb is the command
-// that works on the base instead.
+// version is its base, or an unmanaged one. what says what the flag would
+// have done with the commit: "compare with", "revert to"; and verb is the
+// command that works on the base instead.
 func notAForkRefusal(name, what, verb string, ok bool) error {
 	if ok {
 		return fail(exitRefused, sanitised(name)+" is managed, not a fork, so it has no commit of its own to "+what,

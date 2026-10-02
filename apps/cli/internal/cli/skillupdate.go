@@ -662,7 +662,15 @@ func (r *updateRun) apply(ctx context.Context) error {
 			}
 		}
 		if len(live) > 0 {
-			if err := m.Apply(inv.refs(ctx)); err != nil {
+			backs := make([]func(), 0, len(live))
+			for _, u := range live {
+				backs = append(backs, reenterReplaced(u.libPath))
+			}
+			err := m.Apply(inv.refs(ctx))
+			for _, back := range backs {
+				back()
+			}
+			if err != nil {
 				return err
 			}
 		}

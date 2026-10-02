@@ -134,9 +134,9 @@ func splitUnrecordable(j forkJudged) (kept, lost []string) {
 // the lock, once forkRevert has refused a merge pending: the commit has to
 // be the tip or one of its ancestors and hold the fork's skill directory;
 // the fork has to have no uncommitted edits, exit code 6; and the new
-// commit is written, the tip's tree with the skill directory
-// that commit holds, the tip its one parent. A commit whose directory the
-// tip holds already leaves nothing to commit, r.commit "".
+// commit is written, the tip's tree with the skill directory that commit
+// holds, the tip its one parent. A commit whose directory the tip holds
+// already leaves nothing to commit, r.commit "".
 func (inv *invocation) forkRevertTo(ctx context.Context, r *forkReverting) error {
 	f := r.site
 	c, err := inv.resolveForkCommit(ctx, f, r.to, true)
@@ -296,6 +296,8 @@ func (inv *invocation) applyForkRevert(ctx context.Context, r *forkReverting, do
 		*done = placements{}
 		inv.refreshCopies(ctx, m, f.gitDir, f.name, r.laid, placed, r.lay, recorded, done)
 	}
+	back := reenterReplaced(f.skillDir)
+	defer back()
 	return m.Apply(inv.refs(ctx))
 }
 

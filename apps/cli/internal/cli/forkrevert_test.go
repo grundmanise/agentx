@@ -207,6 +207,39 @@ func TestSkillRevertToACommit(t *testing.T) {
 	equal(t, "the branch after it", h.ref(lineage.ForkRef("notes")), reverted)
 }
 
+// TestSkillRevertOfAForkRunInItsFolder: a revert run in the fork's skill
+// directory, reached through its library entry or in the worktree, exits 0
+// and leaves the process in the directory that now holds the reverted
+// content. The revert replaces the directory, and a git started in the one
+// it displaced, which is removed once the revert is complete, would fail.
+func TestSkillRevertOfAForkRunInItsFolder(t *testing.T) {
+	// Not parallel: it changes the process's working directory.
+	h, _ := installHarness(t)
+	h.mustRun("skill", "new", "notes")
+	first := h.ref(lineage.ForkRef("notes"))
+	lib := filepath.Join(h.library, "notes")
+	root := filepath.Join(h.agentx, "worktrees", "notes")
+	written := readText(t, filepath.Join(lib, "SKILL.md"))
+	writeFile(t, filepath.Join(lib, "SKILL.md"), skill("notes", "Committed"))
+	gitIn(t, h, root, "commit", "-q", "-a", "-m", "Committed")
+	writeFile(t, filepath.Join(lib, "SKILL.md"), skill("notes", "An edit"))
+	for _, c := range []struct {
+		name, wd, want string
+		args           []string
+	}{
+		{"the edits, in the library entry", lib, skill("notes", "Committed"), nil},
+		{"an earlier commit, in the worktree", filepath.Join(root, "notes"), written, []string{"--to", first}},
+	} {
+		t.Chdir(c.wd)
+		out := h.run(append([]string{"skill", "revert", "notes"}, c.args...)...)
+		equal(t, c.name+": exit", out.exit, 0)
+		equal(t, c.name+": SKILL.md", readText(t, filepath.Join(lib, "SKILL.md")), c.want)
+		if wd, err := os.Getwd(); err != nil || wd != c.wd {
+			t.Errorf("%s: the working directory is %q, %v; want %s", c.name, wd, err, c.wd)
+		}
+	}
+}
+
 // forkRevertChildEnv marks the process TestSkillRevertOfAForkRecoversWhereItWasKilled
 // starts, which runs the skill revert whose arguments it holds, separated
 // by spaces, and is killed part way.

@@ -213,7 +213,9 @@ func TestServeKeepsGitsVerdictUntilTheSkillChanges(t *testing.T) {
 // with its bytes and mode, a symlink as a link, and a path the new content
 // holds already keeps the new content's file. So does a path under a file
 // or a symlink the new content holds where its directory was, and nothing
-// is written through the link.
+// is written through the link. An ignored nested repository, which git
+// lists as one directory, where the new content holds a directory keeps
+// every file of its own the new content does not hold.
 func TestCarryIgnoredKeepsWhatTheNewContentHolds(t *testing.T) {
 	t.Parallel()
 	from, to, outside := t.TempDir(), t.TempDir(), t.TempDir()
@@ -227,8 +229,12 @@ func TestCarryIgnoredKeepsWhatTheNewContentHolds(t *testing.T) {
 	link(t, outside, filepath.Join(to, "sub"))
 	writeFile(t, mkdirs(t, filepath.Join(from, "x"), "debug.log"), "log\n")
 	writeFile(t, filepath.Join(to, "x"), "now a file\n")
+	writeFile(t, mkdirs(t, filepath.Join(from, "vendor", ".git"), "HEAD"), "ref: refs/heads/main\n")
+	writeFile(t, filepath.Join(from, "vendor", "x.txt"), "mine\n")
+	writeFile(t, filepath.Join(from, "vendor", "a.md"), "the nested repository's\n")
+	writeFile(t, mkdirs(t, filepath.Join(to, "vendor"), "a.md"), "the new content\n")
 
-	paths := []string{".DS_Store", "build/run", "latest", "a.md", "sub/x.log", "x/debug.log"}
+	paths := []string{".DS_Store", "build/run", "latest", "a.md", "sub/x.log", "x/debug.log", "vendor/", "vendor/.git"}
 	if err := carryIgnored(from, to, paths); err != nil {
 		t.Fatal(err)
 	}
@@ -244,4 +250,7 @@ func TestCarryIgnoredKeepsWhatTheNewContentHolds(t *testing.T) {
 		t.Errorf("latest = %q, %v, want a link to a.md", target, err)
 	}
 	equal(t, "a.md", readText(t, filepath.Join(to, "a.md")), "the new content\n")
+	equal(t, "vendor/x.txt", readText(t, filepath.Join(to, "vendor", "x.txt")), "mine\n")
+	equal(t, "vendor/.git/HEAD", readText(t, filepath.Join(to, "vendor", ".git", "HEAD")), "ref: refs/heads/main\n")
+	equal(t, "vendor/a.md", readText(t, filepath.Join(to, "vendor", "a.md")), "the new content\n")
 }

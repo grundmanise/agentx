@@ -253,18 +253,43 @@ func stageVersion(dest string, lay func(dest string) error, v version, from stri
 // holds already is the new content's, and is not carried, and so is a path
 // under a file or a symlink the new content holds where the ignored file's
 // directory was: git checkout drops such a file, and carrying it would write
-// through the link, perhaps outside the skill.
+// through the link, perhaps outside the skill. A directory the new content
+// holds a directory at too is not the new content's whole: each entry in it
+// is carried by the same rule, so only a file the new content holds at the
+// same path replaces the local one.
 func carryIgnored(from, to string, paths []string) error {
 	for _, p := range paths {
-		held, err := heldByNewContent(to, p)
-		if err != nil {
+		if err := carryEntry(from, to, strings.TrimSuffix(p, "/")); err != nil {
 			return err
 		}
-		if held {
-			continue
-		}
-		dst := filepath.Join(to, filepath.FromSlash(p))
-		if err := carryFile(filepath.Join(from, filepath.FromSlash(p)), dst); err != nil {
+	}
+	return nil
+}
+
+// carryEntry carries the slash-separated path p from from into to by
+// carryIgnored's rule.
+func carryEntry(from, to, p string) error {
+	src := filepath.Join(from, filepath.FromSlash(p))
+	held, dir, err := heldByNewContent(to, p)
+	if err != nil {
+		return err
+	}
+	if !held {
+		return carryFile(src, filepath.Join(to, filepath.FromSlash(p)))
+	}
+	if !dir {
+		return nil
+	}
+	info, err := os.Lstat(src)
+	if err != nil || !info.IsDir() {
+		return err // a file where the new content holds a directory is dropped
+	}
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if err := carryEntry(from, to, p+"/"+e.Name()); err != nil {
 			return err
 		}
 	}
@@ -273,25 +298,27 @@ func carryIgnored(from, to string, paths []string) error {
 
 // heldByNewContent reports whether the content laid out in to owns the
 // slash-separated path p: it holds p itself, or holds something other than
-// a directory at one of p's parents. Each component is read without
-// following a link, so a symlink in the new content is never resolved.
-func heldByNewContent(to, p string) (bool, error) {
-	parts := strings.Split(strings.TrimSuffix(p, "/"), "/")
+// a directory at one of p's parents. dir says that what it holds at p is a
+// directory, reached through directories only. Each component is read
+// without following a link, so a symlink in the new content is never
+// resolved.
+func heldByNewContent(to, p string) (held, dir bool, err error) {
+	parts := strings.Split(p, "/")
 	at := to
 	for i, part := range parts {
 		at = filepath.Join(at, part)
 		info, err := os.Lstat(at)
 		if errors.Is(err, fs.ErrNotExist) {
-			return false, nil // the rest is the carry's to make
+			return false, false, nil // the rest is the carry's to make
 		}
 		if err != nil {
-			return false, err
+			return false, false, err
 		}
 		if i == len(parts)-1 || !info.IsDir() {
-			return true, nil
+			return true, i == len(parts)-1 && info.IsDir(), nil
 		}
 	}
-	return false, nil
+	return false, false, nil
 }
 
 func carryFile(src, dst string) error {

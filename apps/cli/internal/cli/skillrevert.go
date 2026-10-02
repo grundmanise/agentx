@@ -178,7 +178,9 @@ func (inv *invocation) skillRevert(ctx context.Context, name, to string) error {
 				return err
 			}
 		}
+		back := reenterReplaced(libPath)
 		applied := m.Apply(inv.refs(ctx))
+		back()
 		journaled = m.Journaled()
 		return applied
 	})
