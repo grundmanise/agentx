@@ -22,7 +22,7 @@ A pull, and the merge a publish makes when the account remote holds commits the 
 
 - Nothing to do when the remote tip is the local tip or an ancestor of it.
 - A fast-forward when the local tip is an ancestor of the remote tip. No commit is written.
-- Otherwise `merge-tree --write-tree` of the two tips, with the merge base git finds. A clean result is committed with the local tip and the remote tip as parents and the base below; a conflict becomes a pending merge, resolved in its worktree like any other conflict.
+- Otherwise `merge-tree --write-tree` of the two tips, with the merge base git finds. A clean result is committed with the local tip and the remote tip as parents and the base below; a conflict becomes a pending merge, resolved in its worktree like any other conflict. A binary file or a symlink both sides changed conflicts whole, as Git merges it: the pending merge holds the local side's version and the other side's as its own stage, with no markers.
 
 Publishing pushes commits only, never forced, and only the fork's own branch: import branches, update candidates, upstream-removed markers and source refs never travel. A push the remote rejects is reported, never retried with force.
 
@@ -42,7 +42,7 @@ A pull that moves the fork's base to another import also drops the update candid
 
 ## Deterministic parentless imports
 
-Every upstream version becomes a commit with no parent whose id is a pure function of the version and its coordinates, identical on every machine. So two machines that took the same upstream version merge clean, and two that took different versions merge clean where the versions changed different lines and conflict where both changed the same lines, as Git merges any two histories.
+Every upstream version becomes a commit with no parent whose id is a pure function of the version and its coordinates, identical on every machine. So two machines that took the same upstream version merge clean, and two that took different versions merge clean where the versions changed different lines and conflict where both changed the same lines, as Git merges any two histories. Two machines that each took the same version share its import commit as a merge base beside the last commit they shared, and Git merges over both: a line one of them put back to the older upstream text, where the other kept the version's, conflicts rather than being taken back without a word.
 
 ## No inferred ancestry
 
