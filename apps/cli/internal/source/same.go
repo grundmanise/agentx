@@ -17,9 +17,9 @@ import (
 type Address struct {
 	Scheme string // https, http, ssh, git or file; the SSH shorthand and git+ssh and ssh+git read as ssh, a path on disk as file
 	User   string // the user of an SSH address, "" for none
-	Host   string // lowercased, without a trailing dot; "" for a path on disk
-	Port   string // "" for the scheme's default
-	Path   string // the repository path, decoded, without a leading or trailing slash or a .git suffix; its case is kept
+	Host   string // lowercased, without a trailing dot; "" for a path on disk, whose file URL's host git ignores
+	Port   string // "" for the scheme's default and for a path on disk
+	Path   string // the repository path, decoded, without a leading or trailing slash; its case is kept, and so is a .git suffix on disk alone
 }
 
 // ErrCredential is the error of a URL that carries a password or a token:
@@ -84,8 +84,11 @@ func ParseAddress(raw string) (Address, error) {
 		if a.Port = u.Port(); a.Port == defaultPorts[a.Scheme] {
 			a.Port = ""
 		}
-		if a.Scheme == "file" && a.Host == "localhost" && a.Port == "" {
-			a.Host = ""
+		if a.Scheme == "file" {
+			// git reads a file URL's path on this machine whatever host it
+			// names, so a file URL shares no host with a URL over the
+			// network.
+			a.Host, a.Port = "", ""
 		}
 		if a.Scheme != "file" && a.Host == "" {
 			return Address{}, fmt.Errorf("%w: no host", ErrForm)
@@ -118,12 +121,27 @@ func ParseAddress(raw string) (Address, error) {
 	if len(segments) == 0 {
 		return Address{}, fmt.Errorf("%w: no repository path", ErrForm)
 	}
-	last := len(segments) - 1
-	for strings.HasSuffix(segments[last], ".git") && len(segments[last]) > len(".git") {
-		segments[last] = strings.TrimSuffix(segments[last], ".git")
-	}
+	// A server finds a repository with or without its .git suffix, while
+	// on disk /srv/skills and /srv/skills.git can be two directories, so
+	// the suffix goes everywhere but there, as Parse keeps it in a file URL.
 	a.Path = strings.Join(segments, "/")
+	if a.Scheme != "file" {
+		a.Path = trimGit(a.Path)
+	}
 	return a, nil
+}
+
+// trimGit is path without the .git suffixes of its last segment, as a
+// server finds the repository.
+func trimGit(path string) string {
+	dir, last := "", path
+	if i := strings.LastIndex(path, "/"); i >= 0 {
+		dir, last = path[:i+1], path[i+1:]
+	}
+	for strings.HasSuffix(last, ".git") && len(last) > len(".git") {
+		last = strings.TrimSuffix(last, ".git")
+	}
+	return dir + last
 }
 
 // SameTransport reports whether a and b reach their repositories the same
@@ -160,13 +178,20 @@ var sameHosts = map[string]string{
 }
 
 // Compare tells whether a and b name one repository. The paths decide
-// first, compared as they are written but for a .git suffix and the
-// slashes around them; the hosts then, each SSH host first through
-// resolve, which reads the host name an SSH configuration gives an alias
-// (nil reads every host as itself), then through the hosts a forge serves
-// one repository under. The scheme, the user and the port do not decide:
-// one repository is reached over HTTPS and over SSH alike. Pure.
+// first, compared as ParseAddress leaves them, but for the .git suffix of
+// a path on disk beside a URL over the network, which a server finds the
+// repository without; the hosts then, each SSH
+// host first through resolve, which reads the host name an SSH
+// configuration gives an alias (nil reads every host as itself), then
+// through the hosts a forge serves one repository under. A path on disk
+// has no host, so it is at most OtherHost beside a URL over the network,
+// as a mount of the server's disk can be. The scheme, the user and the
+// port do not decide: one repository is reached over HTTPS and over SSH
+// alike. Pure.
 func Compare(a, b Address, resolve func(host string) string) Kinship {
+	if (a.Scheme == "file") != (b.Scheme == "file") {
+		a.Path, b.Path = trimGit(a.Path), trimGit(b.Path)
+	}
 	if a.Path != b.Path {
 		return OtherRepository
 	}
