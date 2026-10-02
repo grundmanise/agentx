@@ -89,13 +89,14 @@ const mergePending = "merge pending"
 func newSkillCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "skill",
-		Short:       "Install, create, commit, place, compare, revert, update and remove skills, check them for updates, and list what the library holds",
+		Short:       "Install, create, fork, commit, place, compare, revert, update and remove skills, check them for updates, and list what the library holds",
 		Annotations: map[string]string{annotationGroup: "true"},
 		Args:        cobra.NoArgs,
 		RunE:        needSubcommand(inv, "no skill command given", "run 'agentx skill --help' to list commands"),
 	}
 	cmd.AddCommand(newSkillAddCommand(inv))
 	cmd.AddCommand(newSkillNewCommand(inv))
+	cmd.AddCommand(newSkillForkCommand(inv))
 	cmd.AddCommand(newSkillCommitCommand(inv))
 	cmd.AddCommand(newSkillPlaceCommand(inv))
 	cmd.AddCommand(newSkillRemoveCommand(inv))

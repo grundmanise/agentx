@@ -103,7 +103,7 @@ func (inv *invocation) skillNew(ctx context.Context, name, description string) e
 	}
 	var done placements
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
-		return inv.createFork(ctx, gitDir, name, commit, targets, &done)
+		return inv.createFork(ctx, gitDir, name, name, commit, name, targets, &done)
 	})
 	if errors.Is(err, home.ErrMovedBeforeApply) {
 		return fail(exitRefused, name+" changed while it was being created, so nothing was changed", "run the command again")
@@ -134,11 +134,14 @@ func (inv *invocation) newSkillRoom(libPath, root string) error {
 }
 
 // createFork records and applies, under the lock, the creation of a fork
-// whose first commit is commit: its branch, its worktree, its skill
-// directory laid out from the commit, the library symlink and the
-// placements. Every input is read again first: the branches, for a name
-// another command took meanwhile, and the library and worktree paths.
-func (inv *invocation) createFork(ctx context.Context, gitDir, name, commit string, targets []placeTarget, done *placements) error {
+// called name whose branch starts at commit: its branch, its worktree, its
+// skill directory dir laid out from the commit, the library symlink and the
+// placements, a copy wherever copy_mode records one for the skill called
+// copiesOf, which is the fork itself for a new skill and the skill it was
+// forked from for a fork beside it. Every input is read again first: the
+// branches, for a name another command took meanwhile, and the library and
+// worktree paths.
+func (inv *invocation) createFork(ctx context.Context, gitDir, name, dir, commit, copiesOf string, targets []placeTarget, done *placements) error {
 	records, err := lineage.List(ctx, inv.git, gitDir)
 	if err != nil {
 		return accountRepoFailure(err)
@@ -154,9 +157,9 @@ func (inv *invocation) createFork(ctx context.Context, gitDir, name, commit stri
 	if err != nil {
 		return libraryFailure(inv.dirs.Library, err)
 	}
-	for _, dir := range []string{inv.dirs.Library, inv.worktreesDir()} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return libraryFailure(dir, err)
+	for _, parent := range []string{inv.dirs.Library, inv.worktreesDir()} {
+		if err := os.MkdirAll(parent, 0o755); err != nil {
+			return libraryFailure(parent, err)
 		}
 	}
 	// A creation killed before its journal was written left what it staged
@@ -169,7 +172,7 @@ func (inv *invocation) createFork(ctx context.Context, gitDir, name, commit stri
 			sweepStaged(t.dir)
 		}
 	}
-	link, err := inv.forkLink(libPath, filepath.Join(root, name))
+	link, err := inv.forkLink(libPath, filepath.Join(root, dir))
 	if err != nil {
 		return libraryFailure(inv.dirs.Library, err)
 	}
@@ -181,14 +184,14 @@ func (inv *invocation) createFork(ctx context.Context, gitDir, name, commit stri
 	// The content is staged beside the worktree, in the worktrees directory,
 	// never inside it, where git would see it as a file of the branch.
 	staged := m.Sibling(root, "staged")
-	fingerprint, err := inv.stageForkContent(ctx, gitDir, commit, name, staged, "", nil)
+	fingerprint, err := inv.stageForkContent(ctx, gitDir, commit, dir, staged, "", nil)
 	if err != nil {
 		os.RemoveAll(staged)
 		return accountRepoFailure(err)
 	}
 	m.Ref(gitDir, lineage.ForkRef(name), "", commit)
 	m.Worktree(gitDir, root, strings.TrimPrefix(lineage.ForkRef(name), "refs/heads/"))
-	m.Publish(filepath.Join(root, name), staged, fingerprint)
+	m.Publish(filepath.Join(root, dir), staged, fingerprint)
 	if !home.IsAbsent(libState) {
 		m.Remove(libPath, libState) // a fork's symlink whose worktree is gone
 	}
@@ -197,7 +200,7 @@ func (inv *invocation) createFork(ctx context.Context, gitDir, name, commit stri
 	p := placeable{name: name, hash: hash, stage: func(dest string) error { return copyTreeTo(staged, dest) }}
 	*done = placements{}
 	for _, t := range targets {
-		inv.stagePlacement(m, p, t, libPath, false, edit.copiesOf(name), done)
+		inv.stagePlacement(m, p, t, libPath, false, edit.copiesOf(copiesOf), done)
 	}
 	edit.addCopies(name, done.copies)
 	if err := edit.stage(m, inv.dirs.Home); err != nil {

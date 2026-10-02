@@ -80,7 +80,7 @@ _Avoid_: orphaned, detached
 A skill found on disk whose upstream agentx cannot determine. Inventoried, never updated or reverted.
 
 **Fork**:
-A skill derived from an upstream skill and edited by the user, keeping the upstream name unless renamed. A fork supersedes the skill it was forked from in the agent configuration. Its lineage record keeps the third-party upstream so later upstream versions can be merged in. Lives in the account repo; local until published.
+A skill derived from an upstream skill and edited by the user, keeping the upstream name unless renamed. A fork supersedes the skill it was forked from in the agent configuration; a fork under a new name sits beside the skill it came from instead. Managed, unmanaged and plugin-owned skills and forks can all be forked with `agentx skill fork`. Its lineage record keeps the third-party upstream so later upstream versions can be merged in. Lives in the account repo; local until published.
 _Avoid_: copy, variant, override
 
 **Greenfield skill**:
@@ -96,7 +96,7 @@ A commit with no parent whose tree is one upstream version of a skill and whose 
 _Avoid_: base commit, snapshot commit, root
 
 **Import branch**:
-The branch `managed/<name>` in the account repo that points at a managed skill's current import commit. Never checked out; the library holds the real directory. Renamed into the fork namespace when the skill becomes a fork.
+The branch `managed/<name>` in the account repo that points at a managed skill's current import commit. Never checked out; the library holds the real directory. When the skill is forked in its place, the fork's branch starts from its import commit and the import branch is deleted, so the import commit becomes the fork's base.
 _Avoid_: managed branch, shadow branch, cache branch
 
 **Adopt into fork**:

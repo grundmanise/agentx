@@ -77,8 +77,9 @@ type replacement struct {
 // a path and as an object id (empty for none) for a ref. Every step is
 // decided from the live state and is safe to repeat.
 type step struct {
-	Kind     string `json:"kind"`               // ref, publish, link, remove or worktree
-	Path     string `json:"path,omitempty"`     // the live path of publish, link, remove and worktree
+	Kind     string `json:"kind"`               // ref, publish, link, remove, worktree or move
+	Path     string `json:"path,omitempty"`     // the live path of publish, link, remove, worktree and move
+	From     string `json:"from,omitempty"`     // the live directory a move takes its content from
 	GitDir   string `json:"git_dir,omitempty"`  // the repository of a ref or worktree step
 	Ref      string `json:"ref,omitempty"`      // the ref it moves
 	Old      string `json:"old"`                // what the step expects to find
@@ -97,6 +98,11 @@ const (
 	// aligns the worktree's index with the branch tip. It runs git, as a ref
 	// step does, through the Worktrees the journal is handed.
 	stepWorktree = "worktree"
+	// stepMove renames a live directory to a path where nothing is yet,
+	// which is how a skill directory goes into a fork's worktree without
+	// its content being copied. Nothing is staged for it: the content is
+	// the user's, and only the rename moves it.
+	stepMove = "move"
 )
 
 // worktreeOn is how a worktree step records its new state: the short name
@@ -273,6 +279,10 @@ func (m *Mutation) RemoveInto(path, old, dir string) error {
 	return nil
 }
 
+// SameDevice reports whether the two directories are on one file system,
+// which a move step, a rename, needs of its two ends.
+func SameDevice(a, b string) (bool, error) { return sameDevice(a, b) }
+
 // sameDevice reports whether the two directories are on one file system.
 func sameDevice(a, b string) (bool, error) {
 	var sa, sb syscall.Stat_t
@@ -293,6 +303,16 @@ func sameDevice(a, b string) (bool, error) {
 // how a command that moved the branch brings the worktree along.
 func (m *Mutation) Worktree(gitDir, path, branch string) {
 	m.j.Steps = append(m.j.Steps, step{Kind: stepWorktree, Path: path, GitDir: gitDir, Old: absent, New: worktreeOn + branch})
+}
+
+// Move records that the live directory from, whose fingerprint is fp as
+// the caller captured it under the lock, moves to the path to, where
+// nothing is yet. The directory is renamed, never copied, so from and to
+// must be on one file system. Nothing of from is staged or retained, and
+// nothing discards it: it is the user's content, and recovery moves it
+// only while it still holds what was captured.
+func (m *Mutation) Move(from, to, fp string) {
+	m.j.Steps = append(m.j.Steps, step{Kind: stepMove, Path: to, From: from, Old: absent, New: dirOf + fp})
 }
 
 // Ref records that ref in gitDir moves from old, empty for a ref that must
@@ -454,6 +474,8 @@ func applyStep(s step, u RefUpdater) (bool, error) {
 		return applyRefs([]step{s}, u)
 	case stepWorktree:
 		return applyWorktree(s, u)
+	case stepMove:
+		return applyMove(s)
 	}
 	live, err := liveState(s.Path)
 	if err != nil {
@@ -647,6 +669,37 @@ func applyWorktree(s step, u RefUpdater) (bool, error) {
 	return added, w.ResetIndex(s.Path)
 }
 
+// applyMove brings a move step's path to the directory it records. The
+// path holding it already is done; anything at the path but nothing is not
+// what the mutation expected; and the directory is renamed only while it
+// still holds what was captured, so content changed or put there since is
+// never moved into a place the journal does not describe.
+func applyMove(s step) (bool, error) {
+	live, err := liveState(s.Path)
+	switch {
+	case err != nil:
+		return false, err
+	case live == s.New:
+		return false, nil
+	case live != s.Old:
+		return false, fmt.Errorf("%w: %s holds neither what the mutation expected nor what it was to become", ErrRecovery, s.Path)
+	}
+	from, err := liveState(s.From)
+	if err != nil {
+		return false, err
+	}
+	if from != s.New {
+		return false, fmt.Errorf("%w: %s changed or is gone since the mutation was to move it to %s", ErrRecovery, s.From, s.Path)
+	}
+	if err := os.Rename(s.From, s.Path); err != nil {
+		return false, err
+	}
+	if err := syncDir(filepath.Dir(s.From)); err != nil {
+		return false, err
+	}
+	return true, syncDir(filepath.Dir(s.Path))
+}
+
 // emptyOrAbsent reports whether path holds nothing: no entry, or an empty
 // directory.
 func emptyOrAbsent(path string) bool {
@@ -752,6 +805,11 @@ func IsAbsent(state string) bool { return state == absent }
 
 // IsDir reports whether a state says the path is a real directory.
 func IsDir(state string) bool { return strings.HasPrefix(state, dirOf) }
+
+// DirFingerprint is the fingerprint a state says the path's directory
+// holds, and false when the state is not a real directory's: what a move
+// of that directory expects to find.
+func DirFingerprint(state string) (string, bool) { return strings.CutPrefix(state, dirOf) }
 
 // IsLink reports whether a state says the path is a symlink, wherever it
 // points. What it points at says nothing about whether it may be replaced:
@@ -938,9 +996,15 @@ func recoverJournal(dir, journalPath string, u RefUpdater) error {
 // after both leaves the path holding neither what the remove expected nor
 // what it was to become: the remove is not out of date, the path has moved
 // on past it.
+//
+// A move is settled the same way by a later move that takes its path on to
+// somewhere else and holds its own new state: a journal that moves one
+// directory twice, out of a place and back into another, must not move it
+// out again once it has arrived.
 func settledLater(steps []step, i int) (bool, error) {
 	for _, s := range steps[i+1:] {
-		if s.Kind == stepRef || s.Path != steps[i].Path {
+		onward := steps[i].Kind == stepMove && s.Kind == stepMove && s.From == steps[i].Path
+		if s.Kind == stepRef || (s.Path != steps[i].Path && !onward) {
 			continue
 		}
 		if held, err := holdsNew(s); err != nil || held {
