@@ -294,30 +294,6 @@ func TestWholeRemovalSaysWhoStillSeesTheSkill(t *testing.T) {
 	contains(t, "the scan", sc.stdout, leftover)
 }
 
-// TestSkillRemoveRefusesAFork leaves a fork's branch and library entry
-// alone: removing a fork is its own command. Its placements can still be
-// taken away one configuration at a time.
-func TestSkillRemoveRefusesAFork(t *testing.T) {
-	t.Parallel()
-	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
-	head := strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/managed/alpha"))
-	h.accountGit("update-ref", "refs/heads/skills/alpha", head)
-
-	out := h.run("skill", "remove", "alpha")
-	equal(t, "exit", out.exit, 6)
-	contains(t, "stderr", out.stderr, "alpha is a fork on this machine")
-	if _, err := os.Stat(filepath.Join(h.library, "alpha", "SKILL.md")); err != nil {
-		t.Errorf("a refused removal took the library directory: %v", err)
-	}
-	equal(t, "the fork branch", strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/skills/alpha")), head)
-
-	one := h.run("skill", "remove", "alpha", "--from", "cursor")
-	equal(t, "exit", one.exit, 0)
-	nothingAt(t, "the placement", filepath.Join(h.home, ".cursor", "skills", "alpha"))
-	equal(t, "the fork branch", strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/skills/alpha")), head)
-}
-
 // TestSkillRemoveDropsTheCopyModeOfWhatItRemoved leaves the copy modes of
 // the configurations it did not touch where they are.
 func TestSkillRemoveDropsTheCopyModeOfWhatItRemoved(t *testing.T) {

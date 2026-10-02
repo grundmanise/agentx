@@ -289,9 +289,10 @@ func TestPublishMergesFirstAndNamesUncommittedForks(t *testing.T) {
 // TestPublishRefusesADifferentFork creates a skill of the same name on two
 // machines, which are two forks with two fork ids. The first publishes it;
 // the second's publish and pull of it are refused, exit 6, and the hint
-// names the way out, a fork under another name, and the remote keeps the
-// first machine's branch. The publish still names the uncommitted edits
-// the second machine's fork holds, which its refusal does not.
+// names the way out, a rename, and the remote keeps the first machine's
+// branch; so is the second's removal of it with --remote, which would
+// delete the first's. The publish still names the uncommitted edits the
+// second machine's fork holds, which its refusal does not.
 func TestPublishRefusesADifferentFork(t *testing.T) {
 	t.Parallel()
 	a, _, _, _ := forkHarness(t)
@@ -309,10 +310,20 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 		equal(t, cmd+": exit", out.exit, 6)
 		e := b.one(out.stdout, "error")
 		contains(t, cmd+": message", e["message"].(string), "the account remote's skills/notes is a different fork than notes on this machine")
-		contains(t, cmd+": hint", e["hint"].(string), "agentx skill fork notes --name <new>")
+		contains(t, cmd+": hint", e["hint"].(string), "rename yours with 'agentx skill rename notes <new>'")
 		if cmd == "publish" {
 			contains(t, "the uncommitted edits", out.stderr, "notes has uncommitted edits, which were not published")
 		}
+	}
+	// Nor does a removal of b's notes delete a's from the account remote,
+	// or anything of b's.
+	removal := b.run("--json", "skill", "remove", "notes", "--remote")
+	equal(t, "remove --remote: exit", removal.exit, 6)
+	e := b.one(removal.stdout, "error")
+	equal(t, "remove --remote: message", e["message"], "the account remote's skills/notes is a different fork than notes on this machine, so notes cannot be removed from the account remote")
+	equal(t, "remove --remote: hint", e["hint"], "remove it from this machine alone with 'agentx skill remove notes'")
+	if b.ref(lineage.ForkRef("notes")) == "" || !lexists(b.forkDir("notes", "notes")) {
+		t.Error("a refused removal took b's notes")
 	}
 	equal(t, "the remote's notes", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/notes"), a.ref(lineage.ForkRef("notes")))
 

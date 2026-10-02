@@ -296,7 +296,7 @@ func (inv *invocation) judgePull(ctx context.Context, gitDir string, rec lineage
 func sameForkRefusal(rec lineage.Record, there lineage.ForkLineage, doing string) *failure {
 	name := sanitised(rec.Name)
 	branch := strings.TrimPrefix(rec.Ref, "refs/heads/")
-	rename := "rename yours: fork it under a new name with '" + skillCommand("fork", rec.Name, "--name", "<new>") + "', then publish that one"
+	rename := "rename yours with '" + skillCommand("rename", rec.Name, "<new>") + "', then publish that one"
 	here := ""
 	if rec.Fork != nil {
 		here = rec.Fork.ID

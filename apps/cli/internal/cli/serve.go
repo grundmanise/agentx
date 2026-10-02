@@ -129,10 +129,15 @@ func newServeCommand(inv *invocation) *cobra.Command {
 		Short: "Watch for changes and stream a snapshot on each one, until stdin closes",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var every time.Duration // a single pass runs no check, and reads no interval
+			// A single pass runs no check and pushes nothing, and reads
+			// neither interval.
+			var every, quiet time.Duration
 			if !once {
 				var err error
 				if every, err = inv.checkEvery(); err != nil {
+					return err
+				}
+				if quiet, err = inv.pushQuietPeriod(); err != nil {
 					return err
 				}
 			}
@@ -176,7 +181,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 				Stdin:      cmd.InOrStdin(),
 				Check:      func(ctx context.Context) func() { return inv.serveCheck(ctx, failing) },
 				CheckEvery: every,
-				Ticks:      []serve.Tick{inv.maintenanceTick()},
+				Ticks:      []serve.Tick{inv.maintenanceTick(), inv.autoPushTick(quiet)},
 				Snapshot: func(snap scan.Snapshot) {
 					inv.out.emit(snapshotEvent{event: newEvent("snapshot"), Snapshot: snap})
 					inv.out.print(inv.out.paint(heading, fmt.Sprintf("snapshot %d", snap.ScanCounter)), ": ",

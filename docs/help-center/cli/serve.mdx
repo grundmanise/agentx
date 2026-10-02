@@ -69,13 +69,25 @@ Checks run in the background: scans go on while a check waits on the network, an
 
 To check more or less often, set `AGENTX_CHECK_INTERVAL` to a duration such as `10m` or `2h` before starting serve. Serve refuses to start with exit code 1 when it is not a positive duration.
 
+## Auto-push
+
+With [auto-push](/cli/remote#push-automatically) on, serve publishes a fork's commits once its branch has stood still for a minute, and prints a line for each push:
+
+```text
+auto-push release-notes: pushed 4c2e9a1
+```
+
+It pushes commits only, never commits your edits, and never merges: a fork whose branch on the account remote holds commits you do not have is left for [`agentx publish`](/cli/remote#publish-a-fork), with one warning starting `auto-push:`. A remote it cannot reach is warned about the same way.
+
+To wait longer or shorter, set `AGENTX_PUSH_QUIET` to a duration such as `30s` or `5m` before starting serve. Serve refuses to start with exit code 1 when it is not a positive duration.
+
 ## Run one pass
 
 ```sh
 agentx serve --once
 ```
 
-Scans once, prints the snapshot and exits. It repairs nothing and runs no update check or maintenance. For an inventory to read, run [`agentx scan`](/cli/scan) instead.
+Scans once, prints the snapshot and exits. It repairs nothing, runs no update check or maintenance, and pushes nothing. For an inventory to read, run [`agentx scan`](/cli/scan) instead.
 
 ## One serve per home
 

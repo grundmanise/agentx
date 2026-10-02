@@ -327,7 +327,7 @@ agentx deletes the record of where the skill came from and the placements it mad
 
 ### Forks
 
-A fork has its own removal command, so `agentx skill remove <fork>` stops with exit code 6, with or without `--from universal`. You can still take a fork's placements away with `--from <client>`. The universal clients keep seeing a fork until the fork itself is removed, so `--from` naming one is refused with a hint that says so, rather than offering `--from universal`.
+Removing a fork without `--from`, or with `--from universal`, also deletes its worktree and its branch, and `--remote` deletes its branch on the account remote too: see [Remove a fork](/cli/fork#remove-a-fork). `--from <client>` takes a fork's placement away as for any skill.
 
 ## List your skills
 
@@ -777,7 +777,7 @@ For `skill add --from-account`, see the [account remote's exit codes](/cli/remot
   - `skill check`: also a source added on this machine that it has never fetched, such as one `agentx import` brought back; `agentx source add` fetches it.
 - `6`: agentx refused:
   - the library already holds a different skill under that name, the name is already managed at another version, the skill's name cannot be both a directory and a git branch, the skill's directory in the source is not one agentx can record, the skill holds a file whose path would put it outside the skill's directory, agentx cannot use your library directory, or an interrupted change has to be resolved before anything else can run. The message names what to restore; if you would rather keep what is there, move the named file in `~/.agentx/mutations` aside.
-  - `skill remove`: also `--from` naming a universal client, one that reads the library directly, even next to `--from universal`; removing a name that is a fork; and `--from <client>` for a skill whose library directory is gone.
+  - `skill remove`: also `--from` naming a universal client, one that reads the library directly, even next to `--from universal`; `--from <client>` for a skill whose library directory is gone; and, for a fork, see [Forks](/cli/fork#exit-codes).
   - `skill diff` and `skill revert`: a skill agentx did not install, which has no base version, or a managed skill whose import branch records no version agentx can read. For a fork, see [Forks](/cli/fork#exit-codes).
   - `skill diff --update`: also a skill no check has found an update for.
   - `skill check`: a newer version agentx will not install, for the reasons `skill add` refuses one.

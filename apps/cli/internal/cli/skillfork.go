@@ -70,6 +70,10 @@ type forking struct {
 	commit   string     // the creation commit
 	targets  []placeTarget
 	notes    []forkNoteEvent
+	// scanned scans the machine once, the first time it is asked, and
+	// snap keeps what it found.
+	scanned func() (scan.Snapshot, error)
+	snap    *scan.Snapshot
 }
 
 // skillFork forks the skill arg names, under newName when it is given and
@@ -92,43 +96,61 @@ type forking struct {
 // the configurations the source is placed in, or, for a plugin's skill,
 // into the enabled configurations that have the plugin.
 func (inv *invocation) skillFork(ctx context.Context, arg, newName string) error {
-	if err := inv.finishJournals(ctx); err != nil {
+	fk, err := inv.planFork(ctx, arg, newName)
+	if err != nil {
 		return err
+	}
+	return inv.makeFork(ctx, fk)
+}
+
+// planFork finds the skill arg names and runs every refusal of its fork
+// under newName, see checkForking, before anything is written: the part of
+// a fork that skill rename runs before either of its steps.
+func (inv *invocation) planFork(ctx context.Context, arg, newName string) (*forking, error) {
+	if err := inv.finishJournals(ctx); err != nil {
+		return nil, err
 	}
 	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return accountRepoFailure(err)
+		return nil, accountRepoFailure(err)
 	}
 	records := map[string]lineage.Record{}
 	if exists {
 		if records, err = inv.listLineage(ctx, gitDir); err != nil {
-			return accountRepoFailure(err)
+			return nil, accountRepoFailure(err)
 		}
 	}
-	var snap *scan.Snapshot
-	scanned := func() (scan.Snapshot, error) {
-		if snap == nil {
+	fk := &forking{gitDir: gitDir}
+	fk.scanned = func() (scan.Snapshot, error) {
+		if fk.snap == nil {
 			s, err := inv.scan(ctx, lockWait, "", false)
 			if err != nil {
 				return scan.Snapshot{}, err
 			}
-			snap = &s
+			fk.snap = &s
 		}
-		return *snap, nil
+		return *fk.snap, nil
 	}
-	src, err := inv.forkSourceOf(arg, records, scanned)
+	src, err := inv.forkSourceOf(arg, records, fk.scanned)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	fk := &forking{src: src, target: src.name, gitDir: gitDir}
+	fk.src, fk.target = src, src.name
 	if newName != "" {
 		fk.target = newName
 	}
 	fk.inPlace = fk.target == src.name && (src.kind == lineage.KindManaged || src.kind == lineage.KindUnmanaged)
 	if err := inv.checkForking(ctx, fk, records, newName != ""); err != nil {
-		return err
+		return nil, err
 	}
-	gitDir, _, err = gitx.OpenAccountRepo(ctx, inv.git, inv.dirs.Home)
+	return fk, nil
+}
+
+// makeFork writes the creation commit of the fork planFork planned and
+// applies the fork in one journaled mutation, then reports it.
+func (inv *invocation) makeFork(ctx context.Context, fk *forking) error {
+	src := fk.src
+	gitDir, _, err := gitx.OpenAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
 		return accountRepoFailure(err)
 	}
@@ -156,7 +178,7 @@ func (inv *invocation) skillFork(ctx context.Context, arg, newName string) error
 		return accountRepoFailure(err)
 	}
 	if !fk.inPlace {
-		s, err := scanned()
+		s, err := fk.scanned()
 		if err != nil {
 			return err
 		}

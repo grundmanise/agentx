@@ -41,6 +41,20 @@ agentx publish release-notes
 - Each fork goes to its own branch, `skills/<name>`. Publishing one fork leaves your other forks' commits where they are.
 - When another machine published commits of the fork first, agentx takes them in before it pushes, as [`agentx pull`](#pull-what-another-machine-published) does. Commit or discard your edits first: a fork with uncommitted edits stops with exit code 6.
 - agentx never forces a push. When the remote rejects one, for example because another machine published meanwhile, run `agentx pull <name>`, then publish again.
+- To delete a fork's branch from the remote, remove the fork with [`agentx skill remove <name> --remote`](/cli/fork#remove-a-fork).
+
+### Push automatically
+
+Turn on auto-push to publish your commits without running `agentx publish`:
+
+```sh
+agentx config set auto_push true
+```
+
+- The desktop app's background process, [`agentx serve`](/cli/serve), pushes a fork's commits once you stop committing to it for a minute, so a run of commits goes out as one push.
+- It pushes commits only. It never commits your edits for you: commit them with `agentx skill commit` when you want them published.
+- It never merges. When the remote holds commits of the fork that you do not have, it leaves the fork alone and warns you once: run `agentx publish <name>` to take them in and publish.
+- Auto-push is off by default. Turn it off again with `agentx config set auto_push false`.
 
 ## Install a fork on another machine
 
@@ -125,8 +139,10 @@ Every fork has a permanent id. A skill you create on two machines under the same
 
 ```text
 error: the account remote's skills/release-notes is a different fork than release-notes on this machine, so release-notes cannot be published
-hint: rename yours: fork it under a new name with 'agentx skill fork release-notes --name <new>', then publish that one
+hint: rename yours with 'agentx skill rename release-notes <new>', then publish that one
 ```
+
+[Rename](/cli/fork#rename-a-fork) yours, then publish it under its new name.
 
 ## Exit codes
 

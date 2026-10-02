@@ -197,6 +197,35 @@ func (r *Runner) Push(ctx context.Context, gitDir string, branches []string) ([]
 	return ParsePushPorcelain(out)
 }
 
+// DeleteRemoteBranch deletes the account remote's branch, named by its
+// short name such as "skills/pdf", in one git push of the user's
+// environment with no hook of theirs, see networkConfig, and returns the
+// remote's answer for it. The deletion is leased on expect, the commit the
+// last fetch read the branch at: a branch another machine moved since is
+// not deleted, and git reports it rejected as stale. A branch the remote
+// refuses to delete, as a hosting service refuses its default branch, is
+// a rejected status too, not an error. git drops the remote-tracking
+// branch of a branch it deleted itself.
+func (r *Runner) DeleteRemoteBranch(ctx context.Context, gitDir, branch, expect string) (PushStatus, error) {
+	ref := "refs/heads/" + branch
+	args := append(networkConfig(), "--git-dir="+gitDir, "push", "--porcelain", "--no-verify", "--no-recurse-submodules",
+		"--force-with-lease="+ref+":"+expect, RemoteName, ":"+ref)
+	out, _, err := r.runStatus(ctx, call{}, 1, args...)
+	if err != nil {
+		return PushStatus{}, err
+	}
+	list, err := ParsePushPorcelain(out)
+	if err != nil {
+		return PushStatus{}, err
+	}
+	for _, s := range list {
+		if s.To == ref {
+			return s, nil
+		}
+	}
+	return PushStatus{}, fmt.Errorf("git push said nothing of %s", ref)
+}
+
 // ParsePushPorcelain reads what git push --porcelain prints: a "To <url>"
 // line, then one line per ref, "<flag>\t<from>:<to>\t<summary>", the
 // summary followed by " (<reason>)" when git gives one, and a "Done" line

@@ -236,24 +236,17 @@ func TestSkillRemoveFromUniversalStandsAlone(t *testing.T) {
 // universal is refused with.
 const standsAloneHint = "hint: --from universal asks for the removal without --from; drop it to remove only the placements you name\n"
 
-// TestSkillRemoveFromTheUniversalClientsOfAFork: a fork cannot be taken off
-// the machine by this command, and each way of asking for the universal
-// clients says so, changing nothing.
+// TestSkillRemoveFromTheUniversalClientsOfAFork: the universal clients
+// lose a fork as they lose any skill, with the fork itself, so each way of
+// asking for them is answered as it is for a managed skill.
 //
-//   - --from universal runs the whole removal and so answers a fork as that
-//     removal does, before anything is planned.
-//   - --from universal beside a client that is not universal is the usage
-//     error it is for any skill, and its hint holds for a fork too. It is
-//     decided before the refs are read, so it does not claim that --from
-//     universal takes the skill from every client, which for a fork it does
-//     not. Dropping --from universal, as the hint says, leads to a removal
-//     that works.
 //   - --from naming a universal client is refused, alone, beside another
-//     client and beside --from universal, and the refusal offers no --from
-//     universal: following it would only be refused again. The hint says
-//     instead that the universal clients see the fork until the fork itself
-//     is removed, which is not this command, and that the other clients can
-//     still lose it.
+//     client and beside --from universal, changing nothing, and the
+//     refusal offers --from universal, which takes a fork off the machine
+//     too.
+//   - --from universal beside a client that is not universal is the usage
+//     error it is for any skill.
+//   - --from universal is the whole removal, which removes the fork.
 func TestSkillRemoveFromTheUniversalClientsOfAFork(t *testing.T) {
 	t.Parallel()
 	h, s := universalHarness(t)
@@ -261,18 +254,6 @@ func TestSkillRemoveFromTheUniversalClientsOfAFork(t *testing.T) {
 	head := strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/managed/alpha"))
 	h.accountGit("update-ref", "refs/heads/skills/alpha", head)
 	before := mutationVersion(t, h)
-	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
-
-	whole := h.run("skill", "remove", "alpha", "--from", "universal")
-	equal(t, "exit of --from universal", whole.exit, 6)
-	contains(t, "stderr of --from universal", whole.stderr, "alpha is a fork on this machine")
-
-	usage := h.run("skill", "remove", "alpha", "--from", "universal", "--from", "claude-code")
-	equal(t, "exit of --from universal beside claude-code", usage.exit, 1)
-	contains(t, "stderr of --from universal beside claude-code", usage.stderr, "error: --from universal and --from claude-code cannot both be given\n"+standsAloneHint)
-	if strings.Contains(usage.stderr, "every client") {
-		t.Errorf("the hint says --from universal takes a fork from every client, which it refuses to:\n%s", usage.stderr)
-	}
 
 	for _, from := range [][]string{{"codex"}, {"claude-code", "codex"}, {"universal", "codex"}} {
 		args := []string{"skill", "remove", "alpha"}
@@ -282,25 +263,18 @@ func TestSkillRemoveFromTheUniversalClientsOfAFork(t *testing.T) {
 		out := h.run(args...)
 		equal(t, "exit of "+strings.Join(from, " "), out.exit, 6)
 		contains(t, "stderr", out.stderr, "error: codex reads the library directly, so alpha cannot be removed from it alone\n")
-		contains(t, "stderr", out.stderr, "hint: alpha is a fork on this machine: every universal client sees it through the library entry "+
-			"until the fork itself is removed, which is not this command; take it from the other clients with "+
-			"'agentx skill remove alpha --from <configuration>'\n")
-		for _, offer := range []string{"--from universal", "which removes it from"} {
-			if strings.Contains(out.stderr, offer) {
-				t.Errorf("the refusal for a fork offers %q, which refuses a fork too:\n%s", offer, out.stderr)
-			}
-		}
+		contains(t, "stderr", out.stderr, "hint: take alpha off the machine with 'agentx skill remove alpha --from universal', which removes it from ")
 	}
-
-	contains(t, "the library directory", fileBody(t, filepath.Join(h.library, "alpha", "SKILL.md")), "name: alpha")
-	if target, ok := isSymlink(t, claude); !ok || target != filepath.Join(h.library, "alpha") {
-		t.Errorf("the claude-code placement is %q (symlink %v), want the link to the library", target, ok)
-	}
-	equal(t, "the fork branch", strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/skills/alpha")), head)
+	usage := h.run("skill", "remove", "alpha", "--from", "universal", "--from", "claude-code")
+	equal(t, "exit of --from universal beside claude-code", usage.exit, 1)
+	contains(t, "stderr of --from universal beside claude-code", usage.stderr, "error: --from universal and --from claude-code cannot both be given\n"+standsAloneHint)
 	equal(t, "mutations", mutationVersion(t, h), before)
 
-	equal(t, "exit of what the hint leads to", h.run("skill", "remove", "alpha", "--from", "claude-code").exit, 0)
-	nothingAt(t, "the claude-code placement", claude)
+	whole := h.run("skill", "remove", "alpha", "--from", "universal")
+	equal(t, "exit of --from universal", whole.exit, 0)
+	nothingAt(t, "the library directory", filepath.Join(h.library, "alpha"))
+	nothingAt(t, "the claude-code placement", filepath.Join(h.home, ".claude", "skills", "alpha"))
+	equal(t, "the branches", h.accountGit("for-each-ref", "--format=%(refname)", "refs/heads/"), "")
 }
 
 // TestSkillRemoveFromASymlinkedClient: --from naming a client that is not

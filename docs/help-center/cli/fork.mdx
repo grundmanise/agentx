@@ -295,11 +295,65 @@ A folder with no `SKILL.md` is no skill: `skill place` stops with exit code 5 an
 
 What you adopt shows up as uncommitted edits. Keep them with `agentx skill commit`, or discard them with `agentx skill revert`. `--force` on a fork with nothing in the way stops with exit code 6.
 
+## Rename a fork
+
+Rename a fork with `skill rename`:
+
+```sh
+agentx skill rename release-notes changelog
+```
+
+```text
+✓ forked release-notes as changelog: 1 placement; release-notes stays as it was
+  claude-code  symlink  ~/.claude/skills/changelog -> ~/.agents/skills/changelog
+✓ removed release-notes from the library: 1 placement
+  claude-code  symlink  ~/.claude/skills/release-notes
+  deleted ~/.agents/skills/release-notes, ~/.agentx/worktrees/release-notes and refs/heads/skills/release-notes
+✓ renamed release-notes to changelog
+```
+
+A rename runs the two commands you could run yourself, and nothing else: [`agentx skill fork <old> --name <new>`](#fork-a-fork), then [`agentx skill remove <old>`](#remove-a-fork).
+
+- The renamed fork is a new fork with a fork id of its own. Its history holds every commit of the old one, and its `SKILL.md` carries the new name.
+- It is placed where the old one was, as a copy wherever the old one was a copy.
+- agentx checks both steps before running either, so a name you cannot use, uncommitted edits or a merge pending stop the rename before anything changes. Commit or revert your edits first.
+- Files Git ignores in the old fork's worktree, such as a local `.env`, are deleted with it. Copy the ones you want into the new fork first.
+- The old fork's branch stays on the [account remote](/cli/remote). Add `--remote` to delete it there too.
+- Another machine sees the renamed fork, once you publish it, as a new fork to install, and keeps the old one until you remove it there.
+
+If the removal fails after the new fork was made, the error says so. Finish the rename with the `agentx skill remove <old>` command it names.
+
+## Remove a fork
+
+Remove a fork from this machine with `skill remove`:
+
+```sh
+agentx skill remove release-notes
+```
+
+- Every placement goes, and so do the library symlink, the fork's worktree, its branch, its update candidate and its copy settings.
+- Edits you never committed and files Git ignores go with the worktree. agentx keeps them until the removal is complete, so a removal that stops part way loses nothing.
+- A fork with a merge pending is not removed: finish or abort the merge first.
+- The fork's branch stays on the account remote, and every other machine keeps the fork until you remove it there.
+
+Add `--remote` to delete the fork's branch from the account remote as well:
+
+```sh
+agentx skill remove release-notes --remote
+```
+
+- Run it again if the account remote could not be reached. With the fork gone from this machine, it deletes the branch on the account remote alone.
+- A hosting service refuses to delete a repository's default branch. If the first fork you published became the default branch, make another branch the default on the hosting service, then run the command again.
+- If the account remote's branch of that name is [another fork](/cli/remote#two-forks-with-one-name), agentx refuses to delete it.
+
+To take a fork out of one configuration only, use `--from`, as for any skill: see [Remove a skill](/cli/skill#remove-a-skill).
+
 ## Exit codes
 
-- `1`: the description is more than one line, holds a control character or is longer than 1024 bytes; `-m` is empty; `skill diff` is given both `--update` and `--commit`; `--commit` or `--to` is empty.
-- `4`: the skill you fork or revert has a merge pending. Finish or abort it with `agentx skill update <name>` first. `skill update` left a fork's merge waiting for you to [resolve](#resolve-a-conflict), or found files of it still to resolve.
-- `5`: `skill commit`, `skill history`, `skill diff` or `skill revert` names a skill your library does not hold; `skill place` finds no `SKILL.md` in the fork's skill folder or the folder it would adopt; `skill fork` names a skill neither your library nor a plugin holds; `skill update` names a fork whose upstream source you removed.
-- `6`: the name breaks the naming rule, the account repo already holds a skill of that name in any case, or the library or `~/.agentx/worktrees` already holds something under it. For `skill commit`: the skill is not a fork; the fork's worktree is missing, needs repair or is not on its branch; a Git command you ran there, such as a merge, waits for you to finish or abort it; Git is running there; the fork's skill directory is missing; the fork holds a Git repository its `.gitignore` does not cover; or the fork changed while it was being committed. For `skill fork`: the skill is already a fork and no new name is given; several plugins provide the name; the library entry is a symlink of your own or sits on another file system than agentx home; the skill is itself a Git repository; the skill holds a Git repository its `.gitignore` does not cover; its `SKILL.md` cannot take the new name; or the skill changed while it was being forked. For `skill history`: the skill is not a fork. For `skill update`: the fork has no upstream; the account remote holds [another fork](/cli/remote#two-forks-with-one-name) of that name, or one that shares no commit with yours; it holds a Git repository its `.gitignore` does not cover; its worktree is missing, needs repair, is not on its branch, waits for a Git command you ran there to finish, or Git is running there; its branch moved outside agentx while its merge waited; or the fork, its branch or its update changed while it was being updated. For `skill diff` and `skill revert`: the fork's worktree or skill directory is missing, and for `skill revert` also the worktree needs repair, is not on its branch, waits for a Git command you ran there to finish, or Git is running there; `--commit` or `--to` names no commit of the account repo, a commit that holds no folder of the skill, or, for `--to`, a commit outside the fork's history; `--commit` or `--to` is given for a skill that is not a fork; a revert would discard a Git repository or another entry Git cannot record; or the fork changed while it was being reverted. For `skill place`: a folder is in the way of the fork and `--force` is not given; `--force` is given with nothing in the way; the folder to adopt holds other files, is itself a Git repository, is a copy of another worktree, sits on another file system than agentx home, or meets a worktree that holds edits of its own or files Git ignores; the worktree is not on its branch; a Git command you ran in the worktree waits for you to finish or abort it, or Git is running there; or the fork changed while it was being placed. For a command that moves a fork's branch, and for forking a fork: the fork has uncommitted edits.
+- `1`: `skill remove` is given both `--remote` and `--from` a configuration; `skill rename` is given the fork's own name; the description is more than one line, holds a control character or is longer than 1024 bytes; `-m` is empty; `skill diff` is given both `--update` and `--commit`; `--commit` or `--to` is empty.
+- `3`: `skill remove --remote` cannot reach the account remote, or the account remote refused to delete the fork's branch.
+- `4`: the skill you fork, rename, remove or revert has a merge pending. Finish or abort it with `agentx skill update <name>` first. `skill update` left a fork's merge waiting for you to [resolve](#resolve-a-conflict), or found files of it still to resolve.
+- `5`: `skill commit`, `skill history`, `skill diff` or `skill revert` names a skill your library does not hold; `skill place` finds no `SKILL.md` in the fork's skill folder or the folder it would adopt; `skill fork` names a skill neither your library nor a plugin holds; `skill update` names a fork whose upstream source you removed; `skill remove --remote` names a fork neither this machine nor the account remote holds.
+- `6`: the name breaks the naming rule, the account repo already holds a skill of that name in any case, or the library or `~/.agentx/worktrees` already holds something under it. For `skill commit`: the skill is not a fork; the fork's worktree is missing, needs repair or is not on its branch; a Git command you ran there, such as a merge, waits for you to finish or abort it; Git is running there; the fork's skill directory is missing; the fork holds a Git repository its `.gitignore` does not cover; or the fork changed while it was being committed. For `skill fork`: the skill is already a fork and no new name is given; several plugins provide the name; the library entry is a symlink of your own or sits on another file system than agentx home; the skill is itself a Git repository; the skill holds a Git repository its `.gitignore` does not cover; its `SKILL.md` cannot take the new name; or the skill changed while it was being forked. For `skill history`: the skill is not a fork. For `skill update`: the fork has no upstream; the account remote holds [another fork](/cli/remote#two-forks-with-one-name) of that name, or one that shares no commit with yours; it holds a Git repository its `.gitignore` does not cover; its worktree is missing, needs repair, is not on its branch, waits for a Git command you ran there to finish, or Git is running there; its branch moved outside agentx while its merge waited; or the fork, its branch or its update changed while it was being updated. For `skill diff` and `skill revert`: the fork's worktree or skill directory is missing, and for `skill revert` also the worktree needs repair, is not on its branch, waits for a Git command you ran there to finish, or Git is running there; `--commit` or `--to` names no commit of the account repo, a commit that holds no folder of the skill, or, for `--to`, a commit outside the fork's history; `--commit` or `--to` is given for a skill that is not a fork; a revert would discard a Git repository or another entry Git cannot record; or the fork changed while it was being reverted. For `skill place`: a folder is in the way of the fork and `--force` is not given; `--force` is given with nothing in the way; the folder to adopt holds other files, is itself a Git repository, is a copy of another worktree, sits on another file system than agentx home, or meets a worktree that holds edits of its own or files Git ignores; the worktree is not on its branch; a Git command you ran in the worktree waits for you to finish or abort it, or Git is running there; or the fork changed while it was being placed. For `skill rename`: the skill is not a fork, or it changed while it was being renamed. For `skill remove`: the fork changed while it was being removed; with `--remote`, no account remote is set, the name is a skill of this machine that is not a fork, or the account remote's branch is another fork. For a command that moves a fork's branch, for forking a fork and for renaming one: the fork has uncommitted edits.
 - `7`: another agentx command is running. Retry when it finishes.
 - `8`: the account repo in agentx home cannot be read or written, the fork's history does not say which upstream version it is based on, or its update holds the skill in another folder. Run `agentx doctor`.

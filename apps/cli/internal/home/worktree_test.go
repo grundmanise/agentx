@@ -548,3 +548,50 @@ func TestWorktreeFilesTellAWorktreeApart(t *testing.T) {
 	}
 	check("admin directory gone", false, true, true, false)
 }
+
+// TestStaleForkRegistrations finds the registrations a removed fork left,
+// from files alone: locked with the fork reason, the worktree's directory
+// gone, and the branch gone, loose and packed. A registration whose
+// directory or branch is still there, or that is locked for another
+// reason, is not one.
+func TestStaleForkRegistrations(t *testing.T) {
+	t.Parallel()
+	const reason = "agentx fork"
+	gitDir := filepath.Join(t.TempDir(), "account.git")
+	writeAt := func(path, body string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	there := filepath.Join(t.TempDir(), "there")
+	if err := os.MkdirAll(there, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gone := filepath.Join(t.TempDir(), "gone")
+	writeAt(filepath.Join(gitDir, "refs", "heads", "skills", "loose"), "1111\n")
+	writeAt(filepath.Join(gitDir, "packed-refs"), "# pack-refs with: peeled fully-peeled sorted\n2222 refs/heads/skills/packed\n")
+	for _, a := range []struct{ admin, lock, dir, branch string }{
+		{"removed", reason, gone, "removed"},
+		{"relative", reason, "../../../gone-too", "removed-too"},
+		{"loose", reason, gone, "loose"},
+		{"packed", reason, gone, "packed"},
+		{"present", reason, there, "removed"},
+		{"merge", "agentx pending merge", gone, "removed"},
+	} {
+		admin := filepath.Join(gitDir, "worktrees", a.admin)
+		writeAt(filepath.Join(admin, "locked"), a.lock)
+		writeAt(filepath.Join(admin, "gitdir"), filepath.Join(a.dir, ".git")+"\n")
+		writeAt(filepath.Join(admin, "HEAD"), "ref: refs/heads/skills/"+a.branch+"\n")
+	}
+	var names []string
+	for _, admin := range StaleForkRegistrations(gitDir, reason) {
+		names = append(names, filepath.Base(admin))
+	}
+	if got := strings.Join(names, " "); got != "relative removed" {
+		t.Errorf("stale registrations = %q, want %q", got, "relative removed")
+	}
+}

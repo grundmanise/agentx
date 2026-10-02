@@ -19,8 +19,9 @@ import (
 
 func newSkillRemoveCommand(inv *invocation) *cobra.Command {
 	var from []string
+	var remote bool
 	cmd := &cobra.Command{
-		Use:   "remove <name>",
+		Use:   "remove <name> [--remote]",
 		Short: "Remove a skill from one configuration or from the machine",
 		Long: "Remove a skill from the configurations --from names, or, with --from universal or\n" +
 			"without --from, take it off the machine: every placement, the library directory,\n" +
@@ -33,14 +34,19 @@ func newSkillRemoveCommand(inv *invocation) *cobra.Command {
 			"machine recorded. Anything else at a placement path is left where it is and\n" +
 			"named in the output: agentx never removes what it did not create.\n\n" +
 			"A managed skill whose library directory was deleted outside agentx can still be\n" +
-			"removed without --from: its import branch and the placements agentx made go.",
+			"removed without --from: its import branch and the placements agentx made go.\n\n" +
+			"Removing a fork also deletes its worktree, with any uncommitted edits and files\n" +
+			"git ignores, its branch and its update candidate. --remote deletes the fork's\n" +
+			"branch on the account remote too, also when this machine no longer has the fork.\n" +
+			"Other machines keep the fork until it is removed there.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return inv.skillRemove(cmd.Context(), args[0], from)
+			return inv.skillRemove(cmd.Context(), args[0], from, remote)
 		},
 	}
 	cmd.Flags().StringArrayVar(&from, "from", nil,
 		"remove only the placement in this configuration, or give universal to take the skill off the machine; give it again for each")
+	cmd.Flags().BoolVar(&remote, "remote", false, "remove a fork's branch from the account remote too")
 	return cmd
 }
 
@@ -75,14 +81,22 @@ type removalPlan struct {
 	managed string   // the commit the import branch held; empty when there was none
 	dropped []string // the configurations taken out of copy_mode
 	absent  bool     // the library held no directory for the skill, only its import branch was left
+	// A fork's removal: the commit its branch held, whether its worktree
+	// was there to delete, and whether the account remote's branch was
+	// deleted too.
+	fork     bool
+	branch   string
+	worktree bool
+	remote   bool
 }
 
 // skillRemove takes a skill out of the configurations --from names, or off
 // the machine when --from is absent or universal: every placement, the
 // library directory, the import branch, its candidate ref and its copy
-// modes. --from universal is not a second way to do that but the same run,
-// down to the refusal of a fork: it only names the removal by what it does
-// to the universal clients.
+// modes. --from universal is not a second way to do that but the same run:
+// it only names the removal by what it does to the universal clients. A
+// fork taken off the machine is removed by removeFork, which with remote
+// deletes its branch on the account remote too.
 //
 // The rule the whole command turns on: a placement is deleted only when it
 // is a symlink into the library or a copy this machine recorded in
@@ -90,7 +104,16 @@ type removalPlan struct {
 // somewhere else, a copy nothing recorded and a file are left exactly where
 // they are and named in the output. agentx removes what it created and
 // nothing else.
-func (inv *invocation) skillRemove(ctx context.Context, name string, from []string) error {
+func (inv *invocation) skillRemove(ctx context.Context, name string, from []string, remote bool) error {
+	if named := namedConfigurations(from); len(named) > 0 && remote {
+		return fail(exitUsage, "--remote and --from "+named[0]+" cannot both be given",
+			"--remote removes a fork from the machine and from the account remote; drop --from to remove it whole, or --remote to remove only the placements you name")
+	}
+	if len(namedConfigurations(from)) == 0 {
+		if handled, err := inv.removeFork(ctx, name, remote); handled {
+			return err
+		}
+	}
 	if _, ok := librarySkill(inv.dirs.Library, name); !ok {
 		return inv.removeAbsent(ctx, name, from)
 	}
@@ -123,7 +146,10 @@ func (inv *invocation) skillRemove(ctx context.Context, name string, from []stri
 				return err
 			}
 			if whole && values[lineage.ForkRef(name)] != "" {
-				return forkOutOfScope(name)
+				// A fork made since it was judged: removing it is the
+				// removal of a fork, which this run did not plan.
+				return fail(exitRefused, sanitised(name)+" became a fork while it was being removed, so nothing was removed",
+					"run '"+skillCommand("remove", name)+"' again")
 			}
 			// A merge an update left pending holds the library directory
 			// and the import branch the removal would take away; taking
@@ -359,6 +385,18 @@ func (inv *invocation) removeAbsent(ctx context.Context, name string, from []str
 	return inv.reportRemoved(ctx, plan, targets)
 }
 
+// namedConfigurations are the --from values that name a configuration,
+// every one but universal.
+func namedConfigurations(from []string) []string {
+	var named []string
+	for _, id := range from {
+		if id != fromUniversal {
+			named = append(named, id)
+		}
+	}
+	return named
+}
+
 // removalTargets are the configurations the removal covers, and whether it
 // takes the skill off the machine: those --from names, or, with --from
 // universal or without --from, every detected one, whatever their enabled
@@ -379,17 +417,9 @@ func (inv *invocation) removeAbsent(ctx context.Context, name string, from []str
 // the skill from every configuration, so a list next to it can only mean the
 // user expected it to do less than it does, and a removal is not a command
 // to guess at. The hint says which removal --from universal asks for, not
-// what that removal does: it is decided before the refs are read, and for a
-// fork that removal is refused, so it takes the skill from no client at
-// all. Beside a universal client that answer would be wrong: its hint, to
-// drop --from universal, leads straight to the refusal above.
+// what that removal does, since it is decided before anything is read.
 func (inv *invocation) removalTargets(ctx context.Context, name string, from []string) ([]placeTarget, bool, error) {
-	var named []string
-	for _, id := range from {
-		if id != fromUniversal {
-			named = append(named, id)
-		}
-	}
+	named := namedConfigurations(from)
 	if len(named) == 0 {
 		return inv.detectedTargets(), true, nil
 	}
@@ -404,7 +434,7 @@ func (inv *invocation) removalTargets(ctx context.Context, name string, from []s
 		}
 	}
 	if len(universal) > 0 {
-		return nil, false, inv.refuseUniversal(ctx, universal, name)
+		return nil, false, inv.refuseUniversal(universal, name)
 	}
 	if len(named) < len(from) {
 		return nil, false, fail(exitUsage, "--from universal and --from "+named[0]+" cannot both be given",
@@ -415,27 +445,9 @@ func (inv *invocation) removalTargets(ctx context.Context, name string, from []s
 
 // refuseUniversal answers a --from naming the universal clients in named.
 // What it offers instead is the removal --from universal asks for, with
-// every configuration that removal would take the skill from, unless the
-// name is a fork: that removal refuses a fork, so offering it would send
-// the user from one refusal to the next.
-//
-// Whether the name is a fork is read from the account repo without the
-// lock, as a listing reads its branches: a read changes nothing, and the
-// request is refused whatever it finds.
-func (inv *invocation) refuseUniversal(ctx context.Context, named []string, name string) error {
-	gitDir, hasRepo, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
-	if err != nil {
-		return accountRepoFailure(err)
-	}
-	if hasRepo {
-		values, err := inv.lineageRefs(ctx, gitDir, name)
-		if err != nil {
-			return err
-		}
-		if values[lineage.ForkRef(name)] != "" {
-			return universalFork(named, name)
-		}
-	}
+// every configuration that removal would take the skill from, a fork's
+// included.
+func (inv *invocation) refuseUniversal(named []string, name string) error {
 	reach, err := inv.wholeRemovalReach(name)
 	if err != nil {
 		return err
@@ -723,24 +735,6 @@ func universalRefusal(named []string, name string) string {
 	return fmt.Sprintf("%s %s the library directly, so %s cannot be removed from %s alone", who, reads, name, them)
 }
 
-// universalFork answers a --from naming universal clients when the name is
-// a fork. The universal clients see the fork through the library entry, and
-// only removing the fork takes it from them, which this command does not do,
-// so the hint offers no --from universal: that removal refuses a fork too.
-// What the command can still do is take the fork from the other clients.
-func universalFork(named []string, name string) error {
-	return fail(exitRefused, universalRefusal(named, name),
-		name+" is a fork on this machine: every universal client sees it through the library entry until the fork itself is removed, "+
-			"which is not this command; take it from the other clients with 'agentx skill remove "+name+" --from <configuration>'")
-}
-
-// forkOutOfScope refuses to take a fork off the machine: a fork's history
-// lives in the account repo and removing it is its own command.
-func forkOutOfScope(name string) error {
-	return fail(exitRefused, name+" is a fork on this machine",
-		"take its placements away with 'agentx skill remove "+name+" --from <configuration>'; removing the fork itself is not this command")
-}
-
 // reportRemoved reads the configurations this command covered again and
 // reports what is there now, the way an install does: the rescan is what
 // the report is read from, not what the command meant to do.
@@ -843,11 +837,29 @@ func (inv *invocation) printRemoved(plan removalPlan) {
 		if !plan.absent {
 			gone = append(gone, quotedPath(inv.libraryPath(plan.name)))
 		}
+		if plan.worktree {
+			gone = append(gone, quotedPath(inv.worktreeRoot(plan.name)))
+		}
+		if plan.branch != "" {
+			gone = append(gone, sanitised(lineage.ForkRef(plan.name)))
+		}
 		if plan.managed != "" {
 			gone = append(gone, sanitised(lineage.ManagedRef(plan.name)))
 		}
-		out.print("  ", out.paint(muted, "deleted "+strings.Join(gone, " and ")))
+		out.print("  ", out.paint(muted, "deleted "+andList(gone)))
 	}
+	if plan.remote {
+		out.done("deleted " + out.paint(heading, forkBranch(plan.name)) + " from the account remote")
+	}
+}
+
+// andList joins words as a sentence lists them: "a", "a and b", "a, b and
+// c".
+func andList(words []string) string {
+	if len(words) < 2 {
+		return strings.Join(words, "")
+	}
+	return strings.Join(words[:len(words)-1], ", ") + " and " + words[len(words)-1]
 }
 
 // removeSummary is what the result event says the removal did.
@@ -855,6 +867,16 @@ func removeSummary(plan removalPlan) string {
 	n := plural(plan.removedPlacements(), "placement")
 	var summary string
 	switch {
+	case plan.fork:
+		parts := []string{n}
+		if plan.worktree {
+			parts = append(parts, "its worktree")
+		}
+		parts = append(parts, "its branch")
+		summary = "removed " + plan.name + " from the library, " + andList(parts)
+		if plan.absent {
+			summary = "removed " + plan.name + ", which the library no longer held: " + andList(parts)
+		}
 	case plan.absent:
 		summary = "removed " + plan.name + ", which the library no longer held: its import branch and " + n
 	case plan.whole && plan.managed != "":
@@ -866,6 +888,9 @@ func removeSummary(plan removalPlan) string {
 	}
 	if len(plan.kept) > 0 {
 		summary += ", " + plural(len(plan.kept), "placement") + " left in place"
+	}
+	if plan.remote {
+		summary += "; deleted " + forkBranch(plan.name) + " from the account remote"
 	}
 	return summary
 }

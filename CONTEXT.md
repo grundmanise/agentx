@@ -80,7 +80,7 @@ _Avoid_: orphaned, detached
 A skill found on disk whose upstream agentx cannot determine. Inventoried, never updated or reverted.
 
 **Fork**:
-A skill derived from an upstream skill and edited by the user, keeping the upstream name unless renamed. A fork supersedes the skill it was forked from in the agent configuration; a fork under a new name sits beside the skill it came from instead. Managed, unmanaged and plugin-owned skills and forks can all be forked with `agentx skill fork`. Its lineage record keeps the third-party upstream so later upstream versions can be merged in. Lives in the account repo; local until published.
+A skill derived from an upstream skill and edited by the user, keeping the upstream name unless renamed. A fork supersedes the skill it was forked from in the agent configuration; a fork under a new name sits beside the skill it came from instead. Managed, unmanaged and plugin-owned skills and forks can all be forked with `agentx skill fork`. Renaming a fork with `agentx skill rename` makes a new fork under the new name, with a fork id of its own and the old one's history, and removes the old one; nothing records the rename. Its lineage record keeps the third-party upstream so later upstream versions can be merged in. Lives in the account repo; local until published.
 _Avoid_: copy, variant, override
 
 **Greenfield skill**:
@@ -108,7 +108,7 @@ Something of the user's where a fork placed on this machine belongs: a directory
 _Avoid_: orphan, stray directory
 
 **Unfork**:
-Retiring a fork in favour of an upstream version: the fork's branch is archived and the library gets a managed skill again.
+Retiring a fork in favour of an upstream version: the fork's branch is archived and the library gets a managed skill again. Reserved for a later version; `agentx skill unfork` is refused.
 _Avoid_: delete fork, downgrade
 
 **Account remote**:

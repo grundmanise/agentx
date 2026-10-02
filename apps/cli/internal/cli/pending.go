@@ -330,7 +330,10 @@ func updateMergeMessage(name string, from, to lineage.Record) string {
 // checkout locked with agentx's reason whose directory is gone, its
 // directory under the account repo's worktrees, as git's own pruning
 // removes one. A checkout agentx did not lock, a fork's worktree say, is
-// never touched. It runs no git.
+// never touched. The registration of a fork's worktree goes only when the
+// fork is gone too, its directory and its branch, as a removal killed
+// before it dropped the registration leaves it, see
+// home.StaleForkRegistrations. It runs no git.
 func (inv *invocation) pruneMerges(gitDir string) error {
 	entries, err := os.ReadDir(inv.mergesDir())
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -372,6 +375,11 @@ func (inv *invocation) pruneMerges(gitDir string) error {
 			if err := os.RemoveAll(admin); err != nil {
 				return err
 			}
+		}
+	}
+	for _, admin := range home.StaleForkRegistrations(gitDir, gitx.ForkReason) {
+		if err := os.RemoveAll(admin); err != nil {
+			return err
 		}
 	}
 	return nil

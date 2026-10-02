@@ -139,9 +139,10 @@ func TestSkillRemoveOfAnAbsentSkillWithNoLineageSaysEveryCopyWent(t *testing.T) 
 // TestSkillRemoveOfAnAbsentSkillRefusesWhatChangedUnderTheLock: what a
 // removal of a skill the library no longer holds takes away is decided by
 // what it read before the lock, and it reads both inputs again under it. A
-// git wrapper changes one of them right after the first read of the refs:
-// the library comes to hold the skill again, or a fork of the name
-// appears, which the second read of the refs refuses as it refuses the
+// git wrapper changes one of them right after its read of the refs before
+// the lock, the second read of the run, the first being the one that
+// tells whether the name is a fork: the library comes to hold the skill
+// again, or a fork of the name appears, which the second read of the refs refuses as it refuses the
 // import branch moving. The removal then refuses before it writes a
 // journal, and every placement, the copy mode and whatever the other writer
 // wrote stay as they were.
@@ -173,13 +174,16 @@ func TestSkillRemoveOfAnAbsentSkillRefusesWhatChangedUnderTheLock(t *testing.T) 
 				}
 				change = "printf '%s' " + shellWord(skill("alpha", "Back again")) + " > " + shellWord(filepath.Join(lib, "SKILL.md"))
 			}
-			marker := filepath.Join(t.TempDir(), "changed")
+			marks := t.TempDir()
+			first, marker := filepath.Join(marks, "read"), filepath.Join(marks, "changed")
 			stubGit(t, h, `#!/bin/sh
 case " $* " in
 *" for-each-ref "*)
 	`+real+` "$@"
 	status=$?
-	if [ ! -e `+shellWord(marker)+` ]; then
+	if [ ! -e `+shellWord(first)+` ]; then
+		: > `+shellWord(first)+`
+	elif [ ! -e `+shellWord(marker)+` ]; then
 		: > `+shellWord(marker)+`
 		`+change+`
 	fi

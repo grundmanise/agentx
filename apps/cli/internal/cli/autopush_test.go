@@ -1,0 +1,66 @@
+package cli
+
+import (
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
+)
+
+// TestServeAutoPushesAfterTheQuietPeriod runs one serve over a published
+// fork with a commit the account remote lacks and an edit nobody
+// committed, with a quiet period of a few milliseconds. With auto_push off,
+// as it is by default, nothing is pushed however many quiet periods pass.
+// Turned on while serve runs, the commit is pushed once the branch stood
+// still for a quiet period, reported as a publish of this serve process
+// that names the uncommitted edit, which stays uncommitted: auto-push
+// never commits, and the branch holds the commit it held. A fork the
+// account remote holds commits of that it lacks is not pushed, and is
+// warned about once.
+func TestServeAutoPushesAfterTheQuietPeriod(t *testing.T) {
+	t.Parallel()
+	h, _, skillDir, _ := forkHarness(t)
+	remote := newAccountRemote(t, h)
+	h.mustRun("remote", "set", remote)
+	h.mustRun("publish", "notes")
+	published := h.ref(lineage.ForkRef("notes"))
+	writeFile(t, filepath.Join(skillDir, "notes.md"), "committed, not published\n")
+	h.mustRun("skill", "commit", "notes")
+	tip := h.ref(lineage.ForkRef("notes"))
+	writeFile(t, filepath.Join(skillDir, "draft.md"), "never committed\n")
+	h.env["AGENTX_CHECK_INTERVAL"] = "1h"
+	h.env["AGENTX_PUSH_QUIET"] = "20ms"
+	remoteTip := func() string { return remoteGit(t, h, remote, "rev-parse", "refs/heads/skills/notes") }
+
+	p := h.serve(t, "--json")
+	p.next("snapshot")
+	time.Sleep(300 * time.Millisecond) // fifteen quiet periods with auto_push off
+	equal(t, "the remote's notes, auto_push off", remoteTip(), published)
+
+	h.mustRun("config", "set", "auto_push", "true")
+	ev := p.nextOf("publish")
+	equal(t, "name", ev["name"], "notes")
+	equal(t, "outcome", ev["outcome"], publishPushed)
+	equal(t, "commit", ev["commit"], tip)
+	equal(t, "uncommitted", ev["uncommitted"], true)
+	if id, _ := ev["instance_id"].(string); id == "" {
+		t.Error("the publish names no serve process")
+	}
+	equal(t, "the remote's notes", remoteTip(), tip)
+	equal(t, "the branch", h.ref(lineage.ForkRef("notes")), tip)
+	equal(t, "git status", strings.TrimSpace(gitIn(t, h, filepath.Join(h.agentx, "worktrees", "notes"), "status", "--porcelain")), "?? notes/draft.md")
+
+	// Another machine publishes a commit this one lacks, and this one
+	// commits one of its own: the push would not be a fast-forward, so
+	// auto-push leaves it to a publish, once, with a warning that names it.
+	theirs := h.accountGit("commit-tree", tip+"^{tree}", "-p", tip, "-m", "made on another machine")
+	h.accountGit("push", "--quiet", remote, theirs+":refs/heads/skills/notes")
+	h.mustRun("skill", "commit", "notes")
+	warned := p.awaitLogged("warn", "auto-push: ", 1)
+	equal(t, "the warning", warned[0], "auto-push: notes was not pushed, since the account remote holds commits it lacks; run 'agentx publish notes' to take them in and publish it")
+	equal(t, "the remote's notes, diverged", remoteTip(), theirs)
+	equal(t, "exit", p.close(), 0)
+	equal(t, "warnings", len(p.logged("warn", "auto-push: ")), 1)
+}

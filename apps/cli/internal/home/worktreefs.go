@@ -216,3 +216,72 @@ func RegisteredIn(gitDir, path string) bool {
 	admin, ok := AdminDirOf(path)
 	return ok && NamesBack(admin, path) && SamePath(filepath.Dir(admin), filepath.Join(gitDir, "worktrees"))
 }
+
+// StaleForkRegistrations are the admin directories of the repository at
+// gitDir that a removed fork left: each is locked with reason, its
+// worktree's directory is gone, and the branch its HEAD names no longer
+// exists, as a loose ref or in packed-refs. A removal drops the
+// registration with git once its journal is applied; one killed before
+// that leaves it, and this is how what is left is found again, from files
+// alone. A registration whose branch exists is a fork whose worktree went
+// missing, which skill place puts back, and is never one of these; nor is
+// one locked for any other reason, a pending merge's say.
+func StaleForkRegistrations(gitDir, reason string) []string {
+	admins := filepath.Join(gitDir, "worktrees")
+	entries, err := os.ReadDir(admins)
+	if err != nil {
+		return nil
+	}
+	var packed []byte // read once, and only when a candidate needs it
+	var stale []string
+	for _, e := range entries {
+		admin := filepath.Join(admins, e.Name())
+		locked, err := os.ReadFile(filepath.Join(admin, "locked"))
+		if !e.IsDir() || err != nil || strings.TrimRight(string(locked), "\r\n") != reason {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(admin, "gitdir"))
+		if err != nil {
+			continue
+		}
+		named := strings.TrimRight(string(b), "\r\n")
+		if !filepath.IsAbs(named) {
+			named = filepath.Join(admin, named)
+		}
+		if _, err := os.Lstat(filepath.Dir(named)); !os.IsNotExist(err) {
+			continue // the worktree's directory is there, or cannot be told
+		}
+		head, err := os.ReadFile(filepath.Join(admin, "HEAD"))
+		ref, ok := strings.CutPrefix(strings.TrimRight(string(head), "\r\n"), "ref: ")
+		if err != nil || !ok || !strings.HasPrefix(ref, "refs/heads/") {
+			continue
+		}
+		if _, err := os.Lstat(filepath.Join(gitDir, filepath.FromSlash(ref))); err == nil {
+			continue
+		}
+		if packed == nil {
+			if packed, err = os.ReadFile(filepath.Join(gitDir, "packed-refs")); err != nil && !os.IsNotExist(err) {
+				continue // cannot tell whether the branch is there
+			}
+			if packed == nil {
+				packed = []byte{}
+			}
+		}
+		if packedHolds(packed, ref) {
+			continue
+		}
+		stale = append(stale, admin)
+	}
+	return stale
+}
+
+// packedHolds reports whether the packed-refs file holding packed has a
+// line for ref: "<object id> <ref>".
+func packedHolds(packed []byte, ref string) bool {
+	for _, line := range strings.Split(string(packed), "\n") {
+		if _, name, ok := strings.Cut(strings.TrimRight(line, "\r"), " "); ok && !strings.HasPrefix(line, "#") && !strings.HasPrefix(line, "^") && name == ref {
+			return true
+		}
+	}
+	return false
+}
