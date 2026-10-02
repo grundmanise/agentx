@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 
 	"github.com/spf13/cobra"
 
@@ -50,11 +51,14 @@ func (inv *invocation) skillRename(ctx context.Context, old, newName string, rem
 		return fail(exitRefused, sanitised(old)+" is not a fork, so it cannot be renamed",
 			"fork it under the new name with '"+skillCommand("fork", old, "--name", newName)+"', then remove it with '"+skillCommand("remove", old)+"'")
 	}
-	r, err := inv.judgeForkRemoval(ctx, old, remote)
+	renameHere := skillCommand("rename", old, newName)
+	r, err := inv.judgeForkRemoval(ctx, old, remote, "rename it on this machine alone with '"+renameHere+"'")
 	if err != nil {
 		return err
 	}
-	if r.tip != fk.src.rec.Commit {
+	// No fork of the name, with no --remote asked for, is a removal made
+	// meanwhile by another command.
+	if r == nil || r.tip != fk.src.rec.Commit {
 		return fail(exitRefused, sanitised(old)+" changed while it was being renamed, so nothing was changed", "run the command again")
 	}
 	r.guard = &forkGuard{site: fk.site, judged: fk.judged}
@@ -71,11 +75,34 @@ func (inv *invocation) skillRename(ctx context.Context, old, newName string, rem
 		if remote {
 			finish = skillCommand("remove", old, "--remote")
 		}
-		return fail(f.status, made+", but "+sanitised(old)+" could not be removed: "+f.message, "run '"+finish+"' to finish the rename")
+		return fail(f.status, made+", but "+sanitised(old)+" could not be removed: "+f.message, renameFinish(old, newName, finish, remote, err))
 	}
 	inv.summary = "renamed " + sanitised(old) + " to " + sanitised(newName) + "; " + inv.summary
 	inv.out.done("renamed " + inv.out.paint(heading, sanitised(old)) + " to " + inv.out.paint(heading, sanitised(newName)))
 	return nil
+}
+
+// renameFinish is the hint of a rename whose fork of old was made as
+// newName but whose removal of old failed with err; finish removes old.
+// Most failures leave old as it was forked, and finish completes the
+// rename. Edits nobody committed and a branch that moved since the fork
+// are work newName lacks, which finish would delete: the hint says how to
+// carry it over first, by removing newName and renaming again. Pure.
+func renameFinish(old, newName, finish string, remote bool, err error) string {
+	again := skillCommand("rename", old, newName)
+	if remote {
+		again = skillCommand("rename", old, newName, "--remote")
+	}
+	carry := "run '" + skillCommand("remove", newName) + "' and '" + again + "' again"
+	switch {
+	case errors.Is(err, errUncommitted):
+		return "to keep the edits, commit them with '" + skillCommand("commit", old) + "', then " + carry +
+			"; to drop them, run '" + finish + "'"
+	case errors.Is(err, errMovedWhileRemoved):
+		return sanitised(old) + "'s branch moved since " + sanitised(newName) + " was forked from it; to keep what it holds now, " +
+			carry + "; to drop it, run '" + finish + "'"
+	}
+	return "run '" + finish + "' to finish the rename"
 }
 
 func newSkillUnforkCommand(inv *invocation) *cobra.Command {

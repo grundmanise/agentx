@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -199,7 +200,7 @@ func TestReadForksWalksOnceForEveryFork(t *testing.T) {
 		"copied": {Name: "copied", Kind: KindFork, Commit: copied, Import: imp, HasImport: true},
 		"manage": {Name: "manage", Kind: KindManaged, Commit: base, Import: imp, HasImport: true},
 	}
-	cache := map[string]ForkLineage{}
+	cache := NewWalkCache()
 	if err := ReadForks(ctx, r, gitDir, recs, cache); err != nil {
 		t.Fatal(err)
 	}
@@ -218,7 +219,33 @@ func TestReadForksWalksOnceForEveryFork(t *testing.T) {
 	if recs["manage"].Fork != nil {
 		t.Error("a managed record was given a fork lineage")
 	}
-	if len(cache) != 3 {
-		t.Errorf("the cache holds %d tips, want the three walked", len(cache))
+	if n := len(cache.lineages); n != 3 {
+		t.Errorf("the cache holds %d tips, want the three walked", n)
+	}
+}
+
+// TestWalkCacheIsSharedByGoroutines keeps and reads lineages from several
+// goroutines at once, as serve's scans, update checks and auto-push do;
+// the race detector fails it if the cache is not guarded.
+func TestWalkCacheIsSharedByGoroutines(t *testing.T) {
+	t.Parallel()
+	cache := NewWalkCache()
+	var wg sync.WaitGroup
+	for i := range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			tip := fmt.Sprint(i)
+			cache.put(map[string]ForkLineage{tip: {ID: tip}})
+			if l, ok := cache.get(tip); !ok || l.ID != tip {
+				t.Errorf("tip %s reads %+v, %v", tip, l, ok)
+			}
+		}()
+	}
+	wg.Wait()
+	var none *WalkCache
+	none.put(map[string]ForkLineage{"a": {}})
+	if _, ok := none.get("a"); ok {
+		t.Error("a nil cache kept a lineage")
 	}
 }

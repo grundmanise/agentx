@@ -51,7 +51,10 @@ func (inv *invocation) pushQuietPeriod() (time.Duration, error) {
 // neither fetches for them again nor pushes them until either moves, and
 // the cause of each failure it last warned about. Runs of one tick never
 // overlap, and the report of each is made before the next starts, so
-// nothing else touches it.
+// nothing else touches it. Auto-push takes no lock: what it shares with
+// the scans and the update check running beside it is the fork lineages
+// serve keeps, which lineage.WalkCache guards, and the account repo, whose
+// refs git updates atomically.
 type autoPushState struct {
 	seen    map[string]string // fork name -> tip at the last run
 	behind  map[string]string // fork name -> "<tip> <remote tip>" it could not be pushed at
@@ -101,10 +104,13 @@ func (st *autoPushState) warn(inv *invocation, what, message string) {
 // period, it has no merge pending, and its remote-tracking branch is there
 // and is not that commit: a fork the account remote holds no branch of,
 // as far as the last fetch knows, is published by agentx publish alone.
-// The account remote is fetched once when a fork is due, and a due fork
-// whose branch there is still there, is the same fork by its fork id and
-// is an ancestor of its tip is pushed, every one in one push, see
-// gitx.Push; one whose branch there is another fork, holds commits it
+// The account remote is fetched once when a fork is due. A due fork whose
+// branch there is still there, is the same fork by its fork id and is an
+// ancestor of its tip is pushed, every one in one push of the tip judged,
+// leased on what the fetch read, see gitx.PushTips: a commit made
+// meanwhile waits for a quiet period of its own, and a branch another
+// machine moved or deleted since is rejected rather than overwritten or
+// put back. One whose branch there is another fork, holds commits it
 // lacks, or that the remote rejected, is left alone, with a warning naming
 // what to run, until its tip or its remote-tracking branch moves. It
 // returns a publish event for every fork the account remote now holds the
@@ -169,7 +175,7 @@ func (inv *invocation) autoPush(ctx context.Context, st *autoPushState) []publis
 		st.warn(inv, "account repo", err.Error())
 		return nil
 	}
-	var branches []string
+	var tips []gitx.PushTip
 	for _, name := range due {
 		tip, there := seen[name], tracked[name]
 		if there == "" || there == tip {
@@ -191,12 +197,12 @@ func (inv *invocation) autoPush(ctx context.Context, st *autoPushState) []publis
 			continue
 		}
 		delete(st.behind, name)
-		branches = append(branches, strings.TrimPrefix(lineage.ForkRef(name), "refs/heads/"))
+		tips = append(tips, gitx.PushTip{Branch: strings.TrimPrefix(lineage.ForkRef(name), "refs/heads/"), Commit: tip, Expect: there})
 	}
-	if len(branches) == 0 {
+	if len(tips) == 0 {
 		return nil
 	}
-	statuses, err := inv.git.Push(ctx, gitDir, branches)
+	statuses, err := inv.git.PushTips(ctx, gitDir, tips)
 	if err != nil {
 		st.warn(inv, "push", unreachableRemote(url, err).message)
 		return nil

@@ -87,7 +87,9 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 }
 
 // TestSkillRenameNamesTheCommandThatFinishesIt: a removal that fails once
-// the fork is made says so and names the command that finishes the rename.
+// the fork is made says so and names the command that finishes the rename,
+// and here, since that command would drop a commit the new fork lacks,
+// how to keep it first.
 // A git wrapper moves the old fork's branch at the last moment it can, as
 // a commit made with git in its worktree would: after the removal read it
 // under its lock, at the journal's first transaction, which holds the
@@ -119,7 +121,7 @@ exec `+real+` "$@"
 	equal(t, "exit", out.exit, 6)
 	e := h.one(out.stdout, "error")
 	equal(t, "message", e["message"], "jottings was created, but notes could not be removed: notes changed while it was being removed, so nothing was removed")
-	equal(t, "hint", e["hint"], "run 'agentx skill remove notes' to finish the rename")
+	contains(t, "hint", e["hint"].(string), "to keep what it holds now, run 'agentx skill remove jottings' and 'agentx skill rename notes jottings' again")
 	if made := h.ref(lineage.ForkRef("jottings")); made == "" || h.parents(made) != tip {
 		t.Error("the new fork is not there, made from the old one's tip")
 	}
@@ -127,5 +129,31 @@ exec `+real+` "$@"
 	equal(t, "journals", journalCount(t, h), 0)
 	if _, ok := isSymlink(t, lib); !ok || !lexists(filepath.Join(skillDir, "SKILL.md")) || len(hiddenEntries(t, filepath.Dir(root))) > 0 {
 		t.Error("the refused removal took something of the old fork")
+	}
+}
+
+// TestRenameFinish: the hint of a rename whose removal failed finishes it,
+// unless the old fork holds work the new one lacks, which it says how to
+// keep before naming the removal that drops it.
+func TestRenameFinish(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		remote bool
+		err    error
+		want   string
+	}{
+		{"another failure", true, refuse(exitAccountRepo, "cannot read", ""),
+			"run 'agentx skill remove notes --remote' to finish the rename"},
+		{"uncommitted edits", false, uncommittedRefusal("notes", "removed"),
+			"to keep the edits, commit them with 'agentx skill commit notes', then run 'agentx skill remove jottings' and 'agentx skill rename notes jottings' again; to drop them, run 'agentx skill remove notes'"},
+		{"a branch that moved", true, movedWhileRemoved("notes"),
+			"notes's branch moved since jottings was forked from it; to keep what it holds now, run 'agentx skill remove jottings' and 'agentx skill rename notes jottings --remote' again; to drop it, run 'agentx skill remove notes --remote'"},
+	} {
+		finish := skillCommand("remove", "notes")
+		if tc.remote {
+			finish = skillCommand("remove", "notes", "--remote")
+		}
+		equal(t, tc.name, renameFinish("notes", "jottings", finish, tc.remote, tc.err), tc.want)
 	}
 }

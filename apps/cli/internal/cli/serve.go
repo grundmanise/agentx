@@ -151,7 +151,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 			defer home.Unlock(lock)
 			inv.instanceID() // fixed here, before two goroutines report it
 			inv.verdicts = map[string]keptVerdict{}
-			inv.forkWalks = map[string]lineage.ForkLineage{}
+			inv.forkWalks = lineage.NewWalkCache()
 			inv.forksWarned = true // reconciliation and every snapshot name them
 			if !once {
 				// Reconciliation reports and repairs before the first scan,

@@ -28,7 +28,7 @@ An empty setting shows as `(none)`. In a terminal the keys are cyan and `true` i
 |---|---|
 | `schema_version` | The settings file format version. |
 | `label` | The machine label. Until you set it, it is the hostname. |
-| `auto_push` | Whether the desktop app's background process pushes a fork's commits to the account remote once you stop committing to it for a minute. Off by default. It never commits for you and never merges. See [Push automatically](/cli/remote#push-automatically). |
+| `auto_push` | Whether the desktop app's background process pushes a fork's commits to the account remote once you stop committing to it for a minute, for forks you have published once. Off by default. It never commits for you and never merges. See [Push automatically](/cli/remote#push-automatically). |
 | `accept_operations` | Whether the machine executes operations queued for it. |
 | `ignore_system_files` | Whether the files your operating system or editor leaves in a skill, such as `.DS_Store`, `Thumbs.db`, `*.swp` and `*~` backups, are ignored when agentx compares, diffs and reverts it, and never committed in a skill you created. On by default. See [Files that do not count](/cli/skill#files-that-do-not-count) and [Files that stay local](/cli/fork#files-that-stay-local). |
 | `disabled_configurations` | The agent configurations left out of placements by default. Every other detected configuration is enabled. |

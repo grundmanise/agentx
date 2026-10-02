@@ -105,11 +105,12 @@ type removalPlan struct {
 // they are and named in the output. agentx removes what it created and
 // nothing else.
 func (inv *invocation) skillRemove(ctx context.Context, name string, from []string, remote bool) error {
-	if named := namedConfigurations(from); len(named) > 0 && remote {
+	named := namedConfigurations(from)
+	if len(named) > 0 && remote {
 		return fail(exitUsage, "--remote and --from "+named[0]+" cannot both be given",
 			"--remote removes a fork from the machine and from the account remote; drop --from to remove it whole, or --remote to remove only the placements you name")
 	}
-	if len(namedConfigurations(from)) == 0 {
+	if len(named) == 0 {
 		if handled, err := inv.removeFork(ctx, name, remote); handled {
 			return err
 		}

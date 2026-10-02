@@ -121,13 +121,13 @@ func TestSkillRemoveOfAFork(t *testing.T) {
 }
 
 // TestSkillRemoveOfAForkRecoversWhereItWasKilled kills a fork's removal
-// with SIGKILL at its two durable boundaries: once its journal is on disk
-// and its paths are gone, at the read of the branch its deletion goes last
-// with, so the placement, the library symlink and the worktree are gone
-// and the branch is not; and right after that deletion,
-// before the journal was told and before the worktree's registration was
-// dropped. The next command finishes either one, and drops the
-// registration, which no fork's branch holds any more.
+// with SIGKILL at two of its durable boundaries: once its journal is on
+// disk and its paths are gone, at the read of the branch its deletion goes
+// last with, so the placement, the library symlink and the worktree are
+// gone and the branch is not; and right after that deletion, before the
+// journal was told and before the worktree's registration was dropped. The
+// next command finishes either one, and drops the registration, which no
+// fork's branch holds any more.
 func TestSkillRemoveOfAForkRecoversWhereItWasKilled(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {

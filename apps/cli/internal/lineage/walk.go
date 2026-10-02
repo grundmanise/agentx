@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 )
@@ -150,10 +151,10 @@ func Walk(ctx context.Context, r *gitx.Runner, gitDir string, tips []string) (ma
 // is itself an import commit, parentless with the trailers List read
 // already, is its own base and costs no git; the others are read in one
 // Walk, which also takes a tip that carries an import's trailers and has a
-// parent, since such a commit is never an import. cache,
-// when not nil, holds lineages by tip from an earlier read and is filled
-// with this one's, so that a serve rescan walks only the tips that moved.
-func ReadForks(ctx context.Context, r *gitx.Runner, gitDir string, recs map[string]Record, cache map[string]ForkLineage) error {
+// parent, since such a commit is never an import. cache, when not nil,
+// holds lineages by tip from an earlier read and is filled with this
+// one's, so that a serve rescan walks only the tips that moved.
+func ReadForks(ctx context.Context, r *gitx.Runner, gitDir string, recs map[string]Record, cache *WalkCache) error {
 	var tips []string
 	known := map[string]ForkLineage{}
 	for _, rec := range recs {
@@ -162,7 +163,7 @@ func ReadForks(ctx context.Context, r *gitx.Runner, gitDir string, recs map[stri
 		case rec.HasImport && rec.Parentless:
 			known[rec.Commit] = ForkLineage{Base: rec.Commit, BaseTree: rec.Tree, Import: rec.Import}
 		default:
-			if l, ok := cache[rec.Commit]; ok {
+			if l, ok := cache.get(rec.Commit); ok {
 				known[rec.Commit] = l
 			} else if _, listed := known[rec.Commit]; !listed {
 				known[rec.Commit] = ForkLineage{}
@@ -176,10 +177,8 @@ func ReadForks(ctx context.Context, r *gitx.Runner, gitDir string, recs map[stri
 	}
 	for tip, l := range walked {
 		known[tip] = l
-		if cache != nil {
-			cache[tip] = l
-		}
 	}
+	cache.put(walked)
 	for name, rec := range recs {
 		if rec.Kind == KindFork {
 			l := known[rec.Commit]
@@ -188,4 +187,42 @@ func ReadForks(ctx context.Context, r *gitx.Runner, gitDir string, recs map[stri
 		}
 	}
 	return nil
+}
+
+// WalkCache keeps fork lineages by branch tip from one ReadForks to the
+// next, for a process that reads them again and again, as serve does,
+// whose scans, update checks and auto-push read them on goroutines of
+// their own: its methods may be called from several at once. A nil
+// WalkCache keeps nothing.
+type WalkCache struct {
+	mu       sync.Mutex
+	lineages map[string]ForkLineage
+}
+
+// NewWalkCache is an empty WalkCache.
+func NewWalkCache() *WalkCache {
+	return &WalkCache{lineages: map[string]ForkLineage{}}
+}
+
+// get is the lineage kept for tip.
+func (c *WalkCache) get(tip string) (ForkLineage, bool) {
+	if c == nil {
+		return ForkLineage{}, false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	l, ok := c.lineages[tip]
+	return l, ok
+}
+
+// put keeps the lineages walked, by tip.
+func (c *WalkCache) put(walked map[string]ForkLineage) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for tip, l := range walked {
+		c.lineages[tip] = l
+	}
 }

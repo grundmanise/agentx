@@ -315,15 +315,26 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 			contains(t, "the uncommitted edits", out.stderr, "notes has uncommitted edits, which were not published")
 		}
 	}
-	// Nor does a removal of b's notes delete a's from the account remote,
-	// or anything of b's.
-	removal := b.run("--json", "skill", "remove", "notes", "--remote")
-	equal(t, "remove --remote: exit", removal.exit, 6)
-	e := b.one(removal.stdout, "error")
-	equal(t, "remove --remote: message", e["message"], "the account remote's skills/notes is a different fork than notes on this machine, so notes cannot be removed from the account remote")
-	equal(t, "remove --remote: hint", e["hint"], "remove it from this machine alone with 'agentx skill remove notes'")
-	if b.ref(lineage.ForkRef("notes")) == "" || !lexists(b.forkDir("notes", "notes")) {
-		t.Error("a refused removal took b's notes")
+	// Nor does a removal of b's notes, or the rename the hint above names,
+	// delete a's from the account remote, or anything of b's; each names
+	// what does its work on b alone, which for the rename is not a removal.
+	remove(t, filepath.Join(b.forkDir("notes", "notes"), "draft.md"))
+	for _, tc := range []struct{ cmd, hint string }{
+		{"remove", "remove it from this machine alone with 'agentx skill remove notes'"},
+		{"rename", "rename it on this machine alone with 'agentx skill rename notes jottings'"},
+	} {
+		args := []string{"--json", "skill", tc.cmd, "notes", "--remote"}
+		if tc.cmd == "rename" {
+			args = []string{"--json", "skill", "rename", "notes", "jottings", "--remote"}
+		}
+		out := b.run(args...)
+		equal(t, tc.cmd+" --remote: exit", out.exit, 6)
+		e := b.one(out.stdout, "error")
+		contains(t, tc.cmd+" --remote: message", e["message"].(string), "the account remote's skills/notes is a different fork than notes on this machine, so notes cannot be removed from the account remote")
+		equal(t, tc.cmd+" --remote: hint", e["hint"], tc.hint)
+		if b.ref(lineage.ForkRef("notes")) == "" || !lexists(b.forkDir("notes", "notes")) || b.ref(lineage.ForkRef("jottings")) != "" {
+			t.Errorf("a refused %s changed b's forks", tc.cmd)
+		}
 	}
 	equal(t, "the remote's notes", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/notes"), a.ref(lineage.ForkRef("notes")))
 

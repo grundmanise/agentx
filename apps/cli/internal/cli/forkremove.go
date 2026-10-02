@@ -47,7 +47,7 @@ type forkGuard struct {
 // reports it. handled is false when name is no fork of this machine and
 // remote is not asked for: the removal is then the one of any other skill.
 func (inv *invocation) removeFork(ctx context.Context, name string, remote bool) (handled bool, err error) {
-	r, err := inv.judgeForkRemoval(ctx, name, remote)
+	r, err := inv.judgeForkRemoval(ctx, name, remote, "remove it from this machine alone with '"+skillCommand("remove", name)+"'")
 	if r == nil && err == nil {
 		return false, nil
 	}
@@ -62,9 +62,11 @@ func (inv *invocation) removeFork(ctx context.Context, name string, remote bool)
 // account remote, exit code 6, an account remote git cannot reach, exit
 // code 3, a name that is no fork here or there, and an account remote
 // whose branch of the name is another fork, by its fork id, exit code 6,
-// which a removal of this fork must not delete. It returns nil and no
-// error when name is no fork of this machine and remote is not asked for.
-func (inv *invocation) judgeForkRemoval(ctx context.Context, name string, remote bool) (*forkRemoval, error) {
+// which a removal of this fork must not delete. That last refusal's hint
+// is alone, what does the command's work on this machine alone. It returns
+// nil and no error when name is no fork of this machine and remote is not
+// asked for.
+func (inv *invocation) judgeForkRemoval(ctx context.Context, name string, remote bool, alone string) (*forkRemoval, error) {
 	gitDir, hasRepo, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
 		return nil, accountRepoFailure(err)
@@ -126,7 +128,7 @@ func (inv *invocation) judgeForkRemoval(ctx context.Context, name string, remote
 			return nil, accountRepoFailure(err)
 		}
 		if f := sameForkRefusal(records[name], walked[r.there], "removed from the account remote"); f != nil {
-			f.hint = "remove it from this machine alone with '" + skillCommand("remove", name) + "'"
+			f.hint = alone
 			return nil, f
 		}
 	}
@@ -295,11 +297,16 @@ func (inv *invocation) applyForkRemoval(ctx context.Context, r *forkRemoval) (re
 
 // movedWhileRemoved refuses the removal of the fork called name whose
 // branch moved after it was judged, a commit made with git in its worktree
-// for one: nothing was removed.
+// for one: nothing was removed. It wraps errMovedWhileRemoved.
 func movedWhileRemoved(name string) error {
-	return fail(exitRefused, sanitised(name)+" changed while it was being removed, so nothing was removed",
-		"run '"+skillCommand("remove", name)+"' again")
+	return refuse(exitRefused, sanitised(name)+" changed while it was being removed, so nothing was removed",
+		"run '"+skillCommand("remove", name)+"' again").wrap(errMovedWhileRemoved)
 }
+
+// errMovedWhileRemoved is what movedWhileRemoved wraps, so that skill
+// rename, whose new fork was made from the commit the branch held before
+// it moved, can say what running the removal again would drop.
+var errMovedWhileRemoved = errors.New("fork branch moved while it was being removed")
 
 // libraryKept is the line a fork's removal reports a directory or a file
 // at its library path with, state being what the path holds: it is not the

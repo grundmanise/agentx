@@ -318,10 +318,12 @@ A rename runs the two commands you could run yourself, and nothing else: [`agent
 - It is placed where the old one was, as a copy wherever the old one was a copy.
 - agentx checks both steps before running either, so a name you cannot use, uncommitted edits or a merge pending stop the rename before anything changes. Commit or revert your edits first.
 - Files Git ignores in the old fork's worktree, such as a local `.env`, are deleted with it. Copy the ones you want into the new fork first.
-- The old fork's branch stays on the [account remote](/cli/remote). Add `--remote` to delete it there too.
+- The old fork's branch stays on the [account remote](/cli/remote). Add `--remote` to delete it there too. When the remote's branch is a different fork of the same name, the rename stops: run it again without `--remote`.
 - Another machine sees the renamed fork, once you publish it, as a new fork to install, and keeps the old one until you remove it there.
 
 If the removal fails after the new fork was made, the error says so. Finish the rename with the `agentx skill remove <old>` command it names.
+
+If you edited or committed to the old fork while the rename ran, the removal stops, since the new fork lacks that work. To keep it, commit the edits with `agentx skill commit <old>`, remove the new fork with `agentx skill remove <new>`, and run the rename again. To drop it, run `agentx skill remove <old>`.
 
 ## Remove a fork
 
