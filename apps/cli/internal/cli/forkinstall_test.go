@@ -82,7 +82,7 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 	equal(t, "source", ev["source"], s.url)
 	equal(t, "the source it added", b.one(out.stdout, "source")["url"], s.url)
 	equal(t, "tracking", b.accountGit("config", "--get", "branch.skills/alpha.remote")+" "+b.accountGit("config", "--get", "branch.skills/alpha.merge"),
-		"origin refs/heads/skills/alpha")
+		accountRemoteName(t, b)+" refs/heads/skills/alpha")
 	rootB := filepath.Join(b.agentx, "worktrees", "alpha")
 	equal(t, "the .gitignore beside the skill", fileBody(t, filepath.Join(rootB, ".gitignore")), "*.log\n")
 	writeFile(t, filepath.Join(rootB, "alpha", "build.log"), "ignored\n")
@@ -353,7 +353,7 @@ exec %GIT% "$@"
 				t.Errorf("claude-code's placement points at %q", target)
 			}
 			equal(t, "kind", b.listed("alpha")["kind"], lineage.KindFork)
-			equal(t, "the branch's tracking", b.accountGit("config", "--get", "branch.skills/alpha.remote"), "origin")
+			equal(t, "the branch's tracking", b.accountGit("config", "--get", "branch.skills/alpha.remote"), accountRemoteName(t, b))
 			for _, dir := range []string{b.library, filepath.Join(b.agentx, "worktrees")} {
 				equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 			}

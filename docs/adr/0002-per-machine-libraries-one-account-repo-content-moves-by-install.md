@@ -20,3 +20,6 @@ Live fleet-wide content sync, where an edit on A appears on B with no install st
 ## Consequences
 
 An unmanaged skill or an unpublished fork cannot be installed on another machine; the user forks and publishes first. A private third-party source the target machine cannot authenticate to fails the install there; content is never relayed. Deleting a fork from the account remote never deletes it on other machines; they keep an unpublished copy marked "source removed". Two machines that independently fork the same skill under the same name cannot both publish; the second adopts the first, renames, or merges into it, and the merge is three-way because both forks share the same deterministic root commit. A fork of a plugin-owned skill replaces the plugin copy only in Gemini CLI; in Claude Code and Codex the plugin copy stays loaded under a namespaced name, so the fork coexists with it until plugin management can disable the original. A machine with no account still has full history and revert for its forks, and signing in later attaches the remote and merges histories.
+
+The per-account remote this record names is, since [ADR 0008](0008-sources-have-a-layout-and-an-access-only-the-account-remote-is-pushed-automatically.md), the account remote, a source of the fork layout.
+

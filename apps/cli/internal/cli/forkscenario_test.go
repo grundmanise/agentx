@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
@@ -611,7 +612,13 @@ func TestScenarioEdgeCases(t *testing.T) {
 			t.Errorf("installing %s added a source: %v", name, sources)
 		}
 	}
-	equal(t, "b's sources", len(b.eventsOfType(b.mustRun("--json", "source", "list").stdout, "source")), 1)
+	trees := 0
+	for _, ev := range b.eventsOfType(b.mustRun("--json", "source", "list").stdout, "source") {
+		if ev["layout"] == home.LayoutTree {
+			trees++
+		}
+	}
+	equal(t, "b's tree sources", trees, 1)
 	s.write("skills/alpha/notes.md", forkNotes("four", "four, v2"))
 	s.commit("second version")
 	takeVersion(a)

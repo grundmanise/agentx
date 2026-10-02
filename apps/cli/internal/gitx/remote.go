@@ -9,10 +9,11 @@ import (
 	"strings"
 )
 
-// OriginRemote is the name agentx remote set gives the account remote in
-// the account repo. Every function here that works with a remote of fork
-// branches takes the remote's name, so that the account remote is not
-// bound to it.
+// OriginRemote is the name an earlier agentx gave the account remote in
+// the account repo, before the account remote became a source with a
+// remote named after its id like every other. Every function here that
+// works with a remote of fork branches takes the remote's name, and this
+// one is read only to move such a remote to the name of its source.
 const OriginRemote = "origin"
 
 // ForkRefspec is the one fetch refspec of the remote of fork branches
@@ -173,10 +174,18 @@ func (r *Runner) ProbeRemote(ctx context.Context, url string) error {
 // remote's ForkRefspec is given on the command line, with --refmap=, so
 // that it is the only refspec the fetch follows and prunes: the user's
 // environment merges every remote.<name>.fetch their configuration holds,
-// a global one meant for their projects included.
-func (r *Runner) FetchRemote(ctx context.Context, gitDir, remote string) error {
+// a global one meant for their projects included. refetch fetches every
+// object the fork branches reach again, as a fresh clone would, telling
+// the remote of nothing this repository holds: for a repository that was
+// once fetched without blobs, whose commits would otherwise let the remote
+// leave out blobs the account repo never received.
+func (r *Runner) FetchRemote(ctx context.Context, gitDir, remote string, refetch bool) error {
 	args := append(networkConfig(), "--git-dir="+gitDir,
-		"fetch", "--quiet", "--no-tags", "--no-write-fetch-head", "--prune", "--recurse-submodules=no", "--refmap=", remote, ForkRefspec(remote))
+		"fetch", "--quiet", "--no-tags", "--no-write-fetch-head", "--prune", "--recurse-submodules=no", "--refmap=")
+	if refetch {
+		args = append(args, "--refetch")
+	}
+	args = append(args, remote, ForkRefspec(remote))
 	_, err := r.run(ctx, call{env: map[string]string{"GIT_NO_LAZY_FETCH": "1"}}, args...)
 	return err
 }

@@ -730,11 +730,12 @@ func TestSourceAccessFollowsWhatTheSourceAnswers(t *testing.T) {
 // TestSourceAddRefusesAPushURLAndAForkSource is every refusal source add
 // gives before it writes anything, on one home whose settings hold the
 // account remote: a push URL with a credential or naming another
-// repository, exit 1, and a tree source naming the fork source's
-// repository, exit 6, which source fetch and source skills give for the
-// fork source too, and skill add of it; source fetch --all says it found
-// no tree source. None of them creates the account repo, or says where
-// pushes go.
+// repository, exit 1; a tree source naming the fork source's repository,
+// exit 6, which source skills gives for the fork source too, and skill add
+// of it; the layout flags that cannot be met, exit 1, and a fork source
+// other than the account remote, exit 6; --layout tree of the fork source,
+// exit 6; and an account remote URL with a token or a ref, exit 1. None of
+// them creates the account repo, or says where pushes go.
 func TestSourceAddRefusesAPushURLAndAForkSource(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -763,10 +764,16 @@ func TestSourceAddRefusesAPushURLAndAForkSource(t *testing.T) {
 		{"a push URL of another repository", []string{"source", "add", "acme/skills", "--push-url", "git@github.com:acme/other.git"}, 1,
 			"the push URL git@github.com:acme/other.git names another repository than https://github.com/acme/skills", "at the same path"},
 		{"the fork source's repository", []string{"source", "add", "ssh://git@example.invalid/me/forks.git#main", "--push-url", "git@other.example:me/forks.git"}, 6,
-			"ssh://git@example.invalid/me/forks is the fork source " + forks + ": it holds one branch per fork", "agentx remote set " + forks},
-		{"a fetch of the fork source", []string{"source", "fetch", forks}, 6, forks + " is a fork source", "agentx skill add --from-account <name>"},
-		{"a listing of the fork source", []string{"source", "skills", source.ID(forks)}, 6, forks + " is a fork source", "agentx remote set"},
-		{"an install from the fork source", []string{"skill", "add", forks}, 6, forks + " is a fork source", "agentx skill add --from-account <name>"},
+			"ssh://git@example.invalid/me/forks is the fork source " + forks + ": it holds one branch per fork", "agentx skill add --from-account <name>"},
+		{"a listing of the fork source", []string{"source", "skills", source.ID(forks)}, 6, forks + " is a fork source", "agentx skill list --remote"},
+		{"an install from the fork source", []string{"skill", "add", forks + "#skills/notes"}, 6, forks + " is a fork source", "agentx skill add --from-account <name>"},
+		{"a layout agentx does not know", []string{"source", "add", "acme/skills", "--layout", "flat"}, 1, `--layout takes tree or fork, not "flat"`, "--account"},
+		{"the account remote as a tree", []string{"source", "add", "acme/skills", "--account", "--layout", "tree"}, 1, "takes no --layout tree", "leave --layout out"},
+		{"a second fork source", []string{"source", "add", "acme/skills", "--layout", "fork"}, 6, "several fork sources come in a later version", "--account"},
+		{"the fork source as a tree", []string{"source", "add", forks, "--layout", "tree"}, 6, forks + " is a fork source, and a source keeps its layout", "agentx remote unset"},
+		{"an account remote with a token", []string{"source", "add", "https://me:s3cret@example.invalid/me/other", "--account"}, 1, "the URL carries a password or a token", "credential helper"},
+		{"an account remote with a ref", []string{"source", "add", "https://example.invalid/me/other#main", "--account"}, 1, "names a folder or a ref, and a fork source is a whole repository", "the repository alone"},
+		{"the fork source again with a ref", []string{"source", "add", forks + "#skills/notes"}, 1, "names a folder or a ref", "the repository alone"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out := h.run(append([]string{"--json"}, tc.args...)...)
@@ -785,10 +792,6 @@ func TestSourceAddRefusesAPushURLAndAForkSource(t *testing.T) {
 			}
 		})
 	}
-	// Fetching every source finds no tree source and says why.
-	out := h.run("source", "fetch", "--all")
-	equal(t, "fetch --all exit", out.exit, 0)
-	contains(t, "fetch --all", out.stdout, "No tree sources to fetch. "+forks+" is a fork source")
 	if !reflect.DeepEqual(readSettingsFile(t, h), before) {
 		t.Errorf("a refusal changed the settings: %v", readSettingsFile(t, h))
 	}

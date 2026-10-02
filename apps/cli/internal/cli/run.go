@@ -165,6 +165,9 @@ func newRoot(inv *invocation) *cobra.Command {
 				if _, err := inv.gitVersion(cmd.Context()); err != nil {
 					return err
 				}
+				if migrates(cmd) {
+					return inv.migrateAccount(cmd.Context())
+				}
 			}
 			return nil
 		},

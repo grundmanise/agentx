@@ -220,22 +220,29 @@ func forkSourceRefusal(s home.Settings, src home.Source, resolve func(host strin
 	return nil
 }
 
-// forkSourceIs refuses to fetch url, which names the repository of the fork
+// forkSourceIs refuses to read url, which names the repository of the fork
 // source fork, as a tree source, exit 6; url is the start of the message,
 // so it may name a push URL as such. A fork source holds one branch per
 // fork, and fetching it as a tree as well would bring its objects in
 // without their blobs, which a fork's history then lacks. Its forks are
-// fetched whole by the account remote's commands, and installing one is
-// skill add --from-account, so the hint names both.
+// listed with skill list --remote and installed with skill add
+// --from-account, so the hint names both.
 func forkSourceIs(url string, fork home.Source) *failure {
 	what := url + " is the fork source " + fork.URL
 	if fork.URL == url {
 		what = url + " is a fork source"
 	}
-	reach := fork.URL
-	if fork.PushURL != "" {
-		reach = fork.PushURL
-	}
 	return refuse(exitRefused, what+": it holds one branch per fork rather than skills on one branch",
-		"run 'agentx remote set "+shellWord(sanitised(reach))+"' to fetch its forks, then 'agentx skill add --from-account <name>' to install one")
+		"run 'agentx skill list --remote' to see its forks, then 'agentx skill add --from-account <name>' to install one")
+}
+
+// forkToTree refuses source add --layout tree of the fork source fork, exit
+// 6: its forks' history would lose the blobs a tree fetch leaves out, and
+// the layout of a source is changed by removing it and adding it again.
+func forkToTree(fork home.Source) *failure {
+	hint := "remove it first with 'agentx source remove " + shellWord(fork.URL) + "'"
+	if fork.Account {
+		hint = "detach it first with 'agentx remote unset'"
+	}
+	return refuse(exitRefused, fork.URL+" is a fork source, and a source keeps its layout", hint+", then add it again")
 }

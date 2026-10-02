@@ -8,7 +8,9 @@ import (
 	"testing"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
+	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
 // newAccountRemote is an empty bare repository under the test's own
@@ -24,6 +26,21 @@ func newAccountRemote(t *testing.T, h *harness) string {
 		t.Fatal(err)
 	}
 	return remote
+}
+
+// accountRemoteName is the name of the account remote's git remote in h's
+// account repo: the remote of its source, named after its id.
+func accountRemoteName(t *testing.T, h *harness) string {
+	t.Helper()
+	settings, err := home.LoadSettings(h.agentx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entry, ok := accountEntry(settings)
+	if !ok {
+		t.Fatal("no account remote is set")
+	}
+	return source.RemoteName(source.ID(entry.URL))
 }
 
 // remoteGit runs git against the bare repository at remote, as a plain git
@@ -239,7 +256,7 @@ func TestPublishMergesFirstAndNamesUncommittedForks(t *testing.T) {
 	for _, e := range b.eventsOfType(out.stdout, "progress") {
 		phases = append(phases, e["phase"].(string)+" "+e["subject"].(string))
 	}
-	equal(t, "progress", strings.Join(phases, ", "), "fetch "+remote+", publish alpha")
+	equal(t, "progress", strings.Join(phases, ", "), "fetch file://"+remote+", publish alpha")
 	equal(t, "the remote's alpha", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/alpha"), merged)
 	equal(t, "the remote's beta", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/beta"), betaBefore)
 
@@ -365,21 +382,26 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 	equal(t, "its commit", ev["local_commit"], a.ref(lineage.ForkRef("notes")))
 }
 
-// TestRemoteSetShowUnset attaches, shows and detaches the account remote.
-// With none set, show says so and pull and publish are refused, exit 6. A
-// URL with a password is refused, exit 1, and one git cannot reach, exit
-// 3, before anything is written, an account repo included. A remote that
-// is set has one fetch refspec, the fork branches, and no tags, and what
-// it holds is fetched. Setting another URL forgets what the first one held;
-// unsetting it removes its configuration and its remote-tracking branches,
-// and the local fork stays.
+// TestRemoteSetShowUnset attaches, shows and detaches the account remote,
+// a source of the fork layout. With none set, show says so and emits no
+// event, and pull and publish are refused, exit 6. A URL with a password is
+// refused, exit 1, and one git cannot reach, exit 3, before anything is
+// written, an account repo included. remote set records the settings entry
+// and the remote src-<id>, with one fetch refspec, the fork branches, no
+// tags, no push URL and no promisor settings, then fetches its forks and
+// checks what this machine may do there; source list shows it beside the
+// tree sources, and source fetch fetches its forks. Setting another URL
+// replaces the entry and forgets what the first one held, a fork's
+// tracking following it; source remove of the account remote is remote
+// unset: its configuration, its remote-tracking branches and its entry go,
+// and the local fork stays. source add of its URL adds it again as the
+// account remote.
 func TestRemoteSetShowUnset(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	out := h.mustRun("--json", "remote", "show")
-	if _, ok := h.one(out.stdout, "remote")["url"]; ok {
-		t.Errorf("a remote is shown on a machine with none:\n%s", out.stdout)
-	}
+	equal(t, "show with none", strings.Join(h.types(h.events(out.stdout)), " "), "result")
+	contains(t, "show with none, as text", h.mustRun("remote", "show").stdout, "No account remote is set. Attach one with agentx remote set <url>.")
 	for _, args := range [][]string{{"pull"}, {"publish", "--all"}} {
 		out := h.run(append([]string{"--json"}, args...)...)
 		equal(t, args[0]+": exit", out.exit, 6)
@@ -393,31 +415,80 @@ func TestRemoteSetShowUnset(t *testing.T) {
 	}
 
 	h.mustRun("skill", "new", "notes")
-	h.mustRun("remote", "set", remote)
-	h.mustRun("publish", "notes")
-	other := newAccountRemote(t, h)
-	h.mustRun("remote", "set", remote) // setting it again is no change
-	equal(t, "the remote-tracking branch", h.ref(lineage.RemoteForkRef(gitx.OriginRemote, "notes")), h.ref(lineage.ForkRef("notes")))
-	out = h.mustRun("--json", "remote", "set", other)
-	ev := h.one(out.stdout, "remote")
-	equal(t, "url", ev["url"], other)
-	equal(t, "fetch", ev["fetch"], gitx.ForkRefspec(gitx.OriginRemote))
-	equal(t, "fetch refspecs", h.accountGit("config", "--get-all", "remote.origin.fetch"), gitx.ForkRefspec(gitx.OriginRemote))
-	equal(t, "tags", h.accountGit("config", "--get", "remote.origin.tagOpt"), "--no-tags")
-	equal(t, "what the first remote held", h.ref(lineage.RemoteForkRef(gitx.OriginRemote, "notes")), "")
-	out = h.mustRun("remote", "show")
-	equal(t, "show", strings.TrimSpace(out.stdout), "origin  "+other)
-
-	h.mustRun("remote", "set", remote)
-	h.mustRun("remote", "unset")
-	if out, err := h.accountGitErr("config", "--get-regexp", "^remote\\."); err == nil {
-		t.Errorf("the remote's configuration is still there: %s", out)
+	url := "file://" + remote
+	name := source.RemoteName(source.ID(url))
+	out = h.mustRun("--json", "remote", "set", remote)
+	ev := h.one(out.stdout, "source")
+	equal(t, "url", ev["url"], url)
+	equal(t, "layout", ev["layout"], home.LayoutFork)
+	equal(t, "account", ev["account"], true)
+	equal(t, "access", ev["access"], home.AccessWritable)
+	equal(t, "forks", ev["forks"], float64(0))
+	equal(t, "fetch refspecs", h.accountGit("config", "--get-all", "remote."+name+".fetch"), gitx.ForkRefspec(name))
+	equal(t, "tags", h.accountGit("config", "--get", "remote."+name+".tagOpt"), "--no-tags")
+	equal(t, "the remote's URL", h.accountGit("config", "--get", "remote."+name+".url"), url)
+	for _, key := range []string{"pushurl", "promisor", "partialclonefilter"} {
+		if got, err := h.accountGitErr("config", "--get", "remote."+name+"."+key); err == nil {
+			t.Errorf("the account remote has %s = %s", key, got)
+		}
 	}
-	equal(t, "remote-tracking branches", h.accountGit("for-each-ref", "refs/remotes/"), "")
-	if h.ref(lineage.ForkRef("notes")) == "" {
-		t.Error("unsetting the remote took the local fork")
+	entry := sourceEntryOf(t, h, url)
+	equal(t, "the entry's layout", entry["layout"], home.LayoutFork)
+	equal(t, "the entry's account flag", entry["account"], true)
+	h.mustRun("publish", "notes")
+	equal(t, "the remote-tracking branch", h.ref(lineage.RemoteForkRef(name, "notes")), h.ref(lineage.ForkRef("notes")))
+	out = h.mustRun("remote", "set", remote, "--push-url=") // setting it again fetches and checks it again
+	contains(t, "set again", out.stdout, "the account remote is now "+url+"; it holds 1 fork; you can write to it")
+	contains(t, "source add of it, which keeps its layout", h.mustRun("source", "add", remote).stdout, "the account remote is now "+url)
+	contains(t, "source list", h.mustRun("source", "list").stdout, "  "+url+" (account)  fork  writable  skills/*  1 fork  ")
+	contains(t, "show", h.mustRun("remote", "show").stdout, url+"  fork  writable  1 fork")
+	contains(t, "source fetch", h.mustRun("source", "fetch", "--all").stdout, "re-fetched "+url+": 1 fork; you can write to it")
+
+	h.accountGit("config", "branch.skills/notes.remote", name)
+	other := newAccountRemote(t, h)
+	otherURL := "file://" + other
+	otherName := source.RemoteName(source.ID(otherURL))
+	h.mustRun("remote", "set", other)
+	if sources, _ := readSettingsFile(t, h)["sources"].([]any); len(sources) != 1 {
+		t.Errorf("the settings hold %v, want the new account remote alone", readSettingsFile(t, h)["sources"])
+	}
+	equal(t, "the new entry", sourceEntryOf(t, h, otherURL)["account"], true)
+	equal(t, "what the first remote held", h.ref(lineage.RemoteForkRef(name, "notes")), "")
+	if got, err := h.accountGitErr("config", "--get-regexp", "^remote\\."+name+"\\."); err == nil {
+		t.Errorf("the first remote's configuration is still there: %s", got)
+	}
+	equal(t, "the fork's tracking", h.accountGit("config", "--get", "branch.skills/notes.remote"), otherName)
+
+	for _, unset := range [][]string{{"source", "remove", otherURL}, {"remote", "unset"}} {
+		h.mustRun("remote", "set", other)
+		out = h.mustRun(unset...)
+		contains(t, strings.Join(unset, " "), out.stdout, "the account remote "+otherURL+" is no longer set; the forks of this machine are as they were")
+		if out, err := h.accountGitErr("config", "--get-regexp", "^(remote\\.|branch\\.)"); err == nil {
+			t.Errorf("%s left configuration: %s", strings.Join(unset, " "), out)
+		}
+		equal(t, "remote-tracking branches", h.accountGit("for-each-ref", "refs/remotes/"), "")
+		if sources, _ := readSettingsFile(t, h)["sources"].([]any); len(sources) != 0 {
+			t.Errorf("%s left the entry: %v", strings.Join(unset, " "), readSettingsFile(t, h)["sources"])
+		}
+		if h.ref(lineage.ForkRef("notes")) == "" {
+			t.Errorf("%s took the local fork", strings.Join(unset, " "))
+		}
 	}
 	contains(t, "unset again", h.mustRun("remote", "unset").stdout, "No account remote is set")
+}
+
+// sourceEntryOf is the settings entry of the source at url, as the file
+// holds it.
+func sourceEntryOf(t *testing.T, h *harness, url string) map[string]any {
+	t.Helper()
+	sources, _ := readSettingsFile(t, h)["sources"].([]any)
+	for _, s := range sources {
+		if entry := s.(map[string]any); entry["url"] == url {
+			return entry
+		}
+	}
+	t.Fatalf("no settings entry for %s in %v", url, sources)
+	return nil
 }
 
 // TestRemoteURLRefusal is which URLs the account remote can be set to.

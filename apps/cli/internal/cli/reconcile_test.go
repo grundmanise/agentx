@@ -12,6 +12,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
+	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
 // TestClassifyFork is the rule reconciliation, the listing's warnings and
@@ -202,9 +203,19 @@ func TestServeReconcilesAtStart(t *testing.T) {
 	orphanTree := libraryTree(t, orphan)
 	tip := h.ref(lineage.ForkRef("kept"))
 	// The account remote's branches, as a fetch of it leaves them.
-	h.accountGit("config", "remote.origin.url", "file:///nowhere/skills.git")
-	h.accountGit("update-ref", "refs/remotes/origin/skills/far", tip)
-	h.accountGit("update-ref", "refs/remotes/origin/skills/mine", tip)
+	const account = "file:///nowhere/skills.git"
+	if err := home.Mutate(h.agentx, nil, func() error {
+		settings, err := home.LoadSettings(h.agentx)
+		if err != nil {
+			return err
+		}
+		settings.SetSource(home.Source{URL: account, Layout: home.LayoutFork, Account: true})
+		return home.SaveSettings(h.agentx, settings)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h.accountGit("update-ref", lineage.RemoteForkRef(source.RemoteName(source.ID(account)), "far"), tip)
+	h.accountGit("update-ref", lineage.RemoteForkRef(source.RemoteName(source.ID(account)), "mine"), tip)
 	stray := filepath.Join(t.TempDir(), "stray")
 	h.accountGit("worktree", "add", "--quiet", "--detach", stray, tip)
 	remove(t, stray)

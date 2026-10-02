@@ -9,6 +9,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/serve"
+	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
 // Auto-push is the machine setting auto_push, off by default: when it is
@@ -133,7 +134,10 @@ func (inv *invocation) autoPush(ctx context.Context, st *autoPushState) []publis
 			st.warn(inv, "remote", err.Error())
 			return nil
 		}
-		url, remote, ok = entry.URL, name, found
+		// An account remote an earlier agentx left as the remote origin is
+		// pushed to by nothing: the next command that changes something
+		// moves it into the settings, and the ticks after that push.
+		url, remote, ok = entry.URL, name, found && name != gitx.OriginRemote
 	}
 	if !ok {
 		clear(st.seen)
@@ -178,10 +182,18 @@ func (inv *invocation) autoPush(ctx context.Context, st *autoPushState) []publis
 		return nil
 	}
 	sort.Strings(due)
-	if err := inv.git.FetchRemote(ctx, gitDir, remote); err != nil {
+	if !source.Configured(ctx, inv.git, gitDir, strings.TrimPrefix(remote, "src-")) {
+		// An account remote this machine has an entry of, which an import
+		// wrote, and no remote of yet: a command the user runs writes it,
+		// see accountRemote, and serve writes no configuration of its own.
+		return nil
+	}
+	marker, err := inv.fetchForks(ctx, gitDir, remote)
+	if err != nil {
 		st.warn(inv, "fetch", unreachableRemote(url, err).message)
 		return nil
 	}
+	inv.dropMarker(ctx, gitDir, marker)
 	delete(st.warned, "fetch")
 	if tracked, err = lineage.ListRemote(ctx, inv.git, gitDir, remote); err != nil {
 		st.warn(inv, "account repo", err.Error())

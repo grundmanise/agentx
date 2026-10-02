@@ -353,7 +353,15 @@ func (r *updateRun) accountStep(ctx context.Context, names []string, records map
 	if err != nil || !ok {
 		return nil, nil, err
 	}
-	if err := inv.git.FetchRemote(ctx, r.gitDir, account); err != nil {
+	if account != gitx.OriginRemote {
+		if err := inv.alignAccount(ctx, r.gitDir, entry); err != nil {
+			return nil, nil, err
+		}
+	}
+	marker, err := inv.fetchForks(ctx, r.gitDir, account)
+	if err == nil {
+		inv.dropMarker(ctx, r.gitDir, marker)
+	} else {
 		what := sanitised(forks[0]) + " is"
 		if len(forks) > 1 {
 			what = "forks are"

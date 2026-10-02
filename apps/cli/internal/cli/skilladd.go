@@ -119,11 +119,11 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 	add := false
 	switch {
 	case err == nil:
-		if src.Ref != "" && src.Ref != entry.Pin {
-			return pinMismatch(src, entry)
-		}
 		if entry.Layout == home.LayoutFork {
 			return forkSourceIs(entry.URL, entry)
+		}
+		if src.Ref != "" && src.Ref != entry.Pin {
+			return pinMismatch(src, entry)
 		}
 	case errors.Is(err, errNotAdded) && !source.IsID(arg):
 		// A URL the settings do not hold is a source to add, exactly as

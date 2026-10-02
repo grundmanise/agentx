@@ -76,6 +76,56 @@ func (d *doctor) sourceRemotes(ctx context.Context, gitDir string) {
 		"for each, run 'agentx source add <url>' to add the source and take the remote with it, or 'agentx source remove <id>' to clear it")
 }
 
+// accountRemote reports where the account remote is recorded. An account
+// remote an earlier agentx kept as the account repo's remote origin is
+// moved into the settings by the next command that changes something, see
+// migrateOrigin, and this row names it until then: as waiting for that
+// command, as a remote that cannot move while a source of the settings
+// names its repository, or, for a remote origin agentx did not write or
+// that is not the account remote, as one nothing uses.
+func (d *doctor) accountRemote(ctx context.Context, gitDir string) {
+	settings, err := d.inv.loadSettings()
+	if err != nil {
+		return // the settings row has said what is wrong with the file
+	}
+	entry, has := accountEntry(settings)
+	url, present, ours, err := d.inv.legacyOrigin(ctx, gitDir)
+	if err != nil {
+		d.row("account_remote", "fail", failureOf(err).message, "run with --verbose to see the git commands")
+		return
+	}
+	src, parseErr := source.Parse(url)
+	unused := "remove it with 'git --git-dir=" + gitDir + " remote remove origin' if nothing else of yours needs it"
+	switch {
+	case !present && has:
+		d.row("account_remote", "ok", "the account remote is "+entry.URL, "")
+		return
+	case !present:
+		d.row("account_remote", "ok", "no account remote is set", "")
+		return
+	case !ours || parseErr != nil || src.Stripped || src.Ref != "" || src.Subpath != "":
+		d.row("account_remote", "warn", "the account repo has a remote origin agentx did not write, and nothing uses it", unused)
+		return
+	case has && entry.URL != src.URL:
+		d.row("account_remote", "warn", "the account repo's remote origin "+shownURL(url)+" is not the account remote "+entry.URL+", and nothing uses it", unused)
+		return
+	}
+	if !has {
+		installed, err := d.inv.installedFrom(ctx)
+		if err != nil {
+			d.row("account_remote", "fail", failureOf(err).message, "run with --verbose to see the git commands")
+			return
+		}
+		want := home.Source{URL: src.URL, Layout: home.LayoutFork, Account: true}
+		if f := accountRefusal(settings, want, installed, d.inv.sshHosts(ctx)); f != nil {
+			d.row("account_remote", "warn", "the account remote "+shownURL(url)+" cannot move into the settings: "+f.message, f.hint)
+			return
+		}
+	}
+	d.row("account_remote", "warn", "the account remote "+shownURL(url)+" is still the account repo's remote origin",
+		"any agentx command that changes something moves it into the settings, such as 'agentx source fetch --all'")
+}
+
 // remoteSubject is what a row calls a remote: the canonical URL the remote
 // records, or its source id when that URL is not one agentx would have
 // written. A URL agentx stored carries no user and no token (`source add`

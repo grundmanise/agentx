@@ -10,7 +10,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
-// TestDoctorReadsTheAccountRepoOnlyWhenItOpens: the two account-repo rows
+// TestDoctorReadsTheAccountRepoOnlyWhenItOpens: the account-repo rows
 // follow the row that says the repo can be read. A run on a machine that
 // has no account repo yet leaves them out, there being nothing to say about
 // a repository that does not exist: TestDoctorPassesAndChangesNothing pins
@@ -22,12 +22,13 @@ func TestDoctorReadsTheAccountRepoOnlyWhenItOpens(t *testing.T) {
 	h.mustRun("source", "add", s.url)
 	rows, order := doctorRows(t, h.events(h.mustRun("--json", "doctor").stdout))
 	want := []string{"git", "fork_merges", "commit_identity", "home", "lock", "mutations", "settings",
-		"account_repo", "source_remotes", "staged_imports", "library", "clients"}
+		"account_repo", "source_remotes", "account_remote", "staged_imports", "library", "clients"}
 	if !reflect.DeepEqual(order, want) {
 		t.Fatalf("checks = %v, want %v", order, want)
 	}
 	equal(t, "source_remotes.status", rows["source_remotes"]["status"], "ok")
 	equal(t, "source_remotes.detail", rows["source_remotes"]["detail"], "1 source remote the settings name")
+	equal(t, "account_remote.detail", rows["account_remote"]["detail"], "no account remote is set")
 	equal(t, "staged_imports.status", rows["staged_imports"]["status"], "ok")
 	equal(t, "staged_imports.detail", rows["staged_imports"]["detail"], "no import is left staged")
 }

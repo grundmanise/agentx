@@ -58,16 +58,7 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 	if err != nil {
 		return err
 	}
-	if len(targets) == 0 { // --all on a machine that has no tree source
-		s, err := inv.loadSettings()
-		if err != nil {
-			return err
-		}
-		if len(s.Sources) > 0 { // only fork sources, which a tree fetch never reaches
-			inv.out.print("No tree sources to fetch. ", inv.out.paint(heading, s.Sources[0].URL), " is a fork source: run ",
-				inv.out.paint(label, "agentx remote set <url>"), " to fetch its forks.")
-			return nil
-		}
+	if len(targets) == 0 { // --all on a machine that has no source
 		inv.out.print("No sources. Add one with ", inv.out.paint(label, "agentx source add <url>"), ".")
 		return nil
 	}
@@ -75,8 +66,20 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 	if err != nil {
 		return accountRepoFailure(err)
 	}
-	if !exists { // settings name sources the account repo has nothing of
-		return sourceFailure(source.NotFetched(targets[0].src.URL), targets[0].src)
+	if !exists {
+		// Settings that name sources the account repo has nothing of, as an
+		// import leaves them: a tree source is refused as not fetched, with
+		// the add that fetches it as the hint, and a fork source, which
+		// this command writes the remote of when it is missing, is fetched
+		// into an account repo created for it.
+		for _, t := range targets {
+			if t.entry.Layout != home.LayoutFork {
+				return sourceFailure(source.NotFetched(t.src.URL), t.src)
+			}
+		}
+		if gitDir, _, err = gitx.OpenAccountRepo(ctx, inv.git, inv.dirs.Home); err != nil {
+			return accountRepoFailure(err)
+		}
 	}
 	// Each source that fetched is checked again in the worker that fetched
 	// it: a fetch the user asked for is the moment to find out whether
@@ -133,17 +136,50 @@ func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets 
 	if err := inv.holdLock(ctx, wait, false, func() error { return inv.alignRemotes(ctx, gitDir, targets) }); err != nil {
 		return nil, accountRepoFailure(err)
 	}
-	srcs := make([]source.Source, len(targets))
+	// Tree sources are fetched in parallel, without blobs, see
+	// source.FetchAll; fork sources whole, one after the other once those
+	// are done, see fetchForks. results keeps the order of targets, and
+	// then and the progress events count both alike.
+	var srcs []source.Source
+	var trees, forks []int
 	for i, t := range targets {
-		srcs[i] = t.src
+		if t.entry.Layout == home.LayoutFork {
+			forks = append(forks, i)
+			continue
+		}
+		trees = append(trees, i)
+		srcs = append(srcs, t.src)
 	}
 	var done func(source.Source, int)
 	if progress {
 		done = func(s source.Source, finished int) {
-			inv.out.emit(progressEvent{event: newEvent("progress"), Phase: "fetch", Subject: s.URL, Current: finished, Total: len(srcs)})
+			inv.out.emit(progressEvent{event: newEvent("progress"), Phase: "fetch", Subject: s.URL, Current: finished, Total: len(targets)})
 		}
 	}
-	results := source.FetchAll(ctx, inv.git, gitDir, srcs, then, done)
+	var treeThen func(int)
+	if then != nil {
+		treeThen = func(j int) { then(trees[j]) }
+	}
+	results := make([]source.Result, len(targets))
+	for j, res := range source.FetchAll(ctx, inv.git, gitDir, srcs, treeThen, done) {
+		results[trees[j]] = res
+	}
+	for k, i := range forks {
+		t := targets[i]
+		results[i] = source.Result{Source: t.src}
+		marker, err := inv.fetchForks(ctx, gitDir, source.RemoteName(t.src.ID()))
+		if err != nil {
+			results[i].Err = fmt.Errorf("%w: %v", source.ErrUnreachable, err)
+			continue
+		}
+		inv.dropMarker(ctx, gitDir, marker)
+		if then != nil {
+			then(i)
+		}
+		if done != nil {
+			done(t.src, len(srcs)+k+1)
+		}
+	}
 	// A source whose remote the account repo no longer holds, which an
 	// interrupted removal leaves behind, cannot be fetched at all. git
 	// reports that as a repository it cannot find and names the remote,
@@ -184,15 +220,17 @@ func (inv *invocation) holdLock(ctx context.Context, wait, signal bool, fn func(
 // git config fails rather than waits for its own lock file, and reads every
 // remote in one git process, so a run whose remotes are right costs one.
 //
-// A source with no remote at all, which an interrupted removal leaves, is
-// left alone: writing one for it would build a remote out of an entry
-// nothing can fetch. The fetch that follows fails, and the run says what it
-// is: a source this machine does not hold.
+// A tree source with no remote at all, which an interrupted removal
+// leaves, is left alone: writing one for it would build a remote out of an
+// entry nothing can fetch. The fetch that follows fails, and the run says
+// what it is: a source this machine does not hold. A fork source's remote
+// is written whenever it is missing, as settings an import wrote leave it:
+// its forks are fetched whole from the repository and need nothing else.
 func (inv *invocation) alignRemotes(ctx context.Context, gitDir string, targets []fetchTarget) error {
 	remotes := source.Remotes(ctx, inv.git, gitDir)
 	for _, t := range targets {
 		remote, ok := remotes[t.src.ID()]
-		if !ok || remote.URL == "" || remote == source.RemoteOf(t.entry) {
+		if (!ok || remote.URL == "") && t.entry.Layout != home.LayoutFork || remote == source.RemoteOf(t.entry) {
 			continue
 		}
 		if err := source.Configure(ctx, inv.git, gitDir, t.entry); err != nil {
@@ -253,9 +291,20 @@ func (inv *invocation) reportFetched(ctx context.Context, gitDir string, targets
 		}
 		entry, listing, check := written[res.Source.URL], res.Listing, checks[i]
 		check.report(inv, res.Source.URL)
-		n := len(listing.Skills)
 		ev := entryEvent(entry)
-		ev.Commit, ev.Previous, ev.Skills, ev.AccessReason = listing.Commit, movedFrom(listing), &n, check.reason()
+		ev.AccessReason = check.reason()
+		if entry.Layout == home.LayoutFork {
+			n, _, err := inv.forkCount(ctx, gitDir, entry, source.RemoteName(res.Source.ID()))
+			if err != nil {
+				return accountRepoFailure(err)
+			}
+			ev.Forks = &n
+			inv.out.emit(ev)
+			inv.out.done("re-fetched " + inv.out.paint(heading, entry.URL) + ": " + inv.out.paint(noteStyle, plural(n, "fork")) + accessPhrase(inv.out, entry.AccessName()))
+			continue
+		}
+		n := len(listing.Skills)
+		ev.Commit, ev.Previous, ev.Skills = listing.Commit, movedFrom(listing), &n
 		inv.out.emit(ev)
 		inv.out.done(inv.addLine(false, res.Source, listing) + ": " + inv.out.paint(noteStyle, plural(n, "skill")) + accessPhrase(inv.out, entry.AccessName()))
 	}
@@ -399,7 +448,7 @@ func (inv *invocation) sourcesToFetch(ctx context.Context, args []string, all bo
 	}
 	if all {
 		targets := make([]fetchTarget, 0, len(s.Sources))
-		for _, entry := range treeSources(s.Sources) {
+		for _, entry := range s.Sources {
 			targets = append(targets, target(entry))
 		}
 		return targets, nil
@@ -414,9 +463,6 @@ func (inv *invocation) sourcesToFetch(ctx context.Context, args []string, all bo
 		if src.Ref != "" && src.Ref != entry.Pin {
 			return nil, pinMismatch(src, entry)
 		}
-		if entry.Layout == home.LayoutFork {
-			return nil, forkSourceIs(entry.URL, entry)
-		}
 		if seen[entry.URL] { // named twice, by URL and by id, or by two forms of one URL
 			continue
 		}
@@ -426,9 +472,10 @@ func (inv *invocation) sourcesToFetch(ctx context.Context, args []string, all bo
 	return targets, nil
 }
 
-// treeSources are the entries of sources a fetch of added sources covers:
-// every one but a fork source, whose forks the account remote's commands
-// fetch whole, see gitx.FetchRemote. Fetching one as a tree would bring its
+// treeSources are the entries of sources the update check and serve's
+// search index cover: every one but a fork source, which holds no skill on
+// one branch to check or list. Its forks are fetched whole by the commands
+// that read them, see fetchForks; fetching one as a tree would bring its
 // objects in without their blobs, which its forks' history then lacks.
 func treeSources(sources []home.Source) []home.Source {
 	var trees []home.Source

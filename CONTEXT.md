@@ -54,8 +54,15 @@ The complete result of one scan of one machine. Replaced whole on every rescan, 
 ### Skill lifecycle
 
 **Source**:
-A git repository containing one or more skills, added by URL, from which skills are installed. The account remote is a source. A third-party repo is a source. Stored by its canonical URL, never with an embedded user or token.
+A git repository added by URL, with a layout and an access. The account remote is a source. A third-party repo is a source. Stored by its canonical URL, never with an embedded user or token.
 _Avoid_: registry, marketplace, catalog, remote
+
+**Source layout**:
+How a source holds skills. The tree layout holds skills in folders anywhere in the tree of one branch: reading it installs a managed copy. The fork layout holds one branch per fork, `skills/<name>`: reading it installs a fork, and writing to it is a publish. Declared when the source is added, never guessed, and kept until the source is removed.
+_Avoid_: kind, type, format
+
+**Fork source**:
+A source of the fork layout. This version keeps one, the account remote.
 
 **Source alias**:
 A second URL for a source that moved, mapped to the canonical URL before any identity is derived.
@@ -122,7 +129,7 @@ Retiring a fork in favour of an upstream version: the fork's branch is archived 
 _Avoid_: delete fork, downgrade
 
 **Account remote**:
-The git remote per account that account repos push forks to and fetch them from. In the MVP it is a Git repository the user owns, attached with `agentx remote set`; later, hosted by agentx once the machine is signed in. Only fork branches travel through it.
+The one fork source marked as the account remote: the repository account repos push forks to and fetch them from, and the only source anything is pushed to without an explicit command. In the MVP it is a Git repository the user owns, attached with `agentx remote set` or `agentx source add --account`; later, hosted by agentx once the machine is signed in. Only fork branches travel through it.
 _Avoid_: cloud, server, origin
 
 **Publish**:

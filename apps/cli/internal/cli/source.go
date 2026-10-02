@@ -33,6 +33,7 @@ type sourceEvent struct {
 	DefaultBranch string `json:"default_branch,omitempty"` // the branch the remote's HEAD named at the last look; shown, never followed
 	Subpath       string `json:"subpath,omitempty"`        // the scope of this listing, not stored
 	LastFetched   string `json:"last_fetched,omitempty"`
+	Forks         *int   `json:"forks,omitempty"`           // a fork source's fork branches as its last fetch found them; absent for a tree source and before a fetch
 	Commit        string `json:"commit,omitempty"`          // the fetched commit; absent when the account repo holds no ref
 	Previous      string `json:"previous_commit,omitempty"` // what the ref held before this fetch, when the fetch moved it
 	Skills        *int   `json:"skills,omitempty"`          // how many skills the listing found; only after a listing
@@ -80,7 +81,8 @@ func newSourceCommand(inv *invocation) *cobra.Command {
 }
 
 func newSourceAddCommand(inv *invocation) *cobra.Command {
-	var pushURL string
+	var pushURL, layout string
+	var account bool
 	cmd := &cobra.Command{
 		Use:   "add <url>",
 		Short: "Fetch a git repository and add it as a source",
@@ -89,13 +91,17 @@ func newSourceAddCommand(inv *invocation) *cobra.Command {
 			"a file:// URL or an absolute path, any of them with #ref to pin a branch or tag. A user\n" +
 			"or token in the URL is dropped. --push-url names the URL pushes to the source go to, as\n" +
 			"git reaches it, for a source you fetch over HTTPS and push to over SSH; --push-url=\n" +
-			"clears it.",
+			"clears it. A source has the tree layout, skills in folders on one branch, unless\n" +
+			"--account adds it as the account remote, a repository of your own with one branch per\n" +
+			"fork, which forks are published to.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return inv.sourceAdd(cmd.Context(), args[0], pushChoice{set: cmd.Flags().Changed("push-url"), url: pushURL})
+			return inv.sourceAdd(cmd.Context(), args[0], pushChoice{set: cmd.Flags().Changed("push-url"), url: pushURL}, layout, account)
 		},
 	}
 	cmd.Flags().StringVar(&pushURL, "push-url", "", "the URL pushes to the source go to, such as its SSH address; empty clears it")
+	cmd.Flags().StringVar(&layout, "layout", "", "how the source holds skills: tree, in folders on one branch, or fork, one branch per fork")
+	cmd.Flags().BoolVar(&account, "account", false, "add the source as the account remote, of the fork layout, which forks are published to")
 	return cmd
 }
 
@@ -143,7 +149,8 @@ func takeBackBound(ctx context.Context) time.Duration {
 // lost lock is still exit 7 – and says what stayed behind and how to clear
 // it: adding the source again rewrites the remote and records it, which is
 // the state this run failed to reach, and removing it by id takes it away.
-func leftBehind(cause error, src source.Source) error {
+// add is the command that adds it again.
+func leftBehind(cause error, id, add string) error {
 	f := &failure{status: exitInternal, cause: cause}
 	var already *failure
 	switch {
@@ -154,15 +161,59 @@ func leftBehind(cause error, src source.Source) error {
 	case errors.Is(cause, home.ErrRecovery):
 		f.status = exitRefused
 	}
-	f.message = cause.Error() + "; the remote " + source.RemoteName(src.ID()) + " was left in the account repo and no source names it"
-	f.hint = "run 'agentx source add " + src.URL + "' to add the source and take the remote with it, or 'agentx source remove " + src.ID() + "' to clear it"
+	f.message = cause.Error() + "; the remote " + source.RemoteName(id) + " was left in the account repo and no source names it"
+	f.hint = "run '" + add + "' to add the source and take the remote with it, or 'agentx source remove " + id + "' to clear it"
 	return f
+}
+
+// layoutRefusal is why the layout flags of source add cannot be met, nil
+// when they can: layout is what --layout named, "" when it was not given,
+// and account whether --account was. A layout other than tree and fork,
+// and --account with the tree layout, are exit code 1. A fork source other
+// than the account remote is exit code 6: this version keeps one. Pure.
+func layoutRefusal(layout string, account bool) *failure {
+	switch {
+	case layout != "" && layout != home.LayoutTree && layout != home.LayoutFork:
+		return refuse(exitUsage, "--layout takes tree or fork, not "+quotedArg(layout), "leave it out for a source of skills in folders, or add the account remote with --account")
+	case account && layout == home.LayoutTree:
+		return refuse(exitUsage, "--account adds the account remote, which has the fork layout, so it takes no --layout tree", "leave --layout out")
+	case layout == home.LayoutFork && !account:
+		return refuse(exitRefused, "the one fork source this version keeps is the account remote; several fork sources come in a later version",
+			"add the account remote with 'agentx source add <url> --account'")
+	}
+	return nil
 }
 
 // sourceAdd fetches the source its argument names and records it in the
 // settings, with the push URL push names, which is held to its rules
-// before anything is written.
-func (inv *invocation) sourceAdd(ctx context.Context, arg string, push pushChoice) error {
+// before anything is written, and the layout layout and account name, see
+// layoutRefusal. The account remote, and a source the settings hold as a
+// fork source already, which an add again keeps as one, are added by
+// addAccount. A fork source is never fetched as a tree: --layout tree for
+// one is exit code 6, and so is a tree source naming a fork source's
+// repository, see forkSourceRefusal.
+func (inv *invocation) sourceAdd(ctx context.Context, arg string, push pushChoice, layout string, account bool) error {
+	if f := layoutRefusal(layout, account); f != nil {
+		return f
+	}
+	if account {
+		return inv.addAccount(ctx, arg, push)
+	}
+	s, err := inv.loadSettings()
+	if err != nil {
+		return err
+	}
+	// A fork source of the settings is added again by its own rules, which
+	// refuse a credential rather than drop it, so its URL is looked up
+	// before anything is said about the argument.
+	if src, err := source.Parse(arg); err == nil {
+		if i := s.FindSource(src.URL); i >= 0 && s.Sources[i].Layout == home.LayoutFork {
+			if layout == home.LayoutTree {
+				return forkToTree(s.Sources[i])
+			}
+			return inv.addAccount(ctx, arg, push)
+		}
+	}
 	src, err := inv.parseSource(arg)
 	if err != nil {
 		return err
@@ -252,7 +303,7 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source, push pu
 			return cause
 		}
 		inv.out.debugf("the remote %s could not be taken back: %v", remote, err)
-		return leftBehind(cause, src)
+		return leftBehind(cause, src.ID(), "agentx source add "+src.URL)
 	}
 	// takeBack reverts under a lock this run is not holding, for a failure
 	// that leaves the remote written and nothing naming it. It waits for
@@ -389,7 +440,8 @@ func (inv *invocation) sourceList(ctx context.Context) error {
 		return err
 	}
 	commits := map[string]string{}
-	if gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home); err != nil {
+	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	if err != nil {
 		return accountRepoFailure(err)
 	} else if exists {
 		if commits, err = source.Commits(ctx, inv.git, gitDir); err != nil {
@@ -406,25 +458,41 @@ func (inv *invocation) sourceList(ctx context.Context) error {
 	for _, src := range s.Sources {
 		id := source.ID(src.URL)
 		ev := entryEvent(src)
-		ev.Commit = commits[id]
-		out.emit(ev)
 		name := "  " + src.URL
 		if src.Account {
 			name += " (account)"
 		}
 		// The branch the source follows: its pin, else the branch its HEAD
-		// named at the last look, dimmed since it is only what was seen.
+		// named at the last look, dimmed since it is only what was seen. A
+		// fork source follows every fork branch, and what it holds is how
+		// many of them its last fetch found.
 		branch := c("(unpinned)", muted)
 		switch {
+		case src.Layout == home.LayoutFork:
+			branch = c("skills/*", muted)
 		case src.Pin != "":
 			branch = c(src.Pin, plain)
 		case src.DefaultBranch != "":
 			branch = c(src.DefaultBranch, muted)
 		}
 		commit := c("not fetched", warnStyle)
-		if commits[id] != "" {
+		switch {
+		case src.Layout == home.LayoutFork:
+			n, fetched := 0, false
+			if exists {
+				if n, fetched, err = inv.forkCount(ctx, gitDir, src, source.RemoteName(id)); err != nil {
+					return accountRepoFailure(err)
+				}
+			}
+			if fetched {
+				ev.Forks = &n
+			}
+			commit = forksCell(n, fetched)
+		case commits[id] != "":
+			ev.Commit = commits[id]
 			commit = c(short(commits[id]), muted)
 		}
+		out.emit(ev)
 		t.add(c(name, heading), c(src.LayoutName(), muted), accessWord(src.Access), branch, commit, c(src.LastFetched, muted), c(id, label))
 	}
 	out.render(t, "")
@@ -438,11 +506,11 @@ func (inv *invocation) sourceSkills(ctx context.Context, arg string) error {
 	if err != nil {
 		return err
 	}
-	if src.Ref != "" && src.Ref != entry.Pin {
-		return pinMismatch(src, entry)
-	}
 	if entry.Layout == home.LayoutFork {
 		return forkSourceIs(entry.URL, entry)
+	}
+	if src.Ref != "" && src.Ref != entry.Pin {
+		return pinMismatch(src, entry)
 	}
 	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
@@ -486,10 +554,19 @@ func (inv *invocation) sourceSkills(ctx context.Context, arg string) error {
 // sourceRemove deletes the remote, the ref and the settings entry. The git
 // state goes first: if it failed after the entry was gone, nothing would
 // name the source any more and its remote would be unreachable for good.
+//
+// A fork source's remote goes with its remote-tracking branches and the
+// tracking configuration of every fork branch that names it, see
+// removeAccount, which is remote unset for the account remote.
 func (inv *invocation) sourceRemove(ctx context.Context, arg string) error {
 	id, url, err := inv.sourceToRemove(ctx, arg)
 	if err != nil {
 		return err
+	}
+	if s, err := inv.loadSettings(); err != nil {
+		return err
+	} else if i := s.FindSource(url); i >= 0 && s.Sources[i].Layout == home.LayoutFork {
+		return inv.removeAccount(ctx, s.Sources[i], source.RemoteName(id))
 	}
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
