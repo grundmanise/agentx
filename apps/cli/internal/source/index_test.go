@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
@@ -119,7 +120,7 @@ func (r *repo) tree(path string) string { r.t.Helper(); return r.run("rev-parse"
 func (r *repo) fetch(gitDir string) {
 	r.t.Helper()
 	src := source.Source{URL: r.url}
-	if err := source.Configure(context.Background(), r.git, gitDir, src); err != nil {
+	if err := source.Configure(context.Background(), r.git, gitDir, home.Source{URL: src.URL, Pin: src.Ref}); err != nil {
 		r.t.Fatal(err)
 	}
 	if _, err := source.Fetch(context.Background(), r.git, gitDir, src); err != nil {
@@ -196,7 +197,7 @@ func TestBuildIndexListsASourceItCouldNotListAgain(t *testing.T) {
 	// no git old enough to ignore GIT_NO_LAZY_FETCH can fill the blobs in
 	// behind the test's back.
 	src := source.Source{URL: r.url}
-	if err := source.Configure(ctx, git, gitDir, src); err != nil {
+	if err := source.Configure(ctx, git, gitDir, home.Source{URL: src.URL, Pin: src.Ref}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := git.User(ctx, gitDir, "fetch", "--quiet", "--no-tags", "--filter=blob:none", source.RemoteName(src.ID())); err != nil {

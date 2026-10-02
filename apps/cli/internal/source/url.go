@@ -41,13 +41,13 @@ func IsID(s string) bool { return idPattern.MatchString(s) }
 var idPattern = regexp.MustCompile(`^[0-9a-f]{16}$`)
 
 // The forms Parse accepts, for the hint of a usage error.
-const Forms = "owner/repo, owner/repo/subpath, a GitHub or GitLab URL with an optional tree path, an SSH URL or a file:// URL, each with an optional #ref"
+const Forms = "owner/repo, owner/repo/subpath, a GitHub or GitLab URL with an optional tree path, an SSH URL or [user@]host:path, a file:// URL or an absolute path, each with an optional #ref"
 
 // ErrForm is the error of an input that is not a source URL.
 var ErrForm = errors.New("not a source URL")
 
-// scpLike is user@host:path, the SSH shorthand git accepts.
-var scpLike = regexp.MustCompile(`^([A-Za-z0-9._-]+)@([A-Za-z0-9._-]+):(.*)$`)
+// scpLike is [user@]host:path, the SSH shorthand git accepts.
+var scpLike = regexp.MustCompile(`^(?:([A-Za-z0-9._-]+)@)?([A-Za-z0-9._-]+):(.*)$`)
 
 // shorthand is owner/repo with an optional subpath, resolved to GitHub.
 var shorthand = regexp.MustCompile(`^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+(/.*)?$`)
@@ -63,8 +63,11 @@ var githubPages = map[string]bool{
 // Parse normalises input to a Source. It accepts owner/repo and
 // owner/repo/subpath (GitHub), https and http URLs, GitHub tree URLs
 // (/tree/<ref>/<subpath>), GitLab tree URLs (/-/tree/<ref>/<subpath>),
-// ssh:// and git:// URLs, the user@host:path SSH shorthand, file:// URLs,
-// and any of these with a #ref fragment. On GitHub the repository is
+// ssh:// and git:// URLs, git+ssh:// and ssh+git:// read as ssh://, the
+// [user@]host:path SSH shorthand, file:// URLs and absolute paths, which
+// read as file:// URLs, and any of these with a #ref fragment. A ref of
+// HEAD names the remote's default branch, which is what no ref follows, so
+// it is no pin. On GitHub the repository is
 // owner/repo and what follows is the subpath; elsewhere the repository
 // path ends at /-/ or at a segment named *.git, and what follows is the
 // subpath. The host is lowercased and loses its trailing dot and a port
@@ -95,9 +98,31 @@ func Parse(input string) (Source, error) {
 		if err := s.fromURL(raw, safe); err != nil {
 			return Source{}, err
 		}
+	case strings.HasPrefix(raw, "/"):
+		// A path on disk is the file URL of that path, escaped so that a
+		// percent sign or a question mark in a directory name stays part
+		// of the path.
+		if err := s.fromURL((&url.URL{Scheme: "file", Path: raw}).String(), safe); err != nil {
+			return Source{}, err
+		}
 	case scpLike.MatchString(raw):
 		m := scpLike.FindStringSubmatch(raw)
-		if err := s.fromURL("ssh://"+m[1]+"@"+m[2]+"/"+strings.TrimPrefix(m[3], "/"), safe); err != nil {
+		if user, _, ok := strings.Cut(raw, "@"); m[1] == "" && ok && !strings.Contains(user, "/") {
+			// user:token@host/path is a URL without its scheme, and what
+			// the shorthand would read as a host is a user, the path a token
+			// and a host.
+			return s, fmt.Errorf("%w: a user and a password without a scheme: %s", ErrForm, safe)
+		}
+		if m[1] == "" && strings.Contains(m[3], "\\") {
+			// A drive letter and a backslash make a Windows path, C:\skills,
+			// which no SSH server is named by.
+			return s, fmt.Errorf("%w: %s", ErrForm, safe)
+		}
+		user := ""
+		if m[1] != "" {
+			user = m[1] + "@"
+		}
+		if err := s.fromURL("ssh://"+user+m[2]+"/"+strings.TrimPrefix(m[3], "/"), safe); err != nil {
 			return Source{}, err
 		}
 	case shorthand.MatchString(raw):
@@ -106,6 +131,9 @@ func Parse(input string) (Source, error) {
 		}
 	default:
 		return s, fmt.Errorf("%w: %s", ErrForm, safe)
+	}
+	if s.Ref == "HEAD" {
+		s.Ref = ""
 	}
 	return s, nil
 }
@@ -130,7 +158,8 @@ func redact(input string) string {
 }
 
 // ValidRef accepts the refs a pin can be: the names git check-ref-format
-// allows for a one-level branch or tag, plus a commit id. A ref git refuses
+// --allow-onelevel allows for a branch or tag, one level or several, plus a
+// commit id. A ref git refuses
 // is a usage error; accepting it here would defer it to a fetch error with
 // an unrelated hint about credential helpers, so the rules are git's own,
 // neither wider nor narrower: a commit id, release/1.x and a unicode name
@@ -183,6 +212,9 @@ func (s *Source) fromURL(raw, display string) error {
 	}
 	scheme := strings.ToLower(u.Scheme)
 	switch scheme {
+	case "git+ssh", "ssh+git":
+		// git's older spellings of an SSH URL: the same address.
+		scheme = "ssh"
 	case "https", "http", "ssh", "git", "file":
 	default:
 		return fmt.Errorf("%w: unsupported scheme %q", ErrForm, u.Scheme)

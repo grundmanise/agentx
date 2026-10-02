@@ -96,6 +96,23 @@ func parseCases() []parseCase {
 		{"owner/repo#v1.lockfile", "https://github.com/owner/repo", "", "v1.lockfile", false},
 		{"owner/repo#a./b", "https://github.com/owner/repo", "", "a./b", false},
 		{"owner/repo#x-", "https://github.com/owner/repo", "", "x-", false},
+
+		// HEAD is the remote's default branch, which an unpinned source
+		// follows anyway: it is no pin.
+		{"owner/repo#HEAD", "https://github.com/owner/repo", "", "", false},
+		{"https://github.com/owner/repo/tree/HEAD/skills", "https://github.com/owner/repo", "skills", "", false},
+
+		// Every other form git reads as the URL of a remote: a path on disk,
+		// the SSH shorthand without a user, and the older spellings of an
+		// SSH URL.
+		{"/srv/skills.git", "file:///srv/skills.git", "", "", false},
+		{"/owner/repo", "file:///owner/repo", "", "", false},
+		{"/srv/skills.git/tools#v1", "file:///srv/skills.git", "tools", "v1", false},
+		{"/srv/a%b?c/skills", "file:///srv/a%25b%3Fc/skills", "", "", false},
+		{"git.example.com:team/repo.git", "ssh://git.example.com/team/repo", "", "", false},
+		{"git.example.com:/srv/repo.git#main", "ssh://git.example.com/srv/repo", "", "main", false},
+		{"git+ssh://git@github.com/owner/repo.git", "ssh://git@github.com/owner/repo", "", "", false},
+		{"SSH+GIT://github.com:22/owner/repo", "ssh://github.com/owner/repo", "", "", false},
 	}
 }
 
@@ -178,12 +195,13 @@ func FuzzParseRoundTrip(f *testing.F) {
 func TestParseRejects(t *testing.T) {
 	t.Parallel()
 	for _, in := range []string{
-		"", "   ", "owner", "owner/", "/owner/repo", "owner//repo", "owner/repo#", "owner/repo#a b", "owner/repo#a..b",
+		"", "   ", "owner", "owner/", "owner//repo", "owner/repo#", "owner/repo#a b", "owner/repo#a..b",
 		"https://github.com/owner", "https://github.com/owner/repo/blob/main/SKILL.md",
 		"https://github.com/owner/repo/pull/1", "https://github.com/owner/repo/tree",
 		"https://github.com/owner/repo/tree/main/x#dev", "https://gitlab.com/group/repo/-/blob/main/x",
 		"https://gitlab.com/-/tree/main", "ftp://example.com/repo", "https:///repo", "https://example.com/",
-		"https://github.com/owner/../repo", "file://", "file:///", "not a url", "C:\\repo",
+		"https://github.com/owner/../repo", "file://", "file:///", "not a url", "C:\\repo", "c:\\skills\\repo", "/", "/srv/../repo", "host:",
+		"git+ssh://", "git+https://github.com/owner/repo", "user:tok@example.com/owner/repo",
 		"ssh://::/0", "https://[:]/team/repo", "http://%25/team/repo", "https://a%20b/team/repo",
 		"0/..git", "https://github.com/owner/..git", "https://git.example.com/team/..git/skills",
 		"0/.git.git", "https://github.com/owner/.git.git",

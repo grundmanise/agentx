@@ -480,7 +480,7 @@ func (inv *invocation) addForkSource(ctx context.Context, name string, there lin
 	if err != nil || s.FindSource(url) >= 0 {
 		return
 	}
-	if _, _, err := inv.addSource(ctx, source.Source{URL: url}); err != nil {
+	if _, _, err := inv.addSource(ctx, source.Source{URL: url}, pushChoice{}); err != nil {
 		reason := err.Error()
 		var f *failure
 		if errors.As(err, &f) {

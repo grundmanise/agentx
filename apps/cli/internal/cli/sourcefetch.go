@@ -95,11 +95,12 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 // block a scan.
 //
 // The remotes are brought back in line with the settings here too. The
-// settings hold the pin and the remote's refspec is derived from it, so a
-// run interrupted between the two leaves a remote recording a ref the
-// settings do not name. The refspecs are read in one git process and only
-// one that disagrees is written, which changes no pin: the pin is what the
-// settings say, and only source add sets it.
+// settings hold the pin and the push URL and the remote is derived from
+// them, so a run interrupted between the two leaves a remote recording a
+// ref or a push URL the settings do not name. The remotes are read in one
+// git process and only one that disagrees is written, which changes no pin
+// and no push URL: those are what the settings say, and only source add
+// sets them.
 func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets []fetchTarget, wait, progress bool) ([]source.Result, error) {
 	if err := inv.holdLock(ctx, wait, false, func() error { return inv.alignRemotes(ctx, gitDir, targets) }); err != nil {
 		return nil, accountRepoFailure(err)
@@ -148,23 +149,25 @@ func (inv *invocation) holdLock(ctx context.Context, wait, signal bool, fn func(
 	return home.MutateQuiet(inv.dirs.Home, u, fn)
 }
 
-// alignRemotes rewrites the fetch refspec of every target whose remote does
-// not record the pin the settings hold. It runs under the lock, since git
-// config fails rather than waits for its own lock file, and reads every
+// alignRemotes rewrites the remote of every target that is not the one its
+// settings entry wants, see source.RemoteOf: a URL, a refspec recording
+// another pin, a push URL the entry does not hold or one it has lost, or
+// promisor settings a run cut short left out. It runs under the lock, since
+// git config fails rather than waits for its own lock file, and reads every
 // remote in one git process, so a run whose remotes are right costs one.
 //
 // A source with no remote at all, which an interrupted removal leaves, is
-// left alone: writing a refspec for it would build half a remote out of an
-// entry nothing can fetch. The fetch that follows fails, and the run says
-// what it is: a source this machine does not hold.
+// left alone: writing one for it would build a remote out of an entry
+// nothing can fetch. The fetch that follows fails, and the run says what it
+// is: a source this machine does not hold.
 func (inv *invocation) alignRemotes(ctx context.Context, gitDir string, targets []fetchTarget) error {
 	remotes := source.Remotes(ctx, inv.git, gitDir)
 	for _, t := range targets {
 		remote, ok := remotes[t.src.ID()]
-		if !ok || remote.URL == "" || remote.Refspec == source.Refspec(t.src) {
+		if !ok || remote.URL == "" || remote == source.RemoteOf(t.entry) {
 			continue
 		}
-		if err := source.SetRefspec(ctx, inv.git, gitDir, t.src); err != nil {
+		if err := source.Configure(ctx, inv.git, gitDir, t.entry); err != nil {
 			return err
 		}
 	}
@@ -215,7 +218,7 @@ func (inv *invocation) reportFetched(ctx context.Context, gitDir string, targets
 		}
 		entry, listing := targets[i].entry, res.Listing
 		n := len(listing.Skills)
-		inv.out.emit(sourceEvent{event: newEvent("source"), ID: res.Source.ID(), URL: res.Source.URL, Alias: entry.Alias, Pin: entry.Pin,
+		inv.out.emit(sourceEvent{event: newEvent("source"), ID: res.Source.ID(), URL: res.Source.URL, Alias: entry.Alias, PushURL: entry.PushURL, Pin: entry.Pin,
 			LastFetched: now, Commit: listing.Commit, Previous: movedFrom(listing), Skills: &n})
 		inv.out.done(inv.addLine(false, res.Source, listing) + ": " + inv.out.paint(noteStyle, plural(n, "skill")))
 	}
@@ -356,7 +359,7 @@ func (inv *invocation) sourcesToFetch(ctx context.Context, args []string, all bo
 	}
 	if all {
 		targets := make([]fetchTarget, 0, len(s.Sources))
-		for _, entry := range s.Sources {
+		for _, entry := range treeSources(s.Sources) {
 			targets = append(targets, target(entry))
 		}
 		return targets, nil
@@ -371,6 +374,9 @@ func (inv *invocation) sourcesToFetch(ctx context.Context, args []string, all bo
 		if src.Ref != "" && src.Ref != entry.Pin {
 			return nil, pinMismatch(src, entry)
 		}
+		if entry.Layout == home.LayoutFork {
+			return nil, forkSourceIs(entry.URL, entry)
+		}
 		if seen[entry.URL] { // named twice, by URL and by id, or by two forms of one URL
 			continue
 		}
@@ -378,6 +384,20 @@ func (inv *invocation) sourcesToFetch(ctx context.Context, args []string, all bo
 		targets = append(targets, target(entry))
 	}
 	return targets, nil
+}
+
+// treeSources are the entries of sources a fetch of added sources covers:
+// every one but a fork source, whose forks the account remote's commands
+// fetch whole, see gitx.FetchRemote. Fetching one as a tree would bring its
+// objects in without their blobs, which its forks' history then lacks.
+func treeSources(sources []home.Source) []home.Source {
+	var trees []home.Source
+	for _, entry := range sources {
+		if entry.Layout != home.LayoutFork {
+			trees = append(trees, entry)
+		}
+	}
+	return trees
 }
 
 // target is the fetch of one settings entry: the whole source at the pin

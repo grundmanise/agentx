@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
@@ -114,41 +115,76 @@ func refspecOnto(s Source, dst string) string {
 	return "+" + src + ":" + dst
 }
 
-// Configure writes the source's remote into the account repo: its
-// canonical URL, the refspec above, no tags, and the promisor and
-// blob:none filter settings of a partial clone. It is safe to repeat and
-// updates an existing remote.
-func Configure(ctx context.Context, r *gitx.Runner, gitDir string, s Source) error {
-	name := RemoteName(s.ID())
+// Remote is what the account repo's config records about one source's
+// remote, each key as git config prints it: the URL it is fetched from, the
+// refspec that records its pin, the URL pushes go to, and the promisor
+// settings of a partial clone. A key set more than once holds every value,
+// one per line, so that it equals no single value a source wants. Any key
+// can be empty, since a run killed part way through writing a remote leaves
+// what it had written.
+type Remote struct {
+	URL      string
+	Refspec  string
+	PushURL  string
+	Promisor string
+	Filter   string
+}
+
+// RemoteOf is the remote the settings entry of a source wants, by its
+// layout. A tree source is fetched from its canonical URL, without blobs,
+// onto its staging ref, and pushed to at its push URL when it has one. A
+// fork source is fetched whole, every fork branch onto its remote-tracking
+// branch, from the URL it is pushed to, so that its forks travel both ways
+// with the same credentials, and it has no push URL of its own: one would
+// keep git from applying the user's pushInsteadOf to its URL.
+func RemoteOf(entry home.Source) Remote {
+	if entry.Layout == home.LayoutFork {
+		url := entry.URL
+		if entry.PushURL != "" {
+			url = entry.PushURL
+		}
+		return Remote{URL: url, Refspec: gitx.ForkRefspec(RemoteName(ID(entry.URL)))}
+	}
+	return Remote{
+		URL:      entry.URL,
+		Refspec:  Refspec(Source{URL: entry.URL, Ref: entry.Pin}),
+		PushURL:  entry.PushURL,
+		Promisor: "true",
+		Filter:   "blob:none",
+	}
+}
+
+// Configure writes the remote of the source entry names into the account
+// repo, the one RemoteOf describes, with no tags. A key the remote must
+// not have is unset, so that a remote another layout or an earlier push URL
+// configured comes out as the entry wants it. It is safe to repeat and
+// updates an existing remote. Callers hold the lock, since git config fails
+// rather than waits for its own lock file.
+func Configure(ctx context.Context, r *gitx.Runner, gitDir string, entry home.Source) error {
+	name := "remote." + RemoteName(ID(entry.URL)) + "."
+	want := RemoteOf(entry)
 	for _, kv := range [][2]string{
-		{"url", s.URL},
-		{"fetch", Refspec(s)},
+		{"url", want.URL},
+		{"fetch", want.Refspec},
 		{"tagOpt", "--no-tags"},
-		{"promisor", "true"},
-		{"partialclonefilter", "blob:none"},
+		{"pushurl", want.PushURL},
+		{"promisor", want.Promisor},
+		{"partialclonefilter", want.Filter},
 	} {
-		if _, err := r.Isolated(ctx, gitDir, "config", "remote."+name+"."+kv[0], kv[1]); err != nil {
+		// --replace-all, since a key a user added a second value to cannot
+		// be set to one value otherwise; --unset-all exits 5 for a key that
+		// is not there, which is the state it is asked for.
+		var err error
+		if kv[1] != "" {
+			_, err = r.Isolated(ctx, gitDir, "config", "--replace-all", name+kv[0], kv[1])
+		} else {
+			_, _, err = r.IsolatedStatus(ctx, gitDir, 5, "config", "--unset-all", name+kv[0])
+		}
+		if err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-// SetRefspec writes the source's fetch refspec alone, for a remote whose
-// other settings are already right. It is what brings a remote back in
-// line with the pin the settings hold.
-func SetRefspec(ctx context.Context, r *gitx.Runner, gitDir string, s Source) error {
-	_, err := r.Isolated(ctx, gitDir, "config", "remote."+RemoteName(s.ID())+".fetch", Refspec(s))
-	return err
-}
-
-// Remote is what the account repo's config records about one source: the
-// URL it is fetched from and the refspec that records its pin. Either can
-// be empty, since a run killed part way through writing a remote leaves
-// what it had written.
-type Remote struct {
-	URL     string
-	Refspec string
 }
 
 // Remotes maps the id of every source remote of the account repo to what
@@ -159,9 +195,15 @@ type Remote struct {
 // write or the fetch that follows.
 func Remotes(ctx context.Context, r *gitx.Runner, gitDir string) map[string]Remote {
 	remotes := map[string]Remote{}
-	out, err := r.Isolated(ctx, gitDir, "config", "--get-regexp", `^remote\.src-[0-9a-f]+\.(url|fetch)$`)
+	out, err := r.Isolated(ctx, gitDir, "config", "--get-regexp", `^remote\.src-[0-9a-f]+\.(url|fetch|pushurl|promisor|partialclonefilter)$`)
 	if err != nil {
 		return remotes
+	}
+	add := func(to *string, value string) {
+		if *to != "" {
+			value = *to + "\n" + value
+		}
+		*to = value
 	}
 	for _, line := range strings.Split(out, "\n") {
 		key, value, ok := strings.Cut(line, " ")
@@ -175,9 +217,15 @@ func Remotes(ctx context.Context, r *gitx.Runner, gitDir string) map[string]Remo
 		remote := remotes[id]
 		switch field {
 		case "url":
-			remote.URL = value
+			add(&remote.URL, value)
 		case "fetch":
-			remote.Refspec = value
+			add(&remote.Refspec, value)
+		case "pushurl":
+			add(&remote.PushURL, value)
+		case "promisor":
+			add(&remote.Promisor, value)
+		case "partialclonefilter":
+			add(&remote.Filter, value)
 		}
 		remotes[id] = remote
 	}

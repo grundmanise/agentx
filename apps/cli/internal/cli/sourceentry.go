@@ -147,3 +147,87 @@ func addresses(src home.Source) []source.Address {
 	}
 	return out
 }
+
+// pushChoice is what an add was told about the push URL: nothing, so that
+// an entry it adds again keeps the push URL it has, or a URL to record, ""
+// clearing it.
+type pushChoice struct {
+	set bool
+	url string
+}
+
+// pushURLFor decides what --push-url records for the source at canonical,
+// the push URL as the user gave it in raw. A URL git cannot push to, one
+// with a credential and one naming another repository are refused, exit 1,
+// before anything is written. One that only respells canonical records
+// nothing, since pushes to canonical already go where it points. One whose
+// path is canonical's on a host that does not resolve to canonical's, even
+// through resolve, is recorded with a warning: an SSH alias or a second name
+// of the server can reach one repository under two hosts, and the user
+// typed it. raw is named in a message only once it has parsed with no
+// credential in it. Pure but for resolve.
+func pushURLFor(raw, canonical string, resolve func(host string) string) (record, warning string, refusal *failure) {
+	if raw == "" {
+		return "", "", nil
+	}
+	push, err := source.ParseAddress(raw)
+	switch {
+	case errors.Is(err, source.ErrCredential):
+		return "", "", refuse(exitUsage, "the push URL carries a password or a token, and agentx never stores credentials",
+			"put them in a git credential helper (git config credential.helper) or use an SSH key, and give the push URL without them")
+	case err != nil:
+		return "", "", refuse(exitUsage, "the push URL is not a URL git can push to: "+strings.TrimPrefix(err.Error(), source.ErrForm.Error()+": "),
+			"give a URL with a scheme, the SSH shorthand [user@]host:path or an absolute path, with no #ref")
+	}
+	shown := sanitised(raw)
+	if push.Scheme == "git" {
+		return "", "", refuse(exitUsage, "the push URL "+shown+" is a git:// URL, over which nothing can be pushed",
+			"give an ssh://, https:// or file:// URL, the SSH shorthand [user@]host:path or an absolute path")
+	}
+	at, err := source.ParseAddress(canonical)
+	if err != nil {
+		return "", "", refuse(exitUsage, canonical+" is not a URL git can push to", "add the source without --push-url")
+	}
+	kin := source.Compare(at, push, resolve)
+	switch {
+	case kin == source.OtherRepository:
+		return "", "", refuse(exitUsage, "the push URL "+shown+" names another repository than "+canonical,
+			"give a URL of "+canonical+" itself, at the same path, such as its SSH address")
+	case source.SameTransport(at, push):
+		return "", "", nil
+	case kin == source.OtherHost:
+		return raw, "the push URL " + shown + " and " + canonical + " name different hosts; agentx pushes to " + shown, nil
+	}
+	return raw, "", nil
+}
+
+// forkSourceRefusal is why src, a tree source an add is about to write,
+// cannot be one, nil when it can: a fork source of s already names its
+// repository, by url or push URL, through resolve.
+func forkSourceRefusal(s home.Settings, src home.Source, resolve func(host string) string) *failure {
+	for _, fork := range s.Sources {
+		if fork.Layout == home.LayoutFork && (fork.URL == src.URL || sameRepository(src, fork, resolve)) {
+			return forkSourceIs(src.URL, fork)
+		}
+	}
+	return nil
+}
+
+// forkSourceIs refuses to fetch url, which names the repository of the fork
+// source fork, as a tree source, exit 6. A fork source holds one branch per
+// fork, and fetching it as a tree as well would bring its objects in
+// without their blobs, which a fork's history then lacks. Its forks are
+// fetched whole by the account remote's commands, and installing one is
+// skill add --from-account, so the hint names both.
+func forkSourceIs(url string, fork home.Source) *failure {
+	what := url + " is the fork source " + fork.URL
+	if fork.URL == url {
+		what = url + " is a fork source"
+	}
+	reach := fork.URL
+	if fork.PushURL != "" {
+		reach = fork.PushURL
+	}
+	return refuse(exitRefused, what+": it holds one branch per fork rather than skills on one branch",
+		"run 'agentx remote set "+shellWord(sanitised(reach))+"' to fetch its forks, then 'agentx skill add --from-account <name>' to install one")
+}

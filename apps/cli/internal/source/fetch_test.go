@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
@@ -31,7 +32,7 @@ func TestAFetchWritesNoConfig(t *testing.T) {
 			}
 		}, true},
 		{"a whole remote", func(t *testing.T, git *gitx.Runner, gitDir string, src source.Source) {
-			if err := source.Configure(ctx, git, gitDir, src); err != nil {
+			if err := source.Configure(ctx, git, gitDir, home.Source{URL: src.URL, Pin: src.Ref}); err != nil {
 				t.Fatal(err)
 			}
 		}, true},
@@ -62,5 +63,45 @@ func TestAFetchWritesNoConfig(t *testing.T) {
 				t.Errorf("the fetch wrote the account repo's config:\n--- before\n%s--- after\n%s", before, after)
 			}
 		})
+	}
+}
+
+// TestConfigureWritesTheRemoteOfEachLayout configures one source's remote
+// as a tree source with a push URL, as one without, and as a fork source,
+// in turn, and reads each back as the entry wants it: a key the layout or
+// the entry does not have goes, and a key a user gave a second value is set
+// to one again.
+func TestConfigureWritesTheRemoteOfEachLayout(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	git, gitDir := accountRepo(t)
+	const url, push = "https://github.com/acme/skills", "git@github.com:acme/skills.git"
+	id := source.ID(url)
+	key := "remote." + source.RemoteName(id) + "."
+	tree := home.Source{URL: url, Pin: "v1", PushURL: push}
+	for _, tc := range []struct {
+		name  string
+		entry home.Source
+		want  source.Remote
+	}{
+		{"a tree source with a push URL", tree, source.Remote{URL: url, Refspec: "+v1:" + source.StagingRef(id), PushURL: push, Promisor: "true", Filter: "blob:none"}},
+		{"a tree source without one", home.Source{URL: url, Pin: "v1"}, source.Remote{URL: url, Refspec: "+v1:" + source.StagingRef(id), Promisor: "true", Filter: "blob:none"}},
+		{"a fork source", home.Source{URL: url, Layout: home.LayoutFork, Account: true, PushURL: push}, source.Remote{URL: push, Refspec: gitx.ForkRefspec(source.RemoteName(id))}},
+	} {
+		if got := source.RemoteOf(tc.entry); got != tc.want {
+			t.Errorf("%s: RemoteOf = %+v, want %+v", tc.name, got, tc.want)
+		}
+		if _, err := git.Isolated(ctx, gitDir, "config", "--add", key+"fetch", "+refs/heads/x:refs/x"); err != nil {
+			t.Fatal(err)
+		}
+		if err := source.Configure(ctx, git, gitDir, tc.entry); err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if got := source.Remotes(ctx, git, gitDir)[id]; got != tc.want {
+			t.Errorf("%s: the remote reads back as %+v, want %+v", tc.name, got, tc.want)
+		}
+		if tag, err := git.Isolated(ctx, gitDir, "config", "--get", key+"tagOpt"); err != nil || tag != "--no-tags" {
+			t.Errorf("%s: tagOpt = %q, %v", tc.name, tag, err)
+		}
 	}
 }

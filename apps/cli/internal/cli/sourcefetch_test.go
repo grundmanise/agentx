@@ -691,7 +691,12 @@ func TestSourceFetchDropsASourceRemovedMidRun(t *testing.T) {
 // the settings were leaves over a source pinned to v1. A fetch answers for
 // the pin the settings hold whatever the remote says, and brings the remote
 // back in line, so that a remote left behind does not outlive one run.
-func TestSourceFetchRealignsARemoteWithThePin(t *testing.T) {
+// TestSourceRemoteFollowsThePinAndThePushURL adds a pinned source with a
+// push URL on another host, breaks its remote the way an interrupted run
+// can, and fetches: the settings decide the pin and the push URL, and the
+// remote records them again. Adding the source with --push-url= then
+// takes the push URL off the entry and the remote.
+func TestSourceRemoteFollowsThePinAndThePushURL(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	requireGit(t)
@@ -701,18 +706,38 @@ func TestSourceFetchRealignsARemoteWithThePin(t *testing.T) {
 	s.tag("v1")
 	s.skill("gamma", "gamma", "Only on the default branch", nil)
 	s.commit("main version")
-	equal(t, "add", h.run("source", "add", s.url+"#v1").exit, 0)
+	push := "ssh://git@push.example" + s.gitDir
+	out := h.run("source", "add", s.url+"#v1", "--push-url", push)
+	equal(t, "add", out.exit, 0)
+	contains(t, "add line", out.stdout, "; pushes go to "+push)
+	contains(t, "warning", out.stderr, "warning: the push URL "+push+" and "+s.url+" name different hosts; agentx pushes to "+push)
 	id := source.ID(s.url)
+	remote := "remote." + source.RemoteName(id) + "."
+	equal(t, "pushurl", h.accountGit("config", "--get", remote+"pushurl"), push)
+	equal(t, "settings push_url", readSettingsFile(t, h)["sources"].([]any)[0].(map[string]any)["push_url"], push)
 	v1 := h.accountGit("rev-parse", source.Ref(id))
 
-	h.accountGit("config", "remote."+source.RemoteName(id)+".fetch", "+main:"+source.StagingRef(id))
-	equal(t, "fetch", h.run("source", "fetch", "--all").exit, 0)
+	h.accountGit("config", remote+"fetch", "+main:"+source.StagingRef(id))
+	h.accountGit("config", "--unset", remote+"pushurl")
+	out = h.run("--json", "source", "fetch", "--all")
+	equal(t, "fetch", out.exit, 0)
+	fetched, _ := sourceEvents(t, h.events(out.stdout))
+	equal(t, "fetch push_url", fetched["push_url"], push)
 
 	// The pin decided, not the remote, and the remote records it again.
 	equal(t, "ref", h.accountGit("rev-parse", source.Ref(id)), v1)
-	equal(t, "refspec", h.accountGit("config", "--get", "remote.src-"+id+".fetch"), "+v1:"+source.StagingRef(id))
-	out := h.run("--json", "source", "skills", s.url)
+	equal(t, "refspec", h.accountGit("config", "--get", remote+"fetch"), "+v1:"+source.StagingRef(id))
+	equal(t, "pushurl after the fetch", h.accountGit("config", "--get", remote+"pushurl"), push)
+	out = h.run("--json", "source", "skills", s.url)
 	equal(t, "source skills", out.exit, 0)
 	_, skills := sourceEvents(t, h.events(out.stdout))
 	equal(t, "skills", len(skills), 1) // gamma is on main alone
+
+	equal(t, "clear", h.run("source", "add", s.url+"#v1", "--push-url=").exit, 0)
+	if config := h.accountGit("config", "--list", "--local"); strings.Contains(config, "pushurl") {
+		t.Errorf("--push-url= left the push URL in the remote:\n%s", config)
+	}
+	if _, ok := readSettingsFile(t, h)["sources"].([]any)[0].(map[string]any)["push_url"]; ok {
+		t.Error("--push-url= left the push URL in the settings")
+	}
 }

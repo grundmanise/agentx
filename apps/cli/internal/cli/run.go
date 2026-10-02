@@ -30,9 +30,10 @@ type invocation struct {
 
 	excludes     sync.Once // reads excludesPath, the user's core.excludesFile; see excludesFile
 	excludesPath string
-	verdicts     map[string]keptVerdict // serve's verdicts on managed skills, by name; nil keeps none, see holdsBase
-	forkWalks    *lineage.WalkCache     // serve's fork lineages, by branch tip, shared by its goroutines; nil keeps none, see lineageRecords
-	forksWarned  bool                   // the forks to put back were warned of, or the command's own output names them; see listLineage
+	verdicts     map[string]keptVerdict   // serve's verdicts on managed skills, by name; nil keeps none, see holdsBase
+	forkWalks    *lineage.WalkCache       // serve's fork lineages, by branch tip, shared by its goroutines; nil keeps none, see lineageRecords
+	forksWarned  bool                     // the forks to put back were warned of, or the command's own output names them; see listLineage
+	hosts        func(host string) string // the host names of the user's SSH configuration, read once per host; see sshHosts
 }
 
 // refs is what the mutation journal needs to apply and recover the lineage

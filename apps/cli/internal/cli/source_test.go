@@ -650,6 +650,66 @@ func TestSourceAddErrors(t *testing.T) {
 	contains(t, "stderr", out.stderr, "hint: check the URL")
 }
 
+// TestSourceAddRefusesAPushURLAndAForkSource is every refusal source add
+// gives before it writes anything, on one home whose settings hold the
+// account remote: a push URL with a credential or naming another
+// repository, exit 1, and a tree source naming the fork source's
+// repository, exit 6, which source fetch and source skills give for the
+// fork source too. None of them creates the account repo.
+func TestSourceAddRefusesAPushURLAndAForkSource(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	const forks = "https://example.invalid/me/forks"
+	err := home.Mutate(h.agentx, nil, func() error {
+		settings, err := home.LoadSettings(h.agentx)
+		if err != nil {
+			return err
+		}
+		settings.SetSource(home.Source{URL: forks, Layout: home.LayoutFork, Account: true})
+		return home.SaveSettings(h.agentx, settings)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := readSettingsFile(t, h)
+	for _, tc := range []struct {
+		name    string
+		args    []string
+		exit    int
+		message string
+		hint    string
+	}{
+		{"a push URL with a token", []string{"source", "add", "acme/skills", "--push-url", "https://me:s3cret@github.com/acme/skills"}, 1,
+			"the push URL carries a password or a token", "credential helper"},
+		{"a push URL of another repository", []string{"source", "add", "acme/skills", "--push-url", "git@github.com:acme/other.git"}, 1,
+			"the push URL git@github.com:acme/other.git names another repository than https://github.com/acme/skills", "at the same path"},
+		{"the fork source's repository", []string{"source", "add", "ssh://git@example.invalid/me/forks.git#main"}, 6,
+			"ssh://git@example.invalid/me/forks is the fork source " + forks + ": it holds one branch per fork", "agentx remote set " + forks},
+		{"a fetch of the fork source", []string{"source", "fetch", forks}, 6, forks + " is a fork source", "agentx skill add --from-account <name>"},
+		{"a listing of the fork source", []string{"source", "skills", source.ID(forks)}, 6, forks + " is a fork source", "agentx remote set"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out := h.run(append([]string{"--json"}, tc.args...)...)
+			equal(t, "exit", out.exit, tc.exit)
+			events := h.events(out.stdout)
+			if got, want := h.types(events), []string{"error", "result"}; !reflect.DeepEqual(got, want) {
+				t.Fatalf("event types = %v, want %v\n%s", got, want, out.stderr)
+			}
+			contains(t, "error.message", events[0]["message"].(string), tc.message)
+			contains(t, "error.hint", events[0]["hint"].(string), tc.hint)
+			if strings.Contains(out.stdout+out.stderr, "s3cret") {
+				t.Errorf("the token leaked into the output:\n%s%s", out.stdout, out.stderr)
+			}
+		})
+	}
+	if !reflect.DeepEqual(readSettingsFile(t, h), before) {
+		t.Errorf("a refusal changed the settings: %v", readSettingsFile(t, h))
+	}
+	if _, err := os.Stat(gitx.AccountRepoPath(h.agentx)); !os.IsNotExist(err) {
+		t.Errorf("a refusal created the account repo: %v", err)
+	}
+}
+
 func TestSourceCommandsRespectTheLock(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)

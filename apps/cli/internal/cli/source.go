@@ -23,6 +23,7 @@ type sourceEvent struct {
 	ID          string `json:"id"`
 	URL         string `json:"url"`
 	Alias       string `json:"alias,omitempty"`
+	PushURL     string `json:"push_url,omitempty"`
 	Pin         string `json:"pin,omitempty"`
 	Subpath     string `json:"subpath,omitempty"` // the scope of this listing, not stored
 	LastFetched string `json:"last_fetched,omitempty"`
@@ -49,15 +50,7 @@ func newSourceCommand(inv *invocation) *cobra.Command {
 		Args:        cobra.NoArgs,
 		RunE:        needSubcommand(inv, "no source command given", "run 'agentx source --help' to list commands"),
 	}
-	cmd.AddCommand(&cobra.Command{
-		Use:   "add <url>",
-		Short: "Fetch a git repository and add it as a source",
-		Long: "Fetch a git repository and add it as a source. The URL is owner/repo or owner/repo/subpath\n" +
-			"for GitHub, a GitHub or GitLab URL with an optional tree path, an SSH URL or a file:// URL,\n" +
-			"any of them with #ref to pin a branch or tag. A user or token in the URL is dropped.",
-		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error { return inv.sourceAdd(cmd.Context(), args[0]) },
-	})
+	cmd.AddCommand(newSourceAddCommand(inv))
 	cmd.AddCommand(newSourceFetchCommand(inv))
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",
@@ -77,6 +70,26 @@ func newSourceCommand(inv *invocation) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE:  func(cmd *cobra.Command, args []string) error { return inv.sourceRemove(cmd.Context(), args[0]) },
 	})
+	return cmd
+}
+
+func newSourceAddCommand(inv *invocation) *cobra.Command {
+	var pushURL string
+	cmd := &cobra.Command{
+		Use:   "add <url>",
+		Short: "Fetch a git repository and add it as a source",
+		Long: "Fetch a git repository and add it as a source. The URL is owner/repo or owner/repo/subpath\n" +
+			"for GitHub, a GitHub or GitLab URL with an optional tree path, an SSH URL or host:path,\n" +
+			"a file:// URL or an absolute path, any of them with #ref to pin a branch or tag. A user\n" +
+			"or token in the URL is dropped. --push-url names the URL pushes to the source go to, as\n" +
+			"git reaches it, for a source you fetch over HTTPS and push to over SSH; --push-url=\n" +
+			"clears it.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return inv.sourceAdd(cmd.Context(), args[0], pushChoice{set: cmd.Flags().Changed("push-url"), url: pushURL})
+		},
+	}
+	cmd.Flags().StringVar(&pushURL, "push-url", "", "the URL pushes to the source go to, such as its SSH address; empty clears it")
 	return cmd
 }
 
@@ -141,28 +154,62 @@ func leftBehind(cause error, src source.Source) error {
 }
 
 // sourceAdd fetches the source its argument names and records it in the
-// settings.
-func (inv *invocation) sourceAdd(ctx context.Context, arg string) error {
+// settings, with the push URL push names, which is held to its rules
+// before anything is written.
+func (inv *invocation) sourceAdd(ctx context.Context, arg string, push pushChoice) error {
 	src, err := inv.parseSource(arg)
 	if err != nil {
 		return err
 	}
-	_, _, err = inv.addSource(ctx, src)
+	if push.set {
+		record, warning, f := pushURLFor(push.url, src.URL, inv.sshHosts(ctx))
+		if f != nil {
+			return f
+		}
+		if warning != "" {
+			inv.out.warn(warning)
+		}
+		push.url = record
+	}
+	_, _, err = inv.addSource(ctx, src, push)
 	return err
+}
+
+// sshHosts is the resolve function source.Compare takes, read from the
+// user's SSH configuration and shared by every comparison of the run, so
+// that each host is asked about once.
+func (inv *invocation) sshHosts(ctx context.Context) func(host string) string {
+	if inv.hosts == nil {
+		inv.hosts = source.SSHHosts(ctx, inv.env)
+	}
+	return inv.hosts
 }
 
 // addSource is source add once its argument is parsed: it writes the
 // source's remote, fetches it, records it in the settings as a mutation of
 // its own and confirms it, then returns the listing of the fetch and the
-// entry it wrote. skill add runs it too, for a source this machine does not
-// have yet and for --fetch, so that the source is fetched once and the
-// install reads the listing that fetch built.
-func (inv *invocation) addSource(ctx context.Context, src source.Source) (listing source.Listing, entry home.Source, err error) {
+// entry it wrote. push is the push URL to record, already held to its
+// rules; without one an entry added again keeps the push URL it has. skill
+// add runs it too, for a source this machine does not have yet and for
+// --fetch, so that the source is fetched once and the install reads the
+// listing that fetch built. A fork source of the settings naming the
+// source's repository refuses it, exit 6, before anything is written.
+func (inv *invocation) addSource(ctx context.Context, src source.Source, push pushChoice) (listing source.Listing, entry home.Source, err error) {
 	before, err := inv.loadSettings()
 	if err != nil {
 		return listing, entry, err
 	}
 	existing := before.FindSource(src.URL)
+	// want is the entry the remote is written for: the push URL this add
+	// records, or the one the entry already has, which the settings write
+	// keeps.
+	want := home.Source{URL: src.URL, Pin: src.Ref, PushURL: push.url}
+	if !push.set && existing >= 0 {
+		want.PushURL = before.Sources[existing].PushURL
+	}
+	if f := forkSourceRefusal(before, want, inv.sshHosts(ctx)); f != nil {
+		return listing, entry, f
+	}
 	gitDir, _, err := gitx.OpenAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
 		return listing, entry, accountRepoFailure(err)
@@ -185,8 +232,8 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 	revert := func() error {
 		if existing < 0 { // nothing of a source that was never added is kept
 			return source.Remove(undo, inv.git, gitDir, src.ID())
-		} // else the remote goes back to the pin the settings still hold
-		return source.Configure(undo, inv.git, gitDir, source.Source{URL: src.URL, Ref: before.Sources[existing].Pin})
+		} // else the remote goes back to the pin and the push URL the settings still hold
+		return source.Configure(undo, inv.git, gitDir, before.Sources[existing])
 	}
 	// left answers for a take-back: cause, the failure that stopped the
 	// run, when the remote went back, and the refusal that names what stayed
@@ -218,7 +265,7 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 	// that the network never blocks a scan. This hold may give up: a run
 	// that loses it has written nothing and has nothing to take back.
 	if err := home.MutateQuiet(inv.dirs.Home, inv.refs(ctx), func() error {
-		return source.Configure(ctx, inv.git, gitDir, src)
+		return source.Configure(ctx, inv.git, gitDir, want)
 	}); err != nil {
 		return listing, entry, accountRepoFailure(err)
 	}
@@ -251,9 +298,16 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 		if err != nil {
 			return left(err, revert())
 		}
+		if f := forkSourceRefusal(s, want, inv.sshHosts(ctx)); f != nil {
+			return left(f, revert())
+		}
+		entry.PushURL = push.url
 		if i := s.FindSource(src.URL); i >= 0 {
 			added = false
 			entry = entry.Merge(s.Sources[i]) // what the source's entry knows and this add did not find out is kept
+		}
+		if push.set && push.url == "" {
+			entry.PushURL = "" // --push-url= clears what Merge kept
 		}
 		s.SetSource(entry)
 		if err := home.SaveSettings(inv.dirs.Home, s); err != nil {
@@ -268,9 +322,9 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 		return listing, entry, err
 	}
 	n := len(listing.Skills)
-	inv.out.emit(sourceEvent{event: newEvent("source"), ID: src.ID(), URL: src.URL, Alias: entry.Alias, Pin: src.Ref, Subpath: src.Subpath,
+	inv.out.emit(sourceEvent{event: newEvent("source"), ID: src.ID(), URL: src.URL, Alias: entry.Alias, PushURL: entry.PushURL, Pin: src.Ref, Subpath: src.Subpath,
 		LastFetched: entry.LastFetched, Commit: listing.Commit, Previous: movedFrom(listing), Skills: &n})
-	inv.out.done(inv.addLine(added, src, listing) + ": " + inv.out.paint(noteStyle, plural(n, "skill")) + under(inv.out, src.Subpath))
+	inv.out.done(inv.addLine(added, src, listing) + ": " + inv.out.paint(noteStyle, plural(n, "skill")) + under(inv.out, src.Subpath) + pushesTo(inv.out, entry.PushURL))
 	return listing, entry, nil
 }
 
@@ -326,7 +380,7 @@ func (inv *invocation) sourceList(ctx context.Context) error {
 	t := &table{}
 	for _, src := range s.Sources {
 		id := source.ID(src.URL)
-		out.emit(sourceEvent{event: newEvent("source"), ID: id, URL: src.URL, Alias: src.Alias, Pin: src.Pin, LastFetched: src.LastFetched, Commit: commits[id]})
+		out.emit(sourceEvent{event: newEvent("source"), ID: id, URL: src.URL, Alias: src.Alias, PushURL: src.PushURL, Pin: src.Pin, LastFetched: src.LastFetched, Commit: commits[id]})
 		pin := c("(unpinned)", muted)
 		if src.Pin != "" {
 			pin = c(src.Pin, plain)
@@ -351,6 +405,9 @@ func (inv *invocation) sourceSkills(ctx context.Context, arg string) error {
 	if src.Ref != "" && src.Ref != entry.Pin {
 		return pinMismatch(src, entry)
 	}
+	if entry.Layout == home.LayoutFork {
+		return forkSourceIs(entry.URL, entry)
+	}
 	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
 		return accountRepoFailure(err)
@@ -369,7 +426,7 @@ func (inv *invocation) sourceSkills(ctx context.Context, arg string) error {
 	out := inv.out
 	n := len(listing.Skills)
 	id := src.ID()
-	out.emit(sourceEvent{event: newEvent("source"), ID: id, URL: src.URL, Alias: entry.Alias, Pin: entry.Pin, Subpath: src.Subpath,
+	out.emit(sourceEvent{event: newEvent("source"), ID: id, URL: src.URL, Alias: entry.Alias, PushURL: entry.PushURL, Pin: entry.Pin, Subpath: src.Subpath,
 		LastFetched: entry.LastFetched, Commit: listing.Commit, Skills: &n})
 	out.print(out.paint(heading, plural(n, "skill")), " in ", out.paint(heading, src.URL), under(out, src.Subpath), " at ", short(listing.Commit))
 	t := &table{}
@@ -597,4 +654,12 @@ func under(out *writer, subpath string) string {
 		return ""
 	}
 	return " under " + out.paint(muted, subpath)
+}
+
+// pushesTo ends the confirmation of an add whose source has a push URL.
+func pushesTo(out *writer, pushURL string) string {
+	if pushURL == "" {
+		return ""
+	}
+	return "; pushes go to " + out.paint(label, shownURL(pushURL))
 }
