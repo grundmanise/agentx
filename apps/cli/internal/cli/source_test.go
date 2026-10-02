@@ -313,7 +313,9 @@ func TestSourceAddPeelsAnAnnotatedTagPin(t *testing.T) {
 
 // TestSourceAddKeepsAnAliasOnReAdd: nothing writes alias yet, but it is a
 // second URL mapped onto the canonical one, and a re-add rewrites the whole
-// entry. The alias must be carried across, not dropped.
+// entry. The alias must be carried across, not dropped, and so must the
+// push URL, the access and the default branch of an entry, which an add
+// that does not find them out again has no reason to forget.
 func TestSourceAddKeepsAnAliasOnReAdd(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -332,6 +334,7 @@ func TestSourceAddKeepsAnAliasOnReAdd(t *testing.T) {
 		}
 		entry := settings.Sources[at]
 		entry.Alias = alias
+		entry.PushURL, entry.Access, entry.AccessChecked, entry.DefaultBranch = "ssh://git@example.com/skills", home.AccessWritable, "2026-10-02T10:00:00Z", "main"
 		settings.SetSource(entry)
 		return home.SaveSettings(h.agentx, settings)
 	})
@@ -349,6 +352,10 @@ func TestSourceAddKeepsAnAliasOnReAdd(t *testing.T) {
 	entry := readSettingsFile(t, h)["sources"].([]any)[0].(map[string]any)
 	equal(t, "settings alias", entry["alias"], alias)
 	equal(t, "settings pin", entry["pin"], "v1")
+	equal(t, "settings push_url", entry["push_url"], "ssh://git@example.com/skills")
+	equal(t, "settings access", entry["access"], home.AccessWritable)
+	equal(t, "settings access_checked", entry["access_checked"], "2026-10-02T10:00:00Z")
+	equal(t, "settings default_branch", entry["default_branch"], "main")
 
 	// The listing carries it too, and so does a fetch, which rewrites the
 	// entry's last_fetched and nothing else.

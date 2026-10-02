@@ -294,6 +294,9 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 		{"a last_fetched that is not in UTC", settingsWith("sources", []any{map[string]any{
 			"url": "https://github.com/example/skills", "last_fetched": "2026-09-18T12:00:00+02:00",
 		}}), "RFC 3339 in UTC"},
+		{"a push URL carrying a token", settingsWith("sources", []any{map[string]any{
+			"url": "https://github.com/example/skills", "push_url": credentialed,
+		}}), "push_url of https://github.com/example/skills carries a password or a token"},
 		{"one source twice", settingsWith("sources", []any{
 			map[string]any{"url": "https://github.com/example/skills"},
 			map[string]any{"url": "https://github.com/example/skills", "pin": "v1"},
@@ -629,10 +632,16 @@ func TestValidSettingsCoversEveryFieldOfTheSettings(t *testing.T) {
 		"Settings.DisabledConfigurations": "badDisabledConfigurations",
 		"Settings.Sources":                "badSources",
 		"Settings.CopyMode":               "badCopyMode",
-		"Source.URL":                      "badSources, through badSourceURL",
-		"Source.Alias":                    "badSources, through badSourceURL",
-		"Source.Pin":                      "badSources, through source.ValidRef",
-		"Source.LastFetched":              "badSources, through fetchTime",
+		"Source.URL":                      "sourceRefusal, through badSourceURL",
+		"Source.Alias":                    "sourceRefusal, through badSourceURL",
+		"Source.Layout":                   "sourceRefusal: fork or absent",
+		"Source.Account":                  "sourceRefusal and sourcesRefusal: on a fork source, once",
+		"Source.PushURL":                  "sourceRefusal, through pushURLRefusal",
+		"Source.Pin":                      "sourceRefusal, through source.ValidRef",
+		"Source.Access":                   "sourceRefusal: writable, read-only or absent; an import then forgets it",
+		"Source.AccessChecked":            "sourceRefusal, through fetchTime; an import then forgets it",
+		"Source.DefaultBranch":            "sourceRefusal, through source.ValidRef",
+		"Source.LastFetched":              "sourceRefusal, through fetchTime",
 	}
 	for _, spec := range []struct {
 		kind string
@@ -878,7 +887,10 @@ func TestImportWithNoSkillsStillNamesTheSourcesToAdd(t *testing.T) {
 	file := editedExport(t, h, good, "sources-only.json", func(doc map[string]any) {
 		doc["skills"] = []any{}
 		doc["settings"].(map[string]any)["sources"] = []any{
-			map[string]any{"url": "https://github.com/example/skills", "pin": "release"},
+			map[string]any{"url": "https://github.com/example/skills", "pin": "release", "push_url": "git@github-work:example/skills.git",
+				"access": "writable", "access_checked": "2026-10-02T10:00:00Z", "default_branch": "main"},
+			map[string]any{"url": "https://github.com/me/forks", "layout": "fork", "account": true,
+				"access": "read-only", "access_checked": "2026-10-02T10:00:00Z"},
 		}
 	})
 
@@ -888,5 +900,20 @@ func TestImportWithNoSkillsStillNamesTheSourcesToAdd(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "No skills in the export.\n"+
 		"  only the settings were written: add each source again, then install a missing skill with 'agentx skill add <source>'\n"+
-		"    agentx source add https://github.com/example/skills#release\n")
+		"    agentx source add https://github.com/example/skills#release --push-url git@github-work:example/skills.git\n"+
+		"    agentx remote set https://github.com/me/forks\n")
+
+	// Every field comes across but what the exporting machine found it could
+	// do there, which this machine finds out for itself.
+	restored, err := home.LoadSettings(to.agentx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []home.Source{
+		{URL: "https://github.com/example/skills", PushURL: "git@github-work:example/skills.git", Pin: "release", DefaultBranch: "main"},
+		{URL: "https://github.com/me/forks", Layout: home.LayoutFork, Account: true},
+	}
+	if !reflect.DeepEqual(restored.Sources, want) {
+		t.Errorf("the imported sources are\n %+v\nwant\n %+v", restored.Sources, want)
+	}
 }

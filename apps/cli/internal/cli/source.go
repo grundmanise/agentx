@@ -253,7 +253,7 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 		}
 		if i := s.FindSource(src.URL); i >= 0 {
 			added = false
-			entry.Alias = s.Sources[i].Alias // unused so far; carried, never dropped
+			entry = entry.Merge(s.Sources[i]) // what the source's entry knows and this add did not find out is kept
 		}
 		s.SetSource(entry)
 		if err := home.SaveSettings(inv.dirs.Home, s); err != nil {

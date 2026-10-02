@@ -24,7 +24,7 @@ const exportSchemaVersion = 1
 
 // settingsSchemaVersion is the version of the machine settings file this
 // CLI writes, which is what an import may restore.
-const settingsSchemaVersion = 1
+const settingsSchemaVersion = home.SettingsSchemaVersion
 
 // exportDocument is what agentx export writes and agentx import reads: the
 // machine settings as the file holds them and one lineage record per branch

@@ -93,6 +93,7 @@ func (inv *invocation) importSettings(ctx context.Context, path string, yes bool
 	if err := inv.confirmImport(path, doc, in, yes); err != nil {
 		return err
 	}
+	forgetAccess(&doc.Settings)
 	if err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		return home.SaveSettings(inv.dirs.Home, doc.Settings)
 	}); err != nil {
@@ -105,6 +106,17 @@ func (inv *invocation) importSettings(ctx context.Context, path string, yes bool
 	inv.printImported(path, doc, states)
 	inv.summary = importSummary(path, states)
 	return nil
+}
+
+// forgetAccess takes out of s what another machine found it could do at
+// each source. Rights are a machine's own, a matter of its credentials and
+// SSH keys, so an import keeps every other field of a source and writes
+// none of its access: this machine checks it again when it adds or fetches
+// the source.
+func forgetAccess(s *home.Settings) {
+	for i := range s.Sources {
+		s.Sources[i].Access, s.Sources[i].AccessChecked = "", ""
+	}
 }
 
 // documentLimit bounds the file an import reads. A document is the settings
@@ -267,43 +279,12 @@ func badDisabledConfigurations(s home.Settings) string {
 	return ""
 }
 
-// badSources checks every field of every entry. url and alias are both
-// URLs of a source and are held to the same rule; pin is a ref this
-// machine will hand to git, which source.ValidRef exists to check before
-// that happens; last_fetched is a date agentx wrote and nothing reads back.
-// SetSource keeps the list sorted by url and holds one entry per source,
-// so two entries for one source are a document agentx did not write and a
-// pin or an alias silently lost: FindSource only ever sees the first.
+// badSources holds every field of every entry, and the list as a whole, to
+// what agentx writes, see sourcesRefusal. An SSH host is read as itself:
+// an import reads no SSH configuration, and a push URL whose host is an
+// alias of url's is recorded rather than refused anyway.
 func badSources(s home.Settings) string {
-	seen := map[string]bool{}
-	for _, src := range s.Sources {
-		// url and alias are the same kind of thing and are held to the
-		// same rule. url is always there, an entry being a source; alias
-		// is absent until something maps a second URL onto it, which
-		// nothing does yet, so an import is the only writer it has.
-		urls := []string{src.URL}
-		if src.Alias != "" {
-			urls = append(urls, src.Alias)
-		}
-		for _, url := range urls {
-			if why := badSourceURL(url); why != "" {
-				return why
-			}
-		}
-		switch {
-		case src.Pin != "" && !source.ValidRef(src.Pin):
-			return src.URL + " is pinned to " + clipped(src.Pin) + ", which is not a ref git accepts"
-		case src.LastFetched != "" && !fetchTime(src.LastFetched):
-			return src.URL + " was last fetched at " + clipped(src.LastFetched) + ", which is not RFC 3339 in UTC"
-		case seen[src.URL]:
-			return src.URL + " is listed twice"
-		}
-		seen[src.URL] = true
-	}
-	if !slices.IsSortedFunc(s.Sources, func(a, b home.Source) int { return strings.Compare(a.URL, b.URL) }) {
-		return "the sources must be sorted by url"
-	}
-	return ""
+	return sourcesRefusal(s.Sources, nil)
 }
 
 // badSourceURL holds one URL of a source entry to the canonical form. The
@@ -528,9 +509,10 @@ func (inv *invocation) printImported(path string, doc exportDocument, states []i
 // no account repo is created and no remote configured, so on the machine an
 // import just made, skill add answers that the source was never added.
 // source add is the step that has to come first, and nothing said so. It is
-// printed per source with the pin the settings now hold: source add writes
-// the pin its argument names, so the bare URL would unpin the source this
-// import just restored.
+// printed per source as the settings now hold it: source add writes the pin
+// its argument names, so the bare URL would unpin the source this import
+// just restored, and the push URL, which only a flag can give alongside
+// the canonical URL. The account remote is attached again with remote set.
 func printSourcesToAdd(out *writer, sources []home.Source) {
 	if len(sources) == 0 {
 		out.print("  ", out.paint(muted, "only the settings were written: install a missing skill with 'agentx skill add <source>'"))
@@ -538,8 +520,21 @@ func printSourcesToAdd(out *writer, sources []home.Source) {
 	}
 	out.print("  ", out.paint(muted, "only the settings were written: add each source again, then install a missing skill with 'agentx skill add <source>'"))
 	for _, src := range sources {
-		out.print("    ", out.paint(label, "agentx source add "+sourceAddArg(src.URL, src.Pin)))
+		out.print("    ", out.paint(label, sourceAddLine(src)))
 	}
+}
+
+// sourceAddLine is the command that adds src again as the settings hold
+// it, every word of it quoted for a POSIX shell.
+func sourceAddLine(src home.Source) string {
+	line := "agentx source add " + sourceAddArg(src.URL, src.Pin)
+	if src.Account {
+		line = "agentx remote set " + shellWord(sanitised(src.URL))
+	}
+	if src.PushURL != "" {
+		line += " --push-url " + shellWord(sanitised(src.PushURL))
+	}
+	return line
 }
 
 // sourceAddArg is the argument of a source add that adds a source again as

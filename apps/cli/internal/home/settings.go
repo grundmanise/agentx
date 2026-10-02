@@ -25,13 +25,96 @@ type Settings struct {
 }
 
 // Source is one entry of the sources list: a source by its canonical URL,
-// the ref it is pinned to and when it was last fetched. Alias is a second
-// URL mapped onto the canonical one; nothing sets it yet.
+// how its repository is laid out, where pushes to it go, what git lets
+// this machine do there, the ref it is pinned to and when it was last
+// fetched.
+//
+// Alias and PushURL are both second URLs of the one repository the
+// canonical URL names, and they point in opposite directions. Alias is
+// another name of it whose fetches map onto the canonical URL, its old URL
+// after a rename for one; nothing sets it yet, and it is never pushed to.
+// PushURL is the URL as the user gave it, which pushes go to so that their
+// SSH configuration and credentials apply; it is never fetched from by a
+// source of the tree layout.
 type Source struct {
-	URL         string `json:"url"`
-	Alias       string `json:"alias,omitempty"`
-	Pin         string `json:"pin,omitempty"`
-	LastFetched string `json:"last_fetched,omitempty"` // RFC 3339
+	URL           string `json:"url"`
+	Alias         string `json:"alias,omitempty"`
+	Layout        string `json:"layout,omitempty"`  // LayoutFork, or absent for the tree layout
+	Account       bool   `json:"account,omitempty"` // the account remote: forks publish to it by default
+	PushURL       string `json:"push_url,omitempty"`
+	Pin           string `json:"pin,omitempty"`
+	Access        string `json:"access,omitempty"`         // AccessWritable or AccessReadOnly, absent while unknown
+	AccessChecked string `json:"access_checked,omitempty"` // RFC 3339, when access was last checked, whatever the answer
+	DefaultBranch string `json:"default_branch,omitempty"` // the branch the remote's HEAD named at the last look; shown, never followed
+	LastFetched   string `json:"last_fetched,omitempty"`   // RFC 3339
+}
+
+// The layouts of a source. A source of the tree layout keeps skills in
+// folders anywhere in the tree of one branch, and reading it installs a
+// managed copy; one of the fork layout keeps one branch per fork, named
+// skills/<name>, and reading it installs a fork. An entry stores only
+// LayoutFork: an entry without a layout is of the tree layout, which is
+// every entry written before layouts existed.
+const (
+	LayoutTree = "tree"
+	LayoutFork = "fork"
+)
+
+// The access of a source: what git lets this machine do there. Writable
+// means a push was accepted, or would have been; read-only means git
+// answered with a denial it is known to give for want of rights. Anything
+// else, a check that could not be made among them, is unknown, which an
+// entry stores as no access at all.
+const (
+	AccessWritable = "writable"
+	AccessReadOnly = "read-only"
+	AccessUnknown  = "unknown"
+)
+
+// LayoutName is the entry's layout as it is reported: the tree layout
+// when the entry names none.
+func (s Source) LayoutName() string {
+	if s.Layout == "" {
+		return LayoutTree
+	}
+	return s.Layout
+}
+
+// AccessName is the entry's access as it is reported: unknown when the
+// entry records none.
+func (s Source) AccessName() string {
+	if s.Access == "" {
+		return AccessUnknown
+	}
+	return s.Access
+}
+
+// Merge is s, an entry an add has just built, completed with what prev,
+// the entry the settings held for the same source, knows and the add did
+// not find out. The add decides the canonical URL, the pin, which its
+// argument names, and the time it fetched; every other field is the
+// source's memory and is kept unless the add set it. The access is kept
+// or replaced as a pair with the time of its check, so that an add whose
+// check could not decide records that it looked and does not bring back
+// an answer it no longer has; the layout and the account flag go together
+// the same way. A field an add means to clear, it clears after the merge.
+func (s Source) Merge(prev Source) Source {
+	if s.Alias == "" {
+		s.Alias = prev.Alias
+	}
+	if s.Layout == "" {
+		s.Layout, s.Account = prev.Layout, prev.Account
+	}
+	if s.PushURL == "" {
+		s.PushURL = prev.PushURL
+	}
+	if s.AccessChecked == "" && s.Access == "" {
+		s.Access, s.AccessChecked = prev.Access, prev.AccessChecked
+	}
+	if s.DefaultBranch == "" {
+		s.DefaultBranch = prev.DefaultBranch
+	}
+	return s
 }
 
 // FindSource returns the index of the source with the canonical URL, or -1.
@@ -96,10 +179,29 @@ func (s *Settings) SetCopyModes(modes map[string][]string) error {
 
 func SettingsPath(dir string) string { return filepath.Join(dir, "settings.json") }
 
+// SettingsSchemaVersion is the version of the settings file this agentx
+// reads and writes. A field added to the file leaves it where it is: a
+// reader ignores a key it does not know. It changes when the file changes
+// so that an older agentx would misread it.
+const SettingsSchemaVersion = 1
+
+// NewerSettingsError is the error of a settings file a later agentx wrote,
+// whose schema version this one does not read. Reading it anyway would
+// misread what changed, and the next write would lose it.
+type NewerSettingsError struct {
+	Path    string
+	Version int
+}
+
+func (e *NewerSettingsError) Error() string {
+	return fmt.Sprintf("%s is of settings schema version %d, and this agentx reads version %d", e.Path, e.Version, SettingsSchemaVersion)
+}
+
 // LoadSettings reads the settings file whole. A missing file means
-// defaults, and so does a missing key.
+// defaults, and so does a missing key. A file of a later schema version is
+// a *NewerSettingsError.
 func LoadSettings(dir string) (Settings, error) {
-	s := Settings{SchemaVersion: 1, IgnoreSystemFiles: true}
+	s := Settings{SchemaVersion: SettingsSchemaVersion, IgnoreSystemFiles: true}
 	path := SettingsPath(dir)
 	b, err := os.ReadFile(path)
 	switch {
@@ -109,6 +211,9 @@ func LoadSettings(dir string) (Settings, error) {
 	default:
 		if err := json.Unmarshal(b, &s); err != nil {
 			return s, fmt.Errorf("parse %s: %w", path, err)
+		}
+		if s.SchemaVersion > SettingsSchemaVersion {
+			return s, &NewerSettingsError{Path: path, Version: s.SchemaVersion}
 		}
 	}
 	Normalise(&s)

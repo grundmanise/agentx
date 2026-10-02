@@ -57,7 +57,9 @@ Replace the settings in ~/.agentx/settings.json with those of my-laptop from ~/a
 
 Import writes your settings and nothing else. It creates no account repo, fetches nothing, installs nothing and places nothing.
 
-Your source list comes back with its pins, but no source is fetched. Before you install anything from a source, run the `agentx source add` line import prints for it. Import prints these lines even when the export lists no skills. For a pinned source the line is `agentx source add <url>#<pin>`; running `agentx source add <url>` alone would unpin the source.
+Your source list comes back with its pins and push URLs, but no source is fetched. Before you install anything from a source, run the `agentx source add` line import prints for it. Import prints these lines even when the export lists no skills. For a pinned source the line is `agentx source add <url>#<pin>`; running `agentx source add <url>` alone would unpin the source. A source you push to over another URL gets `--push-url <url>`, and your account remote gets an `agentx remote set <url>` line.
+
+Import leaves out whether you could write to each source. That depends on this machine's credentials, so agentx checks it again here.
 
 When the URL or the pin holds anything but letters, digits and `._/:@%+=,#-`, import puts it in single quotes, so the line runs as printed in a POSIX shell such as bash or zsh. The export file supplies both, and quoting keeps a `$`, `&` or quote in them from running as a command.
 
@@ -98,7 +100,7 @@ Import restores the settings and nothing else, so the sources it lists are not y
 |---|---|
 | 5 | The file is not there. |
 | 6 | The file is not an agentx export, is truncated, is larger than 8 MiB, is of a schema version this agentx does not read, carries a field it does not know, or holds settings it would not write. |
-| 6 | The settings hold something agentx never writes: a URL with a token in it, in either `url` or `alias`; a pin that is not a ref git accepts; a label with a control character in it or longer than 256 bytes; a source or a configuration listed twice; a list out of order. |
+| 6 | The settings hold something agentx never writes: a URL with a token in it, in `url`, `alias` or `push_url`; a push URL that names another repository; a pin or default branch that is not a ref git accepts; two account remotes; a label with a control character in it or longer than 256 bytes; a source or a configuration listed twice; a list out of order. |
 | 6 | You answered no, or there was no terminal to ask at and `--yes` was not given. |
 
 A refused import changes nothing: your settings stay exactly as they were.

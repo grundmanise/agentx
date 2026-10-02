@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"regexp"
@@ -244,10 +245,17 @@ func configurationID(id string) bool {
 	return len(id) <= configurationIDLimit && configurationIDPattern.MatchString(id)
 }
 
-// loadSettings reads the settings file, turning an unreadable file into exit 10.
+// loadSettings reads the settings file, turning an unreadable file, and
+// one a later agentx wrote, into exit 10.
 func (inv *invocation) loadSettings() (home.Settings, error) {
 	s, err := home.LoadSettings(inv.dirs.Home)
-	if err != nil {
+	var newer *home.NewerSettingsError
+	switch {
+	case errors.As(err, &newer):
+		// Deleting the file would lose what the later version keeps in it,
+		// so the hint does not offer it.
+		return s, fail(exitInternal, err.Error(), "upgrade agentx to the version that wrote it")
+	case err != nil:
 		return s, fail(exitInternal, err.Error(), "fix "+home.SettingsPath(inv.dirs.Home)+" or delete it to start from defaults")
 	}
 	return s, nil

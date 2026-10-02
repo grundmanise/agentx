@@ -119,7 +119,9 @@ func TestConfigSetAndGet(t *testing.T) {
 func TestConfigSetKeepsUnknownCollections(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	file := `{"schema_version":1,"disabled_configurations":["cursor"],"sources":[{"url":"https://example.com/skills"}],"copy_mode":{"my-skill":["cursor"]}}`
+	source := `{"url":"https://example.com/skills","layout":"fork","account":true,"push_url":"git@example.com:skills.git",` +
+		`"access":"writable","access_checked":"2026-10-02T10:00:00Z","default_branch":"main"}`
+	file := `{"schema_version":1,"disabled_configurations":["cursor"],"sources":[` + source + `],"copy_mode":{"my-skill":["cursor"]}}`
 	if err := os.WriteFile(filepath.Join(h.agentx, "settings.json"), []byte(file), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +134,11 @@ func TestConfigSetKeepsUnknownCollections(t *testing.T) {
 	if want := []any{"cursor"}; !reflect.DeepEqual(got["disabled_configurations"], want) {
 		t.Errorf("disabled_configurations = %#v, want %#v", got["disabled_configurations"], want)
 	}
-	if want := []any{map[string]any{"url": "https://example.com/skills"}}; !reflect.DeepEqual(got["sources"], want) {
+	var entry any
+	if err := json.Unmarshal([]byte(source), &entry); err != nil {
+		t.Fatal(err)
+	}
+	if want := []any{entry}; !reflect.DeepEqual(got["sources"], want) {
 		t.Errorf("sources = %#v, want %#v", got["sources"], want)
 	}
 	if want := map[string]any{"my-skill": []any{"cursor"}}; !reflect.DeepEqual(got["copy_mode"], want) {
@@ -141,9 +147,25 @@ func TestConfigSetKeepsUnknownCollections(t *testing.T) {
 
 	out = h.run("config", "list")
 	contains(t, "stdout", out.stdout, "disabled_configurations  cursor")
-	contains(t, "stdout", out.stdout, `sources                  [{"url":"https://example.com/skills"}]`)
+	contains(t, "stdout", out.stdout, `sources                  [`+source+`]`)
 	contains(t, "stdout", out.stdout, `copy_mode                {"my-skill":["cursor"]}`)
 	contains(t, "stdout", out.stdout, "ignore_system_files      true")
+}
+
+// TestSettingsOfALaterVersionAreRefused: a settings file a later agentx
+// wrote is not read, so it is not rewritten either, and the hint is to
+// upgrade rather than to delete what that version keeps there.
+func TestSettingsOfALaterVersionAreRefused(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	path := filepath.Join(h.agentx, "settings.json")
+	writeFile(t, path, `{"schema_version":2,"sources":[]}`)
+
+	out := h.run("config", "set", "label", "mine")
+	equal(t, "exit", out.exit, 10)
+	contains(t, "stderr", out.stderr, "is of settings schema version 2, and this agentx reads version 1")
+	contains(t, "stderr", out.stderr, "upgrade agentx")
+	equal(t, "the settings", readText(t, path), `{"schema_version":2,"sources":[]}`)
 }
 
 func TestConfigErrors(t *testing.T) {
