@@ -47,7 +47,7 @@ func TestServeAutoPushesAfterTheQuietPeriod(t *testing.T) {
 	time.Sleep(300 * time.Millisecond) // fifteen quiet periods with auto_push off
 	equal(t, "the remote's notes, auto_push off", remoteTip(), published)
 
-	h.mustRun("config", "set", "auto_push", "true")
+	h.mustRunBeside("config", "set", "auto_push", "true")
 	ev := p.nextOf("publish")
 	equal(t, "name", ev["name"], "notes")
 	equal(t, "outcome", ev["outcome"], publishPushed)
@@ -67,10 +67,10 @@ func TestServeAutoPushesAfterTheQuietPeriod(t *testing.T) {
 	// warning that names it.
 	theirs := h.accountGit("commit-tree", tip+"^{tree}", "-p", tip, "-m", "made on another machine")
 	h.accountGit("push", "--quiet", remote, theirs+":refs/heads/skills/notes")
-	h.mustRun("skill", "list", "--remote")
+	h.mustRunBeside("skill", "list", "--remote")
 	time.Sleep(100 * time.Millisecond) // five quiet periods behind the remote
 	equal(t, "warnings, behind", len(p.logged("warn", "auto-push: ")), 0)
-	h.mustRun("skill", "commit", "notes")
+	h.mustRunBeside("skill", "commit", "notes")
 	warned := p.awaitLogged("warn", "auto-push: ", 1)
 	equal(t, "the warning", warned[0], "auto-push: notes was not pushed, since the account remote holds commits it lacks; run 'agentx publish notes' to take them in and publish it")
 	equal(t, "the remote's notes, diverged", remoteTip(), theirs)
@@ -96,22 +96,42 @@ func TestServeAutoPushesAfterTheQuietPeriod(t *testing.T) {
 	before := draftsTip()
 	writeFile(t, filepath.Join(drafts, "one.md"), "first\n")
 	h.mustRun("skill", "commit", "drafts")
-	h.env["AGENTX_PUSH_QUIET"] = "750ms"
+	h.env["AGENTX_PUSH_QUIET"] = "2s"
 	started := time.Now()
 	p = h.serve(t, "--json")
 	p.next("snapshot")
 	writeFile(t, filepath.Join(drafts, "two.md"), "second\n")
-	h.mustRun("skill", "commit", "drafts")
+	h.mustRunBeside("skill", "commit", "drafts")
 	second := h.ref(lineage.ForkRef("drafts"))
 	equal(t, "the remote's drafts before the quiet period", draftsTip(), before)
 	ev = p.nextOf("publish")
 	// A lower bound, which a loaded machine cannot break: no tick before
 	// serve started can have seen either commit.
-	if waited := time.Since(started); waited < 750*time.Millisecond {
+	if waited := time.Since(started); waited < 2*time.Second {
 		t.Errorf("the push came %s after serve started, within the quiet period", waited)
 	}
 	equal(t, "the pushed fork", ev["name"], "drafts")
 	equal(t, "the commit pushed, the second", ev["commit"], second)
 	equal(t, "the remote's drafts", draftsTip(), second)
 	equal(t, "exit of the second serve", p.close(), 0)
+}
+
+// mustRunBeside is mustRun for a command run while serve runs: it runs it
+// again for as long as it finds the lock held, exit code 7, which it may
+// while the update check serve starts with holds the lock through its
+// fetch, as a user would retry it. Any other failure fails the test.
+func (h *harness) mustRunBeside(args ...string) outcome {
+	h.t.Helper()
+	deadline := time.Now().Add(serveDeadline)
+	for {
+		out := h.run(args...)
+		if out.exit == exitLocked.exit && time.Now().Before(deadline) {
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		if out.exit != 0 {
+			h.t.Fatalf("agentx %s: exit %d\n%s%s", strings.Join(args, " "), out.exit, out.stdout, out.stderr)
+		}
+		return out
+	}
 }
