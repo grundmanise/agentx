@@ -209,7 +209,7 @@ func TestServeReconcilesAtStart(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		settings.SetSource(home.Source{URL: account, Layout: home.LayoutFork, Account: true})
+		settings.SetSource(home.Source{URL: account, Account: true})
 		return home.SaveSettings(h.agentx, settings)
 	}); err != nil {
 		t.Fatal(err)

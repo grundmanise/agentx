@@ -527,7 +527,7 @@ func TestSourceListAndRemove(t *testing.T) {
 	equal(t, "0.commit", events[0]["commit"], bHead)
 	equal(t, "0.pin", events[0]["pin"], nil)
 	equal(t, "0.skills", events[0]["skills"], nil)
-	equal(t, "0.layout", events[0]["layout"], "tree")
+	equal(t, "0.layout", events[0]["layout"], nil) // no source event carries a layout
 	equal(t, "0.access", events[0]["access"], "writable")
 	equal(t, "0.default_branch", events[0]["default_branch"], "main")
 	equal(t, "0.access_reason", events[0]["access_reason"], nil) // only the run that checked says why
@@ -546,10 +546,10 @@ func TestSourceListAndRemove(t *testing.T) {
 	if len(lines) != 3 || lines[0] != "2 sources" {
 		t.Fatalf("source list printed:\n%s", out.stdout)
 	}
-	if got, want := strings.Fields(lines[1]), []string{b.url, "tree", "writable", "main", bHead[:7], bFetched, bID}; !reflect.DeepEqual(got, want) {
+	if got, want := strings.Fields(lines[1]), []string{b.url, "writable", "main", bHead[:7], bFetched, bID}; !reflect.DeepEqual(got, want) {
 		t.Errorf("row 1 = %q, want %q", got, want)
 	}
-	if got, want := strings.Fields(lines[2]), []string{a.url, "tree", "writable", "v1", v1[:7], aFetched, aID}; !reflect.DeepEqual(got, want) {
+	if got, want := strings.Fields(lines[2]), []string{a.url, "writable", "v1", v1[:7], aFetched, aID}; !reflect.DeepEqual(got, want) {
 		t.Errorf("row 2 = %q, want %q", got, want)
 	}
 	contains(t, "stdout", out.stdout, "  "+b.url+"  ")
@@ -722,17 +722,15 @@ func TestSourceAccessFollowsWhatTheSourceAnswers(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, ": 2 skills; you can write to it\n")
 	equal(t, "settings access at last", settingsEntry()["access"], "writable")
-	contains(t, "source list", h.run("source", "list").stdout, "  tree  writable  main  ")
+	contains(t, "source list", h.run("source", "list").stdout, "  writable  main  ")
 }
 
 // TestSourceAddRefusesBeforeWriting is every refusal source add gives
 // before it writes anything, on one home whose settings hold the account
-// remote: a tree source naming the fork source's repository, exit 6, which
-// source skills gives for the fork source too, and skill add of it; the
-// layout flags that cannot be met, exit 1, and a fork source other than
-// the account remote, exit 6; --layout tree of the fork source, exit 6;
-// and an account remote URL with a token or a ref, exit 1. None of them
-// creates the account repo.
+// remote: a shared source naming the account remote's repository, exit 6,
+// which source skills gives for the account remote too, and skill add of
+// it; and an account remote URL with a token or a ref, exit 1. None of
+// them creates the account repo.
 func TestSourceAddRefusesBeforeWriting(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -742,7 +740,7 @@ func TestSourceAddRefusesBeforeWriting(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		settings.SetSource(home.Source{URL: forks, Layout: home.LayoutFork, Account: true})
+		settings.SetSource(home.Source{URL: forks, Account: true})
 		return home.SaveSettings(h.agentx, settings)
 	})
 	if err != nil {
@@ -756,17 +754,13 @@ func TestSourceAddRefusesBeforeWriting(t *testing.T) {
 		message string
 		hint    string
 	}{
-		{"the fork source's repository", []string{"source", "add", "ssh://git@example.invalid/me/forks.git#main"}, 6,
-			"ssh://git@example.invalid/me/forks is the fork source " + forks + ": it holds one branch per fork", "agentx skill add --from-account <name>"},
-		{"a listing of the fork source", []string{"source", "skills", source.ID(forks)}, 6, forks + " is a fork source", "agentx skill list --remote"},
-		{"an install from the fork source", []string{"skill", "add", forks + "#skills/notes"}, 6, forks + " is a fork source", "agentx skill add --from-account <name>"},
-		{"a layout agentx does not know", []string{"source", "add", "acme/skills", "--layout", "flat"}, 1, `--layout takes tree or fork, not "flat"`, "--account"},
-		{"the account remote as a tree", []string{"source", "add", "acme/skills", "--account", "--layout", "tree"}, 1, "takes no --layout tree", "leave --layout out"},
-		{"a second fork source", []string{"source", "add", "acme/skills", "--layout", "fork"}, 6, "several fork sources come in a later version", "--account"},
-		{"the fork source as a tree", []string{"source", "add", forks, "--layout", "tree"}, 6, forks + " is a fork source, and a source keeps its layout", "agentx source remove " + forks},
+		{"the account remote's repository", []string{"source", "add", "ssh://git@example.invalid/me/forks.git#main"}, 6,
+			"ssh://git@example.invalid/me/forks names the repository of the account remote " + forks + ": it holds one branch per fork", "agentx skill add --from-account <name>"},
+		{"a listing of the account remote", []string{"source", "skills", source.ID(forks)}, 6, forks + " is the account remote", "agentx skill list --remote"},
+		{"an install from the account remote", []string{"skill", "add", forks + "#skills/notes"}, 6, forks + " is the account remote", "agentx skill add --from-account <name>"},
 		{"an account remote with a token", []string{"source", "add", "https://me:s3cret@example.invalid/me/other", "--account"}, 1, "the URL carries a password or a token", "credential helper"},
-		{"an account remote with a ref", []string{"source", "add", "https://example.invalid/me/other#main", "--account"}, 1, "names a folder or a ref, and a fork source is a whole repository", "the repository alone"},
-		{"the fork source again with a ref", []string{"source", "add", forks + "#skills/notes"}, 1, "names a folder or a ref", "the repository alone"},
+		{"an account remote with a ref", []string{"source", "add", "https://example.invalid/me/other#main", "--account"}, 1, "names a folder or a ref, and the account remote is a whole repository", "the repository alone"},
+		{"the account remote again with a ref", []string{"source", "add", forks + "#skills/notes"}, 1, "names a folder or a ref", "the repository alone"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out := h.run(append([]string{"--json"}, tc.args...)...)

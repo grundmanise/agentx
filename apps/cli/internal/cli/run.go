@@ -34,6 +34,7 @@ type invocation struct {
 	forkWalks    *lineage.WalkCache       // serve's fork lineages, by branch tip, shared by its goroutines; nil keeps none, see lineageRecords
 	forksWarned  bool                     // the forks to put back were warned of, or the command's own output names them; see listLineage
 	hosts        func(host string) string // the host names of the user's SSH configuration, read once per host; see sshHosts
+	unfetched    sync.Map                 // remote name -> URL of an account remote whose remote was just written over one never fetched whole; see fetchForks
 }
 
 // refs is what the mutation journal needs to apply and recover the lineage

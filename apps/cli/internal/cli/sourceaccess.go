@@ -21,7 +21,7 @@ type sourceCheck struct {
 }
 
 // checkSource asks the source of entry what this machine may do there (see
-// gitx.ProbeAccess) and, for an unpinned tree source, which branch its HEAD
+// gitx.ProbeAccess) and, for an unpinned shared source, which branch its HEAD
 // names, outside the lock, at its URL. The two run one after the other, so
 // that a run that checks in its fetch workers keeps to their bound. Neither
 // can fail the command: an answer that does not come is an unknown access
@@ -32,7 +32,7 @@ func (inv *invocation) checkSource(ctx context.Context, entry home.Source) sourc
 	if c.access.Access != home.AccessWritable {
 		inv.out.debugf("access to %s: %s: %s", entry.URL, c.access.Access, c.access.Reason)
 	}
-	if entry.Pin == "" && entry.Layout != home.LayoutFork && ctx.Err() == nil {
+	if entry.Pin == "" && !entry.Account && ctx.Err() == nil {
 		branch, err := inv.git.DefaultBranch(ctx, entry.URL)
 		switch {
 		case err != nil:
@@ -86,9 +86,9 @@ func (c sourceCheck) report(inv *invocation, url string) {
 }
 
 // entryEvent is the source event of a settings entry: everything the entry
-// records, layout and access by their reported names.
+// records, the access by its reported name.
 func entryEvent(entry home.Source) sourceEvent {
-	return sourceEvent{event: newEvent("source"), ID: source.ID(entry.URL), URL: entry.URL, Alias: entry.Alias, Layout: entry.LayoutName(),
+	return sourceEvent{event: newEvent("source"), ID: source.ID(entry.URL), URL: entry.URL, Alias: entry.Alias,
 		Account: entry.Account, Pin: entry.Pin, Access: entry.AccessName(), AccessChecked: entry.AccessChecked,
 		DefaultBranch: entry.DefaultBranch, LastFetched: entry.LastFetched}
 }

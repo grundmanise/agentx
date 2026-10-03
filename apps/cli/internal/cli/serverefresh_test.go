@@ -239,8 +239,8 @@ func TestServeWarnsOnceAboutASourceItCannotFetch(t *testing.T) {
 // source's ref writes, and the rescan that write sets off rebuilds the
 // source index, but the second source is no different from one rebuild to
 // the next: the index warns once that it has not been fetched, and the
-// checks warn once that they could not fetch it. A fork source, which is
-// never fetched as a tree, is warned about by neither.
+// checks warn once that they could not fetch it. The account remote, which is
+// never fetched as a shared source, is warned about by neither.
 func TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -253,7 +253,7 @@ func TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		settings.SetSource(home.Source{URL: "https://example.invalid/me/forks", Layout: home.LayoutFork, Account: true})
+		settings.SetSource(home.Source{URL: "https://example.invalid/me/forks", Account: true})
 		return home.SaveSettings(h.agentx, settings)
 	})
 	if err != nil {

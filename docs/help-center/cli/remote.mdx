@@ -5,7 +5,7 @@ description: "Publish your forks to a Git repository you own, and pull what your
 
 The account remote is a Git repository you own, such as a private repository on GitHub. Publish a fork to it from one machine, and pull it on another. Only forks travel: managed skills, update checks and sources stay on each machine.
 
-The account remote is a [source](/cli/source) of the fork layout: it holds one branch per fork, and `agentx source list` shows it with `(account)`. Create an empty repository on your Git host, then add it with [`agentx source add <url> --account`](/cli/source#add-your-account-remote). Detach it with `agentx source remove <url>`: your forks and their history stay, and nothing on the remote changes.
+The account remote is the [source](/cli/source) you add with `--account`: it holds one branch per fork, and `agentx source list` shows it with `(account)`. Create an empty repository on your Git host, then add it with [`agentx source add <url> --account`](/cli/source#add-your-account-remote). Detach it with `agentx source remove <url>`: your forks and their history stay, and nothing on the remote changes.
 
 A machine without a remote keeps the whole history of every fork, with commit and diff. Attach a remote when you want a backup, or a second machine.
 

@@ -119,7 +119,7 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 	add := false
 	switch {
 	case err == nil:
-		if entry.Layout == home.LayoutFork {
+		if entry.Account {
 			return forkSourceIs(entry.URL, entry)
 		}
 		if src.Ref != "" && src.Ref != entry.Pin {

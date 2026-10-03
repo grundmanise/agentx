@@ -54,15 +54,12 @@ The complete result of one scan of one machine. Replaced whole on every rescan, 
 ### Skill lifecycle
 
 **Source**:
-A git repository added by URL, with a layout and an access. The account remote is a source. A third-party repo is a source. Stored by its canonical URL, never with an embedded user or token.
+A git repository added by URL, with an access. The account remote is a source. A third-party repo is a source. Stored by its canonical URL, never with an embedded user or token.
 _Avoid_: registry, marketplace, catalog, remote
 
-**Source layout**:
-How a source holds skills. The tree layout holds skills in folders anywhere in the tree of one branch: reading it installs a managed copy. The fork layout holds one branch per fork, `skills/<name>`: reading it installs a fork, and writing to it is a publish. Declared when the source is added, never guessed, and kept until the source is removed.
-_Avoid_: kind, type, format
-
-**Fork source**:
-A source of the fork layout. This version keeps one, the account remote.
+**Shared source**:
+Any source but the account remote. It holds skills in folders on one branch and is fetched without blobs; installing one of its skills reads a managed copy. One repository is never both a shared source and the account remote.
+_Avoid_: tree source
 
 **Source alias**:
 A second URL for a source that moved, mapped to the canonical URL before any identity is derived.
@@ -123,7 +120,7 @@ _Avoid_: orphan, stray directory
 
 **Account remote**:
 The source whose settings entry carries the account flag, added with `agentx source add <url> --account`: the repository account repos push forks to and fetch them from. In the MVP it is a Git repository the user owns; later, hosted by agentx once the machine is signed in. Only fork branches travel through it.
-_Avoid_: cloud, server, origin
+_Avoid_: cloud, server, origin, fork source
 
 **Publish**:
 An explicit user action that pushes one fork's or greenfield skill's branch from the account repo to the account remote, after taking in, as a pull does, what another machine published there first. Another machine with the same remote installs it from there, and takes later versions in with a pull, a plain Git merge. Commits are explicit, made by the user with agentx or with git, and publishing pushes commits only.

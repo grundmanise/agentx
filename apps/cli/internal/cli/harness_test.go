@@ -578,3 +578,19 @@ func applySteps(t *testing.T, steps []journalStep, n int) {
 		}
 	}
 }
+
+// editSettings changes the settings of h's home as edit says, under the
+// lock of the home, as a command's write takes it.
+func editSettings(t *testing.T, h *harness, edit func(*home.Settings)) {
+	t.Helper()
+	if err := home.Mutate(h.agentx, nil, func() error {
+		s, err := home.LoadSettings(h.agentx)
+		if err != nil {
+			return err
+		}
+		edit(&s)
+		return home.SaveSettings(h.agentx, s)
+	}); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -117,7 +117,7 @@ func TestConfigSetAndGet(t *testing.T) {
 func TestConfigSetKeepsUnknownCollections(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	source := `{"url":"https://example.com/skills","layout":"fork","account":true,` +
+	source := `{"url":"https://example.com/skills","account":true,` +
 		`"access":"writable","access_checked":"2026-10-02T10:00:00Z","default_branch":"main"}`
 	// auto_push is what a settings file of an earlier agentx still carries:
 	// it is read past, not refused, and the next write drops it.

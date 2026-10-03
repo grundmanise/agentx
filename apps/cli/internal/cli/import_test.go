@@ -636,8 +636,7 @@ func TestValidSettingsCoversEveryFieldOfTheSettings(t *testing.T) {
 		"Settings.CopyMode":               "badCopyMode",
 		"Source.URL":                      "sourceRefusal, through badSourceURL",
 		"Source.Alias":                    "sourceRefusal, through badSourceURL",
-		"Source.Layout":                   "sourceRefusal: fork or absent",
-		"Source.Account":                  "sourceRefusal and sourcesRefusal: on a fork source, once",
+		"Source.Account":                  "sourcesRefusal: on one entry at most, no shared source of its repository",
 		"Source.Pin":                      "sourceRefusal, through source.ValidRef",
 		"Source.Access":                   "sourceRefusal: writable, read-only or absent; an import then forgets it",
 		"Source.AccessChecked":            "sourceRefusal, through fetchTime; an import then forgets it",
@@ -890,7 +889,7 @@ func TestImportWithNoSkillsStillNamesTheSourcesToAdd(t *testing.T) {
 		doc["settings"].(map[string]any)["sources"] = []any{
 			map[string]any{"url": "https://github.com/example/skills", "pin": "release",
 				"access": "writable", "access_checked": "2026-10-02T10:00:00Z", "default_branch": "main"},
-			map[string]any{"url": "https://github.com/me/forks", "layout": "fork", "account": true,
+			map[string]any{"url": "https://github.com/me/forks", "account": true,
 				"access": "read-only", "access_checked": "2026-10-02T10:00:00Z"},
 		}
 	})
@@ -912,7 +911,7 @@ func TestImportWithNoSkillsStillNamesTheSourcesToAdd(t *testing.T) {
 	}
 	want := []home.Source{
 		{URL: "https://github.com/example/skills", Pin: "release", DefaultBranch: "main"},
-		{URL: "https://github.com/me/forks", Layout: home.LayoutFork, Account: true},
+		{URL: "https://github.com/me/forks", Account: true},
 	}
 	if !reflect.DeepEqual(restored.Sources, want) {
 		t.Errorf("the imported sources are\n %+v\nwant\n %+v", restored.Sources, want)

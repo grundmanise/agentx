@@ -353,11 +353,12 @@ func (inv *invocation) sourceIndex(ctx context.Context, prev *source.Index) (idx
 		if err != nil {
 			return err
 		}
-		// A fork source holds forks rather than skills on one branch, and
-		// is never fetched as a tree, so it has nothing to search.
-		trees := treeSources(s.Sources)
-		urls := make([]string, 0, len(trees))
-		for _, src := range trees {
+		// The account remote holds forks rather than skills on one branch,
+		// and is never fetched as a shared source, so it has nothing to
+		// search.
+		shared := sharedSources(s.Sources)
+		urls := make([]string, 0, len(shared))
+		for _, src := range shared {
 			urls = append(urls, src.URL)
 		}
 		idx, warnings, err = source.BuildIndex(ctx, inv.git, gitx.AccountRepoPath(inv.dirs.Home), urls, prev)

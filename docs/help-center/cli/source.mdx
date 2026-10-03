@@ -5,7 +5,7 @@ description: "Add the git repositories you install skills from, fetch them again
 
 A source is a git repository that holds one or more skills. Add it by URL once; agentx fetches it into its own store and lists the skills inside, so you can pick what to install. [`agentx skill add`](/cli/skill) adds the source itself when you install from a URL you have not added yet.
 
-Every source has a layout. A source you install skills from has the **tree** layout: skills in folders on one branch. Your [account remote](/cli/remote), the repository you publish forks to, has the **fork** layout: one branch per fork.
+A source you install skills from holds skills in folders on one branch. Your [account remote](/cli/remote), the repository you publish forks to, is the one source you add with `--account`: it holds one branch per fork.
 
 ## Add a source
 
@@ -54,12 +54,10 @@ agentx source add git@github.com:you/forks.git --account
 - Give any URL Git reaches, as for any source. agentx records it in its canonical form, and reads the path of `user@host:path` from the server's root, so on a server of your own give the full path. GitHub and GitLab URLs work either way.
 - Give the repository alone: a `#<ref>`, a path or a token in the URL is refused with exit code 1. Keep credentials in a Git credential helper or an SSH key, as for any repository.
 - agentx reaches the repository first. One Git cannot reach is refused with exit code 3, and nothing changes.
-- `--account` gives the source the fork layout, so `--layout fork` is optional. `agentx source list` shows it with `(account)`.
+- `agentx source list` shows it with `(account)`.
 - Adding the account remote's URL again, with or without `--account`, fetches it again.
 - Adding another URL with `--account` replaces the account remote and forgets what the old one held. Your forks stay as they are, and publish to the new remote.
-- A source you installed skills from cannot become the account remote, nor can a source that names the same repository by another URL: agentx stops with exit code 6. Remove the source first with `agentx source remove <url>`.
-
-agentx keeps one fork source, the account remote: `--layout fork` without `--account` stops with exit code 6. A source keeps its layout, so `--layout tree` for the account remote stops with exit code 6 too. Remove it first with `agentx source remove <url>`, then add it again.
+- A source you added without `--account` cannot become the account remote, whether it has the same URL or names the same repository by another URL: agentx stops with exit code 6 and changes nothing. Remove the source first with `agentx source remove <url>`, then add the account remote.
 
 ### Credentials
 
@@ -167,12 +165,12 @@ agentx source list
 
 ```text
 3 sources
-  https://github.com/anthropics/skills       tree  unknown   main      3f2a9c1  2026-09-20T10:00:00Z  1c9d0b7e4a2f6d38
-  https://github.com/me/skills               tree  writable  v2        8b1e0f4  2026-09-19T18:30:00Z  7a3b5c9e1f2d4a60
-  ssh://git@github.com/you/forks (account)  fork  writable  skills/*  2 forks  2026-09-20T09:00:00Z  5e8a1c3b7d9f2a64
+  https://github.com/anthropics/skills      unknown   main      3f2a9c1  2026-09-20T10:00:00Z  1c9d0b7e4a2f6d38
+  https://github.com/me/skills              writable  v2        8b1e0f4  2026-09-19T18:30:00Z  7a3b5c9e1f2d4a60
+  ssh://git@github.com/you/forks (account)  writable  skills/*  2 forks  2026-09-20T09:00:00Z  5e8a1c3b7d9f2a64
 ```
 
-Each row shows the canonical URL, the layout, your write access as the last add or fetch found it, the branch, the fetched commit, when it was last fetched and the source id. The branch is the pin, or for an unpinned source the default branch the repository named at the last add or fetch, or `(unpinned)` while agentx has not seen one. Your account remote is marked `(account)`: it follows every fork branch, `skills/*`, and shows how many forks it held at the last fetch instead of a commit. The id is accepted wherever a URL is.
+Each row shows the canonical URL, your write access as the last add or fetch found it, the branch, the fetched commit, when it was last fetched and the source id. The branch is the pin, or for an unpinned source the default branch the repository named at the last add or fetch, or `(unpinned)` while agentx has not seen one. Your account remote is marked `(account)`: it follows every fork branch, `skills/*`, and shows how many forks it held at the last fetch instead of a commit. The id is accepted wherever a URL is.
 
 ## List the skills of a source
 
@@ -233,10 +231,10 @@ Removing your [account remote](#add-your-account-remote) detaches it: its forks 
 
 ## Exit codes
 
-- `1`: the URL is not one of the accepted forms, the pin and the tree URL name different refs, `--layout` is not `tree` or `fork`, `--account` comes with `--layout tree`, the account remote's URL carries a token, a ref or a path, or `source fetch` was given neither a source nor `--all`.
+- `1`: the URL is not one of the accepted forms, the pin and the tree URL name different refs, the account remote's URL carries a token, a ref or a path, or `source fetch` was given neither a source nor `--all`.
 - `3`: the source cannot be reached, is not a git repository, or needs credentials git does not have. The hint names the fix. From `source fetch` over several sources, it also means they failed for different reasons; read the warnings.
 - `5`: the pinned ref or the path does not exist in the source, the source is not on this machine, or what this machine holds of it is incomplete. For an id of a source you removed, the hint names the `agentx source add` command that brings it back.
-- `6`: the URL names the repository of your account remote, a fork source: list its forks with `agentx skill list --remote` and install one with `agentx skill add --from-account <name>`. Also: `--layout fork` without `--account`, `--layout tree` for the account remote, and `--account` for a source you installed skills from or one that names the same repository by another URL.
+- `6`: the URL names the repository of your account remote: list its forks with `agentx skill list --remote` and install one with `agentx skill add --from-account <name>`. Also: `--account` for the URL of a source you added without it, or of one that names the same repository by another URL.
 - `7`: another agentx command is running. Retry when it finishes. An add that could not take its own half-done work back says what it left and how to clear it.
 - `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.
 

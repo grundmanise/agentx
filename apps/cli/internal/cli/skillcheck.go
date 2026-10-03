@@ -305,7 +305,7 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool) (checkRep
 		// repo that source add has not created yet, and each source is the
 		// failure a fetch of it gives there, which the serve child warns
 		// about once. Nothing is fetched or written, and no git is run.
-		for _, entry := range treeSources(s.Sources) {
+		for _, entry := range sharedSources(s.Sources) {
 			t := target(entry)
 			res := source.Result{Source: t.src, Err: source.NotFetched(t.src.URL)}
 			rep.failures = append(rep.failures, checkFailure{source: entry.URL, fetch: true, f: fetchRefused(res)})
@@ -318,7 +318,7 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool) (checkRep
 	}
 	bySource := inv.checkable(records, s)
 	var targets []fetchTarget
-	for _, entry := range treeSources(s.Sources) {
+	for _, entry := range sharedSources(s.Sources) {
 		if serving || len(bySource[entry.URL]) > 0 {
 			targets = append(targets, target(entry))
 		}

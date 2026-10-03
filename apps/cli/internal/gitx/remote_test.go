@@ -108,3 +108,46 @@ func TestUnsetRemoteTakesOutOnlyTheRemoteItNames(t *testing.T) {
 		t.Errorf("remote-tracking branches after unsetting %s = %q, want only %s's", gone, refs, kept)
 	}
 }
+
+// TestProbeRemoteSaysWhetherForksAreHeld: the probe reports a repository
+// holding a skills/* branch as holding forks and one with only other
+// branches as not. addAccount asks git for a refetch on that answer alone,
+// and a refetch of a repository with no fork branch waits for good.
+func TestProbeRemoteSaysWhetherForksAreHeld(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	ctx := context.Background()
+	r := New(map[string]string{"PATH": os.Getenv("PATH"), "HOME": t.TempDir()}, false, func(string, ...any) {})
+	for _, tc := range []struct {
+		branch string
+		forks  bool
+	}{
+		{"skills/x", true},
+		{"main", false},
+	} {
+		gitDir := filepath.Join(t.TempDir(), "remote.git")
+		if _, err := r.Isolated(ctx, gitDir, "init", "--bare", "--quiet", gitDir); err != nil {
+			t.Fatal(err)
+		}
+		empty, err := r.Isolated(ctx, gitDir, "hash-object", "-t", "tree", "-w", "--stdin")
+		if err != nil {
+			t.Fatal(err)
+		}
+		commit, err := r.IsolatedAt(ctx, gitDir, "1700000000 +0000", "commit-tree", empty, "-m", "one")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := r.Isolated(ctx, gitDir, "update-ref", "refs/heads/"+tc.branch, commit); err != nil {
+			t.Fatal(err)
+		}
+		forks, err := r.ProbeRemote(ctx, "file://"+gitDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if forks != tc.forks {
+			t.Errorf("ProbeRemote of a repository with only %s = %v, want %v", tc.branch, forks, tc.forks)
+		}
+	}
+}

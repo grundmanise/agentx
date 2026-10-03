@@ -89,7 +89,7 @@ func (r *Runner) UnsetTracking(ctx context.Context, gitDir, branch string) error
 // branches go first: one stopped part way leaves the remote set, which a
 // second unset takes out in turn, never branches of a remote no longer set.
 func (r *Runner) UnsetRemote(ctx context.Context, gitDir, remote string) error {
-	if err := r.DropRemoteRefs(ctx, gitDir, remote); err != nil {
+	if err := r.dropRemoteRefs(ctx, gitDir, remote); err != nil {
 		return err
 	}
 	out, _, err := r.IsolatedStatus(ctx, gitDir, 1, "config", "-z", "--get-regexp", `^(remote\.`+regexp.QuoteMeta(remote)+`|branch\.skills/.*)\.`)
@@ -120,10 +120,10 @@ func (r *Runner) UnsetRemote(ctx context.Context, gitDir, remote string) error {
 	return nil
 }
 
-// DropRemoteRefs deletes every remote-tracking ref of the remote called
+// dropRemoteRefs deletes every remote-tracking ref of the remote called
 // remote, in one transaction: what a fetch of a remote no longer set, or of
 // another URL, wrote says nothing about the remote set now.
-func (r *Runner) DropRemoteRefs(ctx context.Context, gitDir, remote string) error {
+func (r *Runner) dropRemoteRefs(ctx context.Context, gitDir, remote string) error {
 	out, err := r.Isolated(ctx, gitDir, "for-each-ref", "--format=%(refname)", TrackingPrefix(remote))
 	if err != nil || strings.TrimSpace(out) == "" {
 		return err
@@ -150,13 +150,13 @@ func networkConfig() []string { return []string{"-c", "core.hooksPath=" + os.Dev
 
 // ProbeRemote asks the repository at url which fork branches it holds, in
 // the user's environment, so that a URL git cannot reach, or a repository
-// it cannot read, is found before anything records it. It reads no
-// repository of agentx's, and runs where no repository is, so that no
-// configuration but the user's applies.
-func (r *Runner) ProbeRemote(ctx context.Context, url string) error {
+// it cannot read, is found before anything records it, and reports whether
+// it holds any. It reads no repository of agentx's, and runs where no
+// repository is, so that no configuration but the user's applies.
+func (r *Runner) ProbeRemote(ctx context.Context, url string) (forks bool, err error) {
 	args := append(networkConfig(), "ls-remote", "--heads", url, "refs/heads/skills/*")
-	_, err := r.run(ctx, call{dir: os.TempDir()}, args...)
-	return err
+	out, err := r.run(ctx, call{dir: os.TempDir()}, args...)
+	return strings.TrimSpace(out) != "", err
 }
 
 // FetchRemote fetches the fork branches of the remote called remote into
@@ -169,9 +169,13 @@ func (r *Runner) ProbeRemote(ctx context.Context, url string) error {
 // environment merges every remote.<name>.fetch their configuration holds,
 // a global one meant for their projects included. refetch fetches every
 // object the fork branches reach again, as a fresh clone would, telling
-// the remote of nothing this repository holds: for a repository that was
-// once fetched without blobs, whose commits would otherwise let the remote
-// leave out blobs the account repo never received.
+// the remote of nothing this repository holds. Only the first fetch of an
+// account remote on this machine asks for it: a shared source of the same
+// repository, removed before, may have left commits fetched without their
+// blobs, which would otherwise let the remote leave out blobs the account
+// repo never received. A refetch with no fork branch to fetch waits on the
+// remote for good, git asking for nothing and still waiting for a pack, so
+// it is asked for only when the remote was just seen holding one.
 func (r *Runner) FetchRemote(ctx context.Context, gitDir, remote string, refetch bool) error {
 	args := append(networkConfig(), "--git-dir="+gitDir,
 		"fetch", "--quiet", "--no-tags", "--no-write-fetch-head", "--prune", "--recurse-submodules=no", "--refmap=")

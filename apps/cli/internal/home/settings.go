@@ -24,8 +24,8 @@ type Settings struct {
 }
 
 // Source is one entry of the sources list: a source by its canonical URL,
-// how its repository is laid out, what git lets this machine do there, the
-// ref it is pinned to and when it was last fetched. A source is fetched
+// whether it is the account remote, what git lets this machine do there,
+// the ref it is pinned to and when it was last fetched. A source is fetched
 // from and pushed to at its canonical URL.
 //
 // Alias is a second URL of the one repository the canonical URL names:
@@ -34,25 +34,13 @@ type Settings struct {
 type Source struct {
 	URL           string `json:"url"`
 	Alias         string `json:"alias,omitempty"`
-	Layout        string `json:"layout,omitempty"`  // LayoutFork, or absent for the tree layout
-	Account       bool   `json:"account,omitempty"` // the account remote: forks publish to it by default
+	Account       bool   `json:"account,omitempty"` // the account remote, which holds one branch per fork and is fetched whole; every other source is shared
 	Pin           string `json:"pin,omitempty"`
 	Access        string `json:"access,omitempty"`         // AccessWritable or AccessReadOnly, absent while unknown
 	AccessChecked string `json:"access_checked,omitempty"` // RFC 3339, when access was last checked, whatever the answer
 	DefaultBranch string `json:"default_branch,omitempty"` // the branch the remote's HEAD named at the last look; shown, never followed
 	LastFetched   string `json:"last_fetched,omitempty"`   // RFC 3339
 }
-
-// The layouts of a source. A source of the tree layout keeps skills in
-// folders anywhere in the tree of one branch, and reading it installs a
-// managed copy; one of the fork layout keeps one branch per fork, named
-// skills/<name>, and reading it installs a fork. An entry stores only
-// LayoutFork: an entry without a layout is of the tree layout, which is
-// every entry written before layouts existed.
-const (
-	LayoutTree = "tree"
-	LayoutFork = "fork"
-)
 
 // The access of a source: what git lets this machine do there. Writable
 // means a push was accepted, or would have been; read-only means git
@@ -64,15 +52,6 @@ const (
 	AccessReadOnly = "read-only"
 	AccessUnknown  = "unknown"
 )
-
-// LayoutName is the entry's layout as it is reported: the tree layout
-// when the entry names none.
-func (s Source) LayoutName() string {
-	if s.Layout == "" {
-		return LayoutTree
-	}
-	return s.Layout
-}
 
 // AccessName is the entry's access as it is reported: unknown when the
 // entry records none.
@@ -90,14 +69,11 @@ func (s Source) AccessName() string {
 // source's memory and is kept unless the add set it. The access is kept
 // or replaced as a pair with the time of its check, so that an add whose
 // check could not decide records that it looked and does not bring back
-// an answer it no longer has; the layout and the account flag go together
-// the same way. A field an add means to clear, it clears after the merge.
+// an answer it no longer has. The account flag is the add's own: source
+// add --account sets it, and only the account remote is added that way.
 func (s Source) Merge(prev Source) Source {
 	if s.Alias == "" {
 		s.Alias = prev.Alias
-	}
-	if s.Layout == "" {
-		s.Layout, s.Account = prev.Layout, prev.Account
 	}
 	if s.AccessChecked == "" && s.Access == "" {
 		s.Access, s.AccessChecked = prev.Access, prev.AccessChecked

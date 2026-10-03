@@ -133,14 +133,14 @@ type Remote struct {
 	Filter   string
 }
 
-// RemoteOf is the remote the settings entry of a source wants, by its
-// layout. Every source is fetched from and pushed to at its canonical URL,
-// so that git applies the user's own url.<base>.insteadOf and pushInsteadOf
-// to it. A tree source is fetched without blobs onto its staging ref. A
-// fork source is fetched whole, every fork branch onto its remote-tracking
+// RemoteOf is the remote the settings entry of a source wants. Every
+// source is fetched from and pushed to at its canonical URL, so that git
+// applies the user's own url.<base>.insteadOf and pushInsteadOf to it. A
+// shared source is fetched without blobs onto its staging ref. The account
+// remote is fetched whole, every fork branch onto its remote-tracking
 // branch.
 func RemoteOf(entry home.Source) Remote {
-	if entry.Layout == home.LayoutFork {
+	if entry.Account {
 		return Remote{URL: entry.URL, Refspec: gitx.ForkRefspec(RemoteName(ID(entry.URL)))}
 	}
 	return Remote{
@@ -153,8 +153,8 @@ func RemoteOf(entry home.Source) Remote {
 
 // Configure writes the remote of the source entry names into the account
 // repo, the one RemoteOf describes, with no tags. A key the remote must
-// not have is unset, so that a remote another layout configured comes out
-// as the entry wants it. It is safe to repeat and updates an existing
+// not have is unset, so that a remote written for another kind of source
+// comes out as the entry wants it. It is safe to repeat and updates an existing
 // remote. Callers hold the lock, since git config fails rather than waits
 // for its own lock file.
 func Configure(ctx context.Context, r *gitx.Runner, gitDir string, entry home.Source) error {

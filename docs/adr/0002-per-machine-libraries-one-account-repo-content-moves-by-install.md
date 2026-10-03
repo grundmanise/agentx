@@ -27,3 +27,5 @@ The per-account remote this record names is, since [ADR 0008](0008-sources-have-
 
 _Amendment, 2026-10-03:_ `skill revert` is removed. Where the text above names a revert, a machine with no account keeps its forks' full history, commits and diffs.
 
+_Amendment, 2026-10-03:_ sources have no layout. The account remote is the source whose settings entry carries the account flag, see [ADR 0008](0008-sources-have-a-layout-and-an-access-only-the-account-remote-is-pushed-automatically.md).
+

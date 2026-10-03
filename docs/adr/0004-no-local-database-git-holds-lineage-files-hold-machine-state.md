@@ -69,3 +69,5 @@ Two rows of the table change with [ADR 0008](0008-sources-have-a-layout-and-an-a
 
 _Amendment, 2026-10-03:_ the settings entry of a source carries no push URL. A source is pushed to at its URL, see [ADR 0008](0008-sources-have-a-layout-and-an-access-only-the-account-remote-is-pushed-automatically.md).
 
+_Amendment, 2026-10-03:_ the settings entry of a source carries no layout. The account remote is the source whose entry carries the account flag, fetched whole; every other source is fetched blobless, see [ADR 0008](0008-sources-have-a-layout-and-an-access-only-the-account-remote-is-pushed-automatically.md).
+
