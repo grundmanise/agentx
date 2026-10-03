@@ -62,8 +62,9 @@ func (inv *invocation) removeFork(ctx context.Context, name string, remote bool)
 }
 
 // judgeForkRemoval runs every refusal of a fork's removal before anything
-// changes: a merge pending for the fork, exit code 4, and with remote no
-// account remote, exit code 6, an account remote git cannot reach, exit
+// changes: a merge pending for the fork, exit code 4, and with remote a
+// skill here that is no fork, see notOfTheAccountRemote, and no account
+// remote, both exit code 6, an account remote git cannot reach, exit
 // code 3, a name that is no fork here or there, and an account remote
 // whose branch of the name is another fork, by its fork id, exit code 6,
 // which a removal of this fork must not delete. That last refusal's hint
@@ -102,9 +103,9 @@ func (inv *invocation) judgeForkRemoval(ctx context.Context, name string, remote
 		return r, nil
 	}
 	if r.tip == "" {
-		if _, inLibrary := librarySkill(inv.dirs.Library, name); inLibrary || values[lineage.ManagedRef(name)] != "" {
-			return nil, fail(exitRefused, sanitised(name)+" is not a fork, and only a fork has a branch on the account remote",
-				"remove it from this machine with '"+skillCommand("remove", name)+"'")
+		managed := values[lineage.ManagedRef(name)]
+		if _, inLibrary := librarySkill(inv.dirs.Library, name); inLibrary || managed != "" {
+			return nil, inv.notOfTheAccountRemote(ctx, gitDir, name, managed)
 		}
 	}
 	var entry home.Source
@@ -139,6 +140,27 @@ func (inv *invocation) judgeForkRemoval(ctx context.Context, name string, remote
 		}
 	}
 	return r, nil
+}
+
+// notOfTheAccountRemote refuses --remote for a skill this machine holds
+// that is not one of the account remote's, exit code 6, before the account
+// remote is looked up or fetched: a managed skill of a shared source, whose
+// branch's tip is managed, which agentx never deletes anything from, named
+// by the source that commit records, or an unmanaged skill, managed empty,
+// which has no source at all. A tip whose message git cannot read or that
+// records no source is still refused, naming no source.
+func (inv *invocation) notOfTheAccountRemote(ctx context.Context, gitDir, name, managed string) error {
+	alone := "remove it from this machine with '" + skillCommand("remove", name) + "'"
+	if managed == "" {
+		return fail(exitRefused, sanitised(name)+" has no source, so there is nothing to delete remotely", alone)
+	}
+	from := "a source other than the account remote"
+	if message, err := inv.git.Isolated(ctx, gitDir, "log", "-1", "--format=%B", managed); err == nil {
+		if imported, err := lineage.Parse(message); err == nil && imported.Source != "" {
+			from = shownURL(imported.Source)
+		}
+	}
+	return fail(exitRefused, sanitised(name)+" comes from "+from+", and agentx deletes skills only from the account remote", alone)
 }
 
 // runForkRemoval removes the fork here, when this machine has one, then,

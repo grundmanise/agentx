@@ -26,10 +26,12 @@ import (
 // there, exit 3, and run again it deletes that branch alone, as it does
 // alpha's; asked again, neither holds it, exit 5. b still has both forks,
 // worktrees and all, after a pull, and its removal of one drops the
-// tracking configuration its install from the account wrote.
+// tracking configuration its install from the account wrote. --remote of
+// a skill of a shared source, or of one with no source, is refused, exit 6,
+// before the account remote is fetched.
 func TestSkillRemoveOfAFork(t *testing.T) {
 	t.Parallel()
-	a, b, _, remote := twoHomes(t)
+	a, b, s, remote := twoHomes(t)
 	root := filepath.Join(a.agentx, "worktrees", "alpha")
 	lib := filepath.Join(a.library, "alpha")
 	claude := filepath.Join(a.home, ".claude", "skills", "alpha")
@@ -142,6 +144,21 @@ func TestSkillRemoveOfAFork(t *testing.T) {
 	if tracking := b.accountGit("config", "--get-regexp", `^branch\.`); strings.Contains(tracking, "skills/alpha") || !strings.Contains(tracking, "skills/beta") {
 		t.Errorf("b's tracking after alpha's removal:\n%s", tracking)
 	}
+
+	// --remote deletes only from the account remote: a skill of a shared
+	// source and one with no source are refused before it is fetched.
+	b.mustRun("skill", "add", s.url, "--name", "alpha")
+	writeFile(t, mkdirs(t, filepath.Join(b.library, "mine"), "SKILL.md"), skill("mine", "My own"))
+	refused := func(name string) string {
+		out := b.run("--json", "skill", "remove", name, "--remote")
+		equal(t, name+" --remote: exit", out.exit, 6)
+		equal(t, name+" --remote: progress", len(b.eventsOfType(out.stdout, "progress")), 0)
+		message, _ := b.one(out.stdout, "error")["message"].(string)
+		return message
+	}
+	equal(t, "alpha --remote: message", refused("alpha"), "alpha comes from "+s.url+", and agentx deletes skills only from the account remote")
+	contains(t, "mine --remote: message", refused("mine"), "mine has no source")
+	equal(t, "b's alpha, kept", b.ref(lineage.ManagedRef("alpha")) != "", true)
 }
 
 // TestSkillRemoveOfAForkRecoversWhereItWasKilled kills a fork's removal
