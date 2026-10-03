@@ -253,8 +253,8 @@ func TestFromAccountRefusesAndKeepsLocal(t *testing.T) {
 	}
 	mine := forkNotes("seven", "seven, mine")
 	writeFile(t, filepath.Join(betaLib, "notes.md"), mine)
-	// An update merge pending comes first: neither --keep-local nor a
-	// revert gets past it.
+	// An update merge pending comes first: --keep-local does not get past
+	// it.
 	s.skill("skills/beta", "beta", "The second skill", map[string]string{"notes.md": forkNotes("seven", "seven, upstream")})
 	s.commit("second version")
 	b.mustRun("skill", "check")

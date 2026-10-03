@@ -242,9 +242,7 @@ func TestScenarioSameVersionMergesClean(t *testing.T) {
 // does not take a's line back to the version's text: it conflicts, a's
 // put-back line in the conflict and a's side whole in the checkout, and b's
 // worktree and branch stay as they were. Resolved with a's line kept, the
-// next pull completes the merge. Then a reverts alpha to the commit it was
-// forked as, and b, which committed nothing since, takes that by a
-// fast-forward.
+// next pull completes the merge.
 //
 // Over the same two merge bases, an edit is enough, and not only to the
 // version's lines: in beta, a edits again a line of the fork's own that
@@ -285,20 +283,6 @@ func TestScenarioARevertIsNeverUndone(t *testing.T) {
 	equal(t, "the completion", b.one(out.stdout, "pull")["outcome"], pullMerged)
 	equal(t, "the merge's parents", b.parents(b.ref(lineage.ForkRef("alpha"))), mine+"\n"+theirs)
 	equal(t, "b's notes", fileBody(t, filepath.Join(b.forkDir("alpha", "alpha"), "notes.md")), forkNotes("four", "four, b", "seven", "seven, v2"))
-
-	b.mustRun("publish", "alpha")
-	a.mustRun("pull", "alpha")
-	// The commit alpha was forked as is the oldest with one parent along
-	// its first parents, the import of the first version being the root.
-	created, _, _ := strings.Cut(a.accountGit("rev-list", "--first-parent", "--min-parents=1", "--max-parents=1", "--reverse", lineage.ForkRef("alpha")), "\n")
-	a.mustRun("skill", "revert", "alpha", "--to", created)
-	reverted := a.ref(lineage.ForkRef("alpha"))
-	a.mustRun("publish", "alpha")
-	out = b.mustRun("--json", "pull", "alpha")
-	equal(t, "the pull of the revert", b.one(out.stdout, "pull")["outcome"], pullFastForward)
-	equal(t, "b's alpha", b.ref(lineage.ForkRef("alpha")), reverted)
-	equal(t, "b's notes, as forked", fileBody(t, filepath.Join(b.forkDir("alpha", "alpha"), "notes.md")), forkNotes())
-	equal(t, "b's status", worktreeStatus(b, "alpha"), "")
 
 	mine, theirs = b.ref(lineage.ForkRef("beta")), a.ref(lineage.ForkRef("beta"))
 	out = b.run("--json", "pull", "beta")

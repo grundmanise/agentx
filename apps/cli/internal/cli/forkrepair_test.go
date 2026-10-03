@@ -39,7 +39,7 @@ func forkLinked(t *testing.T, lib, skillDir string) {
 // place refuses to lay it out until the merge is over. A worktree whose
 // registration was removed by hand, holding an edit, is in the way: skill
 // place refuses it, naming --force, which adopts it in place with the edit
-// left uncommitted, and skill revert then discards the edit. A library
+// left uncommitted, and git checkout then discards the edit. A library
 // directory is not adopted over a skill directory holding a file git
 // ignores, which would go with it.
 func TestSkillPlaceRepairsAFork(t *testing.T) {
@@ -99,7 +99,7 @@ func TestSkillPlaceRepairsAFork(t *testing.T) {
 	equal(t, "exit", out.exit, 6)
 	e := h.one(out.stdout, "error")
 	equal(t, "message", e["message"], root+" is in the way of notes's worktree, so nothing was placed")
-	equal(t, "hint", e["hint"], "run 'agentx skill place notes --force' to adopt it: its content becomes uncommitted edits of the fork, which 'agentx skill revert notes' discards")
+	equal(t, "hint", e["hint"], "run 'agentx skill place notes --force' to adopt it: its content becomes uncommitted edits of the fork")
 
 	ignore := filepath.Join(root, ".gitignore")
 	out = h.run("--json", "skill", "place", "notes", "--force")
@@ -115,9 +115,9 @@ func TestSkillPlaceRepairsAFork(t *testing.T) {
 	contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), "; adopted "+root+" as notes's worktree; its content is uncommitted edits of the fork")
 	cleanAfterPlace(t, h, filepath.Dir(root), h.library)
 
-	h.mustRun("skill", "revert", "notes")
-	equal(t, "git status once reverted", gitIn(t, h, root, "status", "--porcelain"), "")
-	equal(t, "state once reverted", h.listed("notes")["state"], stateCurrent)
+	gitIn(t, h, root, "checkout", "--", "notes")
+	equal(t, "git status once checked out", gitIn(t, h, root, "status", "--porcelain"), "")
+	equal(t, "state once checked out", h.listed("notes")["state"], stateCurrent)
 
 	// A file git ignores is the user's, but a .DS_Store Finder left is not.
 	writeFile(t, filepath.Join(skillDir, ".DS_Store"), "finder\n")

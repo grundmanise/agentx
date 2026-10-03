@@ -28,8 +28,8 @@ import (
 // git that reaches the remote runs in the user's own environment, where
 // their credential helpers, SSH keys and URL rewrites apply, but with no
 // hook of theirs, see gitx.FetchRemote. A fork repository is fetched whole,
-// never without blobs: its forks' history is what pull, publish and revert
-// read.
+// never without blobs: its forks' history is what pull, publish and
+// history read.
 //
 // An earlier agentx kept the account remote as the account repo's remote
 // origin and nowhere else. A command that changes something moves such a

@@ -13,7 +13,7 @@ import (
 // every rule it applies to a work tree, the directory's own .gitignore and
 // .gitattributes files, the repository's info/exclude and the user's
 // global ignore file, and writes nothing to the directory or to any index
-// but this one. A skill directory is compared, diffed and reverted this
+// but this one. A skill directory is compared, diffed and updated this
 // way against the account repo.
 type WorkTree struct {
 	r            *Runner

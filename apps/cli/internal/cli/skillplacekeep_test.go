@@ -847,9 +847,10 @@ func TestSkillPlaceRefusesAPlaceInsideAnother(t *testing.T) {
 // and it may lead into, through or above what skill place removes. Rather
 // than follow it, every run that removes a displaced directory refuses
 // while the library directory holds a symlink at any depth, with or
-// without --force, names the link, points at diff and revert, and changes
-// nothing. A run that only writes placements, a missing one or a copy
-// where the library's symlink stands, removes no directory and goes ahead.
+// without --force, names the link, points at diff and at adding the skill
+// again, and changes nothing. A run that only writes placements, a missing
+// one or a copy where the library's symlink stands, removes no directory
+// and goes ahead.
 // Where else the link may be and lead is judged in TestPlacePlanRefusals.
 func TestSkillPlaceRefusesALibraryDirectoryHoldingASymlink(t *testing.T) {
 	t.Parallel()
@@ -861,7 +862,7 @@ func TestSkillPlaceRefusesALibraryDirectoryHoldingASymlink(t *testing.T) {
 		swapForLink(t, scripts, filepath.Join(claude, "scripts"))
 		refusesUntouched(t, h, everyFlag,
 			"the library directory "+lib+" holds the symlink "+scripts+", which no version agentx installs holds, so nothing was placed",
-			"replace the link with the files it leads to, or see what changed with 'agentx skill diff alpha' and go back to the installed version with 'agentx skill revert alpha', then run 'agentx skill place alpha' again")
+			"replace the link with the files it leads to, or see what changed with 'agentx skill diff alpha' and get the original back by removing the skill and adding it again, then run 'agentx skill place alpha' again")
 		cleanAfterPlace(t, h, h.library, filepath.Dir(claude))
 	})
 

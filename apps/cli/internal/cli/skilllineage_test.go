@@ -28,8 +28,8 @@ var nastySubpaths = []struct {
 // then list as managed with no source, no subpath, no upstream commit and
 // no state, or with a subpath naming another directory of the same source,
 // and nothing said so: the import commit exists to be the base version
-// every later update, revert and fork merge works from, and one no reader
-// accepts leaves a skill that can never be updated or reverted again.
+// every later update and fork merge works from, and one no reader accepts
+// leaves a skill that can never be updated again.
 //
 // The refusal costs only its own skill, as every other refusal of an
 // install does, and names the directory as it is: the space around a name

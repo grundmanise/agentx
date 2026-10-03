@@ -7,7 +7,7 @@ The account remote is a Git repository you own, such as a private repository on 
 
 The account remote is a [source](/cli/source) of the fork layout: it holds one branch per fork, and `agentx source list` shows it with `(account)`. The `agentx remote` commands are other names for source commands: `remote set <url>` is `agentx source add <url> --account`, and `remote unset` is `agentx source remove` of the account remote.
 
-A machine without a remote keeps the whole history of every fork, with commit, diff and revert. Attach a remote when you want a backup, or a second machine.
+A machine without a remote keeps the whole history of every fork, with commit and diff. Attach a remote when you want a backup, or a second machine.
 
 ## Attach a remote
 
@@ -97,7 +97,7 @@ agentx skill add --from-account release-notes
 
 - **A managed copy of the same upstream, unedited**: the fork takes its place. Its placements stay as they are: symlinks now lead to the fork, and a copy keeps the managed version until `agentx skill place <name>` refreshes it. Files Git ignores in it, such as a `.DS_Store`, move into the fork.
 - **A managed skill with an update merge pending**: agentx stops with exit code 4. Finish the merge, or give it up with `agentx skill update <name> --abort`, then install again.
-- **A managed copy with your edits, or any other folder**: agentx stops with exit code 6 and changes nothing. Pass `--keep-local` to move the folder into the fork as it is: its whole content replaces the fork's as uncommitted edits, and files Git ignores stay with it. A folder older than the fork's latest commits then shows those commits undone, so check the edits with `agentx skill diff <name>` first. Then keep the edits with [`agentx skill commit`](/cli/fork#commit-your-edits), or drop them with [`agentx skill revert`](/cli/fork#undo-edits).
+- **A managed copy with your edits, or any other folder**: agentx stops with exit code 6 and changes nothing. Pass `--keep-local` to move the folder into the fork as it is: its whole content replaces the fork's as uncommitted edits, and files Git ignores stay with it. A folder older than the fork's latest commits then shows those commits undone, so check the edits with `agentx skill diff <name>` first. Then keep the edits with [`agentx skill commit`](/cli/fork#commit-your-edits).
 - **A symlink**: agentx stops with exit code 6, even with `--keep-local`. Remove the link, then install again.
 
 ## Pull what another machine published

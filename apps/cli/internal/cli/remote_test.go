@@ -213,7 +213,7 @@ func TestPullFastForwardsMergesAndConflicts(t *testing.T) {
 // TestPublishMergesFirstAndNamesUncommittedForks publishes from machine b
 // while machine a published alpha first. With an uncommitted edit, b's
 // publish of alpha would have to merge a's commit, and is refused, exit 6,
-// nothing pushed, the refusal saying so once. Once the edit is reverted,
+// nothing pushed, the refusal saying so once. Once the edit is undone,
 // the publish merges a's commit first, as a pull does, and pushes the
 // merge; beta, committed on b and not named, stays unpushed. A publish
 // with nothing to take in pushes alpha's commits even though alpha holds
@@ -234,6 +234,7 @@ func TestPublishMergesFirstAndNamesUncommittedForks(t *testing.T) {
 	betaBefore := remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/beta")
 	b.commitFork("beta", forkNotes("two", "two, b"))
 
+	committed := readText(t, filepath.Join(alphaB, "SKILL.md"))
 	writeFile(t, filepath.Join(alphaB, "SKILL.md"), "uncommitted\n")
 	out := b.run("--json", "publish", "alpha")
 	equal(t, "exit", out.exit, 6)
@@ -243,7 +244,7 @@ func TestPublishMergesFirstAndNamesUncommittedForks(t *testing.T) {
 	}
 	equal(t, "the remote's alpha", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/alpha"), theirs)
 
-	b.mustRun("skill", "revert", "alpha")
+	writeFile(t, filepath.Join(alphaB, "SKILL.md"), committed)
 	out = b.mustRun("--json", "publish", "alpha")
 	merged := b.ref(lineage.ForkRef("alpha"))
 	equal(t, "the merge's parents", b.parents(merged), mine+"\n"+theirs)

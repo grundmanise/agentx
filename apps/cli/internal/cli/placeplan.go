@@ -327,7 +327,7 @@ func (plan placePlan) overlap() error {
 	}
 	if link != "" {
 		return fail(exitRefused, fmt.Sprintf("the library directory %s holds the symlink %s, which no version agentx installs holds, so nothing was placed", quotedPath(plan.lib.Path), quotedPath(link)),
-			"replace the link with the files it leads to, or see what changed with '"+skillCommand("diff", plan.lib.Name)+"' and go back to the installed version with '"+skillCommand("revert", plan.lib.Name)+"', then "+again)
+			"replace the link with the files it leads to, or see what changed with '"+skillCommand("diff", plan.lib.Name)+"' and get the original back by removing the skill and adding it again, then "+again)
 	}
 	return nil
 }

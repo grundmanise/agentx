@@ -59,7 +59,7 @@ func newPullCommand(inv *invocation) *cobra.Command {
 			"fork's branch otherwise. A merge that conflicts waits in a Git worktree under\n" +
 			"agentx home, as an update's does, and the fork stays as it is until you resolve it\n" +
 			"with git and pull again, or give it up with 'agentx skill update <name> --abort'.\n" +
-			"Commit or revert a fork's uncommitted edits before it can take anything in. One\n" +
+			"Commit a fork's uncommitted edits before it can take anything in. One\n" +
 			"fork that cannot be pulled does not stop the others.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

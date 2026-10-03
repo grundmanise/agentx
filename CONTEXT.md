@@ -83,7 +83,7 @@ The specific place a skill was installed or forked from: a source, a subpath ins
 _Avoid_: origin, parent, remote
 
 **Managed skill**:
-A skill whose upstream and base version agentx knows, so it can be updated and reverted. Its base version is the import commit on its import branch.
+A skill whose upstream and base version agentx knows, so it can be updated. Its base version is the import commit on its import branch.
 
 **Upstream-removed skill**:
 A managed skill whose subpath no longer holds a skill in its source, as the last update check found it: no directory there, or one without a SKILL.md. Kept as it is, never updated, shown with this state until a check finds it in the source again.
@@ -94,7 +94,7 @@ A skill whose source is gone from this machine. For a managed skill, the canonic
 _Avoid_: orphaned, detached
 
 **Unmanaged skill**:
-A skill found on disk whose upstream agentx cannot determine. Inventoried, never updated or reverted.
+A skill found on disk whose upstream agentx cannot determine. Inventoried, never updated.
 
 **Fork**:
 A skill derived from an upstream skill and edited by the user, keeping the upstream name unless renamed. A fork supersedes the skill it was forked from in the agent configuration; a fork under a new name sits beside the skill it came from instead. Managed, unmanaged and plugin-owned skills and forks can all be forked with `agentx skill fork`. Renaming a fork with `agentx skill rename` makes a new fork under the new name, with a fork id of its own and the old one's history, and removes the old one; nothing records the rename. Its lineage record keeps the third-party upstream so later upstream versions can be merged in. Lives in the account repo; local until published.
@@ -123,10 +123,6 @@ _Avoid_: overwrite, take over
 **Adopt candidate**:
 Something of the user's where a fork placed on this machine belongs: a directory at the fork's worktree that Git does not register, or a directory or a symlink of the user's at its library entry. Reported and left as it is; `skill place --force` adopts it, every file kept as an uncommitted edit of the fork.
 _Avoid_: orphan, stray directory
-
-**Unfork**:
-Retiring a fork in favour of an upstream version: the fork's branch is archived and the library gets a managed skill again. Reserved for a later version; `agentx skill unfork` is refused.
-_Avoid_: delete fork, downgrade
 
 **Account remote**:
 The one fork source marked as the account remote: the repository account repos push forks to and fetch them from. In the MVP it is a Git repository the user owns, attached with `agentx remote set` or `agentx source add --account`; later, hosted by agentx once the machine is signed in. Only fork branches travel through it.
@@ -157,11 +153,11 @@ Applying a managed skill's update candidate, only ever at the user's request: th
 _Avoid_: upgrade, pull, sync
 
 **Pending merge**:
-The merge an update of a modified skill or a fork leaves when the edits and the update candidate conflict, or a pull of a fork when its commits and the account remote's conflict: an ordinary Git merge in progress in a Git worktree of the account repo under agentx home, resolved with Git. The library directory, or a fork's worktree and branch, and so every agent, keeps its content until the next update, or pull, applies the resolved merge, or the merge is given up with `skill update --abort`. While it exists the skill is not reverted or removed. Survives restarts.
+The merge an update of a modified skill or a fork leaves when the edits and the update candidate conflict, or a pull of a fork when its commits and the account remote's conflict: an ordinary Git merge in progress in a Git worktree of the account repo under agentx home, resolved with Git. The library directory, or a fork's worktree and branch, and so every agent, keeps its content until the next update, or pull, applies the resolved merge, or the merge is given up with `skill update --abort`. While it exists the skill is not removed. Survives restarts.
 _Avoid_: merge ref, conflict state
 
 **Modified skill**:
-A managed skill or a fork whose on-disk content differs from what it is compared with: a managed skill's base version, a fork's branch tip. It was edited outside agentx, by hand or by any other tool. Decided as git decides for a work tree: git records the directory over an index loaded from that version, and the skill is modified when the tree it writes differs from the version's, so a changed file mode or symlink counts as an edit and a file git ignores does not. For a fork that is what git status in its worktree says of the skill directory. Shown as drift, local to one machine, never synced. A managed skill can be reverted, updated by merging its edits with the update, or converted to a fork. A fork stays modified until its edits are committed or reverted, and a command that would move its branch refuses until then.
+A managed skill or a fork whose on-disk content differs from what it is compared with: a managed skill's base version, a fork's branch tip. It was edited outside agentx, by hand or by any other tool. Decided as git decides for a work tree: git records the directory over an index loaded from that version, and the skill is modified when the tree it writes differs from the version's, so a changed file mode or symlink counts as an edit and a file git ignores does not. For a fork that is what git status in its worktree says of the skill directory. Shown as drift, local to one machine, never synced. A managed skill can be updated by merging its edits with the update, or converted to a fork. A fork stays modified until its edits are committed, and a command that would move its branch refuses until then.
 _Avoid_: dirty, drifted, changed
 
 **Lineage record**:

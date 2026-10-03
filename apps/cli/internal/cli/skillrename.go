@@ -157,23 +157,6 @@ func renameFinish(old, newName, finish string, remote bool, err error) string {
 	return "run '" + finish + "' to finish the rename"
 }
 
-func newSkillUnforkCommand(inv *invocation) *cobra.Command {
-	return &cobra.Command{
-		Use:    "unfork <name>",
-		Short:  "Reserved for a later version",
-		Hidden: true,
-		Args:   cobra.ArbitraryArgs,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			name := "<name>"
-			if len(args) > 0 {
-				name = args[0]
-			}
-			return fail(exitRefused, "skill unfork is reserved for a later version",
-				"remove the fork with '"+skillCommand("remove", name)+"' and install the upstream again with 'agentx skill add'")
-		},
-	}
-}
-
 // isAncestor is whether the commit a is b or one b's history holds, as
 // git merge-base --is-ancestor says.
 func (inv *invocation) isAncestor(ctx context.Context, gitDir, a, b string) (bool, error) {

@@ -36,12 +36,11 @@ func (inv *invocation) accountRecord(ctx context.Context, name string) (string, 
 // its branch and ok whether it has one, each for its own reason: an
 // unmanaged skill has none, a fork's is decided by its own history, which
 // is not this command's, and a branch whose trailers agentx cannot read
-// records none it can trust. what says what the command would have done
-// with the base: "compare with", "revert to".
-func managedRefusal(name, what string, rec lineage.Record, ok bool) error {
+// records none it can trust.
+func managedRefusal(name string, rec lineage.Record, ok bool) error {
 	switch {
 	case !ok:
-		return fail(exitRefused, fmt.Sprintf("%s is not managed by agentx, so it has no base version to %s", name, what),
+		return fail(exitRefused, name+" is not managed by agentx, so it has no base version to compare with",
 			"run 'agentx skill list' to see which skills are managed")
 	case rec.Kind == lineage.KindFork:
 		return fail(exitRefused, name+" is a fork on this machine",
@@ -56,15 +55,14 @@ func managedRefusal(name, what string, rec lineage.Record, ok bool) error {
 // notAForkRefusal refuses a flag that names one of a fork's commits, given
 // for the skill called name, which has no commits of its own: a managed
 // skill, ok being whether the account repo holds its branch, whose one
-// version is its base, or an unmanaged one. what says what the flag would
-// have done with the commit: "compare with", "revert to"; and verb is the
-// command that works on the base instead.
-func notAForkRefusal(name, what, verb string, ok bool) error {
+// version is its base, which skill diff compares with instead, or an
+// unmanaged one.
+func notAForkRefusal(name string, ok bool) error {
 	if ok {
-		return fail(exitRefused, sanitised(name)+" is managed, not a fork, so it has no commit of its own to "+what,
-			"run '"+skillCommand(verb, name)+"' to "+what+" its base version")
+		return fail(exitRefused, sanitised(name)+" is managed, not a fork, so it has no commit of its own to compare with",
+			"run '"+skillCommand("diff", name)+"' to compare with its base version")
 	}
-	return fail(exitRefused, sanitised(name)+" is not a fork, so it has no commit to "+what,
+	return fail(exitRefused, sanitised(name)+" is not a fork, so it has no commit to compare with",
 		"fork it first with '"+skillCommand("fork", name)+"'")
 }
 

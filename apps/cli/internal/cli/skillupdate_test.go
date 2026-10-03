@@ -587,6 +587,108 @@ func TestSkillUpdateAllRefreshesEachSkillsCopies(t *testing.T) {
 		"  beta   "+moved+"  1 copy placement refreshed, 1 placement skipped\n")
 }
 
+// TestSkillUpdateSkipsACopyItCannotRead: a copy placement this machine
+// cannot read whole can be judged neither unchanged nor edited, so the
+// update leaves it as it is, counts it as skipped and names it with the
+// cause, and the update of the library and of the other copy still lands.
+func TestSkillUpdateSkipsACopyItCannotRead(t *testing.T) {
+	t.Parallel()
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a directory whatever its mode")
+	}
+	h, s, _ := updateHarness(t)
+	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
+	newVersion(t, s)
+	want := secondTree(t, s)
+	h.mustRun("skill", "check")
+	scripts := filepath.Join(cursor, "scripts")
+	chmod(t, scripts, 0)
+	t.Cleanup(func() { _ = os.Chmod(scripts, 0o755) }) // so the temporary home can be removed
+
+	out := h.run("--json", "skill", "update", "alpha")
+	chmod(t, scripts, 0o755)
+	if out.exit != 0 {
+		t.Fatalf("update: exit %d\n%s", out.exit, out.stderr)
+	}
+	sameTree(t, "the library directory", libraryTree(t, filepath.Join(h.library, "alpha")), want)
+	warned := warnings(h, out.stderr)
+	if len(warned) != 1 || !strings.HasPrefix(warned[0], "cannot refresh "+cursor+": ") || !strings.HasSuffix(warned[0], "; the copy was left as it is") {
+		t.Errorf("the warnings = %q, want one that cannot refresh %s", warned, cursor)
+	}
+	contains(t, "the result", h.one(out.stdout, "result")["summary"].(string), ", 1 copy placement refreshed, 1 placement skipped")
+	equal(t, "journals", journalCount(t, h), 0)
+	equal(t, "what is left beside the copy", strings.Join(hiddenEntries(t, filepath.Dir(cursor)), " "), "")
+}
+
+// TestSkillUpdateRefreshesACopyTwoConfigurationsShareOnce updates a skill
+// one of whose copies two configurations reach. Zencoder and Zenflow both
+// read ~/.zencoder/skills, and copy_mode records a copy for each; Cursor's
+// skills directory made a symlink to Claude Code's makes their two copies
+// one directory spelled two ways. The one copy is judged and planned once:
+// planned twice, the second removal would find the first one's copy there
+// and stop the update part way. Holding the version replaced, it is
+// refreshed once and counted for both configurations; edited where it is,
+// it is kept byte for byte with one warning and one skip.
+func TestSkillUpdateRefreshesACopyTwoConfigurationsShareOnce(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name, refreshed string
+		linked, edited  bool
+	}{
+		{"shared by zencoder and zenflow", ", 4 copy placements refreshed", false, false},
+		{"shared and edited where it is", ", 2 copy placements refreshed, 1 placement skipped", false, true},
+		{"reached through a linked skills directory", ", 2 copy placements refreshed", true, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			h, s, _ := updateHarness(t)
+			claude := filepath.Join(h.home, ".claude", "skills")
+			shared := filepath.Join(h.home, ".zencoder", "skills")
+			if c.linked {
+				shared = claude
+				cursor := filepath.Join(h.home, ".cursor", "skills")
+				remove(t, cursor)
+				link(t, claude, cursor)
+			} else {
+				if err := os.MkdirAll(filepath.Join(h.home, ".zencoder"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				h.mustRun("skill", "place", "alpha", "--to", "zencoder", "--to", "zenflow", "--copy")
+			}
+			place := filepath.Join(shared, "alpha")
+			if c.edited {
+				editCopy(t, place)
+			}
+			before := libraryTree(t, place)
+			newVersion(t, s)
+			want := secondTree(t, s)
+			h.mustRun("skill", "check")
+
+			out := h.run("--json", "skill", "update", "alpha")
+			if out.exit != 0 {
+				t.Fatalf("update: exit %d\n%s", out.exit, out.stderr)
+			}
+			summary := h.one(out.stdout, "result")["summary"].(string)
+			if !strings.HasSuffix(summary, c.refreshed) {
+				t.Errorf("the result = %q, want it to end %q", summary, c.refreshed)
+			}
+			warned := warnings(h, out.stderr)
+			if c.edited {
+				sameTree(t, "the shared copy", libraryTree(t, place), before)
+				equal(t, "warnings", len(warned), 1)
+				contains(t, "the warning", strings.Join(warned, "\n"), "zencoder's copy of alpha is different from the library")
+			} else {
+				sameTree(t, "the shared copy", libraryTree(t, place), want)
+				equal(t, "warnings", strings.Join(warned, "\n"), "")
+			}
+			for _, dir := range []string{h.library, shared} {
+				equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
+			}
+			equal(t, "journals", journalCount(t, h), 0)
+		})
+	}
+}
+
 // TestSkillUpdateUsage: a name and --all are the two forms, and one of them
 // is needed.
 func TestSkillUpdateUsage(t *testing.T) {
@@ -752,8 +854,7 @@ func TestSkillUpdateRefusesInOrder(t *testing.T) {
 				},
 				{
 					// What the link leads to is not judged: an edit there is
-					// no reason to send the user to a revert, which refuses
-					// the link too, nor is what git cannot record.
+					// no reason to refuse, nor is what git cannot record.
 					name: "a skill whose library entry is a symlink to an edited directory", skill: "alpha", exit: 6,
 					setup: func(t *testing.T, h *harness, _ *sourceRepo) {
 						lib := filepath.Join(h.library, "alpha")
@@ -1544,10 +1645,9 @@ func TestSkillUpdateKeepsItsCandidateWhenTheLibraryChangesMidway(t *testing.T) {
 // branch already holds the new version and the candidate ref still names
 // it, which is no update: skill list shows the skill modified against the
 // new version with no update available, skill diff --update knows of no
-// update, skill update says the skill is up to date rather than sending
-// the user to a revert that would discard the edit, and update --all has
-// nothing to do. The next check deletes the leftover ref and announces
-// nothing.
+// update, skill update says the skill is up to date rather than
+// discarding the edit, and update --all has nothing to do. The next check
+// deletes the leftover ref and announces nothing.
 func TestSkillUpdateWhoseJournalWasMovedAsideOffersNoUpdate(t *testing.T) {
 	t.Parallel()
 	h, _, candidate, notes := editedMidway(t)

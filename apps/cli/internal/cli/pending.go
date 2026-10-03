@@ -289,8 +289,8 @@ func (inv *invocation) leaveCheckout(path string) {
 
 // reenterReplaced notes the process's working directory when it is the
 // directory at path or one in it, and returns what moves the process back
-// there, by path, once a mutation replaced the directory, as a revert or an
-// update replaces a skill's directory. The replacement leaves the process
+// there, by path, once a mutation replaced the directory, as an update
+// replaces a skill's directory. The replacement leaves the process
 // in the directory it displaced, which the mutation removes once it is
 // complete, and every git started after that would inherit a working
 // directory that is gone. The working directory is judged on its real

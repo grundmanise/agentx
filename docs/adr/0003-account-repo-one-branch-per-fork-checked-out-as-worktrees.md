@@ -48,3 +48,5 @@ The account remote is a source of the fork layout, see [ADR 0008](0008-sources-h
 ## Amendment, 2026-10-03
 
 Auto-push is removed: it is no longer a setting, and serve pushes nothing. Every push to the account remote is an explicit publish, see [ADR 0008](0008-sources-have-a-layout-and-an-access-only-the-account-remote-is-pushed-automatically.md).
+
+`skill revert` is removed, for managed skills and forks alike, and `skill unfork` is no longer reserved. Where the text above names a revert, a machine with no account keeps its forks' full history, commits and diffs; to get a managed skill's original back the user removes it and adds it again.

@@ -594,7 +594,7 @@ func TestSkillUpdateConflictsOfEveryKind(t *testing.T) {
 }
 
 // TestAPendingMergeBlocksWhatWouldReplaceOrRemoveTheSkill: while a merge
-// is pending, a revert and a removal of the whole skill, with no --from
+// is pending, a removal of the whole skill, with no --from
 // or with --from universal, exit 4 with the hint that gives the merge up,
 // and change nothing; so does the removal of what is left of the skill
 // once its library directory is gone, while a removal of it from one
@@ -613,7 +613,6 @@ func TestAPendingMergeBlocksWhatWouldReplaceOrRemoveTheSkill(t *testing.T) {
 		args []string
 		what string
 	}{
-		{[]string{"skill", "revert", "alpha"}, "reverted"},
 		{[]string{"skill", "remove", "alpha"}, "removed"},
 		{[]string{"skill", "remove", "alpha", "--from", "universal"}, "removed"},
 	} {

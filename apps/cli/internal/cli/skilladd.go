@@ -634,7 +634,7 @@ func (inv *invocation) importable(v *imported, taken map[string]string, src sour
 	// records it on one line of a trailer, and one the reader would refuse
 	// or read back as another directory would be written all the same and
 	// found out only on the next listing, by which time the skill is
-	// installed and has no lineage left to update or revert it by. It is
+	// installed and has no lineage left to update it by. It is
 	// checked before the entries under it, so that a refusal of one of
 	// those names a directory it can print as it is.
 	if !lineage.ValidPath(v.skill.Subpath) {

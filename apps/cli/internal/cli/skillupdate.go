@@ -36,7 +36,7 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 			"version replaced is refreshed; a copy edited on its own is kept and named.\n\n" +
 			"A fork's update is always merged, with the upstream version it was last forked or\n" +
 			"updated from as the merge base, so its own commits are kept, and the merge is\n" +
-			"committed on its branch. Commit or revert its uncommitted edits first. A conflict\n" +
+			"committed on its branch. Commit its uncommitted edits first. A conflict\n" +
 			"waits as for a managed skill, and the fork's worktree and branch stay as they are\n" +
 			"until it is applied. With an account remote set, what your other machines\n" +
 			"published of the fork is taken in first, as 'agentx pull' takes it in, as a\n" +
@@ -454,8 +454,8 @@ func (r *updateRun) selection(name string, records map[string]lineage.Record) ([
 // found its source no longer holds, which is kept as it is and never
 // updated; and, having found an update for it, a skill whose library
 // entry is a symlink, whatever it leads to, and one that holds something
-// git cannot record, which the update would discard with no record of it
-// and which a revert refuses too. A skill with no update is neither: u
+// git cannot record, which the update would discard with no record of
+// it. A skill with no update is neither: u
 // and f are then both nil. A skill edited since it was installed is no
 // refusal: its update merges the edits, and u says so. A skill with a
 // merge pending is judged by its checkout, see judgePending, and its
@@ -510,8 +510,7 @@ func (inv *invocation) judgeUpdate(ctx context.Context, gitDir, name string, rec
 	// A library entry that is a symlink leads to a directory of the user's.
 	// The update replaces the entry itself, so it would drop the link and
 	// leave the directory it led to as it was, whatever that holds: the
-	// link is what is refused, before what it leads to is judged, since a
-	// revert of an edit there refuses the link too.
+	// link is what is refused, before what it leads to is judged.
 	if target, isLink := home.LinkTarget(captured); isLink {
 		return nil, refuse(exitRefused, fmt.Sprintf("%s is a symlink to %s; an update replaces the library directory and would drop the link without touching the files it leads to", quotedPath(libPath), quotedPath(target)),
 			"replace the link with the directory it points to, then "+again)
@@ -521,7 +520,7 @@ func (inv *invocation) judgeUpdate(ctx context.Context, gitDir, name string, rec
 		return nil, failureOf(err)
 	}
 	if len(tree.Unrecordable) > 0 {
-		return nil, unrecordableRefusal(name, libPath, tree.Unrecordable, "an update", "update")
+		return nil, unrecordableAt(name, libPath, tree.Unrecordable, "an update", skillCommand("update", name))
 	}
 	j, err := inv.judgeDir(ctx, gitDir, lib.ResolvedPath, tree, v, true)
 	if err != nil {
@@ -1090,4 +1089,19 @@ func (r *updateRun) skippedNote(out *writer) (plain, painted string) {
 		painted += ", " + out.paint(warnStyle, note)
 	}
 	return plain, painted
+}
+
+// unrecordableAt refuses to replace the directory of the skill called
+// name, at libPath, while it holds paths git cannot record, a repository
+// nested in it say, relative to the directory: what replaces the directory
+// would discard them with no record of them anywhere. what is the
+// replacement in words, "an update" say, and again the command line to
+// run again once they are moved out.
+func unrecordableAt(name, libPath string, unrecordable []string, what, again string) *failure {
+	paths := make([]string, len(unrecordable))
+	for i, p := range unrecordable {
+		paths[i] = quotedPath(filepath.Join(libPath, filepath.FromSlash(p)))
+	}
+	return refuse(exitRefused, fmt.Sprintf("%s holds %s, which git cannot record", name, strings.Join(paths, ", ")),
+		what+" would discard it with no record of it anywhere; move it out of the skill, then run '"+again+"' again")
 }

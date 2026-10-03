@@ -366,7 +366,7 @@ func TestForkGuardsRefuseUncommittedEdits(t *testing.T) {
 		t.Errorf("a fork holding only an ignored file: %v", err)
 	}
 	writeFile(t, filepath.Join(f.skillDir, "notes.md"), "notes\n")
-	refused("an edit", guard(true), exitRefused, "notes has uncommitted edits, so it cannot be merged until they are committed or reverted")
+	refused("an edit", guard(true), exitRefused, "notes has uncommitted edits, so it cannot be merged until they are committed")
 	if err := guard(false); err != nil {
 		t.Errorf("a command that does not move the branch: %v", err)
 	}
@@ -387,7 +387,7 @@ func TestForkGuardsRefuseUncommittedEdits(t *testing.T) {
 	equal(t, "the ignored files under the lock", strings.Join(now.ignored, " "), ".DS_Store Thumbs.db")
 	writeFile(t, filepath.Join(f.skillDir, "SKILL.md"), skill("notes", "Edited meanwhile"))
 	_, err = inv.forkGuards(ctx, f, now, "merged", true)
-	refused("an edit made after the judgement", err, exitRefused, "notes has uncommitted edits, so it cannot be merged until they are committed or reverted")
+	refused("an edit made after the judgement", err, exitRefused, "notes has uncommitted edits, so it cannot be merged until they are committed")
 	if err := os.MkdirAll(filepath.Join(h.agentx, "merges", "notes"), 0o755); err != nil {
 		t.Fatal(err)
 	}

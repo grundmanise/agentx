@@ -31,10 +31,8 @@ func (c forkCommit) version() version {
 // commit itself and its tree at the fork's skill directory. A name that is
 // no commit, or several, is exit code 6, and so is a commit that holds no
 // skill directory under the fork's directory name, which the fork's
-// content cannot be compared with. inHistory asks for one more rule, that
-// the commit be the tip or one of its ancestors, which a revert keeps to:
-// putting a fork back to an earlier commit is putting it back to its own.
-func (inv *invocation) resolveForkCommit(ctx context.Context, f forkSite, arg string, inHistory bool) (forkCommit, error) {
+// content cannot be compared with.
+func (inv *invocation) resolveForkCommit(ctx context.Context, f forkSite, arg string) (forkCommit, error) {
 	unknown := fail(exitRefused, "the account repo holds no commit "+sanitised(arg),
 		"name a commit by its id, as '"+skillCommand("history", f.name)+"' lists them")
 	if strings.ContainsAny(arg, "\r\n\x00") {
@@ -64,16 +62,6 @@ func (inv *invocation) resolveForkCommit(ctx context.Context, f forkSite, arg st
 			"name a commit of "+sanitised(f.name)+"'s history, as '"+skillCommand("history", f.name)+"' lists them")
 	}
 	c.sub = sub
-	if inHistory && c.id != f.rec.Commit {
-		_, status, err := inv.git.IsolatedStatus(ctx, f.gitDir, 1, "merge-base", "--is-ancestor", c.id, f.rec.Commit)
-		switch {
-		case err != nil:
-			return forkCommit{}, accountRepoFailure(err)
-		case status != 0:
-			return forkCommit{}, fail(exitRefused, short(c.id)+" is not in the history of "+sanitised(f.name),
-				"name one of the commits '"+skillCommand("history", f.name)+"' lists")
-		}
-	}
 	return c, nil
 }
 
@@ -106,7 +94,7 @@ func (inv *invocation) forkDiff(ctx context.Context, gitDir string, rec lineage.
 	}
 	v, against := f.version(), "its last commit "+short(rec.Commit)
 	if commit != "" {
-		c, err := inv.resolveForkCommit(ctx, f, commit, false)
+		c, err := inv.resolveForkCommit(ctx, f, commit)
 		if err != nil {
 			return err
 		}

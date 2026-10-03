@@ -13,7 +13,7 @@ import (
 
 // forkWriter writes every commit agentx makes on a fork's branch: the
 // creation commit of a fork or a greenfield skill, an explicit commit of a
-// fork's edits, a revert to an earlier commit and a merge. There is no
+// fork's edits and a merge. There is no
 // other writer, so every such commit carries the same identity, the same
 // trailers and the same environment. A commit is written when a command is
 // asked to write it, never on a timer, and none is ever amended: a commit

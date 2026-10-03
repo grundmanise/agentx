@@ -32,3 +32,4 @@ The settings entry of a source gains `layout`, `account`, `push_url`, `access`, 
 ## Amendment (2026-10-03, MVP)
 
 - Auto-push is removed. Nothing is pushed automatically, to the account remote or to any other source: every push is an explicit publish. The title's "the only one pushed to automatically" and the sentences above that say the account remote is pushed to without an explicit command are superseded; the auto_push setting, the serve tick that pushed and `AGENTX_PUSH_QUIET` are gone.
+- `skill revert` is removed. Where the text above names a revert among what reads a fork's history, that history is read by pull, publish, `skill diff` and `skill history`.

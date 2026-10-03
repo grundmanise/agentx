@@ -126,25 +126,6 @@ func TestAGitattributesConversionApplies(t *testing.T) {
 	equal(t, "state with the conversion", h.listed("pdf")["state"], stateCurrent)
 }
 
-// TestRevertKeepsIgnoredFiles: a revert puts back what the skill's files
-// were and keeps the files git ignores, a .DS_Store and a directory the
-// skill's .gitignore names.
-func TestRevertKeepsIgnoredFiles(t *testing.T) {
-	t.Parallel()
-	h := ignoreHarness(t)
-	web := filepath.Join(h.library, "web")
-	want := libraryTree(t, web)
-	writeFile(t, mkdirs(t, filepath.Join(web, "node_modules", "pkg"), "index.js"), "module.exports = 1\n")
-	writeFile(t, filepath.Join(web, ".DS_Store"), "finder\n")
-	writeFile(t, filepath.Join(web, "a.md"), "an edit\n")
-	writeFile(t, filepath.Join(web, "new.md"), "a file of my own\n")
-
-	h.mustRun("skill", "revert", "web")
-	want["node_modules/pkg/index.js"], want[".DS_Store"] = "module.exports = 1\n", "finder\n"
-	sameTree(t, "the library directory", libraryTree(t, web), want)
-	equal(t, "state", h.listed("web")["state"], stateCurrent)
-}
-
 // TestAdoptionIgnoresASystemFile: a directory adopted at the version it
 // holds is not modified for a .DS_Store beside it, as skill list says
 // afterwards.

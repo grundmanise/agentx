@@ -391,7 +391,7 @@ func (inv *invocation) forkLayout(ctx context.Context, gitDir, commit, dir strin
 // tipLaying is what a command that moves a fork's branch to a new tip lays
 // out in the fork's worktree, see layTipJournal.
 type tipLaying struct {
-	commit string // the commit the branch moves to; the tip itself holds it there
+	commit string // the commit the branch moves to
 	laid   version
 	lay    func(dest string) error
 	now    siteJudged // the skill directory as it was judged under the lock
@@ -405,9 +405,9 @@ type tipLaying struct {
 
 // layTipJournal starts the one journal of a command, under the lock, that
 // moves the branch of the fork at f to t.commit and lays that commit's
-// skill directory out in the worktree: a ref step, which moves the branch
-// or holds it at its tip, so that recovery puts back the version the
-// branch still names and no other; the removal of the skill directory,
+// skill directory out in the worktree: a ref step, which moves the
+// branch, so that recovery puts back the version the branch names and no
+// other; the removal of the skill directory,
 // retained in the worktrees directory until the mutation is verified; the
 // publish of the new content, staged beside the worktree with the files
 // git ignores in the directory and t.kept carried in, but for a path the

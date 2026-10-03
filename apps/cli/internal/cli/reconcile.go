@@ -275,8 +275,8 @@ func worktreeMissingWarning(f forkSite, facts forkFacts) string {
 // adoptRefusal is what skill place says of an adopt candidate it was not
 // given --force for, and how a listing warns of one: what is in the way of
 // what, and how to adopt it. Adopting keeps every file: a directory's
-// content becomes uncommitted edits of the fork, which skill revert then
-// discards, and a symlink, which holds nothing, is replaced.
+// content becomes uncommitted edits of the fork, and a symlink, which
+// holds nothing, is replaced.
 func adoptRefusal(f forkSite, v forkVerdict, facts forkFacts) (what, wayOut string) {
 	path := f.root
 	if v.inWay == "library symlink" {
@@ -287,7 +287,7 @@ func adoptRefusal(f forkSite, v forkVerdict, facts forkFacts) (what, wayOut stri
 	if facts.lib == libForeign && v.inWay == "library symlink" {
 		return what, force + " to replace it with the fork's library symlink"
 	}
-	return what, force + " to adopt it: its content becomes uncommitted edits of the fork, which '" + skillCommand("revert", f.name) + "' discards"
+	return what, force + " to adopt it: its content becomes uncommitted edits of the fork"
 }
 
 // forkWarnings are the warnings a listing gives of the forks of records

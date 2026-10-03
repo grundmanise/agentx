@@ -25,3 +25,5 @@ An unmanaged skill or an unpublished fork cannot be installed on another machine
 
 The per-account remote this record names is, since [ADR 0008](0008-sources-have-a-layout-and-an-access-only-the-account-remote-is-pushed-automatically.md), the account remote, a source of the fork layout.
 
+_Amendment, 2026-10-03:_ `skill revert` is removed. Where the text above names a revert, a machine with no account keeps its forks' full history, commits and diffs.
+

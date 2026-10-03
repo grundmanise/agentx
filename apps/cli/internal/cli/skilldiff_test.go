@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
 // libraryEntries are the names the library directory holds, hidden ones
@@ -168,35 +170,33 @@ func TestSkillDiffNamesWhatGitCannotRecord(t *testing.T) {
 	equal(t, "the listing's state with an edit", h.listed("pdf")["state"], stateModified)
 }
 
-// TestSkillDiffAndRevertRefuseWhatHasNoBase: a name the library does not
-// hold and an unmanaged skill each have no base version this command can
-// read, and a managed skill no commit of its own to name with --commit or
-// --to. A fork is not refused for having no base: its versions are its
-// own commits, and one whose worktree is gone, as a branch made with git
-// over a library directory has none, is refused for that.
-func TestSkillDiffAndRevertRefuseWhatHasNoBase(t *testing.T) {
+// TestSkillDiffRefusesWhatHasNoBase: a name the library does not hold
+// and an unmanaged skill each have no base version this command can read,
+// and a managed skill no commit of its own to name with --commit. A fork
+// is not refused for having no base: its versions are its own commits,
+// and one whose worktree is gone, as a branch made with git over a
+// library directory has none, is refused for that.
+func TestSkillDiffRefusesWhatHasNoBase(t *testing.T) {
 	t.Parallel()
 	h, _ := driftHarness(t)
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "mine"), "SKILL.md"), skill("mine", "My own"))
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "forked"), "SKILL.md"), skill("forked", "A fork"))
 	h.accountGit("update-ref", "refs/heads/skills/forked", h.accountGit("rev-parse", "refs/heads/managed/pdf"))
-	for verb, flag := range map[string]string{"diff": "--commit", "revert": "--to"} {
-		for _, c := range []struct {
-			args    []string
-			message string
-			exit    int
-		}{
-			{[]string{"nowhere"}, `the library holds no skill called "nowhere"`, 5},
-			{[]string{"mine"}, "mine is not managed by agentx, so it has no base version to", 6},
-			{[]string{"forked"}, "forked's worktree " + quotedPath(filepath.Join(h.agentx, "worktrees", "forked")) + " is missing", 6},
-			{[]string{"pdf", flag, "HEAD"}, "pdf is managed, not a fork, so it has no commit of its own to", 6},
-			{[]string{"mine", flag, "HEAD"}, "mine is not a fork, so it has no commit to", 6},
-		} {
-			what := verb + " " + strings.Join(c.args, " ")
-			out := h.run(append([]string{"--json", "skill", verb}, c.args...)...)
-			equal(t, what+": exit", out.exit, c.exit)
-			contains(t, what+": message", h.one(out.stdout, "error")["message"].(string), c.message)
-		}
+	for _, c := range []struct {
+		args    []string
+		message string
+		exit    int
+	}{
+		{[]string{"nowhere"}, `the library holds no skill called "nowhere"`, 5},
+		{[]string{"mine"}, "mine is not managed by agentx, so it has no base version to", 6},
+		{[]string{"forked"}, "forked's worktree " + quotedPath(filepath.Join(h.agentx, "worktrees", "forked")) + " is missing", 6},
+		{[]string{"pdf", "--commit", "HEAD"}, "pdf is managed, not a fork, so it has no commit of its own to", 6},
+		{[]string{"mine", "--commit", "HEAD"}, "mine is not a fork, so it has no commit to", 6},
+	} {
+		what := "diff " + strings.Join(c.args, " ")
+		out := h.run(append([]string{"--json", "skill", "diff"}, c.args...)...)
+		equal(t, what+": exit", out.exit, c.exit)
+		contains(t, what+": message", h.one(out.stdout, "error")["message"].(string), c.message)
 	}
 	sameTree(t, "the unmanaged skill", libraryTree(t, filepath.Join(h.library, "mine")), map[string]string{"SKILL.md": skill("mine", "My own")})
 }
@@ -225,8 +225,8 @@ func TestAdoptionOffersNoDiff(t *testing.T) {
 // CRLF line endings is compared as git compares a work tree. A file the
 // base holds counts whatever the .gitignore says, so the edit to a.md is
 // the one difference, and its diff carries no carriage return, since git
-// normalises what it adds. The revert puts a.md back and keeps both
-// files, which git ignores, and the skill is current again.
+// normalises what it adds. With a.md put back by hand the skill is current
+// again, both files being ones git ignores.
 func TestIgnoreRulesAndAttributesApplyAsGitAppliesThem(t *testing.T) {
 	t.Parallel()
 	h, _ := driftHarness(t)
@@ -247,17 +247,15 @@ func TestIgnoreRulesAndAttributesApplyAsGitAppliesThem(t *testing.T) {
 		t.Errorf("a.md's diff carries a carriage return:\n%q", patch)
 	}
 
-	h.mustRun("skill", "revert", "pdf")
-	want[".gitignore"], want[".gitattributes"] = "*\n", "* text eol=crlf\n"
-	sameTree(t, "the library directory", libraryTree(t, lib), want)
-	equal(t, "state after the revert", h.listed("pdf")["state"], stateCurrent)
+	writeFile(t, filepath.Join(lib, "a.md"), want["a.md"])
+	equal(t, "state with a.md put back", h.listed("pdf")["state"], stateCurrent)
 }
 
-// TestSkillDiffAndRevertTakeARelativeHome names agentx home and the library
+// TestSkillDiffTakesARelativeHome names agentx home and the library
 // relative to the working directory. git runs in the skill directory, so
 // the paths agentx gives it are made absolute first: the diff shows the
-// edit and the revert undoes it.
-func TestSkillDiffAndRevertTakeARelativeHome(t *testing.T) {
+// edit.
+func TestSkillDiffTakesARelativeHome(t *testing.T) {
 	// Not parallel: it changes the process's working directory.
 	h, _ := driftHarness(t)
 	root := filepath.Dir(h.agentx)
@@ -269,14 +267,71 @@ func TestSkillDiffAndRevertTakeARelativeHome(t *testing.T) {
 		}
 		h.env[key] = rel
 	}
-	lib := filepath.Join(h.library, "pdf")
-	want := libraryTree(t, lib)
-	writeFile(t, filepath.Join(lib, "a.md"), "the same bytes\nand a line of mine\n")
+	writeFile(t, filepath.Join(h.library, "pdf", "a.md"), "the same bytes\nand a line of mine\n")
 
 	diffs := h.eventsOfType(h.mustRun("--json", "skill", "diff", "pdf").stdout, "diff")
 	if len(diffs) != 1 || diffs[0]["path"] != "a.md" || diffs[0]["status"] != diffModified {
 		t.Fatalf("diffs = %v, want a.md modified alone", diffs)
 	}
-	h.mustRun("skill", "revert", "pdf")
-	sameTree(t, "the library directory", libraryTree(t, lib), want)
+}
+
+// TestSkillDiffOfAFork compares a greenfield skill, with a .gitignore at
+// its worktree's root that a commit made with git put there, with its last
+// commit and with an earlier one. An edit, a new file, a file the root
+// .gitignore names and a file the system-file list names make two diffs,
+// with every path relative to the skill's directory and never the root's
+// own entries; once the edits are committed the fork matches its last
+// commit and still differs from the first. A commit the account repo does
+// not hold, one that holds no skill directory of that name, and --update
+// with --commit are refused.
+func TestSkillDiffOfAFork(t *testing.T) {
+	t.Parallel()
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "new", "notes")
+	first := h.ref(lineage.ForkRef("notes"))
+	root := filepath.Join(h.agentx, "worktrees", "notes")
+	writeFile(t, filepath.Join(root, ".gitignore"), "*.log\n")
+	gitIn(t, h, root, "add", "-A")
+	gitIn(t, h, root, "commit", "-q", "-m", "Ignore logs")
+	tip := h.ref(lineage.ForkRef("notes"))
+	writeFile(t, filepath.Join(h.library, "notes", "SKILL.md"), skill("notes", "Edited"))
+	writeFile(t, filepath.Join(h.library, "notes", "extra.md"), "extra\n")
+	writeFile(t, filepath.Join(h.library, "notes", "debug.log"), "ignored by the root .gitignore\n")
+	writeFile(t, filepath.Join(h.library, "notes", ".DS_Store"), "finder\n")
+
+	files := func(out outcome) string {
+		t.Helper()
+		var got []string
+		for _, d := range h.eventsOfType(out.stdout, "diff") {
+			got = append(got, d["path"].(string)+" "+d["status"].(string))
+		}
+		return strings.Join(got, ",")
+	}
+	out := h.mustRun("--json", "skill", "diff", "notes")
+	equal(t, "the diffs against the tip", files(out), "SKILL.md modified,extra.md added")
+	diffs := h.eventsOfType(out.stdout, "diff")
+	contains(t, "SKILL.md's patch", diffs[0]["patch"].(string), "diff --git a/SKILL.md b/SKILL.md\n")
+	equal(t, "the result against the tip", h.one(out.stdout, "result")["summary"], "notes differs from its last commit "+short(tip)+" in 2 files")
+
+	h.mustRun("skill", "commit", "notes")
+	committed := h.ref(lineage.ForkRef("notes"))
+	equal(t, "the text once committed", h.mustRun("skill", "diff", "notes").stdout, "notes matches its last commit "+short(committed)+"\n")
+	out = h.mustRun("--json", "skill", "diff", "notes", "--commit", short(first))
+	equal(t, "the diffs against the first commit", files(out), "SKILL.md modified,extra.md added")
+	equal(t, "the result against the first commit", h.one(out.stdout, "result")["summary"], "notes differs from commit "+short(first)+" in 2 files")
+
+	for _, c := range []struct {
+		args    []string
+		message string
+		exit    int
+	}{
+		{[]string{"--commit", "deadbeef"}, "the account repo holds no commit deadbeef", 6},
+		{[]string{"--commit", h.ref(lineage.ManagedRef("alpha"))}, "holds no skill directory notes to compare notes with", 6},
+		{[]string{"--commit", first, "--update"}, "--update and --commit cannot be given together", 1},
+	} {
+		out := h.run(append([]string{"--json", "skill", "diff", "notes"}, c.args...)...)
+		equal(t, strings.Join(c.args, " ")+": exit", out.exit, c.exit)
+		contains(t, strings.Join(c.args, " ")+": message", h.one(out.stdout, "error")["message"].(string), c.message)
+	}
 }

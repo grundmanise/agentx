@@ -331,8 +331,7 @@ func TestSkillForkOfAFork(t *testing.T) {
 // repository git would record as a link, a skill that is itself a
 // repository, which its own .gitignore naming .git does not let move, and
 // a skill whose update left a merge pending, which is asked about before
-// anything is committed. skill unfork, reserved, is refused in the same
-// home.
+// anything is committed.
 func TestSkillForkRefusals(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -366,13 +365,6 @@ func TestSkillForkRefusals(t *testing.T) {
 		equal(t, strings.Join(tc.args, " ")+": exit", out.exit, tc.exit.exit)
 		contains(t, strings.Join(tc.args, " ")+": error", h.one(out.stdout, "error")["message"].(string), tc.says)
 	}
-	// The command that retires a fork in favour of its upstream is
-	// reserved, and refused whatever it names.
-	unfork := h.run("--json", "skill", "unfork", "alpha")
-	equal(t, "unfork: exit", unfork.exit, exitRefused.exit)
-	e := h.one(unfork.stdout, "error")
-	equal(t, "unfork: error", e["message"], "skill unfork is reserved for a later version")
-	equal(t, "unfork: hint", e["hint"], "remove the fork with 'agentx skill remove alpha' and install the upstream again with 'agentx skill add'")
 	if err := os.MkdirAll(filepath.Join(h.agentx, "merges", "alpha"), 0o755); err != nil {
 		t.Fatal(err)
 	}

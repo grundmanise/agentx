@@ -158,7 +158,7 @@ func fromAccountPlan(name, libPath string, holds libraryHolds, keepLocal bool) (
 	case holdsEditedCopy:
 		if !keepLocal {
 			return 0, refuse(exitRefused, sanitised(name)+" holds edits at "+quotedPath(libPath)+" that installing the fork would lose, so nothing was changed",
-				again+" to make that directory's whole content the fork's uncommitted content, then check it with '"+skillCommand("diff", name)+"' before you commit, or '"+skillCommand("revert", name)+"' to discard the edits first")
+				again+" to make that directory's whole content the fork's uncommitted content, then check it with '"+skillCommand("diff", name)+"' before you commit")
 		}
 		return installKeepLocal, nil
 	case holdsDirectory:
@@ -285,7 +285,7 @@ func (inv *invocation) judgeAccountInstall(ctx context.Context, gitDir, remote, 
 		}
 		in.managed = &rec
 		// A pending merge comes before what the library holds: until it is
-		// finished or aborted, neither --keep-local nor a revert can help.
+		// finished or aborted, --keep-local cannot help.
 		if inv.mergePending(name) {
 			return nil, pendingMergeRefusal(name, "replaced by the fork")
 		}

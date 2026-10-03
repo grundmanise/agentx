@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
@@ -27,7 +28,7 @@ import (
 //
 // The update refuses while the fork has edits nobody committed, as git
 // merge refuses over a dirty work tree, so they are never merged over or
-// lost: they are committed or reverted first.
+// lost: they are committed first.
 
 // forkUpdate is what the update of a fork reads before the lock besides
 // what every update reads, see updating, and applies under it.
@@ -278,7 +279,7 @@ func (inv *invocation) cleanSite(ctx context.Context, site forkSite, fork *forkU
 
 // unrecordable refuses the fork of site, whose skill directory holds lost,
 // what git cannot record and no ignore rule covers, which laying a new tip
-// out over it would discard, see unrecordableRefusal.
+// out over it would discard, see unrecordableAt.
 func (f *forkUpdate) unrecordable(site forkSite, lost []string) *failure {
 	command, _ := f.again(site.name)
 	what := "an update"
@@ -447,4 +448,22 @@ func forkConflictFailure(u *updating, checkout string) *failure {
 	name := u.name
 	return refuse(exitPendingMerge, sanitised(name)+" conflicts with "+with+" in "+plural(len(u.conflict.Files), "file")+", so the merge is pending and the fork's worktree and branch were left as they are",
 		conflictHintRunning(name, filepath.Join(checkout, u.fork.site.dir), u.fork.complete(name)))
+}
+
+// splitUnrecordable sorts the paths of a fork's skill directory, as j
+// judged it, that git cannot record: the .git of a repository nested in
+// the directory that an ignore rule covers is no part of the fork and is
+// carried over into the directory that replaces it, kept, as every file git
+// ignores is; anything else, a repository no rule covers or a named pipe,
+// is lost, which replacing the directory would discard with no record of
+// it anywhere. Pure.
+func splitUnrecordable(j forkJudged) (kept, lost []string) {
+	for _, p := range j.unrecordable {
+		if hasGitComponent(p) && !slices.Contains(j.exposed, p) {
+			kept = append(kept, p)
+			continue
+		}
+		lost = append(lost, p)
+	}
+	return kept, lost
 }

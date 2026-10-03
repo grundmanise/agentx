@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -63,9 +64,10 @@ func (h *harness) parents(commit string) string {
 // skill directory holds exactly the new version, besides the .DS_Store git
 // ignores in it. beta has a commit of its own, an edit away from the
 // lines the update changes and a .gitignore naming build/: the merge
-// keeps the edit and takes the update's, the ignored build/keep stays,
-// and the update's own build/x replaces the local file of that path, as
-// git checkout replaces it. Each fork's branch moves to a merge commit
+// keeps the edit and takes the update's, the ignored build/keep stays, a
+// repository nested in build/, which git cannot record, is carried over
+// whole without a refusal, and the update's own build/x replaces the
+// local file of that path, as git checkout replaces it. Each fork's branch moves to a merge commit
 // with the tip and the candidate as parents and the candidate as its
 // base, written with the user's identity; the candidate goes, git status
 // in each worktree is clean, nothing is pending and nothing is left
@@ -83,6 +85,8 @@ func TestSkillUpdateMergesUpstreamIntoAFork(t *testing.T) {
 	writeFile(t, filepath.Join(alpha, ".DS_Store"), "finder\n")
 	writeFile(t, mkdirs(t, filepath.Join(beta, "build"), "x"), "local build\n")
 	writeFile(t, filepath.Join(beta, "build", "keep"), "kept\n")
+	writeFile(t, mkdirs(t, filepath.Join(beta, "build", "dep", ".git"), "HEAD"), "ref: refs/heads/main\n")
+	writeFile(t, filepath.Join(beta, "build", "dep", "x.txt"), "local\n")
 
 	s.write("skills/alpha/notes.md", forkNotes("seven", "seven, upstream"))
 	s.write("skills/beta/notes.md", forkNotes("seven", "seven, upstream"))
@@ -114,6 +118,8 @@ func TestSkillUpdateMergesUpstreamIntoAFork(t *testing.T) {
 	equal(t, "beta's notes", fileBody(t, filepath.Join(beta, "notes.md")), forkNotes("two", "two, mine", "seven", "seven, upstream"))
 	equal(t, "beta's build/x", fileBody(t, filepath.Join(beta, "build", "x")), "upstream build\n")
 	equal(t, "beta's build/keep", fileBody(t, filepath.Join(beta, "build", "keep")), "kept\n")
+	equal(t, "beta's nested repository", fileBody(t, filepath.Join(beta, "build", "dep", ".git", "HEAD")), "ref: refs/heads/main\n")
+	equal(t, "the nested repository's own file", fileBody(t, filepath.Join(beta, "build", "dep", "x.txt")), "local\n")
 	equal(t, "what is left beside the worktrees", strings.Join(hiddenEntries(t, filepath.Join(h.agentx, "worktrees")), " "), "")
 }
 
@@ -154,7 +160,7 @@ func TestSkillUpdateOfAForkConflicts(t *testing.T) {
 	was := h.unchangedHome()
 	refused := h.run("--json", "skill", "update", "alpha")
 	equal(t, "exit over uncommitted edits", refused.exit, 6)
-	equal(t, "message", h.one(refused.stdout, "error")["message"], "alpha has uncommitted edits, so it cannot be updated until they are committed or reverted")
+	equal(t, "message", h.one(refused.stdout, "error")["message"], "alpha has uncommitted edits, so it cannot be updated until they are committed")
 	was.check(t, h, "the refused update", 0)
 	writeFile(t, filepath.Join(alpha, "notes.md"), forkNotes("seven", "seven, mine"))
 	worktree := onDisk(t, filepath.Join(h.agentx, "worktrees", "alpha"))
@@ -200,9 +206,8 @@ func TestSkillUpdateOfAForkConflicts(t *testing.T) {
 	writeFile(t, filepath.Join(alpha, "SKILL.md"), skill("alpha", "Uncommitted"))
 	refused = h.run("--json", "skill", "update", "alpha")
 	equal(t, "exit of the completion over uncommitted edits", refused.exit, 6)
-	equal(t, "message", h.one(refused.stdout, "error")["message"], "alpha has uncommitted edits, so it cannot be updated until they are committed or reverted")
-	// A plain revert is refused while the merge is pending, so the edit is
-	// undone by hand.
+	equal(t, "message", h.one(refused.stdout, "error")["message"], "alpha has uncommitted edits, so it cannot be updated until they are committed")
+	// The edit is undone by hand.
 	writeFile(t, filepath.Join(alpha, "SKILL.md"), skill("alpha", "The first skill"))
 	writeFile(t, filepath.Join(alpha, ".DS_Store"), "finder\n")
 
@@ -357,11 +362,34 @@ func TestARevertSurvivesTheNextUpdate(t *testing.T) {
 	equal(t, "the notes", fileBody(t, filepath.Join(alpha, "notes.md")), forkNotes("seven", "seven, upstream"))
 }
 
+// TestSkillUpdateOfAForkRunInItsFolder: an update of a fork run in its
+// skill directory, reached through the library entry, exits 0 and leaves
+// the process in the directory that now holds the update. The update
+// replaces the directory, and a git started in the one it displaced, which
+// is removed once the update is complete, would fail.
+func TestSkillUpdateOfAForkRunInItsFolder(t *testing.T) {
+	// Not parallel: it changes the process's working directory.
+	h, s, _ := forkUpdateHarness(t)
+	h.mustRun("skill", "fork", "alpha")
+	s.write("skills/alpha/notes.md", forkNotes("seven", "seven, upstream"))
+	s.commit("second version")
+	h.mustRun("skill", "check")
+	lib := filepath.Join(h.library, "alpha")
+	t.Chdir(lib)
+
+	out := h.run("skill", "update", "alpha")
+	equal(t, "exit", out.exit, 0)
+	equal(t, "the notes", fileBody(t, filepath.Join(lib, "notes.md")), forkNotes("seven", "seven, upstream"))
+	if wd, err := os.Getwd(); err != nil || wd != lib {
+		t.Errorf("the working directory is %q, %v; want %s", wd, err, lib)
+	}
+}
+
 // TestForkUpdateRecoversWhereItWasKilled kills a fork's clean update with
 // SIGKILL at two boundaries: once its journal is on disk, before anything
 // was applied, and right after its last live write, the deletion of the
 // candidate. Every boundary between them is the journal's:
-// home.TestForkRevertRecoversFromEveryBoundary replays the same ref,
+// home.TestForkUpdateRecoversFromEveryBoundary replays the same ref,
 // remove, publish and worktree steps without git, and the final deletion
 // of the candidate is an ordinary ref step. The next command finishes the
 // update: the branch at the merge, the skill directory holding it with the
@@ -474,4 +502,17 @@ func TestForkUpdateRefusals(t *testing.T) {
 	equal(t, "message", h.one(out.stdout, "error")["message"],
 		"the update candidate refs/agentx/candidate/alpha holds alpha under another source or directory than its base version")
 	was.check(t, h, "the update refused over a candidate of another directory", 0)
+}
+
+// TestSplitUnrecordable is what an update of a fork carries over of what
+// git cannot record in its skill directory, and what it refuses to lose.
+func TestSplitUnrecordable(t *testing.T) {
+	t.Parallel()
+	j := forkJudged{
+		unrecordable: []string{"cache/.git", "pipe", "vendor/.git", "vendor/sub/.GIT"},
+		exposed:      []string{"vendor/.git"},
+	}
+	kept, lost := splitUnrecordable(j)
+	equal(t, "kept", strings.Join(kept, " "), "cache/.git vendor/sub/.GIT")
+	equal(t, "lost", strings.Join(lost, " "), "pipe vendor/.git")
 }

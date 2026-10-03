@@ -66,7 +66,7 @@ func newAdoptCommand(inv *invocation) *cobra.Command {
 		Use:   "adopt",
 		Short: "Adopt skills another tool installed into the library",
 		Long: "Take over the skills the vercel skills CLI installed into the library, so that\n" +
-			"agentx knows where each one came from and can update and revert it. Run it with\n" +
+			"agentx knows where each one came from and can update it. Run it with\n" +
 			"no flags to see what it would adopt; nothing is written and the lock file is\n" +
 			"never touched.\n\n" +
 			"The base version recorded for a skill is the upstream version it was installed\n" +

@@ -106,7 +106,7 @@ func TestModifiedIsDecidedByTreeID(t *testing.T) {
 
 // TestARootSkillIsComparedUnderTheRepositoryName installs a skill that is a
 // whole repository: its import tree holds it under the repository's name,
-// and the comparison, the diff and the revert all find it there.
+// and the comparison and the diff both find it there.
 func TestARootSkillIsComparedUnderTheRepositoryName(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -125,8 +125,8 @@ func TestARootSkillIsComparedUnderTheRepositoryName(t *testing.T) {
 	if len(diffs) != 1 || diffs[0]["path"] != "notes.md" || diffs[0]["status"] != "modified" {
 		t.Fatalf("diff events = %v, want notes.md modified", diffs)
 	}
-	h.mustRun("skill", "revert", "solo")
-	equal(t, "state after the revert", h.listed("solo")["state"], stateCurrent)
+	writeFile(t, filepath.Join(h.library, "solo", "notes.md"), "notes\n")
+	equal(t, "state with the edit put back", h.listed("solo")["state"], stateCurrent)
 }
 
 // TestPlacementDriftIsReadAtEachConfigurationsOwnPlace: displaced and
@@ -383,9 +383,9 @@ func words(v any) string {
 
 // TestServeEmitsADriftEventOnEachTransition runs serve while a managed skill
 // goes through every state: edited in an editor, missing a placement,
-// displaced from another, reverted, its source removed and added again,
-// and left without its branch. Each change is followed by one drift event,
-// after the snapshot that shows it and naming that snapshot, with the
+// displaced from another, put back by hand, its source removed and added
+// again, and left without its branch. Each change is followed by one drift
+// event, after the snapshot that shows it and naming that snapshot, with the
 // state and drift before and after; the first snapshot is where every
 // state starts and is followed by none. A source removed and added again
 // changes the settings alone, and serve follows them as it follows the
@@ -439,9 +439,11 @@ func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 	}
 
 	lib := filepath.Join(h.library, "alpha")
+	notes := filepath.Join(lib, "notes.md")
+	installed := readText(t, notes)
 	// An edit saved in an editor reaches serve through the watcher alone:
 	// no refresh is asked for, and the drift follows the snapshot it made.
-	replaceFile(t, filepath.Join(lib, "notes.md"), "edited in an editor\n")
+	replaceFile(t, notes, "edited in an editor\n")
 	snap := p.next("snapshot")
 	edited := p.next("drift")
 	equal(t, "edited: scan_counter", edited["scan_counter"], snap["scan_counter"])
@@ -452,7 +454,7 @@ func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 		"managed", stateModified, "missing", stateModified, "")
 	expect(change("displaced", func() { remove(t, claude); copyTree(t, lib, claude) }),
 		"managed", stateModified, "displaced,missing", stateModified, "missing")
-	expect(change("reverted", func() { h.runBesideServe("skill", "revert", "alpha") }),
+	expect(change("restored", func() { replaceFile(t, notes, installed) }),
 		"managed", stateCurrent, "displaced,missing", stateModified, "displaced,missing")
 	expect(change("source-removed", func() { h.runBesideServe("source", "remove", s.url) }),
 		"managed", stateCurrent, "displaced,missing,source removed", stateCurrent, "displaced,missing")

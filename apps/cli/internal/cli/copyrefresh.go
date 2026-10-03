@@ -131,8 +131,7 @@ func (inv *invocation) skipRefresh(done *placements, place string, err error) {
 // copiesNote is what a command did to copy placements, as its line and its
 // result say it, whether of one skill or added up over a run of several
 // updates: how many were refreshed and how many were skipped, each after a
-// comma, or nothing when neither. A revert and an update both say it this
-// way.
+// comma, or nothing when neither. An update says it this way.
 func copiesNote(out *writer, refreshed, skipped int) (plain, painted string) {
 	if refreshed > 0 {
 		note := plural(refreshed, "copy placement") + " refreshed"

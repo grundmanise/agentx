@@ -236,8 +236,8 @@ func (inv *invocation) printConflicts(ev conflictEvent, with string) {
 
 // pendingMergeRefusal refuses to do what to the skill called name while an
 // update left a merge pending for it: the merge holds the library
-// directory as it was and the update it was merged with, and updating,
-// reverting or removing the skill would leave it merging versions that are
+// directory as it was and the update it was merged with, and updating
+// or removing the skill would leave it merging versions that are
 // no longer there. It is exit code 4, answered under the lock by
 // everything that replaces a skill's content or takes it away, and the
 // hint names the way out that keeps the library directory as it is.

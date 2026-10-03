@@ -821,10 +821,10 @@ func retainedIn(t *testing.T, dir string) string {
 	return ""
 }
 
-// replacement is the shape of a revert, and of an install that displaces
-// what the library held: one ref step that moves nothing, then the library
-// directory taken out of the way and filled again with staged content, all
-// at one path.
+// replacement is the shape of an update, and of an install that displaces
+// what the library held: one ref step, here one that moves nothing, then
+// the library directory taken out of the way and filled again with staged
+// content, all at one path.
 func (in install) replacement(t *testing.T, name, content string) *Mutation {
 	t.Helper()
 	lib := filepath.Join(in.library, name)

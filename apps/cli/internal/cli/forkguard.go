@@ -31,8 +31,8 @@ func forkPendingRefusal(name, what string) *failure {
 // ignores is no such edit, since no commit would record it either. The
 // refusal wraps errUncommitted.
 func uncommittedRefusal(name, what string) *failure {
-	return refuse(exitRefused, sanitised(name)+" has uncommitted edits, so it cannot be "+what+" until they are committed or reverted",
-		"run '"+skillCommand("commit", name)+"' to keep them, or '"+skillCommand("revert", name)+"' to discard them, then run the command again").wrap(errUncommitted)
+	return refuse(exitRefused, sanitised(name)+" has uncommitted edits, so it cannot be "+what+" until they are committed",
+		"run '"+skillCommand("commit", name)+"' to keep them, then run the command again").wrap(errUncommitted)
 }
 
 // errUncommitted is what a refusal for uncommitted edits wraps, so that a

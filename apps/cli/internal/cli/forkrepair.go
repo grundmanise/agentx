@@ -89,8 +89,8 @@ func noForkSkill(f forkSite, plan forkPlacing, dir string, flags []string) error
 // content in place and becomes the fork's worktree, and a directory at the
 // library entry is moved into the worktree as the fork's skill directory,
 // replacing one there only when it holds the branch tip. Either content
-// then reads as uncommitted edits of the fork, which skill commit keeps
-// and skill revert discards. A symlink of the user's at the library entry
+// then reads as uncommitted edits of the fork, which skill commit keeps.
+// A symlink of the user's at the library entry
 // holds nothing, and --force replaces it. --force with nothing in the way
 // is refused, as it always was for a fork.
 func (inv *invocation) placeFork(ctx context.Context, rec lineage.Record, targets []placeTarget, asCopy, force bool, flags []string) error {
@@ -317,7 +317,7 @@ func (inv *invocation) retirable(ctx context.Context, f forkSite, again string) 
 	}
 	if !j.clean {
 		return "", fail(exitRefused, sanitised(f.name)+"'s worktree holds uncommitted edits at "+quotedPath(f.skillDir)+" and "+quotedPath(f.libPath)+" holds a directory of its own, and only one of them can be the fork's",
-			"commit or revert the fork's edits with '"+skillCommand("commit", f.name)+"' or '"+skillCommand("revert", f.name)+"', or move "+quotedPath(f.libPath)+" aside, then "+again)
+			"commit the fork's edits with '"+skillCommand("commit", f.name)+"', or move "+quotedPath(f.libPath)+" aside, then "+again)
 	}
 	return state, nil
 }

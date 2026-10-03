@@ -172,8 +172,8 @@ func ownPlaces(targets []placeTarget, library, name string, disabled, copies []s
 
 // placeKey is how the paths of places are told apart: the path as
 // canonicalPath writes it, and the directory it sits in, read once as a
-// file, nil when it cannot be read. Drift judges each place once by it, a
-// revert or an update refreshes each copy once, and skill place changes
+// file, nil when it cannot be read. Drift judges each place once by it,
+// an update refreshes each copy once, and skill place changes
 // each path once.
 type placeKey struct {
 	real string

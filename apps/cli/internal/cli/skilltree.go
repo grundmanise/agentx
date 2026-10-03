@@ -17,7 +17,7 @@ import (
 )
 
 // Every comparison of a skill directory with a version goes through this
-// file, whichever command makes it: drift, diff, revert, adoption and the
+// file, whichever command makes it: drift, diff, update, adoption and the
 // copy step. A skill directory is a git work tree: git runs with the
 // account repo as its git directory, the skill directory as its work tree
 // and a throwaway index loaded from the version, then add -A and
