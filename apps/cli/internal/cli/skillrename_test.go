@@ -82,7 +82,7 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 	nothingAt(t, "the old library entry", filepath.Join(a.library, "alpha"))
 	equal(t, "the remote's old branch", remoteGit(t, a, remote, "rev-parse", "refs/heads/skills/alpha"), published)
 
-	a.mustRun("publish", "renamed")
+	a.mustRun("skill", "publish", "renamed")
 	listed := b.mustRun("--json", "skill", "list", "--remote")
 	installable := b.eventsOfType(listed.stdout, "installable_fork")
 	if len(installable) != 1 || installable[0]["name"] != "renamed" || installable[0]["fork_id"] != a.trailer(renamed, lineage.TrailerForkID) {
@@ -95,7 +95,7 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 	// A commit b published and a never pulled would go with the remote
 	// branch, and be in neither fork.
 	b.commitFork("beta", "b's commit\n")
-	b.mustRun("publish", "beta")
+	b.mustRun("skill", "publish", "beta")
 	refused := a.run("skill", "rename", "beta", "gamma", "--remote")
 	equal(t, "a rename over an unpulled commit: exit", refused.exit, 6)
 	contains(t, "a rename over an unpulled commit: hint", refused.stderr, "run 'agentx pull beta' first")

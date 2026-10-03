@@ -124,7 +124,7 @@ func TestTheAccountRemoteIsSetReplacedAndDetached(t *testing.T) {
 			t.Errorf("the account remote has %s = %s", key, got)
 		}
 	}
-	h.mustRun("publish", "notes")
+	h.mustRun("skill", "publish", "notes")
 	equal(t, "the remote-tracking branch", h.ref(lineage.RemoteForkRef(name, "notes")), h.ref(lineage.ForkRef("notes")))
 	ev = h.one(h.mustRun("--json", "source", "add", remote).stdout, "source")
 	equal(t, "added again: account", ev["account"], true)

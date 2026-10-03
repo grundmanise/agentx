@@ -144,7 +144,7 @@ func TestScenarioDisjointEditsMergeClean(t *testing.T) {
 	alphaB := b.forkDir("alpha", "alpha")
 
 	theirs := a.commitFork("alpha", forkNotes("one", "one, a"))
-	a.mustRun("publish", "alpha")
+	a.mustRun("skill", "publish", "alpha")
 	mine := b.commitFork("alpha", forkNotes("eight", "eight, b"))
 	writeFile(t, filepath.Join(alphaB, "draft.md"), "a draft\n")
 	out := b.run("--json", "pull", "alpha")
@@ -163,7 +163,7 @@ func TestScenarioDisjointEditsMergeClean(t *testing.T) {
 	equal(t, "the pull", b.one(out.stdout, "pull")["outcome"], pullMerged)
 	merged := b.ref(lineage.ForkRef("alpha"))
 	equal(t, "the merge's parents", b.parents(merged), committed+"\n"+theirs)
-	b.mustRun("publish", "alpha")
+	b.mustRun("skill", "publish", "alpha")
 	out = a.mustRun("--json", "pull", "alpha")
 	equal(t, "a's pull", a.one(out.stdout, "pull")["outcome"], pullFastForward)
 	equal(t, "a's alpha", a.ref(lineage.ForkRef("alpha")), merged)
@@ -199,7 +199,7 @@ func TestScenarioSameVersionMergesClean(t *testing.T) {
 		equal(t, name+": b's import of the version", mergedImport(b, name), mergedImport(a, name))
 	}
 	importTwo := mergedImport(a, "alpha")
-	a.mustRun("publish", "--all")
+	a.mustRun("skill", "publish")
 
 	out := b.mustRun("--json", "pull", "alpha")
 	equal(t, "alpha's pull", b.one(out.stdout, "pull")["outcome"], pullMerged)
@@ -210,7 +210,7 @@ func TestScenarioSameVersionMergesClean(t *testing.T) {
 	equal(t, "alpha's status", worktreeStatus(b, "alpha"), "")
 
 	mineB, theirsA := b.ref(lineage.ForkRef("beta")), a.ref(lineage.ForkRef("beta"))
-	out = b.run("--json", "publish", "beta")
+	out = b.run("--json", "skill", "publish", "beta")
 	equal(t, "beta's publish: exit", out.exit, 4)
 	conflict := b.one(out.stdout, "conflict")
 	equal(t, "the conflicted file", conflictPaths(conflict), "notes.md")
@@ -251,7 +251,7 @@ func TestScenarioARevertIsNeverUndone(t *testing.T) {
 	t.Parallel()
 	a, b, s, _ := scenarioHomes(t, "alpha", "beta")
 	a.commitFork("beta", forkNotes("one", "one, x"))
-	a.mustRun("publish", "beta")
+	a.mustRun("skill", "publish", "beta")
 	b.mustRun("pull", "beta")
 	s.write("skills/alpha/notes.md", forkNotes("two", "two, v2", "seven", "seven, v2"))
 	s.write("skills/beta/notes.md", forkNotes("seven", "seven, v2"))
@@ -260,7 +260,7 @@ func TestScenarioARevertIsNeverUndone(t *testing.T) {
 	takeVersion(b)
 	a.commitFork("alpha", forkNotes("seven", "seven, v2"))
 	a.commitFork("beta", forkNotes("one", "one, x and more", "seven", "seven, v2"))
-	a.mustRun("publish", "--all")
+	a.mustRun("skill", "publish")
 	b.commitFork("alpha", forkNotes("two", "two, v2", "four", "four, b", "seven", "seven, v2"))
 
 	mine, theirs := b.ref(lineage.ForkRef("alpha")), a.ref(lineage.ForkRef("alpha"))
@@ -319,7 +319,7 @@ func TestScenarioDifferentVersionsOtherLines(t *testing.T) {
 	s.commit("third version")
 	takeVersion(b)
 	alphaThree, betaThree := mergedImport(b, "alpha"), mergedImport(b, "beta")
-	b.mustRun("publish", "--all")
+	b.mustRun("skill", "publish")
 
 	out := a.mustRun("--json", "pull", "alpha")
 	ev := a.one(out.stdout, "pull")
@@ -345,7 +345,7 @@ func TestScenarioDifferentVersionsOtherLines(t *testing.T) {
 	tip := a.ref(lineage.ForkRef("alpha"))
 	equal(t, "alpha's base after its update", a.trailer(tip, lineage.TrailerBase), alphaThree)
 	equal(t, "the update changed no line", a.accountGit("diff", tip+"^1", tip), "")
-	a.mustRun("publish", "--all")
+	a.mustRun("skill", "publish")
 	b.mustRun("pull")
 	writeFile(t, filepath.Join(b.forkDir("beta", "beta"), "notes.md"), "edited\n")
 
@@ -423,7 +423,7 @@ func TestScenarioDifferentVersionsSameLines(t *testing.T) {
 	s.commit("third version")
 	takeVersion(b)
 	alphaThree, betaThree := mergedImport(b, "alpha"), mergedImport(b, "beta")
-	b.mustRun("publish", "alpha")
+	b.mustRun("skill", "publish", "alpha")
 
 	mine, theirs := a.ref(lineage.ForkRef("alpha")), b.ref(lineage.ForkRef("alpha"))
 	notesA, notesB := filepath.Join(a.forkDir("alpha", "alpha"), "notes.md"), filepath.Join(b.forkDir("alpha", "alpha"), "notes.md")
@@ -455,7 +455,7 @@ func TestScenarioDifferentVersionsSameLines(t *testing.T) {
 	equal(t, "a's notes, resolved", fileBody(t, notesA), forkNotes("two", "two, v2 and v3"))
 	noCheckout(t, a, "alpha")
 
-	a.mustRun("publish", "beta")
+	a.mustRun("skill", "publish", "beta")
 	mine, theirs = b.ref(lineage.ForkRef("beta")), a.ref(lineage.ForkRef("beta"))
 	out = b.run("--json", "pull", "beta")
 	equal(t, "beta's pull: exit", out.exit, 4)
@@ -495,7 +495,7 @@ func TestScenarioUnprovableOrderKeepsTheLocalBase(t *testing.T) {
 	s.commitAt("the second version, rewritten", "1900000000 +0000")
 	takeVersion(b)
 	rewritten := mergedImport(b, "alpha")
-	b.mustRun("publish", "alpha")
+	b.mustRun("skill", "publish", "alpha")
 
 	a.mustRun("source", "fetch", s.url)
 	out := a.mustRun("--json", "pull", "alpha")
@@ -532,7 +532,7 @@ func TestScenarioIgnoredFilesStayLocal(t *testing.T) {
 	writeFile(t, filepath.Join(alphaA, "notes.local"), "a's own notes\n")
 	writeFile(t, filepath.Join(alphaA, ".DS_Store"), "finder\n")
 	a.commitFork("alpha", forkNotes("one", "one, a"))
-	a.mustRun("publish", "alpha")
+	a.mustRun("skill", "publish", "alpha")
 	equal(t, "what a published", remoteGit(t, b, remote, "ls-tree", "--name-only", "refs/heads/skills/alpha:alpha"), ".gitignore\nSKILL.md\nnotes.md")
 	b.mustRun("pull", "alpha")
 	sameTree(t, "b's alpha", libraryTree(t, alphaB), map[string]string{
@@ -541,7 +541,7 @@ func TestScenarioIgnoredFilesStayLocal(t *testing.T) {
 
 	writeFile(t, filepath.Join(alphaB, "notes.local"), "b's notes, committed\n")
 	b.mustRun("skill", "commit", "alpha")
-	b.mustRun("publish", "alpha")
+	b.mustRun("skill", "publish", "alpha")
 	real, err := exec.LookPath("git")
 	if err != nil {
 		t.Fatal(err)
@@ -615,7 +615,7 @@ func TestScenarioEdgeCases(t *testing.T) {
 	writeFile(t, filepath.Join(alphaA, "logo.png"), "\x89PNG\r\n\x1a\n\x00a's logo")
 	link(t, "notes.md", filepath.Join(alphaA, "link.md"))
 	a.mustRun("skill", "commit", "alpha")
-	a.mustRun("publish", "--all")
+	a.mustRun("skill", "publish")
 	b.commitFork("alpha", forkNotes("four", "four, v2", "eight", "eight, b"))
 	out := b.mustRun("--json", "pull", "alpha")
 	equal(t, "alpha's pull", b.one(out.stdout, "pull")["outcome"], pullMerged)
@@ -635,12 +635,12 @@ func TestScenarioEdgeCases(t *testing.T) {
 	writeFile(t, filepath.Join(betaA, "logo.png"), "\x89PNG\r\n\x1a\n\x00the logo")
 	link(t, "SKILL.md", filepath.Join(betaA, "link.md"))
 	a.mustRun("skill", "commit", "beta")
-	a.mustRun("publish", "beta")
+	a.mustRun("skill", "publish", "beta")
 	b.mustRun("pull", "beta")
 	writeFile(t, filepath.Join(betaA, "logo.png"), "\x89PNG\r\n\x1a\n\x00a's logo")
 	swapForLink(t, filepath.Join(betaA, "link.md"), "notes.md")
 	a.mustRun("skill", "commit", "beta")
-	a.mustRun("publish", "beta")
+	a.mustRun("skill", "publish", "beta")
 	writeFile(t, filepath.Join(betaB, "logo.png"), "\x89PNG\r\n\x1a\n\x00b's logo")
 	swapForLink(t, filepath.Join(betaB, "link.md"), "SKILL.md.orig")
 	b.mustRun("skill", "commit", "beta")

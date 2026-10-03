@@ -123,7 +123,7 @@ The source whose settings entry carries the account flag, added with `agentx sou
 _Avoid_: cloud, server, origin, fork source
 
 **Publish**:
-An explicit user action that pushes one fork's or greenfield skill's branch from the account repo to the account remote, after taking in, as a pull does, what another machine published there first. Another machine with the same remote installs it from there, and takes later versions in with a pull, a plain Git merge. Commits are explicit, made by the user with agentx or with git, and publishing pushes commits only.
+An explicit user action, `agentx skill publish`, that pushes one fork's or greenfield skill's branch from the account repo to the account remote, after taking in, as a pull does, what another machine published there first. Another machine with the same remote installs it from there, and takes later versions in with a pull, a plain Git merge. Commits are explicit, made by the user with agentx or with git, and publishing pushes commits only.
 _Avoid_: sync, share, upload
 
 **Pull**:

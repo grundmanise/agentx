@@ -12,7 +12,7 @@ A machine without a remote keeps the whole history of every fork, with commit an
 ## Publish a fork
 
 ```sh
-agentx publish release-notes
+agentx skill publish release-notes
 ```
 
 ```text
@@ -20,11 +20,11 @@ agentx publish release-notes
 ```
 
 - Publishing pushes your commits, and nothing else. Commit your edits first with [`agentx skill commit`](/cli/fork#commit-your-edits). A fork with uncommitted edits still publishes its commits, and agentx names it with a warning.
-- `agentx publish --all` publishes every fork with commits the remote does not have.
+- `agentx skill publish` with no name publishes every fork with commits the remote does not have.
 - Each fork goes to its own branch, `skills/<name>`. Publishing one fork leaves your other forks' commits where they are.
 - When another machine published commits of the fork first, agentx takes them in before it pushes, as [`agentx pull`](#pull-what-another-machine-published) does. Commit or discard your edits first: a fork with uncommitted edits stops with exit code 6.
 - agentx never forces a push. When the remote rejects one, for example because another machine published meanwhile, run `agentx pull <name>`, then publish again.
-- Nothing is pushed for you. Run `agentx publish` each time you want your commits on the remote.
+- Nothing is pushed for you. Run `agentx skill publish` each time you want your commits on the remote.
 - To delete a fork's branch from the remote, remove the fork with [`agentx skill remove <name> --remote`](/cli/fork#remove-a-fork).
 
 ## Install a fork on another machine
@@ -102,7 +102,7 @@ release-notes conflicts with the account remote in 1 file
 notes.md: both modified
 ```
 
-Resolve it as you resolve an update's conflict: fix each file with Git in `~/.agentx/merges/<name>/<folder>` and `git add` it, then run `agentx pull <name>`. `agentx skill update <name>` completes it too, but `agentx publish` does not: while the merge waits and the remote has something new, publishing stops with exit code 4, so complete the merge with `agentx pull <name>` first, then publish. Give the merge up with `agentx skill update <name> --abort`. See [Resolve a conflict](/cli/fork#resolve-a-conflict).
+Resolve it as you resolve an update's conflict: fix each file with Git in `~/.agentx/merges/<name>/<folder>` and `git add` it, then run `agentx pull <name>`. `agentx skill update <name>` completes it too, but `agentx skill publish` does not: while the merge waits and the remote has something new, publishing stops with exit code 4, so complete the merge with `agentx pull <name>` first, then publish. Give the merge up with `agentx skill update <name> --abort`. See [Resolve a conflict](/cli/fork#resolve-a-conflict).
 
 A binary file or a symlink that both machines changed conflicts as a whole, with no markers: the waiting merge holds this machine's version. Keep it, or take the other machine's with `git checkout --theirs <file>`, then `git add` it.
 
@@ -121,7 +121,7 @@ hint: rename yours with 'agentx skill rename release-notes <new>', then publish 
 
 ## Exit codes
 
-- `1`: `publish` is given both a name and `--all`, or neither; `skill add --from-account` is given no name, a source, `--name`, `--all`, `--except` or `--fetch`; or `--keep-local` is given without `--from-account`.
+- `1`: `skill add --from-account` is given no name, a source, `--name`, `--all`, `--except` or `--fetch`; or `--keep-local` is given without `--from-account`.
 - `3`: Git cannot reach the account remote.
 - `4`: a fork has a merge waiting, or the pull or publish left one waiting for you to [resolve](#resolve-a-conflict); or the managed skill a fork would take the place of has an update merge pending.
 - `5`: the name is not a skill of this machine; the remote holds no fork of that name to install; or the fork to install, or the folder `--keep-local` keeps, has no `SKILL.md`.

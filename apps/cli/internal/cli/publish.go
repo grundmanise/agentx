@@ -40,12 +40,11 @@ const (
 	publishConflict = "conflict"   // taking in what the account remote holds conflicts, and the merge is pending
 )
 
-func newPublishCommand(inv *invocation) *cobra.Command {
-	var all bool
-	cmd := &cobra.Command{
-		Use:   "publish [<name>] [--all]",
+func newSkillPublishCommand(inv *invocation) *cobra.Command {
+	return &cobra.Command{
+		Use:   "publish [<name>]",
 		Short: "Push the commits of a fork, or of every fork, to the account remote",
-		Long: "Push the commits of the fork called <name>, or with --all of every fork with\n" +
+		Long: "Push the commits of the fork called <name>, or with no name of every fork with\n" +
 			"commits the account remote lacks, to the fork's branch on the account remote.\n" +
 			"Publishing pushes commits only: commit a fork's edits first with 'agentx skill\n" +
 			"commit'; the result names every fork whose edits were left out. When the account\n" +
@@ -55,21 +54,17 @@ func newPublishCommand(inv *invocation) *cobra.Command {
 			"fork is never pushed over.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			const hint = "name the fork to publish, or run 'agentx publish --all' to publish every fork"
-			switch {
-			case all && len(args) > 0:
-				return fail(exitUsage, "publish takes a fork name or --all, not both", hint)
-			case !all && len(args) == 0:
-				return fail(exitUsage, "publish needs a fork name or --all", hint)
-			case all:
-				return inv.publish(cmd.Context(), "")
+			name := ""
+			if len(args) > 0 {
+				name = args[0]
 			}
-			return inv.publish(cmd.Context(), args[0])
+			return inv.publish(cmd.Context(), name)
 		},
 	}
-	cmd.Flags().BoolVar(&all, "all", false, "publish every fork with commits the account remote lacks")
-	return cmd
 }
+
+// publishCommand is the command line that publishes the fork called name.
+func publishCommand(name string) string { return skillCommand("publish", name) }
 
 // publishing is one fork of a publish: what was found of it and what the
 // publish did with it.

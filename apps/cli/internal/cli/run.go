@@ -190,7 +190,6 @@ func newRoot(inv *invocation) *cobra.Command {
 	root.AddCommand(newExportCommand(inv))
 	root.AddCommand(newImportCommand(inv))
 	root.AddCommand(newPullCommand(inv))
-	root.AddCommand(newPublishCommand(inv))
 	return root
 }
 

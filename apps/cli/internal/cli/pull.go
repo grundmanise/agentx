@@ -75,9 +75,6 @@ func newPullCommand(inv *invocation) *cobra.Command {
 // pullCommand is the command line that pulls the fork called name.
 func pullCommand(name string) string { return remoteCommand("pull", name) }
 
-// publishCommand is the command line that publishes the fork called name.
-func publishCommand(name string) string { return remoteCommand("publish", name) }
-
 // remoteCommand is the command line of the top-level command verb for the
 // fork called name, as a hint names it.
 func remoteCommand(verb, name string) string {

@@ -67,7 +67,7 @@ func accountHomes(t *testing.T) (a, b *harness, s *sourceRepo, remote string) {
 	a.mustRun("skill", "fork", "beta")
 	remote = newAccountRemote(t, a)
 	a.setAccount(remote)
-	a.mustRun("publish", "--all")
+	a.mustRun("skill", "publish")
 
 	b = newHarness(t)
 	b.build(t, fixture{dirs: []string{".claude"}})
@@ -119,7 +119,7 @@ func TestPullFastForwardsMergesAndConflicts(t *testing.T) {
 	alphaB := b.forkDir("alpha", "alpha")
 
 	one := a.commitFork("alpha", forkNotes("one", "one, a"))
-	a.mustRun("publish", "alpha")
+	a.mustRun("skill", "publish", "alpha")
 	out := b.mustRun("--json", "pull", "alpha")
 	ev := b.one(out.stdout, "pull")
 	equal(t, "outcome", ev["outcome"], pullFastForward)
@@ -135,7 +135,7 @@ func TestPullFastForwardsMergesAndConflicts(t *testing.T) {
 	a.mustRun("skill", "check-updates")
 	a.mustRun("skill", "update", "alpha")
 	importTwo := a.accountGit("rev-parse", lineage.ForkRef("alpha")+"^2")
-	a.mustRun("publish", "alpha")
+	a.mustRun("skill", "publish", "alpha")
 	mine := b.commitFork("alpha", forkNotes("one", "one, a", "two", "two, b"))
 	out = b.mustRun("--json", "pull", "alpha")
 	ev = b.one(out.stdout, "pull")
@@ -150,7 +150,7 @@ func TestPullFastForwardsMergesAndConflicts(t *testing.T) {
 	equal(t, "b's notes", fileBody(t, filepath.Join(alphaB, "notes.md")), forkNotes("one", "one, a", "two", "two, b", "seven", "seven, upstream"))
 
 	a.commitFork("alpha", forkNotes("one", "one, a", "seven", "seven, upstream", "four", "four, a"))
-	a.mustRun("publish", "alpha")
+	a.mustRun("skill", "publish", "alpha")
 	b.commitFork("alpha", forkNotes("one", "one, a", "two", "two, b", "seven", "seven, upstream", "eight", "eight, b"))
 	b.mustRun("source", "fetch", s.url)
 	b.mustRun("pull", "alpha")
@@ -162,10 +162,10 @@ func TestPullFastForwardsMergesAndConflicts(t *testing.T) {
 	b.mustRun("skill", "update", "beta")
 	betaTwo := b.accountGit("rev-parse", lineage.ForkRef("beta")+"^2")
 	a.commitFork("beta", forkNotes("six", "six, a"))
-	a.mustRun("publish", "beta")
+	a.mustRun("skill", "publish", "beta")
 	betaTip := b.commitFork("beta", forkNotes("six", "six, b"))
 	a.commitFork("alpha", forkNotes("one", "one, a", "seven", "seven, upstream", "four", "four, a", "six", "six, a"))
-	a.mustRun("publish", "alpha")
+	a.mustRun("skill", "publish", "alpha")
 	writeFile(t, filepath.Join(alphaB, "b.md"), "b's own file\n")
 	b.mustRun("skill", "commit", "alpha")
 	alphaTip := b.ref(lineage.ForkRef("alpha"))
@@ -194,7 +194,7 @@ func TestPullFastForwardsMergesAndConflicts(t *testing.T) {
 
 	writeFile(t, filepath.Join(pendingCheckout(b, "beta"), "beta", "notes.md"), forkNotes("six", "six, a and b"))
 	checkoutGit(t, b, "beta", "add", "beta/notes.md")
-	out = b.run("--json", "publish", "beta")
+	out = b.run("--json", "skill", "publish", "beta")
 	equal(t, "a publish of the resolved merge: exit", out.exit, 4)
 	contains(t, "its hint", b.one(out.stdout, "error")["hint"].(string), "run 'agentx pull beta' to complete it, then publish again")
 	checkoutGit(t, b, "beta", "commit", "--quiet", "-m", "resolve")
@@ -229,14 +229,14 @@ func TestPublishMergesFirstAndNamesUncommittedForks(t *testing.T) {
 	a, b, _, remote := twoHomes(t)
 	alphaB := b.forkDir("alpha", "alpha")
 	theirs := a.commitFork("alpha", forkNotes("one", "one, a"))
-	a.mustRun("publish", "alpha")
+	a.mustRun("skill", "publish", "alpha")
 	mine := b.commitFork("alpha", forkNotes("eight", "eight, b"))
 	betaBefore := remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/beta")
 	b.commitFork("beta", forkNotes("two", "two, b"))
 
 	committed := readText(t, filepath.Join(alphaB, "SKILL.md"))
 	writeFile(t, filepath.Join(alphaB, "SKILL.md"), "uncommitted\n")
-	out := b.run("--json", "publish", "alpha")
+	out := b.run("--json", "skill", "publish", "alpha")
 	equal(t, "exit", out.exit, 6)
 	contains(t, "the error", b.one(out.stdout, "error")["message"].(string), "alpha has uncommitted edits, so it cannot be published")
 	if strings.Contains(out.stderr, "which were not published") {
@@ -245,7 +245,7 @@ func TestPublishMergesFirstAndNamesUncommittedForks(t *testing.T) {
 	equal(t, "the remote's alpha", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/alpha"), theirs)
 
 	writeFile(t, filepath.Join(alphaB, "SKILL.md"), committed)
-	out = b.mustRun("--json", "publish", "alpha")
+	out = b.mustRun("--json", "skill", "publish", "alpha")
 	merged := b.ref(lineage.ForkRef("alpha"))
 	equal(t, "the merge's parents", b.parents(merged), mine+"\n"+theirs)
 	equal(t, "pull outcome", b.one(out.stdout, "pull")["outcome"], pullMerged)
@@ -263,11 +263,11 @@ func TestPublishMergesFirstAndNamesUncommittedForks(t *testing.T) {
 
 	tip := b.commitFork("alpha", forkNotes("one", "one, a", "eight", "eight, b", "two", "two, b"))
 	writeFile(t, filepath.Join(alphaB, "notes.md"), "uncommitted\n")
-	out = b.run("publish", "alpha")
+	out = b.run("skill", "publish", "alpha")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "the line", out.stdout, "published alpha as "+short(tip))
 	contains(t, "the warning", out.stderr, "alpha has uncommitted edits, which were not published")
-	out = b.mustRun("--json", "publish", "--all")
+	out = b.mustRun("--json", "skill", "publish")
 	equal(t, "summary", b.one(out.stdout, "result")["summary"], "published 1 of 2 forks; uncommitted edits were not published: alpha")
 	for _, e := range b.eventsOfType(out.stdout, "publish") {
 		switch e["name"] {
@@ -283,20 +283,20 @@ func TestPublishMergesFirstAndNamesUncommittedForks(t *testing.T) {
 	equal(t, "the remote's refs", remoteGit(t, b, remote, "for-each-ref", "--format=%(refname)"), "refs/heads/skills/alpha\nrefs/heads/skills/beta")
 
 	a.commitFork("beta", forkNotes("two", "two, a"))
-	out = a.run("--json", "publish", "beta")
+	out = a.run("--json", "skill", "publish", "beta")
 	equal(t, "a conflicting publish: exit", out.exit, 4)
 	equal(t, "its outcome", a.one(out.stdout, "publish")["outcome"], publishConflict)
 	contains(t, "its hint", a.one(out.stdout, "error")["hint"].(string), "then run 'agentx pull beta' to complete it before publishing again, or ")
 	out = a.run("--json", "skill", "update", "beta")
 	equal(t, "the merge reported again: exit", out.exit, 4)
 	contains(t, "its message", a.one(out.stdout, "error")["message"].(string), "beta conflicts with the account remote in 1 file")
-	out = a.run("--json", "publish", "beta")
+	out = a.run("--json", "skill", "publish", "beta")
 	equal(t, "a publish over the pending merge: exit", out.exit, 4)
 	contains(t, "its hint", a.one(out.stdout, "error")["hint"].(string), "resolve it with git in "+filepath.Join(a.agentx, "merges", "beta", "beta")+" and run")
 
 	writeShim(t, filepath.Join(remote, "hooks", "pre-receive"), "#!/bin/sh\nexit 1\n")
 	b.commitFork("alpha", forkNotes("nine", "nine, b"))
-	out = b.run("--json", "publish", "alpha")
+	out = b.run("--json", "skill", "publish", "alpha")
 	equal(t, "a rejected push: exit", out.exit, 6)
 	equal(t, "its outcome", b.one(out.stdout, "publish")["outcome"], publishRejected)
 	e := b.one(out.stdout, "error")
@@ -317,20 +317,21 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 	a, _, _, _ := forkHarness(t)
 	remote := newAccountRemote(t, a)
 	a.setAccount(remote)
-	out := a.mustRun("--json", "publish", "notes")
+	out := a.mustRun("--json", "skill", "publish", "notes")
 	equal(t, "outcome", a.one(out.stdout, "publish")["outcome"], publishPushed)
 	equal(t, "summary", a.one(out.stdout, "result")["summary"], "published notes")
 
 	b, _, _, _ := forkHarness(t)
 	b.setAccount(remote)
 	writeFile(t, filepath.Join(b.forkDir("notes", "notes"), "draft.md"), "uncommitted\n")
-	for _, cmd := range []string{"publish", "pull"} {
-		out := b.run("--json", cmd, "notes")
+	for _, argv := range [][]string{{"skill", "publish"}, {"pull"}} {
+		cmd := strings.Join(argv, " ")
+		out := b.run(append(append([]string{"--json"}, argv...), "notes")...)
 		equal(t, cmd+": exit", out.exit, 6)
 		e := b.one(out.stdout, "error")
 		contains(t, cmd+": message", e["message"].(string), "the account remote's skills/notes is a different fork than notes on this machine")
 		contains(t, cmd+": hint", e["hint"].(string), "rename yours with 'agentx skill rename notes <new>'")
-		if cmd == "publish" {
+		if cmd == "skill publish" {
 			contains(t, "the uncommitted edits", out.stderr, "notes has uncommitted edits, which were not published")
 		}
 	}
@@ -376,7 +377,7 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 	equal(t, "its kind", ev["local_kind"], lineage.KindFork)
 	writeFile(t, filepath.Join(a.forkDir("notes", "notes"), "more.md"), "more\n")
 	a.mustRun("skill", "commit", "notes")
-	a.mustRun("publish", "notes")
+	a.mustRun("skill", "publish", "notes")
 	fresh.setAccount(remote)
 	ev = state(fresh)
 	equal(t, "the fresh machine's notes, published again", ev["state"], restoreDifferent)
@@ -412,7 +413,7 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	t.Parallel()
 	a, b, s, remote := twoHomes(t)
 	theirs := a.commitFork("alpha", forkNotes("one", "one, a"))
-	a.mustRun("publish", "alpha")
+	a.mustRun("skill", "publish", "alpha")
 	mine := b.commitFork("alpha", forkNotes("three", "three, b"))
 	s.write("skills/alpha/notes.md", forkNotes("seven", "seven, upstream"))
 	second := s.commit("second version")
@@ -439,7 +440,7 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 		}
 	}
 
-	b.mustRun("publish", "alpha")
+	b.mustRun("skill", "publish", "alpha")
 	a.mustRun("pull", "alpha")
 	s.write("skills/alpha/notes.md", forkNotes("seven", "seven, third"))
 	s.write("skills/beta/notes.md", forkNotes("six", "six, third"))
@@ -450,7 +451,7 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	s.commit("fourth version")
 	a.mustRun("skill", "check-updates")
 	a.mustRun("skill", "update", "alpha")
-	a.mustRun("publish", "alpha")
+	a.mustRun("skill", "publish", "alpha")
 	published := a.ref(lineage.ForkRef("alpha"))
 
 	out = b.mustRun("--json", "skill", "update", "--all")
@@ -529,7 +530,7 @@ func TestPullRecoversWhereItWasKilled(t *testing.T) {
 			t.Parallel()
 			a, b, _, _ := twoHomes(t)
 			theirs := a.commitFork("alpha", forkNotes("one", "one, a"))
-			a.mustRun("publish", "alpha")
+			a.mustRun("skill", "publish", "alpha")
 			mine := b.commitFork("alpha", forkNotes("eight", "eight, b"))
 			out := killedChild(t, b, "TestPullChildProcess", pullChildEnv, "alpha", tc.script)
 			_, kinds := journalKinds(t, b)
