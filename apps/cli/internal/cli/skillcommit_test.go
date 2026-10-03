@@ -152,7 +152,7 @@ func TestSkillCommitCommitsEachEditedFork(t *testing.T) {
 func TestSkillCommitRefusals(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "mine"), "SKILL.md"), skill("mine", "mine"))
 	h.mustRun("skill", "new", "notes")
 	h.mustRun("skill", "new", "gone")

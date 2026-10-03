@@ -63,7 +63,7 @@ func TestExportCarriesCoordinatesAndNoContent(t *testing.T) {
 	s.commit("one skill")
 	head := s.run("rev-parse", "HEAD")
 	equal(t, "source add", h.run("source", "add", s.url).exit, 0)
-	equal(t, "skill add", h.run("skill", "add", s.url, "--skill", "keeper").exit, 0)
+	equal(t, "skill add", h.run("skill", "add", s.url, "--name", "keeper").exit, 0)
 
 	file := h.exportPath("export.json")
 	out := h.run("--json", "export", file)

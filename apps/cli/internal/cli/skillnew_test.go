@@ -117,7 +117,7 @@ func TestSkillNewCreatesAForkFromTheTemplate(t *testing.T) {
 func TestSkillNewRefusals(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	h.accountGit("update-ref", "refs/heads/managed/Shout", h.ref(lineage.ManagedRef("alpha")))
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "taken"), "SKILL.md"), skill("taken", "mine"))
 	if err := os.MkdirAll(filepath.Join(h.agentx, "worktrees", "held"), 0o755); err != nil {

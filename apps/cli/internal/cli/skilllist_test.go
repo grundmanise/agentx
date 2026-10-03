@@ -19,7 +19,7 @@ import (
 func TestSkillListReportsManagedAndUnmanaged(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	equal(t, "exit", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "exit", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 	byHand := filepath.Join(h.library, "mine")
 	if err := os.MkdirAll(byHand, 0o755); err != nil {
 		t.Fatal(err)
@@ -62,7 +62,7 @@ func TestSkillListReportsManagedAndUnmanaged(t *testing.T) {
 func TestSkillListReadsLineageFromTheBranchesAlone(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	equal(t, "exit", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "exit", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 	beforeJSON := h.mustRun("--json", "skill", "list")
 	beforeText := h.mustRun("skill", "list")
 
@@ -93,7 +93,7 @@ func TestSkillListReadsLineageFromTheBranchesAlone(t *testing.T) {
 func TestSkillListReportsAFork(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	equal(t, "exit", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "exit", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 	h.accountGit("update-ref", "refs/heads/skills/beta", h.accountGit("rev-parse", "refs/heads/managed/alpha"))
 	copyTree(t, filepath.Join(h.library, "alpha"), filepath.Join(h.library, "beta"))
 
@@ -138,7 +138,7 @@ func TestSkillListWithoutALibrary(t *testing.T) {
 func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--skill", "beta")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--name", "beta")
 	writeFile(t, filepath.Join(h.library, "alpha", "SKILL.md"), skill("alpha", "Edited in the library"))
 	chmod(t, filepath.Join(h.library, "alpha", "notes.md"), 0o755)
 	claude := filepath.Join(h.home, ".claude", "skills", "beta")
@@ -204,7 +204,7 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 		equal(t, what+": git runs", strings.Join(ran, " "), "add add config for-each-ref log read-tree read-tree write-tree write-tree")
 	}
 	ghost := "ghost is managed in the account repo but the library holds no skill directory for it;" +
-		" run 'agentx skill add <source> --skill ghost' to install it again, or 'agentx skill remove ghost' to stop managing it"
+		" run 'agentx skill add <source> --name ghost' to install it again, or 'agentx skill remove ghost' to stop managing it"
 	list := h.mustRun("skill", "list")
 	equal(t, "skill list's warning", list.stderr, "warning: "+ghost+"\n")
 	contains(t, "skill list", list.stdout, "modified, update available, merge pending  ")

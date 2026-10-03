@@ -34,7 +34,7 @@ var driftHome = &fixtureHome{
 		s.executable("tools/pdf-tools/bin/run.sh")
 		s.commit("pdf")
 		h.mustRun("source", "add", s.url)
-		h.mustRun("skill", "add", s.url, "--skill", "pdf")
+		h.mustRun("skill", "add", s.url, "--name", "pdf")
 		return nil
 	},
 }
@@ -135,7 +135,7 @@ func TestARootSkillIsComparedUnderTheRepositoryName(t *testing.T) {
 func TestPlacementDriftIsReadAtEachConfigurationsOwnPlace(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	lib := filepath.Join(h.library, "alpha")
 	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
 	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
@@ -189,7 +189,7 @@ func TestPlacementDriftIsReadAtEachConfigurationsOwnPlace(t *testing.T) {
 func TestACopyIsDisplacedByALinkAndNeverMissing(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--copy")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--copy")
 	lib := filepath.Join(h.library, "alpha")
 	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
 	equal(t, "after a copy install", drift(h.listed("alpha")), "")
@@ -224,7 +224,7 @@ func TestASharedPlaceIsJudgedOnce(t *testing.T) {
 		h.build(t, fixture{dirs: []string{".claude", ".zencoder"}})
 		s, _, _ := h.standardSource(true)
 		h.mustRun("source", "add", s.url)
-		h.mustRun(append([]string{"skill", "add", s.url, "--skill", "alpha"}, add...)...)
+		h.mustRun(append([]string{"skill", "add", s.url, "--name", "alpha"}, add...)...)
 		return h, filepath.Join(h.home, ".zencoder", "skills", "alpha")
 	}
 	expect := func(t *testing.T, h *harness, what, want, text string) {
@@ -393,7 +393,7 @@ func words(v any) string {
 func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	p := h.serve(t, "--json")
 	first := p.next("snapshot")
 	p.send(`{"type":"refresh","request_id":"start"}`)
@@ -463,7 +463,7 @@ func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 
 	// A skill that arrives in the library is no transition, of its own or
 	// of the skill beside it: the snapshot says so itself.
-	h.runBesideServe("skill", "add", s.url, "--skill", "beta")
+	h.runBesideServe("skill", "add", s.url, "--name", "beta")
 	p.send(`{"type":"refresh","request_id":"arrived"}`)
 	var arrived jsonEvent
 	for _, e := range p.until("arrived") {
@@ -530,7 +530,7 @@ func TestAdoptionAndListingAgreeOnModified(t *testing.T) {
 func TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	p := h.serve(t, "--json")
 	p.next("snapshot")
 	p.send(`{"type":"refresh","request_id":"start"}`)
@@ -542,7 +542,7 @@ func TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := "alpha is managed in the account repo but the library holds no skill directory for it; run 'agentx skill add " +
-		shellWord(s.url) + " --skill alpha' to install it again, or 'agentx skill remove alpha' to stop managing it"
+		shellWord(s.url) + " --name alpha' to install it again, or 'agentx skill remove alpha' to stop managing it"
 	p.send(`{"type":"refresh","request_id":"gone"}`)
 	var snap jsonEvent
 	for _, e := range p.until("gone") {
@@ -578,7 +578,7 @@ func TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning(t *testing.T) {
 
 	// The warning is the whole of it: a skill the library holds again is
 	// listed again, and warned about no more.
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	out = h.mustRun("--json", "skill", "list")
 	equal(t, "state after installing it again", h.librarySkill(out.stdout, "alpha")["state"], stateCurrent)
 	equal(t, "warnings after installing it again", strings.Join(warnings(h, out.stderr), "\n"), "")
@@ -591,11 +591,11 @@ func TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning(t *testing.T) {
 func TestAManagedSkillWithoutItsSKILLmdNamesTheDirectory(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	lib := filepath.Join(h.library, "alpha")
 	remove(t, filepath.Join(lib, "SKILL.md"))
 	want := "alpha is managed in the account repo but " + lib + " holds no SKILL.md; move " + lib + " aside, then run 'agentx skill add " +
-		shellWord(s.url) + " --skill alpha' to install it again, or run 'agentx skill remove alpha' to stop managing it"
+		shellWord(s.url) + " --name alpha' to install it again, or run 'agentx skill remove alpha' to stop managing it"
 	equal(t, "skill list's warnings", strings.Join(warnings(h, h.mustRun("--json", "skill", "list").stderr), "\n"), want)
 	out := h.serveOnce("--json")
 	var named []string
@@ -607,7 +607,7 @@ func TestAManagedSkillWithoutItsSKILLmdNamesTheDirectory(t *testing.T) {
 	equal(t, "the snapshot's warnings about alpha", strings.Join(named, "\n"), want)
 
 	remove(t, lib)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	listed := h.mustRun("--json", "skill", "list")
 	equal(t, "state after installing it again", h.librarySkill(listed.stdout, "alpha")["state"], stateCurrent)
 	equal(t, "warnings after installing it again", strings.Join(warnings(h, listed.stderr), "\n"), "")

@@ -44,7 +44,7 @@ var legacyHome = &fixtureHome{
 		}
 		contains(s.t, "the source listing", s.bare("ls-tree", "HEAD:skills/nc"), "100644 blob "+s.run("rev-parse", "HEAD:skills/nc/a.md")+"\ta.md")
 		h.mustRun("source", "add", s.url)
-		h.mustRun("skill", "add", s.url, "--skill", "nc")
+		h.mustRun("skill", "add", s.url, "--name", "nc")
 		return []string{canonical}
 	},
 }
@@ -136,14 +136,14 @@ func TestInstallingTheSameVersionStoresAnOlderBranchAgain(t *testing.T) {
 	remove(t, ignored)
 
 	stored := "nc differs from its base version at " + ncShort(h) + " only in how the account repo stores it;" +
-		" run 'agentx skill add " + shellWord(s.url) + " --skill nc' to install that version again while the source still holds it," +
+		" run 'agentx skill add " + shellWord(s.url) + " --name nc' to install that version again while the source still holds it," +
 		" which stores it as git writes it today and changes no file, or, once 'agentx skill check-updates' finds a newer version, run 'agentx skill update nc'"
 	out := h.mustRun("--json", "skill", "diff", "nc")
 	equal(t, "diff events", len(h.eventsOfType(out.stdout, "diff")), 0)
 	equal(t, "the diff's result", h.one(out.stdout, "result")["summary"], stored)
 	equal(t, "the import branch after the diff", h.accountGit("rev-parse", "refs/heads/managed/nc"), legacy)
 
-	out = h.run("--json", "skill", "add", s.url, "--skill", "nc")
+	out = h.run("--json", "skill", "add", s.url, "--name", "nc")
 	if out.exit != 0 {
 		t.Fatalf("add: exit %d\n%s", out.exit, out.stderr)
 	}
@@ -153,7 +153,7 @@ func TestInstallingTheSameVersionStoresAnOlderBranchAgain(t *testing.T) {
 
 	h.storeInOlderForm(t, s)
 	remove(t, filepath.Join(h.library, "nc"))
-	h.mustRun("skill", "add", s.url, "--skill", "nc")
+	h.mustRun("skill", "add", s.url, "--name", "nc")
 	equal(t, "the import branch with the directory gone", h.accountGit("rev-parse", "refs/heads/managed/nc"), tip)
 	equal(t, "a.md", fileBody(t, filepath.Join(h.library, "nc", "a.md")), "a\n")
 	equal(t, "state with the directory gone", h.listed("nc")["state"], stateCurrent)

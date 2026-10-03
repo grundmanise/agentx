@@ -81,7 +81,7 @@ func drift(entry map[string]any) string {
 func TestSourceRemovedIsReportedAndClearedByAddingTheSourceAgain(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	beforeText := h.mustRun("skill", "list").stdout
 	beforeJSON := h.mustRun("--json", "skill", "list").stdout
 	before := h.librarySkill(beforeJSON, "alpha")
@@ -126,7 +126,7 @@ func TestSourceRemovedIsReportedAndClearedByAddingTheSourceAgain(t *testing.T) {
 	// command that adds the source again rather than a listing it is gone
 	// from.
 	id := source.ID(s.url)
-	refused := h.run("--json", "skill", "add", id, "--skill", "beta")
+	refused := h.run("--json", "skill", "add", id, "--name", "beta")
 	equal(t, "exit", refused.exit, 5)
 	e := h.one(refused.stdout, "error")
 	equal(t, "code", e["code"], "not_found")
@@ -155,7 +155,7 @@ func TestSourceRemovedIsReportedAndClearedByAddingTheSourceAgain(t *testing.T) {
 	}
 
 	// The install the hint was given for now goes through.
-	again := h.run("--json", "skill", "add", id, "--skill", "beta")
+	again := h.run("--json", "skill", "add", id, "--name", "beta")
 	equal(t, "exit after adding the source again", again.exit, 0)
 	equal(t, "beta's add event drift", drift(h.librarySkill(again.stdout, "beta")), "")
 	h.accountGit("rev-parse", "--verify", "refs/heads/managed/beta")
@@ -177,7 +177,7 @@ func TestSourceRemovedIsReportedAndClearedByAddingTheSourceAgain(t *testing.T) {
 func TestSourceRemovedIsReadFromTheSettings(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	beforeJSON := h.mustRun("--json", "skill", "list").stdout
 	before := h.librarySkill(beforeJSON, "alpha")
 	equal(t, "snapshot drift before", drift(h.snapshotLibrary("alpha")), "")
@@ -212,7 +212,7 @@ func TestSourceRemovedIsReadFromTheSettings(t *testing.T) {
 		equal(t, field, after[field], before[field])
 	}
 	equal(t, "snapshot drift", drift(h.snapshotLibrary("alpha")), "source removed")
-	refused := h.run("--json", "skill", "add", source.ID(s.url), "--skill", "beta")
+	refused := h.run("--json", "skill", "add", source.ID(s.url), "--name", "beta")
 	equal(t, "refused exit", refused.exit, 5)
 	equal(t, "refused hint", h.one(refused.stdout, "error")["hint"], removedHint(s.url))
 
@@ -240,7 +240,7 @@ func TestImportedSettingsDecideSourceRemoved(t *testing.T) {
 	t.Parallel()
 	_, elsewhere := plainExport(t)
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	beforeJSON := h.mustRun("--json", "skill", "list").stdout
 	here := h.exportPath("here.json")
 	h.mustRun("export", here)
@@ -266,7 +266,7 @@ func TestImportedSettingsDecideSourceRemoved(t *testing.T) {
 func TestSourceRemovedIsForManagedSkillsAlone(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	h.accountGit("update-ref", "refs/heads/skills/beta", h.accountGit("rev-parse", "refs/heads/managed/alpha"))
 	copyTree(t, filepath.Join(h.library, "alpha"), filepath.Join(h.library, "beta"))
 	copyTree(t, filepath.Join(h.library, "alpha"), filepath.Join(h.library, "gamma"))
@@ -288,7 +288,7 @@ func TestSourceRemovedIsForManagedSkillsAlone(t *testing.T) {
 func TestSourceAddAtAnotherPinClearsSourceRemoved(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	before := h.librarySkill(h.mustRun("--json", "skill", "list").stdout, "alpha")
 	h.mustRun("source", "remove", s.url)
 	equal(t, "drift after the removal", drift(h.librarySkill(h.mustRun("--json", "skill", "list").stdout, "alpha")), "source removed")
@@ -309,7 +309,7 @@ func TestSourceAddAtAnotherPinClearsSourceRemoved(t *testing.T) {
 func TestSourceCommandsNameARemovedSource(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	h.mustRun("source", "remove", s.url)
 	id := source.ID(s.url)
 	for _, args := range [][]string{
@@ -354,10 +354,10 @@ func TestRemovedSourceHintIsQuotedForAShell(t *testing.T) {
 	// some characters of a path, and the id is the hash of that URL.
 	added := h.one(h.mustRun("--json", "source", "add", s.url).stdout, "source")
 	url, id := added["url"].(string), added["id"].(string)
-	h.mustRun("skill", "add", url, "--skill", "alpha")
+	h.mustRun("skill", "add", url, "--name", "alpha")
 	h.mustRun("source", "remove", url)
 
-	out := h.run("--json", "skill", "add", id, "--skill", "alpha")
+	out := h.run("--json", "skill", "add", id, "--name", "alpha")
 	equal(t, "exit", out.exit, 5)
 	hint := h.one(out.stdout, "error")["hint"].(string)
 	equal(t, "hint", hint, removedHint(url))
@@ -372,7 +372,7 @@ func TestRemovedSourceHintIsQuotedForAShell(t *testing.T) {
 func TestAForkDoesNotNameARemovedSource(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	h.accountGit("update-ref", "refs/heads/skills/alpha", h.accountGit("rev-parse", "refs/heads/managed/alpha"))
 	h.accountGit("update-ref", "-d", "refs/heads/managed/alpha")
 	h.mustRun("source", "remove", s.url)
@@ -394,7 +394,7 @@ func TestAForkDoesNotNameARemovedSource(t *testing.T) {
 func TestUnreadableLineageLeavesTheRefusalOfAnId(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	h.mustRun("source", "remove", s.url)
 	// rev-parse --is-bare-repository still succeeds on this, so the check
 	// of the account repo passes and the lineage read is what fails.
@@ -420,7 +420,7 @@ func TestUnreadableLineageLeavesTheRefusalOfAnId(t *testing.T) {
 func TestPlacementEventsCarryTheDrift(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	before := h.librarySkill(h.mustRun("--json", "skill", "list").stdout, "alpha")
 	report := func(want string) {
 		t.Helper()

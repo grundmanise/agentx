@@ -287,7 +287,7 @@ func TestSkillDiffTakesARelativeHome(t *testing.T) {
 func TestSkillDiffOfAFork(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	h.mustRun("skill", "new", "notes")
 	first := h.ref(lineage.ForkRef("notes"))
 	root := filepath.Join(h.agentx, "worktrees", "notes")

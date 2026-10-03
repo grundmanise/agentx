@@ -90,7 +90,7 @@ func TestSkillAddRefusesAnEntryThatClimbsOut(t *testing.T) {
 		subpaths = append(subpaths, ev["subpath"].(string))
 	}
 	equal(t, "the skills listed", strings.Join(subpaths, " "), "skills/alpha skills/evil")
-	out := h.run("skill", "add", s.url, "--skill", "evil")
+	out := h.run("skill", "add", s.url, "--name", "evil")
 	equal(t, "exit", out.exit, 6)
 	contains(t, "stderr", out.stderr, `the skill "evil" in `+s.url+` under skills/evil holds an entry agentx will not lay out: ".."`)
 
@@ -118,7 +118,7 @@ func TestSkillAddRefusesAnEntryThatClimbsOut(t *testing.T) {
 	}
 
 	// The source is refused one skill at a time, not whole.
-	equal(t, "exit of the other skill", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "exit of the other skill", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 }
 
 // TestStageCopyStaysInside is the second line of defence: whatever path

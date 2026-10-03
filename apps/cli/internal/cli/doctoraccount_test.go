@@ -178,7 +178,7 @@ func TestDoctorSendsUnreadableSettingsBackToTheSettings(t *testing.T) {
 func TestDoctorNamesStagingRefsOfAnInterruptedInstall(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	commit := h.accountGit("rev-parse", lineage.ManagedRef("alpha"))
 
 	// Two refs of one run, as a killed install of two skills leaves them.

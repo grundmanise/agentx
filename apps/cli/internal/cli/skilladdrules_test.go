@@ -63,10 +63,10 @@ func TestSelectionCheck(t *testing.T) {
 		says string // "" when the selection passes
 	}{
 		{"nothing named", selection{}, ""},
-		{"--skill", selection{names: []string{"alpha"}}, ""},
+		{"--name", selection{names: []string{"alpha"}}, ""},
 		{"--all", selection{all: true}, ""},
 		{"--all --except", selection{all: true, except: []string{"beta"}}, ""},
-		{"--all with --skill", selection{all: true, names: []string{"alpha"}}, "--all and --skill cannot both be given"},
+		{"--all with --name", selection{all: true, names: []string{"alpha"}}, "--all and --name cannot both be given"},
 		{"--except without --all", selection{names: []string{"alpha"}, except: []string{"beta"}}, "--except needs --all"},
 		{"--except alone", selection{except: []string{"beta"}}, "--except needs --all"},
 	} {
@@ -86,7 +86,7 @@ func TestSelectionCheck(t *testing.T) {
 // match the frontmatter name, which is the directory name only when the
 // frontmatter has none, in any case; the listing's order decides, not the
 // order of the flags; a name given twice takes one skill, and a name two
-// directories share takes the first of them. An --except or a --skill that
+// directories share takes the first of them. An --except or a --name that
 // names no skill of the source is refused, since the run would otherwise
 // install more or less than was asked.
 func TestSelectSkills(t *testing.T) {
@@ -110,15 +110,15 @@ func TestSelectSkills(t *testing.T) {
 		want    string // the subpaths selected, or the refusal
 		status  status // of the refusal
 	}{
-		{"--skill in any case, twice, in another order", listing, selection{names: []string{"GAMMA", "Alpha", "alpha"}}, "skills/alpha skills/gamma", exitOK},
-		{"--skill by the frontmatter name", listing, selection{names: []string{"FANCY"}}, "skills/on-disk", exitOK},
+		{"--name in any case, twice, in another order", listing, selection{names: []string{"GAMMA", "Alpha", "alpha"}}, "skills/alpha skills/gamma", exitOK},
+		{"--name by the frontmatter name", listing, selection{names: []string{"FANCY"}}, "skills/on-disk", exitOK},
 		{"--all", listing, selection{all: true}, "skills/alpha skills/beta skills/gamma skills/on-disk", exitOK},
 		{"--all --except in any case, twice", listing, selection{all: true, except: []string{"BeTa", "beta", "fancy"}}, "skills/alpha skills/gamma", exitOK},
-		{"one skill needs no --skill", source.Listing{Skills: listing.Skills[:1]}, selection{}, "skills/alpha", exitOK},
+		{"one skill needs no --name", source.Listing{Skills: listing.Skills[:1]}, selection{}, "skills/alpha", exitOK},
 		{"a name two directories share takes the first", twins, selection{names: []string{"twin"}}, "skills/first", exitOK},
 		{"--except leaves out every skill of the name", twins, selection{all: true, except: []string{"TWIN"}}, "skills/other", exitOK},
-		{"--skill by the directory name of a named skill", listing, selection{names: []string{"alpha", "on-disk"}}, `has no skill called "on-disk"`, exitNotFound},
-		{"--skill of nothing in the source, named once", listing, selection{names: []string{"delta", "Delta", "epsilon"}}, `has no skill called "delta", "epsilon"`, exitNotFound},
+		{"--name by the directory name of a named skill", listing, selection{names: []string{"alpha", "on-disk"}}, `has no skill called "on-disk"`, exitNotFound},
+		{"--name of nothing in the source, named once", listing, selection{names: []string{"delta", "Delta", "epsilon"}}, `has no skill called "delta", "epsilon"`, exitNotFound},
 		{"--except of nothing in the source", listing, selection{all: true, except: []string{"delta"}}, `has no skill called "delta"`, exitNotFound},
 		{"--except of everything", listing, selection{all: true, except: []string{"alpha", "beta", "gamma", "fancy"}}, "--except left no skill to install", exitUsage},
 		{"several skills and nothing named", listing, selection{}, src.URL + " holds 4 skills", exitUsage},

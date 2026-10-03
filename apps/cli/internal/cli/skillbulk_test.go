@@ -107,7 +107,7 @@ func TestSkillAddAllSelectsEverySkill(t *testing.T) {
 }
 
 // TestSkillAddMatchesNamesInAnyCase selects by the frontmatter name in any
-// case for --skill and --except alike, falling back to the directory name
+// case for --name and --except alike, falling back to the directory name
 // only when the frontmatter has no name, which the source listing decides.
 // The library directory keeps the frontmatter's spelling. Every other rule
 // of a selection is TestSelectionCheck and TestSelectSkills.
@@ -122,7 +122,7 @@ func TestSkillAddMatchesNamesInAnyCase(t *testing.T) {
 	s.commit("three skills")
 	equal(t, "exit of source add", h.run("source", "add", s.url).exit, 0)
 	for _, args := range [][]string{
-		{"--skill", "plain", "--skill", "on-disk"},
+		{"--name", "plain", "--name", "on-disk"},
 		{"--all", "--except", "on-disk"},
 	} {
 		out := h.run(append([]string{"skill", "add", s.url}, args...)...)
@@ -133,7 +133,7 @@ func TestSkillAddMatchesNamesInAnyCase(t *testing.T) {
 	out := h.run("skill", "add", s.url, "--all", "--except", "FANCY", "--except", "NameLess")
 	equal(t, "exit of --except by frontmatter and fallback names", out.exit, 0)
 	equal(t, "the skills left", strings.Join(installedNames(t, h), ","), "plain")
-	equal(t, "exit of --skill in another case", h.run("skill", "add", s.url, "--skill", "FANCY").exit, 0)
+	equal(t, "exit of --name in another case", h.run("skill", "add", s.url, "--name", "FANCY").exit, 0)
 	equal(t, "the library after it", strings.Join(installedNames(t, h), ","), "fancy,plain")
 }
 
@@ -151,7 +151,7 @@ func TestSkillAddAllAddsASourceThatIsNotAdded(t *testing.T) {
 	}
 	s.commit("three skills")
 
-	for _, args := range [][]string{{"--all", "--skill", "alpha"}, {"--except", "beta"}} {
+	for _, args := range [][]string{{"--all", "--name", "alpha"}, {"--except", "beta"}} {
 		out := h.run(append([]string{"skill", "add", s.url}, args...)...)
 		equal(t, fmt.Sprint(args, ": exit"), out.exit, 1)
 		if list := h.run("--json", "source", "list"); len(h.eventsOfType(list.stdout, "source")) != 0 {
@@ -467,7 +467,7 @@ func TestSkillAddRefusesTwoSkillsOfOneName(t *testing.T) {
 	// Naming it resolves to one skill, as it always has: the first, which
 	// is the one the library holds, so asking for it by name is that version
 	// again and not a second one.
-	again := h.run("skill", "add", s.url, "--skill", "twin")
+	again := h.run("skill", "add", s.url, "--name", "twin")
 	equal(t, "exit of the install by name", again.exit, 0)
 	equal(t, "stderr of the install by name", again.stderr, "")
 }

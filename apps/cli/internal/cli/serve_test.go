@@ -380,7 +380,7 @@ func TestServeWatchesAClientSkillsDirectory(t *testing.T) {
 func TestServeKeepsServingWhenTheAccountRepoCannotBeRead(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	account := gitx.AccountRepoPath(h.agentx)
 	head := filepath.Join(account, "HEAD")
 	healthy, err := os.ReadFile(head)

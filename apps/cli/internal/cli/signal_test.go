@@ -268,7 +268,7 @@ func TestASecondSignalKillsTheRun(t *testing.T) {
 	hangingGit(t, h, "update-ref", ready)
 
 	code, stderr := signalled(t, h, stopRun{ready: ready, sigs: []syscall.Signal{syscall.SIGINT, syscall.SIGINT},
-		args: []string{"skill", "add", s.url, "--skill", "alpha", "--color", "off"}})
+		args: []string{"skill", "add", s.url, "--name", "alpha", "--color", "off"}})
 
 	equal(t, "the exit status after a second signal", code, -int(syscall.SIGINT))
 	if stderr != "" {
@@ -314,7 +314,7 @@ done
 exec `+real+` "$@"
 `)
 	code, stderr := signalled(t, h, stopRun{ready: ready,
-		args: []string{"skill", "add", s.url, "--skill", "alpha", "--color", "off"}})
+		args: []string{"skill", "add", s.url, "--name", "alpha", "--color", "off"}})
 
 	if _, err := os.Stat(done); err != nil {
 		t.Fatalf("the journal's ref step never ran, so the test did not stop the run where it means to:\n%s", stderr)
@@ -370,7 +370,7 @@ func TestATerminalCtrlCDuringTheJournalIsTheCrashBoundary(t *testing.T) {
 	hangingGit(t, h, "update-ref", ready)
 
 	code, stderr := signalled(t, h, stopRun{ready: ready, sigs: []syscall.Signal{syscall.SIGINT}, group: true,
-		args: []string{"skill", "add", s.url, "--skill", "alpha", "--color", "off"}})
+		args: []string{"skill", "add", s.url, "--name", "alpha", "--color", "off"}})
 
 	equal(t, "the exit code of a run a terminal stopped", code, exitInterrupted.exit)
 	contains(t, "stderr", stderr, "error: interrupted")

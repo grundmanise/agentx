@@ -84,7 +84,7 @@ func TestACopyPlacementLeavesNoStagedDirectory(t *testing.T) {
 	h.build(t, fixture{dirs: []string{".claude", ".zencoder"}})
 	s, _, _ := h.standardSource(true)
 	equal(t, "source add", h.run("source", "add", s.url).exit, 0)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "claude-code").exit, 0)
 
 	shared := filepath.Join(h.home, ".zencoder", "skills")
 	out := h.run("skill", "place", "alpha", "--to", "zencoder", "--to", "zenflow", "--copy")

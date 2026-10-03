@@ -20,7 +20,7 @@ func TestImportCommitIsTheSameEverywhere(t *testing.T) {
 	t.Parallel()
 	first, s := installHarness(t)
 	first.env["TZ"] = "UTC"
-	equal(t, "exit", first.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "exit", first.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 	want := first.accountGit("rev-parse", "refs/heads/managed/alpha")
 
 	second := newHarness(t)
@@ -30,7 +30,7 @@ func TestImportCommitIsTheSameEverywhere(t *testing.T) {
 	second.rewrite(s)
 	spoilTheGitConfig(t, second)
 	second.mustRun("source", "add", s.url)
-	second.mustRun("skill", "add", s.url, "--skill", "alpha")
+	second.mustRun("skill", "add", s.url, "--name", "alpha")
 	if got := second.accountGit("rev-parse", "refs/heads/managed/alpha"); got != want {
 		t.Errorf("the import branch is at %s in the second home and %s in the first", got, want)
 		t.Logf("first:\n%s", first.accountGit("cat-file", "commit", want))
@@ -79,7 +79,7 @@ func TestImportLeavesOutWhatIsNotAFile(t *testing.T) {
 	s.commit("a skill with a symlink")
 	equal(t, "exit", h.run("source", "add", s.url).exit, 0)
 
-	out := h.run("skill", "add", s.url, "--skill", "linked")
+	out := h.run("skill", "add", s.url, "--name", "linked")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stderr", out.stderr, "tools/linked/alias.md is not a regular file")
 	if _, err := os.Lstat(filepath.Join(h.library, "linked", "alias.md")); err == nil {
@@ -115,7 +115,7 @@ func TestLibraryNameAndImportDirectoryDiffer(t *testing.T) {
 	s.skill("tools/pdf-tools", "pdf", "Named by its frontmatter", nil)
 	s.commit("a skill whose name is not its directory")
 	equal(t, "exit", h.run("source", "add", s.url).exit, 0)
-	equal(t, "exit", h.run("skill", "add", s.url, "--skill", "pdf").exit, 0)
+	equal(t, "exit", h.run("skill", "add", s.url, "--name", "pdf").exit, 0)
 
 	// The library and the branch go by the frontmatter name.
 	if _, err := os.Stat(filepath.Join(h.library, "pdf", "SKILL.md")); err != nil {
@@ -168,7 +168,7 @@ func TestStagingIsHiddenFromDiscovery(t *testing.T) {
 	}
 
 	// And an install leaves none of its own behind.
-	equal(t, "exit", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "exit", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 	entries, err := os.ReadDir(h.library)
 	if err != nil {
 		t.Fatal(err)
@@ -207,7 +207,7 @@ func TestImportCommitTakesTheUpstreamCommitterDate(t *testing.T) {
 	const upstream = "1710000000"
 	s.commitAt("a version committed elsewhere", upstream+" +0545")
 	equal(t, "exit", h.run("source", "add", s.url).exit, 0)
-	equal(t, "exit", h.run("skill", "add", s.url, "--skill", "dated").exit, 0)
+	equal(t, "exit", h.run("skill", "add", s.url, "--name", "dated").exit, 0)
 
 	equal(t, "the upstream committer time", s.bare("show", "-s", "--format=%ct", "HEAD"), upstream)
 	body := h.accountGit("cat-file", "commit", "refs/heads/managed/dated")
@@ -229,7 +229,7 @@ func TestImportCommitIgnoresUnrelatedUpstreamCommits(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	touched := s.run("rev-parse", "HEAD") // the fixture's last commit changes skills/alpha
-	equal(t, "exit", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code").exit, 0)
+	equal(t, "exit", h.run("skill", "add", s.url, "--name", "alpha", "--to", "claude-code").exit, 0)
 	head := h.accountGit("rev-parse", "refs/heads/managed/alpha")
 	body := h.accountGit("cat-file", "commit", head)
 	contains(t, "the import commit", body, "Agentx-Upstream-Commit: "+touched)
@@ -243,7 +243,7 @@ func TestImportCommitIgnoresUnrelatedUpstreamCommits(t *testing.T) {
 	equal(t, "exit of source fetch", h.run("source", "fetch", s.url).exit, 0)
 	equal(t, "the fetched tip", h.accountGit("rev-parse", "refs/agentx/sources/"+source.ID(s.url)), tip)
 
-	out := h.run("skill", "add", s.url, "--skill", "alpha", "--to", "cursor")
+	out := h.run("skill", "add", s.url, "--name", "alpha", "--to", "cursor")
 	equal(t, "exit of the second placement", out.exit, 0)
 	equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), head)
 	if _, err := os.Lstat(filepath.Join(h.home, ".cursor", "skills", "alpha")); err != nil {
@@ -255,7 +255,7 @@ func TestImportCommitIgnoresUnrelatedUpstreamCommits(t *testing.T) {
 	second.build(t, fixture{dirs: []string{".claude"}})
 	second.rewrite(s)
 	equal(t, "exit of source add in the second home", second.run("source", "add", s.url).exit, 0)
-	equal(t, "exit of skill add in the second home", second.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "exit of skill add in the second home", second.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 	got := second.accountGit("rev-parse", "refs/heads/managed/alpha")
 	if got != head {
 		t.Errorf("the import branch is at %s in a home that fetched %s, %s in one that fetched before it", got, short(tip), head)
@@ -291,7 +291,7 @@ func TestImportCommitMatchesTheSubpathLiterally(t *testing.T) {
 	// print the tree of ":(icase)odd", which git cannot rule out for a
 	// pattern.
 	for _, name := range []string{"star", "odd"} {
-		equal(t, name+": exit", h.run("skill", "add", s.url, "--skill", name).exit, 0)
+		equal(t, name+": exit", h.run("skill", "add", s.url, "--name", name).exit, 0)
 		contains(t, name+": the import commit", h.accountGit("cat-file", "commit", "refs/heads/managed/"+name), "Agentx-Upstream-Commit: "+touched)
 	}
 }

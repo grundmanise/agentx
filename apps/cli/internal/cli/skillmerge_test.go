@@ -1045,7 +1045,7 @@ func TestSkillUpdateConflictsInTheCheckoutAsMergeTreeFoundIt(t *testing.T) {
 	s.skill("skills/union", "union", "Joins its notes", map[string]string{".gitattributes": "notes.md merge=union\n", "notes.md": "notes\n"})
 	s.commit("first version")
 	h.mustRun("source", "add", s.url)
-	h.mustRun("skill", "add", s.url, "--skill", "union")
+	h.mustRun("skill", "add", s.url, "--name", "union")
 	s.write("skills/union/notes.md", "notes, revised upstream\n")
 	s.commit("second version")
 	h.mustRun("skill", "check-updates")
@@ -1170,7 +1170,7 @@ func TestAnIgnoredFileIsNotMineAndSurvivesTheMerge(t *testing.T) {
 	s.skill("skills/logs", "logs", "Keeps its logs", map[string]string{".gitignore": "*.log\n", "notes.md": "notes\n", "usage.md": "usage\n"})
 	s.commit("first version")
 	h.mustRun("source", "add", s.url)
-	h.mustRun("skill", "add", s.url, "--skill", "logs")
+	h.mustRun("skill", "add", s.url, "--name", "logs")
 	s.write("skills/logs/notes.md", "notes, revised upstream\n")
 	s.write("skills/logs/run.log", "the log the new version ships\n")
 	s.run("add", "--force", "skills/logs/run.log") // the source's own .gitignore names it

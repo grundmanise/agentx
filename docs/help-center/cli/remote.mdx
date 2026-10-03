@@ -121,7 +121,7 @@ hint: rename yours with 'agentx skill rename release-notes <new>', then publish 
 
 ## Exit codes
 
-- `1`: `publish` is given both a name and `--all`, or neither; `skill add --from-account` is given no name, a source, `--skill`, `--all`, `--except` or `--fetch`; or `--keep-local` is given without `--from-account`.
+- `1`: `publish` is given both a name and `--all`, or neither; `skill add --from-account` is given no name, a source, `--name`, `--all`, `--except` or `--fetch`; or `--keep-local` is given without `--from-account`.
 - `3`: Git cannot reach the account remote.
 - `4`: a fork has a merge waiting, or the pull or publish left one waiting for you to [resolve](#resolve-a-conflict); or the managed skill a fork would take the place of has an update merge pending.
 - `5`: the name is not a skill of this machine; the remote holds no fork of that name to install; or the fork to install, or the folder `--keep-local` keeps, has no `SKILL.md`.

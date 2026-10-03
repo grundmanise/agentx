@@ -414,7 +414,7 @@ func namedConfigurations(from []string) []string {
 // to recover from.
 //
 // Only then is --from universal beside a client that is not universal
-// refused, the way --all beside --skill is: the whole removal already takes
+// refused, the way --all beside --name is: the whole removal already takes
 // the skill from every configuration, so a list next to it can only mean the
 // user expected it to do less than it does, and a removal is not a command
 // to guess at. The hint says which removal --from universal asks for, not

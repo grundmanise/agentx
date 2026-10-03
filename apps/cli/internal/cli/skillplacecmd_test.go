@@ -28,7 +28,7 @@ func placeHome(t *testing.T) *harness {
 func TestSkillPlaceAddsAPlacementLater(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "codex")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "codex")
 	nothingAt(t, "a placement the install did not make", filepath.Join(h.home, ".cursor", "skills", "alpha"))
 	head := h.accountGit("rev-parse", "refs/heads/managed/alpha")
 	before := mutationVersion(t, h)
@@ -82,7 +82,7 @@ func TestSkillPlaceAddsAPlacementLater(t *testing.T) {
 func TestPlacingAgainKeepsARecordedCopy(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "cursor", "--copy").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "cursor", "--copy").exit, 0)
 
 	out := h.run("--json", "skill", "place", "alpha", "--to", "cursor")
 	equal(t, "exit", out.exit, 0)
@@ -116,7 +116,7 @@ func TestPlacingAgainKeepsAnEditedCopy(t *testing.T) {
 			return h.run(append(flags, "skill", "place", "alpha", "--to", "cursor")...)
 		}},
 		{"skill add", func(_ *testing.T, h *harness, s *sourceRepo, flags ...string) outcome {
-			return h.run(append(flags, "skill", "add", s.url, "--skill", "alpha", "--to", "cursor")...)
+			return h.run(append(flags, "skill", "add", s.url, "--name", "alpha", "--to", "cursor")...)
 		}},
 		{"config enable --place-all", func(t *testing.T, h *harness, _ *sourceRepo, flags ...string) outcome {
 			equal(t, "disable", h.run("config", "disable", "cursor").exit, 0)
@@ -126,7 +126,7 @@ func TestPlacingAgainKeepsAnEditedCopy(t *testing.T) {
 		t.Run(c.what, func(t *testing.T) {
 			t.Parallel()
 			h, s := placementHarness(t)
-			h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "cursor", "--copy")
+			h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "cursor", "--copy")
 			place := filepath.Join(h.home, ".cursor", "skills", "alpha")
 			editCopy(t, place)
 			edited := libraryTree(t, place)
@@ -158,14 +158,14 @@ func TestPlacingAgainKeepsAnEditedCopy(t *testing.T) {
 func TestPlacingAgainLeavesAnEditedCopyOfAnotherConfiguration(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "cursor", "--copy")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "cursor", "--copy")
 	recorded := filepath.Join(h.home, ".cursor", "skills", "alpha")
 	editCopy(t, recorded)
 	other := filepath.Join(h.home, ".copilot", "skills", "alpha")
 	copyTree(t, recorded, other)
 	edited := libraryTree(t, other)
 
-	out := h.run("--json", "skill", "add", s.url, "--skill", "alpha", "--to", "cursor", "--to", "github-copilot")
+	out := h.run("--json", "skill", "add", s.url, "--name", "alpha", "--to", "cursor", "--to", "github-copilot")
 	equal(t, "exit", out.exit, 0)
 	sameTree(t, "the other copy", libraryTree(t, other), edited)
 	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "cursor")
@@ -183,7 +183,7 @@ func TestPlacingAgainLeavesAnEditedCopyOfAnotherConfiguration(t *testing.T) {
 func TestPlacingAgainLeavesWhatReplacedARecordedCopy(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "cursor", "--copy")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "cursor", "--copy")
 	place := filepath.Join(h.home, ".cursor", "skills", "alpha")
 	mine := filepath.Join(h.home, "my-skills", "alpha")
 	copyTree(t, place, mine)
@@ -226,7 +226,7 @@ func TestTheHintForAnEditedCopyTakesTheLibraryVersion(t *testing.T) {
 	t.Parallel()
 	addAlpha := func(t *testing.T) *harness {
 		h, s := placementHarness(t)
-		h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "cursor", "--copy")
+		h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "cursor", "--copy")
 		return h
 	}
 	for _, c := range []struct {
@@ -428,7 +428,7 @@ func warnings(h *harness, stderr string) []string {
 func TestSkillPlaceLeavesALinkOfTheUsers(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code", "--copy").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "claude-code", "--copy").exit, 0)
 	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "claude-code")
 	mine := filepath.Join(h.home, "my-skills", "alpha")
 	copyTree(t, filepath.Join(h.library, "alpha"), mine)

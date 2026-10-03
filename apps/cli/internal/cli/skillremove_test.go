@@ -112,7 +112,7 @@ func nothingAt(t *testing.T, what, path string) {
 func TestSkillRemoveFromOneConfiguration(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 	head := h.accountGit("rev-parse", "refs/heads/managed/alpha")
 	before := mutationVersion(t, h)
 
@@ -149,7 +149,7 @@ func TestSkillRemoveFromOneConfiguration(t *testing.T) {
 func TestSkillRemoveTakesTheSkillOffTheMachine(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--copy").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--copy").exit, 0)
 	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "claude-code,cursor,github-copilot,windsurf")
 	// A candidate ref, which a later spec writes and this command deletes.
 	head := h.accountGit("rev-parse", "refs/heads/managed/alpha")
@@ -183,7 +183,7 @@ func TestSkillRemoveDeletesOnlyWhatAgentxMade(t *testing.T) {
 	// Claude Code gets the symlink an install makes; Cursor gets a copy
 	// agentx records; Windsurf and GitHub Copilot get placements of the
 	// user's own that agentx must not touch.
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "claude-code").exit, 0)
 	equal(t, "place", h.run("skill", "place", "alpha", "--to", "cursor", "--copy").exit, 0)
 
 	// A real directory holding exactly the library's version, which nothing
@@ -234,7 +234,7 @@ func TestSkillRemoveLeavesAFileAndAHandMadeDirectory(t *testing.T) {
 	h, s := placementHarness(t)
 	// Install into a client that reads the library, so no placement of
 	// agentx's own is made in the four directories that have one.
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "codex").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "codex").exit, 0)
 
 	aFile := filepath.Join(h.home, ".claude", "skills", "alpha")
 	if err := os.MkdirAll(filepath.Dir(aFile), 0o755); err != nil {
@@ -274,7 +274,7 @@ func TestSkillRemoveLeavesAFileAndAHandMadeDirectory(t *testing.T) {
 func TestWholeRemovalSaysWhoStillSeesTheSkill(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 
 	// Codex reads the library, so the removal never examines its own skills
 	// directory. Cursor reads that directory too, so both clients keep the
@@ -299,7 +299,7 @@ func TestWholeRemovalSaysWhoStillSeesTheSkill(t *testing.T) {
 func TestSkillRemoveDropsTheCopyModeOfWhatItRemoved(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--copy").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--copy").exit, 0)
 	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "claude-code,cursor,github-copilot,windsurf")
 
 	out := h.run("skill", "remove", "alpha", "--from", "cursor")
@@ -346,7 +346,7 @@ func TestSkillRemoveSaysACopyWasNotTheLibraryVersion(t *testing.T) {
 		t.Run(c.what, func(t *testing.T) {
 			t.Parallel()
 			h, s := placementHarness(t)
-			equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "cursor", "--copy").exit, 0)
+			equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "cursor", "--copy").exit, 0)
 			place := filepath.Join(h.home, ".cursor", "skills", "alpha")
 			c.build(t, place)
 
@@ -378,7 +378,7 @@ func removedCopyWarning(place, name string) string {
 func TestSkillRemoveRefusesWhatItCannotFind(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 
 	none := h.run("skill", "remove", "gamma")
 	equal(t, "exit", none.exit, 5)
@@ -406,7 +406,7 @@ func TestSkillRemoveRefusesWhatItCannotFind(t *testing.T) {
 func TestSkillRemoveHandlesAPlacementThatIsNotThere(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "claude-code").exit, 0)
 
 	out := h.run("--json", "skill", "remove", "alpha", "--from", "cursor")
 	equal(t, "exit", out.exit, 0)

@@ -77,7 +77,7 @@ func TestSkillAddNamesTheUniversalClients(t *testing.T) {
 			if c.disable != "" {
 				equal(t, "disable", h.run("config", "disable", c.disable).exit, 0)
 			}
-			out := h.run(append([]string{"--json", "skill", "add", s.url, "--skill", "alpha"}, c.to...)...)
+			out := h.run(append([]string{"--json", "skill", "add", s.url, "--name", "alpha"}, c.to...)...)
 			equal(t, "exit", out.exit, 0)
 			nothingAt(t, "a placement in a universal client's own directory", filepath.Join(h.home, ".codex", "skills", "alpha"))
 			ev := h.one(out.stdout, "library_skill")
@@ -114,7 +114,7 @@ func TestSkillAddNamesEveryUniversalClientOfABatch(t *testing.T) {
 func TestSkillPlaceNamesTheUniversalClients(t *testing.T) {
 	t.Parallel()
 	h, s := universalHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "gemini-cli").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "gemini-cli").exit, 0)
 	equal(t, "disable", h.run("config", "disable", "codex").exit, 0)
 
 	out := h.run("--json", "skill", "place", "alpha", "--to", "claude-code")
@@ -149,7 +149,7 @@ func TestSkillAddNamesNoUniversalClientWhereThereIsNone(t *testing.T) {
 	s, _, _ := h.standardSource(true)
 	equal(t, "source add", h.run("source", "add", s.url).exit, 0)
 
-	out := h.run("--json", "skill", "add", s.url, "--skill", "alpha")
+	out := h.run("--json", "skill", "add", s.url, "--name", "alpha")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "universal", universalOf(t, h.one(out.stdout, "library_skill")), "")
 	if summary := h.one(out.stdout, "result")["summary"].(string); strings.Contains(summary, "universal") {
@@ -174,7 +174,7 @@ func TestSkillAddNamesNoUniversalClientWhereThereIsNone(t *testing.T) {
 func TestSkillRemoveFromUniversalIsTheWholeRemoval(t *testing.T) {
 	t.Parallel()
 	h, s := universalHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--copy").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--copy").exit, 0)
 	equal(t, "copy_mode", copyModeOf(t, h, "alpha"), "claude-code")
 	head := strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/managed/alpha"))
 	h.accountGit("update-ref", "refs/agentx/candidate/alpha", head)
@@ -196,7 +196,7 @@ func TestSkillRemoveFromUniversalIsTheWholeRemoval(t *testing.T) {
 }
 
 // TestSkillRemoveFromUniversalStandsAlone: --from universal beside a client
-// that is not universal is a usage error, as --all beside --skill is. The
+// that is not universal is a usage error, as --all beside --name is. The
 // whole removal already takes the skill from every client, so a list beside
 // it means the user expected it to do less, and nothing is removed on a
 // guess. Beside a universal client it is that client's refusal instead, see
@@ -208,7 +208,7 @@ func TestSkillRemoveFromUniversalIsTheWholeRemoval(t *testing.T) {
 func TestSkillRemoveFromUniversalStandsAlone(t *testing.T) {
 	t.Parallel()
 	h, s := universalHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 	before := mutationVersion(t, h)
 
 	for _, from := range [][]string{
@@ -255,7 +255,7 @@ const standsAloneHint = "hint: --from universal asks for the removal without --f
 func TestSkillRemoveFromTheUniversalClientsOfAFork(t *testing.T) {
 	t.Parallel()
 	h, s := universalHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 	head := strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/managed/alpha"))
 	h.accountGit("update-ref", "refs/heads/skills/alpha", head)
 	before := mutationVersion(t, h)
@@ -294,7 +294,7 @@ func TestSkillRemoveFromTheUniversalClientsOfAFork(t *testing.T) {
 func TestSkillRemoveFromASymlinkedClient(t *testing.T) {
 	t.Parallel()
 	h, s := universalHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 	head := h.accountGit("rev-parse", "refs/heads/managed/alpha")
 
 	out := h.run("--json", "skill", "remove", "alpha", "--from", "claude-code")
@@ -353,7 +353,7 @@ func TestSkillRemoveRefusesAUniversalClient(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			h, s := universalHarness(t, ".codeium/windsurf")
-			add := []string{"skill", "add", s.url, "--skill", "alpha", "--to", "claude-code"}
+			add := []string{"skill", "add", s.url, "--name", "alpha", "--to", "claude-code"}
 			if mode == modeCopy {
 				add = append(add, "--copy")
 			}
@@ -429,7 +429,7 @@ func TestSkillRemoveRefusalNamesAClientReadingAnotherClientsDirectory(t *testing
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			h, s := universalHarness(t, ".cursor")
-			add := []string{"skill", "add", s.url, "--skill", "alpha", "--to", "claude-code"}
+			add := []string{"skill", "add", s.url, "--name", "alpha", "--to", "claude-code"}
 			if mode == modeCopy {
 				add = append(add, "--copy")
 			}
@@ -479,7 +479,7 @@ func TestSkillRemoveRefusalNamesAClientLinkedThroughTheLibrary(t *testing.T) {
 	t.Run("a chain of links in a client's own directory", func(t *testing.T) {
 		t.Parallel()
 		h, s := universalHarness(t, ".cursor")
-		equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "gemini-cli").exit, 0)
+		equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "gemini-cli").exit, 0)
 		place, target := userLink(t, h, ".claude", "alpha")
 		before := mutationVersion(t, h)
 
@@ -507,7 +507,7 @@ func TestSkillRemoveRefusalNamesAClientLinkedThroughTheLibrary(t *testing.T) {
 	t.Run("a link in a universal client's own directory", func(t *testing.T) {
 		t.Parallel()
 		h, s := universalHarness(t, ".cursor")
-		equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "gemini-cli").exit, 0)
+		equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "gemini-cli").exit, 0)
 		mine := filepath.Join(h.home, ".codex", "skills", "alpha")
 		if err := os.MkdirAll(filepath.Dir(mine), 0o755); err != nil {
 			t.Fatal(err)
@@ -594,7 +594,7 @@ func TestSkillListAndPlaceAllNameTheUniversalClients(t *testing.T) {
 	h, s := universalHarness(t)
 	equal(t, "disable codex", h.run("config", "disable", "codex").exit, 0)
 	equal(t, "disable claude-code", h.run("config", "disable", "claude-code").exit, 0)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 
 	list := h.run("--json", "skill", "list")
 	equal(t, "exit of skill list", list.exit, 0)
@@ -616,7 +616,7 @@ func TestSkillListAndPlaceAllNameTheUniversalClients(t *testing.T) {
 func TestEveryClientReadingTheLibraryIsUniversal(t *testing.T) {
 	t.Parallel()
 	h, s := universalHarness(t, ".warp")
-	out := h.run("--json", "skill", "add", s.url, "--skill", "alpha", "--to", "claude-code")
+	out := h.run("--json", "skill", "add", s.url, "--name", "alpha", "--to", "claude-code")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "universal", universalOf(t, h.one(out.stdout, "library_skill")), "codex,gemini-cli,warp")
 
@@ -640,7 +640,7 @@ func TestEveryClientReadingTheLibraryIsUniversal(t *testing.T) {
 func TestUniversalClientsOfASkillWhoseSourceWasRemoved(t *testing.T) {
 	t.Parallel()
 	h, s := universalHarness(t, ".cursor")
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code")
 	h.mustRun("source", "remove", s.url)
 
 	placed := h.mustRun("--json", "skill", "place", "alpha", "--to", "cursor")
@@ -666,7 +666,7 @@ func TestUniversalClientsOfASkillWhoseSourceWasRemoved(t *testing.T) {
 	// While alpha records the source, its id is refused with the command
 	// that adds the source again.
 	id := source.ID(s.url)
-	recorded := h.run("--json", "skill", "add", id, "--skill", "alpha")
+	recorded := h.run("--json", "skill", "add", id, "--name", "alpha")
 	equal(t, "exit while alpha records the source", recorded.exit, 5)
 	equal(t, "hint while alpha records the source", h.one(recorded.stdout, "error")["hint"], removedHint(s.url))
 
@@ -679,7 +679,7 @@ func TestUniversalClientsOfASkillWhoseSourceWasRemoved(t *testing.T) {
 		t.Error("the import branch is still there")
 	}
 
-	gone := h.run("--json", "skill", "add", id, "--skill", "alpha")
+	gone := h.run("--json", "skill", "add", id, "--name", "alpha")
 	equal(t, "exit once nothing records the source", gone.exit, 5)
 	e := h.one(gone.stdout, "error")
 	equal(t, "message once nothing records the source", e["message"], "no source with id "+id)

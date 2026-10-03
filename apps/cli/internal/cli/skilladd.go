@@ -44,7 +44,7 @@ func newSkillAddCommand(inv *invocation) *cobra.Command {
 		Long: "Install skills from a source into the library and place them in every enabled\n" +
 			"configuration. A source URL this machine has not added yet is added first, as\n" +
 			"'agentx source add' would; an added source is installed from as it was last\n" +
-			"fetched, unless --fetch fetches it again. Name the skills with --skill, once for\n" +
+			"fetched, unless --fetch fetches it again. Name the skills with --name, once for\n" +
 			"each, or take the whole source with --all and leave out what you do not want\n" +
 			"with --except.\n\n" +
 			"With --from-account, install the fork called <name> that another machine\n" +
@@ -64,7 +64,7 @@ func newSkillAddCommand(inv *invocation) *cobra.Command {
 				if fromAccount == "" {
 					return fail(exitUsage, "--from-account needs the name of a fork", "run 'agentx skill list --remote' to see the forks the account remote holds")
 				}
-				for _, other := range []string{"skill", "all", "except", "fetch"} {
+				for _, other := range []string{"name", "all", "except", "fetch"} {
 					if cmd.Flags().Changed(other) {
 						return fail(exitUsage, "--from-account installs one fork and takes no --"+other, "run '"+fromAccountCommand(fromAccount)+"'")
 					}
@@ -79,7 +79,7 @@ func newSkillAddCommand(inv *invocation) *cobra.Command {
 	}
 	cmd.Flags().StringVar(&fromAccount, "from-account", "", "install the fork of this name from the account remote")
 	cmd.Flags().BoolVar(&keepLocal, "keep-local", false, "with --from-account, keep the directory the library holds as the fork's uncommitted edits")
-	cmd.Flags().StringArrayVar(&sel.names, "skill", nil, "the skill to install, by its name in the source; give it again for each")
+	cmd.Flags().StringArrayVar(&sel.names, "name", nil, "the skill to install, by its name in the source; give it again for each")
 	cmd.Flags().BoolVar(&sel.all, "all", false, "install every skill the source holds")
 	cmd.Flags().StringArrayVar(&sel.except, "except", nil, "with --all, a skill to leave out; give it again for each")
 	cmd.Flags().StringArrayVar(&to, "to", nil, "the configuration to place them in, instead of every enabled one")
@@ -839,16 +839,16 @@ func upstreamDir(src source.Source, sk source.Skill) string {
 func (sel selection) check() error {
 	switch {
 	case sel.all && len(sel.names) > 0:
-		return fail(exitUsage, "--all and --skill cannot both be given", "--all installs every skill; drop it to install the ones you name")
+		return fail(exitUsage, "--all and --name cannot both be given", "--all installs every skill; drop it to install the ones you name")
 	case !sel.all && len(sel.except) > 0:
-		return fail(exitUsage, "--except needs --all", "name the skills you want with --skill, or take the rest with --all --except")
+		return fail(exitUsage, "--except needs --all", "name the skills you want with --name, or take the rest with --all --except")
 	}
 	return nil
 }
 
 // selectSkills picks the skills of the listing to install, in the order the
 // listing holds them, which is by subpath: a source or a path that holds
-// one skill needs no --skill, --skill names one and may be given again for
+// one skill needs no --name, --name names one and may be given again for
 // each, and --all takes every one with --except leaving some out. The
 // selection has passed check already.
 func selectSkills(listing source.Listing, sel selection, src source.Source) ([]source.Skill, error) {
@@ -865,9 +865,9 @@ func selectSkills(listing source.Listing, sel selection, src source.Source) ([]s
 	return nil, fail(exitUsage, fmt.Sprintf("%s%s holds %s", src.URL, underPath(src.Subpath), plural(len(listing.Skills), "skill")), skillNamesHint(listing))
 }
 
-// namedSkills resolves the --skill names against the listing, keeping the
-// listing's order. A name matches a skill's frontmatter name, or its
-// directory name when the frontmatter has none, case-insensitively. A name
+// namedSkills resolves the names given with --name against the listing,
+// keeping the listing's order. A name matches a skill's frontmatter name, or
+// its directory name when the frontmatter has none, case-insensitively. A name
 // given twice installs one skill, and a name two directories of the source
 // share resolves to the first of them, which is what naming a skill has
 // always meant here.
@@ -976,7 +976,7 @@ func skillNamesHint(listing source.Listing) string {
 	if len(names) > namesInAHint {
 		names = append(names[:namesInAHint], "...")
 	}
-	return "name one with --skill, or take them all with --all: " + strings.Join(names, ", ")
+	return "name one with --name, or take them all with --all: " + strings.Join(names, ", ")
 }
 
 func containsString(list []string, s string) bool {

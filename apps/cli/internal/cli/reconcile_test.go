@@ -182,7 +182,7 @@ func TestServeReconcilesAtStart(t *testing.T) {
 	h, s := installHarness(t)
 	s.skill("skills/gamma", "gamma", "The third skill", nil)
 	s.commit("gamma")
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--skill", "beta", "--skill", "gamma", "--fetch")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--name", "beta", "--name", "gamma", "--fetch")
 	writeFile(t, filepath.Join(h.library, "alpha", ".DS_Store"), "finder\n")
 	writeFile(t, filepath.Join(h.library, "beta", "notes.md"), "my notes\n")
 	remove(t, filepath.Join(h.library, "gamma"))

@@ -485,7 +485,7 @@ func TestSkillUpdateAllReportsEachRefusalAndGoesOn(t *testing.T) {
 	s.skill("skills/delta", "delta", "The fourth skill", nil)
 	s.skill("skills/epsilon", "epsilon", "The fifth skill", nil)
 	s.commit("delta and epsilon")
-	h.mustRun("skill", "add", s.url, "--skill", "delta", "--skill", "epsilon", "--fetch")
+	h.mustRun("skill", "add", s.url, "--name", "delta", "--name", "epsilon", "--fetch")
 	s.write("skills/alpha-dir/notes.md", "alpha notes, revised again\n")
 	s.skill("skills/delta", "delta", "The fourth skill, revised", nil)
 	s.skill("skills/epsilon", "epsilon", "The fifth skill, revised", nil)
@@ -831,7 +831,7 @@ func TestSkillUpdateRefusesInOrder(t *testing.T) {
 					name: "a managed skill whose library directory is gone", skill: "alpha", exit: 6,
 					setup:   func(t *testing.T, h *harness, _ *sourceRepo) { remove(t, filepath.Join(h.library, "alpha")) },
 					message: "alpha is managed in the account repo but the library holds no skill directory for it, so there is nothing to update",
-					hint:    "run 'agentx skill add %URL% --skill alpha' to install it again, or 'agentx skill remove alpha' to stop managing it",
+					hint:    "run 'agentx skill add %URL% --name alpha' to install it again, or 'agentx skill remove alpha' to stop managing it",
 				},
 			},
 		},

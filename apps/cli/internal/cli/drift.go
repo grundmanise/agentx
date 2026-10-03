@@ -317,7 +317,7 @@ func (sc skillContext) absentNotice(inv *invocation, name string) (what, wayOut 
 	if rec := sc.records[name]; rec.HasImport {
 		from = shellWord(rec.Import.Source)
 	}
-	add := "'agentx skill add " + from + " --skill " + shellWord(name) + "'"
+	add := "'agentx skill add " + from + " --name " + shellWord(name) + "'"
 	remove := "'" + skillCommand("remove", name) + "'"
 	libPath := quotedPath(inv.libraryPath(name))
 	if _, err := os.Lstat(inv.libraryPath(name)); err == nil {

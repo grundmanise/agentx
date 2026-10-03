@@ -134,7 +134,7 @@ func TestFromAccountSupersedesAnUnmodifiedCopy(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(b.home, ".cursor"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	b.mustRun("skill", "add", s.url, "--skill", "alpha")
+	b.mustRun("skill", "add", s.url, "--name", "alpha")
 	b.mustRun("skill", "remove", "alpha", "--from", "cursor")
 	writeFile(t, filepath.Join(b.library, "alpha", ".DS_Store"), "finder data\n")
 	s.write("skills/alpha/notes.md", forkNotes("seven", "seven, upstream"))
@@ -240,7 +240,7 @@ func TestFromAccountRefusesAndKeepsLocal(t *testing.T) {
 	if err := os.Remove(betaLib); err != nil {
 		t.Fatal(err)
 	}
-	b.mustRun("skill", "add", s.url, "--skill", "beta")
+	b.mustRun("skill", "add", s.url, "--name", "beta")
 	aside := filepath.Join(b.home, "beta-aside")
 	if err := os.Rename(betaLib, aside); err != nil {
 		t.Fatal(err)

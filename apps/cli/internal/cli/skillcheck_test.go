@@ -515,7 +515,7 @@ func TestSkillCheckCandidateIsTheCommitAnInstallWrites(t *testing.T) {
 	}
 	h.mustRun("skill", "remove", "alpha")
 	equal(t, "the candidate after the removal", h.ref(lineage.CandidateRef("alpha")), "")
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), candidate)
 }
 
@@ -557,7 +557,7 @@ func TestSkillCheckMarksAndClearsUpstreamRemoved(t *testing.T) {
 	h, s, _ := checkHarness(t)
 	s.skill("skills/gamma", "gamma", "A third skill", map[string]string{"notes.md": "gamma notes\n"})
 	s.commit("gamma")
-	h.mustRun("skill", "add", s.url, "--skill", "gamma", "--fetch")
+	h.mustRun("skill", "add", s.url, "--name", "gamma", "--fetch")
 	s.skill("skills/beta", "beta", "The second skill, revised", nil)
 	s.commit("beta revised")
 	h.mustRun("skill", "check-updates")

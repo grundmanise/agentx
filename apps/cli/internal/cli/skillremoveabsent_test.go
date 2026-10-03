@@ -27,7 +27,7 @@ var absentHome = &fixtureHome{
 	dirs:   installHome.dirs,
 	build: func(h *harness, s *sourceRepo) []string {
 		installHome.build(h, s)
-		h.mustRun("skill", "add", s.url, "--skill", "alpha")
+		h.mustRun("skill", "add", s.url, "--name", "alpha")
 		h.mustRun("skill", "remove", "alpha", "--from", "cursor")
 		h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
 		remove(h.t, filepath.Join(h.library, "alpha"))
@@ -225,7 +225,7 @@ exec `+real+` "$@"
 func TestSkillRemoveLeavesADirectoryThatLostItsSKILLmd(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	lib := filepath.Join(h.library, "alpha")
 	remove(t, filepath.Join(lib, "SKILL.md"))
 	left := libraryTree(t, lib)

@@ -49,7 +49,7 @@ func TestPlaceAdoptsADirectoryOfThisVersionAndSaysSo(t *testing.T) {
 func adoptable(t *testing.T) (*harness, string) {
 	t.Helper()
 	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "codex").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "codex").exit, 0)
 	place := filepath.Join(h.home, ".cursor", "skills", "alpha")
 	copyTree(t, filepath.Join(h.library, "alpha"), place)
 	return h, place

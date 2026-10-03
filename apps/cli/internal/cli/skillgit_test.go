@@ -49,7 +49,7 @@ func TestSkillAddSpawnsABoundedNumberOfGitProcesses(t *testing.T) {
 	// that do not depend on each other pass through it together.
 	counts := gatedGitOn(t, h, 2, `*" rev-list "*|*" log "*`)
 	one := libraryReads(t, func() {
-		equal(t, "exit", h.run("skill", "add", s.url, "--skill", "big").exit, 0)
+		equal(t, "exit", h.run("skill", "add", s.url, "--name", "big").exit, 0)
 	})
 	peak, total := counts()
 	if peak < 2 {
@@ -148,7 +148,7 @@ func libraryReads(t *testing.T, fn func()) int64 {
 func TestSkillAddFetchesTheBlobsInOneBatch(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	out := h.run("--verbose", "skill", "add", s.url, "--skill", "alpha")
+	out := h.run("--verbose", "skill", "add", s.url, "--name", "alpha")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "fetches", fetches(out.stderr), 1)
 
@@ -158,7 +158,7 @@ func TestSkillAddFetchesTheBlobsInOneBatch(t *testing.T) {
 	if err := os.RemoveAll(filepath.Join(h.library, "alpha")); err != nil {
 		t.Fatal(err)
 	}
-	again := h.run("--verbose", "skill", "add", s.url, "--skill", "alpha")
+	again := h.run("--verbose", "skill", "add", s.url, "--name", "alpha")
 	equal(t, "exit", again.exit, 0)
 	equal(t, "fetches of a version already held", fetches(again.stderr), 0)
 }
@@ -172,7 +172,7 @@ func TestSkillAddCreatesTheBranchWithAnExpectedOldValue(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	fed := stdinGit(t, h, "update-ref")
-	equal(t, "exit", h.run("skill", "add", s.url, "--skill", "alpha", "--skill", "beta").exit, 0)
+	equal(t, "exit", h.run("skill", "add", s.url, "--name", "alpha", "--name", "beta").exit, 0)
 
 	var created, deleted []string
 	for _, in := range fed() {

@@ -29,7 +29,7 @@ import (
 func TestSkillForkConvertsManagedSkills(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--skill", "beta")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--name", "beta")
 	imports := map[string]string{"alpha": h.ref(lineage.ManagedRef("alpha")), "beta": h.ref(lineage.ManagedRef("beta"))}
 	h.accountGit("update-ref", lineage.CandidateRef("alpha"), imports["beta"])
 	h.accountGit("update-ref", lineage.UpstreamRemovedRef("alpha"), imports["beta"])
@@ -103,7 +103,7 @@ func TestForksOfOneVersionShareTheImport(t *testing.T) {
 	a, s := installHarness(t)
 	b, _ := installHarness(t)
 	for _, h := range []*harness{a, b} {
-		h.mustRun("skill", "add", s.url, "--skill", "alpha")
+		h.mustRun("skill", "add", s.url, "--name", "alpha")
 	}
 	b.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
 	a.mustRun("skill", "fork", "alpha")
@@ -288,7 +288,7 @@ func TestSkillForkOfAPluginSkill(t *testing.T) {
 func TestSkillForkOfAFork(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	h.mustRun("skill", "fork", "alpha")
 	refuses := func(what string, args []string, st status, says string) {
 		t.Helper()
@@ -335,7 +335,7 @@ func TestSkillForkOfAFork(t *testing.T) {
 func TestSkillForkRefusals(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--skill", "beta")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--name", "beta")
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "beta", "vendor", ".git"), "HEAD"), "ref: refs/heads/main\n")
 	writeFile(t, mkdirs(t, filepath.Join(h.home, "mine", "gamma"), "SKILL.md"), skill("gamma", "Mine"))
 	if err := os.Symlink(filepath.Join(h.home, "mine", "gamma"), filepath.Join(h.library, "gamma")); err != nil {
@@ -526,7 +526,7 @@ exec %GIT% "$@"
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			h, s := installHarness(t)
-			h.mustRun("skill", "add", s.url, "--skill", "alpha")
+			h.mustRun("skill", "add", s.url, "--name", "alpha")
 			writeFile(t, filepath.Join(h.library, "alpha", "notes.md"), "my notes\n")
 			writeFile(t, filepath.Join(h.library, "alpha", ".DS_Store"), "finder\n")
 			out := killedChild(t, h, "TestForkChildProcess", forkChildEnv, "alpha", tc.script)

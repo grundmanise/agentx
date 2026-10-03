@@ -31,7 +31,7 @@ var ignoreHome = &fixtureHome{
 		s.skill("tools/mac", "mac", "Keeps its Finder file", map[string]string{".gitignore": "!.DS_Store\n"})
 		s.commit("three skills")
 		h.mustRun("source", "add", s.url)
-		h.mustRun("skill", "add", s.url, "--skill", "pdf", "--skill", "web", "--skill", "mac")
+		h.mustRun("skill", "add", s.url, "--name", "pdf", "--name", "web", "--name", "mac")
 		return nil
 	},
 }

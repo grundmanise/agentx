@@ -251,7 +251,7 @@ func (inv *invocation) reportDiff(subject diffSubject, name, against string, fil
 // version, which stores that one anew.
 func (inv *invocation) reportStoredDiff(name, source, libPath, against string, exact bool) {
 	const stored = " only in how the account repo stores it; "
-	add := "run 'agentx skill add " + shellWord(source) + " --skill " + shellWord(name) + "' to install that version again while the source still holds it, which stores it as git writes it today"
+	add := "run 'agentx skill add " + shellWord(source) + " --name " + shellWord(name) + "' to install that version again while the source still holds it, which stores it as git writes it today"
 	if exact {
 		add += " and changes no file"
 	} else {

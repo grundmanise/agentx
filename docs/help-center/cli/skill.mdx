@@ -8,7 +8,7 @@ Your library is one directory, `~/.agents/skills`, that holds every skill agentx
 ## Install a skill
 
 ```sh
-agentx skill add anthropics/skills --skill pdf
+agentx skill add anthropics/skills --name pdf
 ```
 
 ```text
@@ -37,12 +37,12 @@ hint: run 'agentx source add https://github.com/anthropics/skills' to add it aga
 A source you already added is not fetched again. The install reads what that source last fetched, whether you fetched it or the [desktop app's background process](/cli/serve#update-checks) did, and the result says when that fetch was. Add `--fetch` to fetch the source again first, or run `agentx source fetch`:
 
 ```sh
-agentx skill add anthropics/skills --skill pdf --fetch
+agentx skill add anthropics/skills --name pdf --fetch
 ```
 
 To install from another branch or tag than the one the source is pinned to, change the pin with `agentx source add <url>#<ref>` first.
 
-Name the skill with `--skill` when the source holds more than one. `--skill` and `--except` match the `name` in the skill's `SKILL.md` frontmatter, ignoring case, or the directory name when there is no `name`, as the vercel skills CLI does. If a path already narrows it to a single skill, leave `--skill` out:
+Name the skill with `--name` when the source holds more than one. `--name` and `--except` match the `name` in the skill's `SKILL.md` frontmatter, ignoring case, or the directory name when there is no `name`, as the vercel skills CLI does. If a path already narrows it to a single skill, leave `--name` out:
 
 ```sh
 agentx skill add anthropics/skills/skills/pdf
@@ -50,10 +50,10 @@ agentx skill add anthropics/skills/skills/pdf
 
 ### Install several at once
 
-Give `--skill` once for each skill you want:
+Give `--name` once for each skill you want:
 
 ```sh
-agentx skill add anthropics/skills --skill pdf --skill xlsx --skill docx
+agentx skill add anthropics/skills --name pdf --name xlsx --name docx
 ```
 
 Or take the whole source and leave out what you do not want:
@@ -62,7 +62,7 @@ Or take the whole source and leave out what you do not want:
 agentx skill add anthropics/skills --all --except artifacts-builder
 ```
 
-`--all` and `--skill` do not mix, and `--except` needs `--all`. Skills install in the order the source lists them, whatever order you name them in. `--all` works with a source you have not added yet too: it is added once, and then every skill of it installs.
+`--all` and `--name` do not mix, and `--except` needs `--all`. Skills install in the order the source lists them, whatever order you name them in. `--all` works with a source you have not added yet too: it is added once, and then every skill of it installs.
 
 One command installs them all: the files come down in one fetch, the versions are recorded in one write to the account repo, and the whole run is one change agentx can finish after an interruption. Thirty skills cost the same git work as one; the time they take is the time their files take.
 
@@ -106,7 +106,7 @@ The line is left out when no universal client is installed. To take a skill away
 By default a skill is placed in every enabled configuration. Name the ones you want instead:
 
 ```sh
-agentx skill add anthropics/skills --skill pdf --to claude-code --to cursor
+agentx skill add anthropics/skills --name pdf --to claude-code --to cursor
 ```
 
 `--to` replaces the default targets for that install, including configurations you have disabled with `agentx config disable`. It decides which clients get a placement; the universal clients see the skill whatever it names.
@@ -114,7 +114,7 @@ agentx skill add anthropics/skills --skill pdf --to claude-code --to cursor
 ### Copy instead of link
 
 ```sh
-agentx skill add anthropics/skills --skill pdf --copy
+agentx skill add anthropics/skills --name pdf --copy
 ```
 
 Use `--copy` for a client that cannot follow a symlink. agentx remembers which configurations hold a copy and keeps them that way: installing the skill again, `agentx skill place` and `agentx config enable --place-all` give those configurations a copy even without `--copy`.
@@ -362,7 +362,7 @@ A skill can be in more than one state at once, so the row names each of them: `m
 If a managed skill's directory is deleted from the library outside agentx, the skill has no row, since there is nothing left to compare or place. `skill list` names it in a warning instead, with two ways out:
 
 ```text
-warning: pdf is managed in the account repo but the library holds no skill directory for it; run 'agentx skill add https://github.com/anthropics/skills --skill pdf' to install it again, or 'agentx skill remove pdf' to stop managing it
+warning: pdf is managed in the account repo but the library holds no skill directory for it; run 'agentx skill add https://github.com/anthropics/skills --name pdf' to install it again, or 'agentx skill remove pdf' to stop managing it
 ```
 
 - Install it again with `agentx skill add`. This works while the source still holds the version you installed. If you fetched the source since and the skill changed upstream, `skill add` refuses and tells you to run `agentx skill remove` first; after that, `skill add` installs the version the source holds now.
@@ -420,7 +420,7 @@ A repository nested in the skill, or anything else git cannot record, such as a 
 An earlier version of agentx could store a skill from a source that uses an old kind of file mode in a form that makes it show as `modified` even though you changed nothing. `skill diff` then says so instead of showing a diff:
 
 ```text
-pdf differs from its base version at 3f2a9c1 only in how the account repo stores it; run 'agentx skill add https://github.com/anthropics/skills --skill pdf' to install that version again while the source still holds it, which stores it as git writes it today and changes no file, or, once 'agentx skill check-updates' finds a newer version, run 'agentx skill update pdf'
+pdf differs from its base version at 3f2a9c1 only in how the account repo stores it; run 'agentx skill add https://github.com/anthropics/skills --name pdf' to install that version again while the source still holds it, which stores it as git writes it today and changes no file, or, once 'agentx skill check-updates' finds a newer version, run 'agentx skill update pdf'
 ```
 
 Run the `agentx skill add` command it names while the source still holds that version. It stores the version again without touching your files, and the skill shows as `current`. Move any file git ignores, such as a `.DS_Store`, out of the skill first: the command names that step when it sees one. Once the source holds a newer version, run `agentx skill check-updates` and then `agentx skill update pdf` instead, which stores the newer version.
@@ -443,7 +443,7 @@ agentx does not undo edits for you. To discard your edits, remove the skill and 
 
 ```sh
 agentx skill remove pdf
-agentx skill add anthropics/skills --skill pdf
+agentx skill add anthropics/skills --name pdf
 ```
 
 Removing deletes the skill and every edit you made to it, so run `agentx skill diff pdf` first and save what you want to keep. Adding it again installs the version the source holds, which may be newer than the one you had. Pass `--copy` or `--to` again if you placed the skill that way: removing it forgets those choices.
@@ -722,7 +722,7 @@ This removes the worktree and whatever you resolved in it. Your library director
 - `agentx skill update <name>` of a skill whose source you removed stops with exit code 5, and the hint names the `agentx source add` command that brings the source back. With `--all`, the skill is skipped with a warning that names the same command, and the run does not fail. Either way, the update found earlier is kept.
 - A skill its source no longer holds, shown as `upstream removed`, is kept as it is and never updated: exit code 6.
 - A skill agentx did not install has no update to apply: exit code 6. A fork is updated by merging, see [Take a new upstream version](/cli/fork#take-a-new-upstream-version); one with no upstream, such as a skill you created, stops with exit code 6.
-- A skill whose library directory is gone stops with exit code 6. Install it again with `agentx skill add <source> --skill <name>`, or stop managing it with `agentx skill remove <name>`.
+- A skill whose library directory is gone stops with exit code 6. Install it again with `agentx skill add <source> --name <name>`, or stop managing it with `agentx skill remove <name>`.
 - A skill whose record in the account repo agentx cannot read stops with exit code 6. Run `agentx doctor` and check the account repo it names.
 - A skill whose library directory is a symlink to a directory of your own stops with exit code 6, even if you edited that directory: an update replaces the library directory, so it would remove your link. Replace the link with the directory it points to, then update again. With `--all` this skill is counted as not updated.
 - A skill that holds something git cannot record, such as a repository nested in it, stops with exit code 6 and names it: an update would discard it with no record of it anywhere. Move it out of the skill, then update again. With `--all` this skill is counted as not updated.
@@ -739,14 +739,14 @@ For `skill add --from-account`, see the [account remote's exit codes](/cli/remot
 
 - `1`: a usage error:
   - the command line names no skill to install;
-  - the flags contradict each other: `--all` with `--skill`, `--except` without `--all`, `--except` leaving nothing, or `--from universal` with a client that is not universal;
+  - the flags contradict each other: `--all` with `--name`, `--except` without `--all`, `--except` leaving nothing, or `--from universal` with a client that is not universal;
   - it names the source with another branch or tag than its pin;
   - `skill add` is given something that is not a source, for example the name of a skill the library already holds;
   - `skill update` was given both a name and `--all`, neither, or `--abort` with `--all`.
 - `3`: the source, or the files of the skill, could not be fetched. For `skill check-updates`, also a run whose sources and skills failed for different reasons.
 - `4`: `skill update` found your edits conflicting with the update and left the merge pending, or found files of a pending merge still to resolve, or a merge already pending blocks `skill fork` or a `skill remove` that takes the skill off the machine. See [When your edits conflict](#when-your-edits-conflict).
 - `5`: something the command names does not exist:
-  - a source id names no source on this machine (for a source you removed, the hint names the `agentx source add` command that brings it back), the source did not serve a skill's files, the path or a skill named by `--skill` or `--except` does not exist in the source, or `--to` or `--from` names a configuration that is not detected;
+  - a source id names no source on this machine (for a source you removed, the hint names the `agentx source add` command that brings it back), the source did not serve a skill's files, the path or a skill named by `--name` or `--except` does not exist in the source, or `--to` or `--from` names a configuration that is not detected;
   - `skill place`, `skill diff` and `skill update` (except with `--abort`): also a name the library does not hold as a skill, other than a fork's for `skill place`, which [puts the fork back](/cli/fork#recover-a-fork);
   - `skill update`: also a skill whose source you removed;
   - `skill remove`: a name that is neither a skill of the library nor a managed skill whose library directory is gone;

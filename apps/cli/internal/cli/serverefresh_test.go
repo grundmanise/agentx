@@ -110,7 +110,7 @@ func TestServeRefreshesEverySource(t *testing.T) {
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	one, two := h.fetchSources(t)
-	h.mustRun("skill", "add", one.url, "--skill", "alpha")
+	h.mustRun("skill", "add", one.url, "--name", "alpha")
 	gone := h.newSourceRepo("gone", true)
 	gone.skill("skills/epsilon", "epsilon", "A skill of a source removed later", nil)
 	gone.skill("skills/zeta", "zeta", "Another skill of that source", nil)
@@ -201,7 +201,7 @@ func TestServeWarnsOnceAboutASourceItCannotFetch(t *testing.T) {
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	one, two := h.fetchSources(t)
-	h.mustRun("skill", "add", one.url, "--skill", "alpha")
+	h.mustRun("skill", "add", one.url, "--name", "alpha")
 	two.bare("symbolic-ref", "HEAD", "refs/heads/gone") // the default branch it follows names nothing
 
 	h.env["AGENTX_CHECK_INTERVAL"] = quickChecks

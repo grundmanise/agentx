@@ -23,7 +23,7 @@ import (
 func TestSkillHistoryMarksImportsAndForeignCommits(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--skill", "beta")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--name", "beta")
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "mine"), "SKILL.md"), skill("mine", "mine"))
 	imported := h.ref(lineage.ManagedRef("alpha"))
 	writeFile(t, filepath.Join(h.library, "alpha", "SKILL.md"), skill("alpha", "Edited before the fork"))

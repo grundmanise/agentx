@@ -30,7 +30,7 @@ var everywhereHome = &fixtureHome{
 	dirs:   installHome.dirs,
 	build: func(h *harness, s *sourceRepo) []string {
 		installHome.build(h, s)
-		h.mustRun("skill", "add", s.url, "--skill", "alpha")
+		h.mustRun("skill", "add", s.url, "--name", "alpha")
 		return nil
 	},
 }
@@ -109,7 +109,7 @@ func placesNothing(t *testing.T, h *harness, args ...string) string {
 func TestSkillPlacePutsBackMissingPlacements(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code", "--to", "cursor", "--to", "windsurf")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code", "--to", "cursor", "--to", "windsurf")
 	h.mustRun("skill", "place", "alpha", "--to", "github-copilot", "--copy")
 	lib := filepath.Join(h.library, "alpha")
 	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
@@ -344,7 +344,7 @@ func TestSkillPlaceForceWithCopyWritesACopy(t *testing.T) {
 func TestSkillPlaceReplacesTheLibrarysLinkWithACopy(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--copy")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--copy")
 	lib := filepath.Join(h.library, "alpha")
 	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
 	remove(t, cursor)
@@ -370,7 +370,7 @@ func TestSkillPlaceReplacesTheLibrarysLinkWithACopy(t *testing.T) {
 func TestSkillPlaceLeavesWhatIsNotDrift(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code", "--to", "windsurf", "--to", "github-copilot")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code", "--to", "windsurf", "--to", "github-copilot")
 	h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
 	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
 	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
@@ -433,7 +433,7 @@ func TestSkillPlaceLeavesTheLibraryAClientReadsThroughALink(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			h, s := placementHarness(t)
-			h.mustRun("skill", "add", s.url, "--skill", "alpha")
+			h.mustRun("skill", "add", s.url, "--name", "alpha")
 			lib := filepath.Join(h.library, "alpha")
 			skills := filepath.Join(h.home, ".claude", "skills")
 			cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
@@ -1104,7 +1104,7 @@ func TestSkillPlaceJudgesASharedPlaceOnce(t *testing.T) {
 	h.build(t, fixture{dirs: []string{".claude", ".zencoder"}})
 	s, _, _ := h.standardSource(true)
 	h.mustRun("source", "add", s.url)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "zenflow", "--copy")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "zenflow", "--copy")
 	lib := filepath.Join(h.library, "alpha")
 	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
 	shared := filepath.Join(h.home, ".zencoder", "skills", "alpha")
@@ -1300,13 +1300,13 @@ func TestSkillPlaceForceOnWhatItCannotJudge(t *testing.T) {
 	t.Run("a managed skill whose library directory is gone", func(t *testing.T) {
 		t.Parallel()
 		h, s := installHarness(t)
-		h.mustRun("skill", "add", s.url, "--skill", "alpha")
+		h.mustRun("skill", "add", s.url, "--name", "alpha")
 		remove(t, filepath.Join(h.library, "alpha"))
 		out := h.run("--json", "skill", "place", "alpha")
 		equal(t, "exit", out.exit, 6)
 		e := h.one(out.stdout, "error")
 		equal(t, "message", e["message"], "alpha is managed in the account repo but the library holds no skill directory for it, so there is no skill to place")
-		equal(t, "hint", e["hint"], "run 'agentx skill add "+shellWord(s.url)+" --skill alpha' to install it again, or 'agentx skill remove alpha' to stop managing it")
+		equal(t, "hint", e["hint"], "run 'agentx skill add "+shellWord(s.url)+" --name alpha' to install it again, or 'agentx skill remove alpha' to stop managing it")
 		equal(t, "journals", journalCount(t, h), 0)
 	})
 
@@ -1610,7 +1610,7 @@ func TestSkillPlaceRecoversACopyWhenKilled(t *testing.T) {
 		t.Run(fmt.Sprintf("after %d steps", stop), func(t *testing.T) {
 			t.Parallel()
 			h, s := placementHarness(t)
-			h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code", "--to", "cursor")
+			h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code", "--to", "cursor")
 			h.mustRun("skill", "place", "alpha", "--to", "windsurf", "--to", "github-copilot", "--copy")
 			lib := filepath.Join(h.library, "alpha")
 			claude := filepath.Join(h.home, ".claude", "skills", "alpha")
@@ -1656,7 +1656,7 @@ func TestSkillPlaceRecoversACopyWhenKilled(t *testing.T) {
 func TestSkillPlaceSweepsStagingAKilledPlaceLeft(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code")
 	h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
 	lib := filepath.Join(h.library, "alpha")
 	claude := filepath.Join(h.home, ".claude", "skills", "alpha")

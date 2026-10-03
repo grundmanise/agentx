@@ -47,7 +47,7 @@ func TestInstallRefusesASubpathItCannotRecord(t *testing.T) {
 	s.commit("skill directories a trailer cannot carry")
 	h.mustRun("source", "add", s.url)
 
-	alone := h.run("--json", "skill", "add", s.url, "--skill", nastySubpaths[0].name)
+	alone := h.run("--json", "skill", "add", s.url, "--name", nastySubpaths[0].name)
 	equal(t, "exit of the skill alone", alone.exit, exitRefused.exit)
 	contains(t, "the refusal", lastError(t, h.events(alone.stdout))["message"].(string), "is not a directory the account repo can record")
 
@@ -138,7 +138,7 @@ func TestTheDirectoryIsRefusedBeforeTheEntriesUnderIt(t *testing.T) {
 	contains(t, "the source tree", s.bare("ls-tree", "-r", "HEAD"), "skills/evil /../SKILL.md")
 	equal(t, "source add", h.run("source", "add", s.url).exit, 0)
 
-	out := h.run("skill", "add", s.url, "--skill", "evil")
+	out := h.run("skill", "add", s.url, "--name", "evil")
 	equal(t, "exit", out.exit, exitRefused.exit)
 	contains(t, "the refusal", out.stderr, `evil comes from "skills/evil ", which is not a directory the account repo can record`)
 	if strings.Contains(out.stderr, "will not lay out") {
