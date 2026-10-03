@@ -301,9 +301,6 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 		{"a last_fetched that is not in UTC", settingsWith("sources", []any{map[string]any{
 			"url": "https://github.com/example/skills", "last_fetched": "2026-09-18T12:00:00+02:00",
 		}}), "RFC 3339 in UTC"},
-		{"a push URL carrying a token", settingsWith("sources", []any{map[string]any{
-			"url": "https://github.com/example/skills", "push_url": credentialed,
-		}}), "push_url of https://github.com/example/skills carries a password or a token"},
 		{"one source twice", settingsWith("sources", []any{
 			map[string]any{"url": "https://github.com/example/skills"},
 			map[string]any{"url": "https://github.com/example/skills", "pin": "v1"},
@@ -641,7 +638,6 @@ func TestValidSettingsCoversEveryFieldOfTheSettings(t *testing.T) {
 		"Source.Alias":                    "sourceRefusal, through badSourceURL",
 		"Source.Layout":                   "sourceRefusal: fork or absent",
 		"Source.Account":                  "sourceRefusal and sourcesRefusal: on a fork source, once",
-		"Source.PushURL":                  "sourceRefusal, through pushURLRefusal",
 		"Source.Pin":                      "sourceRefusal, through source.ValidRef",
 		"Source.Access":                   "sourceRefusal: writable, read-only or absent; an import then forgets it",
 		"Source.AccessChecked":            "sourceRefusal, through fetchTime; an import then forgets it",
@@ -892,7 +888,7 @@ func TestImportWithNoSkillsStillNamesTheSourcesToAdd(t *testing.T) {
 	file := editedExport(t, h, good, "sources-only.json", func(doc map[string]any) {
 		doc["skills"] = []any{}
 		doc["settings"].(map[string]any)["sources"] = []any{
-			map[string]any{"url": "https://github.com/example/skills", "pin": "release", "push_url": "git@github-work:example/skills.git",
+			map[string]any{"url": "https://github.com/example/skills", "pin": "release",
 				"access": "writable", "access_checked": "2026-10-02T10:00:00Z", "default_branch": "main"},
 			map[string]any{"url": "https://github.com/me/forks", "layout": "fork", "account": true,
 				"access": "read-only", "access_checked": "2026-10-02T10:00:00Z"},
@@ -905,7 +901,7 @@ func TestImportWithNoSkillsStillNamesTheSourcesToAdd(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "No skills in the export.\n"+
 		"  only the settings were written: add each source again, then install a missing skill with 'agentx skill add <source>'\n"+
-		"    agentx source add https://github.com/example/skills#release --push-url git@github-work:example/skills.git\n"+
+		"    agentx source add https://github.com/example/skills#release\n"+
 		"    agentx source add https://github.com/me/forks --account\n")
 
 	// Every field comes across but what the exporting machine found it could
@@ -915,7 +911,7 @@ func TestImportWithNoSkillsStillNamesTheSourcesToAdd(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []home.Source{
-		{URL: "https://github.com/example/skills", PushURL: "git@github-work:example/skills.git", Pin: "release", DefaultBranch: "main"},
+		{URL: "https://github.com/example/skills", Pin: "release", DefaultBranch: "main"},
 		{URL: "https://github.com/me/forks", Layout: home.LayoutFork, Account: true},
 	}
 	if !reflect.DeepEqual(restored.Sources, want) {

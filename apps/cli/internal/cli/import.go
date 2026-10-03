@@ -289,8 +289,7 @@ func badDisabledConfigurations(s home.Settings) string {
 
 // badSources holds every field of every entry, and the list as a whole, to
 // what agentx writes, see sourcesRefusal. An SSH host is read as itself:
-// an import reads no SSH configuration, and a push URL whose host is an
-// alias of url's is recorded rather than refused anyway.
+// an import reads no SSH configuration.
 func badSources(s home.Settings) string {
 	return sourcesRefusal(s.Sources, nil)
 }
@@ -519,8 +518,7 @@ func (inv *invocation) printImported(path string, doc exportDocument, states []i
 // source add is the step that has to come first, and nothing said so. It is
 // printed per source as the settings now hold it: source add writes the pin
 // its argument names, so the bare URL would unpin the source this import
-// just restored, and the push URL, which only a flag can give alongside
-// the canonical URL. The account remote is attached again with source add
+// just restored. The account remote is attached again with source add
 // --account.
 func printSourcesToAdd(out *writer, sources []home.Source) {
 	if len(sources) == 0 {
@@ -539,9 +537,6 @@ func sourceAddLine(src home.Source) string {
 	line := "agentx source add " + sourceAddArg(src.URL, src.Pin)
 	if src.Account {
 		line = "agentx source add " + shellWord(sanitised(src.URL)) + " --account"
-	}
-	if src.PushURL != "" {
-		line += " --push-url " + shellWord(sanitised(src.PushURL))
 	}
 	return line
 }

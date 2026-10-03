@@ -496,7 +496,7 @@ func (inv *invocation) addAdoptSources(ctx context.Context, run *adoptRun, ready
 			inv.out.warn(fmt.Sprintf("%s was installed at more than one ref (%s); it is added pinned to %s. Add it at another ref with 'agentx source add %s#<ref>' and adopt again",
 				url, strings.Join(pinNames(recorded), ", "), pinName(pin), url))
 		}
-		if _, _, err := inv.addSource(ctx, src, pushChoice{}); err != nil {
+		if _, _, err := inv.addSource(ctx, src); err != nil {
 			var f *failure
 			if !errors.As(err, &f) {
 				f = refuse(exitInternal, err.Error(), "run 'agentx doctor' and check what it names")

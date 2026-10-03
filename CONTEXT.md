@@ -68,9 +68,6 @@ A source of the fork layout. This version keeps one, the account remote.
 A second URL for a source that moved, mapped to the canonical URL before any identity is derived.
 _Avoid_: mirror, redirect
 
-**Push URL**:
-The URL pushes to a source go to, as the user gave it, when they reach its repository another way than the canonical URL does, such as over SSH through a host alias for a source fetched over HTTPS. Always the same repository, never a second one, and never part of the source's identity.
-
 **Access**:
 What git lets this machine do at a source, as the last add or fetch of it found: writable, read-only when the server answered with a known denial, or unknown, which is everything else. Advice, never a rule: no command refuses on it.
 _Avoid_: permission, write rights, writable flag

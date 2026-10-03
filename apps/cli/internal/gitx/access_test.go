@@ -89,7 +89,7 @@ func TestClassifyAccess(t *testing.T) {
 
 // TestProbeAccessRunsADryRunAndNothingElse pins what the access check asks
 // git: a dry run of a deletion that signs nothing and runs no hook, after
-// one read of the configuration that applies to the source's URLs alone.
+// one read of the configuration that applies to the source's URL alone.
 func TestProbeAccessRunsADryRunAndNothingElse(t *testing.T) {
 	t.Parallel()
 	env := stubGit(t)
@@ -102,7 +102,7 @@ func TestProbeAccessRunsADryRunAndNothingElse(t *testing.T) {
 			commands = append(commands, args[0].(string))
 		}
 	}
-	got := New(env, false, logf).ProbeAccess(context.Background(), "https://github.com/acme/skills", "git@github-work:acme/skills.git")
+	got := New(env, false, logf).ProbeAccess(context.Background(), "https://github.com/acme/skills")
 	if got.Access != home.AccessUnknown { // the stub prints no ref's status
 		t.Errorf("access = %+v", got)
 	}
@@ -111,7 +111,7 @@ func TestProbeAccessRunsADryRunAndNothingElse(t *testing.T) {
 	}
 	push := strings.Fields(commands[0])
 	for _, flag := range []string{"--dry-run", "--porcelain", "--no-signed", "--no-verify", "--no-recurse-submodules", "--no-follow-tags", "push.negotiate=false", "push.pushOption=", "core.hooksPath=/dev/null",
-		"remote.agentx.url=https://github.com/acme/skills", "remote.agentx.pushurl=git@github-work:acme/skills.git", "remote.agentx-push.url=git@github-work:acme/skills.git"} {
+		"remote.agentx.url=https://github.com/acme/skills"} {
 		if !contains(push, flag) {
 			t.Errorf("push %q lacks %s", commands[0], flag)
 		}
@@ -142,12 +142,13 @@ func equalString(t *testing.T, what, got, want string) {
 	}
 }
 
-// TestProbeAccessAppliesTheIncludesOfItsOwnURLs checks why the access
-// check runs in a repository of its own: a setting the user keys on a
-// remote's URL applies to that URL alone, whichever of the source's URLs it
-// names, and never to another source, as it would inside the account repo,
-// which holds every source's remote.
-func TestProbeAccessAppliesTheIncludesOfItsOwnURLs(t *testing.T) {
+// TestProbeAccessAppliesTheIncludesOfItsOwnURL checks why the access check
+// runs in a repository of its own: a setting the user keys on a remote's
+// URL applies to that source alone and never to another, as it would
+// inside the account repo, which holds every source's remote. It also
+// checks that the user's pushInsteadOf applies to the check as it does to
+// a real push.
+func TestProbeAccessAppliesTheIncludesOfItsOwnURL(t *testing.T) {
 	t.Parallel()
 	dir, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
@@ -167,14 +168,20 @@ func TestProbeAccessAppliesTheIncludesOfItsOwnURLs(t *testing.T) {
 
 	// The access check of each source runs the SSH command the user's
 	// configuration names for it, the work one for the source the include
-	// is keyed on and the user's own for every other.
+	// is keyed on and the user's own for every other. The URLs are
+	// canonical, as checkSource passes them, so the include is keyed on the
+	// canonical form. A source fetched over HTTPS that the user's
+	// pushInsteadOf rewrites to SSH is checked over SSH, as a real push to
+	// it would go.
 	write(t, global, "[core]\n\tsshCommand = "+filepath.Join(dir, "personal-ssh")+"\n"+
-		"[includeIf \"hasconfig:remote.*.url:git@github-work:*/**\"]\n\tpath = "+work+"\n")
-	for _, c := range []struct{ url, pushURL, who string }{
-		{"https://github.com/acme/skills", "git@github-work:acme/skills.git", "work"},
-		{"git@github.com:me/skills.git", "", "personal"},
+		"[includeIf \"hasconfig:remote.*.url:ssh://git@github-work/**\"]\n\tpath = "+work+"\n"+
+		"[url \"git@github.com:\"]\n\tpushInsteadOf = https://github.com/me/\n")
+	for _, c := range []struct{ url, who string }{
+		{"ssh://git@github-work/acme/skills", "work"},
+		{"ssh://git@github.com/me/skills", "personal"},
+		{"https://github.com/me/other", "personal"},
 	} {
-		got := r.ProbeAccess(ctx, c.url, c.pushURL)
+		got := r.ProbeAccess(ctx, c.url)
 		equalString(t, "reason of "+c.url, got.Reason, "ERROR: Permission to x.git denied to "+c.who+".")
 	}
 }

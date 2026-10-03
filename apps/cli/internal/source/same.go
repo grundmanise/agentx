@@ -1,7 +1,6 @@
 package source
 
 import (
-	"errors"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -9,23 +8,14 @@ import (
 	"unicode"
 )
 
-// Address is where a git URL reaches, in the parts two URLs of one
-// repository are compared by: the transport, the user, the host and the
-// path. It reads every form git does for a remote it pushes to, the forms
-// Parse reads and a path on disk among them, and keeps no subpath and no
-// ref: an address is a whole repository.
+// Address is where the canonical URL of a source reaches, in the parts
+// that decide whether two sources name one repository: the host and the
+// path. It keeps no subpath and no ref: an address is a whole repository.
 type Address struct {
 	Scheme string // https, http, ssh, git or file; the SSH shorthand and git+ssh and ssh+git read as ssh, a path on disk as file
-	User   string // the user of an SSH address, "" for none
 	Host   string // lowercased, without a trailing dot; "" for a path on disk, whose file URL's host git ignores
-	Port   string // "" for the scheme's default and for a path on disk
 	Path   string // the repository path, decoded, without a leading or trailing slash; its case is kept, and so is a .git suffix on disk alone
 }
-
-// ErrCredential is the error of a URL that carries a password or a token:
-// a password anywhere, or a user over a transport other than SSH, where it
-// is a token.
-var ErrCredential = errors.New("the URL carries a password or a token")
 
 // scpAddress is git's SSH shorthand, [user@]host:path, whose host holds no
 // slash; git reads a colon after a slash as part of a path on disk.
@@ -41,9 +31,10 @@ var helperAddress = regexp.MustCompile(`^[A-Za-z0-9._~-]+::`)
 // inside raw is read as git reads it, as part of the path, and one at
 // either end is refused. A URL with a query is refused: git reads a query
 // over SSH and on disk as part of the path and sends one over HTTP before
-// the path it appends, and a query is where a token rides. It never
-// repeats raw in an error, since what it refuses can be a credential.
-// Pure.
+// the path it appends, and a query is where a token rides. So is a URL
+// that carries a password, or a user over a transport other than SSH,
+// where it is a token. It never repeats raw in an error, since what it
+// refuses can be a credential. Pure.
 func ParseAddress(raw string) (Address, error) {
 	switch {
 	case raw == "" || strings.TrimSpace(raw) != raw || strings.IndexFunc(raw, unicode.IsControl) >= 0:
@@ -76,19 +67,15 @@ func ParseAddress(raw string) (Address, error) {
 		}
 		if u.User != nil {
 			if _, password := u.User.Password(); password || a.Scheme != "ssh" {
-				return Address{}, ErrCredential
+				return Address{}, fmt.Errorf("%w: carries a password or a token", ErrForm)
 			}
-			a.User = u.User.Username()
 		}
 		a.Host = strings.TrimRight(strings.ToLower(u.Hostname()), ".")
-		if a.Port = u.Port(); a.Port == defaultPorts[a.Scheme] {
-			a.Port = ""
-		}
 		if a.Scheme == "file" {
 			// git reads a file URL's path on this machine whatever host it
 			// names, so a file URL shares no host with a URL over the
 			// network.
-			a.Host, a.Port = "", ""
+			a.Host = ""
 		}
 		if a.Scheme != "file" && a.Host == "" {
 			return Address{}, fmt.Errorf("%w: no host", ErrForm)
@@ -100,13 +87,13 @@ func ParseAddress(raw string) (Address, error) {
 		// A colon in what stands before the @ is a password, which the
 		// shorthand below would otherwise read as a host.
 		if user, _, ok := strings.Cut(raw, "@"); ok && strings.Contains(user, ":") && !strings.Contains(user, "/") {
-			return Address{}, ErrCredential
+			return Address{}, fmt.Errorf("%w: carries a password or a token", ErrForm)
 		}
 		m := scpAddress.FindStringSubmatch(raw)
 		if m == nil {
 			return Address{}, fmt.Errorf("%w: neither a URL, the SSH shorthand nor an absolute path", ErrForm)
 		}
-		a.Scheme, a.User, a.Host, path = "ssh", m[1], strings.TrimRight(strings.ToLower(m[2]), "."), m[3]
+		a.Scheme, a.Host, path = "ssh", strings.TrimRight(strings.ToLower(m[2]), "."), m[3]
 	}
 	var segments []string
 	for _, seg := range strings.Split(path, "/") {
@@ -144,29 +131,6 @@ func trimGit(path string) string {
 	return dir + last
 }
 
-// SameTransport reports whether a and b reach their repositories the same
-// way: the same transport, user, host and port. Two URLs of one repository
-// that do are spelled differently and nothing more, as https://host/a and
-// https://host/a.git are, and git@host:a and ssh://git@host/a.
-func SameTransport(a, b Address) bool {
-	return a.Scheme == b.Scheme && a.User == b.User && a.Host == b.Host && a.Port == b.Port
-}
-
-// Kinship is how much of two addresses names one repository.
-type Kinship int
-
-const (
-	// OtherRepository: the paths differ, so the addresses name two
-	// repositories whatever their hosts.
-	OtherRepository Kinship = iota
-	// OtherHost: the same path on hosts that do not resolve to one host.
-	// They may still be one repository, through a name agentx cannot see
-	// through, so a caller warns rather than refuses.
-	OtherHost
-	// SameRepository: the same path on the same host.
-	SameRepository
-)
-
 // sameHosts are the hosts a forge serves one repository under, each mapped
 // to the host it is known by: the SSH endpoint over port 443 that a
 // firewall leaves open, and the www name of a web host.
@@ -177,28 +141,21 @@ var sameHosts = map[string]string{
 	"altssh.bitbucket.org": "bitbucket.org",
 }
 
-// Compare tells whether a and b name one repository. The paths decide
-// first, compared as ParseAddress leaves them, but for the .git suffix of
-// a path on disk beside a URL over the network, which a server finds the
-// repository without; the hosts then, each SSH
-// host first through resolve, which reads the host name an SSH
-// configuration gives an alias (nil reads every host as itself), then
-// through the hosts a forge serves one repository under. A path on disk
-// has no host, so it is at most OtherHost beside a URL over the network,
-// as a mount of the server's disk can be. The scheme, the user and the
-// port do not decide: one repository is reached over HTTPS and over SSH
-// alike. Pure.
-func Compare(a, b Address, resolve func(host string) string) Kinship {
+// SameRepository tells whether a and b name one repository: the same path
+// on the same host. The paths are compared as ParseAddress leaves them, but
+// for the .git suffix of a path on disk beside a URL over the network,
+// which a server finds the repository without; the hosts each SSH host
+// first through resolve, which reads the host name an SSH configuration
+// gives an alias (nil reads every host as itself), then through the hosts
+// a forge serves one repository under. The same path on hosts that do not
+// resolve to one host names two repositories, and so does a path on disk
+// beside a URL over the network. The scheme does not decide: one
+// repository is reached over HTTPS and over SSH alike. Pure.
+func SameRepository(a, b Address, resolve func(host string) string) bool {
 	if (a.Scheme == "file") != (b.Scheme == "file") {
 		a.Path, b.Path = trimGit(a.Path), trimGit(b.Path)
 	}
-	if a.Path != b.Path {
-		return OtherRepository
-	}
-	if canonicalHost(a, resolve) != canonicalHost(b, resolve) {
-		return OtherHost
-	}
-	return SameRepository
+	return a.Path == b.Path && canonicalHost(a, resolve) == canonicalHost(b, resolve)
 }
 
 // canonicalHost is the host a's repository is known by.

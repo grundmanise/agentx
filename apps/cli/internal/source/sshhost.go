@@ -15,14 +15,14 @@ import (
 // Match exec runs a command of the user's that hangs.
 const sshHostWait = 5 * time.Second
 
-// SSHHosts returns the resolve function Compare takes: the host name the
-// user's SSH configuration gives a host, as ssh -G prints it, so that an
-// alias such as github-work in ~/.ssh/config compares as the github.com it
-// stands for. ssh runs in env, the user's environment, found on its PATH;
-// without one, as for a host ssh cannot read or one that would read as an
-// option, every host resolves to itself. Each host is asked about once per
-// resolve function, and only when Compare needs it; it is not safe for
-// concurrent use.
+// SSHHosts returns the resolve function SameRepository takes: the host
+// name the user's SSH configuration gives a host, as ssh -G prints it, so
+// that an alias such as github-work in ~/.ssh/config compares as the
+// github.com it stands for. ssh runs in env, the user's environment, found
+// on its PATH; without one, as for a host ssh cannot read or one that
+// would read as an option, every host resolves to itself. Each host is
+// asked about once per resolve function, and only when SameRepository
+// needs it; it is not safe for concurrent use.
 func SSHHosts(ctx context.Context, env map[string]string) func(host string) string {
 	known := map[string]string{}
 	ssh := gitx.FindProgram(env, "ssh")

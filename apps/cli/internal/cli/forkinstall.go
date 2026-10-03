@@ -480,7 +480,7 @@ func (inv *invocation) addForkSource(ctx context.Context, name string, there lin
 	if err != nil || s.FindSource(url) >= 0 {
 		return
 	}
-	if _, _, err := inv.addSource(ctx, source.Source{URL: url}, pushChoice{}); err != nil {
+	if _, _, err := inv.addSource(ctx, source.Source{URL: url}); err != nil {
 		again := "; run 'agentx source add " + shellWord(url) + "' to receive its updates"
 		if ctx.Err() != nil { // a stop, not the upstream, is what kept it out
 			inv.out.warn(sanitised(name) + "'s upstream " + sanitised(url) + " was not added because the run was stopped" + again)

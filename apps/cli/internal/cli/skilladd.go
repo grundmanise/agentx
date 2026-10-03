@@ -147,7 +147,7 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 		if !add {
 			at.Ref = entry.Pin
 		}
-		if listing, entry, err = inv.addSource(ctx, at, pushChoice{}); err != nil {
+		if listing, entry, err = inv.addSource(ctx, at); err != nil {
 			return err
 		}
 	}

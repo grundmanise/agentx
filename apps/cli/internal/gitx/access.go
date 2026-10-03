@@ -50,20 +50,10 @@ const (
 // repository, see targetRemote.
 const CheckRemote = "agentx"
 
-// checkPushRemote is a second remote of the throwaway repository whose URL
-// is the source's push URL. Git keys includeIf "hasconfig:remote.*.url:..."
-// on remote.<name>.url alone, never on a push URL, so it is the one through
-// which a setting the user keys on the push URL applies.
-const checkPushRemote = "agentx-push"
-
-// targetRemote is the configuration, as -c options, of CheckRemote for a
-// source fetched from url and pushed to at pushURL, "" for none.
-func targetRemote(url, pushURL string) []string {
-	args := []string{"-c", "remote." + CheckRemote + ".url=" + url}
-	if pushURL != "" {
-		args = append(args, "-c", "remote."+CheckRemote+".pushurl="+pushURL, "-c", "remote."+checkPushRemote+".url="+pushURL)
-	}
-	return args
+// targetRemote is the configuration, as -c options, of CheckRemote for the
+// source at url, which it is fetched from and pushed to.
+func targetRemote(url string) []string {
+	return []string{"-c", "remote." + CheckRemote + ".url=" + url}
 }
 
 // throwawayRepo makes an empty git directory in the temporary directory,
@@ -93,14 +83,14 @@ func throwawayRepo() (gitDir string, remove func(), err error) {
 	return dir, remove, nil
 }
 
-// ProbeAccess asks the source fetched from url and pushed to at pushURL,
-// "" when pushes go to url, whether this machine may push to it, without
-// pushing anything: a dry run of deleting AccessCheckRef, through a remote
-// of those URLs so that the user's URL rewrites apply as they would to a
-// real push. It needs no object and sends no pack, so it runs from an empty
-// throwaway repository (see throwawayRepo), where the user's configuration
-// applies as it does to this source alone: an SSH command, a credential or
-// any other setting the user keys on another source's URL does not.
+// ProbeAccess asks the source at url whether this machine may push to it,
+// without pushing anything: a dry run of deleting AccessCheckRef, through a
+// remote of that URL so that the user's URL rewrites, pushInsteadOf among
+// them, apply as they would to a real push. It needs no object and sends no
+// pack, so it runs from an empty throwaway repository (see throwawayRepo),
+// where the user's configuration applies as it does to this source alone: an
+// SSH command, a credential or any other setting the user keys on another
+// source's URL does not.
 //
 // The check is a side step of the command, never what the user asked for,
 // so it runs unattended (see call.unattended) and within AccessBudget, with
@@ -111,14 +101,14 @@ func throwawayRepo() (gitDir string, remove func(), err error) {
 // A dry run over a path proves nothing, since git checks no permission
 // before it would write: a writable answer over a path is refined by
 // whether this machine may write the repository's directories.
-func (r *Runner) ProbeAccess(ctx context.Context, url, pushURL string) Access {
+func (r *Runner) ProbeAccess(ctx context.Context, url string) Access {
 	gitDir, remove, err := throwawayRepo()
 	if err != nil {
 		return Access{Access: home.AccessUnknown, Reason: firstLine(err.Error())}
 	}
 	defer remove()
 	args := append(networkConfig(), "-c", "push.negotiate=false", "-c", "push.pushOption=")
-	args = append(args, targetRemote(url, pushURL)...)
+	args = append(args, targetRemote(url)...)
 	args = append(args, "--git-dir="+gitDir)
 	args = append(args, ProbeArgs(CheckRemote)...)
 	budget, cancel := context.WithTimeout(ctx, AccessBudget)
@@ -456,7 +446,7 @@ func (r *Runner) DefaultBranch(ctx context.Context, url string) (string, error) 
 	defer remove()
 	budget, cancel := context.WithTimeout(ctx, AccessBudget)
 	defer cancel()
-	args := append(networkConfig(), targetRemote(url, "")...)
+	args := append(networkConfig(), targetRemote(url)...)
 	args = append(args, "--git-dir="+gitDir, "ls-remote", "--symref", CheckRemote, "HEAD")
 	out, err := r.run(budget, call{unattended: true}, args...)
 	if err != nil {

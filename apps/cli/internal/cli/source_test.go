@@ -321,8 +321,8 @@ func TestSourceAddPeelsAnAnnotatedTagPin(t *testing.T) {
 // TestSourceAddKeepsAnAliasOnReAdd: nothing writes alias yet, but it is a
 // second URL mapped onto the canonical one, and a re-add rewrites the whole
 // entry. The alias must be carried across, not dropped, and so must the
-// push URL, the access and the default branch of an entry, which an add
-// that does not find them out again has no reason to forget.
+// access and the default branch of an entry, which an add that does not
+// find them out again has no reason to forget.
 func TestSourceAddKeepsAnAliasOnReAdd(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -341,7 +341,7 @@ func TestSourceAddKeepsAnAliasOnReAdd(t *testing.T) {
 		}
 		entry := settings.Sources[at]
 		entry.Alias = alias
-		entry.PushURL, entry.Access, entry.AccessChecked, entry.DefaultBranch = s.gitDir, home.AccessReadOnly, "2026-10-02T10:00:00Z", "trunk"
+		entry.Access, entry.AccessChecked, entry.DefaultBranch = home.AccessReadOnly, "2026-10-02T10:00:00Z", "trunk"
 		settings.SetSource(entry)
 		return home.SaveSettings(h.agentx, settings)
 	})
@@ -359,10 +359,8 @@ func TestSourceAddKeepsAnAliasOnReAdd(t *testing.T) {
 	entry := readSettingsFile(t, h)["sources"].([]any)[0].(map[string]any)
 	equal(t, "settings alias", entry["alias"], alias)
 	equal(t, "settings pin", entry["pin"], "v1")
-	equal(t, "settings push_url", entry["push_url"], s.gitDir)
-	// The add checks access again, at the push URL, and records what it
-	// found; a pinned source's default branch is not read, so the one the
-	// entry knew stays.
+	// The add checks access again and records what it found; a pinned source's
+	// default branch is not read, so the one the entry knew stays.
 	equal(t, "settings access", entry["access"], home.AccessWritable)
 	if entry["access_checked"] == "2026-10-02T10:00:00Z" {
 		t.Error("the add did not record its access check")
@@ -727,16 +725,15 @@ func TestSourceAccessFollowsWhatTheSourceAnswers(t *testing.T) {
 	contains(t, "source list", h.run("source", "list").stdout, "  tree  writable  main  ")
 }
 
-// TestSourceAddRefusesAPushURLAndAForkSource is every refusal source add
-// gives before it writes anything, on one home whose settings hold the
-// account remote: a push URL with a credential or naming another
-// repository, exit 1; a tree source naming the fork source's repository,
-// exit 6, which source skills gives for the fork source too, and skill add
-// of it; the layout flags that cannot be met, exit 1, and a fork source
-// other than the account remote, exit 6; --layout tree of the fork source,
-// exit 6; and an account remote URL with a token or a ref, exit 1. None of
-// them creates the account repo, or says where pushes go.
-func TestSourceAddRefusesAPushURLAndAForkSource(t *testing.T) {
+// TestSourceAddRefusesBeforeWriting is every refusal source add gives
+// before it writes anything, on one home whose settings hold the account
+// remote: a tree source naming the fork source's repository, exit 6, which
+// source skills gives for the fork source too, and skill add of it; the
+// layout flags that cannot be met, exit 1, and a fork source other than
+// the account remote, exit 6; --layout tree of the fork source, exit 6;
+// and an account remote URL with a token or a ref, exit 1. None of them
+// creates the account repo.
+func TestSourceAddRefusesBeforeWriting(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	const forks = "https://example.invalid/me/forks"
@@ -759,11 +756,7 @@ func TestSourceAddRefusesAPushURLAndAForkSource(t *testing.T) {
 		message string
 		hint    string
 	}{
-		{"a push URL with a token", []string{"source", "add", "acme/skills", "--push-url", "https://me:s3cret@github.com/acme/skills"}, 1,
-			"the push URL carries a password or a token", "credential helper"},
-		{"a push URL of another repository", []string{"source", "add", "acme/skills", "--push-url", "git@github.com:acme/other.git"}, 1,
-			"the push URL git@github.com:acme/other.git names another repository than https://github.com/acme/skills", "at the same path"},
-		{"the fork source's repository", []string{"source", "add", "ssh://git@example.invalid/me/forks.git#main", "--push-url", "git@other.example:me/forks.git"}, 6,
+		{"the fork source's repository", []string{"source", "add", "ssh://git@example.invalid/me/forks.git#main"}, 6,
 			"ssh://git@example.invalid/me/forks is the fork source " + forks + ": it holds one branch per fork", "agentx skill add --from-account <name>"},
 		{"a listing of the fork source", []string{"source", "skills", source.ID(forks)}, 6, forks + " is a fork source", "agentx skill list --remote"},
 		{"an install from the fork source", []string{"skill", "add", forks + "#skills/notes"}, 6, forks + " is a fork source", "agentx skill add --from-account <name>"},
@@ -786,9 +779,6 @@ func TestSourceAddRefusesAPushURLAndAForkSource(t *testing.T) {
 			contains(t, "error.hint", events[0]["hint"].(string), tc.hint)
 			if strings.Contains(out.stdout+out.stderr, "s3cret") {
 				t.Errorf("the token leaked into the output:\n%s%s", out.stdout, out.stderr)
-			}
-			if strings.Contains(out.stderr, "agentx pushes to") {
-				t.Errorf("a refused add said where pushes go:\n%s", out.stderr)
 			}
 		})
 	}

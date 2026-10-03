@@ -207,13 +207,14 @@ func (inv *invocation) installedFrom(ctx context.Context) (map[string]int, error
 // accountRefusal is why want, the account remote an add is about to write,
 // cannot be it given the settings s, nil when it can; installed counts the
 // managed skills of each source, see installedFrom, and resolve reads the
-// host an SSH alias names, as source.Compare takes it. A tree source of the
-// same URL becomes the account remote only while no managed skill was
-// installed from it: its skills are fetched on one branch without blobs,
-// which neither fork fetches nor the forks' history would ever read again.
-// A tree source of another URL naming the same repository is refused too,
-// since the repository would be fetched both ways. Both are exit code 6,
-// the hint saying to remove the source first. Pure but for resolve.
+// host an SSH alias names, as source.SameRepository takes it. A tree
+// source of the same URL becomes the account remote only while no managed
+// skill was installed from it: its skills are fetched on one branch
+// without blobs, which neither fork fetches nor the forks' history would
+// ever read again. A tree source of another URL naming the same
+// repository is refused too, since the repository would be fetched both
+// ways. Both are exit code 6, the hint saying to remove the source first.
+// Pure but for resolve.
 func accountRefusal(s home.Settings, want home.Source, installed map[string]int, resolve func(host string) string) *failure {
 	for _, tree := range s.Sources {
 		switch {
@@ -230,10 +231,9 @@ func accountRefusal(s home.Settings, want home.Source, installed map[string]int,
 	return nil
 }
 
-// addAccount makes the repository arg names the account remote, with the
-// push URL push names: source add --account and a source add of the account
-// remote's URL again both run it. arg is held to the rules of
-// accountURL and push to those of pushURLFor before anything is read.
+// addAccount makes the repository arg names the account remote: source add
+// --account and a source add of the account remote's URL again both run
+// it. arg is held to the rules of accountURL before anything is read.
 //
 // It is source add for a fork source, step by step. A source of the
 // settings that cannot become the account remote refuses it, see
@@ -250,28 +250,18 @@ func accountRefusal(s home.Settings, want home.Source, installed map[string]int,
 // a replaced account remote are published to the new one from then on. A
 // run that gets no further than its fetch takes back the remote it wrote,
 // as an add does.
-func (inv *invocation) addAccount(ctx context.Context, arg string, push pushChoice) error {
+func (inv *invocation) addAccount(ctx context.Context, arg string) error {
 	src, f := accountURL(arg)
 	if f != nil {
 		return f
 	}
 	resolve := inv.sshHosts(ctx)
-	if push.set {
-		record, warning, f := pushURLFor(push.url, src.URL, resolve)
-		if f != nil {
-			return f
-		}
-		push.url, push.warning = record, warning
-	}
 	before, err := inv.loadSettings()
 	if err != nil {
 		return err
 	}
 	existing := before.FindSource(src.URL)
-	want := home.Source{URL: src.URL, Layout: home.LayoutFork, Account: true, PushURL: push.url}
-	if !push.set && existing >= 0 {
-		want.PushURL = before.Sources[existing].PushURL
-	}
+	want := home.Source{URL: src.URL, Layout: home.LayoutFork, Account: true}
 	installed, err := inv.installedFrom(ctx)
 	if err != nil {
 		return err
@@ -279,9 +269,8 @@ func (inv *invocation) addAccount(ctx context.Context, arg string, push pushChoi
 	if f := accountRefusal(before, want, installed, resolve); f != nil {
 		return f
 	}
-	reach := source.RemoteOf(want).URL
-	if err := inv.git.ProbeRemote(ctx, reach); err != nil {
-		return unreachableRemote(reach, err)
+	if err := inv.git.ProbeRemote(ctx, src.URL); err != nil {
+		return unreachableRemote(src.URL, err)
 	}
 	gitDir, _, err := gitx.OpenAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
@@ -329,9 +318,9 @@ func (inv *invocation) addAccount(ctx context.Context, arg string, push pushChoi
 		if ctx.Err() != nil {
 			return takeBack(ctx.Err())
 		}
-		return takeBack(unreachableRemote(reach, err))
+		return takeBack(unreachableRemote(src.URL, err))
 	}
-	inv.out.emit(progressEvent{event: newEvent("progress"), Phase: "fetch", Subject: shownURL(reach), Current: 1, Total: 1})
+	inv.out.emit(progressEvent{event: newEvent("progress"), Phase: "fetch", Subject: shownURL(src.URL), Current: 1, Total: 1})
 	check := inv.checkSource(ctx, want)
 	if err := ctx.Err(); err != nil {
 		return takeBack(err)
@@ -360,9 +349,6 @@ func (inv *invocation) addAccount(ctx context.Context, arg string, push pushChoi
 		}
 		if i := s.FindSource(src.URL); i >= 0 {
 			entry = entry.Merge(s.Sources[i]) // the alias and anything else this add did not find out is kept
-		}
-		if push.set && push.url == "" {
-			entry.PushURL = "" // --push-url= clears what Merge kept
 		}
 		entry.DefaultBranch = "" // a fork source follows no branch; one a tree source of the URL knew means nothing now
 		for _, other := range s.Sources {
@@ -402,9 +388,6 @@ func (inv *invocation) addAccount(ctx context.Context, arg string, push pushChoi
 		}
 		return err
 	}
-	if push.warning != "" {
-		inv.out.warn(push.warning)
-	}
 	check.report(inv, entry.URL)
 	n := len(tips)
 	ev := entryEvent(entry)
@@ -412,7 +395,7 @@ func (inv *invocation) addAccount(ctx context.Context, arg string, push pushChoi
 	inv.out.emit(ev)
 	holds := "; it holds " + plural(n, "fork")
 	inv.summary = "the account remote is now " + entry.URL + holds
-	inv.out.done("the account remote is now " + inv.out.paint(heading, entry.URL) + holds + pushesTo(inv.out, entry.PushURL) + accessPhrase(inv.out, entry.AccessName()))
+	inv.out.done("the account remote is now " + inv.out.paint(heading, entry.URL) + holds + accessPhrase(inv.out, entry.AccessName()))
 	return nil
 }
 

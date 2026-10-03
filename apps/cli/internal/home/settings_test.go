@@ -14,8 +14,7 @@ func TestSourceMerge(t *testing.T) {
 	t.Parallel()
 	prev := Source{
 		URL: "https://example.com/skills", Alias: "https://example.com/old", Layout: LayoutFork, Account: true,
-		PushURL: "git@example.com:skills.git", Pin: "v1", Access: AccessWritable,
-		AccessChecked: "2026-10-01T10:00:00Z", DefaultBranch: "main", LastFetched: "2026-10-01T10:00:00Z",
+		Pin: "v1", Access: AccessWritable, AccessChecked: "2026-10-01T10:00:00Z", DefaultBranch: "main", LastFetched: "2026-10-01T10:00:00Z",
 	}
 	added := Source{URL: prev.URL, LastFetched: "2026-10-02T10:00:00Z"}
 	for _, tc := range []struct {
@@ -23,14 +22,13 @@ func TestSourceMerge(t *testing.T) {
 		add, want Source
 	}{
 		{"an add that found nothing out keeps everything but the pin and the fetch time", added,
-			Source{URL: prev.URL, Alias: prev.Alias, Layout: LayoutFork, Account: true, PushURL: prev.PushURL,
+			Source{URL: prev.URL, Alias: prev.Alias, Layout: LayoutFork, Account: true,
 				Access: AccessWritable, AccessChecked: prev.AccessChecked, DefaultBranch: "main", LastFetched: added.LastFetched}},
-		{"an add's own answers win", Source{URL: prev.URL, Pin: "v2", PushURL: "ssh://git@example.com/skills",
-			Access: AccessReadOnly, AccessChecked: "2026-10-02T10:00:00Z", DefaultBranch: "trunk"},
-			Source{URL: prev.URL, Alias: prev.Alias, Layout: LayoutFork, Account: true, PushURL: "ssh://git@example.com/skills",
-				Pin: "v2", Access: AccessReadOnly, AccessChecked: "2026-10-02T10:00:00Z", DefaultBranch: "trunk"}},
+		{"an add's own answers win", Source{URL: prev.URL, Pin: "v2", Access: AccessReadOnly, AccessChecked: "2026-10-02T10:00:00Z", DefaultBranch: "trunk"},
+			Source{URL: prev.URL, Alias: prev.Alias, Layout: LayoutFork, Account: true, Pin: "v2",
+				Access: AccessReadOnly, AccessChecked: "2026-10-02T10:00:00Z", DefaultBranch: "trunk"}},
 		{"a check that could not decide does not bring the old answer back", Source{URL: prev.URL, AccessChecked: "2026-10-02T10:00:00Z"},
-			Source{URL: prev.URL, Alias: prev.Alias, Layout: LayoutFork, Account: true, PushURL: prev.PushURL,
+			Source{URL: prev.URL, Alias: prev.Alias, Layout: LayoutFork, Account: true,
 				AccessChecked: "2026-10-02T10:00:00Z", DefaultBranch: "main"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

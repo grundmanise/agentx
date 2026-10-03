@@ -24,23 +24,18 @@ type Settings struct {
 }
 
 // Source is one entry of the sources list: a source by its canonical URL,
-// how its repository is laid out, where pushes to it go, what git lets
-// this machine do there, the ref it is pinned to and when it was last
-// fetched.
+// how its repository is laid out, what git lets this machine do there, the
+// ref it is pinned to and when it was last fetched. A source is fetched
+// from and pushed to at its canonical URL.
 //
-// Alias and PushURL are both second URLs of the one repository the
-// canonical URL names, and they point in opposite directions. Alias is
+// Alias is a second URL of the one repository the canonical URL names:
 // another name of it whose fetches map onto the canonical URL, its old URL
 // after a rename for one; nothing sets it yet, and it is never pushed to.
-// PushURL is the URL as the user gave it, which pushes go to so that their
-// SSH configuration and credentials apply; it is never fetched from by a
-// source of the tree layout.
 type Source struct {
 	URL           string `json:"url"`
 	Alias         string `json:"alias,omitempty"`
 	Layout        string `json:"layout,omitempty"`  // LayoutFork, or absent for the tree layout
 	Account       bool   `json:"account,omitempty"` // the account remote: forks publish to it by default
-	PushURL       string `json:"push_url,omitempty"`
 	Pin           string `json:"pin,omitempty"`
 	Access        string `json:"access,omitempty"`         // AccessWritable or AccessReadOnly, absent while unknown
 	AccessChecked string `json:"access_checked,omitempty"` // RFC 3339, when access was last checked, whatever the answer
@@ -103,9 +98,6 @@ func (s Source) Merge(prev Source) Source {
 	}
 	if s.Layout == "" {
 		s.Layout, s.Account = prev.Layout, prev.Account
-	}
-	if s.PushURL == "" {
-		s.PushURL = prev.PushURL
 	}
 	if s.AccessChecked == "" && s.Access == "" {
 		s.Access, s.AccessChecked = prev.Access, prev.AccessChecked

@@ -14,13 +14,13 @@ func TestParseAddress(t *testing.T) {
 	}{
 		{"https://github.com/acme/skills", Address{Scheme: "https", Host: "github.com", Path: "acme/skills"}},
 		{"https://GitHub.com.:443/acme/skills.git/", Address{Scheme: "https", Host: "github.com", Path: "acme/skills"}},
-		{"http://git.example.com:8080/team/repo", Address{Scheme: "http", Host: "git.example.com", Port: "8080", Path: "team/repo"}},
-		{"git@github.com:acme/skills.git", Address{Scheme: "ssh", User: "git", Host: "github.com", Path: "acme/skills"}},
+		{"http://git.example.com:8080/team/repo", Address{Scheme: "http", Host: "git.example.com", Path: "team/repo"}},
+		{"git@github.com:acme/skills.git", Address{Scheme: "ssh", Host: "github.com", Path: "acme/skills"}},
 		{"github-work:acme/skills.git", Address{Scheme: "ssh", Host: "github-work", Path: "acme/skills"}},
-		{"git@host:/srv/skills", Address{Scheme: "ssh", User: "git", Host: "host", Path: "srv/skills"}},
-		{"ssh://git@github.com:22/acme/skills", Address{Scheme: "ssh", User: "git", Host: "github.com", Path: "acme/skills"}},
-		{"ssh://git@ssh.github.com:443/acme/skills", Address{Scheme: "ssh", User: "git", Host: "ssh.github.com", Port: "443", Path: "acme/skills"}},
-		{"git+ssh://git@host/a", Address{Scheme: "ssh", User: "git", Host: "host", Path: "a"}},
+		{"git@host:/srv/skills", Address{Scheme: "ssh", Host: "host", Path: "srv/skills"}},
+		{"ssh://git@github.com:22/acme/skills", Address{Scheme: "ssh", Host: "github.com", Path: "acme/skills"}},
+		{"ssh://git@ssh.github.com:443/acme/skills", Address{Scheme: "ssh", Host: "ssh.github.com", Path: "acme/skills"}},
+		{"git+ssh://git@host/a", Address{Scheme: "ssh", Host: "host", Path: "a"}},
 		{"ssh+git://host/a", Address{Scheme: "ssh", Host: "host", Path: "a"}},
 		{"git://host/a.git", Address{Scheme: "git", Host: "host", Path: "a"}},
 		{"file:///srv/skills.git", Address{Scheme: "file", Path: "srv/skills.git"}},
@@ -30,7 +30,7 @@ func TestParseAddress(t *testing.T) {
 		{"/srv/skills.git", Address{Scheme: "file", Path: "srv/skills.git"}},
 		{"https://example.com/Team/Re%20po", Address{Scheme: "https", Host: "example.com", Path: "Team/Re po"}},
 		{"/srv/acme skills/repo", Address{Scheme: "file", Path: "srv/acme skills/repo"}},
-		{"git@host:a?x=1", Address{Scheme: "ssh", User: "git", Host: "host", Path: "a?x=1"}},
+		{"git@host:a?x=1", Address{Scheme: "ssh", Host: "host", Path: "a?x=1"}},
 	} {
 		t.Run(tc.in, func(t *testing.T) {
 			got, err := ParseAddress(tc.in)
@@ -67,16 +67,16 @@ func TestParseAddress(t *testing.T) {
 			if strings.Contains(err.Error(), "ghp_secret") {
 				t.Errorf("the error repeats the credential: %v", err)
 			}
-			if !errors.Is(err, ErrForm) && !errors.Is(err, ErrCredential) {
-				t.Errorf("ParseAddress(%q) = %v, neither an ErrForm nor an ErrCredential", tc.in, err)
+			if !errors.Is(err, ErrForm) {
+				t.Errorf("ParseAddress(%q) = %v, not an ErrForm", tc.in, err)
 			}
 		})
 	}
 }
 
 // TestParseAddressReadsEveryCanonicalURL: the canonical URL of every source
-// is an address of its repository, so that its push URL can be compared
-// with it.
+// is an address of its repository, so that the URLs of two sources can be
+// compared.
 func TestParseAddressReadsEveryCanonicalURL(t *testing.T) {
 	t.Parallel()
 	for _, tt := range parseCases() {
@@ -85,13 +85,13 @@ func TestParseAddressReadsEveryCanonicalURL(t *testing.T) {
 			t.Errorf("ParseAddress(%q) = %v", tt.url, err)
 			continue
 		}
-		if Compare(a, a, nil) != SameRepository {
+		if !SameRepository(a, a, nil) {
 			t.Errorf("%q does not name the repository it names", tt.url)
 		}
 	}
 }
 
-func TestCompare(t *testing.T) {
+func TestSameRepository(t *testing.T) {
 	t.Parallel()
 	aliases := map[string]string{"github-work": "github.com", "work": "GitHub.com."}
 	resolve := func(host string) string {
@@ -101,29 +101,28 @@ func TestCompare(t *testing.T) {
 		return host
 	}
 	for _, tc := range []struct {
-		a, b      string
-		want      Kinship
-		transport bool
+		a, b string
+		want bool
 	}{
-		{"https://github.com/acme/skills", "https://github.com/acme/skills.git/", SameRepository, true},
-		{"https://github.com/acme/skills", "git@github.com:acme/skills.git", SameRepository, false},
-		{"ssh://git@github.com/acme/skills", "git@github.com:acme/skills", SameRepository, true},
-		{"https://github.com/acme/skills", "ssh://git@github.com:2222/acme/skills", SameRepository, false},
-		{"https://github.com/acme/skills", "git@github-work:acme/skills.git", SameRepository, false},
-		{"https://github.com/acme/skills", "work:acme/skills", SameRepository, false},
-		{"https://github.com/acme/skills", "ssh://git@ssh.github.com:443/acme/skills", SameRepository, false},
-		{"https://gitlab.com/g/r", "git@altssh.gitlab.com:g/r", SameRepository, false},
-		{"file:///srv/skills.git", "/srv/skills.git/", SameRepository, true},
-		{"file:///srv/skills", "file://localhost/srv/skills", SameRepository, true},
-		{"file:///srv/skills.git", "/srv/skills", OtherRepository, true},
-		{"https://github.com/acme/skills", "file://github.com/acme/skills", OtherHost, false},
-		{"ssh://host/srv/skills", "/srv/skills.git", OtherHost, false},
-		{"https://github.com/acme/skills", "git@github.com:acme/other", OtherRepository, false},
-		{"https://github.com/acme/skills", "https://github.com/Acme/Skills", OtherRepository, true},
-		{"https://github.com/acme/skills", "git@elsewhere.example:acme/skills", OtherHost, false},
+		{"https://github.com/acme/skills", "https://github.com/acme/skills.git/", true},
+		{"https://github.com/acme/skills", "git@github.com:acme/skills.git", true},
+		{"ssh://git@github.com/acme/skills", "git@github.com:acme/skills", true},
+		{"https://github.com/acme/skills", "ssh://git@github.com:2222/acme/skills", true},
+		{"https://github.com/acme/skills", "git@github-work:acme/skills.git", true},
+		{"https://github.com/acme/skills", "work:acme/skills", true},
+		{"https://github.com/acme/skills", "ssh://git@ssh.github.com:443/acme/skills", true},
+		{"https://gitlab.com/g/r", "git@altssh.gitlab.com:g/r", true},
+		{"file:///srv/skills.git", "/srv/skills.git/", true},
+		{"file:///srv/skills", "file://localhost/srv/skills", true},
+		{"file:///srv/skills.git", "/srv/skills", false},
+		{"https://github.com/acme/skills", "file://github.com/acme/skills", false},
+		{"ssh://host/srv/skills", "/srv/skills.git", false},
+		{"https://github.com/acme/skills", "git@github.com:acme/other", false},
+		{"https://github.com/acme/skills", "https://github.com/Acme/Skills", false},
+		{"https://github.com/acme/skills", "git@elsewhere.example:acme/skills", false},
 		// An alias reads through only over SSH, where an SSH configuration
 		// is what names hosts.
-		{"https://github.com/acme/skills", "https://github-work/acme/skills", OtherHost, false},
+		{"https://github.com/acme/skills", "https://github-work/acme/skills", false},
 	} {
 		t.Run(tc.a+" "+tc.b, func(t *testing.T) {
 			a, err := ParseAddress(tc.a)
@@ -134,14 +133,11 @@ func TestCompare(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := Compare(a, b, resolve); got != tc.want {
-				t.Errorf("Compare = %d, want %d", got, tc.want)
+			if got := SameRepository(a, b, resolve); got != tc.want {
+				t.Errorf("SameRepository = %t, want %t", got, tc.want)
 			}
-			if got := Compare(b, a, resolve); got != tc.want {
-				t.Errorf("Compare the other way = %d, want %d", got, tc.want)
-			}
-			if got := SameTransport(a, b); got != tc.transport {
-				t.Errorf("SameTransport = %v, want %v", got, tc.transport)
+			if got := SameRepository(b, a, resolve); got != tc.want {
+				t.Errorf("SameRepository the other way = %t, want %t", got, tc.want)
 			}
 		})
 	}

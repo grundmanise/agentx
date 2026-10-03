@@ -22,19 +22,18 @@ type sourceCheck struct {
 
 // checkSource asks the source of entry what this machine may do there (see
 // gitx.ProbeAccess) and, for an unpinned tree source, which branch its HEAD
-// names, outside the lock, through the URLs the account repo's remote for
-// it has. The two run one after the other, so that a run that checks in its
-// fetch workers keeps to their bound. Neither can fail the command: an
-// answer that does not come is an unknown access and no default branch.
+// names, outside the lock, at its URL. The two run one after the other, so
+// that a run that checks in its fetch workers keeps to their bound. Neither
+// can fail the command: an answer that does not come is an unknown access
+// and no default branch.
 func (inv *invocation) checkSource(ctx context.Context, entry home.Source) sourceCheck {
-	remote := source.RemoteOf(entry)
 	var c sourceCheck
-	c.access = inv.git.ProbeAccess(ctx, remote.URL, remote.PushURL)
+	c.access = inv.git.ProbeAccess(ctx, entry.URL)
 	if c.access.Access != home.AccessWritable {
 		inv.out.debugf("access to %s: %s: %s", entry.URL, c.access.Access, c.access.Reason)
 	}
 	if entry.Pin == "" && entry.Layout != home.LayoutFork && ctx.Err() == nil {
-		branch, err := inv.git.DefaultBranch(ctx, remote.URL)
+		branch, err := inv.git.DefaultBranch(ctx, entry.URL)
 		switch {
 		case err != nil:
 			inv.out.debugf("reading the default branch of %s: %v", entry.URL, err)
@@ -90,7 +89,7 @@ func (c sourceCheck) report(inv *invocation, url string) {
 // records, layout and access by their reported names.
 func entryEvent(entry home.Source) sourceEvent {
 	return sourceEvent{event: newEvent("source"), ID: source.ID(entry.URL), URL: entry.URL, Alias: entry.Alias, Layout: entry.LayoutName(),
-		Account: entry.Account, PushURL: entry.PushURL, Pin: entry.Pin, Access: entry.AccessName(), AccessChecked: entry.AccessChecked,
+		Account: entry.Account, Pin: entry.Pin, Access: entry.AccessName(), AccessChecked: entry.AccessChecked,
 		DefaultBranch: entry.DefaultBranch, LastFetched: entry.LastFetched}
 }
 

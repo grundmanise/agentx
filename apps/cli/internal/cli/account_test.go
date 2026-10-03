@@ -66,18 +66,17 @@ func TestAccountRemoteTakesTheSourceOfItsURL(t *testing.T) {
 
 // TestTheAccountRemoteIsSetReplacedAndDetached attaches, replaces and
 // detaches the account remote, a source of the fork layout. With none set,
-// pull is refused, exit 6, naming source add --account. One
-// git cannot reach is refused, exit 3, before anything is written, an
-// account repo included. source add --account records the settings entry
-// and the remote src-<id>, with one fetch refspec, the fork branches, no
-// tags, no push URL and no promisor settings, then fetches its forks and
-// checks what this machine may do there. A plain source add of its URL
-// adds it again, still the account remote, and finds the fork published
-// in between; source list marks it, and source fetch fetches its forks.
-// Adding another URL with --account replaces the entry and forgets what
-// the first one held, a fork's tracking following it; source remove
-// detaches it: its configuration, its remote-tracking branches and its
-// entry go, and the local fork stays.
+// pull is refused, exit 6, naming source add --account. One git cannot reach
+// is refused, exit 3, before anything is written, an account repo included.
+// source add --account records the settings entry and the remote src-<id>,
+// with one fetch refspec, the fork branches, no tags and no promisor
+// settings, then fetches its forks and checks what this machine may do
+// there. A plain source add of its URL adds it again, still the account
+// remote, and finds the fork published in between; source list marks it, and
+// source fetch fetches its forks. Adding another URL with --account replaces
+// the entry and forgets what the first one held, a fork's tracking following
+// it; source remove detaches it: its configuration, its remote-tracking
+// branches and its entry go, and the local fork stays.
 func TestTheAccountRemoteIsSetReplacedAndDetached(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -104,7 +103,7 @@ func TestTheAccountRemoteIsSetReplacedAndDetached(t *testing.T) {
 	equal(t, "fetch refspecs", h.accountGit("config", "--get-all", "remote."+name+".fetch"), gitx.ForkRefspec(name))
 	equal(t, "tags", h.accountGit("config", "--get", "remote."+name+".tagOpt"), "--no-tags")
 	equal(t, "the remote's URL", h.accountGit("config", "--get", "remote."+name+".url"), url)
-	for _, key := range []string{"pushurl", "promisor", "partialclonefilter"} {
+	for _, key := range []string{"promisor", "partialclonefilter"} {
 		if got, err := h.accountGitErr("config", "--get", "remote."+name+"."+key); err == nil {
 			t.Errorf("the account remote has %s = %s", key, got)
 		}
@@ -170,7 +169,6 @@ func TestAccountRefusal(t *testing.T) {
 		{"a tree source of the URL", []home.Source{{URL: forks}}, 0, ""},
 		{"one skills are installed from", []home.Source{{URL: forks}}, 2, "installed 2 skills from"},
 		{"another URL of the repository", []home.Source{{URL: "ssh://git@github-work/me/forks"}}, 0, "names the repository of the source ssh://git@github-work/me/forks"},
-		{"its push URL", []home.Source{{URL: "https://example.com/me/forks", PushURL: "git@github.com:me/forks.git"}}, 0, "names the repository of the source"},
 		{"another repository", []home.Source{{URL: "https://github.com/me/skills"}}, 3, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

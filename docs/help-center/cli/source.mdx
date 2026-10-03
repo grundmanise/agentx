@@ -51,9 +51,8 @@ agentx source add git@github.com:you/forks.git --account
 ✓ the account remote is now ssh://git@github.com/you/forks; it holds 0 forks; you can write to it
 ```
 
-- Give any URL Git reaches, as for any source. agentx records it in its canonical form.
+- Give any URL Git reaches, as for any source. agentx records it in its canonical form, and reads the path of `user@host:path` from the server's root, so on a server of your own give the full path. GitHub and GitLab URLs work either way.
 - Give the repository alone: a `#<ref>`, a path or a token in the URL is refused with exit code 1. Keep credentials in a Git credential helper or an SSH key, as for any repository.
-- To name the repository by its HTTPS URL and reach it over SSH, add `--push-url git@github.com:you/forks.git`: agentx fetches and pushes forks there. `--push-url=` clears it.
 - agentx reaches the repository first. One Git cannot reach is refused with exit code 3, and nothing changes.
 - `--account` gives the source the fork layout, so `--layout fork` is optional. `agentx source list` shows it with `(account)`.
 - Adding the account remote's URL again, with or without `--account`, fetches it again.
@@ -66,27 +65,13 @@ agentx keeps one fork source, the account remote: `--layout fork` without `--acc
 
 The fetch runs with your own git, so the credential helper, SSH key and URL rewrites you use in a terminal apply here too. A private repository you can already clone just works.
 
+Add each source by the URL agentx should fetch from and push to. To fetch a source over HTTPS and push to it over SSH, set Git's own `url.<base>.pushInsteadOf`, for example `git config --global url.git@github.com:.pushInsteadOf https://github.com/`.
+
 Never put a token in the URL. agentx drops it before the URL is used anywhere, and never repeats it back to you, not even in an error. For an SSH URL the `git@` part is the address rather than a credential, so it is kept and only a password is dropped. If the fetch then fails, store the credential in a git credential helper instead:
 
 ```sh
 git config --global credential.helper store
 ```
-
-### Push over another URL
-
-If you fetch a source over HTTPS but push to it over SSH, give the URL you push to with `--push-url`:
-
-```sh
-agentx source add https://github.com/acme/skills --push-url git@github-work:acme/skills.git
-```
-
-```text
-✓ added https://github.com/acme/skills at 3f2a9c1: 12 skills; pushes go to git@github-work:acme/skills.git; you can write to it
-```
-
-The push URL must name the same repository. agentx reads a host alias from your SSH configuration, so `github-work` in `~/.ssh/config` counts as the `github.com` it stands for. If the hosts still differ, agentx records the push URL and warns you. A push URL with a token in it, or one naming another repository, is refused.
-
-Adding the source again keeps its push URL. Clear it with `--push-url=`, or with a push URL that only spells the source's own URL another way. While a source has a push URL, git ignores your `pushInsteadOf` rewrites for it.
 
 ### Write access
 
@@ -98,7 +83,7 @@ Whenever it adds a source, with `agentx source add`, `agentx skill add` or `agen
 | `; read-only for you` | the server said you may read the source and not write to it |
 | `; write access unknown` | git could not tell, for example because pushing needs a password git may not ask for, or the server did not answer |
 
-The check pushes nothing: it is a dry run of deleting a branch that does not exist, made with your own git, credentials and SSH configuration, through the push URL when the source has one. A setting you key on a source's URL with `includeIf "hasconfig:remote.*.url:..."`, such as the SSH key of a work account, applies to that source's check alone. A setting you key on agentx's home directory with `includeIf "gitdir:..."` does not apply to the check: key it on the source's URL instead. The check never asks for a password or passphrase, and gives up after 30 seconds. An answer that does not come never fails the command.
+The check pushes nothing: it is a dry run of deleting a branch that does not exist, made with your own git, credentials, SSH configuration and URL rewrites. A setting you key on a source's URL with `includeIf "hasconfig:remote.*.url:..."`, such as the SSH key of a work account, applies to that source's check alone. Key it on the URL as `agentx source list` prints it, for example `ssh://git@github-work/**`: a pattern in the `git@host:path` form does not match. A setting you key on agentx's home directory with `includeIf "gitdir:..."` does not apply to the check: key it on the source's URL instead. The check never asks for a password or passphrase, and gives up after 30 seconds. An answer that does not come never fails the command.
 
 A `writable` source can still refuse a push to a protected branch, or one a server hook rejects: a dry run does not reach those rules.
 
@@ -248,7 +233,7 @@ Removing your [account remote](#add-your-account-remote) detaches it: its forks 
 
 ## Exit codes
 
-- `1`: the URL is not one of the accepted forms, the pin and the tree URL name different refs, the push URL carries a token, is not a URL git can push to or names another repository, `--layout` is not `tree` or `fork`, `--account` comes with `--layout tree`, the account remote's URL carries a token, a ref or a path, or `source fetch` was given neither a source nor `--all`.
+- `1`: the URL is not one of the accepted forms, the pin and the tree URL name different refs, `--layout` is not `tree` or `fork`, `--account` comes with `--layout tree`, the account remote's URL carries a token, a ref or a path, or `source fetch` was given neither a source nor `--all`.
 - `3`: the source cannot be reached, is not a git repository, or needs credentials git does not have. The hint names the fix. From `source fetch` over several sources, it also means they failed for different reasons; read the warnings.
 - `5`: the pinned ref or the path does not exist in the source, the source is not on this machine, or what this machine holds of it is incomplete. For an id of a source you removed, the hint names the `agentx source add` command that brings it back.
 - `6`: the URL names the repository of your account remote, a fork source: list its forks with `agentx skill list --remote` and install one with `agentx skill add --from-account <name>`. Also: `--layout fork` without `--account`, `--layout tree` for the account remote, and `--account` for a source you installed skills from or one that names the same repository by another URL.

@@ -57,7 +57,7 @@ Replace the settings in ~/.agentx/settings.json with those of my-laptop from ~/a
 
 Import writes your settings and nothing else. It creates no account repo, fetches nothing, installs nothing and places nothing.
 
-Your source list comes back with its pins and push URLs, but no source is fetched. Before you install anything from a source, run the `agentx source add` line import prints for it. Import prints these lines even when the export lists no skills. For a pinned source the line is `agentx source add <url>#<pin>`; running `agentx source add <url>` alone would unpin the source. A source you push to over another URL gets `--push-url <url>`, and your account remote gets an `agentx source add <url> --account` line.
+Your source list comes back with its pins, but no source is fetched. Before you install anything from a source, run the `agentx source add` line import prints for it. Import prints these lines even when the export lists no skills. For a pinned source the line is `agentx source add <url>#<pin>`; running `agentx source add <url>` alone would unpin the source. Your account remote gets an `agentx source add <url> --account` line.
 
 Import leaves out whether you could write to each source. That depends on this machine's credentials, so agentx checks it again here.
 
@@ -100,7 +100,7 @@ Import restores the settings and nothing else, so the sources it lists are not y
 |---|---|
 | 5 | The file is not there. |
 | 6 | The file is not an agentx export, is truncated, is larger than 8 MiB, is of a schema version this agentx does not read, carries a field it does not know, or holds settings it would not write. |
-| 6 | The settings hold something agentx never writes: a URL with a token in it, in `url`, `alias` or `push_url`; a push URL git cannot push to, such as one naming a ref with `#` or a remote helper's address; a push URL with a query, over `git://`, naming another repository, or only respelling the URL; a layout other than `fork`, or an access other than `writable` or `read-only`; an account remote that is not a fork source, a fork source that is not the account remote, or two account remotes; a tree source and a fork source naming one repository; a pin or default branch that is not a ref git accepts; a date not in RFC 3339 UTC; a label with a control character in it or longer than 256 bytes; a source or a configuration listed twice; a list out of order. The message names the entry and the rule. |
+| 6 | The settings hold something agentx never writes: a URL with a token in it, in `url` or `alias`; a layout other than `fork`, or an access other than `writable` or `read-only`; an account remote that is not a fork source, a fork source that is not the account remote, or two account remotes; a tree source and a fork source naming one repository; a pin or default branch that is not a ref git accepts; a date not in RFC 3339 UTC; a label with a control character in it or longer than 256 bytes; a source or a configuration listed twice; a list out of order. The message names the entry and the rule. |
 | 6 | You answered no, or there was no terminal to ask at and `--yes` was not given. |
 
 A refused import changes nothing: your settings stay exactly as they were.

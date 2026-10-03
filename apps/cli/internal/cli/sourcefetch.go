@@ -126,12 +126,11 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 // block a scan.
 //
 // The remotes are brought back in line with the settings here too. The
-// settings hold the pin and the push URL and the remote is derived from
-// them, so a run interrupted between the two leaves a remote recording a
-// ref or a push URL the settings do not name. The remotes are read in one
-// git process and only one that disagrees is written, which changes no pin
-// and no push URL: those are what the settings say, and only source add
-// sets them.
+// settings hold the pin and the remote is derived from them, so a run
+// interrupted between the two leaves a remote recording a ref the settings
+// do not name. The remotes are read in one git process and only one that
+// disagrees is written, which changes no pin: that is what the settings
+// say, and only source add sets it.
 func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets []fetchTarget, wait, progress bool, then func(i int)) ([]source.Result, error) {
 	if err := inv.holdLock(ctx, wait, false, func() error { return inv.alignRemotes(ctx, gitDir, targets) }); err != nil {
 		return nil, accountRepoFailure(err)
@@ -215,10 +214,10 @@ func (inv *invocation) holdLock(ctx context.Context, wait, signal bool, fn func(
 
 // alignRemotes rewrites the remote of every target that is not the one its
 // settings entry wants, see source.RemoteOf: a URL, a refspec recording
-// another pin, a push URL the entry does not hold or one it has lost, or
-// promisor settings a run cut short left out. It runs under the lock, since
-// git config fails rather than waits for its own lock file, and reads every
-// remote in one git process, so a run whose remotes are right costs one.
+// another pin, or promisor settings a run cut short left out. It runs under
+// the lock, since git config fails rather than waits for its own lock file,
+// and reads every remote in one git process, so a run whose remotes are
+// right costs one.
 //
 // A tree source with no remote at all, which an interrupted removal
 // leaves, is left alone: writing one for it would build a remote out of an

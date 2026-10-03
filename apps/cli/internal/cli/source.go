@@ -25,7 +25,6 @@ type sourceEvent struct {
 	Alias         string `json:"alias,omitempty"`
 	Layout        string `json:"layout,omitempty"`  // tree or fork; absent on a removal's event, which says only what went
 	Account       bool   `json:"account,omitempty"` // the account remote
-	PushURL       string `json:"push_url,omitempty"`
 	Pin           string `json:"pin,omitempty"`
 	Access        string `json:"access,omitempty"`         // writable, read-only or unknown; absent where Layout is
 	AccessChecked string `json:"access_checked,omitempty"` // when access was last checked
@@ -81,7 +80,7 @@ func newSourceCommand(inv *invocation) *cobra.Command {
 }
 
 func newSourceAddCommand(inv *invocation) *cobra.Command {
-	var pushURL, layout string
+	var layout string
 	var account bool
 	cmd := &cobra.Command{
 		Use:   "add <url>",
@@ -89,17 +88,15 @@ func newSourceAddCommand(inv *invocation) *cobra.Command {
 		Long: "Fetch a git repository and add it as a source. The URL is owner/repo or owner/repo/subpath\n" +
 			"for GitHub, a GitHub or GitLab URL with an optional tree path, an SSH URL or host:path,\n" +
 			"a file:// URL or an absolute path, any of them with #ref to pin a branch or tag. A user\n" +
-			"or token in the URL is dropped. --push-url names the URL pushes to the source go to, as\n" +
-			"git reaches it, for a source you fetch over HTTPS and push to over SSH; --push-url=\n" +
-			"clears it. A source has the tree layout, skills in folders on one branch, unless\n" +
-			"--account adds it as the account remote, a repository of your own with one branch per\n" +
-			"fork, which forks are published to.",
+			"or token in the URL is dropped. A source is fetched from and pushed to at that URL. A\n" +
+			"source has the tree layout, skills in folders on one branch, unless --account adds it\n" +
+			"as the account remote, a repository of your own with one branch per fork, which forks\n" +
+			"are published to.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return inv.sourceAdd(cmd.Context(), args[0], pushChoice{set: cmd.Flags().Changed("push-url"), url: pushURL}, layout, account)
+			return inv.sourceAdd(cmd.Context(), args[0], layout, account)
 		},
 	}
-	cmd.Flags().StringVar(&pushURL, "push-url", "", "the URL pushes to the source go to, such as its SSH address; empty clears it")
 	cmd.Flags().StringVar(&layout, "layout", "", "how the source holds skills: tree, in folders on one branch, or fork, one branch per fork")
 	cmd.Flags().BoolVar(&account, "account", false, "add the source as the account remote, of the fork layout, which forks are published to")
 	return cmd
@@ -185,19 +182,17 @@ func layoutRefusal(layout string, account bool) *failure {
 }
 
 // sourceAdd fetches the source its argument names and records it in the
-// settings, with the push URL push names, which is held to its rules
-// before anything is written, and the layout layout and account name, see
-// layoutRefusal. The account remote, and a source the settings hold as a
-// fork source already, which an add again keeps as one, are added by
-// addAccount. A fork source is never fetched as a tree: --layout tree for
-// one is exit code 6, and so is a tree source naming a fork source's
-// repository, see forkSourceRefusal.
-func (inv *invocation) sourceAdd(ctx context.Context, arg string, push pushChoice, layout string, account bool) error {
+// settings, with the layout layout and account name, see layoutRefusal. The
+// account remote, and a source the settings hold as a fork source already,
+// which an add again keeps as one, are added by addAccount. A fork source is
+// never fetched as a tree: --layout tree for one is exit code 6, and so is a
+// tree source naming a fork source's repository, see forkSourceRefusal.
+func (inv *invocation) sourceAdd(ctx context.Context, arg, layout string, account bool) error {
 	if f := layoutRefusal(layout, account); f != nil {
 		return f
 	}
 	if account {
-		return inv.addAccount(ctx, arg, push)
+		return inv.addAccount(ctx, arg)
 	}
 	s, err := inv.loadSettings()
 	if err != nil {
@@ -211,27 +206,20 @@ func (inv *invocation) sourceAdd(ctx context.Context, arg string, push pushChoic
 			if layout == home.LayoutTree {
 				return forkToTree(s.Sources[i])
 			}
-			return inv.addAccount(ctx, arg, push)
+			return inv.addAccount(ctx, arg)
 		}
 	}
 	src, err := inv.parseSource(arg)
 	if err != nil {
 		return err
 	}
-	if push.set {
-		record, warning, f := pushURLFor(push.url, src.URL, inv.sshHosts(ctx))
-		if f != nil {
-			return f
-		}
-		push.url, push.warning = record, warning
-	}
-	_, _, err = inv.addSource(ctx, src, push)
+	_, _, err = inv.addSource(ctx, src)
 	return err
 }
 
-// sshHosts is the resolve function source.Compare takes, read from the
-// user's SSH configuration and shared by every comparison of the run, so
-// that each host is asked about once.
+// sshHosts is the resolve function source.SameRepository takes, read from
+// the user's SSH configuration and shared by every comparison of the run,
+// so that each host is asked about once.
 func (inv *invocation) sshHosts(ctx context.Context) func(host string) string {
 	if inv.hosts == nil {
 		inv.hosts = source.SSHHosts(ctx, inv.env)
@@ -242,26 +230,19 @@ func (inv *invocation) sshHosts(ctx context.Context) func(host string) string {
 // addSource is source add once its argument is parsed: it writes the
 // source's remote, fetches it, records it in the settings as a mutation of
 // its own and confirms it, then returns the listing of the fetch and the
-// entry it wrote. push is the push URL to record, already held to its
-// rules, and its warning is printed only once the entry is written; without
-// one an entry added again keeps the push URL it has. skill
-// add runs it too, for a source this machine does not have yet and for
-// --fetch, so that the source is fetched once and the install reads the
-// listing that fetch built. A fork source of the settings naming the
-// source's repository refuses it, exit 6, before anything is written.
-func (inv *invocation) addSource(ctx context.Context, src source.Source, push pushChoice) (listing source.Listing, entry home.Source, err error) {
+// entry it wrote. skill add runs it too, for a source this machine does not
+// have yet and for --fetch, so that the source is fetched once and the
+// install reads the listing that fetch built. A fork source of the settings
+// naming the source's repository refuses it, exit 6, before anything is
+// written.
+func (inv *invocation) addSource(ctx context.Context, src source.Source) (listing source.Listing, entry home.Source, err error) {
 	before, err := inv.loadSettings()
 	if err != nil {
 		return listing, entry, err
 	}
 	existing := before.FindSource(src.URL)
-	// want is the entry the remote is written for: the push URL this add
-	// records, or the one the entry already has, which the settings write
-	// keeps.
-	want := home.Source{URL: src.URL, Pin: src.Ref, PushURL: push.url}
-	if !push.set && existing >= 0 {
-		want.PushURL = before.Sources[existing].PushURL
-	}
+	// want is the entry the remote is written for.
+	want := home.Source{URL: src.URL, Pin: src.Ref}
 	if f := forkSourceRefusal(before, want, inv.sshHosts(ctx)); f != nil {
 		return listing, entry, f
 	}
@@ -296,7 +277,7 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source, push pu
 	revert := func() error {
 		if existing < 0 { // nothing of a source that was never added is kept
 			return source.Remove(undo, inv.git, gitDir, src.ID())
-		} // else the remote goes back to the pin and the push URL the settings still hold
+		} // else the remote goes back to the pin the settings still hold
 		if err := source.Configure(undo, inv.git, gitDir, before.Sources[existing]); err != nil {
 			return err
 		}
@@ -382,13 +363,9 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source, push pu
 		if f := forkSourceRefusal(s, want, inv.sshHosts(ctx)); f != nil {
 			return left(f, revert())
 		}
-		entry.PushURL = push.url
 		if i := s.FindSource(src.URL); i >= 0 {
 			added = false
 			entry = entry.Merge(s.Sources[i]) // what the source's entry knows and this add did not find out is kept
-		}
-		if push.set && push.url == "" {
-			entry.PushURL = "" // --push-url= clears what Merge kept
 		}
 		s.SetSource(entry)
 		if err := home.SaveSettings(inv.dirs.Home, s); err != nil {
@@ -402,16 +379,13 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source, push pu
 		}
 		return listing, entry, err
 	}
-	if push.warning != "" {
-		inv.out.warn(push.warning)
-	}
 	check.report(inv, src.URL)
 	n := len(listing.Skills)
 	ev := entryEvent(entry)
 	ev.Subpath, ev.Commit, ev.Previous, ev.Skills, ev.AccessReason = src.Subpath, listing.Commit, movedFrom(listing), &n, check.reason()
 	inv.out.emit(ev)
 	inv.out.done(inv.addLine(added, src, listing) + ": " + inv.out.paint(noteStyle, plural(n, "skill")) + under(inv.out, src.Subpath) +
-		pushesTo(inv.out, entry.PushURL) + accessPhrase(inv.out, entry.AccessName()))
+		accessPhrase(inv.out, entry.AccessName()))
 	return listing, entry, nil
 }
 
@@ -779,12 +753,4 @@ func under(out *writer, subpath string) string {
 		return ""
 	}
 	return " under " + out.paint(muted, subpath)
-}
-
-// pushesTo ends the confirmation of an add whose source has a push URL.
-func pushesTo(out *writer, pushURL string) string {
-	if pushURL == "" {
-		return ""
-	}
-	return "; pushes go to " + out.paint(label, shownURL(pushURL))
 }

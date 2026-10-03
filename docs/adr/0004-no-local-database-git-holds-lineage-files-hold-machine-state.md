@@ -67,3 +67,5 @@ Hand edits are expected and survive. Retain unfinished mutation journals, their 
 
 Two rows of the table change with [ADR 0008](0008-sources-have-a-layout-and-an-access-only-the-account-remote-is-pushed-automatically.md). The last fetched state of each source is blobless for a source of the tree layout only; a source of the fork layout, the account remote, is fetched whole into its remote-tracking branches, since its forks' history is read in full. Each source's layout, account flag, push URL and access, the last of them as git last answered a dry run of a push, are per-machine settings in `settings.json`, beside its URL and pin; an import resets the access, which belongs to this machine's credentials. The account remote's git remote is named after its source id, `src-<id>`, like every source's.
 
+_Amendment, 2026-10-03:_ the settings entry of a source carries no push URL. A source is pushed to at its URL, see [ADR 0008](0008-sources-have-a-layout-and-an-access-only-the-account-remote-is-pushed-automatically.md).
+

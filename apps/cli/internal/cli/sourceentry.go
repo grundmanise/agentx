@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"errors"
 	"slices"
 	"strings"
 
@@ -15,14 +14,9 @@ import (
 // canonical; pin and default_branch are refs this machine hands to git,
 // which source.ValidRef exists to check before that happens; last_fetched
 // and access_checked are dates agentx wrote; layout and access are the
-// words agentx writes, the default of each written as no key at all; and
-// push_url is the URL a push goes to, so it is held to the rules that keep
-// a push where the user meant it: a URL git pushes over, no credential,
-// the repository url names and not another, and a transport, user or host
-// of its own, since a push URL that only respells url says nothing url
-// does not. The messages name the entry by its url, which is canonical by
-// the time they are reached, and never repeat the push URL, which may be a
-// credential this refuses. Pure.
+// words agentx writes, the default of each written as no key at all. The
+// messages name the entry by its url, which is canonical by the time they
+// are reached. Pure.
 func sourceRefusal(src home.Source) string {
 	urls := []string{src.URL}
 	if src.Alias != "" {
@@ -51,34 +45,6 @@ func sourceRefusal(src home.Source) string {
 	case src.LastFetched != "" && !fetchTime(src.LastFetched):
 		return src.URL + " was last fetched at " + clipped(src.LastFetched) + ", which is not RFC 3339 in UTC"
 	}
-	return pushURLRefusal(src)
-}
-
-// pushURLRefusal is why the push_url of src is not one agentx would
-// record, "" when it is one or when there is none.
-func pushURLRefusal(src home.Source) string {
-	if src.PushURL == "" {
-		return ""
-	}
-	of := "the push_url of " + src.URL
-	push, err := source.ParseAddress(src.PushURL)
-	switch {
-	case errors.Is(err, source.ErrCredential):
-		return of + " carries a password or a token, and agentx never stores credentials"
-	case err != nil:
-		return of + " is not a URL git can push to: " + strings.TrimPrefix(err.Error(), source.ErrForm.Error()+": ")
-	case push.Scheme == "git":
-		return of + " is a git:// URL, over which nothing can be pushed"
-	}
-	canonical, err := source.ParseAddress(src.URL)
-	switch {
-	case err != nil:
-		return src.URL + " is not a URL git can push to"
-	case source.Compare(canonical, push, nil) == source.OtherRepository:
-		return of + " names another repository"
-	case source.SameTransport(canonical, push):
-		return of + " only respells it: agentx records a push URL whose transport, user or host differs"
-	}
 	return ""
 }
 
@@ -89,8 +55,8 @@ func pushURLRefusal(src home.Source) string {
 // pushed to by both. SetSource keeps the list sorted by url and holds one
 // entry per source, so two entries for one source are a list agentx did
 // not write and a pin or an alias silently lost: FindSource only ever sees
-// the first. resolve reads the host an SSH alias names, as source.Compare
-// takes it; nil reads every host as itself. Pure.
+// the first. resolve reads the host an SSH alias names, as
+// source.SameRepository takes it; nil reads every host as itself. Pure.
 func sourcesRefusal(sources []home.Source, resolve func(host string) string) string {
 	seen := map[string]bool{}
 	account := ""
@@ -124,105 +90,33 @@ func sourcesRefusal(sources []home.Source, resolve func(host string) string) str
 	return ""
 }
 
-// sameRepository reports whether any URL of a, its url or its push URL,
-// names the repository any URL of b names.
+// sameRepository reports whether the URLs of a and b name one repository.
 func sameRepository(a, b home.Source, resolve func(host string) string) bool {
-	for _, x := range addresses(a) {
-		for _, y := range addresses(b) {
-			if source.Compare(x, y, resolve) == source.SameRepository {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// addresses are the addresses of the URLs src reaches its repository by.
-func addresses(src home.Source) []source.Address {
-	var out []source.Address
-	for _, raw := range []string{src.URL, src.PushURL} {
-		if a, err := source.ParseAddress(raw); raw != "" && err == nil {
-			out = append(out, a)
-		}
-	}
-	return out
-}
-
-// pushChoice is what an add was told about the push URL: nothing, so that
-// an entry it adds again keeps the push URL it has, or a URL to record, ""
-// clearing it. warning is what pushURLFor had to say about the URL, which
-// the add prints once the entry is written, since it says where pushes go.
-type pushChoice struct {
-	set     bool
-	url     string
-	warning string
-}
-
-// pushURLFor decides what --push-url records for the source at canonical,
-// the push URL as the user gave it in raw. A URL git cannot push to, one
-// with a credential and one naming another repository are refused, exit 1,
-// before anything is written. One that only respells canonical records
-// nothing, since pushes to canonical already go where it points. One whose
-// path is canonical's on a host that does not resolve to canonical's, even
-// through resolve, is recorded with a warning: an SSH alias or a second name
-// of the server can reach one repository under two hosts, and the user
-// typed it. raw is named in a message only once it has parsed with no
-// credential in it. Pure but for resolve.
-func pushURLFor(raw, canonical string, resolve func(host string) string) (record, warning string, refusal *failure) {
-	if raw == "" {
-		return "", "", nil
-	}
-	push, err := source.ParseAddress(raw)
-	switch {
-	case errors.Is(err, source.ErrCredential):
-		return "", "", refuse(exitUsage, "the push URL carries a password or a token, and agentx never stores credentials",
-			"put them in a git credential helper (git config credential.helper) or use an SSH key, and give the push URL without them")
-	case err != nil:
-		return "", "", refuse(exitUsage, "the push URL is not a URL git can push to: "+strings.TrimPrefix(err.Error(), source.ErrForm.Error()+": "),
-			"give a URL with a scheme, the SSH shorthand [user@]host:path or an absolute path, with no #ref")
-	}
-	shown := sanitised(raw)
-	if push.Scheme == "git" {
-		return "", "", refuse(exitUsage, "the push URL "+shown+" is a git:// URL, over which nothing can be pushed",
-			"give an ssh://, https:// or file:// URL, the SSH shorthand [user@]host:path or an absolute path")
-	}
-	at, err := source.ParseAddress(canonical)
+	x, err := source.ParseAddress(a.URL)
 	if err != nil {
-		return "", "", refuse(exitUsage, canonical+" is not a URL git can push to", "add the source without --push-url")
+		return false
 	}
-	kin := source.Compare(at, push, resolve)
-	switch {
-	case kin == source.OtherRepository:
-		return "", "", refuse(exitUsage, "the push URL "+shown+" names another repository than "+canonical,
-			"give a URL of "+canonical+" itself, at the same path, such as its SSH address")
-	case source.SameTransport(at, push):
-		return "", "", nil
-	case kin == source.OtherHost:
-		return raw, "the push URL " + shown + " and " + canonical + " name different hosts; agentx pushes to " + shown, nil
+	y, err := source.ParseAddress(b.URL)
+	if err != nil {
+		return false
 	}
-	return raw, "", nil
+	return source.SameRepository(x, y, resolve)
 }
 
 // forkSourceRefusal is why src, a tree source an add is about to write,
 // cannot be one, nil when it can: a fork source of s already names its
-// repository, by url or push URL, through resolve. The message names the
-// URL of src that does, its push URL when only that one does.
+// repository, through resolve.
 func forkSourceRefusal(s home.Settings, src home.Source, resolve func(host string) string) *failure {
 	for _, fork := range s.Sources {
-		if fork.Layout != home.LayoutFork || (fork.URL != src.URL && !sameRepository(src, fork, resolve)) {
-			continue
+		if fork.Layout == home.LayoutFork && (fork.URL == src.URL || sameRepository(src, fork, resolve)) {
+			return forkSourceIs(src.URL, fork)
 		}
-		if fork.URL != src.URL && !sameRepository(home.Source{URL: src.URL}, fork, resolve) {
-			return forkSourceIs("the push URL "+sanitised(src.PushURL), fork)
-		}
-		return forkSourceIs(src.URL, fork)
 	}
 	return nil
 }
 
 // forkSourceIs refuses to read url, which names the repository of the fork
-// source fork, as a tree source, exit 6; url is the start of the message,
-// so it may name a push URL as such. A fork source holds one branch per
+// source fork, as a tree source, exit 6. A fork source holds one branch per
 // fork, and fetching it as a tree as well would bring its objects in
 // without their blobs, which a fork's history then lacks. Its forks are
 // listed with skill list --remote and installed with skill add
