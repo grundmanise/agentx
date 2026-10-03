@@ -54,7 +54,7 @@ func scenarioHomes(t *testing.T, names ...string) (a, b *harness, s *sourceRepo,
 // holds now into every fork of it.
 func takeVersion(h *harness) {
 	h.t.Helper()
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	h.mustRun("skill", "update", "--all")
 }
 
@@ -338,7 +338,7 @@ func TestScenarioDifferentVersionsOtherLines(t *testing.T) {
 		equal(t, name+": git status", worktreeStatus(a, name), "")
 	}
 
-	out = a.mustRun("--json", "skill", "check")
+	out = a.mustRun("--json", "skill", "check-updates")
 	equal(t, "the update found", a.one(out.stdout, "update_available")["name"], "alpha")
 	equal(t, "its candidate", a.ref(lineage.CandidateRef("alpha")), alphaThree)
 	a.mustRun("skill", "update", "alpha")
@@ -504,7 +504,7 @@ func TestScenarioUnprovableOrderKeepsTheLocalBase(t *testing.T) {
 	equal(t, "the base, a's own", a.trailer(merged, lineage.TrailerBase), alphaTwo)
 	sameTree(t, "alpha", libraryTree(t, a.forkDir("alpha", "alpha")), libraryTree(t, filepath.Join(s.work, "skills", "alpha")))
 
-	a.mustRun("skill", "check")
+	a.mustRun("skill", "check-updates")
 	equal(t, "the update found", a.ref(lineage.CandidateRef("alpha")), rewritten)
 	a.mustRun("skill", "update", "alpha")
 	tip := a.ref(lineage.ForkRef("alpha"))

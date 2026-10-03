@@ -137,7 +137,7 @@ func TestInstallingTheSameVersionStoresAnOlderBranchAgain(t *testing.T) {
 
 	stored := "nc differs from its base version at " + ncShort(h) + " only in how the account repo stores it;" +
 		" run 'agentx skill add " + shellWord(s.url) + " --skill nc' to install that version again while the source still holds it," +
-		" which stores it as git writes it today and changes no file, or, once 'agentx skill check' finds a newer version, run 'agentx skill update nc'"
+		" which stores it as git writes it today and changes no file, or, once 'agentx skill check-updates' finds a newer version, run 'agentx skill update nc'"
 	out := h.mustRun("--json", "skill", "diff", "nc")
 	equal(t, "diff events", len(h.eventsOfType(out.stdout, "diff")), 0)
 	equal(t, "the diff's result", h.one(out.stdout, "result")["summary"], stored)

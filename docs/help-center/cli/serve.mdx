@@ -50,7 +50,7 @@ The desktop app runs serve with [`--json`](/cli/output#json-output). It then als
 
 ## Update checks
 
-Serve checks your managed skills and forks for updates as [`agentx skill check`](/cli/skill#check-for-updates) does: once when it starts, right after the first snapshot, and then every thirty minutes. Each check also fetches every source you added, even the ones you have not installed anything from, as [`agentx source fetch --all`](/cli/source#fetch-a-source-again) would. A machine without any source has nothing to fetch, and serve runs no git for it.
+Serve checks your managed skills and forks for updates as [`agentx skill check-updates`](/cli/skill#check-for-updates) does: once when it starts, right after the first snapshot, and then every thirty minutes. Each check also fetches every source you added, even the ones you have not installed anything from, as [`agentx source fetch --all`](/cli/source#fetch-a-source-again) would. A machine without any source has nothing to fetch, and serve runs no git for it.
 
 A check only records what it found; nothing is ever applied. Every check lists every available update again, so the `update` lines repeat while the update is available. Apply an update with [`agentx skill update`](/cli/skill#update-a-skill).
 

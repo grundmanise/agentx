@@ -97,7 +97,7 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 
 	s.write("skills/alpha/notes.md", forkNotes("seven", "seven, upstream"))
 	s.commit("second version")
-	out = b.mustRun("--json", "skill", "check")
+	out = b.mustRun("--json", "skill", "check-updates")
 	equal(t, "the update b's check finds", b.updateOf(out.stdout, "alpha")["kind"], lineage.KindFork)
 
 	out = b.mustRun("--json", "skill", "list", "--remote")
@@ -139,7 +139,7 @@ func TestFromAccountSupersedesAnUnmodifiedCopy(t *testing.T) {
 	writeFile(t, filepath.Join(b.library, "alpha", ".DS_Store"), "finder data\n")
 	s.write("skills/alpha/notes.md", forkNotes("seven", "seven, upstream"))
 	s.commit("second version")
-	b.mustRun("skill", "check")
+	b.mustRun("skill", "check-updates")
 	if b.ref(lineage.CandidateRef("alpha")) == "" {
 		t.Fatal("the check pinned no candidate for alpha")
 	}
@@ -257,7 +257,7 @@ func TestFromAccountRefusesAndKeepsLocal(t *testing.T) {
 	// it.
 	s.skill("skills/beta", "beta", "The second skill", map[string]string{"notes.md": forkNotes("seven", "seven, upstream")})
 	s.commit("second version")
-	b.mustRun("skill", "check")
+	b.mustRun("skill", "check-updates")
 	if out := b.run("skill", "update", "beta"); out.exit != 4 {
 		t.Fatalf("beta's update: exit %d, want a conflict\n%s", out.exit, out.stderr)
 	}

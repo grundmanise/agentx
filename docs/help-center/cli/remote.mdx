@@ -62,7 +62,7 @@ agentx skill add --from-account release-notes
 
 - It is the same fork, with its id and its whole history. Commit here and publish, and the commits go to the same branch.
 - agentx places it into every enabled configuration, as `agentx skill add` does. Pass `--to <configuration>` to choose, and `--copy` for copies.
-- When this machine has not added the fork's upstream source, agentx adds it, so that [`agentx skill check`](/cli/skill) finds the fork's updates here too. A source it cannot fetch does not stop the install: run the `agentx source add` line the warning prints.
+- When this machine has not added the fork's upstream source, agentx adds it, so that [`agentx skill check-updates`](/cli/skill) finds the fork's updates here too. A source it cannot fetch does not stop the install: run the `agentx source add` line the warning prints.
 
 ### When the library already holds the name
 
@@ -91,7 +91,7 @@ agentx pull release-notes
 
 A fork remembers the upstream version it was last updated from, so that its next update merges correctly. When two machines took the same version, the merge keeps it. When they took different versions of the same upstream, the merge records the newer one, but only when the source's history on this machine proves it newer: run [`agentx source fetch`](/cli/source) first to fetch that history. Otherwise the merge keeps this machine's version. At worst, the next update then conflicts where both versions changed the same lines. No content is lost.
 
-When a pull brings a newer upstream version than the update your last [`agentx skill check`](/cli/skill) found, agentx drops that update, so `agentx skill update` never takes the fork back to the older version. Run `agentx skill check` again to look for anything newer.
+When a pull brings a newer upstream version than the update your last [`agentx skill check-updates`](/cli/skill) found, agentx drops that update, so `agentx skill update` never takes the fork back to the older version. Run `agentx skill check-updates` again to look for anything newer.
 
 ### Resolve a conflict
 

@@ -92,7 +92,7 @@ func TestSkillUpdateMergesUpstreamIntoAFork(t *testing.T) {
 	s.write("skills/beta/notes.md", forkNotes("seven", "seven, upstream"))
 	s.write("skills/beta/build/x", "upstream build\n")
 	second := s.commit("second version")
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	tips := map[string]string{"alpha": h.ref(lineage.ForkRef("alpha")), "beta": h.ref(lineage.ForkRef("beta"))}
 	candidates := map[string]string{"alpha": h.ref(lineage.CandidateRef("alpha")), "beta": h.ref(lineage.CandidateRef("beta"))}
 
@@ -152,7 +152,7 @@ func TestSkillUpdateOfAForkConflicts(t *testing.T) {
 	h.mustRun("skill", "commit", "alpha")
 	s.skill("skills/alpha", "alpha", "The first skill, revised", map[string]string{"notes.md": forkNotes("seven", "seven, upstream")})
 	second := s.commit("second version")
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	tip, candidate := h.ref(lineage.ForkRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
 	base := h.accountGit("rev-parse", tip+"~2") // the commit, then the fork's creation, then the import
 
@@ -283,7 +283,7 @@ func TestForkCompletionAfterTheTipMoved(t *testing.T) {
 	equal(t, "the notes", fileBody(t, filepath.Join(alpha, "notes.md")), forkNotes("one", "one, meanwhile", "seven", "seven, mine"))
 	equal(t, "the candidate", h.ref(lineage.CandidateRef("alpha")), "")
 	noCheckout(t, h, "alpha")
-	check := h.mustRun("--json", "skill", "check")
+	check := h.mustRun("--json", "skill", "check-updates")
 	equal(t, "a check right after", h.one(check.stdout, "result")["summary"], "checked 2 skills from 1 source: no update available")
 }
 
@@ -300,7 +300,7 @@ func movedWhilePending(t *testing.T) (h *harness, old, candidate, tip string) {
 	h.mustRun("skill", "commit", "alpha")
 	s.write("skills/alpha/notes.md", forkNotes("one", "one, upstream", "seven", "seven, upstream"))
 	s.commit("second version")
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	old, candidate = h.ref(lineage.ForkRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
 	if out := h.run("skill", "update", "alpha"); out.exit != 4 {
 		t.Fatalf("the update that should conflict: exit %d\n%s", out.exit, out.stderr)
@@ -351,13 +351,13 @@ func TestARevertSurvivesTheNextUpdate(t *testing.T) {
 	alpha := h.forkDir("alpha", "alpha")
 	s.write("skills/alpha/notes.md", forkNotes("three", "three, upstream"))
 	s.commit("second version")
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	h.mustRun("skill", "update", "alpha")
 	writeFile(t, filepath.Join(alpha, "notes.md"), forkNotes())
 	h.mustRun("skill", "commit", "alpha")
 	s.write("skills/alpha/notes.md", forkNotes("three", "three, upstream", "seven", "seven, upstream"))
 	s.commit("third version")
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	h.mustRun("skill", "update", "alpha")
 	equal(t, "the notes", fileBody(t, filepath.Join(alpha, "notes.md")), forkNotes("seven", "seven, upstream"))
 }
@@ -373,7 +373,7 @@ func TestSkillUpdateOfAForkRunInItsFolder(t *testing.T) {
 	h.mustRun("skill", "fork", "alpha")
 	s.write("skills/alpha/notes.md", forkNotes("seven", "seven, upstream"))
 	s.commit("second version")
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	lib := filepath.Join(h.library, "alpha")
 	t.Chdir(lib)
 
@@ -419,7 +419,7 @@ func TestForkUpdateRecoversWhereItWasKilled(t *testing.T) {
 			s.write("skills/alpha/notes.md", forkNotes("seven", "seven, upstream"))
 			s.write("skills/alpha/build/x", "upstream build\n")
 			s.commit("second version")
-			h.mustRun("skill", "check")
+			h.mustRun("skill", "check-updates")
 			tip, candidate := h.ref(lineage.ForkRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
 			out := killedChild(t, h, "TestUpdateChildProcess", updateChildEnv, "alpha", tc.script)
 			_, kinds := journalKinds(t, h)
@@ -485,7 +485,7 @@ func TestForkUpdateRefusals(t *testing.T) {
 	h.mustRun("skill", "fork", "alpha")
 	s.write("skills/alpha/notes.md", forkNotes("seven", "seven, upstream"))
 	s.commit("second version")
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	vendored := filepath.Join(h.forkDir("alpha", "alpha"), "vendored")
 	writeFile(t, mkdirs(t, filepath.Join(vendored, ".git"), "HEAD"), "ref: refs/heads/main\n")
 	was := h.unchangedHome()

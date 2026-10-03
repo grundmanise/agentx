@@ -120,7 +120,7 @@ func TestServeRefreshesEverySource(t *testing.T) {
 	gone.skill("skills/epsilon", "epsilon", "A skill of a source removed later, revised", nil)
 	gone.run("rm", "-r", "--quiet", "skills/zeta")
 	gone.commit("epsilon revised, zeta removed")
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	candidate, marker := h.ref(lineage.CandidateRef("epsilon")), h.ref(lineage.UpstreamRemovedRef("zeta"))
 	if candidate == "" || marker == "" {
 		t.Fatalf("candidate %q and marker %q before the source went", candidate, marker)
@@ -407,7 +407,7 @@ func TestServeRefreshesNothingWithoutASource(t *testing.T) {
 // repo to fetch into until source add creates one. No check runs git,
 // creates the account repo or writes anything, but the first warns about
 // each source as not fetched, as source fetch refuses it, and the checks
-// after it log the same line at debug level. skill check, which
+// after it log the same line at debug level. skill check-updates, which
 // checks only the sources a managed skill came from, still has nothing to
 // check there.
 //
@@ -468,7 +468,7 @@ func TestServeWarnsOnceAboutSourcesAnImportBrought(t *testing.T) {
 		t.Errorf("serve created %s: %v", account, err)
 	}
 	equal(t, "the version file", mutationVersion(t, h), version)
-	equal(t, "skill check", h.mustRun("skill", "check").stdout,
+	equal(t, "skill check-updates", h.mustRun("skill", "check-updates").stdout,
 		"Nothing to check: no managed skill or fork comes from a source added on this machine.\n")
 
 	h.mustRun("source", "add", one.url)

@@ -25,11 +25,11 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 		Use:   "update [<name>] [--abort]",
 		Short: "Apply the update the last check found to a managed skill or a fork",
 		Long: "Replace the library directory of a managed skill with the newer upstream version\n" +
-			"'agentx skill check' found for it, and record that version as the one the skill\n" +
-			"is at. A skill edited since it was installed keeps its edits: they are merged\n" +
-			"into the newer version. When they conflict with it, the library is left as it is\n" +
-			"and the conflicting files are listed: the merge waits, an ordinary Git merge in\n" +
-			"progress in a Git worktree under agentx home, never in the library, for you to\n" +
+			"'" + checkUpdatesCommand + "' found for it, and record that version as the one the\n" +
+			"skill is at. A skill edited since it was installed keeps its edits: they are\n" +
+			"merged into the newer version. When they conflict with it, the library is left as\n" +
+			"it is and the conflicting files are listed: the merge waits, an ordinary Git merge\n" +
+			"in progress in a Git worktree under agentx home, never in the library, for you to\n" +
 			"resolve with git. Run the update again once it is resolved to apply it, or pass\n" +
 			"--abort to give it up. Files git ignores in the skill, such as a .DS_Store or an\n" +
 			"ignored build directory, are not edits, and stay. A copy placement that holds the\n" +
@@ -233,9 +233,9 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 	names, libs := r.selection(name, records)
 	r.selected = len(names)
 	if r.all && len(names) == 0 {
-		inv.summary = "nothing to update: no managed skill or fork has an update as of the last update check; run 'agentx skill check' to look again"
+		inv.summary = "nothing to update: no managed skill or fork has an update as of the last update check; run '" + checkUpdatesCommand + "' to look again"
 		inv.out.print("Nothing to update: no managed skill or fork has an update as of the last update check. Run ",
-			inv.out.paint(label, "agentx skill check"), " to look again.")
+			inv.out.paint(label, checkUpdatesCommand), " to look again.")
 		return nil
 	}
 
@@ -274,12 +274,12 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 		case u == nil && r.all: // a fork whose account step took in the update its candidate named
 			continue
 		case u == nil: // a name the last check found no update for, which only a run of one name asks about
-			inv.summary = n + " is up to date as of the last update check; run 'agentx skill check' to look again"
+			inv.summary = n + " is up to date as of the last update check; run '" + checkUpdatesCommand + "' to look again"
 			if len(pulled) > 0 {
 				inv.summary = "pulled " + n + " from the account remote; it is up to date with its upstream as of the last update check"
 			}
 			inv.out.print(inv.out.paint(heading, sanitised(n)), " is up to date as of the last update check; run ",
-				inv.out.paint(label, "agentx skill check"), " to look again")
+				inv.out.paint(label, checkUpdatesCommand), " to look again")
 			return inv.reportForks(ctx, pulled)
 		case u.merged.conflicted && (u.fork == nil || !u.fork.start): // a merge pending with files still to resolve, left as it is
 			r.pending = append(r.pending, u)
@@ -584,7 +584,7 @@ func removedSourceRefusal(name, url string) *failure {
 // source no longer holds: it is kept as it is and never updated.
 func upstreamRemovedRefusal(name string) *failure {
 	return refuse(exitRefused, "the last update check found that the source of "+name+" no longer holds it, so it is kept as it is and never updated",
-		"run 'agentx skill check' once the source holds it again, or '"+skillCommand("remove", name)+"' to remove it")
+		"run '"+checkUpdatesCommand+"' once the source holds it again, or '"+skillCommand("remove", name)+"' to remove it")
 }
 
 // read reads, outside the lock, the version each skill is updated to: the
@@ -605,7 +605,7 @@ func (r *updateRun) read(ctx context.Context) error {
 		}
 		if !u.next.Canonical(theirs) {
 			r.drop(u.name, refuse(exitAccountRepo, "the update candidate "+lineage.CandidateRef(u.name)+" stores its version in a form agentx does not write",
-				"run 'agentx skill check' to pin the update again"))
+				"run '"+checkUpdatesCommand+"' to pin the update again"))
 			continue
 		}
 		u.theirs, u.base = theirs, theirs
@@ -661,7 +661,7 @@ func (r *updateRun) merge(ctx context.Context, u *updating) *failure {
 	dir := u.rec.Import.Dir()
 	if u.next.Import.Dir() != dir {
 		return refuse(exitAccountRepo, "the update candidate "+lineage.CandidateRef(u.name)+" holds "+u.name+" under another directory than its import branch",
-			"run 'agentx skill check' to pin the update again")
+			"run '"+checkUpdatesCommand+"' to pin the update again")
 	}
 	if u.checkout == "" {
 		mine, err := lineage.CommitDir(ctx, git, gitDir, dir, u.written, u.rec.Commit, "library directory of "+u.name+"\n")

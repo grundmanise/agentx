@@ -341,8 +341,8 @@ func (v *imported) version() lineage.Version {
 // history walk finds the upstream commit of every selected skill, so a
 // batch of thirty skills reads what one skill reads.
 //
-// It is the import of skill add. skill check reads the versions it writes
-// candidates for through the same two halves, listVersions and
+// It is the import of skill add. skill check-updates reads the versions it
+// writes candidates for through the same two halves, listVersions and
 // fillVersions, so that a candidate is the commit an install of that
 // version writes.
 func (inv *invocation) readVersions(ctx context.Context, b *batch, gitDir string, src source.Source, tip string, skills []source.Skill) ([]*imported, error) {

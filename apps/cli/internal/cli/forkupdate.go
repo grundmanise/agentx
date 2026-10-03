@@ -203,7 +203,7 @@ func (inv *invocation) judgeForkUpdate(ctx context.Context, gitDir string, rec l
 	}
 	if next.Import.Source != base.Import.Source || next.Import.Path != base.Import.Path {
 		return nil, refuse(exitAccountRepo, "the update candidate "+lineage.CandidateRef(name)+" holds "+sanitised(name)+" under another source or directory than its base version",
-			"run 'agentx skill check' to pin the update again")
+			"run '"+checkUpdatesCommand+"' to pin the update again")
 	}
 	site, err := inv.forkSiteOf(ctx, gitDir, rec)
 	if err != nil {

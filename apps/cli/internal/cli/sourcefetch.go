@@ -51,8 +51,8 @@ func newSourceFetchCommand(inv *invocation) *cobra.Command {
 // sourceFetch re-fetches the named sources, or every one of them, in
 // parallel and outside the lock, then records what moved in one settings
 // write. It is the manual refresh of a source no skill was installed from,
-// which skill check does not fetch and the serve child fetches only on the
-// timer of its update check.
+// which skill check-updates does not fetch and the serve child fetches only
+// on the timer of its update check.
 func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool) error {
 	targets, err := inv.sourcesToFetch(ctx, args, all)
 	if err != nil {
@@ -108,15 +108,15 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 // fetchSources fetches targets, sources the settings hold, in parallel and
 // outside the lock, and returns one result per target in the order given.
 // It is the one fetch of an added source: source fetch runs it, and so do
-// skill check and the update check of the serve child. What it refuses is
-// what is not one source's to answer for, a lock it could not take or a
-// journal it could not recover; a source that could not be fetched is its
-// result's error, and turning that into a refusal is the caller's, so that
-// the serve child, which never exits for one, runs the same fetch. wait
-// takes the lock as the serve child does, waiting for a holder rather than
-// giving up, and progress reports one progress event per source as its
-// fetch ends. then, when it is not nil, runs in the worker of each target
-// that fetched, with its index, before its progress event, see
+// skill check-updates and the update check of the serve child. What it
+// refuses is what is not one source's to answer for, a lock it could not
+// take or a journal it could not recover; a source that could not be
+// fetched is its result's error, and turning that into a refusal is the
+// caller's, so that the serve child, which never exits for one, runs the
+// same fetch. wait takes the lock as the serve child does, waiting for a
+// holder rather than giving up, and progress reports one progress event per
+// source as its fetch ends. then, when it is not nil, runs in the worker of
+// each target that fetched, with its index, before its progress event, see
 // source.FetchAll.
 //
 // The lock is taken before the network and released again: an unfinished

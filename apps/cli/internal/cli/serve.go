@@ -217,22 +217,22 @@ func newServeCommand(inv *invocation) *cobra.Command {
 }
 
 // serveCheck is one tick of the serve child's timer, run off its loop: the
-// update check skill check runs, over every source of the settings rather
-// than only the sources a managed skill came from, so that one pass fetches
-// each source once, whether or not a skill was installed from it, and the
-// source index follows what they hold now. It waits for the lock rather
-// than giving up on it, since it runs in the background and a command
-// holding the lock for a moment is no reason to drop what it fetched. It
-// reports nothing as it goes and never ends serve: the report it returns is
-// made on the loop's goroutine and carries one update_available per update,
-// with this process's instance id, and the warnings of what the check could
-// not check, a source it could not fetch once per cause (see
-// sourceFailures). A machine with no source runs no git at all, and neither
-// does one with no account repo; a source an import wrote stays a source
-// not fetched, account repo or not, until source add adds it. The rescan
-// its write of the version file sets off brings the candidates and markers
-// it wrote into the next snapshot, and every source ref it moved into the
-// source index.
+// update check skill check-updates runs, over every source of the settings
+// rather than only the sources a managed skill came from, so that one pass
+// fetches each source once, whether or not a skill was installed from it,
+// and the source index follows what they hold now. It waits for the lock
+// rather than giving up on it, since it runs in the background and a
+// command holding the lock for a moment is no reason to drop what it
+// fetched. It reports nothing as it goes and never ends serve: the report
+// it returns is made on the loop's goroutine and carries one
+// update_available per update, with this process's instance id, and the
+// warnings of what the check could not check, a source it could not fetch
+// once per cause (see sourceFailures). A machine with no source runs no git
+// at all, and neither does one with no account repo; a source an import
+// wrote stays a source not fetched, account repo or not, until source add
+// adds it. The rescan its write of the version file sets off brings the
+// candidates and markers it wrote into the next snapshot, and every source
+// ref it moved into the source index.
 func (inv *invocation) serveCheck(ctx context.Context, failing sourceFailures) func() {
 	rep, err := inv.checkUpdates(ctx, true)
 	return func() {
@@ -268,7 +268,7 @@ type sourceFailures map[string]string
 // level. A source that goes from the settings is forgotten without a note.
 // Everything else a check could not check, a skill's newer version it
 // cannot import or a source it fetched but could not read, is a warning on
-// every check, as it is in skill check.
+// every check, as it is in skill check-updates.
 func (sf sourceFailures) report(out *writer, rep checkReport) {
 	now := sourceFailures{}
 	for _, cf := range rep.failures {

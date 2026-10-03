@@ -420,10 +420,10 @@ A repository nested in the skill, or anything else git cannot record, such as a 
 An earlier version of agentx could store a skill from a source that uses an old kind of file mode in a form that makes it show as `modified` even though you changed nothing. `skill diff` then says so instead of showing a diff:
 
 ```text
-pdf differs from its base version at 3f2a9c1 only in how the account repo stores it; run 'agentx skill add https://github.com/anthropics/skills --skill pdf' to install that version again while the source still holds it, which stores it as git writes it today and changes no file, or, once 'agentx skill check' finds a newer version, run 'agentx skill update pdf'
+pdf differs from its base version at 3f2a9c1 only in how the account repo stores it; run 'agentx skill add https://github.com/anthropics/skills --skill pdf' to install that version again while the source still holds it, which stores it as git writes it today and changes no file, or, once 'agentx skill check-updates' finds a newer version, run 'agentx skill update pdf'
 ```
 
-Run the `agentx skill add` command it names while the source still holds that version. It stores the version again without touching your files, and the skill shows as `current`. Move any file git ignores, such as a `.DS_Store`, out of the skill first: the command names that step when it sees one. Once the source holds a newer version, run `agentx skill check` and then `agentx skill update pdf` instead, which stores the newer version.
+Run the `agentx skill add` command it names while the source still holds that version. It stores the version again without touching your files, and the skill shows as `current`. Move any file git ignores, such as a `.DS_Store`, out of the skill first: the command names that step when it sees one. Once the source holds a newer version, run `agentx skill check-updates` and then `agentx skill update pdf` instead, which stores the newer version.
 
 A skill agentx did not install has no base version to compare with, so `skill diff` stops with exit code 6. For a fork, `skill diff` shows its uncommitted edits instead: see [See what changed](/cli/fork#see-what-changed).
 
@@ -526,7 +526,7 @@ Keep the two apart, then run the command again. A client's skills directory that
 Look for newer versions of the skills you installed, and of your forks of them:
 
 ```sh
-agentx skill check
+agentx skill check-updates
 ```
 
 ```text
@@ -566,7 +566,7 @@ diff --git a/SKILL.md b/SKILL.md
 ...
 ```
 
-The diff compares the version you installed with the version the last check found. It leaves out your own edits, which `agentx skill diff pdf` shows, and it needs no network. If no check has found an update for the skill, the command stops with exit code 6 and tells you to run `agentx skill check`.
+The diff compares the version you installed with the version the last check found. It leaves out your own edits, which `agentx skill diff pdf` shows, and it needs no network. If no check has found an update for the skill, the command stops with exit code 6 and tells you to run `agentx skill check-updates`.
 
 ### A skill its source no longer holds
 
@@ -623,7 +623,7 @@ agentx skill update --all
   xlsx  5d6e7f8 -> 9a0b1c2  edits merged cleanly
 ```
 
-If no check has found an update for the skill, the command says it is up to date as of the last check and changes nothing. Run `agentx skill check` to look again.
+If no check has found an update for the skill, the command says it is up to date as of the last check and changes nothing. Run `agentx skill check-updates` to look again.
 
 A copy placement is handled on its own:
 
@@ -743,24 +743,24 @@ For `skill add --from-account`, see the [account remote's exit codes](/cli/remot
   - it names the source with another branch or tag than its pin;
   - `skill add` is given something that is not a source, for example the name of a skill the library already holds;
   - `skill update` was given both a name and `--all`, neither, or `--abort` with `--all`.
-- `3`: the source, or the files of the skill, could not be fetched. For `skill check`, also a run whose sources and skills failed for different reasons.
+- `3`: the source, or the files of the skill, could not be fetched. For `skill check-updates`, also a run whose sources and skills failed for different reasons.
 - `4`: `skill update` found your edits conflicting with the update and left the merge pending, or found files of a pending merge still to resolve, or a merge already pending blocks `skill fork` or a `skill remove` that takes the skill off the machine. See [When your edits conflict](#when-your-edits-conflict).
 - `5`: something the command names does not exist:
   - a source id names no source on this machine (for a source you removed, the hint names the `agentx source add` command that brings it back), the source did not serve a skill's files, the path or a skill named by `--skill` or `--except` does not exist in the source, or `--to` or `--from` names a configuration that is not detected;
   - `skill place`, `skill diff` and `skill update` (except with `--abort`): also a name the library does not hold as a skill, other than a fork's for `skill place`, which [puts the fork back](/cli/fork#recover-a-fork);
   - `skill update`: also a skill whose source you removed;
   - `skill remove`: a name that is neither a skill of the library nor a managed skill whose library directory is gone;
-  - `skill check`: also a source added on this machine that it has never fetched, such as one `agentx import` brought back; `agentx source add` fetches it.
+  - `skill check-updates`: also a source added on this machine that it has never fetched, such as one `agentx import` brought back; `agentx source add` fetches it.
 - `6`: agentx refused:
   - the library already holds a different skill under that name, the name is already managed at another version, the skill's name cannot be both a directory and a git branch, the skill's directory in the source is not one agentx can record, the skill holds a file whose path would put it outside the skill's directory, agentx cannot use your library directory, or an interrupted change has to be resolved before anything else can run. The message names what to restore; if you would rather keep what is there, move the named file in `~/.agentx/mutations` aside.
   - `skill remove`: also `--from` naming a universal client, one that reads the library directly, even next to `--from universal`; `--from <client>` for a skill whose library directory is gone; and, for a fork, see [Forks](/cli/fork#exit-codes).
   - `skill diff`: a skill agentx did not install, which has no base version, or a managed skill whose import branch records no version agentx can read. For a fork, see [Forks](/cli/fork#exit-codes).
   - `skill diff --update`: also a skill no check has found an update for.
-  - `skill check`: a newer version agentx will not install, for the reasons `skill add` refuses one.
+  - `skill check-updates`: a newer version agentx will not install, for the reasons `skill add` refuses one.
   - `skill place`: a displaced directory that differs from the library when `--force` is not given; for a fork, see [Forks](/cli/fork#exit-codes); a managed skill whose library directory is gone; a skill or placement that changed while it was being placed; a library directory that is a symlink or holds one when the command would remove a displaced directory; and a client's directory it would change that symlinks make overlap the library, a directory a library entry links to or another client's directory.
   - `skill update`: a skill agentx did not install, a managed skill whose library directory is gone or whose import branch records no version agentx can read, a skill its source no longer holds, a skill that holds something git cannot record, a skill whose library directory is a symlink, or a skill, its installed version or its update that changed while it was being updated. With a merge pending, also a library directory edited or a record moved outside agentx while the merge was pending; see [Finish the merge](#finish-the-merge).
   - `skill update --abort`: any name with no merge pending, one the library does not hold included.
-  - A run of several skills, other than `skill check`: the skills that were skipped disagree about why. A run whose failures all have one cause exits with that cause, so a batch that skipped two skills the source did not serve exits `5`.
+  - A run of several skills, other than `skill check-updates`: the skills that were skipped disagree about why. A run whose failures all have one cause exits with that cause, so a batch that skipped two skills the source did not serve exits `5`.
 - `7`: another agentx command is running. Retry when it finishes.
-- `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`. For `skill update`, also an update recorded in a form this agentx does not write; run `agentx skill check` to record it again.
+- `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`. For `skill update`, also an update recorded in a form this agentx does not write; run `agentx skill check-updates` to record it again.
 - `10`: agentx could not read its own settings file, the library still held the skill after `skill remove` took it away, or agentx hit an error it has no better answer for. Run `agentx doctor`.

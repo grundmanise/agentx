@@ -22,9 +22,13 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
-func newSkillCheckCommand(inv *invocation) *cobra.Command {
+// checkUpdatesCommand is the command every hint names to look for updates
+// again.
+const checkUpdatesCommand = "agentx skill check-updates"
+
+func newSkillCheckUpdatesCommand(inv *invocation) *cobra.Command {
 	return &cobra.Command{
-		Use:   "check",
+		Use:   "check-updates",
 		Short: "Look for newer upstream versions of the managed skills and forks",
 		Long: "Fetch every added source a managed skill or a fork came from and report which skills\n" +
 			"have a newer upstream version, with the files each one changes; skills from a source\n" +
@@ -33,7 +37,7 @@ func newSkillCheckCommand(inv *invocation) *cobra.Command {
 			"apply an update with 'agentx skill update <name>', or read it first with\n" +
 			"'agentx skill diff <name> --update'.",
 		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error { return inv.skillCheck(cmd.Context()) },
+		RunE: func(cmd *cobra.Command, args []string) error { return inv.skillCheckUpdates(cmd.Context()) },
 	}
 }
 
@@ -122,8 +126,8 @@ type removedSkill struct {
 	name, source, subpath, commit string
 }
 
-// checkReport is what one update check found and did, for skill check to
-// print and for the serve child to emit.
+// checkReport is what one update check found and did, for skill
+// check-updates to print and for the serve child to emit.
 type checkReport struct {
 	// idle is a check with nothing to fetch: no managed skill or fork comes
 	// from a source this machine has, no source at all for the serve child,
@@ -139,11 +143,11 @@ type checkReport struct {
 	notes     []string // what a candidate the check moved leaves out or calls otherwise
 }
 
-// skillCheck is agentx skill check: the update check, printed, and every
-// source or skill it could not check turned into the refusal a run over
-// several sources answers with. What it could check is reported and pinned
-// all the same.
-func (inv *invocation) skillCheck(ctx context.Context) error {
+// skillCheckUpdates is agentx skill check-updates: the update check,
+// printed, and every source or skill it could not check turned into the
+// refusal a run over several sources answers with. What it could check is
+// reported and pinned all the same.
+func (inv *invocation) skillCheckUpdates(ctx context.Context) error {
 	rep, err := inv.checkUpdates(ctx, false)
 	if err != nil {
 		return err
@@ -257,13 +261,13 @@ func checkRefusal(failures []checkFailure) error {
 	return fail(st, "could not check "+strings.Join(named, ", "), hint)
 }
 
-// checkUpdates is the update check, which skill check runs and the serve
-// child runs on its timer. It fetches every source a managed skill came
-// from, in the user's git environment and outside the lock, compares each
-// skill's base version with what its source holds now by tree id, writes
-// the import commit of every newer version outside the lock, then records
-// what it found in one mutation: the candidate and upstream-removed refs
-// and last_fetched. Nothing is applied to the library.
+// checkUpdates is the update check, which skill check-updates runs and the
+// serve child runs on its timer. It fetches every source a managed skill
+// came from, in the user's git environment and outside the lock, compares
+// each skill's base version with what its source holds now by tree id,
+// writes the import commit of every newer version outside the lock, then
+// records what it found in one mutation: the candidate and upstream-removed
+// refs and last_fetched. Nothing is applied to the library.
 //
 // serving is the serve child's check, which differs in three ways. It
 // fetches every source of the settings, a source no skill was installed
@@ -272,8 +276,8 @@ func checkRefusal(failures []checkFailure) error {
 // follows them; on a machine with no account repo, where nothing can be
 // fetched, each is reported as not fetched rather than passed over. It
 // takes the lock as the serve child does, waiting for a holder. And it
-// reports no progress, where skill check reports a progress event per
-// source.
+// reports no progress, where skill check-updates reports a progress event
+// per source.
 //
 // A source the settings no longer hold is not fetched and its skills are
 // left as they are, candidate and marker included: nothing names it to

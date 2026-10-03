@@ -23,8 +23,8 @@ func newSkillDiffCommand(inv *invocation) *cobra.Command {
 			"the version it was installed at, as one unified diff per file. Every edit counts,\n" +
 			"whatever tool made it, a file made executable and a file turned into a symlink\n" +
 			"included. Files git ignores do not. Nothing is written to the library. With\n" +
-			"--update, show instead what the update 'agentx skill check' found changes in\n" +
-			"the base version.\n\n" +
+			"--update, show instead what the update '" + checkUpdatesCommand + "' found\n" +
+			"changes in the base version.\n\n" +
 			"For a fork, show its uncommitted edits: how its skill directory differs from the\n" +
 			"last commit of its branch, or, with --commit <id>, from that commit.",
 		Args: cobra.ExactArgs(1),
@@ -179,7 +179,7 @@ func (inv *invocation) skillDiffUpdate(ctx context.Context, name string) error {
 	c, ok := rec.AtCandidate()
 	if !ok {
 		return fail(exitRefused, "no update of "+name+" is known",
-			"run 'agentx skill check' to look for one; it pins what it finds for this command to show")
+			"run '"+checkUpdatesCommand+"' to look for one; it pins what it finds for this command to show")
 	}
 	files, err := diffTrees(ctx, inv.git, gitDir, rec.Commit+":"+rec.Import.Dir(), c.Commit+":"+c.Import.Dir())
 	if err != nil {
@@ -257,7 +257,7 @@ func (inv *invocation) reportStoredDiff(name, source, libPath, against string, e
 	} else {
 		add = "move what git ignores out of " + quotedPath(libPath) + ", then " + add
 	}
-	fix := add + ", or, once 'agentx skill check' finds a newer version, run '" + skillCommand("update", name) + "'"
+	fix := add + ", or, once '" + checkUpdatesCommand + "' finds a newer version, run '" + skillCommand("update", name) + "'"
 	inv.summary = name + " differs from " + against + stored + fix
 	out := inv.out
 	out.print(out.paint(heading, sanitised(name)), " differs from ", against, stored, sanitised(fix))

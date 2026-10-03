@@ -132,7 +132,7 @@ func TestPullFastForwardsMergesAndConflicts(t *testing.T) {
 	importOne := a.accountGit("rev-parse", one+"~2") // the import, then the fork's creation commit, then a's commit
 	s.write("skills/alpha/notes.md", forkNotes("seven", "seven, upstream"))
 	s.commit("second version")
-	a.mustRun("skill", "check")
+	a.mustRun("skill", "check-updates")
 	a.mustRun("skill", "update", "alpha")
 	importTwo := a.accountGit("rev-parse", lineage.ForkRef("alpha")+"^2")
 	a.mustRun("publish", "alpha")
@@ -158,7 +158,7 @@ func TestPullFastForwardsMergesAndConflicts(t *testing.T) {
 
 	s.write("skills/beta/extra.md", "extra\n")
 	s.commit("third version")
-	b.mustRun("skill", "check")
+	b.mustRun("skill", "check-updates")
 	b.mustRun("skill", "update", "beta")
 	betaTwo := b.accountGit("rev-parse", lineage.ForkRef("beta")+"^2")
 	a.commitFork("beta", forkNotes("six", "six, a"))
@@ -416,7 +416,7 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	mine := b.commitFork("alpha", forkNotes("three", "three, b"))
 	s.write("skills/alpha/notes.md", forkNotes("seven", "seven, upstream"))
 	second := s.commit("second version")
-	b.mustRun("skill", "check")
+	b.mustRun("skill", "check-updates")
 	candidate := b.ref(lineage.CandidateRef("alpha"))
 
 	out := b.mustRun("--json", "skill", "update", "alpha")
@@ -444,11 +444,11 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	s.write("skills/alpha/notes.md", forkNotes("seven", "seven, third"))
 	s.write("skills/beta/notes.md", forkNotes("six", "six, third"))
 	s.commit("third version")
-	b.mustRun("skill", "check")
+	b.mustRun("skill", "check-updates")
 	betaCandidate := b.ref(lineage.CandidateRef("beta"))
 	s.write("skills/alpha/notes.md", forkNotes("seven", "seven, fourth", "eight", "eight, fourth"))
 	s.commit("fourth version")
-	a.mustRun("skill", "check")
+	a.mustRun("skill", "check-updates")
 	a.mustRun("skill", "update", "alpha")
 	a.mustRun("publish", "alpha")
 	published := a.ref(lineage.ForkRef("alpha"))
@@ -466,7 +466,7 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	// take in, with a warning.
 	s.write("skills/beta/notes.md", forkNotes("six", "six, fifth"))
 	s.commit("fifth version")
-	b.mustRun("skill", "check")
+	b.mustRun("skill", "check-updates")
 	before := b.ref(lineage.ForkRef("beta"))
 	if err := os.Rename(remote, remote+".gone"); err != nil {
 		t.Fatal(err)

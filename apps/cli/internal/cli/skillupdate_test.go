@@ -68,7 +68,7 @@ func secondTree(t *testing.T, s *sourceRepo) map[string]string {
 // upToDate is how skill update answers for a skill it has no update to
 // apply to, as its summary.
 func upToDate(name string) string {
-	return name + " is up to date as of the last update check; run 'agentx skill check' to look again"
+	return name + " is up to date as of the last update check; run 'agentx skill check-updates' to look again"
 }
 
 // unchangedHome is what a command that changes nothing leaves as it found
@@ -123,7 +123,7 @@ func TestSkillUpdateReplacesAnUnmodifiedSkill(t *testing.T) {
 	writeFile(t, filepath.Join(claude, ".DS_Store"), "finder data\n")
 	second := newVersion(t, s)
 	want := secondTree(t, s)
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	refs := h.refMap()
 	tip, candidate := refs[lineage.ManagedRef("alpha")], refs[lineage.CandidateRef("alpha")]
 	if candidate == "" || candidate == tip {
@@ -173,7 +173,7 @@ func TestSkillUpdateReplacesAnUnmodifiedSkill(t *testing.T) {
 	if strings.Contains(h.mustRun("skill", "list").stdout, updateAvailable) {
 		t.Error("skill list still shows an update after it was applied")
 	}
-	check := h.mustRun("--json", "skill", "check")
+	check := h.mustRun("--json", "skill", "check-updates")
 	if got := h.eventsOfType(check.stdout, "update_available"); len(got) != 0 {
 		t.Errorf("a check right after the update found %d updates: %v", len(got), got)
 	}
@@ -252,7 +252,7 @@ var mixedHome = &fixtureHome{
 		s.write("skills/epsilon/notes.md", "epsilon notes, revised\n")
 		s.run("rm", "-r", "--quiet", "skills/gamma")
 		second := s.commit("second version")
-		h.mustRun("skill", "check")
+		h.mustRun("skill", "check-updates")
 		editLibrary(h.t, h, "beta", "notes.md", "beta notes, edited here\n")
 		editLibrary(h.t, h, "epsilon", "usage.md", "epsilon usage, edited here\n")
 		return []string{first, second}
@@ -397,7 +397,7 @@ func otherSourceHarness(t *testing.T) (h *harness, s, other *sourceRepo) {
 	s.commit("beta revised")
 	other.skill("gamma", "gamma", "A skill of the other source, revised", nil)
 	other.commit("gamma revised")
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	refs := h.refMap()
 	for _, name := range []string{"alpha", "beta", "gamma"} {
 		if refs[lineage.CandidateRef(name)] == "" {
@@ -458,7 +458,7 @@ func TestSkillUpdateAllSkipsASkillWhoseSourceWasRemoved(t *testing.T) {
 	equal(t, "message", e["message"], refusal)
 	equal(t, "hint", e["hint"], hint)
 
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	equal(t, "gamma's candidate after another check", h.ref(lineage.CandidateRef("gamma")), gammaCandidate)
 	again := h.run("skill", "update", "--all")
 	equal(t, "exit of the next run", again.exit, 0)
@@ -490,7 +490,7 @@ func TestSkillUpdateAllReportsEachRefusalAndGoesOn(t *testing.T) {
 	s.skill("skills/delta", "delta", "The fourth skill, revised", nil)
 	s.skill("skills/epsilon", "epsilon", "The fifth skill, revised", nil)
 	s.commit("alpha, delta and epsilon revised")
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	h.mustRun("source", "remove", other.url)
 	refs := h.refMap()
 	for _, name := range []string{"alpha", "beta", "delta", "epsilon", "gamma"} {
@@ -554,7 +554,7 @@ func TestSkillUpdateAllRefreshesEachSkillsCopies(t *testing.T) {
 	second := newVersion(t, s)
 	alphaWant := secondTree(t, s)
 	betaWant := libraryTree(t, filepath.Join(s.work, "skills", "beta"))
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	refs := h.refMap()
 	for _, name := range []string{"alpha", "beta"} {
 		if refs[lineage.CandidateRef(name)] == "" {
@@ -600,7 +600,7 @@ func TestSkillUpdateSkipsACopyItCannotRead(t *testing.T) {
 	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
 	newVersion(t, s)
 	want := secondTree(t, s)
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	scripts := filepath.Join(cursor, "scripts")
 	chmod(t, scripts, 0)
 	t.Cleanup(func() { _ = os.Chmod(scripts, 0o755) }) // so the temporary home can be removed
@@ -662,7 +662,7 @@ func TestSkillUpdateRefreshesACopyTwoConfigurationsShareOnce(t *testing.T) {
 			before := libraryTree(t, place)
 			newVersion(t, s)
 			want := secondTree(t, s)
-			h.mustRun("skill", "check")
+			h.mustRun("skill", "check-updates")
 
 			out := h.run("--json", "skill", "update", "alpha")
 			if out.exit != 0 {
@@ -717,7 +717,7 @@ func TestSkillUpdateUsage(t *testing.T) {
 func checked(t *testing.T, h *harness, s *sourceRepo) {
 	t.Helper()
 	newVersion(t, s)
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 }
 
 // upstreamRemoved deletes beta from the source and runs a check, which
@@ -726,7 +726,7 @@ func upstreamRemoved(t *testing.T, h *harness, s *sourceRepo) {
 	t.Helper()
 	s.run("rm", "-r", "--quiet", "skills/beta")
 	s.commit("beta removed")
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 }
 
 // withoutLineage points beta's import branch at a commit of the version it
@@ -872,7 +872,7 @@ func TestSkillUpdateRefusesInOrder(t *testing.T) {
 						editLibrary(t, h, "beta", "notes.md", "beta notes, edited\n")
 					},
 					message: "the last update check found that the source of beta no longer holds it, so it is kept as it is and never updated",
-					hint:    "run 'agentx skill check' once the source holds it again, or 'agentx skill remove beta' to remove it",
+					hint:    "run 'agentx skill check-updates' once the source holds it again, or 'agentx skill remove beta' to remove it",
 				},
 				{
 					name: "an upstream-removed skill whose source was removed", skill: "beta", exit: 5,
@@ -939,7 +939,7 @@ func TestRecheckUpdateRefusesWhatChangedSinceTheSkillWasJudged(t *testing.T) {
 		sourceGone = refuse(exitNotFound, "alpha was installed from "+url+", which was removed from this machine, so it is not updated",
 			"run 'agentx source add "+url+"' to add it again")
 		upstreamGone = refuse(exitRefused, "the last update check found that the source of alpha no longer holds it, so it is kept as it is and never updated",
-			"run 'agentx skill check' once the source holds it again, or 'agentx skill remove alpha' to remove it")
+			"run 'agentx skill check-updates' once the source holds it again, or 'agentx skill remove alpha' to remove it")
 		candidate = refuse(exitRefused, "the update candidate refs/agentx/candidate/alpha moved while alpha was being updated, so nothing was changed",
 			"run 'agentx skill update alpha' again to apply the update the last check found")
 		edited = refuse(exitRefused, "alpha changed while it was being updated, so nothing was changed",
@@ -1175,7 +1175,7 @@ func TestSkillUpdateAllGoesOnPastASkillThatChangedBeforeTheLock(t *testing.T) {
 	newVersion(t, s)
 	s.write("skills/beta/notes.md", "beta notes, revised\n")
 	s.commit("beta revised")
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	refs := h.refMap()
 	alphaTip, alphaCandidate := refs[lineage.ManagedRef("alpha")], refs[lineage.CandidateRef("alpha")]
 	betaCandidate := refs[lineage.CandidateRef("beta")]
@@ -1234,7 +1234,7 @@ func TestSkillUpdateKeepsTheLocalNameThroughAnUpstreamRename(t *testing.T) {
 	h, s, _ := updateHarness(t)
 	s.skill("skills/alpha-dir", "alpha-renamed", "The first skill, renamed upstream", nil)
 	s.commit("alpha renamed")
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	candidate := h.ref(lineage.CandidateRef("alpha"))
 
 	out := h.mustRun("--json", "skill", "update", "alpha")
@@ -1267,10 +1267,10 @@ func TestSkillUpdateOfASkillAtTheRootOfItsSource(t *testing.T) {
 	first := s.commit("first version")
 	h.mustRun("skill", "add", s.url)
 	equal(t, "the text with no update", h.mustRun("skill", "update", "rooted").stdout,
-		"rooted is up to date as of the last update check; run agentx skill check to look again\n")
+		"rooted is up to date as of the last update check; run agentx skill check-updates to look again\n")
 	s.write("notes.md", "root notes, revised\n")
 	second := s.commit("second version")
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	candidate := h.ref(lineage.CandidateRef("rooted"))
 	if candidate == "" {
 		t.Fatal("the check pinned no candidate")
@@ -1288,7 +1288,7 @@ func TestSkillUpdateOfASkillAtTheRootOfItsSource(t *testing.T) {
 	editLibrary(t, h, "rooted", "usage.md", "root usage, edited here\n")
 	s.write("notes.md", "root notes, revised again\n")
 	s.commit("third version")
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	contains(t, "the text of a merge", h.mustRun("skill", "update", "rooted").stdout, " and merged its edits cleanly\n")
 	sameTree(t, "the merged library directory", libraryTree(t, filepath.Join(h.library, "rooted")), map[string]string{
 		"SKILL.md": skillMD, "notes.md": "root notes, revised again\n", "usage.md": "root usage, edited here\n",
@@ -1297,7 +1297,7 @@ func TestSkillUpdateOfASkillAtTheRootOfItsSource(t *testing.T) {
 
 	s.write("usage.md", "root usage, revised\n")
 	s.commit("fourth version")
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	conflicted := h.run("--json", "skill", "update", "rooted")
 	equal(t, "exit of the update that conflicts", conflicted.exit, 4)
 	equal(t, "files", conflictPaths(h.one(conflicted.stdout, "conflict")), "usage.md")
@@ -1474,7 +1474,7 @@ func TestSkillUpdateRunAgainFinishesTheUpdateThatStopped(t *testing.T) {
 		summary string
 	}{
 		{[]string{"skill", "update", "alpha"}, 2, upToDate("alpha")},
-		{[]string{"skill", "update", "--all"}, 1, "nothing to update: no managed skill or fork has an update as of the last update check; run 'agentx skill check' to look again"},
+		{[]string{"skill", "update", "--all"}, 1, "nothing to update: no managed skill or fork has an update as of the last update check; run 'agentx skill check-updates' to look again"},
 	} {
 		t.Run(fmt.Sprintf("%s after %d steps", strings.Join(c.args, " "), c.stop), func(t *testing.T) {
 			t.Parallel()
@@ -1678,7 +1678,7 @@ func TestSkillUpdateWhoseJournalWasMovedAsideOffersNoUpdate(t *testing.T) {
 	equal(t, "alpha's notes", fileBody(t, notes), "an edit made midway\n")
 	equal(t, "the candidate ref before a check", h.ref(lineage.CandidateRef("alpha")), candidate)
 
-	check := h.mustRun("--json", "skill", "check")
+	check := h.mustRun("--json", "skill", "check-updates")
 	if got := h.eventsOfType(check.stdout, "update_available"); len(got) != 0 {
 		t.Errorf("the check announced %v", got)
 	}
@@ -1747,10 +1747,10 @@ func TestSkillUpdateRefusesACandidateStoredInAnOlderForm(t *testing.T) {
 	equal(t, "exit", out.exit, 8)
 	e := h.one(out.stdout, "error")
 	equal(t, "message", e["message"], "the update candidate refs/agentx/candidate/nc stores its version in a form agentx does not write")
-	equal(t, "hint", e["hint"], "run 'agentx skill check' to pin the update again")
+	equal(t, "hint", e["hint"], "run 'agentx skill check-updates' to pin the update again")
 	was.check(t, h, "the refused update", 0)
 
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	equal(t, "the candidate after a check", h.ref(lineage.CandidateRef("nc")), "")
 }
 
@@ -1767,7 +1767,7 @@ func TestSkillUpdateOfAnAdoptedSkill(t *testing.T) {
 		SkillPath: "skills/alpha/SKILL.md", SkillFolderHash: installed,
 	}})
 	h.mustRun("adopt", "--all")
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	candidate := h.ref(lineage.CandidateRef("alpha"))
 	if candidate == "" {
 		t.Fatal("the check pinned no candidate for the adopted skill")
