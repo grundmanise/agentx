@@ -1629,7 +1629,7 @@ func TestServeWarnsAboutASourceItCannotCheck(t *testing.T) {
 }
 
 // TestServeRefusesABadCheckInterval: the interval is a positive duration
-// or nothing, and so is the quiet period of auto-push.
+// or nothing.
 func TestServeRefusesABadCheckInterval(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
@@ -1642,12 +1642,6 @@ func TestServeRefusesABadCheckInterval(t *testing.T) {
 		equal(t, v+": message", e["message"], "AGENTX_CHECK_INTERVAL "+v+" is not a positive duration")
 	}
 	equal(t, "serve --once ignores it", h.serveOnce("--json").exit, 0)
-	delete(h.env, "AGENTX_CHECK_INTERVAL")
-	h.env["AGENTX_PUSH_QUIET"] = "0s"
-	out := h.run("--json", "serve")
-	equal(t, "AGENTX_PUSH_QUIET: exit", out.exit, 1)
-	equal(t, "AGENTX_PUSH_QUIET: message", h.one(out.stdout, "error")["message"], "AGENTX_PUSH_QUIET 0s is not a positive duration")
-	equal(t, "serve --once ignores it too", h.serveOnce("--json").exit, 0)
 }
 
 // nextUpdate reads the child's events up to the first update_available

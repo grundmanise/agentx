@@ -220,7 +220,7 @@ func TestServeRescansOnVersionBumpWithoutSnapshot(t *testing.T) {
 	p.next("refresh_complete")
 
 	// A one-shot mutation that changes nothing the snapshot shows.
-	out := h.run("config", "set", "auto_push", "true")
+	out := h.run("config", "set", "accept_operations", "true")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "version", readVersion(t, h), 1)
 	p.send(`{"type":"refresh","request_id":"after-bump"}`)

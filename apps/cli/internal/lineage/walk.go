@@ -191,8 +191,8 @@ func ReadForks(ctx context.Context, r *gitx.Runner, gitDir string, recs map[stri
 
 // WalkCache keeps fork lineages by branch tip from one ReadForks to the
 // next, for a process that reads them again and again, as serve does,
-// whose scans, update checks and auto-push read them on goroutines of
-// their own: its methods may be called from several at once. A nil
+// whose scans and update checks read them on goroutines of their own: its
+// methods may be called from several at once. A nil
 // WalkCache keeps nothing.
 type WalkCache struct {
 	mu       sync.Mutex

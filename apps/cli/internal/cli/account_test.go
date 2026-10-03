@@ -208,7 +208,7 @@ exec %GIT% "$@"
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			h, _, url := legacyAccountHome(t)
-			out := killedChild(t, h, "TestMigrateChildProcess", migrateChildEnv, "config\nset\nauto_push\ntrue", tc.script)
+			out := killedChild(t, h, "TestMigrateChildProcess", migrateChildEnv, "config\nset\naccept_operations\ntrue", tc.script)
 			if h.accountGit("config", "--get", "remote.origin.url") == "" {
 				t.Fatalf("the killed run moved the remote origin:\n%s", out)
 			}

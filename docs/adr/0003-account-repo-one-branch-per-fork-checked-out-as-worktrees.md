@@ -45,3 +45,6 @@ An unmanaged skill or an unpublished fork cannot be installed on another machine
 
 The account remote is a source of the fork layout, see [ADR 0008](0008-sources-have-a-layout-and-an-access-only-the-account-remote-is-pushed-automatically.md): its settings entry marks it as the account remote, and its remote in the account repo is `src-<id>`, named after its source id like every source's, where it was `origin`. Everything above about what travels through it stands: only `skills/*` branches, fetched whole, published by an explicit command or by auto-push, which pushes to the account remote and nowhere else. "Content moves only when the user asks" keeps its list; writing to any other source is an explicit command of its own, never a side effect of an install, an update or a publish.
 
+## Amendment, 2026-10-03
+
+Auto-push is removed: it is no longer a setting, and serve pushes nothing. Every push to the account remote is an explicit publish, see [ADR 0008](0008-sources-have-a-layout-and-an-access-only-the-account-remote-is-pushed-automatically.md).

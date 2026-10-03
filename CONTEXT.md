@@ -129,7 +129,7 @@ Retiring a fork in favour of an upstream version: the fork's branch is archived 
 _Avoid_: delete fork, downgrade
 
 **Account remote**:
-The one fork source marked as the account remote: the repository account repos push forks to and fetch them from, and the only source anything is pushed to without an explicit command. In the MVP it is a Git repository the user owns, attached with `agentx remote set` or `agentx source add --account`; later, hosted by agentx once the machine is signed in. Only fork branches travel through it.
+The one fork source marked as the account remote: the repository account repos push forks to and fetch them from. In the MVP it is a Git repository the user owns, attached with `agentx remote set` or `agentx source add --account`; later, hosted by agentx once the machine is signed in. Only fork branches travel through it.
 _Avoid_: cloud, server, origin
 
 **Publish**:

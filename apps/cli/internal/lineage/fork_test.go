@@ -225,7 +225,7 @@ func TestReadForksWalksOnceForEveryFork(t *testing.T) {
 }
 
 // TestWalkCacheIsSharedByGoroutines keeps and reads lineages from several
-// goroutines at once, as serve's scans, update checks and auto-push do;
+// goroutines at once, as serve's scans and update checks do;
 // the race detector fails it if the cache is not guarded.
 func TestWalkCacheIsSharedByGoroutines(t *testing.T) {
 	t.Parallel()

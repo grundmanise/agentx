@@ -16,7 +16,6 @@ import (
 type Settings struct {
 	SchemaVersion          int             `json:"schema_version"`
 	Label                  string          `json:"label,omitempty"` // empty until set; the hostname stands in
-	AutoPush               bool            `json:"auto_push"`
 	AcceptOperations       bool            `json:"accept_operations"`
 	IgnoreSystemFiles      bool            `json:"ignore_system_files"` // a file without the key reads true; see SystemFiles
 	DisabledConfigurations []string        `json:"disabled_configurations"`

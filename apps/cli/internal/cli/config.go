@@ -18,7 +18,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 )
 
-const settableKeys = "label, auto_push, accept_operations, ignore_system_files"
+const settableKeys = "label, accept_operations, ignore_system_files"
 
 type settingsEvent struct {
 	event
@@ -70,7 +70,7 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 	})
 	cmd.AddCommand(&cobra.Command{
 		Use:   "set <key> <value>",
-		Short: "Change label, auto_push, accept_operations or ignore_system_files",
+		Short: "Change label, accept_operations or ignore_system_files",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			apply, err := settingSetter(args[0], args[1])
@@ -173,9 +173,6 @@ func settingSetter(key, value string) (func(*home.Settings), error) {
 			return nil, err
 		}
 		return func(s *home.Settings) { s.Label = value }, nil
-	case "auto_push":
-		b, err := parseBool(key, value)
-		return func(s *home.Settings) { s.AutoPush = b }, err
 	case "accept_operations":
 		b, err := parseBool(key, value)
 		return func(s *home.Settings) { s.AcceptOperations = b }, err
@@ -303,7 +300,6 @@ func (inv *invocation) settingRows(s home.Settings) []settingRow {
 	return []settingRow{
 		{"schema_version", strconv.Itoa(s.SchemaVersion)},
 		{"label", inv.label(s)},
-		{"auto_push", strconv.FormatBool(s.AutoPush)},
 		{"accept_operations", strconv.FormatBool(s.AcceptOperations)},
 		{"ignore_system_files", strconv.FormatBool(s.IgnoreSystemFiles)},
 		{"disabled_configurations", strings.Join(s.DisabledConfigurations, ", ")},

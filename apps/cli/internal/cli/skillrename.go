@@ -173,3 +173,10 @@ func newSkillUnforkCommand(inv *invocation) *cobra.Command {
 		},
 	}
 }
+
+// isAncestor is whether the commit a is b or one b's history holds, as
+// git merge-base --is-ancestor says.
+func (inv *invocation) isAncestor(ctx context.Context, gitDir, a, b string) (bool, error) {
+	_, status, err := inv.git.IsolatedStatus(ctx, gitDir, 1, "merge-base", "--is-ancestor", a, b)
+	return err == nil && status == 0, err
+}

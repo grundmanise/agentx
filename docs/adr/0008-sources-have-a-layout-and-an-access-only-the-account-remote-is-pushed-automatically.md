@@ -28,3 +28,7 @@ Keeping `origin` for the account remote beside `src-<id>` for the sources: two n
 ## Consequences
 
 The settings entry of a source gains `layout`, `account`, `push_url`, `access`, `access_checked` and `default_branch`; `schema_version` stays 1, all of them being additive, and an agentx that knows no layout reads a fork entry as a tree source, which is unsupported and named in the contract. The `remote` event is gone; the account remote is the `source` event with `account` true. `source fetch --all` fetches the account remote too. A fork source holds no skill to install by URL: `source skills` and `skill add` of it are refused with the commands that list and install its forks. Until a later version keeps several fork sources, the account remote is the only fork source, and replacing it with another URL forgets what the old one held, its forks staying on the machine and publishing to the new one.
+
+## Amendment (2026-10-03, MVP)
+
+- Auto-push is removed. Nothing is pushed automatically, to the account remote or to any other source: every push is an explicit publish. The title's "the only one pushed to automatically" and the sentences above that say the account remote is pushed to without an explicit command are superseded; the auto_push setting, the serve tick that pushed and `AGENTX_PUSH_QUIET` are gone.

@@ -194,7 +194,7 @@ func TestImportAsksBeforeItWrites(t *testing.T) {
 // record, which each case of the refusal tests below changes in one place.
 const soundExport = `{"schema_version": 1,
  "machine": {"id": "0123456789abcdef0123456789abcdef", "label": "first-laptop"},
- "settings": {"schema_version": 1, "label": "first-laptop", "auto_push": false, "accept_operations": false,
+ "settings": {"schema_version": 1, "label": "first-laptop", "accept_operations": false,
   "ignore_system_files": true, "disabled_configurations": [], "sources": [], "copy_mode": {}},
  "skills": [{"name": "alpha", "kind": "managed", "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "source": "https://github.com/example/skills", "subpath": "skills/alpha",
@@ -255,6 +255,7 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 		{"a field agentx does not know", edited(func(doc map[string]any) { doc["snapshot"] = map[string]any{} }), "not an agentx export"},
 		{"later settings", settingsWith("schema_version", 2), "schema_version is 2"},
 		{"a settings field agentx does not know", settingsWith("secrets", "x"), "not an agentx export"},
+		{"the retired auto_push setting", settingsWith("auto_push", true), "auto_push is no longer a setting"},
 		{"a label of two lines", settingsWith("label", "one\ntwo"), "one non-empty line"},
 		{"a record of another kind", recordWith("kind", "greenfield"), "neither managed nor fork"},
 		{"a record with no commit", recordWith("commit", "HEAD"), "does not name the commit"},
@@ -352,7 +353,7 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 			if !errors.As(err, &f) || f.status != exitRefused {
 				t.Fatalf("readExport = %v, want a refusal", err)
 			}
-			contains(t, "the refusal", f.message, tc.says)
+			contains(t, "the refusal", f.message+"\n"+f.hint, tc.says)
 			// The refusal names the URL it parsed to, never what it was given.
 			if said := f.message + f.hint; strings.Contains(said, importToken) || strings.Contains(said, "user:") {
 				t.Errorf("the refusal repeated the credential: %q", said)
@@ -584,7 +585,6 @@ func TestImportFillsInWhatADocumentLeavesOut(t *testing.T) {
 	contains(t, "stdout", out.stdout, "No skills in the export.")
 	equal(t, "the settings", readText(t, home.SettingsPath(to.agentx)), `{
   "schema_version": 1,
-  "auto_push": false,
   "accept_operations": false,
   "ignore_system_files": true,
   "disabled_configurations": [],
@@ -632,7 +632,6 @@ func TestValidSettingsCoversEveryFieldOfTheSettings(t *testing.T) {
 	covered := map[string]string{
 		"Settings.SchemaVersion":          "badSchemaVersion",
 		"Settings.Label":                  "badLabel (validLabel, as config set label is)",
-		"Settings.AutoPush":               "a bool: the JSON type is the whole domain",
 		"Settings.AcceptOperations":       "a bool: the JSON type is the whole domain",
 		"Settings.IgnoreSystemFiles":      "a bool: the JSON type is the whole domain",
 		"Settings.DisabledConfigurations": "badDisabledConfigurations",

@@ -235,35 +235,6 @@ func (r *Runner) Push(ctx context.Context, gitDir, remote string, branches []str
 	return ParsePushPorcelain(out)
 }
 
-// PushTip is one branch PushTips pushes: the commit the remote's branch
-// is to hold, and what it must hold until then.
-type PushTip struct {
-	Branch string // the short name, such as "skills/pdf"
-	Commit string // what is pushed
-	Expect string // what the remote's branch holds, as the last fetch read it
-}
-
-// PushTips is Push of exact commits, each leased on what the last fetch
-// read its branch at: a branch is set to its commit, and not to whatever
-// it holds by the time git runs, and one another machine moved or deleted
-// since the fetch is not overwritten or put back, but rejected as stale.
-// The caller has made sure each commit descends from what it expects.
-func (r *Runner) PushTips(ctx context.Context, gitDir, remote string, tips []PushTip) ([]PushStatus, error) {
-	args := append(networkConfig(), "--git-dir="+gitDir, "push", "--porcelain", "--no-verify", "--no-recurse-submodules")
-	for _, t := range tips {
-		args = append(args, "--force-with-lease=refs/heads/"+t.Branch+":"+t.Expect)
-	}
-	args = append(args, remote)
-	for _, t := range tips {
-		args = append(args, t.Commit+":refs/heads/"+t.Branch)
-	}
-	out, _, err := r.runStatus(ctx, call{}, 1, args...)
-	if err != nil {
-		return nil, err
-	}
-	return ParsePushPorcelain(out)
-}
-
 // DeleteRemoteBranch deletes the branch of the remote called remote, named
 // by its short name such as "skills/pdf", in one git push of the user's
 // environment with no hook of theirs, see networkConfig, and returns the

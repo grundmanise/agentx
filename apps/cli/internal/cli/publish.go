@@ -27,9 +27,8 @@ type publishEvent struct {
 	event
 	Name        string `json:"name"`
 	Outcome     string `json:"outcome"`
-	Commit      string `json:"commit,omitempty"`      // what the account remote's branch holds now, when the publish knows it
-	Uncommitted bool   `json:"uncommitted"`           // the fork holds edits nobody committed, which were not published
-	InstanceID  string `json:"instance_id,omitempty"` // the serve process whose auto-push published it; absent from agentx publish
+	Commit      string `json:"commit,omitempty"` // what the account remote's branch holds now, when the publish knows it
+	Uncommitted bool   `json:"uncommitted"`      // the fork holds edits nobody committed, which were not published
 }
 
 // The outcomes of a publish, one per fork.

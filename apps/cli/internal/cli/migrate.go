@@ -33,8 +33,7 @@ var readOnly = map[string]bool{
 // something does, but serve, and a command that only groups others runs
 // nothing. serve runs for as long as the desktop app does and must not
 // fail to start over a lock another command holds: its reconciliation
-// reads the remote where it is, and its auto-push waits for the next
-// command to move it.
+// reads the remote where it is.
 func migrates(cmd *cobra.Command) bool {
 	return !cmd.HasSubCommands() && !readOnly[cmd.CommandPath()] && cmd.CommandPath() != "agentx serve"
 }
