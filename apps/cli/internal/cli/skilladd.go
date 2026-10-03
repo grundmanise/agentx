@@ -36,51 +36,37 @@ const namesInAHint = 12
 func newSkillAddCommand(inv *invocation) *cobra.Command {
 	var sel selection
 	var to []string
-	var asCopy, fetch, keepLocal bool
-	var fromAccount string
+	var asCopy, fetch bool
 	cmd := &cobra.Command{
-		Use:   "add <source>[/<subpath>] | --from-account <name>",
-		Short: "Install skills from a source, or a fork from the account remote, into the library and place them",
+		Use:   "add [<source>[/<subpath>]] [--name <name>]... [--all [--except <name>]...]",
+		Short: "Install skills from a source, or your own from the account remote, into the library and place them",
 		Long: "Install skills from a source into the library and place them in every enabled\n" +
 			"configuration. A source URL this machine has not added yet is added first, as\n" +
 			"'agentx source add' would; an added source is installed from as it was last\n" +
 			"fetched, unless --fetch fetches it again. Name the skills with --name, once for\n" +
 			"each, or take the whole source with --all and leave out what you do not want\n" +
 			"with --except.\n\n" +
-			"With --from-account, install the fork called <name> that another machine\n" +
-			"published to the account remote: the same fork, with its history, whose commits\n" +
-			"you publish back to the same branch. 'agentx skill list --remote' lists them. A\n" +
-			"managed copy of the fork's upstream that holds its base version gives way to the\n" +
-			"fork and keeps its placements; any other directory in the library is refused\n" +
-			"unless --keep-local moves it into the fork as uncommitted edits.",
-		Args: func(cmd *cobra.Command, args []string) error {
-			if cmd.Flags().Changed("from-account") {
-				return cobra.NoArgs(cmd, args)
-			}
-			return cobra.ExactArgs(1)(cmd, args)
-		},
+			"With no source, install your own skills from the account remote, which is\n" +
+			"fetched every time: the ones you name with --name, or with --all every one this\n" +
+			"machine lacks. Each is the same skill, with its history, that you publish back\n" +
+			"to the same branch. 'agentx skill list --remote' lists them. A managed copy of\n" +
+			"the skill's upstream that holds its base version gives way to it and keeps its\n" +
+			"placements; any other directory the library holds of the name is refused.",
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if cmd.Flags().Changed("from-account") {
-				if fromAccount == "" {
-					return fail(exitUsage, "--from-account needs the name of a fork", "run 'agentx skill list --remote' to see the forks the account remote holds")
-				}
-				for _, other := range []string{"name", "all", "except", "fetch"} {
-					if cmd.Flags().Changed(other) {
-						return fail(exitUsage, "--from-account installs one fork and takes no --"+other, "run '"+fromAccountCommand(fromAccount)+"'")
-					}
-				}
-				return inv.installFromAccount(cmd.Context(), fromAccount, to, asCopy, keepLocal)
+			// Flags that contradict each other are refused before anything
+			// else, a source this run would add included.
+			if err := sel.check(); err != nil {
+				return err
 			}
-			if keepLocal {
-				return fail(exitUsage, "--keep-local applies to --from-account only", "run 'agentx skill add --from-account <name> --keep-local'")
+			if len(args) == 0 {
+				return inv.addFromAccount(cmd.Context(), sel, to, asCopy, fetch)
 			}
 			return inv.skillAdd(cmd.Context(), args[0], sel, to, asCopy, fetch)
 		},
 	}
-	cmd.Flags().StringVar(&fromAccount, "from-account", "", "install the fork of this name from the account remote")
-	cmd.Flags().BoolVar(&keepLocal, "keep-local", false, "with --from-account, keep the directory the library holds as the fork's uncommitted edits")
-	cmd.Flags().StringArrayVar(&sel.names, "name", nil, "the skill to install, by its name in the source; give it again for each")
-	cmd.Flags().BoolVar(&sel.all, "all", false, "install every skill the source holds")
+	cmd.Flags().StringArrayVar(&sel.names, "name", nil, "the skill to install, by its name in the source or on the account remote; give it again for each")
+	cmd.Flags().BoolVar(&sel.all, "all", false, "install every skill the source holds, or with no source every one of the account remote this machine lacks")
 	cmd.Flags().StringArrayVar(&sel.except, "except", nil, "with --all, a skill to leave out; give it again for each")
 	cmd.Flags().StringArrayVar(&to, "to", nil, "the configuration to place them in, instead of every enabled one")
 	cmd.Flags().BoolVar(&asCopy, "copy", false, "place copies instead of symlinks")
@@ -107,11 +93,6 @@ type selection struct {
 // with a warning naming it, the rest of the batch lands, and the run
 // answers with what failed, the way a fetch of several sources does.
 func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, to []string, asCopy, fetch bool) error {
-	// Flags that contradict each other are refused before anything else, a
-	// source this run would add included.
-	if err := sel.check(); err != nil {
-		return err
-	}
 	if err := inv.alreadyInLibrary(arg, to, asCopy); err != nil {
 		return err
 	}

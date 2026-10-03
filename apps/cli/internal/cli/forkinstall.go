@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
@@ -15,12 +17,13 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
-// A fork another machine published is installable here once a fetch of the
-// account remote has written its remote-tracking branch and this machine
-// has no branch of its own by that name. skill list --remote lists them,
-// each with the provenance its own commits record, and skill add
-// --from-account installs one: the local branch is created at the
-// remote-tracking branch's commit, so the fork is the same fork, with the
+// A skill of the account remote, one another machine published, is
+// installable here once a fetch of the account remote has written its
+// remote-tracking branch and this machine has no branch of its own by that
+// name. skill list --remote lists them, each with the provenance its own
+// commits record, and skill add with no source installs them, named with
+// --name or every one with --all: the local branch is created at the
+// remote-tracking branch's commit, so the skill is the same fork, with the
 // same fork id and history, and what is committed here is published back
 // to the same branch. Nothing is copied outside git: the worktree is added
 // for the branch and its skill directory laid out from the commit, as a
@@ -47,10 +50,10 @@ const installRemoteRow = "installable"
 // called remote, holds that records, the account repo's branches, hold no
 // fork branch of, sorted by name, with the provenance of each read by one
 // walk of their remote tips. A branch whose name agentx would never give
-// a fork, or whose history records no fork id, is left out, with a warning
-// each: installing the one could not create the local branch, and the
-// other could never be updated or published, since nothing would tell that
-// the two branches are one fork.
+// a fork, or whose history records no fork id, is left out, with a
+// warning each: installing the one could not create the local branch, and
+// the other could never be updated or published, since nothing would tell
+// that the two branches are one fork.
 func (inv *invocation) installableForks(ctx context.Context, gitDir, remote string, records map[string]lineage.Record) ([]installableForkEvent, []string, error) {
 	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
 	if err != nil {
@@ -62,7 +65,7 @@ func (inv *invocation) installableForks(ctx context.Context, gitDir, remote stri
 		switch {
 		case records[name].Kind == lineage.KindFork:
 		case forkNameRefusal(name) != "":
-			warnings = append(warnings, "the account remote's branch skills/"+sanitised(name)+" is not listed, since it cannot be installed: "+forkNameRefusal(name))
+			warnings = append(warnings, "the account remote's branch skills/"+sanitised(name)+" is left out, since it cannot be installed: "+forkNameRefusal(name))
 		default:
 			candidates = append(candidates, name)
 			walk = append(walk, tip)
@@ -75,7 +78,7 @@ func (inv *invocation) installableForks(ctx context.Context, gitDir, remote stri
 	var names []string
 	for _, name := range candidates {
 		if walked[tips[name]].ID == "" {
-			warnings = append(warnings, "the account remote's branch skills/"+sanitised(name)+" is not listed, since its history records no fork id")
+			warnings = append(warnings, "the account remote's branch skills/"+sanitised(name)+" is left out, since its history records no fork id")
 			continue
 		}
 		names = append(names, name)
@@ -110,23 +113,26 @@ func installableRow(out *writer, ev installableForkEvent) []cell {
 	return []cell{c("  "+sanitised(ev.Name), heading), c(lineage.KindFork, muted), c(installRemoteRow, infoStyle), upstream}
 }
 
-// fromAccountCommand is the command line that installs the fork called
-// name from the account remote, with flags after it.
-func fromAccountCommand(name string, flags ...string) string {
-	return strings.Join(append([]string{"agentx", "skill", "add", "--from-account", shellWord(name)}, flags...), " ")
+// accountAddCommand is the command line that installs the skill called
+// name from the account remote.
+func accountAddCommand(name string) string {
+	return "agentx skill add --name " + shellWord(name)
 }
 
-// libraryHolds is what the library path of a fork being installed from
+// listRemoteHint is the hint of a refusal to install a name the account
+// remote does not offer.
+const listRemoteHint = "run 'agentx skill list --remote' to see the skills the account remote holds"
+
+// libraryHolds is what the library path of a skill being installed from
 // the account remote holds, as fromAccountPlan decides on it.
 type libraryHolds int
 
 const (
-	holdsNothing    libraryHolds = iota // nothing, or a symlink into the worktrees directory that leads nowhere
-	holdsCopy                           // a managed skill of the fork's upstream, its library directory holding the base version
-	holdsEditedCopy                     // a managed skill of the fork's upstream whose library directory was edited
-	holdsDirectory                      // any other directory: an unmanaged skill, or a managed skill of another upstream
-	holdsLink                           // a symlink that is not a fork's whose worktree is gone
-	holdsFile                           // a file, or anything else that is neither a directory nor a symlink
+	holdsNothing   libraryHolds = iota // nothing, or a symlink into the worktrees directory that leads nowhere
+	holdsCopy                          // a managed skill of the fork's upstream, its library directory holding the base version
+	holdsDirectory                     // any other directory: an unmanaged skill, an edited copy, or a managed skill of another upstream
+	holdsLink                          // a symlink that is not a fork's whose worktree is gone
+	holdsFile                          // a file, or anything else that is neither a directory nor a symlink
 )
 
 // accountAction is what an install from the account remote does at the
@@ -136,75 +142,66 @@ type accountAction int
 const (
 	installFresh     accountAction = iota // lay the fork out and link the library path to it
 	installSupersede                      // as installFresh, the managed copy's directory retired and its files git ignores carried in
-	installKeepLocal                      // move the directory into the worktree, its content then uncommitted edits of the fork
 )
 
-// fromAccountPlan decides, with no I/O, what installing the fork called
+// fromAccountPlan decides, with no I/O, what installing the skill called
 // name from the account remote does with what its library path, libPath,
-// holds, and refuses what it cannot take: a managed copy of the fork's
-// upstream that still holds its base version is superseded, with or
-// without --keep-local; a directory of anything else, an edited copy
-// included, is refused unless --keep-local keeps it as the fork's
-// uncommitted edits; and a symlink or a file is refused either way, since
-// moving one in would make the fork's skill directory a link or no
-// directory at all.
-func fromAccountPlan(name, libPath string, holds libraryHolds, keepLocal bool) (accountAction, *failure) {
-	again := "run '" + fromAccountCommand(name, "--keep-local") + "'"
+// holds, and refuses what it cannot take: a managed copy of the skill's
+// upstream that still holds its base version is superseded; a directory of
+// anything else, an edited copy included, a symlink and a file are refused,
+// since installing would lose what they hold.
+func fromAccountPlan(name, libPath string, holds libraryHolds) (accountAction, *failure) {
 	switch holds {
 	case holdsNothing:
 		return installFresh, nil
 	case holdsCopy:
 		return installSupersede, nil
-	case holdsEditedCopy:
-		if !keepLocal {
-			return 0, refuse(exitRefused, sanitised(name)+" holds edits at "+quotedPath(libPath)+" that installing the fork would lose, so nothing was changed",
-				again+" to make that directory's whole content the fork's uncommitted content, then check it with '"+skillCommand("diff", name)+"' before you commit")
-		}
-		return installKeepLocal, nil
 	case holdsDirectory:
-		if !keepLocal {
-			return 0, refuse(exitRefused, "the library already holds "+quotedPath(libPath)+", so "+sanitised(name)+" was not installed",
-				again+" to make its whole content the fork's uncommitted content, then check it with '"+skillCommand("diff", name)+"' before you commit, or move it aside and run the command again")
-		}
-		return installKeepLocal, nil
+		return 0, refuse(exitRefused, "the library already holds "+quotedPath(libPath)+", so "+sanitised(name)+" was not installed",
+			"move it aside, or run '"+skillCommand("remove", name)+"', then run '"+accountAddCommand(name)+"' again")
 	case holdsLink:
 		return 0, refuse(exitRefused, "the library already holds "+quotedPath(libPath)+", a symlink, so "+sanitised(name)+" was not installed",
-			"remove the link, then run '"+fromAccountCommand(name)+"' again")
+			"remove the link, then run '"+accountAddCommand(name)+"' again")
 	}
 	return 0, refuse(exitRefused, quotedPath(libPath)+" is neither a directory nor a symlink, so "+sanitised(name)+" was not installed",
-		"move it aside, then run '"+fromAccountCommand(name)+"' again")
+		"move it aside, then run '"+accountAddCommand(name)+"' again")
 }
 
-// accountInstall is one fork being installed from the account remote, as
+// accountInstall is one skill being installed from the account remote, as
 // the command found it before the lock and checks again under it.
 type accountInstall struct {
-	site      forkSite            // the fork as it will be: rec is its branch at the remote tip
-	beside    []string            // what the tip holds at its root beside the skill directory
-	there     lineage.ForkLineage // the remote tip's lineage
-	action    accountAction
-	managed   *lineage.Record // the managed skill of the name the fork takes the place of, nil for none
-	libState  string          // what the library path held, as captured before it was judged
-	ignored   []string        // the files git ignores in a superseded copy, carried into the worktree
-	keepLocal bool
-	remote    string // the account remote's git remote, which the fork's branch tracks
+	site     forkSite            // the fork as it will be: rec is its branch at the remote tip
+	beside   []string            // what the tip holds at its root beside the skill directory
+	there    lineage.ForkLineage // the remote tip's lineage
+	action   accountAction
+	managed  *lineage.Record // the managed skill of the name the fork takes the place of, nil for none
+	libState string          // what the library path held, as captured before it was judged
+	ignored  []string        // the files git ignores in a superseded copy, carried into the worktree
+	remote   string          // the account remote's git remote, which the fork's branch tracks
 }
 
-// installFromAccount is skill add --from-account: it fetches the account
-// remote, then installs the fork called name it holds, see accountInstall,
-// in one journaled mutation: the local branch at the remote tip, its
-// worktree, the skill directory laid out from the tip, or the directory at
-// the library path moved in with --keep-local, the library symlink, and
-// the placements of a fork new to this machine. A managed skill the fork
-// takes the place of keeps its placements, which lead to the library path
-// and so to the fork, and its import branch, update candidate and
-// upstream-removed marker are deleted last. The fork's upstream source is
-// added first when the settings lack it, as source add adds one, so that
-// update checks cover the fork here as on the machine that published it.
-// The branch is set to track the account remote's just before the journal
-// is written.
-func (inv *invocation) installFromAccount(ctx context.Context, name string, to []string, asCopy, keepLocal bool) error {
-	if refusal := forkNameRefusal(name); refusal != "" {
-		return fail(exitRefused, refusal, "run 'agentx skill list --remote' to see the forks the account remote holds")
+// addFromAccount is skill add with no source: it fetches the account
+// remote once, then installs the skills of it the selection names, or with
+// --all every one this machine lacks but those --except names, one after
+// the other, each in a journaled mutation of its own, see installOne. A
+// skill that cannot be installed does not cost the others: the run goes
+// on, and answers with what failed, as an install from a source does.
+func (inv *invocation) addFromAccount(ctx context.Context, sel selection, to []string, asCopy, fetch bool) error {
+	switch {
+	case fetch:
+		return fail(exitUsage, "--fetch applies to a source; the account remote is fetched every time", "run the command again without --fetch")
+	case !sel.all && len(sel.names) == 0:
+		return fail(exitUsage, "skill add needs a source, or --name or --all to install from the account remote", listRemoteHint)
+	}
+	var names []string
+	for _, name := range sel.names {
+		if containsString(names, name) {
+			continue
+		}
+		if refusal := forkNameRefusal(name); refusal != "" {
+			return fail(exitRefused, refusal, listRemoteHint)
+		}
+		names = append(names, name)
 	}
 	targets, err := inv.placementTargets(to)
 	if err != nil {
@@ -223,7 +220,99 @@ func (inv *invocation) installFromAccount(ctx context.Context, name string, to [
 	if err := home.SyncExclude(gitDir, inv.systemFilesIgnored()); err != nil {
 		return accountRepoFailure(err)
 	}
-	in, err := inv.judgeAccountInstall(ctx, gitDir, remote, name, keepLocal)
+	if sel.all {
+		if names, err = inv.everyAccountSkillBut(ctx, gitDir, remote, sel.except); err != nil || len(names) == 0 {
+			return err
+		}
+	}
+	run := refusals{verb: "installed", mixed: "run 'agentx skill list --remote' to see what the account remote holds, then install the rest one at a time"}
+	var installed []string
+	for _, name := range names {
+		err := inv.installOne(ctx, gitDir, remote, name, targets, to, asCopy)
+		var f *failure
+		switch {
+		case err == nil:
+			installed = append(installed, sanitised(name))
+			continue
+		case ctx.Err() != nil || !errors.As(err, &f):
+			return err
+		}
+		run.add(name, f)
+		if len(names) > 1 {
+			inv.out.warn(namedReason(name, f.message))
+		}
+	}
+	if len(names) > 1 {
+		inv.summary = "installed " + strconv.Itoa(len(installed)) + " of " + plural(len(names), "skill") + " from the account remote"
+		if len(installed) > 0 {
+			inv.summary += ": " + strings.Join(installed, ", ")
+		}
+	}
+	if f := run.failure(len(names), len(installed)); f != nil {
+		return f
+	}
+	return nil
+}
+
+// everyAccountSkillBut is --all with no source: every skill the account
+// remote holds that this machine lacks, as skill list --remote lists them,
+// less those except names, matched exactly. A branch that cannot be
+// installed is left out with a warning. An --except naming no such skill is
+// refused, exit code 5, even when the account remote holds nothing to
+// install; otherwise such an account remote says so and installs nothing,
+// which is no failure, and an --except that leaves nothing is exit code 1.
+func (inv *invocation) everyAccountSkillBut(ctx context.Context, gitDir, remote string, except []string) ([]string, error) {
+	records, err := inv.listLineage(ctx, gitDir)
+	if err != nil {
+		return nil, accountRepoFailure(err)
+	}
+	installable, warnings, err := inv.installableForks(ctx, gitDir, remote, records)
+	if err != nil {
+		return nil, err
+	}
+	for _, w := range warnings {
+		inv.out.warn(w)
+	}
+	var unknown []string
+	for _, name := range except {
+		if !containsString(unknown, name) && !slices.ContainsFunc(installable, func(ev installableForkEvent) bool { return ev.Name == name }) {
+			unknown = append(unknown, name)
+		}
+	}
+	if len(unknown) > 0 {
+		return nil, fail(exitNotFound, "the account remote holds no skill this machine lacks called "+quoted(unknown), listRemoteHint)
+	}
+	if len(installable) == 0 {
+		inv.out.print("The account remote holds no skill this machine lacks.")
+		inv.summary = "the account remote holds no skill this machine lacks"
+		return nil, nil
+	}
+	var names []string
+	for _, ev := range installable {
+		if !containsString(except, ev.Name) {
+			names = append(names, ev.Name)
+		}
+	}
+	if len(names) == 0 {
+		return nil, fail(exitUsage, "--except left no skill to install", "drop one of the --except names")
+	}
+	return names, nil
+}
+
+// installOne installs the skill called name from the account remote, the
+// git remote called remote, which the run has fetched, see accountInstall,
+// in one journaled mutation: the local branch at the remote tip, its
+// worktree, the skill directory laid out from the tip, the library
+// symlink, and the placements of a skill new to this machine. A managed
+// skill it takes the place of keeps its placements, which lead to the
+// library path and so to the fork, and its import branch, update candidate
+// and upstream-removed marker are deleted last. The skill's upstream source
+// is added first when the settings lack it, as source add adds one, so that
+// update checks cover it here as on the machine that published it. The
+// branch is set to track the account remote's just before the journal is
+// written.
+func (inv *invocation) installOne(ctx context.Context, gitDir, remote, name string, targets []placeTarget, to []string, asCopy bool) error {
+	in, err := inv.judgeAccountInstall(ctx, gitDir, remote, name)
 	if err != nil {
 		return err
 	}
@@ -237,25 +326,16 @@ func (inv *invocation) installFromAccount(ctx context.Context, name string, to [
 	})
 	switch {
 	case errors.Is(err, home.ErrMovedBeforeApply):
-		return fail(exitRefused, sanitised(name)+" changed while it was being installed, so nothing was changed", "run '"+fromAccountCommand(name, installFlags(in)...)+"' again")
+		return fail(exitRefused, sanitised(name)+" changed while it was being installed, so nothing was changed", "run '"+accountAddCommand(name)+"' again")
 	case err != nil:
 		return mutationFailure(err)
 	}
 	return inv.reportAccountInstall(ctx, in, done)
 }
 
-// installFlags is --keep-local when the install was given it, for a hint
-// that runs the command again.
-func installFlags(in *accountInstall) []string {
-	if in.keepLocal {
-		return []string{"--keep-local"}
-	}
-	return nil
-}
-
-// judgeAccountInstall reads what installing the fork called name from the
+// judgeAccountInstall reads what installing the skill called name from the
 // account remote, the git remote called remote, takes, after the fetch and
-// before the lock, and refuses what it cannot do, changing nothing: a fork
+// before the lock, and refuses what it cannot do, changing nothing: a skill
 // the account remote does not hold, and a content to install that holds no
 // SKILL.md, exit code 5; one this machine has a branch of already, a name
 // another branch holds whatever its case, a remote history that records no
@@ -264,33 +344,32 @@ func installFlags(in *accountInstall) []string {
 // the place of whose update merge is pending, exit code 4. Every refusal
 // comes before the fork's upstream source is added, which is a change of
 // its own.
-func (inv *invocation) judgeAccountInstall(ctx context.Context, gitDir, remote, name string, keepLocal bool) (*accountInstall, error) {
+func (inv *invocation) judgeAccountInstall(ctx context.Context, gitDir, remote, name string) (*accountInstall, error) {
 	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
 	if err != nil {
 		return nil, accountRepoFailure(err)
 	}
 	tip := tips[name]
 	if tip == "" {
-		return nil, fail(exitNotFound, "the account remote holds no fork called "+sanitised(name),
-			"run 'agentx skill list --remote' to see the forks it holds")
+		return nil, fail(exitNotFound, "the account remote holds no skill called "+sanitised(name), listRemoteHint)
 	}
 	records, err := inv.listLineage(ctx, gitDir)
 	if err != nil {
 		return nil, accountRepoFailure(err)
 	}
-	in := &accountInstall{keepLocal: keepLocal, remote: remote}
+	in := &accountInstall{remote: remote}
 	if rec, ok := records[name]; ok {
 		if rec.Kind == lineage.KindFork {
 			return nil, inv.installedRefusal(gitDir, rec)
 		}
 		in.managed = &rec
 		// A pending merge comes before what the library holds: until it is
-		// finished or aborted, --keep-local cannot help.
+		// finished or aborted, the library directory is the merge's.
 		if inv.mergePending(name) {
-			return nil, pendingMergeRefusal(name, "replaced by the fork")
+			return nil, pendingMergeRefusal(name, "replaced by the account remote's skill")
 		}
 	}
-	if err := inv.checkForkName(ctx, records, name, name, "remove it first, then run '"+fromAccountCommand(name)+"' again"); err != nil {
+	if err := inv.checkForkName(ctx, records, name, name, "remove it first, then run '"+accountAddCommand(name)+"' again"); err != nil {
 		return nil, err
 	}
 	walked, err := lineage.Walk(ctx, inv.git, gitDir, []string{tip})
@@ -302,8 +381,8 @@ func (inv *invocation) judgeAccountInstall(ctx context.Context, gitDir, remote, 
 		// The account step and a publish refuse a fork whose two histories
 		// do not both record its id, so a fork installed from this branch
 		// could never sync.
-		return nil, fail(exitRefused, "the history of the account remote's skills/"+sanitised(name)+" records no fork id, so nothing tells that it is a fork and "+sanitised(name)+" cannot be installed",
-			"publish it from a fork agentx made, one 'agentx skill new' or 'agentx skill fork' creates, on the machine that holds it")
+		return nil, fail(exitRefused, "the history of the account remote's skills/"+sanitised(name)+" records no fork id, so nothing tells which skill it is and "+sanitised(name)+" cannot be installed",
+			"publish it from a skill agentx made, one 'agentx skill new' or 'agentx skill fork' creates, on the machine that holds it")
 	}
 	rec := lineage.Record{Name: name, Kind: lineage.KindFork, Ref: lineage.ForkRef(name), Commit: tip, Fork: &in.there}
 	f := inv.forkPlace(gitDir, rec)
@@ -314,7 +393,7 @@ func (inv *invocation) judgeAccountInstall(ctx context.Context, gitDir, remote, 
 	in.site = f
 	if lexists(f.root) {
 		return nil, fail(exitRefused, quotedPath(f.root)+" already exists, so "+sanitised(name)+" was not installed",
-			"move it aside, then run '"+fromAccountCommand(name, installFlags(in)...)+"' again")
+			"move it aside, then run '"+accountAddCommand(name)+"' again")
 	}
 	if in.beside, err = inv.besideSkillDir(ctx, gitDir, tip, f.dir); err != nil {
 		return nil, err
@@ -325,24 +404,17 @@ func (inv *invocation) judgeAccountInstall(ctx context.Context, gitDir, remote, 
 	}
 	if in.managed != nil && holds == holdsNothing {
 		return nil, fail(exitRefused, sanitised(name)+" is managed on this machine, and the library no longer holds it",
-			"run '"+skillCommand("remove", name)+"' to stop managing it, then run '"+fromAccountCommand(name)+"' again")
+			"run '"+skillCommand("remove", name)+"' to stop managing it, then run '"+accountAddCommand(name)+"' again")
 	}
-	action, f2 := fromAccountPlan(name, f.libPath, holds, keepLocal)
+	action, f2 := fromAccountPlan(name, f.libPath, holds)
 	if f2 != nil {
 		return nil, f2
 	}
 	in.action = action
-	if action == installKeepLocal {
-		if err := inv.movableLibrary(in); err != nil {
-			return nil, err
-		}
-		if !holdsSkillFile(f.libPath) {
-			return nil, noAccountSkill(f, in)
-		}
-	} else if ok, err := inv.tipHoldsSkill(ctx, gitDir, tip, f.dir); err != nil {
+	if ok, err := inv.tipHoldsSkill(ctx, gitDir, tip, f.dir); err != nil {
 		return nil, err
 	} else if !ok {
-		return nil, noAccountSkill(f, in)
+		return nil, noAccountSkill(f)
 	}
 	return in, nil
 }
@@ -388,8 +460,8 @@ func (inv *invocation) tipDir(ctx context.Context, gitDir string, rec lineage.Re
 		}
 	}
 	if len(dirs) != 1 {
-		return "", fail(exitAccountRepo, fmt.Sprintf("the account remote's branch %s holds %d directories at its root, not the one skill directory a fork's branch holds", strings.TrimPrefix(rec.Ref, "refs/heads/"), len(dirs)),
-			"fix the branch on the account remote, then run '"+fromAccountCommand(rec.Name)+"' again")
+		return "", fail(exitAccountRepo, fmt.Sprintf("the account remote's branch %s holds %d directories at its root, not the one skill directory a skill's branch holds", strings.TrimPrefix(rec.Ref, "refs/heads/"), len(dirs)),
+			"fix the branch on the account remote, then run '"+accountAddCommand(rec.Name)+"' again")
 	}
 	return dirs[0], nil
 }
@@ -399,7 +471,7 @@ func (inv *invocation) tipDir(ctx context.Context, gitDir string, rec lineage.Re
 // the fork's upstream, the same source and subpath its base version
 // records, is judged against its own base version under Git's ignore
 // rules, as drift judges it, and the files git ignores in it are kept for
-// the worktree.
+// the worktree; one with edits is a directory like any other.
 func (inv *invocation) judgeAccountLibrary(ctx context.Context, gitDir string, in *accountInstall) (libraryHolds, error) {
 	libPath := in.site.libPath
 	state, err := home.State(libPath)
@@ -431,7 +503,7 @@ func (inv *invocation) judgeAccountLibrary(ctx context.Context, gitDir string, i
 		return 0, accountRepoFailure(err)
 	}
 	if !j.holds {
-		return holdsEditedCopy, nil
+		return holdsDirectory, nil
 	}
 	in.ignored = j.ignored
 	return holdsCopy, nil
@@ -442,28 +514,6 @@ func (inv *invocation) judgeAccountLibrary(ctx context.Context, gitDir string, i
 // same subpath, whatever version of it each holds.
 func sameUpstream(imp lineage.Import, there lineage.ForkLineage) bool {
 	return there.Base != "" && there.Problem == "" && imp.Source == there.Import.Source && imp.Path == there.Import.Path
-}
-
-// movableLibrary refuses a library directory --keep-local cannot move into
-// the fork's worktree by a rename: one that is itself a Git repository,
-// which git run in the fork would find instead of the fork's branch, and
-// one on another file system than agentx home.
-func (inv *invocation) movableLibrary(in *accountInstall) error {
-	f := in.site
-	again := "then run '" + fromAccountCommand(f.name, "--keep-local") + "' again"
-	if own := filepath.Join(f.libPath, ".git"); lexists(own) {
-		return fail(exitRefused, quotedPath(f.libPath)+" is itself a Git repository, at "+quotedPath(own)+", which git would take for the fork",
-			"move its .git out of the directory, "+again)
-	}
-	same, err := home.SameDevice(filepath.Dir(f.libPath), existingAncestor(inv.worktreesDir()))
-	if err != nil {
-		return libraryFailure(inv.dirs.Library, err)
-	}
-	if !same {
-		return fail(exitRefused, "the library and agentx home are on different file systems, so "+quotedPath(f.libPath)+" cannot be moved into "+sanitised(f.name)+"'s worktree",
-			"keep AGENTX_HOME and AGENTX_LIBRARY on one file system, or move "+quotedPath(f.libPath)+" aside, "+again)
-	}
-	return nil
 }
 
 // addForkSource adds the upstream source of the fork whose remote lineage
@@ -502,7 +552,7 @@ func (inv *invocation) addForkSource(ctx context.Context, name string, there lin
 // library path.
 func (inv *invocation) applyAccountInstall(ctx context.Context, in *accountInstall, targets []placeTarget, asCopy bool, done *placements) error {
 	f := in.site
-	again := "run '" + fromAccountCommand(f.name, installFlags(in)...) + "' again"
+	again := "run '" + accountAddCommand(f.name) + "' again"
 	records, err := inv.listLineage(ctx, f.gitDir)
 	if err != nil {
 		return accountRepoFailure(err)
@@ -515,12 +565,12 @@ func (inv *invocation) applyAccountInstall(ctx context.Context, in *accountInsta
 	case held && rec.Kind == lineage.KindFork:
 		return fail(exitRefused, sanitised(f.name)+" was installed by another command meanwhile, so nothing was changed", "run '"+skillCommand("update", f.name)+"' to take in what the account remote holds of it")
 	case held != (in.managed != nil), held && rec.Commit != in.managed.Commit:
-		return fail(exitRefused, sanitised(f.name)+"'s import branch changed while the fork was being installed, so nothing was changed", again)
+		return fail(exitRefused, sanitised(f.name)+"'s import branch changed while it was being installed, so nothing was changed", again)
 	}
 	if in.managed != nil {
 		in.managed = &rec // its candidate and marker as they are now
 		if inv.mergePending(f.name) {
-			return pendingMergeRefusal(f.name, "replaced by the fork")
+			return pendingMergeRefusal(f.name, "replaced by the account remote's skill")
 		}
 	}
 	if lexists(f.root) {
@@ -553,34 +603,27 @@ func (inv *invocation) applyAccountInstall(ctx context.Context, in *accountInsta
 	m := home.NewMutation(inv.dirs.Home)
 	m.Ref(f.gitDir, f.rec.Ref, "", f.rec.Commit)
 	m.Worktree(f.gitDir, f.root, f.branch, in.beside...)
-	from := f.libPath // where the fork's content is before the journal is applied
-	if in.action == installKeepLocal {
-		fp, _ := home.DirFingerprint(in.libState)
-		m.Move(f.libPath, f.skillDir, fp)
-	} else {
-		// The content is staged beside the worktree, in the worktrees
-		// directory, never inside it, where git would see it as a file of
-		// the branch.
-		staged := m.Sibling(f.root, "staged")
-		carried := ""
-		if in.action == installSupersede {
-			carried = f.libPath
-		}
-		fp, err := inv.stageForkContent(ctx, f.gitDir, f.rec.Commit, f.dir, staged, carried, in.ignored)
-		if err != nil {
-			_ = home.RemoveTree(staged)
-			return accountRepoFailure(err)
-		}
-		m.Publish(f.skillDir, staged, fp)
-		if !home.IsAbsent(in.libState) {
-			m.Remove(f.libPath, in.libState) // the superseded copy, retained until the journal completes, or a link that led nowhere
-		}
-		from = staged
+	// The content is staged beside the worktree, in the worktrees
+	// directory, never inside it, where git would see it as a file of the
+	// branch.
+	staged := m.Sibling(f.root, "staged")
+	carried := ""
+	if in.action == installSupersede {
+		carried = f.libPath
+	}
+	fp, err := inv.stageForkContent(ctx, f.gitDir, f.rec.Commit, f.dir, staged, carried, in.ignored)
+	if err != nil {
+		_ = home.RemoveTree(staged)
+		return accountRepoFailure(err)
+	}
+	m.Publish(f.skillDir, staged, fp)
+	if !home.IsAbsent(in.libState) {
+		m.Remove(f.libPath, in.libState) // the superseded copy, retained until the journal completes, or a link that led nowhere
 	}
 	m.Link(f.libPath, link)
-	if !holdsSkillFile(from) { // judged before the lock, and read again for a directory changed since
+	if !holdsSkillFile(staged) { // judged before the lock, and read again from what was staged
 		m.Discard()
-		return noAccountSkill(f, in)
+		return noAccountSkill(f)
 	}
 	if place {
 		edit, err := inv.beginSettings()
@@ -589,7 +632,7 @@ func (inv *invocation) applyAccountInstall(ctx context.Context, in *accountInsta
 			return err
 		}
 		*done = placements{}
-		p := dirPlaceable(f.name, from)
+		p := dirPlaceable(f.name, staged)
 		for _, t := range targets {
 			inv.stagePlacement(m, p, t, f.libPath, asCopy, edit.copiesOf(f.name), done)
 		}
@@ -622,22 +665,17 @@ func (inv *invocation) applyAccountInstall(ctx context.Context, in *accountInsta
 	return m.Apply(inv.refs(ctx))
 }
 
-// noAccountSkill refuses to install the fork f when what it would be
-// installed from, the remote tip's skill directory or with --keep-local
-// the library directory, holds no SKILL.md: no listing would show it as a
-// skill. Nothing is changed.
-func noAccountSkill(f forkSite, in *accountInstall) error {
-	if in.action == installKeepLocal {
-		return fail(exitNotFound, quotedPath(f.libPath)+" holds no SKILL.md, so "+sanitised(f.name)+" was not installed and nothing was changed",
-			"add a SKILL.md to "+quotedPath(f.libPath)+", then run '"+fromAccountCommand(f.name, "--keep-local")+"' again")
-	}
+// noAccountSkill refuses to install the skill f when what it would be
+// installed from, the remote tip's skill directory, holds no SKILL.md: no
+// listing would show it as a skill. Nothing is changed.
+func noAccountSkill(f forkSite) error {
 	return fail(exitNotFound, "the account remote's branch "+sanitised(f.branch)+" holds no SKILL.md in "+sanitised(f.dir)+", so there is no skill to install and nothing was changed",
-		"commit a SKILL.md to "+sanitised(f.dir)+" on the machine that published "+sanitised(f.name)+" and publish it, then run '"+fromAccountCommand(f.name)+"' again")
+		"commit a SKILL.md to "+sanitised(f.dir)+" on the machine that published "+sanitised(f.name)+" and publish it, then run '"+accountAddCommand(f.name)+"' again")
 }
 
 // reportAccountInstall reads the machine again and reports the installed
-// fork: its library_skill event, a confirmation that says what became of
-// what the library path held, and for a fork new to this machine one row
+// skill: its library_skill event, a confirmation that says what became of
+// a managed skill it replaced, and for a skill new to this machine one row
 // per configuration it was placed in.
 func (inv *invocation) reportAccountInstall(ctx context.Context, in *accountInstall, done placements) error {
 	f := in.site
@@ -662,14 +700,8 @@ func (inv *invocation) reportAccountInstall(ctx context.Context, in *accountInst
 	out, name := inv.out, sanitised(f.name)
 	line := "installed " + out.paint(heading, name) + " from the account remote at " + short(f.rec.Commit)
 	inv.summary = "installed " + name + " from the account remote"
-	var kept string
-	switch {
-	case in.action == installKeepLocal:
-		kept = quotedPath(f.libPath) + " was moved into its worktree, and its content replaces the fork's as uncommitted edits; check them with '" + skillCommand("diff", f.name) + "' before you commit"
-	case in.managed != nil:
-		kept = "the fork replaces the managed skill wherever it was"
-	}
 	if in.managed != nil {
+		const kept = "it replaces the managed skill wherever it was"
 		out.done(line + "; " + kept)
 		inv.summary += "; " + kept
 		return nil
@@ -680,10 +712,6 @@ func (inv *invocation) reportAccountInstall(ctx context.Context, in *accountInst
 	if n := len(done.skipped); n > 0 {
 		line += ", " + out.paint(warnStyle, plural(n, "placement")+" skipped")
 		inv.summary += ", " + plural(n, "placement") + " skipped"
-	}
-	if kept != "" {
-		line += "; " + kept
-		inv.summary += "; " + kept
 	}
 	out.done(line)
 	inv.printPlacementRows(f.name, rows)

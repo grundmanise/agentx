@@ -86,7 +86,7 @@ func TestForkSourceRefusal(t *testing.T) {
 			case tc.says != "" && (f == nil || f.status != exitRefused || !strings.Contains(f.message, tc.says)):
 				t.Errorf("forkSourceRefusal = %v, want exit 6 saying %q", f, tc.says)
 			case tc.says != "":
-				contains(t, "hint", f.hint, "'agentx skill add --from-account <name>'")
+				contains(t, "hint", f.hint, "'agentx skill add --name <name>'")
 			}
 		})
 	}

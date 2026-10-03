@@ -13,13 +13,14 @@ func newSkillListCommand(inv *invocation) *cobra.Command {
 		Use:   "list",
 		Short: "List the skills in the library with their upstream and placements",
 		Long: "List the skills in the library with their upstream and placements. With --remote,\n" +
-			"fetch the account remote first and list after them the forks it holds that this\n" +
+			"fetch the account remote first and list after them the skills it holds that this\n" +
 			"machine has not installed, each with the upstream its history records; install\n" +
-			"one with 'agentx skill add --from-account <name>'.",
+			"one with 'agentx skill add --name <name>', or all of them with\n" +
+			"'agentx skill add --all'.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error { return inv.skillList(cmd.Context(), remote) },
 	}
-	cmd.Flags().BoolVar(&remote, "remote", false, "fetch the account remote and list the forks it holds that this machine has not installed")
+	cmd.Flags().BoolVar(&remote, "remote", false, "fetch the account remote and list the skills it holds that this machine has not installed")
 	return cmd
 }
 
@@ -94,23 +95,23 @@ func (inv *invocation) skillList(ctx context.Context, remote bool) error {
 	return nil
 }
 
-// printInstallable reports the forks the account remote holds that this
+// printInstallable reports the skills the account remote holds that this
 // machine has not installed: one installable_fork event each, and a table
-// of them after the library's, with the command that installs one.
+// of them after the library's, with the commands that install them.
 func (inv *invocation) printInstallable(installable []installableForkEvent) {
 	out := inv.out
 	if len(installable) == 0 {
-		out.print("The account remote holds no fork this machine has not installed.")
+		out.print("The account remote holds no skill this machine has not installed.")
 		return
 	}
-	out.print(out.paint(heading, plural(len(installable), "installable fork")+" on the account remote"))
+	out.print(out.paint(heading, plural(len(installable), "installable skill")+" on the account remote"))
 	t := &table{}
 	for _, ev := range installable {
 		out.emit(ev)
 		t.add(installableRow(out, ev)...)
 	}
 	out.render(t, "")
-	out.print("Install one with ", out.paint(label, "agentx skill add --from-account <name>"), ".")
+	out.print("Install one with ", out.paint(label, "agentx skill add --name <name>"), ", or all of them with ", out.paint(label, "agentx skill add --all"), ".")
 }
 
 // row is one line of the human listing: the name, what agentx knows it as,

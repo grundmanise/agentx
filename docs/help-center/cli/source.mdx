@@ -234,7 +234,7 @@ Removing your [account remote](#add-your-account-remote) detaches it: its forks 
 - `1`: the URL is not one of the accepted forms, the pin and the tree URL name different refs, the account remote's URL carries a token, a ref or a path, or `source fetch` was given neither a source nor `--all`.
 - `3`: the source cannot be reached, is not a git repository, or needs credentials git does not have. The hint names the fix. From `source fetch` over several sources, it also means they failed for different reasons; read the warnings.
 - `5`: the pinned ref or the path does not exist in the source, the source is not on this machine, or what this machine holds of it is incomplete. For an id of a source you removed, the hint names the `agentx source add` command that brings it back.
-- `6`: the URL names the repository of your account remote: list its forks with `agentx skill list --remote` and install one with `agentx skill add --from-account <name>`. Also: `--account` for the URL of a source you added without it, or of one that names the same repository by another URL.
+- `6`: the URL names the repository of your account remote: list its skills with `agentx skill list --remote` and install one with `agentx skill add --name <name>`, see [Install your skills on another machine](/cli/skill#install-your-skills-on-another-machine). Also: `--account` for the URL of a source you added without it, or of one that names the same repository by another URL.
 - `7`: another agentx command is running. Retry when it finishes. An add that could not take its own half-done work back says what it left and how to clear it.
 - `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.
 

@@ -112,13 +112,13 @@ func forkSourceRefusal(s home.Settings, src home.Source, resolve func(host strin
 // account remote fork, as a shared source, exit 6. The account remote holds
 // one branch per fork, and fetching it as a shared source as well would
 // bring its objects in without their blobs, which a fork's history then
-// lacks. Its forks are listed with skill list --remote and installed with
-// skill add --from-account, so the hint names both.
+// lacks. Its skills are listed with skill list --remote and installed with
+// skill add --name, so the hint names both.
 func forkSourceIs(url string, fork home.Source) *failure {
 	what := url + " names the repository of the account remote " + fork.URL
 	if fork.URL == url {
 		what = url + " is the account remote"
 	}
-	return refuse(exitRefused, what+": it holds one branch per fork rather than skills on one branch",
-		"run 'agentx skill list --remote' to see its forks, then 'agentx skill add --from-account <name>' to install one")
+	return refuse(exitRefused, what+": it holds one branch per skill rather than skills on one branch",
+		"run 'agentx skill list --remote' to see its skills, then 'agentx skill add --name <name>' to install one")
 }

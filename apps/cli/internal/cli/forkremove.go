@@ -366,7 +366,7 @@ func (inv *invocation) applyForkRemoval(ctx context.Context, r *forkRemoval) (re
 		// Still under the lock, so that no worktree another command makes
 		// at root meanwhile goes with it. What is left of the registration
 		// goes with the next mutation, see pruneMerges; the tracking
-		// configuration skill add --from-account wrote goes here alone.
+		// configuration skill add wrote goes here alone.
 		back()
 		if err := inv.git.RemoveCheckout(ctx, r.gitDir, root); err != nil {
 			inv.out.debugf("%s: %v", r.name, err)

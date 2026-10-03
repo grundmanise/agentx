@@ -110,10 +110,6 @@ _Avoid_: base commit, snapshot commit, root
 The branch `managed/<name>` in the account repo that points at a managed skill's current import commit. Never checked out; the library holds the real directory. When the skill is forked in its place, the fork's branch starts from its import commit and the import branch is deleted, so the import commit becomes the fork's base.
 _Avoid_: managed branch, shadow branch, cache branch
 
-**Adopt into fork**:
-Installing a published fork with `skill add --from-account <name> --keep-local` over a directory that already exists in the library under that name, keeping the directory's content as pending changes on the fork. A managed copy of the fork's upstream that still holds its base version needs no adoption: the fork supersedes it.
-_Avoid_: overwrite, take over
-
 **Adopt candidate**:
 Something of the user's where a fork placed on this machine belongs: a directory at the fork's worktree that Git does not register, or a directory or a symlink of the user's at its library entry. Reported and left as it is; `skill place --force` adopts it, every file kept as an uncommitted edit of the fork.
 _Avoid_: orphan, stray directory
@@ -126,9 +122,9 @@ _Avoid_: cloud, server, origin, fork source
 An explicit user action, `agentx skill publish`, that pushes one fork's or greenfield skill's branch from the account repo to the account remote, after taking in, as an update's account step does, what another machine published there first. Another machine with the same remote installs it from there, and takes later versions in with an update, a plain Git merge. Commits are explicit, made by the user with agentx or with git, and publishing pushes commits only.
 _Avoid_: sync, share, upload
 
-**Installable fork**:
-A fork the account remote holds that this machine's account repo has no branch of, as the last fetch of the remote found it. Listed by `skill list --remote` and installed with `skill add --from-account`, which creates the local branch at the remote's commit: the same fork, with its fork id and its history.
-_Avoid_: remote skill, available fork
+**Installable skill**:
+One of the user's own skills that the account remote holds and this machine's account repo has no branch of, as the last fetch of the remote found it. Listed by `skill list --remote` and installed by `skill add` with no source, `--name <name>` or `--all`, which creates the local branch at the remote's commit: the same skill, with its fork id and its history. A managed copy of its upstream that still holds its base version gives way to it; any other directory of that name in the library is refused.
+_Avoid_: remote skill, available fork, installable fork
 
 **Update check**:
 Fetching the sources the managed skills and forks came from and comparing each skill's base version with what its source holds now, by tree id; a fork's base version is the import commit its history names, whatever its own commits changed. It records what it found and never applies anything: a newer version becomes the skill's update candidate. Run by hand with `agentx skill check-updates`, and by the desktop app on launch and on a timer, where the same pass also fetches every other added source, so that browsing and search see what the sources hold now. With an account remote set, it also fetches the account remote and lists the user's own skills placed here that another machine published to.

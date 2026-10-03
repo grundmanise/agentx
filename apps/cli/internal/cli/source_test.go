@@ -755,9 +755,9 @@ func TestSourceAddRefusesBeforeWriting(t *testing.T) {
 		hint    string
 	}{
 		{"the account remote's repository", []string{"source", "add", "ssh://git@example.invalid/me/forks.git#main"}, 6,
-			"ssh://git@example.invalid/me/forks names the repository of the account remote " + forks + ": it holds one branch per fork", "agentx skill add --from-account <name>"},
+			"ssh://git@example.invalid/me/forks names the repository of the account remote " + forks + ": it holds one branch per skill", "agentx skill add --name <name>"},
 		{"a listing of the account remote", []string{"source", "skills", source.ID(forks)}, 6, forks + " is the account remote", "agentx skill list --remote"},
-		{"an install from the account remote", []string{"skill", "add", forks + "#skills/notes"}, 6, forks + " is the account remote", "agentx skill add --from-account <name>"},
+		{"an install from the account remote", []string{"skill", "add", forks + "#skills/notes"}, 6, forks + " is the account remote", "agentx skill add --name <name>"},
 		{"an account remote with a token", []string{"source", "add", "https://me:s3cret@example.invalid/me/other", "--account"}, 1, "the URL carries a password or a token", "credential helper"},
 		{"an account remote with a ref", []string{"source", "add", "https://example.invalid/me/other#main", "--account"}, 1, "names a folder or a ref, and the account remote is a whole repository", "the repository alone"},
 		{"the account remote again with a ref", []string{"source", "add", forks + "#skills/notes"}, 1, "names a folder or a ref", "the repository alone"},

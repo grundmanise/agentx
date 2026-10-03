@@ -83,8 +83,8 @@ func accountHomes(t *testing.T) (a, b *harness, s *sourceRepo, remote string) {
 func twoHomes(t *testing.T) (a, b *harness, s *sourceRepo, remote string) {
 	t.Helper()
 	a, b, s, remote = accountHomes(t)
-	b.mustRun("skill", "add", "--from-account", "alpha")
-	b.mustRun("skill", "add", "--from-account", "beta")
+	b.mustRun("skill", "add", "--name", "alpha")
+	b.mustRun("skill", "add", "--name", "beta")
 	return a, b, s, remote
 }
 
@@ -373,7 +373,7 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	out = a.mustRun("skill", "update", "notes")
 	contains(t, "the update of a skill never published", out.stdout, "notes has no branch on the account remote")
 	a.mustRun("skill", "publish", "notes")
-	b.mustRun("skill", "add", "--from-account", "notes")
+	b.mustRun("skill", "add", "--name", "notes")
 	local := b.ref(lineage.ForkRef("notes"))
 	published = a.commitFork("notes", forkNotes("one", "one, a"))
 	a.mustRun("skill", "publish", "notes")

@@ -45,7 +45,7 @@ func scenarioHomes(t *testing.T, names ...string) (a, b *harness, s *sourceRepo,
 	t.Helper()
 	a, b, s, remote = scenarioMachines(t)
 	for _, name := range names {
-		b.mustRun("skill", "add", "--from-account", name)
+		b.mustRun("skill", "add", "--name", name)
 	}
 	return a, b, s, remote
 }
@@ -592,7 +592,7 @@ func TestScenarioEdgeCases(t *testing.T) {
 	a, b, s, _ := scenarioMachines(t)
 	b.mustRun("source", "add", "https://GitHub.com/fixtures/forked.git/")
 	for _, name := range []string{"alpha", "beta"} {
-		out := b.mustRun("--json", "skill", "add", "--from-account", name)
+		out := b.mustRun("--json", "skill", "add", "--name", name)
 		if sources := b.eventsOfType(out.stdout, "source"); len(sources) != 0 {
 			t.Errorf("installing %s added a source: %v", name, sources)
 		}

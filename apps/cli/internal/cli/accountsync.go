@@ -303,8 +303,8 @@ func (inv *invocation) remoteSelection(ctx context.Context, remote, name string,
 	_, held := librarySkill(inv.dirs.Library, name)
 	if !ok && !held {
 		if inv.remoteHolds(ctx, remote, name) {
-			return nil, fail(exitNotFound, sanitised(name)+" is a fork of the account remote that this machine has not installed, so there is nothing of it here to publish",
-				"install it with '"+fromAccountCommand(name)+"'")
+			return nil, fail(exitNotFound, sanitised(name)+" is a skill of the account remote that this machine has not installed, so there is nothing of it here to publish",
+				"install it with '"+accountAddCommand(name)+"'")
 		}
 		return nil, inv.noLibrarySkill(name)
 	}
@@ -313,20 +313,21 @@ func (inv *invocation) remoteSelection(ctx context.Context, remote, name string,
 		what = " is managed, not a fork"
 	}
 	refusal := sanitised(name) + what + ", so it is never published: only forks travel through the account remote"
-	// A fork the account remote holds of the name takes the place of what
+	// A skill the account remote holds of the name takes the place of what
 	// is here; a fork of it made here would be another fork of the name,
-	// which a publish refuses. A symlink at the library path is never
-	// moved into the fork, so it has to go first.
+	// which a publish refuses. An install supersedes only a managed copy of
+	// the skill's upstream, so a symlink or a directory of anything else at
+	// the library path has to go first.
 	if inv.remoteHolds(ctx, remote, name) {
 		libPath := inv.libraryPath(name)
+		install := "install the account remote's skill in its place with '" + accountAddCommand(name) + "'"
 		if state, err := home.State(libPath); err == nil && home.IsLink(state) {
-			return nil, fail(exitRefused, refusal, "remove the link "+quotedPath(libPath)+", then install the account remote's fork in its place with '"+fromAccountCommand(name)+"'")
+			return nil, fail(exitRefused, refusal, "remove the link "+quotedPath(libPath)+", then "+install)
 		}
-		var flags []string
 		if !ok && isDir(libPath) {
-			flags = []string{"--keep-local"}
+			return nil, fail(exitRefused, refusal, "move "+quotedPath(libPath)+" aside, then "+install)
 		}
-		return nil, fail(exitRefused, refusal, "install the account remote's fork in its place with '"+fromAccountCommand(name, flags...)+"'")
+		return nil, fail(exitRefused, refusal, install+"; if the library copy holds edits, move it aside or run '"+skillCommand("remove", name)+"' first")
 	}
 	return nil, fail(exitRefused, refusal, "fork it first with '"+skillCommand("fork", name)+"'")
 }
