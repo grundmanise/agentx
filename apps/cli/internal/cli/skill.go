@@ -80,6 +80,11 @@ const driftUpstreamRemoved = "upstream removed"
 // candidate rather than in drift.
 const updateAvailable = "update available"
 
+// publishedElsewhere is what skill check-updates says of one of the user's
+// own skills whose branch on the account remote holds commits another
+// machine published, which this machine's branch lacks.
+const publishedElsewhere = "published from another machine"
+
 // mergePending is what the skill list row says of a managed skill an update
 // left a pending merge for. Like an update available it is no drift: the
 // library directory is as it was, and the event carries it as

@@ -217,14 +217,14 @@ func newServeCommand(inv *invocation) *cobra.Command {
 }
 
 // serveCheck is one tick of the serve child's timer, run off its loop: the
-// update check skill check-updates runs, over every source of the settings
-// rather than only the sources a managed skill came from, so that one pass
-// fetches each source once, whether or not a skill was installed from it,
-// and the source index follows what they hold now. It waits for the lock
-// rather than giving up on it, since it runs in the background and a
-// command holding the lock for a moment is no reason to drop what it
-// fetched. It reports nothing as it goes and never ends serve: the report
-// it returns is made on the loop's goroutine and carries one
+// update check skill check-updates runs, the account remote included, over
+// every source of the settings rather than only the sources a managed skill
+// came from, so that one pass fetches each source once, whether or not a
+// skill was installed from it, and the source index follows what they hold
+// now. It waits for the lock rather than giving up on it, since it runs in
+// the background and a command holding the lock for a moment is no reason to
+// drop what it fetched. It reports nothing as it goes and never ends serve:
+// the report it returns is made on the loop's goroutine and carries one
 // update_available per update, with this process's instance id, and the
 // warnings of what the check could not check, a source it could not fetch
 // once per cause (see sourceFailures). A machine with no source runs no git
@@ -247,8 +247,9 @@ func (inv *invocation) serveCheck(ctx context.Context, failing sourceFailures) f
 		for _, ev := range rep.updates {
 			ev.InstanceID = inv.instanceID()
 			inv.out.emit(ev)
+			from, to := ev.versions()
 			inv.out.print(inv.out.paint(heading, "update "+sanitised(ev.Name)), ": ",
-				short(ev.UpstreamCommit), " -> ", short(ev.CandidateUpstreamCommit), ", ", plural(len(ev.Files), "file"))
+				short(from), " -> ", short(to), ", ", plural(len(ev.Files), "file"))
 		}
 	}
 }

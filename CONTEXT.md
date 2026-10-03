@@ -135,7 +135,7 @@ A fork the account remote holds that this machine's account repo has no branch o
 _Avoid_: remote skill, available fork
 
 **Update check**:
-Fetching the sources the managed skills and forks came from and comparing each skill's base version with what its source holds now, by tree id; a fork's base version is the import commit its history names, whatever its own commits changed. It records what it found and never applies anything: a newer version becomes the skill's update candidate. Run by hand with `agentx skill check-updates`, and by the desktop app on launch and on a timer, where the same pass also fetches every other added source, so that browsing and search see what the sources hold now.
+Fetching the sources the managed skills and forks came from and comparing each skill's base version with what its source holds now, by tree id; a fork's base version is the import commit its history names, whatever its own commits changed. It records what it found and never applies anything: a newer version becomes the skill's update candidate. Run by hand with `agentx skill check-updates`, and by the desktop app on launch and on a timer, where the same pass also fetches every other added source, so that browsing and search see what the sources hold now. With an account remote set, it also fetches the account remote and lists the user's own skills placed here that another machine published to.
 _Avoid_: sync, poll
 
 **Update candidate**:

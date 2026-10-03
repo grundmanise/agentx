@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -311,7 +312,10 @@ func TestPublishMergesFirstAndNamesUncommittedForks(t *testing.T) {
 // names the way out, a rename, and the remote keeps the first machine's
 // branch; so is the second's removal of it with --remote, which would
 // delete the first's. The publish still names the uncommitted edits the
-// second machine's fork holds, which its refusal does not.
+// second machine's fork holds, which its refusal does not. Before the
+// second machine exists, the first's check-updates, with no shared source,
+// checks its own skill against the account remote and counts it as one
+// source.
 func TestPublishRefusesADifferentFork(t *testing.T) {
 	t.Parallel()
 	a, _, _, _ := forkHarness(t)
@@ -320,6 +324,8 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 	out := a.mustRun("--json", "skill", "publish", "notes")
 	equal(t, "outcome", a.one(out.stdout, "publish")["outcome"], publishPushed)
 	equal(t, "summary", a.one(out.stdout, "result")["summary"], "published notes")
+	out = a.mustRun("--json", "skill", "check-updates")
+	equal(t, "the check of a machine with only its own skills", a.one(out.stdout, "result")["summary"], "checked 1 skill from 1 source: no update available")
 
 	b, _, _, _ := forkHarness(t)
 	b.setAccount(remote)
@@ -410,15 +416,19 @@ func sourceEntryOf(t *testing.T, h *harness, url string) map[string]any {
 // version back over the newer one, and alpha is left as a published it
 // while beta, which the remote has nothing new for, takes its own update.
 //
-// A skill a made with skill new, which has no upstream, takes in what a
-// published of it through b's update of every skill alone, with no check
-// and no pull first; updated again, it is up to date with the account
-// remote, exit 0. Once both machines changed its line, b's update leaves
-// the merge pending, exit 4, and, resolved in its checkout, the next update
-// completes it; with that merge and beta's not yet published, the update
-// of every skill has nothing to do and says nothing else. Last, with the
-// account remote out of reach, the update of beta only warns, while that of
-// the skill with no upstream fails, exit 3, alone or with every skill.
+// A skill a made with skill new, which has no upstream, is what a
+// publishes next. b's check names it published from another machine, with
+// the file a changed; b's update of every skill alone then takes it in,
+// with no pull first; updated again, it is up to date with the account
+// remote, exit 0. Once both machines changed its line, and b added a file
+// of its own, b's check lists only what a changed since the commit both
+// share, and b's update leaves the merge pending, exit 4; resolved in its
+// checkout, the next update completes it. With that merge and beta's not
+// yet published, the update of every skill has nothing to do and says
+// nothing else. Last, with the account remote out of reach, the update of
+// beta only warns, while that of the skill with no upstream fails, exit 3,
+// alone or with every skill, and so does the check, as for a source it
+// cannot reach, naming the account remote.
 func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	t.Parallel()
 	a, b, s, remote := twoHomes(t)
@@ -427,10 +437,12 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	mine := b.commitFork("alpha", forkNotes("three", "three, b"))
 	s.write("skills/alpha/notes.md", forkNotes("seven", "seven, upstream"))
 	second := s.commit("second version")
-	b.mustRun("skill", "check-updates")
+	out := b.mustRun("skill", "check-updates")
+	contains(t, "the check's line for what a published", out.stdout, "alpha  published from another machine")
+	contains(t, "its hint, with an upstream update listed too", out.stdout, "agentx skill diff <name> --update")
 	candidate := b.ref(lineage.CandidateRef("alpha"))
 
-	out := b.mustRun("--json", "skill", "update", "alpha")
+	out = b.mustRun("--json", "skill", "update", "alpha")
 	equal(t, "pull outcome", b.one(out.stdout, "pull")["outcome"], pullMerged)
 	tip := b.ref(lineage.ForkRef("alpha"))
 	account := b.accountGit("rev-parse", tip+"^1")
@@ -478,8 +490,28 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	contains(t, "the update of a skill never published", out.stdout, "notes has no branch on the account remote")
 	a.mustRun("skill", "publish", "notes")
 	b.mustRun("skill", "add", "--from-account", "notes")
+	local := b.ref(lineage.ForkRef("notes"))
 	published = a.commitFork("notes", forkNotes("one", "one, a"))
 	a.mustRun("skill", "publish", "notes")
+	backdate(t, b)
+	out = b.mustRun("--json", "skill", "check-updates")
+	equal(t, "the check's summary, alpha and beta counted once", b.one(out.stdout, "result")["summary"], "checked 3 skills from 2 sources: 1 update available")
+	progress := b.eventsOfType(out.stdout, "progress")
+	equal(t, "its last progress event", fmt.Sprint(progress[len(progress)-1]["current"], "/", progress[len(progress)-1]["total"]), "2/2")
+	update := b.one(out.stdout, "update_available")
+	equal(t, "the check's update", update["name"], "notes")
+	equal(t, "its source", update["source"], "file://"+remote)
+	equal(t, "its candidate", update["candidate"], published)
+	equal(t, "its upstream commit", update["upstream_commit"], "")
+	equal(t, "its files", fmt.Sprint(update["files"]), "[map[path:notes.md status:added]]")
+	if lastFetched(t, b, "file://"+remote) == backdated {
+		t.Error("the check left the account remote's last_fetched as it was")
+	}
+	out = b.mustRun("skill", "check-updates")
+	contains(t, "the check's line", out.stdout, "notes  published from another machine  "+short(local)+" -> "+short(published)+"  1 file")
+	if strings.Contains(out.stdout, "--update") {
+		t.Errorf("the check of what another machine published sends to skill diff --update:\n%s", out.stdout)
+	}
 	out = b.mustRun("--json", "skill", "update", "--all")
 	pulled := b.one(out.stdout, "pull")
 	equal(t, "the pull of notes", pulled["name"], "notes")
@@ -490,7 +522,10 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 
 	theirs = a.commitFork("notes", forkNotes("one", "one, a", "two", "two, a"))
 	a.mustRun("skill", "publish", "notes")
+	writeFile(t, filepath.Join(b.forkDir("notes", "notes"), "mine.md"), "b's own\n")
 	mine = b.commitFork("notes", forkNotes("one", "one, a", "two", "two, b"))
+	out = b.mustRun("--json", "skill", "check-updates")
+	equal(t, "the files a changed since the commit both share", fmt.Sprint(b.updateOf(out.stdout, "notes")["files"]), "[map[path:notes.md status:modified]]")
 	out = b.run("--json", "skill", "update", "--all")
 	equal(t, "the update of both machines' line: exit", out.exit, 4)
 	equal(t, "its pull outcome", b.one(out.stdout, "pull")["outcome"], pullConflict)
@@ -525,6 +560,11 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	contains(t, "its error", b.one(out.stdout, "error")["message"].(string), "cannot reach the account remote")
 	out = b.run("skill", "update", "--all")
 	equal(t, "the update of every skill with no remote: exit", out.exit, 3)
+	out = b.run("--json", "skill", "check-updates")
+	equal(t, "the check with no remote: exit", out.exit, 3)
+	e := b.one(out.stdout, "error")
+	equal(t, "its code", e["code"], "source")
+	contains(t, "its message", e["message"].(string), "could not check the account remote file://"+remote+": cannot reach it: ")
 }
 
 // pullChildEnv names the fork TestPullChildProcess pulls.

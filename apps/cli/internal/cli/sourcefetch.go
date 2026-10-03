@@ -168,12 +168,10 @@ func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets 
 		results[i] = source.Result{Source: t.src}
 		if err := inv.fetchForks(ctx, gitDir, source.RemoteName(t.src.ID()), false); err != nil {
 			results[i].Err = fmt.Errorf("%w: %v", source.ErrUnreachable, err)
-			continue
-		}
-		if then != nil {
+		} else if then != nil {
 			then(i)
 		}
-		if done != nil {
+		if done != nil { // failed or not, as for a shared source
 			done(t.src, len(srcs)+k+1)
 		}
 	}

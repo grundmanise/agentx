@@ -125,7 +125,7 @@ agentx source fetch anthropics/skills
 
 A fetch updates what agentx knows about a source: the commit it holds, the skills inside it, and whether you may write to it. Run it when you want to see what changed upstream now.
 
-You often do not need to. [`agentx skill check-updates`](/cli/skill#check-for-updates) fetches the sources your managed skills came from on its own. While the desktop app is open, its [background process](/cli/serve#update-checks) fetches every source you added when it starts and every thirty minutes, including the ones you have not installed anything from yet.
+You often do not need to. [`agentx skill check-updates`](/cli/skill#check-for-updates) fetches the sources your managed skills came from on its own. With an account remote set, it also fetches the account remote whenever one of your own skills is placed on this machine. While the desktop app is open, its [background process](/cli/serve#update-checks) fetches every source you added when it starts and every thirty minutes, including the ones you have not installed anything from yet.
 
 Name several sources to fetch them together, by URL or by id, or fetch every source on this machine:
 

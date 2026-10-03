@@ -541,7 +541,7 @@ Apply an update with agentx skill update <name>, or read it first with agentx sk
 
 agentx fetches every source your managed skills and forks came from, once each and a few at a time, with your own git, so the credential helper, SSH key and URL rewrites you use in a terminal apply. It then compares each skill with what its source holds now and lists every skill that has a newer version, with the files that version changes. Paths are relative to the skill's directory. A fork is compared by the upstream version it was last forked or updated from, not by your own commits: see [Take a new upstream version](/cli/fork#take-a-new-upstream-version).
 
-Nothing is applied. Your library, your clients and your edits stay exactly as they were. agentx records the newer version it found so that you can read it, apply it with [`agentx skill update`](#update-a-skill), and so that `agentx skill list` shows `update available` for the skill:
+Nothing is applied. Your library, your clients and your edits stay exactly as they were. agentx records the newer upstream version it found so that you can read it, apply it with [`agentx skill update`](#update-a-skill), and so that `agentx skill list` shows `update available` for the skill:
 
 ```text
 1 skill
@@ -551,6 +551,15 @@ Nothing is applied. Your library, your clients and your edits stay exactly as th
 Run the check again whenever you like. It lists every update available, including the ones an earlier check found. The exception is a skill it could not check this time: the check names it in a warning, and `agentx skill list` still shows that skill's update.
 
 A newer version upstream replaces the one found before. A change that does not reach your library, such as a symlink in the source, which agentx never installs, is not an update. If a newer version gives the skill another name, the check says so; the skill keeps the name you installed it under.
+
+With an account remote set, the check also fetches it and lists each of your own skills placed on this machine that another machine published changes to. Take those changes in with `agentx skill update <name>`:
+
+```text
+  notes  published from another machine  4c2d1e9 -> 7a0b3f2  1 file
+    modified  notes.md
+```
+
+What another machine published is not recorded, so `agentx skill list` does not show it and `agentx skill diff --update` cannot read it: run the check again to see it, or `agentx skill update <name>` to take it in. If the account remote cannot be reached, the check warns, still checks your other sources, and exits with code 3.
 
 The [desktop app's background process](/cli/serve#update-checks) runs the same check when it starts and every thirty minutes, and fetches every other source you added in the same pass.
 

@@ -33,8 +33,10 @@ func newSkillCheckUpdatesCommand(inv *invocation) *cobra.Command {
 		Long: "Fetch every added source a managed skill or a fork came from and report which skills\n" +
 			"have a newer upstream version, with the files each one changes; skills from a source\n" +
 			"you removed are skipped. A fork is compared by the upstream version it was last\n" +
-			"forked or updated from, whatever its own commits changed. Nothing is applied:\n" +
-			"apply an update with 'agentx skill update <name>', or read it first with\n" +
+			"forked or updated from, whatever its own commits changed. With an account remote\n" +
+			"set, your own skills placed here are also compared with what your other machines\n" +
+			"published to it. Nothing is applied: apply an update with\n" +
+			"'agentx skill update <name>', or read an upstream one first with\n" +
 			"'agentx skill diff <name> --update'.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error { return inv.skillCheckUpdates(cmd.Context()) },
@@ -61,6 +63,25 @@ type updateAvailableEvent struct {
 	CandidateUpstreamCommit string        `json:"candidate_upstream_commit"`
 	Files                   []changedFile `json:"files"`
 	UpstreamName            string        `json:"upstream_name,omitempty"` // present when the upstream names the skill otherwise
+
+	local string // an account-remote update's: the commit the skill's branch holds here
+}
+
+// fromAccount reports whether ev is what the account remote holds for one
+// of the user's own skills, which another machine published, rather than a
+// newer upstream version: it names the account remote as its source and
+// carries none of the upstream fields.
+func (ev updateAvailableEvent) fromAccount() bool { return ev.local != "" }
+
+// versions are the two commits an update goes from and to, as a line of
+// text names them: the upstream's for an upstream update, the skill's own
+// branch here and the account remote's for one published from another
+// machine.
+func (ev updateAvailableEvent) versions() (from, to string) {
+	if ev.fromAccount() {
+		return ev.local, ev.Candidate
+	}
+	return ev.UpstreamCommit, ev.CandidateUpstreamCommit
 }
 
 // changedFile is one file a change of a skill touches, an update or a
@@ -203,9 +224,17 @@ func (inv *invocation) printCheck(rep checkReport) {
 	if len(rep.refreshed) > 0 || len(rep.failures) == 0 {
 		out.done(rep.summary())
 	}
+	upstream := false
 	for _, ev := range rep.updates {
-		out.print("  ", out.paint(heading, sanitised(ev.Name)), "  ", out.paint(warnStyle, updateAvailable), "  ",
-			short(ev.UpstreamCommit), " -> ", short(ev.CandidateUpstreamCommit), "  ", out.paint(noteStyle, plural(len(ev.Files), "file")))
+		state := updateAvailable
+		if ev.fromAccount() {
+			state = publishedElsewhere
+		} else {
+			upstream = true
+		}
+		from, to := ev.versions()
+		out.print("  ", out.paint(heading, sanitised(ev.Name)), "  ", out.paint(warnStyle, state), "  ",
+			short(from), " -> ", short(to), "  ", out.paint(noteStyle, plural(len(ev.Files), "file")))
 		t := &table{}
 		for _, f := range ev.Files {
 			t.add(c("    "+f.Status, muted), c(quotedPath(f.Path), plain))
@@ -220,9 +249,12 @@ func (inv *invocation) printCheck(rep checkReport) {
 		out.print("  ", out.paint(heading, sanitised(r.name)), "  ", out.paint(warnStyle, driftUpstreamRemoved), "  ",
 			sanitised(where), " at ", short(r.commit))
 	}
-	if len(rep.updates) > 0 {
+	switch {
+	case upstream:
 		out.print("Apply an update with ", out.paint(label, "agentx skill update <name>"),
 			", or read it first with ", out.paint(label, "agentx skill diff <name> --update"), ".")
+	case len(rep.updates) > 0: // only what other machines published, which skill diff --update does not read
+		out.print("Apply an update with ", out.paint(label, "agentx skill update <name>"), ".")
 	}
 }
 
@@ -268,6 +300,15 @@ func checkRefusal(failures []checkFailure) error {
 // writes the import commit of every newer version outside the lock, then
 // records what it found in one mutation: the candidate and upstream-removed
 // refs and last_fetched. Nothing is applied to the library.
+//
+// The account remote is checked too, see accountDue and checkAccount: the
+// user's own skills placed here against what their other machines
+// published. It is one more target of the same fetch, fetched once the
+// shared sources are and counted with them, see fetchSources; its
+// last_fetched is stamped with the others' and a fetch of it that fails is
+// a failure in the report as a shared source's is. An
+// update found there is reported only for a skill whose branch, read again
+// under the lock, is still the commit it was compared with.
 //
 // serving is the serve child's check, which differs in three ways. It
 // fetches every source of the settings, a source no skill was installed
@@ -316,7 +357,7 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool) (checkRep
 		}
 		return rep, nil
 	}
-	records, err := inv.checkLineage(ctx, gitDir)
+	records, own, err := inv.checkLineage(ctx, gitDir)
 	if err != nil {
 		return rep, err
 	}
@@ -326,6 +367,13 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool) (checkRep
 		if serving || len(bySource[entry.URL]) > 0 {
 			targets = append(targets, target(entry))
 		}
+	}
+	acc, err := inv.accountDue(own)
+	if err != nil {
+		return rep, err
+	}
+	if acc.entry.URL != "" { // fetched last, counted with the shared sources
+		targets = append(targets, target(acc.entry))
 	}
 	if len(targets) == 0 {
 		rep.idle = true
@@ -337,6 +385,17 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool) (checkRep
 	}
 	run := &checkRun{inv: inv, gitDir: gitDir, owners: map[*imported][]lineage.Record{}}
 	fetched := map[string]bool{}
+	if acc.entry.URL != "" {
+		res := results[len(results)-1]
+		results = results[:len(results)-1]
+		if err := inv.checkAccount(ctx, gitDir, &acc, res); err != nil {
+			return rep, err
+		}
+		if acc.fetched { // stamped with the shared sources, under the one lock the check takes
+			fetched[acc.entry.URL] = true
+		}
+		run.failures = append(run.failures, acc.failures...)
+	}
 	for _, res := range results {
 		recs := bySource[res.Source.URL] // none for a source only the serve child fetches
 		if res.Err != nil {
@@ -353,7 +412,7 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool) (checkRep
 	if err := run.writeCandidates(ctx, importing); err != nil {
 		return rep, err
 	}
-	live, added, moved, journaled, err := inv.recordCheck(ctx, gitDir, serving, run.findings, fetched, records)
+	live, ownLive, added, moved, journaled, err := inv.recordCheck(ctx, gitDir, serving, run.findings, fetched, records)
 	if !journaled || err == nil {
 		// Recovery of a journal that could not be finished needs the
 		// commits the staging refs hold; otherwise they are what the
@@ -402,6 +461,13 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool) (checkRep
 		}
 	}
 	rep.checked = len(checked)
+	if acc.fetched && added[acc.entry.URL] { // a skill both sources checked is counted once
+		for _, name := range acc.skills {
+			if _, ok := ownLive[name]; ok && !checked[name] {
+				rep.checked++
+			}
+		}
+	}
 	var announced []lineage.Record
 	for name := range checked {
 		rec := live[name]
@@ -419,7 +485,178 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool) (checkRep
 			rep.notes = append(rep.notes, renameWarning(ev.Name, ev.UpstreamName))
 		}
 	}
+	if acc.fetched && added[acc.entry.URL] {
+		for _, ev := range acc.updates {
+			// The branch moved, by an update that took the remote's commits
+			// in, or the skill went, while the check ran: what it found is
+			// no longer what the branch here lacks.
+			if rec, ok := ownLive[ev.Name]; ok && rec.Commit == ev.local {
+				rep.updates = append(rep.updates, ev)
+			}
+		}
+		sort.SliceStable(rep.updates, func(i, j int) bool { return rep.updates[i].Name < rep.updates[j].Name })
+	}
 	return rep, nil
+}
+
+// accountCheck is what an update check found on the account remote for the
+// user's own skills placed on this machine, see accountDue and checkAccount.
+type accountCheck struct {
+	entry    home.Source      // the account remote's entry; its URL is "" when nothing is checked there
+	placed   []lineage.Record // the skills compared with it, by name
+	fetched  bool             // the fetch of it succeeded
+	skills   []string         // the skills it checked, by name: placed but those failures name
+	updates  []updateAvailableEvent
+	failures []checkFailure // the fetch that failed, with the skills it left unchecked, or a skill it could not compare
+}
+
+// accountDue is what checkAccount will check, read before anything is
+// fetched: the user's own skills, the forks of own placed on this machine,
+// and the account remote's entry, whose fetch is then one target of the
+// check's, after the shared sources, see fetchSources. Nothing is due when
+// no account remote is set or none of those skills is placed here.
+func (inv *invocation) accountDue(own map[string]lineage.Record) (accountCheck, error) {
+	var ac accountCheck
+	entry, _, ok, err := inv.accountSource()
+	if err != nil || !ok {
+		return ac, err
+	}
+	for name, rec := range own {
+		if inv.forkPlaced(name) {
+			ac.placed = append(ac.placed, rec)
+		}
+	}
+	if len(ac.placed) == 0 {
+		return ac, nil
+	}
+	sort.Slice(ac.placed, func(i, j int) bool { return ac.placed[i].Name < ac.placed[j].Name })
+	ac.entry = entry
+	return ac, nil
+}
+
+// checkAccount is the update check of the user's own skills placed on this
+// machine, see accountDue, against what the account remote holds of them,
+// which is what their other machines published, once the fetch of it, res,
+// has ended. A fetch that failed is the failure of an unreachable source,
+// naming every skill it left unchecked, and costs the check nothing else.
+//
+// A skill whose remote branch holds a commit its branch here lacks is an
+// update: one merge-base per such skill, none for a skill whose remote
+// branch is its tip or that the remote holds no branch of, then one read of
+// every tree and one diff-tree of what the remote changed since the commit
+// both share, the skill's directory left off each path. A remote branch
+// that this one already holds, as one this machine published to and moved
+// on from does, is none, and neither is one that shares no commit with it,
+// which skill update refuses to merge and says so. A skill that cannot be
+// compared, a merge-base that fails or a branch whose directory cannot be
+// told, is a failure naming that skill alone. The event names the account
+// remote as its source and the remote branch's tip as its candidate, and
+// leaves every upstream field empty: that is what tells it from an
+// upstream's newer version. Nothing is written for it: the fetch's
+// remote-tracking branches are what skill update takes in, and the caller
+// stamps the account remote's last_fetched with the shared sources'.
+func (inv *invocation) checkAccount(ctx context.Context, gitDir string, ac *accountCheck, res source.Result) error {
+	url := ac.entry.URL
+	if res.Err != nil {
+		ac.failures = append(ac.failures, checkFailure{source: url, fetch: true, skills: skillNamesOf(ac.placed), f: uncheckedAccount(url, res.Err)})
+		return nil
+	}
+	ac.fetched = true
+	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, source.RemoteName(source.ID(url)))
+	if err != nil {
+		return accountRepoFailure(err)
+	}
+	unchecked := func(rec lineage.Record, err error) error {
+		var f *failure
+		if !errors.As(err, &f) {
+			return err // a lock or a recovery, no one skill's
+		}
+		ac.failures = append(ac.failures, checkFailure{source: url, skill: true, skills: []string{rec.Name}, f: f})
+		return nil
+	}
+	type published struct {
+		rec            lineage.Record
+		dir, base, tip string
+	}
+	var behind []published
+	for _, rec := range ac.placed {
+		tip := tips[rec.Name]
+		if tip == "" || tip == rec.Commit {
+			ac.skills = append(ac.skills, rec.Name)
+			continue
+		}
+		out, status, err := inv.git.IsolatedStatus(ctx, gitDir, 1, "merge-base", rec.Commit, tip)
+		base := strings.TrimSpace(out)
+		if err != nil {
+			if err := unchecked(rec, accountRepoFailure(err)); err != nil {
+				return err
+			}
+			continue
+		}
+		if status != 0 || base == tip { // no commit in common, or nothing the branch here lacks
+			ac.skills = append(ac.skills, rec.Name)
+			continue
+		}
+		dir, err := inv.forkDir(ctx, gitDir, rec)
+		if err != nil {
+			if err := unchecked(rec, err); err != nil {
+				return err
+			}
+			continue
+		}
+		ac.skills = append(ac.skills, rec.Name)
+		behind = append(behind, published{rec: rec, dir: dir, base: base, tip: tip})
+	}
+	if len(behind) == 0 {
+		return nil
+	}
+	args := []string{"rev-parse"}
+	for _, p := range behind {
+		args = append(args, p.base+"^{tree}", p.tip+"^{tree}")
+	}
+	out, err := inv.git.Isolated(ctx, gitDir, args...)
+	if err != nil {
+		return accountRepoFailure(err)
+	}
+	trees := strings.Fields(out)
+	if len(trees) != 2*len(behind) {
+		return accountRepoFailure(fmt.Errorf("git rev-parse answered %d of %d trees", len(trees), 2*len(behind)))
+	}
+	var pairs strings.Builder
+	for i := range behind {
+		pairs.WriteString(trees[2*i] + " " + trees[2*i+1] + "\n")
+	}
+	out, err = inv.git.IsolatedInput(ctx, gitDir, strings.NewReader(pairs.String()), "diff-tree", "--stdin", "-r", "-z", "--no-renames", "--name-status")
+	if err != nil {
+		return accountRepoFailure(err)
+	}
+	changes, err := parsePairDiffs(out)
+	if err != nil {
+		return accountRepoFailure(err)
+	}
+	for i, p := range behind {
+		ev := updateAvailableEvent{
+			event: newEvent("update_available"), Name: p.rec.Name, Kind: p.rec.Kind, Source: url,
+			Candidate: p.tip, Files: []changedFile{}, local: p.rec.Commit,
+		}
+		for _, f := range changes[trees[2*i]+" "+trees[2*i+1]] {
+			f.Path = strings.TrimPrefix(f.Path, p.dir+"/")
+			ev.Files = append(ev.Files, f)
+		}
+		sort.Slice(ev.Files, func(i, j int) bool { return ev.Files[i].Path < ev.Files[j].Path })
+		ac.updates = append(ac.updates, ev)
+	}
+	return nil
+}
+
+// uncheckedAccount is unreachableRemote as a check reports it, in the shape
+// of a shared source's failure, the remote named first, so that the
+// refusal reads "could not check the account remote <url>: ...". err is
+// the fetch's, as fetchSources wraps it.
+func uncheckedAccount(url string, err error) *failure {
+	f := unreachableRemote(url, err)
+	reason := strings.TrimPrefix(err.Error(), source.ErrUnreachable.Error()+": ")
+	return refuse(f.status, "the account remote "+shownURL(url)+": cannot reach it: "+trimGit(reason), f.hint)
 }
 
 // checkLineage is the lineage an update check works from, read in the one
@@ -431,25 +668,31 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool) (checkRep
 // keeps by tip. A fork with no base, a greenfield skill or a fork of an
 // unmanaged or a plugin's skill, has no upstream to check and is left out,
 // as is one whose history does not say which import is its base.
-func (inv *invocation) checkLineage(ctx context.Context, gitDir string) (map[string]lineage.Record, error) {
-	records, err := inv.listLineage(ctx, gitDir)
+//
+// own are the user's own skills, every fork, by name, each with its branch
+// and its tip as the account repo holds them, which is what the account
+// remote's branch of it is compared with, see checkAccount.
+func (inv *invocation) checkLineage(ctx context.Context, gitDir string) (records, own map[string]lineage.Record, err error) {
+	records, err = inv.listLineage(ctx, gitDir)
 	if err == nil {
 		err = lineage.ReadForks(ctx, inv.git, gitDir, records, inv.forkWalks)
 	}
 	if err != nil {
-		return nil, accountRepoFailure(fmt.Errorf("account repo %s: %w", gitDir, err))
+		return nil, nil, accountRepoFailure(fmt.Errorf("account repo %s: %w", gitDir, err))
 	}
+	own = map[string]lineage.Record{}
 	for name, rec := range records {
 		if rec.Kind != lineage.KindFork {
 			continue
 		}
+		own[name] = rec
 		if base, ok := rec.ForkBase(); ok {
 			records[name] = base
 		} else {
 			delete(records, name)
 		}
 	}
-	return records, nil
+	return records, own, nil
 }
 
 // checkable are the skills an update check covers, by the canonical URL of
@@ -662,8 +905,10 @@ func (c *checkRun) writeCandidates(ctx context.Context, run string) error {
 
 // recordCheck writes what the check found in one mutation under the lock,
 // the only hold of it after the network, and returns the lineage as the
-// mutation left it, the sources the settings hold once the fetches are
-// done, and the skills whose candidate it moved.
+// mutation left it, the user's own skills as that read found them, see
+// checkLineage, the sources the settings hold once the fetches are done,
+// and the skills whose candidate it moved. When every fetch failed it reads
+// no lineage and returns no own skills.
 //
 // The lineage is read again under the lock. A skill whose branch no longer
 // names the import commit it was compared with, or that is gone, gets
@@ -679,7 +924,7 @@ func (c *checkRun) writeCandidates(ctx context.Context, run string) error {
 // last_fetched for every source that fetched, and the write bumps the
 // version file once.
 func (inv *invocation) recordCheck(ctx context.Context, gitDir string, wait bool, findings []finding, fetched map[string]bool, records map[string]lineage.Record) (
-	live map[string]lineage.Record, added, moved map[string]bool, journaled bool, err error,
+	live, own map[string]lineage.Record, added, moved map[string]bool, journaled bool, err error,
 ) {
 	live, moved = records, map[string]bool{}
 	if len(fetched) == 0 {
@@ -689,14 +934,14 @@ func (inv *invocation) recordCheck(ctx context.Context, gitDir string, wait bool
 		// removed while its fetch ran is not reported as one that failed.
 		s, err := inv.loadSettings()
 		if err != nil {
-			return nil, nil, nil, false, err
+			return nil, nil, nil, nil, false, err
 		}
-		return live, sourceURLs(s), moved, false, nil
+		return live, nil, sourceURLs(s), moved, false, nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	err = inv.holdLock(ctx, wait, true, func() error {
 		var err error
-		if live, err = inv.checkLineage(ctx, gitDir); err != nil {
+		if live, own, err = inv.checkLineage(ctx, gitDir); err != nil {
 			return err
 		}
 		s, err := inv.loadSettings()
@@ -755,9 +1000,9 @@ func (inv *invocation) recordCheck(ctx context.Context, gitDir string, wait bool
 		return applied
 	})
 	if err != nil {
-		return nil, nil, nil, journaled, mutationFailure(err)
+		return nil, nil, nil, nil, journaled, mutationFailure(err)
 	}
-	return live, added, moved, journaled, nil
+	return live, own, added, moved, journaled, nil
 }
 
 // describeCandidates builds the update_available event of every record,
