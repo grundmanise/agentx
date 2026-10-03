@@ -85,7 +85,7 @@ agentx pull release-notes
 - When both machines committed, agentx merges the two with Git, and commits the merge on the fork's branch, as `release-notes: merge the account remote (desktop)`.
 - Leave out the name to pull every fork placed on this machine. A fork that cannot be pulled does not stop the others.
 - Commit or discard your edits first: a fork with uncommitted edits stops with exit code 6 when the remote has something new.
-- `agentx skill update <name>` pulls a fork first, then takes its new upstream version, as two commits.
+- `agentx skill update <name>` pulls a fork first, then takes its new upstream version, as two commits. `agentx skill update --all` pulls every fork placed on this machine that another machine published to.
 
 ### Which upstream version the merge records
 

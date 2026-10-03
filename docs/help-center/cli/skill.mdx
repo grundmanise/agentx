@@ -609,7 +609,7 @@ agentx skill update pdf
 
 agentx replaces the skill's library directory with the newer version and records it as the version you have. Every client that links to the library sees the new version at once. `agentx skill list` shows the skill as `current` again, and its `update available` is gone.
 
-The update needs no network: it applies exactly the version the last check found, the one `agentx skill diff pdf --update` shows. agentx never updates a skill unless you run this command. A skill you edited keeps your edits; see [A skill you edited](#a-skill-you-edited).
+The update of a skill installed from a shared source needs no network: it applies exactly the version the last check found, the one `agentx skill diff pdf --update` shows. agentx never updates a skill unless you run this command. A skill you edited keeps your edits; see [A skill you edited](#a-skill-you-edited).
 
 Files your ignore rules name stay: a `.DS_Store`, an editor's backup file or an ignored `build` folder (see [Files that do not count](#files-that-do-not-count)). If the newer version ships a file at the same path, its file replaces yours.
 
@@ -626,6 +626,19 @@ agentx skill update --all
 ```
 
 If no check has found an update for the skill, the command says it is up to date as of the last check and changes nothing. Run `agentx skill check-updates` to look again.
+
+Take in what you published from another machine the same way. With an [account remote](/cli/source#add-your-account-remote) set, `agentx skill update <name>` of one of your own skills fetches the account remote first and takes in what it holds that this machine lacks, and `agentx skill update --all` does so for every one of your own skills on this machine, with no check first:
+
+```sh
+agentx skill update --all
+```
+
+```text
+✓ pulled notes: fast-forward to 4c2d1e9
+no skill was updated from upstream
+```
+
+A skill with no upstream (one you created with `agentx skill new`, or forked from an unmanaged or a plugin's skill) that has nothing new on the account remote is `up to date with the account remote`; one you never published has no branch there yet, and the update tells you to run `agentx skill publish <name>`. If Git cannot reach the account remote, its update stops with exit code 3; a skill you forked from a source only gets a warning and still takes its new upstream version.
 
 A copy placement is handled on its own:
 
@@ -723,7 +736,7 @@ This removes the worktree and whatever you resolved in it. Your library director
 - A skill with a [merge pending](#when-your-edits-conflict) that still has files to resolve stops with exit code 4 and lists them.
 - `agentx skill update <name>` of a skill whose source you removed stops with exit code 5, and the hint names the `agentx source add` command that brings the source back. With `--all`, the skill is skipped with a warning that names the same command, and the run does not fail. Either way, the update found earlier is kept.
 - A skill its source no longer holds, shown as `upstream removed`, is kept as it is and never updated: exit code 6.
-- A skill agentx did not install has no update to apply: exit code 6. A fork is updated by merging, see [Take a new upstream version](/cli/fork#take-a-new-upstream-version); one with no upstream, such as a skill you created, stops with exit code 6.
+- A skill agentx did not install has no update to apply: exit code 6. A fork is updated by merging, see [Take a new upstream version](/cli/fork#take-a-new-upstream-version); one with no upstream, such as a skill you created, stops with exit code 6 when no account remote is set. With one set, its update takes in what your other machines published, see [Update a skill](#update-a-skill).
 - A skill whose library directory is gone stops with exit code 6. Install it again with `agentx skill add <source> --name <name>`, or stop managing it with `agentx skill remove <name>`.
 - A skill whose record in the account repo agentx cannot read stops with exit code 6. Run `agentx doctor` and check the account repo it names.
 - A skill whose library directory is a symlink to a directory of your own stops with exit code 6, even if you edited that directory: an update replaces the library directory, so it would remove your link. Replace the link with the directory it points to, then update again. With `--all` this skill is counted as not updated.
@@ -745,7 +758,7 @@ For `skill add --from-account`, see the [account remote's exit codes](/cli/remot
   - it names the source with another branch or tag than its pin;
   - `skill add` is given something that is not a source, for example the name of a skill the library already holds;
   - `skill update` was given both a name and `--all`, neither, or `--abort` with `--all`.
-- `3`: the source, or the files of the skill, could not be fetched. For `skill check-updates`, also a run whose sources and skills failed for different reasons.
+- `3`: the source, or the files of the skill, could not be fetched. For `skill check-updates`, also a run whose sources and skills failed for different reasons. For `skill update`, also the account remote, for a skill with no upstream.
 - `4`: `skill update` found your edits conflicting with the update and left the merge pending, or found files of a pending merge still to resolve, or a merge already pending blocks `skill fork` or a `skill remove` that takes the skill off the machine. See [When your edits conflict](#when-your-edits-conflict).
 - `5`: something the command names does not exist:
   - a source id names no source on this machine (for a source you removed, the hint names the `agentx source add` command that brings it back), the source did not serve a skill's files, the path or a skill named by `--name` or `--except` does not exist in the source, or `--to` or `--from` names a configuration that is not detected;

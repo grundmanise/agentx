@@ -409,6 +409,16 @@ func sourceEntryOf(t *testing.T, h *harness, url string) map[string]any {
 // candidate goes with the pull, so the update never merges the older
 // version back over the newer one, and alpha is left as a published it
 // while beta, which the remote has nothing new for, takes its own update.
+//
+// A skill a made with skill new, which has no upstream, takes in what a
+// published of it through b's update of every skill alone, with no check
+// and no pull first; updated again, it is up to date with the account
+// remote, exit 0. Once both machines changed its line, b's update leaves
+// the merge pending, exit 4, and, resolved in its checkout, the next update
+// completes it; with that merge and beta's not yet published, the update
+// of every skill has nothing to do and says nothing else. Last, with the
+// account remote out of reach, the update of beta only warns, while that of
+// the skill with no upstream fails, exit 3, alone or with every skill.
 func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	t.Parallel()
 	a, b, s, remote := twoHomes(t)
@@ -463,6 +473,38 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	equal(t, "beta's base", b.trailer(b.ref(lineage.ForkRef("beta")), lineage.TrailerBase), betaCandidate)
 	equal(t, "beta's notes", fileBody(t, filepath.Join(b.forkDir("beta", "beta"), "notes.md")), forkNotes("six", "six, third"))
 
+	a.mustRun("skill", "new", "notes")
+	out = a.mustRun("skill", "update", "notes")
+	contains(t, "the update of a skill never published", out.stdout, "notes has no branch on the account remote")
+	a.mustRun("skill", "publish", "notes")
+	b.mustRun("skill", "add", "--from-account", "notes")
+	published = a.commitFork("notes", forkNotes("one", "one, a"))
+	a.mustRun("skill", "publish", "notes")
+	out = b.mustRun("--json", "skill", "update", "--all")
+	pulled := b.one(out.stdout, "pull")
+	equal(t, "the pull of notes", pulled["name"], "notes")
+	equal(t, "its outcome", pulled["outcome"], pullFastForward)
+	equal(t, "notes' tip", b.ref(lineage.ForkRef("notes")), published)
+	out = b.mustRun("skill", "update", "notes")
+	contains(t, "the update with nothing new", out.stdout, "notes is up to date with the account remote")
+
+	theirs = a.commitFork("notes", forkNotes("one", "one, a", "two", "two, a"))
+	a.mustRun("skill", "publish", "notes")
+	mine = b.commitFork("notes", forkNotes("one", "one, a", "two", "two, b"))
+	out = b.run("--json", "skill", "update", "--all")
+	equal(t, "the update of both machines' line: exit", out.exit, 4)
+	equal(t, "its pull outcome", b.one(out.stdout, "pull")["outcome"], pullConflict)
+	equal(t, "its warnings, with beta ahead of the remote and left out", out.stderr, "")
+	writeFile(t, filepath.Join(pendingCheckout(b, "notes"), "notes", "notes.md"), forkNotes("one", "one, a", "two", "two, a and b"))
+	checkoutGit(t, b, "notes", "add", "notes/notes.md")
+	b.mustRun("skill", "update", "notes")
+	equal(t, "the completed merge's parents", b.parents(b.ref(lineage.ForkRef("notes"))), mine+"\n"+theirs)
+	equal(t, "b's notes", fileBody(t, filepath.Join(b.forkDir("notes", "notes"), "notes.md")), forkNotes("one", "one, a", "two", "two, a and b"))
+	noCheckout(t, b, "notes")
+	out = b.mustRun("skill", "update", "--all")
+	contains(t, "the update of every skill with notes and beta ahead of the remote", out.stdout, "Nothing to update")
+	equal(t, "its warnings", out.stderr, "")
+
 	// An account remote git cannot reach leaves the upstream's version to
 	// take in, with a warning.
 	s.write("skills/beta/notes.md", forkNotes("six", "six, fifth"))
@@ -476,6 +518,13 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	contains(t, "the warning", out.stderr, "so beta is updated from upstream only")
 	equal(t, "beta's first parent", b.accountGit("rev-parse", b.ref(lineage.ForkRef("beta"))+"^1"), before)
 	equal(t, "beta's notes after the upstream-only update", fileBody(t, filepath.Join(b.forkDir("beta", "beta"), "notes.md")), forkNotes("six", "six, fifth"))
+	out = b.mustRun("skill", "update", "beta")
+	contains(t, "the warning with nothing from upstream", out.stderr, "so what your other machines published is not taken in")
+	out = b.run("--json", "skill", "update", "notes")
+	equal(t, "the update of a skill with no upstream: exit", out.exit, 3)
+	contains(t, "its error", b.one(out.stdout, "error")["message"].(string), "cannot reach the account remote")
+	out = b.run("skill", "update", "--all")
+	equal(t, "the update of every skill with no remote: exit", out.exit, 3)
 }
 
 // pullChildEnv names the fork TestPullChildProcess pulls.

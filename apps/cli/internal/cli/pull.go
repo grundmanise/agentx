@@ -102,6 +102,13 @@ func (inv *invocation) readRemoteForks(ctx context.Context, gitDir, remote strin
 	if err != nil {
 		return remoteForks{}, accountRepoFailure(err)
 	}
+	return inv.walkRemoteForks(ctx, gitDir, remote, tips, records, names)
+}
+
+// walkRemoteForks is readRemoteForks for a run that read the
+// remote-tracking branches already: tips, by name. It walks the remote
+// tips of names that differ from the local ones, in one git process.
+func (inv *invocation) walkRemoteForks(ctx context.Context, gitDir, remote string, tips map[string]string, records map[string]lineage.Record, names []string) (remoteForks, error) {
 	var walk []string
 	for _, n := range names {
 		if tip := tips[n]; tip != "" && tip != records[n].Commit {
@@ -398,7 +405,7 @@ func (inv *invocation) remoteSelection(ctx context.Context, remote, name string,
 	if name == "" {
 		var names []string
 		for n, rec := range records {
-			if rec.Kind == lineage.KindFork && (!placed || lexists(inv.worktreeRoot(n)) || lexists(inv.libraryPath(n))) {
+			if rec.Kind == lineage.KindFork && (!placed || inv.forkPlaced(n)) {
 				names = append(names, n)
 			}
 		}
@@ -438,6 +445,12 @@ func (inv *invocation) remoteSelection(ctx context.Context, remote, name string,
 		return nil, fail(exitRefused, refusal, "install the account remote's fork in its place with '"+fromAccountCommand(name, flags...)+"'")
 	}
 	return nil, fail(exitRefused, refusal, "fork it first with '"+skillCommand("fork", name)+"'")
+}
+
+// forkPlaced reports whether the fork called name is placed on this
+// machine: a worktree or a library entry of its is there.
+func (inv *invocation) forkPlaced(name string) bool {
+	return lexists(inv.worktreeRoot(name)) || lexists(inv.libraryPath(name))
 }
 
 // remoteHolds reports whether the account remote, the git remote called
