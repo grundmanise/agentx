@@ -41,7 +41,7 @@ Adding a source you already have fetches it again and sets the pin to what you t
 
 ### Add your account remote
 
-Add the repository you publish forks to with `--account`:
+The [account remote](/cli/remote) is the Git repository you own that you publish forks to. Create an empty repository on your Git host, then add it with `--account`:
 
 ```sh
 agentx source add git@github.com:you/forks.git --account
@@ -51,9 +51,16 @@ agentx source add git@github.com:you/forks.git --account
 ✓ the account remote is now ssh://git@github.com/you/forks; it holds 0 forks; you can write to it
 ```
 
-This is [`agentx remote set`](/cli/remote#attach-a-remote) under another name. `--account` gives the source the fork layout, so `--layout fork` is optional. Give the repository alone: a `#<ref>`, a path or a token in the URL is refused with exit code 1. Adding the account remote's URL again, with or without `--account`, fetches it again.
+- Give any URL Git reaches, as for any source. agentx records it in its canonical form.
+- Give the repository alone: a `#<ref>`, a path or a token in the URL is refused with exit code 1. Keep credentials in a Git credential helper or an SSH key, as for any repository.
+- To name the repository by its HTTPS URL and reach it over SSH, add `--push-url git@github.com:you/forks.git`: agentx fetches and pushes forks there. `--push-url=` clears it.
+- agentx reaches the repository first. One Git cannot reach is refused with exit code 3, and nothing changes.
+- `--account` gives the source the fork layout, so `--layout fork` is optional. `agentx source list` shows it with `(account)`.
+- Adding the account remote's URL again, with or without `--account`, fetches it again.
+- Adding another URL with `--account` replaces the account remote and forgets what the old one held. Your forks stay as they are, and publish to the new remote.
+- A source you installed skills from cannot become the account remote, nor can a source that names the same repository by another URL: agentx stops with exit code 6. Remove the source first with `agentx source remove <url>`.
 
-agentx keeps one fork source, the account remote: `--layout fork` without `--account` stops with exit code 6. A source keeps its layout, so `--layout tree` for the account remote stops with exit code 6 too. Detach it first with `agentx remote unset`.
+agentx keeps one fork source, the account remote: `--layout fork` without `--account` stops with exit code 6. A source keeps its layout, so `--layout tree` for the account remote stops with exit code 6 too. Remove it first with `agentx source remove <url>`, then add it again.
 
 ### Credentials
 
@@ -237,7 +244,7 @@ hint: run 'agentx source add https://github.com/anthropics/skills' to add it aga
 
 Once you take the last of those skills off the machine, with [`agentx skill remove <name>`](/cli/skill) or its `--from universal` form, nothing on this machine records the source's URL any more, and the id is refused like any other. Add the source again by its URL.
 
-Removing your account remote is [`agentx remote unset`](/cli/remote#attach-a-remote): its forks stay on this machine, and nothing on the remote changes.
+Removing your [account remote](#add-your-account-remote) detaches it: its forks stay on this machine, and nothing on the remote changes.
 
 ## Exit codes
 

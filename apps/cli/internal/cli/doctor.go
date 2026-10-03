@@ -55,7 +55,7 @@ var doctorSections = []struct {
 	checks []string
 }{
 	{"System", []string{"git", "fork_merges", "commit_identity", "home"}},
-	{"App", []string{"lock", "mutations", "settings", "account_repo", "source_remotes", "account_remote", "staged_imports", "library"}},
+	{"App", []string{"lock", "mutations", "settings", "account_repo", "source_remotes", "staged_imports", "library"}},
 	{"Clients", nil}, // client:<id> and clients
 }
 
@@ -247,7 +247,6 @@ func (d *doctor) run(ctx context.Context) error {
 		// These read the account repo, so they follow the row that says it
 		// can be read and are left out when it cannot.
 		d.sourceRemotes(ctx, gitDir)
-		d.accountRemote(ctx, gitDir)
 		d.stagedImports(ctx, gitDir)
 	}
 

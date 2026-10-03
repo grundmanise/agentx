@@ -9,13 +9,6 @@ import (
 	"strings"
 )
 
-// OriginRemote is the name an earlier agentx gave the account remote in
-// the account repo, before the account remote became a source with a
-// remote named after its id like every other. Every function here that
-// works with a remote of fork branches takes the remote's name, and this
-// one is read only to move such a remote to the name of its source.
-const OriginRemote = "origin"
-
 // ForkRefspec is the one fetch refspec of the remote of fork branches
 // called remote: every fork branch it holds, onto the remote-tracking
 // branch of the same name. Nothing else travels: import branches, update

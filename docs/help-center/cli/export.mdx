@@ -57,7 +57,7 @@ Replace the settings in ~/.agentx/settings.json with those of my-laptop from ~/a
 
 Import writes your settings and nothing else. It creates no account repo, fetches nothing, installs nothing and places nothing.
 
-Your source list comes back with its pins and push URLs, but no source is fetched. Before you install anything from a source, run the `agentx source add` line import prints for it. Import prints these lines even when the export lists no skills. For a pinned source the line is `agentx source add <url>#<pin>`; running `agentx source add <url>` alone would unpin the source. A source you push to over another URL gets `--push-url <url>`, and your account remote gets an `agentx remote set <url>` line.
+Your source list comes back with its pins and push URLs, but no source is fetched. Before you install anything from a source, run the `agentx source add` line import prints for it. Import prints these lines even when the export lists no skills. For a pinned source the line is `agentx source add <url>#<pin>`; running `agentx source add <url>` alone would unpin the source. A source you push to over another URL gets `--push-url <url>`, and your account remote gets an `agentx source add <url> --account` line.
 
 Import leaves out whether you could write to each source. That depends on this machine's credentials, so agentx checks it again here.
 
@@ -71,7 +71,7 @@ The listing says what this machine's account repo has of each skill:
 | `missing` | Neither the account repo nor the account remote has a branch for it. For a managed skill, add its source with [`agentx source add`](/cli/source), then install it again with [`agentx skill add`](/cli/skill). That brings back the upstream skill, not a fork: a fork you never published to the account remote cannot be restored on this machine. |
 | `different` | The account repo holds that name at another version, or as a fork where the export had a managed skill, or the account remote holds that fork at another version, as when it was published again after the export. |
 
-A fresh machine has no account repo, so every skill reads `missing` there. Set your account remote before you import, with `agentx remote set <url>`, and the forks you published read `present`: the listing then tells which of your forks the remote keeps for you. Install each one with `agentx skill add --from-account <name>`.
+A fresh machine has no account repo, so every skill reads `missing` there. Add your account remote before you import, with `agentx source add <url> --account`, and the forks you published read `present`: the listing then tells which of your forks the remote keeps for you. Install each one with `agentx skill add --from-account <name>`.
 
 ## Confirm without a terminal
 
@@ -87,7 +87,7 @@ Use `--yes` in scripts and wherever there is no terminal. Without it, and withou
 
 1. On the old machine, run `agentx export ~/agentx-export.json`.
 2. Copy the file to the new machine.
-3. If you publish forks, attach your account remote on the new machine with `agentx remote set <url>`.
+3. If you publish forks, add your account remote on the new machine with `agentx source add <url> --account`.
 4. On the new machine, run `agentx import ~/agentx-export.json`.
 5. Run each `agentx source add` line the import printed, exactly as printed. It names the pin of a pinned source, `<url>#<pin>`, and `agentx source list` shows the pins too.
 6. Install what the listing calls missing with `agentx skill add <source>`.

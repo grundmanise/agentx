@@ -349,14 +349,12 @@ func (r *updateRun) accountStep(ctx context.Context, names []string, records map
 	if len(forks) == 0 {
 		return nil, nil, nil
 	}
-	entry, account, ok, err := inv.accountSourceIn(ctx, r.gitDir)
+	entry, account, ok, err := inv.accountSource()
 	if err != nil || !ok {
 		return nil, nil, err
 	}
-	if account != gitx.OriginRemote {
-		if err := inv.alignAccount(ctx, r.gitDir, entry); err != nil {
-			return nil, nil, err
-		}
+	if err := inv.alignAccount(ctx, r.gitDir, entry); err != nil {
+		return nil, nil, err
 	}
 	marker, err := inv.fetchForks(ctx, r.gitDir, account)
 	if err == nil {

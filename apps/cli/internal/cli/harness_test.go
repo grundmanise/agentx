@@ -140,6 +140,13 @@ func (h *harness) mustRun(args ...string) outcome {
 	return out
 }
 
+// setAccount makes the repository at url the account remote of h, as the
+// user does, and fails on the spot when it does not work.
+func (h *harness) setAccount(url string) outcome {
+	h.t.Helper()
+	return h.mustRun("source", "add", url, "--account")
+}
+
 // runDeadline bounds a run started with start. It is longer than
 // serveDeadline because such a run may be deliberately waiting rather than
 // hanging: a take-back waits for the agentx lock for seconds on purpose.

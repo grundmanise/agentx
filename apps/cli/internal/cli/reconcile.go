@@ -552,7 +552,7 @@ func (inv *invocation) prepareWorktrees(ctx context.Context, gitDir string, root
 		}
 	}
 	remote = map[string]bool{}
-	_, account, ok, err := inv.accountSourceIn(ctx, gitDir)
+	_, account, ok, err := inv.accountSource()
 	if err != nil {
 		return nil, nil, err
 	}

@@ -240,9 +240,6 @@ func forkSourceIs(url string, fork home.Source) *failure {
 // 6: its forks' history would lose the blobs a tree fetch leaves out, and
 // the layout of a source is changed by removing it and adding it again.
 func forkToTree(fork home.Source) *failure {
-	hint := "remove it first with 'agentx source remove " + shellWord(fork.URL) + "'"
-	if fork.Account {
-		hint = "detach it first with 'agentx remote unset'"
-	}
-	return refuse(exitRefused, fork.URL+" is a fork source, and a source keeps its layout", hint+", then add it again")
+	return refuse(exitRefused, fork.URL+" is a fork source, and a source keeps its layout",
+		"remove it first with 'agentx source remove "+shellWord(fork.URL)+"', then add it again")
 }

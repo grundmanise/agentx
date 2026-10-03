@@ -435,9 +435,9 @@ func restoreStates(skills []exportSkill, records map[string]lineage.Record, remo
 
 // remoteTips is what the account remote held of every fork as the last
 // fetch left it, see lineage.ListRemote: none on a machine with no account
-// repo, or whose account repo has no remote set.
+// repo, or with no account remote set.
 func (inv *invocation) remoteTips(ctx context.Context) (map[string]string, error) {
-	_, remote, ok, err := inv.accountSource(ctx)
+	_, remote, ok, err := inv.accountSource()
 	if err != nil || !ok {
 		return nil, err
 	}
@@ -520,7 +520,8 @@ func (inv *invocation) printImported(path string, doc exportDocument, states []i
 // printed per source as the settings now hold it: source add writes the pin
 // its argument names, so the bare URL would unpin the source this import
 // just restored, and the push URL, which only a flag can give alongside
-// the canonical URL. The account remote is attached again with remote set.
+// the canonical URL. The account remote is attached again with source add
+// --account.
 func printSourcesToAdd(out *writer, sources []home.Source) {
 	if len(sources) == 0 {
 		out.print("  ", out.paint(muted, "only the settings were written: install a missing skill with 'agentx skill add <source>'"))
@@ -537,7 +538,7 @@ func printSourcesToAdd(out *writer, sources []home.Source) {
 func sourceAddLine(src home.Source) string {
 	line := "agentx source add " + sourceAddArg(src.URL, src.Pin)
 	if src.Account {
-		line = "agentx remote set " + shellWord(sanitised(src.URL))
+		line = "agentx source add " + shellWord(sanitised(src.URL)) + " --account"
 	}
 	if src.PushURL != "" {
 		line += " --push-url " + shellWord(sanitised(src.PushURL))

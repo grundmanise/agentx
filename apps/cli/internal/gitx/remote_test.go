@@ -70,7 +70,7 @@ func TestUnsetRemoteTakesOutOnlyTheRemoteItNames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const kept, gone = OriginRemote, "src-0123456789abcdef"
+	const kept, gone = "origin", "src-0123456789abcdef"
 	for _, rb := range [][2]string{{kept, "skills/a"}, {gone, "skills/b"}} {
 		remote, branch := rb[0], rb[1]
 		if err := r.SetRemote(ctx, gitDir, remote, "file:///srv/"+remote+".git"); err != nil {

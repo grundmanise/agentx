@@ -770,7 +770,7 @@ func TestSourceAddRefusesAPushURLAndAForkSource(t *testing.T) {
 		{"a layout agentx does not know", []string{"source", "add", "acme/skills", "--layout", "flat"}, 1, `--layout takes tree or fork, not "flat"`, "--account"},
 		{"the account remote as a tree", []string{"source", "add", "acme/skills", "--account", "--layout", "tree"}, 1, "takes no --layout tree", "leave --layout out"},
 		{"a second fork source", []string{"source", "add", "acme/skills", "--layout", "fork"}, 6, "several fork sources come in a later version", "--account"},
-		{"the fork source as a tree", []string{"source", "add", forks, "--layout", "tree"}, 6, forks + " is a fork source, and a source keeps its layout", "agentx remote unset"},
+		{"the fork source as a tree", []string{"source", "add", forks, "--layout", "tree"}, 6, forks + " is a fork source, and a source keeps its layout", "agentx source remove " + forks},
 		{"an account remote with a token", []string{"source", "add", "https://me:s3cret@example.invalid/me/other", "--account"}, 1, "the URL carries a password or a token", "credential helper"},
 		{"an account remote with a ref", []string{"source", "add", "https://example.invalid/me/other#main", "--account"}, 1, "names a folder or a ref, and a fork source is a whole repository", "the repository alone"},
 		{"the fork source again with a ref", []string{"source", "add", forks + "#skills/notes"}, 1, "names a folder or a ref", "the repository alone"},

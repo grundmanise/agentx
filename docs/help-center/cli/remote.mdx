@@ -5,38 +5,9 @@ description: "Publish your forks to a Git repository you own, and pull what your
 
 The account remote is a Git repository you own, such as a private repository on GitHub. Publish a fork to it from one machine, and pull it on another. Only forks travel: managed skills, update checks and sources stay on each machine.
 
-The account remote is a [source](/cli/source) of the fork layout: it holds one branch per fork, and `agentx source list` shows it with `(account)`. The `agentx remote` commands are other names for source commands: `remote set <url>` is `agentx source add <url> --account`, and `remote unset` is `agentx source remove` of the account remote.
+The account remote is a [source](/cli/source) of the fork layout: it holds one branch per fork, and `agentx source list` shows it with `(account)`. Create an empty repository on your Git host, then add it with [`agentx source add <url> --account`](/cli/source#add-your-account-remote). Detach it with `agentx source remove <url>`: your forks and their history stay, and nothing on the remote changes.
 
 A machine without a remote keeps the whole history of every fork, with commit and diff. Attach a remote when you want a backup, or a second machine.
-
-## Attach a remote
-
-Create an empty repository on your Git host, then attach it:
-
-```sh
-agentx remote set git@github.com:you/skills.git
-```
-
-```text
-✓ the account remote is now ssh://git@github.com/you/skills; it holds 0 forks; you can write to it
-```
-
-- Give any URL Git reaches: `https://`, `ssh://`, `git@host:path`, `file://` or an absolute path. agentx records it in its canonical form, as it records a source.
-- To name the repository by its HTTPS URL and reach it over SSH, add `--push-url git@github.com:you/skills.git`: agentx fetches and pushes forks there. `--push-url=` clears it.
-- Keep credentials out of the URL. Use a Git credential helper or an SSH key, as for any repository: agentx runs `git` with your own settings, so they apply. A URL with a password or a token in it is refused with exit code 1.
-- agentx reaches the repository first. One Git cannot reach is refused with exit code 3, and nothing changes.
-- Attaching a different URL forgets what the old remote held. Your forks stay as they are, and publish to the new remote.
-- A source you added with `agentx source add` cannot become the account remote while you have skills installed from it, nor while it names the same repository by another URL: agentx stops with exit code 6. Remove the source first with `agentx source remove <url>`.
-
-Check which remote is set with `agentx remote show`:
-
-```text
-ssh://git@github.com/you/skills  fork  writable  2 forks
-```
-
-Detach it with `agentx remote unset`: your forks and their history stay, and nothing on the remote changes.
-
-An earlier agentx kept the account remote as the Git remote `origin` of its own repository. The next agentx command that changes something, such as `agentx source fetch --all`, moves it into your settings; [`agentx doctor`](/cli/doctor) names it until then.
 
 ## Publish a fork
 
@@ -58,7 +29,7 @@ agentx publish release-notes
 
 ## Install a fork on another machine
 
-On a second machine, attach the same remote, then list the forks it holds that this machine has not installed:
+On a second machine, add the same remote with `agentx source add <url> --account`, then list the forks it holds that this machine has not installed:
 
 ```sh
 agentx skill list --remote
@@ -150,10 +121,10 @@ hint: rename yours with 'agentx skill rename release-notes <new>', then publish 
 
 ## Exit codes
 
-- `1`: the URL is not one Git reaches as it is, carries a password or a token, or names a ref with `#`; the push URL breaks the rules of [`--push-url`](/cli/source#push-over-another-url); `publish` is given both a name and `--all`, or neither; `skill add --from-account` is given no name, a source, `--skill`, `--all`, `--except` or `--fetch`; or `--keep-local` is given without `--from-account`.
+- `1`: `publish` is given both a name and `--all`, or neither; `skill add --from-account` is given no name, a source, `--skill`, `--all`, `--except` or `--fetch`; or `--keep-local` is given without `--from-account`.
 - `3`: Git cannot reach the account remote.
 - `4`: a fork has a merge waiting, or the pull or publish left one waiting for you to [resolve](#resolve-a-conflict); or the managed skill a fork would take the place of has an update merge pending.
 - `5`: the name is not a skill of this machine; the remote holds no fork of that name to install; or the fork to install, or the folder `--keep-local` keeps, has no `SKILL.md`.
-- `6`: no account remote is set; a source you installed skills from, or another URL of the same repository, is in the way of `remote set`; the skill is not a fork; the fork to install is installed already, or the library holds a symlink, edits or a folder of its own at its name; the remote's branch of that name is [another fork](#two-forks-with-one-name), names no fork id, or shares no commit with yours; the fork has uncommitted edits and the remote has something new; the remote rejected the push; the fork's worktree is missing, needs repair or is not on its branch; or the fork, or its branch on the remote, changed while it was being pulled or published.
+- `6`: no account remote is set; the skill is not a fork; the fork to install is installed already, or the library holds a symlink, edits or a folder of its own at its name; the remote's branch of that name is [another fork](#two-forks-with-one-name), names no fork id, or shares no commit with yours; the fork has uncommitted edits and the remote has something new; the remote rejected the push; the fork's worktree is missing, needs repair or is not on its branch; or the fork, or its branch on the remote, changed while it was being pulled or published.
 - `7`: another agentx command is running. Retry when it finishes.
 - `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.

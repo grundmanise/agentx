@@ -906,7 +906,7 @@ func TestImportWithNoSkillsStillNamesTheSourcesToAdd(t *testing.T) {
 	contains(t, "stdout", out.stdout, "No skills in the export.\n"+
 		"  only the settings were written: add each source again, then install a missing skill with 'agentx skill add <source>'\n"+
 		"    agentx source add https://github.com/example/skills#release --push-url git@github-work:example/skills.git\n"+
-		"    agentx remote set https://github.com/me/forks\n")
+		"    agentx source add https://github.com/me/forks --account\n")
 
 	// Every field comes across but what the exporting machine found it could
 	// do there, which this machine finds out for itself.

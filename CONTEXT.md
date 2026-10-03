@@ -125,7 +125,7 @@ Something of the user's where a fork placed on this machine belongs: a directory
 _Avoid_: orphan, stray directory
 
 **Account remote**:
-The one fork source marked as the account remote: the repository account repos push forks to and fetch them from. In the MVP it is a Git repository the user owns, attached with `agentx remote set` or `agentx source add --account`; later, hosted by agentx once the machine is signed in. Only fork branches travel through it.
+The source whose settings entry carries the account flag, added with `agentx source add <url> --account`: the repository account repos push forks to and fetch them from. In the MVP it is a Git repository the user owns; later, hosted by agentx once the machine is signed in. Only fork branches travel through it.
 _Avoid_: cloud, server, origin
 
 **Publish**:

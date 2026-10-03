@@ -279,7 +279,7 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 // branch of the fork, as a pull's merge is: false on a machine with no
 // account remote.
 func (inv *invocation) mergedWithAccount(ctx context.Context, gitDir, name, theirs string) (bool, error) {
-	_, remote, ok, err := inv.accountSourceIn(ctx, gitDir)
+	_, remote, ok, err := inv.accountSource()
 	if err != nil || !ok {
 		return false, err
 	}

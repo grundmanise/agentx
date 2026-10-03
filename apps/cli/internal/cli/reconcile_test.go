@@ -317,7 +317,7 @@ func (h *harness) moveTo(t *testing.T, root string) {
 func TestServeRepairsWorktreesOfAMovedHome(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	h.mustRun("remote", "set", newAccountRemote(t, h))
+	h.setAccount(newAccountRemote(t, h))
 	_, _ = h.accountGitErr("config", "--unset", "worktree.useRelativePaths") // unset already on an older git
 	h.mustRun("skill", "new", "notes")
 	h.moveTo(t, filepath.Join(t.TempDir(), "moved"))

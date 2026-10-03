@@ -3,9 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
-	"regexp"
+	"net/url"
 	"strings"
 	"time"
 
@@ -31,10 +29,8 @@ import (
 // never without blobs: its forks' history is what pull, publish and
 // history read.
 //
-// An earlier agentx kept the account remote as the account repo's remote
-// origin and nowhere else. A command that changes something moves such a
-// remote into the settings first, see migrateAccount; until then a command
-// that only reads finds it there, see legacyOrigin.
+// The account remote is set only by source add <url> --account, see
+// addAccount, and detached only by source remove, see removeAccount.
 
 // accountEntry is the settings entry of the account remote, ok false when
 // the settings mark none.
@@ -47,21 +43,11 @@ func accountEntry(s home.Settings) (entry home.Source, ok bool) {
 	return home.Source{}, false
 }
 
-// accountSource is the account remote as this machine records it: its
+// accountSource is the account remote as the settings record it: its
 // entry, and the name of its git remote in the account repo, which every
 // command that reads, fetches or pushes the account remote's fork branches
-// works with. ok is false when no account remote is set. The entry is read
-// from the settings; with none there, the remote origin an earlier agentx
-// left in the account repo stands in for it, see legacyOrigin, its URL as
-// that remote records it.
-func (inv *invocation) accountSource(ctx context.Context) (entry home.Source, remote string, ok bool, err error) {
-	return inv.accountSourceIn(ctx, gitx.AccountRepoPath(inv.dirs.Home))
-}
-
-// accountSourceIn is accountSource for a command that has the account
-// repo's path at hand. It runs no git unless the settings mark no account
-// remote and the account repo's configuration names a remote origin.
-func (inv *invocation) accountSourceIn(ctx context.Context, gitDir string) (entry home.Source, remote string, ok bool, err error) {
+// works with. ok is false when no account remote is set. It runs no git.
+func (inv *invocation) accountSource() (entry home.Source, remote string, ok bool, err error) {
 	s, err := inv.loadSettings()
 	if err != nil {
 		return home.Source{}, "", false, err
@@ -69,57 +55,7 @@ func (inv *invocation) accountSourceIn(ctx context.Context, gitDir string) (entr
 	if entry, ok := accountEntry(s); ok {
 		return entry, source.RemoteName(source.ID(entry.URL)), true, nil
 	}
-	url, present, ours, err := inv.legacyOrigin(ctx, gitDir)
-	if err != nil || !present || !ours {
-		return home.Source{}, "", false, err
-	}
-	return home.Source{URL: url, Layout: home.LayoutFork, Account: true}, gitx.OriginRemote, true, nil
-}
-
-// originSection is the header of the remote origin's section in a git
-// configuration file: the section name is read without regard to case, the
-// subsection name as written, as git reads both.
-var originSection = regexp.MustCompile(`(?m)^[ \t]*\[(?i:remote)[ \t]+"origin"\]`)
-
-// hasOrigin reports whether the configuration file of the account repo at
-// gitDir has a section for the remote origin. It reads one file and runs no
-// git, so that every command can afford to ask: almost every machine says
-// no.
-func hasOrigin(gitDir string) bool {
-	b, err := os.ReadFile(filepath.Join(gitDir, "config"))
-	return err == nil && originSection.Match(b)
-}
-
-// legacyOrigin reads the remote origin of the account repo at gitDir from
-// its own configuration file alone, so that a remote.origin.* of the
-// user's global configuration never reads as one: present is false when the
-// file has no such section. ours says whether it is the account remote an
-// earlier agentx wrote: one URL and one fetch refspec, the fork branches
-// onto refs/remotes/origin/skills/*. Any other origin, one the user wrote
-// into the account repo by hand, is no account remote, and nothing of
-// agentx's reads or moves it.
-func (inv *invocation) legacyOrigin(ctx context.Context, gitDir string) (url string, present, ours bool, err error) {
-	if !hasOrigin(gitDir) {
-		return "", false, false, nil
-	}
-	out, _, err := inv.git.IsolatedStatus(ctx, gitDir, 1, "config", "--file", filepath.Join(gitDir, "config"), "-z", "--get-regexp", `^remote\.origin\.(url|fetch)$`)
-	if err != nil {
-		return "", true, false, accountRepoFailure(err)
-	}
-	var urls, fetches []string
-	for _, record := range strings.Split(out, "\x00") {
-		key, value, _ := strings.Cut(record, "\n")
-		switch strings.ToLower(key) {
-		case "remote.origin.url":
-			urls = append(urls, value)
-		case "remote.origin.fetch":
-			fetches = append(fetches, value)
-		}
-	}
-	if len(urls) != 1 {
-		return "", true, false, nil
-	}
-	return urls[0], true, len(fetches) == 1 && fetches[0] == gitx.ForkRefspec(gitx.OriginRemote), nil
+	return home.Source{}, "", false, nil
 }
 
 // accountRemote is the account repo and the account remote, see
@@ -128,15 +64,12 @@ func (inv *invocation) legacyOrigin(ctx context.Context, gitDir string) (url str
 // has none yet, as settings an import wrote leave it, and the remote is
 // written into it when it is not the one the entry wants, see alignAccount.
 func (inv *invocation) accountRemote(ctx context.Context) (gitDir string, entry home.Source, remote string, err error) {
-	entry, remote, ok, err := inv.accountSource(ctx)
+	entry, remote, ok, err := inv.accountSource()
 	if err != nil {
 		return "", home.Source{}, "", err
 	}
 	if !ok {
 		return "", home.Source{}, "", noRemoteRefusal()
-	}
-	if remote == gitx.OriginRemote { // read where an earlier agentx left it, as it is
-		return gitx.AccountRepoPath(inv.dirs.Home), entry, remote, nil
 	}
 	gitDir, _, err = gitx.OpenAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
@@ -170,7 +103,7 @@ func (inv *invocation) alignAccount(ctx context.Context, gitDir string, entry ho
 // noRemoteRefusal refuses a command that works with the account remote on
 // a machine that has none.
 func noRemoteRefusal() *failure {
-	return refuse(exitRefused, "no account remote is set", "run 'agentx remote set <url>' to attach a Git repository you own")
+	return refuse(exitRefused, "no account remote is set", "run 'agentx source add <url> --account' to attach a Git repository you own")
 }
 
 // fetchRemote fetches the fork branches of the account remote, the git
@@ -298,8 +231,8 @@ func accountRefusal(s home.Settings, want home.Source, installed map[string]int,
 }
 
 // addAccount makes the repository arg names the account remote, with the
-// push URL push names: remote set, source add --account and a source add of
-// the account remote's URL again all run it. arg is held to the rules of
+// push URL push names: source add --account and a source add of the account
+// remote's URL again both run it. arg is held to the rules of
 // accountURL and push to those of pushURLFor before anything is read.
 //
 // It is source add for a fork source, step by step. A source of the
@@ -379,7 +312,7 @@ func (inv *invocation) addAccount(ctx context.Context, arg string, push pushChoi
 			return cause
 		}
 		inv.out.debugf("the remote %s could not be taken back: %v", remote, err)
-		return leftBehind(cause, id, "agentx remote set "+shellWord(sanitised(reach)))
+		return leftBehind(cause, id, "agentx source add "+shellWord(sanitised(src.URL))+" --account")
 	}
 	takeBack := func(cause error) error {
 		waiting, cancel := context.WithTimeout(undo, takeBackBound(ctx))
@@ -483,17 +416,15 @@ func (inv *invocation) addAccount(ctx context.Context, arg string, push pushChoi
 	return nil
 }
 
-// removeAccount detaches the account remote entry names, whose git remote
-// is called remote, in one hold of the lock: its remote is taken out of the
-// account repo, see gitx.UnsetRemote, the remote-tracking branches first,
-// then its source ref, which a tree fetch of it may have left, then its
-// settings entry. remote unset and source remove of the account remote's
-// URL or id both run it. Local fork branches, their worktrees and every
-// commit stay as they are, and nothing on the remote changes. An account
-// remote an earlier agentx left as the remote origin, which nothing could
-// move into the settings, has no entry, and its remote alone goes.
-func (inv *invocation) removeAccount(ctx context.Context, entry home.Source, remote string) error {
+// removeAccount detaches the account remote entry names in one hold of the
+// lock: its remote is taken out of the account repo, see gitx.UnsetRemote,
+// the remote-tracking branches first, then its source ref, which a tree
+// fetch of it may have left, then its settings entry. source remove of the account remote's URL or id runs it.
+// Local fork branches, their worktrees and every commit stay as they are,
+// and nothing on the remote changes.
+func (inv *invocation) removeAccount(ctx context.Context, entry home.Source) error {
 	id := source.ID(entry.URL)
+	remote := source.RemoteName(id)
 	if err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
 		if err != nil {
@@ -503,14 +434,9 @@ func (inv *invocation) removeAccount(ctx context.Context, entry home.Source, rem
 			if err := inv.git.UnsetRemote(ctx, gitDir, remote); err != nil {
 				return accountRepoFailure(err)
 			}
-			if remote != gitx.OriginRemote {
-				if err := source.Remove(ctx, inv.git, gitDir, id); err != nil {
-					return accountRepoFailure(err)
-				}
+			if err := source.Remove(ctx, inv.git, gitDir, id); err != nil {
+				return accountRepoFailure(err)
 			}
-		}
-		if remote == gitx.OriginRemote {
-			return nil
 		}
 		s, err := inv.loadSettings()
 		if err != nil {
@@ -540,11 +466,56 @@ func (inv *invocation) forkCount(ctx context.Context, gitDir string, entry home.
 	return len(tips), len(tips) > 0 || entry.LastFetched != "", nil
 }
 
-// forksCell is the commit column of a fork source in source list and
-// remote show: how many forks it held at its last fetch.
+// forksCell is the commit column of a fork source in source list: how many
+// forks it held at its last fetch.
 func forksCell(n int, fetched bool) cell {
 	if !fetched {
 		return c("not fetched", warnStyle)
 	}
 	return c(plural(n, "fork"), muted)
+}
+
+// retrack makes every fork branch whose tracking configuration names the
+// remote called from name the remote called to instead, see
+// gitx.SetTracking, so that git status in its worktree goes on comparing it
+// with its branch on the account remote.
+func (inv *invocation) retrack(ctx context.Context, gitDir, from, to string) error {
+	out, _, err := inv.git.IsolatedStatus(ctx, gitDir, 1, "config", "-z", "--get-regexp", `^branch\.skills/.*\.remote$`)
+	if err != nil {
+		return err
+	}
+	for _, record := range strings.Split(out, "\x00") {
+		key, value, ok := strings.Cut(record, "\n")
+		if !ok || value != from {
+			continue
+		}
+		if _, err := inv.git.Isolated(ctx, gitDir, "config", key, to); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// quotedArg is s in double quotes, the way a message names an argument it
+// could not read as anything else.
+func quotedArg(s string) string { return `"` + sanitised(s) + `"` }
+
+// shownURL is a remote URL as agentx prints it: a password someone wrote
+// into the account repo's configuration by hand is never shown.
+func shownURL(raw string) string {
+	if u, err := url.Parse(raw); err == nil && u.User != nil {
+		if _, ok := u.User.Password(); ok {
+			u.User = url.UserPassword(u.User.Username(), "***")
+			return sanitised(u.String())
+		}
+	}
+	return sanitised(raw)
+}
+
+// accountRepoFailureOrNil is accountRepoFailure for an error that may be nil.
+func accountRepoFailureOrNil(err error) error {
+	if err == nil {
+		return nil
+	}
+	return accountRepoFailure(err)
 }

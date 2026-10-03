@@ -66,14 +66,14 @@ func accountHomes(t *testing.T) (a, b *harness, s *sourceRepo, remote string) {
 	a.mustRun("skill", "fork", "alpha")
 	a.mustRun("skill", "fork", "beta")
 	remote = newAccountRemote(t, a)
-	a.mustRun("remote", "set", remote)
+	a.setAccount(remote)
 	a.mustRun("publish", "--all")
 
 	b = newHarness(t)
 	b.build(t, fixture{dirs: []string{".claude"}})
 	b.rewrite(s)
 	b.withIdentity("Machine B", "b@example.com")
-	b.mustRun("remote", "set", remote)
+	b.setAccount(remote)
 	return a, b, s, remote
 }
 
@@ -316,13 +316,13 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 	t.Parallel()
 	a, _, _, _ := forkHarness(t)
 	remote := newAccountRemote(t, a)
-	a.mustRun("remote", "set", remote)
+	a.setAccount(remote)
 	out := a.mustRun("--json", "publish", "notes")
 	equal(t, "outcome", a.one(out.stdout, "publish")["outcome"], publishPushed)
 	equal(t, "summary", a.one(out.stdout, "result")["summary"], "published notes")
 
 	b, _, _, _ := forkHarness(t)
-	b.mustRun("remote", "set", remote)
+	b.setAccount(remote)
 	writeFile(t, filepath.Join(b.forkDir("notes", "notes"), "draft.md"), "uncommitted\n")
 	for _, cmd := range []string{"publish", "pull"} {
 		out := b.run("--json", cmd, "notes")
@@ -370,112 +370,17 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 	equal(t, "b's notes", ev["state"], restoreDifferent)
 	equal(t, "b's commit", ev["local_commit"], b.ref(lineage.ForkRef("notes")))
 	fresh := newHarness(t)
-	fresh.mustRun("remote", "set", remote)
+	fresh.setAccount(remote)
 	ev = state(fresh)
 	equal(t, "the fresh machine's notes", ev["state"], restorePresent)
 	equal(t, "its kind", ev["local_kind"], lineage.KindFork)
 	writeFile(t, filepath.Join(a.forkDir("notes", "notes"), "more.md"), "more\n")
 	a.mustRun("skill", "commit", "notes")
 	a.mustRun("publish", "notes")
-	fresh.mustRun("remote", "set", remote)
+	fresh.setAccount(remote)
 	ev = state(fresh)
 	equal(t, "the fresh machine's notes, published again", ev["state"], restoreDifferent)
 	equal(t, "its commit", ev["local_commit"], a.ref(lineage.ForkRef("notes")))
-}
-
-// TestRemoteSetShowUnset attaches, shows and detaches the account remote,
-// a source of the fork layout. With none set, show says so and emits no
-// event, and pull and publish are refused, exit 6. A URL with a password is
-// refused, exit 1, and one git cannot reach, exit 3, before anything is
-// written, an account repo included. remote set records the settings entry
-// and the remote src-<id>, with one fetch refspec, the fork branches, no
-// tags, no push URL and no promisor settings, then fetches its forks and
-// checks what this machine may do there; source list shows it beside the
-// tree sources, and source fetch fetches its forks. Setting another URL
-// replaces the entry and forgets what the first one held, a fork's
-// tracking following it; source remove of the account remote is remote
-// unset: its configuration, its remote-tracking branches and its entry go,
-// and the local fork stays. source add of its URL adds it again as the
-// account remote.
-func TestRemoteSetShowUnset(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	out := h.mustRun("--json", "remote", "show")
-	equal(t, "show with none", strings.Join(h.types(h.events(out.stdout)), " "), "result")
-	contains(t, "show with none, as text", h.mustRun("remote", "show").stdout, "No account remote is set. Attach one with agentx remote set <url>.")
-	for _, args := range [][]string{{"pull"}, {"publish", "--all"}} {
-		out := h.run(append([]string{"--json"}, args...)...)
-		equal(t, args[0]+": exit", out.exit, 6)
-		equal(t, args[0]+": message", h.one(out.stdout, "error")["message"], "no account remote is set")
-	}
-	equal(t, "a password", h.run("remote", "set", "https://me:secret@example.com/skills.git").exit, 1)
-	remote := newAccountRemote(t, h)
-	equal(t, "an unreachable remote", h.run("remote", "set", remote+"-missing").exit, 3)
-	if _, err := os.Stat(gitx.AccountRepoPath(h.agentx)); err == nil {
-		t.Error("a remote that could not be set created the account repo")
-	}
-
-	h.mustRun("skill", "new", "notes")
-	url := "file://" + remote
-	name := source.RemoteName(source.ID(url))
-	out = h.mustRun("--json", "remote", "set", remote)
-	ev := h.one(out.stdout, "source")
-	equal(t, "url", ev["url"], url)
-	equal(t, "layout", ev["layout"], home.LayoutFork)
-	equal(t, "account", ev["account"], true)
-	equal(t, "access", ev["access"], home.AccessWritable)
-	equal(t, "forks", ev["forks"], float64(0))
-	equal(t, "fetch refspecs", h.accountGit("config", "--get-all", "remote."+name+".fetch"), gitx.ForkRefspec(name))
-	equal(t, "tags", h.accountGit("config", "--get", "remote."+name+".tagOpt"), "--no-tags")
-	equal(t, "the remote's URL", h.accountGit("config", "--get", "remote."+name+".url"), url)
-	for _, key := range []string{"pushurl", "promisor", "partialclonefilter"} {
-		if got, err := h.accountGitErr("config", "--get", "remote."+name+"."+key); err == nil {
-			t.Errorf("the account remote has %s = %s", key, got)
-		}
-	}
-	entry := sourceEntryOf(t, h, url)
-	equal(t, "the entry's layout", entry["layout"], home.LayoutFork)
-	equal(t, "the entry's account flag", entry["account"], true)
-	h.mustRun("publish", "notes")
-	equal(t, "the remote-tracking branch", h.ref(lineage.RemoteForkRef(name, "notes")), h.ref(lineage.ForkRef("notes")))
-	out = h.mustRun("remote", "set", remote, "--push-url=") // setting it again fetches and checks it again
-	contains(t, "set again", out.stdout, "the account remote is now "+url+"; it holds 1 fork; you can write to it")
-	contains(t, "source add of it, which keeps its layout", h.mustRun("source", "add", remote).stdout, "the account remote is now "+url)
-	contains(t, "source list", h.mustRun("source", "list").stdout, "  "+url+" (account)  fork  writable  skills/*  1 fork  ")
-	contains(t, "show", h.mustRun("remote", "show").stdout, url+"  fork  writable  1 fork")
-	contains(t, "source fetch", h.mustRun("source", "fetch", "--all").stdout, "re-fetched "+url+": 1 fork; you can write to it")
-
-	h.accountGit("config", "branch.skills/notes.remote", name)
-	other := newAccountRemote(t, h)
-	otherURL := "file://" + other
-	otherName := source.RemoteName(source.ID(otherURL))
-	h.mustRun("remote", "set", other)
-	if sources, _ := readSettingsFile(t, h)["sources"].([]any); len(sources) != 1 {
-		t.Errorf("the settings hold %v, want the new account remote alone", readSettingsFile(t, h)["sources"])
-	}
-	equal(t, "the new entry", sourceEntryOf(t, h, otherURL)["account"], true)
-	equal(t, "what the first remote held", h.ref(lineage.RemoteForkRef(name, "notes")), "")
-	if got, err := h.accountGitErr("config", "--get-regexp", "^remote\\."+name+"\\."); err == nil {
-		t.Errorf("the first remote's configuration is still there: %s", got)
-	}
-	equal(t, "the fork's tracking", h.accountGit("config", "--get", "branch.skills/notes.remote"), otherName)
-
-	for _, unset := range [][]string{{"source", "remove", otherURL}, {"remote", "unset"}} {
-		h.mustRun("remote", "set", other)
-		out = h.mustRun(unset...)
-		contains(t, strings.Join(unset, " "), out.stdout, "the account remote "+otherURL+" is no longer set; the forks of this machine are as they were")
-		if out, err := h.accountGitErr("config", "--get-regexp", "^(remote\\.|branch\\.)"); err == nil {
-			t.Errorf("%s left configuration: %s", strings.Join(unset, " "), out)
-		}
-		equal(t, "remote-tracking branches", h.accountGit("for-each-ref", "refs/remotes/"), "")
-		if sources, _ := readSettingsFile(t, h)["sources"].([]any); len(sources) != 0 {
-			t.Errorf("%s left the entry: %v", strings.Join(unset, " "), readSettingsFile(t, h)["sources"])
-		}
-		if h.ref(lineage.ForkRef("notes")) == "" {
-			t.Errorf("%s took the local fork", strings.Join(unset, " "))
-		}
-	}
-	contains(t, "unset again", h.mustRun("remote", "unset").stdout, "No account remote is set")
 }
 
 // sourceEntryOf is the settings entry of the source at url, as the file
@@ -490,47 +395,6 @@ func sourceEntryOf(t *testing.T, h *harness, url string) map[string]any {
 	}
 	t.Fatalf("no settings entry for %s in %v", url, sources)
 	return nil
-}
-
-// TestRemoteURLRefusal is which URLs the account remote can be set to.
-func TestRemoteURLRefusal(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		url    string
-		reason string // a word of the refusal, "" for a URL that is accepted
-	}{
-		{"https://github.com/me/skills.git", ""},
-		{"ssh://git@github.com/me/skills.git", ""},
-		{"git@github.com:me/skills.git", ""},
-		{"github.com:me/skills.git", ""},
-		{"file:///srv/skills.git", ""},
-		{"/srv/skills.git", ""},
-		{"", "not a URL"},
-		{" https://github.com/me/skills.git", "not a URL"},
-		{"--upload-pack=x", "not a URL"},
-		{"me/skills", "not a URL"},
-		{"skills.git", "not a URL"},
-		{"https://github.com/me/skills.git\n", "not a URL"},
-		{"https://me:secret@github.com/me/skills.git", "password or a token"},
-		{"https://token@github.com/me/skills.git", "password or a token"},
-		{"ssh://git:secret@github.com/me/skills.git", "password or a token"},
-		{"git:secret@github.com:me/skills.git", "password or a token"},
-		{"https://github.com/me/skills.git#main", "names a ref"},
-	} {
-		t.Run(tc.url, func(t *testing.T) {
-			t.Parallel()
-			f := remoteURLRefusal(tc.url)
-			switch {
-			case tc.reason == "" && f != nil:
-				t.Errorf("refused: %s", f.message)
-			case tc.reason != "" && f == nil:
-				t.Errorf("accepted, want a refusal saying %q", tc.reason)
-			case f != nil:
-				contains(t, "the refusal", f.message, tc.reason)
-				equal(t, "exit", f.status.exit, 1)
-			}
-		})
-	}
 }
 
 // TestSkillUpdateOfAForkPullsThenMerges updates on machine b a fork that

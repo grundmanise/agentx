@@ -568,7 +568,7 @@ func (inv *invocation) sourceSkills(ctx context.Context, arg string) error {
 //
 // A fork source's remote goes with its remote-tracking branches and the
 // tracking configuration of every fork branch that names it, see
-// removeAccount, which is remote unset for the account remote.
+// removeAccount.
 func (inv *invocation) sourceRemove(ctx context.Context, arg string) error {
 	id, url, err := inv.sourceToRemove(ctx, arg)
 	if err != nil {
@@ -577,7 +577,7 @@ func (inv *invocation) sourceRemove(ctx context.Context, arg string) error {
 	if s, err := inv.loadSettings(); err != nil {
 		return err
 	} else if i := s.FindSource(url); i >= 0 && s.Sources[i].Layout == home.LayoutFork {
-		return inv.removeAccount(ctx, s.Sources[i], source.RemoteName(id))
+		return inv.removeAccount(ctx, s.Sources[i])
 	}
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
