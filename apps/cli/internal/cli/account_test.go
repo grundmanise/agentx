@@ -83,7 +83,7 @@ func TestAccountRemoteRefusesASharedSourceOfItsURL(t *testing.T) {
 
 // TestTheAccountRemoteIsSetReplacedAndDetached attaches, replaces and
 // detaches the account remote. With none set,
-// pull is refused, exit 6, naming source add --account. One git cannot reach
+// publish is refused, exit 6, naming source add --account. One git cannot reach
 // is refused, exit 3, before anything is written, an account repo included.
 // source add --account records the settings entry and the remote src-<id>,
 // with one fetch refspec, the fork branches, no tags and no promisor
@@ -97,11 +97,11 @@ func TestAccountRemoteRefusesASharedSourceOfItsURL(t *testing.T) {
 func TestTheAccountRemoteIsSetReplacedAndDetached(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	out := h.run("--json", "pull")
-	equal(t, "pull: exit", out.exit, 6)
+	out := h.run("--json", "skill", "publish")
+	equal(t, "publish: exit", out.exit, 6)
 	e := h.one(out.stdout, "error")
-	equal(t, "pull: message", e["message"], "no account remote is set")
-	contains(t, "pull: hint", e["hint"].(string), "agentx source add <url> --account")
+	equal(t, "publish: message", e["message"], "no account remote is set")
+	contains(t, "publish: hint", e["hint"].(string), "agentx source add <url> --account")
 	remote := newAccountRemote(t, h)
 	equal(t, "an unreachable remote", h.run("source", "add", remote+"-missing", "--account").exit, 3)
 	if _, err := os.Stat(gitx.AccountRepoPath(h.agentx)); err == nil {

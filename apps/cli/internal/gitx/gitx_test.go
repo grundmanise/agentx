@@ -287,7 +287,7 @@ func TestAddCheckoutLocksWithTheReason(t *testing.T) {
 }
 
 // TestGitRunsFromADeletedDirectory: a process whose working directory was
-// removed, a shell left in a merge checkout a pull completed, still reads
+// removed, a shell left in a merge checkout an update completed, still reads
 // the repository it names. Not parallel: it changes the working directory.
 func TestGitRunsFromADeletedDirectory(t *testing.T) {
 	r, gitDir, commit := checkoutRepo(t)

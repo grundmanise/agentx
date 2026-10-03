@@ -49,7 +49,7 @@ const installRemoteRow = "installable"
 // walk of their remote tips. A branch whose name agentx would never give
 // a fork, or whose history records no fork id, is left out, with a warning
 // each: installing the one could not create the local branch, and the
-// other could never be pulled or published, since nothing would tell that
+// other could never be updated or published, since nothing would tell that
 // the two branches are one fork.
 func (inv *invocation) installableForks(ctx context.Context, gitDir, remote string, records map[string]lineage.Record) ([]installableForkEvent, []string, error) {
 	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
@@ -299,9 +299,9 @@ func (inv *invocation) judgeAccountInstall(ctx context.Context, gitDir, remote, 
 	}
 	in.there = walked[tip]
 	if in.there.ID == "" {
-		// A pull and a publish refuse a fork whose two histories do not
-		// both record its id, so a fork installed from this branch could
-		// never sync.
+		// The account step and a publish refuse a fork whose two histories
+		// do not both record its id, so a fork installed from this branch
+		// could never sync.
 		return nil, fail(exitRefused, "the history of the account remote's skills/"+sanitised(name)+" records no fork id, so nothing tells that it is a fork and "+sanitised(name)+" cannot be installed",
 			"publish it from a fork agentx made, one 'agentx skill new' or 'agentx skill fork' creates, on the machine that holds it")
 	}
@@ -361,7 +361,7 @@ func (inv *invocation) tipHoldsSkill(ctx context.Context, gitDir, tip, dir strin
 }
 
 // installedRefusal refuses to install a fork this machine has a branch of
-// already, exit code 6: a pull takes in what the account remote holds of
+// already, exit code 6: an update takes in what the account remote holds of
 // it, and skill place lays out one that was never placed here.
 func (inv *invocation) installedRefusal(gitDir string, rec lineage.Record) error {
 	name := rec.Name
@@ -370,7 +370,7 @@ func (inv *invocation) installedRefusal(gitDir string, rec lineage.Record) error
 			"run '"+skillCommand("place", name)+"' to place it")
 	}
 	return fail(exitRefused, sanitised(name)+" is already installed on this machine",
-		"run '"+pullCommand(name)+"' to take in what the account remote holds of it")
+		"run '"+skillCommand("update", name)+"' to take in what the account remote holds of it")
 }
 
 // tipDir is the skill directory a fork's tip holds at its root: the one
@@ -513,7 +513,7 @@ func (inv *invocation) applyAccountInstall(ctx context.Context, in *accountInsta
 	rec, held := records[f.name]
 	switch {
 	case held && rec.Kind == lineage.KindFork:
-		return fail(exitRefused, sanitised(f.name)+" was installed by another command meanwhile, so nothing was changed", "run '"+pullCommand(f.name)+"' to take in what the account remote holds of it")
+		return fail(exitRefused, sanitised(f.name)+" was installed by another command meanwhile, so nothing was changed", "run '"+skillCommand("update", f.name)+"' to take in what the account remote holds of it")
 	case held != (in.managed != nil), held && rec.Commit != in.managed.Commit:
 		return fail(exitRefused, sanitised(f.name)+"'s import branch changed while the fork was being installed, so nothing was changed", again)
 	}

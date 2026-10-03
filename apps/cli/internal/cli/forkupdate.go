@@ -49,18 +49,17 @@ type forkUpdate struct {
 	message string // the message of the commit that completes a merge left pending, its MERGE_MSG
 	// theirsRef is the ref the commit the fork takes in was read from, which
 	// has to hold theirs still under the lock: the update candidate for an
-	// update, the remote-tracking branch for a pull; "" for a merge pending
-	// being completed, which takes in what it merged, whatever the ref
-	// holds now.
+	// update, the remote-tracking branch for the account step; "" for a
+	// merge pending being completed, which takes in what it merged,
+	// whatever the ref holds now.
 	theirsRef, theirs string
 	// with is what a merge left pending merges, as the line that reports it
 	// names it, see updating.conflictsWith; "" for an update from upstream.
 	with string
-	// pull is set for a pull from the account remote, a publish's and an
-	// update's account step included, which says so in its refusals and
-	// names its own command in their hints, and doing is "published" for a
-	// publish's and "updated" for an update's; an update from upstream
-	// leaves both unset.
+	// pull is set for the account step, which takes in what the account
+	// remote holds, of an update or of a publish, and says so in its
+	// refusals, and doing is "published" for a publish's and "updated" for
+	// an update's; an update from upstream leaves both unset.
 	pull  bool
 	doing string
 	// stale is the update candidate the fork's new base passed: when the
@@ -95,13 +94,10 @@ func (inv *invocation) staleCandidate(ctx context.Context, gitDir string, rec li
 }
 
 // what is what the command does to the fork, as its refusals say it cannot
-// be done: pulled, published or updated.
+// be done: published or updated.
 func (f *forkUpdate) what() string {
-	switch {
-	case f.doing != "":
+	if f.doing != "" {
 		return f.doing
-	case f.pull:
-		return "pulled"
 	}
 	return "updated"
 }
@@ -109,24 +105,19 @@ func (f *forkUpdate) what() string {
 // again is the command that does it again for the fork called name, and
 // what it does, as the hints of its refusals name them.
 func (f *forkUpdate) again(name string) (command, verb string) {
-	switch {
-	case f.doing == "published":
+	if f.doing == "published" {
 		return publishCommand(name), "publish"
-	case f.doing == "updated":
-		return skillCommand("update", name), "update"
-	case f.pull:
-		return pullCommand(name), "pull"
 	}
 	return skillCommand("update", name), "update"
 }
 
 // complete is how the fork's merge is completed once it is resolved, as
 // the hint of its conflict says it: by running the command that started it
-// again, but for a merge a publish started, which a pull completes, since
-// a publish never completes a pending merge.
+// again, but for a merge a publish started, which an update completes,
+// since a publish never completes a pending merge.
 func (f *forkUpdate) complete(name string) string {
 	if f.doing == "published" {
-		return "run '" + pullCommand(name) + "' to complete it before publishing again"
+		return "run '" + skillCommand("update", name) + "' to complete it before publishing again"
 	}
 	command, _ := f.again(name)
 	return "run '" + command + "' again to apply it"
@@ -188,7 +179,7 @@ func (inv *invocation) forkBaseOf(ctx context.Context, gitDir string, rec lineag
 func (inv *invocation) judgeForkUpdate(ctx context.Context, gitDir string, rec lineage.Record, sources map[string]bool) (*updating, *failure) {
 	name := rec.Name
 	if inv.mergePending(name) {
-		return inv.judgeForkCompletion(ctx, gitDir, rec, false)
+		return inv.judgeForkCompletion(ctx, gitDir, rec)
 	}
 	base, f := forkBaseRecord(rec)
 	if f != nil {

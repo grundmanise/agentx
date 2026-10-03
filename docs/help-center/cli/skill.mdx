@@ -636,19 +636,6 @@ agentx skill update --all
 
 If no check has found an update for the skill, the command says it is up to date as of the last check and changes nothing. Run `agentx skill check-updates` to look again.
 
-Take in what you published from another machine the same way. With an [account remote](/cli/source#add-your-account-remote) set, `agentx skill update <name>` of one of your own skills fetches the account remote first and takes in what it holds that this machine lacks, and `agentx skill update --all` does so for every one of your own skills on this machine, with no check first:
-
-```sh
-agentx skill update --all
-```
-
-```text
-✓ pulled notes: fast-forward to 4c2d1e9
-no skill was updated from upstream
-```
-
-A skill with no upstream (one you created with `agentx skill new`, or forked from an unmanaged or a plugin's skill) that has nothing new on the account remote is `up to date with the account remote`; one you never published has no branch there yet, and the update tells you to run `agentx skill publish <name>`. If Git cannot reach the account remote, its update stops with exit code 3; a skill you forked from a source only gets a warning and still takes its new upstream version.
-
 A copy placement is handled on its own:
 
 - A copy that holds the version you are replacing gets the new version, and keeps the files your ignore rules name in it.
@@ -663,6 +650,31 @@ Only what the skill held when you ran the command is replaced:
 - If a file of the skill changes while the update is being written, agentx stops with exit code 6, keeps your change and says that recovery is required. Restore the file it names to let the next command finish the update. To keep your change instead, move the named file in `~/.agentx/mutations` aside; the skill then shows as modified against the new version, with no update available.
 
 agentx keeps what it replaces until the update is complete, so an interrupted update finishes on the next command, running the update again included, and loses nothing.
+
+### Take in what another machine published
+
+Your own skills travel between your machines through the [account remote](/cli/source#add-your-account-remote): the ones you created with `agentx skill new`, forked with `agentx skill fork`, or installed from the account remote. Take in what you published of them from another machine the way you take an update:
+
+```sh
+agentx skill check-updates
+agentx skill update --all
+```
+
+```text
+✓ pulled notes: fast-forward to 4c2d1e9
+no skill was updated from upstream
+```
+
+- `agentx skill check-updates` lists what the account remote holds that this machine lacks as `published from another machine`. Checking first is optional: `agentx skill update <name>` fetches the account remote itself.
+- `agentx skill update <name>` takes in what the account remote holds of one skill. `agentx skill update --all` does so for every one of your own skills on this machine.
+- When this machine has no commits of its own, the skill moves to the published commit: a fast-forward, with nothing new committed. When both machines committed, agentx merges the two with Git and commits the merge, as `notes: merge the account remote (desktop)`.
+- A skill you forked from a source takes in what the account remote holds first, then its new upstream version, as two commits.
+- Commit or discard your edits first: a skill with uncommitted edits stops with exit code 6 when the account remote has something new.
+- When both machines changed the same lines, the merge waits for you: see [Resolve a conflict](/cli/fork#resolve-a-conflict). Resolve it, then run `agentx skill update <name>` again.
+- A skill with no upstream (one you created with `agentx skill new`, or forked from an unmanaged or a plugin's skill) that has nothing new on the account remote is `up to date with the account remote`. One you never published has no branch there yet, and the update tells you to run `agentx skill publish <name>`.
+- If Git cannot reach the account remote, the update of a skill with no upstream stops with exit code 3; a skill you forked from a source gets a warning and still takes its new upstream version.
+
+A forked skill remembers the upstream version it was last updated from. When both machines took different versions of the same upstream, the merge records the newer one, but only when the source's history on this machine proves it newer: run [`agentx source fetch`](/cli/source) first to fetch that history. Otherwise the merge keeps this machine's version, and at worst the next update conflicts where both versions changed the same lines. When the merge brings a newer upstream version than the update your last check found, agentx drops that update, so the update never takes the skill back to the older version.
 
 ### A skill you edited
 
@@ -745,7 +757,7 @@ This removes the worktree and whatever you resolved in it. Your library director
 - A skill with a [merge pending](#when-your-edits-conflict) that still has files to resolve stops with exit code 4 and lists them.
 - `agentx skill update <name>` of a skill whose source you removed stops with exit code 5, and the hint names the `agentx source add` command that brings the source back. With `--all`, the skill is skipped with a warning that names the same command, and the run does not fail. Either way, the update found earlier is kept.
 - A skill its source no longer holds, shown as `upstream removed`, is kept as it is and never updated: exit code 6.
-- A skill agentx did not install has no update to apply: exit code 6. A fork is updated by merging, see [Take a new upstream version](/cli/fork#take-a-new-upstream-version); one with no upstream, such as a skill you created, stops with exit code 6 when no account remote is set. With one set, its update takes in what your other machines published, see [Update a skill](#update-a-skill).
+- A skill agentx did not install has no update to apply: exit code 6. A fork is updated by merging, see [Take a new upstream version](/cli/fork#take-a-new-upstream-version); one with no upstream, such as a skill you created, stops with exit code 6 when no account remote is set. With one set, its update takes in what your other machines published, see [Take in what another machine published](#take-in-what-another-machine-published).
 - A skill whose library directory is gone stops with exit code 6. Install it again with `agentx skill add <source> --name <name>`, or stop managing it with `agentx skill remove <name>`.
 - A skill whose record in the account repo agentx cannot read stops with exit code 6. Run `agentx doctor` and check the account repo it names.
 - A skill whose library directory is a symlink to a directory of your own stops with exit code 6, even if you edited that directory: an update replaces the library directory, so it would remove your link. Replace the link with the directory it points to, then update again. With `--all` this skill is counted as not updated.
@@ -768,7 +780,7 @@ For `skill add --from-account`, see the [account remote's exit codes](/cli/remot
   - `skill add` is given something that is not a source, for example the name of a skill the library already holds;
   - `skill update` was given both a name and `--all`, neither, or `--abort` with `--all`.
 - `3`: the source, or the files of the skill, could not be fetched. For `skill check-updates`, also a run whose sources and skills failed for different reasons. For `skill update`, also the account remote, for a skill with no upstream.
-- `4`: `skill update` found your edits conflicting with the update and left the merge pending, or found files of a pending merge still to resolve, or a merge already pending blocks `skill fork` or a `skill remove` that takes the skill off the machine. See [When your edits conflict](#when-your-edits-conflict).
+- `4`: `skill update` found your edits, or what another machine published, conflicting with the update and left the merge pending, or found files of a pending merge still to resolve, or a merge already pending blocks `skill fork` or a `skill remove` that takes the skill off the machine. See [When your edits conflict](#when-your-edits-conflict).
 - `5`: something the command names does not exist:
   - a source id names no source on this machine (for a source you removed, the hint names the `agentx source add` command that brings it back), the source did not serve a skill's files, the path or a skill named by `--name` or `--except` does not exist in the source, or `--to` or `--from` names a configuration that is not detected;
   - `skill place`, `skill diff` and `skill update` (except with `--abort`): also a name the library does not hold as a skill, other than a fork's for `skill place`, which [puts the fork back](/cli/fork#recover-a-fork);
@@ -782,7 +794,7 @@ For `skill add --from-account`, see the [account remote's exit codes](/cli/remot
   - `skill diff --update`: also a skill no check has found an update for.
   - `skill check-updates`: a newer version agentx will not install, for the reasons `skill add` refuses one.
   - `skill place`: a displaced directory that differs from the library when `--force` is not given; for a fork, see [Forks](/cli/fork#exit-codes); a managed skill whose library directory is gone; a skill or placement that changed while it was being placed; a library directory that is a symlink or holds one when the command would remove a displaced directory; and a client's directory it would change that symlinks make overlap the library, a directory a library entry links to or another client's directory.
-  - `skill update`: a skill agentx did not install, a managed skill whose library directory is gone or whose import branch records no version agentx can read, a skill its source no longer holds, a skill that holds something git cannot record, a skill whose library directory is a symlink, or a skill, its installed version or its update that changed while it was being updated. With a merge pending, also a library directory edited or a record moved outside agentx while the merge was pending; see [Finish the merge](#finish-the-merge).
+  - `skill update`: a skill agentx did not install, a managed skill whose library directory is gone or whose import branch records no version agentx can read, a skill its source no longer holds, a skill that holds something git cannot record, a skill whose library directory is a symlink, one of your own skills with uncommitted edits when the account remote has something new, or a skill, its installed version or its update that changed while it was being updated. With a merge pending, also a library directory edited or a record moved outside agentx while the merge was pending; see [Finish the merge](#finish-the-merge).
   - `skill update --abort`: any name with no merge pending, one the library does not hold included.
   - A run of several skills, other than `skill check-updates`: the skills that were skipped disagree about why. A run whose failures all have one cause exits with that cause, so a batch that skipped two skills the source did not serve exits `5`.
 - `7`: another agentx command is running. Retry when it finishes.

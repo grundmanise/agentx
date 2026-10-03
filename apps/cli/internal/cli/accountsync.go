@@ -4,85 +4,49 @@ import (
 	"context"
 	"errors"
 	"sort"
-	"strconv"
 	"strings"
-
-	"github.com/spf13/cobra"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
-// A pull brings a fork up to date with what another machine published to
-// the account remote, by a plain Git merge on the ancestry the two
-// histories share: nothing when the account remote holds nothing this
-// machine lacks, a fast-forward when this machine holds nothing the
-// account remote lacks, and otherwise a merge of the two tips, git finding
-// their merge base. A clean merge is committed by the fork commit writer,
-// with the local tip and the remote tip as its parents and the base the
-// two sides agree on, see lineage.PickBase, and the branch and the
-// worktree move to it in one journal, as an update's do. A merge that
-// conflicts becomes a pending merge in a checkout under agentx home, as an
-// update's does: the fork's worktree and branch stay as they are, and the
-// next pull or update of the fork completes it once it is resolved there
-// with git. A pull refuses a remote branch of the same name that is
-// another fork, by its fork id, and, while the fork has edits nobody
-// committed, anything that would move its branch.
+// The account step brings a fork up to date with what another machine
+// published to the account remote, by a plain Git merge on the ancestry the
+// two histories share: nothing when the account remote holds nothing this
+// machine lacks, a fast-forward when this machine holds nothing the account
+// remote lacks, and otherwise a merge of the two tips, git finding their
+// merge base. It is the first step of a fork's update, see
+// updateRun.accountStep, and what a publish takes in first. A clean merge
+// is committed by the fork commit writer, with the local tip and the remote
+// tip as its parents and the base the two sides agree on, see
+// lineage.PickBase, and the branch and the worktree move to it in one
+// journal, as an update's do. A merge that conflicts becomes a pending
+// merge in a checkout under agentx home, as an update's does: the fork's
+// worktree and branch stay as they are, and the next update of the fork
+// completes it once it is resolved there with git. The account step
+// refuses a remote branch of the same name that is another fork, by its
+// fork id, and, while the fork has edits nobody committed, anything that
+// would move its branch.
 
-// pullEvent is what one pull did to one fork.
+// pullEvent is what the account step did to one fork.
 type pullEvent struct {
 	event
 	Name    string `json:"name"`
 	Outcome string `json:"outcome"`
-	Commit  string `json:"commit,omitempty"` // the fork's new tip, when the pull moved it
-	Base    string `json:"base,omitempty"`   // the base the merge records, when the pull merged
+	Commit  string `json:"commit,omitempty"` // the fork's new tip, when the account step moved it
+	Base    string `json:"base,omitempty"`   // the base the merge records, when the account step merged
 }
 
-// The outcomes of a pull, one per fork.
+// The outcomes of the account step, one per fork. An up to date fork is
+// never reported: the step took nothing in.
 const (
-	pullUpToDate    = "up to date"       // the account remote holds nothing the fork lacks
-	pullFastForward = "fast-forward"     // the fork's branch moved to the remote tip
-	pullMerged      = "merged"           // the two tips were merged, or a merge left pending was completed
-	pullConflict    = "conflict"         // the merge is pending
-	pullRefused     = "refused"          // see the error
-	pullNoBranch    = "no remote branch" // the account remote holds no branch of the fork's name
+	pullUpToDate    = "up to date"   // the account remote holds nothing the fork lacks
+	pullFastForward = "fast-forward" // the fork's branch moved to the remote tip
+	pullMerged      = "merged"       // the two tips were merged
+	pullConflict    = "conflict"     // the merge is pending
+	pullRefused     = "refused"      // see the error
 )
-
-func newPullCommand(inv *invocation) *cobra.Command {
-	return &cobra.Command{
-		Use:   "pull [<name>]",
-		Short: "Take in what another machine published of a fork, or of every fork",
-		Long: "Fetch the account remote once, then bring the fork called <name>, or every fork\n" +
-			"placed on this machine, up to date with its branch there, by a plain Git merge:\n" +
-			"a fast-forward when this machine has nothing of its own, a merge committed on the\n" +
-			"fork's branch otherwise. A merge that conflicts waits in a Git worktree under\n" +
-			"agentx home, as an update's does, and the fork stays as it is until you resolve it\n" +
-			"with git and pull again, or give it up with 'agentx skill update <name> --abort'.\n" +
-			"Commit a fork's uncommitted edits before it can take anything in. One\n" +
-			"fork that cannot be pulled does not stop the others.",
-		Args: cobra.MaximumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			name := ""
-			if len(args) > 0 {
-				name = args[0]
-			}
-			return inv.pull(cmd.Context(), name)
-		},
-	}
-}
-
-// pullCommand is the command line that pulls the fork called name.
-func pullCommand(name string) string { return remoteCommand("pull", name) }
-
-// remoteCommand is the command line of the top-level command verb for the
-// fork called name, as a hint names it.
-func remoteCommand(verb, name string) string {
-	if strings.HasPrefix(name, "-") {
-		return "agentx " + verb + " -- " + shellWord(name)
-	}
-	return "agentx " + verb + " " + shellWord(name)
-}
 
 // remoteForks is what the account remote held of the forks a run covers,
 // as its fetch left the remote-tracking branches: each fork's remote tip,
@@ -122,9 +86,9 @@ func (inv *invocation) walkRemoteForks(ctx context.Context, gitDir, remote strin
 	return remoteForks{remote: remote, tips: tips, walked: walked}, nil
 }
 
-// forkSync is what a pull, a publish or the account step of an update made
-// of one fork: its outcome, see the pull outcomes, the update it applied
-// or left pending, and why it was refused.
+// forkSync is what the account step of an update, or of a publish, made of
+// one fork: its outcome, see the outcomes of the account step, the update
+// it applied or left pending, and why it was refused.
 type forkSync struct {
 	name    string
 	outcome string
@@ -137,10 +101,10 @@ func (s forkSync) moved() bool {
 	return s.outcome == pullFastForward || s.outcome == pullMerged
 }
 
-// syncFork pulls the fork whose branch is rec, see judgePull, and applies
-// what the pull found, in a hold of the lock and a journal of its own, see
-// applyForkUpdate. doing is what the command does, as its refusals say it:
-// pulled, published, or updated for the account step of an update.
+// syncFork runs the account step for the fork whose branch is rec, see
+// judgePull, and applies what it found, in a hold of the lock and a journal
+// of its own, see applyForkUpdate. doing is what the command does, as its
+// refusals say it: published, or updated for the account step of an update.
 func (inv *invocation) syncFork(ctx context.Context, gitDir string, rec lineage.Record, remote remoteForks, doing string) forkSync {
 	s := forkSync{name: rec.Name}
 	s.outcome, s.u, s.f = inv.judgePull(ctx, gitDir, rec, remote, doing)
@@ -148,10 +112,7 @@ func (inv *invocation) syncFork(ctx context.Context, gitDir string, rec lineage.
 		s.outcome = pullRefused
 		return s
 	}
-	if s.u == nil || s.u.merged.conflicted && !s.u.fork.start {
-		if s.u != nil {
-			s.f = forkConflictFailure(s.u, inv.checkoutPath(s.name))
-		}
+	if s.u == nil {
 		return s
 	}
 	err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error { return inv.applyForkUpdate(ctx, gitDir, s.u) })
@@ -174,19 +135,19 @@ func (inv *invocation) syncFork(ctx context.Context, gitDir string, rec lineage.
 	return s
 }
 
-// judgePull decides, before the lock, what pulling the fork whose branch is
-// rec takes in from remote, and merges it. A fork with a merge pending is
-// judged by its checkout, see judgeForkCompletion: the pull completes it, or
-// reports it again. Otherwise, in this order: a fork the account remote
-// holds no branch of, or one that holds what the fork holds already, is
-// left as it is; a remote branch whose history names another fork id than
-// the fork's, or one of the two that names none, is refused, exit code 6,
-// since two forks of one name are never tangled; then a fork whose
-// worktree git cannot work in, see worktreeHealth, and one with
-// uncommitted edits or a repository nested in it that no ignore rule
-// covers, see cleanSite, is refused, exit code 6, before anything is
-// written. A fork the account remote has nothing new for is up to date
-// whatever its worktree holds.
+// judgePull decides, before the lock, what the account step of the fork
+// whose branch is rec takes in from remote, and merges it. Its callers
+// never give it a fork with a merge pending: the update completes that one,
+// see judgeForkCompletion, and a publish refuses it. In this order: a fork
+// the account remote holds no branch of, or one that holds what the fork
+// holds already, is left as it is, up to date; a remote branch whose
+// history names another fork id than the fork's, or one of the two that
+// names none, is refused, exit code 6, since two forks of one name are
+// never tangled; then a fork whose worktree git cannot work in, see
+// worktreeHealth, and one with uncommitted edits or a repository nested in
+// it that no ignore rule covers, see cleanSite, is refused, exit code 6,
+// before anything is written. A fork the account remote has nothing new for
+// is up to date whatever its worktree holds.
 //
 // A fork whose tip the remote tip descends from is fast-forwarded to it.
 // Any other is merged with it by merge-tree, with git's own merge base: a
@@ -198,21 +159,7 @@ func (inv *invocation) judgePull(ctx context.Context, gitDir string, rec lineage
 	name := rec.Name
 	theirs := remote.tips[name]
 	fork := &forkUpdate{pull: true, doing: doing, theirsRef: lineage.RemoteForkRef(remote.remote, name), theirs: theirs, with: "the account remote"}
-	if inv.mergePending(name) {
-		u, f := inv.judgeForkCompletion(ctx, gitDir, rec, true)
-		switch {
-		case f != nil:
-			return "", nil, f
-		case u.merged.conflicted && !u.fork.start:
-			return pullConflict, u, nil
-		}
-		u.fork.doing = doing
-		return pullMerged, u, nil
-	}
-	switch theirs {
-	case "":
-		return pullNoBranch, nil, nil
-	case rec.Commit:
+	if theirs == "" || theirs == rec.Commit {
 		return pullUpToDate, nil, nil
 	}
 	there := remote.walked[theirs]
@@ -322,67 +269,6 @@ func accountMergeSubject(name, label string) string {
 	return name + ": merge the account remote (" + sanitised(label) + ")"
 }
 
-// pull fetches the account remote once and pulls the fork called name, or,
-// with no name, every fork placed on this machine, one after the other,
-// see syncFork. A fork that cannot be pulled, whose merge conflicts or is
-// still pending, or that holds uncommitted edits, is reported and the run
-// goes on with the others; the run then answers for all of them, see
-// refusals. An unfinished journal is finished before anything is read.
-func (inv *invocation) pull(ctx context.Context, name string) error {
-	gitDir, entry, account, err := inv.accountRemote(ctx)
-	if err != nil {
-		return err
-	}
-	if err := inv.finishJournals(ctx); err != nil {
-		return err
-	}
-	if err := inv.fetchRemote(ctx, gitDir, account, entry.URL); err != nil {
-		return err
-	}
-	records, err := inv.forkRecords(ctx, gitDir)
-	if err != nil {
-		return err
-	}
-	names, err := inv.remoteSelection(ctx, account, name, records, true, "pull")
-	if err != nil {
-		return err
-	}
-	if len(names) == 0 {
-		inv.summary = "no fork to pull: no fork is placed on this machine"
-		inv.out.print("No fork to pull: no fork is placed on this machine.")
-		return nil
-	}
-	remote, err := inv.readRemoteForks(ctx, gitDir, account, records, names)
-	if err != nil {
-		return err
-	}
-	run := refusals{verb: "pulled", noun: "fork", mixed: "run 'agentx skill list' to see the state of each fork, then pull the rest one at a time"}
-	var moved []string
-	counts := map[string]int{}
-	for _, n := range names {
-		s := inv.syncFork(ctx, gitDir, records[n], remote, "pulled")
-		inv.reportSync(s)
-		counts[s.outcome]++
-		if s.moved() {
-			moved = append(moved, n)
-		}
-		if s.f != nil {
-			run.add(n, s.f)
-			if len(names) > 1 {
-				inv.out.warn(namedReason(n, s.f.message))
-			}
-		}
-	}
-	if err := inv.reportForks(ctx, moved); err != nil {
-		return err
-	}
-	inv.summary = pullSummary(names, counts)
-	if f := run.failure(len(names), len(names)-len(run.broken)); f != nil {
-		return f
-	}
-	return nil
-}
-
 // forkRecords is the lineage of the account repo with every fork's
 // history read, see lineage.ReadForks.
 func (inv *invocation) forkRecords(ctx context.Context, gitDir string) (map[string]lineage.Record, error) {
@@ -396,16 +282,14 @@ func (inv *invocation) forkRecords(ctx context.Context, gitDir string) (map[stri
 	return records, nil
 }
 
-// remoteSelection is the forks a pull or a publish covers, in name order:
+// remoteSelection is the forks a publish covers, in name order:
 // the one name it was given, which has to be a fork of this machine, or
-// with none every fork, only those placed on this machine, a worktree or a
-// library entry of theirs there, when placed is set. verb is the command,
-// as its refusals name it, and remote the account remote's git remote.
-func (inv *invocation) remoteSelection(ctx context.Context, remote, name string, records map[string]lineage.Record, placed bool, verb string) ([]string, error) {
+// with none every fork. remote is the account remote's git remote.
+func (inv *invocation) remoteSelection(ctx context.Context, remote, name string, records map[string]lineage.Record) ([]string, error) {
 	if name == "" {
 		var names []string
 		for n, rec := range records {
-			if rec.Kind == lineage.KindFork && (!placed || inv.forkPlaced(n)) {
+			if rec.Kind == lineage.KindFork {
 				names = append(names, n)
 			}
 		}
@@ -419,7 +303,7 @@ func (inv *invocation) remoteSelection(ctx context.Context, remote, name string,
 	_, held := librarySkill(inv.dirs.Library, name)
 	if !ok && !held {
 		if inv.remoteHolds(ctx, remote, name) {
-			return nil, fail(exitNotFound, sanitised(name)+" is a fork of the account remote that this machine has not installed, so there is nothing of it here to "+verb,
+			return nil, fail(exitNotFound, sanitised(name)+" is a fork of the account remote that this machine has not installed, so there is nothing of it here to publish",
 				"install it with '"+fromAccountCommand(name)+"'")
 		}
 		return nil, inv.noLibrarySkill(name)
@@ -428,7 +312,7 @@ func (inv *invocation) remoteSelection(ctx context.Context, remote, name string,
 	if ok {
 		what = " is managed, not a fork"
 	}
-	refusal := sanitised(name) + what + ", so it is never " + verb + "ed: only forks travel through the account remote"
+	refusal := sanitised(name) + what + ", so it is never published: only forks travel through the account remote"
 	// A fork the account remote holds of the name takes the place of what
 	// is here; a fork of it made here would be another fork of the name,
 	// which a publish refuses. A symlink at the library path is never
@@ -461,8 +345,9 @@ func (inv *invocation) remoteHolds(ctx context.Context, remote, name string) boo
 	return err == nil && tips[name] != ""
 }
 
-// reportSync reports what a pull did to one fork: a pull event, a line,
-// and for a merge left pending the conflict, see printConflicts.
+// reportSync reports what the account step did to one fork it took
+// something in for, or refused: a pull event, a line, and for a merge left
+// pending the conflict, see printConflicts.
 func (inv *invocation) reportSync(s forkSync) {
 	out := inv.out
 	ev := pullEvent{event: newEvent("pull"), Name: s.name, Outcome: s.outcome}
@@ -475,18 +360,10 @@ func (inv *invocation) reportSync(s forkSync) {
 	out.emit(ev)
 	name := out.paint(heading, sanitised(s.name))
 	switch s.outcome {
-	case pullUpToDate:
-		out.print(name, " is up to date with the account remote")
-	case pullNoBranch:
-		out.print(name, " has no branch on the account remote; run ", out.paint(label, publishCommand(s.name)), " to publish it")
 	case pullFastForward:
 		out.done("pulled " + name + ": fast-forward to " + short(ev.Commit))
 	case pullMerged:
-		how := "merged the account remote"
-		if s.u.checkout != "" {
-			how = "applied the merge you resolved"
-		}
-		out.done("pulled " + name + ": " + how + ", committed as " + short(ev.Commit))
+		out.done("pulled " + name + ": merged the account remote, committed as " + short(ev.Commit))
 	case pullConflict:
 		inv.printConflicts(s.u.conflict, s.u.conflictsWith())
 	}
@@ -514,20 +391,4 @@ func (inv *invocation) reportForks(ctx context.Context, names []string) error {
 		}
 	}
 	return nil
-}
-
-// pullSummary is what a pull says it did, by outcome, as in "pulled 3
-// forks: 1 fast-forward, 1 merged, 1 up to date".
-func pullSummary(names []string, counts map[string]int) string {
-	var parts []string
-	for _, o := range []string{pullFastForward, pullMerged, pullUpToDate, pullNoBranch, pullConflict, pullRefused} {
-		if counts[o] > 0 {
-			parts = append(parts, strconv.Itoa(counts[o])+" "+o)
-		}
-	}
-	what := sanitised(names[0])
-	if len(names) > 1 {
-		what = plural(len(names), "fork")
-	}
-	return "pulled " + what + ": " + strings.Join(parts, ", ")
 }

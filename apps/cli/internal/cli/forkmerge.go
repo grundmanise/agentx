@@ -89,19 +89,18 @@ func (inv *invocation) readForkMerge(ctx context.Context, dir string) (forkPendi
 	return p, err
 }
 
-// judgeForkCompletion judges, before the lock, the merge pending for the
-// fork whose branch is rec, for an update or, when pull is set, a pull, as
-// the user left it resolving it with git, see readForkMerge. A merge with
-// files still unmerged, or none in progress, is left as it is and reported
-// again, exit code 4. One resolved, in progress or committed, is
-// completed, once the fork's skill directory is found to hold no
-// uncommitted edits, exit code 6 otherwise, as for the update that started
-// it: the commit that completes it is the user's own commit in the
-// checkout, or the one the fork commit writer writes here, with the tree
-// of the checkout's index, the tip the merge started from and what it
-// merged as its parents, and the merge's MERGE_MSG as its message.
-// A user's commit whose message names no base is written again the same
-// way, with the base added to its message.
+// judgeForkCompletion judges, before the lock, the merge pending for the fork
+// whose branch is rec, for an update, as the user left it resolving it with
+// git, see readForkMerge. A merge with files still unmerged, or none in
+// progress, is left as it is and reported again, exit code 4. One resolved, in
+// progress or committed, is completed, once the fork's skill directory is found
+// to hold no uncommitted edits, exit code 6 otherwise, as for the update that
+// started it: the commit that completes it is the user's own commit in the
+// checkout, or the one the fork commit writer writes here, with the tree of the
+// checkout's index, the tip the merge started from and what it merged as its
+// parents, and the merge's MERGE_MSG as its message. A user's commit whose
+// message names no base is written again the same way, with the base added to
+// its message.
 //
 // When the fork's branch still holds that tip, the branch moves to the
 // commit, see applyFork. When it moved on, because commits were made in
@@ -118,13 +117,13 @@ func (inv *invocation) readForkMerge(ctx context.Context, dir string) (forkPendi
 // turn. A branch that no longer holds the tip the merge started from at
 // all was moved outside agentx, and the merge cannot be applied, exit code
 // 6, until it is given up.
-func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, rec lineage.Record, pull bool) (*updating, *failure) {
+func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, rec lineage.Record) (*updating, *failure) {
 	name := rec.Name
 	site, err := inv.forkSiteOf(ctx, gitDir, rec)
 	if err != nil {
 		return nil, failureOf(err)
 	}
-	u := &updating{name: name, libPath: site.libPath, checkout: inv.checkoutPath(name), fork: &forkUpdate{site: site, pull: pull}}
+	u := &updating{name: name, libPath: site.libPath, checkout: inv.checkoutPath(name), fork: &forkUpdate{site: site}}
 	p, err := inv.readForkMerge(ctx, u.checkout)
 	if err != nil {
 		return nil, failureOf(accountRepoFailure(err))
@@ -150,16 +149,16 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 	resolved := len(p.unmerged) == 0 && (p.tree != "" || p.merged != "")
 	// A merge committed in the checkout with a message of the user's own, as
 	// git commit -m writes it, or one whose MERGE_MSG was edited, names no
-	// base. The base is then the one the merge was started to record: what
-	// it merges, an import, or the base the completed merge it merges again
-	// records. A merge of two histories of the fork, as a pull starts, or a
-	// completed merge merged again records what the base rule picks of the
-	// two sides' bases instead, see lineage.PickBase, as the merge's
-	// MERGE_MSG did: a pull never takes the fork back to an older version
-	// than the one this machine holds. The commit that completes it is
-	// written again with that base added to the user's message, see
-	// keptMessage, so that the fork does not stay on the old base and take
-	// the same update, and conflict, again.
+	// base. The base is then the one the merge was started to record: what it
+	// merges, an import, or the base the completed merge it merges again
+	// records. A merge of two histories of the fork, as the account step
+	// starts, or a completed merge merged again records what the base rule
+	// picks of the two sides' bases instead, see lineage.PickBase, as the
+	// merge's MERGE_MSG did: the account step never takes the fork back to an
+	// older version than the one this machine holds. The commit that completes
+	// it is written again with that base added to the user's message, see
+	// keptMessage, so that the fork does not stay on the old base and take the
+	// same update, and conflict, again.
 	next := walked[recorded]
 	rewrite := resolved && recorded == "" && walked[p.theirs].Base != ""
 	if rewrite {
@@ -172,9 +171,9 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 	}
 	u.rec = lineage.Record{Name: name, Kind: lineage.KindFork, Commit: mine.Base, Import: mine.Import}
 	u.next = lineage.Record{Name: name, Kind: lineage.KindFork, Commit: recorded, Import: next.Import}
-	// A merge whose theirs is no import commit is a merge of two histories:
-	// a completed merge merged again with the commits made while it was
-	// pending, or a pull's merge with what the account remote held.
+	// A merge whose theirs is no import commit is a merge of two histories: a
+	// completed merge merged again with the commits made while it was pending,
+	// or the account step's merge with what the account remote held.
 	u.fork.remerge = p.theirs != "" && walked[p.theirs].Base != p.theirs
 	if !resolved {
 		u.merge = lineage.Merge{Base: mine.Base, Mine: p.mine, Theirs: p.theirs}
@@ -183,9 +182,9 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 				return nil, failureOf(accountRepoFailure(err))
 			}
 			// A completed merge is only ever written here, so a theirs the
-			// remote-tracking branch holds is what a pull merged, whichever
-			// command reports the merge again and however far the remote
-			// moved on since.
+			// remote-tracking branch holds is what the account step merged,
+			// whichever command reports the merge again and however far the
+			// remote moved on since.
 			with, err := inv.mergedWithAccount(ctx, gitDir, name, p.theirs)
 			if err != nil {
 				return nil, failureOf(err)
@@ -274,10 +273,10 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 	return u, inv.layFork(ctx, u, commit)
 }
 
-// mergedWithAccount reports whether theirs, what a pending merge of the
-// fork called name merged, is on the account remote's remote-tracking
-// branch of the fork, as a pull's merge is: false on a machine with no
-// account remote.
+// mergedWithAccount reports whether theirs, what a pending merge of the fork
+// called name merged, is on the account remote's remote-tracking branch of the
+// fork, as the account step's merge is: false on a machine with no account
+// remote.
 func (inv *invocation) mergedWithAccount(ctx context.Context, gitDir, name, theirs string) (bool, error) {
 	_, remote, ok, err := inv.accountSource()
 	if err != nil || !ok {

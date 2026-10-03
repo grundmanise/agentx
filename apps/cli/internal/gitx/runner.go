@@ -322,7 +322,7 @@ func (r *Runner) run(ctx context.Context, c call, args ...string) (string, error
 
 // workDir is the directory a git given none runs in: the process's own,
 // "" to keep it, unless that directory is gone, as it is for a shell left
-// in a merge checkout a pull completed and removed. git started there
+// in a merge checkout an update completed and removed. git started there
 // fails before it reads any argument, so it runs at the root instead; a
 // call that names no directory names its repository with --git-dir. Not
 // every system fails getcwd for a removed directory, macOS may still give

@@ -17,18 +17,19 @@ import (
 // while machine b, which installed it, keeps it. A merge pending refuses
 // the removal, exit 4, and --remote beside --from is a usage error, both
 // changing nothing, as does a git running in the worktree, exit 6, which
-// could commit to the branch at any moment. Then the removal takes the placements, the library
-// symlink, the worktree with its uncommitted edit and ignored file, the
-// branch and the copy mode, and drops the worktree's registration, leaving
-// nothing hidden; the account remote keeps its branch. --remote then
-// on beta removes it here, but for a directory of the user's at its
-// library path, which stays, and a push git cannot make leaves its branch
-// there, exit 3, and run again it deletes that branch alone, as it does
-// alpha's; asked again, neither holds it, exit 5. b still has both forks,
-// worktrees and all, after a pull, and its removal of one drops the
-// tracking configuration its install from the account wrote. --remote of
-// a skill of a shared source, or of one with no source, is refused, exit 6,
-// before the account remote is fetched.
+// could commit to the branch at any moment. Then the removal takes the
+// placements, the library symlink, the worktree with its uncommitted edit
+// and ignored file, the branch and the copy mode, and drops the worktree's
+// registration, leaving nothing hidden; the account remote keeps its
+// branch. --remote then on beta removes it here, but for a directory of
+// the user's at its library path, which stays, and a push git cannot make
+// leaves its branch there, exit 3, and run again it deletes that branch
+// alone, as it does alpha's; asked again, neither holds it, exit 5. b
+// still has both forks, worktrees and all, after an update of every skill,
+// and its removal of one drops the tracking configuration its install from
+// the account wrote. --remote of a skill of a shared source, or of one
+// with no source, is refused, exit 6, before the account remote is
+// fetched.
 func TestSkillRemoveOfAFork(t *testing.T) {
 	t.Parallel()
 	a, b, s, remote := twoHomes(t)
@@ -129,7 +130,7 @@ func TestSkillRemoveOfAFork(t *testing.T) {
 	contains(t, "neither holds beta: stderr", out.stderr, "neither this machine nor the account remote holds a fork called beta")
 
 	bTips := map[string]string{"alpha": b.ref(lineage.ForkRef("alpha")), "beta": b.ref(lineage.ForkRef("beta"))}
-	b.run("pull")
+	b.mustRun("skill", "update", "--all")
 	for name, want := range bTips {
 		equal(t, "b's "+name, b.ref(lineage.ForkRef(name)), want)
 		if _, err := os.Stat(filepath.Join(b.forkDir(name, name), "SKILL.md")); err != nil {

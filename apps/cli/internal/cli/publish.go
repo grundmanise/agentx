@@ -13,14 +13,14 @@ import (
 )
 
 // A publish pushes a fork's commits to the account remote, and nothing but
-// commits: edits nobody committed stay where they are, and the result
-// names every fork that holds some. It pushes only the fork's own branch,
-// to the branch of the same name, never forced. When the account remote
-// holds commits the fork lacks, another machine's, the publish takes them
-// in first exactly as a pull does, see judgePull, and pushes the merge; a
-// merge that conflicts is left pending, and that fork is not pushed. A
-// branch of the same name that is another fork, by its fork id, is never
-// pushed over.
+// commits: edits nobody committed stay where they are, and the result names
+// every fork that holds some. It pushes only the fork's own branch, to the
+// branch of the same name, never forced. When the account remote holds
+// commits the fork lacks, another machine's, the publish takes them in
+// first exactly as an update's account step does, see judgePull, and pushes
+// the merge; a merge that conflicts is left pending, and that fork is not
+// pushed. A branch of the same name that is another fork, by its fork id,
+// is never pushed over.
 
 // publishEvent is what one publish did with one fork.
 type publishEvent struct {
@@ -49,9 +49,9 @@ func newSkillPublishCommand(inv *invocation) *cobra.Command {
 			"Publishing pushes commits only: commit a fork's edits first with 'agentx skill\n" +
 			"commit'; the result names every fork whose edits were left out. When the account\n" +
 			"remote holds commits another machine published, they are taken in first, as\n" +
-			"'agentx pull' takes them in, and the merge is pushed. A push the account remote\n" +
-			"rejects is reported, never forced, and a branch of the same name that is another\n" +
-			"fork is never pushed over.",
+			"'agentx skill update' takes them in, and the merge is pushed. A push the account\n" +
+			"remote rejects is reported, never forced, and a branch of the same name that is\n" +
+			"another fork is never pushed over.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := ""
@@ -106,7 +106,7 @@ func (inv *invocation) publish(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	names, err := inv.remoteSelection(ctx, account, name, records, false, "publish")
+	names, err := inv.remoteSelection(ctx, account, name, records)
 	if err != nil {
 		return err
 	}
@@ -191,11 +191,11 @@ func (inv *invocation) judgePublish(ctx context.Context, gitDir string, rec line
 // publishPendingRefusal refuses to publish the fork called name while it
 // has a merge pending and the account remote holds commits it lacks: the
 // publish would have to take them in, and it never completes a pending
-// merge, resolved or not. A pull completes it once it is resolved in its
+// merge, resolved or not. An update completes it once it is resolved in its
 // checkout, at checkout.
 func publishPendingRefusal(name, checkout string) *failure {
 	return refuse(exitPendingMerge, sanitised(name)+" has a merge pending, so it cannot be published until the merge is completed or given up",
-		"resolve it with git in "+quotedPath(checkout)+" and run '"+pullCommand(name)+"' to complete it, then publish again, or run '"+
+		"resolve it with git in "+quotedPath(checkout)+" and run '"+skillCommand("update", name)+"' to complete it, then publish again, or run '"+
 			skillCommand("update", name, "--abort")+"' to give the merge up")
 }
 
@@ -245,7 +245,7 @@ func (inv *invocation) pushForks(ctx context.Context, gitDir, remote, url string
 				"run '"+publishCommand(p.name)+"' again")
 		case statuses[i].Rejected():
 			p.outcome, p.f = publishRejected, refuse(exitRefused, "the account remote rejected "+branch+": "+sanitised(statuses[i].Why()),
-				"run '"+pullCommand(p.name)+"' to take in what it holds, then publish again; agentx never forces a push")
+				"run '"+skillCommand("update", p.name)+"' to take in what it holds, then publish again; agentx never forces a push")
 		case statuses[i].Flag == '=':
 			p.outcome, p.commit = publishUpToDate, tips[p.name]
 		default:
@@ -256,11 +256,11 @@ func (inv *invocation) pushForks(ctx context.Context, gitDir, remote, url string
 }
 
 // reportPublished reports every fork of the publish, in name order: one
-// progress event each, a merge it made first as a pull reports it, its
-// publish event and its line, then one library_skill event for each fork
-// the merge moved, a warning for each fork with uncommitted edits but one
-// refused for them, whose refusal names them, and the result, which
-// answers for every fork that was not published, see refusals.
+// progress event each, a merge it made first as an update's account step
+// reports it, its publish event and its line, then one library_skill event
+// for each fork the merge moved, a warning for each fork with uncommitted
+// edits but one refused for them, whose refusal names them, and the result,
+// which answers for every fork that was not published, see refusals.
 func (inv *invocation) reportPublished(ctx context.Context, list []*publishing) error {
 	out := inv.out
 	run := refusals{verb: "published", noun: "fork", mixed: "run 'agentx skill list' to see the state of each fork, then publish the rest one at a time"}

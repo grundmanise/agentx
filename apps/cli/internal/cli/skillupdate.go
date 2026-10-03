@@ -39,9 +39,9 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 			"committed on its branch. Commit its uncommitted edits first. A conflict\n" +
 			"waits as for a managed skill, and the fork's worktree and branch stay as they are\n" +
 			"until it is applied. With an account remote set, it is fetched first, and what\n" +
-			"your other machines published of the fork is taken in, as 'agentx pull' takes it\n" +
-			"in, as a commit of its own. A skill made with 'agentx skill new' has no upstream:\n" +
-			"its update takes in what the account remote holds, and nothing else.\n\n" +
+			"your other machines published of the fork is taken in first, as a commit of its\n" +
+			"own. A skill made with 'agentx skill new' has no upstream: its update takes in\n" +
+			"what the account remote holds, and nothing else.\n\n" +
 			"Pass --all instead of a name to update every managed skill and fork the last check\n" +
 			"found an update for, and every fork placed here that your other machines\n" +
 			"published to. Read an update before you apply it with\n" +
@@ -429,20 +429,19 @@ func (r *updateRun) fetchAccount(ctx context.Context, name string, records map[s
 
 // accountStep is the first step of a fork's update when the run fetched
 // the account remote, see fetchAccount: what another machine published of
-// the fork is taken in first, exactly as agentx pull takes it in, see
-// syncFork, as a commit of its own, before the update from upstream merges
-// on top of it. With --all that covers every fork placed here that another
-// machine published to, see selection, a fork with no upstream included,
-// which its account step alone brings up to date. A fork with a merge
-// pending is left to the update, which completes it; one whose remote
-// branch holds nothing it lacks, or that the remote holds no branch of, is
-// left as it is, with nothing reported. A fork whose account step
-// conflicts, and so is left pending, or is refused, is dropped from the
-// run, see drop, and its update from upstream waits: dropped names them.
-// pulled names the forks whose branch it moved, in name order. A remote
-// git could not reach drops each fork with no upstream, exit code 3, since
-// it has nothing else to update from; for the others it is a warning, and
-// the update from upstream goes on without it.
+// the fork is taken in first, see syncFork, as a commit of its own, before
+// the update from upstream merges on top of it. With --all that covers
+// every fork placed here that another machine published to, see selection,
+// a fork with no upstream included, which its account step alone brings up
+// to date. A fork with a merge pending is left to the update, which
+// completes it; one whose remote branch holds nothing it lacks, or that
+// the remote holds no branch of, is left as it is, with nothing reported.
+// A fork whose account step conflicts, and so is left pending, or is
+// refused, is dropped from the run, see drop, and its update from upstream
+// waits: dropped names them. pulled names the forks whose branch it moved,
+// in name order. A remote git could not reach drops each fork with no
+// upstream, exit code 3, since it has nothing else to update from; for the
+// others it is a warning, and the update from upstream goes on without it.
 func (r *updateRun) accountStep(ctx context.Context, names []string, records map[string]lineage.Record) (pulled []string, dropped map[string]bool, err error) {
 	inv := r.inv
 	a := r.account
@@ -495,7 +494,7 @@ func (r *updateRun) accountStep(ctx context.Context, names []string, records map
 			continue
 		}
 		s := inv.syncFork(ctx, r.gitDir, records[n], remote, "updated")
-		if s.outcome == pullUpToDate || s.outcome == pullNoBranch {
+		if s.outcome == pullUpToDate {
 			continue // the remote is behind: the account step took nothing in
 		}
 		inv.reportSync(s)
@@ -1144,8 +1143,8 @@ func conflictHintAt(name, path string) string {
 }
 
 // conflictHintRunning is conflictHintAt with then saying how the merge is
-// completed once it is resolved, such as running agentx pull <name> again
-// for a merge a pull left pending.
+// completed once it is resolved, such as running agentx skill update
+// <name> for a merge a publish left pending.
 func conflictHintRunning(name, path, then string) string {
 	return "resolve it with git in " + quotedPath(path) + " ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), " +
 		"then " + then + ", or '" + skillCommand("update", name, "--abort") + "' to give it up"
@@ -1185,7 +1184,7 @@ func (r *updateRun) reportApplied(ctx context.Context) error {
 		moved := " from " + short(u.rec.Import.Commit) + " to " + short(u.next.Import.Commit)
 		switch {
 		case u.checkout != "" && u.fork != nil && u.rec.Import.Commit == u.next.Import.Commit:
-			// A merge a pull left pending moves no upstream version.
+			// A merge the account step left pending moves no upstream version.
 			moved = " with the merge you resolved"
 		case u.checkout != "":
 			moved += " with the merge you resolved"

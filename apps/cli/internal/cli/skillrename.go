@@ -67,7 +67,7 @@ func (inv *invocation) skillRename(ctx context.Context, old, newName string, rem
 		return fail(exitRefused, sanitised(old)+" changed while it was being renamed, so nothing was changed", "run the command again")
 	}
 	// The renamed fork holds the old one's history as this machine has it:
-	// commits another machine published that this one never pulled would
+	// commits another machine published that this one never took in would
 	// go with the remote branch and be in neither fork.
 	if r.remote && r.there != "" && r.there != r.tip {
 		held, err := inv.isAncestor(ctx, r.gitDir, r.there, r.tip)
@@ -76,7 +76,7 @@ func (inv *invocation) skillRename(ctx context.Context, old, newName string, rem
 		}
 		if !held {
 			return fail(exitRefused, "the account remote's "+forkBranch(old)+" holds commits "+sanitised(old)+" on this machine lacks, which removing it from the account remote would delete",
-				"run 'agentx pull "+shellWord(old)+"' first, or rename it without --remote with '"+renameHere+"'")
+				"run '"+skillCommand("update", old)+"' first, or rename it without --remote with '"+renameHere+"'")
 		}
 	}
 	r.guard = &forkGuard{site: fk.site, judged: fk.judged}

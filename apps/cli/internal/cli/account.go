@@ -25,8 +25,8 @@ import (
 // git that reaches the remote runs in the user's own environment, where
 // their credential helpers, SSH keys and URL rewrites apply, but with no
 // hook of theirs, see gitx.FetchRemote. A fork repository is fetched whole,
-// never without blobs: its forks' history is what pull, publish and
-// history read.
+// never without blobs: its forks' history is what the account step,
+// publish and history read.
 //
 // The account remote is set only by source add <url> --account, see
 // addAccount, and detached only by source remove, see removeAccount.

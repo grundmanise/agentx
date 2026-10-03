@@ -96,132 +96,17 @@ func (h *harness) commitFork(name, notes string) string {
 	return h.ref(lineage.ForkRef(name))
 }
 
-// TestPullFastForwardsMergesAndConflicts pulls on machine b what machine a
-// published, each way a pull goes. alpha, which b did not change, is
-// fast-forwarded to a's commit, its worktree following. Then a takes the
-// source's second version into alpha while b commits an edit of its own:
-// b's pull merges the two cleanly, a merge commit of b's tip and a's on
-// b's branch, written with b's identity, and since b's account repo has
-// not fetched the source's second version, nothing proves it newer and
-// the merge keeps b's base. Once b fetched the source, the next merge of
-// the two records the newer version as the base. Last, a pull of every
-// fork in one run: beta, whose line both machines changed, conflicts and
-// is left pending in its checkout under the merges directory, exit 4,
-// while alpha, where b added a file of its own, merges all the same, and
-// the run says both; beta's worktree and branch stay as they were, with
-// no conflict marker in the worktree. b took the source's third
-// version into beta first, while a's beta stayed on the first: resolved
-// in the checkout, the merge is not completed by a publish, exit 4, but,
-// committed with git commit -m, by the next pull, and it keeps b's newer
-// base.
-func TestPullFastForwardsMergesAndConflicts(t *testing.T) {
-	t.Parallel()
-	a, b, s, _ := twoHomes(t)
-	alphaB := b.forkDir("alpha", "alpha")
-
-	one := a.commitFork("alpha", forkNotes("one", "one, a"))
-	a.mustRun("skill", "publish", "alpha")
-	out := b.mustRun("--json", "pull", "alpha")
-	ev := b.one(out.stdout, "pull")
-	equal(t, "outcome", ev["outcome"], pullFastForward)
-	equal(t, "commit", ev["commit"], one)
-	equal(t, "b's alpha", b.ref(lineage.ForkRef("alpha")), one)
-	equal(t, "b's notes", fileBody(t, filepath.Join(alphaB, "notes.md")), forkNotes("one", "one, a"))
-	equal(t, "git status", gitIn(t, b, filepath.Join(b.agentx, "worktrees", "alpha"), "status", "--porcelain"), "")
-	b.librarySkill(out.stdout, "alpha")
-
-	importOne := a.accountGit("rev-parse", one+"~2") // the import, then the fork's creation commit, then a's commit
-	s.write("skills/alpha/notes.md", forkNotes("seven", "seven, upstream"))
-	s.commit("second version")
-	a.mustRun("skill", "check-updates")
-	a.mustRun("skill", "update", "alpha")
-	importTwo := a.accountGit("rev-parse", lineage.ForkRef("alpha")+"^2")
-	a.mustRun("skill", "publish", "alpha")
-	mine := b.commitFork("alpha", forkNotes("one", "one, a", "two", "two, b"))
-	out = b.mustRun("--json", "pull", "alpha")
-	ev = b.one(out.stdout, "pull")
-	equal(t, "outcome", ev["outcome"], pullMerged)
-	merged := b.ref(lineage.ForkRef("alpha"))
-	equal(t, "commit", ev["commit"], merged)
-	equal(t, "the merge's parents", b.parents(merged), mine+"\n"+a.ref(lineage.ForkRef("alpha")))
-	equal(t, "the base, unproved", b.trailer(merged, lineage.TrailerBase), importOne)
-	equal(t, "base", ev["base"], importOne)
-	equal(t, "the subject", b.accountGit("log", "-1", "--format=%s", merged), "alpha: merge the account remote (test-host)")
-	equal(t, "the author", b.accountGit("log", "-1", "--format=%an <%ae>", merged), "Machine B <b@example.com>")
-	equal(t, "b's notes", fileBody(t, filepath.Join(alphaB, "notes.md")), forkNotes("one", "one, a", "two", "two, b", "seven", "seven, upstream"))
-
-	a.commitFork("alpha", forkNotes("one", "one, a", "seven", "seven, upstream", "four", "four, a"))
-	a.mustRun("skill", "publish", "alpha")
-	b.commitFork("alpha", forkNotes("one", "one, a", "two", "two, b", "seven", "seven, upstream", "eight", "eight, b"))
-	b.mustRun("source", "fetch", s.url)
-	b.mustRun("pull", "alpha")
-	equal(t, "the base, proved newer", b.trailer(b.ref(lineage.ForkRef("alpha")), lineage.TrailerBase), importTwo)
-
-	s.write("skills/beta/extra.md", "extra\n")
-	s.commit("third version")
-	b.mustRun("skill", "check-updates")
-	b.mustRun("skill", "update", "beta")
-	betaTwo := b.accountGit("rev-parse", lineage.ForkRef("beta")+"^2")
-	a.commitFork("beta", forkNotes("six", "six, a"))
-	a.mustRun("skill", "publish", "beta")
-	betaTip := b.commitFork("beta", forkNotes("six", "six, b"))
-	a.commitFork("alpha", forkNotes("one", "one, a", "seven", "seven, upstream", "four", "four, a", "six", "six, a"))
-	a.mustRun("skill", "publish", "alpha")
-	writeFile(t, filepath.Join(alphaB, "b.md"), "b's own file\n")
-	b.mustRun("skill", "commit", "alpha")
-	alphaTip := b.ref(lineage.ForkRef("alpha"))
-	out = b.run("--json", "pull")
-	equal(t, "exit", out.exit, 4)
-	outcomes := map[string]any{}
-	for _, e := range b.eventsOfType(out.stdout, "pull") {
-		outcomes[e["name"].(string)] = e["outcome"]
-	}
-	equal(t, "alpha", outcomes["alpha"], pullMerged)
-	equal(t, "beta", outcomes["beta"], pullConflict)
-	equal(t, "the error", b.one(out.stdout, "error")["message"].(string), "1 of 2 forks could not be pulled: beta conflicts with the account remote in 1 file, so the merge is pending and the fork's worktree and branch were left as they are")
-	conflict := b.one(out.stdout, "conflict")
-	equal(t, "kind", conflict["kind"], lineage.KindFork)
-	equal(t, "mine", conflict["mine"], betaTip)
-	equal(t, "b's alpha, merged", b.parents(b.ref(lineage.ForkRef("alpha"))), alphaTip+"\n"+a.ref(lineage.ForkRef("alpha")))
-	b.librarySkill(out.stdout, "alpha")
-	equal(t, "b's beta", b.ref(lineage.ForkRef("beta")), betaTip)
-	betaB := b.forkDir("beta", "beta")
-	equal(t, "b's beta notes", fileBody(t, filepath.Join(betaB, "notes.md")), forkNotes("six", "six, b"))
-	head, mergeHead, msg := mergeState(t, b, "beta")
-	equal(t, "HEAD", head, betaTip)
-	equal(t, "MERGE_HEAD", mergeHead, a.ref(lineage.ForkRef("beta")))
-	contains(t, "MERGE_MSG", msg, "beta: merge the account remote (test-host)")
-	contains(t, "the checkout's notes", fileBody(t, filepath.Join(pendingCheckout(b, "beta"), "beta", "notes.md")), "<<<<<<<< ")
-
-	writeFile(t, filepath.Join(pendingCheckout(b, "beta"), "beta", "notes.md"), forkNotes("six", "six, a and b"))
-	checkoutGit(t, b, "beta", "add", "beta/notes.md")
-	out = b.run("--json", "skill", "publish", "beta")
-	equal(t, "a publish of the resolved merge: exit", out.exit, 4)
-	contains(t, "its hint", b.one(out.stdout, "error")["hint"].(string), "run 'agentx pull beta' to complete it, then publish again")
-	checkoutGit(t, b, "beta", "commit", "--quiet", "-m", "resolve")
-	out = b.mustRun("--json", "pull", "beta")
-	equal(t, "outcome", b.one(out.stdout, "pull")["outcome"], pullMerged)
-	done := b.ref(lineage.ForkRef("beta"))
-	equal(t, "the completed merge's parents", b.parents(done), betaTip+"\n"+a.ref(lineage.ForkRef("beta")))
-	equal(t, "the completed merge's base, b's newer one", b.trailer(done, lineage.TrailerBase), betaTwo)
-	equal(t, "b's beta notes", fileBody(t, filepath.Join(betaB, "notes.md")), forkNotes("six", "six, a and b"))
-	noCheckout(t, b, "beta")
-	if _, err := os.Stat(filepath.Join(b.agentx, "merges", "beta")); err == nil {
-		t.Error("the checkout is still there")
-	}
-}
-
 // TestPublishMergesFirstAndNamesUncommittedForks publishes from machine b
 // while machine a published alpha first. With an uncommitted edit, b's
 // publish of alpha would have to merge a's commit, and is refused, exit 6,
 // nothing pushed, the refusal saying so once. Once the edit is undone,
-// the publish merges a's commit first, as a pull does, and pushes the
+// the publish merges a's commit first, as an update does, and pushes the
 // merge; beta, committed on b and not named, stays unpushed. A publish
 // with nothing to take in pushes alpha's commits even though alpha holds
 // an uncommitted edit, and names it: publishing never commits. The push
 // carries the fork branches alone: the remote holds no import branch,
 // update candidate or other ref. A publish on a whose merge of b's beta
-// conflicts leaves it pending, exit 4, and its hint names the pull that
+// conflicts leaves it pending, exit 4, and its hint names the update that
 // completes it, since a publish never does; reported again by skill
 // update, the merge is still the account remote's. A push the remote
 // rejects is reported, exit 6, and never forced.
@@ -287,7 +172,7 @@ func TestPublishMergesFirstAndNamesUncommittedForks(t *testing.T) {
 	out = a.run("--json", "skill", "publish", "beta")
 	equal(t, "a conflicting publish: exit", out.exit, 4)
 	equal(t, "its outcome", a.one(out.stdout, "publish")["outcome"], publishConflict)
-	contains(t, "its hint", a.one(out.stdout, "error")["hint"].(string), "then run 'agentx pull beta' to complete it before publishing again, or ")
+	contains(t, "its hint", a.one(out.stdout, "error")["hint"].(string), "then run 'agentx skill update beta' to complete it before publishing again, or ")
 	out = a.run("--json", "skill", "update", "beta")
 	equal(t, "the merge reported again: exit", out.exit, 4)
 	contains(t, "its message", a.one(out.stdout, "error")["message"].(string), "beta conflicts with the account remote in 1 file")
@@ -302,13 +187,13 @@ func TestPublishMergesFirstAndNamesUncommittedForks(t *testing.T) {
 	equal(t, "its outcome", b.one(out.stdout, "publish")["outcome"], publishRejected)
 	e := b.one(out.stdout, "error")
 	contains(t, "its message", e["message"].(string), "the account remote rejected skills/alpha: ")
-	contains(t, "its hint", e["hint"].(string), "agentx never forces a push")
+	contains(t, "its hint", e["hint"].(string), "run 'agentx skill update alpha' to take in what it holds, then publish again; agentx never forces a push")
 	equal(t, "the remote's alpha, kept", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/alpha"), tip)
 }
 
 // TestPublishRefusesADifferentFork creates a skill of the same name on two
 // machines, which are two forks with two fork ids. The first publishes it;
-// the second's publish and pull of it are refused, exit 6, and the hint
+// the second's publish of it is refused, exit 6, and the hint
 // names the way out, a rename, and the remote keeps the first machine's
 // branch; so is the second's removal of it with --remote, which would
 // delete the first's. The publish still names the uncommitted edits the
@@ -330,17 +215,12 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 	b, _, _, _ := forkHarness(t)
 	b.setAccount(remote)
 	writeFile(t, filepath.Join(b.forkDir("notes", "notes"), "draft.md"), "uncommitted\n")
-	for _, argv := range [][]string{{"skill", "publish"}, {"pull"}} {
-		cmd := strings.Join(argv, " ")
-		out := b.run(append(append([]string{"--json"}, argv...), "notes")...)
-		equal(t, cmd+": exit", out.exit, 6)
-		e := b.one(out.stdout, "error")
-		contains(t, cmd+": message", e["message"].(string), "the account remote's skills/notes is a different fork than notes on this machine")
-		contains(t, cmd+": hint", e["hint"].(string), "rename yours with 'agentx skill rename notes <new>'")
-		if cmd == "skill publish" {
-			contains(t, "the uncommitted edits", out.stderr, "notes has uncommitted edits, which were not published")
-		}
-	}
+	out = b.run("--json", "skill", "publish", "notes")
+	equal(t, "publish: exit", out.exit, 6)
+	e := b.one(out.stdout, "error")
+	contains(t, "publish: message", e["message"].(string), "the account remote's skills/notes is a different fork than notes on this machine")
+	contains(t, "publish: hint", e["hint"].(string), "rename yours with 'agentx skill rename notes <new>'")
+	contains(t, "the uncommitted edits", out.stderr, "notes has uncommitted edits, which were not published")
 	// Nor does a removal of b's notes, or the rename the hint above names,
 	// delete a's from the account remote, or anything of b's; each names
 	// what does its work on b alone, which for the rename is not a removal.
@@ -412,23 +292,25 @@ func sourceEntryOf(t *testing.T, h *harness, url string) map[string]any {
 // Then b's check pins a third version for both forks, and a takes a fourth
 // into alpha and publishes it. b's update of every fork fast-forwards alpha
 // to a's commit, whose base is newer than the candidate b pinned: the
-// candidate goes with the pull, so the update never merges the older
+// candidate goes with the account step, so the update never merges the older
 // version back over the newer one, and alpha is left as a published it
 // while beta, which the remote has nothing new for, takes its own update.
 //
-// A skill a made with skill new, which has no upstream, is what a
-// publishes next. b's check names it published from another machine, with
-// the file a changed; b's update of every skill alone then takes it in,
-// with no pull first; updated again, it is up to date with the account
-// remote, exit 0. Once both machines changed its line, and b added a file
-// of its own, b's check lists only what a changed since the commit both
-// share, and b's update leaves the merge pending, exit 4; resolved in its
-// checkout, the next update completes it. With that merge and beta's not
-// yet published, the update of every skill has nothing to do and says
-// nothing else. Last, with the account remote out of reach, the update of
-// beta only warns, while that of the skill with no upstream fails, exit 3,
-// alone or with every skill, and so does the check, as for a source it
-// cannot reach, naming the account remote.
+// A skill a made with skill new, which has no upstream, is what a publishes
+// next. b's check names it published from another machine, with the file a
+// changed; b's update of every skill alone then takes it in, its account
+// step with a pull event and the skill's library_skill event; updated
+// again, it is up to date with the account remote, exit 0. Once both
+// machines changed its line, and b added a file of its own, b's check lists
+// only what a changed since the commit both share, and b's update leaves
+// the merge pending, exit 4; resolved in its checkout, the merge is not
+// completed by a publish, exit 4, whose hint names the update, and the next
+// update completes it. With that merge and beta's not yet published, the
+// update of every skill has nothing to do and says nothing else. Last, with
+// the account remote out of reach, the update of beta only warns, while
+// that of the skill with no upstream fails, exit 3, alone or with every
+// skill, and so does the check, as for a source it cannot reach, naming the
+// account remote.
 func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	t.Parallel()
 	a, b, s, remote := twoHomes(t)
@@ -448,6 +330,8 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	account := b.accountGit("rev-parse", tip+"^1")
 	equal(t, "the update's parents", b.parents(tip), account+"\n"+candidate)
 	equal(t, "the account merge's parents", b.parents(account), mine+"\n"+theirs)
+	equal(t, "its subject", b.accountGit("log", "-1", "--format=%s", account), "alpha: merge the account remote (test-host)")
+	equal(t, "its author", b.accountGit("log", "-1", "--format=%an <%ae>", account), "Machine B <b@example.com>")
 	equal(t, "the base", b.trailer(tip, lineage.TrailerBase), candidate)
 	equal(t, "b's notes", fileBody(t, filepath.Join(b.forkDir("alpha", "alpha"), "notes.md")), forkNotes("one", "one, a", "three", "three, b", "seven", "seven, upstream"))
 	equal(t, "the candidate", b.ref(lineage.CandidateRef("alpha")), "")
@@ -463,7 +347,7 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	}
 
 	b.mustRun("skill", "publish", "alpha")
-	a.mustRun("pull", "alpha")
+	a.mustRun("skill", "update", "alpha")
 	s.write("skills/alpha/notes.md", forkNotes("seven", "seven, third"))
 	s.write("skills/beta/notes.md", forkNotes("six", "six, third"))
 	s.commit("third version")
@@ -514,8 +398,10 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	}
 	out = b.mustRun("--json", "skill", "update", "--all")
 	pulled := b.one(out.stdout, "pull")
-	equal(t, "the pull of notes", pulled["name"], "notes")
+	equal(t, "the account step of notes", pulled["name"], "notes")
 	equal(t, "its outcome", pulled["outcome"], pullFastForward)
+	equal(t, "its commit", pulled["commit"], published)
+	b.librarySkill(out.stdout, "notes")
 	equal(t, "notes' tip", b.ref(lineage.ForkRef("notes")), published)
 	out = b.mustRun("skill", "update", "notes")
 	contains(t, "the update with nothing new", out.stdout, "notes is up to date with the account remote")
@@ -532,7 +418,12 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	equal(t, "its warnings, with beta ahead of the remote and left out", out.stderr, "")
 	writeFile(t, filepath.Join(pendingCheckout(b, "notes"), "notes", "notes.md"), forkNotes("one", "one, a", "two", "two, a and b"))
 	checkoutGit(t, b, "notes", "add", "notes/notes.md")
-	b.mustRun("skill", "update", "notes")
+	out = b.run("--json", "skill", "publish", "notes")
+	equal(t, "a publish of the resolved merge: exit", out.exit, 4)
+	contains(t, "its hint", b.one(out.stdout, "error")["hint"].(string), "run 'agentx skill update notes' to complete it, then publish again")
+	out = b.mustRun("--json", "skill", "update", "notes")
+	contains(t, "the completion", b.one(out.stdout, "result")["summary"].(string), "updated notes with the merge you resolved, committed as ")
+	equal(t, "its pull events", len(b.eventsOfType(out.stdout, "pull")), 0)
 	equal(t, "the completed merge's parents", b.parents(b.ref(lineage.ForkRef("notes"))), mine+"\n"+theirs)
 	equal(t, "b's notes", fileBody(t, filepath.Join(b.forkDir("notes", "notes"), "notes.md")), forkNotes("one", "one, a", "two", "two, a and b"))
 	noCheckout(t, b, "notes")
@@ -567,75 +458,6 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	contains(t, "its message", e["message"].(string), "could not check the account remote file://"+remote+": cannot reach it: ")
 }
 
-// pullChildEnv names the fork TestPullChildProcess pulls.
-const pullChildEnv = "AGENTX_TEST_PULL_CHILD"
-
-// TestPullChildProcess is the pull a crash test kills: it runs agentx pull
-// of the fork pullChildEnv names, with the environment it was given.
-func TestPullChildProcess(t *testing.T) {
-	name := os.Getenv(pullChildEnv)
-	if name == "" {
-		t.Skip("not the pull child process")
-	}
-	env := map[string]string{}
-	for _, kv := range os.Environ() {
-		if k, v, ok := strings.Cut(kv, "="); ok {
-			env[k] = v
-		}
-	}
-	os.Exit(Run(context.Background(), []string{"pull", name}, env, strings.NewReader(""), os.Stdout, os.Stderr))
-}
-
-// resetKilledScript lets the pull run to its last live write, the reset of
-// the worktree's index that its journal's worktree step makes, and kills
-// it the moment that is done.
-const resetKilledScript = `
-case " $* " in
-*" reset "*)
-	%GIT% "$@"
-	status=$?
-	kill -9 $PPID
-	exit $status
-	;;
-esac
-exec %GIT% "$@"
-`
-
-// TestPullRecoversWhereItWasKilled kills a pull that merges on machine b
-// with SIGKILL at two boundaries of its own: once its journal is on disk,
-// before anything changed, and right after its last live write. Every
-// boundary in between is one of the journal's, which the home package
-// replays without git. The journal moves the branch, replaces the skill
-// directory and resets the worktree's index, and the next command
-// recovers it: the branch at the merge of both machines' commits, the
-// worktree holding it and clean, nothing left behind.
-func TestPullRecoversWhereItWasKilled(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct{ name, script string }{
-		{"once the journal is on disk", killedUpdateScript},
-		{"after its last live write", resetKilledScript},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			a, b, _, _ := twoHomes(t)
-			theirs := a.commitFork("alpha", forkNotes("one", "one, a"))
-			a.mustRun("skill", "publish", "alpha")
-			mine := b.commitFork("alpha", forkNotes("eight", "eight, b"))
-			out := killedChild(t, b, "TestPullChildProcess", pullChildEnv, "alpha", tc.script)
-			_, kinds := journalKinds(t, b)
-			equal(t, "the journal's steps", kinds, "ref, remove, publish, worktree")
-			if got := b.run("skill", "list"); got.exit != 0 {
-				t.Fatalf("the command after the killed pull: exit %d\n%s\nthe killed run:\n%s", got.exit, got.stderr, out)
-			}
-			equal(t, "journals after recovery", journalCount(t, b), 0)
-			equal(t, "the merge's parents", b.parents(b.ref(lineage.ForkRef("alpha"))), mine+"\n"+theirs)
-			equal(t, "the notes", fileBody(t, filepath.Join(b.forkDir("alpha", "alpha"), "notes.md")), forkNotes("one", "one, a", "eight", "eight, b"))
-			equal(t, "git status in the worktree", gitIn(t, b, filepath.Join(b.agentx, "worktrees", "alpha"), "status", "--porcelain"), "")
-			equal(t, "what is left in the worktrees directory", strings.Join(hiddenEntries(t, filepath.Join(b.agentx, "worktrees")), " "), "")
-		})
-	}
-}
-
 // TestSameForkRefusal is when a remote branch is the same fork as the local
 // branch of its name: by their fork ids alone.
 func TestSameForkRefusal(t *testing.T) {
@@ -658,7 +480,7 @@ func TestSameForkRefusal(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			f := sameForkRefusal(tc.rec, tc.there, "pulled")
+			f := sameForkRefusal(tc.rec, tc.there, "updated")
 			switch {
 			case tc.want == "" && f != nil:
 				t.Errorf("refused: %s", f.message)
@@ -669,21 +491,5 @@ func TestSameForkRefusal(t *testing.T) {
 				equal(t, "exit", f.status.exit, 6)
 			}
 		})
-	}
-}
-
-// TestPullSummary is the result of a pull, by outcome.
-func TestPullSummary(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		names  []string
-		counts map[string]int
-		want   string
-	}{
-		{[]string{"notes"}, map[string]int{pullFastForward: 1}, "pulled notes: 1 fast-forward"},
-		{[]string{"a", "b", "c"}, map[string]int{pullUpToDate: 1, pullMerged: 1, pullConflict: 1}, "pulled 3 forks: 1 merged, 1 up to date, 1 conflict"},
-		{[]string{"a", "b"}, map[string]int{pullNoBranch: 2}, "pulled 2 forks: 2 no remote branch"},
-	} {
-		equal(t, "pullSummary", pullSummary(tc.names, tc.counts), tc.want)
 	}
 }

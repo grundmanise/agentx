@@ -21,7 +21,7 @@ import (
 // outside the fork name grammar, and zeta, whose history records no fork
 // id, which an install refuses too. Installing alpha creates b's branch at
 // a's commit, so the fork keeps its id and its history, tracking the
-// account remote's branch, where a pull of it before was exit 5 naming the
+// account remote's branch, where a publish of it before was exit 5 naming the
 // install; checks its worktree out with the .gitignore a commit put beside
 // the skill directory, so git status there is clean; links the library to
 // it and places it into the enabled configuration. It adds the fork's
@@ -69,8 +69,8 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 	equal(t, "a branch with no fork id: exit", out.exit, 6)
 	contains(t, "its error", b.one(out.stdout, "error")["message"].(string), "records no fork id")
 
-	out = b.run("--json", "pull", "alpha")
-	equal(t, "a pull of a fork not installed: exit", out.exit, 5)
+	out = b.run("--json", "skill", "publish", "alpha")
+	equal(t, "a publish of a fork not installed: exit", out.exit, 5)
 	contains(t, "its hint", b.one(out.stdout, "error")["hint"].(string), "install it with 'agentx skill add --from-account alpha'")
 
 	out = b.mustRun("--json", "skill", "add", "--from-account", "alpha")
@@ -104,7 +104,9 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 	equal(t, "installable once alpha is installed", len(b.eventsOfType(out.stdout, "installable_fork")), 2)
 	out = b.run("--json", "skill", "add", "--from-account", "alpha")
 	equal(t, "installing alpha again: exit", out.exit, 6)
-	contains(t, "its error", b.one(out.stdout, "error")["message"].(string), "alpha is already installed on this machine")
+	e := b.one(out.stdout, "error")
+	contains(t, "its error", e["message"].(string), "alpha is already installed on this machine")
+	contains(t, "its hint", e["hint"].(string), "run 'agentx skill update alpha' to take in what the account remote holds of it")
 
 	// Without its worktree and library entry, the branch is the fork's
 	// alone, and skill place lays it out.
@@ -126,7 +128,7 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 // the symlink into the fork's worktree, which holds the .DS_Store, and the
 // placements are as they were, Claude Code's leading to the fork and
 // Cursor still without one, though the install was given --to cursor,
-// which a warning says places nothing. A pull of the managed alpha before
+// which a warning says places nothing. A publish of the managed alpha before
 // names the install, not a fork of b's own.
 func TestFromAccountSupersedesAnUnmodifiedCopy(t *testing.T) {
 	t.Parallel()
@@ -145,9 +147,9 @@ func TestFromAccountSupersedesAnUnmodifiedCopy(t *testing.T) {
 	}
 	claude := filepath.Join(b.home, ".claude", "skills", "alpha")
 	before, _ := os.Readlink(claude)
-	pulled := b.run("--json", "pull", "alpha")
-	equal(t, "a pull of the managed alpha: exit", pulled.exit, 6)
-	contains(t, "its hint", b.one(pulled.stdout, "error")["hint"].(string), "agentx skill add --from-account alpha")
+	published := b.run("--json", "skill", "publish", "alpha")
+	equal(t, "a publish of the managed alpha: exit", published.exit, 6)
+	contains(t, "its hint", b.one(published.stdout, "error")["hint"].(string), "agentx skill add --from-account alpha")
 
 	out := b.mustRun("--json", "skill", "add", "--from-account", "alpha", "--to", "cursor")
 	contains(t, "the warning", out.stderr, "so --to and --copy place nothing")
@@ -176,7 +178,7 @@ func TestFromAccountSupersedesAnUnmodifiedCopy(t *testing.T) {
 // settings included, which lack the forks' source: a fork the account
 // remote does not hold, exit 5; an unmanaged directory at alpha's library
 // path, exit 6, and with --keep-local, while it holds no SKILL.md, exit 5;
-// a symlink at beta's, exit 6 with --keep-local too, and a pull of it
+// a symlink at beta's, exit 6 with --keep-local too, and a publish of it
 // names the link to remove; a directory where alpha's worktree goes, exit
 // 6; a managed beta whose library directory is gone, exit 6; an edited
 // managed copy of beta's upstream whose update merge is pending, exit 4,
@@ -216,8 +218,8 @@ func TestFromAccountRefusesAndKeepsLocal(t *testing.T) {
 	}
 	unchanged.check(t, b, "the refusals", 0)
 	writeFile(t, filepath.Join(alphaLib, "SKILL.md"), "---\nname: alpha\ndescription: Mine\n---\n")
-	out := b.run("--json", "pull", "beta")
-	equal(t, "a pull of the linked beta: exit", out.exit, 6)
+	out := b.run("--json", "skill", "publish", "beta")
+	equal(t, "a publish of the linked beta: exit", out.exit, 6)
 	contains(t, "its hint", b.one(out.stdout, "error")["hint"].(string), "remove the link")
 	rootA := filepath.Join(b.agentx, "worktrees", "alpha")
 	if err := os.MkdirAll(rootA, 0o755); err != nil {

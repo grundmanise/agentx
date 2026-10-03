@@ -92,14 +92,14 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 		t.Error("b lost its alpha")
 	}
 
-	// A commit b published and a never pulled would go with the remote
+	// A commit b published and a never took in would go with the remote
 	// branch, and be in neither fork.
 	b.commitFork("beta", "b's commit\n")
 	b.mustRun("skill", "publish", "beta")
 	refused := a.run("skill", "rename", "beta", "gamma", "--remote")
 	equal(t, "a rename over an unpulled commit: exit", refused.exit, 6)
-	contains(t, "a rename over an unpulled commit: hint", refused.stderr, "run 'agentx pull beta' first")
-	a.mustRun("pull", "beta")
+	contains(t, "a rename over an unpulled commit: hint", refused.stderr, "run 'agentx skill update beta' first")
+	a.mustRun("skill", "update", "beta")
 	renamedOut := a.mustRun("skill", "rename", "beta", "gamma", "--remote")
 	excludes(t, "the fork step's line in a rename", renamedOut.stdout, "stays as it was")
 	equal(t, "the remote's beta", remoteGit(t, a, remote, "for-each-ref", "--format=%(refname)", "refs/heads/skills/beta"), "")

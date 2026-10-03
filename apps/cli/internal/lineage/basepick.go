@@ -6,19 +6,19 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 )
 
-// A merge of two histories of one fork, as a pull or a publish makes when
-// both this machine and the account remote moved on, records which import
-// is the fork's base afterwards in its Agentx-Base trailer, since the next
-// update from upstream merges with that import as its base. When both
-// sides are on the same import, that is it. When they took different
-// versions of the same upstream, the newer one is the base, but only when
-// the source's own history proves it newer: its upstream commit descends
-// from the other's. Anything else keeps this machine's base: a version
-// whose history the account repo never fetched, a source that was force
-// pushed, two versions on diverged branches of the source, or bases from
-// two different sources or directories. A base kept that way costs at most
-// a conflict on the next update from upstream; no content is ever lost
-// over it, and no time or order of import is ever read to guess.
+// A merge of two histories of one fork, as the account step of an update or
+// a publish makes when both this machine and the account remote moved on,
+// records which import is the fork's base afterwards in its Agentx-Base
+// trailer, since the next update from upstream merges with that import as
+// its base. When both sides are on the same import, that is it. When they
+// took different versions of the same upstream, the newer one is the base,
+// but only when the source's own history proves it newer: its upstream
+// commit descends from the other's. Anything else keeps this machine's
+// base: a version whose history the account repo never fetched, a source
+// that was force pushed, two versions on diverged branches of the source,
+// or bases from two different sources or directories. A base kept that way
+// costs at most a conflict on the next update from upstream; no content is
+// ever lost over it, and no time or order of import is ever read to guess.
 
 // chooseBase is the rule, given whether the source history proves the
 // remote side's upstream commit a descendant of the local side's. Pure.
