@@ -291,7 +291,7 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 			// on to judgeForkUpdate, the one way that completes it.
 			switch {
 			case slices.Contains(pulled, n):
-				inv.summary = "pulled " + n + " from the account remote; it has no upstream to update from"
+				inv.summary = "took in " + n + " from the account remote; it has no upstream to update from"
 			case removed:
 				what, hint := remoteRemovedNotice(n)
 				inv.summary = what + "; " + hint
@@ -318,7 +318,7 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 		case u == nil: // a name the last check found no update for, which only a run of one name asks about
 			inv.summary = n + " is up to date as of the last update check; run '" + checkUpdatesCommand + "' to look again"
 			if len(pulled) > 0 {
-				inv.summary = "pulled " + n + " from the account remote; it is up to date with its upstream as of the last update check"
+				inv.summary = "took in " + n + " from the account remote; it is up to date with its upstream as of the last update check"
 			}
 			inv.out.print(inv.out.paint(heading, sanitised(n)), " is up to date as of the last update check; run ",
 				inv.out.paint(label, checkUpdatesCommand), " to look again")

@@ -360,9 +360,9 @@ func (inv *invocation) reportSync(s forkSync) {
 	name := out.paint(heading, sanitised(s.name))
 	switch s.outcome {
 	case pullFastForward:
-		out.done("pulled " + name + ": fast-forward to " + short(ev.Commit))
+		out.done("took in " + name + " from the account remote: fast-forward to " + short(ev.Commit))
 	case pullMerged:
-		out.done("pulled " + name + ": merged the account remote, committed as " + short(ev.Commit))
+		out.done("merged " + name + " with the account remote, committed as " + short(ev.Commit))
 	case pullConflict:
 		inv.printConflicts(s.u.conflict, s.u.conflictsWith())
 	}
