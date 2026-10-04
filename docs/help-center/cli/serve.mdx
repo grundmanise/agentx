@@ -18,7 +18,8 @@ snapshot 1: 3 configurations, 6 skills
 - One of your own skills whose worktree or library symlink went missing is checked out again from its branch: `repaired`. So is one whose Git pointers broke because `~/.agentx` moved.
 - One of your own skills that serve cannot put back, because a Git command you ran is waiting in its worktree or the worktree is on another branch, is reported as `worktree missing`. Finish or abort the Git command, or switch the worktree back to its branch, then run [`agentx skill place <name>`](/cli/fork#recover-a-skill-of-your-own).
 - A folder in the way of one of your own skills is reported as an `adopt candidate` and left as it is. Adopt it with [`agentx skill place <name> --force`](/cli/fork#something-in-the-way).
-- A managed skill you edited is `modified`; one whose folder is gone is `installable`, as is one of your own skills you have not placed on this machine. A skill no source manages is `unmanaged`.
+- A skill of a shared source you edited is `modified`; one whose folder is gone is `installable`, as is one of your own skills you have not placed on this machine. A skill no source manages is `unmanaged`.
+- One of your own skills counts as fine when its worktree and its library symlink are intact, whatever you edited in it, so serve prints no line for it. [`agentx skill list`](/cli/skill#list-your-skills) shows it as `modified` until you publish your edits.
 
 Serve never deletes or overwrites anything to repair it. A skill that is fine is `restored` and prints no line.
 
@@ -61,7 +62,7 @@ warning: update check: https://github.com/me/skills: git fetch: fatal: unable to
 info: update check: https://github.com/me/skills can be fetched again
 ```
 
-The checks in between log the failure as a debug line, which `--verbose` shows, and serve keeps running. A skill whose new version agentx refuses to import, and a source that was fetched but could not be read, are warned about on every check. The other `update check:` warnings say what an update leaves out or renames, or that a whole check failed.
+The checks in between log the failure as a debug line, which `--verbose` shows, and serve keeps running. A skill whose new version agentx refuses to import, and a source that was fetched but could not be read, are warned about on every check. A skill of your own that another machine removed from the account remote or renamed there is warned about once, with what to do next. The other `update check:` warnings say what an update leaves out or renames, or that a whole check failed.
 
 Serve cannot fetch a source that [`agentx import`](/cli/export#import-onto-another-machine) brought back until you add it again. Run `agentx source add <url>` to fetch it, or `agentx source add <url>#<pin>` for a pinned source so that it stays pinned.
 

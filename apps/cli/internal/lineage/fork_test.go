@@ -145,9 +145,9 @@ func TestResolveWalksFirstParents(t *testing.T) {
 		{"renames above the creation commit, nearest first", oid("r2"), history(
 			commit("g", own("Agentx-Fork-ID: "+idA)), commit("r1", "Rename alpha to beta\n", "g"),
 			commit("e", "Rename this to that, an edit\n", "r1"), commit("r2", "Rename beta to gamma\n", "e")),
-			ForkLineage{ID: idA, Created: oid("g"), Greenfield: true, Renamed: []string{"beta", "alpha"}}, ""},
+			ForkLineage{ID: idA, Created: oid("g"), NoUpstream: true, Renamed: []string{"beta", "alpha"}}, ""},
 		{"made by skill new", oid("e"), history(commit("g", own("Agentx-Fork-ID: "+idA)), commit("e", "an edit\n", "g")),
-			ForkLineage{ID: idA, Created: oid("g"), Greenfield: true}, ""},
+			ForkLineage{ID: idA, Created: oid("g"), NoUpstream: true}, ""},
 		{"a base that is no import", oid("m"), history(
 			commit("g", own("Agentx-Fork-ID: "+idA)), commit("x", "a plain commit\n"),
 			commit("m", own("Agentx-Base: "+oid("x")), "g", "x")),
@@ -158,7 +158,7 @@ func TestResolveWalksFirstParents(t *testing.T) {
 			ForkLineage{ID: idA, Created: oid("g")}, "which is not an import commit in its history"},
 		{"an import message on a commit with a parent is no base", oid("q"), history(
 			commit("g", own("Agentx-Fork-ID: "+idA)), commit("q", importMsg, "g")),
-			ForkLineage{ID: idA, Created: oid("g"), Greenfield: true}, ""},
+			ForkLineage{ID: idA, Created: oid("g"), NoUpstream: true}, ""},
 		{"no fork id anywhere", oid("e"), history(commit("i1", importMsg), commit("e", "an edit\n", "i1")),
 			ForkLineage{Base: oid("i1"), BaseTree: "tree-i1", Import: imp}, ""},
 		{"a commit missing from the history", oid("e"), history(commit("e", "an edit\n", "gone")),

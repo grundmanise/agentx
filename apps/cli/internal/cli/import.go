@@ -564,13 +564,20 @@ func (inv *invocation) printImported(path string, doc exportDocument, states []i
 // printed per source as the settings now hold it: source add writes the pin
 // its argument names, so the bare URL would unpin the source this import
 // just restored. The account remote is attached again with source add
-// --account.
+// --account, and your own skills are installed from it by name.
 func printSourcesToAdd(out *writer, sources []home.Source) {
 	if len(sources) == 0 {
 		out.print("  ", out.paint(muted, "only the settings were written: install a missing skill with 'agentx skill add <source>'"))
 		return
 	}
-	out.print("  ", out.paint(muted, "only the settings were written: add each source again, then install a missing skill with 'agentx skill add <source>'"))
+	install := "install a missing skill with 'agentx skill add <source>'"
+	for _, src := range sources {
+		if src.Account {
+			install += ", or one of your own with 'agentx skill add --name <name>'"
+			break
+		}
+	}
+	out.print("  ", out.paint(muted, "only the settings were written: add each source again, then "+install))
 	for _, src := range sources {
 		out.print("    ", out.paint(label, sourceAddLine(src)))
 	}

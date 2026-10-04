@@ -39,6 +39,20 @@ const UpstreamRemovedPrefix = "refs/agentx/upstream-removed/"
 // UpstreamRemovedRef is the upstream-removed marker of the skill called name.
 func UpstreamRemovedRef(name string) string { return UpstreamRemovedPrefix + name }
 
+// RemoteRemovedPrefix is where a fetch of the account remote records that
+// it no longer holds the branch of one of your own skills this machine
+// holds, which another machine removed or renamed: one ref per skill,
+// pointing at the commit the remote-tracking branch held before the fetch
+// deleted it, the skill's last published version. A skill is compared
+// with it as with the remote's branch, so its state and its diff say what
+// it holds that was never published, and a publish of every skill leaves
+// it out. A fetch that finds the branch again, and a removal of the skill,
+// delete it.
+const RemoteRemovedPrefix = "refs/agentx/remote-removed/"
+
+// RemoteRemovedRef is the remote-removed marker of the skill called name.
+func RemoteRemovedRef(name string) string { return RemoteRemovedPrefix + name }
+
 // The kinds of lineage record a skill has. KindFork is one of the user's
 // own skills, on a skills/ branch, which events list as managed (see
 // eventKind in package cli).
@@ -73,6 +87,7 @@ type Record struct {
 	Parentless      bool         // the commit has no parent, as an import commit never has
 	Candidate       *Candidate   // the update candidate, nil when the account repo holds none
 	UpstreamRemoved string       // the source commit the upstream-removed marker names, "" when there is none
+	RemoteRemoved   string       // the last published commit the remote-removed marker names, "" when there is none
 	Fork            *ForkLineage // a fork's lineage, read by ReadForks; nil for a managed skill and until then
 }
 
@@ -158,11 +173,13 @@ func (rec Record) CandidateCommit() string {
 //
 // The same for-each-ref reads what the last update check left for each
 // skill, its candidate with the trailers of the version it pins and its
-// upstream-removed marker, so that a listing that shows them still costs
-// one git process. A marker names a source's own commit, whose message is
-// the source's and says nothing agentx reads, so its message is not
-// printed at all. A candidate or a marker of a name no branch holds is no
-// skill's and is left out.
+// upstream-removed marker, and what the last fetch of the account remote
+// left for one of your own skills, its remote-removed marker, so that a
+// listing that shows them still costs one git process. A marker names a
+// commit whose message says nothing agentx reads, a source's own for the
+// upstream-removed one, so its message is not printed at all. A candidate
+// or a marker of a name no branch holds is no skill's and is left out, and
+// so is a remote-removed marker of a managed skill's name.
 //
 // Nothing here reads the source refs: the lineage of a skill is what its own
 // branch says, so deleting a source ref changes no lineage. Whether the
@@ -171,16 +188,17 @@ func (rec Record) CandidateCommit() string {
 func List(ctx context.Context, r *gitx.Runner, gitDir string) (map[string]Record, error) {
 	const recordEnd = "\x01"
 	markers := strings.TrimSuffix(UpstreamRemovedPrefix, "/")
+	published := strings.TrimSuffix(RemoteRemovedPrefix, "/")
 	out, err := r.Isolated(ctx, gitDir,
 		"for-each-ref", "--format=%(refname)%00%(objectname)%00%(tree)%00%(parent)%00"+
-			"%(if:notequals="+markers+")%(refname:rstrip=1)%(then)%(contents)%(end)"+recordEnd,
-		ManagedPrefix, ForkPrefix, CandidatePrefix, UpstreamRemovedPrefix)
+			"%(if:notequals="+markers+")%(refname:rstrip=1)%(then)%(if:notequals="+published+")%(refname:rstrip=1)%(then)%(contents)%(end)%(end)"+recordEnd,
+		ManagedPrefix, ForkPrefix, CandidatePrefix, UpstreamRemovedPrefix, RemoteRemovedPrefix)
 	if err != nil {
 		return nil, err
 	}
 	records := map[string]Record{}
 	candidates := map[string]Candidate{}
-	removed := map[string]string{}
+	removed, gone := map[string]string{}, map[string]string{}
 	for _, entry := range strings.Split(out, recordEnd) {
 		entry = strings.TrimPrefix(entry, "\n")
 		if strings.TrimSpace(entry) == "" {
@@ -206,6 +224,9 @@ func List(ctx context.Context, r *gitx.Runner, gitDir string) (map[string]Record
 		case strings.HasPrefix(rec.Ref, UpstreamRemovedPrefix):
 			removed[strings.TrimPrefix(rec.Ref, UpstreamRemovedPrefix)] = rec.Commit
 			continue
+		case strings.HasPrefix(rec.Ref, RemoteRemovedPrefix):
+			gone[strings.TrimPrefix(rec.Ref, RemoteRemovedPrefix)] = rec.Commit
+			continue
 		default:
 			continue
 		}
@@ -221,6 +242,9 @@ func List(ctx context.Context, r *gitx.Runner, gitDir string) (map[string]Record
 			rec.Candidate = &c
 		}
 		rec.UpstreamRemoved = removed[name]
+		if rec.Kind == KindFork {
+			rec.RemoteRemoved = gone[name]
+		}
 		records[name] = rec
 	}
 	return records, nil

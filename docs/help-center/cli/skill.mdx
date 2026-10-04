@@ -14,10 +14,10 @@ agentx skill add anthropics/skills --name pdf
 ```text
 ✓ added https://github.com/anthropics/skills at 8c41d07: 17 skills; write access unknown
 ✓ installed pdf from https://github.com/anthropics/skills under skills/pdf at 3f2a9c1, source fetched 2026-09-22T10:00:00Z: 4 placements
-  claude-code  symlink  ~/.claude/skills/pdf -> ~/.agents/skills/pdf
-  codex        library  ~/.agents/skills/pdf
-  cursor       symlink  ~/.cursor/skills/pdf -> ~/.agents/skills/pdf
-  gemini-cli   library  ~/.agents/skills/pdf
+  claude-code  symlink  /home/me/.claude/skills/pdf -> /home/me/.agents/skills/pdf
+  codex        library  /home/me/.agents/skills/pdf
+  cursor       symlink  /home/me/.cursor/skills/pdf -> /home/me/.agents/skills/pdf
+  gemini-cli   library  /home/me/.agents/skills/pdf
   always available to universal clients: codex, gemini-cli
 ```
 
@@ -69,10 +69,10 @@ One command installs them all: the files come down in one fetch, the versions ar
 If one skill cannot be installed, the rest still land. agentx names the one it skipped and why, and exits non-zero:
 
 ```text
-warning: xlsx: the library already holds xlsx at ~/.agents/skills
+warning: xlsx: the library already holds xlsx at /home/me/.agents/skills
 ✓ installed pdf from https://github.com/anthropics/skills under skills/pdf at 3f2a9c1, source fetched 2026-09-22T10:00:00Z: 4 placements
   ...
-error: 1 of 3 skills could not be installed: xlsx: the library already holds xlsx at ~/.agents/skills
+error: 1 of 3 skills could not be installed: xlsx: the library already holds xlsx at /home/me/.agents/skills
 ```
 
 agentx also refuses a skill whose directory in the source carries a control character, or opens or closes with a space:
@@ -140,7 +140,7 @@ If two commands try to install the same name at once, one of them wins and the o
 A copy agentx placed stops matching the library when you edit the copy or when the skill in the library changes. `agentx skill place` and `agentx config enable --place-all` keep that copy exactly as it is and skip it, with a warning:
 
 ```text
-warning: cursor's copy of pdf is different from the library, so it was left unchanged (~/.cursor/skills/pdf)
+warning: cursor's copy of pdf is different from the library, so it was left unchanged (/home/me/.cursor/skills/pdf)
   to replace it with the library version: agentx skill remove pdf --from cursor && agentx skill place pdf --to cursor --copy
 ```
 
@@ -183,9 +183,8 @@ agentx skill add --name release-notes
 ```
 
 ```text
-✓ added https://github.com/acme/skills at 7d1e0b2: 3 skills; you can write to it
 ✓ installed release-notes from the account remote at 4c2e9a1: 1 placement
-  claude-code  symlink  ~/.claude/skills/release-notes -> ~/.agents/skills/release-notes
+  claude-code  symlink  /home/me/.claude/skills/release-notes -> /home/me/.agents/skills/release-notes
 ```
 
 Or install every skill the account remote holds that this machine lacks, and leave out what you do not want with `--except`:
@@ -198,7 +197,7 @@ agentx skill add --all --except standup
 - agentx fetches the account remote every time, so `--fetch` does not apply. A remote Git cannot reach stops with exit code 3.
 - `--name` and `--except` match the skill's name exactly.
 - agentx places each skill into every enabled configuration, as for a source. Pass `--to <configuration>` to choose, and `--copy` for copies.
-- When this machine has not added a skill's upstream source, agentx adds it, so that [`agentx skill check-updates`](#check-for-updates) finds the skill's updates here too. A source it cannot fetch does not stop the install: run the `agentx source add` line the warning prints.
+- When this machine has not added the upstream source of a skill you forked, agentx adds it first and prints its `✓ added <url> at <commit>: <n> skills` line, so that [`agentx skill check-updates`](#check-for-updates) finds the skill's updates here too. A source it cannot fetch does not stop the install: run the `agentx source add` line the warning prints.
 - A skill that cannot be installed does not stop the others: agentx names it in a warning and installs the rest. The command then exits with that skill's exit code, or `6` when several skills failed for different reasons.
 
 #### When the library already holds the name
@@ -218,7 +217,7 @@ agentx skill place pdf --to cursor
 
 ```text
 ✓ placed pdf in 1 configuration
-  cursor  symlink  ~/.cursor/skills/pdf -> ~/.agents/skills/pdf
+  cursor  symlink  /home/me/.cursor/skills/pdf -> /home/me/.agents/skills/pdf
   always available to universal clients: codex, gemini-cli
 ```
 
@@ -257,7 +256,7 @@ agentx skill remove pdf --from cursor
 
 ```text
 ✓ removed pdf from cursor: 1 placement
-  cursor  symlink  ~/.cursor/skills/pdf
+  cursor  symlink  /home/me/.cursor/skills/pdf
 ```
 
 From the machine altogether:
@@ -268,11 +267,11 @@ agentx skill remove pdf
 
 ```text
 ✓ removed pdf from the library: 4 placements
-  claude-code  symlink  ~/.claude/skills/pdf
-  cursor       copy     ~/.cursor/skills/pdf
-  codex        library  ~/.agents/skills/pdf
-  gemini-cli   library  ~/.agents/skills/pdf
-  deleted ~/.agents/skills/pdf and refs/heads/managed/pdf
+  claude-code  symlink  /home/me/.claude/skills/pdf
+  cursor       copy     /home/me/.cursor/skills/pdf
+  codex        library  /home/me/.agents/skills/pdf
+  gemini-cli   library  /home/me/.agents/skills/pdf
+  deleted /home/me/.agents/skills/pdf and refs/heads/managed/pdf
 ```
 
 Without `--from`, agentx takes away every placement, the library directory, the record of where the skill came from and what the settings remembered about it. With `--from <client>`, only those clients' placements go; the library keeps the skill.
@@ -306,8 +305,8 @@ Everything else is left exactly where it is and named in the output:
 agentx decides by the name a link holds, never by where following it leads, so a link of yours is yours whatever it resolves to:
 
 ```text
-warning: ~/.claude/skills/pdf points at ~/mylinks/pdf, not at ~/.agents/skills/pdf and was left as it is; it no longer leads to pdf
-warning: ~/.cursor/skills/pdf is a directory agentx did not place there and was left as it is; cursor still sees it
+warning: /home/me/.claude/skills/pdf points at /home/me/mylinks/pdf, not at /home/me/.agents/skills/pdf and was left as it is; it no longer leads to pdf
+warning: /home/me/.cursor/skills/pdf is a directory agentx did not place there and was left as it is; cursor still sees it
 ✓ removed pdf from the library: 2 placements, 2 placements left in place
   ...
 ```
@@ -317,7 +316,7 @@ Here `~/mylinks/pdf` points at the library entry, so once the removal deletes th
 A copy agentx recorded is removed as you asked, even when it no longer holds the library's version of the skill. agentx warns, naming whose copy it was and its path, rather than letting the content go quietly:
 
 ```text
-warning: cursor's copy of pdf was different from the library; removing it deleted those changes (~/.cursor/skills/pdf)
+warning: cursor's copy of pdf was different from the library; removing it deleted those changes (/home/me/.cursor/skills/pdf)
 ```
 
 Take a copy of anything you want to keep before removing it.
@@ -353,7 +352,7 @@ A client may still see a skill through another client's directory: Cursor reads 
 Removing a skill from the machine warns for every client that still sees it afterwards, naming the path:
 
 ```text
-warning: codex still sees pdf at ~/.codex/skills/pdf, which agentx did not place there
+warning: codex still sees pdf at /home/me/.codex/skills/pdf, which agentx did not place there
 ```
 
 Universal clients, such as Codex and Gemini CLI, read the library, so removing the library entry is all agentx can do for them. A directory of their own under the same name stays, and the warning says where it is.
@@ -368,8 +367,8 @@ agentx skill remove pdf
 
 ```text
 ✓ removed pdf, which the library no longer held: 2 placements
-  claude-code  symlink  ~/.claude/skills/pdf
-  cursor       copy     ~/.cursor/skills/pdf
+  claude-code  symlink  /home/me/.claude/skills/pdf
+  cursor       copy     /home/me/.cursor/skills/pdf
   deleted refs/heads/managed/pdf
 ```
 
@@ -415,11 +414,12 @@ The source column shows where the skill is published to:
 
 The state column shows:
 
-- `current` or `modified`: whether the skill holds edits you have not published yet. A skill of a shared source is compared with the version it was installed at, or the one you last [published to its source](#publish-edits-to-a-shared-source). One of your own skills is compared with what you last published to your account remote, as agentx last fetched it: it stays `modified` until you [publish its edits](#publish-a-skill), including edits an update or a fork recorded on it. One you never published is `current` until you edit or update it. Every change counts, whatever tool made it: a file you edited, added or deleted, but also a file made executable, a file replaced by a symlink and a symlink added. Files git ignores do not count: see [Files that do not count](#files-that-do-not-count). See what changed with [`agentx skill diff`](#see-what-you-changed).
+- `current` or `modified`: whether the skill holds edits you have not published yet. A skill of a shared source is compared with the version it was installed at, or the one you last [published to its source](#publish-edits-to-a-shared-source). One of your own skills is compared with what you last published to your account remote, as agentx last fetched it: it stays `modified` until you [publish its edits](#publish-a-skill), including edits an update or a fork recorded on it. One you never published is `current` until you edit or update it. One another machine removed from the account remote, or renamed there, is compared with what the account remote last held of it. Every change counts, whatever tool made it: a file you edited, added or deleted, but also a file made executable, a file replaced by a symlink and a symlink added. Files git ignores do not count: see [Files that do not count](#files-that-do-not-count). See what changed with [`agentx skill diff`](#see-what-you-changed).
 - `displaced`: a client that should see the skill through a link from its own skills directory has a real directory there instead, which is what an installer that copies over links leaves. For a client you placed a copy in, it is the other way round: a link to the library where the copy should be. Put it back with [`agentx skill place <name>`](#put-back-placements).
 - `missing`: an enabled client has nothing of the skill in its own skills directory, because you placed the skill with `--to`, removed it with `--from`, or the placement was deleted. Place it in one client with `agentx skill place <name> --to <client>`, or in every client it is missing from with [`agentx skill place <name>`](#put-back-placements). Universal clients and disabled clients are never missing a skill.
 - `source removed`: the source the skill came from is no longer added on this machine. The skill keeps working, stays where it is and keeps its record of where it came from. Add the source again to clear it: see below.
 - `upstream removed`: the last [update check](#check-for-updates) found the skill gone from its source. The skill stays as it is and is never updated. The next check that finds it back in the source clears the state.
+- `remote removed`: one of your own skills that the account remote held and no longer holds, because another machine removed it or renamed it. The skill stays as it is, and a publish of all your skills leaves it out. Remove it here with `agentx skill remove <name>`, or put it back on the account remote with `agentx skill publish <name>`: see [Remove a skill of your own](/cli/fork#remove-a-skill-of-your-own). Removing or replacing the account remote clears this state.
 - `update available`: the last update check found a newer version of the skill in its source. Nothing changed in your library; apply the update with [`agentx skill update <name>`](#update-a-skill), or read it first with `agentx skill diff <name> --update`.
 - `merge pending`: an update of the skill found your edits conflicting with it. The update left your library directory as it was, and it applies nothing until you resolve the merge with Git and update again, or give it up. See [When your edits conflict](#when-your-edits-conflict).
 
@@ -518,11 +518,11 @@ agentx skill place pdf
 
 ```text
 ✓ placed pdf in 4 configurations
-  claude-code  symlink  ~/.claude/skills/pdf -> ~/.agents/skills/pdf
-  codex        library  ~/.agents/skills/pdf
-  cursor       symlink  ~/.cursor/skills/pdf -> ~/.agents/skills/pdf
-  gemini-cli   library  ~/.agents/skills/pdf
-  adopted ~/.claude/skills/pdf
+  claude-code  symlink  /home/me/.claude/skills/pdf -> /home/me/.agents/skills/pdf
+  codex        library  /home/me/.agents/skills/pdf
+  cursor       symlink  /home/me/.cursor/skills/pdf -> /home/me/.agents/skills/pdf
+  gemini-cli   library  /home/me/.agents/skills/pdf
+  adopted /home/me/.claude/skills/pdf
   always available to universal clients: codex, gemini-cli
 ```
 
@@ -537,7 +537,7 @@ Add `--to` to put back only the clients you name. A link of your own to another 
 If a real directory where the link belongs holds anything else, for example because another installer copied a different version there or you edited the skill there, replacing it would delete what it holds. `skill place` stops with exit code 6 and changes nothing:
 
 ```text
-error: ~/.claude/skills/pdf is a directory whose content differs from the library's pdf, so nothing was placed
+error: /home/me/.claude/skills/pdf is a directory whose content differs from the library's pdf, so nothing was placed
 hint: to replace it with the library's version and delete what it holds, run 'agentx skill place pdf --force'; to keep it, move it elsewhere first
 ```
 
@@ -549,11 +549,11 @@ agentx skill place pdf --force
 
 ```text
 ✓ placed pdf in 4 configurations
-  claude-code  symlink  ~/.claude/skills/pdf -> ~/.agents/skills/pdf
-  codex        library  ~/.agents/skills/pdf
-  cursor       symlink  ~/.cursor/skills/pdf -> ~/.agents/skills/pdf
-  gemini-cli   library  ~/.agents/skills/pdf
-  discarded what ~/.claude/skills/pdf held
+  claude-code  symlink  /home/me/.claude/skills/pdf -> /home/me/.agents/skills/pdf
+  codex        library  /home/me/.agents/skills/pdf
+  cursor       symlink  /home/me/.cursor/skills/pdf -> /home/me/.agents/skills/pdf
+  gemini-cli   library  /home/me/.agents/skills/pdf
+  discarded what /home/me/.claude/skills/pdf held
   always available to universal clients: codex, gemini-cli
 ```
 
@@ -575,7 +575,7 @@ One of your own skills is placed as `skill add` places it: a directory that diff
 - it would remove a displaced directory while the skill's library directory holds a symlink. agentx never installs one there, so it is your edit: see it with [`agentx skill diff`](#see-what-you-changed) and [get the original back](#get-the-original-back), or replace the link with the files it leads to. A run that only writes placements is not affected.
 
 ```text
-error: ~/.cursor/skills/pdf lies inside ~/.claude/skills/pdf, and placing one would change the other, so nothing was placed
+error: /home/me/.cursor/skills/pdf lies inside /home/me/.claude/skills/pdf, and placing one would change the other, so nothing was placed
 hint: replace the symlink that joins them with the files it leads to, or move one of them elsewhere, then run 'agentx skill place pdf' again
 ```
 
@@ -583,7 +583,7 @@ Keep the two apart, then run the command again. A client's skills directory that
 
 ## Check for updates
 
-Look for newer versions of the skills you installed, and of your forks of them:
+Look for newer versions of the skills you installed, including the ones you forked:
 
 ```sh
 agentx skill check-updates
@@ -727,10 +727,10 @@ no skill was updated from upstream
 - `agentx skill update <name>` takes in what the account remote holds of one skill. `agentx skill update --all` does so for every one of your own skills on this machine.
 - When this machine has no commits of its own, the skill moves to the published commit: a fast-forward, with nothing new committed. When both machines committed, agentx merges the two with Git and commits the merge, as `notes: merge the account remote (desktop)`.
 - A skill you forked from a source takes in what the account remote holds first, then its new upstream version, as two commits.
-- Edits you have not published are recorded on the skill first, and what the account remote holds is merged with them. They stay unpublished until you [publish](#publish-a-skill) them.
+- Edits you have not published are recorded on the skill first, and what the account remote holds is merged with them. They stay unpublished until you [publish](#publish-a-skill) them. Publish with `-m` to publish them under your own message.
 - Take them in before you publish: [`agentx skill publish`](#publish-a-skill) never merges, and stops with exit code 6 when another machine published changes and this machine has changes of its own.
 - When both machines changed the same lines, the merge waits for you: see [Resolve a conflict](/cli/fork#resolve-a-conflict). Resolve it, then run `agentx skill update <name>` again.
-- A skill with no upstream (one you created with `agentx skill new`, or forked from an unmanaged or a plugin's skill) that has nothing new on the account remote is `up to date with the account remote`. One you never published has no branch there yet, and the update tells you to run `agentx skill publish <name>`.
+- A skill with no upstream (one you created with `agentx skill new`, or forked from an unmanaged or a plugin's skill) that has nothing new on the account remote is `up to date with the account remote`. One you never published has no branch there yet, and the update tells you to run `agentx skill publish <name>`. One another machine removed from the account remote, or renamed there, gets a warning naming the two ways on: remove it here, or publish it again.
 - If Git cannot reach the account remote, the update of a skill with no upstream stops with exit code 3; a skill you forked from a source gets a warning and still takes its new upstream version.
 
 A forked skill remembers the upstream version it was last updated from. When both machines took different versions of the same upstream, the merge records the newer one, but only when the source's history on this machine proves it newer: run [`agentx source fetch`](/cli/source) first to fetch that history. Otherwise the merge keeps this machine's version, and at worst the next update conflicts where both versions changed the same lines. When the merge brings a newer upstream version than the update your last check found, agentx drops that update, so the update never takes the skill back to the older version.
@@ -838,7 +838,8 @@ agentx skill publish release-notes -m "Cover reverted pull requests"
 
 - Your edits stay on this machine until you publish them. Publishing records them as one commit on the skill's history, then pushes it. There is no separate commit step.
 - Give the commit a message with `-m`. Its first line is the subject. Without `-m`, agentx writes one that names the skill, the files you changed and this machine, such as `release-notes: edit SKILL.md (laptop)`.
-- Run `agentx skill publish` with no name to publish every skill of your own. `-m` then gives the message of each commit it records. A bare publish never covers a skill you installed from a shared source: name it to [publish it to its source](#publish-edits-to-a-shared-source).
+- With `-m`, edits that [`agentx skill update`](#take-in-what-another-machine-published) recorded on the skill, what it merged from another machine, and commits you made with Git in the skill's worktree are published in the same one commit, under your message. A [rename](/cli/fork#rename-a-skill-of-your-own) or an update from upstream that you have not published yet keeps its own commit: agentx then warns that `-m` was not used, unless the skill also has new edits, which get your message.
+- Run `agentx skill publish` with no name to publish every skill of your own. `-m` then gives the message of each commit it records. A bare publish never covers a skill you installed from a shared source: name it to [publish it to its source](#publish-edits-to-a-shared-source). It also leaves out a skill another machine removed from the account remote or renamed there, shown as `remote removed`, with a warning: name it to publish it again.
 - [Files that stay local](/cli/fork#files-that-stay-local), such as a `.DS_Store`, are never published.
 - Each skill goes to its own branch, `skills/<name>`. Publishing one skill leaves your other skills where they are.
 - When another machine published changes to the skill first, publishing stops with exit code 6 and records nothing: your edits stay where they are. Run [`agentx skill update <name>`](#take-in-what-another-machine-published) to take them in, then publish again. A skill with no edits and nothing new of its own has nothing to publish: agentx warns, and the publish still succeeds.
@@ -887,6 +888,8 @@ agentx skill publish pdf -m "Keep the original file"
   hint: run 'agentx skill update pdf' to take the change in, then publish again
   ```
 
+- When someone pushes to the branch between agentx's fetch and its push, agentx fetches the source again and checks once more. A change to other folders is no obstacle: the commit goes on top of it. A change to the skill stops the publish as above, and `agentx skill update <name>` then takes it in.
+
 - While a merge with an update is pending, publishing stops with exit code 4: [finish the merge](#finish-the-merge) or give it up first.
 - When you removed the skill's source from this machine, publishing stops with exit code 5: add it again with `agentx source add <url>`.
 - When the source's host declines the push, for example a hook or a protected branch, publishing stops with exit code 6 and names the host's reason. Fix what the host says, then publish again.
@@ -904,7 +907,7 @@ agentx skill publish pdf -m "Keep the original file"
 Every skill of your own has a permanent id. A skill you create on two machines under the same name is two skills, with two ids. agentx never mixes them: once one is published, publishing or updating the other stops with exit code 6:
 
 ```text
-error: the account remote's skills/release-notes is a different fork than release-notes on this machine, so release-notes cannot be published
+error: the account remote's skills/release-notes is a different skill than release-notes on this machine, so release-notes cannot be published
 hint: rename yours with 'agentx skill rename release-notes <new>', then publish that one
 ```
 

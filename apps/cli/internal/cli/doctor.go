@@ -173,11 +173,11 @@ func (d *doctor) run(ctx context.Context) error {
 	commit, mergeErr, probeErr := gitx.Probe(ctx, inv.git)
 	switch {
 	case probeErr != nil:
-		d.row("fork_merges", "fail", "cannot merge upstream changes into forks: cannot set up the probe repository: "+probeErr.Error(), verbose)
+		d.row("fork_merges", "fail", "cannot merge upstream changes into your own skills: cannot set up the probe repository: "+probeErr.Error(), verbose)
 	case mergeErr != nil:
-		d.row("fork_merges", "fail", "cannot merge upstream changes into forks: "+mergeErr.Error(), verbose)
+		d.row("fork_merges", "fail", "cannot merge upstream changes into your own skills: "+mergeErr.Error(), verbose)
 	default:
-		d.row("fork_merges", "ok", "upstream changes can be merged into forks", "")
+		d.row("fork_merges", "ok", "upstream changes can be merged into your own skills", "")
 	}
 	switch {
 	case commit == "":

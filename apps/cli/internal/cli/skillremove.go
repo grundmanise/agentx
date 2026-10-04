@@ -88,6 +88,7 @@ type removalPlan struct {
 	branch   string
 	worktree bool
 	remote   bool
+	quiet    bool // the lines are left out of the text output, see forkRemoval.quiet
 }
 
 // skillRemove takes a skill out of the configurations --from names, or off
@@ -108,7 +109,7 @@ func (inv *invocation) skillRemove(ctx context.Context, name string, from []stri
 	named := namedConfigurations(from)
 	if len(named) > 0 && remote {
 		return fail(exitUsage, "--remote and --from "+named[0]+" cannot both be given",
-			"--remote removes a fork from the machine and from the account remote; drop --from to remove it whole, or --remote to remove only the placements you name")
+			"--remote removes one of your own skills from the machine and from the account remote; drop --from to remove it whole, or --remote to remove only the placements you name")
 	}
 	if len(named) == 0 {
 		if handled, err := inv.removeFork(ctx, name, remote); handled {
@@ -149,7 +150,7 @@ func (inv *invocation) skillRemove(ctx context.Context, name string, from []stri
 			if whole && values[lineage.ForkRef(name)] != "" {
 				// A fork made since it was judged: removing it is the
 				// removal of a fork, which this run did not plan.
-				return fail(exitRefused, sanitised(name)+" became a fork while it was being removed, so nothing was removed",
+				return fail(exitRefused, sanitised(name)+" became one of your own skills while it was being removed, so nothing was removed",
 					"run '"+skillCommand("remove", name)+"' again")
 			}
 			// A merge an update left pending holds the library directory
@@ -562,25 +563,26 @@ func canonicalPath(path string) string {
 }
 
 // lineageRefs reads the import branch, the fork branch, the candidate ref
-// and the upstream-removed marker of one skill in one git process, so that
+// and the upstream-removed and remote-removed markers of one skill in one
+// git process, so that
 // a removal knows what it has to take away and what it must refuse before
 // it plans anything.
 func (inv *invocation) lineageRefs(ctx context.Context, gitDir, name string) (map[string]string, error) {
 	values, err := inv.git.Refs(ctx).RefValues(gitDir,
-		[]string{lineage.ManagedRef(name), lineage.ForkRef(name), lineage.CandidateRef(name), lineage.UpstreamRemovedRef(name)})
+		[]string{lineage.ManagedRef(name), lineage.ForkRef(name), lineage.CandidateRef(name), lineage.UpstreamRemovedRef(name), lineage.RemoteRemovedRef(name)})
 	if err != nil {
 		return nil, accountRepoFailure(err)
 	}
 	return values, nil
 }
 
-// dropCheckRefs records the deletion of what the update check left for a
-// skill that leaves the machine, its candidate and its upstream-removed
-// marker, each with the value it holds now, so that nothing of the skill is
+// dropCheckRefs records the deletion of what the update check and the
+// fetches of the account remote left for a skill that leaves the machine,
+// its candidate and its upstream-removed and remote-removed markers, each with the value it holds now, so that nothing of the skill is
 // left under refs/agentx and a skill installed under that name later does
 // not inherit either.
 func dropCheckRefs(m *home.Mutation, gitDir, name string, values map[string]string) {
-	for _, ref := range []string{lineage.CandidateRef(name), lineage.UpstreamRemovedRef(name)} {
+	for _, ref := range []string{lineage.CandidateRef(name), lineage.UpstreamRemovedRef(name), lineage.RemoteRemovedRef(name)} {
 		if held := values[ref]; held != "" {
 			m.Ref(gitDir, ref, held, "")
 		}
@@ -749,7 +751,9 @@ func (inv *invocation) reportRemoved(ctx context.Context, plan removalPlan, targ
 	if plan.whole {
 		inv.warnStillSeen(snap, plan, targetIDs(targets))
 	}
-	inv.printRemoved(plan)
+	if !plan.quiet {
+		inv.printRemoved(plan)
+	}
 	inv.summary = removeSummary(plan)
 	return nil
 }

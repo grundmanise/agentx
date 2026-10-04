@@ -66,13 +66,16 @@ func newSkillPublishCommand(inv *invocation) *cobra.Command {
 		Long: "Publish the skill called <name>, or with no name every skill of your own: record\n" +
 			"the edits its directory holds as one commit on its branch, then push the branch\n" +
 			"to the account remote. Edits stay on this machine until you publish them. The\n" +
-			"commit's message names the skill and the files it changes, unless -m gives one.\n" +
-			"Files git ignores are never published. When the account remote holds changes\n" +
-			"another machine published, nothing is recorded or pushed: run 'agentx skill\n" +
-			"update <name>' to take them in first, then publish again. A push the account\n" +
-			"remote's host declines, by a hook or a protected branch, is reported with its\n" +
-			"reason, never forced, and a branch of the same name that is another skill is\n" +
-			"never pushed over.\n\n" +
+			"commit's message names the skill and the files it changes, unless -m gives one;\n" +
+			"with -m, the edits an update recorded are published in that one commit too,\n" +
+			"unless a rename or an update from upstream lies between. Files git ignores are\n" +
+			"never published. A skill another machine removed from the account remote, or\n" +
+			"renamed there, is published again only when you name it. When the account\n" +
+			"remote holds changes another machine published, nothing is recorded or\n" +
+			"pushed: run 'agentx skill update <name>' to take them in first, then publish\n" +
+			"again. A push the account remote's host declines, by a hook or a protected\n" +
+			"branch, is reported with its reason, never forced, and a branch of the same\n" +
+			"name that is another skill is never pushed over.\n\n" +
 			"A skill installed from a shared source is published only when you name it: its\n" +
 			"edits become one commit, under your own git identity, on the branch of the\n" +
 			"source it is installed from, changing its folder alone, and the commit is pushed\n" +
@@ -127,14 +130,23 @@ func publishCommand(name string) string { return skillCommand("publish", name) }
 // publishing is one skill of a publish: what was found of it and what the
 // publish did with it.
 type publishing struct {
-	name     string
-	outcome  string
-	commit   string
-	edits    *committing // the edits its directory holds, nil when it holds its tip
-	judged   bool        // its edits were judged; a skill whose directory cannot be judged is refused
-	recorded bool        // the edits were recorded on its branch
-	push     bool        // its branch goes in the push
-	f        *failure
+	name    string
+	outcome string
+	commit  string
+	edits   *committing // the edits its directory holds, nil when it holds its tip
+	// fold is the commit that records, under the message -m gives, every
+	// edit the skill holds that the account remote lacks, recorded or not,
+	// see foldable; nil when -m gives none or they cannot be folded. With
+	// edits, it is edits itself.
+	fold *committing
+	// foldRefused is set when -m gives a message and the commits the
+	// account remote lacks cannot be folded, see foldable: they keep
+	// their own commits.
+	foldRefused bool
+	recorded    bool // the edits were recorded on its branch
+	judged      bool // its edits were judged; a skill whose directory cannot be judged is refused
+	push        bool // its branch goes in the push
+	f           *failure
 }
 
 // publish publishes the skill called name, or with no name every skill of
@@ -174,13 +186,22 @@ func (inv *invocation) publish(ctx context.Context, name, message string) error 
 	if err != nil {
 		return err
 	}
-	names := remoteSelection(records)
+	names, left := remoteSelection(records)
 	if name != "" {
+		left = nil
 		if records[name].Kind != lineage.KindFork {
 			// A journal finished above took the skill away.
 			return inv.noLibrarySkill(name)
 		}
 		names = []string{name}
+	}
+	for _, n := range left {
+		what, hint := remoteRemovedNotice(n)
+		inv.out.warnWith(what+", so it was not published", hint)
+	}
+	if len(names) == 0 && len(left) > 0 {
+		inv.summary = "published no skill; the account remote no longer holds " + sanitised(andList(left))
+		return nil
 	}
 	if len(names) == 0 {
 		inv.summary = "no skill to publish"
@@ -201,24 +222,33 @@ func (inv *invocation) publish(ctx context.Context, name, message string) error 
 	list := make([]*publishing, 0, len(names))
 	byName := map[string]*publishing{}
 	var ready []*committing
-	edited, allJudged := false, true
+	edited, allJudged, recordedBefore := false, true, false
 	for _, n := range names {
-		p, err := inv.judgePublish(ctx, gitDir, records[n], remote)
+		p, err := inv.judgePublish(ctx, gitDir, records[n], remote, message)
 		if err != nil {
 			return err
 		}
-		edited, allJudged = edited || p.edits != nil, allJudged && p.judged
-		if p.push && p.edits != nil {
+		edited, allJudged = edited || p.edits != nil || p.fold != nil, allJudged && p.judged
+		recordedBefore = recordedBefore || p.push && p.foldRefused
+		switch {
+		case p.push && p.fold != nil:
+			ready = append(ready, p.fold)
+		case p.push && p.edits != nil:
 			ready = append(ready, p.edits)
 		}
 		list, byName[n] = append(list, p), p
 	}
 	// A skill whose directory could not be judged may hold edits: its
 	// refusal says what is wrong, and -m is not said to be unused while
-	// any skill of the run was not judged.
+	// any skill of the run was not judged. Edits an update, a fork or a
+	// rename recorded keep their own commits when they cannot be folded,
+	// see foldable, and the warning says so.
 	if message != "" && allJudged && !edited {
 		what := "no skill has edits to record"
-		if name != "" {
+		switch {
+		case name != "" && recordedBefore:
+			what = "the edits of " + sanitised(name) + " were already recorded in commits of their own, which a rename or an update from upstream keeps"
+		case name != "":
 			what = sanitised(name) + " has no edits to record"
 		}
 		inv.out.warn(what + ", so -m was not used")
@@ -341,7 +371,13 @@ func (inv *invocation) publishable(ctx context.Context, name string) (shared boo
 // own is refused, outcome moved, exit code 6, since a publish never
 // merges: what the account remote holds that the skill lacks is an
 // update's to take in, see updateRun.accountStep.
-func (inv *invocation) judgePublish(ctx context.Context, gitDir string, rec lineage.Record, remote remoteForks) (*publishing, error) {
+//
+// With message, the -m of the run, a skill pushed onto the account
+// remote's branch, which its tip descends from, is folded when it can be,
+// see foldable: what it holds that the remote lacks, the commits an
+// update, a fork or a rename recorded for its edits included, becomes one
+// commit on the remote's tip under that message.
+func (inv *invocation) judgePublish(ctx context.Context, gitDir string, rec lineage.Record, remote remoteForks, message string) (*publishing, error) {
 	n := rec.Name
 	p := &publishing{name: n}
 	edits, err := inv.judgeEdits(ctx, gitDir, rec)
@@ -357,7 +393,10 @@ func (inv *invocation) judgePublish(ctx context.Context, gitDir string, rec line
 	theirs := remote.tips[n]
 	switch theirs {
 	case "":
+		// A skill renamed here and published under an old name keeps its
+		// rename's commit, which is never folded, see foldable.
 		p.push = true
+		p.foldRefused = strings.TrimSpace(message) != "" && rec.Fork != nil && publishedName(n, rec.Fork.Renamed, remote.tips) != ""
 		return p, nil
 	case rec.Commit:
 		if edits != nil {
@@ -383,6 +422,11 @@ func (inv *invocation) judgePublish(ctx context.Context, gitDir string, rec line
 		p.outcome, p.f = publishRefused, failureOf(accountRepoFailure(err))
 	case ahead: // the account remote holds nothing the skill lacks
 		p.push = true
+		if strings.TrimSpace(message) != "" {
+			if p.fold, p.foldRefused, err = inv.foldEdits(ctx, gitDir, rec, theirs, remote.walked[theirs].Base, edits); err != nil {
+				return nil, err
+			}
+		}
 	case behind && edits == nil: // the skill holds nothing the account remote lacks
 		p.outcome, p.commit = publishBehind, theirs
 	default: // the remote moved on, and the skill holds commits or edits of its own
@@ -407,7 +451,67 @@ type committing struct {
 	site     forkSite
 	captured string // the skill directory's fingerprint, taken before git read it
 	root     string // the root tree of the commit: the tip's, with the skill's directory as git wrote it
+	parent   string // the commit's one parent, the tip when ""; a fold's is the account remote's tip, see foldEdits
 	commit   string
+}
+
+// foldEdits is the commit that folds what the skill whose branch is rec
+// holds that the account remote lacks, the remote's branch being at
+// theirs, an ancestor of its tip, into one commit on theirs, see foldable;
+// nil when it cannot be folded, refused true, or the skill has no
+// worktree or library entry here. edits are the skill's edits not yet
+// recorded, nil when it holds its tip; the fold records them too, and is
+// edits itself then.
+func (inv *invocation) foldEdits(ctx context.Context, gitDir string, rec lineage.Record, theirs, base string, edits *committing) (fold *committing, refused bool, err error) {
+	ok, err := inv.foldable(ctx, gitDir, theirs, rec.Commit, base)
+	if err != nil || !ok {
+		return nil, err == nil, err
+	}
+	if edits != nil {
+		edits.parent = theirs
+		return edits, false, nil
+	}
+	if !inv.forkPlaced(rec.Name) {
+		return nil, false, nil
+	}
+	f, err := inv.forkSiteOf(ctx, gitDir, rec)
+	if err != nil {
+		return nil, false, err
+	}
+	j, err := inv.judgeSite(ctx, f, false)
+	if err != nil || !j.clean {
+		return nil, false, err
+	}
+	return &committing{site: f, captured: j.captured, root: rec.Tree, parent: theirs}, false, nil
+}
+
+// foldable reports whether the commits of tip the account remote's tip
+// theirs lacks can be folded into one: none of them may carry what a
+// skill's history is read for, see lineage.Resolve, so that the history
+// of the fold, theirs and the one commit on it, says what the skill's
+// says. A commit with no parent, a rename's and one naming a fork id do;
+// so does a merge naming another base than base, the one theirs's history
+// names, as an update from upstream that was never published writes. The
+// commits recorded for edits, the merges of what another machine
+// published and commits made with git in the worktree do not.
+func (inv *invocation) foldable(ctx context.Context, gitDir, theirs, tip, base string) (bool, error) {
+	const recordEnd = "\x01"
+	out, err := inv.git.Isolated(ctx, gitDir, "log", "--format=%P%x00%B"+recordEnd, theirs+".."+tip)
+	if err != nil {
+		return false, accountRepoFailure(err)
+	}
+	for _, record := range strings.Split(out, recordEnd) {
+		record = strings.TrimPrefix(record, "\n")
+		if strings.TrimSpace(record) == "" {
+			continue
+		}
+		parents, message, _ := strings.Cut(record, "\x00")
+		t, err := lineage.ParseFork(message)
+		if strings.TrimSpace(parents) == "" || err != nil || lineage.RenamedFrom(message) != "" || t.ForkID != "" || t.Base != "" && t.Base != base {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 // judgeEdits judges the edits of the skill whose branch is rec: its
@@ -478,6 +582,12 @@ func (inv *invocation) writeCommits(ctx context.Context, w *forkWriter, gitDir s
 	for _, c := range ready {
 		pairs.WriteString(c.site.rec.Tree + " " + c.root + "\n")
 	}
+	parent := func(c *committing) string {
+		if c.parent != "" {
+			return c.parent
+		}
+		return c.site.rec.Commit
+	}
 	out, err := inv.git.IsolatedInput(ctx, gitDir, strings.NewReader(pairs.String()), "diff-tree", "--stdin", "-r", "-z", "--no-renames", "--name-status")
 	if err != nil {
 		return accountRepoFailure(err)
@@ -497,7 +607,7 @@ func (inv *invocation) writeCommits(ctx context.Context, w *forkWriter, gitDir s
 		if text := strings.TrimSpace(message); text != "" {
 			subject, body, _ = strings.Cut(text, "\n")
 		}
-		c.commit, err = w.commit(ctx, c.root, []string{c.site.rec.Commit}, forkMessage{subject: subject, body: body})
+		c.commit, err = w.commit(ctx, c.root, []string{parent(c)}, forkMessage{subject: subject, body: body})
 		switch {
 		case err != nil && strings.TrimSpace(message) != "" && errors.Is(err, lineage.ErrForkTrailer):
 			// Only a message the user gave can carry a trailer of agentx's;

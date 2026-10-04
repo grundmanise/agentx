@@ -21,7 +21,7 @@ Text that comes from somewhere else is cleaned before it is printed: tabs, newli
 Paths are quoted instead of cleaned, so you can still copy one. A path holding a control character is printed in double quotes with escapes, the way `git status` prints such a path:
 
 ```text
-    nasty  directory  user  "~/.claude/skills/na\033[31msty"
+    nasty  directory  user  "/home/me/.claude/skills/na\033[31msty"
 ```
 
 ## Colour

@@ -266,9 +266,9 @@ func sameForkRefusal(rec lineage.Record, there lineage.ForkLineage, doing string
 	}
 	switch {
 	case here != "" && there.ID != "" && here != there.ID:
-		return refuse(exitRefused, "the account remote's "+branch+" is a different fork than "+name+" on this machine, so "+name+" cannot be "+doing, rename)
+		return refuse(exitRefused, "the account remote's "+branch+" is a different skill than "+name+" on this machine, so "+name+" cannot be "+doing, rename)
 	case here == "" || there.ID == "":
-		return refuse(exitRefused, "the history of "+name+" here or of the account remote's "+branch+" records no fork id, so nothing tells that they are one fork and "+name+" cannot be "+doing, rename)
+		return refuse(exitRefused, "the history of "+name+" here or of the account remote's "+branch+" records no fork id, so nothing tells that they are one skill and "+name+" cannot be "+doing, rename)
 	}
 	return nil
 }
@@ -295,16 +295,39 @@ func (inv *invocation) forkRecords(ctx context.Context, gitDir string) (map[stri
 
 // remoteSelection is the skills a bare publish covers, in name order:
 // every skill of your own this machine holds, those whose branch is a
-// fork branch.
-func remoteSelection(records map[string]lineage.Record) []string {
-	var names []string
+// fork branch, but the ones the account remote no longer holds, see
+// driftRemoteRemoved, which are left, in name order: putting a branch
+// another machine removed back takes naming the skill.
+func remoteSelection(records map[string]lineage.Record) (names, left []string) {
 	for n, rec := range records {
-		if rec.Kind == lineage.KindFork {
+		switch {
+		case rec.Kind != lineage.KindFork:
+		case rec.RemoteRemoved != "":
+			left = append(left, n)
+		default:
 			names = append(names, n)
 		}
 	}
 	sort.Strings(names)
-	return names
+	sort.Strings(left)
+	return names, left
+}
+
+// remoteRemoved reports whether the last fetch of the account remote found
+// the branch of the skill called name gone, see lineage.RemoteRemovedPrefix,
+// read in one git process; a read that fails says it did not.
+func (inv *invocation) remoteRemoved(ctx context.Context, gitDir, name string) bool {
+	ref := lineage.RemoteRemovedRef(name)
+	values, err := inv.git.Refs(ctx).RefValues(gitDir, []string{ref})
+	return err == nil && values[ref] != ""
+}
+
+// remoteRemovedNotice is what is said of one of your own skills the
+// account remote no longer holds, see driftRemoteRemoved, and the two ways
+// on.
+func remoteRemovedNotice(name string) (what, hint string) {
+	return sanitised(name) + " is no longer on the account remote: another machine removed or renamed it",
+		"run '" + skillCommand("remove", name) + "' to remove it here too, or '" + publishCommand(name) + "' to publish it again"
 }
 
 // forkPlaced reports whether the fork called name is placed on this

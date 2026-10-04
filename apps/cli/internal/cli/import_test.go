@@ -952,7 +952,7 @@ func TestImportWithNoSkillsStillNamesTheSourcesToAdd(t *testing.T) {
 	out := to.run("import", file, "--yes")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "No skills in the export.\n"+
-		"  only the settings were written: add each source again, then install a missing skill with 'agentx skill add <source>'\n"+
+		"  only the settings were written: add each source again, then install a missing skill with 'agentx skill add <source>', or one of your own with 'agentx skill add --name <name>'\n"+
 		"    agentx source add https://github.com/example/skills#release\n"+
 		"    agentx source add https://github.com/me/forks --account\n")
 

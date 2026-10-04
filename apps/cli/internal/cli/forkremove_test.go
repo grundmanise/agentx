@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,8 +27,11 @@ import (
 // leaves its branch there, exit 3, and run again it deletes that branch
 // alone, as it does alpha's; asked again, neither holds it, exit 5. b
 // still has both forks, worktrees and all, after an update of every skill,
-// and its removal of one drops the tracking configuration its install from
-// the account wrote. --remote of a skill of a shared source, or of one
+// which reads them current and gone from the account remote, and a bare
+// publish leaves them out, while a check names them; its removal of one
+// drops the tracking configuration its install from the account wrote,
+// and the marker, and a publish of the other by name puts it back, the
+// next fetch dropping its marker. --remote of a skill of a shared source, or of one
 // with no source, is refused, exit 6, before the account remote is
 // fetched.
 func TestSkillRemoveOfAFork(t *testing.T) {
@@ -137,14 +141,37 @@ func TestSkillRemoveOfAFork(t *testing.T) {
 			t.Errorf("b's %s: %v", name, err)
 		}
 	}
+	// That update's fetch found both branches gone from the account remote:
+	// b's skills compare with the versions they last held there, so they
+	// read current, with nothing to diff, and say they are gone; a
+	// publish of every skill leaves them out rather than put them back.
+	for _, ev := range b.eventsOfType(b.mustRun("--json", "skill", "list").stdout, "library_skill") {
+		equal(t, "b's "+ev["name"].(string)+": state", ev["state"], stateCurrent)
+		equal(t, "b's "+ev["name"].(string)+": drift", fmt.Sprint(ev["drift"]), "["+driftRemoteRemoved+"]")
+	}
+	contains(t, "b's diff", b.mustRun("skill", "diff", "beta").stdout, "beta matches its last published version "+short(bTips["beta"]))
+	contains(t, "b's update", b.mustRun("skill", "update", "beta").stderr, "beta is no longer on the account remote: another machine removed or renamed it")
+	out = b.mustRun("skill", "publish")
+	contains(t, "b's publish", out.stderr, "alpha is no longer on the account remote: another machine removed or renamed it, so it was not published")
+	equal(t, "the remote's branches after b's publish", remoteGit(t, a, remote, "for-each-ref", "--format=%(refname)"), "")
 	// b installed both from the account, which made their branches track
 	// the account remote's: a removal takes that tracking with the branch,
 	// so that a later fork of the name tracks nothing.
 	contains(t, "b's tracking", b.accountGit("config", "--get-regexp", `^branch\.`), "branch.skills/alpha.remote")
 	b.mustRun("skill", "remove", "alpha")
+	equal(t, "b's alpha, its remote-removed marker", b.ref(lineage.RemoteRemovedRef("alpha")), "")
 	if tracking := b.accountGit("config", "--get-regexp", `^branch\.`); strings.Contains(tracking, "skills/alpha") || !strings.Contains(tracking, "skills/beta") {
 		t.Errorf("b's tracking after alpha's removal:\n%s", tracking)
 	}
+	// A check names beta, its hint on a line of its own; published by name
+	// it is back on the account remote, and the next fetch, finding its
+	// branch there, drops the marker.
+	contains(t, "b's check", b.run("skill", "check-updates").stderr,
+		"warning: beta is no longer on the account remote: another machine removed or renamed it\n  run 'agentx skill remove beta' to remove it here too")
+	b.mustRun("skill", "publish", "beta")
+	equal(t, "the remote's beta, published again", remoteGit(t, a, remote, "rev-parse", "refs/heads/skills/beta"), bTips["beta"])
+	b.mustRun("skill", "check-updates")
+	equal(t, "b's beta, its marker after a fetch found it again", b.ref(lineage.RemoteRemovedRef("beta")), "")
 
 	// --remote deletes only from the account remote: a skill of a shared
 	// source and one with no source are refused before it is fetched.

@@ -12,11 +12,11 @@ agentx skill new release-notes --description "Write release notes from the merge
 ```
 
 ```text
-✓ created release-notes in ~/.agents/skills/release-notes: 4 placements
-  claude-code  symlink  ~/.claude/skills/release-notes -> ~/.agents/skills/release-notes
-  codex        library  ~/.agents/skills/release-notes
-  cursor       symlink  ~/.cursor/skills/release-notes -> ~/.agents/skills/release-notes
-  gemini-cli   library  ~/.agents/skills/release-notes
+✓ created release-notes in /home/me/.agents/skills/release-notes: 4 placements
+  claude-code  symlink  /home/me/.claude/skills/release-notes -> /home/me/.agents/skills/release-notes
+  codex        library  /home/me/.agents/skills/release-notes
+  cursor       symlink  /home/me/.cursor/skills/release-notes -> /home/me/.agents/skills/release-notes
+  gemini-cli   library  /home/me/.agents/skills/release-notes
   always available to universal clients: codex, gemini-cli
 No account remote is set: run 'agentx source add <url> --account' before publishing release-notes.
 ```
@@ -67,10 +67,10 @@ agentx skill fork pdf --name my-pdf
 
 ```text
 ✓ forked pdf as my-pdf: 4 placements; pdf stays as it was
-  claude-code  symlink  ~/.claude/skills/my-pdf -> ~/.agents/skills/my-pdf
-  codex        library  ~/.agents/skills/my-pdf
-  cursor       copy     ~/.cursor/skills/my-pdf
-  gemini-cli   library  ~/.agents/skills/my-pdf
+  claude-code  symlink  /home/me/.claude/skills/my-pdf -> /home/me/.agents/skills/my-pdf
+  codex        library  /home/me/.agents/skills/my-pdf
+  cursor       copy     /home/me/.cursor/skills/my-pdf
+  gemini-cli   library  /home/me/.agents/skills/my-pdf
   always available to universal clients: codex, gemini-cli
 ```
 
@@ -97,8 +97,8 @@ agentx skill fork format
 • codex: both load, the plugin's copy under the plugin's namespace
 • gemini-cli: it reads the library, so it sees format whether or not it has formatter
 ✓ forked format from plugin formatter as format: 2 placements; the plugin's copy stays as it was
-  claude-code  symlink  ~/.claude/skills/format -> ~/.agents/skills/format
-  codex        library  ~/.agents/skills/format
+  claude-code  symlink  /home/me/.claude/skills/format -> /home/me/.agents/skills/format
+  codex        library  /home/me/.agents/skills/format
   always available to universal clients: codex, gemini-cli
 ```
 
@@ -169,7 +169,7 @@ e07d5b2  2026-10-01 09:12  Create release-notes  1 file
 
 - Commits are listed newest first, each with the files it changes in the skill.
 - `foreign` marks a commit made with Git directly, or by an agent running Git, rather than by agentx.
-- `import` marks the upstream version a fork of an installed skill started from. Its date is always `2000-01-01 00:00`, so the same version has the same commit on every machine.
+- `import` marks the upstream version a fork of an installed skill started from. Its date is the date of the upstream commit, so the same version has the same commit on every machine.
 - A file outside the skill folder, such as a `README.md` you committed with Git at the root of the worktree, starts with `../`.
 - With `--json`, each commit is a `history` event with its full message, its author and the machine that wrote it.
 
@@ -239,8 +239,8 @@ agentx skill place release-notes
 
 ```text
 ✓ placed release-notes in 2 configurations
-  claude-code  symlink  ~/.claude/skills/release-notes -> ~/.agents/skills/release-notes
-  cursor       symlink  ~/.cursor/skills/release-notes -> ~/.agents/skills/release-notes
+  claude-code  symlink  /home/me/.claude/skills/release-notes -> /home/me/.agents/skills/release-notes
+  cursor       symlink  /home/me/.cursor/skills/release-notes -> /home/me/.agents/skills/release-notes
 ✓ checked release-notes's worktree out again from its branch
 ```
 
@@ -257,7 +257,7 @@ The desktop app's background process, [`agentx serve`](/cli/serve#what-serve-rep
 agentx never deletes or overwrites a folder of yours to recover a skill. When a folder sits where the skill's worktree or library symlink belongs, `skill place` stops with exit code 6 and changes nothing:
 
 ```text
-error: ~/.agentx/worktrees/release-notes is in the way of release-notes's worktree, so nothing was placed
+error: /home/me/.agentx/worktrees/release-notes is in the way of release-notes's worktree, so nothing was placed
 hint: run 'agentx skill place release-notes --force' to adopt it: its content becomes the skill's unpublished edits
 ```
 
@@ -284,19 +284,15 @@ agentx skill rename release-notes changelog
 ```
 
 ```text
-✓ forked release-notes as changelog: 1 placement
-  claude-code  symlink  ~/.claude/skills/changelog -> ~/.agents/skills/changelog
-✓ removed release-notes from the library: 1 placement
-  claude-code  symlink  ~/.claude/skills/release-notes
-  deleted ~/.agents/skills/release-notes, ~/.agentx/worktrees/release-notes and refs/heads/skills/release-notes
-✓ renamed release-notes to changelog
+✓ renamed release-notes to changelog: 1 placement
+  claude-code  symlink  /home/me/.claude/skills/changelog -> /home/me/.agents/skills/changelog
 ```
 
-A rename works on this machine alone. It forks the skill under the new name, as [`agentx skill fork <old> --name <new>`](#fork-one-of-your-own-skills) would, then removes the old one, as [`agentx skill remove <old>`](#remove-a-skill-of-your-own) would.
+A rename works on this machine alone. The old name's folder, worktree and branch go, and the skill carries on under the new name.
 
-- The renamed skill is the same skill: it keeps its fork id and every commit of the old one. Its `SKILL.md` carries the new name.
+- The renamed skill is the same skill: it keeps its id and every commit of the old one. Its `SKILL.md` carries the new name.
 - It is placed where the old one was, as a copy wherever the old one was a copy.
-- agentx checks both steps before running either, so a name you cannot use or a merge pending stop the rename before anything changes. Edits you have not published are recorded on the old skill first, and the renamed skill keeps them, still unpublished.
+- agentx checks everything the rename needs before it changes anything, so a name you cannot use or a merge pending stop the rename before anything changes. Edits you have not published are recorded on the old skill first, and the renamed skill keeps them, still unpublished.
 - Only your own skills can be renamed. A skill you installed from a shared source, or one agentx does not manage, stops with exit code 6.
 - Files Git ignores in the old skill's worktree, such as a local `.env`, are deleted with it. Copy the ones you want into the renamed skill first.
 - The renamed skill shows as `modified` until you publish it, since the [account remote](/cli/source#add-your-account-remote) does not hold it under its new name yet. Until then, `agentx skill diff <new>` compares it with what the account remote holds under the old name, so it shows the new name and the edits you have not published.
@@ -316,8 +312,8 @@ agentx skill publish changelog
 - If another machine published to the old name after you renamed it, the publish keeps the old branch and warns. Install it beside the renamed skill with `agentx skill add --name <old>`, or delete it with `agentx skill remove <old> --remote`.
 - If the account remote refuses to delete the old branch, for example because it is the repository's default branch, the publish warns and still exits `0`. The next `agentx skill publish <new>` tries again.
 - Publishing a renamed skill never deletes a branch of [another skill](/cli/skill#two-skills-with-one-name) of the old name.
-- Another machine keeps the old name until you remove it there, and lists the renamed skill as one to install.
-- Publishing the old name from a machine that still holds it puts `skills/<old>` back on the account remote. On that machine, install the renamed skill with `agentx skill add --name <new>` and remove the old one with `agentx skill remove <old>`.
+- Another machine keeps the old name until you remove it there, and lists the renamed skill as one to install. Once it fetches the account remote, it shows the old name as `remote removed`, and a bare `agentx skill publish` there leaves it out.
+- Publishing the old name by name from a machine that still holds it puts `skills/<old>` back on the account remote. On that machine, install the renamed skill with `agentx skill add --name <new>` and remove the old one with `agentx skill remove <old>`.
 
 If the removal fails after the renamed skill was made, the error says so. Finish the rename with the `agentx skill remove <old>` command it names.
 
@@ -347,6 +343,13 @@ agentx skill remove release-notes --remote
 - Run it again if the account remote could not be reached. With the skill gone from this machine, it deletes the branch on the account remote alone.
 - A hosting service refuses to delete a repository's default branch. If the first skill you published became the default branch, make another branch the default on the hosting service, then run the command again.
 - If the account remote's branch of that name is [another skill](/cli/skill#two-skills-with-one-name), agentx refuses to delete it.
+
+Your other machines keep the skill. The next time one of them fetches the account remote, it shows the skill as `remote removed`:
+
+- The skill reads `current` there, unless that machine holds edits it never published, and `agentx skill diff` compares it with what the account remote last held of it.
+- `agentx skill update <name>` and `agentx skill check-updates` warn that the skill is no longer on the account remote.
+- A bare `agentx skill publish` there leaves the skill out, with a warning, so it does not bring the branch back.
+- Remove it there with `agentx skill remove <name>`. To keep it on the account remote after all, publish it by name from that machine with `agentx skill publish <name>`, which puts its branch back.
 
 To take one of your own skills out of one configuration only, use `--from`, as for any skill: see [Remove a skill](/cli/skill#remove-a-skill).
 

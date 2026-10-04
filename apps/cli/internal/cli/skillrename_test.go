@@ -76,7 +76,7 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 	// history keeps, so nothing of the user's is said to be lost.
 	excludes(t, "the copy left behind by a commit", out.stdout+out.stderr, "deleted those changes")
 	equal(t, "summary", a.one(out.stdout, "result")["summary"],
-		"renamed alpha to renamed; removed alpha from the library, 1 placement, its worktree and its branch")
+		"renamed alpha to renamed in 1 configuration")
 	renamed := a.ref(lineage.ForkRef("renamed"))
 	recorded := a.parents(renamed)
 	equal(t, "the recorded commit's parent", a.parents(recorded), published)
@@ -114,8 +114,10 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 	// warns and goes on, and the next one deletes it.
 	hook := filepath.Join(remote, "hooks", "pre-receive")
 	writeShim(t, hook, "#!/bin/sh\nwhile read old new ref; do [ \"$ref\" = refs/heads/skills/alpha ] && exit 1; done\nexit 0\n")
-	out = a.run("skill", "publish", "renamed")
+	// -m does not fold a rename, which keeps its commit.
+	out = a.run("skill", "publish", "renamed", "-m", "Rename alpha")
 	equal(t, "a refused deletion: exit", out.exit, 0)
+	contains(t, "-m over a rename", out.stderr, "the edits of renamed were already recorded in commits of their own, which a rename or an update from upstream keeps, so -m was not used")
 	contains(t, "its warning", out.stderr, "the account remote still holds skills/alpha: the account remote rejected its deletion")
 	contains(t, "its hint", out.stderr, "the next 'agentx skill publish renamed' tries again")
 	equal(t, "the remote's alpha, kept", remoteGit(t, a, remote, "rev-parse", "refs/heads/skills/alpha"), published)

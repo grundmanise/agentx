@@ -81,7 +81,8 @@ func (h *harness) record(name string) string {
 // commit made with git put there, which the publish keeps. Last, an edit
 // of a skill whose tip the account remote holds already is recorded with
 // the message agentx writes and pushed, not reported up to date, and -m
-// with nothing to record warns, for a named and a bare publish.
+// with nothing to record warns, for a named and a bare publish and for
+// the first publish of a skill.
 func TestSkillPublishRecordsEditsAndPushes(t *testing.T) {
 	t.Parallel()
 	h, s, _ := forkUpdateHarness(t)
@@ -189,6 +190,10 @@ func TestSkillPublishRecordsEditsAndPushes(t *testing.T) {
 	contains(t, "its line", out.stdout, "notes is up to date on the account remote")
 	out = h.mustRun("skill", "publish", "-m", "unused")
 	contains(t, "a bare publish: -m with nothing to record", out.stderr, "no skill has edits to record, so -m was not used")
+	// A first publish with nothing to record has nothing to fold either.
+	h.mustRun("skill", "new", "fresh")
+	out = h.mustRun("skill", "publish", "fresh", "-m", "unused")
+	contains(t, "a first publish: -m with nothing to record", out.stderr, "fresh has no edits to record, so -m was not used")
 }
 
 // TestPublishRefusesASkillThatChangedWhileRecording edits a skill's

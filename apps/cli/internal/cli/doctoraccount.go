@@ -113,7 +113,7 @@ func sourceRemotesHint(orphans, forks []string, account string) string {
 	if len(orphans) == 0 && (len(forks) == 1 || account != "") {
 		return "for each, " + held
 	}
-	hint := "for " + strings.Join(forks, ", ") + ", which held forks, " + held
+	hint := "for " + strings.Join(forks, ", ") + ", which held your skills, " + held
 	if len(orphans) > 0 {
 		hint += "; for each remote that held none, " + plain
 	}

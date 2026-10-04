@@ -68,6 +68,10 @@ type forking struct {
 	target  string // the fork's name
 	inPlace bool   // the fork takes the source's place: its library directory moves into the worktree
 	rename  bool   // the fork is the first step of skill rename, which removes the source next
+	// renamed reports a rename once its source is removed, in one line
+	// that names both names; reportForked sets it for a rename, in place
+	// of its own line.
+	renamed func()
 	gitDir  string
 	dir     string // the skill's directory in the fork's branch, which never changes
 	// captured is what the source's library directory held before git read
@@ -256,7 +260,7 @@ func (inv *invocation) checkForking(ctx context.Context, fk *forking, records ma
 		if named {
 			return fail(exitRefused, "the fork is already called "+sanitised(src.name), fk.takenHint())
 		}
-		return fail(exitRefused, sanitised(src.name)+" is already a fork",
+		return fail(exitRefused, sanitised(src.name)+" is already one of your own skills",
 			"fork it under a new name with '"+skillCommand("fork", src.name, "--name", "<new>")+"'")
 	}
 	if refusal := forkNameRefusal(fk.target); refusal != "" {
@@ -739,24 +743,34 @@ func (inv *invocation) reportForked(ctx context.Context, fk *forking, done place
 		what, stays = name+" from plugin "+sanitised(src.plugin), "the plugin's copy stays as it was"
 	}
 	rows := inv.ownPlacements(fk.target, done.placed, ev.Placements)
+	if fk.rename {
+		// The rename is one step to the user: the source's removal comes
+		// next, and the line that names both names follows it.
+		fk.renamed = func() {
+			line := "renamed " + out.paint(heading, name) + " to " + out.paint(heading, sanitised(fk.target)) + ": " + out.paint(noteStyle, plural(len(rows), "placement"))
+			inv.summary = "renamed " + name + " to " + sanitised(fk.target) + " in " + plural(len(done.placed), "configuration")
+			if n := len(done.skipped); n > 0 {
+				line += ", " + out.paint(warnStyle, plural(n, "placement")+" skipped")
+				inv.summary += ", " + plural(n, "placement") + " skipped"
+			}
+			out.done(line)
+			inv.printPlacementRows(fk.target, rows)
+			inv.printUniversal(ev.Universal)
+			inv.summary += universalClause(ev.Universal)
+		}
+		return nil
+	}
 	line := "forked " + out.paint(heading, what) + " as " + out.paint(heading, fk.target) + ": " + out.paint(noteStyle, plural(len(rows), "placement"))
 	inv.summary = "forked " + what + " as " + fk.target + " in " + plural(len(done.placed), "configuration")
 	if n := len(done.skipped); n > 0 {
 		line += ", " + out.paint(warnStyle, plural(n, "placement")+" skipped")
 		inv.summary += ", " + plural(n, "placement") + " skipped"
 	}
-	if fk.rename {
-		// The rename removes the source next, and says so itself.
-		out.done(line)
-	} else {
-		out.done(line + "; " + stays)
-		inv.summary += "; " + stays
-	}
+	out.done(line + "; " + stays)
+	inv.summary += "; " + stays
 	inv.printPlacementRows(fk.target, rows)
 	inv.printUniversal(ev.Universal)
-	if !fk.rename {
-		inv.noAccountRemoteHint(ev)
-	}
+	inv.noAccountRemoteHint(ev)
 	inv.summary += universalClause(ev.Universal)
 	return nil
 }

@@ -31,10 +31,9 @@ type sourceEvent struct {
 	DefaultBranch string `json:"default_branch,omitempty"` // the branch the remote's HEAD named at the last look; shown, never followed
 	Subpath       string `json:"subpath,omitempty"`        // the scope of this listing, not stored
 	LastFetched   string `json:"last_fetched,omitempty"`
-	Forks         *int   `json:"forks,omitempty"`           // the account remote's fork branches as its last fetch found them; absent for a shared source and before a fetch
 	Commit        string `json:"commit,omitempty"`          // the fetched commit; absent when the account repo holds no ref
 	Previous      string `json:"previous_commit,omitempty"` // what the ref held before this fetch, when the fetch moved it
-	Skills        *int   `json:"skills,omitempty"`          // how many skills the listing found; only after a listing
+	Skills        *int   `json:"skills,omitempty"`          // how many skills the listing found, only after a listing; for the account remote, its skill branches as its last fetch found them, absent before a fetch
 }
 
 // sourceSkillEvent is one installable skill of a source.
@@ -442,7 +441,7 @@ func (inv *invocation) sourceList(ctx context.Context) error {
 				}
 			}
 			if fetched {
-				ev.Forks = &n
+				ev.Skills = &n
 			}
 			commit = forksCell(n, fetched)
 		case commits[id] != "":

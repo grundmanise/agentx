@@ -1474,7 +1474,7 @@ func TestSkillUpdateRunAgainFinishesTheUpdateThatStopped(t *testing.T) {
 		summary string
 	}{
 		{[]string{"skill", "update", "alpha"}, 2, upToDate("alpha")},
-		{[]string{"skill", "update", "--all"}, 1, "nothing to update: no managed skill or fork has an update as of the last update check; run 'agentx skill check-updates' to look again"},
+		{[]string{"skill", "update", "--all"}, 1, "nothing to update: no managed skill has an update as of the last update check; run 'agentx skill check-updates' to look again"},
 	} {
 		t.Run(fmt.Sprintf("%s after %d steps", strings.Join(c.args, " "), c.stop), func(t *testing.T) {
 			t.Parallel()

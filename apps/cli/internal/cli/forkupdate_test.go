@@ -172,7 +172,7 @@ func TestSkillUpdateOfAForkConflicts(t *testing.T) {
 	out := h.run("--json", "skill", "update", "alpha")
 	equal(t, "exit", out.exit, 4)
 	e := h.one(out.stdout, "error")
-	equal(t, "message", e["message"], "alpha conflicts with its update in 1 file, so the merge is pending and the fork's worktree and branch were left as they are")
+	equal(t, "message", e["message"], "alpha conflicts with its update in 1 file, so the merge is pending and alpha's worktree and branch were left as they are")
 	equal(t, "hint", e["hint"], conflictHint(h, "alpha", "alpha"))
 	ev := h.one(out.stdout, "conflict")
 	equal(t, "kind", ev["kind"], lineage.KindManaged)
@@ -195,7 +195,7 @@ func TestSkillUpdateOfAForkConflicts(t *testing.T) {
 	equal(t, "stdout of the update run again", text.stdout, "alpha conflicts with its update from "+short(first)+" to "+short(second)+" in 1 file\nnotes.md: both modified\n")
 
 	abort := h.mustRun("skill", "update", "alpha", "--abort")
-	equal(t, "stdout of the abort", abort.stdout, "✓ gave up the merge of alpha; the fork's worktree and branch are as they were\n")
+	equal(t, "stdout of the abort", abort.stdout, "✓ gave up the merge of alpha; its worktree and branch are as they were\n")
 	noCheckout(t, h, "alpha")
 	equal(t, "the branch once given up", h.ref(lineage.ForkRef("alpha")), tip)
 	equal(t, "the candidate once given up", h.ref(lineage.CandidateRef("alpha")), candidate)
@@ -256,7 +256,7 @@ func TestForkCompletionAfterTheTipMoved(t *testing.T) {
 	out := h.run("--json", "skill", "update", "alpha")
 	equal(t, "exit", out.exit, 4)
 	equal(t, "message", h.one(out.stdout, "error")["message"],
-		"alpha conflicts with the commits made while its merge was pending in 1 file, so the merge is pending and the fork's worktree and branch were left as they are")
+		"alpha conflicts with the commits made while its merge was pending in 1 file, so the merge is pending and alpha's worktree and branch were left as they are")
 	ev := h.one(out.stdout, "conflict")
 	equal(t, "base", ev["base"], old)
 	equal(t, "mine", ev["mine"], tip)

@@ -701,7 +701,7 @@ func TestSkillCheckSkipsARemovedSource(t *testing.T) {
 	s.skill("skills/beta", "beta", "The second skill", nil)
 	s.commit("both changed")
 	out := h.mustRun("--verbose", "skill", "check-updates")
-	equal(t, "stdout", out.stdout, "Nothing to check: no managed skill or fork comes from a source added on this machine.\n")
+	equal(t, "stdout", out.stdout, "Nothing to check: no managed skill comes from a source added on this machine.\n")
 	equal(t, "fetches", fetches(out.stderr), 0)
 	refs = h.refMap()
 	equal(t, "the candidate", refs[lineage.CandidateRef("alpha")], candidate)
@@ -1257,7 +1257,7 @@ func TestSkillCheckWithNothingToCheck(t *testing.T) {
 	h := newHarness(t)
 	calls := countingGit(t, h)
 	out := h.mustRun("--json", "skill", "check-updates")
-	equal(t, "summary", h.one(out.stdout, "result")["summary"], "nothing to check: no managed skill or fork comes from a source added on this machine")
+	equal(t, "summary", h.one(out.stdout, "result")["summary"], "nothing to check: no managed skill comes from a source added on this machine")
 	equal(t, "git calls", strings.Join(calls(), "|"), "--version")
 
 	s := h.newSourceRepo("skills", true)
@@ -1265,7 +1265,7 @@ func TestSkillCheckWithNothingToCheck(t *testing.T) {
 	s.commit("alpha")
 	h.mustRun("source", "add", s.url)
 	out = h.mustRun("--verbose", "skill", "check-updates")
-	equal(t, "stdout", out.stdout, "Nothing to check: no managed skill or fork comes from a source added on this machine.\n")
+	equal(t, "stdout", out.stdout, "Nothing to check: no managed skill comes from a source added on this machine.\n")
 	equal(t, "fetches", fetches(out.stderr), 0)
 }
 

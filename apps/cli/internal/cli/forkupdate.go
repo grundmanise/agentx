@@ -427,7 +427,7 @@ func forkConflictFailure(u *updating, checkout string) *failure {
 		with = "the commits made while its merge was pending"
 	}
 	name := u.name
-	return refuse(exitPendingMerge, sanitised(name)+" conflicts with "+with+" in "+plural(len(u.conflict.Files), "file")+", so the merge is pending and the fork's worktree and branch were left as they are",
+	return refuse(exitPendingMerge, sanitised(name)+" conflicts with "+with+" in "+plural(len(u.conflict.Files), "file")+", so the merge is pending and "+sanitised(name)+"'s worktree and branch were left as they are",
 		conflictHintAt(name, filepath.Join(checkout, u.fork.site.dir)))
 }
 

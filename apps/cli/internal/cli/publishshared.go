@@ -106,6 +106,7 @@ type sharedPublish struct {
 	commit        string // the commit the branch holds once published
 	imp           string // the import commit of the version published
 	run           string // the staging namespace of that import commit
+	retried       bool   // the source moved the branch once between the fetch and the push, and was fetched again
 }
 
 // publishShared publishes the managed skill called name to the shared
@@ -266,7 +267,7 @@ func (inv *invocation) judgeShared(ctx context.Context, p *sharedPublish) *failu
 	switch {
 	case errors.Is(err, source.ErrNotABranch):
 		return refuse(exitRefused, p.name+" has no branch of "+shownURL(url)+" to publish to: "+trimGit(err.Error()),
-			"add the source at the branch to publish to with 'agentx source add "+sourceAddArg(url, "<branch>")+"', then update the skill from it and publish again")
+			"add the source at the branch to publish to with 'agentx source add "+sanitised(url)+"#<branch>', then update the skill from it and publish again")
 	case err != nil:
 		return unreachableSource(url, err)
 	}
@@ -423,8 +424,9 @@ func (inv *invocation) importShared(ctx context.Context, p *sharedPublish, src s
 
 // pushShared pushes the commit judgeShared wrote to the branch, leased on
 // the tip the source's branch was fetched at, and reads what the source
-// answered, see gitx.ClassifyPush: a branch that moved since is moved, as a
-// skill the source changed is; one the host declined, by a hook, a
+// answered, see gitx.ClassifyPush: a branch that moved since is fetched
+// and judged again, once, and moved the second time, as a skill the
+// source changed is; one the host declined, by a hook, a
 // protected branch or a rule of its own, is exit code 6 naming its reason;
 // one this machine may not push to is exit code 3, and so is a push git
 // could not make and one whose answer is not known, the host's failure or
@@ -450,9 +452,21 @@ func (inv *invocation) pushShared(ctx context.Context, p *sharedPublish) error {
 		return inv.finishShared(ctx, p, publishPushed)
 	case class == gitx.PushUpToDate:
 		return inv.finishShared(ctx, p, publishUpToDate)
+	case class == gitx.PushMoved && !p.retried:
+		// The branch moved between the fetch and the push. The source is
+		// fetched and judged again, once: a change to other folders is
+		// published on top of, and one to the skill is refused as the
+		// first judgement refuses it, with its update candidate pinned, so
+		// that the update the refusal names takes it in.
+		inv.dropImporting(ctx, p.gitDir, p.run, 1)
+		p.retried, p.branch, p.commit, p.imp, p.run = true, "", "", "", ""
+		if f := inv.judgeShared(ctx, p); f != nil {
+			return inv.reportShared(ctx, p, outcomeOf(f), f)
+		}
+		return inv.pushShared(ctx, p)
 	case class == gitx.PushMoved:
 		outcome, f = publishMoved, refuse(exitRefused, shownURL(url)+" moved "+p.branch+" since it was fetched, so "+p.name+" was not published",
-			"run '"+skillCommand("update", p.name)+"' to take the change in, then publish again")
+			again+", which checks the source first and says what to do when it changed "+p.name)
 	case class == gitx.PushDeclined:
 		outcome, f = publishDeclined, refuse(exitRefused, shownURL(url)+" declined "+p.branch+": "+sanitised(reason),
 			"agentx never forces a push; once "+shownURL(url)+" takes it, "+again)

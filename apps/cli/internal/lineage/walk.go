@@ -32,7 +32,7 @@ type ForkLineage struct {
 	Base       string // the base import commit; "" for a skill made by skill new, and when Problem says why it cannot be read
 	BaseTree   string // the base's root tree, the upstream directory as its one entry
 	Import     Import // the base's coordinates, when Base is not ""
-	Greenfield bool   // the walk reached a root that is neither an import commit nor names one, as for a skill made by skill new
+	NoUpstream bool   // the walk reached a root that is neither an import commit nor names one, as for a skill made by skill new
 	Problem    string // why the base cannot be read; "" when it can
 }
 
@@ -74,7 +74,7 @@ func Resolve(tip string, commits map[string]Commit) ForkLineage {
 			break
 		}
 		if len(c.Parents) == 0 {
-			l.Greenfield = true
+			l.NoUpstream = true
 			break
 		}
 		id = c.Parents[0]

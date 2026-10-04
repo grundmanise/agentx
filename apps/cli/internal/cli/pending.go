@@ -259,7 +259,7 @@ func (inv *invocation) abortMerge(ctx context.Context, name string) error {
 	}
 	kept := "; the library directory is as it was"
 	if fork {
-		kept = "; the fork's worktree and branch are as they were"
+		kept = "; its worktree and branch are as they were"
 	}
 	inv.summary = "gave up the merge of " + name + kept
 	if lib, ok := librarySkill(inv.dirs.Library, name); ok {

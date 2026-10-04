@@ -39,6 +39,10 @@ type forkRemoval struct {
 	// removes the fork it has just forked, and an edit made in between
 	// would be in neither.
 	guard *forkGuard
+	// quiet leaves the removal's lines out of the text output, for skill
+	// rename, which reports both of its steps in one line of its own; its
+	// events are emitted all the same.
+	quiet bool
 }
 
 // forkGuard is a fork's site and how its skill directory was judged.
@@ -182,6 +186,7 @@ func (inv *invocation) runForkRemoval(ctx context.Context, r *forkRemoval) error
 	}
 	if plan != nil {
 		plan.remote = r.remote && r.there != "" && deleted == nil
+		plan.quiet = r.quiet
 		if err := inv.reportRemoved(ctx, *plan, inv.detectedTargets()); err != nil {
 			return err
 		}

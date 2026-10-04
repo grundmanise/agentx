@@ -301,9 +301,9 @@ func (inv *invocation) reportFetched(ctx context.Context, gitDir string, targets
 			if err != nil {
 				return accountRepoFailure(err)
 			}
-			ev.Forks = &n
+			ev.Skills = &n
 			inv.out.emit(ev)
-			inv.out.done("re-fetched " + inv.out.paint(heading, entry.URL) + ": " + inv.out.paint(noteStyle, plural(n, "fork")) + accessPhrase(inv.out, entry.AccessName()))
+			inv.out.done("re-fetched " + inv.out.paint(heading, entry.URL) + ": " + inv.out.paint(noteStyle, plural(n, "skill")) + accessPhrase(inv.out, entry.AccessName()))
 			continue
 		}
 		n := len(listing.Skills)

@@ -151,6 +151,16 @@ func (inv *invocation) fetchRemote(ctx context.Context, gitDir, remote, url stri
 // and refetches in turn rather than read a remote with the fork refspec as
 // fetched whole.
 func (inv *invocation) fetchForks(ctx context.Context, gitDir, remote string, refetch bool) error {
+	before := inv.readPublishedRefs(ctx, gitDir, remote)
+	if err := inv.fetchForkBranches(ctx, gitDir, remote, refetch); err != nil {
+		return err
+	}
+	inv.markRemoteRemoved(ctx, gitDir, remote, before)
+	return nil
+}
+
+// fetchForkBranches is fetchForks' fetch itself, see gitx.FetchRemote.
+func (inv *invocation) fetchForkBranches(ctx context.Context, gitDir, remote string, refetch bool) error {
 	url, first := inv.unfetched.LoadAndDelete(remote)
 	if !first {
 		return inv.git.FetchRemote(ctx, gitDir, remote, refetch)
@@ -169,6 +179,115 @@ func (inv *invocation) fetchForks(ctx context.Context, gitDir, remote string, re
 			inv.out.debugf("the remote %s could not be taken back: %v", remote, uerr)
 		}
 	}
+	return err
+}
+
+// publishedRefs is what the account repo held, before a fetch of the
+// account remote, of the branches of your own skills: the remote-tracking
+// branch of each, the skills this machine holds a branch of, and the
+// remote-removed markers, each by skill name. nil when it could not be
+// read, which leaves the markers as they are.
+type publishedRefs struct {
+	remote, markers map[string]string
+	held            map[string]bool
+}
+
+// readPublishedRefs reads publishedRefs in one for-each-ref, before a fetch
+// of the account remote, the git remote called remote.
+func (inv *invocation) readPublishedRefs(ctx context.Context, gitDir, remote string) *publishedRefs {
+	tracking := lineage.RemoteForkPrefix(remote)
+	out, err := inv.git.Isolated(ctx, gitDir, "for-each-ref", "--format=%(refname)%00%(objectname)", tracking, lineage.ForkPrefix, lineage.RemoteRemovedPrefix)
+	if err != nil {
+		inv.out.debugf("cannot read the branches of your skills before the fetch: %v", err)
+		return nil
+	}
+	p := &publishedRefs{remote: map[string]string{}, markers: map[string]string{}, held: map[string]bool{}}
+	for _, line := range strings.Split(out, "\n") {
+		ref, commit, ok := strings.Cut(line, "\x00")
+		if !ok {
+			continue
+		}
+		if name, ok := strings.CutPrefix(ref, tracking); ok && name != "" {
+			p.remote[name] = commit
+		} else if name, ok := strings.CutPrefix(ref, lineage.ForkPrefix); ok && name != "" {
+			p.held[name] = true
+		} else if name, ok := strings.CutPrefix(ref, lineage.RemoteRemovedPrefix); ok && name != "" {
+			p.markers[name] = commit
+		}
+	}
+	return p
+}
+
+// markRemoteRemoved records, once a fetch of the account remote, the git
+// remote called remote, deleted the remote-tracking branch of one of your
+// own skills this machine holds, that another machine removed or renamed
+// it: a remote-removed marker at the commit the branch held before the
+// fetch, its last published version, see lineage.RemoteRemovedPrefix.
+// Without it the skill would read as never published, and a publish of
+// every skill would put the branch back. A marker whose branch the fetch
+// found again, or whose skill this machine no longer holds, is deleted. It
+// is one mutation under the lock, waited for a while, and only when there
+// is something to change; one that cannot be made is said at debug level,
+// and the skills then compare with what created them.
+func (inv *invocation) markRemoteRemoved(ctx context.Context, gitDir, remote string, before *publishedRefs) {
+	if before == nil {
+		return
+	}
+	after, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
+	if err != nil {
+		inv.out.debugf("cannot read what the account remote holds after the fetch: %v", err)
+		return
+	}
+	type change struct{ ref, old, value string }
+	var changes []change
+	for name, tip := range before.remote {
+		if after[name] == "" && before.held[name] && before.markers[name] == "" {
+			changes = append(changes, change{lineage.RemoteRemovedRef(name), "", tip})
+		}
+	}
+	for name, marker := range before.markers {
+		if after[name] != "" || !before.held[name] {
+			changes = append(changes, change{lineage.RemoteRemovedRef(name), marker, ""})
+		}
+	}
+	if len(changes) == 0 {
+		return
+	}
+	undo := interrupt.Uninterruptible(ctx)
+	waiting, cancel := context.WithTimeout(undo, takeBackBound(ctx))
+	defer cancel()
+	if err := home.MutateWaiting(waiting, inv.dirs.Home, inv.refs(undo), func() error {
+		m := home.NewMutation(inv.dirs.Home)
+		for _, c := range changes {
+			m.Ref(gitDir, c.ref, c.old, c.value)
+		}
+		return m.Apply(inv.refs(undo))
+	}); err != nil {
+		inv.out.debugf("cannot record which of your skills the account remote no longer holds: %v", err)
+	}
+}
+
+// dropRemoteRemoved deletes every remote-removed marker of the account
+// repo, see lineage.RemoteRemovedPrefix, in one update-ref: a marker
+// records what a fetch of the account remote found gone, so it goes with
+// the account remote it was recorded for, when source remove detaches it
+// or source add --account replaces it with another. The caller holds the
+// lock.
+func (inv *invocation) dropRemoteRemoved(ctx context.Context, gitDir string) error {
+	out, err := inv.git.Isolated(ctx, gitDir, "for-each-ref", "--format=%(refname)", lineage.RemoteRemovedPrefix)
+	if err != nil {
+		return err
+	}
+	var drop []string
+	for _, ref := range strings.Split(out, "\n") {
+		if ref != "" {
+			drop = append(drop, "delete "+ref)
+		}
+	}
+	if len(drop) == 0 {
+		return nil
+	}
+	_, err = inv.git.IsolatedInput(ctx, gitDir, strings.NewReader(strings.Join(drop, "\n")+"\n"), "update-ref", "--stdin")
 	return err
 }
 
@@ -243,7 +362,8 @@ func accountRefusal(s home.Settings, want home.Source, resolve func(host string)
 // see gitx.FetchRemote. Last, in one hold of the lock, the settings
 // entry is written, and the account remote it replaces, if any, is taken
 // out of the settings and its remote out of the account repo, its
-// remote-tracking branches first, then its source ref and staging refs. Local forks stay as they are: those of a
+// remote-tracking branches first, then its source ref and staging refs,
+// and every remote-removed marker with it, see dropRemoteRemoved. Local forks stay as they are: those of a
 // replaced account remote are published to the new one from then on. A run
 // that gets no further than its fetch takes back the remote it wrote, as an
 // add does.
@@ -364,6 +484,9 @@ func (inv *invocation) addAccount(ctx context.Context, arg string) error {
 			if err := source.Remove(ctx, inv.git, gitDir, source.ID(replaced.URL)); err != nil {
 				return accountRepoFailure(err)
 			}
+			if err := inv.dropRemoteRemoved(ctx, gitDir); err != nil {
+				return accountRepoFailure(err)
+			}
 		}
 		return nil
 	})
@@ -376,9 +499,9 @@ func (inv *invocation) addAccount(ctx context.Context, arg string) error {
 	check.report(inv, entry.URL)
 	n := len(tips)
 	ev := entryEvent(entry)
-	ev.Forks, ev.AccessReason = &n, check.reason()
+	ev.Skills, ev.AccessReason = &n, check.reason()
 	inv.out.emit(ev)
-	holds := "; it holds " + plural(n, "fork")
+	holds := "; it holds " + plural(n, "skill")
 	inv.summary = "the account remote is now " + entry.URL + holds
 	inv.out.done("the account remote is now " + inv.out.paint(heading, entry.URL) + holds + accessPhrase(inv.out, entry.AccessName()))
 	return nil
@@ -388,7 +511,8 @@ func (inv *invocation) addAccount(ctx context.Context, arg string) error {
 // lock: its remote is taken out of the account repo, see gitx.UnsetRemote,
 // the remote-tracking branches first, then its source ref and every
 // staging ref a killed fetch of its URL can have left, as a shared source
-// add of that URL cut short does, see source.Remove, then its settings
+// add of that URL cut short does, see source.Remove, and every
+// remote-removed marker, see dropRemoteRemoved, then its settings
 // entry. source
 // remove of the account remote's URL or id runs it. Local fork branches,
 // their worktrees and every commit stay as they are, and nothing on the
@@ -408,6 +532,9 @@ func (inv *invocation) removeAccount(ctx context.Context, entry home.Source) err
 			if err := source.Remove(ctx, inv.git, gitDir, id); err != nil {
 				return accountRepoFailure(err)
 			}
+			if err := inv.dropRemoteRemoved(ctx, gitDir); err != nil {
+				return accountRepoFailure(err)
+			}
 		}
 		s, err := inv.loadSettings()
 		if err != nil {
@@ -420,8 +547,8 @@ func (inv *invocation) removeAccount(ctx context.Context, entry home.Source) err
 	}
 	inv.out.emit(sourceEvent{event: newEvent("source"), ID: id, URL: entry.URL})
 	u := shownURL(entry.URL)
-	inv.summary = "the account remote " + u + " is no longer set; the forks of this machine are as they were"
-	inv.out.done("the account remote " + inv.out.paint(heading, u) + " is no longer set; the forks of this machine are as they were")
+	inv.summary = "the account remote " + u + " is no longer set; your skills on this machine are as they were"
+	inv.out.done("the account remote " + inv.out.paint(heading, u) + " is no longer set; your skills on this machine are as they were")
 	return nil
 }
 
@@ -443,7 +570,7 @@ func forksCell(n int, fetched bool) cell {
 	if !fetched {
 		return c("not fetched", warnStyle)
 	}
-	return c(plural(n, "fork"), muted)
+	return c(plural(n, "skill"), muted)
 }
 
 // retrack makes every fork branch whose tracking configuration names the

@@ -16,12 +16,12 @@ func TestChooseBase(t *testing.T) {
 		want          string
 	}{
 		{"the same import on both sides", v1, v1, true, "b1"},
-		{"made by skill new on both sides", ForkLineage{Greenfield: true}, ForkLineage{Greenfield: true}, false, ""},
+		{"made by skill new on both sides", ForkLineage{NoUpstream: true}, ForkLineage{NoUpstream: true}, false, ""},
 		{"the remote's version proved newer", v1, v2, true, "b2"},
 		{"the local version newer or not proved", v1, v2, false, "b1"},
 		{"another directory of the source", v1, at("b2", src, "docx", "u2"), true, "b1"},
 		{"another source", v1, at("b2", "https://github.com/other/skills", "pdf", "u2"), true, "b1"},
-		{"made by skill new here, a base there", ForkLineage{Greenfield: true}, v2, true, ""},
+		{"made by skill new here, a base there", ForkLineage{NoUpstream: true}, v2, true, ""},
 		{"a base here, none readable there", v1, ForkLineage{Problem: "unreadable"}, true, "b1"},
 		{"one upstream commit, two imports", v1, at("b2", src, "pdf", "u1"), true, "b1"},
 	} {

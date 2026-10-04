@@ -46,6 +46,7 @@ type observation struct {
 	modified bool     // the directory does not hold its base version, see holdsBase, or holds edits not yet published, see unpublished
 	placed   []string // the drift states of the placements, sorted
 	pending  bool     // an update left a merge pending for the skill, see pendingMerges
+	removed  bool     // one of your own skills the account remote no longer holds the branch of, see driftRemoteRemoved
 }
 
 // observe reads what a skill's drift is judged from: a managed skill's
@@ -73,8 +74,15 @@ func (sc skillContext) observe(ctx context.Context, inv *invocation, lib scan.Li
 			renamed = rec.Fork.Renamed
 		}
 		remoteTip := sc.published[publishedName(lib.Name, renamed, sc.published)]
+		// One the account remote no longer holds is compared with its last
+		// published version, which the fetch that found it gone recorded;
+		// with no account remote set, a marker left over says nothing.
+		removed := sc.account != "" && remoteTip == "" && rec.RemoteRemoved != ""
+		if removed {
+			remoteTip = rec.RemoteRemoved
+		}
 		modified := !inv.holdsTip(ctx, lib, rec, dir) || !inv.tipPublished(ctx, rec, remoteTip)
-		return observation{judged: true, modified: modified, placed: sc.placementDrift(inv, lib), pending: sc.merges[lib.Name]}
+		return observation{judged: true, modified: modified, placed: sc.placementDrift(inv, lib), pending: sc.merges[lib.Name], removed: removed}
 	}
 	return observation{}
 }
@@ -337,9 +345,14 @@ func (p placeSite) drift(libPath string) string {
 // driftOf is the drift list of a skill: the states of its placements,
 // source removed and upstream removed, sorted, or nil when it is in none. A
 // fork is never source removed or upstream removed: the source that
-// matters to it is the account remote, and nothing marks its upstream.
+// matters to it is the account remote, and nothing marks its upstream. It
+// is remote removed instead when the account remote no longer holds it,
+// see driftRemoteRemoved.
 func driftOf(obs observation, sourceRemoved, upstreamRemoved bool) []string {
 	drift := append([]string(nil), obs.placed...)
+	if obs.removed {
+		drift = append(drift, driftRemoteRemoved)
+	}
 	if sourceRemoved {
 		drift = append(drift, driftSourceRemoved)
 	}

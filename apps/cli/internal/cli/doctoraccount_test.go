@@ -121,15 +121,15 @@ func TestSourceRemotesHint(t *testing.T) {
 		{"one fork", nil, []string{"f"}, "",
 			"for each, run 'agentx source add <url> --account' to make it the account remote again and take the remote with it, or 'agentx source remove <id>' to clear it"},
 		{"two forks", nil, []string{"f", "g"}, "",
-			"for f, g, which held forks, run 'agentx source add <url> --account' for the one to make the account remote again, and 'agentx source remove <id>' for the rest"},
+			"for f, g, which held your skills, run 'agentx source add <url> --account' for the one to make the account remote again, and 'agentx source remove <id>' for the rest"},
 		{"forks beside an account remote", nil, []string{"f", "g"}, account,
 			"for each, run 'agentx source remove <id>' to clear it, since 'agentx source add <url> --account' would replace the account remote " + account},
 		{"both", []string{"a"}, []string{"f"}, "",
-			"for f, which held forks, run 'agentx source add <url> --account' to make it the account remote again and take the remote with it, or 'agentx source remove <id>' to clear it; for each remote that held none, run 'agentx source add <url>' to add the source and take the remote with it, or 'agentx source remove <id>' to clear it"},
+			"for f, which held your skills, run 'agentx source add <url> --account' to make it the account remote again and take the remote with it, or 'agentx source remove <id>' to clear it; for each remote that held none, run 'agentx source add <url>' to add the source and take the remote with it, or 'agentx source remove <id>' to clear it"},
 		{"both, two forks", []string{"a"}, []string{"f", "g"}, "",
-			"for f, g, which held forks, run 'agentx source add <url> --account' for the one to make the account remote again, and 'agentx source remove <id>' for the rest; for each remote that held none, run 'agentx source add <url>' to add the source and take the remote with it, or 'agentx source remove <id>' to clear it"},
+			"for f, g, which held your skills, run 'agentx source add <url> --account' for the one to make the account remote again, and 'agentx source remove <id>' for the rest; for each remote that held none, run 'agentx source add <url>' to add the source and take the remote with it, or 'agentx source remove <id>' to clear it"},
 		{"both beside an account remote", []string{"a"}, []string{"f"}, account,
-			"for f, which held forks, run 'agentx source remove <id>' to clear it, since 'agentx source add <url> --account' would replace the account remote " + account + "; for each remote that held none, run 'agentx source add <url>' to add the source and take the remote with it, or 'agentx source remove <id>' to clear it"},
+			"for f, which held your skills, run 'agentx source remove <id>' to clear it, since 'agentx source add <url> --account' would replace the account remote " + account + "; for each remote that held none, run 'agentx source add <url>' to add the source and take the remote with it, or 'agentx source remove <id>' to clear it"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

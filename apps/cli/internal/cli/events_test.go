@@ -36,7 +36,7 @@ func TestSkillOrigin(t *testing.T) {
 			[5]string{"managed", account, "<absent>", upstream, ""}},
 		{"forked, no account remote", lineage.Record{Kind: lineage.KindFork, Fork: based}, "",
 			[5]string{"managed", "", "<absent>", upstream, ""}},
-		{"made by skill new", lineage.Record{Kind: lineage.KindFork, Fork: &lineage.ForkLineage{ID: "id", Greenfield: true}}, account,
+		{"made by skill new", lineage.Record{Kind: lineage.KindFork, Fork: &lineage.ForkLineage{ID: "id", NoUpstream: true}}, account,
 			[5]string{"managed", account, "<absent>", "", "<absent>"}},
 		{"the walk left unread", lineage.Record{Kind: lineage.KindFork, Import: imported, HasImport: true, Fork: &lineage.ForkLineage{}}, account,
 			[5]string{"managed", account, "<absent>", "", "<absent>"}},

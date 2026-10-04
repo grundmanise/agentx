@@ -5,7 +5,7 @@ description: "Add the git repositories you install skills from, fetch them again
 
 A source is a git repository that holds one or more skills. Add it by URL once; agentx fetches it into its own store and lists the skills inside, so you can pick what to install. [`agentx skill add`](/cli/skill) adds the source itself when you install from a URL you have not added yet.
 
-A source you install skills from holds skills in folders on one branch. Your [account remote](#add-your-account-remote), the repository you publish your own skills to, is the one source you add with `--account`: it holds one branch per fork.
+A source you install skills from holds skills in folders on one branch. Your [account remote](#add-your-account-remote), the repository you publish your own skills to, is the one source you add with `--account`: it holds one branch per skill.
 
 ## Add a source
 
@@ -48,7 +48,7 @@ agentx source add git@github.com:you/forks.git --account
 ```
 
 ```text
-✓ the account remote is now ssh://git@github.com/you/forks; it holds 0 forks; you can write to it
+✓ the account remote is now ssh://git@github.com/you/forks; it holds 0 skills; you can write to it
 ```
 
 - Give any URL Git reaches, as for any source. agentx records it in its canonical form, and reads the path of `user@host:path` from the server's root, so on a server of your own give the full path. GitHub and GitLab URLs work either way.
@@ -146,7 +146,7 @@ Sources are fetched in parallel, a few at a time, and each one gets a line that 
 `--all` fetches your account remote too, after the other sources. Its line counts the skills of yours it holds:
 
 ```text
-✓ re-fetched ssh://git@github.com/you/forks: 2 forks; you can write to it
+✓ re-fetched ssh://git@github.com/you/forks: 2 skills; you can write to it
 ```
 
 A source that fails is a warning naming it and does not stop the others. Every source that did fetch is recorded, and the command then fails, naming the ones that did not. If they all failed for the same reason, the exit code is the one that source would give on its own; if the reasons differ, it is `3`.
@@ -167,9 +167,9 @@ agentx source list
 
 ```text
 3 sources
-  https://github.com/anthropics/skills      unknown   main      3f2a9c1  2026-09-20T10:00:00Z  1c9d0b7e4a2f6d38
-  https://github.com/me/skills              writable  v2        8b1e0f4  2026-09-19T18:30:00Z  7a3b5c9e1f2d4a60
-  ssh://git@github.com/you/forks (account)  writable  skills/*  2 forks  2026-09-20T09:00:00Z  5e8a1c3b7d9f2a64
+  https://github.com/anthropics/skills      unknown   main      3f2a9c1   2026-09-20T10:00:00Z  1c9d0b7e4a2f6d38
+  https://github.com/me/skills              writable  v2        8b1e0f4   2026-09-19T18:30:00Z  7a3b5c9e1f2d4a60
+  ssh://git@github.com/you/forks (account)  writable  skills/*  2 skills  2026-09-20T09:00:00Z  5e8a1c3b7d9f2a64
 ```
 
 Each row shows the canonical URL, your write access as the last add or fetch found it, the branch, the fetched commit, when it was last fetched and the source id. The branch is the pin, or for an unpinned source the default branch the repository named at the last add or fetch, or `(unpinned)` while agentx has not seen one. Your account remote is marked `(account)`: it follows the branch of every skill of yours, `skills/*`, and shows how many it held at the last fetch instead of a commit. The id is accepted wherever a URL is.

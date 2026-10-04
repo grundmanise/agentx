@@ -11,7 +11,7 @@ agentx keeps no database on the machine. Every piece of local state has exactly 
 |---|---|---|---|
 | Fork and greenfield content and history | `skills/<name>` branches in the account repo, one worktree per placed fork | yes | after publish |
 | Managed skill base versions and upstream coordinates | `managed/<name>` import branches in the account repo, no worktree | yes | V1: separate backup refs per machine and logical asset |
-| Update candidates and upstream-removed markers | refs in the account repo | yes | no |
+| Update candidates, upstream-removed and remote-removed markers | refs in the account repo | yes | no |
 | Pending merges | a Git merge in progress in a linked Git worktree of the account repo, `merges/<name>` in agentx home | yes | no |
 | Per-machine settings | `settings.json` in agentx home | yes | no; the fleet sees their effect in the snapshot |
 | Local mutation journals | one file per mutation, with retained old content | until completion or recovery | no |
@@ -25,7 +25,7 @@ agentx keeps no database on the machine. Every piece of local state has exactly 
 ```mermaid
 flowchart LR
   subgraph home["agentx home"]
-    repo["account repo<br/>skills/* forks<br/>managed/* import branches<br/>candidate, upstream-removed and source refs"]
+    repo["account repo<br/>skills/* forks<br/>managed/* import branches<br/>candidate, removed markers and source refs"]
     wt["worktrees"]
     merges["merges"]
     files["settings.json, sync.json<br/>mutation journals, operation records<br/>lock, mutation counter"]
@@ -72,3 +72,5 @@ _Amendment, 2026-10-03:_ the settings entry of a source carries no push URL. A s
 _Amendment, 2026-10-03:_ the settings entry of a source carries no layout. The account remote is the source whose entry carries the account flag, fetched whole; every other source is fetched blobless, see [ADR 0008](0008-sources-have-a-layout-and-an-access-only-the-account-remote-is-pushed-automatically.md).
 
 _Amendment, 2026-10-04:_ "fork" and "greenfield" are no longer kinds of skill, see [ADR 0002](0002-per-machine-libraries-one-account-repo-content-moves-by-install.md). The table's first row holds the user's own skills, made with `skill new` or `skill fork` or installed from the account remote: their content and history are the `skills/<name>` branches, visible to other machines once published. Nothing else in the table changes.
+
+_Amendment, 2026-10-04:_ a fetch of the account remote that finds the branch of one of the user's own skills gone, removed or renamed by another machine, records the version the branch last held as a remote-removed marker, `refs/agentx/remote-removed/<name>`, beside the update check's markers, so that the skill is still compared with its last published version. Like them it stays on the machine and goes with the skill.

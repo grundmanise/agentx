@@ -1265,7 +1265,7 @@ func TestSkillPlaceForceOnWhatItCannotJudge(t *testing.T) {
 		out = h.run("--json", "skill", "place", "alpha", "--force")
 		equal(t, "exit", out.exit, 6)
 		e = h.one(out.stdout, "error")
-		equal(t, "message", e["message"], "alpha is a fork with nothing in the way of its worktree or its library symlink, so --force has nothing to adopt")
+		equal(t, "message", e["message"], "alpha has nothing in the way of its worktree or its library symlink, so --force has nothing to adopt")
 		equal(t, "hint", e["hint"], "place it without --force with 'agentx skill place alpha'")
 	})
 

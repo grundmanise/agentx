@@ -168,6 +168,9 @@ func newServeCommand(inv *invocation) *cobra.Command {
 			// The sources the checks could not fetch, which the report of
 			// each check reads and rewrites on the loop's goroutine.
 			failing := sourceFailures{}
+			// Your own skills the account remote no longer held at the
+			// last check, warned about once, see removedNotices.
+			removed := removedNotices{}
 			err = serve.Run(cmd.Context(), serve.Options{
 				Scan:       func(ctx context.Context) (scan.Snapshot, error) { return inv.snapshot(ctx, 0, "", false) },
 				Index:      inv.sourceIndex,
@@ -175,7 +178,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 				Trees:      trees,
 				Once:       once,
 				Stdin:      cmd.InOrStdin(),
-				Check:      func(ctx context.Context) func() { return inv.serveCheck(ctx, failing) },
+				Check:      func(ctx context.Context) func() { return inv.serveCheck(ctx, failing, removed) },
 				CheckEvery: every,
 				Ticks:      []serve.Tick{inv.maintenanceTick()},
 				Snapshot: func(snap scan.Snapshot) {
@@ -227,13 +230,14 @@ func newServeCommand(inv *invocation) *cobra.Command {
 // the report it returns is made on the loop's goroutine and carries one
 // update_available per update, with this process's instance id, and the
 // warnings of what the check could not check, a source it could not fetch
-// once per cause (see sourceFailures). A machine with no source runs no git
+// once per cause (see sourceFailures), and one of your own skills the
+// account remote no longer holds once (see removedNotices). A machine with no source runs no git
 // at all, and neither does one with no account repo; a source an import
 // wrote stays a source not fetched, account repo or not, until source add
 // adds it. The rescan its write of the version file sets off brings the
 // candidates and markers it wrote into the next snapshot, and every source
 // ref it moved into the source index.
-func (inv *invocation) serveCheck(ctx context.Context, failing sourceFailures) func() {
+func (inv *invocation) serveCheck(ctx context.Context, failing sourceFailures, removed removedNotices) func() {
 	rep, err := inv.checkUpdates(ctx, true, "")
 	return func() {
 		if err != nil {
@@ -244,6 +248,7 @@ func (inv *invocation) serveCheck(ctx context.Context, failing sourceFailures) f
 		for _, note := range rep.notes {
 			inv.out.warn("update check: " + note)
 		}
+		removed.report(inv.out, rep)
 		for _, ev := range rep.updates {
 			ev.InstanceID = inv.instanceID()
 			inv.out.emit(ev)
@@ -252,6 +257,36 @@ func (inv *invocation) serveCheck(ctx context.Context, failing sourceFailures) f
 				short(from), " -> ", short(to), ", ", plural(len(ev.Files), "file"))
 		}
 	}
+}
+
+// removedNotices is what the serve child remembers from one check to the
+// next of your own skills the account remote no longer holds, see
+// driftRemoteRemoved: their names. It lives in the serve process alone,
+// and only the report of a check reads or writes it, on the loop's
+// goroutine.
+type removedNotices map[string]bool
+
+// report warns about each of your own skills a check found the account
+// remote no longer holds, see checkReport.remoteRemoved, from the first
+// check that finds it so and not again while it stays so: the skill keeps
+// that state until the user removes or publishes it, and a warning every
+// tick would say nothing new. One that leaves the state is forgotten, so
+// that it is warned about again should it come back to it. A check that
+// did not fetch the account remote changes nothing.
+func (rn removedNotices) report(out *writer, rep checkReport) {
+	if !rep.accountChecked {
+		return
+	}
+	now := map[string]bool{}
+	for _, name := range rep.remoteRemoved {
+		if !rn[name] {
+			what, hint := remoteRemovedNotice(name)
+			out.warnWith("update check: "+what, hint)
+		}
+		now[name] = true
+	}
+	clear(rn)
+	maps.Copy(rn, now)
 }
 
 // sourceFailures is what the serve child remembers from one check to the

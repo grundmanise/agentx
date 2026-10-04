@@ -52,10 +52,11 @@ var sharedPublishHome = &fixtureHome{
 // source; alpha stays managed and reads current. Then another clone
 // pushes to beta's folder, and a second publish of alpha fast-forwards
 // onto it, fetching the source alone although an account remote git cannot
-// reach is set. A branch another clone moves between the fetch and the push
-// is moved, exit 6, by the lease. Then the source changes alpha: a publish of a new edit is
-// moved, exit 6, with the update hint, the edit stays and the update the
-// check found is pinned. Once the update took the change in, a hook of the
+// reach is set. A branch another clone moves in beta's folder between the
+// fetch and the push is fetched again and published on top of, unless it
+// moves again at the second push, exit 6. One moved
+// in alpha's folder is moved, exit 6, with the update hint, the edit stays
+// and the update the second check found is pinned. Once the update took the change in, a hook of the
 // source declines the push, exit 6, with the hook's message, and nothing
 // moves. Last, alpha's import branch moves while a publish runs: at the
 // fetch, nothing is published, exit 6; after the push, the publish is
@@ -118,47 +119,73 @@ func TestPublishToASharedSource(t *testing.T) {
 	equal(t, "a fast-forward onto the other clone's commit", s.query("rev-parse", second+"^"), other)
 	equal(t, "its message", s.query("log", "-1", "--format=%B", second), "Update skills/alpha")
 
-	// Another clone moves main between the publish's fetch and its push:
-	// the lease refuses it.
+	// Another clone moves main between the publish's fetch and its push,
+	// in beta's folder: the lease refuses the push, and the publish fetches
+	// the source again and publishes on top of it.
 	writeFile(t, filepath.Join(lib, "draft.md"), "a draft\n")
-	managed := h.ref(lineage.ManagedRef("alpha"))
-	s.write("skills/beta/notes.md", "beta notes, theirs again\n")
-	next := s.commit("Edit beta again")
-	s.run("update-ref", "refs/heads/main", second)
 	real, err := exec.LookPath("git")
 	if err != nil {
 		t.Fatal(err)
 	}
 	path := h.env["PATH"]
+	// Moved again at the second push, it is refused, exit 6, and nothing
+	// of it is published.
+	src := real + ` --git-dir=` + shellWord(s.gitDir)
 	stubGit(t, h, `#!/bin/sh
 case " $* " in
 *" push "*)
-	`+real+` --git-dir=`+shellWord(s.gitDir)+` update-ref refs/heads/main `+next+` || exit 1 ;;
+	tip=$(`+src+` rev-parse refs/heads/main) &&
+	moved=$(`+src+` -c user.name=Other -c user.email=other@example.com commit-tree -p "$tip" -m Moved "$tip^{tree}") &&
+	`+src+` update-ref refs/heads/main "$moved" || exit 1 ;;
 esac
 exec `+real+` "$@"
 `)
 	out = h.run("--json", "skill", "publish", "alpha")
 	h.env["PATH"] = path
-	equal(t, "moved at the push: exit", out.exit, exitRefused.exit)
-	equal(t, "moved at the push: outcome", h.one(out.stdout, "publish")["outcome"], publishMoved)
+	equal(t, "moved at both pushes: exit", out.exit, exitRefused.exit)
 	e := h.one(out.stdout, "error")
-	contains(t, "moved at the push: message", e["message"].(string), "moved main since it was fetched")
-	contains(t, "moved at the push: hint", e["hint"].(string), "agentx skill update alpha")
-	equal(t, "moved at the push: the import branch", h.ref(lineage.ManagedRef("alpha")), managed)
-	equal(t, "moved at the push: the source", s.query("rev-parse", "main"), next)
+	equal(t, "moved at both pushes: message", e["message"], s.url+" moved main since it was fetched, so alpha was not published")
+	contains(t, "moved at both pushes: hint", e["hint"].(string), "run 'agentx skill publish alpha' again, which checks the source first")
+	equal(t, "moved at both pushes: the source", s.query("rev-list", "--count", second+"..main"), "2")
+	s.run("reset", "--hard", "--quiet")
+	s.write("skills/beta/notes.md", "beta notes, theirs again\n")
+	next := s.commit("Edit beta again")
+	s.run("update-ref", "refs/heads/main", second)
+	race := func(to string) {
+		stubGit(t, h, `#!/bin/sh
+case " $* " in
+*" push "*)
+	`+real+` --git-dir=`+shellWord(s.gitDir)+` update-ref refs/heads/main `+to+` || exit 1 ;;
+esac
+exec `+real+` "$@"
+`)
+	}
+	race(next)
+	out = h.run("--json", "skill", "publish", "alpha")
+	h.env["PATH"] = path
+	equal(t, "moved at the push: exit", out.exit, 0)
+	equal(t, "moved at the push: outcome", h.one(out.stdout, "publish")["outcome"], publishPushed)
+	third := s.query("rev-parse", "main")
+	equal(t, "moved at the push: published on top", s.query("rev-parse", third+"^"), next)
 
-	// The source changes alpha: a publish is moved.
+	// The same in alpha's folder: the second judgement finds the source
+	// changed alpha, refuses the publish as moved, exit 6, keeps the edit
+	// and pins the update, which the update the hint names takes in.
+	writeFile(t, filepath.Join(lib, "draft.md"), "a second draft\n")
+	managed := h.ref(lineage.ManagedRef("alpha"))
 	s.run("reset", "--hard", "--quiet")
 	s.write("skills/alpha/notes.md", "alpha notes, theirs\n")
-	s.commit("Edit alpha")
-	upstream := s.query("rev-parse", "main")
+	upstream := s.commit("Edit alpha")
+	s.run("update-ref", "refs/heads/main", third)
+	race(upstream)
 	out = h.run("--json", "skill", "publish", "alpha")
+	h.env["PATH"] = path
 	equal(t, "moved: exit", out.exit, exitRefused.exit)
 	equal(t, "moved: outcome", h.one(out.stdout, "publish")["outcome"], publishMoved)
 	e = h.one(out.stdout, "error")
 	equal(t, "moved: message", e["message"], s.url+" changed alpha since it was installed, so it was not published")
 	contains(t, "moved: hint", e["hint"].(string), "agentx skill update alpha")
-	equal(t, "moved: the edit, kept", fileBody(t, filepath.Join(lib, "draft.md")), "a draft\n")
+	equal(t, "moved: the edit, kept", fileBody(t, filepath.Join(lib, "draft.md")), "a second draft\n")
 	equal(t, "moved: the import branch", h.ref(lineage.ManagedRef("alpha")), managed)
 	if h.ref(lineage.CandidateRef("alpha")) == "" {
 		t.Error("moved: the check pinned no update")
@@ -286,7 +313,7 @@ exec `+real+` "$@"
 	equal(t, "a tag pin: exit", out.exit, exitRefused.exit)
 	e := h.one(out.stdout, "error")
 	equal(t, "a tag pin: message", e["message"], "alpha has no branch of "+s.url+" to publish to: the source is not on a branch: v1 is refs/tags/v1")
-	contains(t, "a tag pin: hint", e["hint"].(string), "agentx source add")
+	contains(t, "a tag pin: hint", e["hint"].(string), "'agentx source add "+s.url+"#<branch>'")
 
 	equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), managed)
 	equal(t, "the source", s.query("for-each-ref", "--format=%(refname) %(objectname)", "refs/heads"), "refs/heads/main "+first)

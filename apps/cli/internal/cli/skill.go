@@ -78,6 +78,15 @@ const driftSourceRemoved = "source removed"
 // ref. The skill is kept as it is and never updated.
 const driftUpstreamRemoved = "upstream removed"
 
+// driftRemoteRemoved is the drift state of one of your own skills whose
+// branch the account remote held and, at a later fetch, no longer did:
+// another machine removed or renamed it. The fetch records it as a
+// marker ref, see lineage.RemoteRemovedPrefix, at the skill's last
+// published version, which the skill is compared with, so it reads
+// modified only for edits never published. A publish of every skill
+// leaves it out; publishing it by name puts the branch back.
+const driftRemoteRemoved = "remote removed"
+
 // updateAvailable is what the skill list row says of a managed skill the
 // last update check pinned a candidate for. It is not a drift state: the
 // skill has not drifted, its upstream moved on, and the event carries it as

@@ -469,7 +469,7 @@ func TestServeWarnsOnceAboutSourcesAnImportBrought(t *testing.T) {
 	}
 	equal(t, "the version file", mutationVersion(t, h), version)
 	equal(t, "skill check-updates", h.mustRun("skill", "check-updates").stdout,
-		"Nothing to check: no managed skill or fork comes from a source added on this machine.\n")
+		"Nothing to check: no managed skill comes from a source added on this machine.\n")
 
 	h.mustRun("source", "add", one.url)
 	backdate(t, h)
@@ -556,6 +556,42 @@ func TestSourceFailuresReportEachCauseOnce(t *testing.T) {
 	for i, c := range checks {
 		var stderr bytes.Buffer
 		failing.report(&writer{stderr: &stderr, verbose: true}, c.rep)
+		var got []string
+		if out := strings.TrimSuffix(stderr.String(), "\n"); out != "" {
+			got = strings.Split(out, "\n")
+		}
+		if !slices.Equal(got, c.want) {
+			t.Errorf("check %d logged\n%q\nwant\n%q", i+1, got, c.want)
+		}
+	}
+}
+
+// TestRemovedNoticesWarnOnce drives the memory serve keeps of your own
+// skills the account remote no longer holds through a run of checks: a
+// warning, with its hint, from the first check that finds a skill so, none
+// while it stays so or a check does not fetch the account remote, and
+// another once it comes back to that state after leaving it.
+func TestRemovedNoticesWarnOnce(t *testing.T) {
+	t.Parallel()
+	warning := func(name string) []string {
+		what, hint := remoteRemovedNotice(name)
+		return []string{"warning: update check: " + what, "  " + hint}
+	}
+	checks := []struct {
+		rep  checkReport
+		want []string
+	}{
+		{checkReport{accountChecked: true, remoteRemoved: []string{"beta"}}, warning("beta")},
+		{checkReport{accountChecked: true, remoteRemoved: []string{"beta"}}, nil},
+		{checkReport{}, nil}, // the account remote was not fetched
+		{checkReport{accountChecked: true, remoteRemoved: []string{"alpha", "beta"}}, warning("alpha")},
+		{checkReport{accountChecked: true, remoteRemoved: []string{"alpha"}}, nil},
+		{checkReport{accountChecked: true, remoteRemoved: []string{"alpha", "beta"}}, warning("beta")},
+	}
+	told := removedNotices{}
+	for i, c := range checks {
+		var stderr bytes.Buffer
+		told.report(&writer{stderr: &stderr}, c.rep)
 		var got []string
 		if out := strings.TrimSuffix(stderr.String(), "\n"); out != "" {
 			got = strings.Split(out, "\n")

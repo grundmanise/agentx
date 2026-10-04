@@ -14,7 +14,7 @@ agentx export ~/agentx-export.json
 ```
 
 ```text
-✓ exported the settings and 12 lineage records to ~/agentx-export.json
+✓ exported the settings and 12 lineage records to /home/me/agentx-export.json
   the export holds no skill content: the account repo and 'agentx skill add' restore that
 ```
 
@@ -45,13 +45,13 @@ agentx import ~/agentx-export.json
 ```
 
 ```text
-Replace the settings in ~/.agentx/settings.json with those of my-laptop from ~/agentx-export.json? [y/N] y
-✓ imported the settings of my-laptop from ~/agentx-export.json
+Replace the settings in /home/me/.agentx/settings.json with those of my-laptop from /home/me/agentx-export.json? [y/N] y
+✓ imported the settings of my-laptop from /home/me/agentx-export.json
 3 skills in the export: 1 present, 1 missing, 1 at a different version
   pdf     managed  present    https://github.com/example/skills/skills/pdf
   xlsx    managed  missing    https://github.com/example/skills/skills/xlsx
   review  managed  different  ssh://git@github.com/you/forks (account)
-  only the settings were written: add each source again, then install a missing skill with 'agentx skill add <source>'
+  only the settings were written: add each source again, then install a missing skill with 'agentx skill add <source>', or one of your own with 'agentx skill add --name <name>'
     agentx source add https://github.com/example/skills#release
     agentx source add ssh://git@github.com/you/forks --account
 ```
@@ -91,7 +91,7 @@ Use `--yes` in scripts and wherever there is no terminal. Without it, and withou
 3. If you publish your own skills, add your account remote on the new machine with `agentx source add <url> --account`.
 4. On the new machine, run `agentx import ~/agentx-export.json`.
 5. Run each `agentx source add` line the import printed, exactly as printed. It names the pin of a pinned source, `<url>#<pin>`, and `agentx source list` shows the pins too.
-6. Install what the listing calls missing with `agentx skill add <source>`.
+6. Install what the listing calls missing: a skill of a source with `agentx skill add <source>`, and one of your own with `agentx skill add --name <name>`, or all of yours with `agentx skill add --all`.
 
 Import restores the settings and nothing else, so the sources it lists are not yet on the new machine. Until you add a source again, `agentx source fetch` and `agentx skill add` exit with code 5 and say the source was not fetched. They name the same `agentx source add` line, pin included, so following that hint keeps the pin too.
 

@@ -306,7 +306,7 @@ func TestSkillForkOfAFork(t *testing.T) {
 		equal(t, what+": exit", out.exit, st.exit)
 		contains(t, what+": error", h.one(out.stdout, "error")["message"].(string), says)
 	}
-	refuses("no new name", []string{"alpha"}, exitRefused, "alpha is already a fork")
+	refuses("no new name", []string{"alpha"}, exitRefused, "alpha is already one of your own skills")
 	refuses("its own name", []string{"alpha", "--name", "alpha"}, exitRefused, "the fork is already called alpha")
 	root := filepath.Join(h.agentx, "worktrees", "alpha")
 	writeFile(t, filepath.Join(root, "README.md"), "beside\n")

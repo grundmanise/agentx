@@ -166,6 +166,11 @@ type checkReport struct {
 	removed   []removedSkill
 	failures  []checkFailure
 	notes     []string // what a candidate the check moved leaves out or calls otherwise
+	// remoteRemoved is your own skills placed here whose branch the
+	// account remote no longer holds, see driftRemoteRemoved, in name
+	// order, read when accountChecked: the check fetched the account remote.
+	remoteRemoved  []string
+	accountChecked bool
 }
 
 // skillCheckUpdates is agentx skill check-updates: the update check,
@@ -179,8 +184,8 @@ func (inv *invocation) skillCheckUpdates(ctx context.Context) error {
 	}
 	out := inv.out
 	if rep.idle {
-		inv.summary = "nothing to check: no managed skill or fork comes from a source added on this machine"
-		out.print("Nothing to check: no managed skill or fork comes from a source added on this machine.")
+		inv.summary = "nothing to check: no managed skill comes from a source added on this machine"
+		out.print("Nothing to check: no managed skill comes from a source added on this machine.")
 		return nil
 	}
 	for _, cf := range rep.failures {
@@ -188,6 +193,9 @@ func (inv *invocation) skillCheckUpdates(ctx context.Context) error {
 	}
 	for _, note := range rep.notes {
 		out.warn(note)
+	}
+	for _, name := range rep.remoteRemoved {
+		out.warnWith(remoteRemovedNotice(name))
 	}
 	for _, ev := range rep.updates {
 		out.emit(ev)
@@ -501,6 +509,7 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 		}
 	}
 	if acc.fetched && added[acc.entry.URL] {
+		rep.accountChecked = true
 		for _, ev := range acc.updates {
 			// The branch moved, by an update that took the remote's commits
 			// in, or the skill went, while the check ran: what it found is
@@ -510,6 +519,14 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 			}
 		}
 		sort.SliceStable(rep.updates, func(i, j int) bool { return rep.updates[i].Name < rep.updates[j].Name })
+		// A skill whose branch the fetch found gone is named, with the two
+		// ways on: nothing else would tell the user another machine
+		// removed or renamed it.
+		for _, name := range acc.skills {
+			if rec, ok := ownLive[name]; ok && rec.RemoteRemoved != "" {
+				rep.remoteRemoved = append(rep.remoteRemoved, name)
+			}
+		}
 	}
 	return rep, nil
 }

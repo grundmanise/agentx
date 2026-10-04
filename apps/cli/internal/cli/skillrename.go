@@ -16,10 +16,10 @@ func newSkillRenameCommand(inv *invocation) *cobra.Command {
 		Use:   "rename <old> <new>",
 		Short: "Rename one of your skills",
 		Long: "Rename the skill called <old>, one of your own skills, to <new> on this machine,\n" +
-			"placed where <old> was. The renamed skill is the same skill: it keeps its fork id\n" +
-			"and its history, and a commit on top writes the new name into SKILL.md. Both\n" +
-			"steps, forking it under the new name and removing <old>, are checked before\n" +
-			"either runs, so a merge pending or a name that cannot be used change nothing.\n" +
+			"placed where <old> was. The renamed skill is the same skill: it keeps its id and\n" +
+			"its history, and a commit on top writes the new name into SKILL.md. Everything\n" +
+			"the rename needs is checked before anything changes, so a merge pending or a\n" +
+			"name that cannot be used change nothing.\n" +
 			"Unpublished edits are recorded on the old branch first, and the renamed skill\n" +
 			"keeps them, still unpublished. Files git ignores in the old worktree are deleted\n" +
 			"with it. The rename stays on this machine until 'agentx skill publish <new>',\n" +
@@ -73,14 +73,15 @@ func (inv *invocation) skillRename(ctx context.Context, old, newName string) err
 	}
 	// The fork recorded old's edits on its branch, see makeFork, so the
 	// removal finds the branch at the tip that holds them.
-	r.tip, r.guard = fk.src.rec.Commit, &forkGuard{site: fk.site, judged: fk.judged}
+	r.tip, r.guard, r.quiet = fk.src.rec.Commit, &forkGuard{site: fk.site, judged: fk.judged}, true
 	made := sanitised(newName) + " was created"
 	if err := inv.runForkRemoval(ctx, r); err != nil {
 		f := failureOf(err)
 		return fail(f.status, made+", but "+sanitised(old)+" could not be removed: "+f.message, renameFinish(old, newName, skillCommand("remove", old), err))
 	}
-	inv.summary = "renamed " + sanitised(old) + " to " + sanitised(newName) + "; " + inv.summary
-	inv.out.done("renamed " + inv.out.paint(heading, sanitised(old)) + " to " + inv.out.paint(heading, sanitised(newName)))
+	if fk.renamed != nil {
+		fk.renamed()
+	}
 	return nil
 }
 

@@ -63,7 +63,7 @@ func TestForkCandidateIsJudgedAgainstTheBase(t *testing.T) {
 		update bool
 	}{
 		{name: "a fork whose lineage was not read", rec: fork(nil, update)},
-		{name: "a skill made by skill new", rec: fork(&ForkLineage{ID: "id", Greenfield: true}, update)},
+		{name: "a skill made by skill new", rec: fork(&ForkLineage{ID: "id", NoUpstream: true}, update)},
 		{name: "a history that does not say", rec: fork(&ForkLineage{Problem: "missing"}, update)},
 		{name: "a managed skill", rec: Record{Name: "pdf", Kind: KindManaged, Commit: "import", Import: base, HasImport: true, Candidate: update}},
 		{name: "no candidate", rec: fork(read, nil)},

@@ -152,7 +152,7 @@ func TestForkWarningsSayWhatIsMissing(t *testing.T) {
 		{"a directory at the worktree", "worktree", libOwn, root + " is in the way of notes's worktree", adopt},
 		{"a directory at the library entry", "library symlink", libDir, f.libPath + " is in the way of notes's library symlink", adopt},
 		{"a symlink of the user's", "library symlink", libForeign, f.libPath + " is in the way of notes's library symlink",
-			"run 'agentx skill place notes --force' to replace it with the fork's library symlink"},
+			"run 'agentx skill place notes --force' to replace it with notes's library symlink"},
 	} {
 		what, wayOut := adoptRefusal(f, forkVerdict{outcome: outcomeAdoptCandidate, inWay: tc.inWay}, forkFacts{lib: tc.lib})
 		equal(t, tc.what, what, tc.wantWhat)

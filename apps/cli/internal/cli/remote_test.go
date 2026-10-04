@@ -101,7 +101,8 @@ func (h *harness) commitFork(name, notes string) string {
 // two diverged: b's publish of alpha is refused, exit 6, outcome moved,
 // its hint naming the update, with nothing recorded or written here or on
 // the remote and no pull event, since a publish never merges. Once b's
-// update has taken a's commit in, the publish pushes the merge; beta,
+// update has taken a's commit in, the publish with -m pushes the commit,
+// the merge and a new edit as one commit on a's, under its message; beta,
 // recorded on b and not named, stays unpushed until a bare publish, in
 // which alpha is up to date. The push carries the fork branches alone: the
 // remote holds no import branch, update candidate or other ref. a, which
@@ -140,10 +141,19 @@ func TestPublishNeverMerges(t *testing.T) {
 	b.mustRun("skill", "update", "alpha")
 	merged := b.ref(lineage.ForkRef("alpha"))
 	equal(t, "the merge's parents", b.parents(merged), mine+"\n"+theirs)
-	out = b.mustRun("--json", "skill", "publish", "alpha")
+	// With -m, what b holds that the remote lacks, its commit, the merge
+	// the update recorded and an edit, is published as one commit on the
+	// remote's, under the message.
+	writeFile(t, draft, "an edit\n")
+	out = b.mustRun("--json", "skill", "publish", "alpha", "-m", "Eight, merged")
 	ev := b.one(out.stdout, "publish")
 	equal(t, "outcome", ev["outcome"], publishPushed)
-	equal(t, "commit", ev["commit"], merged)
+	folded := b.ref(lineage.ForkRef("alpha"))
+	equal(t, "commit", ev["commit"], folded)
+	equal(t, "the fold's one parent", b.parents(folded), theirs)
+	equal(t, "its message", b.accountGit("log", "-1", "--format=%s", folded), "Eight, merged")
+	equal(t, "what it adds to the merge", b.accountGit("diff-tree", "-r", "--name-status", merged, folded), "A\talpha/draft.md")
+	merged = folded
 	var phases []string
 	for _, e := range b.eventsOfType(out.stdout, "progress") {
 		phases = append(phases, e["phase"].(string)+" "+e["subject"].(string))
@@ -239,7 +249,7 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 	out = b.run("--json", "skill", "publish", "notes")
 	equal(t, "publish: exit", out.exit, 6)
 	e := b.one(out.stdout, "error")
-	contains(t, "publish: message", e["message"].(string), "the account remote's skills/notes is a different fork than notes on this machine")
+	contains(t, "publish: message", e["message"].(string), "the account remote's skills/notes is a different skill than notes on this machine")
 	contains(t, "publish: hint", e["hint"].(string), "rename yours with 'agentx skill rename notes <new>'")
 	equal(t, "b's notes, nothing recorded", b.ref(lineage.ForkRef("notes")), bTip)
 	// Nor does a removal of b's notes with --remote delete a's from the
@@ -249,7 +259,7 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 	out = b.run("--json", "skill", "remove", "notes", "--remote")
 	equal(t, "remove --remote: exit", out.exit, 6)
 	e = b.one(out.stdout, "error")
-	contains(t, "remove --remote: message", e["message"].(string), "the account remote's skills/notes is a different fork than notes on this machine, so notes cannot be removed from the account remote")
+	contains(t, "remove --remote: message", e["message"].(string), "the account remote's skills/notes is a different skill than notes on this machine, so notes cannot be removed from the account remote")
 	equal(t, "remove --remote: hint", e["hint"], "remove it from this machine alone with 'agentx skill remove notes'")
 	if b.ref(lineage.ForkRef("notes")) == "" || !lexists(b.forkDir("notes", "notes")) {
 		t.Error("a refused removal changed b's notes")
@@ -508,7 +518,7 @@ func TestSameForkRefusal(t *testing.T) {
 		want  string // a word of the refusal, "" for none
 	}{
 		{"one id", rec(one), lineage.ForkLineage{ID: one}, ""},
-		{"two ids", rec(two), lineage.ForkLineage{ID: one}, "is a different fork than notes"},
+		{"two ids", rec(two), lineage.ForkLineage{ID: one}, "is a different skill than notes"},
 		{"none here", rec(""), lineage.ForkLineage{ID: one}, "records no fork id"},
 		{"none there", rec(one), lineage.ForkLineage{}, "records no fork id"},
 		{"history not read", lineage.Record{Name: "notes", Ref: lineage.ForkRef("notes")}, lineage.ForkLineage{ID: one}, "records no fork id"},

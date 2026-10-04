@@ -285,7 +285,7 @@ func adoptRefusal(f forkSite, v forkVerdict, facts forkFacts) (what, wayOut stri
 	what = quotedPath(path) + " is in the way of " + sanitised(f.name) + "'s " + v.inWay
 	force := "run '" + skillCommand("place", f.name, "--force") + "'"
 	if facts.lib == libForeign && v.inWay == "library symlink" {
-		return what, force + " to replace it with the fork's library symlink"
+		return what, force + " to replace it with " + sanitised(f.name) + "'s library symlink"
 	}
 	return what, force + " to adopt it: its content becomes the skill's unpublished edits"
 }
@@ -467,7 +467,7 @@ func (inv *invocation) reconcile(ctx context.Context) ([]reconcileEvent, error) 
 	repaired := map[string]bool{}
 	if len(repairs) > 0 {
 		if repaired, err = inv.repairForks(ctx, repairs); err != nil {
-			inv.out.warn("reconcile: " + err.Error() + "; run 'agentx skill place <name>' for each fork whose worktree is missing")
+			inv.out.warn("reconcile: " + err.Error() + "; run 'agentx skill place <name>' for each of your skills whose worktree is missing")
 		}
 	}
 	for i := range events {

@@ -261,8 +261,8 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 	if r.all {
 		names = r.afterAccountStep(names, records, pulled, dropped)
 		if len(names)+len(pulled)+len(dropped) == 0 {
-			inv.summary = "nothing to update: no managed skill or fork has an update as of the last update check; run '" + checkUpdatesCommand + "' to look again"
-			inv.out.print("Nothing to update: no managed skill or fork has an update as of the last update check. Run ",
+			inv.summary = "nothing to update: no managed skill has an update as of the last update check; run '" + checkUpdatesCommand + "' to look again"
+			inv.out.print("Nothing to update: no managed skill has an update as of the last update check. Run ",
 				inv.out.paint(label, checkUpdatesCommand), " to look again.")
 			return nil
 		}
@@ -276,7 +276,14 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 		var u *updating
 		var f *failure
 		fork := managed && rec.Kind == lineage.KindFork
-		if fork && r.account != nil && rec.Fork != nil && rec.Fork.Greenfield && !inv.mergePending(n) {
+		// One of your own skills another machine removed from the account
+		// remote, or renamed there, is said to be gone, see
+		// driftRemoteRemoved; one with an upstream is still updated from it.
+		removed := fork && r.account != nil && !r.all && r.account.err == nil && r.account.tips[n] == "" && inv.remoteRemoved(ctx, r.gitDir, n)
+		if removed {
+			inv.out.warnWith(remoteRemovedNotice(n))
+		}
+		if fork && r.account != nil && rec.Fork != nil && rec.Fork.NoUpstream && !inv.mergePending(n) {
 			// A fork with no upstream is up to date once its account step
 			// took in what the account remote held, or found nothing to take
 			// in; one the account remote holds no branch of has nothing to
@@ -285,6 +292,9 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 			switch {
 			case slices.Contains(pulled, n):
 				inv.summary = "pulled " + n + " from the account remote; it has no upstream to update from"
+			case removed:
+				what, hint := remoteRemovedNotice(n)
+				inv.summary = what + "; " + hint
 			case !r.all && r.account.tips[n] == "":
 				inv.summary = n + " has no branch on the account remote; run '" + publishCommand(n) + "' to publish it"
 				inv.out.print(inv.out.paint(heading, sanitised(n)), " has no branch on the account remote; run ",
@@ -461,7 +471,7 @@ func (r *updateRun) accountStep(ctx context.Context, names []string, records map
 		var upstream []string
 		for _, n := range forks {
 			rec := records[n]
-			if rec.Fork != nil && rec.Fork.Greenfield {
+			if rec.Fork != nil && rec.Fork.NoUpstream {
 				dropped[n] = true
 				r.drop(n, unreachableRemote(a.entry.URL, a.err))
 				continue
@@ -475,7 +485,7 @@ func (r *updateRun) accountStep(ctx context.Context, names []string, records map
 		case len(upstream) > 0:
 			what := sanitised(upstream[0]) + " is"
 			if len(upstream) > 1 {
-				what = "forks are"
+				what = "your skills are"
 			}
 			inv.out.warn("could not fetch the account remote " + shownURL(a.entry.URL) + ", so " + what + " updated from upstream only" + why)
 		case len(dropped) == 0:
@@ -602,7 +612,7 @@ func (r *updateRun) published(name string, rec lineage.Record) bool {
 	}
 	tip := r.account.tips[name]
 	if r.account.err != nil {
-		return tip != "" && rec.Fork != nil && rec.Fork.Greenfield
+		return tip != "" && rec.Fork != nil && rec.Fork.NoUpstream
 	}
 	return tip != "" && tip != rec.Commit
 }

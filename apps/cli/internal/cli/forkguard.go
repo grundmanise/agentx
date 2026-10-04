@@ -25,7 +25,7 @@ import (
 // longer there.
 func forkPendingRefusal(name, what string) *failure {
 	return refuse(exitPendingMerge, sanitised(name)+" has a merge pending, so it cannot be "+what+" until the merge is resolved or given up",
-		"run '"+skillCommand("update", name, "--abort")+"' to give the merge up; the fork's worktree and branch stay as they are")
+		"run '"+skillCommand("update", name, "--abort")+"' to give the merge up; its worktree and branch stay as they are")
 }
 
 // uncommittedRefusal refuses to do what to the fork called name when its

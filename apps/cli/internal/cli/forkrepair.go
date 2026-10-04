@@ -195,7 +195,7 @@ func (inv *invocation) planForkPlace(ctx context.Context, f forkSite, facts fork
 	var plan forkPlacing
 	switch {
 	case v.outcome != outcomeAdoptCandidate && force:
-		return plan, fail(exitRefused, name+" is a fork with nothing in the way of its worktree or its library symlink, so --force has nothing to adopt",
+		return plan, fail(exitRefused, name+" has nothing in the way of its worktree or its library symlink, so --force has nothing to adopt",
 			"place it without --force with '"+skillCommand("place", f.name, flags...)+"'")
 	case v.outcome == outcomeAdoptCandidate && !force:
 		what, wayOut := adoptRefusal(f, v, facts)
