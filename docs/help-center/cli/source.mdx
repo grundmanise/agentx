@@ -5,7 +5,7 @@ description: "Add the git repositories you install skills from, fetch them again
 
 A source is a git repository that holds one or more skills. Add it by URL once; agentx fetches it into its own store and lists the skills inside, so you can pick what to install. [`agentx skill add`](/cli/skill) adds the source itself when you install from a URL you have not added yet.
 
-A source you install skills from holds skills in folders on one branch. Your [account remote](/cli/remote), the repository you publish forks to, is the one source you add with `--account`: it holds one branch per fork.
+A source you install skills from holds skills in folders on one branch. Your [account remote](#add-your-account-remote), the repository you publish your own skills to, is the one source you add with `--account`: it holds one branch per fork.
 
 ## Add a source
 
@@ -41,7 +41,7 @@ Adding a source you already have fetches it again and sets the pin to what you t
 
 ### Add your account remote
 
-The [account remote](/cli/remote) is the Git repository you own that you publish forks to. Create an empty repository on your Git host, then add it with `--account`:
+The account remote is the Git repository you own that you [publish](/cli/skill#publish-a-skill) your own skills to, the ones you create with `agentx skill new` or fork with `agentx skill fork`, so your [other machines can install them](/cli/skill#install-your-skills-on-another-machine). Create an empty repository on your Git host, then add it with `--account`:
 
 ```sh
 agentx source add git@github.com:you/forks.git --account
@@ -55,6 +55,8 @@ agentx source add git@github.com:you/forks.git --account
 - Give the repository alone: a `#<ref>`, a path or a token in the URL is refused with exit code 1. Keep credentials in a Git credential helper or an SSH key, as for any repository.
 - agentx reaches the repository first. One Git cannot reach is refused with exit code 3, and nothing changes.
 - `agentx source list` shows it with `(account)`.
+- Only your own skills travel through it. Skills you install from other sources, their update checks and the sources themselves stay on each machine.
+- A machine without an account remote keeps the whole history of your own skills: `agentx skill history` and `agentx skill diff` work without one. Add it when you want a backup, or a second machine.
 - Adding the account remote's URL again, with or without `--account`, fetches it again.
 - Adding another URL with `--account` replaces the account remote and forgets what the old one held. Your forks stay as they are, and publish to the new remote.
 - A source you added without `--account` cannot become the account remote, whether it has the same URL or names the same repository by another URL: agentx stops with exit code 6 and changes nothing. Remove the source first with `agentx source remove <url>`, then add the account remote.
