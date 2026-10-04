@@ -325,8 +325,7 @@ func mktreeOf(t *testing.T, ctx context.Context, r *gitx.Runner, gitDir string, 
 }
 
 // importCommit writes, through commit-tree, the import commit of imp over
-// the skill tree tree under dir, the way an earlier agentx wrote one: the
-// tree given, whatever form it is in.
+// the skill tree tree under dir, the tree given as it is.
 func importCommit(t *testing.T, ctx context.Context, r *gitx.Runner, gitDir string, imp Import, dir, tree, when string) Record {
 	t.Helper()
 	root := mktreeOf(t, ctx, r, gitDir, "040000 tree "+tree+"\t"+dir)
@@ -335,32 +334,6 @@ func importCommit(t *testing.T, ctx context.Context, r *gitx.Runner, gitDir stri
 		t.Fatalf("commit-tree: %v", err)
 	}
 	return Record{Name: dir, Kind: KindManaged, Ref: ManagedRef(dir), Commit: commit, Tree: root, Import: imp, HasImport: true}
-}
-
-// TestCanonicalTellsABaseStoredInALegacyForm: a branch an earlier agentx
-// wrote over a source's own tree, legacy modes and all, is current against
-// no directory, and Canonical says so, while its base reads with the id
-// git writes today.
-func TestCanonicalTellsABaseStoredInALegacyForm(t *testing.T) {
-	t.Parallel()
-	requireGit(t)
-	ctx := context.Background()
-	r, gitDir := newRepo(t)
-	legacy, canonical := legacyTree(t, ctx, r, gitDir)
-	imp := Import{Source: "https://github.com/example/skills", Path: "skills/alpha", Commit: commitID, Hash: hashID}
-	const when = "1700000000 +0000"
-
-	rec := importCommit(t, ctx, r, gitDir, imp, "alpha", legacy, when)
-	base, err := ReadBase(ctx, r, gitDir, rec)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rec.Canonical(base) {
-		t.Fatal("a branch over the legacy tree reads as canonical")
-	}
-	if base.Tree != legacy || base.ID() != canonical.tree {
-		t.Fatalf("the base is stored as %s with the id %s, want %s with the id %s", base.Tree, base.ID(), legacy, canonical.tree)
-	}
 }
 
 // TestBaseIDCountsItsSymlinks: the id of a base is the id of the directory
@@ -375,15 +348,6 @@ func TestBaseIDCountsItsSymlinks(t *testing.T) {
 	base := Base{Tree: linked.tree, Entries: linked.entries}
 	if base.ID() != linked.tree {
 		t.Errorf("the base's id is %s, want %s, the tree holding its symlink", base.ID(), linked.tree)
-	}
-	imp := Import{Source: "https://github.com/example/skills", Path: "skills/gamma", Commit: commitID, Hash: hashID}
-	rec := importCommit(t, ctx, r, gitDir, imp, "gamma", linked.tree, "1700000000 +0000")
-	read, err := ReadBase(ctx, r, gitDir, rec)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !rec.Canonical(read) {
-		t.Error("a branch over a tree git writes today does not read as canonical")
 	}
 }
 

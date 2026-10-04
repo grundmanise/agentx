@@ -102,7 +102,7 @@ Import restores the settings and nothing else, so the sources it lists are not y
 | 5 | The file is not there. |
 | 6 | The file is not an agentx export, is truncated, is larger than 8 MiB, is of a schema version this agentx does not read, carries a field it does not know, or holds settings it would not write. |
 | 6 | A skill record agentx would not write: a kind other than `managed`, a commit that is not a commit id, a subpath on one of your own skills, an upstream on a skill of a shared source, or a version that does not add up. The message names the skill. |
-| 6 | The settings hold something agentx never writes: a URL with a token in it, in `url` or `alias`; an access other than `writable` or `read-only`; two account remotes; another source naming the repository of the account remote; a pin or default branch that is not a ref git accepts; a date not in RFC 3339 UTC; a label with a control character in it or longer than 256 bytes; a source or a configuration listed twice; a list out of order. The message names the entry and the rule. |
+| 6 | The settings hold something agentx never writes: a URL with a token in it, in `url` or `alias`; an access other than `writable` or `read-only`; two account remotes; a pin on the account remote; another source naming the repository of the account remote; a pin or default branch that is not a ref git accepts; a date not in RFC 3339 UTC; a label with a control character in it or longer than 256 bytes; a source or a configuration listed twice; a list out of order. The message names the entry and the rule. |
 | 6 | You answered no, or there was no terminal to ask at and `--yes` was not given. |
 
 A refused import changes nothing: your settings stay exactly as they were.

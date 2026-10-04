@@ -12,7 +12,8 @@ import (
 // when it is one. Every field is held to the rule of the command that
 // writes it: url and alias are both URLs of a source and are stored
 // canonical; pin and default_branch are refs this machine hands to git,
-// which source.ValidRef exists to check before that happens; last_fetched
+// which source.ValidRef exists to check before that happens, and the
+// account remote, a whole repository, has no pin; last_fetched
 // and access_checked are dates agentx wrote; access is a word agentx
 // writes, unknown written as no key at all. The messages name the entry by
 // its url, which is canonical by the time they are reached. Pure.
@@ -29,6 +30,8 @@ func sourceRefusal(src home.Source) string {
 	switch {
 	case src.Pin != "" && !source.ValidRef(src.Pin):
 		return src.URL + " is pinned to " + clipped(src.Pin) + ", which is not a ref git accepts"
+	case src.Pin != "" && src.Account:
+		return src.URL + " is pinned to " + clipped(src.Pin) + ", and the account remote is a whole repository"
 	case src.Access != "" && src.Access != home.AccessWritable && src.Access != home.AccessReadOnly:
 		return src.URL + " has the access " + clipped(src.Access) + ", and agentx writes writable or read-only, or none while it is unknown"
 	case src.AccessChecked != "" && !fetchTime(src.AccessChecked):

@@ -83,7 +83,7 @@ func (inv *invocation) accountRemote(ctx context.Context) (gitDir string, entry 
 // alignAccount writes the remote of the account remote's entry into the
 // account repo when the remote there is not the one the entry wants, see
 // source.RemoteOf: missing, as settings an import wrote leave it, or
-// rewritten, as a run cut short or an older agentx leaves it. The remotes
+// rewritten, as a run cut short leaves it. The remotes
 // are read in one git process, and only a remote that disagrees is written,
 // under the lock, since git config fails rather than waits for its own lock
 // file. One written over a remote never fetched whole is fetched with

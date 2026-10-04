@@ -119,9 +119,9 @@ func TestConfigSetKeepsUnknownCollections(t *testing.T) {
 	h := newHarness(t)
 	source := `{"url":"https://example.com/skills","account":true,` +
 		`"access":"writable","access_checked":"2026-10-02T10:00:00Z","default_branch":"main"}`
-	// auto_push is what a settings file of an earlier agentx still carries:
-	// it is read past, not refused, and the next write drops it.
-	file := `{"schema_version":1,"auto_push":true,"disabled_configurations":["cursor"],"sources":[` + source + `],"copy_mode":{"my-skill":["cursor"]}}`
+	// A key this agentx does not know is read past, not refused, and the
+	// next write drops it.
+	file := `{"schema_version":1,"some_future_key":true,"disabled_configurations":["cursor"],"sources":[` + source + `],"copy_mode":{"my-skill":["cursor"]}}`
 	if err := os.WriteFile(filepath.Join(h.agentx, "settings.json"), []byte(file), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -131,8 +131,8 @@ func TestConfigSetKeepsUnknownCollections(t *testing.T) {
 
 	got := readSettingsFile(t, h)
 	equal(t, "label", got["label"], "kept")
-	if _, ok := got["auto_push"]; ok {
-		t.Error("the retired auto_push key was written back")
+	if _, ok := got["some_future_key"]; ok {
+		t.Error("the unknown key was written back")
 	}
 	if want := []any{"cursor"}; !reflect.DeepEqual(got["disabled_configurations"], want) {
 		t.Errorf("disabled_configurations = %#v, want %#v", got["disabled_configurations"], want)
@@ -182,7 +182,7 @@ func TestConfigErrors(t *testing.T) {
 		hint string
 	}{
 		{"get unknown key", []string{"config", "get", "colour"}, 1, "usage", "label"},
-		{"set unknown key", []string{"config", "set", "auto_push", "true"}, 1, "usage", "accept_operations"},
+		{"set unknown key", []string{"config", "set", "some_future_key", "true"}, 1, "usage", "accept_operations"},
 		{"set read-only key", []string{"config", "set", "sources", "[]"}, 1, "usage", "accept_operations"},
 		{"set bad bool", []string{"config", "set", "accept_operations", "yes"}, 1, "usage", "true or false"},
 		{"set empty label", []string{"config", "set", "label", " "}, 1, "usage", ""},

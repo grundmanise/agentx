@@ -276,7 +276,6 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 		{"a field agentx does not know", edited(func(doc map[string]any) { doc["snapshot"] = map[string]any{} }), "not an agentx export"},
 		{"later settings", settingsWith("schema_version", 2), "schema_version is 2"},
 		{"a settings field agentx does not know", settingsWith("secrets", "x"), "not an agentx export"},
-		{"the retired auto_push setting", settingsWith("auto_push", true), "auto_push is no longer a setting"},
 		{"a label of two lines", settingsWith("label", "one\ntwo"), "one non-empty line"},
 		{"a record of another kind", recordWith("kind", "unmanaged"), "the kind of alpha is not managed"},
 		{"one of your own skills with a subpath", edited(func(doc map[string]any) {
@@ -376,7 +375,7 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 			if !errors.As(err, &f) || f.status != exitRefused {
 				t.Fatalf("readExport = %v, want a refusal", err)
 			}
-			contains(t, "the refusal", f.message+"\n"+f.hint, tc.says)
+			contains(t, "the refusal", f.message, tc.says)
 			// The refusal names the URL it parsed to, never what it was given.
 			if said := f.message + f.hint; strings.Contains(said, importToken) || strings.Contains(said, "user:") {
 				t.Errorf("the refusal repeated the credential: %q", said)

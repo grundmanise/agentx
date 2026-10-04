@@ -83,12 +83,7 @@ type fileDiff struct {
 // Whether the directory matches its base is decided as its state is, so
 // that the diff never says a skill matches while the listing calls it
 // modified: a directory holding something git cannot record is not the
-// base version, even when every path git can record is. Nor is one holding
-// every file of a base that an earlier agentx stored over a source's own
-// tree, in a form no directory holds: git finds no file that differs, and
-// the command says the difference is where the version is stored, and
-// that installing that version again stores it anew without touching a
-// file.
+// base version, even when every path git can record is.
 //
 // One of your own skills is compared with its last published version, or
 // with the commit given, see forkDiff.
@@ -141,10 +136,6 @@ func (inv *invocation) skillDiff(ctx context.Context, name, commit string) error
 		}
 		if err != nil {
 			return accountRepoFailure(err)
-		}
-		if len(files) == 0 && len(tree.Unrecordable) == 0 {
-			inv.reportStoredDiff(name, rec.Import.Source, lib.Path, against, contentHashAt(lib.Path) == rec.Import.Hash)
-			return nil
 		}
 	}
 	inv.reportDiff(subject, name, against, files, len(tree.Unrecordable))
@@ -240,31 +231,6 @@ func (inv *invocation) reportDiff(subject diffSubject, name, against string, fil
 			}
 		}
 	}
-}
-
-// reportStoredDiff says that the library directory holds every file of
-// its base version while the import commit stores that version in a form
-// git no longer writes, which is why the skill lists as modified, and how
-// to put that right. Installing the same version again stores it as git
-// writes it today, but it adopts only a directory whose content hash is
-// the version's, and exact says whether the one at libPath is: a file git
-// ignores, which the diff leaves out, counts for the hash, so when it is
-// not, the hint says to move such files out first. The install also needs
-// the source to hold that version still, which this command cannot see,
-// so the hint names the other way out as well: the update to a newer
-// version, which stores that one anew.
-func (inv *invocation) reportStoredDiff(name, source, libPath, against string, exact bool) {
-	const stored = " only in how the account repo stores it; "
-	add := "run 'agentx skill add " + shellWord(source) + " --name " + shellWord(name) + "' to install that version again while the source still holds it, which stores it as git writes it today"
-	if exact {
-		add += " and changes no file"
-	} else {
-		add = "move what git ignores out of " + quotedPath(libPath) + ", then " + add
-	}
-	fix := add + ", or, once '" + checkUpdatesCommand + "' finds a newer version, run '" + skillCommand("update", name) + "'"
-	inv.summary = name + " differs from " + against + stored + fix
-	out := inv.out
-	out.print(out.paint(heading, sanitised(name)), " differs from ", against, stored, sanitised(fix))
 }
 
 // patchLine is one line of a diff as the text output prints it. The lines

@@ -1302,8 +1302,8 @@ func TestSourceAddKeepsTheRefWhenTheBlobsDoNotArrive(t *testing.T) {
 // crash can leak, and nothing reads it. Each fetch stages on a ref of its
 // own, which no later fetch can tell from the ref of one still running, so
 // a killed fetch's ref stays until the source goes; the ref the configured
-// refspec names, where an older agentx staged every fetch, goes with the
-// next fetch as it always has. A removal takes both with the source ref,
+// refspec names, which the full-fetch fallback of FetchObjects writes, goes
+// with the next fetch. A removal takes both with the source ref,
 // so nothing of a killed fetch outlives the source, and nothing of another
 // source's: the staging refs of its fetches, which may be running, stay.
 func TestSourceFetchReclaimsAStaleStagingRef(t *testing.T) {
@@ -1314,12 +1314,12 @@ func TestSourceFetchReclaimsAStaleStagingRef(t *testing.T) {
 	head := s.commit("first version")
 	equal(t, "add", h.run("source", "add", s.url).exit, 0)
 	id := source.ID(s.url)
-	legacy := source.StagingRef(id)
+	configured := source.StagingRef(id)
 	killed := source.StagingRefPrefix + "0123456789abcdef/" + id
 
 	// What a fetch killed after its first step leaves: a ref on a commit
 	// whose blobs may not be here.
-	h.accountGit("update-ref", legacy, head)
+	h.accountGit("update-ref", configured, head)
 	h.accountGit("update-ref", killed, head)
 	out := h.run("--json", "source", "list")
 	equal(t, "exit", out.exit, 0)
@@ -1345,7 +1345,7 @@ func TestSourceFetchReclaimsAStaleStagingRef(t *testing.T) {
 		h.accountGit("update-ref", ref, otherHead)
 	}
 
-	h.accountGit("update-ref", legacy, head)
+	h.accountGit("update-ref", configured, head)
 	equal(t, "remove", h.run("source", "remove", s.url).exit, 0)
 	kept = append(kept, source.Ref(otherID))
 	sort.Strings(kept)

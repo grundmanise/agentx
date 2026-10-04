@@ -800,12 +800,12 @@ func (inv *invocation) stageAdoption(ctx context.Context, m *home.Mutation, gitD
 	}
 	// Modified is what skill list will say of the skill.
 	c.hash, c.modified = hash, !inv.holdsImported(ctx, gitDir, c.path, c.imported)
-	from, write, f := refPlan(c.imported, records, c.path, false)
+	write, f := refPlan(c.imported, records, c.path, false)
 	if f != nil {
 		return f, nil
 	}
 	if write {
-		m.Ref(gitDir, lineage.ManagedRef(c.entry.Name), from, c.imported.commit)
+		m.Ref(gitDir, lineage.ManagedRef(c.entry.Name), "", c.imported.commit)
 	}
 	return nil, nil
 }

@@ -149,7 +149,7 @@ func SettingsPath(dir string) string { return filepath.Join(dir, "settings.json"
 // SettingsSchemaVersion is the version of the settings file this agentx
 // reads and writes. A field added to the file leaves it where it is: a
 // reader ignores a key it does not know. It changes when the file changes
-// so that an older agentx would misread it.
+// so that an agentx that predates the change would misread it.
 const SettingsSchemaVersion = 1
 
 // NewerSettingsError is the error of a settings file a later agentx wrote,

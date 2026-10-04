@@ -1070,13 +1070,13 @@ func (inv *invocation) stageSkill(m *home.Mutation, gitDir string, v *imported, 
 	if f != nil {
 		return nil, f, nil
 	}
-	from, write, f := refPlan(v, records, libPath, home.IsAbsent(state))
+	write, f := refPlan(v, records, libPath, home.IsAbsent(state))
 	if f != nil {
 		return nil, f, nil
 	}
 	done := &installed{v: v, adopted: lib.adopt}
 	if write {
-		m.Ref(gitDir, lineage.ManagedRef(v.name), from, v.commit)
+		m.Ref(gitDir, lineage.ManagedRef(v.name), "", v.commit)
 	}
 	if !lib.adopt {
 		if lib.displace {
@@ -1139,18 +1139,9 @@ func (inv *invocation) libraryPlan(v *imported, libPath, state string) (libraryA
 
 // refPlan decides the import branch, which is created with an expected old
 // value of empty, so that two commands cannot both claim the name. write
-// says whether the branch is written at all, and from is the value it is
-// expected to hold when it is. A branch already at this commit is the same
-// version installed again; one at another commit is a version this command
-// does not replace.
-//
-// The same version is the same four trailers, not the same commit: an
-// earlier agentx wrote the import commit of a source that stores a mode git
-// no longer writes over that source's own tree, which no directory on disk
-// is current against, and the commit an install writes now holds the same
-// version as git writes it today. Such a branch is moved to that commit,
-// from the one it holds, so installing the version again is what puts it
-// right, and two machines that installed it end at one commit again.
+// says whether the branch is written at all. A branch already at this
+// commit is the same version installed again; one at another commit is a
+// version this command does not replace.
 //
 // absent says the library path holds nothing: the branch is all that is
 // left of the skill, its directory having been deleted outside agentx, and
@@ -1158,23 +1149,21 @@ func (inv *invocation) libraryPlan(v *imported, libPath, state string) (libraryA
 // this would be that version again. skill remove takes such a branch away,
 // so the hint names it rather than a directory that is not there and a ref
 // to delete by hand.
-func refPlan(v *imported, records map[string]lineage.Record, libPath string, absent bool) (from string, write bool, f *failure) {
+func refPlan(v *imported, records map[string]lineage.Record, libPath string, absent bool) (write bool, f *failure) {
 	rec, ok := records[v.name]
 	switch {
 	case !ok:
-		return "", true, nil
+		return true, nil
 	case rec.Kind == lineage.KindFork:
-		return "", false, refuse(exitRefused, fmt.Sprintf("%s is a skill of the account remote on this machine", v.name),
+		return false, refuse(exitRefused, fmt.Sprintf("%s is a skill of the account remote on this machine", v.name),
 			"rename yours with '"+skillCommand("rename", v.name, "<new>")+"', or remove it with '"+skillCommand("remove", v.name)+"', then install again")
 	case rec.Commit == v.commit: // the same version again: nothing to move
-		return "", false, nil
-	case rec.HasImport && rec.Import == v.imp: // the same version, stored in an older form
-		return rec.Commit, true, nil
+		return false, nil
 	case absent:
-		return "", false, refuse(exitRefused, fmt.Sprintf("%s is already managed at another version, which the library no longer holds", v.name),
+		return false, refuse(exitRefused, fmt.Sprintf("%s is already managed at another version, which the library no longer holds", v.name),
 			"run '"+skillCommand("remove", v.name)+"' to stop managing that version, then install again to get the version the source holds now")
 	}
-	return "", false, refuse(exitRefused, fmt.Sprintf("%s is already managed at another version", v.name),
+	return false, refuse(exitRefused, fmt.Sprintf("%s is already managed at another version", v.name),
 		"remove "+libPath+" and the branch "+lineage.ManagedRef(v.name)+", then install again")
 }
 

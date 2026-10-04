@@ -37,18 +37,6 @@ func (rec Record) HoldsID(id string) bool {
 	return rec.HasImport && treeid.Wrap(rec.Import.Dir(), id) == rec.Tree
 }
 
-// Canonical reports whether the import commit rec names stores base, the
-// version read out of it, as git writes a tree today, which is the only
-// form a directory on disk can be compared equal to. Every import writes
-// it that way; an earlier agentx reused a source's own tree whole, and a
-// source may store a mode git reads but no longer writes, such as 100664.
-// HoldsID is never true against a branch that fails this, whatever the
-// library holds: a diff says so, and an install of that version again
-// stores it as git writes it today.
-func (rec Record) Canonical(base Base) bool {
-	return rec.HasImport && treeid.Wrap(rec.Import.Dir(), base.ID()) == rec.Tree
-}
-
 // Base is the base version of a managed skill as the account repo holds it:
 // the tree of the skill's directory and every entry below it, their paths
 // relative to that directory.
@@ -60,13 +48,10 @@ type Base struct {
 // ID is the id git gives the base version's directory as it writes a tree
 // today, computed in process from every entry it holds: its files, and
 // the symlinks no import writes but a directory laid out from the base
-// would hold all the same. For a base an import writes now it is Tree
-// itself, since every import tree is written that way. A base an earlier
-// agentx reused whole from a source that stores a mode git no longer
-// writes, such as 100664, keeps an id of its own in Tree, while the
-// directory laid out from it, like any directory on disk, has this one.
-// So a command that lays the base out holds what it laid out to ID, and a
-// diff, which git reads with canonical modes, compares with Tree.
+// would hold all the same. For a base an import wrote it is Tree itself,
+// since every import tree is written as git writes one today. It is also
+// the id a directory laid out from the base has, which is what a command
+// that lays the base out, such as forkLayout, compares its result with.
 func (b Base) ID() string {
 	return planTrees(Version{Tree: b.Tree, Entries: b.Entries}, true).ids[""]
 }

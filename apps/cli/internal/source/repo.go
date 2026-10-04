@@ -40,8 +40,7 @@ func Ref(id string) string { return RefPrefix + id }
 // StagingRef is the ref the configured refspec of the source with id
 // names. Fetch stages on a ref of its own instead; this one is written only
 // by the full fetch FetchObjects falls back to, which takes the remote as
-// configured, and by an older agentx, which staged every fetch there.
-// Nothing reads it.
+// configured. Nothing reads it.
 func StagingRef(id string) string { return StagingRefPrefix + id }
 
 // stagingRunRef is the ref one fetch of the source with id stages on,
@@ -49,7 +48,8 @@ func StagingRef(id string) string { return StagingRefPrefix + id }
 // at once, the serve child's update check and a source fetch among them,
 // never write, read or delete each other's staging ref. The run comes
 // first, since a ref under refs/agentx/fetching/<id>/ could not be written
-// beside the ref an older agentx left at refs/agentx/fetching/<id>.
+// beside refs/agentx/fetching/<id>, which the full-fetch fallback of
+// FetchObjects writes.
 func stagingRunRef(run, id string) string { return StagingRefPrefix + run + "/" + id }
 
 // newFetchRun names one fetch's staging ref.

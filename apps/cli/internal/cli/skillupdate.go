@@ -758,9 +758,6 @@ func upstreamRemovedRefusal(name string) *failure {
 // entries of its candidate's upstream directory, one ls-tree each, and for
 // a skill that was edited the merge of its edits with them, see merge; then
 // the files of every version laid out, in one cat-file for the whole run.
-// A candidate that stores its version in a form an import does not write,
-// which no library directory is current against, is refused for its skill
-// alone: a check writes it again, as an install would write it.
 func (r *updateRun) read(ctx context.Context) error {
 	var ready []*updating
 	var ids []string
@@ -770,13 +767,8 @@ func (r *updateRun) read(ctx context.Context) error {
 			r.drop(u.name, failureOf(accountRepoFailure(err)))
 			continue
 		}
-		if !u.next.Canonical(theirs) {
-			r.drop(u.name, refuse(exitAccountRepo, "the update candidate "+lineage.CandidateRef(u.name)+" stores its version in a form agentx does not write",
-				"run '"+checkUpdatesCommand+"' to pin the update again"))
-			continue
-		}
 		u.theirs, u.base = theirs, theirs
-		u.target = version{load: baseVersion(u.next).load, holds: func(id string) bool { return id == theirs.ID() }}
+		u.target = baseVersion(u.next)
 		u.placed = []version{baseVersion(u.rec)}
 		if u.edited {
 			if f := r.merge(ctx, u); f != nil {

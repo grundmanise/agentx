@@ -329,31 +329,13 @@ func (inv *invocation) removeAbsent(ctx context.Context, name string, from []str
 			// changes and goes with the warning.
 			judge.differs = func(string) bool { return true }
 		} else {
-			// A branch an earlier agentx stored in a form git no longer
-			// writes is held by no directory, so a copy that does not hold
-			// it is held to the base's files as well, read once and only
-			// for such a copy.
-			var base *lineage.Base
 			judge.differs = func(path string) bool {
 				tree, err := treeid.Read(path)
 				if err != nil {
 					return true
 				}
 				j, err := inv.judgeDir(ctx, gitDir, path, tree, baseVersion(rec), false)
-				if err != nil {
-					return true
-				}
-				if j.holds {
-					return false
-				}
-				if base == nil {
-					read, err := lineage.ReadBase(ctx, inv.git, gitDir, rec)
-					if err != nil {
-						return true
-					}
-					base = &read
-				}
-				return j.written != base.ID()
+				return err != nil || !j.holds
 			}
 		}
 		edit, err := inv.beginSettings()

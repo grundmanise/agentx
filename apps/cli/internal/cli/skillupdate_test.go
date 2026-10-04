@@ -1726,34 +1726,6 @@ func TestSkillUpdateOffersNoUpdateWhoseLineageItCannotRead(t *testing.T) {
 	equal(t, "journals", journalCount(t, h), 0)
 }
 
-// TestSkillUpdateRefusesACandidateStoredInAnOlderForm: a candidate whose
-// import commit stores its version over a source's own tree, legacy modes
-// and all, is a version no library directory is ever current against, so
-// applying it would leave the skill modified at once. The update refuses it
-// for what the account repo holds and changes nothing; a check, which
-// finds the source holding the version the branch names, drops it. A run
-// over every skill refuses it while it reads the versions it lays out, as
-// it refuses beta's candidate in
-// TestSkillUpdateAllReportsEachRefusalAndGoesOn, and goes on.
-func TestSkillUpdateRefusesACandidateStoredInAnOlderForm(t *testing.T) {
-	t.Parallel()
-	h, s, _ := legacyHarness(t)
-	legacy, canonical := h.storeInOlderForm(t, s)
-	h.accountGit("update-ref", lineage.ManagedRef("nc"), canonical, legacy)
-	h.accountGit("update-ref", lineage.CandidateRef("nc"), legacy)
-	was := h.unchangedHome()
-
-	out := h.run("--json", "skill", "update", "nc")
-	equal(t, "exit", out.exit, 8)
-	e := h.one(out.stdout, "error")
-	equal(t, "message", e["message"], "the update candidate refs/agentx/candidate/nc stores its version in a form agentx does not write")
-	equal(t, "hint", e["hint"], "run 'agentx skill check-updates' to pin the update again")
-	was.check(t, h, "the refused update", 0)
-
-	h.mustRun("skill", "check-updates")
-	equal(t, "the candidate after a check", h.ref(lineage.CandidateRef("nc")), "")
-}
-
 // TestSkillUpdateOfAnAdoptedSkill: a skill another tool installed and
 // agentx adopted, with nothing edited, is a managed skill like any other.
 // The check finds the version its source moved on to, and the update lays

@@ -185,18 +185,10 @@ func readExport(path string) (exportDocument, error) {
 			"export it again from that machine with this version of agentx, or upgrade agentx here")
 	}
 	var doc exportDocument
-	doc.Settings.IgnoreSystemFiles = true // the default, for a document written before the key existed
+	doc.Settings.IgnoreSystemFiles = true // the default, as for a settings file without the key
 	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.DisallowUnknownFields() // a field this version does not know is a document it cannot restore whole
 	if err := dec.Decode(&doc); err != nil {
-		if strings.Contains(err.Error(), `unknown field "auto_push"`) {
-			// An earlier agentx exported auto_push. The setting is retired,
-			// since nothing is pushed without an explicit publish, so the
-			// file did come from 'agentx export' and the usual hint would
-			// send the user back to it.
-			return exportDocument{}, fail(exitRefused, path+" is not an agentx export: "+sanitised(err.Error()),
-				"auto_push is no longer a setting; delete it from the document's settings and import again")
-		}
 		return exportDocument{}, notAnExport(path, err.Error())
 	}
 	home.Normalise(&doc.Settings) // a document may leave out what a settings file agentx wrote always holds

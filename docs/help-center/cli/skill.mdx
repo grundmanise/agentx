@@ -485,14 +485,6 @@ A repository nested in the skill, or anything else git cannot record, such as a 
 - the diff ends with the number of paths git cannot record, as in `pdf differs from its base version at 3f2a9c1 only in 1 path git cannot record`;
 - `skill update` refuses to apply an update to it until you move the path out of the skill.
 
-An earlier version of agentx could store a skill from a source that uses an old kind of file mode in a form that makes it show as `modified` even though you changed nothing. `skill diff` then says so instead of showing a diff:
-
-```text
-pdf differs from its base version at 3f2a9c1 only in how the account repo stores it; run 'agentx skill add https://github.com/anthropics/skills --name pdf' to install that version again while the source still holds it, which stores it as git writes it today and changes no file, or, once 'agentx skill check-updates' finds a newer version, run 'agentx skill update pdf'
-```
-
-Run the `agentx skill add` command it names while the source still holds that version. It stores the version again without touching your files, and the skill shows as `current`. Move any file git ignores, such as a `.DS_Store`, out of the skill first: the command names that step when it sees one. Once the source holds a newer version, run `agentx skill check-updates` and then `agentx skill update pdf` instead, which stores the newer version.
-
 A skill agentx did not install has no base version to compare with, so `skill diff` stops with exit code 6. For a fork, `skill diff` shows its unpublished edits instead, against what you last published: see [See what changed](/cli/fork#see-what-changed).
 
 ### Files that do not count

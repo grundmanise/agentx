@@ -29,7 +29,8 @@ func TestSourcesRefusal(t *testing.T) {
 		says    string // "" for a list agentx writes
 	}{
 		{"what agentx writes", []home.Source{tree, account}, ""},
-		{"the account remote pinned to a fork branch", with(account, func(s *home.Source) { s.Pin = "skills/pdf" }), ""},
+		{"the account remote pinned to a branch", with(account, func(s *home.Source) { s.Pin = "skills/pdf" }),
+			forks + " is pinned to skills/pdf, and the account remote is a whole repository"},
 		{"two account remotes", []home.Source{account, {URL: "https://github.com/me/more", Account: true}},
 			"both " + forks + " and https://github.com/me/more are marked as the account remote"},
 		{"a shared source and the account remote of one repository", []home.Source{{URL: forks, Account: true},

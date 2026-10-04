@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
@@ -187,6 +188,44 @@ func TestThePlaceHintRunsAsItIsPrinted(t *testing.T) {
 		want := append([]string{"agentx", "skill", "place"}, c.words...)
 		if got := shellCommands(hint); len(got) != 1 || !reflect.DeepEqual(got[0], want) {
 			t.Errorf("a shell reads %q as %q, want %q", hint, got, want)
+		}
+	}
+}
+
+// TestRefPlan decides whether an install writes the import branch of a
+// version: only when the skill has no branch yet. A branch at the version's
+// own import commit is left as it is, and a branch at another commit is
+// never moved, even when that commit carries the same four trailers.
+func TestRefPlan(t *testing.T) {
+	t.Parallel()
+	imp := lineage.Import{Source: "https://example.com/s.git", Path: "skills/nc", Commit: "upstream1", Hash: "hash1"}
+	v := &imported{name: "nc", imp: imp, commit: "commit1"}
+	for _, c := range []struct {
+		what      string
+		rec       *lineage.Record
+		absent    bool
+		wantWrite bool
+		want      string
+	}{
+		{"no branch", nil, false, true, ""},
+		{"a fork of that name", &lineage.Record{Kind: lineage.KindFork, Commit: "fork1"}, false, false, "is a skill of the account remote"},
+		{"the same import commit", &lineage.Record{Kind: lineage.KindManaged, Commit: "commit1", Import: imp, HasImport: true}, false, false, ""},
+		{"another commit with the same trailers", &lineage.Record{Kind: lineage.KindManaged, Commit: "commit2", Import: imp, HasImport: true}, false, false, "is already managed at another version"},
+		{"another commit, the library without it", &lineage.Record{Kind: lineage.KindManaged, Commit: "commit2", Import: imp, HasImport: true}, true, false, "which the library no longer holds"},
+	} {
+		records := map[string]lineage.Record{}
+		if c.rec != nil {
+			records["nc"] = *c.rec
+		}
+		write, f := refPlan(v, records, "/lib/nc", c.absent)
+		if write != c.wantWrite {
+			t.Errorf("%s: write = %v, want %v", c.what, write, c.wantWrite)
+		}
+		switch {
+		case c.want == "" && f != nil:
+			t.Errorf("%s: refused with %q, want no refusal", c.what, f.message)
+		case c.want != "" && (f == nil || !strings.Contains(f.message, c.want)):
+			t.Errorf("%s: refusal %v, want one containing %q", c.what, f, c.want)
 		}
 	}
 }
