@@ -33,10 +33,10 @@ func newSkillPlaceCommand(inv *invocation) *cobra.Command {
 			"anything else, the command stops and changes nothing: --force replaces the\n" +
 			"directory with the placement and deletes what it held. To keep that content,\n" +
 			"move the directory elsewhere first.\n\n" +
-			"For a fork, it first puts back what the fork needs on this machine: its worktree,\n" +
-			"checked out again from its branch, and its library symlink. A directory in the\n" +
-			"way of either stops the command: --force adopts it, keeping every file as an\n" +
-			"unpublished edit of the skill.",
+			"For one of your own skills, it first puts back what it needs on this machine:\n" +
+			"its worktree, checked out again from its branch, and its library symlink. A\n" +
+			"directory in the way of either stops the command: --force adopts it, keeping\n" +
+			"every file as an unpublished edit of the skill.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return inv.skillPlace(cmd.Context(), args[0], to, asCopy, force)
@@ -45,7 +45,7 @@ func newSkillPlaceCommand(inv *invocation) *cobra.Command {
 	cmd.Flags().StringArrayVar(&to, "to", nil, "the configuration to place the skill in, instead of every enabled one; give it again for each")
 	cmd.Flags().BoolVar(&asCopy, "copy", false, "place a copy instead of a symlink")
 	cmd.Flags().BoolVar(&force, "force", false,
-		"replace a displaced directory whose content differs from the library with the expected placement, deleting what the directory holds; for a fork, adopt what is in the way of its worktree or library symlink")
+		"replace a displaced directory whose content differs from the library with the expected placement, deleting what the directory holds; for one of your own skills, adopt what is in the way of its worktree or library symlink")
 	return cmd
 }
 

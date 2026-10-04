@@ -58,7 +58,7 @@ agentx source add git@github.com:you/forks.git --account
 - Only your own skills travel through it. Skills you install from other sources, their update checks and the sources themselves stay on each machine.
 - A machine without an account remote keeps the whole history of your own skills: `agentx skill history` and `agentx skill diff` work without one. Add it when you want a backup, or a second machine.
 - Adding the account remote's URL again, with or without `--account`, fetches it again.
-- Adding another URL with `--account` replaces the account remote and forgets what the old one held. Your forks stay as they are, and publish to the new remote.
+- Adding another URL with `--account` replaces the account remote and forgets what the old one held. Your own skills stay as they are, and publish to the new remote.
 - A source you added without `--account` cannot become the account remote, whether it has the same URL or names the same repository by another URL: agentx stops with exit code 6 and changes nothing. Remove the source first with `agentx source remove <url>`, then add the account remote.
 
 ### Credentials
@@ -143,7 +143,7 @@ Sources are fetched in parallel, a few at a time, and each one gets a line that 
 ✓ re-fetched https://github.com/me/skills, already at 8b1e0f4: 4 skills; you can write to it
 ```
 
-`--all` fetches your account remote too, after the other sources. Its line counts the forks it holds:
+`--all` fetches your account remote too, after the other sources. Its line counts the skills of yours it holds:
 
 ```text
 ✓ re-fetched ssh://git@github.com/you/forks: 2 forks; you can write to it
@@ -172,7 +172,7 @@ agentx source list
   ssh://git@github.com/you/forks (account)  writable  skills/*  2 forks  2026-09-20T09:00:00Z  5e8a1c3b7d9f2a64
 ```
 
-Each row shows the canonical URL, your write access as the last add or fetch found it, the branch, the fetched commit, when it was last fetched and the source id. The branch is the pin, or for an unpinned source the default branch the repository named at the last add or fetch, or `(unpinned)` while agentx has not seen one. Your account remote is marked `(account)`: it follows every fork branch, `skills/*`, and shows how many forks it held at the last fetch instead of a commit. The id is accepted wherever a URL is.
+Each row shows the canonical URL, your write access as the last add or fetch found it, the branch, the fetched commit, when it was last fetched and the source id. The branch is the pin, or for an unpinned source the default branch the repository named at the last add or fetch, or `(unpinned)` while agentx has not seen one. Your account remote is marked `(account)`: it follows the branch of every skill of yours, `skills/*`, and shows how many it held at the last fetch instead of a commit. The id is accepted wherever a URL is.
 
 ## List the skills of a source
 
@@ -229,7 +229,7 @@ hint: run 'agentx source add https://github.com/anthropics/skills' to add it aga
 
 Once you take the last of those skills off the machine, with [`agentx skill remove <name>`](/cli/skill) or its `--from universal` form, nothing on this machine records the source's URL any more, and the id is refused like any other. Add the source again by its URL.
 
-Removing your [account remote](#add-your-account-remote) detaches it: its forks stay on this machine, and nothing on the remote changes.
+Removing your [account remote](#add-your-account-remote) detaches it: your own skills stay on this machine, and nothing on the remote changes.
 
 ## Exit codes
 

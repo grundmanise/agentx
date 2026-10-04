@@ -39,7 +39,9 @@ const UpstreamRemovedPrefix = "refs/agentx/upstream-removed/"
 // UpstreamRemovedRef is the upstream-removed marker of the skill called name.
 func UpstreamRemovedRef(name string) string { return UpstreamRemovedPrefix + name }
 
-// The kinds a skill of the library is listed with.
+// The kinds of lineage record a skill has. KindFork is one of the user's
+// own skills, on a skills/ branch, which events list as managed (see
+// eventKind in package cli).
 const (
 	KindManaged   = "managed"
 	KindFork      = "fork"
@@ -62,7 +64,7 @@ func ForkRef(name string) string { return ForkPrefix + name }
 // source commit it found without the skill.
 type Record struct {
 	Name            string
-	Kind            string // managed or fork
+	Kind            string // KindManaged or KindFork
 	Ref             string
 	Commit          string
 	Tree            string // the root tree of that commit: for an import commit, the upstream directory as its one entry
@@ -112,8 +114,8 @@ func (rec Record) AtCandidate() (Record, bool) {
 // name, kind and candidate. It is what a fork's update is judged against,
 // by the same rules as a managed skill's, since a fork's update is a newer
 // version of the upstream its base came from. ok is false for a fork
-// whose lineage was not read, one with no base, as a greenfield skill has
-// none, and one whose history does not say which it is.
+// whose lineage was not read, one with no base, as a skill made by skill
+// new has none, and one whose history does not say which it is.
 func (rec Record) ForkBase() (Record, bool) {
 	l := rec.Fork
 	if rec.Kind != KindFork || l == nil || l.Base == "" || l.Problem != "" {

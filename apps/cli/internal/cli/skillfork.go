@@ -35,10 +35,11 @@ func newSkillForkCommand(inv *invocation) *cobra.Command {
 			"into the fork's worktree and every placement stays as it was. With --name <new>\n" +
 			"the fork is made beside the skill, under the new name, which it also writes into\n" +
 			"SKILL.md, and placed into the configurations the skill is placed in; the skill\n" +
-			"stays as it was. A fork, and a plugin's skill, is always forked beside it. A\n" +
-			"fork's unpublished edits are recorded on its branch first, so the new fork holds\n" +
-			"them too; the fork keeps showing them as unpublished until 'agentx skill\n" +
-			"publish', while the new fork starts from them and reads current.\n\n" +
+			"stays as it was. One of your own skills, and a plugin's skill, is always forked\n" +
+			"beside it. The unpublished edits of one of your own are recorded on its branch\n" +
+			"first, so the new skill holds them too; the skill you fork keeps showing them as\n" +
+			"unpublished until 'agentx skill publish', while the new one starts from them and\n" +
+			"reads current.\n\n" +
 			"Name a plugin's skill as <plugin>:<skill> when several plugins provide one of\n" +
 			"that name. Files git ignores are never committed.",
 		Args: cobra.ExactArgs(1),

@@ -35,10 +35,10 @@ func newSkillRemoveCommand(inv *invocation) *cobra.Command {
 			"named in the output: agentx never removes what it did not create.\n\n" +
 			"A managed skill whose library directory was deleted outside agentx can still be\n" +
 			"removed without --from: its import branch and the placements agentx made go.\n\n" +
-			"Removing a fork also deletes its worktree, with any unpublished edits and files\n" +
-			"git ignores, its branch and its update candidate. --remote deletes the fork's\n" +
-			"branch on the account remote too, also when this machine no longer has the fork.\n" +
-			"Other machines keep the fork until it is removed there.",
+			"Removing one of your own skills also deletes its worktree, with any unpublished\n" +
+			"edits and files git ignores, its branch and its update candidate. --remote deletes\n" +
+			"its branch on the account remote too, also when this machine no longer has it.\n" +
+			"Other machines keep it until it is removed there.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return inv.skillRemove(cmd.Context(), args[0], from, remote)
@@ -46,7 +46,7 @@ func newSkillRemoveCommand(inv *invocation) *cobra.Command {
 	}
 	cmd.Flags().StringArrayVar(&from, "from", nil,
 		"remove only the placement in this configuration, or give universal to take the skill off the machine; give it again for each")
-	cmd.Flags().BoolVar(&remote, "remote", false, "remove a fork's branch from the account remote too")
+	cmd.Flags().BoolVar(&remote, "remote", false, "remove one of your own skills from the account remote too")
 	return cmd
 }
 

@@ -527,7 +527,6 @@ func TestSourceListAndRemove(t *testing.T) {
 	equal(t, "0.commit", events[0]["commit"], bHead)
 	equal(t, "0.pin", events[0]["pin"], nil)
 	equal(t, "0.skills", events[0]["skills"], nil)
-	equal(t, "0.layout", events[0]["layout"], nil) // no source event carries a layout
 	equal(t, "0.access", events[0]["access"], "writable")
 	equal(t, "0.default_branch", events[0]["default_branch"], "main")
 	equal(t, "0.access_reason", events[0]["access_reason"], nil) // only the run that checked says why

@@ -14,7 +14,7 @@ import (
 const (
 	// TrailerBase names, on every merge commit agentx writes on a fork's
 	// branch, the import commit that is the fork's base after the merge. A
-	// greenfield skill has none to name.
+	// skill made by skill new has none to name.
 	TrailerBase = "Agentx-Base"
 	// TrailerForkID is the permanent id of a fork, a new UUID on the commit
 	// that creates the fork. That commit is never amended, so the id never

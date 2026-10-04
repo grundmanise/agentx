@@ -146,7 +146,7 @@ func TestResolveWalksFirstParents(t *testing.T) {
 			commit("g", own("Agentx-Fork-ID: "+idA)), commit("r1", "Rename alpha to beta\n", "g"),
 			commit("e", "Rename this to that, an edit\n", "r1"), commit("r2", "Rename beta to gamma\n", "e")),
 			ForkLineage{ID: idA, Created: oid("g"), Greenfield: true, Renamed: []string{"beta", "alpha"}}, ""},
-		{"greenfield", oid("e"), history(commit("g", own("Agentx-Fork-ID: "+idA)), commit("e", "an edit\n", "g")),
+		{"made by skill new", oid("e"), history(commit("g", own("Agentx-Fork-ID: "+idA)), commit("e", "an edit\n", "g")),
 			ForkLineage{ID: idA, Created: oid("g"), Greenfield: true}, ""},
 		{"a base that is no import", oid("m"), history(
 			commit("g", own("Agentx-Fork-ID: "+idA)), commit("x", "a plain commit\n"),

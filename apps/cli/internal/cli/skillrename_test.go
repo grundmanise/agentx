@@ -14,9 +14,8 @@ import (
 // on machine a, which published it, a version since its creation
 // included, while machine b installed it. Every refusal of either step
 // comes before anything changes: a name outside the grammar, a name
-// another skill has, a skill that is not one of the account remote's, a
-// merge pending, and --remote, which is no flag of skill rename. The
-// rename is then a fork of the skill under the new name that keeps its
+// another skill has, a skill that is not one of the account remote's and
+// a merge pending. The rename is then a fork of the skill under the new name that keeps its
 // fork id, with the old branch's commits as its history and the edit a
 // held recorded on it, still unpublished, placed where the old one was
 // with its copy mode, even once that recorded edit left the copy behind;
@@ -54,7 +53,6 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 		{"a name outside the grammar", []string{"alpha", "Renamed"}, 6, "Renamed"},
 		{"a name taken", []string{"alpha", "beta"}, 6, "choose another name with 'agentx skill rename alpha <new>'"},
 		{"not the account remote's", []string{"mine", "yours"}, 6, "mine is not a skill of the account remote, so it cannot be renamed"},
-		{"--remote", []string{"alpha", "renamed", "--remote"}, 1, "unknown flag: --remote"},
 		{"a merge pending", []string{"alpha", "renamed"}, 4, "alpha has a merge pending"},
 	} {
 		if tc.name == "a merge pending" {

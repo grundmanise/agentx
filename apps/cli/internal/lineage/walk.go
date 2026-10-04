@@ -29,10 +29,10 @@ type ForkLineage struct {
 	// RenamedFrom, read along first parents from the tip down to the
 	// creation commit. A rename keeps the fork id, so they sit above it.
 	Renamed    []string
-	Base       string // the base import commit; "" for a greenfield skill, and when Problem says why it cannot be read
+	Base       string // the base import commit; "" for a skill made by skill new, and when Problem says why it cannot be read
 	BaseTree   string // the base's root tree, the upstream directory as its one entry
 	Import     Import // the base's coordinates, when Base is not ""
-	Greenfield bool   // the walk reached a root that is neither an import commit nor names one
+	Greenfield bool   // the walk reached a root that is neither an import commit nor names one, as for a skill made by skill new
 	Problem    string // why the base cannot be read; "" when it can
 }
 
@@ -40,11 +40,12 @@ type ForkLineage struct {
 // by the read rule, with no git. Along first parents from the tip, the
 // first import commit is the base itself; the first commit with an
 // Agentx-Base trailer names it, and the commit it names must be an import
-// commit in the tip's history; reaching a root that is neither makes the
-// fork greenfield. The fork id, and the renames above it, are read by a
-// walk of its own, which goes on past the base: a fork's creation commit
-// sits above the import it was forked from and carries the id, not the
-// base. A fork of a fork carries two ids, and the nearer one is its own.
+// commit in the tip's history; reaching a root that is neither makes it a
+// skill with no base, as skill new makes one. The fork id, and the renames
+// above it, are read by a walk of its own, which goes on past the base: a
+// fork's creation commit sits above the import it was forked from and
+// carries the id, not the base. A fork of a fork carries two ids, and the
+// nearer one is its own.
 // Nothing is ever inferred: a history that does not say is reported, not
 // guessed at.
 func Resolve(tip string, commits map[string]Commit) ForkLineage {

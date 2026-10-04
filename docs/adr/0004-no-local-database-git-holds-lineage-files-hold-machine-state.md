@@ -71,3 +71,4 @@ _Amendment, 2026-10-03:_ the settings entry of a source carries no push URL. A s
 
 _Amendment, 2026-10-03:_ the settings entry of a source carries no layout. The account remote is the source whose entry carries the account flag, fetched whole; every other source is fetched blobless, see [ADR 0008](0008-sources-have-a-layout-and-an-access-only-the-account-remote-is-pushed-automatically.md).
 
+_Amendment, 2026-10-04:_ "fork" and "greenfield" are no longer kinds of skill, see [ADR 0002](0002-per-machine-libraries-one-account-repo-content-moves-by-install.md). The table's first row holds the user's own skills, made with `skill new` or `skill fork` or installed from the account remote: their content and history are the `skills/<name>` branches, visible to other machines once published. Nothing else in the table changes.

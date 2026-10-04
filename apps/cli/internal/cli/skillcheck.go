@@ -29,15 +29,15 @@ const checkUpdatesCommand = "agentx skill check-updates"
 func newSkillCheckUpdatesCommand(inv *invocation) *cobra.Command {
 	return &cobra.Command{
 		Use:   "check-updates",
-		Short: "Look for newer upstream versions of the managed skills and forks",
-		Long: "Fetch every added source a managed skill or a fork came from and report which skills\n" +
-			"have a newer upstream version, with the files each one changes; skills from a source\n" +
-			"you removed are skipped. A fork is compared by the upstream version it was last\n" +
-			"forked or updated from, whatever its own commits changed. With an account remote\n" +
-			"set, your own skills placed here are also compared with what your other machines\n" +
-			"published to it. Nothing is applied: apply an update with\n" +
-			"'agentx skill update <name>', or read an upstream one first with\n" +
-			"'agentx skill diff <name> --update'.",
+		Short: "Look for upstream updates and for what your other machines published",
+		Long: "Fetch every added source a managed skill came from, a forked skill's upstream\n" +
+			"included, and report which skills have a newer upstream version, with the files\n" +
+			"each one changes; skills from a source you removed are skipped. A forked skill is\n" +
+			"compared by the upstream version it was last forked or updated from, whatever its\n" +
+			"own commits changed. With an account remote set, your own skills placed here are\n" +
+			"also compared with what your other machines published to it. Nothing is applied:\n" +
+			"apply an update with 'agentx skill update <name>', or read an upstream one first\n" +
+			"with 'agentx skill diff <name> --update'.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error { return inv.skillCheckUpdates(cmd.Context()) },
 	}

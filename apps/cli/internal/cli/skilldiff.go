@@ -18,7 +18,7 @@ func newSkillDiffCommand(inv *invocation) *cobra.Command {
 	var commit string
 	cmd := &cobra.Command{
 		Use:   "diff <name>",
-		Short: "Show how a skill differs from its base version, or a fork from what it published",
+		Short: "Show the edits of a skill not yet published, or what its update changes",
 		Long: "Show how the library directory of a managed skill differs from its base version,\n" +
 			"the version it was installed at or last published, as one unified diff per file:\n" +
 			"its edits not yet published, which 'agentx skill publish <name>' pushes to its\n" +
@@ -26,11 +26,11 @@ func newSkillDiffCommand(inv *invocation) *cobra.Command {
 			"file turned into a symlink included. Files git ignores do not. Nothing is\n" +
 			"written to the library. With --update, show instead what the update\n" +
 			"'" + checkUpdatesCommand + "' found changes in the base version.\n\n" +
-			"For a fork, show its unpublished edits: how its skill directory differs from its\n" +
-			"last published version, the newest commit of its branch the account remote holds\n" +
-			"as last fetched, or from the commit that created it when the account remote holds\n" +
-			"none, so edits an update or a fork recorded show until they are published; or,\n" +
-			"with --commit <id>, how it differs from that commit.",
+			"For one of your own skills, show its unpublished edits: how its skill directory\n" +
+			"differs from its last published version, the newest commit of its branch the\n" +
+			"account remote holds as last fetched, or from the commit that created it when the\n" +
+			"account remote holds none, so edits an update or a fork recorded show until they\n" +
+			"are published; or, with --commit <id>, how it differs from that commit.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			switch {
@@ -45,7 +45,7 @@ func newSkillDiffCommand(inv *invocation) *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&update, "update", false, "compare the base version with the update the last check found")
-	cmd.Flags().StringVar(&commit, "commit", "", "compare a fork with this commit instead of its last one")
+	cmd.Flags().StringVar(&commit, "commit", "", "compare one of your own skills with this commit instead of its last published version")
 	return cmd
 }
 

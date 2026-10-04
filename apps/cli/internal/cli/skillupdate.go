@@ -23,7 +23,7 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 	var all, abort bool
 	cmd := &cobra.Command{
 		Use:   "update [<name>] [--abort]",
-		Short: "Apply the update the last check found to a managed skill or a fork",
+		Short: "Apply the update the last check found to a managed skill",
 		Long: "Replace the library directory of a managed skill with the newer upstream version\n" +
 			"'" + checkUpdatesCommand + "' found for it, and record that version as the one the\n" +
 			"skill is at. A skill edited since it was installed keeps its edits: they are\n" +
@@ -34,17 +34,18 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 			"--abort to give it up. Files git ignores in the skill, such as a .DS_Store or an\n" +
 			"ignored build directory, are not edits, and stay. A copy placement that holds the\n" +
 			"version replaced is refreshed; a copy edited on its own is kept and named.\n\n" +
-			"A fork's update is always merged, with the upstream version it was last forked or\n" +
-			"updated from as the merge base, so its own commits are kept, and the merge is\n" +
-			"committed on its branch. Its unpublished edits are recorded on its branch first,\n" +
-			"and stay unpublished until 'agentx skill publish'. A conflict\n" +
-			"waits as for a managed skill, and the fork's worktree and branch stay as they are\n" +
-			"until it is applied. With an account remote set, it is fetched first, and what\n" +
-			"your other machines published of the fork is taken in first, as a commit of its\n" +
-			"own. A skill made with 'agentx skill new' has no upstream: its update takes in\n" +
-			"what the account remote holds, and nothing else.\n\n" +
-			"Pass --all instead of a name to update every managed skill and fork the last check\n" +
-			"found an update for, and every fork placed here that your other machines\n" +
+			"A forked skill's update is always merged, with the upstream version it was last\n" +
+			"forked or updated from as the merge base, so its own commits are kept, and the\n" +
+			"merge is committed on its branch. The unpublished edits of one of your own\n" +
+			"skills are recorded on its branch first, and stay unpublished until\n" +
+			"'agentx skill publish'. A conflict waits as for a skill of a shared source, and\n" +
+			"its worktree and branch stay as they are until it is applied. With an account\n" +
+			"remote set, it is fetched first, and what your other machines published of the\n" +
+			"skill is taken in first, as a commit of its own. A skill made with\n" +
+			"'agentx skill new' has no upstream: its update takes in what the account remote\n" +
+			"holds, and nothing else.\n\n" +
+			"Pass --all instead of a name to update every managed skill the last check found\n" +
+			"an update for, and every skill of your own placed here that your other machines\n" +
 			"published to. Read an update before you apply it with\n" +
 			"'agentx skill diff <name> --update'.",
 		Args: cobra.MaximumNArgs(1),
@@ -67,8 +68,8 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 			return inv.skillUpdate(cmd.Context(), name)
 		},
 	}
-	cmd.Flags().BoolVar(&all, "all", false, "update every managed skill and fork the last check found an update for, and every fork another machine published to")
-	cmd.Flags().BoolVar(&abort, "abort", false, "give up the merge pending for the skill; the library directory, or a fork's worktree and branch, stay as they are")
+	cmd.Flags().BoolVar(&all, "all", false, "update every managed skill the last check found an update for, and every skill of your own another machine published to")
+	cmd.Flags().BoolVar(&abort, "abort", false, "give up the merge pending for the skill; the library directory, or the worktree and branch of one of your own, stay as they are")
 	return cmd
 }
 

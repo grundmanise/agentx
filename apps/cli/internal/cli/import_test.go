@@ -402,8 +402,8 @@ func TestImportRefusesADocumentItCannotRead(t *testing.T) {
 		{"settings agentx would not write", editedSound(t, func(doc map[string]any) {
 			doc["settings"].(map[string]any)["sources"] = []any{map[string]any{"url": "https://user:" + importToken + "@github.com/example/skills"}}
 		}), "must be stored as the canonical URL of a source alone"},
-		// A record of kind fork is no record agentx writes, so it is
-		// refused as any other kind but managed is.
+		// A record of any kind but managed is no record agentx writes, so it
+		// is refused.
 		{"a record agentx cannot read", editedSound(t, func(doc map[string]any) {
 			doc["skills"].([]any)[0].(map[string]any)["kind"] = lineage.KindFork
 		}), "the kind of alpha is not managed"},

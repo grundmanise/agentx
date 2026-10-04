@@ -83,18 +83,20 @@ func newSourceAddCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "add <url>",
 		Short: "Fetch a git repository and add it as a source",
-		Long: "Fetch a git repository and add it as a source. The URL is owner/repo or owner/repo/subpath\n" +
-			"for GitHub, a GitHub or GitLab URL with an optional tree path, an SSH URL or host:path,\n" +
-			"a file:// URL or an absolute path, any of them with #ref to pin a branch or tag. A user\n" +
-			"or token in the URL is dropped. A source is fetched from and pushed to at that URL. A\n" +
-			"source holds skills in folders on one branch, unless --account adds it as the account\n" +
-			"remote, a repository of your own with one branch per fork, which forks are published to.",
+		Long: "Fetch a git repository and add it as a source. The URL is owner/repo or\n" +
+			"owner/repo/subpath for GitHub, a GitHub or GitLab URL with an optional tree\n" +
+			"path, an SSH URL or host:path, a file:// URL or an absolute path, any of them\n" +
+			"with #ref to pin a branch or tag. A user or token in the URL is dropped. A\n" +
+			"source is fetched from and pushed to at that URL. A source holds skills in\n" +
+			"folders on one branch, unless --account adds it as the account remote, a\n" +
+			"repository of yours with one branch per skill of your own, which they are\n" +
+			"published to.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return inv.sourceAdd(cmd.Context(), args[0], account)
 		},
 	}
-	cmd.Flags().BoolVar(&account, "account", false, "add the source as the account remote, which forks are published to")
+	cmd.Flags().BoolVar(&account, "account", false, "add the source as the account remote, which your own skills are published to")
 	return cmd
 }
 

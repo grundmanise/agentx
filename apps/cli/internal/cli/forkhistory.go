@@ -14,10 +14,10 @@ import (
 func newSkillHistoryCommand(inv *invocation) *cobra.Command {
 	return &cobra.Command{
 		Use:   "history <name>",
-		Short: "List the commits of a fork, newest first",
-		Long: "List every commit of the fork called <name>, newest first: the commits agentx\n" +
-			"wrote, those made with git in the fork's worktree, which are marked foreign, and\n" +
-			"the upstream imports the fork was made from or merged, which are marked import.\n" +
+		Short: "List the commits of one of your own skills, newest first",
+		Long: "List every commit of <name>, one of your own skills, newest first: the commits\n" +
+			"agentx wrote, those made with git in its worktree, which are marked foreign, and\n" +
+			"the upstream imports it was forked from or merged, which are marked import.\n" +
 			"Each names the files it changes in the skill's directory, a merge against its\n" +
 			"first parent. Nothing is written.",
 		Args: cobra.ExactArgs(1),

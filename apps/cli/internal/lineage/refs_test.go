@@ -46,7 +46,7 @@ func TestAtCandidateIsAnUpdateOnlyWhenItCanBeRead(t *testing.T) {
 // TestForkCandidateIsJudgedAgainstTheBase holds ForkCandidate to what a
 // fork's update is: a readable candidate other than the base version its
 // history names, whatever its own tip holds. A fork whose lineage was not
-// read, a greenfield one and one whose history does not say have no base,
+// read, one made by skill new and one whose history does not say have no base,
 // and so no update.
 func TestForkCandidateIsJudgedAgainstTheBase(t *testing.T) {
 	t.Parallel()
@@ -63,7 +63,7 @@ func TestForkCandidateIsJudgedAgainstTheBase(t *testing.T) {
 		update bool
 	}{
 		{name: "a fork whose lineage was not read", rec: fork(nil, update)},
-		{name: "a greenfield skill", rec: fork(&ForkLineage{ID: "id", Greenfield: true}, update)},
+		{name: "a skill made by skill new", rec: fork(&ForkLineage{ID: "id", Greenfield: true}, update)},
 		{name: "a history that does not say", rec: fork(&ForkLineage{Problem: "missing"}, update)},
 		{name: "a managed skill", rec: Record{Name: "pdf", Kind: KindManaged, Commit: "import", Import: base, HasImport: true, Candidate: update}},
 		{name: "no candidate", rec: fork(read, nil)},

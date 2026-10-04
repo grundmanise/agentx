@@ -69,9 +69,9 @@ func halfAdd(gitDir, path string) error {
 	return os.WriteFile(filepath.Join(path, ".git"), []byte("gitdir: "+admin+"\n"), 0o644)
 }
 
-// creation is the shape of a greenfield skill's creation: the fork's branch,
-// its worktree, the skill directory published into the worktree from
-// content staged in the worktrees directory, and the library symlink to it.
+// creation is the shape of what skill new creates: the fork's branch, its
+// worktree, the skill directory published into the worktree from content
+// staged in the worktrees directory, and the library symlink to it.
 type creation struct {
 	install
 	worktrees string
