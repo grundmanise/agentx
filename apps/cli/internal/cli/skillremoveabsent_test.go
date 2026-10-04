@@ -27,7 +27,7 @@ var absentHome = &fixtureHome{
 	dirs:   installHome.dirs,
 	build: func(h *harness, s *sourceRepo) []string {
 		installHome.build(h, s)
-		h.mustRun("skill", "add", s.url, "--skill", "alpha")
+		h.mustRun("skill", "add", s.url, "--name", "alpha")
 		h.mustRun("skill", "remove", "alpha", "--from", "cursor")
 		h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
 		remove(h.t, filepath.Join(h.library, "alpha"))
@@ -139,12 +139,13 @@ func TestSkillRemoveOfAnAbsentSkillWithNoLineageSaysEveryCopyWent(t *testing.T) 
 // TestSkillRemoveOfAnAbsentSkillRefusesWhatChangedUnderTheLock: what a
 // removal of a skill the library no longer holds takes away is decided by
 // what it read before the lock, and it reads both inputs again under it. A
-// git wrapper changes one of them right after the first read of the refs:
-// the library comes to hold the skill again, or a fork of the name
-// appears, which the second read of the refs refuses as it refuses the
-// import branch moving. The removal then refuses before it writes a
-// journal, and every placement, the copy mode and whatever the other writer
-// wrote stay as they were.
+// git wrapper changes one of them right after its read of the refs before
+// the lock, the second read of the run, the first being the one that
+// tells whether the name is a fork: the library comes to hold the skill
+// again, or a fork of the name appears, which the second read of the refs
+// refuses as it refuses the import branch moving. The removal then refuses
+// before it writes a journal, and every placement, the copy mode and
+// whatever the other writer wrote stay as they were.
 func TestSkillRemoveOfAnAbsentSkillRefusesWhatChangedUnderTheLock(t *testing.T) {
 	t.Parallel()
 	real, err := exec.LookPath("git")
@@ -173,13 +174,16 @@ func TestSkillRemoveOfAnAbsentSkillRefusesWhatChangedUnderTheLock(t *testing.T) 
 				}
 				change = "printf '%s' " + shellWord(skill("alpha", "Back again")) + " > " + shellWord(filepath.Join(lib, "SKILL.md"))
 			}
-			marker := filepath.Join(t.TempDir(), "changed")
+			marks := t.TempDir()
+			first, marker := filepath.Join(marks, "read"), filepath.Join(marks, "changed")
 			stubGit(t, h, `#!/bin/sh
 case " $* " in
 *" for-each-ref "*)
 	`+real+` "$@"
 	status=$?
-	if [ ! -e `+shellWord(marker)+` ]; then
+	if [ ! -e `+shellWord(first)+` ]; then
+		: > `+shellWord(first)+`
+	elif [ ! -e `+shellWord(marker)+` ]; then
 		: > `+shellWord(marker)+`
 		`+change+`
 	fi
@@ -221,7 +225,7 @@ exec `+real+` "$@"
 func TestSkillRemoveLeavesADirectoryThatLostItsSKILLmd(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	lib := filepath.Join(h.library, "alpha")
 	remove(t, filepath.Join(lib, "SKILL.md"))
 	left := libraryTree(t, lib)

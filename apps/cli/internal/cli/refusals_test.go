@@ -80,3 +80,18 @@ func TestRefusalsFailure(t *testing.T) {
 		equal(t, c.name+": hint", got.hint, c.hint)
 	}
 }
+
+// TestNamedReason: a reason in a run over several names its skill once,
+// with a prefix only when the message does not already start with it.
+func TestNamedReason(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct{ subject, message, want string }{
+		{"beta", "it conflicts with its update in 1 file", "beta: it conflicts with its update in 1 file"},
+		{"beta", "beta conflicts with the account remote in 1 file", "beta conflicts with the account remote in 1 file"},
+		{"gone", "gone's worktree /w/gone is missing", "gone's worktree /w/gone is missing"},
+		{"beta", "betamax holds a file", "beta: betamax holds a file"},
+		{"beta", "the library already holds beta", "beta: the library already holds beta"},
+	} {
+		equal(t, c.subject+" "+c.message, namedReason(c.subject, c.message), c.want)
+	}
+}

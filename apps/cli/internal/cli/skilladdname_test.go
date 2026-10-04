@@ -27,7 +27,7 @@ import (
 func TestSkillAddPointsAtSkillPlaceForALibrarySkill(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code")
 	ownLibrarySkill(t, h, "-mine")
 	for _, c := range []struct {
 		name string   // the library skill
@@ -86,7 +86,7 @@ func TestSkillAddReadsASourceFormAsASource(t *testing.T) {
 	id := source.ID(s.url)
 	ownLibrarySkill(t, h, id)
 
-	out := h.run("--json", "skill", "add", id, "--skill", "alpha", "--to", "cursor")
+	out := h.run("--json", "skill", "add", id, "--name", "alpha", "--to", "cursor")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "installed", h.one(out.stdout, "library_skill")["name"], "alpha")
 	if _, ok := isSymlink(t, filepath.Join(h.home, ".cursor", "skills", "alpha")); !ok {

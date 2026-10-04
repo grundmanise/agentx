@@ -66,7 +66,7 @@ func newAdoptCommand(inv *invocation) *cobra.Command {
 		Use:   "adopt",
 		Short: "Adopt skills another tool installed into the library",
 		Long: "Take over the skills the vercel skills CLI installed into the library, so that\n" +
-			"agentx knows where each one came from and can update and revert it. Run it with\n" +
+			"agentx knows where each one came from and can update it. Run it with\n" +
 			"no flags to see what it would adopt; nothing is written and the lock file is\n" +
 			"never touched.\n\n" +
 			"The base version recorded for a skill is the upstream version it was installed\n" +
@@ -231,8 +231,8 @@ func (inv *invocation) judge(c *candidate, dir bool, records map[string]lineage.
 			"a directory without a SKILL.md is not a skill; leave it as it is or remove it"))
 		return
 	case known && rec.Kind == lineage.KindFork:
-		c.refuse(refuse(exitRefused, c.entry.Name+" is a fork on this machine",
-			"a fork has a history of its own; adopting would take the place of it"))
+		c.refuse(refuse(exitRefused, c.entry.Name+" is a skill of the account remote on this machine",
+			"it has a history of its own; adopting would take the place of it"))
 		return
 	case known:
 		c.state, c.reason = adoptManaged, "agentx already manages it"
@@ -408,7 +408,7 @@ func (r *adoptRun) drop(c *candidate, f *failure) {
 	r.total--
 	r.add(c.entry.Name, f)
 	if r.selected > 1 {
-		r.inv.out.warn(c.entry.Name + ": " + f.message)
+		r.inv.out.warn(namedReason(c.entry.Name, f.message))
 	}
 }
 
@@ -721,7 +721,7 @@ func (inv *invocation) writeAdoptions(ctx context.Context, run *adoptRun, ready 
 	}
 	journaled := false
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
-		records, err := lineage.List(ctx, inv.git, gitDir)
+		records, err := inv.listLineage(ctx, gitDir)
 		if err != nil {
 			return accountRepoFailure(err)
 		}

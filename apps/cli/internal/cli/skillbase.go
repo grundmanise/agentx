@@ -12,37 +12,55 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
 
-// managedRecord is the lineage of the managed skill a command compares with
-// or puts back to its base version, read in the one for-each-ref a listing
-// reads. A skill with no base version to read is refused, each for its own
-// reason: an unmanaged skill has none, a fork's is decided by its own
-// history, which is not this command's, and a branch whose trailers agentx
-// cannot read records none it can trust. what says what the command would
-// have done with the base: "compare with", "revert to".
-func (inv *invocation) managedRecord(ctx context.Context, name, what string) (string, lineage.Record, error) {
+// accountRecord is the branch the account repo holds for the skill called
+// name, read in the one for-each-ref a listing reads, and false when it
+// holds none, as an account repo that does not exist yet holds none. A
+// command that works on managed skills and forks alike reads it first, to
+// tell which of the two it was given.
+func (inv *invocation) accountRecord(ctx context.Context, name string) (string, lineage.Record, bool, error) {
 	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return "", lineage.Record{}, accountRepoFailure(err)
+		return "", lineage.Record{}, false, accountRepoFailure(err)
 	}
 	records := map[string]lineage.Record{}
 	if exists {
-		if records, err = lineage.List(ctx, inv.git, gitDir); err != nil {
-			return "", lineage.Record{}, accountRepoFailure(fmt.Errorf("account repo %s: %w", gitDir, err))
+		if records, err = inv.listLineage(ctx, gitDir); err != nil {
+			return "", lineage.Record{}, false, accountRepoFailure(fmt.Errorf("account repo %s: %w", gitDir, err))
 		}
 	}
 	rec, ok := records[name]
+	return gitDir, rec, ok, nil
+}
+
+// managedRefusal refuses a skill with no base version to read, rec being
+// its branch and ok whether it has one, each for its own reason: an
+// unmanaged skill has none, and a branch whose trailers agentx cannot read
+// records none it can trust. Callers send one of your own skills elsewhere
+// first, since its versions are its own history.
+func managedRefusal(name string, rec lineage.Record, ok bool) error {
 	switch {
 	case !ok:
-		return "", lineage.Record{}, fail(exitRefused, fmt.Sprintf("%s is not managed by agentx, so it has no base version to %s", name, what),
+		return fail(exitRefused, name+" is not managed by agentx, so it has no base version to compare with",
 			"run 'agentx skill list' to see which skills are managed")
-	case rec.Kind == lineage.KindFork:
-		return "", lineage.Record{}, fail(exitRefused, name+" is a fork on this machine",
-			"a fork's versions are its own history; this command works on a managed skill")
 	case !rec.HasImport:
-		return "", lineage.Record{}, fail(exitRefused, fmt.Sprintf("the import branch %s records no version agentx can read", rec.Ref),
+		return fail(exitRefused, fmt.Sprintf("the import branch %s records no version agentx can read", rec.Ref),
 			"run 'agentx doctor' and check the account repo it names")
 	}
-	return gitDir, rec, nil
+	return nil
+}
+
+// notAForkRefusal refuses a flag that names one of a fork's commits, given
+// for the skill called name, which has no commits of its own: a managed
+// skill, ok being whether the account repo holds its branch, whose one
+// version is its base, which skill diff compares with instead, or an
+// unmanaged one.
+func notAForkRefusal(name string, ok bool) error {
+	if ok {
+		return fail(exitRefused, sanitised(name)+" is not a skill of the account remote, so it has no commit of its own to compare with",
+			"run '"+skillCommand("diff", name)+"' to compare with its base version")
+	}
+	return fail(exitRefused, sanitised(name)+" is not a skill of the account remote, so it has no commit to compare with",
+		"fork it first with '"+skillCommand("fork", name)+"'")
 }
 
 // readLibraryTree reads a library skill's directory as git would record it,

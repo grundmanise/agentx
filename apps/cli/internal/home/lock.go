@@ -221,6 +221,11 @@ func flock(path string, how int) (*os.File, error) {
 	return f, nil
 }
 
+// BumpVersion rewrites the version file of agentx home dir, the change
+// signal every mutation ends with, for a hold of the lock taken without it
+// that turned out to change something. Call it under the exclusive lock.
+func BumpVersion(dir string) error { return bumpVersion(dir) }
+
 // bumpVersion increments the counter in the version file; a missing or
 // unreadable file counts as 0.
 func bumpVersion(dir string) error {

@@ -54,7 +54,7 @@ func (h *harness) one(text, typ string) jsonEvent {
 func TestSkillAddPlacesTheSkillEverywhere(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	out := h.run("--json", "skill", "add", s.url, "--skill", "alpha")
+	out := h.run("--json", "skill", "add", s.url, "--name", "alpha")
 	equal(t, "exit", out.exit, 0)
 	types := h.types(h.events(out.stdout))
 	want := []string{"source", "progress", "progress", "progress", "progress", "library_skill", "result"}
@@ -135,7 +135,7 @@ func TestSkillAddPlacesTheSkillEverywhere(t *testing.T) {
 func TestSkillAddWritesTheImportCommit(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	equal(t, "exit", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "exit", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 
 	head := h.accountGit("rev-parse", "refs/heads/managed/alpha")
 	if parents := h.accountGit("rev-list", "--count", head); parents != "1" {
@@ -189,7 +189,7 @@ func TestSkillAddSanitisesTheDirectoryItNames(t *testing.T) {
 	s.commit("skills")
 	equal(t, "source add", h.run("source", "add", s.url).exit, 0)
 
-	out := h.run("skill", "add", s.url, "--skill", name)
+	out := h.run("skill", "add", s.url, "--name", name)
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "✓ installed pl ain from "+s.url+" under na 31msty at ")
 	for _, r := range out.stdout {

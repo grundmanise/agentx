@@ -28,8 +28,8 @@ var nastySubpaths = []struct {
 // then list as managed with no source, no subpath, no upstream commit and
 // no state, or with a subpath naming another directory of the same source,
 // and nothing said so: the import commit exists to be the base version
-// every later update, revert and fork merge works from, and one no reader
-// accepts leaves a skill that can never be updated or reverted again.
+// every later update and fork merge works from, and one no reader accepts
+// leaves a skill that can never be updated again.
 //
 // The refusal costs only its own skill, as every other refusal of an
 // install does, and names the directory as it is: the space around a name
@@ -47,14 +47,14 @@ func TestInstallRefusesASubpathItCannotRecord(t *testing.T) {
 	s.commit("skill directories a trailer cannot carry")
 	h.mustRun("source", "add", s.url)
 
-	alone := h.run("--json", "skill", "add", s.url, "--skill", nastySubpaths[0].name)
+	alone := h.run("--json", "skill", "add", s.url, "--name", nastySubpaths[0].name)
 	equal(t, "exit of the skill alone", alone.exit, exitRefused.exit)
 	contains(t, "the refusal", lastError(t, h.events(alone.stdout))["message"].(string), "is not a directory the account repo can record")
 
 	out := h.run("skill", "add", s.url, "--all")
 	equal(t, "exit of the batch", out.exit, exitRefused.exit)
 	for _, c := range nastySubpaths {
-		contains(t, "the warnings", out.stderr, c.name+": ")
+		contains(t, "the warnings", out.stderr, "warning: "+c.name+" comes from ")
 		contains(t, "the warnings", out.stderr, c.quoted)
 		// Nothing was written for it: no import branch, no library
 		// directory, and so nothing for a later command to trip over.
@@ -138,7 +138,7 @@ func TestTheDirectoryIsRefusedBeforeTheEntriesUnderIt(t *testing.T) {
 	contains(t, "the source tree", s.bare("ls-tree", "-r", "HEAD"), "skills/evil /../SKILL.md")
 	equal(t, "source add", h.run("source", "add", s.url).exit, 0)
 
-	out := h.run("skill", "add", s.url, "--skill", "evil")
+	out := h.run("skill", "add", s.url, "--name", "evil")
 	equal(t, "exit", out.exit, exitRefused.exit)
 	contains(t, "the refusal", out.stderr, `evil comes from "skills/evil ", which is not a directory the account repo can record`)
 	if strings.Contains(out.stderr, "will not lay out") {

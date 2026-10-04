@@ -13,7 +13,7 @@ import (
 // file still open on a network or FUSE file system, and editors' swap,
 // backup and lock files. While ignore_system_files is on, git ignores them
 // in every skill directory, so none of them makes a skill modified, shows
-// in a diff or is lost to a revert. Each is a shell glob matched against a
+// in a diff or is lost to an update. Each is a shell glob matched against a
 // base name, which is how git reads a pattern with no slash in it.
 var SystemFiles = []string{
 	".DS_Store", "._*", ".AppleDouble", ".LSOverride",

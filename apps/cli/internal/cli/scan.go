@@ -171,6 +171,11 @@ func (inv *invocation) inventory(ctx context.Context, wait time.Duration, projec
 			if !listed {
 				return nil
 			}
+			if !inv.forksWarned {
+				// Read, not written, under serve, where the update check
+				// reads it at the same time.
+				inv.forksWarned = true // the snapshot's warnings name them
+			}
 			records, err := inv.lineageRecords(ctx)
 			var f *failure
 			switch {
@@ -179,7 +184,7 @@ func (inv *invocation) inventory(ctx context.Context, wait time.Duration, projec
 				// lock the library was read under, so that an entry never
 				// pairs the library's directory with placements or content
 				// from the other side of a mutation.
-				read := newSkillContext(inv, records, s, copyMode)
+				read := newSkillContext(ctx, inv, records, s, copyMode)
 				read.observeAll(ctx, inv, sc.Library())
 				listing = &read
 				// A managed skill the library no longer holds has no entry

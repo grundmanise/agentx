@@ -43,8 +43,8 @@ func (rec Record) HoldsID(id string) bool {
 // it that way; an earlier agentx reused a source's own tree whole, and a
 // source may store a mode git reads but no longer writes, such as 100664.
 // HoldsID is never true against a branch that fails this, whatever the
-// library holds: a diff says so, and a revert writes the branch again, see
-// Rewrite.
+// library holds: a diff says so, and an install of that version again
+// stores it as git writes it today.
 func (rec Record) Canonical(base Base) bool {
 	return rec.HasImport && treeid.Wrap(rec.Import.Dir(), base.ID()) == rec.Tree
 }

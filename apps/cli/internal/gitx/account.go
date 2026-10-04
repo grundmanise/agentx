@@ -76,6 +76,14 @@ func createAccountRepo(ctx context.Context, r *Runner, gitDir string) error {
 		{"core.logAllRefUpdates", "true"}, // a bare repo has no reflogs by default
 		{"merge.conflictStyle", "zdiff3"},
 	}
+	// A git that can write the worktree paths of the account repo relative
+	// to it is told to: a fork's worktree then survives agentx home being
+	// moved as a whole. An existing repo is never switched over, since the
+	// first relative worktree marks the repo as one an older git cannot
+	// read.
+	if v, err := r.Version(ctx); err == nil && v.AtLeast(2, 48) {
+		config = append(config, [2]string{"worktree.useRelativePaths", "true"})
+	}
 	if _, err := r.Isolated(ctx, tmp, "init", "--bare", "--quiet"); err != nil {
 		return err
 	}

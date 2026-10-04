@@ -8,12 +8,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
+	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
 // readText reads a file the test compares byte for byte.
@@ -99,7 +101,12 @@ func plainExport(t *testing.T) (*harness, string) {
 func TestImportRestoresTheSettingsByteForByte(t *testing.T) {
 	t.Parallel()
 	from, file := exportedFrom(t)
-	before := readText(t, home.SettingsPath(from.agentx))
+	// Access is what this machine may do at a source, so an import resets it
+	// and every other byte comes back.
+	before := regexp.MustCompile(`(?m)^ *"access(_checked)?": .*\n`).ReplaceAllString(readText(t, home.SettingsPath(from.agentx)), "")
+	if strings.Contains(before, `"access`) {
+		t.Fatalf("the access fields are still in\n%s", before)
+	}
 
 	to := newHarness(t)
 	to.build(t, fixture{dirs: []string{".claude"}})
@@ -109,7 +116,7 @@ func TestImportRestoresTheSettingsByteForByte(t *testing.T) {
 		t.Errorf("the settings were not restored byte for byte:\nexported:\n%s\nimported:\n%s", before, after)
 	}
 	contains(t, "stdout", out.stdout, "imported the settings of first-laptop")
-	contains(t, "stdout", out.stdout, "2 skills in the export: 0 in the account repo, 2 missing, 0 at a different version")
+	contains(t, "stdout", out.stdout, "2 skills in the export: 0 present, 2 missing, 0 at a different version")
 	contains(t, "stdout", out.stdout, "  alpha  managed  missing  "+fixtureURL("skills")+"/skills/alpha")
 	contains(t, "stdout", out.stdout, "  beta   managed  missing  "+fixtureURL("skills")+"/skills/beta")
 	contains(t, "stdout", out.stdout, "only the settings were written")
@@ -187,7 +194,7 @@ func TestImportAsksBeforeItWrites(t *testing.T) {
 // record, which each case of the refusal tests below changes in one place.
 const soundExport = `{"schema_version": 1,
  "machine": {"id": "0123456789abcdef0123456789abcdef", "label": "first-laptop"},
- "settings": {"schema_version": 1, "label": "first-laptop", "auto_push": false, "accept_operations": false,
+ "settings": {"schema_version": 1, "label": "first-laptop", "accept_operations": false,
   "ignore_system_files": true, "disabled_configurations": [], "sources": [], "copy_mode": {}},
  "skills": [{"name": "alpha", "kind": "managed", "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "source": "https://github.com/example/skills", "subpath": "skills/alpha",
@@ -231,6 +238,27 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 		t.Fatalf("the sound document is refused: %v", err)
 	}
 	edited := func(change func(map[string]any)) string { return editedSound(t, change) }
+	// ownSkill turns the record into one of your own skills, a fork of
+	// alpha, with no account remote set: no source, and the upstream fields
+	// in place of the source's.
+	ownSkill := func(record map[string]any) {
+		delete(record, "source")
+		delete(record, "subpath")
+		record["upstream"] = "https://github.com/example/skills"
+		record["upstream_subpath"] = "skills/alpha"
+	}
+	ownWith := func(key string, value any) string {
+		return edited(func(doc map[string]any) {
+			record := doc["skills"].([]any)[0].(map[string]any)
+			ownSkill(record)
+			if key != "" {
+				record[key] = value
+			}
+		})
+	}
+	if _, err := readExport(write("sound fork", ownWith("", nil))); err != nil {
+		t.Fatalf("the sound document of a forked skill is refused: %v", err)
+	}
 	settingsWith := func(key string, value any) string {
 		return edited(func(doc map[string]any) { doc["settings"].(map[string]any)[key] = value })
 	}
@@ -248,10 +276,16 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 		{"a field agentx does not know", edited(func(doc map[string]any) { doc["snapshot"] = map[string]any{} }), "not an agentx export"},
 		{"later settings", settingsWith("schema_version", 2), "schema_version is 2"},
 		{"a settings field agentx does not know", settingsWith("secrets", "x"), "not an agentx export"},
+		{"the retired auto_push setting", settingsWith("auto_push", true), "auto_push is no longer a setting"},
 		{"a label of two lines", settingsWith("label", "one\ntwo"), "one non-empty line"},
-		{"a record of another kind", recordWith("kind", "greenfield"), "neither managed nor fork"},
+		{"a record of another kind", recordWith("kind", "unmanaged"), "the kind of alpha is not managed"},
+		{"one of your own skills with a subpath", edited(func(doc map[string]any) {
+			delete(doc["skills"].([]any)[0].(map[string]any), "source")
+		}), "which have no subpath"},
+		{"a record of a shared source with an upstream", recordWith("upstream", "https://github.com/example/other"), "only your own skills have"},
 		{"a record with no commit", recordWith("commit", "HEAD"), "does not name the commit"},
 		{"a record with a bad hash", recordWith("base_hash", "nonsense"), "one upstream version"},
+		{"one of your own skills with a bad hash", ownWith("base_hash", "nonsense"), "one upstream version"},
 		{"a record that walks out", recordWith("name", "../evil"), "not a name the library and a branch can both hold"},
 		{"a record named for a nested branch", recordWith("name", "nested/deeper"), "not a name the library and a branch can both hold"},
 		{"a record given twice", edited(func(doc map[string]any) {
@@ -342,7 +376,7 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 			if !errors.As(err, &f) || f.status != exitRefused {
 				t.Fatalf("readExport = %v, want a refusal", err)
 			}
-			contains(t, "the refusal", f.message, tc.says)
+			contains(t, "the refusal", f.message+"\n"+f.hint, tc.says)
 			// The refusal names the URL it parsed to, never what it was given.
 			if said := f.message + f.hint; strings.Contains(said, importToken) || strings.Contains(said, "user:") {
 				t.Errorf("the refusal repeated the credential: %q", said)
@@ -369,9 +403,11 @@ func TestImportRefusesADocumentItCannotRead(t *testing.T) {
 		{"settings agentx would not write", editedSound(t, func(doc map[string]any) {
 			doc["settings"].(map[string]any)["sources"] = []any{map[string]any{"url": "https://user:" + importToken + "@github.com/example/skills"}}
 		}), "must be stored as the canonical URL of a source alone"},
+		// A record of kind fork is no record agentx writes, so it is
+		// refused as any other kind but managed is.
 		{"a record agentx cannot read", editedSound(t, func(doc map[string]any) {
-			doc["skills"].([]any)[0].(map[string]any)["commit"] = "HEAD"
-		}), "does not name the commit"},
+			doc["skills"].([]any)[0].(map[string]any)["kind"] = lineage.KindFork
+		}), "the kind of alpha is not managed"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			file := to.exportPath(strings.ReplaceAll(tc.name, " ", "-") + ".json")
@@ -435,18 +471,59 @@ func TestImportListsWhatTheAccountRepoHas(t *testing.T) {
 	equal(t, "alpha", states["alpha"]["state"], "present")
 	equal(t, "beta", states["beta"]["state"], "different")
 	equal(t, "gamma", states["gamma"]["state"], "missing")
-	equal(t, "beta's local kind", states["beta"]["local_kind"], "managed")
 	equal(t, "beta's local commit", states["beta"]["local_commit"], alpha)
 	if _, ok := states["gamma"]["local_commit"]; ok {
 		t.Error("a missing skill carries a local commit")
 	}
 	equal(t, "summary", h.one(out.stdout, "result")["summary"],
-		"imported the settings from "+file+": 1 of 3 skills in the account repo, 1 missing, 1 at a different version")
+		"imported the settings from "+file+": 1 of 3 skills present, 1 missing, 1 at a different version")
 
 	text := h.run("import", file, "--yes")
-	contains(t, "stdout", text.stdout, "3 skills in the export: 1 in the account repo, 1 missing, 1 at a different version")
+	contains(t, "stdout", text.stdout, "3 skills in the export: 1 present, 1 missing, 1 at a different version")
 	contains(t, "stdout", text.stdout, "  alpha  managed  present")
 	contains(t, "stdout", text.stdout, "  gamma  managed  missing")
+}
+
+// TestRestoreStates: a record is looked up in the namespace it belongs in,
+// your own skills, with the account remote or no source at all, under
+// skills/, and a shared source's under managed/. A branch of the name
+// decides the state whatever the account remote holds, and the remote's
+// branch stands in only for one of your own skills the account repo holds
+// no branch of, never for a shared source's.
+func TestRestoreStates(t *testing.T) {
+	t.Parallel()
+	const account, shared = "https://github.com/me/skills", "https://github.com/example/skills"
+	fork := func(commit string) lineage.Record { return lineage.Record{Kind: lineage.KindFork, Commit: commit} }
+	managed := func(commit string) lineage.Record { return lineage.Record{Kind: lineage.KindManaged, Commit: commit} }
+	cases := []struct {
+		name    string
+		source  string
+		account string
+		records map[string]lineage.Record
+		remote  map[string]string
+		want    string
+		local   string
+	}{
+		{"own, local branch only", account, account, map[string]lineage.Record{"notes": fork("c1")}, nil, restorePresent, "c1"},
+		{"own with no source", "", "", map[string]lineage.Record{"notes": fork("c1")}, nil, restorePresent, "c1"},
+		{"own, remote branch at its commit", account, account, nil, map[string]string{"notes": "c1"}, restorePresent, "c1"},
+		{"own, remote branch at another commit", account, account, nil, map[string]string{"notes": "c2"}, restoreDifferent, "c2"},
+		{"own, the local branch decides", account, account, map[string]lineage.Record{"notes": fork("c2")}, map[string]string{"notes": "c1"}, restoreDifferent, "c2"},
+		{"own, held as a shared source's", account, account, map[string]lineage.Record{"notes": managed("c1")}, nil, restoreDifferent, "c1"},
+		{"shared, its import branch", shared, account, map[string]lineage.Record{"notes": managed("c1")}, nil, restorePresent, "c1"},
+		{"shared, held as one of your own", shared, account, map[string]lineage.Record{"notes": fork("c1")}, nil, restoreDifferent, "c1"},
+		{"shared, not matched against the remote", shared, account, nil, map[string]string{"notes": "c1"}, restoreMissing, ""},
+		{"the account remote's URL with no account remote set", account, "", nil, map[string]string{"notes": "c1"}, restoreMissing, ""},
+		{"neither", account, account, nil, nil, restoreMissing, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			got := restoreStates([]exportSkill{{Name: "notes", Kind: lineage.KindManaged, Commit: "c1", Source: c.source}}, c.records, c.remote, c.account)
+			equal(t, "state", got[0].State, c.want)
+			equal(t, "local commit", got[0].LocalCommit, c.local)
+		})
+	}
 }
 
 // TestImportOntoAMachineWithNoAccountRepo: everything the export lists is
@@ -543,7 +620,6 @@ func TestImportFillsInWhatADocumentLeavesOut(t *testing.T) {
 	contains(t, "stdout", out.stdout, "No skills in the export.")
 	equal(t, "the settings", readText(t, home.SettingsPath(to.agentx)), `{
   "schema_version": 1,
-  "auto_push": false,
   "accept_operations": false,
   "ignore_system_files": true,
   "disabled_configurations": [],
@@ -591,16 +667,19 @@ func TestValidSettingsCoversEveryFieldOfTheSettings(t *testing.T) {
 	covered := map[string]string{
 		"Settings.SchemaVersion":          "badSchemaVersion",
 		"Settings.Label":                  "badLabel (validLabel, as config set label is)",
-		"Settings.AutoPush":               "a bool: the JSON type is the whole domain",
 		"Settings.AcceptOperations":       "a bool: the JSON type is the whole domain",
 		"Settings.IgnoreSystemFiles":      "a bool: the JSON type is the whole domain",
 		"Settings.DisabledConfigurations": "badDisabledConfigurations",
 		"Settings.Sources":                "badSources",
 		"Settings.CopyMode":               "badCopyMode",
-		"Source.URL":                      "badSources, through badSourceURL",
-		"Source.Alias":                    "badSources, through badSourceURL",
-		"Source.Pin":                      "badSources, through source.ValidRef",
-		"Source.LastFetched":              "badSources, through fetchTime",
+		"Source.URL":                      "sourceRefusal, through badSourceURL",
+		"Source.Alias":                    "sourceRefusal, through badSourceURL",
+		"Source.Account":                  "sourcesRefusal: on one entry at most, no shared source of its repository",
+		"Source.Pin":                      "sourceRefusal, through source.ValidRef",
+		"Source.Access":                   "sourceRefusal: writable, read-only or absent; an import then forgets it",
+		"Source.AccessChecked":            "sourceRefusal, through fetchTime; an import then forgets it",
+		"Source.DefaultBranch":            "sourceRefusal, through source.ValidRef",
+		"Source.LastFetched":              "sourceRefusal, through fetchTime",
 	}
 	for _, spec := range []struct {
 		kind string
@@ -846,7 +925,10 @@ func TestImportWithNoSkillsStillNamesTheSourcesToAdd(t *testing.T) {
 	file := editedExport(t, h, good, "sources-only.json", func(doc map[string]any) {
 		doc["skills"] = []any{}
 		doc["settings"].(map[string]any)["sources"] = []any{
-			map[string]any{"url": "https://github.com/example/skills", "pin": "release"},
+			map[string]any{"url": "https://github.com/example/skills", "pin": "release",
+				"access": "writable", "access_checked": "2026-10-02T10:00:00Z", "default_branch": "main"},
+			map[string]any{"url": "https://github.com/me/forks", "account": true,
+				"access": "read-only", "access_checked": "2026-10-02T10:00:00Z"},
 		}
 	})
 
@@ -856,5 +938,20 @@ func TestImportWithNoSkillsStillNamesTheSourcesToAdd(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "No skills in the export.\n"+
 		"  only the settings were written: add each source again, then install a missing skill with 'agentx skill add <source>'\n"+
-		"    agentx source add https://github.com/example/skills#release\n")
+		"    agentx source add https://github.com/example/skills#release\n"+
+		"    agentx source add https://github.com/me/forks --account\n")
+
+	// Every field comes across but what the exporting machine found it could
+	// do there, which this machine finds out for itself.
+	restored, err := home.LoadSettings(to.agentx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []home.Source{
+		{URL: "https://github.com/example/skills", Pin: "release", DefaultBranch: "main"},
+		{URL: "https://github.com/me/forks", Account: true},
+	}
+	if !reflect.DeepEqual(restored.Sources, want) {
+		t.Errorf("the imported sources are\n %+v\nwant\n %+v", restored.Sources, want)
+	}
 }

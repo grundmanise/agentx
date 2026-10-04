@@ -50,7 +50,7 @@ func TestSkillAddSkipsAPlacementItCannotMake(t *testing.T) {
 			h, s := installHarness(t)
 			c.build(t, h, filepath.Join(h.home, ".cursor", "skills"))
 
-			out := h.run("--json", "skill", "add", s.url, "--skill", "alpha")
+			out := h.run("--json", "skill", "add", s.url, "--name", "alpha")
 			if out.exit != 0 {
 				t.Fatalf("skill add: exit %d, want the placement skipped and the install done\n%s", out.exit, out.stderr)
 			}
@@ -85,7 +85,7 @@ func TestSkillAddSkipsAPlacementItCannotMake(t *testing.T) {
 func TestRecoveryRefusesAStepItCannotApplyCleanly(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	equal(t, "exit", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "exit", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 
 	// A journal left by an interrupted install whose placement lands under
 	// a path that is a regular file: the step can never be applied.
@@ -117,7 +117,7 @@ func TestRecoveryRefusesAStepItCannotApplyCleanly(t *testing.T) {
 func TestCommandsRefuseAJournalWhoseAccountRepoIsGone(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	equal(t, "exit", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "exit", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 	gitDir := filepath.Join(h.agentx, "account.git")
 	writeJournalFile(t, h, `{"progress":"staged","replace":[],"steps":[`+
 		`{"kind":"ref","git_dir":`+quote(gitDir)+`,"ref":"refs/heads/managed/beta","old":"","new":"0123456789abcdef0123456789abcdef01234567"}]}`)

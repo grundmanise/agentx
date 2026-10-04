@@ -17,12 +17,12 @@ import (
 func TestSkillAddToOverridesTheTargets(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	unknown := h.run("skill", "add", s.url, "--skill", "alpha", "--to", "nowhere")
+	unknown := h.run("skill", "add", s.url, "--name", "alpha", "--to", "nowhere")
 	equal(t, "exit of an unknown configuration", unknown.exit, 5)
 	contains(t, "stderr of an unknown configuration", unknown.stderr, "detected configurations:")
 	equal(t, "exit", h.run("config", "disable", "cursor").exit, 0)
 
-	out := h.run("--json", "skill", "add", s.url, "--skill", "alpha", "--to", "cursor")
+	out := h.run("--json", "skill", "add", s.url, "--name", "alpha", "--to", "cursor")
 	equal(t, "exit", out.exit, 0)
 	if _, err := os.Lstat(filepath.Join(h.home, ".cursor", "skills", "alpha")); err != nil {
 		t.Errorf("the configuration --to named has no placement: %v", err)
@@ -43,7 +43,7 @@ func TestSkillAddSkipsDisabledConfigurations(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	equal(t, "exit", h.run("config", "disable", "claude-code").exit, 0)
-	equal(t, "exit", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "exit", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 	if _, err := os.Lstat(filepath.Join(h.home, ".claude", "skills", "alpha")); err == nil {
 		t.Error("a disabled configuration was placed into")
 	}
@@ -58,7 +58,7 @@ func TestSkillAddCopyPlacesCopies(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	before := journalCount(t, h)
-	out := h.run("--json", "skill", "add", s.url, "--skill", "alpha", "--copy")
+	out := h.run("--json", "skill", "add", s.url, "--name", "alpha", "--copy")
 	equal(t, "exit", out.exit, 0)
 
 	place := filepath.Join(h.home, ".claude", "skills", "alpha")
@@ -110,7 +110,7 @@ func TestSkillAddAdoptsAPlacementOfTheSameVersion(t *testing.T) {
 	}
 	writeFile(t, filepath.Join(other2, "SKILL.md"), "---\nname: alpha\ndescription: mine\n---\n\nmine\n")
 
-	out := h.run("--json", "skill", "add", s.url, "--skill", "alpha")
+	out := h.run("--json", "skill", "add", s.url, "--name", "alpha")
 	equal(t, "exit", out.exit, 0)
 	if info, err := os.Lstat(same); err != nil || info.Mode()&os.ModeSymlink == 0 {
 		t.Errorf("the directory of this version was not adopted as a symlink: %v", err)
@@ -135,7 +135,7 @@ func TestSkillAddKeepsAPlacementThatIsAlreadyRight(t *testing.T) {
 	if err := os.Symlink(filepath.Join(h.library, "alpha"), place); err != nil { // dangling until the install
 		t.Fatal(err)
 	}
-	out := h.run("--json", "skill", "add", s.url, "--skill", "alpha")
+	out := h.run("--json", "skill", "add", s.url, "--name", "alpha")
 	equal(t, "exit", out.exit, 0)
 	target, err := os.Readlink(place)
 	if err != nil || target != filepath.Join(h.library, "alpha") {
@@ -152,12 +152,12 @@ func TestSkillAddKeepsAPlacementThatIsAlreadyRight(t *testing.T) {
 func TestSkillAddAdoptsTheLibraryDirectory(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	equal(t, "exit", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "exit", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 	head := h.accountGit("rev-parse", "refs/heads/managed/alpha")
 
 	// The same version again: the branch stays where it is and nothing is
 	// written over the library.
-	out := h.run("--json", "skill", "add", s.url, "--skill", "alpha")
+	out := h.run("--json", "skill", "add", s.url, "--name", "alpha")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), head)
 	contains(t, "the result", out.stdout, "adopted alpha")
@@ -165,7 +165,7 @@ func TestSkillAddAdoptsTheLibraryDirectory(t *testing.T) {
 	// A library directory holding something else is a refusal, not an
 	// overwrite: the user's content is never replaced by an install.
 	writeFile(t, filepath.Join(h.library, "alpha", "notes.md"), "edited by hand\n")
-	mine := h.run("skill", "add", s.url, "--skill", "alpha")
+	mine := h.run("skill", "add", s.url, "--name", "alpha")
 	equal(t, "exit", mine.exit, 6)
 	contains(t, "stderr", mine.stderr, "the library already holds alpha")
 	body, err := os.ReadFile(filepath.Join(h.library, "alpha", "notes.md"))
@@ -187,7 +187,7 @@ func TestSkillAddTreatsADanglingWorktreeLinkAsAbsent(t *testing.T) {
 	if err := os.Symlink(gone, filepath.Join(h.library, "alpha")); err != nil {
 		t.Fatal(err)
 	}
-	equal(t, "exit", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "exit", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 	info, err := os.Lstat(filepath.Join(h.library, "alpha"))
 	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 		t.Errorf("the library entry is not the installed directory: %v", err)
@@ -203,7 +203,7 @@ func TestSkillAddTreatsADanglingWorktreeLinkAsAbsent(t *testing.T) {
 func TestSkillAddRefusesASecondVersion(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	equal(t, "exit", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "exit", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 	head := h.accountGit("rev-parse", "refs/heads/managed/alpha")
 
 	// Move the source on and take the library directory out of the way, so
@@ -215,8 +215,8 @@ func TestSkillAddRefusesASecondVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	contains(t, "the listing's warning", h.mustRun("skill", "list").stderr,
-		"run 'agentx skill add "+shellWord(s.url)+" --skill alpha' to install it again, or 'agentx skill remove alpha' to stop managing it")
-	out := h.run("--json", "skill", "add", s.url, "--skill", "alpha")
+		"run 'agentx skill add "+shellWord(s.url)+" --name alpha' to install it again, or 'agentx skill remove alpha' to stop managing it")
+	out := h.run("--json", "skill", "add", s.url, "--name", "alpha")
 	equal(t, "exit", out.exit, 6)
 	e := h.one(out.stdout, "error")
 	equal(t, "message", e["message"], "alpha is already managed at another version, which the library no longer holds")
@@ -224,7 +224,7 @@ func TestSkillAddRefusesASecondVersion(t *testing.T) {
 	equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), head)
 
 	h.mustRun("skill", "remove", "alpha")
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	equal(t, "notes.md", fileBody(t, filepath.Join(h.library, "alpha", "notes.md")), "newer\n")
 	if h.accountGit("rev-parse", "refs/heads/managed/alpha") == head {
 		t.Error("the import branch still names the version the library no longer held")
@@ -235,19 +235,19 @@ func TestSkillAddRefusesASecondVersion(t *testing.T) {
 }
 
 // TestSkillAddNamesTheSkillToInstall refuses a source that holds more than
-// one skill without --skill, and a --skill that names none.
+// one skill without --name, and a --name that names none.
 func TestSkillAddNamesTheSkillToInstall(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	many := h.run("skill", "add", s.url)
 	equal(t, "exit", many.exit, 1)
-	contains(t, "stderr", many.stderr, "name one with --skill, or take them all with --all: alpha, beta")
+	contains(t, "stderr", many.stderr, "name one with --name, or take them all with --all: alpha, beta")
 
-	none := h.run("skill", "add", s.url, "--skill", "gamma")
+	none := h.run("skill", "add", s.url, "--name", "gamma")
 	equal(t, "exit", none.exit, 5)
 	contains(t, "stderr", none.stderr, "has no skill called \"gamma\"")
 
-	// A path that holds exactly one skill needs no --skill.
+	// A path that holds exactly one skill needs no --name.
 	equal(t, "exit", h.run("skill", "add", s.url+"#main").exit, 1) // still the whole repository
 	one := h.run("skill", "add", strings.TrimSuffix(s.url, ".git")+".git/skills/beta")
 	equal(t, "exit", one.exit, 0)
@@ -267,7 +267,7 @@ func TestSkillAddAddsASourceThatIsNotAdded(t *testing.T) {
 	h.build(t, fixture{dirs: []string{".claude"}})
 	s, _, head := h.standardSource(true)
 
-	out := h.run("--json", "skill", "add", s.url, "--skill", "alpha")
+	out := h.run("--json", "skill", "add", s.url, "--name", "alpha")
 	equal(t, "exit", out.exit, 0)
 	types := h.types(h.events(out.stdout))
 	want := []string{"source", "progress", "progress", "progress", "progress", "library_skill", "result"}
@@ -287,7 +287,7 @@ func TestSkillAddAddsASourceThatIsNotAdded(t *testing.T) {
 	// An install that fails after the add keeps the source it added.
 	third := newHarness(t)
 	third.build(t, fixture{dirs: []string{".claude"}})
-	none := third.run("skill", "add", s.url, "--skill", "gamma")
+	none := third.run("skill", "add", s.url, "--name", "gamma")
 	equal(t, "exit", none.exit, 5)
 	contains(t, "stdout", none.stdout, "added "+s.url)
 	equal(t, "the source kept", third.one(third.run("--json", "source", "list").stdout, "source")["url"], s.url)
@@ -303,7 +303,7 @@ func TestSkillAddResolvesAnAddedSource(t *testing.T) {
 	equal(t, "exit of an unknown id", id.exit, 5)
 	contains(t, "stderr", id.stderr, "agentx source list")
 
-	pin := h.run("skill", "add", s.url+"#v1", "--skill", "alpha")
+	pin := h.run("skill", "add", s.url+"#v1", "--name", "alpha")
 	equal(t, "exit of another pin", pin.exit, 1)
 	contains(t, "stderr", pin.stderr, `is pinned to "", not "v1"`)
 	contains(t, "stderr", pin.stderr, "agentx source add "+s.url+"#v1")
@@ -320,7 +320,7 @@ func TestSkillAddFetchesOnlyWhenAsked(t *testing.T) {
 	moved := s.commit("beta moves on")
 
 	// Without --fetch: the version the last fetch brought, and no fetch.
-	out := h.run("--json", "skill", "add", s.url, "--skill", "beta")
+	out := h.run("--json", "skill", "add", s.url, "--name", "beta")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "the source ref", h.accountGit("rev-parse", ref), fetchedAt)
 	equal(t, "the source commit", h.one(out.stdout, "source")["commit"], fetchedAt)
@@ -330,13 +330,13 @@ func TestSkillAddFetchesOnlyWhenAsked(t *testing.T) {
 
 	// With --fetch: the source is fetched again at its pin first, and the
 	// install reads what that fetch brought.
-	out = h.run("--json", "skill", "add", s.url, "--skill", "alpha", "--fetch")
+	out = h.run("--json", "skill", "add", s.url, "--name", "alpha", "--fetch")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "the source ref", h.accountGit("rev-parse", ref), moved)
 	ev := h.one(out.stdout, "source")
 	equal(t, "commit", ev["commit"], moved)
 	equal(t, "previous_commit", ev["previous_commit"], fetchedAt)
-	text := h.run("skill", "add", s.url, "--skill", "alpha", "--fetch")
+	text := h.run("skill", "add", s.url, "--name", "alpha", "--fetch")
 	equal(t, "exit", text.exit, 0)
 	contains(t, "stdout", text.stdout, "re-fetched "+s.url+", already at "+moved[:7])
 	contains(t, "stdout", text.stdout, ", source fetched ")
@@ -428,7 +428,7 @@ func TestSkillAddSkipsAForeignSymlink(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			args := []string{"--json", "skill", "add", s.url, "--skill", "alpha"}
+			args := []string{"--json", "skill", "add", s.url, "--name", "alpha"}
 			if mode.flag != "" {
 				args = append(args, mode.flag)
 			}

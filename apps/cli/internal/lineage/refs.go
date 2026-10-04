@@ -54,10 +54,12 @@ func ForkRef(name string) string { return ForkPrefix + name }
 
 // Record is what the account repo holds for one skill name: the branch, the
 // commit it points at, that commit's tree and, when that commit carries
-// them, the four lineage trailers. A fork's tip carries the trailers of the
-// last upstream version merged into it, and may carry none at all. What the
-// last update check found for the skill comes with it: the candidate it
-// pinned, and the source commit it found without the skill.
+// them, the four lineage trailers. A managed skill's tip is its import
+// commit. A fork's tip is a commit of its own history, whose lineage
+// ReadForks reads into Fork; Import and HasImport then describe the tip
+// alone and say nothing of the fork's base. What the last update check
+// found for the skill comes with it: the candidate it pinned, and the
+// source commit it found without the skill.
 type Record struct {
 	Name            string
 	Kind            string // managed or fork
@@ -66,8 +68,10 @@ type Record struct {
 	Tree            string // the root tree of that commit: for an import commit, the upstream directory as its one entry
 	Import          Import
 	HasImport       bool
-	Candidate       *Candidate // the update candidate, nil when the account repo holds none
-	UpstreamRemoved string     // the source commit the upstream-removed marker names, "" when there is none
+	Parentless      bool         // the commit has no parent, as an import commit never has
+	Candidate       *Candidate   // the update candidate, nil when the account repo holds none
+	UpstreamRemoved string       // the source commit the upstream-removed marker names, "" when there is none
+	Fork            *ForkLineage // a fork's lineage, read by ReadForks; nil for a managed skill and until then
 }
 
 // Candidate is an update candidate: the import commit of a newer upstream
@@ -100,6 +104,36 @@ func (rec Record) AtCandidate() (Record, bool) {
 		return Record{}, false
 	}
 	return Record{Name: rec.Name, Kind: rec.Kind, Ref: rec.Ref, Commit: c.Commit, Tree: c.Tree, Import: c.Import, HasImport: true}, true
+}
+
+// ForkBase is the record of a fork's base version, the import commit its
+// history names, as the import branch of a managed skill at that version
+// would read: that commit, its tree and its trailers, with the fork's own
+// name, kind and candidate. It is what a fork's update is judged against,
+// by the same rules as a managed skill's, since a fork's update is a newer
+// version of the upstream its base came from. ok is false for a fork
+// whose lineage was not read, one with no base, as a greenfield skill has
+// none, and one whose history does not say which it is.
+func (rec Record) ForkBase() (Record, bool) {
+	l := rec.Fork
+	if rec.Kind != KindFork || l == nil || l.Base == "" || l.Problem != "" {
+		return Record{}, false
+	}
+	return Record{Name: rec.Name, Kind: rec.Kind, Ref: rec.Ref, Commit: l.Base, Tree: l.BaseTree, Import: l.Import, HasImport: true,
+		Parentless: true, Candidate: rec.Candidate}, true
+}
+
+// ForkCandidate is the update of a fork, read as AtCandidate reads a
+// managed skill's against the fork's base version: the candidate's import
+// commit, when agentx can read its lineage and it is not the base the
+// fork already holds. Whatever the fork's own commits hold, a candidate
+// that is its base is no update.
+func (rec Record) ForkCandidate() (Record, bool) {
+	base, ok := rec.ForkBase()
+	if !ok {
+		return Record{}, false
+	}
+	return base.AtCandidate()
 }
 
 // CandidateCommit is the commit the skill's candidate ref holds, "" when it
@@ -136,7 +170,7 @@ func List(ctx context.Context, r *gitx.Runner, gitDir string) (map[string]Record
 	const recordEnd = "\x01"
 	markers := strings.TrimSuffix(UpstreamRemovedPrefix, "/")
 	out, err := r.Isolated(ctx, gitDir,
-		"for-each-ref", "--format=%(refname)%00%(objectname)%00%(tree)%00"+
+		"for-each-ref", "--format=%(refname)%00%(objectname)%00%(tree)%00%(parent)%00"+
 			"%(if:notequals="+markers+")%(refname:rstrip=1)%(then)%(contents)%(end)"+recordEnd,
 		ManagedPrefix, ForkPrefix, CandidatePrefix, UpstreamRemovedPrefix)
 	if err != nil {
@@ -150,11 +184,11 @@ func List(ctx context.Context, r *gitx.Runner, gitDir string) (map[string]Record
 		if strings.TrimSpace(entry) == "" {
 			continue
 		}
-		fields := strings.SplitN(entry, "\x00", 4)
-		if len(fields) != 4 {
+		fields := strings.SplitN(entry, "\x00", 5)
+		if len(fields) != 5 {
 			continue
 		}
-		rec := Record{Ref: fields[0], Commit: fields[1], Tree: fields[2]}
+		rec := Record{Ref: fields[0], Commit: fields[1], Tree: fields[2], Parentless: fields[3] == ""}
 		switch {
 		case strings.HasPrefix(rec.Ref, ManagedPrefix):
 			rec.Name, rec.Kind = strings.TrimPrefix(rec.Ref, ManagedPrefix), KindManaged
@@ -162,7 +196,7 @@ func List(ctx context.Context, r *gitx.Runner, gitDir string) (map[string]Record
 			rec.Name, rec.Kind = strings.TrimPrefix(rec.Ref, ForkPrefix), KindFork
 		case strings.HasPrefix(rec.Ref, CandidatePrefix):
 			c := Candidate{Commit: rec.Commit, Tree: rec.Tree}
-			if imported, err := Parse(fields[3]); err == nil {
+			if imported, err := Parse(fields[4]); err == nil {
 				c.Import, c.HasImport = imported, true
 			}
 			candidates[strings.TrimPrefix(rec.Ref, CandidatePrefix)] = c
@@ -173,7 +207,7 @@ func List(ctx context.Context, r *gitx.Runner, gitDir string) (map[string]Record
 		default:
 			continue
 		}
-		if imported, err := Parse(fields[3]); err == nil {
+		if imported, err := Parse(fields[4]); err == nil {
 			rec.Import, rec.HasImport = imported, true
 		}
 		if have, ok := records[rec.Name]; !ok || have.Kind == KindFork && rec.Kind == KindManaged {

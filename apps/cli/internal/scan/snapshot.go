@@ -79,24 +79,28 @@ type Occurrence struct {
 // node is something else: one content version found anywhere on the
 // machine, which knows nothing of lineage.
 type LibraryEntry struct {
-	Name           string             `json:"name"`
-	Kind           string             `json:"kind"`              // managed, fork or unmanaged
-	Source         string             `json:"source,omitempty"`  // the canonical URL of the upstream
-	Subpath        *string            `json:"subpath,omitempty"` // the directory in the source, "" for its root
-	UpstreamCommit string             `json:"upstream_commit,omitempty"`
-	BaseHash       string             `json:"base_hash,omitempty"`     // the content hash of the base version
-	ContentHash    string             `json:"content_hash"`            // what the library holds now
-	State          string             `json:"state,omitempty"`         // current or modified, for a managed skill
-	Drift          []string           `json:"drift,omitempty"`         // the drift states beside state, for a managed skill
-	Candidate      *LibraryCandidate  `json:"candidate,omitempty"`     // the update the last check found, for a managed skill
-	PendingMerge   bool               `json:"pending_merge,omitempty"` // an update left a merge pending, read from <agentx home>/merges/<name>
-	Placements     []LibraryPlacement `json:"placements"`
-	Universal      []string           `json:"universal"` // every detected universal client, which sees the skill whatever its placements
+	Name            string             `json:"name"`
+	Kind            string             `json:"kind"`                       // managed or unmanaged
+	ForkID          string             `json:"fork_id,omitempty"`          // one of your own skills' permanent id, from the commit that created it
+	Source          string             `json:"source,omitempty"`           // the canonical URL of the source it is published to
+	Subpath         *string            `json:"subpath,omitempty"`          // the directory in the source, "" for its root
+	Upstream        string             `json:"upstream,omitempty"`         // the canonical URL a forked skill came from
+	UpstreamSubpath *string            `json:"upstream_subpath,omitempty"` // the directory in the upstream, "" for its root
+	UpstreamCommit  string             `json:"upstream_commit,omitempty"`
+	BaseHash        string             `json:"base_hash,omitempty"`     // the content hash of the base version
+	ContentHash     string             `json:"content_hash"`            // what the library holds now
+	State           string             `json:"state,omitempty"`         // current or modified, for a managed skill whose directory is its checkout
+	Drift           []string           `json:"drift,omitempty"`         // the drift states beside state, for a managed skill
+	Candidate       *LibraryCandidate  `json:"candidate,omitempty"`     // the update the last check found, from its source or its upstream
+	PendingMerge    bool               `json:"pending_merge,omitempty"` // an update left a merge pending, read from <agentx home>/merges/<name>
+	Placements      []LibraryPlacement `json:"placements"`
+	Universal       []string           `json:"universal"` // every detected universal client, which sees the skill whatever its placements
 }
 
 // LibraryCandidate is the update the last update check found for a managed
-// skill: the newer upstream version its candidate ref pins, by the upstream
-// commit and the content hash that version's import commit records.
+// skill or a fork: the newer upstream version its candidate ref pins, by
+// the upstream commit and the content hash that version's import commit
+// records.
 type LibraryCandidate struct {
 	UpstreamCommit string `json:"upstream_commit"`
 	ContentHash    string `json:"content_hash"`

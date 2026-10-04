@@ -34,7 +34,6 @@ func TestConfigListDefaults(t *testing.T) {
 	for _, row := range []string{
 		"schema_version           1",
 		"label                    test-host",
-		"auto_push                false",
 		"accept_operations        false",
 		"ignore_system_files      true",
 		"disabled_configurations  (none)",
@@ -59,7 +58,6 @@ func TestConfigListDefaults(t *testing.T) {
 	want := map[string]any{
 		"schema_version":          float64(1),
 		"label":                   "test-host",
-		"auto_push":               false,
 		"accept_operations":       false,
 		"ignore_system_files":     true,
 		"disabled_configurations": []any{},
@@ -84,7 +82,7 @@ func TestConfigSetAndGet(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	equal(t, "stdout", out.stdout, "work laptop\n")
 
-	out = h.run("--json", "config", "set", "auto_push", "true")
+	out = h.run("--json", "config", "set", "accept_operations", "true")
 	equal(t, "exit", out.exit, 0)
 	events := h.events(out.stdout)
 	if got, want := h.types(events), []string{"settings", "result"}; !reflect.DeepEqual(got, want) {
@@ -92,34 +90,38 @@ func TestConfigSetAndGet(t *testing.T) {
 	}
 	settings := events[0]["settings"].(map[string]any)
 	equal(t, "settings.label", settings["label"], "work laptop")
-	equal(t, "settings.auto_push", settings["auto_push"], true)
+	equal(t, "settings.accept_operations", settings["accept_operations"], true)
 
-	out = h.run("config", "set", "accept_operations", "1")
+	out = h.run("config", "set", "ignore_system_files", "0")
 	equal(t, "exit", out.exit, 0)
 
 	file := readSettingsFile(t, h)
 	equal(t, "file label", file["label"], "work laptop")
-	equal(t, "file auto_push", file["auto_push"], true)
 	equal(t, "file accept_operations", file["accept_operations"], true)
+	equal(t, "file ignore_system_files", file["ignore_system_files"], false)
 	equal(t, "file schema_version", file["schema_version"], float64(1))
 
-	out = h.run("--json", "config", "get", "auto_push")
+	out = h.run("--json", "config", "get", "accept_operations")
 	equal(t, "exit", out.exit, 0)
 	events = h.events(out.stdout)
 	equal(t, "get event type", events[0]["type"], "settings")
-	equal(t, "get auto_push", events[0]["settings"].(map[string]any)["auto_push"], true)
+	equal(t, "get accept_operations", events[0]["settings"].(map[string]any)["accept_operations"], true)
 
-	out = h.run("config", "get", "auto_push")
+	out = h.run("config", "get", "accept_operations")
 	equal(t, "stdout", out.stdout, "true\n")
 	out = h.run("config", "list")
 	contains(t, "stdout", out.stdout, "label                    work laptop")
-	contains(t, "stdout", out.stdout, "auto_push                true")
+	contains(t, "stdout", out.stdout, "accept_operations        true")
 }
 
 func TestConfigSetKeepsUnknownCollections(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	file := `{"schema_version":1,"disabled_configurations":["cursor"],"sources":[{"url":"https://example.com/skills"}],"copy_mode":{"my-skill":["cursor"]}}`
+	source := `{"url":"https://example.com/skills","account":true,` +
+		`"access":"writable","access_checked":"2026-10-02T10:00:00Z","default_branch":"main"}`
+	// auto_push is what a settings file of an earlier agentx still carries:
+	// it is read past, not refused, and the next write drops it.
+	file := `{"schema_version":1,"auto_push":true,"disabled_configurations":["cursor"],"sources":[` + source + `],"copy_mode":{"my-skill":["cursor"]}}`
 	if err := os.WriteFile(filepath.Join(h.agentx, "settings.json"), []byte(file), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -129,10 +131,17 @@ func TestConfigSetKeepsUnknownCollections(t *testing.T) {
 
 	got := readSettingsFile(t, h)
 	equal(t, "label", got["label"], "kept")
+	if _, ok := got["auto_push"]; ok {
+		t.Error("the retired auto_push key was written back")
+	}
 	if want := []any{"cursor"}; !reflect.DeepEqual(got["disabled_configurations"], want) {
 		t.Errorf("disabled_configurations = %#v, want %#v", got["disabled_configurations"], want)
 	}
-	if want := []any{map[string]any{"url": "https://example.com/skills"}}; !reflect.DeepEqual(got["sources"], want) {
+	var entry any
+	if err := json.Unmarshal([]byte(source), &entry); err != nil {
+		t.Fatal(err)
+	}
+	if want := []any{entry}; !reflect.DeepEqual(got["sources"], want) {
 		t.Errorf("sources = %#v, want %#v", got["sources"], want)
 	}
 	if want := map[string]any{"my-skill": []any{"cursor"}}; !reflect.DeepEqual(got["copy_mode"], want) {
@@ -141,9 +150,25 @@ func TestConfigSetKeepsUnknownCollections(t *testing.T) {
 
 	out = h.run("config", "list")
 	contains(t, "stdout", out.stdout, "disabled_configurations  cursor")
-	contains(t, "stdout", out.stdout, `sources                  [{"url":"https://example.com/skills"}]`)
+	contains(t, "stdout", out.stdout, `sources                  [`+source+`]`)
 	contains(t, "stdout", out.stdout, `copy_mode                {"my-skill":["cursor"]}`)
 	contains(t, "stdout", out.stdout, "ignore_system_files      true")
+}
+
+// TestSettingsOfALaterVersionAreRefused: a settings file a later agentx
+// wrote is not read, so it is not rewritten either, and the hint is to
+// upgrade rather than to delete what that version keeps there.
+func TestSettingsOfALaterVersionAreRefused(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	path := filepath.Join(h.agentx, "settings.json")
+	writeFile(t, path, `{"schema_version":2,"sources":[]}`)
+
+	out := h.run("config", "set", "label", "mine")
+	equal(t, "exit", out.exit, 10)
+	contains(t, "stderr", out.stderr, "is of settings schema version 2, and this agentx reads version 1")
+	contains(t, "stderr", out.stderr, "upgrade agentx")
+	equal(t, "the settings", readText(t, path), `{"schema_version":2,"sources":[]}`)
 }
 
 func TestConfigErrors(t *testing.T) {
@@ -157,9 +182,9 @@ func TestConfigErrors(t *testing.T) {
 		hint string
 	}{
 		{"get unknown key", []string{"config", "get", "colour"}, 1, "usage", "label"},
-		{"set unknown key", []string{"config", "set", "colour", "blue"}, 1, "usage", "auto_push"},
-		{"set read-only key", []string{"config", "set", "sources", "[]"}, 1, "usage", "auto_push"},
-		{"set bad bool", []string{"config", "set", "auto_push", "yes"}, 1, "usage", "true or false"},
+		{"set unknown key", []string{"config", "set", "auto_push", "true"}, 1, "usage", "accept_operations"},
+		{"set read-only key", []string{"config", "set", "sources", "[]"}, 1, "usage", "accept_operations"},
+		{"set bad bool", []string{"config", "set", "accept_operations", "yes"}, 1, "usage", "true or false"},
 		{"set empty label", []string{"config", "set", "label", " "}, 1, "usage", ""},
 		{"set missing value", []string{"config", "set", "label"}, 1, "usage", ""},
 		{"get missing key", []string{"config", "get"}, 1, "usage", ""},

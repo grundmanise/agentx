@@ -38,21 +38,35 @@ func newSkillAddCommand(inv *invocation) *cobra.Command {
 	var to []string
 	var asCopy, fetch bool
 	cmd := &cobra.Command{
-		Use:   "add <source>[/<subpath>]",
-		Short: "Install skills from a source into the library and place them",
+		Use:   "add [<source>[/<subpath>]] [--name <name>]... [--all [--except <name>]...]",
+		Short: "Install skills from a source, or your own from the account remote, into the library and place them",
 		Long: "Install skills from a source into the library and place them in every enabled\n" +
 			"configuration. A source URL this machine has not added yet is added first, as\n" +
 			"'agentx source add' would; an added source is installed from as it was last\n" +
-			"fetched, unless --fetch fetches it again. Name the skills with --skill, once for\n" +
+			"fetched, unless --fetch fetches it again. Name the skills with --name, once for\n" +
 			"each, or take the whole source with --all and leave out what you do not want\n" +
-			"with --except.",
-		Args: cobra.ExactArgs(1),
+			"with --except.\n\n" +
+			"With no source, install your own skills from the account remote, which is\n" +
+			"fetched every time: the ones you name with --name, or with --all every one this\n" +
+			"machine lacks. Each is the same skill, with its history, that you publish back\n" +
+			"to the same branch. 'agentx skill list --remote' lists them. A managed copy of\n" +
+			"the skill's upstream that holds its base version gives way to it and keeps its\n" +
+			"placements; any other directory the library holds of the name is refused.",
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Flags that contradict each other are refused before anything
+			// else, a source this run would add included.
+			if err := sel.check(); err != nil {
+				return err
+			}
+			if len(args) == 0 {
+				return inv.addFromAccount(cmd.Context(), sel, to, asCopy, fetch)
+			}
 			return inv.skillAdd(cmd.Context(), args[0], sel, to, asCopy, fetch)
 		},
 	}
-	cmd.Flags().StringArrayVar(&sel.names, "skill", nil, "the skill to install, by its name in the source; give it again for each")
-	cmd.Flags().BoolVar(&sel.all, "all", false, "install every skill the source holds")
+	cmd.Flags().StringArrayVar(&sel.names, "name", nil, "the skill to install, by its name in the source or on the account remote; give it again for each")
+	cmd.Flags().BoolVar(&sel.all, "all", false, "install every skill the source holds, or with no source every one of the account remote this machine lacks")
 	cmd.Flags().StringArrayVar(&sel.except, "except", nil, "with --all, a skill to leave out; give it again for each")
 	cmd.Flags().StringArrayVar(&to, "to", nil, "the configuration to place them in, instead of every enabled one")
 	cmd.Flags().BoolVar(&asCopy, "copy", false, "place copies instead of symlinks")
@@ -79,11 +93,6 @@ type selection struct {
 // with a warning naming it, the rest of the batch lands, and the run
 // answers with what failed, the way a fetch of several sources does.
 func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, to []string, asCopy, fetch bool) error {
-	// Flags that contradict each other are refused before anything else, a
-	// source this run would add included.
-	if err := sel.check(); err != nil {
-		return err
-	}
 	if err := inv.alreadyInLibrary(arg, to, asCopy); err != nil {
 		return err
 	}
@@ -91,6 +100,9 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 	add := false
 	switch {
 	case err == nil:
+		if entry.Account {
+			return forkSourceIs(entry.URL, entry)
+		}
 		if src.Ref != "" && src.Ref != entry.Pin {
 			return pinMismatch(src, entry)
 		}
@@ -143,8 +155,9 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 			return sourceFailure(err, pinned)
 		}
 		n := len(listing.Skills)
-		inv.out.emit(sourceEvent{event: newEvent("source"), ID: src.ID(), URL: src.URL, Alias: entry.Alias, Pin: entry.Pin, Subpath: src.Subpath,
-			LastFetched: entry.LastFetched, Commit: listing.Commit, Skills: &n})
+		ev := entryEvent(entry)
+		ev.Subpath, ev.Commit, ev.Skills = src.Subpath, listing.Commit, &n
+		inv.out.emit(ev)
 	}
 	skills, err := selectSkills(listing, sel, src)
 	if err != nil {
@@ -252,7 +265,7 @@ func (b *batch) drop(subject string, remaining int, f *failure) {
 	b.total -= remaining
 	b.add(subject, f)
 	if b.selected > 1 {
-		b.inv.out.warn(subject + ": " + f.message)
+		b.inv.out.warn(namedReason(subject, f.message))
 	}
 }
 
@@ -309,8 +322,8 @@ func (v *imported) version() lineage.Version {
 // history walk finds the upstream commit of every selected skill, so a
 // batch of thirty skills reads what one skill reads.
 //
-// It is the import of skill add. skill check reads the versions it writes
-// candidates for through the same two halves, listVersions and
+// It is the import of skill add. skill check-updates reads the versions it
+// writes candidates for through the same two halves, listVersions and
 // fillVersions, so that a candidate is the commit an install of that
 // version writes.
 func (inv *invocation) readVersions(ctx context.Context, b *batch, gitDir string, src source.Source, tip string, skills []source.Skill) ([]*imported, error) {
@@ -602,7 +615,7 @@ func (inv *invocation) importable(v *imported, taken map[string]string, src sour
 	// records it on one line of a trailer, and one the reader would refuse
 	// or read back as another directory would be written all the same and
 	// found out only on the next listing, by which time the skill is
-	// installed and has no lineage left to update or revert it by. It is
+	// installed and has no lineage left to update it by. It is
 	// checked before the entries under it, so that a refusal of one of
 	// those names a directory it can print as it is.
 	if !lineage.ValidPath(v.skill.Subpath) {
@@ -807,16 +820,16 @@ func upstreamDir(src source.Source, sk source.Skill) string {
 func (sel selection) check() error {
 	switch {
 	case sel.all && len(sel.names) > 0:
-		return fail(exitUsage, "--all and --skill cannot both be given", "--all installs every skill; drop it to install the ones you name")
+		return fail(exitUsage, "--all and --name cannot both be given", "--all installs every skill; drop it to install the ones you name")
 	case !sel.all && len(sel.except) > 0:
-		return fail(exitUsage, "--except needs --all", "name the skills you want with --skill, or take the rest with --all --except")
+		return fail(exitUsage, "--except needs --all", "name the skills you want with --name, or take the rest with --all --except")
 	}
 	return nil
 }
 
 // selectSkills picks the skills of the listing to install, in the order the
 // listing holds them, which is by subpath: a source or a path that holds
-// one skill needs no --skill, --skill names one and may be given again for
+// one skill needs no --name, --name names one and may be given again for
 // each, and --all takes every one with --except leaving some out. The
 // selection has passed check already.
 func selectSkills(listing source.Listing, sel selection, src source.Source) ([]source.Skill, error) {
@@ -833,9 +846,9 @@ func selectSkills(listing source.Listing, sel selection, src source.Source) ([]s
 	return nil, fail(exitUsage, fmt.Sprintf("%s%s holds %s", src.URL, underPath(src.Subpath), plural(len(listing.Skills), "skill")), skillNamesHint(listing))
 }
 
-// namedSkills resolves the --skill names against the listing, keeping the
-// listing's order. A name matches a skill's frontmatter name, or its
-// directory name when the frontmatter has none, case-insensitively. A name
+// namedSkills resolves the names given with --name against the listing,
+// keeping the listing's order. A name matches a skill's frontmatter name, or
+// its directory name when the frontmatter has none, case-insensitively. A name
 // given twice installs one skill, and a name two directories of the source
 // share resolves to the first of them, which is what naming a skill has
 // always meant here.
@@ -944,7 +957,7 @@ func skillNamesHint(listing source.Listing) string {
 	if len(names) > namesInAHint {
 		names = append(names[:namesInAHint], "...")
 	}
-	return "name one with --skill, or take them all with --all: " + strings.Join(names, ", ")
+	return "name one with --name, or take them all with --all: " + strings.Join(names, ", ")
 }
 
 func containsString(list []string, s string) bool {
@@ -986,7 +999,7 @@ func (inv *invocation) install(ctx context.Context, b *batch, gitDir string, ver
 				sweepStaged(t.dir)
 			}
 		}
-		records, err := lineage.List(ctx, inv.git, gitDir)
+		records, err := inv.listLineage(ctx, gitDir)
 		if err != nil {
 			return accountRepoFailure(err)
 		}
@@ -1151,8 +1164,8 @@ func refPlan(v *imported, records map[string]lineage.Record, libPath string, abs
 	case !ok:
 		return "", true, nil
 	case rec.Kind == lineage.KindFork:
-		return "", false, refuse(exitRefused, fmt.Sprintf("%s is a fork on this machine", v.name),
-			"install the skill under another name, or remove the fork first")
+		return "", false, refuse(exitRefused, fmt.Sprintf("%s is a skill of the account remote on this machine", v.name),
+			"rename yours with '"+skillCommand("rename", v.name, "<new>")+"', or remove it with '"+skillCommand("remove", v.name)+"', then install again")
 	case rec.Commit == v.commit: // the same version again: nothing to move
 		return "", false, nil
 	case rec.HasImport && rec.Import == v.imp: // the same version, stored in an older form
@@ -1236,7 +1249,7 @@ func sweepStaged(dir string) {
 	}
 	for _, e := range entries {
 		if strings.HasPrefix(e.Name(), ".agentx-staged-") {
-			os.RemoveAll(filepath.Join(dir, e.Name()))
+			_ = home.RemoveTree(filepath.Join(dir, e.Name()))
 		}
 	}
 }
@@ -1259,17 +1272,26 @@ func holdsSkillFile(path string) bool {
 }
 
 // intoWorktrees reports whether the symlink at path points into the agentx
-// worktrees directory, which is where a fork's placement points.
+// worktrees directory, which is where a fork's library symlink points. A
+// relative link is read from the directory it really sits in, and agentx
+// home is compared by its real path too, so that no spelling of either
+// through a symlink hides it.
 func (inv *invocation) intoWorktrees(path string) bool {
 	link, err := os.Readlink(path)
 	if err != nil {
 		return false
 	}
 	if !filepath.IsAbs(link) {
-		link = filepath.Join(filepath.Dir(path), link)
+		link = filepath.Join(filepath.Dir(canonicalPath(path)), link)
 	}
+	link = filepath.Clean(link)
 	worktrees := filepath.Join(inv.dirs.Home, "worktrees")
-	return strings.HasPrefix(filepath.Clean(link), worktrees+string(filepath.Separator))
+	for _, w := range []string{worktrees, canonicalPath(worktrees)} {
+		if strings.HasPrefix(link, w+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
 }
 
 // mutationFailure keeps the refusals of a mutating skill command as they
@@ -1280,7 +1302,7 @@ func mutationFailure(err error) error {
 	switch {
 	case errors.As(err, &f):
 		return err
-	case errors.Is(err, home.ErrRecovery), errors.Is(err, home.ErrLocked):
+	case errors.Is(err, home.ErrRecovery), errors.Is(err, home.ErrLocked), errors.Is(err, home.ErrMovedBeforeApply):
 		return err
 	case errors.Is(err, gitx.ErrAccountRepo):
 		return accountRepoFailure(err)
@@ -1315,7 +1337,7 @@ func (inv *invocation) reportInstalled(ctx context.Context, b *batch, dones []*i
 		modes = map[string][]string{}
 	}
 	// The lineage is what the run just wrote, so it is not read again.
-	sc := newSkillContext(inv, map[string]lineage.Record{}, s, modes)
+	sc := newSkillContext(ctx, inv, map[string]lineage.Record{}, s, modes)
 	// The library is read once for the whole run. Reading it content-hashes
 	// every directory it holds, so reading it per installed skill costs a
 	// batch of n skills n hashes of the whole library: a run of forty was

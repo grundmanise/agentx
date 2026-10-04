@@ -49,7 +49,7 @@ func TestConfigEnableWithoutPlaceAllChangesOnlyTheDefault(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
 	equal(t, "disable", h.run("config", "disable", "cursor").exit, 0)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 
 	out := h.run("--json", "config", "enable", "cursor")
 	equal(t, "exit", out.exit, 0)
@@ -57,7 +57,7 @@ func TestConfigEnableWithoutPlaceAllChangesOnlyTheDefault(t *testing.T) {
 	equal(t, "events", strings.Join(h.types(h.events(out.stdout)), ","), "settings,result")
 
 	// A skill installed after it, though, goes there like anywhere else.
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "beta").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "beta").exit, 0)
 	if _, ok := isSymlink(t, filepath.Join(h.home, ".cursor", "skills", "beta")); !ok {
 		t.Error("an install after the configuration was enabled did not place into it")
 	}
@@ -97,7 +97,7 @@ func TestConfigEnablePlaceAllIntoAClientThatReadsTheLibrary(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
 	equal(t, "disable", h.run("config", "disable", "codex").exit, 0)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 
 	out := h.run("--json", "config", "enable", "codex", "--place-all")
 	equal(t, "exit", out.exit, 0)

@@ -46,15 +46,34 @@ type Options struct {
 	// Check is one update check, run off the loop's goroutine after the
 	// initial snapshot and then every CheckEvery; it returns what reports
 	// its outcome, nil for nothing to report. nil, or a CheckEvery that is
-	// not positive, checks nothing, and so does Once.
+	// not positive, checks nothing, and so does Once. It is the first of
+	// the ticks, see Tick.
 	Check      func(ctx context.Context) (report func())
 	CheckEvery time.Duration
+	// Ticks are the other jobs serve runs on timers of their own, such as
+	// the account repo's maintenance.
+	Ticks []Tick
 
 	Snapshot        func(scan.Snapshot)                                   // a changed whole snapshot, counter set
 	RefreshComplete func(requestID string, counter int, err error)        // the acknowledgement of one refresh request
 	Search          func(requestID, query string, results []source.Match) // the answer to one search request
 	BadRequest      func(message, hint string)                            // a stdin line that is not a request
 	Warn            func(message string)
+}
+
+// Tick is one job serve runs on a timer, off the loop's goroutine: Run
+// every Every, the first time once the initial snapshot is out when
+// AtStart says so and one Every later otherwise. A tick that finds its
+// last run still going is skipped rather than queued, so a job never
+// overlaps itself and never piles up, while two jobs run beside each
+// other. The report a run returns, nil for nothing to report, is made on
+// the loop's goroutine, where every other report is. Under Once no tick
+// runs, and Run waits for a run still going, stopped by its context, before
+// it returns.
+type Tick struct {
+	Every   time.Duration
+	Run     func(ctx context.Context) (report func())
+	AtStart bool
 }
 
 const (
@@ -97,36 +116,62 @@ func Run(ctx context.Context, o Options) error {
 	}
 	reqs := readRequests(ctx, o.Stdin, l.answer)
 
-	// The update check runs on a timer of its own, off this goroutine, since
-	// a check waits on the network for as long as its sources take and a
-	// rescan may not wait for it. The first starts once the initial
-	// snapshot is out. A tick that finds the last check still running is
-	// skipped rather than queued, so checks never overlap and never pile
-	// up; the report of one that ended comes back over checked and is made
-	// here, where every other report is.
-	var tickC <-chan time.Time
-	checked := make(chan func())
-	running := false
-	check := func() {
-		if running {
+	// The update check and every other tick run on timers of their own,
+	// off this goroutine, since a check waits on the network for as long
+	// as its sources take and a rescan may not wait for it. The first runs
+	// once the initial snapshot is out. A tick that finds its last run
+	// still going is skipped rather than queued, so runs never overlap and
+	// never pile up; the report of one that ended comes back over ended
+	// and is made here, where every other report is.
+	ticks := o.Ticks
+	if o.Check != nil && o.CheckEvery > 0 {
+		ticks = append([]Tick{{Every: o.CheckEvery, Run: o.Check, AtStart: true}}, ticks...)
+	}
+	type tickEnd struct {
+		i      int
+		report func()
+	}
+	due := make(chan int)
+	ended := make(chan tickEnd)
+	running := make([]bool, len(ticks))
+	start := func(i int) {
+		if running[i] {
 			return
 		}
-		running = true
+		running[i] = true
 		checking.Add(1)
 		go func() {
 			defer checking.Done()
-			report := o.Check(ctx)
+			report := ticks[i].Run(ctx)
 			select {
-			case checked <- report:
+			case ended <- tickEnd{i, report}:
 			case <-ctx.Done():
 			}
 		}()
 	}
-	if o.Check != nil && o.CheckEvery > 0 {
-		ticker := time.NewTicker(o.CheckEvery)
+	for i, tick := range ticks {
+		if tick.Run == nil || tick.Every <= 0 {
+			continue
+		}
+		ticker := time.NewTicker(tick.Every)
 		defer ticker.Stop()
-		tickC = ticker.C
-		check()
+		go func() {
+			for {
+				select {
+				case <-ticker.C:
+					select {
+					case due <- i:
+					case <-ctx.Done():
+						return
+					}
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+		if tick.AtStart {
+			start(i)
+		}
 	}
 
 	// A change starts the debounce timer and, unless one is running, the
@@ -182,12 +227,12 @@ func Run(ctx context.Context, o Options) error {
 			if err := rescan(); err != nil {
 				return err
 			}
-		case <-tickC:
-			check()
-		case report := <-checked:
-			running = false
-			if report != nil {
-				report()
+		case i := <-due:
+			start(i)
+		case e := <-ended:
+			running[e.i] = false
+			if e.report != nil {
+				e.report()
 			}
 		}
 	}

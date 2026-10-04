@@ -151,7 +151,7 @@ func TestSourceFetchByURLByIDAndAll(t *testing.T) {
 	before = readVersion(t, h)
 	out = h.run("source", "fetch", source.ID(two.url))
 	equal(t, "exit", out.exit, 0)
-	equal(t, "stdout", out.stdout, "✓ re-fetched "+two.url+", already at "+twoHead[:7]+": 1 skill\n")
+	equal(t, "stdout", out.stdout, "✓ re-fetched "+two.url+", already at "+twoHead[:7]+": 1 skill; you can write to it\n")
 	refetched(t, h, two.url)
 	equal(t, "last_fetched of one", lastFetched(t, h, one.url), backdated)
 	equal(t, "version", readVersion(t, h), before+1)
@@ -446,9 +446,10 @@ func TestSourceFetchIsParallelAndBounded(t *testing.T) {
 	// landed there, three to walk the trees, the blob batch, the
 	// batch-check that proves the blobs arrived, the cat-file that reads
 	// them, the update-ref that publishes the fetch and the one that drops
-	// the staging ref. The run adds the version check and the account repo
-	// probe. Nothing here is per skill.
-	if bound := 12*sources + 4; total > bound {
+	// the staging ref. The check after it adds two: the access check's dry
+	// run and the read of the default branch. The run adds the version
+	// check and the account repo probe. Nothing here is per skill.
+	if bound := 14*sources + 4; total > bound {
 		t.Errorf("%d git processes for %d sources, want at most %d", total, sources, bound)
 	}
 }
@@ -684,14 +685,15 @@ func TestSourceFetchDropsASourceRemovedMidRun(t *testing.T) {
 	equal(t, "sources", len(readSettingsFile(t, h)["sources"].([]any)), 0)
 }
 
-// TestSourceFetchRealignsARemoteWithThePin: the settings hold the pin and
-// the remote's refspec is derived from it, so a run interrupted between the
-// two leaves a remote recording a ref the settings do not name – what a
-// `source add <url>#main` killed after the remote was written and before
-// the settings were leaves over a source pinned to v1. A fetch answers for
-// the pin the settings hold whatever the remote says, and brings the remote
-// back in line, so that a remote left behind does not outlive one run.
-func TestSourceFetchRealignsARemoteWithThePin(t *testing.T) {
+// TestSourceRemoteFollowsThePin: the settings hold the pin, and the remote
+// is derived from it, so a run interrupted between the two writes leaves a
+// remote recording what the settings do not name – what a `source add
+// <url>#main` killed after the remote was written and before the settings
+// were leaves over a source pinned to v1. The test adds a pinned source,
+// breaks its refspec by hand, and fetches: the fetch answers for the pin
+// the settings hold whatever the remote says, and brings the remote back
+// in line, so that a remote left behind does not outlive one run.
+func TestSourceRemoteFollowsThePin(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	requireGit(t)
@@ -703,14 +705,15 @@ func TestSourceFetchRealignsARemoteWithThePin(t *testing.T) {
 	s.commit("main version")
 	equal(t, "add", h.run("source", "add", s.url+"#v1").exit, 0)
 	id := source.ID(s.url)
+	remote := "remote." + source.RemoteName(id) + "."
 	v1 := h.accountGit("rev-parse", source.Ref(id))
 
-	h.accountGit("config", "remote."+source.RemoteName(id)+".fetch", "+main:"+source.StagingRef(id))
+	h.accountGit("config", remote+"fetch", "+main:"+source.StagingRef(id))
 	equal(t, "fetch", h.run("source", "fetch", "--all").exit, 0)
 
 	// The pin decided, not the remote, and the remote records it again.
 	equal(t, "ref", h.accountGit("rev-parse", source.Ref(id)), v1)
-	equal(t, "refspec", h.accountGit("config", "--get", "remote.src-"+id+".fetch"), "+v1:"+source.StagingRef(id))
+	equal(t, "refspec", h.accountGit("config", "--get", remote+"fetch"), "+v1:"+source.StagingRef(id))
 	out := h.run("--json", "source", "skills", s.url)
 	equal(t, "source skills", out.exit, 0)
 	_, skills := sourceEvents(t, h.events(out.stdout))

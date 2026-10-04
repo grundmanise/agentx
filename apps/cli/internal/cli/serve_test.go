@@ -220,7 +220,7 @@ func TestServeRescansOnVersionBumpWithoutSnapshot(t *testing.T) {
 	p.next("refresh_complete")
 
 	// A one-shot mutation that changes nothing the snapshot shows.
-	out := h.run("config", "set", "auto_push", "true")
+	out := h.run("config", "set", "accept_operations", "true")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "version", readVersion(t, h), 1)
 	p.send(`{"type":"refresh","request_id":"after-bump"}`)
@@ -315,7 +315,11 @@ func TestWatchedDirsCoverEverySkillsDirectoryOnce(t *testing.T) {
 	if got, want := dirs[2:], trees; !reflect.DeepEqual(got, want) {
 		t.Errorf("dirs after the flat ones = %v, want the trees %v", got, want)
 	}
-	if got, want := trees[:3], []string{"/u/.agentx/worktrees", "/u/.agents/skills", "/u/.claude/skills"}; !reflect.DeepEqual(got, want) {
+	// The reflogs of the fork branches are where a commit made with git in
+	// a fork's worktree shows, and those of the remote-tracking branches
+	// where a publish that only pushes does.
+	logs := gitx.AccountRepoPath("/u/.agentx") + "/logs/refs"
+	if got, want := trees[:5], []string{"/u/.agentx/worktrees", "/u/.agents/skills", logs + "/heads/skills", logs + "/remotes", "/u/.claude/skills"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("first trees = %v, want %v", got, want)
 	}
 	seen := map[string]bool{}
@@ -378,7 +382,7 @@ func TestServeWatchesAClientSkillsDirectory(t *testing.T) {
 func TestServeKeepsServingWhenTheAccountRepoCannotBeRead(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	account := gitx.AccountRepoPath(h.agentx)
 	head := filepath.Join(account, "HEAD")
 	healthy, err := os.ReadFile(head)

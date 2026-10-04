@@ -116,3 +116,30 @@ func (x refs) UpdateRefs(gitDir string, updates []home.RefUpdate) error {
 	}
 	return nil
 }
+
+// AddWorktree adds a fork's worktree for the journal's worktree step, see
+// AddForkWorktree.
+func (x refs) AddWorktree(gitDir, path, branch string) error {
+	if err := x.r.AddForkWorktree(x.ctx, gitDir, path, branch); err != nil {
+		return fmt.Errorf("%w: %w", ErrAccountRepo, err)
+	}
+	return nil
+}
+
+// ResetIndex aligns a fork worktree's index with its branch tip for the
+// journal's worktree step, see Runner.ResetIndex.
+func (x refs) ResetIndex(path string) error {
+	if err := x.r.ResetIndex(x.ctx, path); err != nil {
+		return fmt.Errorf("%w: %w", ErrAccountRepo, err)
+	}
+	return nil
+}
+
+// CheckOut writes the entries a fork's branch holds beside its skill
+// directory for the journal's worktree step, see Runner.CheckOutEntries.
+func (x refs) CheckOut(path string, names []string) error {
+	if err := x.r.CheckOutEntries(x.ctx, path, names); err != nil {
+		return fmt.Errorf("%w: %w", ErrAccountRepo, err)
+	}
+	return nil
+}

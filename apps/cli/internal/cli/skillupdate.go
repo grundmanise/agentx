@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -24,19 +23,29 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 	var all, abort bool
 	cmd := &cobra.Command{
 		Use:   "update [<name>] [--abort]",
-		Short: "Apply the update the last check found to a managed skill",
+		Short: "Apply the update the last check found to a managed skill or a fork",
 		Long: "Replace the library directory of a managed skill with the newer upstream version\n" +
-			"'agentx skill check' found for it, and record that version as the one the skill\n" +
-			"is at. A skill edited since it was installed keeps its edits: they are merged\n" +
-			"into the newer version. When they conflict with it, the library is left as it is\n" +
-			"and the conflicting files are listed: the merge waits, an ordinary Git merge in\n" +
-			"progress in a Git worktree under agentx home, never in the library, for you to\n" +
+			"'" + checkUpdatesCommand + "' found for it, and record that version as the one the\n" +
+			"skill is at. A skill edited since it was installed keeps its edits: they are\n" +
+			"merged into the newer version. When they conflict with it, the library is left as\n" +
+			"it is and the conflicting files are listed: the merge waits, an ordinary Git merge\n" +
+			"in progress in a Git worktree under agentx home, never in the library, for you to\n" +
 			"resolve with git. Run the update again once it is resolved to apply it, or pass\n" +
 			"--abort to give it up. Files git ignores in the skill, such as a .DS_Store or an\n" +
 			"ignored build directory, are not edits, and stay. A copy placement that holds the\n" +
-			"version replaced is refreshed; a copy edited on its own is kept and named. Pass\n" +
-			"--all instead of a name to update every managed skill the last check found an\n" +
-			"update for. Read an update before you apply it with\n" +
+			"version replaced is refreshed; a copy edited on its own is kept and named.\n\n" +
+			"A fork's update is always merged, with the upstream version it was last forked or\n" +
+			"updated from as the merge base, so its own commits are kept, and the merge is\n" +
+			"committed on its branch. Its unpublished edits are recorded on its branch first,\n" +
+			"and stay unpublished until 'agentx skill publish'. A conflict\n" +
+			"waits as for a managed skill, and the fork's worktree and branch stay as they are\n" +
+			"until it is applied. With an account remote set, it is fetched first, and what\n" +
+			"your other machines published of the fork is taken in first, as a commit of its\n" +
+			"own. A skill made with 'agentx skill new' has no upstream: its update takes in\n" +
+			"what the account remote holds, and nothing else.\n\n" +
+			"Pass --all instead of a name to update every managed skill and fork the last check\n" +
+			"found an update for, and every fork placed here that your other machines\n" +
+			"published to. Read an update before you apply it with\n" +
 			"'agentx skill diff <name> --update'.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -58,8 +67,8 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 			return inv.skillUpdate(cmd.Context(), name)
 		},
 	}
-	cmd.Flags().BoolVar(&all, "all", false, "update every managed skill the last check found an update for")
-	cmd.Flags().BoolVar(&abort, "abort", false, "give up the merge pending for the skill; the library directory stays as it is")
+	cmd.Flags().BoolVar(&all, "all", false, "update every managed skill and fork the last check found an update for, and every fork another machine published to")
+	cmd.Flags().BoolVar(&abort, "abort", false, "give up the merge pending for the skill; the library directory, or a fork's worktree and branch, stay as they are")
 	return cmd
 }
 
@@ -96,6 +105,11 @@ type updating struct {
 	conflict     conflictEvent // the conflicts of the merge left pending
 	upstreamName string        // the name the candidate's SKILL.md gives the skill, when it is not name
 	done         placements    // the copies the mutation refreshed or kept
+	// fork is what the update of a fork reads and applies besides, see
+	// judgeForkUpdate; nil for a managed skill. For a fork, rec is the
+	// record of its base version and next the candidate's, or, for a merge
+	// it completes, of the base the merge records.
+	fork *forkUpdate
 }
 
 // updateRun is one run of agentx skill update, for one name or for --all:
@@ -110,9 +124,20 @@ type updateRun struct {
 	selected   int               // the skills the run set out to update
 	sourceless []string          // the skills --all skipped because their source was removed, by name
 	ready      []*updating       // the skills judged ready to update, by name
+	forks      []*updating       // the forks judged ready to update, by name, each applied on its own
 	bodies     map[string]string // what the files of every version staged hold, by blob id
 	applied    []*updating       // the skills whose update the mutation applied, by name
 	pending    []*updating       // the skills whose merge the mutation left pending, by name
+	account    *accountFetch     // the account remote as the run fetched it; nil when it did not, see fetchAccount
+}
+
+// accountFetch is the account remote as a run of skill update fetched it,
+// once, before it selected anything, see updateRun.fetchAccount.
+type accountFetch struct {
+	entry  home.Source       // the account remote's settings entry
+	remote string            // its git remote in the account repo
+	tips   map[string]string // the tip of each skill it holds, by name, as its remote-tracking branches hold them
+	err    error             // why git could not fetch it, which leaves the tips of the fetch before; nil when it fetched
 }
 
 // drop gives up on one skill. A run over every skill goes on with the rest,
@@ -134,7 +159,7 @@ func (r *updateRun) drop(name string, f *failure) {
 	}
 	r.add(name, f)
 	if r.all && r.selected > 1 {
-		r.inv.out.warn(name + ": " + f.message)
+		r.inv.out.warn(namedReason(name, f.message))
 	}
 }
 
@@ -198,22 +223,17 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 	// until it is finished the skill reads as already updated while the
 	// library still holds the version replaced, or holds no directory once
 	// that was retained, and the run would answer for a machine halfway
-	// through its own change. The lock is taken for it only when there is
-	// a journal to finish, and nothing is written beyond what the recovery
-	// writes, its own bump of the version file included, as for the
-	// recovery a scan runs.
-	switch journals, err := home.Journals(inv.dirs.Home); {
-	case err != nil:
-		return mutationFailure(err)
-	case len(journals) > 0:
-		inv.out.debugf("recovering %s", strings.Join(journals, ", "))
-		if err := home.MutateQuiet(inv.dirs.Home, inv.refs(ctx), func() error { return nil }); err != nil {
-			return mutationFailure(err)
-		}
+	// through its own change.
+	if err := inv.finishJournals(ctx); err != nil {
+		return err
 	}
 	records := map[string]lineage.Record{}
 	if exists {
-		if records, err = lineage.List(ctx, inv.git, gitDir); err != nil {
+		records, err = inv.listLineage(ctx, gitDir)
+		if err == nil {
+			err = lineage.ReadForks(ctx, inv.git, gitDir, records, inv.forkWalks)
+		}
+		if err != nil {
 			return accountRepoFailure(fmt.Errorf("account repo %s: %w", gitDir, err))
 		}
 	}
@@ -223,29 +243,79 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 	}
 	sources := sourceURLs(s)
 
+	if err := r.fetchAccount(ctx, name, records); err != nil {
+		return err
+	}
 	names, libs := r.selection(name, records)
 	r.selected = len(names)
-	if r.all && len(names) == 0 {
-		inv.summary = "nothing to update: no managed skill has an update as of the last update check; run 'agentx skill check' to look again"
-		inv.out.print("Nothing to update: no managed skill has an update as of the last update check. Run ",
-			inv.out.paint(label, "agentx skill check"), " to look again.")
-		return nil
+	pulled, dropped, err := r.accountStep(ctx, names, records)
+	if err != nil {
+		return err
 	}
-
+	if len(pulled) > 0 {
+		if records, err = inv.forkRecords(ctx, gitDir); err != nil {
+			return err
+		}
+	}
+	if r.all {
+		names = r.afterAccountStep(names, records, pulled, dropped)
+		if len(names)+len(pulled)+len(dropped) == 0 {
+			inv.summary = "nothing to update: no managed skill or fork has an update as of the last update check; run '" + checkUpdatesCommand + "' to look again"
+			inv.out.print("Nothing to update: no managed skill or fork has an update as of the last update check. Run ",
+				inv.out.paint(label, checkUpdatesCommand), " to look again.")
+			return nil
+		}
+	}
 	for _, n := range names {
+		if dropped[n] {
+			continue
+		}
 		lib, held := libs[n]
 		rec, managed := records[n]
-		u, f := inv.judgeUpdate(ctx, gitDir, n, rec, managed, lib, held, sources)
+		var u *updating
+		var f *failure
+		fork := managed && rec.Kind == lineage.KindFork
+		if fork && r.account != nil && rec.Fork != nil && rec.Fork.Greenfield && !inv.mergePending(n) {
+			// A fork with no upstream is up to date once its account step
+			// took in what the account remote held, or found nothing to take
+			// in; one the account remote holds no branch of has nothing to
+			// take in until it is published. One with a merge pending goes
+			// on to judgeForkUpdate, the one way that completes it.
+			switch {
+			case slices.Contains(pulled, n):
+				inv.summary = "pulled " + n + " from the account remote; it has no upstream to update from"
+			case !r.all && r.account.tips[n] == "":
+				inv.summary = n + " has no branch on the account remote; run '" + publishCommand(n) + "' to publish it"
+				inv.out.print(inv.out.paint(heading, sanitised(n)), " has no branch on the account remote; run ",
+					inv.out.paint(label, publishCommand(n)), " to publish it")
+			case !r.all:
+				inv.summary = n + " is up to date with the account remote"
+				inv.out.print(inv.out.paint(heading, sanitised(n)), " is up to date with the account remote")
+			}
+			continue
+		}
+		if fork {
+			u, f = inv.judgeForkUpdate(ctx, gitDir, rec, sources)
+		} else {
+			u, f = inv.judgeUpdate(ctx, gitDir, n, rec, managed, lib, held, sources)
+		}
 		switch {
 		case f != nil:
 			r.drop(n, f)
+		case u == nil && r.all: // a fork whose account step took in the update its candidate named
+			continue
 		case u == nil: // a name the last check found no update for, which only a run of one name asks about
-			inv.summary = n + " is up to date as of the last update check; run 'agentx skill check' to look again"
+			inv.summary = n + " is up to date as of the last update check; run '" + checkUpdatesCommand + "' to look again"
+			if len(pulled) > 0 {
+				inv.summary = "pulled " + n + " from the account remote; it is up to date with its upstream as of the last update check"
+			}
 			inv.out.print(inv.out.paint(heading, sanitised(n)), " is up to date as of the last update check; run ",
-				inv.out.paint(label, "agentx skill check"), " to look again")
-			return nil
-		case u.merged.conflicted: // a merge pending with files still to resolve, left as it is
+				inv.out.paint(label, checkUpdatesCommand), " to look again")
+			return inv.reportForks(ctx, pulled)
+		case u.merged.conflicted && (u.fork == nil || !u.fork.start): // a merge pending with files still to resolve, left as it is
 			r.pending = append(r.pending, u)
+		case fork:
+			r.forks = append(r.forks, u)
 		default:
 			r.ready = append(r.ready, u)
 		}
@@ -258,6 +328,20 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 			return err
 		}
 	}
+	for _, u := range r.forks {
+		if err := r.applyFork(ctx, u); err != nil {
+			return err
+		}
+	}
+	var onlyPulled []string
+	for _, n := range pulled {
+		if !slices.ContainsFunc(r.applied, func(u *updating) bool { return u.name == n }) {
+			onlyPulled = append(onlyPulled, n)
+		}
+	}
+	if err := inv.reportForks(ctx, onlyPulled); err != nil {
+		return err
+	}
 	if len(r.applied) > 0 || len(r.pending) > 0 {
 		if err := r.report(ctx); err != nil {
 			return err
@@ -265,17 +349,220 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 	} else if r.all && len(r.broken) == 0 {
 		skips, _ := r.skippedNote(inv.out)
 		inv.summary = "no skill was updated" + skips
+		if len(pulled) > 0 {
+			inv.summary = "no skill was updated from upstream" + skips
+		}
 		inv.out.print(inv.summary)
 	}
 	return r.failure()
 }
 
+// afterAccountStep is what a run over every skill goes on to update once
+// the account step ran, see accountStep: the skills it selected but for
+// the forks that have no update from upstream, a candidate other than
+// their base version, and no merge pending. Those were selected for the
+// account step alone, since the account remote held another tip of them,
+// and it already took in what there was: a fork with no upstream is up to
+// date then, and one the remote is behind, with commits not yet published,
+// was up to date all along, so nothing is said of either. The forks the
+// account step dropped are left out too. The account step already took
+// the forks left out silently off the count of skills the run set out to
+// update.
+func (r *updateRun) afterAccountStep(names []string, records map[string]lineage.Record, pulled []string, dropped map[string]bool) []string {
+	var kept []string
+	for _, n := range names {
+		if dropped[n] {
+			continue
+		}
+		if rec, ok := records[n]; ok && rec.Kind == lineage.KindFork && !r.inv.mergePending(n) {
+			if _, update := rec.ForkCandidate(); !update {
+				continue
+			}
+		}
+		kept = append(kept, n)
+	}
+	return kept
+}
+
+// fetchAccount fetches the account remote once for the run, before it
+// selects anything, when one is set and the run needs it: for a name, when
+// it is a fork, a skill of the account remote, with no merge pending; with
+// --all, when any fork is placed on this machine, a worktree or a library
+// entry of its there. A run that needs no fork, the update of a skill of a
+// shared source say, never fetches the account remote, so one git cannot
+// reach neither warns nor fails it. The remote-tracking branches are read
+// once, after the fetch: --all selects from them, see selection, and the
+// account step takes in what they hold, see accountStep. A fetch that fails
+// is no failure of the run here: the account step answers for it, and
+// --all selects from what the fetch before left.
+func (r *updateRun) fetchAccount(ctx context.Context, name string, records map[string]lineage.Record) error {
+	inv := r.inv
+	need := false
+	if r.all {
+		for n, rec := range records {
+			if rec.Kind == lineage.KindFork && inv.forkPlaced(n) {
+				need = true
+				break
+			}
+		}
+	} else {
+		need = records[name].Kind == lineage.KindFork && !inv.mergePending(name)
+	}
+	if !need {
+		return nil
+	}
+	entry, remote, ok, err := inv.accountSource()
+	if err != nil || !ok {
+		return err
+	}
+	if err := inv.alignAccount(ctx, r.gitDir, entry); err != nil {
+		return err
+	}
+	a := &accountFetch{entry: entry, remote: remote, err: inv.fetchForks(ctx, r.gitDir, remote, false)}
+	if a.err == nil || r.all {
+		if a.tips, err = lineage.ListRemote(ctx, inv.git, r.gitDir, remote); err != nil {
+			return accountRepoFailure(err)
+		}
+	}
+	r.account = a
+	return nil
+}
+
+// accountStep is the first step of a fork's update when the run fetched
+// the account remote, see fetchAccount: what another machine published of
+// the fork is taken in first, see syncFork, as a commit of its own, before
+// the update from upstream merges on top of it. With --all that covers
+// every fork placed here that another machine published to, see selection,
+// a fork with no upstream included, which its account step alone brings up
+// to date. A fork with a merge pending is left to the update, which
+// completes it; one whose remote branch holds nothing it lacks, or that
+// the remote holds no branch of, is left as it is, with nothing reported.
+// A fork whose account step conflicts, and so is left pending, or is
+// refused, is dropped from the run, see drop, and its update from upstream
+// waits: dropped names them. pulled names the forks whose branch it moved,
+// in name order. A remote git could not reach drops each fork with no
+// upstream, exit code 3, since it has nothing else to update from; for the
+// others it is a warning, and the update from upstream goes on without it.
+func (r *updateRun) accountStep(ctx context.Context, names []string, records map[string]lineage.Record) (pulled []string, dropped map[string]bool, err error) {
+	inv := r.inv
+	a := r.account
+	if a == nil {
+		return nil, nil, nil
+	}
+	var forks []string
+	for _, n := range names {
+		if rec, ok := records[n]; ok && rec.Kind == lineage.KindFork && !inv.mergePending(n) {
+			forks = append(forks, n)
+		}
+	}
+	dropped = map[string]bool{}
+	if a.err != nil {
+		var upstream []string
+		for _, n := range forks {
+			rec := records[n]
+			if rec.Fork != nil && rec.Fork.Greenfield {
+				dropped[n] = true
+				r.drop(n, unreachableRemote(a.entry.URL, a.err))
+				continue
+			}
+			if _, update := rec.ForkCandidate(); update {
+				upstream = append(upstream, n)
+			}
+		}
+		why := ": " + trimGit(a.err.Error())
+		switch {
+		case len(upstream) > 0:
+			what := sanitised(upstream[0]) + " is"
+			if len(upstream) > 1 {
+				what = "forks are"
+			}
+			inv.out.warn("could not fetch the account remote " + shownURL(a.entry.URL) + ", so " + what + " updated from upstream only" + why)
+		case len(dropped) == 0:
+			inv.out.warn("could not fetch the account remote " + shownURL(a.entry.URL) + ", so what your other machines published is not taken in" + why)
+		}
+		return nil, dropped, nil
+	}
+	if len(forks) == 0 {
+		return nil, nil, nil
+	}
+	remote, err := inv.walkRemoteForks(ctx, r.gitDir, a.remote, a.tips, records, forks)
+	if err != nil {
+		return nil, nil, err
+	}
+	var failed []forkFailure
+	for _, n := range forks {
+		if tip := remote.tips[n]; tip == "" || tip == records[n].Commit {
+			continue
+		}
+		s := inv.syncFork(ctx, r.gitDir, records[n], remote)
+		if s.outcome == pullUpToDate {
+			continue // the remote is behind: the account step took nothing in
+		}
+		inv.reportSync(s)
+		switch {
+		case s.f != nil:
+			dropped[n] = true
+			failed = append(failed, forkFailure{n, s.f})
+		case s.moved():
+			pulled = append(pulled, n)
+		}
+	}
+	// With --all, a fork the step neither moved nor dropped, with no
+	// candidate, was selected for the account step alone and is left out
+	// of the run silently, see afterAccountStep: the count of skills the
+	// run set out to update loses it before any fork is dropped, so that a
+	// drop warns only when other skills are left to update.
+	for _, n := range forks {
+		if _, update := records[n].ForkCandidate(); r.all && !update && !dropped[n] && !slices.Contains(pulled, n) {
+			r.selected--
+		}
+	}
+	for _, d := range failed {
+		r.drop(d.name, d.f)
+	}
+	return pulled, dropped, nil
+}
+
+// forkFailure is a fork the account step gave up on, dropped once the step
+// is done with every fork.
+type forkFailure struct {
+	name string
+	f    *failure
+}
+
+// finishJournals finishes any unfinished journal before a command reads
+// what it works on, for a command whose reads would otherwise answer for a
+// machine halfway through an earlier change. The lock is taken for it only
+// when there is a journal to finish, and nothing is written beyond what
+// the recovery writes, its own bump of the version file included, as for
+// the recovery a scan runs.
+func (inv *invocation) finishJournals(ctx context.Context) error {
+	switch journals, err := home.Journals(inv.dirs.Home); {
+	case err != nil:
+		return mutationFailure(err)
+	case len(journals) > 0:
+		inv.out.debugf("recovering %s", strings.Join(journals, ", "))
+		if err := home.MutateQuiet(inv.dirs.Home, inv.refs(ctx), func() error { return nil }); err != nil {
+			return mutationFailure(err)
+		}
+	}
+	return nil
+}
+
 // selection is the skills a run sets out to update, in name order, with
 // what the library holds of each: the one name it was given, or with --all
 // every managed skill with an update, a candidate agentx can read that its
-// branch does not already hold (see lineage.Record.AtCandidate). A skill
-// with no candidate has nothing to update, an upstream-removed one
-// included, since the check that marks a skill deletes its candidate.
+// branch does not already hold (see lineage.Record.AtCandidate), every
+// fork with one, a candidate other than its base version (see
+// lineage.Record.ForkCandidate), and, when the run fetched the account
+// remote, every fork placed on this machine whose branch there differs
+// from its own, or whose merge is pending, see accountStep: one the remote
+// is behind is judged up to date there, with nothing said, see
+// afterAccountStep. A remote git could not reach selects, of those, the
+// forks with no upstream it held at the last fetch, which then fail, and
+// those with a merge pending. A skill with no
+// candidate has nothing to update, an upstream-removed one included, since
+// the check that marks a skill deletes its candidate.
 func (r *updateRun) selection(name string, records map[string]lineage.Record) ([]string, map[string]scan.LibrarySkill) {
 	libs := map[string]scan.LibrarySkill{}
 	if !r.all {
@@ -286,7 +573,9 @@ func (r *updateRun) selection(name string, records map[string]lineage.Record) ([
 	}
 	var names []string
 	for n, rec := range records {
-		if _, ok := rec.AtCandidate(); ok && rec.Kind == lineage.KindManaged {
+		_, managed := rec.AtCandidate()
+		_, fork := rec.ForkCandidate()
+		if managed && rec.Kind == lineage.KindManaged || fork || r.published(n, rec) {
 			names = append(names, n)
 		}
 	}
@@ -297,22 +586,42 @@ func (r *updateRun) selection(name string, records map[string]lineage.Record) ([
 	return names, libs
 }
 
+// published reports whether rec, the record of the skill called name, is a
+// fork placed on this machine whose merge is pending, or that the account
+// remote, as the run fetched it, holds another tip of. When git could not
+// fetch it, nothing is taken in from the tips the fetch before left, and a
+// fork it held is selected only when it has no upstream, for the account
+// step to fail it, see accountStep.
+func (r *updateRun) published(name string, rec lineage.Record) bool {
+	if r.account == nil || rec.Kind != lineage.KindFork || !r.inv.forkPlaced(name) {
+		return false
+	}
+	if r.inv.mergePending(name) {
+		return true
+	}
+	tip := r.account.tips[name]
+	if r.account.err != nil {
+		return tip != "" && rec.Fork != nil && rec.Fork.Greenfield
+	}
+	return tip != "" && tip != rec.Commit
+}
+
 // judgeUpdate decides, before the lock, whether the skill called name can
-// be updated, and reads what the mutation replaces. It refuses, in this
-// order: a name the library does not hold and no lineage names, an
-// unmanaged skill, a fork, a managed skill whose library directory is gone
-// and one whose import branch agentx cannot read; a skill whose source was
-// removed from this machine, which is exit code 5 as installing from it
-// is; a skill the last update check found its source no longer holds,
-// which is kept as it is and never updated; and, having found an update
-// for it, a skill whose library entry is a symlink, whatever it leads to,
-// and one that holds something git cannot record, which the update would
-// discard with no record of it and which a revert refuses too. A skill
-// with no update is neither: u and f are then both nil. A skill edited
-// since it was installed is no refusal: its update merges the edits, and
-// u says so. A skill with a merge pending is judged by its checkout, see
-// judgePending, and its library directory must still hold the mine the
-// merge started from.
+// be updated, and reads what the mutation replaces. A fork is judged by
+// judgeForkUpdate instead. It refuses, in this order: a name the library
+// does not hold and no lineage names, an unmanaged skill, a managed skill
+// whose library directory is gone and one whose import branch agentx
+// cannot read; a skill whose source was removed from this machine, which
+// is exit code 5 as installing from it is; a skill the last update check
+// found its source no longer holds, which is kept as it is and never
+// updated; and, having found an update for it, a skill whose library
+// entry is a symlink, whatever it leads to, and one that holds something
+// git cannot record, which the update would discard with no record of
+// it. A skill with no update is neither: u
+// and f are then both nil. A skill edited since it was installed is no
+// refusal: its update merges the edits, and u says so. A skill with a
+// merge pending is judged by its checkout, see judgePending, and its
+// library directory must still hold the mine the merge started from.
 //
 // Edited is decided as drift decides it, by git over a throwaway index
 // loaded from the base version, with the in-process tree id as the fast
@@ -328,9 +637,6 @@ func (inv *invocation) judgeUpdate(ctx context.Context, gitDir, name string, rec
 	case !managed:
 		return nil, refuse(exitRefused, name+" is not managed by agentx, so it has no upstream to update from",
 			"run 'agentx skill list' to see which skills are managed")
-	case rec.Kind == lineage.KindFork:
-		return nil, refuse(exitRefused, name+" is a fork on this machine",
-			"a fork's versions are its own history; this command works on a managed skill")
 	case !held:
 		sc := skillContext{records: map[string]lineage.Record{name: rec}}
 		what, wayOut := sc.absentNotice(inv, name)
@@ -366,8 +672,7 @@ func (inv *invocation) judgeUpdate(ctx context.Context, gitDir, name string, rec
 	// A library entry that is a symlink leads to a directory of the user's.
 	// The update replaces the entry itself, so it would drop the link and
 	// leave the directory it led to as it was, whatever that holds: the
-	// link is what is refused, before what it leads to is judged, since a
-	// revert of an edit there refuses the link too.
+	// link is what is refused, before what it leads to is judged.
 	if target, isLink := home.LinkTarget(captured); isLink {
 		return nil, refuse(exitRefused, fmt.Sprintf("%s is a symlink to %s; an update replaces the library directory and would drop the link without touching the files it leads to", quotedPath(libPath), quotedPath(target)),
 			"replace the link with the directory it points to, then "+again)
@@ -377,7 +682,7 @@ func (inv *invocation) judgeUpdate(ctx context.Context, gitDir, name string, rec
 		return nil, failureOf(err)
 	}
 	if len(tree.Unrecordable) > 0 {
-		return nil, unrecordableRefusal(name, libPath, tree.Unrecordable, "an update", "update")
+		return nil, unrecordableAt(name, libPath, tree.Unrecordable, "an update", skillCommand("update", name))
 	}
 	j, err := inv.judgeDir(ctx, gitDir, lib.ResolvedPath, tree, v, true)
 	if err != nil {
@@ -446,7 +751,7 @@ func removedSourceRefusal(name, url string) *failure {
 // source no longer holds: it is kept as it is and never updated.
 func upstreamRemovedRefusal(name string) *failure {
 	return refuse(exitRefused, "the last update check found that the source of "+name+" no longer holds it, so it is kept as it is and never updated",
-		"run 'agentx skill check' once the source holds it again, or '"+skillCommand("remove", name)+"' to remove it")
+		"run '"+checkUpdatesCommand+"' once the source holds it again, or '"+skillCommand("remove", name)+"' to remove it")
 }
 
 // read reads, outside the lock, the version each skill is updated to: the
@@ -467,7 +772,7 @@ func (r *updateRun) read(ctx context.Context) error {
 		}
 		if !u.next.Canonical(theirs) {
 			r.drop(u.name, refuse(exitAccountRepo, "the update candidate "+lineage.CandidateRef(u.name)+" stores its version in a form agentx does not write",
-				"run 'agentx skill check' to pin the update again"))
+				"run '"+checkUpdatesCommand+"' to pin the update again"))
 			continue
 		}
 		u.theirs, u.base = theirs, theirs
@@ -523,7 +828,7 @@ func (r *updateRun) merge(ctx context.Context, u *updating) *failure {
 	dir := u.rec.Import.Dir()
 	if u.next.Import.Dir() != dir {
 		return refuse(exitAccountRepo, "the update candidate "+lineage.CandidateRef(u.name)+" holds "+u.name+" under another directory than its import branch",
-			"run 'agentx skill check' to pin the update again")
+			"run '"+checkUpdatesCommand+"' to pin the update again")
 	}
 	if u.checkout == "" {
 		mine, err := lineage.CommitDir(ctx, git, gitDir, dir, u.written, u.rec.Commit, "library directory of "+u.name+"\n")
@@ -653,7 +958,15 @@ func (r *updateRun) apply(ctx context.Context) error {
 			}
 		}
 		if len(live) > 0 {
-			if err := m.Apply(inv.refs(ctx)); err != nil {
+			backs := make([]func(), 0, len(live))
+			for _, u := range live {
+				backs = append(backs, reenterReplaced(u.libPath))
+			}
+			err := m.Apply(inv.refs(ctx))
+			for _, back := range backs {
+				back()
+			}
+			if err != nil {
 				return err
 			}
 		}
@@ -749,7 +1062,7 @@ func (inv *invocation) stageUpdate(ctx context.Context, m *home.Mutation, gitDir
 	staged := m.Sibling(u.libPath, "staged")
 	fingerprint, err := stageVersion(staged, lay, u.target, u.libPath, u.ignored)
 	if err != nil {
-		os.RemoveAll(staged)
+		_ = home.RemoveTree(staged)
 		return libraryFailure(inv.dirs.Library, err)
 	}
 	u.done = placements{}
@@ -787,10 +1100,30 @@ func (r *updateRun) report(ctx context.Context) error {
 	}
 	slices.SortFunc(r.pending, func(a, b *updating) int { return strings.Compare(a.name, b.name) })
 	for _, u := range r.pending {
-		r.inv.printConflicts(u.conflict, short(u.rec.Import.Commit), short(u.next.Import.Commit))
+		r.inv.printConflicts(u.conflict, u.conflictsWith())
+		if u.fork != nil {
+			r.drop(u.name, forkConflictFailure(u, r.inv.checkoutPath(u.name)))
+			continue
+		}
 		r.drop(u.name, conflictFailure(u.name, filepath.Join(r.inv.checkoutPath(u.name), u.rec.Import.Dir()), len(u.conflict.Files)))
 	}
 	return nil
+}
+
+// conflictsWith is what the merge left pending for u's skill merged the
+// skill with, as the line that reports it names it: its update, from the
+// upstream commit of its base to the candidate's; for a fork's merge with
+// the account remote, what forkUpdate.with names it; or, for a fork whose
+// completed merge was merged again with commits made while it was pending,
+// those commits.
+func (u *updating) conflictsWith() string {
+	switch {
+	case u.fork != nil && u.fork.with != "":
+		return u.fork.with
+	case u.fork != nil && u.fork.remerge:
+		return "the commits made while its merge was pending"
+	}
+	return "its update from " + short(u.rec.Import.Commit) + " to " + short(u.next.Import.Commit)
 }
 
 // conflictFailure is how an update answers for a skill whose merge it left
@@ -801,13 +1134,20 @@ func (r *updateRun) report(ctx context.Context) error {
 // it up.
 func conflictFailure(name, path string, files int) *failure {
 	return refuse(exitPendingMerge, name+" conflicts with its update in "+plural(files, "file")+", so the merge is pending and the library directory was left as it is",
-		"resolve it with git in "+quotedPath(path)+" ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), "+
-			"then run '"+skillCommand("update", name)+"' again to apply it, or '"+skillCommand("update", name, "--abort")+"' to give it up")
+		conflictHintAt(name, path))
+}
+
+// conflictHintAt is the hint of an update that left the merge of the skill
+// called name pending, path being the skill's directory in the checkout.
+func conflictHintAt(name, path string) string {
+	return "resolve it with git in " + quotedPath(path) + " ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), " +
+		"then run '" + skillCommand("update", name) + "' again to apply it, or '" + skillCommand("update", name, "--abort") + "' to give it up"
 }
 
 // reportApplied is report's part for the skills the run updated.
 func (r *updateRun) reportApplied(ctx context.Context) error {
 	inv := r.inv
+	slices.SortFunc(r.applied, func(a, b *updating) int { return strings.Compare(a.name, b.name) })
 	snap, err := inv.scan(ctx, lockWait, "", false)
 	if err != nil {
 		return err
@@ -824,7 +1164,10 @@ func (r *updateRun) reportApplied(ctx context.Context) error {
 	}
 	for _, u := range r.applied {
 		lib, ok := libs[u.name]
-		if !ok {
+		switch {
+		case !ok && u.fork != nil: // a fork whose library entry is elsewhere has nothing in the library to report
+			continue
+		case !ok:
 			return fail(exitInternal, "the library holds no "+u.name+" after updating it", "run 'agentx doctor' and check the library it names")
 		}
 		inv.out.emit(sc.librarySkillEventFor(ctx, inv, snap, lib, nil))
@@ -834,10 +1177,16 @@ func (r *updateRun) reportApplied(ctx context.Context) error {
 		u := r.applied[0]
 		moved := " from " + short(u.rec.Import.Commit) + " to " + short(u.next.Import.Commit)
 		switch {
+		case u.checkout != "" && u.fork != nil && u.rec.Import.Commit == u.next.Import.Commit:
+			// A merge the account step left pending moves no upstream version.
+			moved = " with the merge you resolved"
 		case u.checkout != "":
 			moved += " with the merge you resolved"
 		case u.edited:
 			moved += " and merged its edits cleanly"
+		}
+		if u.fork != nil {
+			moved += ", committed as " + short(u.fork.commit)
 		}
 		plain, painted := copiesNote(out, len(u.done.copies), len(u.done.skipped))
 		inv.summary = "updated " + u.name + moved + plain
@@ -864,6 +1213,9 @@ func (r *updateRun) reportApplied(ctx context.Context) error {
 	t := &table{}
 	for _, u := range r.applied {
 		notes, _ := copiesNote(out, len(u.done.copies), len(u.done.skipped))
+		if u.fork != nil {
+			notes = ", committed as " + short(u.fork.commit) + notes
+		}
 		switch {
 		case u.checkout != "":
 			notes = ", the merge you resolved" + notes
@@ -892,4 +1244,19 @@ func (r *updateRun) skippedNote(out *writer) (plain, painted string) {
 		painted += ", " + out.paint(warnStyle, note)
 	}
 	return plain, painted
+}
+
+// unrecordableAt refuses to replace the directory of the skill called
+// name, at libPath, while it holds paths git cannot record, a repository
+// nested in it say, relative to the directory: what replaces the directory
+// would discard them with no record of them anywhere. what is the
+// replacement in words, "an update" say, and again the command line to
+// run again once they are moved out.
+func unrecordableAt(name, libPath string, unrecordable []string, what, again string) *failure {
+	paths := make([]string, len(unrecordable))
+	for i, p := range unrecordable {
+		paths[i] = quotedPath(filepath.Join(libPath, filepath.FromSlash(p)))
+	}
+	return refuse(exitRefused, fmt.Sprintf("%s holds %s, which git cannot record", name, strings.Join(paths, ", ")),
+		what+" would discard it with no record of it anywhere; move it out of the skill, then run '"+again+"' again")
 }

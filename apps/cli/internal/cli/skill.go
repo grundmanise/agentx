@@ -19,9 +19,13 @@ import (
 // which is one content version found anywhere on the machine, or from a
 // sourceSkillEvent, which is one installable skill of a source. Its fields
 // are the library entry a snapshot lists, so the two always say the same.
+// own, which no event carries, is whether it is one of your own skills,
+// whose source is the account remote: its kind alone does not say, and
+// while no account remote is set neither does its source.
 type librarySkillEvent struct {
 	event
 	scan.LibraryEntry
+	own bool
 }
 
 // placementEvent is one way a configuration sees the skill: mode is what
@@ -38,7 +42,10 @@ const (
 
 // The two states a managed skill is listed with: its library directory
 // holds the version it was installed at, or it was edited since. Nothing
-// here decides whether an upstream moved, which a later command does.
+// here decides whether an upstream moved, which a later command does. A
+// fork is listed with the same two against its branch tip: current when
+// its skill directory holds what the tip records, modified while it holds
+// edits not yet published, which a publish records on the branch.
 //
 // The two are told apart the way skilltree.go compares a directory with a
 // version, so a file git ignores is no edit. A mode is content to git, so
@@ -77,6 +84,11 @@ const driftUpstreamRemoved = "upstream removed"
 // candidate rather than in drift.
 const updateAvailable = "update available"
 
+// publishedElsewhere is what skill check-updates says of one of the user's
+// own skills whose branch on the account remote holds commits another
+// machine published, which this machine's branch lacks.
+const publishedElsewhere = "published from another machine"
+
 // mergePending is what the skill list row says of a managed skill an update
 // left a pending merge for. Like an update available it is no drift: the
 // library directory is as it was, and the event carries it as
@@ -86,24 +98,23 @@ const mergePending = "merge pending"
 func newSkillCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "skill",
-		Short:       "Install, place, compare, revert, update and remove skills, check them for updates, and list what the library holds",
+		Short:       "Install, create, fork, publish, place, compare, update, rename and remove skills, check them for updates, and list what the library holds",
 		Annotations: map[string]string{annotationGroup: "true"},
 		Args:        cobra.NoArgs,
 		RunE:        needSubcommand(inv, "no skill command given", "run 'agentx skill --help' to list commands"),
 	}
 	cmd.AddCommand(newSkillAddCommand(inv))
+	cmd.AddCommand(newSkillNewCommand(inv))
+	cmd.AddCommand(newSkillForkCommand(inv))
+	cmd.AddCommand(newSkillPublishCommand(inv))
+	cmd.AddCommand(newSkillHistoryCommand(inv))
 	cmd.AddCommand(newSkillPlaceCommand(inv))
 	cmd.AddCommand(newSkillRemoveCommand(inv))
+	cmd.AddCommand(newSkillRenameCommand(inv))
 	cmd.AddCommand(newSkillDiffCommand(inv))
-	cmd.AddCommand(newSkillRevertCommand(inv))
-	cmd.AddCommand(newSkillCheckCommand(inv))
+	cmd.AddCommand(newSkillCheckUpdatesCommand(inv))
 	cmd.AddCommand(newSkillUpdateCommand(inv))
-	cmd.AddCommand(&cobra.Command{
-		Use:   "list",
-		Short: "List the skills in the library with their upstream and placements",
-		Args:  cobra.NoArgs,
-		RunE:  func(cmd *cobra.Command, args []string) error { return inv.skillList(cmd.Context()) },
-	})
+	cmd.AddCommand(newSkillListCommand(inv))
 	return cmd
 }
 
@@ -287,9 +298,10 @@ func universalClients(snap scan.Snapshot) []string {
 }
 
 // skillFromLibrary builds the event of one library skill from its lineage
-// record, the canonical URLs of the sources the settings hold, the
-// placements a scan found, the universal clients that scan detected and
-// what was observed of its directory and of its places.
+// record, the canonical URLs of the sources the settings hold, the account
+// remote's, "" when none is set, the placements a scan found, the
+// universal clients that scan detected and what was observed of its
+// directory and of its places.
 //
 // Every state is derived here, on every read, and nothing is ever written
 // for one: the lineage says where the skill came from and the settings say
@@ -298,22 +310,47 @@ func universalClients(snap scan.Snapshot) []string {
 // a source is gone is its settings entry and not its ref in the account
 // repo: an entry whose ref is missing is a source this machine still has
 // and has not fetched, which is what an import leaves.
-func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, sources map[string]bool, places []placementEvent, universal []string, obs observation) librarySkillEvent {
+func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, sources map[string]bool, account string, places []placementEvent, universal []string, obs observation) librarySkillEvent {
 	ev := librarySkillEvent{event: newEvent("library_skill"), LibraryEntry: scan.LibraryEntry{
 		Name: lib.Name, Kind: lineage.KindUnmanaged, ContentHash: lib.ContentHash, Placements: places, Universal: universal,
 	}}
 	if !ok {
 		return ev
 	}
-	ev.Kind = rec.Kind
-	if rec.HasImport {
-		subpath := rec.Import.Path
-		ev.Source, ev.Subpath, ev.UpstreamCommit, ev.BaseHash = rec.Import.Source, &subpath, rec.Import.Commit, rec.Import.Hash
+	ev.Kind, ev.Source, ev.Subpath, ev.Upstream, ev.UpstreamSubpath = skillOrigin(rec, account)
+	ev.own = rec.Kind == lineage.KindFork
+	// The version is the base version's: a managed skill's is the import
+	// commit its branch points at, and a fork's the import commit its
+	// history names, read by the walk, which a skill made by skill new has
+	// none of. A fork's logical identity is its fork id, which its
+	// creation commit carries, not its root commit.
+	base, hasBase := rec.Import, rec.HasImport
+	if rec.Kind == lineage.KindFork && rec.Fork != nil {
+		base, hasBase = rec.Fork.Import, rec.Fork.Base != ""
+		ev.ForkID = rec.Fork.ID
+	}
+	if hasBase {
+		ev.UpstreamCommit, ev.BaseHash = base.Commit, base.Hash
+	}
+	// A fork is compared with what the account remote holds of it:
+	// modified while it has edits not yet published, see unpublished. Its drift is its placements', since what
+	// the source drift states say of a managed skill is not true of a
+	// fork, see driftOf.
+	if rec.Kind == lineage.KindFork && obs.judged {
+		ev.State = stateCurrent
+		if obs.modified {
+			ev.State = stateModified
+		}
+		ev.Drift = driftOf(obs, false, false)
+		ev.PendingMerge = obs.pending
+	}
+	// A fork's update is a newer version of the upstream its base came
+	// from, judged against that base, whatever its own commits hold.
+	if next, ok := rec.ForkCandidate(); ok {
+		ev.Candidate = &scan.LibraryCandidate{UpstreamCommit: next.Import.Commit, ContentHash: next.Import.Hash}
 	}
 	// A managed skill's base version is the import commit its branch points
-	// at, so the directory can be compared with that commit's tree; a fork's
-	// base is the last version merged into it, which a later command reads
-	// from its history.
+	// at, so the directory can be compared with that commit's tree.
 	if rec.Kind == lineage.KindManaged && rec.HasImport {
 		ev.State = stateCurrent
 		if obs.modified {

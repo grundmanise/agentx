@@ -3,11 +3,16 @@ package gitx
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 // stubGit puts a git script on a fresh PATH that prints its arguments on the
@@ -76,23 +81,26 @@ func TestEnvironments(t *testing.T) {
 	}
 	expect(t, "user", out,
 		[]string{"--git-dir=/repo.git fetch origin", "GIT_AUTHOR_NAME=Someone", "GIT_SSH_COMMAND=ssh -i /home/someone/key", "HOME=/home/someone"},
-		[]string{"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_ATTR_NOSYSTEM=1", "GIT_NO_LAZY_FETCH=1", "AGENTX_LEAK=from the process", "GIT_ASKPASS=/bin/false"})
+		[]string{"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1", "GIT_ATTR_NOSYSTEM=1", "GIT_NO_LAZY_FETCH=1", "AGENTX_LEAK=from the process", "GIT_ASKPASS=/bin/false", "SSH_ASKPASS_REQUIRE=never"})
 
 	serve := New(env, true, logf)
 	out, err = serve.run(ctx, call{}, "fetch")
 	if err != nil {
 		t.Fatal(err)
 	}
-	expect(t, "serve user", out,
-		[]string{"GIT_TERMINAL_PROMPT=0", "GIT_SSH_COMMAND=ssh -i /home/someone/key -o BatchMode=yes", "GIT_ASKPASS=/bin/false"},
-		nil)
+	// The serve child never prompts, and leaves the user's SSH command as
+	// it is: appending options to it would break a command that is not ssh
+	// itself, and replacing it would drop a core.sshCommand of theirs.
+	unattended := []string{"GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS=/bin/false", "SSH_ASKPASS=/bin/false", "SSH_ASKPASS_REQUIRE=never", "GCM_INTERACTIVE=never"}
+	expect(t, "serve user", out, append([]string{"GIT_SSH_COMMAND=ssh -i /home/someone/key"}, unattended...), nil)
 	out, err = serve.Isolated(ctx, "/repo.git", "commit")
 	if err != nil {
 		t.Fatal(err)
 	}
-	expect(t, "serve isolated", out,
-		[]string{"GIT_TERMINAL_PROMPT=0", "GIT_SSH_COMMAND=ssh -o BatchMode=yes", "GIT_ASKPASS=/bin/false", "GIT_CONFIG_GLOBAL=/dev/null"},
-		nil)
+	expect(t, "serve isolated", out, append([]string{"GIT_CONFIG_GLOBAL=/dev/null"}, unattended...), nil)
+	if strings.Contains(out, "GIT_SSH_COMMAND=") {
+		t.Errorf("serve isolated: an SSH command was set:\n%s", out)
+	}
 }
 
 func TestVersion(t *testing.T) {
@@ -162,6 +170,9 @@ func TestOpenAccountRepoCreatesOnceWithAgentxConfig(t *testing.T) {
 		t.Fatalf("OpenAccountRepo = %q, %v, %v", gitDir, created, err)
 	}
 	want := map[string]string{"core.bare": "true", "gc.auto": "0", "core.logAllRefUpdates": "true", "merge.conflictStyle": "zdiff3"}
+	if v, err := r.Version(ctx); err == nil && v.AtLeast(2, 48) {
+		want["worktree.useRelativePaths"] = "true"
+	}
 	for key, value := range want {
 		if got, err := r.Isolated(ctx, gitDir, "config", "--get", key); err != nil || got != value {
 			t.Errorf("%s = %q, %v; want %q", key, got, err, value)
@@ -243,11 +254,19 @@ func TestIsolatedStatusAnswersWithTheExitStatus(t *testing.T) {
 
 // TestAddCheckoutLocksWithTheReason: a checkout is added detached at the
 // commit given and locked with the reason, which git worktree list shows,
-// so that git's own pruning never takes it.
+// so that git's own pruning never takes it, and a registration whose
+// directory is gone is pruned first.
 func TestAddCheckoutLocksWithTheReason(t *testing.T) {
 	t.Parallel()
 	r, gitDir, commit := checkoutRepo(t)
 	ctx := context.Background()
+	stale := filepath.Join(t.TempDir(), "stale")
+	if _, err := r.Isolated(ctx, gitDir, "worktree", "add", "--detach", stale, commit); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(stale); err != nil {
+		t.Fatal(err)
+	}
 	path := filepath.Join(t.TempDir(), "merges", "alpha")
 	if err := r.AddCheckout(ctx, gitDir, path, commit, "a reason of its own"); err != nil {
 		t.Fatal(err)
@@ -259,8 +278,98 @@ func TestAddCheckoutLocksWithTheReason(t *testing.T) {
 	if want := "HEAD " + commit + "\ndetached\nlocked a reason of its own"; !strings.Contains(list, want) {
 		t.Errorf("worktree list says\n%s\nwant it to hold %q", list, want)
 	}
+	if strings.Contains(list, stale) {
+		t.Errorf("worktree list still names the stale registration:\n%s", list)
+	}
 	if top, err := r.InCheckout(ctx, path, "rev-parse", "HEAD"); err != nil || strings.TrimSpace(top) != commit {
 		t.Errorf("HEAD in the checkout = %q, %v; want %s", top, err, commit)
+	}
+}
+
+// TestGitRunsFromADeletedDirectory: a process whose working directory was
+// removed, a shell left in a merge checkout an update completed, still reads
+// the repository it names. Not parallel: it changes the working directory.
+func TestGitRunsFromADeletedDirectory(t *testing.T) {
+	r, gitDir, commit := checkoutRepo(t)
+	gone := filepath.Join(t.TempDir(), "gone")
+	if err := os.Mkdir(gone, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(gone)
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := r.Isolated(context.Background(), gitDir, "rev-parse", commit); err != nil || strings.TrimSpace(out) != strings.TrimSpace(commit) {
+		t.Errorf("rev-parse from a deleted directory = %q, %v; want %s", out, err, commit)
+	}
+}
+
+// TestCancellingAnUnattendedGitStopsItsTransport: an unattended git runs in
+// a session of its own, out of reach of a terminal's Ctrl-C, so a cancelled
+// run has to stop what git started as well as git: an ssh waiting on a host
+// that does not answer would otherwise outlive the run by minutes. The
+// stand-in transport holds the write end of a FIFO, so the reader sees its
+// end exactly when the transport is gone.
+func TestCancellingAnUnattendedGitStopsItsTransport(t *testing.T) {
+	t.Parallel()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sleeper, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fifo, ready := filepath.Join(dir, "transport"), filepath.Join(dir, "ready")
+	if err := syscall.Mkfifo(fifo, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeShim(t, filepath.Join(dir, "git"), "#!/bin/sh\n[ \"$1\" = --version ] && exit 0\n"+
+		sleeper+" 300 > "+fifo+" &\necho $! > "+ready+"\nwait\n")
+	r := New(map[string]string{"PATH": dir, "HOME": dir}, false, func(string, ...any) {})
+
+	opened, ended := make(chan struct{}), make(chan error, 1)
+	go func() {
+		f, err := os.Open(fifo) // returns once the transport has opened its end
+		close(opened)
+		if err != nil {
+			ended <- err
+			return
+		}
+		defer f.Close()
+		_, err = io.Copy(io.Discard, f)
+		ended <- err
+	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	ran := make(chan error, 1)
+	go func() {
+		_, err := r.run(ctx, call{unattended: true}, "fetch")
+		ran <- err
+	}()
+	<-opened
+	// The transport's pid, for a failure to clean up after, is written
+	// once it has started.
+	for deadline := time.Now().Add(30 * time.Second); ; time.Sleep(10 * time.Millisecond) {
+		if info, err := os.Stat(ready); (err == nil && info.Size() > 0) || time.Now().After(deadline) {
+			break
+		}
+	}
+	cancel()
+	if err := <-ran; err == nil {
+		t.Error("a cancelled git answered no error")
+	}
+	select {
+	case err := <-ended:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(30 * time.Second):
+		if b, err := os.ReadFile(ready); err == nil {
+			if pid, err := strconv.Atoi(strings.TrimSpace(string(b))); err == nil {
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+			}
+		}
+		t.Fatal("the transport git started outlived the cancelled run")
 	}
 }
 
@@ -322,4 +431,23 @@ func checkoutRepo(t *testing.T) (*Runner, string, string) {
 		t.Fatal(err)
 	}
 	return r, gitDir, commit
+}
+
+// writeShim writes a git shell script a parallel test is about to run and
+// waits until it can be run. The suite forks in parallel with itself and a
+// fork duplicates the write descriptor of a file being written, so running
+// the script can fail with ETXTBSY until the child that inherited that
+// descriptor execs; it is run with --version until it starts, which every
+// script given answers at once.
+func writeShim(t *testing.T, path, script string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		if err := exec.Command(path, "--version").Run(); !errors.Is(err, syscall.ETXTBSY) {
+			return
+		}
+		runtime.Gosched()
+	}
 }

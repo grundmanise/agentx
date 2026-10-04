@@ -10,28 +10,41 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
+	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
 func newSkillDiffCommand(inv *invocation) *cobra.Command {
 	var update bool
+	var commit string
 	cmd := &cobra.Command{
 		Use:   "diff <name>",
-		Short: "Show how a managed skill differs from the version it was installed at",
+		Short: "Show how a skill differs from its base version, or a fork from what it published",
 		Long: "Show how the library directory of a managed skill differs from its base version,\n" +
 			"the version it was installed at, as one unified diff per file. Every edit counts,\n" +
 			"whatever tool made it, a file made executable and a file turned into a symlink\n" +
 			"included. Files git ignores do not. Nothing is written to the library. With\n" +
-			"--update, show instead what the update 'agentx skill check' found changes in\n" +
-			"the base version.",
+			"--update, show instead what the update '" + checkUpdatesCommand + "' found\n" +
+			"changes in the base version.\n\n" +
+			"For a fork, show its unpublished edits: how its skill directory differs from its\n" +
+			"last published version, the newest commit of its branch the account remote holds\n" +
+			"as last fetched, or from the commit that created it when the account remote holds\n" +
+			"none, so edits an update or a fork recorded show until they are published; or,\n" +
+			"with --commit <id>, how it differs from that commit.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if update {
+			switch {
+			case update && commit != "":
+				return fail(exitUsage, "--update and --commit cannot be given together", "compare with the update or with a commit, one at a time")
+			case cmd.Flags().Changed("commit") && strings.TrimSpace(commit) == "":
+				return fail(exitUsage, "--commit needs a commit", "name a commit by its id, such as one 'agentx skill history' lists")
+			case update:
 				return inv.skillDiffUpdate(cmd.Context(), args[0])
 			}
-			return inv.skillDiff(cmd.Context(), args[0])
+			return inv.skillDiff(cmd.Context(), args[0], commit)
 		},
 	}
 	cmd.Flags().BoolVar(&update, "update", false, "compare the base version with the update the last check found")
+	cmd.Flags().StringVar(&commit, "commit", "", "compare a fork with this commit instead of its last one")
 	return cmd
 }
 
@@ -73,14 +86,27 @@ type fileDiff struct {
 // every file of a base that an earlier agentx stored over a source's own
 // tree, in a form no directory holds: git finds no file that differs, and
 // the command says the difference is where the version is stored, and
-// that a revert stores it again without touching a file.
-func (inv *invocation) skillDiff(ctx context.Context, name string) error {
+// that installing that version again stores it anew without touching a
+// file.
+//
+// One of your own skills is compared with its last published version, or
+// with the commit given, see forkDiff.
+func (inv *invocation) skillDiff(ctx context.Context, name, commit string) error {
+	gitDir, rec, held, err := inv.accountRecord(ctx, name)
+	if err != nil {
+		return err
+	}
+	if held && rec.Kind == lineage.KindFork {
+		return inv.forkDiff(ctx, gitDir, rec, commit)
+	}
 	lib, ok := librarySkill(inv.dirs.Library, name)
 	if !ok {
 		return inv.noLibrarySkill(name)
 	}
-	gitDir, rec, err := inv.managedRecord(ctx, name, "compare with")
-	if err != nil {
+	if commit != "" {
+		return notAForkRefusal(name, held)
+	}
+	if err := managedRefusal(name, rec, held); err != nil {
 		return err
 	}
 	tree, err := inv.readLibraryTree(lib.Path)
@@ -116,7 +142,7 @@ func (inv *invocation) skillDiff(ctx context.Context, name string) error {
 			return accountRepoFailure(err)
 		}
 		if len(files) == 0 && len(tree.Unrecordable) == 0 {
-			inv.reportStoredDiff(name, against)
+			inv.reportStoredDiff(name, rec.Import.Source, lib.Path, against, contentHashAt(lib.Path) == rec.Import.Hash)
 			return nil
 		}
 	}
@@ -133,18 +159,30 @@ func (inv *invocation) skillDiff(ctx context.Context, name string) error {
 // what the source holds now. A skill with no candidate, or with one its
 // branch already holds, has nothing to show, and the refusal says how to
 // look for an update.
+//
+// A fork's update is compared with the fork's base version, the import
+// commit its history names, exactly as a managed skill's: what the update
+// changes upstream, which is what merging it brings in, and not how it
+// differs from the fork's own commits.
 func (inv *invocation) skillDiffUpdate(ctx context.Context, name string) error {
 	if _, ok := librarySkill(inv.dirs.Library, name); !ok {
 		return inv.noLibrarySkill(name)
 	}
-	gitDir, rec, err := inv.managedRecord(ctx, name, "compare with")
+	gitDir, rec, held, err := inv.accountRecord(ctx, name)
 	if err != nil {
+		return err
+	}
+	if held && rec.Kind == lineage.KindFork {
+		if rec, err = inv.forkBaseOf(ctx, gitDir, rec); err != nil {
+			return err
+		}
+	} else if err := managedRefusal(name, rec, held); err != nil {
 		return err
 	}
 	c, ok := rec.AtCandidate()
 	if !ok {
 		return fail(exitRefused, "no update of "+name+" is known",
-			"run 'agentx skill check' to look for one; it pins what it finds for this command to show")
+			"run '"+checkUpdatesCommand+"' to look for one; it pins what it finds for this command to show")
 	}
 	files, err := diffTrees(ctx, inv.git, gitDir, rec.Commit+":"+rec.Import.Dir(), c.Commit+":"+c.Import.Dir())
 	if err != nil {
@@ -206,10 +244,23 @@ func (inv *invocation) reportDiff(subject diffSubject, name, against string, fil
 // reportStoredDiff says that the library directory holds every file of
 // its base version while the import commit stores that version in a form
 // git no longer writes, which is why the skill lists as modified, and how
-// to put that right.
-func (inv *invocation) reportStoredDiff(name, against string) {
-	const stored = " only in how the account repo stores it; run '"
-	fix := skillCommand("revert", name) + "' to store it as git writes it today, which changes no file"
+// to put that right. Installing the same version again stores it as git
+// writes it today, but it adopts only a directory whose content hash is
+// the version's, and exact says whether the one at libPath is: a file git
+// ignores, which the diff leaves out, counts for the hash, so when it is
+// not, the hint says to move such files out first. The install also needs
+// the source to hold that version still, which this command cannot see,
+// so the hint names the other way out as well: the update to a newer
+// version, which stores that one anew.
+func (inv *invocation) reportStoredDiff(name, source, libPath, against string, exact bool) {
+	const stored = " only in how the account repo stores it; "
+	add := "run 'agentx skill add " + shellWord(source) + " --name " + shellWord(name) + "' to install that version again while the source still holds it, which stores it as git writes it today"
+	if exact {
+		add += " and changes no file"
+	} else {
+		add = "move what git ignores out of " + quotedPath(libPath) + ", then " + add
+	}
+	fix := add + ", or, once '" + checkUpdatesCommand + "' finds a newer version, run '" + skillCommand("update", name) + "'"
 	inv.summary = name + " differs from " + against + stored + fix
 	out := inv.out
 	out.print(out.paint(heading, sanitised(name)), " differs from ", against, stored, sanitised(fix))

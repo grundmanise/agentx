@@ -12,7 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
+	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
 // The variables the child process of the stop-signal tests reads: it runs
@@ -155,31 +157,38 @@ exec `+real+` "$@"
 // raises: a run that is waiting on the network has to answer a Ctrl-C at
 // once, say so, and take its git child with it. Before there was a handler
 // the process died where it stood, printing nothing, and the git it had
-// started was reparented to init and went on fetching.
+// started was reparented to init and went on fetching. The access check
+// that follows each fetch is waited on the same way, and a stop there is a
+// stop too, not a run that finished with the access it had before.
 func TestASignalStopsAFetchAndTearsDownItsGit(t *testing.T) {
 	t.Parallel()
-	h := newHarness(t)
-	s, _, _ := h.standardSource(true)
-	h.mustRun("source", "add", s.url)
+	for _, sub := range []string{"fetch", "push"} {
+		t.Run(sub, func(t *testing.T) {
+			t.Parallel()
+			h := newHarness(t)
+			s, _, _ := h.standardSource(true)
+			h.mustRun("source", "add", s.url)
 
-	ready := filepath.Join(t.TempDir(), "fetching")
-	hangingGit(t, h, "fetch", ready)
-	code, stderr := signalled(t, h, stopRun{ready: ready, sigs: []syscall.Signal{syscall.SIGTERM},
-		args: []string{"source", "fetch", "--all", "--color", "off"}})
+			ready := filepath.Join(t.TempDir(), "waiting")
+			hangingGit(t, h, sub, ready)
+			code, stderr := signalled(t, h, stopRun{ready: ready, sigs: []syscall.Signal{syscall.SIGTERM},
+				args: []string{"source", "fetch", "--all", "--color", "off"}})
 
-	equal(t, "the exit code of an interrupted fetch", code, exitInterrupted.exit)
-	if !strings.Contains(stderr, "error: interrupted") {
-		t.Errorf("the run said nothing about the stop:\n%s", stderr)
-	}
-	if !strings.Contains(stderr, "hint: ") {
-		t.Errorf("the stop came with no hint:\n%s", stderr)
-	}
-	gitPID := readPID(t, ready)
-	if err := syscall.Kill(gitPID, 0); err == nil {
-		_ = syscall.Kill(gitPID, syscall.SIGKILL) // do not leave it behind either
-		t.Errorf("the git child %d outlived the run it belonged to", gitPID)
-	} else if !errors.Is(err, syscall.ESRCH) {
-		t.Errorf("git %d: %v", gitPID, err)
+			equal(t, "the exit code of an interrupted fetch", code, exitInterrupted.exit)
+			if !strings.Contains(stderr, "error: interrupted") {
+				t.Errorf("the run said nothing about the stop:\n%s", stderr)
+			}
+			if !strings.Contains(stderr, "hint: ") {
+				t.Errorf("the stop came with no hint:\n%s", stderr)
+			}
+			gitPID := readPID(t, ready)
+			if err := syscall.Kill(gitPID, 0); err == nil {
+				_ = syscall.Kill(gitPID, syscall.SIGKILL) // do not leave it behind either
+				t.Errorf("the git child %d outlived the run it belonged to", gitPID)
+			} else if !errors.Is(err, syscall.ESRCH) {
+				t.Errorf("git %d: %v", gitPID, err)
+			}
+		})
 	}
 }
 
@@ -212,6 +221,38 @@ func TestASignalDuringAnAddStillTakesTheRemoteBack(t *testing.T) {
 	killLeftover(t, ready)
 }
 
+// TestASignalDuringTheAccessCheckOfAReAddLeavesTheSourceAsItWas: a re-add
+// that changes the pin has already published its fetch when the access
+// check runs, and the check can take a while on a slow host, which is when
+// a Ctrl-C comes. The stop takes the add back whole: the settings keep the
+// old pin, and the source ref goes back to the commit that pin fetched, so
+// that source skills does not list skills of a branch the settings do not
+// follow.
+func TestASignalDuringTheAccessCheckOfAReAddLeavesTheSourceAsItWas(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	s, v1, _ := h.standardSource(true)
+	h.mustRun("source", "add", s.url+"#v1")
+	ref := source.Ref(source.ID(s.url))
+	held := h.accountGit("rev-parse", ref)
+	ready := filepath.Join(t.TempDir(), "checking")
+	hangingGit(t, h, "push", ready)
+
+	code, stderr := signalled(t, h, stopRun{ready: ready, sigs: []syscall.Signal{syscall.SIGINT},
+		args: []string{"source", "add", s.url, "--color", "off"}})
+
+	equal(t, "the exit code of a stopped re-add", code, exitInterrupted.exit)
+	contains(t, "stderr", stderr, "error: interrupted")
+	equal(t, "the source ref after the stopped re-add", h.accountGit("rev-parse", ref), held)
+	equal(t, "the commit it names", h.accountGit("rev-parse", ref+"^{commit}"), v1)
+	settings, err := home.LoadSettings(h.agentx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	equal(t, "the pin after the stopped re-add", settings.Sources[settings.FindSource(s.url)].Pin, "v1")
+	killLeftover(t, ready)
+}
+
 // TestASecondSignalKillsTheRun is the way out of a run that will not stop,
 // and it is stopped here at the one place a first signal deliberately does
 // not reach: the ref step of a journal already on disk, which runs on a
@@ -227,7 +268,7 @@ func TestASecondSignalKillsTheRun(t *testing.T) {
 	hangingGit(t, h, "update-ref", ready)
 
 	code, stderr := signalled(t, h, stopRun{ready: ready, sigs: []syscall.Signal{syscall.SIGINT, syscall.SIGINT},
-		args: []string{"skill", "add", s.url, "--skill", "alpha", "--color", "off"}})
+		args: []string{"skill", "add", s.url, "--name", "alpha", "--color", "off"}})
 
 	equal(t, "the exit status after a second signal", code, -int(syscall.SIGINT))
 	if stderr != "" {
@@ -273,7 +314,7 @@ done
 exec `+real+` "$@"
 `)
 	code, stderr := signalled(t, h, stopRun{ready: ready,
-		args: []string{"skill", "add", s.url, "--skill", "alpha", "--color", "off"}})
+		args: []string{"skill", "add", s.url, "--name", "alpha", "--color", "off"}})
 
 	if _, err := os.Stat(done); err != nil {
 		t.Fatalf("the journal's ref step never ran, so the test did not stop the run where it means to:\n%s", stderr)
@@ -329,7 +370,7 @@ func TestATerminalCtrlCDuringTheJournalIsTheCrashBoundary(t *testing.T) {
 	hangingGit(t, h, "update-ref", ready)
 
 	code, stderr := signalled(t, h, stopRun{ready: ready, sigs: []syscall.Signal{syscall.SIGINT}, group: true,
-		args: []string{"skill", "add", s.url, "--skill", "alpha", "--color", "off"}})
+		args: []string{"skill", "add", s.url, "--name", "alpha", "--color", "off"}})
 
 	equal(t, "the exit code of a run a terminal stopped", code, exitInterrupted.exit)
 	contains(t, "stderr", stderr, "error: interrupted")

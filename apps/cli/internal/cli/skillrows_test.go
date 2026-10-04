@@ -34,7 +34,7 @@ func pathsOf(t *testing.T, ev jsonEvent) []string {
 func TestSkillPlaceShowsOneRowPerClient(t *testing.T) {
 	t.Parallel()
 	h, s := universalHarness(t, ".cursor")
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	h.mustRun("skill", "remove", "alpha", "--from", "cursor")
 	lib := filepath.Join(h.library, "alpha")
 	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
@@ -62,7 +62,7 @@ func TestSkillAddShowsOneRowPerClient(t *testing.T) {
 	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
 	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
 
-	out := h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code", "--to", "cursor")
+	out := h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code", "--to", "cursor")
 	header, rows, ok := strings.Cut(out.stdout, "\n")
 	if !ok || !strings.HasPrefix(header, "✓ installed alpha from ") {
 		t.Fatalf("stdout does not open with the install:\n%s", out.stdout)
@@ -76,7 +76,7 @@ func TestSkillAddShowsOneRowPerClient(t *testing.T) {
 
 	// The same install again is the same rescan, and its event is read from
 	// it rather than from a second home.
-	installed := h.mustRun("--json", "skill", "add", s.url, "--skill", "alpha", "--to", "claude-code", "--to", "cursor")
+	installed := h.mustRun("--json", "skill", "add", s.url, "--name", "alpha", "--to", "claude-code", "--to", "cursor")
 	equal(t, "the paths of the event", strings.Join(pathsOf(t, h.one(installed.stdout, "library_skill")), ";"),
 		"claude-code "+claude+";cursor "+claude+";cursor "+cursor)
 }
@@ -88,7 +88,7 @@ func TestSkillAddShowsOneRowPerClient(t *testing.T) {
 func TestSkillListCountsEachClientOnce(t *testing.T) {
 	t.Parallel()
 	h, s := universalHarness(t, ".cursor")
-	installed := h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	installed := h.mustRun("skill", "add", s.url, "--name", "alpha")
 	header, _, _ := strings.Cut(installed.stdout, "\n")
 	if !strings.HasSuffix(header, ": 4 placements") {
 		t.Errorf("the install line does not count one placement per client: %q", header)
@@ -141,7 +141,7 @@ func TestConfigEnablePlaceAllShowsOneRowPerSkill(t *testing.T) {
 func TestPlacingShowsWhereAClientStillSeesASkillItCouldNotPlace(t *testing.T) {
 	t.Parallel()
 	h, s := universalHarness(t, ".cursor")
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code")
 	handMade := filepath.Join(h.home, ".cursor", "skills", "alpha")
 	if err := os.MkdirAll(filepath.Dir(handMade), 0o755); err != nil {
 		t.Fatal(err)
@@ -183,7 +183,7 @@ func TestPlacingShowsWhereAClientSeesASkillBesideACopyItKept(t *testing.T) {
 		t.Run(c.what, func(t *testing.T) {
 			t.Parallel()
 			h, s := universalHarness(t, ".cursor")
-			h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "cursor", "--copy")
+			h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "cursor", "--copy")
 			if c.claude {
 				h.mustRun("skill", "place", "alpha", "--to", "claude-code")
 			}

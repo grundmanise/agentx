@@ -14,6 +14,7 @@ import (
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
+	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 	"github.com/grundmanise/agentx/apps/cli/internal/serve"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
@@ -52,7 +53,7 @@ type driftEvent struct {
 	InstanceID    string   `json:"instance_id"`
 	ScanCounter   int      `json:"scan_counter"`
 	Name          string   `json:"name"`
-	Kind          string   `json:"kind"`
+	Kind          string   `json:"kind"` // managed or unmanaged, as the snapshot's library entry has it
 	State         string   `json:"state,omitempty"`
 	Drift         []string `json:"drift"` // [] when none
 	PreviousState string   `json:"previous_state,omitempty"`
@@ -128,7 +129,8 @@ func newServeCommand(inv *invocation) *cobra.Command {
 		Short: "Watch for changes and stream a snapshot on each one, until stdin closes",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var every time.Duration // a single pass runs no check, and reads no interval
+			// A single pass runs no check and reads no interval.
+			var every time.Duration
 			if !once {
 				var err error
 				if every, err = inv.checkEvery(); err != nil {
@@ -145,6 +147,19 @@ func newServeCommand(inv *invocation) *cobra.Command {
 			defer home.Unlock(lock)
 			inv.instanceID() // fixed here, before two goroutines report it
 			inv.verdicts = map[string]keptVerdict{}
+			inv.forkWalks = lineage.NewWalkCache()
+			inv.forksWarned = true // reconciliation and every snapshot name them
+			if !once {
+				// Reconciliation reports and repairs before the first scan,
+				// so the snapshot shows what it put back. One that cannot
+				// run leaves serve to report what the scan finds.
+				if err := inv.serveReconcile(cmd.Context()); err != nil {
+					if cmd.Context().Err() != nil {
+						return nil
+					}
+					inv.out.warn("reconcile: " + err.Error())
+				}
+			}
 			dirs, trees := inv.watchedDirs()
 			// The library of the last snapshot emitted, which the next one's
 			// drift is told against. Snapshots are reported from the loop's
@@ -162,6 +177,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 				Stdin:      cmd.InOrStdin(),
 				Check:      func(ctx context.Context) func() { return inv.serveCheck(ctx, failing) },
 				CheckEvery: every,
+				Ticks:      []serve.Tick{inv.maintenanceTick()},
 				Snapshot: func(snap scan.Snapshot) {
 					inv.out.emit(snapshotEvent{event: newEvent("snapshot"), Snapshot: snap})
 					inv.out.print(inv.out.paint(heading, fmt.Sprintf("snapshot %d", snap.ScanCounter)), ": ",
@@ -201,22 +217,22 @@ func newServeCommand(inv *invocation) *cobra.Command {
 }
 
 // serveCheck is one tick of the serve child's timer, run off its loop: the
-// update check skill check runs, over every source of the settings rather
-// than only the sources a managed skill came from, so that one pass fetches
-// each source once, whether or not a skill was installed from it, and the
-// source index follows what they hold now. It waits for the lock rather
-// than giving up on it, since it runs in the background and a command
-// holding the lock for a moment is no reason to drop what it fetched. It
-// reports nothing as it goes and never ends serve: the report it returns is
-// made on the loop's goroutine and carries one update_available per update,
-// with this process's instance id, and the warnings of what the check could
-// not check, a source it could not fetch once per cause (see
-// sourceFailures). A machine with no source runs no git at all, and neither
-// does one with no account repo; a source an import wrote stays a source
-// not fetched, account repo or not, until source add adds it. The rescan
-// its write of the version file sets off brings the candidates and markers
-// it wrote into the next snapshot, and every source ref it moved into the
-// source index.
+// update check skill check-updates runs, the account remote included, over
+// every source of the settings rather than only the sources a managed skill
+// came from, so that one pass fetches each source once, whether or not a
+// skill was installed from it, and the source index follows what they hold
+// now. It waits for the lock rather than giving up on it, since it runs in
+// the background and a command holding the lock for a moment is no reason to
+// drop what it fetched. It reports nothing as it goes and never ends serve:
+// the report it returns is made on the loop's goroutine and carries one
+// update_available per update, with this process's instance id, and the
+// warnings of what the check could not check, a source it could not fetch
+// once per cause (see sourceFailures). A machine with no source runs no git
+// at all, and neither does one with no account repo; a source an import
+// wrote stays a source not fetched, account repo or not, until source add
+// adds it. The rescan its write of the version file sets off brings the
+// candidates and markers it wrote into the next snapshot, and every source
+// ref it moved into the source index.
 func (inv *invocation) serveCheck(ctx context.Context, failing sourceFailures) func() {
 	rep, err := inv.checkUpdates(ctx, true)
 	return func() {
@@ -231,8 +247,9 @@ func (inv *invocation) serveCheck(ctx context.Context, failing sourceFailures) f
 		for _, ev := range rep.updates {
 			ev.InstanceID = inv.instanceID()
 			inv.out.emit(ev)
+			from, to := ev.versions()
 			inv.out.print(inv.out.paint(heading, "update "+sanitised(ev.Name)), ": ",
-				short(ev.UpstreamCommit), " -> ", short(ev.CandidateUpstreamCommit), ", ", plural(len(ev.Files), "file"))
+				short(from), " -> ", short(to), ", ", plural(len(ev.Files), "file"))
 		}
 	}
 }
@@ -252,7 +269,7 @@ type sourceFailures map[string]string
 // level. A source that goes from the settings is forgotten without a note.
 // Everything else a check could not check, a skill's newer version it
 // cannot import or a source it fetched but could not read, is a warning on
-// every check, as it is in skill check.
+// every check, as it is in skill check-updates.
 func (sf sourceFailures) report(out *writer, rep checkReport) {
 	now := sourceFailures{}
 	for _, cf := range rep.failures {
@@ -307,9 +324,21 @@ var perAttempt = regexp.MustCompile(` after [0-9]+ (ms|milliseconds)\b` +
 // home and the account repo is a tree: an edit anywhere inside a skill is a
 // signal too, wherever the scan reads that skill from. A skills directory a
 // client shares with another, and the library itself, are watched once.
+//
+// The reflogs of the fork branches are a tree too: a commit made with git
+// in a fork's worktree writes nothing in the worktree or in agentx home,
+// only in the account repo, where it appends to its branch's reflog, so
+// that is how serve learns the fork moved. So are the reflogs of the
+// remote-tracking branches: a publish with nothing to record, as of a
+// commit made with git, moves only the account remote's branch as the
+// account repo tracks it, which is what a fork's state is judged against,
+// see unpublished. The worktrees' own admin directories are not watched:
+// git writes an index there on every status, which would be a signal of
+// its own.
 func (inv *invocation) watchedDirs() (dirs, trees []string) {
 	h := inv.dirs.Home
-	trees = []string{filepath.Join(h, "worktrees"), inv.dirs.Library}
+	logs := filepath.Join(gitx.AccountRepoPath(h), "logs", "refs")
+	trees = []string{filepath.Join(h, "worktrees"), inv.dirs.Library, filepath.Join(logs, "heads", "skills"), filepath.Join(logs, "remotes")}
 	for _, dir := range scan.UserSkillsDirs(inv.dirs) {
 		if !slices.Contains(trees, dir) {
 			trees = append(trees, dir)
@@ -330,8 +359,12 @@ func (inv *invocation) sourceIndex(ctx context.Context, prev *source.Index) (idx
 		if err != nil {
 			return err
 		}
-		urls := make([]string, 0, len(s.Sources))
-		for _, src := range s.Sources {
+		// The account remote holds forks rather than skills on one branch,
+		// and is never fetched as a shared source, so it has nothing to
+		// search.
+		shared := sharedSources(s.Sources)
+		urls := make([]string, 0, len(shared))
+		for _, src := range shared {
 			urls = append(urls, src.URL)
 		}
 		idx, warnings, err = source.BuildIndex(ctx, inv.git, gitx.AccountRepoPath(inv.dirs.Home), urls, prev)

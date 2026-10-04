@@ -3,8 +3,6 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -46,7 +44,7 @@ var legacyHome = &fixtureHome{
 		}
 		contains(s.t, "the source listing", s.bare("ls-tree", "HEAD:skills/nc"), "100644 blob "+s.run("rev-parse", "HEAD:skills/nc/a.md")+"\ta.md")
 		h.mustRun("source", "add", s.url)
-		h.mustRun("skill", "add", s.url, "--skill", "nc")
+		h.mustRun("skill", "add", s.url, "--name", "nc")
 		return []string{canonical}
 	},
 }
@@ -90,100 +88,62 @@ func ncShort(h *harness) string {
 // TestASkillStoredWithALegacyModeInstallsCurrent: the import writes the
 // tree git writes today for a source that stores a legacy mode, so the
 // skill lists as current straight after the install, the diff agrees, and
-// an edit reverts back to current.
-//
-// A branch an earlier agentx wrote holds the source's own tree instead,
-// which no directory is current against. A revert of an edit lays out the
-// version it holds and stores the branch again, at the commit an install
-// writes today, so the skill is current afterwards and every command says
-// so.
+// an edit put back by hand is current again. Over a branch an earlier
+// agentx wrote with the source's own tree, an edit is still the one file
+// the diff names.
 func TestASkillStoredWithALegacyModeInstallsCurrent(t *testing.T) {
 	t.Parallel()
 	h, s, canonical := legacyHarness(t)
 	equal(t, "state after the install", h.listed("nc")["state"], stateCurrent)
 	equal(t, "the import tree", h.accountGit("rev-parse", "refs/heads/managed/nc:nc"), canonical)
 	short := ncShort(h)
-	matches := "nc matches its base version at " + short + "\n"
-	equal(t, "the diff", h.mustRun("skill", "diff", "nc").stdout, matches)
+	equal(t, "the diff", h.mustRun("skill", "diff", "nc").stdout, "nc matches its base version at "+short+"\n")
 
 	file := filepath.Join(h.library, "nc", "a.md")
 	writeFile(t, file, "an edit\n")
 	equal(t, "state after an edit", h.listed("nc")["state"], stateModified)
-	contains(t, "the revert", h.mustRun("skill", "revert", "nc").stdout, "✓ reverted nc to its base version at "+short+"\n")
-	equal(t, "a.md after the revert", fileBody(t, file), "a\n")
-	equal(t, "state after the revert", h.listed("nc")["state"], stateCurrent)
+	writeFile(t, file, "a\n")
+	equal(t, "state with the edit put back", h.listed("nc")["state"], stateCurrent)
 
-	_, tip := h.storeInOlderForm(t, s)
+	h.storeInOlderForm(t, s)
 	writeFile(t, file, "another edit\n")
 	diffs := h.eventsOfType(h.mustRun("--json", "skill", "diff", "nc").stdout, "diff")
 	if len(diffs) != 1 || diffs[0]["path"] != "a.md" {
 		t.Errorf("the diff over the older branch = %v, want a.md alone", diffs)
 	}
-	contains(t, "the revert over the older branch", h.mustRun("skill", "revert", "nc").stdout, "✓ reverted nc to its base version at "+short+"\n")
-	equal(t, "a.md after that revert", fileBody(t, file), "a\n")
-	equal(t, "the import branch after that revert", h.accountGit("rev-parse", "refs/heads/managed/nc"), tip)
-	equal(t, "the staging refs left", h.accountGit("for-each-ref", "refs/agentx/importing/"), "")
-	equal(t, "state after that revert", h.listed("nc")["state"], stateCurrent)
-	equal(t, "the diff after that revert", h.mustRun("skill", "diff", "nc").stdout, matches)
-	equal(t, "a second revert", h.mustRun("skill", "revert", "nc").stdout, "nc already matches its base version at "+short+"; nothing was reverted\n")
 }
 
-// TestABranchStoredInAnOlderFormIsStoredAgain: over a branch an earlier
-// agentx stored with the source's legacy modes, a library directory that
-// holds every file of its base version lists as modified all the same,
-// since no directory is current against that tree. The diff says the one
-// difference is where the version is stored and names the revert that
-// stores it again; the revert then moves the branch alone, to the commit an
-// install writes today, and touches no file, even through a library entry
-// that is a symlink, which a revert that lays the base out refuses.
-func TestABranchStoredInAnOlderFormIsStoredAgain(t *testing.T) {
-	t.Parallel()
-	h, s, _ := legacyHarness(t)
-	lib := filepath.Join(h.library, "nc")
-	own := filepath.Join(t.TempDir(), "nc")
-	if err := os.Rename(lib, own); err != nil {
-		t.Fatal(err)
-	}
-	link(t, own, lib)
-	before := libraryTree(t, own)
-	legacy, tip := h.storeInOlderForm(t, s)
-	short := ncShort(h)
-
-	stored := "nc differs from its base version at " + short + " only in how the account repo stores it;" +
-		" run 'agentx skill revert nc' to store it as git writes it today, which changes no file"
-	equal(t, "the diff", h.mustRun("skill", "diff", "nc").stdout, stored+"\n")
-	out := h.mustRun("--json", "skill", "diff", "nc").stdout
-	equal(t, "diff events", len(h.eventsOfType(out, "diff")), 0)
-	equal(t, "the diff's result", h.one(out, "result")["summary"], stored)
-	equal(t, "the import branch after the diff", h.accountGit("rev-parse", "refs/heads/managed/nc"), legacy)
-
-	equal(t, "the revert", h.mustRun("skill", "revert", "nc").stdout,
-		"✓ nc already matches its base version at "+short+"; nothing was reverted,"+
-			" and its import branch now stores that version as git writes it today\n")
-	equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/nc"), tip)
-	equal(t, "the staging refs left", h.accountGit("for-each-ref", "refs/agentx/importing/"), "")
-	if target, err := os.Readlink(lib); err != nil || target != own {
-		t.Errorf("the library entry after the revert: %q, %v; want the link to %s", target, err, own)
-	}
-	sameTree(t, "the directory the link leads to", libraryTree(t, own), before)
-	equal(t, "what is left beside the library", strings.Join(hiddenEntries(t, h.library), " "), "")
-	equal(t, "state after the revert", h.listed("nc")["state"], stateCurrent)
-	equal(t, "the diff after the revert", h.mustRun("skill", "diff", "nc").stdout, "nc matches its base version at "+short+"\n")
-	equal(t, "a second revert", h.mustRun("skill", "revert", "nc").stdout, "nc already matches its base version at "+short+"; nothing was reverted\n")
-}
-
-// TestInstallingTheSameVersionStoresAnOlderBranchAgain: installing the
-// version a branch an earlier agentx stored in an older form holds is the
-// same version installed again, told by its four trailers rather than by
-// the commit: the branch moves, from the commit it holds, to the one the
-// install writes today, and the skill is current. With the library
+// TestInstallingTheSameVersionStoresAnOlderBranchAgain: over a branch an
+// earlier agentx stored with the source's legacy modes, a library
+// directory that holds every file of its base version lists as modified
+// all the same, since no directory is current against that tree. The diff
+// says the one difference is where the version is stored and names the
+// install that stores it again, which, with a file git ignores in the
+// directory, takes moving that file out first. Installing that version is
+// the same version installed again, told by its four trailers rather than
+// by the commit: the branch moves, from the commit it holds, to the one
+// the install writes today, and the skill is current. With the library
 // directory gone as well, the install lays it out again.
 func TestInstallingTheSameVersionStoresAnOlderBranchAgain(t *testing.T) {
 	t.Parallel()
 	h, s, _ := legacyHarness(t)
-	_, tip := h.storeInOlderForm(t, s)
+	legacy, tip := h.storeInOlderForm(t, s)
 
-	out := h.run("--json", "skill", "add", s.url, "--skill", "nc")
+	ignored := filepath.Join(h.library, "nc", ".DS_Store")
+	writeFile(t, ignored, "finder\n")
+	contains(t, "the diff with a file git ignores", h.mustRun("skill", "diff", "nc").stdout,
+		"move what git ignores out of "+filepath.Join(h.library, "nc")+", then run 'agentx skill add")
+	remove(t, ignored)
+
+	stored := "nc differs from its base version at " + ncShort(h) + " only in how the account repo stores it;" +
+		" run 'agentx skill add " + shellWord(s.url) + " --name nc' to install that version again while the source still holds it," +
+		" which stores it as git writes it today and changes no file, or, once 'agentx skill check-updates' finds a newer version, run 'agentx skill update nc'"
+	out := h.mustRun("--json", "skill", "diff", "nc")
+	equal(t, "diff events", len(h.eventsOfType(out.stdout, "diff")), 0)
+	equal(t, "the diff's result", h.one(out.stdout, "result")["summary"], stored)
+	equal(t, "the import branch after the diff", h.accountGit("rev-parse", "refs/heads/managed/nc"), legacy)
+
+	out = h.run("--json", "skill", "add", s.url, "--name", "nc")
 	if out.exit != 0 {
 		t.Fatalf("add: exit %d\n%s", out.exit, out.stderr)
 	}
@@ -193,7 +153,7 @@ func TestInstallingTheSameVersionStoresAnOlderBranchAgain(t *testing.T) {
 
 	h.storeInOlderForm(t, s)
 	remove(t, filepath.Join(h.library, "nc"))
-	h.mustRun("skill", "add", s.url, "--skill", "nc")
+	h.mustRun("skill", "add", s.url, "--name", "nc")
 	equal(t, "the import branch with the directory gone", h.accountGit("rev-parse", "refs/heads/managed/nc"), tip)
 	equal(t, "a.md", fileBody(t, filepath.Join(h.library, "nc", "a.md")), "a\n")
 	equal(t, "state with the directory gone", h.listed("nc")["state"], stateCurrent)
@@ -237,158 +197,6 @@ func TestSkillRemoveOfAnAbsentSkillJudgesACopyByItsBaseFiles(t *testing.T) {
 			equal(t, "warnings", strings.Join(warnings(h, out.stderr), "\n"), want)
 			nothingAt(t, "cursor's copy", cursor)
 			equal(t, "the import branch", refValue(t, h, "refs/heads/managed/nc"), "")
-		})
-	}
-}
-
-// TestSkillRevertOfAnOlderBranchRecovers kills a revert that stores its
-// branch again at the two boundaries its ref step makes: once its journal
-// is on disk, before the branch moved, and right after the branch moved,
-// before any path changed. A revert whose library already holds the base's
-// files has the branch alone to move. The next command recovers each one,
-// and the revert is then whole: the library and the copy hold the base, the
-// branch holds the commit an install writes today, and the skill is
-// current. Recovery after each of the path steps that follow is generic,
-// and TestReplacementRecoversFromEveryBoundary in internal/home covers it.
-func TestSkillRevertOfAnOlderBranchRecovers(t *testing.T) {
-	t.Parallel()
-	const journalOnDisk = `
-for f in %MUTATIONS%/*.json; do
-	if [ -e "$f" ]; then
-		kill -9 $PPID
-		exit 1
-	fi
-done
-exec %GIT% "$@"
-`
-	const branchMoved = `
-case " $* " in
-*" update-ref "*)
-	%GIT% "$@"
-	status=$?
-	kill -9 $PPID
-	exit $status
-	;;
-esac
-exec %GIT% "$@"
-`
-	for _, c := range []struct {
-		name   string
-		edit   bool   // the library and the copy hold an edit the revert discards
-		script string // where the revert is killed
-		moved  bool   // the branch moved before the kill
-	}{
-		{name: "the branch alone, before it moved", script: journalOnDisk},
-		{name: "the branch alone, after it moved", script: branchMoved, moved: true},
-		{name: "before the branch moved", edit: true, script: journalOnDisk},
-		{name: "after the branch moved", edit: true, script: branchMoved, moved: true},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			t.Parallel()
-			h, s, _ := legacyHarness(t)
-			lib := filepath.Join(h.library, "nc")
-			cursor := filepath.Join(h.home, ".cursor", "skills", "nc")
-			base := libraryTree(t, lib)
-			if c.edit {
-				editLibrary(t, h, "nc", "a.md", "an edit\n")
-			}
-			h.mustRun("skill", "remove", "nc", "--from", "cursor")
-			h.mustRun("skill", "place", "nc", "--to", "cursor", "--copy")
-			legacy, tip := h.storeInOlderForm(t, s)
-
-			out := killedRevertBy(t, h, "nc", c.script)
-			var kinds []string
-			for _, s := range readJournal(t, h) {
-				kinds = append(kinds, s.Kind)
-			}
-			want := "ref"
-			if c.edit {
-				want = "ref, remove, publish, remove, publish"
-			}
-			equal(t, "the journal's steps", strings.Join(kinds, ", "), want)
-			branch := legacy
-			if c.moved {
-				branch = tip
-			}
-			equal(t, "the import branch when the revert was killed", h.accountGit("rev-parse", "refs/heads/managed/nc"), branch)
-
-			if got := h.run("config", "set", "label", "recovered"); got.exit != 0 {
-				t.Fatalf("the command after the killed revert: exit %d\n%s\nthe killed run:\n%s", got.exit, got.stderr, out)
-			}
-			equal(t, "journals after recovery", journalCount(t, h), 0)
-			equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/nc"), tip)
-			sameTree(t, "the library directory", libraryTree(t, lib), base)
-			sameTree(t, "cursor's copy", libraryTree(t, cursor), base)
-			for _, dir := range []string{h.library, filepath.Dir(cursor)} {
-				equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
-			}
-			equal(t, "state", h.listed("nc")["state"], stateCurrent)
-		})
-	}
-}
-
-// TestARefusedRevertOfAnOlderBranchLeavesNoStagingRef: a revert over a
-// branch stored in an older form writes the commit an install writes today
-// before it takes the lock, held by a staging ref of its own. A git wrapper
-// moves the branch, makes a fork of the name, or edits the library while
-// the revert reads the base version, and the revert refuses under the
-// lock, before it writes a journal. Nothing names the staging ref then, so
-// the revert drops it: no ref is left under refs/agentx/importing/, the
-// branch holds what it held or what the other writer wrote, and the edit
-// is still there.
-func TestARefusedRevertOfAnOlderBranchLeavesNoStagingRef(t *testing.T) {
-	t.Parallel()
-	for _, c := range []struct {
-		name string
-		ref  string // the ref the wrapper writes; none edits the library instead
-		fork bool   // the ref written is a fork of the name, at the commit the branch holds
-	}{
-		{name: "the branch moves", ref: "refs/heads/managed/nc"},
-		{name: "a fork appears", ref: "refs/heads/skills/nc", fork: true},
-		{name: "the library changes"},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			t.Parallel()
-			h, s, _ := legacyHarness(t)
-			file := filepath.Join(h.library, "nc", "a.md")
-			writeFile(t, file, "an edit\n")
-			legacy, _ := h.storeInOlderForm(t, s)
-			real, err := exec.LookPath("git")
-			if err != nil {
-				t.Fatal(err)
-			}
-			repo := gitx.AccountRepoPath(h.agentx)
-			branch, edit := legacy, "an edit\n"
-			action := `printf 'an edit made meanwhile\n' > ` + shellWord(file)
-			message := "nc changed while it was being reverted, so nothing was discarded"
-			if c.ref != "" {
-				written := legacy
-				if !c.fork {
-					written = h.accountGit("commit-tree", legacy+"^{tree}", "-p", legacy, "-m", "moved")
-					branch = written
-				}
-				action = real + ` --git-dir=` + shellWord(repo) + ` update-ref ` + c.ref + ` ` + written + ` || exit 1`
-				message = "the import branch refs/heads/managed/nc moved while nc was being reverted, so nothing was discarded"
-			} else {
-				edit = "an edit made meanwhile\n"
-			}
-			stubGit(t, h, `#!/bin/sh
-case " $* " in
-*" ls-tree "*) `+action+` ;;
-esac
-exec `+real+` "$@"
-`)
-			out := h.run("--json", "skill", "revert", "nc")
-			equal(t, "exit", out.exit, 6)
-			equal(t, "message", h.one(out.stdout, "error")["message"], message)
-			equal(t, "a.md", fileBody(t, file), edit)
-			equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/nc"), branch)
-			if c.fork {
-				equal(t, "the fork written meanwhile", h.accountGit("rev-parse", c.ref), legacy)
-			}
-			equal(t, "journals", journalCount(t, h), 0)
-			equal(t, "what is left beside the library", strings.Join(hiddenEntries(t, h.library), " "), "")
-			equal(t, "the staging refs left", h.accountGit("for-each-ref", "refs/agentx/importing/"), "")
 		})
 	}
 }

@@ -141,7 +141,7 @@ func TestPlacePlanRefusals(t *testing.T) {
 	}
 	heldLink := func(r *placeRig, at string) string {
 		return "the library directory " + r.lib + " holds the symlink " + at + ", which no version agentx installs holds, so nothing was placed\n" +
-			"replace the link with the files it leads to, or see what changed with 'agentx skill diff alpha' and go back to the installed version with 'agentx skill revert alpha', then run 'agentx skill place alpha' again"
+			"replace the link with the files it leads to, or see what changed with 'agentx skill diff alpha' and get the original back by removing the skill and adding it again, then run 'agentx skill place alpha' again"
 	}
 	for _, c := range []struct {
 		name string

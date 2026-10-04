@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
@@ -109,7 +110,7 @@ func TestServeRefreshesEverySource(t *testing.T) {
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	one, two := h.fetchSources(t)
-	h.mustRun("skill", "add", one.url, "--skill", "alpha")
+	h.mustRun("skill", "add", one.url, "--name", "alpha")
 	gone := h.newSourceRepo("gone", true)
 	gone.skill("skills/epsilon", "epsilon", "A skill of a source removed later", nil)
 	gone.skill("skills/zeta", "zeta", "Another skill of that source", nil)
@@ -119,7 +120,7 @@ func TestServeRefreshesEverySource(t *testing.T) {
 	gone.skill("skills/epsilon", "epsilon", "A skill of a source removed later, revised", nil)
 	gone.run("rm", "-r", "--quiet", "skills/zeta")
 	gone.commit("epsilon revised, zeta removed")
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	candidate, marker := h.ref(lineage.CandidateRef("epsilon")), h.ref(lineage.UpstreamRemovedRef("zeta"))
 	if candidate == "" || marker == "" {
 		t.Fatalf("candidate %q and marker %q before the source went", candidate, marker)
@@ -200,7 +201,7 @@ func TestServeWarnsOnceAboutASourceItCannotFetch(t *testing.T) {
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	one, two := h.fetchSources(t)
-	h.mustRun("skill", "add", one.url, "--skill", "alpha")
+	h.mustRun("skill", "add", one.url, "--name", "alpha")
 	two.bare("symbolic-ref", "HEAD", "refs/heads/gone") // the default branch it follows names nothing
 
 	h.env["AGENTX_CHECK_INTERVAL"] = quickChecks
@@ -238,7 +239,8 @@ func TestServeWarnsOnceAboutASourceItCannotFetch(t *testing.T) {
 // source's ref writes, and the rescan that write sets off rebuilds the
 // source index, but the second source is no different from one rebuild to
 // the next: the index warns once that it has not been fetched, and the
-// checks warn once that they could not fetch it.
+// checks warn once that they could not fetch it. The account remote, which is
+// never fetched as a shared source, is warned about by neither.
 func TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -246,6 +248,17 @@ func TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves(t *testing.T) {
 	one, two := h.fetchSources(t)
 	h.accountGit("remote", "remove", source.RemoteName(source.ID(two.url)))
 	h.accountGit("update-ref", "-d", source.Ref(source.ID(two.url)))
+	err := home.Mutate(h.agentx, nil, func() error {
+		settings, err := home.LoadSettings(h.agentx)
+		if err != nil {
+			return err
+		}
+		settings.SetSource(home.Source{URL: "https://example.invalid/me/forks", Account: true})
+		return home.SaveSettings(h.agentx, settings)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	h.env["AGENTX_CHECK_INTERVAL"] = quickChecks
 	p := h.serve(t, "--json")
@@ -394,7 +407,7 @@ func TestServeRefreshesNothingWithoutASource(t *testing.T) {
 // repo to fetch into until source add creates one. No check runs git,
 // creates the account repo or writes anything, but the first warns about
 // each source as not fetched, as source fetch refuses it, and the checks
-// after it log the same line at debug level. skill check, which
+// after it log the same line at debug level. skill check-updates, which
 // checks only the sources a managed skill came from, still has nothing to
 // check there.
 //
@@ -455,8 +468,8 @@ func TestServeWarnsOnceAboutSourcesAnImportBrought(t *testing.T) {
 		t.Errorf("serve created %s: %v", account, err)
 	}
 	equal(t, "the version file", mutationVersion(t, h), version)
-	equal(t, "skill check", h.mustRun("skill", "check").stdout,
-		"Nothing to check: no managed skill comes from a source added on this machine.\n")
+	equal(t, "skill check-updates", h.mustRun("skill", "check-updates").stdout,
+		"Nothing to check: no managed skill or fork comes from a source added on this machine.\n")
 
 	h.mustRun("source", "add", one.url)
 	backdate(t, h)

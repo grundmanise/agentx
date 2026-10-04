@@ -54,7 +54,7 @@ func TestACopyIsNotPublishedUnlessItHashesToTheVersion(t *testing.T) {
 func TestRemovalCoversADisabledConfiguration(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 	place := filepath.Join(h.home, ".cursor", "skills", "alpha")
 	if _, ok := isSymlink(t, place); !ok {
 		t.Fatalf("the install made no placement at %s", place)
@@ -80,7 +80,7 @@ func TestRemovalCoversADisabledConfiguration(t *testing.T) {
 func TestRemovalFailsWhenTheLibraryStillHoldsTheName(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 	real, err := exec.LookPath("git")
 	if err != nil {
 		t.Fatal(err)

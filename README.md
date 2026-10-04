@@ -85,7 +85,7 @@ Other agents support skills management only at this time.
 >
 > - inventories every agent configuration and what it sees: [`agentx scan`](https://docs.agentx.wtf/cli/scan)
 > - installs skills from git sources and places them in your agent clients: [`agentx skill add`](https://docs.agentx.wtf/cli/skill#install-a-skill)
-> - checks for newer versions and applies them, merging your own edits into each update: [`agentx skill check`](https://docs.agentx.wtf/cli/skill#check-for-updates), [`agentx skill update`](https://docs.agentx.wtf/cli/skill#update-a-skill)
+> - checks for newer versions and applies them, merging your own edits into each update: [`agentx skill check-updates`](https://docs.agentx.wtf/cli/skill#check-for-updates), [`agentx skill update`](https://docs.agentx.wtf/cli/skill#update-a-skill)
 > - takes over the skills the vercel skills CLI installed, so agentx can update them too: [`agentx adopt`](https://docs.agentx.wtf/cli/adopt)
 >
 > Forking and editing skills, syncing across machines and the desktop app are in progress.
