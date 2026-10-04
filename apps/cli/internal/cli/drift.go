@@ -42,11 +42,11 @@ const (
 // library under, and every other report reads it with the rest of what it
 // reports on.
 type observation struct {
-	judged   bool     // the skill has a state: a managed skill with a base version, or a fork whose library entry leads into its worktree
-	modified bool     // the directory does not hold its base version, see holdsBase, or holds edits not yet published, see unpublished
-	placed   []string // the drift states of the placements, sorted
-	pending  bool     // an update left a merge pending for the skill, see pendingMerges
-	removed  bool     // one of your own skills the account remote no longer holds the branch of, see driftRemoteRemoved
+	judged       bool     // the skill has a state: a managed skill with a base version, or a fork whose library entry leads into its worktree
+	modified     bool     // the directory does not hold its base version, see holdsBase, or holds edits not yet published, see unpublished
+	placed       []string // the drift states of the placements, sorted
+	pending      bool     // an update left a merge pending for the skill, see pendingMerges
+	notPublished bool     // one of your own skills the account remote holds no branch of, see driftNotPublished
 }
 
 // observe reads what a skill's drift is judged from: a managed skill's
@@ -74,15 +74,9 @@ func (sc skillContext) observe(ctx context.Context, inv *invocation, lib scan.Li
 			renamed = rec.Fork.Renamed
 		}
 		remoteTip := sc.published[publishedName(lib.Name, renamed, sc.published)]
-		// One the account remote no longer holds is compared with its last
-		// published version, which the fetch that found it gone recorded;
-		// with no account remote set, a marker left over says nothing.
-		removed := sc.account != "" && remoteTip == "" && rec.RemoteRemoved != ""
-		if removed {
-			remoteTip = rec.RemoteRemoved
-		}
 		modified := !inv.holdsTip(ctx, lib, rec, dir) || !inv.tipPublished(ctx, rec, remoteTip)
-		return observation{judged: true, modified: modified, placed: sc.placementDrift(inv, lib), pending: sc.merges[lib.Name], removed: removed}
+		notPublished := remoteTip == "" && sc.publishedRead
+		return observation{judged: true, modified: modified, placed: sc.placementDrift(inv, lib), pending: sc.merges[lib.Name], notPublished: notPublished}
 	}
 	return observation{}
 }
@@ -346,12 +340,12 @@ func (p placeSite) drift(libPath string) string {
 // source removed and upstream removed, sorted, or nil when it is in none. A
 // fork is never source removed or upstream removed: the source that
 // matters to it is the account remote, and nothing marks its upstream. It
-// is remote removed instead when the account remote no longer holds it,
-// see driftRemoteRemoved.
+// is not published instead when the account remote holds no branch of it,
+// see driftNotPublished.
 func driftOf(obs observation, sourceRemoved, upstreamRemoved bool) []string {
 	drift := append([]string(nil), obs.placed...)
-	if obs.removed {
-		drift = append(drift, driftRemoteRemoved)
+	if obs.notPublished {
+		drift = append(drift, driftNotPublished)
 	}
 	if sourceRemoved {
 		drift = append(drift, driftSourceRemoved)
@@ -443,37 +437,40 @@ func newSkillContext(ctx context.Context, inv *invocation, records map[string]li
 		inv.out.debugf("cannot read the pending merges: %v", err)
 	}
 	account, _ := accountEntry(s)
+	published, read := inv.publishedTips(ctx, records, s)
 	return skillContext{
-		records:   records,
-		modes:     modes,
-		sources:   sourceURLs(s),
-		account:   account.URL,
-		disabled:  s.DisabledConfigurations,
-		targets:   inv.detectedTargets(),
-		merges:    merges,
-		published: inv.publishedTips(ctx, records, s),
+		records:       records,
+		modes:         modes,
+		sources:       sourceURLs(s),
+		account:       account.URL,
+		disabled:      s.DisabledConfigurations,
+		targets:       inv.detectedTargets(),
+		merges:        merges,
+		published:     published,
+		publishedRead: read,
 	}
 }
 
 // publishedTips is what the account remote held of your own skills at its
 // last fetch, the tip of each one's branch there by name, read in one
 // for-each-ref of its remote-tracking branches, and nothing when records
-// holds none of your own skills or no account remote is set. A read that
-// fails holds nothing, said at debug level: the skills then compare with
-// the commits that created them.
-func (inv *invocation) publishedTips(ctx context.Context, records map[string]lineage.Record, s home.Settings) map[string]string {
+// holds none of your own skills or no account remote is set. read is false
+// only when that read fails, said at debug level: the skills then compare
+// with the commits that created them, and none is judged not published, as
+// a failed read says nothing of what the account remote holds.
+func (inv *invocation) publishedTips(ctx context.Context, records map[string]lineage.Record, s home.Settings) (tips map[string]string, read bool) {
 	own := false
 	for _, rec := range records {
 		own = own || rec.Kind == lineage.KindFork
 	}
 	entry, ok := accountEntry(s)
 	if !own || !ok {
-		return nil
+		return nil, true
 	}
 	tips, err := lineage.ListRemote(ctx, inv.git, gitx.AccountRepoPath(inv.dirs.Home), source.RemoteName(source.ID(entry.URL)))
 	if err != nil {
 		inv.out.debugf("cannot read what the account remote holds: %v", err)
-		return nil
+		return nil, false
 	}
-	return tips
+	return tips, true
 }

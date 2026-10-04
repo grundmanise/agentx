@@ -139,10 +139,9 @@ func (inv *invocation) forkDiff(ctx context.Context, gitDir string, rec lineage.
 // the account remote's branch holds, as the last fetch left it, which is
 // its last published version, read with one merge-base; for a renamed
 // skill not yet published under its new name, the old name's branch, see
-// publishedName; for a skill the account remote no longer holds, the
-// version a fetch last found there, see lineage.RemoteRemovedPrefix. A fork
-// the account remote holds no branch of, or none that shares its history, never
-// published or with no account remote set, is compared with its creation
+// publishedName. A fork the account remote holds no branch of, or none
+// that shares its history, never published, removed there by another
+// machine or with no account remote set, is compared with its creation
 // commit, the one skill new or skill fork wrote, and one whose history
 // carries no fork id with its tip. Either way it is what its state is
 // judged against, see unpublished.
@@ -180,12 +179,6 @@ func (inv *invocation) publishedVersion(ctx context.Context, gitDir string, rec 
 				}
 			}
 			there = tips[publishedName(rec.Name, rec.Fork.Renamed, tips)]
-		}
-		// One the account remote no longer holds, removed or renamed by
-		// another machine, is compared with the version a fetch last found
-		// there, see lineage.RemoteRemovedPrefix.
-		if there == "" {
-			there = rec.RemoteRemoved
 		}
 		if there != "" {
 			out, status, err := inv.git.IsolatedStatus(ctx, gitDir, 1, "merge-base", rec.Commit, there)

@@ -3,7 +3,7 @@ title: "Your own skills"
 description: "Create skills of your own, or fork installed ones, each with a history in the account repo."
 ---
 
-Create a skill of your own with `agentx skill new`, or make an installed skill your own with `agentx skill fork`. Your own skills are managed skills whose source is your [account remote](/cli/source#add-your-account-remote): [`agentx skill publish`](/cli/skill#publish-a-skill) publishes them there, and you need no account remote until you publish. Each has a history of its own. agentx keeps that history as a branch in the account repo, `~/.agentx/account.git`, and checks the branch out for you, so every client sees the skill as it sees any other. A skill you create has no upstream. A skill you fork keeps its upstream, so you can update it to newer versions later.
+Create a skill of your own with `agentx skill new`, or make an installed skill your own with `agentx skill fork`. Your own skills are managed skills whose source is your [account remote](/cli/source#add-your-account-remote): [`agentx skill publish <name>`](/cli/skill#publish-a-skill) publishes each there, and you need no account remote until you publish. Each has a history of its own. agentx keeps that history as a branch in the account repo, `~/.agentx/account.git`, and checks the branch out for you, so every client sees the skill as it sees any other. A skill you create has no upstream. A skill you fork keeps its upstream, so you can update it to newer versions later.
 
 ## Create a skill
 
@@ -18,7 +18,7 @@ agentx skill new release-notes --description "Write release notes from the merge
   cursor       symlink  /home/me/.cursor/skills/release-notes -> /home/me/.agents/skills/release-notes
   gemini-cli   library  /home/me/.agents/skills/release-notes
   always available to universal clients: codex, gemini-cli
-No account remote is set: run 'agentx source add <url> --account' before publishing release-notes.
+No account remote is set: run 'agentx source add <url> --account', then 'agentx skill publish release-notes' to publish it.
 ```
 
 The skill starts from a template: a `SKILL.md` with the name and the description in its frontmatter and a line that asks for the instructions. Open it from your library and write them. Leave out `--description` to fill it in later.
@@ -26,6 +26,8 @@ The skill starts from a template: a `SKILL.md` with the name and the description
 agentx places the skill in every enabled client, as [`agentx skill add`](/cli/skill#install-a-skill) places a skill it installs. Clients that read the library directly, such as Codex and Gemini CLI, see it there and get no link of their own.
 
 The last line shows only while no account remote is set. Add one with `agentx source add <url> --account` before you publish the skill; until then, `agentx skill publish` refuses it.
+
+Publish a new skill the first time by name, with `agentx skill publish release-notes`. A publish with no name only updates skills the account remote already holds: it skips a new skill and names the command that publishes it. Until its first publish, `agentx skill list` shows the skill as `not published`.
 
 `agentx skill list` shows the skill as `managed`, with no upstream. Its source is your [account remote](/cli/source#add-your-account-remote), marked `(account)`, or `account remote not set` until you add one. With `--json`, its `fork_id` is the skill's permanent id: it never changes, and two skills created separately never share one, even under the same name on two machines.
 
@@ -273,7 +275,7 @@ agentx skill place release-notes --force
 
 A folder with no `SKILL.md` is no skill: `skill place` stops with exit code 5 and changes nothing, for the skill folder in its worktree too. Add a `SKILL.md` first.
 
-What you adopt shows up as unpublished edits. Keep them with `agentx skill publish`. `--force` on a skill with nothing in the way stops with exit code 6.
+What you adopt shows up as unpublished edits. Keep them with `agentx skill publish <name>`. `--force` on a skill with nothing in the way stops with exit code 6.
 
 ## Rename a skill of your own
 
@@ -312,7 +314,7 @@ agentx skill publish changelog
 - If another machine published to the old name after you renamed it, the publish keeps the old branch and warns. Install it beside the renamed skill with `agentx skill add --name <old>`, or delete it with `agentx skill remove <old> --remote`.
 - If the account remote refuses to delete the old branch, for example because it is the repository's default branch, the publish warns and still exits `0`. The next `agentx skill publish <new>` tries again.
 - Publishing a renamed skill never deletes a branch of [another skill](/cli/skill#two-skills-with-one-name) of the old name.
-- Another machine keeps the old name until you remove it there, and lists the renamed skill as one to install. Once it fetches the account remote, it shows the old name as `remote removed`, and a bare `agentx skill publish` there leaves it out.
+- Another machine keeps the old name until you remove it there, and lists the renamed skill as one to install. Once the old branch is gone from the account remote, that machine shows the old name as `not published`, and a bare `agentx skill publish` there leaves it out.
 - Publishing the old name by name from a machine that still holds it puts `skills/<old>` back on the account remote. On that machine, install the renamed skill with `agentx skill add --name <new>` and remove the old one with `agentx skill remove <old>`.
 
 If the removal fails after the renamed skill was made, the error says so. Finish the rename with the `agentx skill remove <old>` command it names.
@@ -344,11 +346,10 @@ agentx skill remove release-notes --remote
 - A hosting service refuses to delete a repository's default branch. If the first skill you published became the default branch, make another branch the default on the hosting service, then run the command again.
 - If the account remote's branch of that name is [another skill](/cli/skill#two-skills-with-one-name), agentx refuses to delete it.
 
-Your other machines keep the skill. The next time one of them fetches the account remote, it shows the skill as `remote removed`:
+Your other machines keep the skill. The next time one of them fetches the account remote, it shows the skill as `not published`, as it shows a skill you never published:
 
-- The skill reads `current` there, unless that machine holds edits it never published, and `agentx skill diff` compares it with what the account remote last held of it.
-- `agentx skill update <name>` and `agentx skill check-updates` warn that the skill is no longer on the account remote.
-- A bare `agentx skill publish` there leaves the skill out, with a warning, so it does not bring the branch back.
+- With no published version left to compare with, that machine compares the skill with the commit that created it, so it also shows as `modified` if it changed since then.
+- A bare `agentx skill publish` there skips the skill and names it, so it does not bring the branch back.
 - Remove it there with `agentx skill remove <name>`. To keep it on the account remote after all, publish it by name from that machine with `agentx skill publish <name>`, which puts its branch back.
 
 To take one of your own skills out of one configuration only, use `--from`, as for any skill: see [Remove a skill](/cli/skill#remove-a-skill).

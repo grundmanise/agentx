@@ -192,8 +192,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 // drop what it fetched. It reports nothing as it goes and never ends serve:
 // the report it returns is made on the loop's goroutine and carries one
 // update_available per update, with this process's instance id, and a
-// warning for each thing the check could not check and for each of your
-// own skills the account remote no longer holds. A machine with no source
+// warning for each thing the check could not check. A machine with no source
 // runs no git at all, and neither does one with no account repo; a source
 // an import wrote stays a source not fetched, account repo or not, until
 // source add adds it. The rescan its write of the version file sets off
@@ -206,8 +205,7 @@ func (inv *invocation) serveCheck(ctx context.Context) func() {
 
 // reportServeCheck reports what the serve child's update check found, every
 // warning prefixed "update check: ": the failure that ended the whole check,
-// or each source or skill it could not check, each note, each of your own
-// skills the account remote no longer holds, with its hint, and then one
+// or each source or skill it could not check, each note, and then one
 // update_available per update.
 func (inv *invocation) reportServeCheck(rep checkReport, err error) {
 	if err != nil {
@@ -219,10 +217,6 @@ func (inv *invocation) reportServeCheck(rep checkReport, err error) {
 	}
 	for _, note := range rep.notes {
 		inv.out.warn("update check: " + note)
-	}
-	for _, name := range rep.remoteRemoved {
-		what, hint := remoteRemovedNotice(name)
-		inv.out.warnWith("update check: "+what, hint)
 	}
 	for _, ev := range rep.updates {
 		ev.InstanceID = inv.instanceID()

@@ -59,7 +59,8 @@ func TestSkillListReportsManagedAndUnmanaged(t *testing.T) {
 	// source its source's URL and directory; one of your own, made by skill
 	// new or skill fork, the account remote, marked as source list marks
 	// it, and a forked one the upstream it came from too; an unmanaged one
-	// none. With an account remote set, neither command says how to set one.
+	// none. With an account remote set, neither command says how to set one;
+	// neither publishes, so both read not published.
 	remote := newAccountRemote(t, h)
 	h.setAccount(remote)
 	account := "file://" + remote
@@ -73,8 +74,8 @@ func TestSkillListReportsManagedAndUnmanaged(t *testing.T) {
 		cells[fields[0]] = fields[1:]
 	}
 	equal(t, "alpha's row", cells["alpha"][0]+"|"+cells["alpha"][2], "managed|"+upstream)
-	equal(t, "gamma's row", strings.Join(cells["gamma"], "|"), "managed|current|"+account+" (account)|4 placements")
-	equal(t, "delta's row", strings.Join(cells["delta"], "|"), "managed|current|"+account+" (account), from "+upstream+"|4 placements")
+	equal(t, "gamma's row", strings.Join(cells["gamma"], "|"), "managed|current, not published|"+account+" (account)|4 placements")
+	equal(t, "delta's row", strings.Join(cells["delta"], "|"), "managed|current, not published|"+account+" (account), from "+upstream+"|4 placements")
 	equal(t, "mine's row", strings.Join(cells["mine"], "|"), "unmanaged|-|(none)|2 placements")
 }
 

@@ -65,8 +65,9 @@ func (h *harness) record(name string) string {
 }
 
 // TestSkillPublishRecordsEditsAndPushes publishes two skills made with
-// skill new and one forked from a shared source, all three edited, in one
-// bare publish with -m: each skill's edits become one commit on the tip
+// skill new and one forked from a shared source, all three edited and
+// their branches on the account remote already, in one bare publish with
+// -m: each skill's edits become one commit on the tip
 // it found, by the user's own identity, carrying the machine and the
 // message -m gives, a file git ignores stays on disk and out of the
 // commit, every branch goes to the account remote, each worktree's status
@@ -151,6 +152,7 @@ func TestSkillPublishRecordsEditsAndPushes(t *testing.T) {
 	equal(t, "the remote after the refusals", remoteGit(t, h, remote, "for-each-ref"), "")
 
 	writeFile(t, filepath.Join(h.library, "jot", ".gitignore"), "vendor/\n")
+	pushOwn(h, remote, names...)
 	out = h.mustRun("--json", "skill", "publish", "-m", "Tighten the notes\n\nThey were too long.")
 	equal(t, "the result", h.one(out.stdout, "result")["summary"], "published 3 of 3 skills")
 	events := h.eventsOfType(out.stdout, "publish")
@@ -268,7 +270,6 @@ exec `+real+` "$@"
 	equal(t, "the recorded commit's parent", h.accountGit("rev-parse", recorded+"^"), tip)
 	equal(t, "the remote", remoteGit(t, h, remote, "for-each-ref"), "")
 
-	h.mustRun("skill", "new", "plans")
 	stubGit(t, h, `#!/bin/sh
 case " $* " in
 *" push "*)
@@ -278,15 +279,11 @@ case " $* " in
 esac
 exec `+real+` "$@"
 `)
-	out = h.run("--json", "skill", "publish")
+	out = h.run("--json", "skill", "publish", "notes")
 	h.env["PATH"] = path
 	equal(t, "denied: exit", out.exit, exitSource.exit)
-	publishes := h.eventsOfType(out.stdout, "publish")
-	equal(t, "denied: publish events", len(publishes), 2)
-	for _, e := range publishes {
-		equal(t, "denied: outcome of "+e["name"].(string), e["outcome"], publishDenied)
-	}
-	contains(t, "denied: hint", h.one(out.stdout, "error")["hint"].(string), "credential helper (git config credential.helper) or SSH key you use for it may push there, then run 'agentx skill publish' again")
+	equal(t, "denied: outcome", h.one(out.stdout, "publish")["outcome"], publishDenied)
+	contains(t, "denied: hint", h.one(out.stdout, "error")["hint"].(string), "credential helper (git config credential.helper) or SSH key you use for it may push there, then run 'agentx skill publish notes' again")
 
 	out = h.mustRun("--json", "skill", "publish", "notes")
 	equal(t, "the next publish: outcome", h.one(out.stdout, "publish")["outcome"], publishPushed)
@@ -368,4 +365,35 @@ func TestCommitSubject(t *testing.T) {
 	} {
 		equal(t, tc.want, commitSubject("notes", "laptop", tc.files), tc.want)
 	}
+}
+
+// TestRemoteSelection: a bare publish covers your own skills whose branch
+// the account remote holds, under their name or, renamed here, under an
+// old name whose branch is the same skill by its fork id or holds the
+// skill's own commit, and skips the rest of your own; a managed skill of a
+// shared source is neither.
+func TestRemoteSelection(t *testing.T) {
+	t.Parallel()
+	own := func(name, id string, renamed ...string) lineage.Record {
+		return lineage.Record{Name: name, Kind: lineage.KindFork, Fork: &lineage.ForkLineage{ID: id, Renamed: renamed}}
+	}
+	records := map[string]lineage.Record{
+		"published": own("published", "1"),
+		"renamed":   own("renamed", "2", "was"),
+		"replaced":  own("replaced", "3", "taken"),
+		"fresh":     own("fresh", "4"),
+		"no-id":     own("no-id", "", "gone"),
+		"shared":    {Name: "shared", Kind: lineage.KindManaged},
+	}
+	same := own("same", "5", "kept")
+	same.Commit = "k"
+	records["same"] = same
+	remote := remoteForks{
+		tips:   map[string]string{"published": "p", "was": "w", "taken": "t", "gone": "g", "kept": "k", "shared": "s"},
+		walked: map[string]lineage.ForkLineage{"w": {ID: "2"}, "t": {ID: "9"}, "g": {}},
+	}
+	names, skipped := remoteSelection(records, remote)
+	equal(t, "covered", strings.Join(names, " "), "published renamed same")
+	equal(t, "skipped", strings.Join(skipped, " "), "fresh no-id replaced")
+	equal(t, "the renamed skill's branch", remote.branchOf(records["renamed"]), "was")
 }

@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"fmt"
 	"os"
 	"reflect"
 	"strings"
@@ -93,10 +92,8 @@ func TestAccountRemoteRefusesASharedSourceOfItsURL(t *testing.T) {
 // remote, and finds the fork published in between; source list marks it, and
 // source fetch fetches its forks. Adding another URL with --account replaces
 // the entry and forgets what the first one held, a fork's tracking following
-// it, and the remote-removed markers its fetches recorded; source remove
-// detaches it: its configuration, its remote-tracking branches, its
-// markers and its entry go, and the local fork stays. A marker left with
-// no account remote set says nothing of the skill's drift.
+// it; source remove detaches it: its configuration, its remote-tracking
+// branches and its entry go, and the local fork stays.
 func TestTheAccountRemoteIsSetReplacedAndDetached(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -137,8 +134,6 @@ func TestTheAccountRemoteIsSetReplacedAndDetached(t *testing.T) {
 	contains(t, "source fetch", h.mustRun("source", "fetch", "--all").stdout, "re-fetched "+url+": 1 skill; you can write to it")
 
 	h.accountGit("config", "branch.skills/notes.remote", name)
-	marker := lineage.RemoteRemovedRef("notes")
-	h.accountGit("update-ref", marker, h.ref(lineage.ForkRef("notes")))
 	other := newAccountRemote(t, h)
 	otherURL := "file://" + other
 	contains(t, "replaced", h.setAccount(other).stdout, "the account remote is now "+otherURL+"; it holds")
@@ -151,8 +146,6 @@ func TestTheAccountRemoteIsSetReplacedAndDetached(t *testing.T) {
 		t.Errorf("the first remote's configuration is still there: %s", got)
 	}
 	equal(t, "the fork's tracking", h.accountGit("config", "--get", "branch.skills/notes.remote"), source.RemoteName(source.ID(otherURL)))
-	equal(t, "the marker the first remote's fetch recorded", h.ref(marker), "")
-	h.accountGit("update-ref", marker, h.ref(lineage.ForkRef("notes")))
 
 	contains(t, "source remove", h.mustRun("source", "remove", otherURL).stdout,
 		"the account remote "+otherURL+" is no longer set; your skills on this machine are as they were")
@@ -166,10 +159,6 @@ func TestTheAccountRemoteIsSetReplacedAndDetached(t *testing.T) {
 	if h.ref(lineage.ForkRef("notes")) == "" {
 		t.Error("source remove took the local fork")
 	}
-	equal(t, "the marker, after source remove", h.ref(marker), "")
-	h.accountGit("update-ref", marker, h.ref(lineage.ForkRef("notes")))
-	listed := h.mustRun("--json", "skill", "list").stdout
-	excludes(t, "a marker with no account remote set", fmt.Sprint(h.librarySkill(listed, "notes")["drift"]), driftRemoteRemoved)
 }
 
 // TestAccountRefusal is when a repository cannot become the account

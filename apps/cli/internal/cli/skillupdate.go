@@ -38,12 +38,12 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 			"forked or updated from as the merge base, so its own commits are kept, and the\n" +
 			"merge is committed on its branch. The unpublished edits of one of your own\n" +
 			"skills are recorded on its branch first, and stay unpublished until\n" +
-			"'agentx skill publish'. A conflict waits as for a skill of a shared source, and\n" +
-			"its worktree and branch stay as they are until it is applied. With an account\n" +
-			"remote set, it is fetched first, and the skill is first updated to the latest\n" +
-			"version your other machines published, as a commit of its own. A skill made\n" +
-			"with 'agentx skill new' has no upstream: its update only brings it to the latest\n" +
-			"published version.\n\n" +
+			"'agentx skill publish <name>'. A conflict waits as for a skill of a shared\n" +
+			"source, and its worktree and branch stay as they are until it is applied. With an\n" +
+			"account remote set, it is fetched first, and the skill is first updated to the\n" +
+			"latest version your other machines published, as a commit of its own. A skill\n" +
+			"made with 'agentx skill new' has no upstream: its update only brings it to the\n" +
+			"latest published version.\n\n" +
 			"Pass --all instead of a name to update every managed skill the last check found\n" +
 			"an update for, and every skill of your own placed here that your other machines\n" +
 			"published to. Read an update before you apply it with\n" +
@@ -276,13 +276,6 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 		var u *updating
 		var f *failure
 		fork := managed && rec.Kind == lineage.KindFork
-		// One of your own skills another machine removed from the account
-		// remote, or renamed there, is said to be gone, see
-		// driftRemoteRemoved; one with an upstream is still updated from it.
-		removed := fork && r.account != nil && !r.all && r.account.err == nil && r.account.tips[n] == "" && inv.remoteRemoved(ctx, r.gitDir, n)
-		if removed {
-			inv.out.warnWith(remoteRemovedNotice(n))
-		}
 		if fork && r.account != nil && rec.Fork != nil && rec.Fork.NoUpstream && !inv.mergePending(n) {
 			// A fork with no upstream is up to date once its account step
 			// took in what the account remote held, or found nothing to take
@@ -292,9 +285,6 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 			switch {
 			case slices.Contains(pulled, n):
 				inv.summary = "updated " + n + " to the latest published version; it has no upstream to update from"
-			case removed:
-				what, hint := remoteRemovedNotice(n)
-				inv.summary = what + "; " + hint
 			case !r.all && r.account.tips[n] == "":
 				inv.summary = n + " has no branch on the account remote; run '" + publishCommand(n) + "' to publish it"
 				inv.out.print(inv.out.paint(heading, sanitised(n)), " has no branch on the account remote; run ",

@@ -58,7 +58,7 @@ agentx source add git@github.com:you/forks.git --account
 - Only your own skills travel through it. Skills you install from other sources, their update checks and the sources themselves stay on each machine.
 - A machine without an account remote keeps the whole history of your own skills: `agentx skill history` and `agentx skill diff` work without one. Add it when you want a backup, or a second machine.
 - Adding the account remote's URL again, with or without `--account`, fetches it again.
-- Adding another URL with `--account` replaces the account remote and forgets what the old one held. Your own skills stay as they are, and publish to the new remote.
+- Adding another URL with `--account` replaces the account remote and forgets what the old one held. Your own skills stay as they are and read `not published` until the new remote holds them: publish each one by name with `agentx skill publish <name>`. A publish with no name skips them.
 - A source you added without `--account` cannot become the account remote, whether it has the same URL or names the same repository by another URL: agentx stops with exit code 6 and changes nothing. Remove the source first with `agentx source remove <url>`, then add the account remote.
 
 ### Credentials

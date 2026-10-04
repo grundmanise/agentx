@@ -770,7 +770,7 @@ func TestSkillCheckFindsAForkUpdate(t *testing.T) {
 	refs := h.refMap()
 	equal(t, "the candidate once the upstream removed it", refs[lineage.CandidateRef("alpha")], "")
 	equal(t, "the marker", refs[lineage.UpstreamRemovedRef("alpha")], "")
-	equal(t, "the drift", drift(h.listed("alpha")), "")
+	excludes(t, "the drift, never upstream removed", drift(h.listed("alpha")), driftUpstreamRemoved)
 }
 
 // TestSkillCheckSkipsASkillWhoseLibraryDirectoryIsGone: a managed skill

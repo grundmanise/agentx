@@ -663,6 +663,9 @@ type skillContext struct {
 	// published is the tip of each of your own skills' branch on the
 	// account remote as last fetched, by name, see publishedTips.
 	published map[string]string
+	// publishedRead is false when published could not be read, so that no
+	// skill is judged not published, see publishedTips.
+	publishedRead bool
 }
 
 func (inv *invocation) skillContext(ctx context.Context) (skillContext, error) {

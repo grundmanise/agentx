@@ -29,8 +29,8 @@ import (
 // and lists the renamed skill, with the same fork id, as installable, and
 // its publish of alpha, which renamed nothing, leaves the renamed skill's
 // branch be. An old branch b published to after a renamed it holds
-// changes the renamed skill lacks: a's publish keeps it, warns, and exits
-// 0.
+// changes the renamed skill lacks: a's bare publish, which covers the
+// renamed skill through that branch, keeps it, warns, and exits 0.
 func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 	t.Parallel()
 	a, b, _, remote := twoHomes(t)
@@ -144,14 +144,16 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 	equal(t, "the remote's alpha, back", remoteGit(t, a, remote, "rev-parse", "refs/heads/skills/alpha"), b.ref(lineage.ForkRef("alpha")))
 
 	// b publishes to beta after a renamed it: the renamed skill lacks that
-	// commit, so a's publish keeps beta's branch.
+	// commit, so a's publish keeps beta's branch. A bare publish covers
+	// gamma through beta's branch, which holds the same skill.
 	renamedOut := a.mustRun("skill", "rename", "beta", "gamma")
 	excludes(t, "the fork step's line in a rename", renamedOut.stdout, "stays as it was")
 	contains(t, "the rename's line", renamedOut.stdout, "renamed beta to gamma")
 	theirs := b.commitFork("beta", "b's commit\n")
 	b.mustRun("skill", "publish", "beta")
-	out = a.run("skill", "publish", "gamma")
+	out = a.run("skill", "publish")
 	equal(t, "a publish over a changed old branch: exit", out.exit, 0)
+	excludes(t, "a bare publish of a renamed skill", out.stderr, "gamma is not published")
 	contains(t, "its warning", out.stderr, "the account remote's skills/beta holds changes gamma lacks, so it was kept")
 	contains(t, "its hint", out.stderr, "agentx skill add --name beta")
 	equal(t, "the remote's beta", remoteGit(t, a, remote, "rev-parse", "refs/heads/skills/beta"), theirs)

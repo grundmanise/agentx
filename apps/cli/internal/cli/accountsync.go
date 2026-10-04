@@ -51,31 +51,31 @@ const (
 // remoteForks is what the account remote held of the forks a run covers,
 // as its fetch left the remote-tracking branches: each fork's remote tip,
 // by name, and the lineage of every remote tip the fork's own branch does
-// not hold already, read in one walk.
+// not hold already, read in one walk. For a fork renamed here whose own
+// name has no branch there, that is the branch of the name it was renamed
+// from, see publishedName.
 type remoteForks struct {
 	remote string // the account remote's git remote, whose remote-tracking branches were read
 	tips   map[string]string
 	walked map[string]lineage.ForkLineage
 }
 
-// readRemoteForks reads the remote-tracking branches of the git remote
-// called remote, then walks the remote tips of names that differ from the
-// local ones, all in two git processes.
-func (inv *invocation) readRemoteForks(ctx context.Context, gitDir, remote string, records map[string]lineage.Record, names []string) (remoteForks, error) {
-	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
-	if err != nil {
-		return remoteForks{}, accountRepoFailure(err)
-	}
-	return inv.walkRemoteForks(ctx, gitDir, remote, tips, records, names)
-}
-
-// walkRemoteForks is readRemoteForks for a run that read the
-// remote-tracking branches already: tips, by name. It walks the remote
-// tips of names that differ from the local ones, in one git process.
+// walkRemoteForks reads remoteForks for names from the account remote's
+// remote-tracking branches, tips, by name, which the run read already. It
+// walks the remote tips of names that differ from the local ones, in one
+// git process; for a
+// renamed skill whose own name has no branch there, the tip of the old
+// name's, see publishedName, so that its fork id tells whether it is the
+// same skill.
 func (inv *invocation) walkRemoteForks(ctx context.Context, gitDir, remote string, tips map[string]string, records map[string]lineage.Record, names []string) (remoteForks, error) {
 	var walk []string
 	for _, n := range names {
-		if tip := tips[n]; tip != "" && tip != records[n].Commit {
+		rec := records[n]
+		tip := tips[n]
+		if tip == "" && rec.Fork != nil {
+			tip = tips[publishedName(n, rec.Fork.Renamed, tips)]
+		}
+		if tip != "" && tip != rec.Commit {
 			walk = append(walk, tip)
 		}
 	}
@@ -295,40 +295,61 @@ func (inv *invocation) forkRecords(ctx context.Context, gitDir string) (map[stri
 }
 
 // remoteSelection is the skills a bare publish covers, in name order:
-// every skill of your own this machine holds, those whose branch is a
-// fork branch, but the ones the account remote no longer holds, see
-// driftRemoteRemoved, which are left, in name order: putting a branch
-// another machine removed back takes naming the skill.
-func remoteSelection(records map[string]lineage.Record) (names, left []string) {
+// every skill of your own this machine holds whose branch the account
+// remote holds, see remoteForks.branchOf, and the ones it skips, those it
+// holds no branch of, in name order: a bare publish never creates a
+// branch, so a first publish, and putting back a skill another machine
+// removed, take naming the skill. Pure.
+func remoteSelection(records map[string]lineage.Record, remote remoteForks) (names, skipped []string) {
 	for n, rec := range records {
 		switch {
 		case rec.Kind != lineage.KindFork:
-		case rec.RemoteRemoved != "":
-			left = append(left, n)
+		case remote.branchOf(rec) != "":
+			names = append(names, n)
 		default:
+			skipped = append(skipped, n)
+		}
+	}
+	sort.Strings(names)
+	sort.Strings(skipped)
+	return names, skipped
+}
+
+// branchOf is the name of the account remote's branch that holds the fork
+// rec, as the fetch left it: its own name, or, for a skill renamed here and
+// not yet published under its new name, the nearest name its history
+// records it was renamed from, see publishedName, when that branch is the
+// same skill by its fork id, see walkRemoteForks. A tip equal to the
+// skill's own commit is the same skill without a walk, and the walk leaves
+// such a tip out. "" when it holds neither. Pure.
+func (r remoteForks) branchOf(rec lineage.Record) string {
+	if r.tips[rec.Name] != "" {
+		return rec.Name
+	}
+	if rec.Fork == nil || rec.Fork.ID == "" {
+		return ""
+	}
+	old := publishedName(rec.Name, rec.Fork.Renamed, r.tips)
+	switch {
+	case old == "":
+		return ""
+	case r.tips[old] == rec.Commit, r.walked[r.tips[old]].ID == rec.Fork.ID:
+		return old
+	}
+	return ""
+}
+
+// ownSkills is the names of your own skills records holds, those whose
+// branch is a fork branch, in name order. Pure.
+func ownSkills(records map[string]lineage.Record) []string {
+	var names []string
+	for n, rec := range records {
+		if rec.Kind == lineage.KindFork {
 			names = append(names, n)
 		}
 	}
 	sort.Strings(names)
-	sort.Strings(left)
-	return names, left
-}
-
-// remoteRemoved reports whether the last fetch of the account remote found
-// the branch of the skill called name gone, see lineage.RemoteRemovedPrefix,
-// read in one git process; a read that fails says it did not.
-func (inv *invocation) remoteRemoved(ctx context.Context, gitDir, name string) bool {
-	ref := lineage.RemoteRemovedRef(name)
-	values, err := inv.git.Refs(ctx).RefValues(gitDir, []string{ref})
-	return err == nil && values[ref] != ""
-}
-
-// remoteRemovedNotice is what is said of one of your own skills the
-// account remote no longer holds, see driftRemoteRemoved, and the two ways
-// on.
-func remoteRemovedNotice(name string) (what, hint string) {
-	return sanitised(name) + " is no longer on the account remote: another machine removed or renamed it",
-		"run '" + skillCommand("remove", name) + "' to remove it here too, or '" + publishCommand(name) + "' to publish it again"
+	return names
 }
 
 // forkPlaced reports whether the fork called name is placed on this

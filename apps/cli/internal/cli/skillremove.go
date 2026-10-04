@@ -563,26 +563,25 @@ func canonicalPath(path string) string {
 }
 
 // lineageRefs reads the import branch, the fork branch, the candidate ref
-// and the upstream-removed and remote-removed markers of one skill in one
-// git process, so that
+// and the upstream-removed marker of one skill in one git process, so that
 // a removal knows what it has to take away and what it must refuse before
 // it plans anything.
 func (inv *invocation) lineageRefs(ctx context.Context, gitDir, name string) (map[string]string, error) {
 	values, err := inv.git.Refs(ctx).RefValues(gitDir,
-		[]string{lineage.ManagedRef(name), lineage.ForkRef(name), lineage.CandidateRef(name), lineage.UpstreamRemovedRef(name), lineage.RemoteRemovedRef(name)})
+		[]string{lineage.ManagedRef(name), lineage.ForkRef(name), lineage.CandidateRef(name), lineage.UpstreamRemovedRef(name)})
 	if err != nil {
 		return nil, accountRepoFailure(err)
 	}
 	return values, nil
 }
 
-// dropCheckRefs records the deletion of what the update check and the
-// fetches of the account remote left for a skill that leaves the machine,
-// its candidate and its upstream-removed and remote-removed markers, each with the value it holds now, so that nothing of the skill is
+// dropCheckRefs records the deletion of what the update check left for a
+// skill that leaves the machine, its candidate and its upstream-removed
+// marker, each with the value it holds now, so that nothing of the skill is
 // left under refs/agentx and a skill installed under that name later does
 // not inherit either.
 func dropCheckRefs(m *home.Mutation, gitDir, name string, values map[string]string) {
-	for _, ref := range []string{lineage.CandidateRef(name), lineage.UpstreamRemovedRef(name), lineage.RemoteRemovedRef(name)} {
+	for _, ref := range []string{lineage.CandidateRef(name), lineage.UpstreamRemovedRef(name)} {
 		if held := values[ref]; held != "" {
 			m.Ref(gitDir, ref, held, "")
 		}

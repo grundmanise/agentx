@@ -376,14 +376,12 @@ func TestServeWarnsAboutSourcesAnImportBrought(t *testing.T) {
 		"Nothing to check: no managed skill comes from a source added on this machine.\n")
 }
 
-// TestReportServeCheck: what serve's check could not check, each note and
-// each of your own skills the account remote no longer holds is a warning
-// prefixed "update check: ", the last with its hint on a line of its own. A
-// check that failed as a whole is one warning, and nothing else is reported.
+// TestReportServeCheck: what serve's check could not check and each note
+// is a warning prefixed "update check: ". A check that failed as a whole is
+// one warning, and nothing else is reported.
 func TestReportServeCheck(t *testing.T) {
 	t.Parallel()
 	const one = "https://example.com/one"
-	what, hint := remoteRemovedNotice("beta")
 	for _, tc := range []struct {
 		name string
 		rep  checkReport
@@ -391,14 +389,11 @@ func TestReportServeCheck(t *testing.T) {
 		want string
 	}{
 		{"checked", checkReport{
-			failures:      []checkFailure{{source: one, fetch: true, skills: []string{"pdf"}, f: refuse(exitSource, one+": git fetch: fatal: repository not found", "")}},
-			notes:         []string{"a note"},
-			remoteRemoved: []string{"beta"},
+			failures: []checkFailure{{source: one, fetch: true, skills: []string{"pdf"}, f: refuse(exitSource, one+": git fetch: fatal: repository not found", "")}},
+			notes:    []string{"a note"},
 		}, nil, strings.Join([]string{
 			"warning: update check: " + one + ": git fetch: fatal: repository not found; not checked: pdf",
 			"warning: update check: a note",
-			"warning: update check: " + what,
-			"  " + hint,
 		}, "\n") + "\n"},
 		{"failed", checkReport{notes: []string{"a note"}}, errors.New("boom"), "warning: update check: boom\n"},
 	} {

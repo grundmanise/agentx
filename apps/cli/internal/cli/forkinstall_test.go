@@ -43,6 +43,7 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 	gitIn(t, a, rootA, "add", ".gitignore")
 	gitIn(t, a, rootA, "-c", "user.name=Grace Hopper", "-c", "user.email=grace@example.com", "commit", "-q", "-m", "Beside the skill")
 	a.mustRun("skill", "new", "notes")
+	pushOwn(a, remote, "notes")
 	a.mustRun("skill", "publish")
 	tip := a.ref(lineage.ForkRef("alpha"))
 	handMade := a.accountGit("-c", "user.name=Grace Hopper", "-c", "user.email=grace@example.com", "commit-tree", "-m", "By hand", tip+"^{tree}")

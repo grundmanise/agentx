@@ -62,20 +62,21 @@ func newSkillPublishCommand(inv *invocation) *cobra.Command {
 	var message string
 	cmd := &cobra.Command{
 		Use:   "publish [<name>]",
-		Short: "Publish the edits of a skill to its source, or of all of yours to the account remote",
-		Long: "Publish the skill called <name>, or with no name every skill of your own: record\n" +
-			"the edits its directory holds as one commit on its branch, then push the branch\n" +
-			"to the account remote. Edits stay on this machine until you publish them. The\n" +
-			"commit's message names the skill and the files it changes, unless -m gives one;\n" +
-			"with -m, the edits an update recorded are published in that one commit too,\n" +
-			"unless a rename or an update from upstream lies between. Files git ignores are\n" +
-			"never published. A skill another machine removed from the account remote, or\n" +
-			"renamed there, is published again only when you name it. When the account\n" +
-			"remote holds changes another machine published, nothing is recorded or\n" +
-			"pushed: run 'agentx skill update <name>' to get them first, then publish\n" +
-			"again. A push the account remote's host declines, by a hook or a protected\n" +
-			"branch, is reported with its reason, never forced, and a branch of the same\n" +
-			"name that is another skill is never pushed over.\n\n" +
+		Short: "Publish the edits of a skill to its source, or of yours the account remote holds",
+		Long: "Publish the skill called <name>, or with no name every skill of your own the\n" +
+			"account remote holds: record the edits its directory holds as one commit on its\n" +
+			"branch, then push the branch to the account remote. Edits stay on this machine\n" +
+			"until you publish them. A bare publish never creates a branch: name a skill to\n" +
+			"publish it for the first time, or to put back one another machine removed; it\n" +
+			"names each skill it skipped. The commit's message names the skill and the files\n" +
+			"it changes, unless -m gives one; with -m, the edits an update recorded are\n" +
+			"published in that one commit too, unless a rename or an update from upstream\n" +
+			"lies between. Files git ignores are never published. When the account remote\n" +
+			"holds changes another machine published, nothing is recorded or pushed: run\n" +
+			"'agentx skill update <name>' to get them first, then publish again. A push the\n" +
+			"account remote's host declines, by a hook or a protected branch, is reported\n" +
+			"with its reason, never forced, and a branch of the same name that is another\n" +
+			"skill is never pushed over.\n\n" +
 			"A skill installed from a shared source is published only when you name it: its\n" +
 			"edits become one commit, under your own git identity, on the branch of the\n" +
 			"source it is installed from, changing its folder alone, and the commit is pushed\n" +
@@ -150,7 +151,9 @@ type publishing struct {
 }
 
 // publish publishes the skill called name, or with no name every skill of
-// your own on this machine. A named skill is judged first from what this
+// your own on this machine whose branch the account remote holds, see
+// remoteSelection, naming each one it skips: a bare publish never creates
+// a branch there. A named skill is judged first from what this
 // machine holds, see publishable, so a skill a publish cannot cover is
 // refused before the account remote is looked up, and a managed skill of a
 // shared source is published to that source instead, see publishShared. Then the account remote
@@ -186,31 +189,40 @@ func (inv *invocation) publish(ctx context.Context, name, message string) error 
 	if err != nil {
 		return err
 	}
-	names, left := remoteSelection(records)
-	if name != "" {
-		left = nil
-		if records[name].Kind != lineage.KindFork {
-			// A journal finished above took the skill away.
-			return inv.noLibrarySkill(name)
+	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, account)
+	if err != nil {
+		return accountRepoFailure(err)
+	}
+	names := []string{name}
+	if name == "" {
+		names = ownSkills(records)
+	} else if records[name].Kind != lineage.KindFork {
+		// A journal finished above took the skill away.
+		return inv.noLibrarySkill(name)
+	}
+	remote, err := inv.walkRemoteForks(ctx, gitDir, account, tips, records, names)
+	if err != nil {
+		return err
+	}
+	if name == "" {
+		var skipped []string
+		names, skipped = remoteSelection(records, remote)
+		for _, n := range skipped {
+			inv.out.warn(sanitised(n) + " is not published: run '" + publishCommand(n) + "' to publish it")
 		}
-		names = []string{name}
-	}
-	for _, n := range left {
-		what, hint := remoteRemovedNotice(n)
-		inv.out.warnWith(what+", so it was not published", hint)
-	}
-	if len(names) == 0 && len(left) > 0 {
-		inv.summary = "published no skill; the account remote no longer holds " + sanitised(andList(left))
-		return nil
+		if len(names) == 0 && len(skipped) > 0 {
+			are := " are"
+			if len(skipped) == 1 {
+				are = " is"
+			}
+			inv.summary = "published no skill; " + plural(len(skipped), "skill") + are + " not published"
+			return nil
+		}
 	}
 	if len(names) == 0 {
 		inv.summary = "no skill to publish"
 		inv.out.print("You have no skill of your own to publish. Create one with ", inv.out.paint(label, "agentx skill new <name>"), " or ", inv.out.paint(label, "agentx skill fork <name>"), ".")
 		return nil
-	}
-	remote, err := inv.readRemoteForks(ctx, gitDir, account, records, names)
-	if err != nil {
-		return err
 	}
 	// The writer reads the user's identity and their core.excludesFile in
 	// one read of their configuration, before git reads any skill

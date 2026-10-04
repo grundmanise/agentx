@@ -191,7 +191,7 @@ func TestSkillForkOfAnUnmanagedSkill(t *testing.T) {
 	text := h.mustRun("skill", "fork", "notes")
 	// No account remote is set, so the fork ends with how to publish it.
 	equal(t, "the text output", text.stdout, "✓ forked notes; the fork replaces it wherever it was\n"+
-		"No account remote is set: run 'agentx source add <url> --account' before publishing notes.\n")
+		"No account remote is set: run 'agentx source add <url> --account', then 'agentx skill publish notes' to publish it.\n")
 	tip = h.ref(lineage.ForkRef("notes"))
 	equal(t, "the history", h.accountGit("rev-list", "--parents", lineage.ForkRef("notes")), tip)
 	equal(t, "the author", h.accountGit("log", "-1", "--format=%an <%ae>", tip), "Ada Lovelace <ada@example.com>")

@@ -675,14 +675,15 @@ func (p *serveProc) nextOf(typ string) jsonEvent {
 	}
 }
 
-// TestServeReportsForkDrift runs serve over a skill made by skill new and changes
-// it three ways, each reaching serve through the watcher alone: an edit
-// saved through the library makes the fork modified, skill publish makes it
-// current, and, after another edit, a commit made with git in the fork's
-// worktree leaves it modified, since nothing published it, until a publish
-// that has nothing to record but pushes the commit, which moves only the
-// account remote's branch as the account repo tracks it. Serve itself
-// never commits an edit.
+// TestServeReportsForkDrift runs serve over a skill made by skill new and
+// changes it three ways, each reaching serve through the watcher alone: an
+// edit saved through the library makes the fork modified, still not
+// published, skill publish makes it current and published, and, after
+// another edit, a commit made with git in the fork's worktree leaves it
+// modified, since nothing published it, until a publish that has nothing
+// to record but pushes the commit, which moves only the account remote's
+// branch as the account repo tracks it. Serve itself never commits an
+// edit.
 func TestServeReportsForkDrift(t *testing.T) {
 	t.Parallel()
 	h, _ := installHarness(t)
@@ -693,16 +694,16 @@ func TestServeReportsForkDrift(t *testing.T) {
 	equal(t, "the fork's first state", first[0].(map[string]any)["state"], stateCurrent)
 	p.send(`{"type":"refresh","request_id":"start"}`)
 	equal(t, "the event after the first snapshot", p.next("refresh_complete")["request_id"], "start")
-	expect := func(what, state, previous string) {
+	expect := func(what, state, previous string, drift ...string) {
 		t.Helper()
 		e := p.nextOf("drift")
 		got := fmt.Sprint(e["name"], " ", e["kind"], " ", e["state"], " ", e["previous_state"], " [", words(e["drift"]), "]")
-		equal(t, what, got, "notes managed "+state+" "+previous+" []")
+		equal(t, what, got, "notes managed "+state+" "+previous+" ["+strings.Join(drift, " ")+"]")
 	}
 
 	tip := h.ref(lineage.ForkRef("notes"))
 	replaceFile(t, filepath.Join(h.library, "notes", "SKILL.md"), skill("notes", "Edited in an editor"))
-	expect("an edit", stateModified, stateCurrent)
+	expect("an edit", stateModified, stateCurrent, driftNotPublished)
 	equal(t, "the branch while serve runs", h.ref(lineage.ForkRef("notes")), tip) // serve never records an edit
 	h.runBesideServe("skill", "publish", "notes")
 	expect("skill publish", stateCurrent, stateModified)

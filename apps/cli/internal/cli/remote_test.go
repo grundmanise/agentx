@@ -69,7 +69,7 @@ func accountHomes(t *testing.T) (a, b *harness, s *sourceRepo, remote string) {
 	a.mustRun("skill", "fork", "beta")
 	remote = newAccountRemote(t, a)
 	a.setAccount(remote)
-	a.mustRun("skill", "publish")
+	pushOwn(a, remote, "alpha", "beta")
 
 	b = newHarness(t)
 	b.build(t, fixture{dirs: []string{".claude"}})
@@ -77,6 +77,19 @@ func accountHomes(t *testing.T) (a, b *harness, s *sourceRepo, remote string) {
 	b.withIdentity("Machine B", "b@example.com")
 	b.setAccount(remote)
 	return a, b, s, remote
+}
+
+// pushOwn pushes the branches of h's own skills called names, which hold
+// no edits, to the account remote at remote in one git push, as a publish
+// of each by name would: a bare publish creates no branch, and one publish
+// per skill would cost a fixture a run each.
+func pushOwn(h *harness, remote string, names ...string) {
+	h.t.Helper()
+	args := []string{"push", "-q", source.RemoteName(source.ID("file://" + remote))}
+	for _, n := range names {
+		args = append(args, strings.TrimPrefix(lineage.ForkRef(n), "refs/heads/"))
+	}
+	h.accountGit(args...)
 }
 
 // twoHomes is accountHomes with both forks installed on b from the account

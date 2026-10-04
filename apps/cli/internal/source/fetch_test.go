@@ -26,7 +26,7 @@ func TestAFetchWritesNoConfig(t *testing.T) {
 		remote  func(t *testing.T, git *gitx.Runner, gitDir string, src source.Source)
 		fetched bool
 	}{
-		{"a remote removed while it fetched", func(*testing.T, *gitx.Runner, string, source.Source) {}, false},
+		{"a remote taken out while it fetched", func(*testing.T, *gitx.Runner, string, source.Source) {}, false},
 		{"a remote with only its URL", func(t *testing.T, git *gitx.Runner, gitDir string, src source.Source) {
 			if _, err := git.Isolated(ctx, gitDir, "config", "remote."+source.RemoteName(src.ID())+".url", src.URL); err != nil {
 				t.Fatal(err)

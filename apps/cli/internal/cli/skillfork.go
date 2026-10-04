@@ -26,11 +26,12 @@ func newSkillForkCommand(inv *invocation) *cobra.Command {
 		Long: "Fork the skill called <name>: a skill of a shared source, an unmanaged one, a\n" +
 			"skill a plugin provides, or one of your own. The fork is one of your own skills:\n" +
 			"a managed skill whose source is your account remote, which 'agentx skill\n" +
-			"publish' publishes it to; no account remote needs to be set until then. It gets\n" +
-			"its own branch, skills/<name>, in the account repo, whose first commit holds the\n" +
-			"skill as it is now, edits included, checked out as a worktree in agentx home,\n" +
-			"and the library holds a symlink to it. The fork of a skill of a shared source\n" +
-			"keeps that source as its upstream, so newer versions can be merged in.\n\n" +
+			"publish <name>' publishes it to; no account remote needs to be set until then.\n" +
+			"It gets its own branch, skills/<name>, in the account repo, whose first commit\n" +
+			"holds the skill as it is now, edits included, checked out as a worktree in\n" +
+			"agentx home, and the library holds a symlink to it. The fork of a skill of a\n" +
+			"shared source keeps that source as its upstream, so newer versions can be\n" +
+			"merged in.\n\n" +
 			"Without --name the fork takes the skill's place: its library directory moves\n" +
 			"into the fork's worktree and every placement stays as it was. With --name <new>\n" +
 			"the fork is made beside the skill, under the new name, which it also writes into\n" +
@@ -38,8 +39,8 @@ func newSkillForkCommand(inv *invocation) *cobra.Command {
 			"stays as it was. One of your own skills, and a plugin's skill, is always forked\n" +
 			"beside it. The unpublished edits of one of your own are recorded on its branch\n" +
 			"first, so the new skill holds them too; the skill you fork keeps showing them as\n" +
-			"unpublished until 'agentx skill publish', while the new one starts from them and\n" +
-			"reads current.\n\n" +
+			"unpublished until 'agentx skill publish <name>', while the new one starts from\n" +
+			"them and reads current.\n\n" +
 			"Name a plugin's skill as <plugin>:<skill> when several plugins provide one of\n" +
 			"that name. Files git ignores are never committed.",
 		Args: cobra.ExactArgs(1),
