@@ -46,11 +46,11 @@ type Options struct {
 	// Check is the update check, run once, off the loop's goroutine, after
 	// the initial snapshot; it returns what reports its outcome, nil for
 	// nothing to report. nil checks nothing, and so does Once. It is the
-	// first of the ticks, one that runs at start alone, see Tick.
-	Check func(ctx context.Context) (report func())
-	// Ticks are the other jobs serve runs on timers of their own, such as
-	// the account repo's maintenance.
-	Ticks []Tick
+	// first of the jobs, see Job.
+	Check Job
+	// Jobs are the other jobs serve runs once at start, such as the account
+	// repo's maintenance.
+	Jobs []Job
 
 	Snapshot        func(scan.Snapshot)                                   // a changed whole snapshot, counter set
 	RefreshComplete func(requestID string, counter int, err error)        // the acknowledgement of one refresh request
@@ -59,22 +59,12 @@ type Options struct {
 	Warn            func(message string)
 }
 
-// Tick is one job serve runs on a timer, off the loop's goroutine: Run
-// every Every, the first time once the initial snapshot is out when
-// AtStart says so and one Every later otherwise. One whose Every is not
-// positive has no timer: it runs once at start when AtStart says so, and
-// never otherwise. A tick that finds its
-// last run still going is skipped rather than queued, so a job never
-// overlaps itself and never piles up, while two jobs run beside each
-// other. The report a run returns, nil for nothing to report, is made on
-// the loop's goroutine, where every other report is. Under Once no tick
-// runs, and Run waits for a run still going, stopped by its context, before
-// it returns.
-type Tick struct {
-	Every   time.Duration
-	Run     func(ctx context.Context) (report func())
-	AtStart bool
-}
+// Job is one job serve runs once, off the loop's goroutine, once the initial
+// snapshot is out; jobs run beside each other. The report a run returns, nil
+// for nothing to report, is made on the loop's goroutine, where every other
+// report is. Under Once no job runs, and Run waits for a run still going,
+// stopped by its context, before it returns.
+type Job func(ctx context.Context) (report func())
 
 const (
 	requestHint = `send one JSON object per line, such as {"type":"refresh","request_id":"<unique id>"}`
@@ -116,64 +106,29 @@ func Run(ctx context.Context, o Options) error {
 	}
 	reqs := readRequests(ctx, o.Stdin, l.answer)
 
-	// The update check and every other tick run off this goroutine, since
-	// a check waits on the network for as long as its sources take and a
-	// rescan may not wait for it: the check once the initial snapshot is
-	// out, and every other tick on a timer of its own. A tick that finds
-	// its last run still going is skipped rather than queued, so runs
-	// never overlap and never pile up; the report of one that ended comes
-	// back over ended and is made here, where every other report is.
-	ticks := o.Ticks
+	// The update check and every other job run off this goroutine, since a
+	// check waits on the network for as long as its sources take and a
+	// rescan may not wait for it: each once, now that the initial snapshot
+	// is out. The report of one that ended comes back over ended and is made
+	// here, where every other report is.
+	jobs := o.Jobs
 	if o.Check != nil {
-		ticks = append([]Tick{{Run: o.Check, AtStart: true}}, ticks...)
+		jobs = append([]Job{o.Check}, jobs...)
 	}
-	type tickEnd struct {
-		i      int
-		report func()
-	}
-	due := make(chan int)
-	ended := make(chan tickEnd)
-	running := make([]bool, len(ticks))
-	start := func(i int) {
-		if running[i] {
-			return
+	ended := make(chan func())
+	for _, job := range jobs {
+		if job == nil {
+			continue
 		}
-		running[i] = true
 		checking.Add(1)
 		go func() {
 			defer checking.Done()
-			report := ticks[i].Run(ctx)
+			report := job(ctx)
 			select {
-			case ended <- tickEnd{i, report}:
+			case ended <- report:
 			case <-ctx.Done():
 			}
 		}()
-	}
-	for i, tick := range ticks {
-		if tick.Run == nil {
-			continue
-		}
-		if tick.Every > 0 {
-			ticker := time.NewTicker(tick.Every)
-			defer ticker.Stop()
-			go func() {
-				for {
-					select {
-					case <-ticker.C:
-						select {
-						case due <- i:
-						case <-ctx.Done():
-							return
-						}
-					case <-ctx.Done():
-						return
-					}
-				}
-			}()
-		}
-		if tick.AtStart {
-			start(i)
-		}
 	}
 
 	// A change starts the debounce timer and, unless one is running, the
@@ -229,12 +184,9 @@ func Run(ctx context.Context, o Options) error {
 			if err := rescan(); err != nil {
 				return err
 			}
-		case i := <-due:
-			start(i)
-		case e := <-ended:
-			running[e.i] = false
-			if e.report != nil {
-				e.report()
+		case report := <-ended:
+			if report != nil {
+				report()
 			}
 		}
 	}

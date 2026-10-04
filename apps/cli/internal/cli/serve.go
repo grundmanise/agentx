@@ -141,7 +141,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 				Once:  once,
 				Stdin: cmd.InOrStdin(),
 				Check: inv.serveCheck,
-				Ticks: []serve.Tick{inv.maintenanceTick()},
+				Jobs:  []serve.Job{inv.maintenanceJob},
 				Snapshot: func(snap scan.Snapshot) {
 					inv.out.emit(snapshotEvent{event: newEvent("snapshot"), Snapshot: snap})
 					inv.out.print(inv.out.paint(heading, fmt.Sprintf("snapshot %d", snap.ScanCounter)), ": ",

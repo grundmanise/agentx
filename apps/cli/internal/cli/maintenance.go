@@ -8,7 +8,6 @@ import (
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
-	"github.com/grundmanise/agentx/apps/cli/internal/serve"
 )
 
 // maintenanceEvery is how often the account repo is maintained: at most
@@ -23,18 +22,16 @@ const (
 	maintenanceLeft  = time.Hour
 )
 
-// maintenanceTick is the serve child's maintenance of the account repo: once
-// at start, running when it is due, see serveMaintenance. What it could not
-// do is a warning.
-func (inv *invocation) maintenanceTick() serve.Tick {
-	return serve.Tick{AtStart: true, Run: func(ctx context.Context) func() {
-		err := inv.serveMaintenance(ctx)
-		return func() {
-			if err != nil {
-				inv.out.warn("maintenance: " + err.Error())
-			}
+// maintenanceJob is the serve child's maintenance of the account repo, run
+// once at start; it maintains the repo when that is due, see
+// serveMaintenance. What it could not do is a warning.
+func (inv *invocation) maintenanceJob(ctx context.Context) func() {
+	err := inv.serveMaintenance(ctx)
+	return func() {
+		if err != nil {
+			inv.out.warn("maintenance: " + err.Error())
 		}
-	}}
+	}
 }
 
 // serveMaintenance maintains the account repo when the last maintenance is

@@ -13,6 +13,8 @@ import (
 // TestTheCheckRunsOnceAtLaunch drives Run with a check that reports at
 // once: it starts once the initial snapshot is out, its report is made, and
 // no other check follows it, however many refreshes serve answers after it.
+// A second job holds on until serve stops, which stops it, and Run returns
+// only once it has.
 func TestTheCheckRunsOnceAtLaunch(t *testing.T) {
 	t.Parallel()
 	stdinR, stdinW, err := os.Pipe()
@@ -23,6 +25,7 @@ func TestTheCheckRunsOnceAtLaunch(t *testing.T) {
 	defer stdinR.Close()
 
 	var snapshots, checks atomic.Int32
+	var held atomic.Bool           // the second job, still running when serve stops, ended
 	started := make(chan int32, 1) // the snapshots out when the check started
 	reported := make(chan struct{}, 1)
 	acked := make(chan string, 4)
@@ -43,6 +46,11 @@ func TestTheCheckRunsOnceAtLaunch(t *testing.T) {
 				}
 				return func() { reported <- struct{}{} }
 			},
+			Jobs: []Job{func(ctx context.Context) func() {
+				<-ctx.Done()
+				held.Store(true)
+				return nil
+			}},
 		})
 	}()
 
@@ -77,6 +85,9 @@ func TestTheCheckRunsOnceAtLaunch(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("Run did not return")
+	}
+	if !held.Load() {
+		t.Error("Run returned before the job it was running ended")
 	}
 	if n := checks.Load(); n != 1 {
 		t.Errorf("%d checks ran, want the one at launch", n)
