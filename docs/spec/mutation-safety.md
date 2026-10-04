@@ -12,7 +12,7 @@ If the prior base cannot be established, leave the directory unmanaged. Offer an
 
 Use the machine's mutation lock and a durable local journal at `~/.agentx/mutations/<id>.json`. This journal is required without an account and is separate from remote operation records.
 
-1. Capture the expected refs and current content of every affected live path, including uncommitted fork edits and copy placements. Stage and validate the proposed content before replacing live content.
+1. Capture the expected refs and current content of every affected live path, including unpublished fork edits and copy placements. Stage and validate the proposed content before replacing live content.
 2. Persist the expected old state, intended new state, staged and retained-content paths, and recovery progress before changing live state. Sync the journal and its directory where the platform requires it. Keep required objects and recovery content reachable until completion.
 3. Revalidate the inputs under the lock before applying. Use expected-old values when changing refs. If live content changed, re-merge or request resolution. A branch tip alone cannot detect an edit that is not committed yet.
 4. Apply the recorded steps and persist progress. Retain displaced content until the final state is verified. Locks coordinate agentx processes, not editors; recheck retained content for intervening edits before discarding it. Preserve unexpected content and stop for resolution if it differs from the captured input.

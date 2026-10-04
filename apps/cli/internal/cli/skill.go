@@ -41,7 +41,7 @@ const (
 // here decides whether an upstream moved, which a later command does. A
 // fork is listed with the same two against its branch tip: current when
 // its skill directory holds what the tip records, modified while it holds
-// edits nobody committed.
+// edits not yet published, which a publish records on the branch.
 //
 // The two are told apart the way skilltree.go compares a directory with a
 // version, so a file git ignores is no edit. A mode is content to git, so
@@ -94,7 +94,7 @@ const mergePending = "merge pending"
 func newSkillCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "skill",
-		Short:       "Install, create, fork, commit, publish, place, compare, update, rename and remove skills, check them for updates, and list what the library holds",
+		Short:       "Install, create, fork, publish, place, compare, update, rename and remove skills, check them for updates, and list what the library holds",
 		Annotations: map[string]string{annotationGroup: "true"},
 		Args:        cobra.NoArgs,
 		RunE:        needSubcommand(inv, "no skill command given", "run 'agentx skill --help' to list commands"),
@@ -102,7 +102,6 @@ func newSkillCommand(inv *invocation) *cobra.Command {
 	cmd.AddCommand(newSkillAddCommand(inv))
 	cmd.AddCommand(newSkillNewCommand(inv))
 	cmd.AddCommand(newSkillForkCommand(inv))
-	cmd.AddCommand(newSkillCommitCommand(inv))
 	cmd.AddCommand(newSkillPublishCommand(inv))
 	cmd.AddCommand(newSkillHistoryCommand(inv))
 	cmd.AddCommand(newSkillPlaceCommand(inv))
@@ -329,7 +328,7 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 		ev.Source, ev.Subpath, ev.UpstreamCommit, ev.BaseHash = base.Source, &subpath, base.Commit, base.Hash
 	}
 	// A fork is compared with its own branch tip: modified while it has
-	// edits nobody committed. Its drift is its placements', since what
+	// edits not yet published. Its drift is its placements', since what
 	// the source drift states say of a managed skill is not true of a
 	// fork, see driftOf.
 	if rec.Kind == lineage.KindFork && obs.judged {

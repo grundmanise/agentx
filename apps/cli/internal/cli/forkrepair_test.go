@@ -99,7 +99,7 @@ func TestSkillPlaceRepairsAFork(t *testing.T) {
 	equal(t, "exit", out.exit, 6)
 	e := h.one(out.stdout, "error")
 	equal(t, "message", e["message"], root+" is in the way of notes's worktree, so nothing was placed")
-	equal(t, "hint", e["hint"], "run 'agentx skill place notes --force' to adopt it: its content becomes uncommitted edits of the fork")
+	equal(t, "hint", e["hint"], "run 'agentx skill place notes --force' to adopt it: its content becomes the skill's unpublished edits")
 
 	ignore := filepath.Join(root, ".gitignore")
 	out = h.run("--json", "skill", "place", "notes", "--force")
@@ -112,7 +112,7 @@ func TestSkillPlaceRepairsAFork(t *testing.T) {
 	}
 	equal(t, "git status in the adopted worktree", gitIn(t, h, root, "status", "--porcelain"), " M notes/SKILL.md\n")
 	equal(t, "state", h.one(out.stdout, "library_skill")["state"], stateModified)
-	contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), "; adopted "+root+" as notes's worktree; its content is uncommitted edits of the fork")
+	contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), "; adopted "+root+" as notes's worktree; its content is the skill's unpublished edits")
 	cleanAfterPlace(t, h, filepath.Dir(root), h.library)
 
 	gitIn(t, h, root, "checkout", "--", "notes")

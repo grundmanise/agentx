@@ -37,7 +37,7 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 		{"a name outside the grammar", "alpha", "Renamed", 6, "Renamed"},
 		{"a name taken", "alpha", "beta", 6, "choose another name with 'agentx skill rename alpha <new>'"},
 		{"no fork", "mine", "yours", 6, "mine is not a fork, so it cannot be renamed"},
-		{"uncommitted edits", "alpha", "renamed", 6, "alpha has uncommitted edits"},
+		{"uncommitted edits", "alpha", "renamed", 6, "alpha has unpublished edits"},
 		{"a merge pending", "alpha", "renamed", 4, "alpha has a merge pending"},
 	} {
 		switch tc.name {
@@ -56,7 +56,7 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 	// A commit leaves the copy behind the library, which a listing no
 	// longer counts as a placement; the rename keeps it all the same.
 	writeFile(t, filepath.Join(a.forkDir("alpha", "alpha"), "notes.md"), "committed after the copy\n")
-	a.mustRun("skill", "commit", "alpha")
+	a.record("alpha")
 	published := old
 	old = a.ref(lineage.ForkRef("alpha"))
 
@@ -165,7 +165,7 @@ func TestRenameFinish(t *testing.T) {
 		{"another failure", true, refuse(exitAccountRepo, "cannot read", ""),
 			"run 'agentx skill remove notes --remote' to finish the rename"},
 		{"uncommitted edits", false, uncommittedRefusal("notes", "removed"),
-			"to keep the edits, commit them with 'agentx skill commit notes', then run 'agentx skill remove jottings' and 'agentx skill rename notes jottings' again; to drop them, run 'agentx skill remove notes'"},
+			"to keep the edits, publish them with 'agentx skill publish notes', then run 'agentx skill remove jottings' and 'agentx skill rename notes jottings' again; to drop them, run 'agentx skill remove notes'"},
 		{"a branch that moved", true, movedWhileRemoved("notes"),
 			"notes's branch moved since jottings was forked from it; to keep what it holds now, run 'agentx skill remove jottings' and 'agentx skill rename notes jottings --remote' again; to drop it, run 'agentx skill remove notes --remote'"},
 	} {

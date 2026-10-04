@@ -88,30 +88,31 @@ func twoHomes(t *testing.T) (a, b *harness, s *sourceRepo, remote string) {
 	return a, b, s, remote
 }
 
-// commitFork writes notes.md of the fork called name on h and commits it.
+// commitFork writes notes.md of the fork called name on h and records it
+// on the fork's branch, unpublished, see record.
 func (h *harness) commitFork(name, notes string) string {
 	h.t.Helper()
 	writeFile(h.t, filepath.Join(h.forkDir(name, name), "notes.md"), notes)
-	h.mustRun("skill", "commit", name)
-	return h.ref(lineage.ForkRef(name))
+	return h.record(name)
 }
 
-// TestPublishNeverMergesAndNamesUncommittedForks publishes from machine b
-// while machine a published alpha first. b holds a commit of its own, so
-// the two histories diverged: b's publish of alpha is refused, exit 6,
-// outcome moved, its hint naming the update, with nothing written here or
-// on the remote and no pull event, since a publish never merges. Once
-// b's update has taken a's commit in, the publish pushes the merge; beta,
-// committed on b and not named, stays unpushed. A publish pushes alpha's
-// commits even though alpha holds an uncommitted edit, and names it:
-// publishing never commits. The push carries the fork branches alone: the
+// TestPublishNeverMerges publishes from machine b while machine a
+// published alpha first. b holds a commit of its own and an edit, so the
+// two diverged: b's publish of alpha is refused, exit 6, outcome moved,
+// its hint naming the update, with nothing recorded or written here or on
+// the remote and no pull event, since a publish never merges. Once b's
+// update has taken a's commit in, the publish pushes the merge; beta,
+// recorded on b and not named, stays unpushed until a bare publish, in
+// which alpha is up to date. The push carries the fork branches alone: the
 // remote holds no import branch, update candidate or other ref. a, which
-// holds both forks unchanged since, is behind: its publish of every fork
-// pushes nothing, exit 0, each fork's outcome behind and its warning
-// naming the update, and so is its publish of alpha alone, which says so in
-// its result. A push the remote rejects is reported, exit 6, and
-// never forced.
-func TestPublishNeverMergesAndNamesUncommittedForks(t *testing.T) {
+// holds both skills unchanged since, is behind: its publish of every skill
+// pushes nothing, exit 0, each skill's outcome behind and its warning
+// naming the update, and so is its publish of alpha alone, which says so
+// in its result; with an edit, a bare publish refuses a's alpha as moved,
+// exit 6, naming it, while beta stays behind, and nothing is recorded. A
+// push the remote rejects is reported, exit 6, and never
+// forced.
+func TestPublishNeverMerges(t *testing.T) {
 	t.Parallel()
 	a, b, _, remote := twoHomes(t)
 	alphaB := b.forkDir("alpha", "alpha")
@@ -120,6 +121,8 @@ func TestPublishNeverMergesAndNamesUncommittedForks(t *testing.T) {
 	mine := b.commitFork("alpha", forkNotes("eight", "eight, b"))
 	betaBefore := remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/beta")
 	b.commitFork("beta", forkNotes("two", "two, b"))
+	draft := filepath.Join(alphaB, "draft.md")
+	writeFile(t, draft, "an edit\n")
 
 	out := b.run("--json", "skill", "publish", "alpha")
 	equal(t, "a publish over another machine's commit: exit", out.exit, 6)
@@ -129,7 +132,9 @@ func TestPublishNeverMergesAndNamesUncommittedForks(t *testing.T) {
 	contains(t, "its hint", e["hint"].(string), "run 'agentx skill update alpha' to take them in, then publish again")
 	equal(t, "its pull events", len(b.eventsOfType(out.stdout, "pull")), 0)
 	equal(t, "b's alpha, kept", b.ref(lineage.ForkRef("alpha")), mine)
+	equal(t, "b's edit, kept", fileBody(t, draft), "an edit\n")
 	noCheckout(t, b, "alpha")
+	remove(t, draft)
 	equal(t, "the remote's alpha", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/alpha"), theirs)
 
 	b.mustRun("skill", "update", "alpha")
@@ -139,7 +144,6 @@ func TestPublishNeverMergesAndNamesUncommittedForks(t *testing.T) {
 	ev := b.one(out.stdout, "publish")
 	equal(t, "outcome", ev["outcome"], publishPushed)
 	equal(t, "commit", ev["commit"], merged)
-	equal(t, "uncommitted", ev["uncommitted"], false)
 	var phases []string
 	for _, e := range b.eventsOfType(out.stdout, "progress") {
 		phases = append(phases, e["phase"].(string)+" "+e["subject"].(string))
@@ -149,18 +153,15 @@ func TestPublishNeverMergesAndNamesUncommittedForks(t *testing.T) {
 	equal(t, "the remote's beta", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/beta"), betaBefore)
 
 	tip := b.commitFork("alpha", forkNotes("one", "one, a", "eight", "eight, b", "two", "two, b"))
-	writeFile(t, filepath.Join(alphaB, "notes.md"), "uncommitted\n")
 	out = b.run("skill", "publish", "alpha")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "the line", out.stdout, "published alpha as "+short(tip))
-	contains(t, "the warning", out.stderr, "alpha has uncommitted edits, which were not published")
 	out = b.mustRun("--json", "skill", "publish")
-	equal(t, "summary", b.one(out.stdout, "result")["summary"], "published 1 of 2 forks; uncommitted edits were not published: alpha")
+	equal(t, "summary", b.one(out.stdout, "result")["summary"], "published 1 of 2 skills")
 	for _, e := range b.eventsOfType(out.stdout, "publish") {
 		switch e["name"] {
 		case "alpha":
 			equal(t, "alpha", e["outcome"], publishUpToDate)
-			equal(t, "alpha uncommitted", e["uncommitted"], true)
 		case "beta":
 			equal(t, "beta", e["outcome"], publishPushed)
 		}
@@ -181,6 +182,20 @@ func TestPublishNeverMergesAndNamesUncommittedForks(t *testing.T) {
 	equal(t, "the remote's refs, kept", remoteGit(t, b, remote, "for-each-ref", "--format=%(refname) %(objectname)"), refs)
 	out = a.mustRun("--json", "skill", "publish", "alpha")
 	contains(t, "the summary of one fork behind", a.one(out.stdout, "result")["summary"].(string), "alpha has nothing to publish")
+	behindTip := a.ref(lineage.ForkRef("alpha"))
+	writeFile(t, filepath.Join(a.forkDir("alpha", "alpha"), "draft.md"), "a's edit\n")
+	out = a.run("--json", "skill", "publish")
+	equal(t, "a bare publish with an edit behind the remote: exit", out.exit, 6)
+	for _, e := range a.eventsOfType(out.stdout, "publish") {
+		switch e["name"] {
+		case "alpha":
+			equal(t, "alpha, edited, outcome", e["outcome"], publishMoved)
+		case "beta":
+			equal(t, "beta's outcome", e["outcome"], publishBehind)
+		}
+	}
+	contains(t, "alpha's refusal", out.stderr, "the account remote holds changes to alpha that this machine lacks")
+	equal(t, "a's alpha, kept", a.ref(lineage.ForkRef("alpha")), behindTip)
 
 	writeShim(t, filepath.Join(remote, "hooks", "pre-receive"), "#!/bin/sh\nexit 1\n")
 	b.commitFork("alpha", forkNotes("nine", "nine, b"))
@@ -195,14 +210,13 @@ func TestPublishNeverMergesAndNamesUncommittedForks(t *testing.T) {
 
 // TestPublishRefusesADifferentFork creates a skill of the same name on two
 // machines, which are two forks with two fork ids. The first publishes it;
-// the second's publish of it is refused, exit 6, and the hint
-// names the way out, a rename, and the remote keeps the first machine's
-// branch; so is the second's removal of it with --remote, which would
-// delete the first's. The publish still names the uncommitted edits the
-// second machine's fork holds, which its refusal does not. Before the
-// second machine exists, the first's check-updates, with no shared source,
-// checks its own skill against the account remote and counts it as one
-// source.
+// the second's publish of it is refused, exit 6, and the hint names the
+// way out, a rename, and the remote keeps the first machine's branch; so
+// is the second's removal of it with --remote, which would delete the
+// first's. The refused publish records nothing of the edit the second
+// machine's skill holds. Before the second machine exists, the first's
+// check-updates, with no shared source, checks its own skill against the
+// account remote and counts it as one source.
 func TestPublishRefusesADifferentFork(t *testing.T) {
 	t.Parallel()
 	a, _, _, _ := forkHarness(t)
@@ -216,13 +230,14 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 
 	b, _, _, _ := forkHarness(t)
 	b.setAccount(remote)
-	writeFile(t, filepath.Join(b.forkDir("notes", "notes"), "draft.md"), "uncommitted\n")
+	bTip := b.ref(lineage.ForkRef("notes"))
+	writeFile(t, filepath.Join(b.forkDir("notes", "notes"), "draft.md"), "an edit\n")
 	out = b.run("--json", "skill", "publish", "notes")
 	equal(t, "publish: exit", out.exit, 6)
 	e := b.one(out.stdout, "error")
 	contains(t, "publish: message", e["message"].(string), "the account remote's skills/notes is a different fork than notes on this machine")
 	contains(t, "publish: hint", e["hint"].(string), "rename yours with 'agentx skill rename notes <new>'")
-	contains(t, "the uncommitted edits", out.stderr, "notes has uncommitted edits, which were not published")
+	equal(t, "b's notes, nothing recorded", b.ref(lineage.ForkRef("notes")), bTip)
 	// Nor does a removal of b's notes, or the rename the hint above names,
 	// delete a's from the account remote, or anything of b's; each names
 	// what does its work on b alone, which for the rename is not a removal.
@@ -264,7 +279,6 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 	equal(t, "the fresh machine's notes", ev["state"], restorePresent)
 	equal(t, "its kind", ev["local_kind"], lineage.KindFork)
 	writeFile(t, filepath.Join(a.forkDir("notes", "notes"), "more.md"), "more\n")
-	a.mustRun("skill", "commit", "notes")
 	a.mustRun("skill", "publish", "notes")
 	fresh.setAccount(remote)
 	ev = state(fresh)

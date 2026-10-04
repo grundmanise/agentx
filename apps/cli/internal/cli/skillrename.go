@@ -20,8 +20,8 @@ func newSkillRenameCommand(inv *invocation) *cobra.Command {
 			"'agentx skill fork <old> --name <new>', then 'agentx skill remove <old>', with\n" +
 			"--remote passed on to the removal. The renamed skill is a new fork, with a fork\n" +
 			"id of its own, whose history holds the old one's commits, placed where the old\n" +
-			"one was. Both steps are checked before either runs, so a merge pending, edits\n" +
-			"nobody committed or a name that cannot be used change nothing. Files git ignores\n" +
+			"one was. Both steps are checked before either runs, so a merge pending,\n" +
+			"unpublished edits or a name that cannot be used change nothing. Files git ignores\n" +
 			"in the old fork's worktree are deleted with it. Another machine sees the renamed\n" +
 			"fork as a new fork to install, and keeps the old one until it is removed there.",
 		Args: cobra.ExactArgs(2),
@@ -137,7 +137,7 @@ func (inv *invocation) keepCopies(fk *forking) error {
 // renameFinish is the hint of a rename whose fork of old was made as
 // newName but whose removal of old failed with err; finish removes old.
 // Most failures leave old as it was forked, and finish completes the
-// rename. Edits nobody committed and a branch that moved since the fork
+// rename. Unpublished edits and a branch that moved since the fork
 // are work newName lacks, which finish would delete: the hint says how to
 // carry it over first, by removing newName and renaming again. Pure.
 func renameFinish(old, newName, finish string, remote bool, err error) string {
@@ -148,7 +148,7 @@ func renameFinish(old, newName, finish string, remote bool, err error) string {
 	carry := "run '" + skillCommand("remove", newName) + "' and '" + again + "' again"
 	switch {
 	case errors.Is(err, errUncommitted):
-		return "to keep the edits, commit them with '" + skillCommand("commit", old) + "', then " + carry +
+		return "to keep the edits, publish them with '" + publishCommand(old) + "', then " + carry +
 			"; to drop them, run '" + finish + "'"
 	case errors.Is(err, errMovedWhileRemoved):
 		return sanitised(old) + "'s branch moved since " + sanitised(newName) + " was forked from it; to keep what it holds now, " +

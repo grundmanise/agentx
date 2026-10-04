@@ -25,7 +25,7 @@ func newSkillDiffCommand(inv *invocation) *cobra.Command {
 			"included. Files git ignores do not. Nothing is written to the library. With\n" +
 			"--update, show instead what the update '" + checkUpdatesCommand + "' found\n" +
 			"changes in the base version.\n\n" +
-			"For a fork, show its uncommitted edits: how its skill directory differs from the\n" +
+			"For a fork, show its unpublished edits: how its skill directory differs from the\n" +
 			"last commit of its branch, or, with --commit <id>, from that commit.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

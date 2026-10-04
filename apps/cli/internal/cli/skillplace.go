@@ -36,7 +36,7 @@ func newSkillPlaceCommand(inv *invocation) *cobra.Command {
 			"For a fork, it first puts back what the fork needs on this machine: its worktree,\n" +
 			"checked out again from its branch, and its library symlink. A directory in the\n" +
 			"way of either stops the command: --force adopts it, keeping every file as an\n" +
-			"uncommitted edit of the fork.",
+			"unpublished edit of the skill.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return inv.skillPlace(cmd.Context(), args[0], to, asCopy, force)

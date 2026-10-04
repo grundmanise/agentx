@@ -13,7 +13,7 @@ import (
 
 // Removing a fork takes it off this machine as one journaled mutation:
 // every placement agentx made of it, the library symlink, the worktree
-// with whatever it holds, uncommitted edits and ignored files included,
+// with whatever it holds, unpublished edits and ignored files included,
 // the fork's branch, its update candidate and its copy modes. The journal
 // retains the worktree until the removal is complete, so a removal that
 // stops part way loses nothing a recovery cannot put back. The worktree's

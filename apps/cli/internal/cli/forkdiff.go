@@ -65,7 +65,7 @@ func (inv *invocation) resolveForkCommit(ctx context.Context, f forkSite, arg st
 	return c, nil
 }
 
-// forkDiff shows the uncommitted edits of the fork whose branch is rec:
+// forkDiff shows the unpublished edits of the fork whose branch is rec:
 // how its skill directory differs from the tip, or, when commit names one,
 // from that commit, any commit of the account repo whose tree holds the
 // fork's skill directory. Only the skill directory is compared, and every

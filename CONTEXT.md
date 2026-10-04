@@ -91,7 +91,7 @@ _Avoid_: orphaned, detached
 A skill found on disk whose upstream agentx cannot determine. Inventoried, never updated.
 
 **Fork**:
-A skill derived from an upstream skill and edited by the user, keeping the upstream name unless renamed. A fork supersedes the skill it was forked from in the agent configuration; a fork under a new name sits beside the skill it came from instead. Managed, unmanaged and plugin-owned skills and forks can all be forked with `agentx skill fork`. Renaming a fork with `agentx skill rename` makes a new fork under the new name, with a fork id of its own and the old one's history, and removes the old one; nothing records the rename. Its lineage record keeps the third-party upstream so later upstream versions can be merged in. Lives in the account repo; local until published.
+A skill derived from an upstream skill and edited by the user, keeping the upstream name unless renamed. A fork supersedes the skill it was forked from in the agent configuration; a fork under a new name sits beside the skill it came from instead. Managed, unmanaged and plugin-owned skills and forks can all be forked with `agentx skill fork`. Renaming a fork with `agentx skill rename` makes a new fork under the new name, with a fork id of its own and the old one's history, and removes the old one; nothing records the rename. Its lineage record keeps the third-party upstream so later upstream versions can be merged in. Lives in the account repo; its edits stay on this machine until it is published, which records them on its branch.
 _Avoid_: copy, variant, override
 
 **Greenfield skill**:
@@ -111,7 +111,7 @@ The branch `managed/<name>` in the account repo that points at a managed skill's
 _Avoid_: managed branch, shadow branch, cache branch
 
 **Adopt candidate**:
-Something of the user's where a fork placed on this machine belongs: a directory at the fork's worktree that Git does not register, or a directory or a symlink of the user's at its library entry. Reported and left as it is; `skill place --force` adopts it, every file kept as an uncommitted edit of the fork.
+Something of the user's where a fork placed on this machine belongs: a directory at the fork's worktree that Git does not register, or a directory or a symlink of the user's at its library entry. Reported and left as it is; `skill place --force` adopts it, every file kept as an unpublished edit of the fork.
 _Avoid_: orphan, stray directory
 
 **Account remote**:
@@ -119,7 +119,7 @@ The source whose settings entry carries the account flag, added with `agentx sou
 _Avoid_: cloud, server, origin, fork source
 
 **Publish**:
-An explicit user action, `agentx skill publish`, that pushes one fork's or greenfield skill's branch from the account repo to the account remote. It never merges: when another machine published there first, the update's account step takes that in before the next publish. Another machine with the same remote installs it from there, and takes later versions in with an update, a plain Git merge. Commits are explicit, made by the user with agentx or with git, and publishing pushes commits only.
+An explicit user action, `agentx skill publish`, that records the edits of one of the user's own skills, a fork or a greenfield skill, as one commit on its branch in the account repo, then pushes the branch to the account remote. There is no separate commit step: edits stay on this machine until they are published. It never merges: when another machine published there first, it records and pushes nothing, and the update's account step takes that in before the next publish. Another machine with the same remote installs it from there, and takes later versions in with an update, a plain Git merge.
 _Avoid_: sync, share, upload
 
 **Installable skill**:
@@ -135,7 +135,7 @@ The import commit of the newer upstream version an update check found for a mana
 _Avoid_: pending update, available version
 
 **Update**:
-Applying a managed skill's update candidate, only ever at the user's request: the import branch moves to the candidate, which becomes the skill's base version, the library directory takes the new content, keeping the files git ignores there, and copy placements that held the old version are refreshed while ones edited in place are kept. A skill that is not modified updates by replacement; a modified skill updates by a three-way merge of its edits with the candidate, over the base version, which applies when it is clean and leaves a pending merge when it conflicts; the next update applies a pending merge once it is resolved. The skill keeps its library name and its placements, whatever the newer version calls it. A fork always updates by a merge of its tip with the candidate, with its base version as the merge base, committed on its branch, whether or not it has commits of its own, and only while it has no uncommitted edits. With an account remote set, an update of one of your own skills first takes in what another machine published of it there, its account step: a plain Git merge of the two histories, a fast-forward when this machine has nothing of its own, whose conflict becomes a pending merge like any other; a branch of the same name that is another fork, by its fork id, is refused. For a skill with no upstream that is the whole update.
+Applying a managed skill's update candidate, only ever at the user's request: the import branch moves to the candidate, which becomes the skill's base version, the library directory takes the new content, keeping the files git ignores there, and copy placements that held the old version are refreshed while ones edited in place are kept. A skill that is not modified updates by replacement; a modified skill updates by a three-way merge of its edits with the candidate, over the base version, which applies when it is clean and leaves a pending merge when it conflicts; the next update applies a pending merge once it is resolved. The skill keeps its library name and its placements, whatever the newer version calls it. A fork always updates by a merge of its tip with the candidate, with its base version as the merge base, committed on its branch, whether or not it has commits of its own, and only while it has no unpublished edits. With an account remote set, an update of one of your own skills first takes in what another machine published of it there, its account step: a plain Git merge of the two histories, a fast-forward when this machine has nothing of its own, whose conflict becomes a pending merge like any other; a branch of the same name that is another fork, by its fork id, is refused. For a skill with no upstream that is the whole update.
 _Avoid_: upgrade, pull, sync
 
 **Pending merge**:
@@ -143,7 +143,7 @@ The merge an update of a modified skill or a fork leaves when the edits and the 
 _Avoid_: merge ref, conflict state
 
 **Modified skill**:
-A managed skill or a fork whose on-disk content differs from what it is compared with: a managed skill's base version, a fork's branch tip. It was edited outside agentx, by hand or by any other tool. Decided as git decides for a work tree: git records the directory over an index loaded from that version, and the skill is modified when the tree it writes differs from the version's, so a changed file mode or symlink counts as an edit and a file git ignores does not. For a fork that is what git status in its worktree says of the skill directory. Shown as drift, local to one machine, never synced. A managed skill can be updated by merging its edits with the update, or converted to a fork. A fork stays modified until its edits are committed, and a command that would move its branch refuses until then.
+A managed skill or a fork whose on-disk content differs from what it is compared with: a managed skill's base version, a fork's branch tip. It was edited outside agentx, by hand or by any other tool. Decided as git decides for a work tree: git records the directory over an index loaded from that version, and the skill is modified when the tree it writes differs from the version's, so a changed file mode or symlink counts as an edit and a file git ignores does not. For a fork that is what git status in its worktree says of the skill directory. Shown as drift, local to one machine, never synced. A managed skill can be updated by merging its edits with the update, or converted to a fork. A fork is modified while it holds edits not yet published, and stays so until a publish records them; a command that would move its branch refuses until then.
 _Avoid_: dirty, drifted, changed
 
 **Lineage record**:

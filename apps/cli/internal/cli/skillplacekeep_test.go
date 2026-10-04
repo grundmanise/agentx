@@ -1258,7 +1258,7 @@ func TestSkillPlaceForceOnWhatItCannotJudge(t *testing.T) {
 		linksToLibrary(t, "cursor's placement", cursor, lib)
 		summary := h.one(out.stdout, "result")["summary"].(string)
 		contains(t, "summary", summary, ", 1 placement skipped")
-		contains(t, "summary", summary, "; moved "+lib+" into alpha's worktree; its content is uncommitted edits of the fork")
+		contains(t, "summary", summary, "; moved "+lib+" into alpha's worktree; its content is the skill's unpublished edits")
 		equal(t, "the fork", h.accountGit("rev-parse", "refs/heads/skills/alpha"), commit)
 		cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor), filepath.Dir(root))
 

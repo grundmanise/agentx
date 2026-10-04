@@ -203,7 +203,7 @@ func (inv *invocation) makeFork(ctx context.Context, fk *forking) error {
 // account repo's branches, before anything changes: a fork forked under
 // its own name, a name agentx cannot give the fork or that a branch
 // already holds, a library path or worktree that is taken, a skill whose
-// update left a merge pending, and a fork with uncommitted edits, which
+// update left a merge pending, and a fork with unpublished edits, which
 // the new fork would leave behind.
 func (inv *invocation) checkForking(ctx context.Context, fk *forking, records map[string]lineage.Record, named bool) error {
 	src := fk.src
@@ -243,7 +243,7 @@ func (inv *invocation) checkForking(ctx context.Context, fk *forking, records ma
 	case src.kind != lineage.KindFork:
 		return nil
 	}
-	// A fork is forked from its tip, so edits nobody committed would stay
+	// A fork is forked from its tip, so unpublished edits would stay
 	// behind in it: they are refused, as every command that leaves the
 	// fork's directory out of what it does refuses them.
 	f, err := inv.forkSiteOf(ctx, fk.gitDir, src.rec)

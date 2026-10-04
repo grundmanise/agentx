@@ -314,7 +314,7 @@ func TestSkillDiffOfAFork(t *testing.T) {
 	contains(t, "SKILL.md's patch", diffs[0]["patch"].(string), "diff --git a/SKILL.md b/SKILL.md\n")
 	equal(t, "the result against the tip", h.one(out.stdout, "result")["summary"], "notes differs from its last commit "+short(tip)+" in 2 files")
 
-	h.mustRun("skill", "commit", "notes")
+	h.record("notes")
 	committed := h.ref(lineage.ForkRef("notes"))
 	equal(t, "the text once committed", h.mustRun("skill", "diff", "notes").stdout, "notes matches its last commit "+short(committed)+"\n")
 	out = h.mustRun("--json", "skill", "diff", "notes", "--commit", short(first))

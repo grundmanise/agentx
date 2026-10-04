@@ -94,7 +94,7 @@ func (inv *invocation) readForkMerge(ctx context.Context, dir string) (forkPendi
 // git, see readForkMerge. A merge with files still unmerged, or none in
 // progress, is left as it is and reported again, exit code 4. One resolved, in
 // progress or committed, is completed, once the fork's skill directory is found
-// to hold no uncommitted edits, exit code 6 otherwise, as for the update that
+// to hold no unpublished edits, exit code 6 otherwise, as for the update that
 // started it: the commit that completes it is the user's own commit in the
 // checkout, or the one the fork commit writer writes here, with the tree of the
 // checkout's index, the tip the merge started from and what it merged as its

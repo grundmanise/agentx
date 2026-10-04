@@ -23,11 +23,11 @@ type forkPlacing struct {
 	// adoptRoot adopts the directory at the worktree that git does not
 	// register: its skill directory is moved aside, the worktree added in
 	// its place, and the skill directory moved back, its content then the
-	// fork's uncommitted edits.
+	// fork's unpublished edits.
 	adoptRoot bool
 	// adoptLib moves the directory at the library entry into the worktree
 	// as the fork's skill directory, its content then the fork's
-	// uncommitted edits.
+	// unpublished edits.
 	adoptLib bool
 	// retire is what the worktree's skill directory holds when adoptLib
 	// replaces it, "" when there is none to replace: it holds the branch
@@ -89,7 +89,7 @@ func noForkSkill(f forkSite, plan forkPlacing, dir string, flags []string) error
 // content in place and becomes the fork's worktree, and a directory at the
 // library entry is moved into the worktree as the fork's skill directory,
 // replacing one there only when it holds the branch tip. Either content
-// then reads as uncommitted edits of the fork, which skill commit keeps.
+// then reads as the fork's unpublished edits, which skill publish records.
 // A symlink of the user's at the library entry
 // holds nothing, and --force replaces it. --force with nothing in the way
 // is refused, as it always was for a fork.
@@ -316,8 +316,8 @@ func (inv *invocation) retirable(ctx context.Context, f forkSite, again string) 
 			"move what you want to keep into "+quotedPath(f.libPath)+" or elsewhere, then "+again)
 	}
 	if !j.clean {
-		return "", fail(exitRefused, sanitised(f.name)+"'s worktree holds uncommitted edits at "+quotedPath(f.skillDir)+" and "+quotedPath(f.libPath)+" holds a directory of its own, and only one of them can be the fork's",
-			"commit the fork's edits with '"+skillCommand("commit", f.name)+"', or move "+quotedPath(f.libPath)+" aside, then "+again)
+		return "", fail(exitRefused, sanitised(f.name)+"'s worktree holds unpublished edits at "+quotedPath(f.skillDir)+" and "+quotedPath(f.libPath)+" holds a directory of its own, and only one of them can be the fork's",
+			"publish the edits with '"+publishCommand(f.name)+"', or move "+quotedPath(f.libPath)+" aside, then "+again)
 	}
 	return state, nil
 }
@@ -448,9 +448,9 @@ func (inv *invocation) reportForkPlaced(f forkSite, plan forkPlacing, repointed 
 	case repointed && !plan.changes():
 		what = fmt.Sprintf("repaired the pointers of %s's worktree", sanitised(f.name))
 	case plan.adoptRoot:
-		what = fmt.Sprintf("adopted %s as %s's worktree; its content is uncommitted edits of the fork", quotedPath(f.root), sanitised(f.name))
+		what = fmt.Sprintf("adopted %s as %s's worktree; its content is the skill's unpublished edits", quotedPath(f.root), sanitised(f.name))
 	case plan.adoptLib:
-		what = fmt.Sprintf("moved %s into %s's worktree; its content is uncommitted edits of the fork", quotedPath(f.libPath), sanitised(f.name))
+		what = fmt.Sprintf("moved %s into %s's worktree; its content is the skill's unpublished edits", quotedPath(f.libPath), sanitised(f.name))
 	case plan.v.worktree && plan.v.content:
 		what = fmt.Sprintf("checked %s's worktree out again from its branch", sanitised(f.name))
 	case plan.v.content:

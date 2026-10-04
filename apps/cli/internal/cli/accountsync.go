@@ -26,7 +26,7 @@ import (
 // worktree and branch stay as they are, and the next update of the fork
 // completes it once it is resolved there with git. The account step
 // refuses a remote branch of the same name that is another fork, by its
-// fork id, and, while the fork has edits nobody committed, anything that
+// fork id, and, while the fork has unpublished edits, anything that
 // would move its branch.
 
 // pullEvent is what the account step did to one fork.
@@ -141,7 +141,7 @@ func (inv *invocation) syncFork(ctx context.Context, gitDir string, rec lineage.
 // is, up to date; a remote branch whose history names another fork id than
 // the fork's, or one of the two that names none, is refused, exit code 6,
 // since two forks of one name are never tangled; then a fork whose worktree
-// git cannot work in, see worktreeHealth, and one with uncommitted edits or
+// git cannot work in, see worktreeHealth, and one with unpublished edits or
 // a repository nested in it that no ignore rule covers, see cleanSite, is
 // refused, exit code 6, before anything is written. A fork the account
 // remote has nothing new for is up to date whatever its worktree holds.
@@ -279,54 +279,18 @@ func (inv *invocation) forkRecords(ctx context.Context, gitDir string) (map[stri
 	return records, nil
 }
 
-// remoteSelection is the forks a publish covers, in name order:
-// the one name it was given, which has to be a fork of this machine, or
-// with none every fork. remote is the account remote's git remote.
-func (inv *invocation) remoteSelection(ctx context.Context, remote, name string, records map[string]lineage.Record) ([]string, error) {
-	if name == "" {
-		var names []string
-		for n, rec := range records {
-			if rec.Kind == lineage.KindFork {
-				names = append(names, n)
-			}
+// remoteSelection is the skills a bare publish covers, in name order:
+// every skill of your own this machine holds, those whose branch is a
+// fork branch.
+func remoteSelection(records map[string]lineage.Record) []string {
+	var names []string
+	for n, rec := range records {
+		if rec.Kind == lineage.KindFork {
+			names = append(names, n)
 		}
-		sort.Strings(names)
-		return names, nil
 	}
-	rec, ok := records[name]
-	if ok && rec.Kind == lineage.KindFork {
-		return []string{name}, nil
-	}
-	_, held := librarySkill(inv.dirs.Library, name)
-	if !ok && !held {
-		if inv.remoteHolds(ctx, remote, name) {
-			return nil, fail(exitNotFound, sanitised(name)+" is a skill of the account remote that this machine has not installed, so there is nothing of it here to publish",
-				"install it with '"+accountAddCommand(name)+"'")
-		}
-		return nil, inv.noLibrarySkill(name)
-	}
-	what := " is not a fork"
-	if ok {
-		what = " is managed, not a fork"
-	}
-	refusal := sanitised(name) + what + ", so it is never published: only forks travel through the account remote"
-	// A skill the account remote holds of the name takes the place of what
-	// is here; a fork of it made here would be another fork of the name,
-	// which a publish refuses. An install supersedes only a managed copy of
-	// the skill's upstream, so a symlink or a directory of anything else at
-	// the library path has to go first.
-	if inv.remoteHolds(ctx, remote, name) {
-		libPath := inv.libraryPath(name)
-		install := "install the account remote's skill in its place with '" + accountAddCommand(name) + "'"
-		if state, err := home.State(libPath); err == nil && home.IsLink(state) {
-			return nil, fail(exitRefused, refusal, "remove the link "+quotedPath(libPath)+", then "+install)
-		}
-		if !ok && isDir(libPath) {
-			return nil, fail(exitRefused, refusal, "move "+quotedPath(libPath)+" aside, then "+install)
-		}
-		return nil, fail(exitRefused, refusal, install+"; if the library copy holds edits, move it aside or run '"+skillCommand("remove", name)+"' first")
-	}
-	return nil, fail(exitRefused, refusal, "fork it first with '"+skillCommand("fork", name)+"'")
+	sort.Strings(names)
+	return names
 }
 
 // forkPlaced reports whether the fork called name is placed on this

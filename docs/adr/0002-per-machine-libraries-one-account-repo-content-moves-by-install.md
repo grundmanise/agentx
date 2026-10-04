@@ -9,6 +9,8 @@ Each machine owns its library at `~/.agents/skills`. Nothing in a library propag
 
 _Amendment, 2026-10-03:_ auto-push is no longer a setting. Nothing is pushed automatically: every push is an explicit publish, see [ADR 0008](0008-sources-have-a-layout-and-an-access-only-the-account-remote-is-pushed-automatically.md).
 
+_Amendment, 2026-10-03:_ edits are never committed on their own, nor by a commit step of the user's: agentx records a skill's edits when the user publishes it, see [ADR 0003](0003-account-repo-one-branch-per-fork-checked-out-as-worktrees.md).
+
 ## Why
 
 One mechanism, install-from-upstream, covers third-party skills and the user's own forks alike. A fork edited and published on machine A is a new upstream version, and machine B receives it as a regular update, which auto-applies when B's copy is unmodified. Explicit publish costs the near-instant propagation but means every version B receives is one the user released. A third-party upstream change is merged into the fork on whichever machine the user accepts it, then published; once published, no other machine is offered that upstream version again. Upstream versions are committed deterministically, so if a second machine merges the same version before the first publishes, the upstream side merges clean and only the two machines' own edits can conflict. Metadata sync carries no file content, so it stays small and cheap.

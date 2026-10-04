@@ -168,7 +168,7 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 // placements are as they were, Claude Code's leading to the fork and
 // Cursor still without one, though the install was given --to cursor,
 // which a warning says places nothing. A publish of the managed alpha before
-// names the install, not a fork of b's own.
+// is not supported and names the install, not a fork of b's own.
 func TestFromAccountSupersedesAnUnmodifiedCopy(t *testing.T) {
 	t.Parallel()
 	_, b, s, _ := accountHomes(t)
@@ -188,7 +188,9 @@ func TestFromAccountSupersedesAnUnmodifiedCopy(t *testing.T) {
 	before, _ := os.Readlink(claude)
 	published := b.run("--json", "skill", "publish", "alpha")
 	equal(t, "a publish of the managed alpha: exit", published.exit, 6)
-	contains(t, "its hint", b.one(published.stdout, "error")["hint"].(string), "agentx skill add --name alpha")
+	refused := b.one(published.stdout, "error")
+	contains(t, "its error", refused["message"].(string), "is not supported yet")
+	contains(t, "its hint", refused["hint"].(string), "agentx skill add --name alpha")
 
 	out := b.mustRun("--json", "skill", "add", "--name", "alpha", "--to", "cursor")
 	contains(t, "the warning", out.stderr, "so --to and --copy place nothing")
@@ -217,10 +219,9 @@ func TestFromAccountSupersedesAnUnmodifiedCopy(t *testing.T) {
 // settings included, which lack the skills' source: a name agentx cannot
 // use for a skill, exit 6; a skill the account remote does not hold,
 // exit 5; an unmanaged directory at alpha's library path, exit 6, and a
-// publish of it says to move it aside; a symlink at beta's, exit 6, and a
-// publish of it names the link to remove; --all over both, exit 6 naming
-// each; an --except naming nothing to install, exit 5, and one that
-// leaves nothing, exit 1; a bare skill add, exit 1 with a hint naming
+// publish of it says to move it aside; a symlink at beta's, exit 6;
+// --all over both, exit 6 naming each; an --except naming nothing to
+// install, exit 5, and one that leaves nothing, exit 1; a bare skill add, exit 1 with a hint naming
 // skill list --remote, and --fetch with no source, exit 1; and a
 // directory where alpha's worktree goes, exit 6. Then a managed beta
 // whose library directory is gone, exit 6; an edited managed copy of
@@ -261,13 +262,10 @@ func TestAddFromAccountRefuses(t *testing.T) {
 			contains(t, "a bare skill add: hint", e["hint"].(string), "agentx skill list --remote")
 		}
 	}
-	unchanged.check(t, b, "the refusals", 0)
-	out := b.run("--json", "skill", "publish", "beta")
-	equal(t, "a publish of the linked beta: exit", out.exit, 6)
-	contains(t, "its hint", b.one(out.stdout, "error")["hint"].(string), "remove the link")
-	out = b.run("--json", "skill", "publish", "alpha")
+	out := b.run("--json", "skill", "publish", "alpha")
 	equal(t, "a publish of the unmanaged alpha: exit", out.exit, 6)
-	contains(t, "its hint", b.one(out.stdout, "error")["hint"].(string), "aside, then install")
+	contains(t, "its hint", b.one(out.stdout, "error")["hint"].(string), "aside and install the one you published")
+	unchanged.check(t, b, "the refusals", 0)
 	rootA := filepath.Join(b.agentx, "worktrees", "alpha")
 	if err := os.MkdirAll(rootA, 0o755); err != nil {
 		t.Fatal(err)

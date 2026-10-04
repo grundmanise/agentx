@@ -8,7 +8,7 @@ A fork takes in two kinds of change: a newer version of its upstream, and what a
 
 - Verify fork identity by `Agentx-Fork-ID`, the permanent id the commit that created the fork records, read along first parents from each tip. A branch of the same name whose history names another id, or names none, is refused rather than merged: two forks of one name are never tangled, and neither is published over the other.
 - Verify the canonical source and subpath: an upstream version is merged into a fork only when it holds the skill under the same source and directory as the fork's base.
-- Refuse while the fork has uncommitted edits, as `git merge` refuses over a work tree with changes it would overwrite. Ignored files are never edits.
+- Refuse while the fork has unpublished edits, edits its skill directory holds that no commit records, as `git merge` refuses over a work tree with changes it would overwrite. Ignored files are never edits.
 - Follow the [mutation-safety](mutation-safety.md) contract: a branch moves with its old tip as the expected value, and the worktree follows through the mutation journal.
 - Never write conflict markers where an agent reads: a merge that conflicts is left pending in a hidden worktree of the account repo, and the fork's worktree and branch stay as they are until it is resolved there and completed, or given up.
 
@@ -26,7 +26,7 @@ The account step:
 - A fast-forward when the local tip is an ancestor of the remote tip. No commit is written.
 - Otherwise `merge-tree --write-tree` of the two tips, with the merge base git finds. A clean result is committed with the local tip and the remote tip as parents and the base below; a conflict becomes a pending merge, resolved in its worktree like any other conflict. A binary file or a symlink both sides changed conflicts whole, as Git merges it: the pending merge holds the local side's version and the other side's as its own stage, with no markers.
 
-Publishing pushes commits only, never forced, and only the fork's own branch: import branches, update candidates, upstream-removed markers and source refs never travel. A push the remote rejects is reported, never retried with force. When the account remote holds commits the fork lacks, the publish does not push it: a fork the remote is only ahead of has nothing to publish, and one whose history diverged from the remote's is refused until `skill update` takes the remote's commits in.
+Publishing records the fork's edits as one commit on its branch, then pushes the branch, never forced, and only the fork's own branch: import branches, update candidates, upstream-removed markers and source refs never travel. Recorded edits are no longer edits: the fork's skill directory holds its tip again. A push the remote rejects is reported, never retried with force. When the account remote holds commits the fork lacks, the publish records nothing and does not push it: a fork the remote is only ahead of, holding no edits, has nothing to publish, and one whose history or edits diverged from the remote's is refused until `skill update` takes the remote's commits in.
 
 ## The recorded base
 

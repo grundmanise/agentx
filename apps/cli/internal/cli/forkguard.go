@@ -9,12 +9,12 @@ import (
 )
 
 // A command that moves a fork's branch refuses while the fork has a merge
-// pending or edits nobody committed, as git merge refuses over a dirty
+// pending or unpublished edits, as git merge refuses over a dirty
 // work tree: moving the branch lays the new tip out over the skill
 // directory, and edits that are in no commit would be merged over or lost.
 // The merge pending is asked about first, exit code 4, then the edits,
 // exit code 6, each before anything changes. A command that works on the
-// edits themselves, committing, comparing or discarding them, is not
+// edits themselves, publishing, comparing or discarding them, is not
 // refused for having them.
 
 // forkPendingRefusal refuses to do what to the fork called name while it
@@ -27,18 +27,19 @@ func forkPendingRefusal(name, what string) *failure {
 }
 
 // uncommittedRefusal refuses to do what to the fork called name while its
-// skill directory holds edits its branch does not record. A file git
-// ignores is no such edit, since no commit would record it either. The
-// refusal wraps errUncommitted, see renameFinish.
+// skill directory holds edits its branch does not record, which only a
+// publish records. A file git ignores is no such edit, since no commit
+// would record it either. The refusal wraps errUncommitted, see
+// renameFinish.
 func uncommittedRefusal(name, what string) *failure {
-	return refuse(exitRefused, sanitised(name)+" has uncommitted edits, so it cannot be "+what+" until they are committed",
-		"run '"+skillCommand("commit", name)+"' to keep them, then run the command again").wrap(errUncommitted)
+	return refuse(exitRefused, sanitised(name)+" has unpublished edits, so it cannot be "+what+" until they are published",
+		"run '"+publishCommand(name)+"', then run the command again").wrap(errUncommitted)
 }
 
-// errUncommitted is what a refusal for uncommitted edits wraps, so that a
+// errUncommitted is what a refusal for unpublished edits wraps, so that a
 // rename whose removal of the old fork it refused can say how to carry the
 // edits over, see renameFinish.
-var errUncommitted = errors.New("uncommitted edits")
+var errUncommitted = errors.New("unpublished edits")
 
 // siteJudged is a fork's skill directory as judgeSite found it: the
 // fingerprint captured before git read it, as a journal compares it, and
@@ -84,7 +85,7 @@ func skillDirMissing(f forkSite) error {
 
 // forkGuards runs, under the lock, the refusals of a command that would do
 // what to the fork f: a merge pending first, and then, when the command
-// moves the fork's branch, needsClean, edits nobody committed. pre is how
+// moves the fork's branch, needsClean, unpublished edits. pre is how
 // judgeSite found the skill directory before the lock; a directory that
 // changed since is judged again, as pre was. It returns the directory as
 // it is now: the fingerprint the command's journal expects, and, for a
@@ -98,7 +99,7 @@ func (inv *invocation) forkGuards(ctx context.Context, f forkSite, pre siteJudge
 
 // siteNow is forkGuards with no merge pending to refuse: the skill
 // directory of f as it is now, judged again when it changed since pre,
-// and refused when needsClean and it holds uncommitted edits. Completing
+// and refused when needsClean and it holds unpublished edits. Completing
 // a fork's pending merge asks it, since the merge it completes is the one
 // pending.
 func (inv *invocation) siteNow(ctx context.Context, f forkSite, pre siteJudged, what string, needsClean bool) (siteJudged, error) {

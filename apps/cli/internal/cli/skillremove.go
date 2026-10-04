@@ -35,7 +35,7 @@ func newSkillRemoveCommand(inv *invocation) *cobra.Command {
 			"named in the output: agentx never removes what it did not create.\n\n" +
 			"A managed skill whose library directory was deleted outside agentx can still be\n" +
 			"removed without --from: its import branch and the placements agentx made go.\n\n" +
-			"Removing a fork also deletes its worktree, with any uncommitted edits and files\n" +
+			"Removing a fork also deletes its worktree, with any unpublished edits and files\n" +
 			"git ignores, its branch and its update candidate. --remote deletes the fork's\n" +
 			"branch on the account remote too, also when this machine no longer has the fork.\n" +
 			"Other machines keep the fork until it is removed there.",
@@ -721,12 +721,12 @@ func (inv *invocation) whyKept(path, state, libPath, id, name string, gone map[s
 // configuration it would take the skill from, reach, so the user sees what
 // the request that can be done costs before making it. For a fork, worktree
 // set when it has one here, that removal deletes the worktree too, with
-// any edits nobody committed, and the fork's branch, which the hint says.
+// any unpublished edits, and the fork's branch, which the hint says.
 func universalLibrary(named []string, name string, reach []string, worktree bool) error {
 	hint := "take " + name + " off the machine with 'agentx skill remove " + name + " --from " + fromUniversal + "', which removes it from " +
 		strings.Join(reach, ", ")
 	if worktree {
-		hint += " and deletes its worktree, with any uncommitted edits, and its branch"
+		hint += " and deletes its worktree, with any unpublished edits, and its branch"
 	}
 	return fail(exitRefused, universalRefusal(named, name), hint)
 }

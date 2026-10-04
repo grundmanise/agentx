@@ -26,9 +26,9 @@ import (
 // resolved there with git and the next update of the fork completes it,
 // see judgeForkCompletion, or it is given up.
 //
-// The update refuses while the fork has edits nobody committed, as git
+// The update refuses while the fork has unpublished edits, as git
 // merge refuses over a dirty work tree, so they are never merged over or
-// lost: they are committed first.
+// lost: they are published first.
 
 // forkUpdate is what the update of a fork reads before the lock besides
 // what every update reads, see updating, and applies under it.
@@ -134,7 +134,7 @@ func (inv *invocation) forkBaseOf(ctx context.Context, gitDir string, rec lineag
 // skill under another source or upstream directory than the base, which
 // the account repo's check never pins, exit code 8; a worktree git cannot
 // work in, see worktreeHealth; and a skill directory holding a repository
-// no ignore rule covers, or edits nobody committed, exit code 6. A fork
+// no ignore rule covers, or unpublished edits, exit code 6. A fork
 // with no candidate, or with its base as its candidate, is up to date: u
 // and f are then both nil.
 //
@@ -217,7 +217,7 @@ func (inv *invocation) judgeForkUpdate(ctx context.Context, gitDir string, rec l
 // cleanSite judges the skill directory of the fork site before a command
 // that lays a new tip out over it, with the files git ignores in it, which
 // the new layout carries over: a repository nested in it that no ignore
-// rule covers, uncommitted edits and anything else git cannot record that
+// rule covers, unpublished edits and anything else git cannot record that
 // no rule covers are refused, exit code 6, before anything is written.
 func (inv *invocation) cleanSite(ctx context.Context, site forkSite, fork *forkUpdate) (siteJudged, *failure) {
 	pre, err := inv.judgeSite(ctx, site, true)
@@ -263,7 +263,7 @@ func (inv *invocation) layFork(ctx context.Context, u *updating, commit string) 
 // is pending, exit code 4, unless the update completes it; the branch,
 // which has to hold the tip the update was judged on, and the candidate;
 // the worktree, which git has to be able to work in; and the skill
-// directory, which has to hold no uncommitted edits, judged again when it
+// directory, which has to hold no unpublished edits, judged again when it
 // changed, exit code 6. A refusal drops the fork alone, as a managed
 // skill's does, and the run goes on.
 //

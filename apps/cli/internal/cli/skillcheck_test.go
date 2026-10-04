@@ -728,7 +728,7 @@ func TestSkillCheckFindsAForkUpdate(t *testing.T) {
 	h.mustRun("skill", "fork", "alpha")
 	h.mustRun("skill", "fork", "alpha", "--name", "other")
 	writeFile(t, filepath.Join(h.library, "alpha", "notes.md"), "alpha notes, forked\n")
-	h.mustRun("skill", "commit", "alpha")
+	h.record("alpha")
 	h.mustRun("skill", "new", "mine")
 	out := h.mustRun("--json", "skill", "check-updates")
 	equal(t, "summary of a fork with a commit of its own", h.one(out.stdout, "result")["summary"], "checked 3 skills from 1 source: no update available")

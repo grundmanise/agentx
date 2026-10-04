@@ -3,30 +3,11 @@ title: "Account remote"
 description: "Publish your forks to a Git repository you own, so your other machines can install them."
 ---
 
-The account remote is a Git repository you own, such as a private repository on GitHub. Publish a fork to it from one machine, [install it on another](/cli/skill#install-your-skills-on-another-machine), and [take in what you publish later](/cli/skill#take-in-what-another-machine-published) with `agentx skill update`. Only forks travel: managed skills, update checks and sources stay on each machine.
+The account remote is a Git repository you own, such as a private repository on GitHub. [Publish](/cli/skill#publish-a-skill) a fork to it from one machine, [install it on another](/cli/skill#install-your-skills-on-another-machine), and [take in what you publish later](/cli/skill#take-in-what-another-machine-published) with `agentx skill update`. Only forks travel: managed skills, update checks and sources stay on each machine.
 
 The account remote is the [source](/cli/source) you add with `--account`: it holds one branch per fork, and `agentx source list` shows it with `(account)`. Create an empty repository on your Git host, then add it with [`agentx source add <url> --account`](/cli/source#add-your-account-remote). Detach it with `agentx source remove <url>`: your forks and their history stay, and nothing on the remote changes.
 
-A machine without a remote keeps the whole history of every fork, with commit and diff. Attach a remote when you want a backup, or a second machine.
-
-## Publish a fork
-
-```sh
-agentx skill publish release-notes
-```
-
-```text
-✓ published release-notes as 4c2e9a1
-```
-
-- Publishing pushes your commits, and nothing else. Commit your edits first with [`agentx skill commit`](/cli/fork#commit-your-edits). A fork with uncommitted edits still publishes its commits, and agentx names it with a warning.
-- `agentx skill publish` with no name publishes every fork with commits the remote does not have.
-- Each fork goes to its own branch, `skills/<name>`. Publishing one fork leaves your other forks' commits where they are.
-- When another machine published commits of the fork first and this machine has commits of its own, publishing fails with exit code 6. Run [`agentx skill update <name>`](/cli/skill#take-in-what-another-machine-published) to take them in, then publish again.
-- When another machine published commits of the fork and this machine has nothing new, there is nothing to publish: agentx warns and the publish still succeeds. Run `agentx skill update <name>` to take them in.
-- agentx never forces a push. When the remote rejects one, for example because another machine published meanwhile, run `agentx skill update <name>`, then publish again.
-- Nothing is pushed for you. Run `agentx skill publish` each time you want your commits on the remote.
-- To delete a fork's branch from the remote, remove the fork with [`agentx skill remove <name> --remote`](/cli/fork#remove-a-fork).
+A machine without a remote keeps the whole history of every fork: `agentx skill history` and `agentx skill diff` work without one. Attach a remote when you want a backup, or a second machine.
 
 ## Two forks with one name
 
@@ -37,12 +18,4 @@ error: the account remote's skills/release-notes is a different fork than releas
 hint: rename yours with 'agentx skill rename release-notes <new>', then publish that one
 ```
 
-[Rename](/cli/fork#rename-a-fork) yours, then publish it under its new name.
-
-## Exit codes
-
-- `3`: Git cannot reach the account remote.
-- `5`: the name is not a skill of this machine.
-- `6`: no account remote is set; the skill is not a fork; the remote's branch of that name is [another fork](#two-forks-with-one-name) or names no fork id; another machine published changes the fork lacks while this machine has commits of its own; or the remote rejected the push.
-- `7`: another agentx command is running. Retry when it finishes.
-- `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.
+[Rename](/cli/fork#rename-a-fork) yours, then publish it under its new name. For every exit code `agentx skill publish` uses, see [Exit codes](/cli/skill#exit-codes).

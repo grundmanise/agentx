@@ -12,7 +12,7 @@ import (
 )
 
 // TestSkillHistoryMarksImportsAndForeignCommits forks an edited managed
-// skill, commits an edit with skill commit and one more with git directly
+// skill, records an edit as a publish does and commits one more with git directly
 // in the worktree, beside the skill directory too, and lists the fork's
 // history: every commit newest first, the one made with git foreign, with
 // its author and its whole message, the two agentx wrote carrying the
@@ -30,7 +30,7 @@ func TestSkillHistoryMarksImportsAndForeignCommits(t *testing.T) {
 	h.mustRun("skill", "fork", "alpha")
 	created := h.ref(lineage.ForkRef("alpha"))
 	writeFile(t, filepath.Join(h.library, "alpha", "extra.md"), "extra\n")
-	h.mustRun("skill", "commit", "alpha")
+	h.record("alpha")
 	committed := h.ref(lineage.ForkRef("alpha"))
 	root := filepath.Join(h.agentx, "worktrees", "alpha")
 	writeFile(t, filepath.Join(h.library, "alpha", "extra.md"), "extra, by hand\n")

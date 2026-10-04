@@ -143,7 +143,7 @@ func TestForkWarningsSayWhatIsMissing(t *testing.T) {
 		equal(t, tc.what, worktreeMissingWarning(f, tc.facts), tc.want)
 	}
 
-	adopt := "run 'agentx skill place notes --force' to adopt it: its content becomes uncommitted edits of the fork"
+	adopt := "run 'agentx skill place notes --force' to adopt it: its content becomes the skill's unpublished edits"
 	for _, tc := range []struct {
 		what, inWay      string
 		lib              libKind

@@ -36,7 +36,7 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 			"version replaced is refreshed; a copy edited on its own is kept and named.\n\n" +
 			"A fork's update is always merged, with the upstream version it was last forked or\n" +
 			"updated from as the merge base, so its own commits are kept, and the merge is\n" +
-			"committed on its branch. Commit its uncommitted edits first. A conflict\n" +
+			"committed on its branch. Publish its unpublished edits first. A conflict\n" +
 			"waits as for a managed skill, and the fork's worktree and branch stay as they are\n" +
 			"until it is applied. With an account remote set, it is fetched first, and what\n" +
 			"your other machines published of the fork is taken in first, as a commit of its\n" +

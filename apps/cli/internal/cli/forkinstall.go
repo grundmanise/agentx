@@ -670,7 +670,7 @@ func (inv *invocation) applyAccountInstall(ctx context.Context, in *accountInsta
 // listing would show it as a skill. Nothing is changed.
 func noAccountSkill(f forkSite) error {
 	return fail(exitNotFound, "the account remote's branch "+sanitised(f.branch)+" holds no SKILL.md in "+sanitised(f.dir)+", so there is no skill to install and nothing was changed",
-		"commit a SKILL.md to "+sanitised(f.dir)+" on the machine that published "+sanitised(f.name)+" and publish it, then run '"+accountAddCommand(f.name)+"' again")
+		"add a SKILL.md to "+sanitised(f.dir)+" on the machine that published "+sanitised(f.name)+" and run '"+publishCommand(f.name)+"' there, then run '"+accountAddCommand(f.name)+"' again")
 }
 
 // reportAccountInstall reads the machine again and reports the installed
