@@ -40,7 +40,7 @@ The fleet-wide identity of a skill or MCP server. For a managed skill its upstre
 _Avoid_: skill id, key
 
 **Fork id**:
-The permanent identity assigned when a fork or greenfield skill is created, carried by the commit that creates it, which is never amended. Installing that published fork elsewhere preserves it; independently creating another fork assigns a different identity, even from the same upstream version.
+The permanent identity assigned when a fork or greenfield skill is created, carried by the commit that creates it, which is never amended. Installing that published fork elsewhere preserves it, and so does renaming it; independently creating another fork assigns a different identity, even from the same upstream version.
 
 **Physical asset**:
 One logical asset on one machine in one version, the version being the content hash for a skill and the tool signature for a server. The unit drift is evaluated on and machine views count.
@@ -91,7 +91,7 @@ _Avoid_: orphaned, detached
 A skill found on disk whose upstream agentx cannot determine. Inventoried, never updated.
 
 **Fork**:
-A skill derived from an upstream skill and edited by the user, keeping the upstream name unless renamed. A fork supersedes the skill it was forked from in the agent configuration; a fork under a new name sits beside the skill it came from instead. Managed, unmanaged and plugin-owned skills and forks can all be forked with `agentx skill fork`. Renaming a fork with `agentx skill rename` makes a new fork under the new name, with a fork id of its own and the old one's history, and removes the old one; nothing records the rename. Its lineage record keeps the third-party upstream so later upstream versions can be merged in. Lives in the account repo; its edits stay on this machine until it is published; a publish, or an update, fork or rename of it, records them on its branch, and only a publish pushes them.
+A skill derived from an upstream skill and edited by the user, keeping the upstream name unless renamed. A fork supersedes the skill it was forked from in the agent configuration; a fork under a new name sits beside the skill it came from instead. Managed, unmanaged and plugin-owned skills and forks can all be forked with `agentx skill fork`. Renaming one with `agentx skill rename` keeps its fork id and history under the new name on this machine; its next publish creates the new name's branch on the account remote and deletes the old one's when the renamed skill holds all of it. Its lineage record keeps the third-party upstream so later upstream versions can be merged in. Lives in the account repo; its edits stay on this machine until it is published; a publish, or an update, fork or rename of it, records them on its branch, and only a publish pushes them.
 _Avoid_: copy, variant, override
 
 **Greenfield skill**:

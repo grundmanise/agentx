@@ -214,7 +214,8 @@ func TestPublishNeverMerges(t *testing.T) {
 // way out, a rename, and the remote keeps the first machine's branch; so
 // is the second's removal of it with --remote, which would delete the
 // first's. The refused publish records nothing of the edit the second
-// machine's skill holds. Before the second machine exists, the first's
+// machine's skill holds. Renamed and published, the second's skill never
+// deletes the first's branch. Before the second machine exists, the first's
 // check-updates, with no shared source, checks its own skill against the
 // account remote and counts it as one source.
 func TestPublishRefusesADifferentFork(t *testing.T) {
@@ -238,29 +239,18 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 	contains(t, "publish: message", e["message"].(string), "the account remote's skills/notes is a different fork than notes on this machine")
 	contains(t, "publish: hint", e["hint"].(string), "rename yours with 'agentx skill rename notes <new>'")
 	equal(t, "b's notes, nothing recorded", b.ref(lineage.ForkRef("notes")), bTip)
-	// Nor does a removal of b's notes, or the rename the hint above names,
-	// delete a's from the account remote, or anything of b's; each names
-	// what does its work on b alone, which for the rename is not a removal.
+	// Nor does a removal of b's notes with --remote delete a's from the
+	// account remote, or anything of b's; it names what does its work on b
+	// alone.
 	remove(t, filepath.Join(b.forkDir("notes", "notes"), "draft.md"))
-	for _, tc := range []struct{ cmd, hint string }{
-		{"remove", "remove it from this machine alone with 'agentx skill remove notes'"},
-		{"rename", "rename it on this machine alone with 'agentx skill rename notes jottings'"},
-	} {
-		args := []string{"--json", "skill", tc.cmd, "notes", "--remote"}
-		if tc.cmd == "rename" {
-			args = []string{"--json", "skill", "rename", "notes", "jottings", "--remote"}
-		}
-		out := b.run(args...)
-		equal(t, tc.cmd+" --remote: exit", out.exit, 6)
-		e := b.one(out.stdout, "error")
-		contains(t, tc.cmd+" --remote: message", e["message"].(string), "the account remote's skills/notes is a different fork than notes on this machine, so notes cannot be removed from the account remote")
-		equal(t, tc.cmd+" --remote: hint", e["hint"], tc.hint)
-		if b.ref(lineage.ForkRef("notes")) == "" || !lexists(b.forkDir("notes", "notes")) || b.ref(lineage.ForkRef("jottings")) != "" {
-			t.Errorf("a refused %s changed b's forks", tc.cmd)
-		}
+	out = b.run("--json", "skill", "remove", "notes", "--remote")
+	equal(t, "remove --remote: exit", out.exit, 6)
+	e = b.one(out.stdout, "error")
+	contains(t, "remove --remote: message", e["message"].(string), "the account remote's skills/notes is a different fork than notes on this machine, so notes cannot be removed from the account remote")
+	equal(t, "remove --remote: hint", e["hint"], "remove it from this machine alone with 'agentx skill remove notes'")
+	if b.ref(lineage.ForkRef("notes")) == "" || !lexists(b.forkDir("notes", "notes")) {
+		t.Error("a refused removal changed b's notes")
 	}
-	equal(t, "the remote's notes", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/notes"), a.ref(lineage.ForkRef("notes")))
-
 	// An export of a lists notes as a fork; b holds another notes, which is
 	// different, and a fresh machine that set the account remote holds a's,
 	// present, until a publishes another commit of it.
@@ -284,6 +274,13 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 	ev = state(fresh)
 	equal(t, "the fresh machine's notes, published again", ev["state"], restoreDifferent)
 	equal(t, "its commit", ev["local_commit"], a.ref(lineage.ForkRef("notes")))
+
+	// The way out the hint names: b renames its notes and publishes that
+	// one, which never deletes a's notes, a different skill by its fork id.
+	b.mustRun("skill", "rename", "notes", "jottings")
+	b.mustRun("skill", "publish", "jottings")
+	equal(t, "the remote's jottings", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/jottings"), b.ref(lineage.ForkRef("jottings")))
+	equal(t, "the remote's notes", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/notes"), a.ref(lineage.ForkRef("notes")))
 }
 
 // sourceEntryOf is the settings entry of the source at url, as the file

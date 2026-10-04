@@ -338,6 +338,29 @@ func TestFromAccountPlan(t *testing.T) {
 	}
 }
 
+// TestHeldUnderAnotherName: an account remote branch is a skill this
+// machine holds under another name when a skill of the same fork id holds
+// its tip, as the renamed skill does of its old name's branch; one whose
+// tip is ahead of that skill's, or of another fork id, is not.
+func TestHeldUnderAnotherName(t *testing.T) {
+	t.Parallel()
+	history := map[string]bool{"old new": true} // old is in new's history
+	ancestor := func(a, b string) bool { return history[a+" "+b] }
+	for _, tc := range []struct {
+		name  string
+		local map[string][]string // the tips of the skills here, by fork id
+		tip   string              // the tip of the branch, whose fork id is id-1
+		want  bool
+	}{
+		{"the same id, its tip in the local tip's history", map[string][]string{"id-1": {"new"}}, "old", true},
+		{"the same id, its tip the local tip", map[string][]string{"id-1": {"new"}}, "new", true},
+		{"the same id, its tip ahead", map[string][]string{"id-1": {"old"}}, "new", false},
+		{"another id", map[string][]string{"id-2": {"new"}}, "old", false},
+	} {
+		equal(t, tc.name, heldUnderAnotherName(tc.local, "id-1", tc.tip, ancestor), tc.want)
+	}
+}
+
 // TestFromAccountRecoversWhereItWasKilled kills an install from the
 // account remote with SIGKILL at two of its boundaries: once its journal
 // is on disk, before anything changed, and right after git added the

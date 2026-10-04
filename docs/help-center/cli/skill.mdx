@@ -174,6 +174,7 @@ Install one with agentx skill add --name <name>, or all of them with agentx skil
 - `--remote` fetches the remote first. A remote Git cannot reach stops with exit code 3.
 - Each row names the upstream the skill's own commits record, or `(none)` for a skill you created with `agentx skill new`.
 - A branch on the remote that agentx cannot install is left out with a warning: one whose name is not a valid skill name, or whose history records no fork id.
+- The old name of a skill you [renamed](/cli/fork#rename-a-fork) is not listed on a machine that holds the renamed skill, while the remote still holds it.
 
 Run `agentx skill add` with no source to install from the account remote. Name a skill with `--name`, once for each:
 
@@ -853,7 +854,7 @@ error: the account remote's skills/release-notes is a different fork than releas
 hint: rename yours with 'agentx skill rename release-notes <new>', then publish that one
 ```
 
-[Rename](/cli/fork#rename-a-fork) yours, then publish it under its new name. A remote branch whose history records no id stops the same way, since nothing tells that it holds the same skill.
+[Rename](/cli/fork#rename-a-fork) yours, then publish it under its new name. Publishing the renamed skill never deletes the other skill's branch, since it has another id. A remote branch whose history records no id stops the same way, since nothing tells that it holds the same skill.
 
 ## Where it is recorded
 

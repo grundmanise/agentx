@@ -137,24 +137,50 @@ func (inv *invocation) forkDiff(ctx context.Context, gitDir string, rec lineage.
 // publishedVersion is the commit skill diff compares the fork whose branch
 // is rec with, and how its line names it: the newest commit of its history
 // the account remote's branch holds, as the last fetch left it, which is
-// its last published version, read with one merge-base. A fork the account
+// its last published version, read with one merge-base; for a renamed
+// skill not yet published under its new name, the old name's branch, see
+// publishedName. A fork the account
 // remote holds no branch of, or none that shares its history, never
 // published or with no account remote set, is compared with its creation
 // commit, the one skill new or skill fork wrote, and one whose history
 // carries no fork id with its tip. Either way it is what its state is
 // judged against, see unpublished.
 func (inv *invocation) publishedVersion(ctx context.Context, gitDir string, rec lineage.Record) (string, string, error) {
+	readFork := func() error {
+		if rec.Fork != nil {
+			return nil
+		}
+		recs := map[string]lineage.Record{rec.Name: rec}
+		if err := lineage.ReadForks(ctx, inv.git, gitDir, recs, inv.forkWalks); err != nil {
+			return accountRepoFailure(err)
+		}
+		rec = recs[rec.Name]
+		return nil
+	}
 	_, remote, ok, err := inv.accountSource()
 	if err != nil {
 		return "", "", err
 	}
 	if ok {
-		ref := lineage.RemoteForkRef(remote, rec.Name)
-		values, err := inv.git.Refs(ctx).RefValues(gitDir, []string{ref})
+		there, err := inv.remoteForkTip(ctx, gitDir, remote, rec.Name)
 		if err != nil {
-			return "", "", accountRepoFailure(err)
+			return "", "", err
 		}
-		if there := values[ref]; there != "" {
+		// A renamed skill's history is read only when its own name has no
+		// branch there, which costs a published skill nothing.
+		if there == "" {
+			if err := readFork(); err != nil {
+				return "", "", err
+			}
+			tips := map[string]string{}
+			for _, old := range rec.Fork.Renamed {
+				if tips[old], err = inv.remoteForkTip(ctx, gitDir, remote, old); err != nil {
+					return "", "", err
+				}
+			}
+			there = tips[publishedName(rec.Name, rec.Fork.Renamed, tips)]
+		}
+		if there != "" {
 			out, status, err := inv.git.IsolatedStatus(ctx, gitDir, 1, "merge-base", rec.Commit, there)
 			if err != nil {
 				return "", "", accountRepoFailure(err)
@@ -164,17 +190,25 @@ func (inv *invocation) publishedVersion(ctx context.Context, gitDir string, rec 
 			}
 		}
 	}
-	if rec.Fork == nil {
-		recs := map[string]lineage.Record{rec.Name: rec}
-		if err := lineage.ReadForks(ctx, inv.git, gitDir, recs, inv.forkWalks); err != nil {
-			return "", "", accountRepoFailure(err)
-		}
-		rec = recs[rec.Name]
+	if err := readFork(); err != nil {
+		return "", "", err
 	}
 	if created := rec.Fork.Created; created != "" {
 		return created, "its creation commit " + short(created), nil
 	}
 	return rec.Commit, "its last commit " + short(rec.Commit), nil
+}
+
+// remoteForkTip is the tip of the account remote's branch of the skill
+// called name, the git remote called remote, as last fetched; "" when it
+// holds none.
+func (inv *invocation) remoteForkTip(ctx context.Context, gitDir, remote, name string) (string, error) {
+	ref := lineage.RemoteForkRef(remote, name)
+	values, err := inv.git.Refs(ctx).RefValues(gitDir, []string{ref})
+	if err != nil {
+		return "", accountRepoFailure(err)
+	}
+	return values[ref], nil
 }
 
 // diffForkDir is the diff of the fork f's skill directory, read as t,

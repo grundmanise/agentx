@@ -22,8 +22,13 @@ type Commit struct {
 // base version, if it has one. The walk is the lineage record: nothing
 // else is kept anywhere.
 type ForkLineage struct {
-	ID         string // the Agentx-Fork-ID of the nearest commit carrying one; "" when none does
-	Created    string // that commit, the fork's creation commit, which skill new or skill fork wrote; "" when none does
+	ID      string // the Agentx-Fork-ID of the nearest commit carrying one; "" when none does
+	Created string // that commit, the fork's creation commit, which skill new or skill fork wrote; "" when none does
+	// Renamed are the names the fork's history records it was renamed
+	// from, nearest first: the subjects skill rename writes, see
+	// RenamedFrom, read along first parents from the tip down to the
+	// creation commit. A rename keeps the fork id, so they sit above it.
+	Renamed    []string
 	Base       string // the base import commit; "" for a greenfield skill, and when Problem says why it cannot be read
 	BaseTree   string // the base's root tree, the upstream directory as its one entry
 	Import     Import // the base's coordinates, when Base is not ""
@@ -36,11 +41,12 @@ type ForkLineage struct {
 // first import commit is the base itself; the first commit with an
 // Agentx-Base trailer names it, and the commit it names must be an import
 // commit in the tip's history; reaching a root that is neither makes the
-// fork greenfield. The fork id is read by a walk of its own, which goes on
-// past the base: a fork's creation commit sits above the import it was
-// forked from and carries the id, not the base. A fork of a fork carries
-// two ids, and the nearer one is its own. Nothing is ever inferred: a
-// history that does not say is reported, not guessed at.
+// fork greenfield. The fork id, and the renames above it, are read by a
+// walk of its own, which goes on past the base: a fork's creation commit
+// sits above the import it was forked from and carries the id, not the
+// base. A fork of a fork carries two ids, and the nearer one is its own.
+// Nothing is ever inferred: a history that does not say is reported, not
+// guessed at.
 func Resolve(tip string, commits map[string]Commit) ForkLineage {
 	var l ForkLineage
 	for id := tip; ; {
@@ -81,6 +87,9 @@ func Resolve(tip string, commits map[string]Commit) ForkLineage {
 		c, ok := commits[id]
 		if !ok {
 			break
+		}
+		if old := RenamedFrom(c.Message); old != "" {
+			l.Renamed = append(l.Renamed, old)
 		}
 		if t, err := ParseFork(c.Message); err == nil && t.ForkID != "" {
 			l.ID, l.Created = t.ForkID, id

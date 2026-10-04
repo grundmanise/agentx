@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -141,6 +142,10 @@ func TestResolveWalksFirstParents(t *testing.T) {
 			commit("e", own("Agentx-Machine: "+aMachine), "c"),
 			commit("c2", own("Agentx-Fork-ID: "+idA), "e")),
 			ForkLineage{ID: idA, Created: oid("c2"), Base: oid("i1"), BaseTree: "tree-i1", Import: imp}, ""},
+		{"renames above the creation commit, nearest first", oid("r2"), history(
+			commit("g", own("Agentx-Fork-ID: "+idA)), commit("r1", "Rename alpha to beta\n", "g"),
+			commit("e", "Rename this to that, an edit\n", "r1"), commit("r2", "Rename beta to gamma\n", "e")),
+			ForkLineage{ID: idA, Created: oid("g"), Greenfield: true, Renamed: []string{"beta", "alpha"}}, ""},
 		{"greenfield", oid("e"), history(commit("g", own("Agentx-Fork-ID: "+idA)), commit("e", "an edit\n", "g")),
 			ForkLineage{ID: idA, Created: oid("g"), Greenfield: true}, ""},
 		{"a base that is no import", oid("m"), history(
@@ -162,7 +167,7 @@ func TestResolveWalksFirstParents(t *testing.T) {
 		got := Resolve(tc.tip, tc.commits)
 		problem := got.Problem
 		got.Problem = ""
-		if got != tc.want || (tc.problem == "") != (problem == "") || !strings.Contains(problem, tc.problem) {
+		if !reflect.DeepEqual(got, tc.want) || (tc.problem == "") != (problem == "") || !strings.Contains(problem, tc.problem) {
 			t.Errorf("%s: Resolve = %+v, problem %q; want %+v, problem %q", tc.name, got, problem, tc.want, tc.problem)
 		}
 	}

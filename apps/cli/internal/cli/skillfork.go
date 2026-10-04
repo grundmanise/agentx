@@ -93,8 +93,9 @@ type forking struct {
 // commit, so that its edits are exactly what the commit changes, for a
 // fork on its tip, so that its history is kept, and for an unmanaged
 // skill or a plugin's as a branch of its own. It carries a new fork id
-// even when it changes nothing, and nothing points at it until one
-// journaled mutation creates the branch.
+// even when it changes nothing, but for skill rename's, which keeps the
+// id of the skill it renames when its history records one, and nothing
+// points at it until one journaled mutation creates the branch.
 //
 // In its place, the mutation deletes the import branch of a managed skill,
 // adds the fork's worktree, moves the library directory into it, files git
@@ -186,7 +187,23 @@ func (inv *invocation) makeFork(ctx context.Context, fk *forking) error {
 			return err
 		}
 	}
-	if fk.commit, err = w.commit(ctx, root, parents, forkMessage{subject: forkSubject(src, fk.target), trailers: lineage.ForkTrailers{ForkID: lineage.NewForkID()}}); err != nil {
+	message := forkMessage{subject: forkSubject(src, fk.target), trailers: lineage.ForkTrailers{ForkID: lineage.NewForkID()}}
+	if fk.rename {
+		// A rename's commit carries no fork id, so the renamed skill keeps
+		// the one its history records: the same skill under a new name,
+		// which the next publish follows to the old name's branch, see
+		// dropRenamed. A history that records none gets a new one, so the
+		// renamed skill publishes as a fork of its own.
+		message.subject = lineage.RenameSubject(sanitised(src.name), fk.target)
+		recs := map[string]lineage.Record{src.name: src.rec}
+		if err := lineage.ReadForks(ctx, inv.git, gitDir, recs, inv.forkWalks); err != nil {
+			return accountRepoFailure(err)
+		}
+		if l := recs[src.name].Fork; l != nil && l.ID != "" {
+			message.trailers = lineage.ForkTrailers{}
+		}
+	}
+	if fk.commit, err = w.commit(ctx, root, parents, message); err != nil {
 		return accountRepoFailure(err)
 	}
 	if !fk.inPlace {

@@ -139,6 +139,28 @@ func isTrailerBlock(paragraph string) bool {
 	return true
 }
 
+// RenameSubject is the subject of the commit skill rename writes on top
+// of the old skill's history when it renames old to newName.
+func RenameSubject(old, newName string) string {
+	return "Rename " + old + " to " + newName
+}
+
+// RenamedFrom is the old name the subject of message, its first line,
+// records a rename from, see RenameSubject; "" when it records none. A
+// skill's name holds no space, so a subject whose names would is none.
+func RenamedFrom(message string) string {
+	subject, _, _ := strings.Cut(message, "\n")
+	rest, ok := strings.CutPrefix(subject, "Rename ")
+	if !ok {
+		return ""
+	}
+	old, newName, ok := strings.Cut(rest, " to ")
+	if !ok || old == "" || newName == "" || strings.ContainsAny(old+newName, " \t") {
+		return ""
+	}
+	return old
+}
+
 // NewForkID is a new random fork id, a version 4 UUID in lowercase.
 func NewForkID() string {
 	var b [16]byte

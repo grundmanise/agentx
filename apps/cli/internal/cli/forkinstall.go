@@ -53,7 +53,9 @@ const installRemoteRow = "installable"
 // a fork, or whose history records no fork id, is left out, with a
 // warning each: installing the one could not create the local branch, and
 // the other could never be updated or published, since nothing would tell
-// that the two branches are one fork.
+// that the two branches are one fork. A branch that is a skill this
+// machine holds under another name, see heldUnderAnotherName, is left out
+// silently: it is the old name of a skill renamed here.
 func (inv *invocation) installableForks(ctx context.Context, gitDir, remote string, records map[string]lineage.Record) ([]installableForkEvent, []string, error) {
 	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
 	if err != nil {
@@ -75,13 +77,28 @@ func (inv *invocation) installableForks(ctx context.Context, gitDir, remote stri
 	if err != nil {
 		return nil, nil, accountRepoFailure(err)
 	}
+	local := map[string][]string{}
+	for _, rec := range records {
+		if rec.Kind == lineage.KindFork && rec.Fork != nil && rec.Fork.ID != "" {
+			local[rec.Fork.ID] = append(local[rec.Fork.ID], rec.Commit)
+		}
+	}
+	ancestor := func(a, b string) bool {
+		held, err := inv.isAncestor(ctx, gitDir, a, b)
+		if err != nil {
+			inv.out.debugf("%s: %v", a, err)
+		}
+		return held
+	}
 	var names []string
 	for _, name := range candidates {
-		if walked[tips[name]].ID == "" {
+		id := walked[tips[name]].ID
+		switch {
+		case id == "":
 			warnings = append(warnings, "the account remote's branch skills/"+sanitised(name)+" is left out, since its history records no fork id")
-			continue
+		case !heldUnderAnotherName(local, id, tips[name], ancestor):
+			names = append(names, name)
 		}
-		names = append(names, name)
 	}
 	sort.Strings(names)
 	sort.Strings(warnings)
@@ -96,6 +113,24 @@ func (inv *invocation) installableForks(ctx context.Context, gitDir, remote stri
 		events = append(events, ev)
 	}
 	return events, warnings, nil
+}
+
+// heldUnderAnotherName reports whether the account remote's branch whose
+// fork id is id and whose tip is tip is a skill this machine already holds
+// under another name: one of its skills, whose tips local holds by fork
+// id, holds id, and that skill's tip is tip or has it in its history, as
+// ancestor(tip, local tip) says. That is the old name's branch of a skill
+// renamed here, before or after a publish of the rename; a branch of the
+// same fork id that holds changes none of them holds, as the renamed
+// skill's branch does for a machine that still holds the old name, is
+// not. Pure but for ancestor.
+func heldUnderAnotherName(local map[string][]string, id, tip string, ancestor func(a, b string) bool) bool {
+	for _, l := range local[id] {
+		if l == tip || ancestor(tip, l) {
+			return true
+		}
+	}
+	return false
 }
 
 // installableRow is one line of the human listing for a fork the account
@@ -262,9 +297,9 @@ func (inv *invocation) addFromAccount(ctx context.Context, sel selection, to []s
 // install; otherwise such an account remote says so and installs nothing,
 // which is no failure, and an --except that leaves nothing is exit code 1.
 func (inv *invocation) everyAccountSkillBut(ctx context.Context, gitDir, remote string, except []string) ([]string, error) {
-	records, err := inv.listLineage(ctx, gitDir)
+	records, err := inv.forkRecords(ctx, gitDir)
 	if err != nil {
-		return nil, accountRepoFailure(err)
+		return nil, err
 	}
 	installable, warnings, err := inv.installableForks(ctx, gitDir, remote, records)
 	if err != nil {

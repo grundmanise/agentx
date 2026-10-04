@@ -68,14 +68,38 @@ func (sc skillContext) observe(ctx context.Context, inv *invocation, lib scan.Li
 		if !ok {
 			return observation{}
 		}
-		modified := !inv.holdsTip(ctx, lib, rec, dir) || !inv.tipPublished(ctx, rec, sc.published[lib.Name])
+		var renamed []string
+		if rec.Fork != nil {
+			renamed = rec.Fork.Renamed
+		}
+		remoteTip := sc.published[publishedName(lib.Name, renamed, sc.published)]
+		modified := !inv.holdsTip(ctx, lib, rec, dir) || !inv.tipPublished(ctx, rec, remoteTip)
 		return observation{judged: true, modified: modified, placed: sc.placementDrift(inv, lib), pending: sc.merges[lib.Name]}
 	}
 	return observation{}
 }
 
+// publishedName is the name of the account remote's branch that holds
+// the published versions of the fork called name, tips being the account
+// remote's branches by name as last fetched: its own, and, for a renamed
+// skill not yet published under its new name, the branch of the nearest
+// name its history records it was renamed from, renamed, nearest first,
+// see lineage.ForkLineage. So a renamed skill holds nothing unpublished
+// that was published under its old name. "" when tips holds none of them.
+// Pure.
+func publishedName(name string, renamed []string, tips map[string]string) string {
+	for _, n := range append([]string{name}, renamed...) {
+		if tips[n] != "" {
+			return n
+		}
+	}
+	return ""
+}
+
 // tipPublished reports whether the branch tip of the fork rec is
-// published: it is the version skill diff compares with, see unpublished.
+// published, remoteTip being the tip of its branch on the account remote,
+// see publishedName: it is the version skill diff compares with, see
+// unpublished.
 // The merge base git reads for it is kept by skill name, with the pair of
 // commits it was read for, and read again when either moves, so serve
 // keeps one per skill however long it runs.

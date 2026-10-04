@@ -746,3 +746,23 @@ func TestUnpublished(t *testing.T) {
 		equal(t, tc.name+": git asked", asked, tc.asked)
 	}
 }
+
+// TestPublishedName: a skill compares with its own name's branch on the
+// account remote, and a renamed one not yet published under its new name
+// with the nearest old name's branch there.
+func TestPublishedName(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, want string
+		renamed    []string
+		tips       map[string]string
+	}{
+		{"its own branch", "new", []string{"old"}, map[string]string{"new": "n", "old": "o"}},
+		{"renamed, not yet published", "old", []string{"old"}, map[string]string{"old": "o"}},
+		{"renamed twice, the nearest", "mid", []string{"mid", "old"}, map[string]string{"mid": "m", "old": "o"}},
+		{"renamed twice, the first name's", "old", []string{"mid", "old"}, map[string]string{"old": "o"}},
+		{"never published", "", []string{"old"}, map[string]string{"other": "x"}},
+	} {
+		equal(t, tc.name, publishedName("new", tc.renamed, tc.tips), tc.want)
+	}
+}

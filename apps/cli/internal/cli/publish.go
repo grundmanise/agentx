@@ -134,7 +134,8 @@ type publishing struct {
 // skill with something to push goes in one push, see gitx.Push, and a ref
 // the remote rejects is reported, exit code 6, never forced. One progress
 // event per skill follows, then its publish event, then the library_skill
-// event of each skill whose edits were recorded.
+// event of each skill whose edits were recorded. Last, the old name's
+// branch of a skill renamed here goes, see dropRenamed.
 func (inv *invocation) publish(ctx context.Context, name, message string) error {
 	if name != "" {
 		if err := inv.publishable(ctx, name); err != nil {
@@ -227,7 +228,9 @@ func (inv *invocation) publish(ctx context.Context, name, message string) error 
 			return inv.pushFailed(ctx, list, name, err)
 		}
 	}
-	return inv.reportPublished(ctx, list, entry.URL)
+	err = inv.reportPublished(ctx, list, entry.URL)
+	inv.dropRenamed(ctx, gitDir, account, records, remote, list)
+	return err
 }
 
 // pushFailed answers a push that failed, err, after edits may have been

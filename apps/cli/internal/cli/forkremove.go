@@ -51,14 +51,14 @@ type forkGuard struct {
 // reports it. handled is false when name is no fork of this machine and
 // remote is not asked for: the removal is then the one of any other skill.
 func (inv *invocation) removeFork(ctx context.Context, name string, remote bool) (handled bool, err error) {
-	r, err := inv.judgeForkRemoval(ctx, name, remote, "remove it from this machine alone with '"+skillCommand("remove", name)+"'")
+	r, err := inv.judgeForkRemoval(ctx, name, remote)
 	if r == nil && err == nil {
 		return false, nil
 	}
 	if err != nil {
 		return true, err
 	}
-	return true, inv.runForkRemoval(ctx, r, "")
+	return true, inv.runForkRemoval(ctx, r)
 }
 
 // judgeForkRemoval runs every refusal of a fork's removal before anything
@@ -67,11 +67,9 @@ func (inv *invocation) removeFork(ctx context.Context, name string, remote bool)
 // remote, both exit code 6, an account remote git cannot reach, exit
 // code 3, a name that is no fork here or there, and an account remote
 // whose branch of the name is another fork, by its fork id, exit code 6,
-// which a removal of this fork must not delete. That last refusal's hint
-// is alone, what does the command's work on this machine alone. It returns
-// nil and no error when name is no fork of this machine and remote is not
-// asked for.
-func (inv *invocation) judgeForkRemoval(ctx context.Context, name string, remote bool, alone string) (*forkRemoval, error) {
+// which a removal of this fork must not delete. It returns nil and no
+// error when name is no fork of this machine and remote is not asked for.
+func (inv *invocation) judgeForkRemoval(ctx context.Context, name string, remote bool) (*forkRemoval, error) {
 	gitDir, hasRepo, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
 		return nil, accountRepoFailure(err)
@@ -135,7 +133,7 @@ func (inv *invocation) judgeForkRemoval(ctx context.Context, name string, remote
 			return nil, accountRepoFailure(err)
 		}
 		if f := sameForkRefusal(records[name], walked[r.there], "removed from the account remote"); f != nil {
-			f.hint = alone
+			f.hint = "remove it from this machine alone with '" + skillCommand("remove", name) + "'"
 			return nil, f
 		}
 	}
@@ -164,23 +162,19 @@ func (inv *invocation) notOfTheAccountRemote(ctx context.Context, gitDir, name, 
 }
 
 // runForkRemoval removes the fork here, when this machine has one, then,
-// with remote, deletes the account remote's branch, and reports both.
-// done, when it is not empty, is what a step before this one did, which a
-// remote deletion that fails says came first; skill rename passes the fork
-// it made.
-func (inv *invocation) runForkRemoval(ctx context.Context, r *forkRemoval, done string) error {
+// with remote, deletes the account remote's branch, and reports both. A
+// remote deletion that fails after the removal here says the removal came
+// first.
+func (inv *invocation) runForkRemoval(ctx context.Context, r *forkRemoval) error {
 	var plan *removalPlan
+	done := ""
 	if r.tip != "" {
 		p, err := inv.applyForkRemoval(ctx, r)
 		if err != nil {
 			return err
 		}
 		plan = &p
-		what := sanitised(r.name) + " was removed from this machine"
-		if done != "" {
-			what = done + " and " + sanitised(r.name) + " removed from this machine"
-		}
-		done = what
+		done = sanitised(r.name) + " was removed from this machine"
 	}
 	var deleted error
 	if r.remote && r.there != "" {
