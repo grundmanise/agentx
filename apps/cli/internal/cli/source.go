@@ -20,15 +20,20 @@ import (
 // holds of it.
 type sourceEvent struct {
 	event
-	ID          string `json:"id"`
-	URL         string `json:"url"`
-	Alias       string `json:"alias,omitempty"`
-	Pin         string `json:"pin,omitempty"`
-	Subpath     string `json:"subpath,omitempty"` // the scope of this listing, not stored
-	LastFetched string `json:"last_fetched,omitempty"`
-	Commit      string `json:"commit,omitempty"`          // the fetched commit; absent when the account repo holds no ref
-	Previous    string `json:"previous_commit,omitempty"` // what the ref held before this fetch, when the fetch moved it
-	Skills      *int   `json:"skills,omitempty"`          // how many skills the listing found; only after a listing
+	ID            string `json:"id"`
+	URL           string `json:"url"`
+	Alias         string `json:"alias,omitempty"`
+	Account       bool   `json:"account,omitempty"` // the account remote
+	Pin           string `json:"pin,omitempty"`
+	Access        string `json:"access,omitempty"`         // writable, read-only or unknown; absent on a removal's event, which says only what went
+	AccessChecked string `json:"access_checked,omitempty"` // when access was last checked
+	AccessReason  string `json:"access_reason,omitempty"`  // why access is not writable, in the run that checked it only
+	DefaultBranch string `json:"default_branch,omitempty"` // the branch the remote's HEAD named at the last look; shown, never followed
+	Subpath       string `json:"subpath,omitempty"`        // the scope of this listing, not stored
+	LastFetched   string `json:"last_fetched,omitempty"`
+	Commit        string `json:"commit,omitempty"`          // the fetched commit; absent when the account repo holds no ref
+	Previous      string `json:"previous_commit,omitempty"` // what the ref held before this fetch, when the fetch moved it
+	Skills        *int   `json:"skills,omitempty"`          // how many skills the listing found, only after a listing; for the account remote, its skill branches as its last fetch found them, absent before a fetch
 }
 
 // sourceSkillEvent is one installable skill of a source.
@@ -49,15 +54,7 @@ func newSourceCommand(inv *invocation) *cobra.Command {
 		Args:        cobra.NoArgs,
 		RunE:        needSubcommand(inv, "no source command given", "run 'agentx source --help' to list commands"),
 	}
-	cmd.AddCommand(&cobra.Command{
-		Use:   "add <url>",
-		Short: "Fetch a git repository and add it as a source",
-		Long: "Fetch a git repository and add it as a source. The URL is owner/repo or owner/repo/subpath\n" +
-			"for GitHub, a GitHub or GitLab URL with an optional tree path, an SSH URL or a file:// URL,\n" +
-			"any of them with #ref to pin a branch or tag. A user or token in the URL is dropped.",
-		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error { return inv.sourceAdd(cmd.Context(), args[0]) },
-	})
+	cmd.AddCommand(newSourceAddCommand(inv))
 	cmd.AddCommand(newSourceFetchCommand(inv))
 	cmd.AddCommand(&cobra.Command{
 		Use:   "list",
@@ -77,6 +74,28 @@ func newSourceCommand(inv *invocation) *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE:  func(cmd *cobra.Command, args []string) error { return inv.sourceRemove(cmd.Context(), args[0]) },
 	})
+	return cmd
+}
+
+func newSourceAddCommand(inv *invocation) *cobra.Command {
+	var account bool
+	cmd := &cobra.Command{
+		Use:   "add <url>",
+		Short: "Fetch a git repository and add it as a source",
+		Long: "Fetch a git repository and add it as a source. The URL is owner/repo or\n" +
+			"owner/repo/subpath for GitHub, a GitHub or GitLab URL with an optional tree\n" +
+			"path, an SSH URL or host:path, a file:// URL or an absolute path, any of them\n" +
+			"with #ref to pin a branch or tag. A user or token in the URL is dropped. A\n" +
+			"source is fetched from and pushed to at that URL. A source holds skills in\n" +
+			"folders on one branch, unless --account adds it as the account remote, a\n" +
+			"repository of yours with one branch per skill of your own, which they are\n" +
+			"published to.",
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return inv.sourceAdd(cmd.Context(), args[0], account)
+		},
+	}
+	cmd.Flags().BoolVar(&account, "account", false, "add the source as the account remote, which your own skills are published to")
 	return cmd
 }
 
@@ -124,7 +143,8 @@ func takeBackBound(ctx context.Context) time.Duration {
 // lost lock is still exit 7 – and says what stayed behind and how to clear
 // it: adding the source again rewrites the remote and records it, which is
 // the state this run failed to reach, and removing it by id takes it away.
-func leftBehind(cause error, src source.Source) error {
+// add is the command that adds it again.
+func leftBehind(cause error, id, add string) error {
 	f := &failure{status: exitInternal, cause: cause}
 	var already *failure
 	switch {
@@ -135,14 +155,32 @@ func leftBehind(cause error, src source.Source) error {
 	case errors.Is(cause, home.ErrRecovery):
 		f.status = exitRefused
 	}
-	f.message = cause.Error() + "; the remote " + source.RemoteName(src.ID()) + " was left in the account repo and no source names it"
-	f.hint = "run 'agentx source add " + src.URL + "' to add the source and take the remote with it, or 'agentx source remove " + src.ID() + "' to clear it"
+	f.message = cause.Error() + "; the remote " + source.RemoteName(id) + " was left in the account repo and no source names it"
+	f.hint = "run '" + add + "' to add the source and take the remote with it, or 'agentx source remove " + id + "' to clear it"
 	return f
 }
 
 // sourceAdd fetches the source its argument names and records it in the
-// settings.
-func (inv *invocation) sourceAdd(ctx context.Context, arg string) error {
+// settings, as the account remote when account is set. The account remote,
+// added with --account or added again by its URL, is added by addAccount;
+// every other source is a shared source, and one naming the account
+// remote's repository is refused, exit code 6, see forkSourceRefusal.
+func (inv *invocation) sourceAdd(ctx context.Context, arg string, account bool) error {
+	if account {
+		return inv.addAccount(ctx, arg)
+	}
+	s, err := inv.loadSettings()
+	if err != nil {
+		return err
+	}
+	// The account remote is added again by its own rules, which refuse a
+	// credential rather than drop it, so its URL is looked up before
+	// anything is said about the argument.
+	if src, err := source.Parse(arg); err == nil {
+		if i := s.FindSource(src.URL); i >= 0 && s.Sources[i].Account {
+			return inv.addAccount(ctx, arg)
+		}
+	}
 	src, err := inv.parseSource(arg)
 	if err != nil {
 		return err
@@ -151,18 +189,34 @@ func (inv *invocation) sourceAdd(ctx context.Context, arg string) error {
 	return err
 }
 
+// sshHosts is the resolve function source.SameRepository takes, read from
+// the user's SSH configuration and shared by every comparison of the run,
+// so that each host is asked about once.
+func (inv *invocation) sshHosts(ctx context.Context) func(host string) string {
+	if inv.hosts == nil {
+		inv.hosts = source.SSHHosts(ctx, inv.env)
+	}
+	return inv.hosts
+}
+
 // addSource is source add once its argument is parsed: it writes the
 // source's remote, fetches it, records it in the settings as a mutation of
 // its own and confirms it, then returns the listing of the fetch and the
 // entry it wrote. skill add runs it too, for a source this machine does not
 // have yet and for --fetch, so that the source is fetched once and the
-// install reads the listing that fetch built.
+// install reads the listing that fetch built. The account remote naming the
+// source's repository refuses it, exit 6, before anything is written.
 func (inv *invocation) addSource(ctx context.Context, src source.Source) (listing source.Listing, entry home.Source, err error) {
 	before, err := inv.loadSettings()
 	if err != nil {
 		return listing, entry, err
 	}
 	existing := before.FindSource(src.URL)
+	// want is the entry the remote is written for.
+	want := home.Source{URL: src.URL, Pin: src.Ref}
+	if f := forkSourceRefusal(before, want, inv.sshHosts(ctx)); f != nil {
+		return listing, entry, f
+	}
 	gitDir, _, err := gitx.OpenAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
 		return listing, entry, accountRepoFailure(err)
@@ -172,8 +226,17 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 	// that gets no further: a source that was not there before goes
 	// altogether, ref and all, and one that was goes back to the pin the
 	// settings still hold, which is what they will still say when the next
-	// command reads them. It writes the git config of the account repo, so
-	// every caller holds the lock while it runs.
+	// command reads them. An add at another pin also puts the source ref
+	// back on the commit it held before this add's fetch, so that what
+	// source skills lists is still what the settings' pin fetched. An add
+	// at the same pin leaves the ref on what it fetched, a later commit of
+	// the branch the settings follow, as source fetch would. Taking that
+	// back too would have the add, run again after a lost lock, move the
+	// ref again, and serve, seeing it move, would list the source again
+	// under the shared lock just as that run wants the lock for its
+	// settings write: on a slow machine every run again lost it the same
+	// way. It writes the git config of the account repo, so every caller
+	// holds the lock while it runs.
 	//
 	// undo is the command's context with the stop signals taken off it. A
 	// take-back is work the run has already committed to, so a Ctrl-C may
@@ -186,7 +249,13 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 		if existing < 0 { // nothing of a source that was never added is kept
 			return source.Remove(undo, inv.git, gitDir, src.ID())
 		} // else the remote goes back to the pin the settings still hold
-		return source.Configure(undo, inv.git, gitDir, source.Source{URL: src.URL, Ref: before.Sources[existing].Pin})
+		if err := source.Configure(undo, inv.git, gitDir, before.Sources[existing]); err != nil {
+			return err
+		}
+		if src.Ref == before.Sources[existing].Pin {
+			return nil
+		}
+		return source.Unpublish(undo, inv.git, gitDir, src, listing)
 	}
 	// left answers for a take-back: cause, the failure that stopped the
 	// run, when the remote went back, and the refusal that names what stayed
@@ -196,7 +265,7 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 			return cause
 		}
 		inv.out.debugf("the remote %s could not be taken back: %v", remote, err)
-		return leftBehind(cause, src)
+		return leftBehind(cause, src.ID(), "agentx source add "+src.URL)
 	}
 	// takeBack reverts under a lock this run is not holding, for a failure
 	// that leaves the remote written and nothing naming it. It waits for
@@ -218,7 +287,7 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 	// that the network never blocks a scan. This hold may give up: a run
 	// that loses it has written nothing and has nothing to take back.
 	if err := home.MutateQuiet(inv.dirs.Home, inv.refs(ctx), func() error {
-		return source.Configure(ctx, inv.git, gitDir, src)
+		return source.Configure(ctx, inv.git, gitDir, want)
 	}); err != nil {
 		return listing, entry, accountRepoFailure(err)
 	}
@@ -226,7 +295,18 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 	if err != nil {
 		return listing, entry, takeBack(sourceFailure(err, src))
 	}
+	// What this machine may do at the source is asked once it is fetched,
+	// so that a URL that cannot be read is refused for that first, and
+	// outside the lock, since it is network. Its answer goes into the one
+	// settings write below. A stop during the check stops the add, and
+	// the take-back of an add at another pin puts the source ref back
+	// where this fetch found it.
+	check := inv.checkSource(ctx, want)
+	if err := ctx.Err(); err != nil {
+		return listing, entry, takeBack(err)
+	}
 	entry = home.Source{URL: src.URL, Pin: src.Ref, LastFetched: time.Now().UTC().Format(time.RFC3339)}
+	check.apply(&entry)
 	// The remote went in under an earlier hold of the lock. Left behind by
 	// a run that gets no further, it is a remote for a source the machine
 	// does not know about, and since `source fetch` and `source skills`
@@ -251,9 +331,12 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 		if err != nil {
 			return left(err, revert())
 		}
+		if f := forkSourceRefusal(s, want, inv.sshHosts(ctx)); f != nil {
+			return left(f, revert())
+		}
 		if i := s.FindSource(src.URL); i >= 0 {
 			added = false
-			entry.Alias = s.Sources[i].Alias // unused so far; carried, never dropped
+			entry = entry.Merge(s.Sources[i]) // what the source's entry knows and this add did not find out is kept
 		}
 		s.SetSource(entry)
 		if err := home.SaveSettings(inv.dirs.Home, s); err != nil {
@@ -267,10 +350,13 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 		}
 		return listing, entry, err
 	}
+	check.report(inv, src.URL)
 	n := len(listing.Skills)
-	inv.out.emit(sourceEvent{event: newEvent("source"), ID: src.ID(), URL: src.URL, Alias: entry.Alias, Pin: src.Ref, Subpath: src.Subpath,
-		LastFetched: entry.LastFetched, Commit: listing.Commit, Previous: movedFrom(listing), Skills: &n})
-	inv.out.done(inv.addLine(added, src, listing) + ": " + inv.out.paint(noteStyle, plural(n, "skill")) + under(inv.out, src.Subpath))
+	ev := entryEvent(entry)
+	ev.Subpath, ev.Commit, ev.Previous, ev.Skills, ev.AccessReason = src.Subpath, listing.Commit, movedFrom(listing), &n, check.reason()
+	inv.out.emit(ev)
+	inv.out.done(inv.addLine(added, src, listing) + ": " + inv.out.paint(noteStyle, plural(n, "skill")) + under(inv.out, src.Subpath) +
+		accessPhrase(inv.out, entry.AccessName()))
 	return listing, entry, nil
 }
 
@@ -310,7 +396,8 @@ func (inv *invocation) sourceList(ctx context.Context) error {
 		return err
 	}
 	commits := map[string]string{}
-	if gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home); err != nil {
+	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	if err != nil {
 		return accountRepoFailure(err)
 	} else if exists {
 		if commits, err = source.Commits(ctx, inv.git, gitDir); err != nil {
@@ -326,16 +413,43 @@ func (inv *invocation) sourceList(ctx context.Context) error {
 	t := &table{}
 	for _, src := range s.Sources {
 		id := source.ID(src.URL)
-		out.emit(sourceEvent{event: newEvent("source"), ID: id, URL: src.URL, Alias: src.Alias, Pin: src.Pin, LastFetched: src.LastFetched, Commit: commits[id]})
-		pin := c("(unpinned)", muted)
-		if src.Pin != "" {
-			pin = c(src.Pin, plain)
+		ev := entryEvent(src)
+		name := "  " + src.URL
+		if src.Account {
+			name += " (account)"
+		}
+		// The branch the source follows: its pin, else the branch its HEAD
+		// named at the last look, dimmed since it is only what was seen. The
+		// account remote follows every fork branch, and what it holds is how
+		// many of them its last fetch found.
+		branch := c("(unpinned)", muted)
+		switch {
+		case src.Account:
+			branch = c("skills/*", muted)
+		case src.Pin != "":
+			branch = c(src.Pin, plain)
+		case src.DefaultBranch != "":
+			branch = c(src.DefaultBranch, muted)
 		}
 		commit := c("not fetched", warnStyle)
-		if commits[id] != "" {
+		switch {
+		case src.Account:
+			n, fetched := 0, false
+			if exists {
+				if n, fetched, err = inv.forkCount(ctx, gitDir, src, source.RemoteName(id)); err != nil {
+					return accountRepoFailure(err)
+				}
+			}
+			if fetched {
+				ev.Skills = &n
+			}
+			commit = forksCell(n, fetched)
+		case commits[id] != "":
+			ev.Commit = commits[id]
 			commit = c(short(commits[id]), muted)
 		}
-		t.add(c("  "+src.URL, heading), pin, commit, c(src.LastFetched, muted), c(id, label))
+		out.emit(ev)
+		t.add(c(name, heading), accessWord(src.Access), branch, commit, c(src.LastFetched, muted), c(id, label))
 	}
 	out.render(t, "")
 	return nil
@@ -347,6 +461,9 @@ func (inv *invocation) sourceSkills(ctx context.Context, arg string) error {
 	src, entry, err := inv.findSource(ctx, arg)
 	if err != nil {
 		return err
+	}
+	if entry.Account {
+		return forkSourceIs(entry.URL, entry)
 	}
 	if src.Ref != "" && src.Ref != entry.Pin {
 		return pinMismatch(src, entry)
@@ -369,8 +486,9 @@ func (inv *invocation) sourceSkills(ctx context.Context, arg string) error {
 	out := inv.out
 	n := len(listing.Skills)
 	id := src.ID()
-	out.emit(sourceEvent{event: newEvent("source"), ID: id, URL: src.URL, Alias: entry.Alias, Pin: entry.Pin, Subpath: src.Subpath,
-		LastFetched: entry.LastFetched, Commit: listing.Commit, Skills: &n})
+	ev := entryEvent(entry)
+	ev.Subpath, ev.Commit, ev.Skills = src.Subpath, listing.Commit, &n
+	out.emit(ev)
 	out.print(out.paint(heading, plural(n, "skill")), " in ", out.paint(heading, src.URL), under(out, src.Subpath), " at ", short(listing.Commit))
 	t := &table{}
 	for _, sk := range listing.Skills {
@@ -392,10 +510,19 @@ func (inv *invocation) sourceSkills(ctx context.Context, arg string) error {
 // sourceRemove deletes the remote, the ref and the settings entry. The git
 // state goes first: if it failed after the entry was gone, nothing would
 // name the source any more and its remote would be unreachable for good.
+//
+// The account remote's remote goes with its remote-tracking branches and
+// the tracking configuration of every fork branch that names it, see
+// removeAccount.
 func (inv *invocation) sourceRemove(ctx context.Context, arg string) error {
 	id, url, err := inv.sourceToRemove(ctx, arg)
 	if err != nil {
 		return err
+	}
+	if s, err := inv.loadSettings(); err != nil {
+		return err
+	} else if i := s.FindSource(url); i >= 0 && s.Sources[i].Account {
+		return inv.removeAccount(ctx, s.Sources[i])
 	}
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)

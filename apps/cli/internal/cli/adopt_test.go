@@ -147,9 +147,9 @@ func sameTree(t *testing.T, what string, got, want map[string]string) {
 // since. Adoption must record the version that was installed as the base,
 // leave the directory exactly as it is, and leave the edit out of the
 // import commit: an edit that entered the import commit would be upstream
-// content from then on, and no later update or revert could tell the two
-// apart. The listing then calls the skill managed and modified against
-// that base, and adopting again changes nothing.
+// content from then on, and no later update could tell the two apart.
+// The listing then calls the skill managed and modified against that
+// base, and adopting again changes nothing.
 func TestAdoptRecordsTheInstalledVersionAndNotTheDirectory(t *testing.T) {
 	t.Parallel()
 	h, s, v1, installed := adoptHarness(t)

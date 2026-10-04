@@ -85,9 +85,9 @@ func TestStagedAndPreviousReadBothRefsAtOnce(t *testing.T) {
 		if before != c.prev {
 			t.Fatalf("%s: rev-parse answers %q, the case says %q", c.name, before, c.prev)
 		}
-		object, commit, prev, err := stagedAndPrevious(ctx, r, gitDir, staging, source)
-		if err != nil || object != c.object || commit != c.commit || prev != c.prev {
-			t.Errorf("%s: stagedAndPrevious = %q, %q, %q, %v; want %q, %q, %q", c.name, object, commit, prev, err, c.object, c.commit, c.prev)
+		object, commit, prev, held, err := stagedAndPrevious(ctx, r, gitDir, staging, source)
+		if err != nil || object != c.object || commit != c.commit || prev != c.prev || held != c.held {
+			t.Errorf("%s: stagedAndPrevious = %q, %q, %q, %q, %v; want %q, %q, %q, %q", c.name, object, commit, prev, held, err, c.object, c.commit, c.prev, c.held)
 		}
 		if err := os.RemoveAll(filepath.Join(gitDir, source)); err != nil {
 			t.Fatal(err)

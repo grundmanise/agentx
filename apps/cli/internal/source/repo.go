@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 	"github.com/grundmanise/agentx/apps/cli/internal/treeid"
 )
@@ -39,8 +40,7 @@ func Ref(id string) string { return RefPrefix + id }
 // StagingRef is the ref the configured refspec of the source with id
 // names. Fetch stages on a ref of its own instead; this one is written only
 // by the full fetch FetchObjects falls back to, which takes the remote as
-// configured, and by an older agentx, which staged every fetch there.
-// Nothing reads it.
+// configured. Nothing reads it.
 func StagingRef(id string) string { return StagingRefPrefix + id }
 
 // stagingRunRef is the ref one fetch of the source with id stages on,
@@ -48,7 +48,8 @@ func StagingRef(id string) string { return StagingRefPrefix + id }
 // at once, the serve child's update check and a source fetch among them,
 // never write, read or delete each other's staging ref. The run comes
 // first, since a ref under refs/agentx/fetching/<id>/ could not be written
-// beside the ref an older agentx left at refs/agentx/fetching/<id>.
+// beside refs/agentx/fetching/<id>, which the full-fetch fallback of
+// FetchObjects writes.
 func stagingRunRef(run, id string) string { return StagingRefPrefix + run + "/" + id }
 
 // newFetchRun names one fetch's staging ref.
@@ -66,6 +67,7 @@ var (
 	ErrNoSubpath   = errors.New("subpath not in the source")        // the subpath is not a directory at the fetched commit
 	ErrIncomplete  = errors.New("the fetched source is incomplete") // an object the listing needs is not in the account repo
 	ErrUnsafePath  = errors.New("unsafe path in the source")        // a tree entry that could be laid out outside its directory
+	ErrNotABranch  = errors.New("the source is not on a branch")    // a tag, a commit, or a remote HEAD that names no branch
 )
 
 // NotFetched is ErrNotFetched naming the source at url, the one way a
@@ -93,6 +95,10 @@ type Listing struct {
 	Previous string
 	Skills   []Skill // sorted by subpath
 	Trees    map[string]string
+	// published is the object the fetch put on the source ref, and held
+	// the object the ref held before it, "" for none: what Unpublish takes
+	// back. Both are empty for a listing List built.
+	published, held string
 }
 
 // Refspec is what remote.src-<id>.fetch holds for the source: its pinned
@@ -114,41 +120,74 @@ func refspecOnto(s Source, dst string) string {
 	return "+" + src + ":" + dst
 }
 
-// Configure writes the source's remote into the account repo: its
-// canonical URL, the refspec above, no tags, and the promisor and
-// blob:none filter settings of a partial clone. It is safe to repeat and
-// updates an existing remote.
-func Configure(ctx context.Context, r *gitx.Runner, gitDir string, s Source) error {
-	name := RemoteName(s.ID())
+// Remote is what the account repo's config records about one source's
+// remote, each key as git config prints it: the URL it is fetched from and
+// pushed to, the refspec that records its pin, and the promisor settings of
+// a partial clone. A key set more than once holds every value,
+// one per line, so that it equals no single value a source wants. Any key
+// can be empty, since a run killed part way through writing a remote leaves
+// what it had written.
+type Remote struct {
+	URL      string
+	Refspec  string
+	Promisor string
+	Filter   string
+}
+
+// RemoteOf is the remote the settings entry of a source wants. Every
+// source is fetched from and pushed to at its canonical URL, so that git
+// applies the user's own url.<base>.insteadOf and pushInsteadOf to it. A
+// shared source is fetched without blobs onto its staging ref. The account
+// remote is fetched whole, every fork branch onto its remote-tracking
+// branch.
+func RemoteOf(entry home.Source) Remote {
+	if entry.Account {
+		return Remote{URL: entry.URL, Refspec: gitx.ForkRefspec(RemoteName(ID(entry.URL)))}
+	}
+	return Remote{
+		URL:      entry.URL,
+		Refspec:  Refspec(Source{URL: entry.URL, Ref: entry.Pin}),
+		Promisor: "true",
+		Filter:   "blob:none",
+	}
+}
+
+// Configure writes the remote of the source entry names into the account
+// repo, the one RemoteOf describes, with no tags. A key the remote must
+// not have is unset, so that a remote written for another kind of source
+// comes out as the entry wants it. It is safe to repeat and updates an existing
+// remote. Callers hold the lock, since git config fails rather than waits
+// for its own lock file.
+func Configure(ctx context.Context, r *gitx.Runner, gitDir string, entry home.Source) error {
+	name := "remote." + RemoteName(ID(entry.URL)) + "."
+	want := RemoteOf(entry)
 	for _, kv := range [][2]string{
-		{"url", s.URL},
-		{"fetch", Refspec(s)},
+		{"url", want.URL},
+		{"fetch", want.Refspec},
 		{"tagOpt", "--no-tags"},
-		{"promisor", "true"},
-		{"partialclonefilter", "blob:none"},
+		{"promisor", want.Promisor},
+		{"partialclonefilter", want.Filter},
 	} {
-		if _, err := r.Isolated(ctx, gitDir, "config", "remote."+name+"."+kv[0], kv[1]); err != nil {
+		// --replace-all, since a key a user added a second value to cannot
+		// be set to one value otherwise; --unset-all exits 5 for a key that
+		// is not there, which is the state it is asked for. Every other
+		// status, such as 3 for a config file git cannot read or 4 for one
+		// it cannot write, is a failure.
+		if kv[1] != "" {
+			if _, err := r.Isolated(ctx, gitDir, "config", "--replace-all", name+kv[0], kv[1]); err != nil {
+				return err
+			}
+			continue
+		}
+		_, status, err := r.IsolatedStatus(ctx, gitDir, 5, "config", "--unset-all", name+kv[0])
+		if err != nil {
 			return err
+		}
+		if status != 0 && status != 5 {
+			return fmt.Errorf("git config --unset-all %s%s exited %d", name, kv[0], status)
 		}
 	}
 	return nil
-}
-
-// SetRefspec writes the source's fetch refspec alone, for a remote whose
-// other settings are already right. It is what brings a remote back in
-// line with the pin the settings hold.
-func SetRefspec(ctx context.Context, r *gitx.Runner, gitDir string, s Source) error {
-	_, err := r.Isolated(ctx, gitDir, "config", "remote."+RemoteName(s.ID())+".fetch", Refspec(s))
-	return err
-}
-
-// Remote is what the account repo's config records about one source: the
-// URL it is fetched from and the refspec that records its pin. Either can
-// be empty, since a run killed part way through writing a remote leaves
-// what it had written.
-type Remote struct {
-	URL     string
-	Refspec string
 }
 
 // Remotes maps the id of every source remote of the account repo to what
@@ -159,9 +198,15 @@ type Remote struct {
 // write or the fetch that follows.
 func Remotes(ctx context.Context, r *gitx.Runner, gitDir string) map[string]Remote {
 	remotes := map[string]Remote{}
-	out, err := r.Isolated(ctx, gitDir, "config", "--get-regexp", `^remote\.src-[0-9a-f]+\.(url|fetch)$`)
+	out, err := r.Isolated(ctx, gitDir, "config", "--get-regexp", `^remote\.src-[0-9a-f]+\.(url|fetch|promisor|partialclonefilter)$`)
 	if err != nil {
 		return remotes
+	}
+	add := func(to *string, value string) {
+		if *to != "" {
+			value = *to + "\n" + value
+		}
+		*to = value
 	}
 	for _, line := range strings.Split(out, "\n") {
 		key, value, ok := strings.Cut(line, " ")
@@ -175,9 +220,13 @@ func Remotes(ctx context.Context, r *gitx.Runner, gitDir string) map[string]Remo
 		remote := remotes[id]
 		switch field {
 		case "url":
-			remote.URL = value
+			add(&remote.URL, value)
 		case "fetch":
-			remote.Refspec = value
+			add(&remote.Refspec, value)
+		case "promisor":
+			add(&remote.Promisor, value)
+		case "partialclonefilter":
+			add(&remote.Filter, value)
 		}
 		remotes[id] = remote
 	}
@@ -228,7 +277,7 @@ func Fetch(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listin
 		}
 		return Listing{}, fmt.Errorf("%w: %v", ErrUnreachable, err)
 	}
-	fetched, commit, previous, err := stagedAndPrevious(ctx, r, gitDir, staging, Ref(id))
+	fetched, commit, previous, held, err := stagedAndPrevious(ctx, r, gitDir, staging, Ref(id))
 	if err != nil || commit == "" {
 		// The fetch landed, so this is the ref itself: a pin that names a
 		// tag pointing at something other than a commit, never a network or
@@ -288,7 +337,33 @@ func Fetch(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (Listin
 	if _, err := r.Isolated(ctx, gitDir, "update-ref", Ref(id), fetched); err != nil {
 		return Listing{}, err
 	}
-	return Listing{Commit: commit, Previous: previous, Skills: skills, Trees: trees}, nil
+	return Listing{Commit: commit, Previous: previous, Skills: skills, Trees: trees, published: fetched, held: held}, nil
+}
+
+// Unpublish puts the source ref of s back to what it held before the fetch
+// that answered listing, for an add at another pin that published a fetch
+// and then did not go through: the ref goes back to the object it held, or
+// goes when the fetch was the source's first. It goes back only while it
+// still holds what that fetch published, so that a later fetch is never
+// undone. A listing that published nothing changes nothing.
+func Unpublish(ctx context.Context, r *gitx.Runner, gitDir string, s Source, listing Listing) error {
+	if listing.published == "" {
+		return nil
+	}
+	ref := Ref(s.ID())
+	args := []string{"update-ref", ref, listing.held, listing.published}
+	if listing.held == "" {
+		args = []string{"update-ref", "-d", ref, listing.published}
+	}
+	if _, err := r.Isolated(ctx, gitDir, args...); err != nil {
+		// The ref moved since: another fetch published over this one,
+		// and what it holds now is no longer this add's to take back.
+		if now, _ := r.Isolated(ctx, gitDir, "for-each-ref", "--format=%(objectname)", ref); now != listing.published {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 // staged reads what a fetch put on the staging ref in one for-each-ref: the
@@ -321,7 +396,11 @@ func staged(ctx context.Context, r *gitx.Runner, gitDir, ref string) (object, co
 // lacks, where rev-parse only answers nothing, a failure reads the two
 // refs apart, so that a broken source ref still leaves the fetch to repair
 // it.
-func stagedAndPrevious(ctx context.Context, r *gitx.Runner, gitDir, staging, source string) (object, commit, previous string, err error) {
+//
+// held is the object the source ref names, tag or commit, for Unpublish to
+// put back: empty for a ref that is not there, and for a broken one, which
+// a take-back removes rather than restores.
+func stagedAndPrevious(ctx context.Context, r *gitx.Runner, gitDir, staging, source string) (object, commit, previous, held string, err error) {
 	peelCommit := func() string {
 		id, _ := r.Isolated(ctx, gitDir, "rev-parse", "--verify", "--quiet", source+"^{commit}")
 		return id
@@ -330,15 +409,16 @@ func stagedAndPrevious(ctx context.Context, r *gitx.Runner, gitDir, staging, sou
 	if err != nil {
 		previous = peelCommit()
 		object, commit, err = staged(ctx, r, gitDir, staging)
-		return object, commit, previous, err
+		return object, commit, previous, held, err
 	}
-	if held, ok := refs[source]; ok {
-		if previous = held.commit; previous == "" {
+	if was, ok := refs[source]; ok {
+		held = was.object
+		if previous = was.commit; previous == "" {
 			previous = peelCommit()
 		}
 	}
 	object, commit = refs[staging].ofCommit()
-	return object, commit, previous, nil
+	return object, commit, previous, held, nil
 }
 
 // peeled is what a ref holds: the object it names and the commit that
@@ -453,10 +533,7 @@ func ResolveRef(ctx context.Context, r *gitx.Runner, gitDir string, s Source, re
 	if !ValidRef(ref) {
 		return "", fmt.Errorf("%w: %q", ErrRefNotFound, ref)
 	}
-	names := []string{"refs/tags/" + ref, "refs/heads/" + ref}
-	if strings.HasPrefix(ref, "refs/") {
-		names = []string{ref}
-	}
+	names := pinNames(ref)
 	// A pattern matches the tail of a ref name, so the peeled id of an
 	// annotated tag has to be asked for by name: refs/tags/v1 does not match
 	// refs/tags/v1^{}.
@@ -484,6 +561,69 @@ func ResolveRef(ctx context.Context, r *gitx.Runner, gitDir string, s Source, re
 		}
 	}
 	return "", nil
+}
+
+// PushBranch is the branch of the source s a publish pushes to: the one it
+// is installed from, its pin when the pin is a branch, or the branch the
+// remote's HEAD names when it follows the default branch. It is one
+// ls-remote --symref over the remote configured for the source, in the
+// user's environment as ResolveRef's, which asks for HEAD and, with a pin,
+// for the tag and the branch of its name. A pin that is a tag, a commit or
+// a name the source does not publish as a branch, and a HEAD that names
+// no branch, is ErrNotABranch: a version read from a tag or a commit has
+// no branch to take a publish.
+func PushBranch(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (string, error) {
+	args := []string{"ls-remote", "--symref", RemoteName(s.ID()), "HEAD"}
+	if s.Ref != "" {
+		if !ValidRef(s.Ref) {
+			return "", fmt.Errorf("%w: %q", ErrNotABranch, s.Ref)
+		}
+		args = append(args, pinNames(s.Ref)...)
+	}
+	out, err := r.User(ctx, gitDir, args...)
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", ErrUnreachable, err)
+	}
+	return parsePushBranch(out, s.Ref)
+}
+
+// pinNames are the refs a pin may name, in git's order of resolution: the
+// ref itself when it is a full name, otherwise the tag before the branch.
+func pinNames(pin string) []string {
+	if strings.HasPrefix(pin, "refs/") {
+		return []string{pin}
+	}
+	return []string{"refs/tags/" + pin, "refs/heads/" + pin}
+}
+
+// parsePushBranch reads the branch a publish pushes to out of what
+// ls-remote --symref printed for HEAD and the refs pin may name, see
+// PushBranch: with no pin the branch HEAD's symref names, with one the
+// first of pinNames the source publishes, when that is a branch. Anything
+// else is ErrNotABranch. Pure.
+func parsePushBranch(out, pin string) (string, error) {
+	if pin == "" {
+		if branch := gitx.ParseSymref(out); branch != "" {
+			return branch, nil
+		}
+		return "", fmt.Errorf("%w: the remote's HEAD names no branch", ErrNotABranch)
+	}
+	held := map[string]bool{}
+	for _, line := range strings.Split(out, "\n") {
+		if _, name, ok := strings.Cut(line, "\t"); ok && !strings.HasPrefix(line, "ref: ") {
+			held[strings.TrimSpace(name)] = true
+		}
+	}
+	for _, name := range pinNames(pin) {
+		if !held[name] {
+			continue
+		}
+		if branch, ok := strings.CutPrefix(name, "refs/heads/"); ok {
+			return branch, nil
+		}
+		return "", fmt.Errorf("%w: %s is %s", ErrNotABranch, pin, name)
+	}
+	return "", fmt.Errorf("%w: the source holds no branch %s", ErrNotABranch, pin)
 }
 
 // Remove deletes the source's remote and ref from the account repo, and

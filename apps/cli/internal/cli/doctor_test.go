@@ -187,7 +187,7 @@ func TestDoctorPassesAndChangesNothing(t *testing.T) {
 	equal(t, "stderr", out.stderr, "")
 	for _, line := range []string{
 		"git              ok  git 2.",
-		"fork_merges      ok  upstream changes can be merged into forks",
+		"fork_merges      ok  upstream changes can be merged into your own skills",
 		"commit_identity  ok  commits get the same id on every machine",
 		"home             ok  " + h.agentx + " is writable",
 		"lock             ok  no other agentx command is running",

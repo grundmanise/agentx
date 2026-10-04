@@ -21,7 +21,7 @@ Text that comes from somewhere else is cleaned before it is printed: tabs, newli
 Paths are quoted instead of cleaned, so you can still copy one. A path holding a control character is printed in double quotes with escapes, the way `git status` prints such a path:
 
 ```text
-    nasty  directory  user  "~/.claude/skills/na\033[31msty"
+    nasty  directory  user  "/home/me/.claude/skills/na\033[31msty"
 ```
 
 ## Colour
@@ -39,7 +39,7 @@ Set the `NO_COLOR` environment variable to any value to turn colour off in every
 
 ## Logs
 
-Logs go to stderr, never to stdout. A line starting `warning:` is something to look at, and one starting `info:` is a note that asks nothing of you, such as a failure warned about earlier that has ended. Add `--verbose` to see debug lines too, such as which agentx home and library the command used.
+Logs go to stderr, never to stdout. A line starting `warning:` is something to look at. Add `--verbose` to see debug lines too, such as which agentx home and library the command used.
 
 Some warnings put what to do on a second line, indented under the warning.
 
@@ -54,10 +54,10 @@ A failed command prints `error: ...` and, when there is a fix, `hint: ...` on st
 | 0 | Success. |
 | 1 | Unknown command, bad flag or missing argument. Run `agentx help`. |
 | 2 | Git is missing or older than 2.40. Install or upgrade git. |
-| 3 | A source is unreachable or authentication failed. |
-| 4 | A pending merge blocks the action, or `skill update` left one pending because [your edits conflict with the update](/cli/skill#when-your-edits-conflict), or found files of one still to resolve. |
+| 3 | A source or the [account remote](/cli/source#add-your-account-remote) is unreachable, or authentication failed, or the account remote or a shared source did not let this machine push, or the account remote refused to delete the branch of one of your own skills (see [Remove a skill of your own](/cli/fork#remove-a-skill-of-your-own)). |
+| 4 | A pending merge blocks the action, or `skill update` left one pending because [your edits conflict with the update](/cli/skill#when-your-edits-conflict), or found files of one still to resolve. `skill update` leaves one pending when [one of your own skills conflicts with the account remote](/cli/fork#resolve-a-conflict). |
 | 5 | The skill, source or configuration does not exist. |
-| 6 | A collision or an unmet precondition. |
+| 6 | A collision or an unmet precondition, such as a push the remote's host declined (see [Publish a skill](/cli/skill#publish-a-skill)), or a source that changed a skill you publish to it (see [Publish edits to a shared source](/cli/skill#publish-edits-to-a-shared-source)). |
 | 7 | Another agentx command is running. Retry when it finishes. |
 | 8 | The account repo is unusable. |
 | 9 | You stopped the run with Ctrl-C, or something sent it a `SIGTERM`. |

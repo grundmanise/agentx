@@ -3,7 +3,6 @@ package lineage
 import (
 	"context"
 	"encoding/hex"
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -326,8 +325,7 @@ func mktreeOf(t *testing.T, ctx context.Context, r *gitx.Runner, gitDir string, 
 }
 
 // importCommit writes, through commit-tree, the import commit of imp over
-// the skill tree tree under dir, the way an earlier agentx wrote one: the
-// tree given, whatever form it is in.
+// the skill tree tree under dir, the tree given as it is.
 func importCommit(t *testing.T, ctx context.Context, r *gitx.Runner, gitDir string, imp Import, dir, tree, when string) Record {
 	t.Helper()
 	root := mktreeOf(t, ctx, r, gitDir, "040000 tree "+tree+"\t"+dir)
@@ -338,58 +336,9 @@ func importCommit(t *testing.T, ctx context.Context, r *gitx.Runner, gitDir stri
 	return Record{Name: dir, Kind: KindManaged, Ref: ManagedRef(dir), Commit: commit, Tree: root, Import: imp, HasImport: true}
 }
 
-// TestRewriteStoresALegacyBaseAsAnInstallWritesItToday: a branch an
-// earlier agentx wrote over a source's own tree, legacy modes and all, is
-// current against no directory, and Canonical says so. Rewrite writes the
-// commit of the same version once more, and it is the very commit an
-// install of that version writes today, dates and message and all, held by
-// the run's staging ref.
-func TestRewriteStoresALegacyBaseAsAnInstallWritesItToday(t *testing.T) {
-	t.Parallel()
-	requireGit(t)
-	ctx := context.Background()
-	r, gitDir := newRepo(t)
-	legacy, canonical := legacyTree(t, ctx, r, gitDir)
-	imp := Import{Source: "https://github.com/example/skills", Path: "skills/alpha", Commit: commitID, Hash: hashID}
-	const when = "1700000000 +0000"
-	installed, _, err := WriteAll(ctx, r, gitDir, NewRun(), []Version{{Import: imp, Dir: "alpha", Tree: canonical.tree, Entries: canonical.entries, When: when}})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	rec := importCommit(t, ctx, r, gitDir, imp, "alpha", legacy, when)
-	base, err := ReadBase(ctx, r, gitDir, rec)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if rec.Canonical(base) {
-		t.Fatal("a branch over the legacy tree reads as canonical")
-	}
-	if base.Tree != legacy || base.ID() != canonical.tree {
-		t.Fatalf("the base is stored as %s with the id %s, want %s with the id %s", base.Tree, base.ID(), legacy, canonical.tree)
-	}
-	run := NewRun()
-	got, err := Rewrite(ctx, r, gitDir, run, rec, base)
-	if err != nil {
-		t.Fatalf("rewrite: %v", err)
-	}
-	if got != installed[0] {
-		t.Errorf("the rewritten commit is %s, want %s, the one an install writes", got, installed[0])
-	}
-	if held, err := r.Isolated(ctx, gitDir, "rev-parse", ImportingRef(run, 0)); err != nil || held != got {
-		t.Errorf("the staging ref holds %q (%v), want %s", held, err, got)
-	}
-
-	again := importCommit(t, ctx, r, gitDir, imp, "alpha", canonical.tree, when)
-	if base, err := ReadBase(ctx, r, gitDir, again); err != nil || !again.Canonical(base) {
-		t.Errorf("a branch over the canonical tree reads as canonical: %v, %v", again.Canonical(base), err)
-	}
-}
-
 // TestBaseIDCountsItsSymlinks: the id of a base is the id of the directory
 // laid out from it, a symlink it holds included, which is the tree git
-// writes for them. No import writes a symlink, so Rewrite refuses a base
-// holding one rather than write a commit of another version.
+// writes for them.
 func TestBaseIDCountsItsSymlinks(t *testing.T) {
 	t.Parallel()
 	requireGit(t)
@@ -399,18 +348,6 @@ func TestBaseIDCountsItsSymlinks(t *testing.T) {
 	base := Base{Tree: linked.tree, Entries: linked.entries}
 	if base.ID() != linked.tree {
 		t.Errorf("the base's id is %s, want %s, the tree holding its symlink", base.ID(), linked.tree)
-	}
-	imp := Import{Source: "https://github.com/example/skills", Path: "skills/gamma", Commit: commitID, Hash: hashID}
-	rec := importCommit(t, ctx, r, gitDir, imp, "gamma", linked.tree, "1700000000 +0000")
-	read, err := ReadBase(ctx, r, gitDir, rec)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !rec.Canonical(read) {
-		t.Error("a branch over a tree git writes today does not read as canonical")
-	}
-	if _, err := Rewrite(ctx, r, gitDir, NewRun(), rec, read); !errors.Is(err, ErrTrailer) {
-		t.Errorf("rewriting a base that holds a symlink: %v, want %v", err, ErrTrailer)
 	}
 }
 

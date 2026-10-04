@@ -31,7 +31,7 @@ var ignoreHome = &fixtureHome{
 		s.skill("tools/mac", "mac", "Keeps its Finder file", map[string]string{".gitignore": "!.DS_Store\n"})
 		s.commit("three skills")
 		h.mustRun("source", "add", s.url)
-		h.mustRun("skill", "add", s.url, "--skill", "pdf", "--skill", "web", "--skill", "mac")
+		h.mustRun("skill", "add", s.url, "--name", "pdf", "--name", "web", "--name", "mac")
 		return nil
 	},
 }
@@ -126,25 +126,6 @@ func TestAGitattributesConversionApplies(t *testing.T) {
 	equal(t, "state with the conversion", h.listed("pdf")["state"], stateCurrent)
 }
 
-// TestRevertKeepsIgnoredFiles: a revert puts back what the skill's files
-// were and keeps the files git ignores, a .DS_Store and a directory the
-// skill's .gitignore names.
-func TestRevertKeepsIgnoredFiles(t *testing.T) {
-	t.Parallel()
-	h := ignoreHarness(t)
-	web := filepath.Join(h.library, "web")
-	want := libraryTree(t, web)
-	writeFile(t, mkdirs(t, filepath.Join(web, "node_modules", "pkg"), "index.js"), "module.exports = 1\n")
-	writeFile(t, filepath.Join(web, ".DS_Store"), "finder\n")
-	writeFile(t, filepath.Join(web, "a.md"), "an edit\n")
-	writeFile(t, filepath.Join(web, "new.md"), "a file of my own\n")
-
-	h.mustRun("skill", "revert", "web")
-	want["node_modules/pkg/index.js"], want[".DS_Store"] = "module.exports = 1\n", "finder\n"
-	sameTree(t, "the library directory", libraryTree(t, web), want)
-	equal(t, "state", h.listed("web")["state"], stateCurrent)
-}
-
 // TestAdoptionIgnoresASystemFile: a directory adopted at the version it
 // holds is not modified for a .DS_Store beside it, as skill list says
 // afterwards.
@@ -211,20 +192,37 @@ func TestServeKeepsGitsVerdictUntilTheSkillChanges(t *testing.T) {
 
 // TestCarryIgnoredKeepsWhatTheNewContentHolds: an ignored file is carried
 // with its bytes and mode, a symlink as a link, and a path the new content
-// holds already keeps the new content's file.
+// holds already keeps the new content's file. So does a path under a file
+// or a symlink the new content holds where its directory was, and nothing
+// is written through the link. An ignored nested repository, which git
+// lists as one directory, where the new content holds a directory keeps
+// every file of its own the new content does not hold.
 func TestCarryIgnoredKeepsWhatTheNewContentHolds(t *testing.T) {
 	t.Parallel()
-	from, to := t.TempDir(), t.TempDir()
+	from, to, outside := t.TempDir(), t.TempDir(), t.TempDir()
 	writeFile(t, filepath.Join(from, ".DS_Store"), "finder\n")
 	writeFile(t, mkdirs(t, filepath.Join(from, "build"), "run"), "#!/bin/sh\n")
 	chmod(t, filepath.Join(from, "build", "run"), 0o755)
 	link(t, "a.md", filepath.Join(from, "latest"))
 	writeFile(t, filepath.Join(from, "a.md"), "the ignored local file\n")
 	writeFile(t, filepath.Join(to, "a.md"), "the new content\n")
+	writeFile(t, mkdirs(t, filepath.Join(from, "sub"), "x.log"), "log\n")
+	link(t, outside, filepath.Join(to, "sub"))
+	writeFile(t, mkdirs(t, filepath.Join(from, "x"), "debug.log"), "log\n")
+	writeFile(t, filepath.Join(to, "x"), "now a file\n")
+	writeFile(t, mkdirs(t, filepath.Join(from, "vendor", ".git"), "HEAD"), "ref: refs/heads/main\n")
+	writeFile(t, filepath.Join(from, "vendor", "x.txt"), "mine\n")
+	writeFile(t, filepath.Join(from, "vendor", "a.md"), "the nested repository's\n")
+	writeFile(t, mkdirs(t, filepath.Join(to, "vendor"), "a.md"), "the new content\n")
 
-	if err := carryIgnored(from, to, []string{".DS_Store", "build/run", "latest", "a.md"}); err != nil {
+	paths := []string{".DS_Store", "build/run", "latest", "a.md", "sub/x.log", "x/debug.log", "vendor/", "vendor/.git"}
+	if err := carryIgnored(from, to, paths); err != nil {
 		t.Fatal(err)
 	}
+	if entries, _ := os.ReadDir(outside); len(entries) != 0 {
+		t.Errorf("the carry wrote %d entries through the link sub", len(entries))
+	}
+	equal(t, "x", readText(t, filepath.Join(to, "x")), "now a file\n")
 	equal(t, ".DS_Store", readText(t, filepath.Join(to, ".DS_Store")), "finder\n")
 	if !executable(t, filepath.Join(to, "build", "run")) {
 		t.Error("build/run lost its exec bit")
@@ -233,4 +231,7 @@ func TestCarryIgnoredKeepsWhatTheNewContentHolds(t *testing.T) {
 		t.Errorf("latest = %q, %v, want a link to a.md", target, err)
 	}
 	equal(t, "a.md", readText(t, filepath.Join(to, "a.md")), "the new content\n")
+	equal(t, "vendor/x.txt", readText(t, filepath.Join(to, "vendor", "x.txt")), "mine\n")
+	equal(t, "vendor/.git/HEAD", readText(t, filepath.Join(to, "vendor", ".git", "HEAD")), "ref: refs/heads/main\n")
+	equal(t, "vendor/a.md", readText(t, filepath.Join(to, "vendor", "a.md")), "the new content\n")
 }

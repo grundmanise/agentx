@@ -173,11 +173,11 @@ func (d *doctor) run(ctx context.Context) error {
 	commit, mergeErr, probeErr := gitx.Probe(ctx, inv.git)
 	switch {
 	case probeErr != nil:
-		d.row("fork_merges", "fail", "cannot merge upstream changes into forks: cannot set up the probe repository: "+probeErr.Error(), verbose)
+		d.row("fork_merges", "fail", "cannot merge upstream changes into your own skills: cannot set up the probe repository: "+probeErr.Error(), verbose)
 	case mergeErr != nil:
-		d.row("fork_merges", "fail", "cannot merge upstream changes into forks: "+mergeErr.Error(), verbose)
+		d.row("fork_merges", "fail", "cannot merge upstream changes into your own skills: "+mergeErr.Error(), verbose)
 	default:
-		d.row("fork_merges", "ok", "upstream changes can be merged into forks", "")
+		d.row("fork_merges", "ok", "upstream changes can be merged into your own skills", "")
 	}
 	switch {
 	case commit == "":
@@ -244,8 +244,8 @@ func (d *doctor) run(ctx context.Context) error {
 		d.row("account_repo", "ok", "not created yet: "+gitDir, "")
 	default:
 		d.row("account_repo", "ok", gitDir+" opens", "")
-		// Both of these read the account repo, so they follow the row that
-		// says it can be read and are left out when it cannot.
+		// These read the account repo, so they follow the row that says it
+		// can be read and are left out when it cannot.
 		d.sourceRemotes(ctx, gitDir)
 		d.stagedImports(ctx, gitDir)
 	}
@@ -281,6 +281,13 @@ func (d *doctor) run(ctx context.Context) error {
 
 func exists(path string) bool {
 	_, err := os.Stat(path)
+	return err == nil
+}
+
+// lexists reports whether path holds an entry, a symlink that leads
+// nowhere included.
+func lexists(path string) bool {
+	_, err := os.Lstat(path)
 	return err == nil
 }
 

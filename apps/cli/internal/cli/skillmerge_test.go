@@ -165,7 +165,7 @@ func TestSkillUpdateMergesANonOverlappingEdit(t *testing.T) {
 	merged["SKILL.md"], merged["mine.md"] = skillMD, "a file of my own\n"
 	want := withFile(withFile(withFile(merged, ".DS_Store", "finder data\n"),
 		filepath.Join("private", ".gitignore"), "*\n"), filepath.Join("private", "notes.md"), "notes git would ignore\n")
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	refs := h.refMap()
 	tip, candidate := refs[lineage.ManagedRef("alpha")], refs[lineage.CandidateRef("alpha")]
 
@@ -230,7 +230,7 @@ func TestSkillUpdateLeavesAConflictPending(t *testing.T) {
 	t.Parallel()
 	h, s, first := updateHarness(t)
 	second := newVersion(t, s)
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	editLibrary(t, h, "alpha", "notes.md", editedNotes)
 	refs := h.refMap()
 	tip, candidate := refs[lineage.ManagedRef("alpha")], refs[lineage.CandidateRef("alpha")]
@@ -536,7 +536,7 @@ func TestSkillUpdateConflictsOfEveryKind(t *testing.T) {
 	s.write("skills/kinds-dir/kept.md", "kept, upstream\n")
 	s.run("mv", "skills/kinds-dir/moved.md", "skills/kinds-dir/moved-upstream.md")
 	second := s.commit("second version")
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	lib := filepath.Join(h.library, "kinds")
 	editLibrary(t, h, "kinds", "notes.md", "one\ntwo, mine\nthree\n")
 	editLibrary(t, h, "kinds", "both.md", "added here\n")
@@ -594,7 +594,7 @@ func TestSkillUpdateConflictsOfEveryKind(t *testing.T) {
 }
 
 // TestAPendingMergeBlocksWhatWouldReplaceOrRemoveTheSkill: while a merge
-// is pending, a revert and a removal of the whole skill, with no --from
+// is pending, a removal of the whole skill, with no --from
 // or with --from universal, exit 4 with the hint that gives the merge up,
 // and change nothing; so does the removal of what is left of the skill
 // once its library directory is gone, while a removal of it from one
@@ -613,7 +613,6 @@ func TestAPendingMergeBlocksWhatWouldReplaceOrRemoveTheSkill(t *testing.T) {
 		args []string
 		what string
 	}{
-		{[]string{"skill", "revert", "alpha"}, "reverted"},
 		{[]string{"skill", "remove", "alpha"}, "removed"},
 		{[]string{"skill", "remove", "alpha", "--from", "universal"}, "removed"},
 	} {
@@ -675,7 +674,7 @@ func TestSkillCheckDuringAPendingMergeMovesOnlyTheCandidate(t *testing.T) {
 	s.write("skills/alpha-dir/notes.md", "alpha notes, revised again upstream\n")
 	third := s.commit("third version")
 
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	moved := h.ref(lineage.CandidateRef("alpha"))
 	if moved == "" || moved == candidate {
 		t.Fatalf("the check left the candidate at %q, from %q", moved, candidate)
@@ -722,7 +721,7 @@ func TestSkillUpdateOfASkillAdoptedWithItsEdits(t *testing.T) {
 			}})
 			h.mustRun("adopt", "--skill", "alpha", "--base", v1)
 			equal(t, "state once adopted", h.listed("alpha")["state"], stateModified)
-			h.mustRun("skill", "check")
+			h.mustRun("skill", "check-updates")
 			candidate := h.ref(lineage.CandidateRef("alpha"))
 			library := onDisk(t, h.library)
 
@@ -1046,10 +1045,10 @@ func TestSkillUpdateConflictsInTheCheckoutAsMergeTreeFoundIt(t *testing.T) {
 	s.skill("skills/union", "union", "Joins its notes", map[string]string{".gitattributes": "notes.md merge=union\n", "notes.md": "notes\n"})
 	s.commit("first version")
 	h.mustRun("source", "add", s.url)
-	h.mustRun("skill", "add", s.url, "--skill", "union")
+	h.mustRun("skill", "add", s.url, "--name", "union")
 	s.write("skills/union/notes.md", "notes, revised upstream\n")
 	s.commit("second version")
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	editLibrary(t, h, "union", "notes.md", "notes, edited here\n")
 	refs := h.refMap()
 	tip, candidate := refs[lineage.ManagedRef("union")], refs[lineage.CandidateRef("union")]
@@ -1095,7 +1094,7 @@ func TestSkillUpdateKeepsAFileAddedInADirectoryTheUpdateRenamed(t *testing.T) {
 				s.write("skills/renamed/notes.md", "notes, upstream\n")
 			}
 			s.commit("second version")
-			h.mustRun("skill", "check")
+			h.mustRun("skill", "check-updates")
 			lib := filepath.Join(h.library, "renamed")
 			editLibrary(t, h, "renamed", filepath.Join("docs", "mine.md"), "a file of my own\n")
 			candidate := h.ref(lineage.CandidateRef("renamed"))
@@ -1171,12 +1170,12 @@ func TestAnIgnoredFileIsNotMineAndSurvivesTheMerge(t *testing.T) {
 	s.skill("skills/logs", "logs", "Keeps its logs", map[string]string{".gitignore": "*.log\n", "notes.md": "notes\n", "usage.md": "usage\n"})
 	s.commit("first version")
 	h.mustRun("source", "add", s.url)
-	h.mustRun("skill", "add", s.url, "--skill", "logs")
+	h.mustRun("skill", "add", s.url, "--name", "logs")
 	s.write("skills/logs/notes.md", "notes, revised upstream\n")
 	s.write("skills/logs/run.log", "the log the new version ships\n")
 	s.run("add", "--force", "skills/logs/run.log") // the source's own .gitignore names it
 	s.commit("second version")
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	lib := filepath.Join(h.library, "logs")
 	editLibrary(t, h, "logs", "usage.md", "usage, edited here\n")
 	editLibrary(t, h, "logs", ".DS_Store", "finder data\n")
@@ -1194,7 +1193,7 @@ func TestAnIgnoredFileIsNotMineAndSurvivesTheMerge(t *testing.T) {
 
 	s.write("skills/logs/usage.md", "usage, revised upstream\n")
 	s.commit("third version")
-	h.mustRun("skill", "check")
+	h.mustRun("skill", "check-updates")
 	library := onDisk(t, h.library)
 	out = h.run("--json", "skill", "update", "logs")
 	equal(t, "exit of the update that conflicts", out.exit, 4)

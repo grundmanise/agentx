@@ -3,11 +3,33 @@ title: "agentx serve"
 description: "Keep watching and report whenever something changes."
 ---
 
-`agentx serve` is what the desktop app runs in the background. It scans the machine once, then rescans whenever anything it inventories changes, and reports again only when the inventory changed. It also checks your skills for updates. You rarely need to run it yourself.
+`agentx serve` is what the desktop app runs in the background. It scans the machine once, then rescans whenever anything it inventories changes, and reports again only when the inventory changed. It also checks your skills for updates when it starts. You rarely need to run it yourself.
+
+## What serve repairs at start
+
+When serve starts, before its first snapshot, it checks every skill against what is on disk and reports one line for every skill that is not `restored`:
+
+```text
+reconcile beta: modified
+reconcile release-notes: repaired
+snapshot 1: 3 configurations, 6 skills
+```
+
+- One of your own skills whose worktree or library symlink went missing is checked out again from its branch: `repaired`. So is one whose Git pointers broke because `~/.agentx` moved.
+- One of your own skills that serve cannot put back, because a Git command you ran is waiting in its worktree or the worktree is on another branch, is reported as `worktree missing`. Finish or abort the Git command, or switch the worktree back to its branch, then run [`agentx skill place <name>`](/cli/fork#recover-a-skill-of-your-own).
+- A folder in the way of one of your own skills is reported as an `adopt candidate` and left as it is. Adopt it with [`agentx skill place <name> --force`](/cli/fork#something-in-the-way).
+- A skill of a shared source you edited is `modified`; one whose folder is gone is `installable`, as is one of your own skills you have not placed on this machine. A skill no source manages is `unmanaged`.
+- One of your own skills counts as fine when its worktree and its library symlink are intact, whatever you edited in it, so serve prints no line for it. [`agentx skill list`](/cli/skill#list-your-skills) shows it as `modified` until you publish your edits.
+
+Serve never deletes or overwrites anything to repair it. A skill that is fine is `restored` and prints no line.
+
+## Maintenance
+
+When it starts, at most once a day, serve tidies the account repo in `~/.agentx/account.git` in the background: it packs loose objects and refs with `git maintenance run`. It deletes nothing and never registers a scheduled job with your system.
 
 ## What counts as a change
 
-Serve watches agentx itself, the library and every skills directory an agent client reads, including the ones clients keep under their own configuration such as `~/.claude/skills`. An edit inside a skill counts, not only a skill added or removed. Edit a skill with any editor or another tool and the next snapshot shows it.
+Serve watches agentx itself, the library and every skills directory an agent client reads, including the ones clients keep under their own configuration such as `~/.claude/skills`. An edit inside a skill counts, not only a skill added or removed. Edit a skill with any editor or another tool and the next snapshot shows it. A skill of your own shows as `modified` as soon as you edit it, and as `current` again once you [publish](/cli/skill#publish-a-skill) it with `agentx skill publish`. A commit you make with Git in its worktree does not make it `current`: the edits stay unpublished until you publish them. Serve never publishes or commits for you.
 
 A change outside the inventory, such as a skill in a directory no installed client reads, causes a rescan that prints nothing.
 
@@ -29,24 +51,21 @@ The desktop app runs serve with [`--json`](/cli/output#json-output). It then als
 
 ## Update checks
 
-Serve checks your managed skills for updates as [`agentx skill check`](/cli/skill#check-for-updates) does: once when it starts, right after the first snapshot, and then every thirty minutes. Each check also fetches every source you added, even the ones you have not installed anything from, as [`agentx source fetch --all`](/cli/source#fetch-a-source-again) would. A machine without any source has nothing to fetch, and serve runs no git for it.
+Serve checks your managed skills, your own included, for updates as [`agentx skill check-updates`](/cli/skill#check-for-updates) does, once when it starts, right after the first snapshot. It does not check again while it runs: to check later, run `agentx skill check-updates`. The check also fetches every source you added, even the ones you have not installed anything from, as [`agentx source fetch --all`](/cli/source#fetch-a-source-again) would. A machine without any source has nothing to fetch, and serve runs no git for it. With an account remote set, the check also fetches it and reports what your other machines published to your own skills placed here.
 
-A check only records what it found; nothing is ever applied. Every check lists every available update again, so the `update` lines repeat while the update is available. Apply an update with [`agentx skill update`](/cli/skill#update-a-skill).
+The check only records what it found; nothing is ever applied. Apply an update with [`agentx skill update`](/cli/skill#update-a-skill).
 
-A source that cannot be fetched, because you are offline or the repository moved, is a warning starting `update check:` that names it and any skills it left unchecked. Serve warns once, not on every check. It warns again only when the reason changes, and it says so on a line of its own when the source can be fetched again:
+A source that cannot be fetched, because you are offline or the repository moved, is a warning starting `update check:` that names it and any skills it left unchecked:
 
 ```text
 warning: update check: https://github.com/me/skills: git fetch: fatal: unable to access 'https://github.com/me/skills/': Could not resolve host: github.com; not checked: pdf
-info: update check: https://github.com/me/skills can be fetched again
 ```
 
-The checks in between log the failure as a debug line, which `--verbose` shows, and serve keeps running. A skill whose new version agentx refuses to import, and a source that was fetched but could not be read, are warned about on every check. The other `update check:` warnings say what an update leaves out or renames, or that a whole check failed.
+Serve keeps running. The other `update check:` warnings name a skill whose new version agentx refuses to import, a source that was fetched but could not be read, a skill of your own that another machine removed from the account remote or renamed there, with what to do next, what an update leaves out or renames, or a check that failed as a whole.
 
 Serve cannot fetch a source that [`agentx import`](/cli/export#import-onto-another-machine) brought back until you add it again. Run `agentx source add <url>` to fetch it, or `agentx source add <url>#<pin>` for a pinned source so that it stays pinned.
 
-Checks run in the background: scans go on while a check waits on the network, and a check still running when the next one is due is not started twice.
-
-To check more or less often, set `AGENTX_CHECK_INTERVAL` to a duration such as `10m` or `2h` before starting serve. Serve refuses to start with exit code 1 when it is not a positive duration.
+The check runs in the background: scans go on while it waits on the network.
 
 ## Run one pass
 
@@ -54,7 +73,7 @@ To check more or less often, set `AGENTX_CHECK_INTERVAL` to a duration such as `
 agentx serve --once
 ```
 
-Scans once, prints the snapshot and exits. It runs no update check. For an inventory to read, run [`agentx scan`](/cli/scan) instead.
+Scans once, prints the snapshot and exits. It repairs nothing and runs no update check or maintenance. For an inventory to read, run [`agentx scan`](/cli/scan) instead.
 
 ## One serve per home
 

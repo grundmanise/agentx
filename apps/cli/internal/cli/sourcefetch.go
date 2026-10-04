@@ -51,8 +51,8 @@ func newSourceFetchCommand(inv *invocation) *cobra.Command {
 // sourceFetch re-fetches the named sources, or every one of them, in
 // parallel and outside the lock, then records what moved in one settings
 // write. It is the manual refresh of a source no skill was installed from,
-// which skill check does not fetch and the serve child fetches only on the
-// timer of its update check.
+// which skill check-updates does not fetch and the serve child fetches only
+// in the update check it runs at start.
 func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool) error {
 	targets, err := inv.sourcesToFetch(ctx, args, all)
 	if err != nil {
@@ -66,27 +66,58 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 	if err != nil {
 		return accountRepoFailure(err)
 	}
-	if !exists { // settings name sources the account repo has nothing of
-		return sourceFailure(source.NotFetched(targets[0].src.URL), targets[0].src)
+	if !exists {
+		// Settings that name sources the account repo has nothing of, as an
+		// import leaves them: a shared source is refused as not fetched, with
+		// the add that fetches it as the hint, and the account remote, which
+		// this command writes the remote of when it is missing, is fetched
+		// into an account repo created for it.
+		for _, t := range targets {
+			if !t.entry.Account {
+				return sourceFailure(source.NotFetched(t.src.URL), t.src)
+			}
+		}
+		if gitDir, _, err = gitx.OpenAccountRepo(ctx, inv.git, inv.dirs.Home); err != nil {
+			return accountRepoFailure(err)
+		}
 	}
-	results, err := inv.fetchSources(ctx, gitDir, targets, false, true)
+	// Each source that fetched is checked again in the worker that fetched
+	// it: a fetch the user asked for is the moment to find out whether
+	// what this machine may do there has changed.
+	checks := make([]sourceCheck, len(targets))
+	results, err := inv.fetchSources(ctx, gitDir, targets, false, true, func(i int) {
+		checks[i] = inv.checkSource(ctx, targets[i].entry)
+	})
 	if err != nil {
 		return err
 	}
-	return inv.reportFetched(ctx, gitDir, targets, results)
+	err = inv.reportFetched(ctx, gitDir, targets, results, checks)
+	if err == nil {
+		for i, res := range results {
+			if res.Err == nil && !checks[i].ok {
+				// Every fetch finished and is recorded, but a stop cut this
+				// check short and it answered nothing, so the run did not
+				// do all it was asked and answers for the stop.
+				return interruptedFailure()
+			}
+		}
+	}
+	return err
 }
 
 // fetchSources fetches targets, sources the settings hold, in parallel and
 // outside the lock, and returns one result per target in the order given.
 // It is the one fetch of an added source: source fetch runs it, and so do
-// skill check and the update check of the serve child. What it refuses is
-// what is not one source's to answer for, a lock it could not take or a
-// journal it could not recover; a source that could not be fetched is its
-// result's error, and turning that into a refusal is the caller's, so that
-// the serve child, which never exits for one, runs the same fetch. wait
-// takes the lock as the serve child does, waiting for a holder rather than
-// giving up, and progress reports one progress event per source as its
-// fetch ends.
+// skill check-updates and the update check of the serve child. What it
+// refuses is what is not one source's to answer for, a lock it could not
+// take or a journal it could not recover; a source that could not be
+// fetched is its result's error, and turning that into a refusal is the
+// caller's, so that the serve child, which never exits for one, runs the
+// same fetch. wait takes the lock as the serve child does, waiting for a
+// holder rather than giving up, and progress reports one progress event per
+// source as its fetch ends. then, when it is not nil, runs in the worker of
+// each target that fetched, with its index, before its progress event, see
+// source.FetchAll.
 //
 // The lock is taken before the network and released again: an unfinished
 // mutation journal is recovered, and a run that could not write the
@@ -95,35 +126,67 @@ func (inv *invocation) sourceFetch(ctx context.Context, args []string, all bool)
 // block a scan.
 //
 // The remotes are brought back in line with the settings here too. The
-// settings hold the pin and the remote's refspec is derived from it, so a
-// run interrupted between the two leaves a remote recording a ref the
-// settings do not name. The refspecs are read in one git process and only
-// one that disagrees is written, which changes no pin: the pin is what the
-// settings say, and only source add sets it.
-func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets []fetchTarget, wait, progress bool) ([]source.Result, error) {
+// settings hold the pin and the remote is derived from them, so a run
+// interrupted between the two leaves a remote recording a ref the settings
+// do not name. The remotes are read in one git process and only one that
+// disagrees is written, which changes no pin: that is what the settings
+// say, and only source add sets it.
+func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets []fetchTarget, wait, progress bool, then func(i int)) ([]source.Result, error) {
 	if err := inv.holdLock(ctx, wait, false, func() error { return inv.alignRemotes(ctx, gitDir, targets) }); err != nil {
 		return nil, accountRepoFailure(err)
 	}
-	srcs := make([]source.Source, len(targets))
+	// Shared sources are fetched in parallel, without blobs, see
+	// source.FetchAll; the account remote whole, once those are done, see
+	// fetchForks. results keeps the order of targets, and then and the
+	// progress events count both alike.
+	var srcs []source.Source
+	var shared, forks []int
 	for i, t := range targets {
-		srcs[i] = t.src
+		if t.entry.Account {
+			forks = append(forks, i)
+			continue
+		}
+		shared = append(shared, i)
+		srcs = append(srcs, t.src)
 	}
 	var done func(source.Source, int)
 	if progress {
 		done = func(s source.Source, finished int) {
-			inv.out.emit(progressEvent{event: newEvent("progress"), Phase: "fetch", Subject: s.URL, Current: finished, Total: len(srcs)})
+			inv.out.emit(progressEvent{event: newEvent("progress"), Phase: "fetch", Subject: s.URL, Current: finished, Total: len(targets)})
 		}
 	}
-	results := source.FetchAll(ctx, inv.git, gitDir, srcs, done)
+	var sharedThen func(int)
+	if then != nil {
+		sharedThen = func(j int) { then(shared[j]) }
+	}
+	results := make([]source.Result, len(targets))
+	for j, res := range source.FetchAll(ctx, inv.git, gitDir, srcs, sharedThen, done) {
+		results[shared[j]] = res
+	}
+	for k, i := range forks {
+		t := targets[i]
+		results[i] = source.Result{Source: t.src}
+		if err := inv.fetchForks(ctx, gitDir, source.RemoteName(t.src.ID()), false); err != nil {
+			results[i].Err = fmt.Errorf("%w: %v", source.ErrUnreachable, err)
+		} else if then != nil {
+			then(i)
+		}
+		if done != nil { // failed or not, as for a shared source
+			done(t.src, len(srcs)+k+1)
+		}
+	}
 	// A source whose remote the account repo no longer holds, which an
 	// interrupted removal leaves behind, cannot be fetched at all. git
 	// reports that as a repository it cannot find and names the remote,
 	// which is agentx's internal name for the source rather than anything
 	// the user wrote; the truth is that the source is not on this machine,
-	// which is what source skills says of the same state. Only a source
-	// that failed is checked, so a run that works spawns nothing for it.
+	// which is what source skills says of the same state. Only a shared
+	// source that failed is checked, so a run that works spawns nothing for
+	// it: the account remote's remote is always written before its fetch,
+	// and one a failed first fetch took out again, see fetchForks, was
+	// still unreachable.
 	for i, res := range results {
-		if res.Err != nil && !source.Configured(ctx, inv.git, gitDir, res.Source.ID()) {
+		if res.Err != nil && !targets[i].entry.Account && !source.Configured(ctx, inv.git, gitDir, res.Source.ID()) {
 			results[i].Err = source.NotFetched(res.Source.URL)
 		}
 	}
@@ -148,44 +211,57 @@ func (inv *invocation) holdLock(ctx context.Context, wait, signal bool, fn func(
 	return home.MutateQuiet(inv.dirs.Home, u, fn)
 }
 
-// alignRemotes rewrites the fetch refspec of every target whose remote does
-// not record the pin the settings hold. It runs under the lock, since git
-// config fails rather than waits for its own lock file, and reads every
-// remote in one git process, so a run whose remotes are right costs one.
+// alignRemotes rewrites the remote of every target that is not the one its
+// settings entry wants, see source.RemoteOf: a URL, a refspec recording
+// another pin, or promisor settings a run cut short left out. It runs under
+// the lock, since git config fails rather than waits for its own lock file,
+// and reads every remote in one git process, so a run whose remotes are
+// right costs one.
 //
-// A source with no remote at all, which an interrupted removal leaves, is
-// left alone: writing a refspec for it would build half a remote out of an
+// A shared source with no remote at all, which an interrupted removal
+// leaves, is left alone: writing one for it would build a remote out of an
 // entry nothing can fetch. The fetch that follows fails, and the run says
-// what it is: a source this machine does not hold.
+// what it is: a source this machine does not hold. The account remote's
+// remote is written whenever it is missing, as settings an import wrote leave it:
+// its forks are fetched whole from the repository and need nothing else.
+// One written over a remote never fetched whole is fetched with --refetch
+// the first time, see awaitWholeFetch.
 func (inv *invocation) alignRemotes(ctx context.Context, gitDir string, targets []fetchTarget) error {
 	remotes := source.Remotes(ctx, inv.git, gitDir)
 	for _, t := range targets {
 		remote, ok := remotes[t.src.ID()]
-		if !ok || remote.URL == "" || remote.Refspec == source.Refspec(t.src) {
+		if (!ok || remote.URL == "") && !t.entry.Account || remote == source.RemoteOf(t.entry) {
 			continue
 		}
-		if err := source.SetRefspec(ctx, inv.git, gitDir, t.src); err != nil {
+		if err := source.Configure(ctx, inv.git, gitDir, t.entry); err != nil {
 			return err
+		}
+		if t.entry.Account {
+			inv.awaitWholeFetch(remotes, t.entry)
 		}
 	}
 	return nil
 }
 
 // reportFetched records the sources that fetched in one settings write,
-// then reports every result in the order the command named them, so that
-// the parallel work leaves no trace in the output. A source that failed is
-// one warning naming it; the run then refuses, naming them all.
-func (inv *invocation) reportFetched(ctx context.Context, gitDir string, targets []fetchTarget, results []source.Result) error {
+// with what checks, one per target, found out about each, then reports
+// every result in the order the command named them, so that the parallel
+// work leaves no trace in the output. A source that failed is one warning
+// naming it; the run then refuses, naming them all.
+func (inv *invocation) reportFetched(ctx context.Context, gitDir string, targets []fetchTarget, results []source.Result, checks []sourceCheck) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	fetched := make(map[string]bool, len(results))
+	checked := make(map[string]sourceCheck, len(results))
 	var failed []source.Result
-	for _, res := range results {
+	for i, res := range results {
 		if res.Err == nil {
 			fetched[res.Source.URL] = true
+			checked[res.Source.URL] = checks[i]
 		} else {
 			failed = append(failed, res)
 		}
 	}
+	written := map[string]home.Source{}
 	if len(fetched) > 0 {
 		// One write for the whole run, under the lock, on the settings as
 		// they are now; see stampFetched.
@@ -195,9 +271,12 @@ func (inv *invocation) reportFetched(ctx context.Context, gitDir string, targets
 				return err
 			}
 			m := home.NewMutation(inv.dirs.Home)
-			if err := inv.stampFetched(ctx, m, gitDir, s, fetched, now); err != nil {
+			if err := inv.stampFetched(ctx, m, gitDir, s, fetched, checked, now); err != nil {
 				m.Discard()
 				return err
+			}
+			for _, entry := range s.Sources {
+				written[entry.URL] = entry
 			}
 			return m.Apply(inv.refs(ctx))
 		}); err != nil {
@@ -213,11 +292,24 @@ func (inv *invocation) reportFetched(ctx context.Context, gitDir string, targets
 		if !fetched[res.Source.URL] {
 			continue // removed while this run fetched
 		}
-		entry, listing := targets[i].entry, res.Listing
+		entry, listing, check := written[res.Source.URL], res.Listing, checks[i]
+		check.report(inv, res.Source.URL)
+		ev := entryEvent(entry)
+		ev.AccessReason = check.reason()
+		if entry.Account {
+			n, _, err := inv.forkCount(ctx, gitDir, entry, source.RemoteName(res.Source.ID()))
+			if err != nil {
+				return accountRepoFailure(err)
+			}
+			ev.Skills = &n
+			inv.out.emit(ev)
+			inv.out.done("re-fetched " + inv.out.paint(heading, entry.URL) + ": " + inv.out.paint(noteStyle, plural(n, "skill")) + accessPhrase(inv.out, entry.AccessName()))
+			continue
+		}
 		n := len(listing.Skills)
-		inv.out.emit(sourceEvent{event: newEvent("source"), ID: res.Source.ID(), URL: res.Source.URL, Alias: entry.Alias, Pin: entry.Pin,
-			LastFetched: now, Commit: listing.Commit, Previous: movedFrom(listing), Skills: &n})
-		inv.out.done(inv.addLine(false, res.Source, listing) + ": " + inv.out.paint(noteStyle, plural(n, "skill")))
+		ev.Commit, ev.Previous, ev.Skills = listing.Commit, movedFrom(listing), &n
+		inv.out.emit(ev)
+		inv.out.done(inv.addLine(false, res.Source, listing) + ": " + inv.out.paint(noteStyle, plural(n, "skill")) + accessPhrase(inv.out, entry.AccessName()))
 	}
 	if len(failed) == 0 {
 		return nil
@@ -228,15 +320,18 @@ func (inv *invocation) reportFetched(ctx context.Context, gitDir string, targets
 // stampFetched stages the settings write that ends a fetch run, under the
 // lock the caller holds, on s as the settings are now: last_fetched, now,
 // for every source of fetched, which are the canonical URLs of the sources
-// that fetched. A source removed while the run fetched is not written back,
+// that fetched, and what checked, by the same URLs, found out about those
+// it checked; nil checks none. s is updated in place, so that the caller
+// reports the entries as written. A source removed while the run fetched is not written back,
 // and is taken out of fetched, so that nothing says a source is present and
 // fresh once it is gone. The file is written whatever it holds, as one
 // write of the whole run.
-func (inv *invocation) stampFetched(ctx context.Context, m *home.Mutation, gitDir string, s home.Settings, fetched map[string]bool, now string) error {
+func (inv *invocation) stampFetched(ctx context.Context, m *home.Mutation, gitDir string, s home.Settings, fetched map[string]bool, checked map[string]sourceCheck, now string) error {
 	var removed []string
 	for url := range fetched {
 		if i := s.FindSource(url); i >= 0 {
 			s.Sources[i].LastFetched = now
+			checked[url].apply(&s.Sources[i])
 		} else {
 			delete(fetched, url)
 			removed = append(removed, url)
@@ -378,6 +473,22 @@ func (inv *invocation) sourcesToFetch(ctx context.Context, args []string, all bo
 		targets = append(targets, target(entry))
 	}
 	return targets, nil
+}
+
+// sharedSources are the entries of sources the update check and serve's
+// search index cover: every one but the account remote, which holds no
+// skill on one branch to check or list. Its forks are fetched whole by the
+// commands that read them, see fetchForks; fetching it as a shared source
+// would bring its objects in without their blobs, which its forks' history
+// then lacks.
+func sharedSources(sources []home.Source) []home.Source {
+	var shared []home.Source
+	for _, entry := range sources {
+		if !entry.Account {
+			shared = append(shared, entry)
+		}
+	}
+	return shared
 }
 
 // target is the fetch of one settings entry: the whole source at the pin

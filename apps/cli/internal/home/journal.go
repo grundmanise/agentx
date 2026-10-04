@@ -20,6 +20,34 @@ import (
 // finished because a live path no longer holds what the journal expects.
 var ErrRecovery = errors.New("recovery required")
 
+// ErrMovedBeforeApply is returned by Apply when a ref the mutation creates
+// or moves no longer holds the value the command read under the lock, so
+// that the mutation refused before it changed anything. A user or an agent
+// committing with git in a fork's worktree moves the fork's branch without
+// agentx's lock, and may do so between the command's last read and its
+// Apply. Nothing was applied, so there is nothing to recover: the journal
+// and what the mutation staged are removed, and the command answers as if
+// it had found the change itself.
+var ErrMovedBeforeApply = errors.New("a ref moved before the mutation changed anything")
+
+// movedRef is ErrMovedBeforeApply for the ref that moved.
+type movedRef struct{ ref string }
+
+func (m movedRef) Error() string { return ErrMovedBeforeApply.Error() + ": " + m.ref }
+
+func (m movedRef) Unwrap() error { return ErrMovedBeforeApply }
+
+// MovedRef is the ref an ErrMovedBeforeApply names, so that a command
+// whose mutation moves several branches can say which one moved; "" for
+// any other error.
+func MovedRef(err error) string {
+	var m movedRef
+	if errors.As(err, &m) {
+		return m.ref
+	}
+	return ""
+}
+
 func MutationsDir(dir string) string { return filepath.Join(dir, "mutations") }
 
 // journal is one mutations/<id>.json: a mutation that replaces live files
@@ -49,14 +77,19 @@ type replacement struct {
 // a path and as an object id (empty for none) for a ref. Every step is
 // decided from the live state and is safe to repeat.
 type step struct {
-	Kind     string `json:"kind"`               // ref, publish, link or remove
-	Path     string `json:"path,omitempty"`     // the live path of publish, link and remove
-	GitDir   string `json:"git_dir,omitempty"`  // the repository of a ref step
+	Kind     string `json:"kind"`               // ref, publish, link, remove, worktree or move
+	Path     string `json:"path,omitempty"`     // the live path of publish, link, remove, worktree and move
+	From     string `json:"from,omitempty"`     // the live directory a move takes its content from
+	GitDir   string `json:"git_dir,omitempty"`  // the repository of a ref or worktree step
 	Ref      string `json:"ref,omitempty"`      // the ref it moves
 	Old      string `json:"old"`                // what the step expects to find
 	New      string `json:"new"`                // what it leaves behind
 	Staged   string `json:"staged,omitempty"`   // the directory publish renames into place
 	Retained string `json:"retained,omitempty"` // where remove keeps the content it displaced
+	// Beside names the entries a worktree step checks out at the root of
+	// its worktree when they are absent: what the branch tip holds there
+	// beside the skill directory, which the mutation publishes itself.
+	Beside []string `json:"beside,omitempty"`
 }
 
 // The step kinds.
@@ -65,7 +98,20 @@ const (
 	stepPublish = "publish" // rename a staged directory into place
 	stepLink    = "link"    // create a symlink placement
 	stepRemove  = "remove"  // take a path out of the way, retaining what it held
+	// stepWorktree makes a path a linked worktree of a fork's branch and
+	// aligns the worktree's index with the branch tip. It runs git, as a ref
+	// step does, through the Worktrees the journal is handed.
+	stepWorktree = "worktree"
+	// stepMove renames a live directory to a path where nothing is yet,
+	// which is how a skill directory goes into a fork's worktree without
+	// its content being copied. Nothing is staged for it: the content is
+	// the user's, and only the rename moves it.
+	stepMove = "move"
 )
+
+// worktreeOn is how a worktree step records its new state: the short name
+// of the branch the worktree at its path is on, such as skills/pdf.
+const worktreeOn = "worktree:"
 
 // The live states a path step compares. A directory carries the
 // fingerprint of its content, so that a directory replaced by hand is
@@ -117,6 +163,26 @@ type RefUpdater interface {
 	UpdateRefs(gitDir string, updates []RefUpdate) error
 }
 
+// Worktrees runs the git a worktree step needs. The journal cannot run git
+// itself, so the RefUpdater a command hands it implements this as well, and
+// recovery refuses a worktree step it is handed no git for, as it refuses a
+// ref step.
+type Worktrees interface {
+	// AddWorktree makes path a linked worktree of the repository at gitDir,
+	// on branch, a short branch name such as skills/pdf, locked and with no
+	// files checked out. The path is absent, an empty directory, or holds
+	// nothing but the .git file of an add stopped half way, which it clears
+	// together with the registration that add left in gitDir.
+	AddWorktree(gitDir, path, branch string) error
+	// ResetIndex sets the index of the worktree at path to its branch tip,
+	// touching no file in it. It is safe to repeat.
+	ResetIndex(path string) error
+	// CheckOut writes the entries names, at the root of the worktree at
+	// path, from its index, which ResetIndex has just set to the branch
+	// tip. Each is absent when it is called.
+	CheckOut(path string, names []string) error
+}
+
 // Mutation collects one command's changes into one journal: the state files
 // it replaces, the library directories it publishes, the placements it
 // creates and the lineage refs it moves. Build it under the exclusive lock,
@@ -153,8 +219,13 @@ func (m *Mutation) StagePath() string {
 // half-written skill, discovery skipping hidden entries. kind says what it
 // holds, staged or retained.
 func (m *Mutation) Sibling(live, kind string) string {
+	return m.hiddenIn(filepath.Dir(live), kind)
+}
+
+// hiddenIn is a fresh hidden path in dir for content of the given kind.
+func (m *Mutation) hiddenIn(dir, kind string) string {
 	m.staged++
-	return filepath.Join(filepath.Dir(live), fmt.Sprintf(".agentx-%s-%s-%d", kind, m.id, m.staged))
+	return filepath.Join(dir, fmt.Sprintf(".agentx-%s-%s-%d", kind, m.id, m.staged))
 }
 
 // ReplaceFile stages data for the live file path.
@@ -194,6 +265,70 @@ func (m *Mutation) Remove(path, old string) {
 	m.j.Steps = append(m.j.Steps, s)
 }
 
+// RemoveInto is Remove with the displaced content retained in dir rather
+// than beside path. A fork's skill directory sits in its worktree, where a
+// hidden directory beside it would be an untracked file to git, which a
+// plain git add -A there would commit; the fork's content is retained in
+// the worktrees directory instead. dir must be on path's file system, since
+// the step renames, and an error says when it is not.
+func (m *Mutation) RemoveInto(path, old, dir string) error {
+	s := step{Kind: stepRemove, Path: path, Old: old, New: absent}
+	if strings.HasPrefix(old, dirOf) {
+		same, err := sameDevice(filepath.Dir(path), dir)
+		if err != nil {
+			return err
+		}
+		if !same {
+			return fmt.Errorf("%s and %s are on different file systems", path, dir)
+		}
+		s.Retained = m.hiddenIn(dir, "retained")
+	}
+	m.j.Steps = append(m.j.Steps, s)
+	return nil
+}
+
+// SameDevice reports whether the two directories are on one file system,
+// which a move step, a rename, needs of its two ends.
+func SameDevice(a, b string) (bool, error) { return sameDevice(a, b) }
+
+// sameDevice reports whether the two directories are on one file system.
+func sameDevice(a, b string) (bool, error) {
+	var sa, sb syscall.Stat_t
+	if err := syscall.Stat(a, &sa); err != nil {
+		return false, err
+	}
+	if err := syscall.Stat(b, &sb); err != nil {
+		return false, err
+	}
+	return sa.Dev == sb.Dev, nil
+}
+
+// Worktree records that path becomes a linked worktree of the repository at
+// gitDir on branch, the short name of a fork's branch such as skills/pdf,
+// with its index at the branch tip. The worktree is added with nothing
+// checked out: the content is published into it by a later step. A path
+// that already is that worktree only has its index aligned again, which is
+// how a command that moved the branch brings the worktree along.
+//
+// The entries beside, names at the worktree's root that the branch tip
+// holds beside the skill directory, are checked out with it, each one that
+// is absent: a worktree put back from its branch comes back with the files
+// a commit made with git keeps there, such as a .gitignore, rather than
+// with them reading as deleted. One that is there is left as it is.
+func (m *Mutation) Worktree(gitDir, path, branch string, beside ...string) {
+	m.j.Steps = append(m.j.Steps, step{Kind: stepWorktree, Path: path, GitDir: gitDir, Old: absent, New: worktreeOn + branch, Beside: beside})
+}
+
+// Move records that the live directory from, whose fingerprint is fp as
+// the caller captured it under the lock, moves to the path to, where
+// nothing is yet. The directory is renamed, never copied, so from and to
+// must be on one file system. Nothing of from is staged or retained, and
+// nothing discards it: it is the user's content, and recovery moves it
+// while it is still a directory, edited since or not.
+func (m *Mutation) Move(from, to, fp string) {
+	m.j.Steps = append(m.j.Steps, step{Kind: stepMove, Path: to, From: from, Old: absent, New: dirOf + fp})
+}
+
 // Ref records that ref in gitDir moves from old, empty for a ref that must
 // not exist yet, to newValue.
 func (m *Mutation) Ref(gitDir, ref, old, newValue string) {
@@ -217,7 +352,11 @@ func (m *Mutation) Apply(u RefUpdater) error {
 		return err
 	}
 	m.journaled = true
-	return apply(path, m.j, u)
+	err := apply(path, m.j, u)
+	if errors.Is(err, ErrMovedBeforeApply) {
+		m.journaled = false // the journal is gone again, and nothing needs what it named
+	}
+	return err
 }
 
 // Journaled reports whether this mutation's journal reached the disk. It is
@@ -241,14 +380,16 @@ func (m *Mutation) journalPath() string {
 }
 
 // discardStaged removes what a mutation staged before its journal existed.
-func (m *Mutation) discardStaged() {
-	for _, r := range m.j.Replace {
+func (m *Mutation) discardStaged() { discardStaged(m.j) }
+
+func discardStaged(j journal) {
+	for _, r := range j.Replace {
 		os.Remove(r.Staged)
 	}
-	for _, s := range m.j.Steps {
+	for _, s := range j.Steps {
 		for _, path := range []string{s.Staged, s.Retained} {
 			if path != "" {
-				os.RemoveAll(path)
+				_ = RemoveTree(path)
 			}
 		}
 	}
@@ -269,9 +410,24 @@ func replaceFile(dir, path string, data []byte) error {
 // deletes, marks the journal applied and removes it. Retained content is
 // discarded last, once every live path holds its new state. The refs go in
 // the two transactions refPhases splits them into.
+//
+// A ref that refuses its expected old value in the first transaction, before
+// anything else of the journal ran, means that something moved it since the
+// command read it under the lock, git run in a fork's worktree for one. The
+// mutation changed nothing, so the journal is abandoned rather than left for
+// a recovery that would refuse it in the same words every time: it and its
+// staged content are removed, and the answer is ErrMovedBeforeApply.
 func apply(journalPath string, j journal, u RefUpdater) error {
 	early, late := refPhases(j.Steps)
-	if _, err := applyRefs(early, u); err != nil {
+	if moved, err := applyRefs(early, late, u); err != nil {
+		var refused refusedRef
+		if !moved && errors.As(err, &refused) {
+			discardStaged(j)
+			if rmErr := os.Remove(journalPath); rmErr != nil {
+				return err // still on disk, so it is recovery's, as any refusal
+			}
+			return movedRef(refused)
+		}
 		return err
 	}
 	for _, s := range j.Steps {
@@ -287,7 +443,7 @@ func apply(journalPath string, j journal, u RefUpdater) error {
 			return unfinished(journalPath, step{Kind: "replace", Path: r.Path}, err)
 		}
 	}
-	if _, err := applyRefs(late, u); err != nil {
+	if _, err := applyRefs(late, nil, u); err != nil {
 		return err
 	}
 	j.Progress = "applied"
@@ -309,7 +465,7 @@ func apply(journalPath string, j journal, u RefUpdater) error {
 // put there is already a recovery, and a ref step's failure is the account
 // repo's own answer; neither is reworded.
 func unfinished(journalPath string, s step, err error) error {
-	if err == nil || s.Kind == stepRef || errors.Is(err, ErrRecovery) {
+	if err == nil || s.Kind == stepRef || s.Kind == stepWorktree || errors.Is(err, ErrRecovery) {
 		return err
 	}
 	return fmt.Errorf("%w: the %s step of the mutation in %s could not be finished at %s: %w",
@@ -327,8 +483,13 @@ func unfinished(journalPath string, s step, err error) error {
 // user put there and nothing holds a copy of it.
 // TestRecoveryRefusesARemovalWhoseTargetChanged is the guard on it.
 func applyStep(s step, u RefUpdater) (bool, error) {
-	if s.Kind == stepRef {
-		return applyRefs([]step{s}, u)
+	switch s.Kind {
+	case stepRef:
+		return applyRefs([]step{s}, nil, u)
+	case stepWorktree:
+		return applyWorktree(s, u)
+	case stepMove:
+		return applyMove(s)
 	}
 	live, err := liveState(s.Path)
 	if err != nil {
@@ -343,7 +504,7 @@ func applyStep(s step, u RefUpdater) (bool, error) {
 		// plan exactly this – two publishes of one path, the second of them
 		// already done – so the leak is an ordinary run's, not a crash's.
 		if s.Staged != "" {
-			os.RemoveAll(s.Staged)
+			_ = RemoveTree(s.Staged)
 		}
 		return false, nil
 	}
@@ -429,7 +590,16 @@ func refPhases(steps []step) (early, late []step) {
 // one, so that a journal of thirty skills is two git processes and one
 // transaction rather than sixty processes and thirty chances to stop
 // halfway.
-func applyRefs(steps []step, u RefUpdater) (bool, error) {
+//
+// later is the steps of the phase that runs after this one. A ref this
+// phase names and a later step moves on is done too once it holds what
+// that later step leaves: a step whose old and new values are the same
+// moves nothing and holds the journal to a ref, so that a removal that
+// deletes a fork's branch last refuses in its first transaction, before
+// any path changed, when git run in the worktree moved the branch, and a
+// recovery that finds the branch already deleted by the removal's last
+// transaction must not refuse the check that came first.
+func applyRefs(steps, later []step, u RefUpdater) (bool, error) {
 	byDir := map[string][]step{}
 	var dirs []string // the repositories in the order the journal names them
 	for _, s := range steps {
@@ -461,9 +631,9 @@ func applyRefs(steps []step, u RefUpdater) (bool, error) {
 		var updates []RefUpdate
 		for _, s := range byDir[dir] {
 			switch have := live[s.Ref]; {
-			case have == s.New: // done already, by this run or an earlier one
+			case have == s.New, movedOnTo(later, s, have): // done already, by this run or an earlier one
 			case have != s.Old:
-				return moved, fmt.Errorf("%w: %s holds neither what the mutation expected nor what it was to become", ErrRecovery, s.Ref)
+				return moved, refusedRef{ref: s.Ref}
 			default:
 				updates = append(updates, RefUpdate{Ref: s.Ref, New: s.New, Old: s.Old})
 			}
@@ -477,6 +647,122 @@ func applyRefs(steps []step, u RefUpdater) (bool, error) {
 		moved = true
 	}
 	return moved, nil
+}
+
+// movedOnTo reports whether a step of later moves the ref of s on to
+// have, which then holds what the journal leaves there.
+func movedOnTo(later []step, s step, have string) bool {
+	for _, l := range later {
+		if l.GitDir == s.GitDir && l.Ref == s.Ref && l.New == have {
+			return true
+		}
+	}
+	return false
+}
+
+// refusedRef is the refusal of a ref that holds neither what the mutation
+// expected nor what it was to become. It is a recovery, and Apply tells it
+// apart from other failures to abandon a journal that changed nothing.
+type refusedRef struct{ ref string }
+
+func (r refusedRef) Error() string {
+	return ErrRecovery.Error() + ": " + r.ref + " holds neither what the mutation expected nor what it was to become"
+}
+
+func (r refusedRef) Unwrap() error { return ErrRecovery }
+
+// applyWorktree brings a worktree step's path to the worktree it records
+// and aligns the worktree's index with its branch tip, which is always done
+// again, since it is cheap, safe to repeat and nothing on disk says whether
+// it ran. What the path holds decides the rest, as for every step:
+//
+//   - the worktree already, on the branch: only the index is aligned;
+//   - nothing, an empty directory, or nothing but a .git file whose
+//     registration is not on the branch: the worktree is added. The .git
+//     file alone is what a worktree add stopped half way leaves, which git
+//     cleans up after a signal it can catch and not after SIGKILL or a
+//     power loss, and adding the worktree clears it with whatever else of
+//     that add the repository kept;
+//   - anything else is not what the mutation expected and refuses.
+//
+// The entries the step names beside the skill directory are then checked
+// out, each one still absent, which is also done again: a run stopped
+// between the add and the checkout leaves them absent for recovery.
+func applyWorktree(s step, u RefUpdater) (bool, error) {
+	w, ok := u.(Worktrees)
+	if !ok {
+		return false, fmt.Errorf("%w: the worktree %s needs git to finish; run a command that uses the account repo", ErrRecovery, s.Path)
+	}
+	branch := strings.TrimPrefix(s.New, worktreeOn)
+	added := false
+	if !WorktreeAt(s.Path, branch) {
+		if !emptyOrAbsent(s.Path) && !HalfMade(s.Path, branch) {
+			return false, fmt.Errorf("%w: %s holds neither what the mutation expected nor what it was to become", ErrRecovery, s.Path)
+		}
+		if err := w.AddWorktree(s.GitDir, s.Path, branch); err != nil {
+			return false, err
+		}
+		added = true
+	}
+	if err := w.ResetIndex(s.Path); err != nil {
+		return added, err
+	}
+	var missing []string
+	for _, name := range s.Beside {
+		if _, err := os.Lstat(filepath.Join(s.Path, name)); errors.Is(err, fs.ErrNotExist) {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) == 0 {
+		return added, nil
+	}
+	return true, w.CheckOut(s.Path, missing)
+}
+
+// applyMove brings a move step's path to the directory it records. The
+// path holding it already is done, and anything at the path but nothing is
+// not what the mutation expected. The source is renamed while it is still
+// a directory, whatever it holds now: a move only takes the user's own
+// directory to the place the journal names, which loses nothing even when
+// it was edited since it was captured, and refusing it would leave the
+// skill half moved with no command to finish it. A source that is gone,
+// or that is a symlink or a file now, is not the directory the journal
+// captured, and is left alone.
+func applyMove(s step) (bool, error) {
+	live, err := liveState(s.Path)
+	switch {
+	case err != nil:
+		return false, err
+	case live == s.New:
+		return false, nil
+	case live != s.Old:
+		return false, fmt.Errorf("%w: %s holds neither what the mutation expected nor what it was to become", ErrRecovery, s.Path)
+	}
+	from, err := liveState(s.From)
+	if err != nil {
+		return false, err
+	}
+	if !strings.HasPrefix(from, dirOf) {
+		return false, fmt.Errorf("%w: %s is no longer a directory since the mutation was to move it to %s", ErrRecovery, s.From, s.Path)
+	}
+	if err := os.Rename(s.From, s.Path); err != nil {
+		return false, err
+	}
+	if err := syncDir(filepath.Dir(s.From)); err != nil {
+		return false, err
+	}
+	return true, syncDir(filepath.Dir(s.Path))
+}
+
+// emptyOrAbsent reports whether path holds nothing: no entry, or an empty
+// directory.
+func emptyOrAbsent(path string) bool {
+	entries, err := os.ReadDir(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		_, lerr := os.Lstat(path)
+		return errors.Is(lerr, fs.ErrNotExist)
+	}
+	return err == nil && len(entries) == 0
 }
 
 // liveState renders what path holds now, in the words the journal records:
@@ -574,6 +860,11 @@ func IsAbsent(state string) bool { return state == absent }
 // IsDir reports whether a state says the path is a real directory.
 func IsDir(state string) bool { return strings.HasPrefix(state, dirOf) }
 
+// DirFingerprint is the fingerprint a state says the path's directory
+// holds, and false when the state is not a real directory's: what a move
+// of that directory expects to find.
+func DirFingerprint(state string) (string, bool) { return strings.CutPrefix(state, dirOf) }
+
 // IsLink reports whether a state says the path is a symlink, wherever it
 // points. What it points at says nothing about whether it may be replaced:
 // a link is the user's own, and where it leads is beside the point.
@@ -655,7 +946,7 @@ func recoverJournals(dir string, u RefUpdater) error {
 		return err
 	}
 	for _, staged := range orphans {
-		os.RemoveAll(staged)
+		_ = RemoveTree(staged)
 	}
 	return nil
 }
@@ -670,7 +961,7 @@ func recoverJournal(dir, journalPath string, u RefUpdater) error {
 		return fmt.Errorf("%w: %s is not a mutation journal", ErrRecovery, journalPath)
 	}
 	early, late := refPhases(j.Steps)
-	resumed, err := applyRefs(early, u)
+	resumed, err := applyRefs(early, late, u)
 	if err != nil {
 		return err
 	}
@@ -737,7 +1028,7 @@ func recoverJournal(dir, journalPath string, u RefUpdater) error {
 	for _, r := range j.Replace {
 		os.Remove(r.Staged) // left behind when the live file already held the new content
 	}
-	moved, err := applyRefs(late, u)
+	moved, err := applyRefs(late, nil, u)
 	if err != nil {
 		return err
 	}
@@ -759,26 +1050,33 @@ func recoverJournal(dir, journalPath string, u RefUpdater) error {
 // after both leaves the path holding neither what the remove expected nor
 // what it was to become: the remove is not out of date, the path has moved
 // on past it.
+//
+// A move is settled the same way by a later move that takes its path on to
+// somewhere else and holds its own new state: a journal that moves one
+// directory twice, out of a place and back into another, must not move it
+// out again once it has arrived.
 func settledLater(steps []step, i int) (bool, error) {
-	later := false
 	for _, s := range steps[i+1:] {
-		if s.Kind != stepRef && s.Path == steps[i].Path {
-			later = true
+		onward := steps[i].Kind == stepMove && s.Kind == stepMove && s.From == steps[i].Path
+		if s.Kind == stepRef || (s.Path != steps[i].Path && !onward) {
+			continue
 		}
-	}
-	if !later {
-		return false, nil
-	}
-	live, err := liveState(steps[i].Path)
-	if err != nil {
-		return false, err
-	}
-	for _, s := range steps[i+1:] {
-		if s.Kind != stepRef && s.Path == steps[i].Path && s.New == live {
-			return true, nil
+		if held, err := holdsNew(s); err != nil || held {
+			return held, err
 		}
 	}
 	return false, nil
+}
+
+// holdsNew reports whether a path step's path already holds what the step
+// leaves there: the worktree it records, for a worktree step, and the live
+// state it records for any other.
+func holdsNew(s step) (bool, error) {
+	if s.Kind == stepWorktree {
+		return WorktreeAt(s.Path, strings.TrimPrefix(s.New, worktreeOn)), nil
+	}
+	live, err := liveState(s.Path)
+	return live == s.New, err
 }
 
 // discardRetained drops the content a removal displaced, once every live
@@ -786,7 +1084,8 @@ func settledLater(steps []step, i int) (bool, error) {
 // the journal captured: locks coordinate agentx commands, not editors, and
 // content that changed under us is kept and named, since it is the user's
 // and nothing else will ever mention it – the sweep of the next install
-// covers staging directories alone, by design.
+// covers staging directories alone, by design. Content that cannot be
+// removed is named the same way.
 func discardRetained(j journal, u RefUpdater) {
 	for _, s := range j.Steps {
 		if s.Kind != stepRemove || s.Retained == "" {
@@ -795,7 +1094,9 @@ func discardRetained(j journal, u RefUpdater) {
 		fp, err := Fingerprint(s.Retained)
 		switch {
 		case err == nil && dirOf+fp == s.Old:
-			os.RemoveAll(s.Retained)
+			if err := RemoveTree(s.Retained); err != nil {
+				warn(u, "what "+s.Path+" held could not be removed and is kept at "+s.Retained+": "+err.Error())
+			}
 		case err == nil:
 			warn(u, "what "+s.Path+" held changed while the change was unfinished and is kept at "+s.Retained)
 		}

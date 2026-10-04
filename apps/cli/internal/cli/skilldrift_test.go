@@ -2,11 +2,14 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
 // driftHarness is a machine with four configurations and one managed skill
@@ -31,7 +34,7 @@ var driftHome = &fixtureHome{
 		s.executable("tools/pdf-tools/bin/run.sh")
 		s.commit("pdf")
 		h.mustRun("source", "add", s.url)
-		h.mustRun("skill", "add", s.url, "--skill", "pdf")
+		h.mustRun("skill", "add", s.url, "--name", "pdf")
 		return nil
 	},
 }
@@ -103,7 +106,7 @@ func TestModifiedIsDecidedByTreeID(t *testing.T) {
 
 // TestARootSkillIsComparedUnderTheRepositoryName installs a skill that is a
 // whole repository: its import tree holds it under the repository's name,
-// and the comparison, the diff and the revert all find it there.
+// and the comparison and the diff both find it there.
 func TestARootSkillIsComparedUnderTheRepositoryName(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -122,8 +125,8 @@ func TestARootSkillIsComparedUnderTheRepositoryName(t *testing.T) {
 	if len(diffs) != 1 || diffs[0]["path"] != "notes.md" || diffs[0]["status"] != "modified" {
 		t.Fatalf("diff events = %v, want notes.md modified", diffs)
 	}
-	h.mustRun("skill", "revert", "solo")
-	equal(t, "state after the revert", h.listed("solo")["state"], stateCurrent)
+	writeFile(t, filepath.Join(h.library, "solo", "notes.md"), "notes\n")
+	equal(t, "state with the edit put back", h.listed("solo")["state"], stateCurrent)
 }
 
 // TestPlacementDriftIsReadAtEachConfigurationsOwnPlace: displaced and
@@ -132,7 +135,7 @@ func TestARootSkillIsComparedUnderTheRepositoryName(t *testing.T) {
 func TestPlacementDriftIsReadAtEachConfigurationsOwnPlace(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	lib := filepath.Join(h.library, "alpha")
 	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
 	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
@@ -186,7 +189,7 @@ func TestPlacementDriftIsReadAtEachConfigurationsOwnPlace(t *testing.T) {
 func TestACopyIsDisplacedByALinkAndNeverMissing(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--copy")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--copy")
 	lib := filepath.Join(h.library, "alpha")
 	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
 	equal(t, "after a copy install", drift(h.listed("alpha")), "")
@@ -221,7 +224,7 @@ func TestASharedPlaceIsJudgedOnce(t *testing.T) {
 		h.build(t, fixture{dirs: []string{".claude", ".zencoder"}})
 		s, _, _ := h.standardSource(true)
 		h.mustRun("source", "add", s.url)
-		h.mustRun(append([]string{"skill", "add", s.url, "--skill", "alpha"}, add...)...)
+		h.mustRun(append([]string{"skill", "add", s.url, "--name", "alpha"}, add...)...)
 		return h, filepath.Join(h.home, ".zencoder", "skills", "alpha")
 	}
 	expect := func(t *testing.T, h *harness, what, want, text string) {
@@ -380,9 +383,9 @@ func words(v any) string {
 
 // TestServeEmitsADriftEventOnEachTransition runs serve while a managed skill
 // goes through every state: edited in an editor, missing a placement,
-// displaced from another, reverted, its source removed and added again,
-// and left without its branch. Each change is followed by one drift event,
-// after the snapshot that shows it and naming that snapshot, with the
+// displaced from another, put back by hand, its source removed and added
+// again, and left without its branch. Each change is followed by one drift
+// event, after the snapshot that shows it and naming that snapshot, with the
 // state and drift before and after; the first snapshot is where every
 // state starts and is followed by none. A source removed and added again
 // changes the settings alone, and serve follows them as it follows the
@@ -390,7 +393,7 @@ func words(v any) string {
 func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	p := h.serve(t, "--json")
 	first := p.next("snapshot")
 	p.send(`{"type":"refresh","request_id":"start"}`)
@@ -436,9 +439,11 @@ func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 	}
 
 	lib := filepath.Join(h.library, "alpha")
+	notes := filepath.Join(lib, "notes.md")
+	installed := readText(t, notes)
 	// An edit saved in an editor reaches serve through the watcher alone:
 	// no refresh is asked for, and the drift follows the snapshot it made.
-	replaceFile(t, filepath.Join(lib, "notes.md"), "edited in an editor\n")
+	replaceFile(t, notes, "edited in an editor\n")
 	snap := p.next("snapshot")
 	edited := p.next("drift")
 	equal(t, "edited: scan_counter", edited["scan_counter"], snap["scan_counter"])
@@ -449,7 +454,7 @@ func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 		"managed", stateModified, "missing", stateModified, "")
 	expect(change("displaced", func() { remove(t, claude); copyTree(t, lib, claude) }),
 		"managed", stateModified, "displaced,missing", stateModified, "missing")
-	expect(change("reverted", func() { h.runBesideServe("skill", "revert", "alpha") }),
+	expect(change("restored", func() { replaceFile(t, notes, installed) }),
 		"managed", stateCurrent, "displaced,missing", stateModified, "displaced,missing")
 	expect(change("source-removed", func() { h.runBesideServe("source", "remove", s.url) }),
 		"managed", stateCurrent, "displaced,missing,source removed", stateCurrent, "displaced,missing")
@@ -458,7 +463,7 @@ func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 
 	// A skill that arrives in the library is no transition, of its own or
 	// of the skill beside it: the snapshot says so itself.
-	h.runBesideServe("skill", "add", s.url, "--skill", "beta")
+	h.runBesideServe("skill", "add", s.url, "--name", "beta")
 	p.send(`{"type":"refresh","request_id":"arrived"}`)
 	var arrived jsonEvent
 	for _, e := range p.until("arrived") {
@@ -525,7 +530,7 @@ func TestAdoptionAndListingAgreeOnModified(t *testing.T) {
 func TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	p := h.serve(t, "--json")
 	p.next("snapshot")
 	p.send(`{"type":"refresh","request_id":"start"}`)
@@ -537,7 +542,7 @@ func TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := "alpha is managed in the account repo but the library holds no skill directory for it; run 'agentx skill add " +
-		shellWord(s.url) + " --skill alpha' to install it again, or 'agentx skill remove alpha' to stop managing it"
+		shellWord(s.url) + " --name alpha' to install it again, or 'agentx skill remove alpha' to stop managing it"
 	p.send(`{"type":"refresh","request_id":"gone"}`)
 	var snap jsonEvent
 	for _, e := range p.until("gone") {
@@ -573,7 +578,7 @@ func TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning(t *testing.T) {
 
 	// The warning is the whole of it: a skill the library holds again is
 	// listed again, and warned about no more.
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	out = h.mustRun("--json", "skill", "list")
 	equal(t, "state after installing it again", h.librarySkill(out.stdout, "alpha")["state"], stateCurrent)
 	equal(t, "warnings after installing it again", strings.Join(warnings(h, out.stderr), "\n"), "")
@@ -586,11 +591,11 @@ func TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning(t *testing.T) {
 func TestAManagedSkillWithoutItsSKILLmdNamesTheDirectory(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	lib := filepath.Join(h.library, "alpha")
 	remove(t, filepath.Join(lib, "SKILL.md"))
 	want := "alpha is managed in the account repo but " + lib + " holds no SKILL.md; move " + lib + " aside, then run 'agentx skill add " +
-		shellWord(s.url) + " --skill alpha' to install it again, or run 'agentx skill remove alpha' to stop managing it"
+		shellWord(s.url) + " --name alpha' to install it again, or run 'agentx skill remove alpha' to stop managing it"
 	equal(t, "skill list's warnings", strings.Join(warnings(h, h.mustRun("--json", "skill", "list").stderr), "\n"), want)
 	out := h.serveOnce("--json")
 	var named []string
@@ -602,7 +607,7 @@ func TestAManagedSkillWithoutItsSKILLmdNamesTheDirectory(t *testing.T) {
 	equal(t, "the snapshot's warnings about alpha", strings.Join(named, "\n"), want)
 
 	remove(t, lib)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	listed := h.mustRun("--json", "skill", "list")
 	equal(t, "state after installing it again", h.librarySkill(listed.stdout, "alpha")["state"], stateCurrent)
 	equal(t, "warnings after installing it again", strings.Join(warnings(h, listed.stderr), "\n"), "")
@@ -644,4 +649,121 @@ func TestPlaceKeyTellsOnePlaceInTwoSpellings(t *testing.T) {
 	equal(t, "a place in no directory, spelled the same", keyAt(gone).is(keyAt(gone)), true)
 	equal(t, "a place in no directory, spelled otherwise", keyAt(gone).is(keyAt(filepath.Join(root, "gone", "skills2", "pdf"))), false)
 	equal(t, "the spelling keyOf resolves", keyOf(spelled).real, place)
+}
+
+// nextOf returns the next stdout event of type typ, passing over every
+// event of another type before it.
+func (p *serveProc) nextOf(typ string) jsonEvent {
+	p.t.Helper()
+	deadline := time.After(serveDeadline)
+	for {
+		select {
+		case line, ok := <-p.lines:
+			if !ok {
+				p.t.Fatalf("serve ended before a %s event", typ)
+			}
+			var e jsonEvent
+			if err := json.Unmarshal([]byte(line), &e); err != nil {
+				p.t.Fatalf("not a JSON event: %q: %v", line, err)
+			}
+			if e["type"] == typ {
+				return e
+			}
+		case <-deadline:
+			p.t.Fatalf("no %s event within %s", typ, serveDeadline)
+		}
+	}
+}
+
+// TestServeReportsForkDrift runs serve over a skill made by skill new and
+// changes it three ways, each reaching serve through the watcher alone: an
+// edit saved through the library makes the fork modified, still not
+// published, skill publish makes it current and published, and, after
+// another edit, a commit made with git in the fork's worktree leaves it
+// modified, since nothing published it, until a publish that has nothing
+// to record but pushes the commit, which moves only the account remote's
+// branch as the account repo tracks it. Serve itself never commits an
+// edit.
+func TestServeReportsForkDrift(t *testing.T) {
+	t.Parallel()
+	h, _ := installHarness(t)
+	h.mustRun("skill", "new", "notes")
+	h.setAccount(newAccountRemote(t, h))
+	p := h.serve(t, "--json")
+	first := p.next("snapshot")["library"].([]any)
+	equal(t, "the fork's first state", first[0].(map[string]any)["state"], stateCurrent)
+	p.send(`{"type":"refresh","request_id":"start"}`)
+	equal(t, "the event after the first snapshot", p.next("refresh_complete")["request_id"], "start")
+	expect := func(what, state, previous string, drift ...string) {
+		t.Helper()
+		e := p.nextOf("drift")
+		got := fmt.Sprint(e["name"], " ", e["kind"], " ", e["state"], " ", e["previous_state"], " [", words(e["drift"]), "]")
+		equal(t, what, got, "notes managed "+state+" "+previous+" ["+strings.Join(drift, " ")+"]")
+	}
+
+	tip := h.ref(lineage.ForkRef("notes"))
+	replaceFile(t, filepath.Join(h.library, "notes", "SKILL.md"), skill("notes", "Edited in an editor"))
+	expect("an edit", stateModified, stateCurrent, driftNotPublished)
+	equal(t, "the branch while serve runs", h.ref(lineage.ForkRef("notes")), tip) // serve never records an edit
+	h.runBesideServe("skill", "publish", "notes")
+	expect("skill publish", stateCurrent, stateModified)
+	replaceFile(t, filepath.Join(h.library, "notes", "SKILL.md"), skill("notes", "Edited again"))
+	expect("another edit", stateModified, stateCurrent)
+	gitIn(t, h, filepath.Join(h.agentx, "worktrees", "notes"),
+		"-c", "user.name=Grace Hopper", "-c", "user.email=grace@example.com", "commit", "-q", "-a", "-m", "By hand")
+	h.runBesideServe("skill", "publish", "notes")
+	expect("a commit made with git, then published", stateCurrent, stateModified)
+	equal(t, "exit", p.close(), 0)
+}
+
+// TestUnpublished is when one of your own skills reads modified: its skill
+// directory differs from its tip, or the tip is not the version skill diff
+// compares with: the merge base of the tip and the account remote's branch
+// as last fetched, which git is asked only when the two tips differ, or,
+// with no remote branch or one that shares no commit, the commit that
+// created it, and the tip itself when its history names none.
+func TestUnpublished(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name                 string
+		holdsTip             bool
+		tip, remote, created string
+		base                 string // what git says: the merge base of the tip and the remote's
+		want, asked          bool
+	}{
+		{"the tip is the remote's", true, "t", "t", "c", "", false, false},
+		{"the tip is behind the remote's", true, "t", "r", "c", "t", false, true},
+		{"the tip is ahead of or diverged from the remote's", true, "t", "r", "c", "b", true, true},
+		{"a remote branch sharing no commit, as created", true, "c", "r", "c", "", false, true},
+		{"a remote branch sharing no commit, a commit since", true, "t", "r", "c", "", true, true},
+		{"no remote branch, as created", true, "c", "", "c", "", false, false},
+		{"no remote branch, a commit since", true, "t", "", "c", "", true, false},
+		{"no remote branch, no creation commit", true, "t", "", "", "", false, false},
+		{"the folder differs", false, "t", "t", "c", "", true, false},
+	} {
+		asked := false
+		got := unpublished(tc.holdsTip, tc.tip, tc.remote, tc.created, func() string { asked = true; return tc.base })
+		equal(t, tc.name, got, tc.want)
+		equal(t, tc.name+": git asked", asked, tc.asked)
+	}
+}
+
+// TestPublishedName: a skill compares with its own name's branch on the
+// account remote, and a renamed one not yet published under its new name
+// with the nearest old name's branch there.
+func TestPublishedName(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, want string
+		renamed    []string
+		tips       map[string]string
+	}{
+		{"its own branch", "new", []string{"old"}, map[string]string{"new": "n", "old": "o"}},
+		{"renamed, not yet published", "old", []string{"old"}, map[string]string{"old": "o"}},
+		{"renamed twice, the nearest", "mid", []string{"mid", "old"}, map[string]string{"mid": "m", "old": "o"}},
+		{"renamed twice, the first name's", "old", []string{"mid", "old"}, map[string]string{"old": "o"}},
+		{"never published", "", []string{"old"}, map[string]string{"other": "x"}},
+	} {
+		equal(t, tc.name, publishedName("new", tc.renamed, tc.tips), tc.want)
+	}
 }

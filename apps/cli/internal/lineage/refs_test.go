@@ -42,3 +42,50 @@ func TestAtCandidateIsAnUpdateOnlyWhenItCanBeRead(t *testing.T) {
 		})
 	}
 }
+
+// TestForkCandidateIsJudgedAgainstTheBase holds ForkCandidate to what a
+// fork's update is: a readable candidate other than the base version its
+// history names, whatever its own tip holds. A fork whose lineage was not
+// read, one made by skill new and one whose history does not say have no base,
+// and so no update.
+func TestForkCandidateIsJudgedAgainstTheBase(t *testing.T) {
+	t.Parallel()
+	base := Import{Source: "https://github.com/example/skills", Path: "skills/pdf", Commit: commitID, Hash: hashID}
+	next := Import{Source: base.Source, Path: base.Path, Commit: "fedcba9876543210fedcba9876543210fedcba98", Hash: hashID}
+	update := &Candidate{Commit: "cand", Tree: "next-tree", Import: next, HasImport: true}
+	fork := func(l *ForkLineage, c *Candidate) Record {
+		return Record{Name: "pdf", Kind: KindFork, Ref: ForkRef("pdf"), Commit: "tip", Tree: "tip-tree", Candidate: c, Fork: l}
+	}
+	read := &ForkLineage{ID: "id", Base: "import", BaseTree: "base-tree", Import: base}
+	for _, c := range []struct {
+		name   string
+		rec    Record
+		update bool
+	}{
+		{name: "a fork whose lineage was not read", rec: fork(nil, update)},
+		{name: "a skill made by skill new", rec: fork(&ForkLineage{ID: "id", NoUpstream: true}, update)},
+		{name: "a history that does not say", rec: fork(&ForkLineage{Problem: "missing"}, update)},
+		{name: "a managed skill", rec: Record{Name: "pdf", Kind: KindManaged, Commit: "import", Import: base, HasImport: true, Candidate: update}},
+		{name: "no candidate", rec: fork(read, nil)},
+		{name: "the base itself", rec: fork(read, &Candidate{Commit: "import", Tree: "base-tree", Import: base, HasImport: true})},
+		{name: "a newer version", rec: fork(read, update), update: true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			got, ok := c.rec.ForkCandidate()
+			if ok != c.update {
+				t.Fatalf("ForkCandidate() is an update: %t, want %t", ok, c.update)
+			}
+			want := Record{}
+			if c.update {
+				want = Record{Name: "pdf", Kind: KindFork, Ref: ForkRef("pdf"), Commit: "cand", Tree: "next-tree", Import: next, HasImport: true}
+			}
+			if got != want {
+				t.Errorf("ForkCandidate() = %+v, want %+v", got, want)
+			}
+			if b, ok := c.rec.ForkBase(); ok && (b.Commit != "import" || b.Tree != "base-tree" || b.Import != base) {
+				t.Errorf("ForkBase() = %+v", b)
+			}
+		})
+	}
+}

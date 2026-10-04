@@ -36,7 +36,7 @@ agentx adopt --all
 ```
 
 ```text
-✓ added https://github.com/anthropics/skills at 3f2a9c1: 12 skills
+✓ added https://github.com/anthropics/skills at 3f2a9c1: 12 skills; write access unknown
 ✓ adopted pdf from https://github.com/anthropics/skills under skills/pdf at 9c1d0ab
   base 4e7b21c: the version the lock file recorded, found in the source; the directory differs from it, so what differs is a local modification
 ```
@@ -76,7 +76,7 @@ agentx skill list
 
 ## What is recorded as the base
 
-The base is the upstream version you installed, not the files on your disk. That distinction is the whole point: with it, an edit of yours stays an edit, and a later update or revert knows what came from upstream and what came from you.
+The base is the upstream version you installed, not the files on your disk. That distinction is the whole point: with it, an edit of yours stays an edit, and a later update knows what came from upstream and what came from you.
 
 agentx establishes the version in one of these ways, and never guesses. Each is tried in turn, and a skill is left unmanaged only when none of them reaches a version:
 
@@ -86,12 +86,12 @@ agentx establishes the version in one of these ways, and never guesses. Each is 
 
 Whichever way finds the version, the commit recorded is the one at which the skill's directory took that content, never the one you happen to have fetched or named with `--base`. An install of that version records the same commit. So two machines that adopt the same install, or one that adopts it and one that installs it, write the same import commit, whenever each of them last fetched the source.
 
-Your directory is never changed, whichever way the version was found. If it differs from the base, agentx says so and `agentx skill list` shows the skill as `modified`. See what differs with [`agentx skill diff <name>`](/cli/skill#see-what-you-changed), and discard it with [`agentx skill revert <name>`](/cli/skill#revert-a-skill).
+Your directory is never changed, whichever way the version was found. If it differs from the base, agentx says so and `agentx skill list` shows the skill as `modified`. See what differs with [`agentx skill diff <name>`](/cli/skill#see-what-you-changed).
 
 ## When the version cannot be established
 
 ```text
-warning: pdf: the version pdf was installed at cannot be established: no version of skills/pdf in https://github.com/anthropics/skills at 3f2a9c1, or in the 500 commits of it behind that, has the folder hash ~/.agents/.skill-lock.json recorded, and the directory is not the version https://github.com/anthropics/skills at 3f2a9c1 holds
+warning: pdf: the version pdf was installed at cannot be established: no version of skills/pdf in https://github.com/anthropics/skills at 3f2a9c1, or in the 500 commits of it behind that, has the folder hash /home/me/.agents/.skill-lock.json recorded, and the directory is not the version https://github.com/anthropics/skills at 3f2a9c1 holds
 error: 1 of 3 skills could not be adopted: ...
 hint: leave it unmanaged, or name the version it came from with 'agentx adopt --skill pdf --base <commit, branch or tag>'
 ```
@@ -127,7 +127,7 @@ agentx source add https://github.com/anthropics/skills#main
 
 ### Leave it unmanaged
 
-If you do not know the version, leave the skill as it is. It stays in your library and keeps its placements, so every client that saw it still does, and `agentx skill list` shows it as `unmanaged`. agentx keeps it in the inventory but never updates or reverts it.
+If you do not know the version, leave the skill as it is. It stays in your library and keeps its placements, so every client that saw it still does, and `agentx skill list` shows it as `unmanaged`. agentx keeps it in the inventory but never updates it.
 
 To adopt it later, name its base:
 
@@ -140,7 +140,7 @@ agentx adopt --skill pdf --base <commit, branch or tag>
 | Reason | What to do |
 |---|---|
 | The library entry is a symlink, or holds no `SKILL.md` | agentx manages real skill directories; leave it as it is |
-| The name is already a fork on this machine | the fork has a history of its own; nothing to adopt |
+| The name is already one of your own skills on this machine | it has a history of its own; nothing to adopt |
 | The entry names no source agentx can fetch | install it with [`agentx skill add`](/cli/skill) from a git source instead |
 | The entry names a path that is not inside a repository, or one agentx cannot record: a path carrying a control character, or opening or closing with a space | fix the entry, or install the skill instead |
 | Its source cannot be fetched | check the URL and your credentials, then run again |

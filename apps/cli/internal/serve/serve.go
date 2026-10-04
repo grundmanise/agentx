@@ -43,12 +43,14 @@ type Options struct {
 	Once  bool                                                                           // scan once, emit and return
 	Stdin io.Reader                                                                      // request lines
 
-	// Check is one update check, run off the loop's goroutine after the
-	// initial snapshot and then every CheckEvery; it returns what reports
-	// its outcome, nil for nothing to report. nil, or a CheckEvery that is
-	// not positive, checks nothing, and so does Once.
-	Check      func(ctx context.Context) (report func())
-	CheckEvery time.Duration
+	// Check is the update check, run once, off the loop's goroutine, after
+	// the initial snapshot; it returns what reports its outcome, nil for
+	// nothing to report. nil checks nothing, and so does Once. It is the
+	// first of the jobs, see Job.
+	Check Job
+	// Jobs are the other jobs serve runs once at start, such as the account
+	// repo's maintenance.
+	Jobs []Job
 
 	Snapshot        func(scan.Snapshot)                                   // a changed whole snapshot, counter set
 	RefreshComplete func(requestID string, counter int, err error)        // the acknowledgement of one refresh request
@@ -56,6 +58,13 @@ type Options struct {
 	BadRequest      func(message, hint string)                            // a stdin line that is not a request
 	Warn            func(message string)
 }
+
+// Job is one job serve runs once, off the loop's goroutine, once the initial
+// snapshot is out; jobs run beside each other. The report a run returns, nil
+// for nothing to report, is made on the loop's goroutine, where every other
+// report is. Under Once no job runs, and Run waits for a run still going,
+// stopped by its context, before it returns.
+type Job func(ctx context.Context) (report func())
 
 const (
 	requestHint = `send one JSON object per line, such as {"type":"refresh","request_id":"<unique id>"}`
@@ -97,36 +106,29 @@ func Run(ctx context.Context, o Options) error {
 	}
 	reqs := readRequests(ctx, o.Stdin, l.answer)
 
-	// The update check runs on a timer of its own, off this goroutine, since
-	// a check waits on the network for as long as its sources take and a
-	// rescan may not wait for it. The first starts once the initial
-	// snapshot is out. A tick that finds the last check still running is
-	// skipped rather than queued, so checks never overlap and never pile
-	// up; the report of one that ended comes back over checked and is made
+	// The update check and every other job run off this goroutine, since a
+	// check waits on the network for as long as its sources take and a
+	// rescan may not wait for it: each once, now that the initial snapshot
+	// is out. The report of one that ended comes back over ended and is made
 	// here, where every other report is.
-	var tickC <-chan time.Time
-	checked := make(chan func())
-	running := false
-	check := func() {
-		if running {
-			return
+	jobs := o.Jobs
+	if o.Check != nil {
+		jobs = append([]Job{o.Check}, jobs...)
+	}
+	ended := make(chan func())
+	for _, job := range jobs {
+		if job == nil {
+			continue
 		}
-		running = true
 		checking.Add(1)
 		go func() {
 			defer checking.Done()
-			report := o.Check(ctx)
+			report := job(ctx)
 			select {
-			case checked <- report:
+			case ended <- report:
 			case <-ctx.Done():
 			}
 		}()
-	}
-	if o.Check != nil && o.CheckEvery > 0 {
-		ticker := time.NewTicker(o.CheckEvery)
-		defer ticker.Stop()
-		tickC = ticker.C
-		check()
 	}
 
 	// A change starts the debounce timer and, unless one is running, the
@@ -182,10 +184,7 @@ func Run(ctx context.Context, o Options) error {
 			if err := rescan(); err != nil {
 				return err
 			}
-		case <-tickC:
-			check()
-		case report := <-checked:
-			running = false
+		case report := <-ended:
 			if report != nil {
 				report()
 			}

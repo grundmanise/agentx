@@ -2,9 +2,12 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
@@ -14,7 +17,7 @@ import (
 )
 
 // Every comparison of a skill directory with a version goes through this
-// file, whichever command makes it: drift, diff, revert, adoption and the
+// file, whichever command makes it: drift, diff, update, adoption and the
 // copy step. A skill directory is a git work tree: git runs with the
 // account repo as its git directory, the skill directory as its work tree
 // and a throwaway index loaded from the version, then add -A and
@@ -104,10 +107,16 @@ func (inv *invocation) judgeDir(ctx context.Context, gitDir, dir string, t treei
 // openWorkTree opens dir as a work tree of the account repo, with
 // info/exclude brought in line with ignore_system_files first.
 func (inv *invocation) openWorkTree(ctx context.Context, gitDir, dir string) (*gitx.WorkTree, error) {
+	return inv.openWorkTreeWithin(ctx, gitDir, dir, dir)
+}
+
+// openWorkTreeWithin is openWorkTree of top with git running in dir, a
+// directory inside it, see gitx.NewWorkTreeWithin.
+func (inv *invocation) openWorkTreeWithin(ctx context.Context, gitDir, top, dir string) (*gitx.WorkTree, error) {
 	if err := home.SyncExclude(gitDir, inv.systemFilesIgnored()); err != nil {
 		return nil, err
 	}
-	return inv.git.NewWorkTree(gitDir, dir, inv.excludesFile(ctx, gitDir))
+	return inv.git.NewWorkTreeWithin(gitDir, top, dir, inv.excludesFile(ctx, gitDir))
 }
 
 // writeWorkTree loads v into the work tree's index, adds the directory to
@@ -140,34 +149,48 @@ func (inv *invocation) excludesFile(ctx context.Context, gitDir string) string {
 // directory holds its base version. It never fails: a directory that
 // cannot be read, or that git cannot compare, is modified. Under serve,
 // git's verdict is kept until the directory's tree id, the version or the
-// setting changes.
+// setting changes, see verdict.
 func (inv *invocation) holdsBase(ctx context.Context, lib scan.LibrarySkill, rec lineage.Record) bool {
 	tree, err := treeid.Read(lib.ResolvedPath)
 	if err != nil || len(tree.Unrecordable) > 0 {
 		return false
 	}
 	v := baseVersion(rec)
+	return inv.verdict(lib.Name, "its base version", tree, v, func() (bool, error) {
+		j, err := inv.judgeDir(ctx, gitx.AccountRepoPath(inv.dirs.Home), lib.ResolvedPath, tree, v, false)
+		return j.holds, err
+	})
+}
+
+// verdict is whether the directory of the library skill called name, read
+// as tree, holds v, the version drift compares it with: by the fast path,
+// then by git's verdict, which judge reaches. A judge that fails is a
+// directory that does not hold it, said at debug level, against naming the
+// version. Serve keeps git's verdict by skill, with the tree id, the
+// version and the setting it was reached on, so a rescan asks git again
+// only about a directory, or a version, that changed since.
+func (inv *invocation) verdict(name, against string, tree treeid.Tree, v version, judge func() (bool, error)) bool {
 	ignoreSystem := inv.systemFilesIgnored()
 	if fastHolds(tree, ignoreSystem, v) {
 		return true
 	}
 	key := verdictKey{id: tree.ID, load: v.load, ignoreSystem: ignoreSystem}
-	if kept, ok := inv.verdicts[lib.Name]; ok && kept.key == key {
+	if kept, ok := inv.verdicts[name]; ok && kept.key == key {
 		return kept.holds
 	}
-	j, err := inv.judgeDir(ctx, gitx.AccountRepoPath(inv.dirs.Home), lib.ResolvedPath, tree, v, false)
+	holds, err := judge()
 	if err != nil {
-		inv.out.debugf("cannot compare %s with its base version: %v", lib.Name, err)
+		inv.out.debugf("cannot compare %s with %s: %v", name, against, err)
 		return false
 	}
 	if inv.verdicts != nil {
-		inv.verdicts[lib.Name] = keptVerdict{key: key, holds: j.holds}
+		inv.verdicts[name] = keptVerdict{key: key, holds: holds}
 	}
-	return j.holds
+	return holds
 }
 
-// keptVerdict is git's verdict on one managed skill, kept by serve, and
-// verdictKey what it was reached on.
+// keptVerdict is git's verdict on one managed skill or fork, kept by
+// serve, and verdictKey what it was reached on.
 type keptVerdict struct {
 	key   verdictKey
 	holds bool
@@ -224,20 +247,78 @@ func stageVersion(dest string, lay func(dest string) error, v version, from stri
 
 // carryIgnored copies each of paths, files git ignores in the directory
 // from, into to, as git checkout keeps the ignored files of a work tree: a
-// file with its bytes and permission bits, a symlink with its target. A
-// path the new content in to holds already is the new content's, and is
-// not carried.
+// file with its bytes and permission bits, a symlink with its target, and a
+// directory, as git lists a repository nested in the directory that an
+// ignore rule covers, with everything in it. A path the new content in to
+// holds already is the new content's, and is not carried, and so is a path
+// under a file or a symlink the new content holds where the ignored file's
+// directory was: git checkout drops such a file, and carrying it would write
+// through the link, perhaps outside the skill. A directory the new content
+// holds a directory at too is not the new content's whole: each entry in it
+// is carried by the same rule, so only a file the new content holds at the
+// same path replaces the local one.
 func carryIgnored(from, to string, paths []string) error {
 	for _, p := range paths {
-		dst := filepath.Join(to, filepath.FromSlash(p))
-		if _, err := os.Lstat(dst); err == nil {
-			continue
-		}
-		if err := carryFile(filepath.Join(from, filepath.FromSlash(p)), dst); err != nil {
+		if err := carryEntry(from, to, strings.TrimSuffix(p, "/")); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// carryEntry carries the slash-separated path p from from into to by
+// carryIgnored's rule.
+func carryEntry(from, to, p string) error {
+	src := filepath.Join(from, filepath.FromSlash(p))
+	held, dir, err := heldByNewContent(to, p)
+	if err != nil {
+		return err
+	}
+	if !held {
+		return carryFile(src, filepath.Join(to, filepath.FromSlash(p)))
+	}
+	if !dir {
+		return nil
+	}
+	info, err := os.Lstat(src)
+	if err != nil || !info.IsDir() {
+		return err // a file where the new content holds a directory is dropped
+	}
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if err := carryEntry(from, to, p+"/"+e.Name()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// heldByNewContent reports whether the content laid out in to owns the
+// slash-separated path p: it holds p itself, or holds something other than
+// a directory at one of p's parents. dir says that what it holds at p is a
+// directory, reached through directories only. Each component is read
+// without following a link, so a symlink in the new content is never
+// resolved.
+func heldByNewContent(to, p string) (held, dir bool, err error) {
+	parts := strings.Split(p, "/")
+	at := to
+	for i, part := range parts {
+		at = filepath.Join(at, part)
+		info, err := os.Lstat(at)
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, false, nil // the rest is the carry's to make
+		}
+		if err != nil {
+			return false, false, err
+		}
+		if i == len(parts)-1 || !info.IsDir() {
+			return true, i == len(parts)-1 && info.IsDir(), nil
+		}
+	}
+	return false, false, nil
 }
 
 func carryFile(src, dst string) error {
@@ -247,6 +328,24 @@ func carryFile(src, dst string) error {
 	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
+	}
+	if info.IsDir() {
+		entries, err := os.ReadDir(src)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(dst, 0o755); err != nil { // writable until it is filled
+			return err
+		}
+		for _, e := range entries {
+			if err := carryFile(filepath.Join(src, e.Name()), filepath.Join(dst, e.Name())); err != nil {
+				return err
+			}
+		}
+		return os.Chmod(dst, info.Mode().Perm())
+	}
+	if !info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0 {
+		return fmt.Errorf("%s is neither a file, a directory nor a symlink, and cannot be carried over", src)
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
 		target, err := os.Readlink(src)

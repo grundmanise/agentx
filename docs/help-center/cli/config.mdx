@@ -14,7 +14,6 @@ agentx config list
 ```text
 schema_version           1
 label                    my-laptop
-auto_push                false
 accept_operations        false
 ignore_system_files      true
 disabled_configurations  (none)
@@ -28,9 +27,8 @@ An empty setting shows as `(none)`. In a terminal the keys are cyan and `true` i
 |---|---|
 | `schema_version` | The settings file format version. |
 | `label` | The machine label. Until you set it, it is the hostname. |
-| `auto_push` | Whether published forks are pushed automatically. |
 | `accept_operations` | Whether the machine executes operations queued for it. |
-| `ignore_system_files` | Whether the files your operating system or editor leaves in a skill, such as `.DS_Store`, `Thumbs.db`, `*.swp` and `*~` backups, are ignored when agentx compares, diffs and reverts it. On by default. See [Files that do not count](/cli/skill#files-that-do-not-count). |
+| `ignore_system_files` | Whether the files your operating system or editor leaves in a skill, such as `.DS_Store`, `Thumbs.db`, `*.swp` and `*~` backups, are ignored when agentx compares, diffs and updates it, and never committed in a skill you created. On by default. See [Files that do not count](/cli/skill#files-that-do-not-count) and [Files that stay local](/cli/fork#files-that-stay-local). |
 | `disabled_configurations` | The agent configurations left out of placements by default. Every other detected configuration is enabled. |
 | `sources` | The sources skills are installed from, managed with [`agentx source`](/cli/source). |
 | `copy_mode` | The skills placed as a copy instead of a symlink, per configuration. Written by `agentx skill add --copy` and `agentx skill place --copy`, and cleared by `agentx skill remove`. |
@@ -47,16 +45,16 @@ The command prints the bare value, so a script can use it directly. An unknown k
 
 ```sh
 agentx config set label "work laptop"
-agentx config set auto_push true
+agentx config set ignore_system_files false
 ```
 
 ```text
 ✓ label is now work laptop
 ```
 
-You can set `label`, `auto_push`, `accept_operations` and `ignore_system_files`:
+You can set `label`, `accept_operations` and `ignore_system_files`:
 
-- `auto_push`, `accept_operations` and `ignore_system_files` take `true` or `false`.
+- `accept_operations` and `ignore_system_files` take `true` or `false`.
 - A label is one non-empty line of at most 256 bytes with no control character in it.
 
 Any other value, an unknown key, or a key this command cannot change exits with code 1.
@@ -86,8 +84,8 @@ agentx config enable cursor --place-all
 ```text
 ✓ cursor is now enabled
 ✓ placed 2 skills in cursor
-  pdf   symlink  ~/.cursor/skills/pdf -> ~/.agents/skills/pdf
-  xlsx  symlink  ~/.cursor/skills/xlsx -> ~/.agents/skills/xlsx
+  pdf   symlink  /home/me/.cursor/skills/pdf -> /home/me/.agents/skills/pdf
+  xlsx  symlink  /home/me/.cursor/skills/xlsx -> /home/me/.agents/skills/xlsx
 ```
 
 Each skill placed gets one row: its placement in Cursor's own skills directory. A skill Claude Code also holds is one row too, although Cursor reads Claude Code's skills directory as well.
@@ -99,10 +97,10 @@ The setting and every placement it implies are one change, written down before a
 A placement agentx cannot make does not fail the run. Something you put there yourself may already be at one of the paths, or agentx may be unable to write the client's skills directory. Either way, agentx leaves that path alone and names it, places the rest, and still succeeds. The client can then end up enabled with only part of the library in it:
 
 ```text
-warning: ~/.cursor/skills/pdf is not this skill and was left as it is; no placement was made for cursor
+warning: /home/me/.cursor/skills/pdf is not this skill and was left as it is; no placement was made for cursor
 ✓ cursor is now enabled
 ✓ placed 1 skill in cursor, 1 placement skipped
-  xlsx  symlink  ~/.cursor/skills/xlsx -> ~/.agents/skills/xlsx
+  xlsx  symlink  /home/me/.cursor/skills/xlsx -> /home/me/.agents/skills/xlsx
 ```
 
 Here Cursor does not see pdf at all, so pdf has no row. If agentx left Cursor's path alone and Cursor still sees the skill through another client's skills directory, as it sees a skill Claude Code holds, the skill's row shows that path instead, so the output still tells you Cursor has the skill.
@@ -110,11 +108,11 @@ Here Cursor does not see pdf at all, so pdf has no row. If agentx left Cursor's 
 A copy agentx keeps for the client is skipped the same way when it is different from the library, for instance because you edited it. It stays exactly as it is, and the line under the warning names the commands that replace it with the library version:
 
 ```text
-warning: cursor's copy of pdf is different from the library, so it was left unchanged (~/.cursor/skills/pdf)
+warning: cursor's copy of pdf is different from the library, so it was left unchanged (/home/me/.cursor/skills/pdf)
   to replace it with the library version: agentx skill remove pdf --from cursor && agentx skill place pdf --to cursor --copy
 ✓ cursor is now enabled
 ✓ placed 1 skill in cursor, 1 placement skipped
-  xlsx  symlink  ~/.cursor/skills/xlsx -> ~/.agents/skills/xlsx
+  xlsx  symlink  /home/me/.cursor/skills/xlsx -> /home/me/.agents/skills/xlsx
 ```
 
 The kept copy is not the library's pdf, so pdf has no row here either. If Cursor also sees pdf through another client's skills directory, pdf's row shows that path, as above.
@@ -128,10 +126,12 @@ A client that reads the library directly, such as Codex, already sees every libr
 ```text
 ✓ codex is now enabled
 ✓ codex reads the library and already sees 2 skills; nothing was placed
-  pdf   library  ~/.agents/skills/pdf
-  xlsx  library  ~/.agents/skills/xlsx
+  pdf   library  /home/me/.agents/skills/pdf
+  xlsx  library  /home/me/.agents/skills/xlsx
 ```
 
 ## Fix a broken file
 
 If `settings.json` cannot be parsed, every `config` command exits with code 10 and names the file. Fix the JSON, or delete the file to start again from defaults.
+
+If a later version of agentx wrote `settings.json`, every command that reads it exits with code 10 and says which schema version the file has. Upgrade agentx to that version instead of deleting the file: deleting it loses the sources and settings the later version keeps there. `agentx doctor` fails its `settings` row with the same hint.

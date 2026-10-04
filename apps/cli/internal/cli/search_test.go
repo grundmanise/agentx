@@ -147,7 +147,7 @@ func TestServeAnswersSearchWhileAScanWaits(t *testing.T) {
 	// The check serve runs at launch fetches both sources and ends in one
 	// write, whose rescan rebuilds the index; once a refresh asked for after
 	// that write is acknowledged, serve has nothing left to run git for.
-	h.awaitWrites(t, version, 1)
+	h.awaitWrite(t, version)
 	p.send(`{"type":"refresh","request_id":"settled"}`)
 	p.until("settled")
 
@@ -275,7 +275,7 @@ func TestSourceRefNeverShowsAnIncompleteFetch(t *testing.T) {
 	}
 	// The check serve runs at launch fetches the source too; the gate is for
 	// the add below alone, so it is armed once that check has written.
-	h.awaitWrites(t, before, 1)
+	h.awaitWrite(t, before)
 
 	// A second commit, fetched with the blob batch held open.
 	s.skill("release", "release", "Cut a release commit", nil)

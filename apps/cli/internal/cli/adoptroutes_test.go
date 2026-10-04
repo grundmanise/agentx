@@ -150,7 +150,7 @@ func TestAdoptRecordsTheCommitAnInstallRecords(t *testing.T) {
 	if out := install.run("source", "add", s.url+"#"+c2); out.exit != 0 {
 		t.Fatalf("source add: exit %d\n%s", out.exit, out.stderr)
 	}
-	if out := install.run("skill", "add", s.url+"#"+c2, "--skill", "alpha"); out.exit != 0 {
+	if out := install.run("skill", "add", s.url+"#"+c2, "--name", "alpha"); out.exit != 0 {
 		t.Fatalf("skill add: exit %d\n%s", out.exit, out.stderr)
 	}
 	want := install.accountGit("rev-parse", "refs/heads/managed/alpha")
@@ -234,7 +234,7 @@ func TestAdoptRecordsABackMergedVersionWhereAnInstallDoes(t *testing.T) {
 
 	install := newHarness(t)
 	install.build(t, fixture{dirs: []string{".claude"}})
-	equal(t, "exit of skill add", install.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "exit of skill add", install.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 	contains(t, "the import commit an install writes", install.accountGit("cat-file", "commit", "refs/heads/managed/alpha"), "Agentx-Upstream-Commit: "+change)
 	equal(t, "the import commit an install writes", install.accountGit("rev-parse", "refs/heads/managed/alpha"), adopted)
 }

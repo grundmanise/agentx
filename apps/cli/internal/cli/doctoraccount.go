@@ -2,10 +2,12 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
@@ -31,31 +33,46 @@ import (
 // run killed outright, and a take-back an unrecoverable journal refused.
 // The hint gives the two repairs the add itself gives when its take-back
 // fails, in the same words, so the user hears one story whichever of the
-// two told it. The other direction, an entry whose remote is gone, needs
-// no row: every command that uses the remote names it as missing, and
-// `source fetch` writes it back.
+// two told it; a remote of fork branches is told apart, see
+// sourceRemotesHint. The other direction, an entry whose remote is gone,
+// needs no row: every command that uses the remote names it as missing,
+// and `source fetch` writes it back.
 func (d *doctor) sourceRemotes(ctx context.Context, gitDir string) {
 	settings, err := d.inv.loadSettings()
 	if err != nil {
 		// The settings row above already said what is wrong with the file;
 		// this one says only that it could not be compared with, and its
-		// hint names that file: the account repo itself opened fine.
-		d.row("source_remotes", "fail", "cannot read the settings to compare the remotes with",
-			"fix "+home.SettingsPath(d.inv.dirs.Home)+", then run doctor again")
+		// hint names that file: the account repo itself opened fine. A file
+		// a later agentx wrote is not to be fixed but read by that version,
+		// so the hint then repeats the settings row's.
+		hint := "fix " + home.SettingsPath(d.inv.dirs.Home) + ", then run doctor again"
+		var newer *home.NewerSettingsError
+		if errors.As(err, &newer) {
+			hint = failureOf(err).hint
+		}
+		d.row("source_remotes", "fail", "cannot read the settings to compare the remotes with", hint)
 		return
 	}
 	named := make(map[string]bool, len(settings.Sources))
+	account := ""
 	for _, s := range settings.Sources {
 		named[source.ID(s.URL)] = true
+		if s.Account {
+			account = s.URL
+		}
 	}
 	remotes := source.Remotes(ctx, d.inv.git, gitDir)
-	var orphans []string
+	var orphans, forks []string
 	for id, remote := range remotes {
-		if !named[id] {
+		switch {
+		case named[id]:
+		case remote.Refspec == gitx.ForkRefspec(source.RemoteName(id)):
+			forks = append(forks, remoteSubject(id, remote.URL))
+		default:
 			orphans = append(orphans, remoteSubject(id, remote.URL))
 		}
 	}
-	if len(orphans) == 0 {
+	if len(orphans)+len(forks) == 0 {
 		detail := "no source remote"
 		if len(remotes) > 0 {
 			detail = plural(len(remotes), "source remote") + " the settings name"
@@ -64,9 +81,43 @@ func (d *doctor) sourceRemotes(ctx context.Context, gitDir string) {
 		return
 	}
 	sort.Strings(orphans)
-	d.row("source_remotes", "warn",
-		plural(len(orphans), "source remote")+" the settings do not name: "+strings.Join(orphans, ", "),
-		"for each, run 'agentx source add <url>' to add the source and take the remote with it, or 'agentx source remove <id>' to clear it")
+	sort.Strings(forks)
+	all := append(append([]string{}, orphans...), forks...)
+	hint := sourceRemotesHint(orphans, forks, account)
+	d.row("source_remotes", "warn", plural(len(all), "source remote")+" the settings do not name: "+strings.Join(all, ", "), hint)
+}
+
+// sourceRemotesHint is the source_remotes hint for the orphan remotes
+// orphans and the orphan remotes of fork branches forks, account being the
+// URL of the account remote the settings hold, "" when none. A remote of
+// fork branches added back as a shared source would have its forks fetched
+// without blobs. With no account remote set, it is one the settings lost,
+// and only one remote can be made the account remote again. With one set,
+// it is what a replaced account remote left, and adding it back with
+// --account would replace the account remote the user chose, so it is
+// only cleared.
+func sourceRemotesHint(orphans, forks []string, account string) string {
+	plain := "run 'agentx source add <url>' to add the source and take the remote with it, or 'agentx source remove <id>' to clear it"
+	if len(forks) == 0 {
+		return "for each, " + plain
+	}
+	var held string
+	switch {
+	case account != "":
+		held = "run 'agentx source remove <id>' to clear it, since 'agentx source add <url> --account' would replace the account remote " + account
+	case len(forks) == 1:
+		held = "run 'agentx source add <url> --account' to make it the account remote again and take the remote with it, or 'agentx source remove <id>' to clear it"
+	default:
+		held = "run 'agentx source add <url> --account' for the one to make the account remote again, and 'agentx source remove <id>' for the rest"
+	}
+	if len(orphans) == 0 && (len(forks) == 1 || account != "") {
+		return "for each, " + held
+	}
+	hint := "for " + strings.Join(forks, ", ") + ", which held your skills, " + held
+	if len(orphans) > 0 {
+		hint += "; for each remote that held none, " + plain
+	}
+	return hint
 }
 
 // remoteSubject is what a row calls a remote: the canonical URL the remote

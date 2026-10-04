@@ -698,7 +698,7 @@ func TestScanSpawnBudget(t *testing.T) {
 func TestScanListsTheLibrary(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--skill", "beta")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--name", "beta")
 	byHand := filepath.Join(h.library, "mine")
 	if err := os.MkdirAll(byHand, 0o755); err != nil {
 		t.Fatal(err)
@@ -760,7 +760,7 @@ const accountRepoWarning = "; the library is not listed, run 'agentx doctor' and
 func TestScanListsNoLibraryWhenTheAccountRepoCannotBeRead(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	account := gitx.AccountRepoPath(h.agentx)
 	writeFile(t, filepath.Join(account, "HEAD"), "garbage\n")
 
@@ -802,7 +802,7 @@ func TestScanListsNoLibraryWhenTheAccountRepoCannotBeRead(t *testing.T) {
 func TestScanWarnsOfABranchDoctorDoesNotRead(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha")
+	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	account := gitx.AccountRepoPath(h.agentx)
 	tip := strings.TrimSpace(h.accountGit("rev-parse", "refs/heads/managed/alpha"))
 	object := filepath.Join(account, "objects", tip[:2], tip[2:])

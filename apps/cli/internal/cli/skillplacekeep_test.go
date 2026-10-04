@@ -30,7 +30,7 @@ var everywhereHome = &fixtureHome{
 	dirs:   installHome.dirs,
 	build: func(h *harness, s *sourceRepo) []string {
 		installHome.build(h, s)
-		h.mustRun("skill", "add", s.url, "--skill", "alpha")
+		h.mustRun("skill", "add", s.url, "--name", "alpha")
 		return nil
 	},
 }
@@ -109,7 +109,7 @@ func placesNothing(t *testing.T, h *harness, args ...string) string {
 func TestSkillPlacePutsBackMissingPlacements(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code", "--to", "cursor", "--to", "windsurf")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code", "--to", "cursor", "--to", "windsurf")
 	h.mustRun("skill", "place", "alpha", "--to", "github-copilot", "--copy")
 	lib := filepath.Join(h.library, "alpha")
 	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
@@ -344,7 +344,7 @@ func TestSkillPlaceForceWithCopyWritesACopy(t *testing.T) {
 func TestSkillPlaceReplacesTheLibrarysLinkWithACopy(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--copy")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--copy")
 	lib := filepath.Join(h.library, "alpha")
 	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
 	remove(t, cursor)
@@ -370,7 +370,7 @@ func TestSkillPlaceReplacesTheLibrarysLinkWithACopy(t *testing.T) {
 func TestSkillPlaceLeavesWhatIsNotDrift(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code", "--to", "windsurf", "--to", "github-copilot")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code", "--to", "windsurf", "--to", "github-copilot")
 	h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
 	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
 	cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
@@ -433,7 +433,7 @@ func TestSkillPlaceLeavesTheLibraryAClientReadsThroughALink(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			h, s := placementHarness(t)
-			h.mustRun("skill", "add", s.url, "--skill", "alpha")
+			h.mustRun("skill", "add", s.url, "--name", "alpha")
 			lib := filepath.Join(h.library, "alpha")
 			skills := filepath.Join(h.home, ".claude", "skills")
 			cursor := filepath.Join(h.home, ".cursor", "skills", "alpha")
@@ -847,9 +847,10 @@ func TestSkillPlaceRefusesAPlaceInsideAnother(t *testing.T) {
 // and it may lead into, through or above what skill place removes. Rather
 // than follow it, every run that removes a displaced directory refuses
 // while the library directory holds a symlink at any depth, with or
-// without --force, names the link, points at diff and revert, and changes
-// nothing. A run that only writes placements, a missing one or a copy
-// where the library's symlink stands, removes no directory and goes ahead.
+// without --force, names the link, points at diff and at adding the skill
+// again, and changes nothing. A run that only writes placements, a missing
+// one or a copy where the library's symlink stands, removes no directory
+// and goes ahead.
 // Where else the link may be and lead is judged in TestPlacePlanRefusals.
 func TestSkillPlaceRefusesALibraryDirectoryHoldingASymlink(t *testing.T) {
 	t.Parallel()
@@ -861,7 +862,7 @@ func TestSkillPlaceRefusesALibraryDirectoryHoldingASymlink(t *testing.T) {
 		swapForLink(t, scripts, filepath.Join(claude, "scripts"))
 		refusesUntouched(t, h, everyFlag,
 			"the library directory "+lib+" holds the symlink "+scripts+", which no version agentx installs holds, so nothing was placed",
-			"replace the link with the files it leads to, or see what changed with 'agentx skill diff alpha' and go back to the installed version with 'agentx skill revert alpha', then run 'agentx skill place alpha' again")
+			"replace the link with the files it leads to, or see what changed with 'agentx skill diff alpha' and get the original back by removing the skill and adding it again, then run 'agentx skill place alpha' again")
 		cleanAfterPlace(t, h, h.library, filepath.Dir(claude))
 	})
 
@@ -1103,7 +1104,7 @@ func TestSkillPlaceJudgesASharedPlaceOnce(t *testing.T) {
 	h.build(t, fixture{dirs: []string{".claude", ".zencoder"}})
 	s, _, _ := h.standardSource(true)
 	h.mustRun("source", "add", s.url)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "zenflow", "--copy")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "zenflow", "--copy")
 	lib := filepath.Join(h.library, "alpha")
 	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
 	shared := filepath.Join(h.home, ".zencoder", "skills", "alpha")
@@ -1211,15 +1212,20 @@ func TestSkillPlaceSkipsAPlaceItCannotWrite(t *testing.T) {
 	cleanAfterPlace(t, h, h.library, skills, filepath.Dir(cursor))
 }
 
-// TestSkillPlaceForceOnWhatItCannotJudge: a fork is placed as it always
-// was, a directory that differs left in place and counted as skipped, and
-// --force on it stops with exit 6 and changes nothing. A skill agentx does
-// not manage is judged like a managed one: a directory that differs stops
-// the run until --force discards it. A managed skill whose library
-// directory is gone has nothing to place, and one whose import branch
-// records no version agentx can read is placed all the same, since --force
-// judges nothing against the base. A name the library does not hold is
-// not found, --force or not, see TestSkillPlaceRefusesWhatItCannotFind.
+// TestSkillPlaceForceOnWhatItCannotJudge: a fork whose library entry is a
+// directory of its own, as a fork's branch written by hand over an
+// installed skill leaves it, is an adopt candidate: skill place refuses it
+// and changes nothing, naming --force, which moves the directory into the
+// fork's worktree, its edit kept as an uncommitted edit of the fork, and
+// places the fork as it always was, a directory that differs left in place
+// and counted as skipped. Once nothing is in the way, --force has nothing
+// to adopt and stops with exit 6. A skill agentx does not manage is judged
+// like a managed one: a directory that differs stops the run until --force
+// discards it. A managed skill whose library directory is gone has nothing
+// to place, and one whose import branch records no version agentx can read
+// is placed all the same, since --force judges nothing against the base. A
+// name the library does not hold is not found, --force or not, see
+// TestSkillPlaceRefusesWhatItCannotFind.
 func TestSkillPlaceForceOnWhatItCannotJudge(t *testing.T) {
 	t.Parallel()
 	t.Run("a fork", func(t *testing.T) {
@@ -1230,22 +1236,37 @@ func TestSkillPlaceForceOnWhatItCannotJudge(t *testing.T) {
 		h.accountGit("update-ref", "-d", "refs/heads/managed/alpha")
 		remove(t, cursor)
 		displace(t, lib, claude, true)
+		writeFile(t, filepath.Join(lib, "notes.md"), "alpha notes, edited in the library\n")
 		kept := libraryTree(t, claude)
 		version := mutationVersion(t, h)
-		out := h.run("--json", "skill", "place", "alpha", "--force")
+		out := h.run("--json", "skill", "place", "alpha")
 		equal(t, "exit", out.exit, 6)
 		e := h.one(out.stdout, "error")
-		equal(t, "message", e["message"], "alpha is a fork on this machine, which --force does not apply to")
-		equal(t, "hint", e["hint"], "place it without --force with 'agentx skill place alpha'")
+		equal(t, "message", e["message"], lib+" is in the way of alpha's library symlink, so nothing was placed")
+		contains(t, "hint", e["hint"].(string), "'agentx skill place alpha --force' to adopt it")
 		nothingAt(t, "cursor's placement", cursor)
 		equal(t, "no mutation", mutationVersion(t, h), version)
 
-		out = h.mustRun("--json", "skill", "place", "alpha")
+		out = h.mustRun("--json", "skill", "place", "alpha", "--force")
+		root := filepath.Join(h.agentx, "worktrees", "alpha")
+		real, err := filepath.EvalSymlinks(lib)
+		if err != nil || real != filepath.Join(root, "alpha") {
+			t.Errorf("the library entry leads to %q, %v, not into the worktree", real, err)
+		}
+		equal(t, "git status in the worktree", gitIn(t, h, root, "status", "--porcelain"), " M alpha/notes.md\n")
 		sameTree(t, "claude's directory", libraryTree(t, claude), kept)
 		linksToLibrary(t, "cursor's placement", cursor, lib)
-		contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), ", 1 placement skipped")
+		summary := h.one(out.stdout, "result")["summary"].(string)
+		contains(t, "summary", summary, ", 1 placement skipped")
+		contains(t, "summary", summary, "; moved "+lib+" into alpha's worktree; its content is the skill's unpublished edits")
 		equal(t, "the fork", h.accountGit("rev-parse", "refs/heads/skills/alpha"), commit)
-		cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor))
+		cleanAfterPlace(t, h, h.library, filepath.Dir(claude), filepath.Dir(cursor), filepath.Dir(root))
+
+		out = h.run("--json", "skill", "place", "alpha", "--force")
+		equal(t, "exit", out.exit, 6)
+		e = h.one(out.stdout, "error")
+		equal(t, "message", e["message"], "alpha has nothing in the way of its worktree or its library symlink, so --force has nothing to adopt")
+		equal(t, "hint", e["hint"], "place it without --force with 'agentx skill place alpha'")
 	})
 
 	t.Run("an unmanaged skill", func(t *testing.T) {
@@ -1279,13 +1300,13 @@ func TestSkillPlaceForceOnWhatItCannotJudge(t *testing.T) {
 	t.Run("a managed skill whose library directory is gone", func(t *testing.T) {
 		t.Parallel()
 		h, s := installHarness(t)
-		h.mustRun("skill", "add", s.url, "--skill", "alpha")
+		h.mustRun("skill", "add", s.url, "--name", "alpha")
 		remove(t, filepath.Join(h.library, "alpha"))
 		out := h.run("--json", "skill", "place", "alpha")
 		equal(t, "exit", out.exit, 6)
 		e := h.one(out.stdout, "error")
 		equal(t, "message", e["message"], "alpha is managed in the account repo but the library holds no skill directory for it, so there is no skill to place")
-		equal(t, "hint", e["hint"], "run 'agentx skill add "+shellWord(s.url)+" --skill alpha' to install it again, or 'agentx skill remove alpha' to stop managing it")
+		equal(t, "hint", e["hint"], "run 'agentx skill add "+shellWord(s.url)+" --name alpha' to install it again, or 'agentx skill remove alpha' to stop managing it")
 		equal(t, "journals", journalCount(t, h), 0)
 	})
 
@@ -1589,7 +1610,7 @@ func TestSkillPlaceRecoversACopyWhenKilled(t *testing.T) {
 		t.Run(fmt.Sprintf("after %d steps", stop), func(t *testing.T) {
 			t.Parallel()
 			h, s := placementHarness(t)
-			h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code", "--to", "cursor")
+			h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code", "--to", "cursor")
 			h.mustRun("skill", "place", "alpha", "--to", "windsurf", "--to", "github-copilot", "--copy")
 			lib := filepath.Join(h.library, "alpha")
 			claude := filepath.Join(h.home, ".claude", "skills", "alpha")
@@ -1635,7 +1656,7 @@ func TestSkillPlaceRecoversACopyWhenKilled(t *testing.T) {
 func TestSkillPlaceSweepsStagingAKilledPlaceLeft(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
-	h.mustRun("skill", "add", s.url, "--skill", "alpha", "--to", "claude-code")
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code")
 	h.mustRun("skill", "place", "alpha", "--to", "cursor", "--copy")
 	lib := filepath.Join(h.library, "alpha")
 	claude := filepath.Join(h.home, ".claude", "skills", "alpha")

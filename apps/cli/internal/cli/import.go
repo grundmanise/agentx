@@ -17,6 +17,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
@@ -39,8 +40,7 @@ type importSkillEvent struct {
 	event
 	exportSkill
 	State       string `json:"state"`                  // present, missing or different
-	LocalKind   string `json:"local_kind,omitempty"`   // the kind the account repo holds, when it holds the name
-	LocalCommit string `json:"local_commit,omitempty"` // the commit it holds it at
+	LocalCommit string `json:"local_commit,omitempty"` // the commit the account repo holds the name at, when it holds it
 }
 
 func newImportCommand(inv *invocation) *cobra.Command {
@@ -84,10 +84,15 @@ func (inv *invocation) importSettings(ctx context.Context, path string, yes bool
 	if err != nil {
 		return err
 	}
-	states := restoreStates(doc.Skills, records)
+	remote, err := inv.remoteTips(ctx)
+	if err != nil {
+		return err
+	}
+	states := restoreStates(doc.Skills, records, remote, documentAccount(doc.Settings))
 	if err := inv.confirmImport(path, doc, in, yes); err != nil {
 		return err
 	}
+	forgetAccess(&doc.Settings)
 	if err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		return home.SaveSettings(inv.dirs.Home, doc.Settings)
 	}); err != nil {
@@ -100,6 +105,17 @@ func (inv *invocation) importSettings(ctx context.Context, path string, yes bool
 	inv.printImported(path, doc, states)
 	inv.summary = importSummary(path, states)
 	return nil
+}
+
+// forgetAccess takes out of s what another machine found it could do at
+// each source. Rights are a machine's own, a matter of its credentials and
+// SSH keys, so an import keeps every other field of a source and writes
+// none of its access: this machine checks it again when it adds or fetches
+// the source.
+func forgetAccess(s *home.Settings) {
+	for i := range s.Sources {
+		s.Sources[i].Access, s.Sources[i].AccessChecked = "", ""
+	}
 }
 
 // documentLimit bounds the file an import reads. A document is the settings
@@ -169,7 +185,7 @@ func readExport(path string) (exportDocument, error) {
 			"export it again from that machine with this version of agentx, or upgrade agentx here")
 	}
 	var doc exportDocument
-	doc.Settings.IgnoreSystemFiles = true // the default, for a document written before the key existed
+	doc.Settings.IgnoreSystemFiles = true // the default, as for a settings file without the key
 	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.DisallowUnknownFields() // a field this version does not know is a document it cannot restore whole
 	if err := dec.Decode(&doc); err != nil {
@@ -179,7 +195,7 @@ func readExport(path string) (exportDocument, error) {
 	if err := validSettings(path, doc.Settings); err != nil {
 		return exportDocument{}, err
 	}
-	if err := validRecords(path, doc.Skills); err != nil {
+	if err := validRecords(path, doc.Skills, documentAccount(doc.Settings)); err != nil {
 		return exportDocument{}, err
 	}
 	return doc, nil
@@ -262,43 +278,11 @@ func badDisabledConfigurations(s home.Settings) string {
 	return ""
 }
 
-// badSources checks every field of every entry. url and alias are both
-// URLs of a source and are held to the same rule; pin is a ref this
-// machine will hand to git, which source.ValidRef exists to check before
-// that happens; last_fetched is a date agentx wrote and nothing reads back.
-// SetSource keeps the list sorted by url and holds one entry per source,
-// so two entries for one source are a document agentx did not write and a
-// pin or an alias silently lost: FindSource only ever sees the first.
+// badSources holds every field of every entry, and the list as a whole, to
+// what agentx writes, see sourcesRefusal. An SSH host is read as itself:
+// an import reads no SSH configuration.
 func badSources(s home.Settings) string {
-	seen := map[string]bool{}
-	for _, src := range s.Sources {
-		// url and alias are the same kind of thing and are held to the
-		// same rule. url is always there, an entry being a source; alias
-		// is absent until something maps a second URL onto it, which
-		// nothing does yet, so an import is the only writer it has.
-		urls := []string{src.URL}
-		if src.Alias != "" {
-			urls = append(urls, src.Alias)
-		}
-		for _, url := range urls {
-			if why := badSourceURL(url); why != "" {
-				return why
-			}
-		}
-		switch {
-		case src.Pin != "" && !source.ValidRef(src.Pin):
-			return src.URL + " is pinned to " + clipped(src.Pin) + ", which is not a ref git accepts"
-		case src.LastFetched != "" && !fetchTime(src.LastFetched):
-			return src.URL + " was last fetched at " + clipped(src.LastFetched) + ", which is not RFC 3339 in UTC"
-		case seen[src.URL]:
-			return src.URL + " is listed twice"
-		}
-		seen[src.URL] = true
-	}
-	if !slices.IsSortedFunc(s.Sources, func(a, b home.Source) int { return strings.Compare(a.URL, b.URL) }) {
-		return "the sources must be sorted by url"
-	}
-	return ""
+	return sourcesRefusal(s.Sources, nil)
 }
 
 // badSourceURL holds one URL of a source entry to the canonical form. The
@@ -365,14 +349,50 @@ func badCopyMode(s home.Settings) string {
 	return ""
 }
 
+// documentAccount is the URL of the account remote the settings of a
+// document set, "" when they set none.
+func documentAccount(s home.Settings) string {
+	entry, _ := accountEntry(s)
+	return entry.URL
+}
+
+// ownRecord reports whether rec is one of your own skills, which a fork
+// branch holds: one whose source is the account remote of the document's
+// settings, account, or that has no source at all, as your own skills
+// have none while no account remote is set. Every other record is a skill
+// of a shared source, whose import branch holds it.
+func ownRecord(rec exportSkill, account string) bool {
+	return rec.Source == "" || account != "" && rec.Source == account
+}
+
+// recordedImport is the upstream version a record names, see exportSkill:
+// the source's for a skill of a shared source, the upstream's for one of
+// your own, and whether it names any field of one.
+func recordedImport(rec exportSkill, own bool) (lineage.Import, bool) {
+	source, subpath := rec.Source, rec.Subpath
+	if own {
+		source, subpath = rec.Upstream, rec.UpstreamSubpath
+	}
+	i := lineage.Import{Source: source, Commit: rec.UpstreamCommit, Hash: rec.BaseHash}
+	if subpath != nil {
+		i.Path = *subpath
+	}
+	return i, source != "" || subpath != nil || rec.UpstreamCommit != "" || rec.BaseHash != ""
+}
+
 // validRecords refuses a listing that is not one the account repo could
 // have produced: a name no branch of the library namespace can carry, a
-// kind that is neither, a commit that is not an object id, or lineage that
-// the trailer reader would not accept. The trailers are checked by the
-// gate every import commit passes before it is written, which is that
-// reader itself on the message the commit would carry, so a record this
-// command accepts is exactly a record a branch could hold.
-func validRecords(path string, skills []exportSkill) error {
+// kind other than managed, a commit that is not an object id, or lineage
+// that the trailer reader would not accept. account is the URL of the
+// account remote the document's settings set, which tells your own skills
+// from a shared source's, see ownRecord: one of your own carries no
+// subpath and names its upstream version, if any, in its upstream fields;
+// a shared source's carries no upstream and names its version in its
+// source fields. The trailers are checked by the gate every import commit
+// passes before it is written, which is that reader itself on the message
+// the commit would carry, so a record this command accepts is exactly a
+// record a branch could hold.
+func validRecords(path string, skills []exportSkill, account string) error {
 	refuse := func(why string) error {
 		return fail(exitRefused, path+" lists a skill agentx cannot read: "+sanitised(why),
 			"fix the export, or write it again from the machine it came from")
@@ -387,20 +407,24 @@ func validRecords(path string, skills []exportSkill) error {
 			return refuse(fmt.Sprintf("the record at position %d is named %q, which is not a name the library and a branch can both hold", i+1, clipped(rec.Name)))
 		case seen[rec.Name]:
 			return refuse(rec.Name + " is listed twice")
-		case rec.Kind != lineage.KindManaged && rec.Kind != lineage.KindFork:
-			return refuse(rec.Name + " is neither " + lineage.KindManaged + " nor " + lineage.KindFork)
+		case rec.Kind != lineage.KindManaged:
+			return refuse("the kind of " + rec.Name + " is not " + lineage.KindManaged)
 		case !lineage.IsObjectID(rec.Commit):
 			return refuse(rec.Name + " does not name the commit its branch points at")
 		}
 		seen[rec.Name] = true
-		if rec.Source == "" && rec.Subpath == nil && rec.UpstreamCommit == "" && rec.BaseHash == "" {
-			continue // a branch with no imported version: a fork with nothing merged into it yet
+		own := ownRecord(rec, account)
+		switch {
+		case own && rec.Subpath != nil:
+			return refuse(rec.Name + " is one of your own skills, which have no subpath")
+		case !own && (rec.Upstream != "" || rec.UpstreamSubpath != nil):
+			return refuse(rec.Name + " names an upstream, which only your own skills have")
 		}
-		var subpath string
-		if rec.Subpath != nil {
-			subpath = *rec.Subpath
+		imported, named := recordedImport(rec, own)
+		if !named && own {
+			continue // a branch with no imported version: a skill made by skill new
 		}
-		if lineage.Unrecordable(lineage.Import{Source: rec.Source, Path: subpath, Commit: rec.UpstreamCommit, Hash: rec.BaseHash}) != "" {
+		if lineage.Unrecordable(imported) != "" {
 			return refuse(rec.Name + " does not carry the lineage of one upstream version")
 		}
 	}
@@ -408,26 +432,63 @@ func validRecords(path string, skills []exportSkill) error {
 }
 
 // restoreStates compares every record of the export with what the account
-// repo of this machine holds under that name. A branch of the same kind at
-// the same commit is the version the export names; a name the repo does not
-// hold at all is missing; a name it holds otherwise, at another commit or in
-// the other namespace, is different, and what it holds is reported beside
-// it. A machine with no account repo holds nothing, and creating one is not
-// this command's to do, so every record is then missing.
-func restoreStates(skills []exportSkill, records map[string]lineage.Record) []importSkillEvent {
+// repo of this machine holds under that name, in the namespace the record
+// belongs in: your own skills, see ownRecord, under skills/, and a shared
+// source's under managed/. A branch in that namespace at the same commit
+// is the version the export names; a name the repo does not hold at all is
+// missing; a name it holds otherwise, at another commit or in the other
+// namespace, is different, and the commit it holds is reported beside it.
+// One of your own skills the repo holds no branch of is also held when the
+// account remote holds it, as remote lists the remote-tracking branches by
+// name: a machine that set the account remote and fetched it holds every
+// skill published there, so such a record reads present when its
+// remote-tracking branch is at its commit and different when that is at
+// another. A machine with no account repo holds nothing, and creating one
+// is not this command's to do, so every record is then missing.
+func restoreStates(skills []exportSkill, records map[string]lineage.Record, remote map[string]string, account string) []importSkillEvent {
 	states := make([]importSkillEvent, 0, len(skills))
 	for _, rec := range skills {
 		st := importSkillEvent{event: newEvent("import_skill"), exportSkill: rec, State: restoreMissing}
-		if have, ok := records[rec.Name]; ok {
-			st.LocalKind, st.LocalCommit = have.Kind, have.Commit
+		kind := lineage.KindManaged
+		if ownRecord(rec, account) {
+			kind = lineage.KindFork
+		}
+		have, local := records[rec.Name]
+		if there := remote[rec.Name]; !local && there != "" && kind == lineage.KindFork {
+			have, local = lineage.Record{Kind: lineage.KindFork, Commit: there}, true
+		}
+		if local {
+			st.LocalCommit = have.Commit
 			st.State = restoreDifferent
-			if have.Kind == rec.Kind && have.Commit == rec.Commit {
+			if have.Kind == kind && have.Commit == rec.Commit {
 				st.State = restorePresent
 			}
 		}
 		states = append(states, st)
 	}
 	return states
+}
+
+// remoteTips is what the account remote held of every fork as the last
+// fetch left it, see lineage.ListRemote: none on a machine with no account
+// repo, or with no account remote set.
+func (inv *invocation) remoteTips(ctx context.Context) (map[string]string, error) {
+	_, remote, ok, err := inv.accountSource()
+	if err != nil || !ok {
+		return nil, err
+	}
+	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	if err != nil {
+		return nil, accountRepoFailure(err)
+	}
+	if !exists {
+		return nil, nil
+	}
+	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
+	if err != nil {
+		return nil, accountRepoFailure(err)
+	}
+	return tips, nil
 }
 
 // confirmImport asks before the settings are replaced. An import overwrites
@@ -485,10 +546,11 @@ func (inv *invocation) printImported(path string, doc exportDocument, states []i
 	}
 	present, missing, different := restoreCounts(states)
 	out.print(out.paint(heading, plural(len(states), "skill")+" in the export"), ": ",
-		fmt.Sprintf("%d in the account repo, %d missing, %d at a different version", present, missing, different))
+		fmt.Sprintf("%d present, %d missing, %d at a different version", present, missing, different))
+	account := documentAccount(doc.Settings)
 	t := &table{}
 	for _, st := range states {
-		t.add(importRow(out, st)...)
+		t.add(importRow(out, st, account)...)
 	}
 	out.render(t, "")
 	printSourcesToAdd(out, doc.Settings.Sources)
@@ -499,18 +561,36 @@ func (inv *invocation) printImported(path string, doc exportDocument, states []i
 // no account repo is created and no remote configured, so on the machine an
 // import just made, skill add answers that the source was never added.
 // source add is the step that has to come first, and nothing said so. It is
-// printed per source with the pin the settings now hold: source add writes
-// the pin its argument names, so the bare URL would unpin the source this
-// import just restored.
+// printed per source as the settings now hold it: source add writes the pin
+// its argument names, so the bare URL would unpin the source this import
+// just restored. The account remote is attached again with source add
+// --account, and your own skills are installed from it by name.
 func printSourcesToAdd(out *writer, sources []home.Source) {
 	if len(sources) == 0 {
 		out.print("  ", out.paint(muted, "only the settings were written: install a missing skill with 'agentx skill add <source>'"))
 		return
 	}
-	out.print("  ", out.paint(muted, "only the settings were written: add each source again, then install a missing skill with 'agentx skill add <source>'"))
+	install := "install a missing skill with 'agentx skill add <source>'"
 	for _, src := range sources {
-		out.print("    ", out.paint(label, "agentx source add "+sourceAddArg(src.URL, src.Pin)))
+		if src.Account {
+			install += ", or one of your own with 'agentx skill add --name <name>'"
+			break
+		}
 	}
+	out.print("  ", out.paint(muted, "only the settings were written: add each source again, then "+install))
+	for _, src := range sources {
+		out.print("    ", out.paint(label, sourceAddLine(src)))
+	}
+}
+
+// sourceAddLine is the command that adds src again as the settings hold
+// it, every word of it quoted for a POSIX shell.
+func sourceAddLine(src home.Source) string {
+	line := "agentx source add " + sourceAddArg(src.URL, src.Pin)
+	if src.Account {
+		line = "agentx source add " + shellWord(sanitised(src.URL)) + " --account"
+	}
+	return line
 }
 
 // sourceAddArg is the argument of a source add that adds a source again as
@@ -548,21 +628,15 @@ func shellWord(text string) string {
 }
 
 // importRow is one line of the listing: the name, what the account repo
-// knows it as, what it has of it and where it came from.
-func importRow(out *writer, st importSkillEvent) []cell {
+// knows it as, what it has of it and where it is published to, account
+// being the account remote of the document's settings, to which a record
+// of one of your own skills, see ownRecord, is published.
+func importRow(out *writer, st importSkillEvent, account string) []cell {
 	state := c(st.State, okStyle)
 	if st.State != restorePresent {
 		state = c(st.State, warnStyle)
 	}
-	upstream := c("(none)", muted)
-	if st.Source != "" {
-		where := st.Source
-		if st.Subpath != nil && *st.Subpath != "" {
-			where += "/" + *st.Subpath
-		}
-		upstream = c(sanitised(where), plain)
-	}
-	return []cell{c("  "+sanitised(st.Name), heading), c(st.Kind, muted), state, upstream}
+	return []cell{c("  "+sanitised(st.Name), heading), c(st.Kind, muted), state, sourceCell(ownRecord(st.exportSkill, account), st.Source, st.Subpath, st.Upstream, st.UpstreamSubpath, account)}
 }
 
 func restoreCounts(states []importSkillEvent) (present, missing, different int) {
@@ -585,6 +659,6 @@ func importSummary(path string, states []importSkillEvent) string {
 		return "imported the settings from " + path + ": the export lists no skills"
 	}
 	present, missing, different := restoreCounts(states)
-	return fmt.Sprintf("imported the settings from %s: %d of %s in the account repo, %d missing, %d at a different version",
+	return fmt.Sprintf("imported the settings from %s: %d of %s present, %d missing, %d at a different version",
 		path, present, plural(len(states), "skill"), missing, different)
 }

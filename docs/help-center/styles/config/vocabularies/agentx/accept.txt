@@ -21,7 +21,10 @@ stderr
 stdin
 stdout
 streamable
+subpaths?
 unmanaged
 vercel
-worktree
+worktrees?
 [Rr]escans?
+[Aa]uthorise
+organisation

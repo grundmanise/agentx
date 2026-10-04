@@ -53,11 +53,13 @@ func MutateQuietWaiting(ctx context.Context, dir string, u RefUpdater, fn func()
 }
 
 // MutateWaiting is Mutate for the update check of the serve child, which
-// runs in the background on a timer: it waits for a held lock until ctx is
+// runs in the background once at start: it waits for a held lock until ctx is
 // done rather than giving up, since a command that happens to hold the lock
 // at that moment is no reason to drop what the check fetched, and nobody is
 // there to run it again. Waiting blocks nobody else: every other command
 // still gives up on a lock it finds held rather than queueing behind this.
+// A publish to a shared source finishes this way too, bounded: the source
+// took its commit already, so a held lock is no reason to drop recording it.
 func MutateWaiting(ctx context.Context, dir string, u RefUpdater, fn func() error) error {
 	return mutate(dir, u, func() (*os.File, error) { return waitLock(ctx, dir, syscall.LOCK_EX) }, true, fn)
 }
@@ -220,6 +222,11 @@ func flock(path string, how int) (*os.File, error) {
 	}
 	return f, nil
 }
+
+// BumpVersion rewrites the version file of agentx home dir, the change
+// signal every mutation ends with, for a hold of the lock taken without it
+// that turned out to change something. Call it under the exclusive lock.
+func BumpVersion(dir string) error { return bumpVersion(dir) }
 
 // bumpVersion increments the counter in the version file; a missing or
 // unreadable file counts as 0.

@@ -4,16 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"path/filepath"
-	"regexp"
 	"slices"
-	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
+	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 	"github.com/grundmanise/agentx/apps/cli/internal/serve"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
@@ -52,7 +50,7 @@ type driftEvent struct {
 	InstanceID    string   `json:"instance_id"`
 	ScanCounter   int      `json:"scan_counter"`
 	Name          string   `json:"name"`
-	Kind          string   `json:"kind"`
+	Kind          string   `json:"kind"` // managed or unmanaged, as the snapshot's library entry has it
 	State         string   `json:"state,omitempty"`
 	Drift         []string `json:"drift"` // [] when none
 	PreviousState string   `json:"previous_state,omitempty"`
@@ -100,27 +98,6 @@ func nonNil(words []string) []string {
 	return words
 }
 
-// checkInterval is how often the serve child runs the update check, the
-// first time once its initial snapshot is out: thirty minutes, or
-// AGENTX_CHECK_INTERVAL, a duration such as 10m, for tests and diagnosis.
-const checkInterval = 30 * time.Minute
-
-// checkEvery is the interval of the update check: checkInterval, or the
-// duration AGENTX_CHECK_INTERVAL names, which is read as
-// AGENTX_HANDSHAKE_TIMEOUT is and refused the same way when it is not a
-// positive one.
-func (inv *invocation) checkEvery() (time.Duration, error) {
-	v := inv.env["AGENTX_CHECK_INTERVAL"]
-	if v == "" {
-		return checkInterval, nil
-	}
-	d, err := time.ParseDuration(v)
-	if err != nil || d <= 0 {
-		return 0, fail(exitUsage, "AGENTX_CHECK_INTERVAL "+v+" is not a positive duration", "set it like 30m or 90s, or unset it")
-	}
-	return d, nil
-}
-
 func newServeCommand(inv *invocation) *cobra.Command {
 	var once bool
 	cmd := &cobra.Command{
@@ -128,13 +105,6 @@ func newServeCommand(inv *invocation) *cobra.Command {
 		Short: "Watch for changes and stream a snapshot on each one, until stdin closes",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var every time.Duration // a single pass runs no check, and reads no interval
-			if !once {
-				var err error
-				if every, err = inv.checkEvery(); err != nil {
-					return err
-				}
-			}
 			lock, err := home.TakeServeLock(inv.dirs.Home)
 			if errors.Is(err, home.ErrServing) {
 				return fail(exitRefused, err.Error(), "stop the agentx serve holding "+home.ServeLockPath(inv.dirs.Home)+" first")
@@ -145,23 +115,33 @@ func newServeCommand(inv *invocation) *cobra.Command {
 			defer home.Unlock(lock)
 			inv.instanceID() // fixed here, before two goroutines report it
 			inv.verdicts = map[string]keptVerdict{}
+			inv.forkWalks = lineage.NewWalkCache()
+			inv.forksWarned = true // reconciliation and every snapshot name them
+			if !once {
+				// Reconciliation reports and repairs before the first scan,
+				// so the snapshot shows what it put back. One that cannot
+				// run leaves serve to report what the scan finds.
+				if err := inv.serveReconcile(cmd.Context()); err != nil {
+					if cmd.Context().Err() != nil {
+						return nil
+					}
+					inv.out.warn("reconcile: " + err.Error())
+				}
+			}
 			dirs, trees := inv.watchedDirs()
 			// The library of the last snapshot emitted, which the next one's
 			// drift is told against. Snapshots are reported from the loop's
 			// goroutine alone, so nothing else touches it.
 			var library map[string]scan.LibraryEntry
-			// The sources the checks could not fetch, which the report of
-			// each check reads and rewrites on the loop's goroutine.
-			failing := sourceFailures{}
 			err = serve.Run(cmd.Context(), serve.Options{
-				Scan:       func(ctx context.Context) (scan.Snapshot, error) { return inv.snapshot(ctx, 0, "", false) },
-				Index:      inv.sourceIndex,
-				Watch:      dirs,
-				Trees:      trees,
-				Once:       once,
-				Stdin:      cmd.InOrStdin(),
-				Check:      func(ctx context.Context) func() { return inv.serveCheck(ctx, failing) },
-				CheckEvery: every,
+				Scan:  func(ctx context.Context) (scan.Snapshot, error) { return inv.snapshot(ctx, 0, "", false) },
+				Index: inv.sourceIndex,
+				Watch: dirs,
+				Trees: trees,
+				Once:  once,
+				Stdin: cmd.InOrStdin(),
+				Check: inv.serveCheck,
+				Jobs:  []serve.Job{inv.maintenanceJob},
 				Snapshot: func(snap scan.Snapshot) {
 					inv.out.emit(snapshotEvent{event: newEvent("snapshot"), Snapshot: snap})
 					inv.out.print(inv.out.paint(heading, fmt.Sprintf("snapshot %d", snap.ScanCounter)), ": ",
@@ -200,105 +180,52 @@ func newServeCommand(inv *invocation) *cobra.Command {
 	return cmd
 }
 
-// serveCheck is one tick of the serve child's timer, run off its loop: the
-// update check skill check runs, over every source of the settings rather
-// than only the sources a managed skill came from, so that one pass fetches
-// each source once, whether or not a skill was installed from it, and the
-// source index follows what they hold now. It waits for the lock rather
-// than giving up on it, since it runs in the background and a command
-// holding the lock for a moment is no reason to drop what it fetched. It
-// reports nothing as it goes and never ends serve: the report it returns is
-// made on the loop's goroutine and carries one update_available per update,
-// with this process's instance id, and the warnings of what the check could
-// not check, a source it could not fetch once per cause (see
-// sourceFailures). A machine with no source runs no git at all, and neither
-// does one with no account repo; a source an import wrote stays a source
-// not fetched, account repo or not, until source add adds it. The rescan
-// its write of the version file sets off brings the candidates and markers
-// it wrote into the next snapshot, and every source ref it moved into the
-// source index.
-func (inv *invocation) serveCheck(ctx context.Context, failing sourceFailures) func() {
-	rep, err := inv.checkUpdates(ctx, true)
-	return func() {
-		if err != nil {
-			inv.out.warn("update check: " + err.Error())
-			return
-		}
-		failing.report(inv.out, rep)
-		for _, note := range rep.notes {
-			inv.out.warn("update check: " + note)
-		}
-		for _, ev := range rep.updates {
-			ev.InstanceID = inv.instanceID()
-			inv.out.emit(ev)
-			inv.out.print(inv.out.paint(heading, "update "+sanitised(ev.Name)), ": ",
-				short(ev.UpstreamCommit), " -> ", short(ev.CandidateUpstreamCommit), ", ", plural(len(ev.Files), "file"))
-		}
-	}
+// serveCheck is the serve child's update check, run once, off its loop,
+// as soon as its initial snapshot is out: after that, updates are checked
+// for only when the user asks, with skill check-updates. It is the check
+// skill check-updates runs, the account remote included, over every source
+// of the settings rather than only the sources a managed skill came from,
+// so that one pass fetches each source once, whether or not a skill was
+// installed from it, and the source index follows what they hold now. It
+// waits for the lock rather than giving up on it, since it runs in the
+// background and a command holding the lock for a moment is no reason to
+// drop what it fetched. It reports nothing as it goes and never ends serve:
+// the report it returns is made on the loop's goroutine and carries one
+// update_available per update, with this process's instance id, and a
+// warning for each thing the check could not check. A machine with no source
+// runs no git at all, and neither does one with no account repo; a source
+// an import wrote stays a source not fetched, account repo or not, until
+// source add adds it. The rescan its write of the version file sets off
+// brings the candidates and markers it wrote into the next snapshot, and
+// every source ref it moved into the source index.
+func (inv *invocation) serveCheck(ctx context.Context) func() {
+	rep, err := inv.checkUpdates(ctx, true, "")
+	return func() { inv.reportServeCheck(rep, err) }
 }
 
-// sourceFailures is what the serve child remembers from one check to the
-// next of the sources it could not fetch: by canonical URL, the cause each
-// one last failed with. It lives in the serve process alone, and only the
-// report of a check reads or writes it, on the loop's goroutine, one report
-// at a time.
-type sourceFailures map[string]string
-
-// report logs what a check could not check. A source that could not be
-// fetched is logged on every check but surfaced once: a warning when it
-// starts failing, another only when the cause changes, and a note when it
-// is fetched again, so that a machine that is offline is not warned about
-// the same source on every tick; the checks in between log it at debug
-// level. A source that goes from the settings is forgotten without a note.
-// Everything else a check could not check, a skill's newer version it
-// cannot import or a source it fetched but could not read, is a warning on
-// every check, as it is in skill check.
-func (sf sourceFailures) report(out *writer, rep checkReport) {
-	now := sourceFailures{}
+// reportServeCheck reports what the serve child's update check found, every
+// warning prefixed "update check: ": the failure that ended the whole check,
+// or each source or skill it could not check, each note, and then one
+// update_available per update.
+func (inv *invocation) reportServeCheck(rep checkReport, err error) {
+	if err != nil {
+		inv.out.warn("update check: " + err.Error())
+		return
+	}
 	for _, cf := range rep.failures {
-		line := "update check: " + cf.warning()
-		if !cf.fetch {
-			out.warn(line)
-			continue
-		}
-		cause := failureCause(cf.f.message)
-		if last, ok := sf[cf.source]; ok && last == cause {
-			out.debugf("%s", line)
-		} else {
-			out.warn(line)
-		}
-		now[cf.source] = cause
+		inv.out.warn("update check: " + cf.warning())
 	}
-	var recovered []string
-	for url := range sf {
-		if _, still := now[url]; !still && rep.refreshed[url] {
-			recovered = append(recovered, url)
-		}
+	for _, note := range rep.notes {
+		inv.out.warn("update check: " + note)
 	}
-	slices.Sort(recovered)
-	for _, url := range recovered {
-		out.info("update check: " + url + " can be fetched again")
+	for _, ev := range rep.updates {
+		ev.InstanceID = inv.instanceID()
+		inv.out.emit(ev)
+		from, to := ev.versions()
+		inv.out.print(inv.out.paint(heading, "update "+sanitised(ev.Name)), ": ",
+			short(from), " -> ", short(to), ", ", plural(len(ev.Files), "file"))
 	}
-	clear(sf)
-	maps.Copy(sf, now)
 }
-
-// failureCause is what tells one cause of a failed fetch from another: the
-// message as a person reads it, less what differs on every attempt with the
-// same cause, which only keys the memory and is never shown.
-func failureCause(message string) string {
-	return perAttempt.ReplaceAllString(sanitised(message), "")
-}
-
-// perAttempt is what a failed fetch reports that differs from one attempt
-// to the next, in the words git relays from curl and ssh: how long a
-// connection took to fail ("after 2034 ms", "after 300001 milliseconds"),
-// how many bytes came before it did ("with 0 out of 0 bytes received",
-// "with 1234 bytes remaining to read"), and which address of the host
-// answered ("Connection closed by 140.82.121.4 port 22").
-var perAttempt = regexp.MustCompile(` after [0-9]+ (ms|milliseconds)\b` +
-	`| with [0-9]+ (out of [0-9]+ )?bytes (received|remaining to read)\b` +
-	`| by [0-9A-Fa-f.:]+ port [0-9]+\b`)
 
 // watchedDirs are the directories a change signal can come from, most
 // important first: agentx home holds the version file every mutation
@@ -307,15 +234,31 @@ var perAttempt = regexp.MustCompile(` after [0-9]+ (ms|milliseconds)\b` +
 // home and the account repo is a tree: an edit anywhere inside a skill is a
 // signal too, wherever the scan reads that skill from. A skills directory a
 // client shares with another, and the library itself, are watched once.
+//
+// The reflogs of the fork branches are a tree too: a commit made with git
+// in a fork's worktree writes nothing in the worktree or in agentx home,
+// only in the account repo, where it appends to its branch's reflog, so
+// that is how serve learns the fork moved. So are the reflogs of the
+// remote-tracking branches: a publish with nothing to record, as of a
+// commit made with git, moves only the account remote's branch as the
+// account repo tracks it, which is what a fork's state is judged against,
+// see unpublished. Those reflog trees appear with the first ref of their
+// kind, a skill's first publish creating logs/refs/remotes and every
+// directory below it at once, so logs and logs/refs are watched too: the
+// directory appearing there is the signal, and a sync takes the new tree in.
+// The worktrees' own admin directories are not watched: git writes an index
+// there on every status, which would be a signal of its own.
 func (inv *invocation) watchedDirs() (dirs, trees []string) {
 	h := inv.dirs.Home
-	trees = []string{filepath.Join(h, "worktrees"), inv.dirs.Library}
+	logs := filepath.Join(gitx.AccountRepoPath(h), "logs")
+	refs := filepath.Join(logs, "refs")
+	trees = []string{filepath.Join(h, "worktrees"), inv.dirs.Library, filepath.Join(refs, "heads", "skills"), filepath.Join(refs, "remotes")}
 	for _, dir := range scan.UserSkillsDirs(inv.dirs) {
 		if !slices.Contains(trees, dir) {
 			trees = append(trees, dir)
 		}
 	}
-	return append([]string{h, gitx.AccountRepoPath(h)}, trees...), trees
+	return append([]string{h, gitx.AccountRepoPath(h), logs, refs}, trees...), trees
 }
 
 // sourceIndex builds the index serve answers searches from: the sources of
@@ -330,8 +273,12 @@ func (inv *invocation) sourceIndex(ctx context.Context, prev *source.Index) (idx
 		if err != nil {
 			return err
 		}
-		urls := make([]string, 0, len(s.Sources))
-		for _, src := range s.Sources {
+		// The account remote holds forks rather than skills on one branch,
+		// and is never fetched as a shared source, so it has nothing to
+		// search.
+		shared := sharedSources(s.Sources)
+		urls := make([]string, 0, len(shared))
+		for _, src := range shared {
 			urls = append(urls, src.URL)
 		}
 		idx, warnings, err = source.BuildIndex(ctx, inv.git, gitx.AccountRepoPath(inv.dirs.Home), urls, prev)

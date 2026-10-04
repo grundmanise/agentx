@@ -28,12 +28,18 @@ type Result struct {
 // were given: the work is parallel, what a caller reports from it is not.
 // A source that fails carries its error and stops no other.
 //
+// then, when it is not nil, is called with the index of each source whose
+// fetch worked, in the worker that fetched it and before done, so that
+// network work of the caller's own about that source, such as checking
+// what this machine may do there, overlaps the fetches of the others. It
+// is called from several goroutines at once, each with its own index.
+//
 // done, when it is not nil, is called once per source as that source's
 // fetch ends, with how many have ended including it, so that a caller can
 // report progress while the rest is still running. It is called in
 // completion order, which the network decides, under the lock that counts,
 // so it need not be safe to call from several goroutines itself.
-func FetchAll(ctx context.Context, r *gitx.Runner, gitDir string, srcs []Source, done func(s Source, finished int)) []Result {
+func FetchAll(ctx context.Context, r *gitx.Runner, gitDir string, srcs []Source, then func(i int), done func(s Source, finished int)) []Result {
 	results := make([]Result, len(srcs))
 	slots := make(chan struct{}, Fetchers)
 	var mu sync.Mutex
@@ -46,6 +52,9 @@ func FetchAll(ctx context.Context, r *gitx.Runner, gitDir string, srcs []Source,
 			slots <- struct{}{}
 			defer func() { <-slots }()
 			listing, err := Fetch(ctx, r, gitDir, s)
+			if err == nil && then != nil {
+				then(i)
+			}
 			mu.Lock()
 			defer mu.Unlock()
 			results[i] = Result{Source: s, Listing: listing, Err: err}

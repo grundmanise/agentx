@@ -52,6 +52,26 @@ func SyncTree(root string) error {
 	})
 }
 
+// RemoveTree removes path and everything under it, as os.RemoveAll does,
+// and also a directory in it that is read-only, as a directory git ignores
+// in a skill may be: one RemoveAll cannot empty is made writable, and
+// readable, before it is removed again. It reports what still stops the
+// removal.
+func RemoveTree(path string) error {
+	if os.RemoveAll(path) == nil {
+		return nil
+	}
+	_ = filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
+		if err == nil && d.IsDir() {
+			if info, err := d.Info(); err == nil {
+				_ = os.Chmod(p, info.Mode().Perm()|0o700)
+			}
+		}
+		return nil
+	})
+	return os.RemoveAll(path)
+}
+
 // syncDir fsyncs a directory, so that a name created or removed in it
 // survives a crash.
 func syncDir(dir string) error {

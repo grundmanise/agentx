@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
@@ -63,10 +64,10 @@ func TestSelectionCheck(t *testing.T) {
 		says string // "" when the selection passes
 	}{
 		{"nothing named", selection{}, ""},
-		{"--skill", selection{names: []string{"alpha"}}, ""},
+		{"--name", selection{names: []string{"alpha"}}, ""},
 		{"--all", selection{all: true}, ""},
 		{"--all --except", selection{all: true, except: []string{"beta"}}, ""},
-		{"--all with --skill", selection{all: true, names: []string{"alpha"}}, "--all and --skill cannot both be given"},
+		{"--all with --name", selection{all: true, names: []string{"alpha"}}, "--all and --name cannot both be given"},
 		{"--except without --all", selection{names: []string{"alpha"}, except: []string{"beta"}}, "--except needs --all"},
 		{"--except alone", selection{except: []string{"beta"}}, "--except needs --all"},
 	} {
@@ -86,7 +87,7 @@ func TestSelectionCheck(t *testing.T) {
 // match the frontmatter name, which is the directory name only when the
 // frontmatter has none, in any case; the listing's order decides, not the
 // order of the flags; a name given twice takes one skill, and a name two
-// directories share takes the first of them. An --except or a --skill that
+// directories share takes the first of them. An --except or a --name that
 // names no skill of the source is refused, since the run would otherwise
 // install more or less than was asked.
 func TestSelectSkills(t *testing.T) {
@@ -110,15 +111,15 @@ func TestSelectSkills(t *testing.T) {
 		want    string // the subpaths selected, or the refusal
 		status  status // of the refusal
 	}{
-		{"--skill in any case, twice, in another order", listing, selection{names: []string{"GAMMA", "Alpha", "alpha"}}, "skills/alpha skills/gamma", exitOK},
-		{"--skill by the frontmatter name", listing, selection{names: []string{"FANCY"}}, "skills/on-disk", exitOK},
+		{"--name in any case, twice, in another order", listing, selection{names: []string{"GAMMA", "Alpha", "alpha"}}, "skills/alpha skills/gamma", exitOK},
+		{"--name by the frontmatter name", listing, selection{names: []string{"FANCY"}}, "skills/on-disk", exitOK},
 		{"--all", listing, selection{all: true}, "skills/alpha skills/beta skills/gamma skills/on-disk", exitOK},
 		{"--all --except in any case, twice", listing, selection{all: true, except: []string{"BeTa", "beta", "fancy"}}, "skills/alpha skills/gamma", exitOK},
-		{"one skill needs no --skill", source.Listing{Skills: listing.Skills[:1]}, selection{}, "skills/alpha", exitOK},
+		{"one skill needs no --name", source.Listing{Skills: listing.Skills[:1]}, selection{}, "skills/alpha", exitOK},
 		{"a name two directories share takes the first", twins, selection{names: []string{"twin"}}, "skills/first", exitOK},
 		{"--except leaves out every skill of the name", twins, selection{all: true, except: []string{"TWIN"}}, "skills/other", exitOK},
-		{"--skill by the directory name of a named skill", listing, selection{names: []string{"alpha", "on-disk"}}, `has no skill called "on-disk"`, exitNotFound},
-		{"--skill of nothing in the source, named once", listing, selection{names: []string{"delta", "Delta", "epsilon"}}, `has no skill called "delta", "epsilon"`, exitNotFound},
+		{"--name by the directory name of a named skill", listing, selection{names: []string{"alpha", "on-disk"}}, `has no skill called "on-disk"`, exitNotFound},
+		{"--name of nothing in the source, named once", listing, selection{names: []string{"delta", "Delta", "epsilon"}}, `has no skill called "delta", "epsilon"`, exitNotFound},
 		{"--except of nothing in the source", listing, selection{all: true, except: []string{"delta"}}, `has no skill called "delta"`, exitNotFound},
 		{"--except of everything", listing, selection{all: true, except: []string{"alpha", "beta", "gamma", "fancy"}}, "--except left no skill to install", exitUsage},
 		{"several skills and nothing named", listing, selection{}, src.URL + " holds 4 skills", exitUsage},
@@ -187,6 +188,44 @@ func TestThePlaceHintRunsAsItIsPrinted(t *testing.T) {
 		want := append([]string{"agentx", "skill", "place"}, c.words...)
 		if got := shellCommands(hint); len(got) != 1 || !reflect.DeepEqual(got[0], want) {
 			t.Errorf("a shell reads %q as %q, want %q", hint, got, want)
+		}
+	}
+}
+
+// TestRefPlan decides whether an install writes the import branch of a
+// version: only when the skill has no branch yet. A branch at the version's
+// own import commit is left as it is, and a branch at another commit is
+// never moved, even when that commit carries the same four trailers.
+func TestRefPlan(t *testing.T) {
+	t.Parallel()
+	imp := lineage.Import{Source: "https://example.com/s.git", Path: "skills/nc", Commit: "upstream1", Hash: "hash1"}
+	v := &imported{name: "nc", imp: imp, commit: "commit1"}
+	for _, c := range []struct {
+		what      string
+		rec       *lineage.Record
+		absent    bool
+		wantWrite bool
+		want      string
+	}{
+		{"no branch", nil, false, true, ""},
+		{"a fork of that name", &lineage.Record{Kind: lineage.KindFork, Commit: "fork1"}, false, false, "is a skill of the account remote"},
+		{"the same import commit", &lineage.Record{Kind: lineage.KindManaged, Commit: "commit1", Import: imp, HasImport: true}, false, false, ""},
+		{"another commit with the same trailers", &lineage.Record{Kind: lineage.KindManaged, Commit: "commit2", Import: imp, HasImport: true}, false, false, "is already managed at another version"},
+		{"another commit, the library without it", &lineage.Record{Kind: lineage.KindManaged, Commit: "commit2", Import: imp, HasImport: true}, true, false, "which the library no longer holds"},
+	} {
+		records := map[string]lineage.Record{}
+		if c.rec != nil {
+			records["nc"] = *c.rec
+		}
+		write, f := refPlan(v, records, "/lib/nc", c.absent)
+		if write != c.wantWrite {
+			t.Errorf("%s: write = %v, want %v", c.what, write, c.wantWrite)
+		}
+		switch {
+		case c.want == "" && f != nil:
+			t.Errorf("%s: refused with %q, want no refusal", c.what, f.message)
+		case c.want != "" && (f == nil || !strings.Contains(f.message, c.want)):
+			t.Errorf("%s: refusal %v, want one containing %q", c.what, f, c.want)
 		}
 	}
 }

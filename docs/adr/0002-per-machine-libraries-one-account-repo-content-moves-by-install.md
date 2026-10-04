@@ -7,6 +7,12 @@ date: 2026-09-16
 
 Each machine owns its library at `~/.agents/skills`. Nothing in a library propagates to another machine on its own. Skill content reaches a machine only through an install or an update from an upstream. Forks and greenfield skills live in one git repository per account, the account repo, one subdirectory per skill. Each machine works in its own clone, with the git dir in `~/.agentx`, and the library holds symlinks into that clone. Which machine has which fork placed is metadata in the local database, not a path in the repository. Edits are committed locally on their own, one commit per skill per debounce window. Publishing is an explicit action that pushes that repository to a per-account remote, after which a fork is an ordinary upstream that other machines install and update from. Auto-push is a setting, off by default. Non-fork managed skills have no git; their base version is cached by content hash and drift is a hash comparison.
 
+_Amendment, 2026-10-03:_ auto-push is no longer a setting. Nothing is pushed automatically: every push is an explicit publish, see [ADR 0008](0008-sources-have-a-layout-and-an-access-only-the-account-remote-is-pushed-automatically.md).
+
+_Amendment, 2026-10-03:_ edits are never committed on their own, nor by a commit step of the user's: agentx records a skill's edits when the user publishes it, see [ADR 0003](0003-account-repo-one-branch-per-fork-checked-out-as-worktrees.md).
+
+_Amendment, 2026-10-04:_ "greenfield skill" and "fork" are no longer kinds of skill. A skill is managed or unmanaged, and a managed skill's source is where it is published to: the source it was installed from, or, for the user's own skills (made by `skill new` or `skill fork`, or installed from the account remote), the account remote. A forked skill also records the upstream it came from, which it takes updates from. Where the text above names forks and greenfield skills, read the user's own skills; no account remote needs to be set until one of them is published.
+
 ## Why
 
 One mechanism, install-from-upstream, covers third-party skills and the user's own forks alike. A fork edited and published on machine A is a new upstream version, and machine B receives it as a regular update, which auto-applies when B's copy is unmodified. Explicit publish costs the near-instant propagation but means every version B receives is one the user released. A third-party upstream change is merged into the fork on whichever machine the user accepts it, then published; once published, no other machine is offered that upstream version again. Upstream versions are committed deterministically, so if a second machine merges the same version before the first publishes, the upstream side merges clean and only the two machines' own edits can conflict. Metadata sync carries no file content, so it stays small and cheap.
@@ -20,3 +26,10 @@ Live fleet-wide content sync, where an edit on A appears on B with no install st
 ## Consequences
 
 An unmanaged skill or an unpublished fork cannot be installed on another machine; the user forks and publishes first. A private third-party source the target machine cannot authenticate to fails the install there; content is never relayed. Deleting a fork from the account remote never deletes it on other machines; they keep an unpublished copy marked "source removed". Two machines that independently fork the same skill under the same name cannot both publish; the second adopts the first, renames, or merges into it, and the merge is three-way because both forks share the same deterministic root commit. A fork of a plugin-owned skill replaces the plugin copy only in Gemini CLI; in Claude Code and Codex the plugin copy stays loaded under a namespaced name, so the fork coexists with it until plugin management can disable the original. A machine with no account still has full history and revert for its forks, and signing in later attaches the remote and merges histories.
+
+The per-account remote this record names is, since [ADR 0008](0008-sources-have-a-layout-and-an-access-only-the-account-remote-is-pushed-automatically.md), the account remote, a source of the fork layout.
+
+_Amendment, 2026-10-03:_ `skill revert` is removed. Where the text above names a revert, a machine with no account keeps its forks' full history, commits and diffs.
+
+_Amendment, 2026-10-03:_ sources have no layout. The account remote is the source whose settings entry carries the account flag, see [ADR 0008](0008-sources-have-a-layout-and-an-access-only-the-account-remote-is-pushed-automatically.md).
+

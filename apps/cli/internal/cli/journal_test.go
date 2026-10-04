@@ -118,12 +118,12 @@ func TestMutationFinishesAnAppliedJournal(t *testing.T) {
 	// The mutation to "two" renamed its staged file over the live one and stopped before removing its journal.
 	journal, _ := writeJournal(t, h, "1000-aaaa", "applied", sha(old), readFile(t, live))
 
-	out = h.run("config", "set", "auto_push", "true")
+	out = h.run("config", "set", "accept_operations", "true")
 	equal(t, "exit", out.exit, 0)
 	gone(t, "journal", journal)
 	file := readSettingsFile(t, h)
 	equal(t, "label", file["label"], "two")
-	equal(t, "auto_push", file["auto_push"], true)
+	equal(t, "accept_operations", file["accept_operations"], true)
 	equal(t, "version", readVersion(t, h), 3) // the finished journal bumps nothing; this command bumps once
 }
 

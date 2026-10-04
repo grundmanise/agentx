@@ -6,6 +6,8 @@ import (
 	"io"
 	"strings"
 	"sync"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
 // schemaVersion is the output schema every event carries. Bump it when an
@@ -19,6 +21,61 @@ type event struct {
 }
 
 func newEvent(typ string) event { return event{Type: typ, SchemaVersion: schemaVersion} }
+
+// eventKind is the kind an event reports for a skill whose lineage record
+// is of kind k: managed for a skill with a branch in either namespace, a
+// fork's included, and unmanaged for one with none. A fork branch is how
+// the account repo keeps your own skills, not a kind of skill: what tells
+// them from the skills of a shared source is their source, see
+// skillOrigin. The commands themselves decide on the record's kind.
+func eventKind(k string) string {
+	if k == lineage.KindManaged || k == lineage.KindFork {
+		return lineage.KindManaged
+	}
+	return lineage.KindUnmanaged
+}
+
+// skillOrigin is what every event that names a skill's origin reports of
+// the skill whose lineage record is rec, account being the URL of the
+// account remote, "" when none is set: its kind, see eventKind; its
+// source, where it is published to, with the directory there; and its
+// upstream, where a forked skill came from and takes its updates from,
+// with the directory there.
+//
+// A managed skill of a shared source is published to the source its
+// import commit names, at the directory it names, and has no upstream.
+// Your own skills, the ones a fork branch holds, are published to the
+// account remote, at no directory, and have no source while no account
+// remote is set; one made by skill fork of a skill of a shared source
+// carries the upstream its base import commit names, which its lineage
+// read by the walk holds, or, for the record of its base version that
+// Record.ForkBase builds, the record's own import. A skill made by skill
+// new, or forked from a skill with no upstream, has none. An unmanaged
+// skill has neither.
+func skillOrigin(rec lineage.Record, account string) (kind, source string, subpath *string, upstream string, upstreamSubpath *string) {
+	kind = eventKind(rec.Kind)
+	switch rec.Kind {
+	case lineage.KindManaged:
+		if rec.HasImport {
+			source, subpath = rec.Import.Source, ptr(rec.Import.Path)
+		}
+	case lineage.KindFork:
+		source = account
+		switch {
+		case rec.Fork != nil:
+			if rec.Fork.Base != "" {
+				upstream, upstreamSubpath = rec.Fork.Import.Source, ptr(rec.Fork.Import.Path)
+			}
+		case rec.HasImport:
+			upstream, upstreamSubpath = rec.Import.Source, ptr(rec.Import.Path)
+		}
+	}
+	return kind, source, subpath, upstream, upstreamSubpath
+}
+
+// ptr is a pointer to a copy of s, for a field whose empty value is
+// carried rather than left out.
+func ptr(s string) *string { return &s }
 
 type logEvent struct {
 	event
@@ -150,16 +207,6 @@ func (w *writer) warn(msg string) {
 		return
 	}
 	w.write(w.stderr, fmt.Sprintf("%s %s\n", w.err().paint(warnStyle, "warning:"), sanitised(msg)))
-}
-
-// info logs at info level: a note that asks for nothing, such as a failure
-// warned about earlier that has ended.
-func (w *writer) info(msg string) {
-	if w.json {
-		w.line(w.stderr, logEvent{event: newEvent("log"), Level: "info", Message: msg})
-		return
-	}
-	w.write(w.stderr, fmt.Sprintf("%s %s\n", w.err().paint(infoStyle, "info:"), sanitised(msg)))
 }
 
 // warnWith logs at warn level with a second line that says what to do

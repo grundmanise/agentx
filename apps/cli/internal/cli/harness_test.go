@@ -7,12 +7,15 @@ import (
 	"encoding/json"
 	"flag"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 )
 
 // suiteParallel is how many tests of this package run at once when go test
@@ -68,6 +71,11 @@ type harness struct {
 	agentx  string // AGENTX_HOME
 	library string // AGENTX_LIBRARY
 	config  string // XDG_CONFIG_HOME
+	// maintain lets serve maintain the account repo when it starts. Serve
+	// does once a day, and a test's serve is told the home was maintained
+	// just now unless the test is about maintenance, so that the git
+	// processes a test counts are its own.
+	maintain bool
 }
 
 func newHarness(t *testing.T) *harness {
@@ -130,6 +138,13 @@ func (h *harness) mustRun(args ...string) outcome {
 		h.t.Fatalf("agentx %s: exit %d\n%s%s", strings.Join(args, " "), out.exit, out.stdout, out.stderr)
 	}
 	return out
+}
+
+// setAccount makes the repository at url the account remote of h, as the
+// user does, and fails on the spot when it does not work.
+func (h *harness) setAccount(url string) outcome {
+	h.t.Helper()
+	return h.mustRun("source", "add", url, "--account")
 }
 
 // runDeadline bounds a run started with start. It is longer than
@@ -261,6 +276,14 @@ func contains(t *testing.T, what, text, sub string) {
 	}
 }
 
+// excludes fails the test when text holds sub.
+func excludes(t *testing.T, what, text, sub string) {
+	t.Helper()
+	if strings.Contains(text, sub) {
+		t.Errorf("%s contains %q:\n%s", what, sub, text)
+	}
+}
+
 // serveProc is one `agentx serve` run in a goroutine, driven through pipes.
 // Every wait on stdout is a channel or a pipe read, never a sleep: send
 // writes a request line, next reads the next stdout event, close ends stdin
@@ -301,6 +324,11 @@ const serveDeadline = 10 * time.Second
 
 func (h *harness) serve(t *testing.T, args ...string) *serveProc {
 	t.Helper()
+	if !h.maintain {
+		if err := home.SetMaintained(h.agentx, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+	}
 	inR, inW, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -341,29 +369,36 @@ func (p *serveProc) send(line string) {
 	}
 }
 
-// next returns the next stdout event, which must be of type typ.
+// next returns the next stdout event, which must be of type typ. The
+// reconcile events a serve starts with are passed over unless typ asks for
+// one: most tests are about what comes after them.
 func (p *serveProc) next(typ string) jsonEvent {
 	p.t.Helper()
-	select {
-	case line, ok := <-p.lines:
-		if !ok {
-			p.t.Fatalf("serve ended before a %s event", typ)
+	deadline := time.After(serveDeadline)
+	for {
+		select {
+		case line, ok := <-p.lines:
+			if !ok {
+				p.t.Fatalf("serve ended before a %s event", typ)
+			}
+			var e jsonEvent
+			if err := json.Unmarshal([]byte(line), &e); err != nil {
+				p.t.Fatalf("not a JSON event: %q: %v", line, err)
+			}
+			if e["schema_version"] != float64(1) {
+				p.t.Errorf("event %v: schema_version = %v, want 1", e, e["schema_version"])
+			}
+			if e["type"] == "reconcile" && typ != "reconcile" {
+				continue
+			}
+			if e["type"] != typ {
+				p.t.Fatalf("next event = %v, want type %s", e, typ)
+			}
+			return e
+		case <-deadline:
+			p.t.Fatalf("no %s event within %s", typ, serveDeadline)
 		}
-		var e jsonEvent
-		if err := json.Unmarshal([]byte(line), &e); err != nil {
-			p.t.Fatalf("not a JSON event: %q: %v", line, err)
-		}
-		if e["schema_version"] != float64(1) {
-			p.t.Errorf("event %v: schema_version = %v, want 1", e, e["schema_version"])
-		}
-		if e["type"] != typ {
-			p.t.Fatalf("next event = %v, want type %s", e, typ)
-		}
-		return e
-	case <-time.After(serveDeadline):
-		p.t.Fatalf("no %s event within %s", typ, serveDeadline)
 	}
-	return nil
 }
 
 // line reads the next stdout line, which must be want: the text output of
@@ -406,4 +441,156 @@ func (p *serveProc) wait() int {
 		p.t.Fatalf("serve did not end within %s", serveDeadline)
 	}
 	return -1
+}
+
+// hiddenEntries are the entries of dir whose names start with .agentx-,
+// which is what a mutation stages and retains beside a live path: after a
+// mutation that finished, whether at once or by recovery, there are none.
+func hiddenEntries(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".agentx-") {
+			names = append(names, e.Name())
+		}
+	}
+	return names
+}
+
+func executable(t *testing.T, path string) bool {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return info.Mode()&0o100 != 0
+}
+
+// withFile is files with one more.
+func withFile(files map[string]string, path, content string) map[string]string {
+	with := map[string]string{path: content}
+	for p, c := range files {
+		with[p] = c
+	}
+	return with
+}
+
+// killedChild runs the child process test, which reads the skill it works
+// on from the variable env, under a git wrapper whose body is script, in
+// which %GIT% is the real git and %MUTATIONS% the journal directory, and
+// returns what the child printed once the wrapper killed it. The harness
+// PATH is left as it was when the child is gone.
+func killedChild(t *testing.T, h *harness, test, env, name, script string) string {
+	t.Helper()
+	real, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := h.env["PATH"]
+	defer func() { h.env["PATH"] = path }()
+	stubGit(t, h, "#!/bin/sh"+strings.NewReplacer("%MUTATIONS%", shellWord(filepath.Join(h.agentx, "mutations")), "%GIT%", real).Replace(script))
+	child := exec.Command(os.Args[0], "-test.run=^"+test+"$", "-test.v")
+	child.Env = append(os.Environ(), env+"="+name)
+	for k, v := range h.env {
+		child.Env = append(child.Env, k+"="+v)
+	}
+	out, err := child.CombinedOutput()
+	if err == nil {
+		t.Fatalf("the child was not killed:\n%s", out)
+	}
+	return string(out)
+}
+
+// journalStep is one step of a journal as the file records it.
+type journalStep struct {
+	Kind     string `json:"kind"`
+	Path     string `json:"path"`
+	Ref      string `json:"ref"`
+	Old      string `json:"old"`
+	New      string `json:"new"`
+	Staged   string `json:"staged"`
+	Retained string `json:"retained"`
+}
+
+// readJournal is the steps of the one journal waiting in agentx home.
+func readJournal(t *testing.T, h *harness) []journalStep {
+	t.Helper()
+	paths, err := filepath.Glob(filepath.Join(h.agentx, "mutations", "*.json"))
+	if err != nil || len(paths) != 1 {
+		t.Fatalf("%d journals, want 1: %v", len(paths), err)
+	}
+	b, err := os.ReadFile(paths[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var j struct {
+		Steps []journalStep `json:"steps"`
+	}
+	if err := json.Unmarshal(b, &j); err != nil {
+		t.Fatalf("the journal is not JSON: %v", err)
+	}
+	return j.Steps
+}
+
+// journalKinds is readJournal with the kinds of its steps in order, comma
+// separated: the step list a command's recovery test pins.
+func journalKinds(t *testing.T, h *harness) ([]journalStep, string) {
+	t.Helper()
+	steps := readJournal(t, h)
+	kinds := make([]string, len(steps))
+	for i, s := range steps {
+		kinds[i] = s.Kind
+	}
+	return steps, strings.Join(kinds, ", ")
+}
+
+// applySteps does what a process that went on would have done with the
+// first n path steps of the journal, which is what one killed after the nth
+// of them leaves: the live paths part way through, the journal as it was
+// written. Its ref step moves nothing, so the path steps are all there is.
+func applySteps(t *testing.T, steps []journalStep, n int) {
+	t.Helper()
+	for _, s := range steps {
+		if s.Kind == "ref" {
+			continue
+		}
+		if n == 0 {
+			return
+		}
+		n--
+		var err error
+		switch {
+		case s.Kind == "remove" && s.Retained != "":
+			err = os.Rename(s.Path, s.Retained)
+		case s.Kind == "remove":
+			err = os.Remove(s.Path)
+		case s.Kind == "publish":
+			err = os.Rename(s.Staged, s.Path)
+		case s.Kind == "link":
+			err = os.Symlink(strings.TrimPrefix(s.New, "link:"), s.Path)
+		}
+		if err != nil {
+			t.Fatalf("applying the %s step at %s: %v", s.Kind, s.Path, err)
+		}
+	}
+}
+
+// editSettings changes the settings of h's home as edit says, under the
+// lock of the home, as a command's write takes it.
+func editSettings(t *testing.T, h *harness, edit func(*home.Settings)) {
+	t.Helper()
+	if err := home.Mutate(h.agentx, nil, func() error {
+		s, err := home.LoadSettings(h.agentx)
+		if err != nil {
+			return err
+		}
+		edit(&s)
+		return home.SaveSettings(h.agentx, s)
+	}); err != nil {
+		t.Fatal(err)
+	}
 }

@@ -216,21 +216,29 @@ func TestInstallRecoversFromEveryBoundary(t *testing.T) {
 
 // TestBatchRefsMoveTogether checks the transaction a journal's refs are
 // applied in: a batch whose second ref is claimed by something else moves
-// none of them, so that recovery finds the branches either all written or
-// all absent rather than a run's skills split between the two.
+// none of them, so that the branches are either all written or all absent
+// rather than a run's skills split between the two. Since the refusal came
+// before anything was applied, the journal is abandoned with what it staged
+// instead of being left for a recovery that would refuse it every time.
 func TestBatchRefsMoveTogether(t *testing.T) {
 	t.Parallel()
 	in, u := newInstall(t)
 	u[in.gitDir+" refs/heads/managed/beta"] = "someone else"
 	m := in.plan(t, "one\n", batch...)
 	err := m.Apply(u)
-	if !errors.Is(err, ErrRecovery) {
-		t.Fatalf("apply = %v, want it refused", err)
+	if !errors.Is(err, ErrMovedBeforeApply) || MovedRef(err) != "refs/heads/managed/beta" || !strings.Contains(err.Error(), "refs/heads/managed/beta") {
+		t.Fatalf("apply = %v, want it abandoned naming the ref that moved", err)
 	}
 	for _, name := range []string{"alpha", "gamma"} {
 		if value := u[in.gitDir+" refs/heads/managed/"+name]; value != "" {
 			t.Errorf("%s was written to %q although the batch was refused", name, value)
 		}
+	}
+	if left, _ := Journals(in.dir); len(left) != 0 || m.Journaled() {
+		t.Errorf("%d journals left, journaled %v, want the journal abandoned", len(left), m.Journaled())
+	}
+	if hidden, _ := filepath.Glob(filepath.Join(in.library, ".agentx-*")); len(hidden) != 0 {
+		t.Errorf("the abandoned journal left %v staged", hidden)
 	}
 }
 
@@ -349,15 +357,22 @@ func TestRecoveryRefusesContentThatChanged(t *testing.T) {
 
 // TestRemoveRetainsWhatItDisplaces keeps the content a placement held until
 // the mutation is through, and drops it only once every live path is where
-// it should be.
+// it should be, a read-only directory in it included.
 func TestRemoveRetainsWhatItDisplaces(t *testing.T) {
 	t.Parallel()
 	in, u := newInstall(t)
 	live := filepath.Join(in.place, "alpha")
-	if err := os.MkdirAll(live, 0o755); err != nil {
+	readOnly := filepath.Join(live, "cache", "ro")
+	if err := os.MkdirAll(readOnly, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(live, "SKILL.md"), []byte("displaced\n"), 0o644); err != nil {
+	t.Cleanup(func() { _ = RemoveTree(in.place) })
+	for path, body := range map[string]string{filepath.Join(live, "SKILL.md"): "displaced\n", filepath.Join(readOnly, "f"): "x\n"} {
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Chmod(readOnly, 0o555); err != nil {
 		t.Fatal(err)
 	}
 	state, err := State(live)
@@ -468,10 +483,14 @@ func newRemoval(t *testing.T, name string) (install, refs) {
 // removalOf plans the removal of one installed skill: the import branch and
 // the candidate ref deleted, the symlink placement unlinked, the copy
 // placement taken away with its content retained, the library directory
-// taken away, and the settings rewritten last.
+// taken away, and the settings rewritten last. The branch is also held to
+// what it holds, a step that moves nothing, as a fork's removal holds its
+// branch, so that the journal refuses in its first transaction when the
+// branch moved, and recovery after the deletion is not refused by it.
 func (in install) removalOf(t *testing.T, name string) *Mutation {
 	t.Helper()
 	m := NewMutation(in.dir)
+	m.Ref(in.gitDir, "refs/heads/managed/"+name, "c0ffee-"+name, "c0ffee-"+name)
 	m.Ref(in.gitDir, "refs/heads/managed/"+name, "c0ffee-"+name, "")
 	m.Ref(in.gitDir, "refs/agentx/candidate/"+name, "cand-"+name, "")
 	for _, path := range []string{filepath.Join(in.place, name), in.copyPlace(name), filepath.Join(in.library, name)} {
@@ -586,6 +605,24 @@ func TestRemovalRecoversFromEveryBoundary(t *testing.T) {
 				t.Errorf("recovery run again left %s", strings.Join(left, ", "))
 			}
 		})
+	}
+}
+
+// TestApplyAbandonsARemovalWhoseHeldBranchMoved is a branch moved by git
+// after the command read it under the lock, and before the removal that
+// deletes it last ran: the step that holds it refuses in the first
+// transaction, so nothing of the removal happens and no journal is left
+// for every later command to refuse at.
+func TestApplyAbandonsARemovalWhoseHeldBranchMoved(t *testing.T) {
+	t.Parallel()
+	in, u := newRemoval(t, "alpha")
+	m := in.removalOf(t, "alpha")
+	u[in.gitDir+" refs/heads/managed/alpha"] = "committed meanwhile"
+	if err := m.Apply(u); !errors.Is(err, ErrMovedBeforeApply) {
+		t.Fatalf("apply = %v, want it abandoned", err)
+	}
+	if left := in.removed(t, u, "alpha"); strings.Join(left, ", ") != "the candidate ref, the copy placement, the import branch, the library directory, the symlink placement" {
+		t.Errorf("what is left of alpha: %s", strings.Join(left, ", "))
 	}
 }
 
@@ -784,10 +821,10 @@ func retainedIn(t *testing.T, dir string) string {
 	return ""
 }
 
-// replacement is the shape of a revert, and of an install that displaces
-// what the library held: one ref step that moves nothing, then the library
-// directory taken out of the way and filled again with staged content, all
-// at one path.
+// replacement is the shape of an update, and of an install that displaces
+// what the library held: one ref step, here one that moves nothing, then
+// the library directory taken out of the way and filled again with staged
+// content, all at one path.
 func (in install) replacement(t *testing.T, name, content string) *Mutation {
 	t.Helper()
 	lib := filepath.Join(in.library, name)

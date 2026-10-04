@@ -15,7 +15,7 @@ func TestRefusalsFailure(t *testing.T) {
 	const mixed = "run 'agentx skill list', then update the rest one at a time"
 	gone := refuse(exitRefused, "the library holds no skill directory for it", "install it again")
 	nested := refuse(exitRefused, "it holds a repository git cannot record", "move it out")
-	stored := refuse(exitAccountRepo, "its candidate is stored in a form agentx does not write", "install it again")
+	unreadable := refuse(exitAccountRepo, "its candidate cannot be read", "install it again")
 	pending := refuse(exitPendingMerge, "it conflicts with its update in 1 file", "resolve it with git")
 	type skill struct {
 		name string
@@ -43,9 +43,9 @@ func TestRefusalsFailure(t *testing.T) {
 			hint:    mixed,
 		},
 		{
-			name: "two whose codes disagree and whose hints agree", broken: []skill{{"beta", stored}, {"delta", gone}}, selected: 2,
+			name: "two whose codes disagree and whose hints agree", broken: []skill{{"beta", unreadable}, {"delta", gone}}, selected: 2,
 			status:  exitRefused,
-			message: "2 of 2 skills could not be updated: beta: its candidate is stored in a form agentx does not write; delta: the library holds no skill directory for it",
+			message: "2 of 2 skills could not be updated: beta: its candidate cannot be read; delta: the library holds no skill directory for it",
 			hint:    "install it again",
 		},
 		{
@@ -78,5 +78,20 @@ func TestRefusalsFailure(t *testing.T) {
 		equal(t, c.name+": code", got.status, c.status)
 		equal(t, c.name+": message", got.message, c.message)
 		equal(t, c.name+": hint", got.hint, c.hint)
+	}
+}
+
+// TestNamedReason: a reason in a run over several names its skill once,
+// with a prefix only when the message does not already start with it.
+func TestNamedReason(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct{ subject, message, want string }{
+		{"beta", "it conflicts with its update in 1 file", "beta: it conflicts with its update in 1 file"},
+		{"beta", "beta conflicts with the account remote in 1 file", "beta conflicts with the account remote in 1 file"},
+		{"gone", "gone's worktree /w/gone is missing", "gone's worktree /w/gone is missing"},
+		{"beta", "betamax holds a file", "beta: betamax holds a file"},
+		{"beta", "the library already holds beta", "beta: the library already holds beta"},
+	} {
+		equal(t, c.subject+" "+c.message, namedReason(c.subject, c.message), c.want)
 	}
 }

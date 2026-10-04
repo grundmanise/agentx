@@ -42,7 +42,7 @@ const (
 // inherited from the process.
 type Runner struct {
 	env     map[string]string
-	serve   bool // the serve child: git must fail instead of prompting
+	serve   bool // the serve child: every git runs unattended, see call.unattended
 	logf    func(format string, args ...any)
 	version *Version // cached after the first Version call
 	// stopped records that a stop signal killed one of this runner's git
@@ -53,9 +53,10 @@ type Runner struct {
 	stopped atomic.Bool
 }
 
-// New returns a runner over env. Under serve every git call has terminal
-// prompts disabled, SSH in batch mode and an askpass that fails. logf receives
-// every command line and its stderr.
+// New returns a runner over env. Under serve every git call runs
+// unattended: in a session of its own with no terminal and every prompt
+// off, see call.unattended. logf receives every command line and its
+// stderr.
 func New(env map[string]string, serve bool, logf func(format string, args ...any)) *Runner {
 	return &Runner{env: env, serve: serve, logf: logf}
 }
@@ -170,9 +171,22 @@ func (r *Runner) InCheckoutInput(ctx context.Context, dir string, stdin io.Reade
 
 // AddCheckout adds a linked worktree of the repository at gitDir at path,
 // detached at commit and locked with reason, so that git's own pruning of
-// worktrees never takes it, whatever becomes of its directory.
+// worktrees never takes it, whatever becomes of its directory. Registrations
+// git lists as prunable are pruned first, as AddForkWorktree prunes them.
 func (r *Runner) AddCheckout(ctx context.Context, gitDir, path, commit, reason string) error {
-	_, err := r.Isolated(ctx, gitDir, "worktree", "add", "--detach", "--lock", "--reason", reason, path, commit)
+	list, err := r.Worktrees(ctx, gitDir)
+	if err != nil {
+		return err
+	}
+	for _, w := range list {
+		if w.Prunable {
+			if err := r.PruneWorktrees(ctx, gitDir); err != nil {
+				return err
+			}
+			break
+		}
+	}
+	_, err = r.Isolated(ctx, gitDir, "worktree", "add", "--detach", "--lock", "--reason", reason, path, commit)
 	return err
 }
 
@@ -265,6 +279,37 @@ type call struct {
 	stdin    io.Reader
 	env      map[string]string // set on top of the environment built, such as GIT_INDEX_FILE
 	dir      string            // git's working directory; "" keeps the process's
+	// terminate stops git with SIGTERM rather than SIGKILL when the
+	// context is cancelled, so that git removes the lock files it holds
+	// on its way out; waitDelay later, a git still running is killed.
+	terminate bool
+	// unattended runs git where nothing can ask the user anything: in a
+	// new session, so that neither git nor the ssh it starts has a
+	// controlling terminal to open, and with every prompt git, ssh and a
+	// credential manager know of turned off, see unattendedEnv. A
+	// credential helper that answers without asking, and a running SSH
+	// agent, still answer; the user's own SSH command is left as it is.
+	// The serve child runs every git this way, and a command runs a check
+	// the user did not ask for, such as the access check of a source, this
+	// way too.
+	unattended bool
+	// stderr, when it is not nil, receives what git wrote on stderr, for a
+	// caller that reads git's answer out of it rather than an error.
+	stderr *string
+}
+
+// unattendedEnv is what an unattended git has on top of its environment:
+// git's terminal prompt and askpass off, ssh's askpass never used, and a
+// credential manager told not to open a window, so that a prompt becomes a
+// failure rather than a hang. ssh before OpenSSH 8.4 knows no
+// SSH_ASKPASS_REQUIRE and, with no terminal and a display, runs
+// SSH_ASKPASS, so that is a program that answers nothing too.
+var unattendedEnv = map[string]string{
+	"GIT_TERMINAL_PROMPT": "0",
+	"GIT_ASKPASS":         "/bin/false",
+	"SSH_ASKPASS":         "/bin/false",
+	"SSH_ASKPASS_REQUIRE": "never",
+	"GCM_INTERACTIVE":     "never",
 }
 
 // run executes git with args; a call that is not isolated runs in the
@@ -273,6 +318,27 @@ type call struct {
 func (r *Runner) run(ctx context.Context, c call, args ...string) (string, error) {
 	out, _, err := r.runStatus(ctx, c, 0, args...)
 	return out, err
+}
+
+// workDir is the directory a git given none runs in: the process's own,
+// "" to keep it, unless that directory is gone, as it is for a shell left
+// in a merge checkout an update completed and removed. git started there
+// fails before it reads any argument, so it runs at the root instead; a
+// call that names no directory names its repository with --git-dir. Not
+// every system fails getcwd for a removed directory, macOS may still give
+// its old path, so the path must also still be the directory the process
+// is in.
+func workDir() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return string(filepath.Separator)
+	}
+	named, errNamed := os.Stat(wd)
+	here, errHere := os.Stat(".")
+	if errNamed != nil || errHere != nil || !os.SameFile(named, here) {
+		return string(filepath.Separator)
+	}
+	return ""
 }
 
 // runStatus is run that answers an exit status from 1 to upTo with stdout
@@ -286,11 +352,20 @@ func (r *Runner) runStatus(ctx context.Context, c call, upTo int, args ...string
 	}
 	r.logf("git %s", strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, git, args...)
-	cmd.Env = r.childEnv(c.isolated, c.dates)
-	for k, v := range c.env {
-		cmd.Env = append(cmd.Env, k+"="+v)
+	unattended := c.unattended || r.serve
+	cmd.Env = r.childEnv(c, unattended)
+	if unattended {
+		// A session of its own has no controlling terminal, and ssh and a
+		// pinentry ask on /dev/tty rather than on stdin, which is the null
+		// device already. It also keeps a terminal's Ctrl-C from reaching
+		// git: the run's cancelled context stops it instead, and on Linux
+		// the death of agentx, see unattendedAttr.
+		cmd.SysProcAttr = unattendedAttr()
 	}
 	cmd.Dir = c.dir
+	if cmd.Dir == "" {
+		cmd.Dir = workDir()
+	}
 	cmd.Stdin = c.stdin
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -304,9 +379,35 @@ func (r *Runner) runStatus(ctx context.Context, c call, upTo int, args ...string
 	// process has exited and only a child it left behind can still hold a
 	// pipe open.
 	cmd.WaitDelay = waitDelay
+	stop := syscall.SIGKILL
+	if c.terminate {
+		stop = syscall.SIGTERM
+	}
+	switch {
+	case unattended:
+		// git leads the session it was started in, and so the process
+		// group, which is the one its transport, ssh or a remote helper,
+		// runs in too. With no terminal's Ctrl-C to reach that group, the
+		// whole group is what a cancelled context stops, so that no ssh
+		// waiting on a host that does not answer outlives the run.
+		cmd.Cancel = func() error {
+			if err := syscall.Kill(-cmd.Process.Pid, stop); err != nil {
+				if errors.Is(err, syscall.ESRCH) {
+					return os.ErrProcessDone
+				}
+				return err
+			}
+			return nil
+		}
+	case c.terminate:
+		cmd.Cancel = func() error { return cmd.Process.Signal(stop) }
+	}
 	err = cmd.Run()
 	if stderr.Len() > 0 {
 		r.logf("git stderr: %s", strings.TrimRight(stderr.String(), "\n"))
+	}
+	if c.stderr != nil {
+		*c.stderr = stderr.String()
 	}
 	if err != nil {
 		if ctx.Err() != nil {
@@ -380,16 +481,26 @@ func subcommand(args []string) string {
 
 // lookPath finds git in the PATH of the environment map, never the process's.
 func (r *Runner) lookPath() (string, error) {
-	for _, dir := range filepath.SplitList(r.env["PATH"]) {
+	if path := FindProgram(r.env, "git"); path != "" {
+		return path, nil
+	}
+	return "", ErrMissing
+}
+
+// FindProgram is the path of the executable called name in the first
+// directory of the PATH of env, the user's environment, that holds one, ""
+// when none does. The process's own PATH is never read.
+func FindProgram(env map[string]string, name string) string {
+	for _, dir := range filepath.SplitList(env["PATH"]) {
 		if dir == "" {
 			continue
 		}
-		path := filepath.Join(dir, "git")
+		path := filepath.Join(dir, name)
 		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() && info.Mode()&0o111 != 0 {
-			return path, nil
+			return path
 		}
 	}
-	return "", ErrMissing
+	return ""
 }
 
 // testConfig is configuration every git process carries in tests only; see
@@ -413,25 +524,53 @@ func SkipFlushesInTests() {
 	}
 }
 
-// childEnv builds the environment of one git process from the environment
-// map. The isolated environment drops every GIT_ variable of the user's,
-// fixes configuration, author and committer, reads no attributes of the
-// user's or the system's, so that no merge driver, filter or marker size
+// repoLocation is every variable with which the user's environment tells
+// git which repository, working tree, index or object store to use, or
+// where to look for one. No git agentx runs works on a repository of the
+// user's: each names its own with --git-dir or a directory, and
+// ls-remote names none, so a GIT_DIR exported by a shell or set by a git
+// hook agentx runs under would make it read that repository's
+// configuration, its URL rewrites and remotes among it, and reach another
+// URL than the fetch that follows. Every environment drops them.
+var repoLocation = []string{
+	"GIT_DIR",
+	"GIT_WORK_TREE",
+	"GIT_INDEX_FILE",
+	"GIT_OBJECT_DIRECTORY",
+	"GIT_ALTERNATE_OBJECT_DIRECTORIES",
+	"GIT_COMMON_DIR",
+	"GIT_NAMESPACE",
+	"GIT_CEILING_DIRECTORIES",
+	"GIT_DISCOVERY_ACROSS_FILESYSTEM",
+	"GIT_PREFIX",
+}
+
+// childEnv builds the environment of one git process, the call c, from the
+// environment map. The isolated environment drops every GIT_ variable of the
+// user's, fixes configuration, author and committer, reads no attributes of
+// the user's or the system's, so that no merge driver, filter or marker size
 // of theirs changes what git writes (isolatedConfig names no attributes file
 // in place of the one git reads under XDG_CONFIG_HOME when configuration
 // names none, and GIT_ATTR_NOSYSTEM drops the system's), and forbids the
 // lazy fetch of a missing object (git 2.45 and newer honour the variable),
-// since it never touches the network; the user environment is the map as
-// is. Under serve, both fail instead of prompting. dates, when it is not
-// empty, replaces the fixed author and committer dates for this one
-// process.
-func (r *Runner) childEnv(isolated bool, dates string) []string {
+// since it never touches the network; the user environment is the map
+// without the variables that locate a repository, see repoLocation, so that
+// the user's configuration, credentials, SSH and proxy settings apply and
+// their repository does not. An unattended process, see call.unattended,
+// has every prompt off on top of either. c.dates, when it is not empty,
+// replaces the fixed author and committer dates, and c.env is set last, on
+// top of everything else.
+func (r *Runner) childEnv(c call, unattended bool) []string {
+	isolated, dates := c.isolated, c.dates
 	env := make(map[string]string, len(r.env)+12)
 	for k, v := range r.env {
 		if isolated && strings.HasPrefix(k, "GIT_") {
 			continue
 		}
 		env[k] = v
+	}
+	for _, k := range repoLocation {
+		delete(env, k)
 	}
 	if isolated {
 		env["GIT_CONFIG_GLOBAL"] = os.DevNull
@@ -448,14 +587,10 @@ func (r *Runner) childEnv(isolated bool, dates string) []string {
 			env["GIT_"+who+"_DATE"] = when
 		}
 	}
-	if r.serve {
-		ssh := env["GIT_SSH_COMMAND"]
-		if ssh == "" {
-			ssh = "ssh"
+	if unattended {
+		for k, v := range unattendedEnv {
+			env[k] = v
 		}
-		env["GIT_TERMINAL_PROMPT"] = "0"
-		env["GIT_SSH_COMMAND"] = ssh + " -o BatchMode=yes"
-		env["GIT_ASKPASS"] = "/bin/false"
 	}
 	if len(testConfig) > 0 {
 		n, _ := strconv.Atoi(env["GIT_CONFIG_COUNT"])
@@ -465,6 +600,9 @@ func (r *Runner) childEnv(isolated bool, dates string) []string {
 			n++
 		}
 		env["GIT_CONFIG_COUNT"] = strconv.Itoa(n)
+	}
+	for k, v := range c.env {
+		env[k] = v
 	}
 	list := make([]string, 0, len(env))
 	for k, v := range env {

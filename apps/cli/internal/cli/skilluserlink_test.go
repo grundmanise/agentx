@@ -68,7 +68,7 @@ func stillTheirs(t *testing.T, what, path, target string) {
 func TestSkillRemoveLeavesALinkThatOnlyResolvesIntoTheLibrary(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha").exit, 0)
 	place, target := userLink(t, h, ".claude", "alpha")
 
 	out := h.run("--json", "skill", "remove", "alpha", "--from", "claude-code")
@@ -90,7 +90,7 @@ func TestSkillRemoveLeavesALinkThatOnlyResolvesIntoTheLibrary(t *testing.T) {
 func TestSkillRemoveSaysALinkThroughARemovedPlacementLeadsNowhere(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "cursor").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "cursor").exit, 0)
 	through := filepath.Join(h.home, ".cursor", "skills", "alpha")
 	place := filepath.Join(h.home, ".claude", "skills", "alpha")
 	if err := os.MkdirAll(filepath.Dir(place), 0o755); err != nil {
@@ -127,7 +127,7 @@ func TestSkillPlaceLeavesALinkThatOnlyResolvesIntoTheLibrary(t *testing.T) {
 		t.Run(c.what, func(t *testing.T) {
 			t.Parallel()
 			h, s := placementHarness(t)
-			equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "codex").exit, 0)
+			equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "codex").exit, 0)
 			place, target := userLink(t, h, ".cursor", "alpha")
 
 			out := h.run(append([]string{"skill", "place", "alpha", "--to", "cursor"}, c.args...)...)
@@ -147,10 +147,10 @@ func TestSkillPlaceLeavesALinkThatOnlyResolvesIntoTheLibrary(t *testing.T) {
 func TestSkillAddLeavesALinkThatOnlyResolvesIntoTheLibrary(t *testing.T) {
 	t.Parallel()
 	h, s := placementHarness(t)
-	equal(t, "add", h.run("skill", "add", s.url, "--skill", "alpha", "--to", "codex").exit, 0)
+	equal(t, "add", h.run("skill", "add", s.url, "--name", "alpha", "--to", "codex").exit, 0)
 	place, target := userLink(t, h, ".cursor", "alpha")
 
-	out := h.run("skill", "add", s.url, "--skill", "alpha", "--to", "cursor")
+	out := h.run("skill", "add", s.url, "--name", "alpha", "--to", "cursor")
 	equal(t, "exit", out.exit, 0)
 	stillTheirs(t, "after an install", place, target)
 	contains(t, "the warning", out.stderr, "is a link of your own")

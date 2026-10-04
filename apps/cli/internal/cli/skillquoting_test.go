@@ -93,9 +93,9 @@ func quotingCases() []quotingCase {
 // git's mktree C-unquotes any name that starts with a double quote and
 // reads one record per line, so a name written back unquoted is silently
 // renamed or breaks the input. The import commit is the base version every
-// later update, revert and fork merge restores from, so a name lost here
-// is lost for good, and the content hash would name a tree the commit does
-// not hold.
+// later update and fork merge restores from, so a name lost here is lost
+// for good, and the content hash would name a tree the commit does not
+// hold.
 //
 // Every skill is taken in one run: a batch writes the trees of every skill
 // together, one mktree per level, which is the mktree a run of one skill

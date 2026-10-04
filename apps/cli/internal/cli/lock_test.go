@@ -157,7 +157,7 @@ func TestConcurrentConfigWrites(t *testing.T) {
 		case 0:
 			writes[i] = write{"label", "label-" + strconv.Itoa(i), outcome{}}
 		case 1:
-			writes[i] = write{"auto_push", "true", outcome{}}
+			writes[i] = write{"ignore_system_files", "false", outcome{}}
 		case 2:
 			writes[i] = write{"accept_operations", "true", outcome{}}
 		}
@@ -186,10 +186,9 @@ func TestConcurrentConfigWrites(t *testing.T) {
 		t.Fatal("no write succeeded")
 	}
 	file := readSettingsFile(t, h)
-	equal(t, "version", readVersion(t, h), len(succeeded["label"])+len(succeeded["auto_push"])+len(succeeded["accept_operations"]))
-	for _, key := range []string{"auto_push", "accept_operations"} {
-		equal(t, key, file[key], len(succeeded[key]) > 0)
-	}
+	equal(t, "version", readVersion(t, h), len(succeeded["label"])+len(succeeded["ignore_system_files"])+len(succeeded["accept_operations"]))
+	equal(t, "accept_operations", file["accept_operations"], len(succeeded["accept_operations"]) > 0)
+	equal(t, "ignore_system_files", file["ignore_system_files"], len(succeeded["ignore_system_files"]) == 0)
 	if labels := succeeded["label"]; len(labels) > 0 {
 		found := false
 		for _, l := range labels {
