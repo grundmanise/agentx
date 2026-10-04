@@ -71,10 +71,9 @@ func (h *harness) record(name string) string {
 // message -m gives, a file git ignores stays on disk and out of the
 // commit, every branch goes to the account remote, each worktree's status
 // is clean, and every skill reads current; the shared source is never
-// pushed to. Before that, in the same home and changing nothing, a named
-// skill a publish cannot cover is refused: the shared source's managed
-// beta also before an account remote is set, then with one set an empty
-// -m, a trailer of agentx's in -m, refused before the name is looked up,
+// pushed to, though its managed beta is edited too. Before that, in the
+// same home and changing nothing, a named skill a publish cannot cover is
+// refused: an empty -m, a trailer of agentx's in -m, refused before the name is looked up,
 // a name the machine does not hold, an unmanaged skill, a skill holding a
 // Git repository its ignore rules do not cover, and an account remote git
 // cannot reach; a .gitignore then lets jot be recorded without the
@@ -92,11 +91,6 @@ func TestSkillPublishRecordsEditsAndPushes(t *testing.T) {
 	h.mustRun("skill", "new", "jot")
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "mine"), "SKILL.md"), skill("mine", "mine"))
 	sourceRefs := remoteGit(t, h, s.gitDir, "for-each-ref", "--format=%(refname) %(objectname)")
-	shared := "publishing to " + s.url + " is not supported yet"
-
-	out := h.run("--json", "skill", "publish", "beta")
-	equal(t, "beta with no account remote: exit", out.exit, exitRefused.exit)
-	contains(t, "beta with no account remote: error", h.one(out.stdout, "error")["message"].(string), shared)
 
 	remote := newAccountRemote(t, h)
 	h.setAccount(remote)
@@ -119,6 +113,7 @@ func TestSkillPublishRecordsEditsAndPushes(t *testing.T) {
 	writeFile(t, filepath.Join(h.library, "notes", "SKILL.md"), skill("notes", "Edited"))
 	writeFile(t, filepath.Join(h.library, "jot", "SKILL.md"), skill("jot", "Edited"))
 	writeFile(t, filepath.Join(h.library, "jot", ".DS_Store"), "finder\n")
+	writeFile(t, filepath.Join(h.library, "beta", "notes.md"), forkNotes("one", "one, mine"))
 	writeFile(t, mkdirs(t, filepath.Join(h.library, "jot", "vendor", ".git"), "HEAD"), "ref: refs/heads/main\n")
 
 	refs := h.refLines()
@@ -131,7 +126,6 @@ func TestSkillPublishRecordsEditsAndPushes(t *testing.T) {
 		{[]string{"absent", "-m", "subject\n\nAgentx-Fork-ID: 11111111-2222-4333-8444-555555555555"}, exitUsage, "-m may not end in a trailer agentx writes itself"},
 		{[]string{"absent"}, exitNotFound, `the library holds no skill called "absent"`},
 		{[]string{"mine"}, exitRefused, "mine is not managed, so it has no source to publish to"},
-		{[]string{"beta"}, exitRefused, shared},
 		{[]string{"jot", "-m", "unused"}, exitRefused, "which git would record as a link rather than its files"},
 	} {
 		out := h.run(append([]string{"--json", "skill", "publish"}, tc.args...)...)
@@ -147,7 +141,7 @@ func TestSkillPublishRecordsEditsAndPushes(t *testing.T) {
 	if err := os.Rename(remote, away); err != nil {
 		t.Fatal(err)
 	}
-	out = h.run("--json", "skill", "publish", "notes")
+	out := h.run("--json", "skill", "publish", "notes")
 	if err := os.Rename(away, remote); err != nil {
 		t.Fatal(err)
 	}

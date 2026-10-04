@@ -232,11 +232,31 @@ func finish(ctx context.Context, inv *invocation, err error) int {
 		out.debugf("the run was interrupted while it reported: %v", err)
 		err = interruptedFailure()
 	}
+	f, known := knownFailure(inv.dirs.Home, err)
+	switch {
+	case known:
+	case inv.parsed:
+		f = &failure{status: exitInternal, message: err.Error()}
+	default:
+		f = &failure{status: exitUsage, message: err.Error(), hint: "run 'agentx help' for usage"}
+	}
+	out.fail(f)
+	out.result(false, f.message)
+	return f.status.exit
+}
+
+// knownFailure is the failure a run reports for err when err is one it
+// knows: a refusal as it is, a lock another command holds, exit code 7, a
+// ref that moved before a mutation applied or a journal that could not be
+// finished, exit code 6, and an account repo git cannot use, exit code 8.
+// It reports false for any other error, whose exit code depends on whether
+// the command line was parsed. dir is agentx home.
+func knownFailure(dir string, err error) (*failure, bool) {
 	var f *failure
 	switch {
 	case errors.As(err, &f):
 	case errors.Is(err, home.ErrLocked):
-		f = &failure{status: exitLocked, message: err.Error(), hint: "wait for the command holding " + home.LockPath(inv.dirs.Home) + " to finish, then retry"}
+		f = &failure{status: exitLocked, message: err.Error(), hint: "wait for the command holding " + home.LockPath(dir) + " to finish, then retry"}
 	case errors.Is(err, home.ErrMovedBeforeApply):
 		// A command that knows what moved says so in its own words; one
 		// that does not still changed nothing, and running it again is the
@@ -249,12 +269,8 @@ func finish(ctx context.Context, inv *invocation, err error) int {
 		// command that wrote the journal is gone, so any command can be the
 		// one that finds it unusable, and the table calls that 8.
 		f = &failure{status: exitAccountRepo, message: err.Error(), hint: "run 'agentx doctor' and check the account repo it names"}
-	case inv.parsed:
-		f = &failure{status: exitInternal, message: err.Error()}
 	default:
-		f = &failure{status: exitUsage, message: err.Error(), hint: "run 'agentx help' for usage"}
+		return nil, false
 	}
-	out.fail(f)
-	out.result(false, f.message)
-	return f.status.exit
+	return f, true
 }

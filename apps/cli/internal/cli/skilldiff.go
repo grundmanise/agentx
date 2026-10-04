@@ -20,11 +20,12 @@ func newSkillDiffCommand(inv *invocation) *cobra.Command {
 		Use:   "diff <name>",
 		Short: "Show how a skill differs from its base version, or a fork from what it published",
 		Long: "Show how the library directory of a managed skill differs from its base version,\n" +
-			"the version it was installed at, as one unified diff per file. Every edit counts,\n" +
-			"whatever tool made it, a file made executable and a file turned into a symlink\n" +
-			"included. Files git ignores do not. Nothing is written to the library. With\n" +
-			"--update, show instead what the update '" + checkUpdatesCommand + "' found\n" +
-			"changes in the base version.\n\n" +
+			"the version it was installed at or last published, as one unified diff per file:\n" +
+			"its edits not yet published, which 'agentx skill publish <name>' pushes to its\n" +
+			"source. Every edit counts, whatever tool made it, a file made executable and a\n" +
+			"file turned into a symlink included. Files git ignores do not. Nothing is\n" +
+			"written to the library. With --update, show instead what the update\n" +
+			"'" + checkUpdatesCommand + "' found changes in the base version.\n\n" +
 			"For a fork, show its unpublished edits: how its skill directory differs from its\n" +
 			"last published version, the newest commit of its branch the account remote holds\n" +
 			"as last fetched, or from the commit that created it when the account remote holds\n" +

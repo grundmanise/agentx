@@ -54,10 +54,10 @@ A failed command prints `error: ...` and, when there is a fix, `hint: ...` on st
 | 0 | Success. |
 | 1 | Unknown command, bad flag or missing argument. Run `agentx help`. |
 | 2 | Git is missing or older than 2.40. Install or upgrade git. |
-| 3 | A source or the [account remote](/cli/source#add-your-account-remote) is unreachable, or authentication failed, or the account remote did not let this machine push, or it refused to delete a fork's branch (see [Remove a fork](/cli/fork#remove-a-fork)). |
+| 3 | A source or the [account remote](/cli/source#add-your-account-remote) is unreachable, or authentication failed, or the account remote or a shared source did not let this machine push, or the account remote refused to delete a fork's branch (see [Remove a fork](/cli/fork#remove-a-fork)). |
 | 4 | A pending merge blocks the action, or `skill update` left one pending because [your edits conflict with the update](/cli/skill#when-your-edits-conflict), or found files of one still to resolve. `skill update` leaves one pending when [a fork conflicts with the account remote](/cli/fork#resolve-a-conflict). |
 | 5 | The skill, source or configuration does not exist. |
-| 6 | A collision or an unmet precondition, such as a push the remote's host declined (see [Publish a skill](/cli/skill#publish-a-skill)). |
+| 6 | A collision or an unmet precondition, such as a push the remote's host declined (see [Publish a skill](/cli/skill#publish-a-skill)), or a source that changed a skill you publish to it (see [Publish edits to a shared source](/cli/skill#publish-edits-to-a-shared-source)). |
 | 7 | Another agentx command is running. Retry when it finishes. |
 | 8 | The account repo is unusable. |
 | 9 | You stopped the run with Ctrl-C, or something sent it a `SIGTERM`. |

@@ -19,7 +19,9 @@ func newSkillListCommand(inv *invocation) *cobra.Command {
 			"the upstream it came from) and placements. With --remote, fetch the account\n" +
 			"remote first and list after them the skills it holds that this machine has not\n" +
 			"installed; install one with 'agentx skill add --name <name>', or all of them\n" +
-			"with 'agentx skill add --all'.",
+			"with 'agentx skill add --all'. A managed skill reads modified while it holds\n" +
+			"edits not yet published, whatever its source; 'agentx skill diff <name>' shows\n" +
+			"them and 'agentx skill publish <name>' publishes them.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error { return inv.skillList(cmd.Context(), remote) },
 	}

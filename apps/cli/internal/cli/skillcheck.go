@@ -173,7 +173,7 @@ type checkReport struct {
 // refusal a run over several sources answers with. What it could check is
 // reported and pinned all the same.
 func (inv *invocation) skillCheckUpdates(ctx context.Context) error {
-	rep, err := inv.checkUpdates(ctx, false)
+	rep, err := inv.checkUpdates(ctx, false, "")
 	if err != nil {
 		return err
 	}
@@ -330,7 +330,13 @@ func checkRefusal(failures []checkFailure) error {
 // not be fetched, and a skill whose newer version cannot be imported, are
 // failures in the report and cost nothing else: every other source is still
 // fetched, compared and recorded.
-func (inv *invocation) checkUpdates(ctx context.Context, serving bool) (checkReport, error) {
+//
+// only, when it is not "", is the canonical URL of the one source the
+// check covers, as a publish to that source runs it, see publishShared:
+// that source alone is fetched, whether or not a skill of it is held, and
+// the account remote is neither fetched nor checked, so it can neither
+// fail nor slow that run. "" is every source, as above.
+func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only string) (checkReport, error) {
 	var rep checkReport
 	s, err := inv.loadSettings()
 	if err != nil {
@@ -368,13 +374,17 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool) (checkRep
 	bySource := inv.checkable(records, s)
 	var targets []fetchTarget
 	for _, entry := range sharedSources(s.Sources) {
-		if serving || len(bySource[entry.URL]) > 0 {
+		switch {
+		case only != "" && entry.URL != only:
+		case serving || only != "" || len(bySource[entry.URL]) > 0:
 			targets = append(targets, target(entry))
 		}
 	}
-	acc, err := inv.accountDue(own)
-	if err != nil {
-		return rep, err
+	var acc accountCheck
+	if only == "" {
+		if acc, err = inv.accountDue(own); err != nil {
+			return rep, err
+		}
 	}
 	if acc.entry.URL != "" { // fetched last, counted with the shared sources
 		targets = append(targets, target(acc.entry))

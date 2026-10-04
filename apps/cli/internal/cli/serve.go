@@ -234,7 +234,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 // candidates and markers it wrote into the next snapshot, and every source
 // ref it moved into the source index.
 func (inv *invocation) serveCheck(ctx context.Context, failing sourceFailures) func() {
-	rep, err := inv.checkUpdates(ctx, true)
+	rep, err := inv.checkUpdates(ctx, true, "")
 	return func() {
 		if err != nil {
 			inv.out.warn("update check: " + err.Error())

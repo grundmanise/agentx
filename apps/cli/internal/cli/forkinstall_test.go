@@ -174,8 +174,7 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 // the symlink into the fork's worktree, which holds the .DS_Store, and the
 // placements are as they were, Claude Code's leading to the fork and
 // Cursor still without one, though the install was given --to cursor,
-// which a warning says places nothing. A publish of the managed alpha before
-// is not supported and names the install, not a fork of b's own.
+// which a warning says places nothing.
 func TestFromAccountSupersedesAnUnmodifiedCopy(t *testing.T) {
 	t.Parallel()
 	_, b, s, _ := accountHomes(t)
@@ -193,12 +192,6 @@ func TestFromAccountSupersedesAnUnmodifiedCopy(t *testing.T) {
 	}
 	claude := filepath.Join(b.home, ".claude", "skills", "alpha")
 	before, _ := os.Readlink(claude)
-	published := b.run("--json", "skill", "publish", "alpha")
-	equal(t, "a publish of the managed alpha: exit", published.exit, 6)
-	refused := b.one(published.stdout, "error")
-	contains(t, "its error", refused["message"].(string), "is not supported yet")
-	contains(t, "its hint", refused["hint"].(string), "agentx skill add --name alpha")
-
 	out := b.mustRun("--json", "skill", "add", "--name", "alpha", "--to", "cursor")
 	contains(t, "the warning", out.stderr, "so --to and --copy place nothing")
 	equal(t, "the import branch", b.ref(lineage.ManagedRef("alpha")), "")

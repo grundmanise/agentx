@@ -32,6 +32,7 @@ type publishEvent struct {
 	Outcome string `json:"outcome"`
 	Commit  string `json:"commit,omitempty"` // what the remote's branch holds now, when the publish knows it
 	Source  string `json:"source"`           // the URL of the source the skill is published to
+	Branch  string `json:"branch,omitempty"` // the branch of a shared source the skill was pushed to, see publishShared
 }
 
 // The outcomes of a publish, one per skill.
@@ -61,7 +62,7 @@ func newSkillPublishCommand(inv *invocation) *cobra.Command {
 	var message string
 	cmd := &cobra.Command{
 		Use:   "publish [<name>]",
-		Short: "Publish the edits of one of your skills, or of all of them, to the account remote",
+		Short: "Publish the edits of a skill to its source, or of all of yours to the account remote",
 		Long: "Publish the skill called <name>, or with no name every skill of your own: record\n" +
 			"the edits its directory holds as one commit on its branch, then push the branch\n" +
 			"to the account remote. Edits stay on this machine until you publish them. The\n" +
@@ -71,7 +72,13 @@ func newSkillPublishCommand(inv *invocation) *cobra.Command {
 			"update <name>' to take them in first, then publish again. A push the account\n" +
 			"remote's host declines, by a hook or a protected branch, is reported with its\n" +
 			"reason, never forced, and a branch of the same name that is another skill is\n" +
-			"never pushed over.",
+			"never pushed over.\n\n" +
+			"A skill installed from a shared source is published only when you name it: its\n" +
+			"edits become one commit, under your own git identity, on the branch of the\n" +
+			"source it is installed from, changing its folder alone, and the commit is pushed\n" +
+			"there. No account remote is needed. When the source changed the skill since it\n" +
+			"was installed, nothing is pushed: run 'agentx skill update <name>' first, then\n" +
+			"publish again.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cmd.Flags().Changed("message") && strings.TrimSpace(message) == "" {
@@ -133,7 +140,8 @@ type publishing struct {
 // publish publishes the skill called name, or with no name every skill of
 // your own on this machine. A named skill is judged first from what this
 // machine holds, see publishable, so a skill a publish cannot cover is
-// refused before the account remote is looked up. Then the account remote
+// refused before the account remote is looked up, and a managed skill of a
+// shared source is published to that source instead, see publishShared. Then the account remote
 // is fetched once, and each skill is judged against its branch there, as
 // the fetch left it, see judgePublish. The edits of every skill that goes
 // on are recorded, see recordEdits, after the fetch and every refusal, so
@@ -145,8 +153,11 @@ type publishing struct {
 // old name's branch of a skill renamed here goes, see dropRenamed.
 func (inv *invocation) publish(ctx context.Context, name, message string) error {
 	if name != "" {
-		if err := inv.publishable(ctx, name); err != nil {
+		switch shared, err := inv.publishable(ctx, name); {
+		case err != nil:
 			return err
+		case shared:
+			return inv.publishShared(ctx, name, message)
 		}
 	}
 	gitDir, entry, account, err := inv.accountRemote(ctx)
@@ -269,29 +280,29 @@ func (inv *invocation) pushFailed(ctx context.Context, list []*publishing, name 
 	return f
 }
 
-// publishable refuses, before the account remote is looked up or fetched,
-// a named skill a publish cannot cover, from what this machine holds:
-// one it does not hold, exit code 5, with the hint to install it when the
-// account remote held it at the last fetch; a managed skill of a shared
-// source, exit code 6, which agentx cannot publish to yet; and an
-// unmanaged skill, exit code 6, which has no source to publish to. One of
-// your own skills, a fork branch's, passes.
-func (inv *invocation) publishable(ctx context.Context, name string) error {
+// publishable judges a named skill from what this machine holds, before
+// the account remote is looked up or fetched: one of your own skills, a
+// fork branch's, passes; a managed skill of a shared source is shared, and
+// published to its source, see publishShared, with no account remote
+// needed; and a skill a publish cannot cover is refused: one this machine
+// does not hold, exit code 5, with the hint to install it when the account
+// remote held it at the last fetch, and an unmanaged skill, exit code 6,
+// which has no source to publish to.
+func (inv *invocation) publishable(ctx context.Context, name string) (shared bool, err error) {
 	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
-		return accountRepoFailure(err)
+		return false, accountRepoFailure(err)
 	}
 	// The records are read without the fork warnings, which the read after
 	// finishJournals gives once any journal left is finished.
 	records := map[string]lineage.Record{}
 	if exists {
 		if records, err = lineage.List(ctx, inv.git, gitDir); err != nil {
-			return accountRepoFailure(err)
+			return false, accountRepoFailure(err)
 		}
 	}
-	rec, ok := records[name]
-	if ok && rec.Kind == lineage.KindFork {
-		return nil
+	if rec, ok := records[name]; ok {
+		return rec.Kind != lineage.KindFork, nil
 	}
 	_, held := librarySkill(inv.dirs.Library, name)
 	// published is whether the account remote held a skill of the name at
@@ -303,28 +314,18 @@ func (inv *invocation) publishable(ctx context.Context, name string) error {
 		published = inv.remoteHolds(ctx, remote, name)
 	}
 	switch {
-	case ok:
-		where := "its source"
-		if rec.HasImport && rec.Import.Source != "" {
-			where = shownURL(rec.Import.Source)
-		}
-		hint := "to publish your own version of " + sanitised(name) + ", fork it with '" + skillCommand("fork", name) + "' and publish that"
-		if published {
-			hint += "; or install the one you published in its place with '" + accountAddCommand(name) + "'"
-		}
-		return fail(exitRefused, "publishing to "+where+" is not supported yet", hint)
 	case held:
 		hint := "make it one of your own skills with '" + skillCommand("fork", name) + "', then publish it"
 		if published {
 			hint += "; or move " + quotedPath(inv.libraryPath(name)) + " aside and install the one you published with '" + accountAddCommand(name) + "'"
 		}
-		return fail(exitRefused, sanitised(name)+" is not managed, so it has no source to publish to", hint)
+		return false, fail(exitRefused, sanitised(name)+" is not managed, so it has no source to publish to", hint)
 	case published:
 		f := failureOf(inv.noLibrarySkill(name))
 		f.hint = "it is one of your skills on the account remote; install it with '" + accountAddCommand(name) + "'"
-		return f
+		return false, f
 	}
-	return inv.noLibrarySkill(name)
+	return false, inv.noLibrarySkill(name)
 }
 
 // judgePublish decides what the publish does with the skill whose branch

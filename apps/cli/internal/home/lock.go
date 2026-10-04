@@ -58,6 +58,8 @@ func MutateQuietWaiting(ctx context.Context, dir string, u RefUpdater, fn func()
 // at that moment is no reason to drop what the check fetched, and nobody is
 // there to run it again. Waiting blocks nobody else: every other command
 // still gives up on a lock it finds held rather than queueing behind this.
+// A publish to a shared source finishes this way too, bounded: the source
+// took its commit already, so a held lock is no reason to drop recording it.
 func MutateWaiting(ctx context.Context, dir string, u RefUpdater, fn func() error) error {
 	return mutate(dir, u, func() (*os.File, error) { return waitLock(ctx, dir, syscall.LOCK_EX) }, true, fn)
 }
