@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -449,5 +450,86 @@ func writeShim(t *testing.T, path, script string) {
 			return
 		}
 		runtime.Gosched()
+	}
+}
+
+// TestChildEnv checks what one git process is given: the variables that
+// locate a repository are dropped in both environments, so that a GIT_DIR
+// of a hook or a shell agentx runs under reaches no git of agentx's, while
+// the user's own configuration, credentials, SSH and proxy settings stay in
+// the user environment, and a call's own variables apply on top of either.
+func TestChildEnv(t *testing.T) {
+	t.Parallel()
+	user := map[string]string{
+		"HOME":                             "/home/someone",
+		"HTTPS_PROXY":                      "http://proxy:3128",
+		"GIT_SSH_COMMAND":                  "ssh -i key",
+		"GIT_CONFIG_GLOBAL":                "/home/someone/.gitconfig-work",
+		"GIT_DIR":                          "/elsewhere/.git",
+		"GIT_WORK_TREE":                    "/elsewhere",
+		"GIT_INDEX_FILE":                   "/elsewhere/.git/index",
+		"GIT_OBJECT_DIRECTORY":             "/elsewhere/.git/objects",
+		"GIT_ALTERNATE_OBJECT_DIRECTORIES": "/shared/objects",
+		"GIT_COMMON_DIR":                   "/elsewhere/.git",
+		"GIT_NAMESPACE":                    "ns",
+		"GIT_CEILING_DIRECTORIES":          "/home",
+		"GIT_DISCOVERY_ACROSS_FILESYSTEM":  "1",
+		"GIT_PREFIX":                       "sub/",
+	}
+	dropped := func(except ...string) []string {
+		var keys []string
+		for _, k := range repoLocation {
+			if !slices.Contains(except, k) {
+				keys = append(keys, k)
+			}
+		}
+		return keys
+	}
+	for _, tc := range []struct {
+		name   string
+		c      call
+		want   map[string]string
+		absent []string
+	}{
+		{
+			name:   "user environment",
+			c:      call{},
+			want:   map[string]string{"HOME": "/home/someone", "HTTPS_PROXY": "http://proxy:3128", "GIT_SSH_COMMAND": "ssh -i key", "GIT_CONFIG_GLOBAL": "/home/someone/.gitconfig-work"},
+			absent: dropped(),
+		},
+		{
+			name:   "user environment, a call's own index",
+			c:      call{env: map[string]string{"GIT_INDEX_FILE": "/tmp/agentx/index", "GIT_NO_LAZY_FETCH": "1"}},
+			want:   map[string]string{"GIT_INDEX_FILE": "/tmp/agentx/index", "GIT_NO_LAZY_FETCH": "1", "GIT_SSH_COMMAND": "ssh -i key"},
+			absent: dropped("GIT_INDEX_FILE"),
+		},
+		{
+			name:   "isolated, a call's own index and identity",
+			c:      call{isolated: true, env: map[string]string{"GIT_INDEX_FILE": "/tmp/agentx/index", "GIT_AUTHOR_NAME": "Someone"}},
+			want:   map[string]string{"GIT_INDEX_FILE": "/tmp/agentx/index", "GIT_AUTHOR_NAME": "Someone", "GIT_COMMITTER_NAME": IdentityName},
+			absent: dropped("GIT_INDEX_FILE"),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := map[string]string{}
+			for _, kv := range New(user, false, func(string, ...any) {}).childEnv(tc.c, false) {
+				k, v, _ := strings.Cut(kv, "=")
+				if _, twice := got[k]; twice {
+					t.Errorf("%s is set twice", k)
+				}
+				got[k] = v
+			}
+			for k, v := range tc.want {
+				if got[k] != v {
+					t.Errorf("%s = %q, want %q", k, got[k], v)
+				}
+			}
+			for _, k := range tc.absent {
+				if v, ok := got[k]; ok {
+					t.Errorf("%s = %q, want it dropped", k, v)
+				}
+			}
+		})
 	}
 }

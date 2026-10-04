@@ -21,6 +21,7 @@ stderr
 stdin
 stdout
 streamable
+subpaths?
 unmanaged
 vercel
 worktrees?

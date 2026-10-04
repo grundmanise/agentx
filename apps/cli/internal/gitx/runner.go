@@ -353,10 +353,7 @@ func (r *Runner) runStatus(ctx context.Context, c call, upTo int, args ...string
 	r.logf("git %s", strings.Join(args, " "))
 	cmd := exec.CommandContext(ctx, git, args...)
 	unattended := c.unattended || r.serve
-	cmd.Env = r.childEnv(c.isolated, unattended, c.dates)
-	for k, v := range c.env {
-		cmd.Env = append(cmd.Env, k+"="+v)
-	}
+	cmd.Env = r.childEnv(c, unattended)
 	if unattended {
 		// A session of its own has no controlling terminal, and ssh and a
 		// pinentry ask on /dev/tty rather than on stdin, which is the null
@@ -527,25 +524,53 @@ func SkipFlushesInTests() {
 	}
 }
 
-// childEnv builds the environment of one git process from the environment
-// map. The isolated environment drops every GIT_ variable of the user's,
-// fixes configuration, author and committer, reads no attributes of the
-// user's or the system's, so that no merge driver, filter or marker size
+// repoLocation is every variable with which the user's environment tells
+// git which repository, working tree, index or object store to use, or
+// where to look for one. No git agentx runs works on a repository of the
+// user's: each names its own with --git-dir or a directory, and
+// ls-remote names none, so a GIT_DIR exported by a shell or set by a git
+// hook agentx runs under would make it read that repository's
+// configuration, its URL rewrites and remotes among it, and reach another
+// URL than the fetch that follows. Every environment drops them.
+var repoLocation = []string{
+	"GIT_DIR",
+	"GIT_WORK_TREE",
+	"GIT_INDEX_FILE",
+	"GIT_OBJECT_DIRECTORY",
+	"GIT_ALTERNATE_OBJECT_DIRECTORIES",
+	"GIT_COMMON_DIR",
+	"GIT_NAMESPACE",
+	"GIT_CEILING_DIRECTORIES",
+	"GIT_DISCOVERY_ACROSS_FILESYSTEM",
+	"GIT_PREFIX",
+}
+
+// childEnv builds the environment of one git process, the call c, from the
+// environment map. The isolated environment drops every GIT_ variable of the
+// user's, fixes configuration, author and committer, reads no attributes of
+// the user's or the system's, so that no merge driver, filter or marker size
 // of theirs changes what git writes (isolatedConfig names no attributes file
 // in place of the one git reads under XDG_CONFIG_HOME when configuration
 // names none, and GIT_ATTR_NOSYSTEM drops the system's), and forbids the
 // lazy fetch of a missing object (git 2.45 and newer honour the variable),
-// since it never touches the network; the user environment is the map as
-// is. An unattended process, see call.unattended, has every prompt off on
-// top of either. dates, when it is not empty, replaces the fixed author and
-// committer dates for this one process.
-func (r *Runner) childEnv(isolated, unattended bool, dates string) []string {
+// since it never touches the network; the user environment is the map
+// without the variables that locate a repository, see repoLocation, so that
+// the user's configuration, credentials, SSH and proxy settings apply and
+// their repository does not. An unattended process, see call.unattended,
+// has every prompt off on top of either. c.dates, when it is not empty,
+// replaces the fixed author and committer dates, and c.env is set last, on
+// top of everything else.
+func (r *Runner) childEnv(c call, unattended bool) []string {
+	isolated, dates := c.isolated, c.dates
 	env := make(map[string]string, len(r.env)+12)
 	for k, v := range r.env {
 		if isolated && strings.HasPrefix(k, "GIT_") {
 			continue
 		}
 		env[k] = v
+	}
+	for _, k := range repoLocation {
+		delete(env, k)
 	}
 	if isolated {
 		env["GIT_CONFIG_GLOBAL"] = os.DevNull
@@ -575,6 +600,9 @@ func (r *Runner) childEnv(isolated, unattended bool, dates string) []string {
 			n++
 		}
 		env["GIT_CONFIG_COUNT"] = strconv.Itoa(n)
+	}
+	for k, v := range c.env {
+		env[k] = v
 	}
 	list := make([]string, 0, len(env))
 	for k, v := range env {

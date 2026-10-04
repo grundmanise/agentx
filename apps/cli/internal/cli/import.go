@@ -485,7 +485,14 @@ func (inv *invocation) remoteTips(ctx context.Context) (map[string]string, error
 	if err != nil || !ok {
 		return nil, err
 	}
-	tips, err := lineage.ListRemote(ctx, inv.git, gitx.AccountRepoPath(inv.dirs.Home), remote)
+	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	if err != nil {
+		return nil, accountRepoFailure(err)
+	}
+	if !exists {
+		return nil, nil
+	}
+	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
 	if err != nil {
 		return nil, accountRepoFailure(err)
 	}

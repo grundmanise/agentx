@@ -527,19 +527,35 @@ func TestRestoreStates(t *testing.T) {
 }
 
 // TestImportOntoAMachineWithNoAccountRepo: everything the export lists is
-// missing, and the repo is not created to find that out.
+// missing, and the repo is not created to find that out, also when the
+// machine's settings name an account remote, as an earlier import leaves
+// them, since no fetch of it has happened there yet.
 func TestImportOntoAMachineWithNoAccountRepo(t *testing.T) {
 	t.Parallel()
 	_, file := plainExport(t)
 	to := newHarness(t)
 	to.build(t, fixture{dirs: []string{".claude"}})
-	out := to.run("--json", "import", file, "--yes")
-	equal(t, "exit", out.exit, 0)
-	for _, e := range to.eventsOfType(out.stdout, "import_skill") {
-		equal(t, e["name"].(string)+" state", e["state"], "missing")
-	}
-	if _, err := os.Stat(filepath.Join(to.agentx, "account.git")); err == nil {
-		t.Error("the import created an account repo")
+	for _, settings := range []string{"no account remote", "an account remote"} {
+		if settings == "an account remote" {
+			s, err := home.LoadSettings(to.agentx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			s.Sources = append(s.Sources, home.Source{URL: "https://github.com/example/forks", Account: true})
+			if err := home.SaveSettings(to.agentx, s); err != nil {
+				t.Fatal(err)
+			}
+		}
+		out := to.run("--json", "import", file, "--yes")
+		equal(t, settings+": exit", out.exit, 0)
+		skills := to.eventsOfType(out.stdout, "import_skill")
+		equal(t, settings+": skills", len(skills), 1)
+		for _, e := range skills {
+			equal(t, settings+": "+e["name"].(string)+" state", e["state"], "missing")
+		}
+		if _, err := os.Stat(filepath.Join(to.agentx, "account.git")); err == nil {
+			t.Errorf("%s: the import created an account repo", settings)
+		}
 	}
 }
 
