@@ -11,44 +11,28 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/serve"
 )
 
-// maintenanceEvery is how often the account repo is maintained: once a
-// day. A serve child lives as long as the desktop app that holds it open,
-// often far less than a day, so the time of the last run is kept in agentx
-// home, see home.Maintained, and every serve child asks it at start and
-// then every maintenanceAsked, so that a run falls due within that much of
-// the day passing, whenever the serve child started.
+// maintenanceEvery is how often the account repo is maintained: at most
+// once a day. The time of the last run is kept in agentx home, see
+// home.Maintained, and every serve child asks it once, at start, so a run
+// falls due on the first start after the day has passed.
 //
 // maintenanceLeft is how old a lock file of git maintenance is when no git
 // still holds it, see clearLeftLocks.
 const (
 	maintenanceEvery = 24 * time.Hour
-	maintenanceAsked = time.Hour
 	maintenanceLeft  = time.Hour
 )
 
-// maintenanceTick is the serve child's maintenance of the account repo, on
-// a timer of its own: at start and then every hour, running once a day,
-// see serveMaintenance. What it could not do is warned about once: the
-// same failure on the next run is a debug line.
+// maintenanceTick is the serve child's maintenance of the account repo: once
+// at start, running when it is due, see serveMaintenance. What it could not
+// do is a warning.
 func (inv *invocation) maintenanceTick() serve.Tick {
-	var last string // the last run's failure, "" after one that worked
-	return serve.Tick{Every: maintenanceAsked, AtStart: true, Run: func(ctx context.Context) func() {
+	return serve.Tick{AtStart: true, Run: func(ctx context.Context) func() {
 		err := inv.serveMaintenance(ctx)
 		return func() {
-			cause := ""
 			if err != nil {
-				// Maintenance runs local git only, so its message carries
-				// no per-attempt text: the whole message is the cause.
-				cause = err.Error()
-			}
-			switch cause {
-			case "":
-			case last:
-				inv.out.debugf("maintenance: %s", err)
-			default:
 				inv.out.warn("maintenance: " + err.Error())
 			}
-			last = cause
 		}
 	}}
 }
