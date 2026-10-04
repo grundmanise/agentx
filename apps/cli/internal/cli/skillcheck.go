@@ -126,7 +126,7 @@ type finding struct {
 type checkFailure struct {
 	source string   // the canonical URL of the source, the one the skill came from for a skill's failure
 	skill  bool     // the failure is the one skill's that skills names, not its source's
-	fetch  bool     // the source could not be fetched at all, which the serve child reports once per cause
+	fetch  bool     // the source could not be fetched at all
 	skills []string // the skills left unchecked, by name; none for a source no managed skill came from
 	f      *failure
 }
@@ -168,9 +168,8 @@ type checkReport struct {
 	notes     []string // what a candidate the check moved leaves out or calls otherwise
 	// remoteRemoved is your own skills placed here whose branch the
 	// account remote no longer holds, see driftRemoteRemoved, in name
-	// order, read when accountChecked: the check fetched the account remote.
-	remoteRemoved  []string
-	accountChecked bool
+	// order, found only when the check fetched the account remote.
+	remoteRemoved []string
 }
 
 // skillCheckUpdates is agentx skill check-updates: the update check,
@@ -306,7 +305,7 @@ func checkRefusal(failures []checkFailure) error {
 }
 
 // checkUpdates is the update check, which skill check-updates runs and the
-// serve child runs on its timer. It fetches every source a managed skill
+// serve child runs once at start. It fetches every source a managed skill
 // came from, in the user's git environment and outside the lock, compares
 // each skill's base version with what its source holds now by tree id,
 // writes the import commit of every newer version outside the lock, then
@@ -324,7 +323,7 @@ func checkRefusal(failures []checkFailure) error {
 //
 // serving is the serve child's check, which differs in three ways. It
 // fetches every source of the settings, a source no skill was installed
-// from included, so that each tick refreshes them all in this one pass,
+// from included, so that its one check refreshes them all in this pass,
 // each fetched once, and the source index serve answers searches from
 // follows them; on a machine with no account repo, where nothing can be
 // fetched, each is reported as not fetched rather than passed over. It
@@ -367,7 +366,7 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 		// as an import leaves them: nothing can be fetched into an account
 		// repo that source add has not created yet, and each source is the
 		// failure a fetch of it gives there, which the serve child warns
-		// about once. Nothing is fetched or written, and no git is run.
+		// about. Nothing is fetched or written, and no git is run.
 		for _, entry := range sharedSources(s.Sources) {
 			t := target(entry)
 			res := source.Result{Source: t.src, Err: source.NotFetched(t.src.URL)}
@@ -509,7 +508,6 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool, only stri
 		}
 	}
 	if acc.fetched && added[acc.entry.URL] {
-		rep.accountChecked = true
 		for _, ev := range acc.updates {
 			// The branch moved, by an update that took the remote's commits
 			// in, or the skill went, while the check ran: what it found is

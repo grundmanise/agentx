@@ -23,7 +23,6 @@ func TestServeRunsMaintenance(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--name", "alpha")
-	h.env["AGENTX_CHECK_INTERVAL"] = "1h"
 	h.maintain = true
 	// The wrapper logs each git maintenance alone, in one write, so that
 	// gits run at once beside it never share its line.

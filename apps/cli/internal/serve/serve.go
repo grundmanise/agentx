@@ -43,13 +43,11 @@ type Options struct {
 	Once  bool                                                                           // scan once, emit and return
 	Stdin io.Reader                                                                      // request lines
 
-	// Check is one update check, run off the loop's goroutine after the
-	// initial snapshot and then every CheckEvery; it returns what reports
-	// its outcome, nil for nothing to report. nil, or a CheckEvery that is
-	// not positive, checks nothing, and so does Once. It is the first of
-	// the ticks, see Tick.
-	Check      func(ctx context.Context) (report func())
-	CheckEvery time.Duration
+	// Check is the update check, run once, off the loop's goroutine, after
+	// the initial snapshot; it returns what reports its outcome, nil for
+	// nothing to report. nil checks nothing, and so does Once. It is the
+	// first of the ticks, one that runs at start alone, see Tick.
+	Check func(ctx context.Context) (report func())
 	// Ticks are the other jobs serve runs on timers of their own, such as
 	// the account repo's maintenance.
 	Ticks []Tick
@@ -63,7 +61,9 @@ type Options struct {
 
 // Tick is one job serve runs on a timer, off the loop's goroutine: Run
 // every Every, the first time once the initial snapshot is out when
-// AtStart says so and one Every later otherwise. A tick that finds its
+// AtStart says so and one Every later otherwise. One whose Every is not
+// positive has no timer: it runs once at start when AtStart says so, and
+// never otherwise. A tick that finds its
 // last run still going is skipped rather than queued, so a job never
 // overlaps itself and never piles up, while two jobs run beside each
 // other. The report a run returns, nil for nothing to report, is made on
@@ -116,16 +116,16 @@ func Run(ctx context.Context, o Options) error {
 	}
 	reqs := readRequests(ctx, o.Stdin, l.answer)
 
-	// The update check and every other tick run on timers of their own,
-	// off this goroutine, since a check waits on the network for as long
-	// as its sources take and a rescan may not wait for it. The first runs
-	// once the initial snapshot is out. A tick that finds its last run
-	// still going is skipped rather than queued, so runs never overlap and
-	// never pile up; the report of one that ended comes back over ended
-	// and is made here, where every other report is.
+	// The update check and every other tick run off this goroutine, since
+	// a check waits on the network for as long as its sources take and a
+	// rescan may not wait for it: the check once the initial snapshot is
+	// out, and every other tick on a timer of its own. A tick that finds
+	// its last run still going is skipped rather than queued, so runs
+	// never overlap and never pile up; the report of one that ended comes
+	// back over ended and is made here, where every other report is.
 	ticks := o.Ticks
-	if o.Check != nil && o.CheckEvery > 0 {
-		ticks = append([]Tick{{Every: o.CheckEvery, Run: o.Check, AtStart: true}}, ticks...)
+	if o.Check != nil {
+		ticks = append([]Tick{{Run: o.Check, AtStart: true}}, ticks...)
 	}
 	type tickEnd struct {
 		i      int
@@ -150,25 +150,27 @@ func Run(ctx context.Context, o Options) error {
 		}()
 	}
 	for i, tick := range ticks {
-		if tick.Run == nil || tick.Every <= 0 {
+		if tick.Run == nil {
 			continue
 		}
-		ticker := time.NewTicker(tick.Every)
-		defer ticker.Stop()
-		go func() {
-			for {
-				select {
-				case <-ticker.C:
+		if tick.Every > 0 {
+			ticker := time.NewTicker(tick.Every)
+			defer ticker.Stop()
+			go func() {
+				for {
 					select {
-					case due <- i:
+					case <-ticker.C:
+						select {
+						case due <- i:
+						case <-ctx.Done():
+							return
+						}
 					case <-ctx.Done():
 						return
 					}
-				case <-ctx.Done():
-					return
 				}
-			}
-		}()
+			}()
+		}
 		if tick.AtStart {
 			start(i)
 		}

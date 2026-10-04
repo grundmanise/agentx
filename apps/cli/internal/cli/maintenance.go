@@ -28,17 +28,18 @@ const (
 
 // maintenanceTick is the serve child's maintenance of the account repo, on
 // a timer of its own: at start and then every hour, running once a day,
-// see serveMaintenance. What it could not do is warned about once per
-// cause, as a source the update check cannot fetch is: the same failure on
-// the next run is a debug line.
+// see serveMaintenance. What it could not do is warned about once: the
+// same failure on the next run is a debug line.
 func (inv *invocation) maintenanceTick() serve.Tick {
-	var last string // the cause of the last run's failure, "" after one that worked
+	var last string // the last run's failure, "" after one that worked
 	return serve.Tick{Every: maintenanceAsked, AtStart: true, Run: func(ctx context.Context) func() {
 		err := inv.serveMaintenance(ctx)
 		return func() {
 			cause := ""
 			if err != nil {
-				cause = failureCause(err.Error())
+				// Maintenance runs local git only, so its message carries
+				// no per-attempt text: the whole message is the cause.
+				cause = err.Error()
 			}
 			switch cause {
 			case "":

@@ -260,7 +260,6 @@ func TestStderrIsSanitisedByTheWriter(t *testing.T) {
 	w := &writer{stderr: &text, verbose: true}
 	w.warn(raw)
 	w.hint(raw)
-	w.info(raw)
 	w.debugf("git stderr: %s", raw)
 	w.fail(&failure{status: exitSource, message: raw, hint: raw})
 	w.warnWith(raw, raw)
@@ -269,9 +268,8 @@ func TestStderrIsSanitisedByTheWriter(t *testing.T) {
 			t.Fatalf("a control character reached the terminal: %q in\n%q", r, text.String())
 		}
 	}
-	equal(t, "lines", strings.Count(text.String(), "\n"), 8) // warn, hint, info, debug, error, its hint, a warning and the line under it
+	equal(t, "lines", strings.Count(text.String(), "\n"), 7) // warn, hint, debug, error, its hint, a warning and the line under it
 	contains(t, "stderr", text.String(), "warning: remote: [2K ]0;pwned hello from the server\n")
-	contains(t, "stderr", text.String(), "info: remote: [2K ]0;pwned hello from the server\n")
 	contains(t, "stderr", text.String(), "warning: remote: [2K ]0;pwned hello from the server\n  remote: [2K ]0;pwned hello from the server\n")
 
 	var events bytes.Buffer

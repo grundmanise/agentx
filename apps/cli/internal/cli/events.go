@@ -209,16 +209,6 @@ func (w *writer) warn(msg string) {
 	w.write(w.stderr, fmt.Sprintf("%s %s\n", w.err().paint(warnStyle, "warning:"), sanitised(msg)))
 }
 
-// info logs at info level: a note that asks for nothing, such as a failure
-// warned about earlier that has ended.
-func (w *writer) info(msg string) {
-	if w.json {
-		w.line(w.stderr, logEvent{event: newEvent("log"), Level: "info", Message: msg})
-		return
-	}
-	w.write(w.stderr, fmt.Sprintf("%s %s\n", w.err().paint(infoStyle, "info:"), sanitised(msg)))
-}
-
 // warnWith logs at warn level with a second line that says what to do
 // about it, indented under the warning and written with it in one write. A
 // log event carries no hint, so in JSON mode the one event's message holds

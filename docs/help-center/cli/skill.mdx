@@ -619,7 +619,7 @@ With an account remote set, the check also fetches it and lists each of your own
 
 What another machine published is not recorded, so `agentx skill list` does not show it and `agentx skill diff --update` cannot read it: run the check again to see it, or `agentx skill update <name>` to take it in. If the account remote cannot be reached, the check warns, still checks your other sources, and exits with code 3.
 
-The [desktop app's background process](/cli/serve#update-checks) runs the same check when it starts and every thirty minutes, and fetches every other source you added in the same pass.
+The [desktop app's background process](/cli/serve#update-checks) runs the same check once when it starts, and fetches every other source you added in the same pass. After that, run `agentx skill check-updates` to check again.
 
 ### Read an update
 

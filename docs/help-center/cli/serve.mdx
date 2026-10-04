@@ -3,7 +3,7 @@ title: "agentx serve"
 description: "Keep watching and report whenever something changes."
 ---
 
-`agentx serve` is what the desktop app runs in the background. It scans the machine once, then rescans whenever anything it inventories changes, and reports again only when the inventory changed. It also checks your skills for updates. You rarely need to run it yourself.
+`agentx serve` is what the desktop app runs in the background. It scans the machine once, then rescans whenever anything it inventories changes, and reports again only when the inventory changed. It also checks your skills for updates when it starts. You rarely need to run it yourself.
 
 ## What serve repairs at start
 
@@ -51,24 +51,21 @@ The desktop app runs serve with [`--json`](/cli/output#json-output). It then als
 
 ## Update checks
 
-Serve checks your managed skills, your own included, for updates as [`agentx skill check-updates`](/cli/skill#check-for-updates) does: once when it starts, right after the first snapshot, and then every thirty minutes. Each check also fetches every source you added, even the ones you have not installed anything from, as [`agentx source fetch --all`](/cli/source#fetch-a-source-again) would. A machine without any source has nothing to fetch, and serve runs no git for it. With an account remote set, each check also fetches it and reports what your other machines published to your own skills placed here.
+Serve checks your managed skills, your own included, for updates as [`agentx skill check-updates`](/cli/skill#check-for-updates) does, once when it starts, right after the first snapshot. It does not check again while it runs: to check later, run `agentx skill check-updates`. The check also fetches every source you added, even the ones you have not installed anything from, as [`agentx source fetch --all`](/cli/source#fetch-a-source-again) would. A machine without any source has nothing to fetch, and serve runs no git for it. With an account remote set, the check also fetches it and reports what your other machines published to your own skills placed here.
 
-A check only records what it found; nothing is ever applied. Every check lists every available update again, so the `update` lines repeat while the update is available. Apply an update with [`agentx skill update`](/cli/skill#update-a-skill).
+The check only records what it found; nothing is ever applied. Apply an update with [`agentx skill update`](/cli/skill#update-a-skill).
 
-A source that cannot be fetched, because you are offline or the repository moved, is a warning starting `update check:` that names it and any skills it left unchecked. Serve warns once, not on every check. It warns again only when the reason changes, and it says so on a line of its own when the source can be fetched again:
+A source that cannot be fetched, because you are offline or the repository moved, is a warning starting `update check:` that names it and any skills it left unchecked:
 
 ```text
 warning: update check: https://github.com/me/skills: git fetch: fatal: unable to access 'https://github.com/me/skills/': Could not resolve host: github.com; not checked: pdf
-info: update check: https://github.com/me/skills can be fetched again
 ```
 
-The checks in between log the failure as a debug line, which `--verbose` shows, and serve keeps running. A skill whose new version agentx refuses to import, and a source that was fetched but could not be read, are warned about on every check. A skill of your own that another machine removed from the account remote or renamed there is warned about once, with what to do next. The other `update check:` warnings say what an update leaves out or renames, or that a whole check failed.
+Serve keeps running. The other `update check:` warnings name a skill whose new version agentx refuses to import, a source that was fetched but could not be read, a skill of your own that another machine removed from the account remote or renamed there, with what to do next, what an update leaves out or renames, or a check that failed as a whole.
 
 Serve cannot fetch a source that [`agentx import`](/cli/export#import-onto-another-machine) brought back until you add it again. Run `agentx source add <url>` to fetch it, or `agentx source add <url>#<pin>` for a pinned source so that it stays pinned.
 
-Checks run in the background: scans go on while a check waits on the network, and a check still running when the next one is due is not started twice.
-
-To check more or less often, set `AGENTX_CHECK_INTERVAL` to a duration such as `10m` or `2h` before starting serve. Serve refuses to start with exit code 1 when it is not a positive duration.
+The check runs in the background: scans go on while it waits on the network.
 
 ## Run one pass
 

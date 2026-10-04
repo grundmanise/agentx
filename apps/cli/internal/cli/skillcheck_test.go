@@ -1427,11 +1427,10 @@ exec `+real+` "$@"
 	equal(t, "skill list", h.listed("alpha")["candidate"].(map[string]any)["upstream_commit"], h.accountGit("rev-parse", "refs/agentx/sources/"+source.ID(s.url)))
 }
 
-// TestServeChecksForUpdates runs serve with the check interval shortened: the
-// first check starts once the initial snapshot is out and announces the
-// update the source holds, with the instance id of this serve, and the
-// snapshot its write sets off carries the candidate; a later check on the
-// timer announces a newer version. A single pass checks nothing.
+// TestServeChecksForUpdates runs serve: the check starts once the initial
+// snapshot is out and announces the update the source holds, with the
+// instance id of this serve, and the snapshot its write sets off carries
+// the candidate. A single pass checks nothing.
 func TestServeChecksForUpdates(t *testing.T) {
 	t.Parallel()
 	h, s, _ := checkHarness(t)
@@ -1443,23 +1442,17 @@ func TestServeChecksForUpdates(t *testing.T) {
 	equal(t, "fetches of serve --once", fetches(once.stderr), 0)
 	equal(t, "the candidate after serve --once", h.ref(lineage.CandidateRef("alpha")), "")
 
-	h.env["AGENTX_CHECK_INTERVAL"] = "300ms"
 	p := h.serve(t, "--json")
 	first := p.next("snapshot")
 	update, events := p.nextUpdate(func(e jsonEvent) bool { return e["candidate_upstream_commit"] == second })
 	equal(t, "name", update["name"], "alpha")
 	equal(t, "instance_id", update["instance_id"], first["instance_id"])
 	equal(t, "the candidate", h.ref(lineage.CandidateRef("alpha")), update["candidate"])
-
-	s.skill("skills/alpha", "alpha", "The first skill, revised again", nil)
-	third := s.commit("third version")
-	later, passed := p.nextUpdate(func(e jsonEvent) bool { return e["candidate_upstream_commit"] == third })
-	equal(t, "the later candidate", h.ref(lineage.CandidateRef("alpha")), later["candidate"])
 	// The write that pinned it bumped the version file, and the rescan that
 	// sets off, or the one this refresh asks for, carries the candidate in
 	// the snapshot the desktop app applies.
 	p.send(`{"type":"refresh","request_id":"after"}`)
-	events = append(append(events, passed...), p.until("after")...)
+	events = append(events, p.until("after")...)
 	var last jsonEvent
 	for _, e := range events {
 		if e["type"] == "snapshot" {
@@ -1467,7 +1460,7 @@ func TestServeChecksForUpdates(t *testing.T) {
 		}
 	}
 	if last == nil {
-		t.Fatal("no snapshot after the checks wrote their candidates")
+		t.Fatal("no snapshot after the check wrote its candidate")
 	}
 	var entry map[string]any
 	for _, e := range last["library"].([]any) {
@@ -1479,7 +1472,7 @@ func TestServeChecksForUpdates(t *testing.T) {
 	if !ok {
 		t.Fatalf("the last snapshot's alpha carries no candidate: %v", entry)
 	}
-	equal(t, "the snapshot's candidate", cand["upstream_commit"], third)
+	equal(t, "the snapshot's candidate", cand["upstream_commit"], second)
 	equal(t, "exit", p.close(), 0)
 }
 
@@ -1492,7 +1485,6 @@ func TestServeChecksInTextMode(t *testing.T) {
 	h, s, first := checkHarness(t)
 	s.skill("skills/alpha", "alpha", "The first skill, revised", nil)
 	second := s.commit("second version")
-	h.env["AGENTX_CHECK_INTERVAL"] = "1h"
 	p := h.serve(t)
 	p.line("snapshot 1: 1 configuration, 2 skills")
 	want := "update alpha: " + short(first) + " -> " + short(second) + ", 1 file"
@@ -1565,7 +1557,6 @@ func TestServeCheckWaitsForTheLock(t *testing.T) {
 			h, s, _ := checkHarness(t)
 			s.skill("skills/alpha", "alpha", "The first skill, revised", nil)
 			second := s.commit("second version")
-			h.env["AGENTX_CHECK_INTERVAL"] = "1h" // the check at launch alone
 			reached, proceed := tc.gate(t, h)()
 			p := h.serve(t, "--json")
 			p.next("snapshot")
@@ -1591,9 +1582,8 @@ func TestServeCheckWaitsForTheLock(t *testing.T) {
 
 // TestServeWarnsAboutASourceItCannotCheck: a source serve's check cannot
 // fetch is one warning, naming the source, why it failed and the skills it
-// left unchecked, however many checks fail on it for the same cause, and it
-// ends nothing: the source beside it is still checked and pinned, later
-// checks still run and serve still answers requests.
+// left unchecked, and it ends nothing: the source beside it is still
+// checked and pinned and serve still answers requests.
 func TestServeWarnsAboutASourceItCannotCheck(t *testing.T) {
 	t.Parallel()
 	h, s, _ := checkHarness(t)
@@ -1607,15 +1597,10 @@ func TestServeWarnsAboutASourceItCannotCheck(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h.env["AGENTX_CHECK_INTERVAL"] = "200ms"
 	p := h.serve(t, "--json")
 	p.next("snapshot")
-	pinned := func(e jsonEvent) bool { return e["name"] == "alpha" && e["candidate_upstream_commit"] == second }
-	update, _ := p.nextUpdate(pinned)
+	update, _ := p.nextUpdate(func(e jsonEvent) bool { return e["name"] == "alpha" && e["candidate_upstream_commit"] == second })
 	equal(t, "alpha's candidate", h.ref(lineage.CandidateRef("alpha")), update["candidate"])
-	// Every check announces the update it finds pinned, so a second one
-	// proves a later check ran after the first one failed for other.
-	p.nextUpdate(pinned)
 	p.send(`{"type":"refresh","request_id":"alive"}`)
 	p.until("alive")
 	equal(t, "exit", p.close(), 0)
@@ -1627,7 +1612,7 @@ func TestServeWarnsAboutASourceItCannotCheck(t *testing.T) {
 		}
 	}
 	if len(warned) != 1 {
-		t.Fatalf("%d update check warnings over two checks, want one:\n%s", len(warned), p.stderr.String())
+		t.Fatalf("%d update check warnings, want one:\n%s", len(warned), p.stderr.String())
 	}
 	if w := warned[0]; !strings.HasPrefix(w, "update check: "+other.url+": ") || !strings.HasSuffix(w, "; not checked: gamma") {
 		t.Errorf("the warning = %q, want the failure of %s and the skill it left unchecked", w, other.url)
@@ -1635,26 +1620,10 @@ func TestServeWarnsAboutASourceItCannotCheck(t *testing.T) {
 	equal(t, "gamma's candidate", h.ref(lineage.CandidateRef("gamma")), "")
 }
 
-// TestServeRefusesABadCheckInterval: the interval is a positive duration
-// or nothing.
-func TestServeRefusesABadCheckInterval(t *testing.T) {
-	t.Parallel()
-	h := serveHarness(t)
-	for _, v := range []string{"soon", "0s", "-5m"} {
-		h.env["AGENTX_CHECK_INTERVAL"] = v
-		out := h.run("--json", "serve")
-		equal(t, v+": exit", out.exit, 1)
-		e := h.one(out.stdout, "error")
-		equal(t, v+": code", e["code"], "usage")
-		equal(t, v+": message", e["message"], "AGENTX_CHECK_INTERVAL "+v+" is not a positive duration")
-	}
-	equal(t, "serve --once ignores it", h.serveOnce("--json").exit, 0)
-}
-
 // nextUpdate reads the child's events up to the first update_available
 // that match accepts, and returns it with every event it passed over on the
 // way: a check and the rescans its write sets off interleave as they
-// happen to, and a check on a short timer announces the same update again.
+// happen to.
 func (p *serveProc) nextUpdate(match func(jsonEvent) bool) (jsonEvent, []jsonEvent) {
 	p.t.Helper()
 	var passed []jsonEvent

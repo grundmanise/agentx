@@ -131,7 +131,7 @@ One of the user's own skills that the account remote holds and this machine's ac
 _Avoid_: remote skill, available fork, installable fork
 
 **Update check**:
-Fetching the sources the managed skills came from, a forked skill's upstream included, and comparing each skill's base version with what its source holds now, by tree id; a fork's base version is the import commit its history names, whatever its own commits changed. It records what it found and never applies anything: a newer version becomes the skill's update candidate. Run by hand with `agentx skill check-updates`, and by the desktop app on launch and on a timer, where the same pass also fetches every other added source, so that browsing and search see what the sources hold now. With an account remote set, it also fetches the account remote and lists the user's own skills placed here that another machine published to.
+Fetching the sources the managed skills came from, a forked skill's upstream included, and comparing each skill's base version with what its source holds now, by tree id; a fork's base version is the import commit its history names, whatever its own commits changed. It records what it found and never applies anything: a newer version becomes the skill's update candidate. Run by hand with `agentx skill check-updates`, and by the desktop app once when it launches, where the same pass also fetches every other added source, so that browsing and search see what the sources hold now. With an account remote set, it also fetches the account remote and lists the user's own skills placed here that another machine published to.
 _Avoid_: sync, poll
 
 **Update candidate**:

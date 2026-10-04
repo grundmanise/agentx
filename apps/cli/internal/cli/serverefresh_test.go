@@ -19,23 +19,20 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
-// awaitWrites waits until agentx home has seen n mutations since the
-// version file read from, and returns the version it then reads. In these
-// tests nothing but serve's update checks mutates agentx home once serve
-// runs, and each check that fetched a source ends in exactly one write,
-// which bumps the version file once: n writes are n checks done.
-func (h *harness) awaitWrites(t *testing.T, from, n int) int {
+// awaitWrite waits until agentx home has seen a mutation since the version
+// file read from. In these tests nothing but the one update check serve
+// runs at launch mutates agentx home once serve runs, and that check, when
+// it fetched a source, ends in exactly one write, which bumps the version
+// file once: the write is the check done.
+func (h *harness) awaitWrite(t *testing.T, from int) {
 	t.Helper()
-	var v int
-	awaitTrue(t, fmt.Sprintf("%d writes after version %d", n, from), func() bool {
-		v = mutationVersion(t, h)
-		return v >= from+n
+	awaitTrue(t, fmt.Sprintf("a write after version %d", from), func() bool {
+		return mutationVersion(t, h) > from
 	})
-	return v
 }
 
 // awaitTrue waits until done reports true, which it is asked every few
-// milliseconds: what serve does on its timer has no event of its own.
+// milliseconds: what serve does off its loop has no event of its own.
 func awaitTrue(t *testing.T, what string, done func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(serveDeadline)
@@ -86,25 +83,19 @@ func (p *serveProc) awaitLogged(level, prefix string, n int) []string {
 	return got
 }
 
-// quickChecks is the AGENTX_CHECK_INTERVAL of the tests that wait for
-// checks on the timer. A check of real sources takes longer than that, and
-// a tick that finds one running is skipped, so the checks run about back to
-// back: the interval is what a test waits between them and no more.
-const quickChecks = "20ms"
-
-// TestServeRefreshesEverySource runs serve with the check interval
-// shortened on a machine with three sources: one a skill was installed
-// from, one nothing was installed from, and one two managed skills came
-// from, removed after a check pinned a candidate for one of them and an
-// upstream-removed marker for the other, which has moved on since. Every
-// check fetches the first two, the check at launch and the ones on the
-// timer: a new commit to the second moves its source ref, which plain git
-// reads back, its last_fetched is written again, and the version bump of
-// the check's one write makes serve rebuild its source index, so that a
-// search finds the skill the commit added without anything else asking for
-// a scan. No check runs git for the removed source, by URL, remote or ref,
-// and the skills that came from it keep their candidate and marker, without
-// a warning about them.
+// TestServeRefreshesEverySource runs serve on a machine with three
+// sources: one a skill was installed from, one nothing was installed from,
+// and one two managed skills came from, removed after a check pinned a
+// candidate for one of them and an upstream-removed marker for the other,
+// which has moved on since. The check serve runs at launch fetches the
+// first two, once each and in one write: a commit made to the second
+// before serve started moves its source ref, which plain git reads back,
+// its last_fetched is written again, and the version bump of the check's
+// write makes serve rebuild its source index, so that a search finds the
+// skill the commit added without anything else asking for a scan. No check
+// runs git for the removed source, by URL, remote or ref, and the skills
+// that came from it keep their candidate and marker, without a warning
+// about them. No other check follows the one at launch.
 func TestServeRefreshesEverySource(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -131,52 +122,43 @@ func TestServeRefreshesEverySource(t *testing.T) {
 	gone.skill("skills/epsilon", "epsilon", "A skill of a source removed later, revised again", nil)
 	gone.skill("skills/zeta", "zeta", "Another skill of that source, back", nil)
 	gone.commit("epsilon revised again, zeta back")
+	two.skill("delta", "delta", "A skill added upstream", nil)
+	moved := two.commit("delta")
 	backdate(t, h)
-	first := h.sourceRef(two.url)
 
 	calls := countingGit(t, h)
-	h.env["AGENTX_CHECK_INTERVAL"] = quickChecks
 	before := mutationVersion(t, h)
 	p := h.serve(t, "--json")
 	p.next("snapshot")
 	// The check at launch fetches both sources and stamps both, the one no
 	// skill came from included, in its one write.
-	h.awaitWrites(t, before, 1)
+	h.awaitWrite(t, before)
 	refetched(t, h, one.url)
 	refetched(t, h, two.url)
-	equal(t, "two's ref after the check at launch", h.sourceRef(two.url), first)
-	if got := p.search("s0", "upstream"); len(got) != 0 {
-		t.Errorf("results before the commit = %q, want none", got)
-	}
+	equal(t, "two's ref after the check at launch", h.sourceRef(two.url), moved)
 
-	two.skill("delta", "delta", "A skill added upstream", nil)
-	moved := two.commit("delta")
-	awaitTrue(t, "two's source ref moves to the new commit", func() bool { return h.sourceRef(two.url) == moved })
-
-	// No refresh is asked for, and until the settings are backdated below
-	// nothing but the checks writes to agentx home: the rescan the write of
-	// the check that moved the ref sets off rebuilds the index on its own.
+	// No refresh is asked for, and nothing but the check writes to agentx
+	// home: the rescan its write sets off rebuilds the index on its own.
 	want := []string{two.url + " delta delta"}
 	searches := 0
-	awaitTrue(t, fmt.Sprintf("a search after the ref moved finds %q", want), func() bool {
+	awaitTrue(t, fmt.Sprintf("a search after the check finds %q", want), func() bool {
 		searches++
 		return reflect.DeepEqual(p.search(fmt.Sprintf("s%d", searches), "upstream"), want)
 	})
-
-	// Checks never overlap, so once the ref has moved every write still to
-	// come is that of a check that fetched after the commit. The lock keeps
-	// them out while the settings go back to an old last_fetched, so that
-	// the next write is known to be one of them.
-	unlock := holdLock(t, h)
-	backdate(t, h)
-	unlock()
-	awaitTrue(t, "two's last_fetched is written again", func() bool { return lastFetched(t, h, two.url) != backdated })
-	refetched(t, h, two.url)
 	equal(t, "exit", p.close(), 0)
 	if w := warnings(h, p.stderr.String()); len(w) > 0 {
 		t.Errorf("serve warned: %q", w)
 	}
+	equal(t, "writes over the run", mutationVersion(t, h)-before, 1)
 
+	// A fetch names the source's remote right after its filter, where the
+	// blob batch that follows it names --stdin, and the log is searched as
+	// one text, since two gits that start together can share a line of it.
+	run := strings.Join(calls(), "\n")
+	for _, src := range []*sourceRepo{one, two} {
+		fetch := "--filter=blob:none " + source.RemoteName(source.ID(src.url)) + " "
+		equal(t, src.url+": fetches", strings.Count(run, fetch), 1)
+	}
 	id := source.ID(gone.url)
 	for _, call := range calls() {
 		if strings.Contains(call, id) || strings.Contains(call, gone.url) {
@@ -188,59 +170,16 @@ func TestServeRefreshesEverySource(t *testing.T) {
 	equal(t, "epsilon's drift", drift(h.listed("epsilon")), "source removed")
 }
 
-// TestServeWarnsOnceAboutASourceItCannotFetch runs serve with the check
-// interval shortened while a source nothing was installed from fails to
-// fetch because the branch it follows is gone. Every check logs the
-// failure, but only the first warns: the checks after it log it at debug
-// level. Once the source can be fetched again, one note says so and nothing
-// else follows. The source beside it is fetched every time and never warned
-// about. TestSourceFailuresReportEachCauseOnce drives the rest of the
-// policy, a change of cause among it, check by check.
-func TestServeWarnsOnceAboutASourceItCannotFetch(t *testing.T) {
-	t.Parallel()
-	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude"}})
-	one, two := h.fetchSources(t)
-	h.mustRun("skill", "add", one.url, "--name", "alpha")
-	two.bare("symbolic-ref", "HEAD", "refs/heads/gone") // the default branch it follows names nothing
-
-	h.env["AGENTX_CHECK_INTERVAL"] = quickChecks
-	p := h.serve(t, "--json", "--verbose")
-	p.next("snapshot")
-	about := "update check: " + two.url
-	// Three checks: one warning, then debug lines.
-	p.awaitLogged("debug", about, 2)
-	warned := p.logged("warn", about)
-	if len(warned) != 1 {
-		t.Fatalf("%d warnings about %s over three checks, want 1: %q", len(warned), two.url, warned)
-	}
-	if strings.Contains(warned[0], "not checked") {
-		t.Errorf("the warning names skills left unchecked, and nothing came from %s: %q", two.url, warned[0])
-	}
-
-	// The source comes back in one write of its HEAD.
-	two.bare("symbolic-ref", "HEAD", "refs/heads/main")
-	p.awaitLogged("info", about, 1)
-	written := mutationVersion(t, h)
-	// Two more checks: the first is reported by the time the second wrote.
-	h.awaitWrites(t, written, 2)
-	equal(t, "exit", p.close(), 0)
-
-	equal(t, "the notes", strings.Join(p.logged("info", "update check: "), "\n"), about+" can be fetched again")
-	if all := p.logged("warn", ""); !slices.Equal(all, warned) {
-		t.Errorf("the warnings = %q, want the one about %s", all, two.url)
-	}
-}
-
-// TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves runs serve with
-// the check interval shortened on a machine with two sources, the second
-// left as a removal cut short leaves it, its remote and ref gone, while a
-// commit lands in the first twice over. Each check that moves the first
-// source's ref writes, and the rescan that write sets off rebuilds the
-// source index, but the second source is no different from one rebuild to
-// the next: the index warns once that it has not been fetched, and the
-// checks warn once that they could not fetch it. The account remote, which is
-// never fetched as a shared source, is warned about by neither.
+// TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves runs serve on a
+// machine with two sources, the second left as a removal cut short leaves
+// it, its remote and ref gone, while a commit lands in the first and source
+// fetch takes it in. The check's write and the fetch's each set off a
+// rescan that rebuilds the source index, twice after the initial build,
+// but the second source is no different from one rebuild to the next: the
+// index warns once that it has not been fetched, and the check at launch
+// warns that it could not fetch it and leaves its last_fetched as it was.
+// The account remote, which is never fetched as a shared source, is warned
+// about by neither.
 func TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -259,23 +198,25 @@ func TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	backdate(t, h)
 
-	h.env["AGENTX_CHECK_INTERVAL"] = quickChecks
+	before := mutationVersion(t, h)
 	p := h.serve(t, "--json")
 	p.next("snapshot")
+	h.awaitWrite(t, before) // the check at launch, which fetched one
+	one.skill("skills/delta", "delta", "A skill added upstream", nil)
+	one.commit("delta")
+	h.runBesideServe("source", "fetch", one.url)
+	// The rebuild that finds the skill logs its warnings before a search
+	// can be answered from it.
+	found := []string{one.url + " skills/delta delta"}
 	searches := 0
-	for _, name := range []string{"delta", "epsilon"} {
-		one.skill("skills/"+name, name, "A skill added upstream", nil)
-		one.commit(name)
-		// The rebuild that finds the skill logs its warnings before a
-		// search can be answered from it.
-		want := []string{one.url + " skills/" + name + " " + name}
-		awaitTrue(t, fmt.Sprintf("a search after one moved finds %q", want), func() bool {
-			searches++
-			return reflect.DeepEqual(p.search(fmt.Sprintf("s%d", searches), name), want)
-		})
-	}
+	awaitTrue(t, fmt.Sprintf("a search after one moved finds %q", found), func() bool {
+		searches++
+		return reflect.DeepEqual(p.search(fmt.Sprintf("s%d", searches), "delta"), found)
+	})
 	equal(t, "exit", p.close(), 0)
+	equal(t, "two's last_fetched", lastFetched(t, h, two.url), backdated)
 
 	warned := warnings(h, p.stderr.String())
 	slices.Sort(warned)
@@ -284,24 +225,21 @@ func TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves(t *testing.T) {
 		"update check: source not fetched: " + two.url,
 	}
 	if !slices.Equal(warned, want) {
-		t.Errorf("the warnings = %q, want one from the index and one from the checks: %q", warned, want)
+		t.Errorf("the warnings = %q, want one from the index and one from the check: %q", warned, want)
 	}
 }
 
-// TestServeRefreshSpawnsBoundedGit counts the git processes serve spawns
-// per check on its timer, on a machine with thirty managed skills from one
-// source and a second source nothing was installed from: each check
-// fetches both, compares every skill and writes once, the rescans its write
-// sets off included, and nothing of that is per skill. It also counts the
-// fetches of each source: one per check, whether or not a skill came from
-// the source, so that no second pass fetches either of them again. The
-// count is of this test's own git, through its own wrapper, so it runs in
-// parallel with the rest.
+// TestServeRefreshSpawnsBoundedGit counts the git processes a whole serve
+// run spawns, on a machine with thirty managed skills from one source and a
+// second source nothing was installed from: the reconciliation and initial
+// scan, the first index build, the check at launch, which fetches both
+// sources, compares every skill and writes once, the rescan its write sets
+// off and one more a refresh asks for. None of that is per skill. The count
+// is of this test's own git, through its own wrapper.
 func TestServeRefreshSpawnsBoundedGit(t *testing.T) {
-	// Not parallel: how many rescans a check's write sets off, and so how
-	// many git processes a check counts, depends on how fast serve runs,
-	// which tests running beside it change. On a loaded three-core runner
-	// the count went over the bound.
+	// Not parallel: how many rescans the check's write sets off, and so how
+	// many git processes the run counts, depends on how fast serve runs,
+	// which tests running beside it change.
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	s := h.newSourceRepo("many", true)
@@ -318,48 +256,32 @@ func TestServeRefreshSpawnsBoundedGit(t *testing.T) {
 	h.mustRun("source", "add", other.url)
 
 	calls := countingGit(t, h)
-	h.env["AGENTX_CHECK_INTERVAL"] = quickChecks
 	before := mutationVersion(t, h)
 	// JSON, as the desktop app runs it, so that the rescans read the
 	// library's lineage. The snapshot of thirty skills is a line of about
 	// 40 KB, which the harness reads whole: it stops at 64 KB.
 	p := h.serve(t, "--json")
 	p.next("snapshot")
-	// Counting starts once the check at launch has written, after the
-	// initial scan and the first index build, which lists every source.
-	from := h.awaitWrites(t, before, 1)
-	n := len(calls())
-	to := h.awaitWrites(t, from, 3)
-	perCheck := (len(calls()) - n) / (to - from)
+	h.awaitWrite(t, before)
+	p.send(`{"type":"refresh","request_id":"settled"}`)
+	p.until("settled")
 	equal(t, "exit", p.close(), 0)
-	t.Logf("git processes per check: %d", perCheck)
+	n := len(calls())
+	t.Logf("git processes over the run: %d", n)
 	// Eleven per source fetched, a few for the check around the fetches and
-	// its write, and the rescan the write sets off with its read of the
-	// lineage: about thirty, with room left for a git that fetches in
-	// another way. A count per skill would add thirty at least, and go over.
-	if perCheck > 40 {
-		t.Errorf("a check of two sources and %d skills spawned %d git processes", skills, perCheck)
-	}
-	// The fetches are counted over the whole run, the check at launch
-	// included, against the writes it made, one per check: only the last
-	// check can have fetched without writing, cut short by serve's exit. A
-	// fetch names the source's remote right after its filter, where the
-	// blob batch that follows it names --stdin, and the log is searched as
-	// one text, since two gits that start together can share a line of it.
-	checks := mutationVersion(t, h) - before
-	run := strings.Join(calls(), "\n")
-	for _, src := range []*sourceRepo{s, other} {
-		lastFetched(t, h, src.url) // the settings hold the URL the remote is named after
-		fetch := "--filter=blob:none " + source.RemoteName(source.ID(src.url)) + " "
-		if got := strings.Count(run, fetch); got < checks || got > checks+1 {
-			t.Errorf("%s was fetched %d times over %d checks, want once per check", src.url, got, checks)
-		}
+	// its write, and a few per scan with its read of the lineage and per
+	// index build: about forty, with room left for a rescan more or a git
+	// that fetches in another way. A count per skill would add thirty at
+	// least, and go over.
+	if n > 60 {
+		t.Errorf("a serve run over two sources and %d skills spawned %d git processes:\n%s", skills, n, strings.Join(calls(), "\n"))
 	}
 }
 
 // TestServeRefreshesNothingWithoutASource: on a machine whose settings hold
 // no source, never added or every one removed since, while a skill
-// installed from one stays, the ticks of the check spawn no git at all.
+// installed from one stays, the check at launch fetches nothing and writes
+// nothing.
 func TestServeRefreshesNothingWithoutASource(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -382,41 +304,33 @@ func TestServeRefreshesNothingWithoutASource(t *testing.T) {
 			requireGit(t)
 			tc.setup(h)
 			calls := countingGit(t, h)
-			h.env["AGENTX_CHECK_INTERVAL"] = "10ms"
+			version := mutationVersion(t, h)
 			p := h.serve(t, "--json")
 			p.next("snapshot")
-			// The scan and the source index it rebuilds have run their git by
-			// the time a refresh is acknowledged.
 			p.send(`{"type":"refresh","request_id":"settled"}`)
 			p.until("settled")
-			n := len(calls())
-			// Ten ticks. That a tick fires on this timer and runs git once the
-			// settings hold a source, TestServeRefreshesEverySource shows.
-			time.Sleep(100 * time.Millisecond)
-			if later := calls()[n:]; len(later) > 0 {
-				t.Errorf("the ticks of a machine with no source spawned git:\n%s", strings.Join(later, "\n"))
-			}
+			// Serve stops only once the check it started at launch has
+			// ended. That the check fetches and writes once the settings
+			// hold a source, TestServeRefreshesEverySource shows.
 			equal(t, "exit", p.close(), 0)
+			for _, call := range calls() {
+				if slices.Contains(strings.Fields(call), "fetch") {
+					t.Errorf("serve fetched on a machine with no source: %s", call)
+				}
+			}
+			equal(t, "the version file", mutationVersion(t, h), version)
 		})
 	}
 }
 
-// TestServeWarnsOnceAboutSourcesAnImportBrought runs serve with the check
-// interval shortened on a machine whose settings name two sources because
-// an import wrote them, and which has fetched nothing, so has no account
-// repo to fetch into until source add creates one. No check runs git,
-// creates the account repo or writes anything, but the first warns about
-// each source as not fetched, as source fetch refuses it, and the checks
-// after it log the same line at debug level. skill check-updates, which
-// checks only the sources a managed skill came from, still has nothing to
-// check there.
-//
-// Then source add adds one of the two, which creates the account repo, and
-// a new serve starts. Its checks fetch that source, but the account repo
-// brings nothing of the other, which is still not fetched: the new serve
-// warns about it once again, since what a serve remembers of a failing
-// source is its own, and its checks after that log it at debug level.
-func TestServeWarnsOnceAboutSourcesAnImportBrought(t *testing.T) {
+// TestServeWarnsAboutSourcesAnImportBrought runs serve on a machine whose
+// settings name two sources because an import wrote them, and which has
+// fetched nothing, so has no account repo to fetch into until source add
+// creates one. The check at launch fetches nothing, creates no account
+// repo and writes nothing, but warns about each source as not fetched, as
+// source fetch refuses it. skill check-updates, which checks only the
+// sources a managed skill came from, still has nothing to check there.
+func TestServeWarnsAboutSourcesAnImportBrought(t *testing.T) {
 	t.Parallel()
 	from := newHarness(t)
 	from.build(t, fixture{dirs: []string{".claude"}})
@@ -433,21 +347,14 @@ func TestServeWarnsOnceAboutSourcesAnImportBrought(t *testing.T) {
 	}
 	version := mutationVersion(t, h)
 	calls := countingGit(t, h)
-	h.env["AGENTX_CHECK_INTERVAL"] = quickChecks
-	p := h.serve(t, "--json", "--verbose")
+	p := h.serve(t, "--json")
 	p.next("snapshot")
-	// The scan and the source index it rebuilds have run their git by the
-	// time a refresh is acknowledged; the checks run none.
-	p.send(`{"type":"refresh","request_id":"settled"}`)
-	p.until("settled")
-	n := len(calls())
 	var want []string
 	for _, s := range []*sourceRepo{one, two} {
 		line := "update check: source not fetched: " + s.url
-		p.awaitLogged("debug", line, 2) // two checks after the one at launch
+		p.awaitLogged("warn", line, 1)
 		want = append(want, line)
 	}
-	later := calls()[n:]
 	equal(t, "exit", p.close(), 0)
 
 	warned := p.logged("warn", "update check: ")
@@ -455,9 +362,6 @@ func TestServeWarnsOnceAboutSourcesAnImportBrought(t *testing.T) {
 	slices.Sort(want)
 	if !slices.Equal(warned, want) {
 		t.Errorf("the check warnings = %q, want one per source: %q", warned, want)
-	}
-	if len(later) > 0 {
-		t.Errorf("the checks of a machine with no account repo spawned git:\n%s", strings.Join(later, "\n"))
 	}
 	for _, call := range calls() {
 		if slices.Contains(strings.Fields(call), "fetch") {
@@ -470,134 +374,40 @@ func TestServeWarnsOnceAboutSourcesAnImportBrought(t *testing.T) {
 	equal(t, "the version file", mutationVersion(t, h), version)
 	equal(t, "skill check-updates", h.mustRun("skill", "check-updates").stdout,
 		"Nothing to check: no managed skill comes from a source added on this machine.\n")
-
-	h.mustRun("source", "add", one.url)
-	backdate(t, h)
-	before := mutationVersion(t, h)
-	p = h.serve(t, "--json", "--verbose")
-	p.next("snapshot")
-	h.awaitWrites(t, before, 1) // the check at launch, which fetched one
-	line := "update check: source not fetched: " + two.url
-	p.awaitLogged("debug", line, 2) // two checks after the one at launch
-	equal(t, "exit", p.close(), 0)
-
-	refetched(t, h, one.url)
-	equal(t, "two's last_fetched", lastFetched(t, h, two.url), backdated)
-	equal(t, "the check warnings of the new serve", strings.Join(p.logged("warn", "update check: "), "\n"), line)
 }
 
-// TestSourceFailuresReportEachCauseOnce drives the memory serve keeps of
-// the sources its checks could not fetch through a run of checks, in text
-// mode with --verbose: a warning for a new failure, a debug line while the
-// cause stays, a warning again when it changes, a note when the source
-// fetches again, and nothing for a source that left the settings. A cause
-// that differs only in how long git tried to connect, in how many bytes
-// came before a transfer stalled or in which address of the host hung up
-// is the same cause; one that differs in the status a server answered
-// with is not. A skill's failure is a warning on every check.
-func TestSourceFailuresReportEachCauseOnce(t *testing.T) {
+// TestReportServeCheck: what serve's check could not check, each note and
+// each of your own skills the account remote no longer holds is a warning
+// prefixed "update check: ", the last with its hint on a line of its own. A
+// check that failed as a whole is one warning, and nothing else is reported.
+func TestReportServeCheck(t *testing.T) {
 	t.Parallel()
-	const one, two = "https://example.com/one", "https://example.com/two"
-	unreachable := func(url, message string, skills ...string) checkFailure {
-		return checkFailure{source: url, fetch: true, skills: skills, f: refuse(exitSource, url+": "+message, "")}
-	}
-	timeout := func(ms int) string {
-		return fmt.Sprintf("git fetch: fatal: unable to access '%s/': Failed to connect to example.com port 443 after %d ms: Couldn't connect to server", one, ms)
-	}
-	closed := func(addr string) string {
-		return "git fetch: Connection closed by " + addr + " port 22: fatal: Could not read from remote repository."
-	}
-	stalled := func(ms, got, total int) string {
-		return fmt.Sprintf("git fetch: error: RPC failed; curl 28 Operation timed out after %d milliseconds with %d out of %d bytes received", ms, got, total)
-	}
-	status := func(code int) string {
-		return fmt.Sprintf("git fetch: fatal: unable to access '%s/': The requested URL returned error: %d", one, code)
-	}
-	skill := checkFailure{source: two, skill: true, skills: []string{"pdf"}, f: refuse(exitRefused, "the version holds a file agentx will not lay out", "")}
-	refreshed := func(urls ...string) map[string]bool {
-		m := map[string]bool{}
-		for _, u := range urls {
-			m[u] = true
-		}
-		return m
-	}
-	checks := []struct {
+	const one = "https://example.com/one"
+	what, hint := remoteRemovedNotice("beta")
+	for _, tc := range []struct {
+		name string
 		rep  checkReport
-		want []string
+		err  error
+		want string
 	}{
-		{checkReport{failures: []checkFailure{unreachable(one, timeout(2034), "pdf")}, refreshed: refreshed(two)},
-			[]string{"warning: update check: " + one + ": " + timeout(2034) + "; not checked: pdf"}},
-		{checkReport{failures: []checkFailure{unreachable(one, timeout(17)), skill}, refreshed: refreshed(two)},
-			[]string{"debug: update check: " + one + ": " + timeout(17), "warning: update check: pdf: the version holds a file agentx will not lay out"}},
-		{checkReport{failures: []checkFailure{unreachable(one, closed("140.82.121.4"))}, refreshed: refreshed(two)},
-			[]string{"warning: update check: " + one + ": " + closed("140.82.121.4")}},
-		{checkReport{failures: []checkFailure{unreachable(one, closed("2606:50c0:8000::154"))}, refreshed: refreshed(two)},
-			[]string{"debug: update check: " + one + ": " + closed("2606:50c0:8000::154")}},
-		{checkReport{failures: []checkFailure{unreachable(one, stalled(30000, 0, 0))}, refreshed: refreshed(two)},
-			[]string{"warning: update check: " + one + ": " + stalled(30000, 0, 0)}},
-		{checkReport{failures: []checkFailure{unreachable(one, stalled(30002, 1234, 5678))}, refreshed: refreshed(two)},
-			[]string{"debug: update check: " + one + ": " + stalled(30002, 1234, 5678)}},
-		{checkReport{failures: []checkFailure{unreachable(one, status(403))}, refreshed: refreshed(two)},
-			[]string{"warning: update check: " + one + ": " + status(403)}},
-		{checkReport{failures: []checkFailure{unreachable(one, status(404))}, refreshed: refreshed(two)},
-			[]string{"warning: update check: " + one + ": " + status(404)}},
-		{checkReport{failures: []checkFailure{unreachable(one, "git fetch: fatal: repository not found"), skill}, refreshed: refreshed(two)},
-			[]string{"warning: update check: " + one + ": git fetch: fatal: repository not found", "warning: update check: pdf: the version holds a file agentx will not lay out"}},
-		{checkReport{refreshed: refreshed(one, two)},
-			[]string{"info: update check: " + one + " can be fetched again"}},
-		{checkReport{refreshed: refreshed(one, two)}, nil},
-		{checkReport{failures: []checkFailure{unreachable(two, "git fetch: fatal: repository not found")}, refreshed: refreshed(one)},
-			[]string{"warning: update check: " + two + ": git fetch: fatal: repository not found"}},
-		{checkReport{idle: true}, nil}, // every source removed: two is forgotten, with no note
-		{checkReport{failures: []checkFailure{unreachable(two, "git fetch: fatal: repository not found")}},
-			[]string{"warning: update check: " + two + ": git fetch: fatal: repository not found"}},
-	}
-	failing := sourceFailures{}
-	for i, c := range checks {
-		var stderr bytes.Buffer
-		failing.report(&writer{stderr: &stderr, verbose: true}, c.rep)
-		var got []string
-		if out := strings.TrimSuffix(stderr.String(), "\n"); out != "" {
-			got = strings.Split(out, "\n")
-		}
-		if !slices.Equal(got, c.want) {
-			t.Errorf("check %d logged\n%q\nwant\n%q", i+1, got, c.want)
-		}
-	}
-}
-
-// TestRemovedNoticesWarnOnce drives the memory serve keeps of your own
-// skills the account remote no longer holds through a run of checks: a
-// warning, with its hint, from the first check that finds a skill so, none
-// while it stays so or a check does not fetch the account remote, and
-// another once it comes back to that state after leaving it.
-func TestRemovedNoticesWarnOnce(t *testing.T) {
-	t.Parallel()
-	warning := func(name string) []string {
-		what, hint := remoteRemovedNotice(name)
-		return []string{"warning: update check: " + what, "  " + hint}
-	}
-	checks := []struct {
-		rep  checkReport
-		want []string
-	}{
-		{checkReport{accountChecked: true, remoteRemoved: []string{"beta"}}, warning("beta")},
-		{checkReport{accountChecked: true, remoteRemoved: []string{"beta"}}, nil},
-		{checkReport{}, nil}, // the account remote was not fetched
-		{checkReport{accountChecked: true, remoteRemoved: []string{"alpha", "beta"}}, warning("alpha")},
-		{checkReport{accountChecked: true, remoteRemoved: []string{"alpha"}}, nil},
-		{checkReport{accountChecked: true, remoteRemoved: []string{"alpha", "beta"}}, warning("beta")},
-	}
-	told := removedNotices{}
-	for i, c := range checks {
-		var stderr bytes.Buffer
-		told.report(&writer{stderr: &stderr}, c.rep)
-		var got []string
-		if out := strings.TrimSuffix(stderr.String(), "\n"); out != "" {
-			got = strings.Split(out, "\n")
-		}
-		if !slices.Equal(got, c.want) {
-			t.Errorf("check %d logged\n%q\nwant\n%q", i+1, got, c.want)
-		}
+		{"checked", checkReport{
+			failures:      []checkFailure{{source: one, fetch: true, skills: []string{"pdf"}, f: refuse(exitSource, one+": git fetch: fatal: repository not found", "")}},
+			notes:         []string{"a note"},
+			remoteRemoved: []string{"beta"},
+		}, nil, strings.Join([]string{
+			"warning: update check: " + one + ": git fetch: fatal: repository not found; not checked: pdf",
+			"warning: update check: a note",
+			"warning: update check: " + what,
+			"  " + hint,
+		}, "\n") + "\n"},
+		{"failed", checkReport{notes: []string{"a note"}}, errors.New("boom"), "warning: update check: boom\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var stderr bytes.Buffer
+			inv := &invocation{out: &writer{stderr: &stderr}}
+			inv.reportServeCheck(tc.rep, tc.err)
+			equal(t, "stderr", stderr.String(), tc.want)
+		})
 	}
 }

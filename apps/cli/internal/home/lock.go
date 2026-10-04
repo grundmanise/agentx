@@ -53,7 +53,7 @@ func MutateQuietWaiting(ctx context.Context, dir string, u RefUpdater, fn func()
 }
 
 // MutateWaiting is Mutate for the update check of the serve child, which
-// runs in the background on a timer: it waits for a held lock until ctx is
+// runs in the background once at start: it waits for a held lock until ctx is
 // done rather than giving up, since a command that happens to hold the lock
 // at that moment is no reason to drop what the check fetched, and nobody is
 // there to run it again. Waiting blocks nobody else: every other command
