@@ -2,8 +2,6 @@ package cli
 
 import (
 	"context"
-	"errors"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -15,12 +13,11 @@ import (
 // A publish pushes a fork's commits to the account remote, and nothing but
 // commits: edits nobody committed stay where they are, and the result names
 // every fork that holds some. It pushes only the fork's own branch, to the
-// branch of the same name, never forced. When the account remote holds
-// commits the fork lacks, another machine's, the publish takes them in
-// first exactly as an update's account step does, see judgePull, and pushes
-// the merge; a merge that conflicts is left pending, and that fork is not
-// pushed. A branch of the same name that is another fork, by its fork id,
-// is never pushed over.
+// branch of the same name, never forced. A publish never merges: when the
+// account remote holds commits the fork lacks, another machine's, the fork
+// is not pushed, and an update takes them in, see updateRun.accountStep. A
+// branch of the same name that is another fork, by its fork id, is never
+// pushed over.
 
 // publishEvent is what one publish did with one fork.
 type publishEvent struct {
@@ -37,7 +34,15 @@ const (
 	publishUpToDate = "up to date" // it held it already
 	publishRejected = "rejected"   // the account remote refused the push; see the error
 	publishRefused  = "refused"    // see the error
-	publishConflict = "conflict"   // taking in what the account remote holds conflicts, and the merge is pending
+	// publishMoved is a fork the account remote holds commits of that it
+	// lacks, published from another machine, while it holds commits of its
+	// own the remote lacks: the two histories diverged, and an update has
+	// to take them in before it can be published. See the error.
+	publishMoved = "moved"
+	// publishBehind is a fork whose tip the account remote's branch holds
+	// in its history, with commits another machine published on top: it
+	// has nothing to publish, and is not refused.
+	publishBehind = "behind"
 )
 
 func newSkillPublishCommand(inv *invocation) *cobra.Command {
@@ -48,8 +53,9 @@ func newSkillPublishCommand(inv *invocation) *cobra.Command {
 			"commits the account remote lacks, to the fork's branch on the account remote.\n" +
 			"Publishing pushes commits only: commit a fork's edits first with 'agentx skill\n" +
 			"commit'; the result names every fork whose edits were left out. When the account\n" +
-			"remote holds commits another machine published, they are taken in first, as\n" +
-			"'agentx skill update' takes them in, and the merge is pushed. A push the account\n" +
+			"remote holds commits another machine published, the fork is not pushed, and\n" +
+			"publishing fails when the fork holds commits of its own: run 'agentx skill\n" +
+			"update <name>' to take them in first, then publish again. A push the account\n" +
 			"remote rejects is reported, never forced, and a branch of the same name that is\n" +
 			"another fork is never pushed over.",
 		Args: cobra.MaximumNArgs(1),
@@ -75,7 +81,6 @@ type publishing struct {
 	uncommitted bool
 	push        bool // its branch goes in the push
 	f           *failure
-	sync        *forkSync // what taking in the account remote's commits did, when they were taken in
 }
 
 // publish fetches the account remote once and publishes the fork called
@@ -83,14 +88,15 @@ type publishing struct {
 // against its branch on the account remote, as the fetch left it: a fork
 // the remote holds no branch of, or holds an ancestor of its tip on, is
 // pushed; one whose tip the remote holds already is up to date; one whose
-// remote branch is another fork is refused, exit code 6; and one the
-// remote holds commits of that it lacks takes them in first, see syncFork,
-// refused while a merge is pending, exit code 4, or while it holds
-// uncommitted edits, exit code 6. Then every fork with something to push
-// goes in one push, see gitx.Push, and a ref the remote rejects is
-// reported, exit code 6, never forced. One progress event per fork follows,
-// then its publish event, which says whether it holds uncommitted edits,
-// which publishing leaves where they are, and the result names them.
+// remote branch is another fork is refused, exit code 6; one whose tip the
+// remote branch descends from is behind, and not pushed; and one the
+// remote holds commits of that it lacks while it holds commits of its own
+// is refused, exit code 6, since a publish never merges. Then every fork
+// with something to push goes in one push, see gitx.Push, and a ref the
+// remote rejects is reported, exit code 6, never forced. One progress event
+// per fork follows, then its publish event, which says whether it holds
+// uncommitted edits, which publishing leaves where they are, and the result
+// names them.
 func (inv *invocation) publish(ctx context.Context, name string) error {
 	gitDir, entry, account, err := inv.accountRemote(ctx)
 	if err != nil {
@@ -133,12 +139,12 @@ func (inv *invocation) publish(ctx context.Context, name string) error {
 			return err
 		}
 	}
-	return inv.reportPublished(ctx, list)
+	return inv.reportPublished(list)
 }
 
 // judgePublish decides what the publish does with the fork whose branch is
-// rec, and takes in what the account remote holds of it when the remote
-// holds commits it lacks, see publish.
+// rec, see publish. It writes nothing: what the account remote holds that
+// the fork lacks is an update's to take in, see updateRun.accountStep.
 func (inv *invocation) judgePublish(ctx context.Context, gitDir string, rec lineage.Record, remote remoteForks) *publishing {
 	n := rec.Name
 	p := &publishing{name: n, uncommitted: inv.forkUncommitted(ctx, gitDir, rec)}
@@ -155,48 +161,33 @@ func (inv *invocation) judgePublish(ctx context.Context, gitDir string, rec line
 		p.outcome, p.f = publishRefused, f
 		return p
 	}
-	_, status, err := inv.git.IsolatedStatus(ctx, gitDir, 1, "merge-base", "--is-ancestor", theirs, rec.Commit)
+	// Is the remote tip in the fork's history, or the fork's tip in the
+	// remote's? Neither is a divergence.
+	ahead, err := inv.isAncestor(ctx, gitDir, theirs, rec.Commit)
+	behind := false
+	if err == nil && !ahead {
+		behind, err = inv.isAncestor(ctx, gitDir, rec.Commit, theirs)
+	}
 	switch {
 	case err != nil:
 		p.outcome, p.f = publishRefused, failureOf(accountRepoFailure(err))
-		return p
-	case status == 0: // the account remote holds nothing the fork lacks
+	case ahead: // the account remote holds nothing the fork lacks
 		p.push = true
-		return p
-	case inv.mergePending(n):
-		// The skill directory in the checkout, as the conflict that left
-		// the merge pending named it.
-		checkout := inv.checkoutPath(n)
-		if dir, err := inv.forkDir(ctx, gitDir, rec); err == nil {
-			checkout = filepath.Join(checkout, dir)
-		}
-		p.outcome, p.f = publishRefused, publishPendingRefusal(n, checkout)
-		return p
-	}
-	s := inv.syncFork(ctx, gitDir, rec, remote, "published")
-	p.sync = &s
-	switch s.outcome {
-	case pullFastForward:
-		p.outcome, p.commit = publishUpToDate, theirs
-	case pullMerged:
-		p.push = true
-	case pullConflict:
-		p.outcome, p.f = publishConflict, s.f
+	case behind: // the fork holds nothing the account remote lacks
+		p.outcome, p.commit = publishBehind, theirs
 	default:
-		p.outcome, p.f = publishRefused, s.f
+		p.outcome, p.f = publishMoved, movedRefusal(n)
 	}
 	return p
 }
 
-// publishPendingRefusal refuses to publish the fork called name while it
-// has a merge pending and the account remote holds commits it lacks: the
-// publish would have to take them in, and it never completes a pending
-// merge, resolved or not. An update completes it once it is resolved in its
-// checkout, at checkout.
-func publishPendingRefusal(name, checkout string) *failure {
-	return refuse(exitPendingMerge, sanitised(name)+" has a merge pending, so it cannot be published until the merge is completed or given up",
-		"resolve it with git in "+quotedPath(checkout)+" and run '"+skillCommand("update", name)+"' to complete it, then publish again, or run '"+
-			skillCommand("update", name, "--abort")+"' to give the merge up")
+// movedRefusal refuses to publish the fork called name while the account
+// remote holds commits of it that it lacks, published from another
+// machine, and it holds commits of its own the remote lacks: a publish
+// never merges, and an update takes them in first.
+func movedRefusal(name string) *failure {
+	return refuse(exitRefused, "the account remote holds changes to "+sanitised(name)+" that this machine lacks, published from another machine",
+		"run '"+skillCommand("update", name)+"' to take them in, then publish again")
 }
 
 // forkUncommitted reports whether the fork whose branch is rec holds edits
@@ -256,24 +247,17 @@ func (inv *invocation) pushForks(ctx context.Context, gitDir, remote, url string
 }
 
 // reportPublished reports every fork of the publish, in name order: one
-// progress event each, a merge it made first as an update's account step
-// reports it, its publish event and its line, then one library_skill event
-// for each fork the merge moved, a warning for each fork with uncommitted
-// edits but one refused for them, whose refusal names them, and the result,
-// which answers for every fork that was not published, see refusals.
-func (inv *invocation) reportPublished(ctx context.Context, list []*publishing) error {
+// progress event each, its publish event and its line, or for a fork
+// behind the account remote a warning, then a warning for each fork with
+// uncommitted edits, and the result, which answers for every fork that
+// was not published, see refusals.
+func (inv *invocation) reportPublished(list []*publishing) error {
 	out := inv.out
 	run := refusals{verb: "published", noun: "fork", mixed: "run 'agentx skill list' to see the state of each fork, then publish the rest one at a time"}
-	var moved, dirty []string
+	var dirty []string
 	pushed := 0
 	for i, p := range list {
 		out.emit(progressEvent{event: newEvent("progress"), Phase: "publish", Subject: p.name, Current: i + 1, Total: len(list)})
-		if p.sync != nil && p.sync.outcome != pullRefused {
-			inv.reportSync(*p.sync)
-			if p.sync.moved() {
-				moved = append(moved, p.name)
-			}
-		}
 		out.emit(publishEvent{event: newEvent("publish"), Name: p.name, Outcome: p.outcome, Commit: p.commit, Uncommitted: p.uncommitted})
 		name := out.paint(heading, sanitised(p.name))
 		switch p.outcome {
@@ -282,10 +266,10 @@ func (inv *invocation) reportPublished(ctx context.Context, list []*publishing) 
 			out.done("published " + name + " as " + short(p.commit))
 		case publishUpToDate:
 			out.print(name, " is up to date on the account remote")
+		case publishBehind:
+			out.warnWith(behindMessage(p.name), "run '"+skillCommand("update", p.name)+"' to take them in")
 		}
-		// A fork refused for its uncommitted edits says so in its refusal;
-		// any other fork that holds some is named with them.
-		if p.uncommitted && (p.f == nil || !errors.Is(p.f, errUncommitted)) {
+		if p.uncommitted {
 			dirty = append(dirty, p.name)
 		}
 		if p.f != nil {
@@ -294,9 +278,6 @@ func (inv *invocation) reportPublished(ctx context.Context, list []*publishing) 
 				out.warn(namedReason(p.name, p.f.message))
 			}
 		}
-	}
-	if err := inv.reportForks(ctx, moved); err != nil {
-		return err
 	}
 	for _, n := range dirty {
 		out.warnWith(sanitised(n)+" has uncommitted edits, which were not published",
@@ -307,6 +288,8 @@ func (inv *invocation) reportPublished(ctx context.Context, list []*publishing) 
 		inv.summary = "published " + sanitised(list[0].name)
 	case len(list) == 1 && list[0].outcome == publishUpToDate:
 		inv.summary = sanitised(list[0].name) + " is up to date on the account remote"
+	case len(list) == 1 && list[0].outcome == publishBehind:
+		inv.summary = behindMessage(list[0].name)
 	default:
 		inv.summary = "published " + strconv.Itoa(pushed) + " of " + plural(len(list), "fork")
 	}
@@ -317,6 +300,12 @@ func (inv *invocation) reportPublished(ctx context.Context, list []*publishing) 
 		return f
 	}
 	return nil
+}
+
+// behindMessage is the warning for the fork called name, which the account
+// remote is ahead of: it has nothing to publish.
+func behindMessage(name string) string {
+	return sanitised(name) + " has nothing to publish; the account remote holds changes published from another machine"
 }
 
 // sanitisedAll is every name of names sanitised.

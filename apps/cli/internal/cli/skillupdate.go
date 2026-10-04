@@ -493,7 +493,7 @@ func (r *updateRun) accountStep(ctx context.Context, names []string, records map
 		if tip := remote.tips[n]; tip == "" || tip == records[n].Commit {
 			continue
 		}
-		s := inv.syncFork(ctx, r.gitDir, records[n], remote, "updated")
+		s := inv.syncFork(ctx, r.gitDir, records[n], remote)
 		if s.outcome == pullUpToDate {
 			continue // the remote is behind: the account step took nothing in
 		}
@@ -1139,15 +1139,8 @@ func conflictFailure(name, path string, files int) *failure {
 // conflictHintAt is the hint of an update that left the merge of the skill
 // called name pending, path being the skill's directory in the checkout.
 func conflictHintAt(name, path string) string {
-	return conflictHintRunning(name, path, "run '"+skillCommand("update", name)+"' again to apply it")
-}
-
-// conflictHintRunning is conflictHintAt with then saying how the merge is
-// completed once it is resolved, such as running agentx skill update
-// <name> for a merge a publish left pending.
-func conflictHintRunning(name, path, then string) string {
 	return "resolve it with git in " + quotedPath(path) + " ('git add' each file you resolved, or 'git checkout --ours|--theirs <file>' then 'git add'; 'git commit' is optional), " +
-		"then " + then + ", or '" + skillCommand("update", name, "--abort") + "' to give it up"
+		"then run '" + skillCommand("update", name) + "' again to apply it, or '" + skillCommand("update", name, "--abort") + "' to give it up"
 }
 
 // reportApplied is report's part for the skills the run updated.

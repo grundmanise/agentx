@@ -723,6 +723,7 @@ no skill was updated from upstream
 - When this machine has no commits of its own, the skill moves to the published commit: a fast-forward, with nothing new committed. When both machines committed, agentx merges the two with Git and commits the merge, as `notes: merge the account remote (desktop)`.
 - A skill you forked from a source takes in what the account remote holds first, then its new upstream version, as two commits.
 - Commit or discard your edits first: a skill with uncommitted edits stops with exit code 6 when the account remote has something new.
+- Take them in before you publish: [`agentx skill publish`](/cli/remote#publish-a-fork) never merges, and stops with exit code 6 when another machine published changes and this machine has commits of its own.
 - When both machines changed the same lines, the merge waits for you: see [Resolve a conflict](/cli/fork#resolve-a-conflict). Resolve it, then run `agentx skill update <name>` again.
 - A skill with no upstream (one you created with `agentx skill new`, or forked from an unmanaged or a plugin's skill) that has nothing new on the account remote is `up to date with the account remote`. One you never published has no branch there yet, and the update tells you to run `agentx skill publish <name>`.
 - If Git cannot reach the account remote, the update of a skill with no upstream stops with exit code 3; a skill you forked from a source gets a warning and still takes its new upstream version.

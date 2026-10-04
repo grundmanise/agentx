@@ -96,21 +96,22 @@ func (h *harness) commitFork(name, notes string) string {
 	return h.ref(lineage.ForkRef(name))
 }
 
-// TestPublishMergesFirstAndNamesUncommittedForks publishes from machine b
-// while machine a published alpha first. With an uncommitted edit, b's
-// publish of alpha would have to merge a's commit, and is refused, exit 6,
-// nothing pushed, the refusal saying so once. Once the edit is undone,
-// the publish merges a's commit first, as an update does, and pushes the
-// merge; beta, committed on b and not named, stays unpushed. A publish
-// with nothing to take in pushes alpha's commits even though alpha holds
-// an uncommitted edit, and names it: publishing never commits. The push
-// carries the fork branches alone: the remote holds no import branch,
-// update candidate or other ref. A publish on a whose merge of b's beta
-// conflicts leaves it pending, exit 4, and its hint names the update that
-// completes it, since a publish never does; reported again by skill
-// update, the merge is still the account remote's. A push the remote
-// rejects is reported, exit 6, and never forced.
-func TestPublishMergesFirstAndNamesUncommittedForks(t *testing.T) {
+// TestPublishNeverMergesAndNamesUncommittedForks publishes from machine b
+// while machine a published alpha first. b holds a commit of its own, so
+// the two histories diverged: b's publish of alpha is refused, exit 6,
+// outcome moved, its hint naming the update, with nothing written here or
+// on the remote and no pull event, since a publish never merges. Once
+// b's update has taken a's commit in, the publish pushes the merge; beta,
+// committed on b and not named, stays unpushed. A publish pushes alpha's
+// commits even though alpha holds an uncommitted edit, and names it:
+// publishing never commits. The push carries the fork branches alone: the
+// remote holds no import branch, update candidate or other ref. a, which
+// holds both forks unchanged since, is behind: its publish of every fork
+// pushes nothing, exit 0, each fork's outcome behind and its warning
+// naming the update, and so is its publish of alpha alone, which says so in
+// its result. A push the remote rejects is reported, exit 6, and
+// never forced.
+func TestPublishNeverMergesAndNamesUncommittedForks(t *testing.T) {
 	t.Parallel()
 	a, b, _, remote := twoHomes(t)
 	alphaB := b.forkDir("alpha", "alpha")
@@ -120,21 +121,21 @@ func TestPublishMergesFirstAndNamesUncommittedForks(t *testing.T) {
 	betaBefore := remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/beta")
 	b.commitFork("beta", forkNotes("two", "two, b"))
 
-	committed := readText(t, filepath.Join(alphaB, "SKILL.md"))
-	writeFile(t, filepath.Join(alphaB, "SKILL.md"), "uncommitted\n")
 	out := b.run("--json", "skill", "publish", "alpha")
-	equal(t, "exit", out.exit, 6)
-	contains(t, "the error", b.one(out.stdout, "error")["message"].(string), "alpha has uncommitted edits, so it cannot be published")
-	if strings.Contains(out.stderr, "which were not published") {
-		t.Errorf("the refusal is warned about again: %s", out.stderr)
-	}
+	equal(t, "a publish over another machine's commit: exit", out.exit, 6)
+	equal(t, "its outcome", b.one(out.stdout, "publish")["outcome"], publishMoved)
+	e := b.one(out.stdout, "error")
+	contains(t, "its message", e["message"].(string), "the account remote holds changes to alpha that this machine lacks, published from another machine")
+	contains(t, "its hint", e["hint"].(string), "run 'agentx skill update alpha' to take them in, then publish again")
+	equal(t, "its pull events", len(b.eventsOfType(out.stdout, "pull")), 0)
+	equal(t, "b's alpha, kept", b.ref(lineage.ForkRef("alpha")), mine)
+	noCheckout(t, b, "alpha")
 	equal(t, "the remote's alpha", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/alpha"), theirs)
 
-	writeFile(t, filepath.Join(alphaB, "SKILL.md"), committed)
-	out = b.mustRun("--json", "skill", "publish", "alpha")
+	b.mustRun("skill", "update", "alpha")
 	merged := b.ref(lineage.ForkRef("alpha"))
 	equal(t, "the merge's parents", b.parents(merged), mine+"\n"+theirs)
-	equal(t, "pull outcome", b.one(out.stdout, "pull")["outcome"], pullMerged)
+	out = b.mustRun("--json", "skill", "publish", "alpha")
 	ev := b.one(out.stdout, "publish")
 	equal(t, "outcome", ev["outcome"], publishPushed)
 	equal(t, "commit", ev["commit"], merged)
@@ -168,24 +169,25 @@ func TestPublishMergesFirstAndNamesUncommittedForks(t *testing.T) {
 	equal(t, "fork progress", len(b.eventsOfType(out.stdout, "progress")), 3)
 	equal(t, "the remote's refs", remoteGit(t, b, remote, "for-each-ref", "--format=%(refname)"), "refs/heads/skills/alpha\nrefs/heads/skills/beta")
 
-	a.commitFork("beta", forkNotes("two", "two, a"))
-	out = a.run("--json", "skill", "publish", "beta")
-	equal(t, "a conflicting publish: exit", out.exit, 4)
-	equal(t, "its outcome", a.one(out.stdout, "publish")["outcome"], publishConflict)
-	contains(t, "its hint", a.one(out.stdout, "error")["hint"].(string), "then run 'agentx skill update beta' to complete it before publishing again, or ")
-	out = a.run("--json", "skill", "update", "beta")
-	equal(t, "the merge reported again: exit", out.exit, 4)
-	contains(t, "its message", a.one(out.stdout, "error")["message"].(string), "beta conflicts with the account remote in 1 file")
-	out = a.run("--json", "skill", "publish", "beta")
-	equal(t, "a publish over the pending merge: exit", out.exit, 4)
-	contains(t, "its hint", a.one(out.stdout, "error")["hint"].(string), "resolve it with git in "+filepath.Join(a.agentx, "merges", "beta", "beta")+" and run")
+	refs := remoteGit(t, b, remote, "for-each-ref", "--format=%(refname) %(objectname)")
+	out = a.run("--json", "skill", "publish")
+	equal(t, "a publish of forks the remote is ahead of: exit", out.exit, 0)
+	behind := a.eventsOfType(out.stdout, "publish")
+	equal(t, "its publish events", len(behind), 2)
+	for _, e := range behind {
+		equal(t, e["name"].(string)+"'s outcome", e["outcome"], publishBehind)
+	}
+	contains(t, "alpha's warning", out.stderr, "alpha has nothing to publish; the account remote holds changes published from another machine; run 'agentx skill update alpha' to take them in")
+	equal(t, "the remote's refs, kept", remoteGit(t, b, remote, "for-each-ref", "--format=%(refname) %(objectname)"), refs)
+	out = a.mustRun("--json", "skill", "publish", "alpha")
+	contains(t, "the summary of one fork behind", a.one(out.stdout, "result")["summary"].(string), "alpha has nothing to publish")
 
 	writeShim(t, filepath.Join(remote, "hooks", "pre-receive"), "#!/bin/sh\nexit 1\n")
 	b.commitFork("alpha", forkNotes("nine", "nine, b"))
 	out = b.run("--json", "skill", "publish", "alpha")
 	equal(t, "a rejected push: exit", out.exit, 6)
 	equal(t, "its outcome", b.one(out.stdout, "publish")["outcome"], publishRejected)
-	e := b.one(out.stdout, "error")
+	e = b.one(out.stdout, "error")
 	contains(t, "its message", e["message"].(string), "the account remote rejected skills/alpha: ")
 	contains(t, "its hint", e["hint"].(string), "run 'agentx skill update alpha' to take in what it holds, then publish again; agentx never forces a push")
 	equal(t, "the remote's alpha, kept", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/alpha"), tip)
@@ -303,9 +305,8 @@ func sourceEntryOf(t *testing.T, h *harness, url string) map[string]any {
 // again, it is up to date with the account remote, exit 0. Once both
 // machines changed its line, and b added a file of its own, b's check lists
 // only what a changed since the commit both share, and b's update leaves
-// the merge pending, exit 4; resolved in its checkout, the merge is not
-// completed by a publish, exit 4, whose hint names the update, and the next
-// update completes it. With that merge and beta's not yet published, the
+// the merge pending, exit 4, reported again as the account remote's while
+// unresolved; resolved in its checkout, the next update completes it. With that merge and beta's not yet published, the
 // update of every skill has nothing to do and says nothing else. Last, with
 // the account remote out of reach, the update of beta only warns, while
 // that of the skill with no upstream fails, exit 3, alone or with every
@@ -416,11 +417,11 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	equal(t, "the update of both machines' line: exit", out.exit, 4)
 	equal(t, "its pull outcome", b.one(out.stdout, "pull")["outcome"], pullConflict)
 	equal(t, "its warnings, with beta ahead of the remote and left out", out.stderr, "")
+	out = b.run("--json", "skill", "update", "notes")
+	equal(t, "the merge reported again: exit", out.exit, 4)
+	contains(t, "its message, still the account remote's", b.one(out.stdout, "error")["message"].(string), "notes conflicts with the account remote in 1 file")
 	writeFile(t, filepath.Join(pendingCheckout(b, "notes"), "notes", "notes.md"), forkNotes("one", "one, a", "two", "two, a and b"))
 	checkoutGit(t, b, "notes", "add", "notes/notes.md")
-	out = b.run("--json", "skill", "publish", "notes")
-	equal(t, "a publish of the resolved merge: exit", out.exit, 4)
-	contains(t, "its hint", b.one(out.stdout, "error")["hint"].(string), "run 'agentx skill update notes' to complete it, then publish again")
 	out = b.mustRun("--json", "skill", "update", "notes")
 	contains(t, "the completion", b.one(out.stdout, "result")["summary"].(string), "updated notes with the merge you resolved, committed as ")
 	equal(t, "its pull events", len(b.eventsOfType(out.stdout, "pull")), 0)

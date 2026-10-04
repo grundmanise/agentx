@@ -18,13 +18,15 @@ An upstream update is always a three-way merge with the accepted import as the e
 
 ## The account step and publishing
 
-The account step of `skill update`, which takes in what another machine published of a fork before the update from upstream, and the merge a publish makes when the account remote holds commits the fork lacks, are a plain Git merge on ordinary ancestry:
+The account step of `skill update`, which takes in what another machine published of a fork before the update from upstream, is a plain Git merge on ordinary ancestry. It is the only step that merges what the account remote holds: a publish never does.
+
+The account step:
 
 - Nothing to do when the remote tip is the local tip or an ancestor of it.
 - A fast-forward when the local tip is an ancestor of the remote tip. No commit is written.
 - Otherwise `merge-tree --write-tree` of the two tips, with the merge base git finds. A clean result is committed with the local tip and the remote tip as parents and the base below; a conflict becomes a pending merge, resolved in its worktree like any other conflict. A binary file or a symlink both sides changed conflicts whole, as Git merges it: the pending merge holds the local side's version and the other side's as its own stage, with no markers.
 
-Publishing pushes commits only, never forced, and only the fork's own branch: import branches, update candidates, upstream-removed markers and source refs never travel. A push the remote rejects is reported, never retried with force.
+Publishing pushes commits only, never forced, and only the fork's own branch: import branches, update candidates, upstream-removed markers and source refs never travel. A push the remote rejects is reported, never retried with force. When the account remote holds commits the fork lacks, the publish does not push it: a fork the remote is only ahead of has nothing to publish, and one whose history diverged from the remote's is refused until `skill update` takes the remote's commits in.
 
 ## The recorded base
 
@@ -42,7 +44,7 @@ An account step that moves the fork's base to another import also drops the upda
 
 ## Deterministic parentless imports
 
-Every upstream version becomes a commit with no parent whose id is a pure function of the version and its coordinates, identical on every machine. So two machines that took the same upstream version merge clean when neither has edited since, and two that took different versions merge clean where the versions changed different lines and conflict where both changed the same lines, as Git merges any two histories. Two machines that each took the same version share its import commit as a merge base beside the last commit they shared. The two bases have no common ancestor, so Git merges over a virtual base of its own, in which every line where the two bases differ conflicts: each line the version changed, and each line the fork had changed from upstream before it took the version. Until the two machines have synced once since taking the version, a commit on either one that edits such a line, or a line next to one, conflicts on the other's update or publish, even when the other edited nothing: a line put back to the older upstream text conflicts rather than being taken back without a word, and any other edit there conflicts too. Once either machine has merged the other's commits, that merge is their one base, and later edits merge as any others do.
+Every upstream version becomes a commit with no parent whose id is a pure function of the version and its coordinates, identical on every machine. So two machines that took the same upstream version merge clean when neither has edited since, and two that took different versions merge clean where the versions changed different lines and conflict where both changed the same lines, as Git merges any two histories. Two machines that each took the same version share its import commit as a merge base beside the last commit they shared. The two bases have no common ancestor, so Git merges over a virtual base of its own, in which every line where the two bases differ conflicts: each line the version changed, and each line the fork had changed from upstream before it took the version. Until the two machines have synced once since taking the version, a commit on either one that edits such a line, or a line next to one, conflicts on the other's update, even when the other edited nothing: a line put back to the older upstream text conflicts rather than being taken back without a word, and any other edit there conflicts too. Once either machine has merged the other's commits, that merge is their one base, and later edits merge as any others do.
 
 ## No inferred ancestry
 
@@ -50,7 +52,7 @@ Ancestry is never inferred: no grafts, no replacement refs, no ordering by impor
 
 ## Acceptance
 
-- The same upstream version on two machines merges clean. Until the two have synced once, an edit on either machine to a line the version changed or the fork had changed from upstream, or to a line next to one, conflicts on the other's update or publish.
+- The same upstream version on two machines merges clean. Until the two have synced once, an edit on either machine to a line the version changed or the fork had changed from upstream, or to a line next to one, conflicts on the other's update.
 - Different upstream versions merge clean where they changed different lines and conflict where both changed the same lines; the conflict is resolved like any other.
 - The recorded `Agentx-Base` follows the base rule above, never a timestamp.
 - A rollback of an upstream line on one machine survives an update on the other, or surfaces as a conflict; it is never silently undone.

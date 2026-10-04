@@ -56,12 +56,10 @@ type forkUpdate struct {
 	// with is what a merge left pending merges, as the line that reports it
 	// names it, see updating.conflictsWith; "" for an update from upstream.
 	with string
-	// pull is set for the account step, which takes in what the account
-	// remote holds, of an update or of a publish, and says so in its
-	// refusals, and doing is "published" for a publish's and "updated" for
-	// an update's; an update from upstream leaves both unset.
-	pull  bool
-	doing string
+	// pull is set for the account step of an update, which takes in what
+	// the account remote holds and says so in its refusals; an update from
+	// upstream leaves it unset.
+	pull bool
 	// stale is the update candidate the fork's new base passed: when the
 	// commit moves the base to another import than the candidate, a
 	// candidate the source history does not prove newer than that import
@@ -91,36 +89,6 @@ func (inv *invocation) staleCandidate(ctx context.Context, gitDir string, rec li
 		return ""
 	}
 	return c.Commit
-}
-
-// what is what the command does to the fork, as its refusals say it cannot
-// be done: published or updated.
-func (f *forkUpdate) what() string {
-	if f.doing != "" {
-		return f.doing
-	}
-	return "updated"
-}
-
-// again is the command that does it again for the fork called name, and
-// what it does, as the hints of its refusals name them.
-func (f *forkUpdate) again(name string) (command, verb string) {
-	if f.doing == "published" {
-		return publishCommand(name), "publish"
-	}
-	return skillCommand("update", name), "update"
-}
-
-// complete is how the fork's merge is completed once it is resolved, as
-// the hint of its conflict says it: by running the command that started it
-// again, but for a merge a publish started, which an update completes,
-// since a publish never completes a pending merge.
-func (f *forkUpdate) complete(name string) string {
-	if f.doing == "published" {
-		return "run '" + skillCommand("update", name) + "' to complete it before publishing again"
-	}
-	command, _ := f.again(name)
-	return "run '" + command + "' again to apply it"
 }
 
 // forkBaseRecord is the record of the fork rec's base version, see
@@ -250,8 +218,7 @@ func (inv *invocation) judgeForkUpdate(ctx context.Context, gitDir string, rec l
 // that lays a new tip out over it, with the files git ignores in it, which
 // the new layout carries over: a repository nested in it that no ignore
 // rule covers, uncommitted edits and anything else git cannot record that
-// no rule covers are refused, exit code 6, before anything is written, in
-// the words of the command that would, see forkUpdate.what.
+// no rule covers are refused, exit code 6, before anything is written.
 func (inv *invocation) cleanSite(ctx context.Context, site forkSite, fork *forkUpdate) (siteJudged, *failure) {
 	pre, err := inv.judgeSite(ctx, site, true)
 	switch {
@@ -260,7 +227,7 @@ func (inv *invocation) cleanSite(ctx context.Context, site forkSite, fork *forkU
 	case len(pre.exposed) > 0:
 		return siteJudged{}, failureOf(nestedRepoRefusal(site.name, pre.exposed))
 	case !pre.clean:
-		return siteJudged{}, uncommittedRefusal(site.name, fork.what())
+		return siteJudged{}, uncommittedRefusal(site.name, "updated")
 	}
 	if _, lost := splitUnrecordable(pre.forkJudged); len(lost) > 0 {
 		return siteJudged{}, fork.unrecordable(site, lost)
@@ -272,7 +239,7 @@ func (inv *invocation) cleanSite(ctx context.Context, site forkSite, fork *forkU
 // what git cannot record and no ignore rule covers, which laying a new tip
 // out over it would discard, see unrecordableAt.
 func (f *forkUpdate) unrecordable(site forkSite, lost []string) *failure {
-	command, _ := f.again(site.name)
+	command := skillCommand("update", site.name)
 	what := "an update"
 	if f.pull {
 		what = "taking in what the account remote holds"
@@ -333,15 +300,13 @@ func (r *updateRun) applyFork(ctx context.Context, u *updating) error {
 // applyForkUpdate is applyFork's work under the lock.
 func (inv *invocation) applyForkUpdate(ctx context.Context, gitDir string, u *updating) error {
 	site, name := u.fork.site, u.name
-	what := u.fork.what()
-	again, verb := u.fork.again(name)
 	candidate := lineage.CandidateRef(name)
 	switch pending := inv.mergePending(name); {
 	case u.checkout == "" && pending:
-		return forkPendingRefusal(name, what)
+		return forkPendingRefusal(name, "updated")
 	case u.checkout != "" && !pending:
 		return refuse(exitRefused, "the merge of "+sanitised(name)+" was given up while it was being applied, so nothing was changed",
-			"run '"+again+"' to merge it again")
+			"run '"+skillCommand("update", name)+"' to merge it again")
 	}
 	refs := []string{site.rec.Ref, candidate}
 	if u.fork.theirsRef != "" && u.fork.theirsRef != candidate {
@@ -352,22 +317,22 @@ func (inv *invocation) applyForkUpdate(ctx context.Context, gitDir string, u *up
 		return accountRepoFailure(err)
 	}
 	if values[site.rec.Ref] != site.rec.Commit {
-		return refuse(exitRefused, sanitised(name)+" changed while it was being "+what+", so nothing was changed",
-			"run '"+again+"' again to "+verb+" it as it is now")
+		return refuse(exitRefused, sanitised(name)+" changed while it was being updated, so nothing was changed",
+			"run '"+skillCommand("update", name)+"' again to update it as it is now")
 	}
 	switch {
 	case u.checkout != "" || u.fork.theirsRef == "" || values[u.fork.theirsRef] == u.fork.theirs:
 	case u.fork.theirsRef == candidate:
 		return refuse(exitRefused, "the update candidate "+candidate+" moved while "+sanitised(name)+" was being updated, so nothing was changed",
-			"run '"+again+"' again to apply the update the last check found")
+			"run '"+skillCommand("update", name)+"' again to apply the update the last check found")
 	default:
-		return refuse(exitRefused, "the account remote's "+site.branch+" moved while "+sanitised(name)+" was being "+what+", so nothing was changed",
-			"run '"+again+"' again to "+verb+" it as it is now")
+		return refuse(exitRefused, "the account remote's "+site.branch+" moved while "+sanitised(name)+" was being updated, so nothing was changed",
+			"run '"+skillCommand("update", name)+"' again to update it as it is now")
 	}
 	if err := worktreeHealth(name, site.root, site.branch); err != nil {
 		return err
 	}
-	now, err := inv.siteNow(ctx, site, u.fork.judged, what, true)
+	now, err := inv.siteNow(ctx, site, u.fork.judged, "updated", true)
 	if err != nil {
 		return err
 	}
@@ -438,7 +403,7 @@ func forkConflictFailure(u *updating, checkout string) *failure {
 	}
 	name := u.name
 	return refuse(exitPendingMerge, sanitised(name)+" conflicts with "+with+" in "+plural(len(u.conflict.Files), "file")+", so the merge is pending and the fork's worktree and branch were left as they are",
-		conflictHintRunning(name, filepath.Join(checkout, u.fork.site.dir), u.fork.complete(name)))
+		conflictHintAt(name, filepath.Join(checkout, u.fork.site.dir)))
 }
 
 // splitUnrecordable sorts the paths of a fork's skill directory, as j

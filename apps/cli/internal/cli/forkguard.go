@@ -29,14 +29,15 @@ func forkPendingRefusal(name, what string) *failure {
 // uncommittedRefusal refuses to do what to the fork called name while its
 // skill directory holds edits its branch does not record. A file git
 // ignores is no such edit, since no commit would record it either. The
-// refusal wraps errUncommitted.
+// refusal wraps errUncommitted, see renameFinish.
 func uncommittedRefusal(name, what string) *failure {
 	return refuse(exitRefused, sanitised(name)+" has uncommitted edits, so it cannot be "+what+" until they are committed",
 		"run '"+skillCommand("commit", name)+"' to keep them, then run the command again").wrap(errUncommitted)
 }
 
 // errUncommitted is what a refusal for uncommitted edits wraps, so that a
-// command reporting the edits on their own does not name them twice.
+// rename whose removal of the old fork it refused can say how to carry the
+// edits over, see renameFinish.
 var errUncommitted = errors.New("uncommitted edits")
 
 // siteJudged is a fork's skill directory as judgeSite found it: the

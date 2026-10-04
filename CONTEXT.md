@@ -119,7 +119,7 @@ The source whose settings entry carries the account flag, added with `agentx sou
 _Avoid_: cloud, server, origin, fork source
 
 **Publish**:
-An explicit user action, `agentx skill publish`, that pushes one fork's or greenfield skill's branch from the account repo to the account remote, after taking in, as an update's account step does, what another machine published there first. Another machine with the same remote installs it from there, and takes later versions in with an update, a plain Git merge. Commits are explicit, made by the user with agentx or with git, and publishing pushes commits only.
+An explicit user action, `agentx skill publish`, that pushes one fork's or greenfield skill's branch from the account repo to the account remote. It never merges: when another machine published there first, the update's account step takes that in before the next publish. Another machine with the same remote installs it from there, and takes later versions in with an update, a plain Git merge. Commits are explicit, made by the user with agentx or with git, and publishing pushes commits only.
 _Avoid_: sync, share, upload
 
 **Installable skill**:
@@ -139,7 +139,7 @@ Applying a managed skill's update candidate, only ever at the user's request: th
 _Avoid_: upgrade, pull, sync
 
 **Pending merge**:
-The merge an update of a modified skill or a fork leaves when the edits and the update candidate conflict, or the account step of an update or a publish when a fork's commits and the account remote's conflict: an ordinary Git merge in progress in a Git worktree of the account repo under agentx home, resolved with Git. The library directory, or a fork's worktree and branch, and so every agent, keeps its content until the next update applies the resolved merge, or the merge is given up with `skill update --abort`. While it exists the skill is not removed. Survives restarts.
+The merge an update of a modified skill or a fork leaves when the edits and the update candidate conflict, or the account step of an update when a fork's commits and the account remote's conflict: an ordinary Git merge in progress in a Git worktree of the account repo under agentx home, resolved with Git. The library directory, or a fork's worktree and branch, and so every agent, keeps its content until the next update applies the resolved merge, or the merge is given up with `skill update --abort`. While it exists the skill is not removed. Survives restarts.
 _Avoid_: merge ref, conflict state
 
 **Modified skill**:

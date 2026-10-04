@@ -22,9 +22,9 @@ agentx skill publish release-notes
 - Publishing pushes your commits, and nothing else. Commit your edits first with [`agentx skill commit`](/cli/fork#commit-your-edits). A fork with uncommitted edits still publishes its commits, and agentx names it with a warning.
 - `agentx skill publish` with no name publishes every fork with commits the remote does not have.
 - Each fork goes to its own branch, `skills/<name>`. Publishing one fork leaves your other forks' commits where they are.
-- When another machine published commits of the fork first, agentx takes them in before it pushes, as [`agentx skill update`](/cli/skill#take-in-what-another-machine-published) does. Commit or discard your edits first: a fork with uncommitted edits stops with exit code 6.
+- When another machine published commits of the fork first and this machine has commits of its own, publishing fails with exit code 6. Run [`agentx skill update <name>`](/cli/skill#take-in-what-another-machine-published) to take them in, then publish again.
+- When another machine published commits of the fork and this machine has nothing new, there is nothing to publish: agentx warns and the publish still succeeds. Run `agentx skill update <name>` to take them in.
 - agentx never forces a push. When the remote rejects one, for example because another machine published meanwhile, run `agentx skill update <name>`, then publish again.
-- When taking them in conflicts, the merge waits and the fork is not pushed: see [Resolve a conflict](/cli/fork#resolve-a-conflict).
 - Nothing is pushed for you. Run `agentx skill publish` each time you want your commits on the remote.
 - To delete a fork's branch from the remote, remove the fork with [`agentx skill remove <name> --remote`](/cli/fork#remove-a-fork).
 
@@ -42,8 +42,7 @@ hint: rename yours with 'agentx skill rename release-notes <new>', then publish 
 ## Exit codes
 
 - `3`: Git cannot reach the account remote.
-- `4`: a fork has a merge waiting, or the publish left one waiting for you to [resolve](/cli/fork#resolve-a-conflict).
 - `5`: the name is not a skill of this machine.
-- `6`: no account remote is set; the skill is not a fork; the remote's branch of that name is [another fork](#two-forks-with-one-name), names no fork id, or shares no commit with yours; the fork has uncommitted edits and the remote has something new; the remote rejected the push; the fork's worktree is missing, needs repair or is not on its branch; or the fork, or its branch on the remote, changed while it was being published.
+- `6`: no account remote is set; the skill is not a fork; the remote's branch of that name is [another fork](#two-forks-with-one-name) or names no fork id; another machine published changes the fork lacks while this machine has commits of its own; or the remote rejected the push.
 - `7`: another agentx command is running. Retry when it finishes.
 - `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.

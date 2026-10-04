@@ -54,3 +54,5 @@ Sources have no layout any more: the account remote is the source whose settings
 `skill revert` is removed, for managed skills and forks alike, and `skill unfork` is no longer reserved. Where the text above names a revert, a machine with no account keeps its forks' full history, commits and diffs; to get a managed skill's original back the user removes it and adds it again.
 
 `pull` is removed. The account remote's changes arrive through `skill update`, whose account step takes in what another machine published of the user's own skill before any update from upstream, and `skill check-updates` lists them before you update. Where the text above names a pull, it is that account step; a merge it leaves pending is completed by the next `skill update` of the skill.
+
+A publish never merges. When the account remote holds commits of a skill that this machine lacks, `skill publish` fails for that skill if this machine has commits of its own to publish, or reports it as having nothing to publish if it does not, and `skill update` takes the remote's commits in.

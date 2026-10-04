@@ -17,7 +17,7 @@ import (
 // machine lacks, a fast-forward when this machine holds nothing the account
 // remote lacks, and otherwise a merge of the two tips, git finding their
 // merge base. It is the first step of a fork's update, see
-// updateRun.accountStep, and what a publish takes in first. A clean merge
+// updateRun.accountStep; a publish never takes anything in. A clean merge
 // is committed by the fork commit writer, with the local tip and the remote
 // tip as its parents and the base the two sides agree on, see
 // lineage.PickBase, and the branch and the worktree move to it in one
@@ -86,9 +86,9 @@ func (inv *invocation) walkRemoteForks(ctx context.Context, gitDir, remote strin
 	return remoteForks{remote: remote, tips: tips, walked: walked}, nil
 }
 
-// forkSync is what the account step of an update, or of a publish, made of
-// one fork: its outcome, see the outcomes of the account step, the update
-// it applied or left pending, and why it was refused.
+// forkSync is what the account step of an update made of one fork: its
+// outcome, see the outcomes of the account step, the update it applied or
+// left pending, and why it was refused.
 type forkSync struct {
 	name    string
 	outcome string
@@ -101,13 +101,12 @@ func (s forkSync) moved() bool {
 	return s.outcome == pullFastForward || s.outcome == pullMerged
 }
 
-// syncFork runs the account step for the fork whose branch is rec, see
-// judgePull, and applies what it found, in a hold of the lock and a journal
-// of its own, see applyForkUpdate. doing is what the command does, as its
-// refusals say it: published, or updated for the account step of an update.
-func (inv *invocation) syncFork(ctx context.Context, gitDir string, rec lineage.Record, remote remoteForks, doing string) forkSync {
+// syncFork runs the account step of an update for the fork whose branch is
+// rec, see judgePull, and applies what it found, in a hold of the lock and
+// a journal of its own, see applyForkUpdate.
+func (inv *invocation) syncFork(ctx context.Context, gitDir string, rec lineage.Record, remote remoteForks) forkSync {
 	s := forkSync{name: rec.Name}
-	s.outcome, s.u, s.f = inv.judgePull(ctx, gitDir, rec, remote, doing)
+	s.outcome, s.u, s.f = inv.judgePull(ctx, gitDir, rec, remote)
 	if s.f != nil {
 		s.outcome = pullRefused
 		return s
@@ -119,9 +118,8 @@ func (inv *invocation) syncFork(ctx context.Context, gitDir string, rec lineage.
 	var f *failure
 	switch {
 	case errors.Is(err, home.ErrMovedBeforeApply):
-		again, verb := s.u.fork.again(s.name)
-		s.f = refuse(exitRefused, sanitised(s.name)+" changed while it was being "+s.u.fork.what()+", so nothing was changed",
-			"run '"+again+"' again to "+verb+" it as it is now")
+		s.f = refuse(exitRefused, sanitised(s.name)+" changed while it was being updated, so nothing was changed",
+			"run '"+skillCommand("update", s.name)+"' again to update it as it is now")
 	case errors.As(err, &f):
 		s.f = f
 	case err != nil:
@@ -136,18 +134,17 @@ func (inv *invocation) syncFork(ctx context.Context, gitDir string, rec lineage.
 }
 
 // judgePull decides, before the lock, what the account step of the fork
-// whose branch is rec takes in from remote, and merges it. Its callers
-// never give it a fork with a merge pending: the update completes that one,
-// see judgeForkCompletion, and a publish refuses it. In this order: a fork
-// the account remote holds no branch of, or one that holds what the fork
-// holds already, is left as it is, up to date; a remote branch whose
-// history names another fork id than the fork's, or one of the two that
-// names none, is refused, exit code 6, since two forks of one name are
-// never tangled; then a fork whose worktree git cannot work in, see
-// worktreeHealth, and one with uncommitted edits or a repository nested in
-// it that no ignore rule covers, see cleanSite, is refused, exit code 6,
-// before anything is written. A fork the account remote has nothing new for
-// is up to date whatever its worktree holds.
+// whose branch is rec takes in from remote, and merges it. Its caller never
+// gives it a fork with a merge pending: the update completes that one, see
+// judgeForkCompletion. In this order: a fork the account remote holds no
+// branch of, or one that holds what the fork holds already, is left as it
+// is, up to date; a remote branch whose history names another fork id than
+// the fork's, or one of the two that names none, is refused, exit code 6,
+// since two forks of one name are never tangled; then a fork whose worktree
+// git cannot work in, see worktreeHealth, and one with uncommitted edits or
+// a repository nested in it that no ignore rule covers, see cleanSite, is
+// refused, exit code 6, before anything is written. A fork the account
+// remote has nothing new for is up to date whatever its worktree holds.
 //
 // A fork whose tip the remote tip descends from is fast-forwarded to it.
 // Any other is merged with it by merge-tree, with git's own merge base: a
@@ -155,15 +152,15 @@ func (inv *invocation) syncFork(ctx context.Context, gitDir string, rec lineage.
 // tip and the remote tip as its parents and the base lineage.PickBase
 // chooses as its Agentx-Base; one that conflicts is left pending under the
 // lock, with that base in its MERGE_MSG.
-func (inv *invocation) judgePull(ctx context.Context, gitDir string, rec lineage.Record, remote remoteForks, doing string) (string, *updating, *failure) {
+func (inv *invocation) judgePull(ctx context.Context, gitDir string, rec lineage.Record, remote remoteForks) (string, *updating, *failure) {
 	name := rec.Name
 	theirs := remote.tips[name]
-	fork := &forkUpdate{pull: true, doing: doing, theirsRef: lineage.RemoteForkRef(remote.remote, name), theirs: theirs, with: "the account remote"}
+	fork := &forkUpdate{pull: true, theirsRef: lineage.RemoteForkRef(remote.remote, name), theirs: theirs, with: "the account remote"}
 	if theirs == "" || theirs == rec.Commit {
 		return pullUpToDate, nil, nil
 	}
 	there := remote.walked[theirs]
-	if f := sameForkRefusal(rec, there, doing); f != nil {
+	if f := sameForkRefusal(rec, there, "updated"); f != nil {
 		return "", nil, f
 	}
 	out, status, err := inv.git.IsolatedStatus(ctx, gitDir, 1, "merge-base", rec.Commit, theirs)

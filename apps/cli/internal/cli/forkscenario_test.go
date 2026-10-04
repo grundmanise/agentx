@@ -134,9 +134,8 @@ func besideConflicts(body string) (merged, conflicts string) {
 // the update, exit 6, naming the fork, and changes nothing on either
 // machine or the remote; once b commits it, the same update merges clean, b
 // publishes the merge and a's update fast-forwards to it, so both machines
-// hold every line either edited. The publish that an uncommitted edit
-// refuses when the remote is ahead is
-// TestPublishMergesFirstAndNamesUncommittedForks.
+// hold every line either edited. A publish never takes in what the remote
+// holds: see TestPublishNeverMergesAndNamesUncommittedForks.
 func TestScenarioDisjointEditsMergeClean(t *testing.T) {
 	t.Parallel()
 	a, b, _, remote := scenarioHomes(t, "alpha")
@@ -210,8 +209,8 @@ func TestScenarioSameVersionMergesClean(t *testing.T) {
 	equal(t, "alpha's status", worktreeStatus(b, "alpha"), "")
 
 	mineB, theirsA := b.ref(lineage.ForkRef("beta")), a.ref(lineage.ForkRef("beta"))
-	out = b.run("--json", "skill", "publish", "beta")
-	equal(t, "beta's publish: exit", out.exit, 4)
+	out = b.run("--json", "skill", "update", "beta")
+	equal(t, "beta's update: exit", out.exit, 4)
 	conflict := b.one(out.stdout, "conflict")
 	equal(t, "the conflicted file", conflictPaths(conflict), "notes.md")
 	keptInConflict(t, b, "beta", "beta", "notes.md", mineB, theirsA)
