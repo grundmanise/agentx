@@ -109,11 +109,9 @@ func TestSkillNewCreatesAForkFromTheTemplate(t *testing.T) {
 	text := a.mustRun("skill", "new", "other")
 	contains(t, "the text output", text.stdout, "✓ created other in "+filepath.Join(a.library, "other")+": 4 placements\n")
 	// With no account remote set the skill is created all the same, with one
-	// line saying how to publish it, which skill publish refuses until then.
+	// line saying how to publish it. That skill publish refuses until then is
+	// TestTheAccountRemoteIsSetReplacedAndDetached's.
 	contains(t, "the hint", text.stdout, "No account remote is set: run 'agentx source add <url> --account' before publishing other.")
-	published := a.run("skill", "publish", "other")
-	equal(t, "exit of publishing it", published.exit, 6)
-	contains(t, "the refusal to publish it", published.stderr, "no account remote is set")
 	if link, _ := os.Readlink(filepath.Join(a.library, "other")); link != "../../../agentx/worktrees/other/other" {
 		t.Errorf("the dangling library symlink was left as %q", link)
 	}

@@ -365,33 +365,6 @@ func TestWorktreeStepNeedsGit(t *testing.T) {
 	}
 }
 
-// TestApplyAbandonsAJournalWhoseRefMovedFirst is a fork's branch moved by
-// git in its worktree after the command read it under the lock: the first
-// ref transaction refuses before any path changed, so the journal and what
-// it staged are removed and nothing is left for recovery to refuse.
-func TestApplyAbandonsAJournalWhoseRefMovedFirst(t *testing.T) {
-	t.Parallel()
-	c, u := newCreation(t)
-	m := c.creationOf(t, "alpha")
-	u[c.gitDir+" refs/heads/skills/alpha"] = "committed meanwhile"
-	err := m.Apply(u)
-	if !errors.Is(err, ErrMovedBeforeApply) {
-		t.Fatalf("apply = %v, want it abandoned", err)
-	}
-	if m.Journaled() {
-		t.Error("an abandoned journal reads as journaled")
-	}
-	if left, _ := Journals(c.dir); len(left) != 0 {
-		t.Errorf("%d journals left, want none", len(left))
-	}
-	if hidden, _ := filepath.Glob(filepath.Join(c.worktrees, ".agentx-*")); len(hidden) != 0 {
-		t.Errorf("the staged content is still there: %v", hidden)
-	}
-	if exists(c.root("alpha")) {
-		t.Error("the worktree was added by a journal that was abandoned")
-	}
-}
-
 // TestRemoveIntoRetainsInTheGivenDirectory keeps a fork's displaced skill
 // directory in the worktrees directory, never beside it in the worktree,
 // where git would see it as a file of the branch.

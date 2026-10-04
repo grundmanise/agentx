@@ -266,30 +266,17 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 		t.Error("a refused removal changed b's notes")
 	}
 	// An export of a lists notes as a managed skill whose source is the
-	// account remote; b holds another notes, which is different, and a
-	// fresh machine that set the account remote holds a's under skills/,
-	// present, until a publishes another commit of it.
+	// account remote, and a fresh machine that set the account remote holds
+	// a's under skills/, present. Which state each mix of local and remote
+	// branches gives is TestRestoreStates'.
 	file := a.exportPath("export.json")
 	a.mustRun("export", file)
-	state := func(h *harness) jsonEvent {
-		t.Helper()
-		return h.one(h.mustRun("--json", "import", file, "--yes").stdout, "import_skill")
-	}
-	ev := state(b)
-	equal(t, "b's notes", ev["state"], restoreDifferent)
-	equal(t, "b's commit", ev["local_commit"], b.ref(lineage.ForkRef("notes")))
 	fresh := newHarness(t)
 	fresh.setAccount(remote)
-	ev = state(fresh)
+	ev := fresh.one(fresh.mustRun("--json", "import", file, "--yes").stdout, "import_skill")
 	equal(t, "the fresh machine's notes", ev["state"], restorePresent)
 	equal(t, "its kind", ev["kind"], lineage.KindManaged)
 	equal(t, "its source", ev["source"], "file://"+remote)
-	writeFile(t, filepath.Join(a.forkDir("notes", "notes"), "more.md"), "more\n")
-	a.mustRun("skill", "publish", "notes")
-	fresh.setAccount(remote)
-	ev = state(fresh)
-	equal(t, "the fresh machine's notes, published again", ev["state"], restoreDifferent)
-	equal(t, "its commit", ev["local_commit"], a.ref(lineage.ForkRef("notes")))
 
 	// The way out the hint names: b renames its notes and publishes that
 	// one, which never deletes a's notes, a different skill by its fork id.
