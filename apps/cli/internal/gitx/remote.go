@@ -148,6 +148,15 @@ func (r *Runner) dropRemoteRefs(ctx context.Context, gitDir, remote string) erro
 // input would hang the serve child.
 func networkConfig() []string { return []string{"-c", "core.hooksPath=" + os.DevNull} }
 
+// pushConfig is networkConfig for a push of the user's environment, with
+// no negotiation and none of the push options the user sets for their own
+// pushes, which a server that takes none refuses. The push itself passes
+// --no-signed, so that a user's push.gpgSign never asks a host that signs
+// nothing for a push certificate.
+func pushConfig() []string {
+	return append(networkConfig(), "-c", "push.negotiate=false", "-c", "push.pushOption=")
+}
+
 // ProbeRemote asks the repository at url which fork branches it holds, in
 // the user's environment, so that a URL git cannot reach, or a repository
 // it cannot read, is found before anything records it, and reports whether
@@ -216,34 +225,41 @@ func (s PushStatus) Why() string {
 // Push pushes each fork branch named by its short name, such as
 // "skills/pdf", to the branch of the same name on the remote called
 // remote, never forced, in one git push of the user's environment with no
-// hook of theirs, see networkConfig, and the remote's answer for each ref
-// read from --porcelain. A ref the remote rejects is a status, not an
-// error: git exits 1 for it, and the push of the others stands. git moves
-// the remote-tracking branch of every ref it pushed itself.
-func (r *Runner) Push(ctx context.Context, gitDir, remote string, branches []string) ([]PushStatus, error) {
-	args := append(networkConfig(), "--git-dir="+gitDir, "push", "--porcelain", "--no-verify", "--no-recurse-submodules", remote)
+// hook, push certificate, push option or tag of theirs, see pushConfig.
+// The remote's answer is the status of each ref read from --porcelain,
+// git's stderr and its exit status, which ClassifyPush reads ref by ref: a
+// ref the remote rejects is a status, not an error, and the push of the
+// others stands, and so is a push git could not make at all, which leaves
+// no status. err is a git that could not run or was stopped. git moves the
+// remote-tracking branch of every ref it pushed itself.
+func (r *Runner) Push(ctx context.Context, gitDir, remote string, branches []string) (statuses []PushStatus, stderr string, exit int, err error) {
+	args := append(pushConfig(), "--git-dir="+gitDir, "push", "--porcelain",
+		"--no-signed", "--no-verify", "--no-recurse-submodules", "--no-follow-tags", remote)
 	for _, b := range branches {
 		args = append(args, "refs/heads/"+b+":refs/heads/"+b)
 	}
-	out, _, err := r.runStatus(ctx, call{}, 1, args...)
+	out, exit, err := r.runStatus(ctx, call{stderr: &stderr}, 255, args...)
 	if err != nil {
-		return nil, err
+		return nil, stderr, exit, err
 	}
-	return ParsePushPorcelain(out)
+	statuses, err = ParsePushPorcelain(out)
+	return statuses, stderr, exit, err
 }
 
 // DeleteRemoteBranch deletes the branch of the remote called remote, named
 // by its short name such as "skills/pdf", in one git push of the user's
-// environment with no hook of theirs, see networkConfig, and returns the
-// remote's answer for it. The deletion is leased on expect, the commit the
-// last fetch read the branch at: a branch another machine moved since is
-// not deleted, and git reports it rejected as stale. A branch the remote
+// environment with no hook, push certificate or push option of theirs, see
+// pushConfig, and returns the remote's answer for it. The deletion is
+// leased on expect, the commit the last fetch read the branch at: a branch
+// another machine moved since is not deleted, and git reports it rejected
+// as stale. A branch the remote
 // refuses to delete, as a hosting service refuses its default branch, is
 // a rejected status too, not an error. git drops the remote-tracking
 // branch of a branch it deleted itself.
 func (r *Runner) DeleteRemoteBranch(ctx context.Context, gitDir, remote, branch, expect string) (PushStatus, error) {
 	ref := "refs/heads/" + branch
-	args := append(networkConfig(), "--git-dir="+gitDir, "push", "--porcelain", "--no-verify", "--no-recurse-submodules",
+	args := append(pushConfig(), "--git-dir="+gitDir, "push", "--porcelain",
+		"--no-signed", "--no-verify", "--no-recurse-submodules", "--no-follow-tags",
 		"--force-with-lease="+ref+":"+expect, remote, ":"+ref)
 	out, _, err := r.runStatus(ctx, call{}, 1, args...)
 	if err != nil {

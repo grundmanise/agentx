@@ -38,8 +38,14 @@ type publishEvent struct {
 const (
 	publishPushed   = "pushed"     // the account remote's branch now holds the skill's tip
 	publishUpToDate = "up to date" // it held it already, and the skill had no edits to record
-	publishRejected = "rejected"   // the account remote refused the push; see the error
 	publishRefused  = "refused"    // see the error
+	// publishDeclined is a push the host refused, a hook of the remote's,
+	// a protected branch or a rule of the hosting service: the error names
+	// its reason.
+	publishDeclined = "declined"
+	// publishDenied is a push this machine may not make: the account
+	// remote denied its credentials, or none answered without asking.
+	publishDenied = "denied"
 	// publishMoved is a skill the account remote holds commits of that it
 	// lacks, published from another machine, while it holds commits or
 	// edits of its own the remote lacks: the two diverged, and an update
@@ -63,8 +69,9 @@ func newSkillPublishCommand(inv *invocation) *cobra.Command {
 			"Files git ignores are never published. When the account remote holds changes\n" +
 			"another machine published, nothing is recorded or pushed: run 'agentx skill\n" +
 			"update <name>' to take them in first, then publish again. A push the account\n" +
-			"remote rejects is reported, never forced, and a branch of the same name that is\n" +
-			"another skill is never pushed over.",
+			"remote's host declines, by a hook or a protected branch, is reported with its\n" +
+			"reason, never forced, and a branch of the same name that is another skill is\n" +
+			"never pushed over.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cmd.Flags().Changed("message") && strings.TrimSpace(message) == "" {
@@ -131,11 +138,11 @@ type publishing struct {
 // the fetch left it, see judgePublish. The edits of every skill that goes
 // on are recorded, see recordEdits, after the fetch and every refusal, so
 // a remote out of reach or one that moved on records nothing. Then every
-// skill with something to push goes in one push, see gitx.Push, and a ref
-// the remote rejects is reported, exit code 6, never forced. One progress
-// event per skill follows, then its publish event, then the library_skill
-// event of each skill whose edits were recorded. Last, the old name's
-// branch of a skill renamed here goes, see dropRenamed.
+// skill with something to push goes in one push, see pushForks, and a ref
+// the remote rejects is reported by what its answer means, never forced.
+// One progress event per skill follows, then its publish event, then the
+// library_skill event of each skill whose edits were recorded. Last, the
+// old name's branch of a skill renamed here goes, see dropRenamed.
 func (inv *invocation) publish(ctx context.Context, name, message string) error {
 	if name != "" {
 		if err := inv.publishable(ctx, name); err != nil {
@@ -224,7 +231,7 @@ func (inv *invocation) publish(ctx context.Context, name, message string) error 
 		}
 	}
 	if len(branches) > 0 {
-		if err := inv.pushForks(ctx, gitDir, account, entry.URL, list, branches); err != nil {
+		if err := inv.pushForks(ctx, gitDir, account, entry.URL, name, list, branches); err != nil {
 			return inv.pushFailed(ctx, list, name, err)
 		}
 	}
@@ -586,41 +593,75 @@ func commitSubject(name, label string, files []changedFile) string {
 
 // pushForks pushes branches in one push to the account remote, the git
 // remote called remote at url, and reads what it answered for each, see
-// gitx.Push, then what its branches hold now. A push git could not make at
-// all is exit code 3, as a fetch is.
-func (inv *invocation) pushForks(ctx context.Context, gitDir, remote, url string, list []*publishing, branches []string) error {
-	statuses, err := inv.git.Push(ctx, gitDir, remote, branches)
+// gitx.ClassifyPush, then what its branches hold now. A push git could not
+// make at all is exit code 3, as a fetch is. A branch the remote moved on
+// since the fetch is moved, as judgePublish finds one, a branch the host
+// declined, by a hook, a protected branch or a rule of its own, is exit
+// code 6 naming the host's reason, and a push this machine's credentials
+// may not make is exit code 3; none is ever pushed again with force. The
+// hints name the run's command, the publish of the skill called name or
+// with no name of every skill of your own, and not each skill, so that a
+// push refused for all of them alike ends with the one hint that fits.
+func (inv *invocation) pushForks(ctx context.Context, gitDir, remote, url, name string, list []*publishing, branches []string) error {
+	statuses, stderr, exit, err := inv.git.Push(ctx, gitDir, remote, branches)
 	if err != nil {
 		return unreachableRemote(url, err)
 	}
-	answered := map[string]int{}
-	for i, s := range statuses {
-		answered[strings.TrimPrefix(s.To, "refs/heads/")] = i
+	if len(statuses) == 0 && exit != 0 {
+		if class, reason := gitx.ClassifyPush(gitx.PushStatus{}, false, stderr, exit); class == gitx.PushUnreachable {
+			return unreachableRemote(url, errors.New(reason))
+		}
+	}
+	answered := map[string]gitx.PushStatus{}
+	for _, s := range statuses {
+		answered[strings.TrimPrefix(s.To, "refs/heads/")] = s
 	}
 	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
 	if err != nil {
 		return accountRepoFailure(err)
 	}
+	command := "agentx skill publish"
+	if name != "" {
+		command = publishCommand(name)
+	}
+	again := "run '" + command + "' again"
 	for _, p := range list {
 		if !p.push {
 			continue
 		}
 		branch := strings.TrimPrefix(lineage.ForkRef(p.name), "refs/heads/")
-		i, ok := answered[branch]
-		switch {
-		case !ok:
-			p.outcome, p.f = publishRejected, refuse(exitSource, "git push said nothing of "+branch+", so whether the account remote took it is not known",
-				"run '"+publishCommand(p.name)+"' again")
-		case statuses[i].Rejected():
-			p.outcome, p.f = publishRejected, refuse(exitRefused, "the account remote rejected "+branch+": "+sanitised(statuses[i].Why()),
-				"run '"+skillCommand("update", p.name)+"' to take in what it holds, then publish again; agentx never forces a push")
-		case statuses[i].Flag == '=':
-			p.outcome, p.commit = publishUpToDate, tips[p.name]
-		default:
+		s, found := answered[branch]
+		class, reason := gitx.ClassifyPush(s, found, gitx.StderrFor(stderr, branch, branches), exit)
+		switch class {
+		case gitx.PushPushed:
 			p.outcome, p.commit = publishPushed, tips[p.name]
+		case gitx.PushUpToDate:
+			p.outcome, p.commit = publishUpToDate, tips[p.name]
+		case gitx.PushMoved:
+			p.outcome, p.f = publishMoved, movedRefusal(p.name)
+		case gitx.PushDeclined:
+			p.outcome, p.f = publishDeclined, refuse(exitRefused, "the account remote declined "+branch+": "+sanitised(reason),
+				"agentx never forces a push; once the account remote takes it, "+again)
+		case gitx.PushDenied:
+			p.outcome, p.f = publishDenied, refuse(exitSource, "the account remote "+shownURL(url)+" did not let this machine push "+branch+": "+sanitised(reason),
+				deniedHint(gitx.DeniedFix(reason))+", then "+again)
+		default:
+			p.outcome, p.f = publishRefused, refuse(exitSource, "whether the account remote took "+branch+" is not known: "+sanitised(reason), again)
 		}
 	}
 	return nil
+}
+
+// deniedHint is what a push the account remote denied tells the user to
+// do first, see gitx.DeniedFix.
+func deniedHint(fix gitx.DenialFix) string {
+	switch fix {
+	case gitx.FixHostKey:
+		return "trust the host's SSH key by connecting to it once with ssh, which adds it to known_hosts"
+	case gitx.FixAuthorise:
+		return "authorise your token or key for the organisation, or allow this machine's IP address"
+	}
+	return "check that the git credential helper (git config credential.helper) or SSH key you use for it may push there"
 }
 
 // reportPublished reports every skill of the publish, in name order: one

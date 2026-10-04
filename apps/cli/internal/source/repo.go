@@ -67,6 +67,7 @@ var (
 	ErrNoSubpath   = errors.New("subpath not in the source")        // the subpath is not a directory at the fetched commit
 	ErrIncomplete  = errors.New("the fetched source is incomplete") // an object the listing needs is not in the account repo
 	ErrUnsafePath  = errors.New("unsafe path in the source")        // a tree entry that could be laid out outside its directory
+	ErrNotABranch  = errors.New("the source is not on a branch")    // a tag, a commit, or a remote HEAD that names no branch
 )
 
 // NotFetched is ErrNotFetched naming the source at url, the one way a
@@ -532,10 +533,7 @@ func ResolveRef(ctx context.Context, r *gitx.Runner, gitDir string, s Source, re
 	if !ValidRef(ref) {
 		return "", fmt.Errorf("%w: %q", ErrRefNotFound, ref)
 	}
-	names := []string{"refs/tags/" + ref, "refs/heads/" + ref}
-	if strings.HasPrefix(ref, "refs/") {
-		names = []string{ref}
-	}
+	names := pinNames(ref)
 	// A pattern matches the tail of a ref name, so the peeled id of an
 	// annotated tag has to be asked for by name: refs/tags/v1 does not match
 	// refs/tags/v1^{}.
@@ -563,6 +561,69 @@ func ResolveRef(ctx context.Context, r *gitx.Runner, gitDir string, s Source, re
 		}
 	}
 	return "", nil
+}
+
+// PushBranch is the branch of the source s a publish pushes to: the one it
+// is installed from, its pin when the pin is a branch, or the branch the
+// remote's HEAD names when it follows the default branch. It is one
+// ls-remote --symref over the remote configured for the source, in the
+// user's environment as ResolveRef's, which asks for HEAD and, with a pin,
+// for the tag and the branch of its name. A pin that is a tag, a commit or
+// a name the source does not publish as a branch, and a HEAD that names
+// no branch, is ErrNotABranch: a version read from a tag or a commit has
+// no branch to take a publish.
+func PushBranch(ctx context.Context, r *gitx.Runner, gitDir string, s Source) (string, error) {
+	args := []string{"ls-remote", "--symref", RemoteName(s.ID()), "HEAD"}
+	if s.Ref != "" {
+		if !ValidRef(s.Ref) {
+			return "", fmt.Errorf("%w: %q", ErrNotABranch, s.Ref)
+		}
+		args = append(args, pinNames(s.Ref)...)
+	}
+	out, err := r.User(ctx, gitDir, args...)
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", ErrUnreachable, err)
+	}
+	return parsePushBranch(out, s.Ref)
+}
+
+// pinNames are the refs a pin may name, in git's order of resolution: the
+// ref itself when it is a full name, otherwise the tag before the branch.
+func pinNames(pin string) []string {
+	if strings.HasPrefix(pin, "refs/") {
+		return []string{pin}
+	}
+	return []string{"refs/tags/" + pin, "refs/heads/" + pin}
+}
+
+// parsePushBranch reads the branch a publish pushes to out of what
+// ls-remote --symref printed for HEAD and the refs pin may name, see
+// PushBranch: with no pin the branch HEAD's symref names, with one the
+// first of pinNames the source publishes, when that is a branch. Anything
+// else is ErrNotABranch. Pure.
+func parsePushBranch(out, pin string) (string, error) {
+	if pin == "" {
+		if branch := gitx.ParseSymref(out); branch != "" {
+			return branch, nil
+		}
+		return "", fmt.Errorf("%w: the remote's HEAD names no branch", ErrNotABranch)
+	}
+	held := map[string]bool{}
+	for _, line := range strings.Split(out, "\n") {
+		if _, name, ok := strings.Cut(line, "\t"); ok && !strings.HasPrefix(line, "ref: ") {
+			held[strings.TrimSpace(name)] = true
+		}
+	}
+	for _, name := range pinNames(pin) {
+		if !held[name] {
+			continue
+		}
+		if branch, ok := strings.CutPrefix(name, "refs/heads/"); ok {
+			return branch, nil
+		}
+		return "", fmt.Errorf("%w: %s is %s", ErrNotABranch, pin, name)
+	}
+	return "", fmt.Errorf("%w: the source holds no branch %s", ErrNotABranch, pin)
 }
 
 // Remove deletes the source's remote and ref from the account repo, and

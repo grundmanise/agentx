@@ -850,7 +850,19 @@ agentx skill publish release-notes -m "Cover reverted pull requests"
 - [Files that stay local](/cli/fork#files-that-stay-local), such as a `.DS_Store`, are never published.
 - Each skill goes to its own branch, `skills/<name>`. Publishing one skill leaves your other skills where they are, and nothing is ever pushed to a shared source.
 - When another machine published changes to the skill first, publishing stops with exit code 6 and records nothing: your edits stay where they are. Run [`agentx skill update <name>`](#take-in-what-another-machine-published) to take them in, then publish again. A skill with no edits and nothing new of its own has nothing to publish: agentx warns, and the publish still succeeds.
-- agentx never forces a push. When the remote rejects one, for example because another machine published meanwhile, run `agentx skill update <name>`, then publish again. Edits recorded before the rejection go out with your next publish.
+- agentx never forces a push. When another machine published meanwhile, the push stops the same way: run `agentx skill update <name>`, then publish again. Edits recorded before a failed push go out with your next publish.
+- When the remote's host declines the push, for example a hook or a protected branch, publishing stops with exit code 6 and names the host's reason, with up to three lines the host wrote:
+
+  ```text
+  error: the account remote declined skills/release-notes: pre-receive hook declined: no pushes on Fridays
+  hint: agentx never forces a push; once the account remote takes it, run 'agentx skill publish release-notes' again
+  ```
+
+  There is nothing to update: fix what the host says, then publish again.
+- When the remote does not let this machine push, publishing stops with exit code 3. The hint says what to fix:
+  - Credentials that only allow reading, or none: check the git credential helper or SSH key you use for the remote.
+  - A host SSH does not trust yet: connect to it once with `ssh` to add its key to `known_hosts`.
+  - An organisation that requires single sign-on or an IP allow list: authorise your token or key for the organisation, or allow this machine's IP address.
 - Nothing is published for you. Run `agentx skill publish` each time you want your changes on the remote.
 - Publishing needs an [account remote](/cli/source#add-your-account-remote). Without one, it stops with exit code 6 and names `agentx source add <url> --account`.
 - When no skill has edits to record, agentx warns that `-m` was not used.
@@ -882,7 +894,7 @@ The account repo is a Git repository in agentx home, `~/.agentx/account.git`, th
   - `skill add` with no source is given neither `--name` nor `--all`, or is given `--fetch`;
   - `skill update` was given both a name and `--all`, neither, or `--abort` with `--all`;
   - `skill publish` was given an empty `-m`, or an `-m` that ends in a trailer agentx writes itself.
-- `3`: the source, or the files of the skill, could not be fetched. For `skill check-updates`, also a run whose sources and skills failed for different reasons. For `skill update`, also the account remote, for a skill with no upstream. For `skill add` with no source and `skill publish`, the account remote.
+- `3`: the source, or the files of the skill, could not be fetched. For `skill check-updates`, also a run whose sources and skills failed for different reasons. For `skill update`, also the account remote, for a skill with no upstream. For `skill add` with no source and `skill publish`, the account remote, and for `skill publish` also a remote that does not let this machine push.
 - `4`: `skill update` found your edits, or what another machine published, conflicting with the update and left the merge pending, or found files of a pending merge still to resolve, or a merge already pending blocks `skill fork`, a `skill remove` that takes the skill off the machine, or a `skill add` from the account remote over a managed skill of that name. See [When your edits conflict](#when-your-edits-conflict).
 - `5`: something the command names does not exist:
   - a source id names no source on this machine (for a source you removed, the hint names the `agentx source add` command that brings it back), the source did not serve a skill's files, the path or a skill named by `--name` or `--except` does not exist in the source, or `--to` or `--from` names a configuration that is not detected;
@@ -902,7 +914,7 @@ The account repo is a Git repository in agentx home, `~/.agentx/account.git`, th
   - `skill place`: a displaced directory that differs from the library when `--force` is not given; for a fork, see [Forks](/cli/fork#exit-codes); a managed skill whose library directory is gone; a skill or placement that changed while it was being placed; a library directory that is a symlink or holds one when the command would remove a displaced directory; and a client's directory it would change that symlinks make overlap the library, a directory a library entry links to or another client's directory.
   - `skill update`: a skill agentx did not install, a managed skill whose library directory is gone or whose import branch records no version agentx can read, a skill its source no longer holds, a skill that holds something git cannot record, a skill whose library directory is a symlink, or a skill, its installed version or its update that changed while it was being updated. With a merge pending, also a library directory edited or a record moved outside agentx while the merge was pending; see [Finish the merge](#finish-the-merge).
   - `skill update --abort`: any name with no merge pending, one the library does not hold included.
-  - `skill publish`: no account remote set; a skill of a shared source, which cannot be published yet; a skill agentx does not manage; another machine published changes the skill lacks while this machine has changes of its own; the remote's branch of that name is [another skill](#two-skills-with-one-name); the skill's worktree is missing, needs repair or is not on its branch, waits for a Git command you ran there to finish, or Git is running there (see [Recover a fork](/cli/fork#recover-a-fork)); its skill folder is missing; it holds a Git repository its `.gitignore` does not cover; the skill changed while its edits were being recorded; or the remote rejected the push.
+  - `skill publish`: no account remote set; a skill of a shared source, which cannot be published yet; a skill agentx does not manage; another machine published changes the skill lacks while this machine has changes of its own; the remote's branch of that name is [another skill](#two-skills-with-one-name); the skill's worktree is missing, needs repair or is not on its branch, waits for a Git command you ran there to finish, or Git is running there (see [Recover a fork](/cli/fork#recover-a-fork)); its skill folder is missing; it holds a Git repository its `.gitignore` does not cover; the skill changed while its edits were being recorded; or the remote's host declined the push.
   - A run of several skills, other than `skill check-updates`: the skills that were skipped disagree about why. A run whose failures all have one cause exits with that cause, so a batch that skipped two skills the source did not serve exits `5`.
 - `7`: another agentx command is running. Retry when it finishes.
 - `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`. For `skill update`, also an update recorded in a form this agentx does not write; run `agentx skill check-updates` to record it again.

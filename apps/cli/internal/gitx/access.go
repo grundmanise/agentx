@@ -107,7 +107,7 @@ func (r *Runner) ProbeAccess(ctx context.Context, url string) Access {
 		return Access{Access: home.AccessUnknown, Reason: firstLine(err.Error())}
 	}
 	defer remove()
-	args := append(networkConfig(), "-c", "push.negotiate=false", "-c", "push.pushOption=")
+	args := pushConfig()
 	args = append(args, targetRemote(url)...)
 	args = append(args, "--git-dir="+gitDir)
 	args = append(args, ProbeArgs(CheckRemote)...)

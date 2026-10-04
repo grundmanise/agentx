@@ -110,8 +110,8 @@ func (h *harness) commitFork(name, notes string) string {
 // naming the update, and so is its publish of alpha alone, which says so
 // in its result; with an edit, a bare publish refuses a's alpha as moved,
 // exit 6, naming it, while beta stays behind, and nothing is recorded. A
-// push the remote rejects is reported, exit 6, and never
-// forced.
+// push a hook of the remote's declines is reported, exit 6, with the
+// hook's message and no update hint, and never forced.
 func TestPublishNeverMerges(t *testing.T) {
 	t.Parallel()
 	a, b, _, remote := twoHomes(t)
@@ -197,14 +197,17 @@ func TestPublishNeverMerges(t *testing.T) {
 	contains(t, "alpha's refusal", out.stderr, "the account remote holds changes to alpha that this machine lacks")
 	equal(t, "a's alpha, kept", a.ref(lineage.ForkRef("alpha")), behindTip)
 
-	writeShim(t, filepath.Join(remote, "hooks", "pre-receive"), "#!/bin/sh\nexit 1\n")
+	writeShim(t, filepath.Join(remote, "hooks", "pre-receive"), "#!/bin/sh\necho 'no pushes on Fridays' >&2\nexit 1\n")
 	b.commitFork("alpha", forkNotes("nine", "nine, b"))
 	out = b.run("--json", "skill", "publish", "alpha")
-	equal(t, "a rejected push: exit", out.exit, 6)
-	equal(t, "its outcome", b.one(out.stdout, "publish")["outcome"], publishRejected)
+	equal(t, "a declined push: exit", out.exit, 6)
+	equal(t, "its outcome", b.one(out.stdout, "publish")["outcome"], publishDeclined)
 	e = b.one(out.stdout, "error")
-	contains(t, "its message", e["message"].(string), "the account remote rejected skills/alpha: ")
-	contains(t, "its hint", e["hint"].(string), "run 'agentx skill update alpha' to take in what it holds, then publish again; agentx never forces a push")
+	equal(t, "its message", e["message"], "the account remote declined skills/alpha: pre-receive hook declined: no pushes on Fridays")
+	contains(t, "its hint", e["hint"].(string), "agentx never forces a push")
+	if strings.Contains(e["hint"].(string), "skill update") {
+		t.Errorf("a declined push's hint names the update: %q", e["hint"])
+	}
 	equal(t, "the remote's alpha, kept", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/alpha"), tip)
 }
 

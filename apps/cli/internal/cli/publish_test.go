@@ -235,7 +235,9 @@ exec `+real+` "$@"
 // TestPublishKeepsWhatItRecordedWhenThePushFails has git fail to push
 // after a publish recorded a skill's edits: the publish ends with exit 3,
 // emits the library_skill event of the skill it recorded, and its hint
-// says the edits were recorded, which the next publish pushes.
+// says the edits were recorded. A push the host then denies this machine
+// is outcome denied, exit 3, with a credentials hint; the next publish
+// pushes the edits.
 func TestPublishKeepsWhatItRecordedWhenThePushFails(t *testing.T) {
 	t.Parallel()
 	real, err := exec.LookPath("git")
@@ -266,6 +268,26 @@ exec `+real+` "$@"
 	recorded := h.ref(lineage.ForkRef("notes"))
 	equal(t, "the recorded commit's parent", h.accountGit("rev-parse", recorded+"^"), tip)
 	equal(t, "the remote", remoteGit(t, h, remote, "for-each-ref"), "")
+
+	h.mustRun("skill", "new", "plans")
+	stubGit(t, h, `#!/bin/sh
+case " $* " in
+*" push "*)
+	echo "remote: Permission to me/skills.git denied to someone." >&2
+	echo "fatal: unable to access 'https://example.com/me/skills.git/': The requested URL returned error: 403" >&2
+	exit 128 ;;
+esac
+exec `+real+` "$@"
+`)
+	out = h.run("--json", "skill", "publish")
+	h.env["PATH"] = path
+	equal(t, "denied: exit", out.exit, exitSource.exit)
+	publishes := h.eventsOfType(out.stdout, "publish")
+	equal(t, "denied: publish events", len(publishes), 2)
+	for _, e := range publishes {
+		equal(t, "denied: outcome of "+e["name"].(string), e["outcome"], publishDenied)
+	}
+	contains(t, "denied: hint", h.one(out.stdout, "error")["hint"].(string), "credential helper (git config credential.helper) or SSH key you use for it may push there, then run 'agentx skill publish' again")
 
 	out = h.mustRun("--json", "skill", "publish", "notes")
 	equal(t, "the next publish: outcome", h.one(out.stdout, "publish")["outcome"], publishPushed)
