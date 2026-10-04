@@ -3,7 +3,7 @@ title: "Your own skills"
 description: "Create skills of your own, or fork installed ones, each with a history in the account repo."
 ---
 
-Create a skill of your own with `agentx skill new`, or make an installed skill your own with `agentx skill fork`. Your own skills are managed skills whose source is your [account remote](/cli/source#add-your-account-remote): [`agentx skill publish`](/cli/skill#publish-a-skill) publishes them there, and you need no account remote until you publish. Each has a history of its own. agentx keeps that history as a branch in the account repo, `~/.agentx/account.git`, and checks the branch out for you, so every client sees the skill as it sees any other. A skill you create has no upstream. A skill you fork keeps its upstream, so you can take in newer versions later.
+Create a skill of your own with `agentx skill new`, or make an installed skill your own with `agentx skill fork`. Your own skills are managed skills whose source is your [account remote](/cli/source#add-your-account-remote): [`agentx skill publish`](/cli/skill#publish-a-skill) publishes them there, and you need no account remote until you publish. Each has a history of its own. agentx keeps that history as a branch in the account repo, `~/.agentx/account.git`, and checks the branch out for you, so every client sees the skill as it sees any other. A skill you create has no upstream. A skill you fork keeps its upstream, so you can update it to newer versions later.
 
 ## Create a skill
 
@@ -54,7 +54,7 @@ agentx skill fork pdf
 - The fork takes the skill's place under the same name. agentx moves the skill's directory into the fork's [worktree](#where-your-skills-live) and leaves a symlink in your library, so every client that had the skill now sees the fork. Nothing is copied, and no placement changes.
 - The fork's first commit holds the skill as it is now. If you edited an installed skill, that commit holds exactly your edits. If you did not, the commit changes nothing and still gives the fork its own id.
 - The fork is one of your own skills: `agentx skill list` shows your account remote as its source, marked `(account)`, or `account remote not set` until you add one. Without one, agentx forks the skill all the same and ends with the line [`agentx skill new`](#create-a-skill) prints.
-- A fork of an installed skill remembers the version it came from, so `agentx skill list` shows its upstream after `from`, and you can take in newer versions later.
+- A fork of an installed skill remembers the version it came from, so `agentx skill list` shows its upstream after `from`, and you can update it to newer versions later.
 - [Files that stay local](#files-that-stay-local), such as a `.DS_Store`, move with the skill and are never published.
 
 agentx refuses, with exit code 6 and nothing changed, a library entry that is a symlink of your own, a skill that is itself a Git repository, with a `.git` of its own, and a library on a different file system than agentx home: the skill can only be moved, not copied. Fork it under a new name instead, or move the skill's `.git` out of it first.
@@ -136,7 +136,7 @@ Publishing records your edits as one commit on the skill's history and pushes it
 
 ### Unpublished edits are kept
 
-A command that moves the branch of one of your own skills, such as [`agentx skill update <name>`](#take-a-new-upstream-version), which also [takes in what another machine published](/cli/skill#take-in-what-another-machine-published), or [forking](#fork-one-of-your-own-skills) or [renaming](#rename-a-skill-of-your-own) one, first records the skill's unpublished edits as a commit on its branch, then goes ahead. Your edits are never merged over or lost, and they stay unpublished: `agentx skill list` shows the skill as `modified`, and `agentx skill diff` shows the edits, until you publish them. A new skill that forking makes starts from them instead, so it shows as `current`. A renamed skill keeps them, unpublished. If you edit the skill while such a command runs, it stops with exit code 6: run it again.
+A command that moves the branch of one of your own skills, such as [`agentx skill update <name>`](#take-a-new-upstream-version), which also [updates it to what another machine published](/cli/skill#update-to-what-another-machine-published), or [forking](#fork-one-of-your-own-skills) or [renaming](#rename-a-skill-of-your-own) one, first records the skill's unpublished edits as a commit on its branch, then goes ahead. Your edits are never merged over or lost, and they stay unpublished: `agentx skill list` shows the skill as `modified`, and `agentx skill diff` shows the edits, until you publish them. A new skill that forking makes starts from them instead, so it shows as `current`. A renamed skill keeps them, unpublished. If you edit the skill while such a command runs, it stops with exit code 6: run it again.
 
 To discard your edits instead, before you run such a command, put the skill's last commit back with Git in its worktree, then delete the files you added:
 
@@ -202,11 +202,11 @@ agentx skill update release-notes
 
 - agentx always merges the new version into your fork, with the version you were last at as the base. Your commits are kept, a line you put back stays as you put it, and what changed upstream alone comes in clean.
 - The merge is committed on the skill's branch, as `release-notes: merge upstream 5d6e7f8 (laptop)`. Nothing is pushed: the fork shows as `modified` until you [publish](/cli/skill#publish-a-skill) it.
-- With an [account remote](/cli/source#add-your-account-remote) set, agentx first [takes in what your other machines published](/cli/skill#take-in-what-another-machine-published) of the fork, then merges the new version on top, as two commits. If Git cannot reach the remote, agentx warns and takes the upstream version alone.
+- With an [account remote](/cli/source#add-your-account-remote) set, agentx first [updates the fork to what your other machines published](/cli/skill#update-to-what-another-machine-published), then merges the new version on top, as two commits. If Git cannot reach the remote, agentx warns and takes the upstream version alone.
 - Edits you have not published are recorded on the fork first, and the merge keeps them, still unpublished. See [Unpublished edits are kept](#unpublished-edits-are-kept).
 - [Files that stay local](#files-that-stay-local) are kept. If the new version holds a file at a path your ignore rules cover, that file replaces your local one, as `git checkout` does.
 - `agentx skill update --all` updates every managed skill with an update, your own skills included.
-- A skill you created with agentx, or forked from an unmanaged or a plugin's skill, has no upstream: with an account remote set, `skill update` takes in only what your other machines published of it; without one, it stops with exit code 6.
+- A skill you created with agentx, or forked from an unmanaged or a plugin's skill, has no upstream: with an account remote set, `skill update` only updates it to the version your other machines published; without one, it stops with exit code 6.
 
 ### Resolve a conflict
 

@@ -94,6 +94,7 @@ type forkSync struct {
 	outcome string
 	u       *updating
 	f       *failure
+	subject string // the remote tip's subject, the message the other machine published it with
 }
 
 // moved reports whether the sync moved the fork's branch.
@@ -105,7 +106,7 @@ func (s forkSync) moved() bool {
 // rec, see judgePull, and applies what it found, in a hold of the lock and
 // a journal of its own, see applyForkUpdate.
 func (inv *invocation) syncFork(ctx context.Context, gitDir string, rec lineage.Record, remote remoteForks) forkSync {
-	s := forkSync{name: rec.Name}
+	s := forkSync{name: rec.Name, subject: remote.walked[remote.tips[rec.Name]].Subject}
 	s.outcome, s.u, s.f = inv.judgePull(ctx, gitDir, rec, remote)
 	if s.f != nil {
 		s.outcome = pullRefused
@@ -344,9 +345,9 @@ func (inv *invocation) remoteHolds(ctx context.Context, remote, name string) boo
 	return err == nil && tips[name] != ""
 }
 
-// reportSync reports what the account step did to one fork it took
-// something in for, or refused: a pull event, a line, and for a merge left
-// pending the conflict, see printConflicts.
+// reportSync reports what the account step did to one fork it updated to
+// the latest published version, or refused: a pull event, a line, and for
+// a merge left pending the conflict, see printConflicts.
 func (inv *invocation) reportSync(s forkSync) {
 	out := inv.out
 	ev := pullEvent{event: newEvent("pull"), Name: s.name, Outcome: s.outcome}
@@ -360,9 +361,9 @@ func (inv *invocation) reportSync(s forkSync) {
 	name := out.paint(heading, sanitised(s.name))
 	switch s.outcome {
 	case pullFastForward:
-		out.done("took in " + name + " from the account remote: fast-forward to " + short(ev.Commit))
+		out.done("updated " + name + " to the latest published version: \"" + sanitised(s.subject) + "\"")
 	case pullMerged:
-		out.done("merged " + name + " with the account remote, committed as " + short(ev.Commit))
+		out.done("merged the latest published version of " + name + " with your local edits")
 	case pullConflict:
 		inv.printConflicts(s.u.conflict, s.u.conflictsWith())
 	}

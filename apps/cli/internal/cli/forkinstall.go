@@ -466,8 +466,8 @@ func (inv *invocation) tipHoldsSkill(ctx context.Context, gitDir, tip, dir strin
 }
 
 // installedRefusal refuses to install a fork this machine has a branch of
-// already, exit code 6: an update takes in what the account remote holds of
-// it, and skill place lays out one that was never placed here.
+// already, exit code 6: an update brings it to the version the account
+// remote holds, and skill place lays out one that was never placed here.
 func (inv *invocation) installedRefusal(gitDir string, rec lineage.Record) error {
 	name := rec.Name
 	if classifyFork(inv.forkFactsOf(inv.forkPlace(gitDir, rec))).outcome == outcomeInstallable {
@@ -475,7 +475,7 @@ func (inv *invocation) installedRefusal(gitDir string, rec lineage.Record) error
 			"run '"+skillCommand("place", name)+"' to place it")
 	}
 	return fail(exitRefused, sanitised(name)+" is already installed on this machine",
-		"run '"+skillCommand("update", name)+"' to take in what the account remote holds of it")
+		"run '"+skillCommand("update", name)+"' to update it to the latest published version")
 }
 
 // tipDir is the skill directory a fork's tip holds at its root: the one
@@ -596,7 +596,7 @@ func (inv *invocation) applyAccountInstall(ctx context.Context, in *accountInsta
 	rec, held := records[f.name]
 	switch {
 	case held && rec.Kind == lineage.KindFork:
-		return fail(exitRefused, sanitised(f.name)+" was installed by another command meanwhile, so nothing was changed", "run '"+skillCommand("update", f.name)+"' to take in what the account remote holds of it")
+		return fail(exitRefused, sanitised(f.name)+" was installed by another command meanwhile, so nothing was changed", "run '"+skillCommand("update", f.name)+"' to update it to the latest published version")
 	case held != (in.managed != nil), held && rec.Commit != in.managed.Commit:
 		return fail(exitRefused, sanitised(f.name)+"'s import branch changed while it was being installed, so nothing was changed", again)
 	}

@@ -152,7 +152,7 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 	equal(t, "installing alpha again: exit", out.exit, 6)
 	e := b.one(out.stdout, "error")
 	contains(t, "its error", e["message"].(string), "alpha is already installed on this machine")
-	contains(t, "its hint", e["hint"].(string), "run 'agentx skill update alpha' to take in what the account remote holds of it")
+	contains(t, "its hint", e["hint"].(string), "run 'agentx skill update alpha' to update it to the latest published version")
 
 	// Without its worktree and library entry, the branch is the fork's
 	// alone, and skill place lays it out.

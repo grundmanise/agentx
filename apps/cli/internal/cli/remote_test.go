@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -130,7 +131,7 @@ func TestPublishNeverMerges(t *testing.T) {
 	equal(t, "its outcome", b.one(out.stdout, "publish")["outcome"], publishMoved)
 	e := b.one(out.stdout, "error")
 	contains(t, "its message", e["message"].(string), "the account remote holds changes to alpha that this machine lacks, published from another machine")
-	contains(t, "its hint", e["hint"].(string), "run 'agentx skill update alpha' to take them in, then publish again")
+	contains(t, "its hint", e["hint"].(string), "run 'agentx skill update alpha' to get them, then publish again")
 	equal(t, "its pull events", len(b.eventsOfType(out.stdout, "pull")), 0)
 	equal(t, "b's alpha, kept", b.ref(lineage.ForkRef("alpha")), mine)
 	equal(t, "b's edit, kept", fileBody(t, draft), "an edit\n")
@@ -188,7 +189,7 @@ func TestPublishNeverMerges(t *testing.T) {
 	for _, e := range behind {
 		equal(t, e["name"].(string)+"'s outcome", e["outcome"], publishBehind)
 	}
-	contains(t, "alpha's warning", out.stderr, "alpha has nothing to publish; the account remote holds changes published from another machine; run 'agentx skill update alpha' to take them in")
+	contains(t, "alpha's warning", out.stderr, "alpha has nothing to publish; the account remote holds changes published from another machine; run 'agentx skill update alpha' to get them")
 	equal(t, "the remote's refs, kept", remoteGit(t, b, remote, "for-each-ref", "--format=%(refname) %(objectname)"), refs)
 	out = a.mustRun("--json", "skill", "publish", "alpha")
 	contains(t, "the summary of one fork behind", a.one(out.stdout, "result")["summary"].(string), "alpha has nothing to publish")
@@ -327,8 +328,9 @@ func sourceEntryOf(t *testing.T, h *harness, url string) map[string]any {
 // A skill a made with skill new, which has no upstream, is what a publishes
 // next. b's check names it published from another machine, with the file a
 // changed; b's update of every skill alone then takes it in, its account
-// step with a pull event and the skill's library_skill event; updated
-// again, it is up to date with the account remote, exit 0. Once both
+// step with a pull event and the skill's library_skill event. The update
+// of it alone brings it to the next version a publishes, saying so in its
+// summary; updated again, it is up to date with the account remote, exit 0. Once both
 // machines changed its line, and b added a file of its own, b's check lists
 // only what a changed since the commit both share, and b's update leaves
 // the merge pending, exit 4, reported again as the account remote's while
@@ -436,6 +438,10 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	equal(t, "its commit", pulled["commit"], published)
 	b.librarySkill(out.stdout, "notes")
 	equal(t, "notes' tip", b.ref(lineage.ForkRef("notes")), published)
+	writeFile(t, filepath.Join(a.forkDir("notes", "notes"), "steps.md"), "the steps\n")
+	a.mustRun("skill", "publish", "notes", "-m", "Add the steps")
+	out = b.mustRun("--json", "skill", "update", "notes")
+	contains(t, "the update of notes alone", b.one(out.stdout, "result")["summary"].(string), "updated notes to the latest published version; it has no upstream to update from")
 	out = b.mustRun("skill", "update", "notes")
 	contains(t, "the update with nothing new", out.stdout, "notes is up to date with the account remote")
 
@@ -490,7 +496,7 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	equal(t, "beta's first parent", b.accountGit("rev-parse", b.ref(lineage.ForkRef("beta"))+"^1"), before)
 	equal(t, "beta's notes after the upstream-only update", fileBody(t, filepath.Join(b.forkDir("beta", "beta"), "notes.md")), forkNotes("six", "six, fifth"))
 	out = b.mustRun("skill", "update", "beta")
-	contains(t, "the warning with nothing from upstream", out.stderr, "so what your other machines published is not taken in")
+	contains(t, "the warning with nothing from upstream", out.stderr, "so nothing was updated to the latest published version")
 	out = b.run("--json", "skill", "update", "notes")
 	equal(t, "the update of a skill with no upstream: exit", out.exit, 3)
 	contains(t, "its error", b.one(out.stdout, "error")["message"].(string), "cannot reach the account remote")
@@ -535,6 +541,33 @@ func TestSameForkRefusal(t *testing.T) {
 				contains(t, "the refusal", f.message, tc.want)
 				equal(t, "exit", f.status.exit, 6)
 			}
+		})
+	}
+}
+
+// TestReportSync is the line the account step of an update prints for a
+// fork it moved: the subject of the remote tip alone, sanitised, for a
+// fast-forward, and no commit for a merge, which is not published yet.
+func TestReportSync(t *testing.T) {
+	t.Parallel()
+	const commit = "4c2d1e9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e"
+	moved := &updating{fork: &forkUpdate{commit: commit}}
+	for _, tc := range []struct {
+		name string
+		s    forkSync
+		want string
+	}{
+		{"fast-forward", forkSync{name: "notes", outcome: pullFastForward, u: moved, subject: "Tighten\tthe summary steps"},
+			"✓ updated notes to the latest published version: \"Tighten the summary steps\"\n"},
+		{"merged", forkSync{name: "notes", outcome: pullMerged, u: moved, subject: "Tighten the summary steps"},
+			"✓ merged the latest published version of notes with your local edits\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var stdout, stderr bytes.Buffer
+			inv := &invocation{out: &writer{stdout: &stdout, stderr: &stderr, env: map[string]string{}}}
+			inv.reportSync(tc.s)
+			equal(t, "the line", stdout.String(), tc.want)
 		})
 	}
 }

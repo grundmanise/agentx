@@ -709,9 +709,9 @@ Only what the skill held when you ran the command is replaced:
 
 agentx keeps what it replaces until the update is complete, so an interrupted update finishes on the next command, running the update again included, and loses nothing.
 
-### Take in what another machine published
+### Update to what another machine published
 
-Your own skills travel between your machines through the [account remote](/cli/source#add-your-account-remote): the ones you created with `agentx skill new`, forked with `agentx skill fork`, or installed from the account remote. Take in what you published of them from another machine the way you take an update:
+Your own skills travel between your machines through the [account remote](/cli/source#add-your-account-remote): the ones you created with `agentx skill new`, forked with `agentx skill fork`, or installed from the account remote. Update them to the latest version you published from another machine the way you take an update:
 
 ```sh
 agentx skill check-updates
@@ -719,16 +719,16 @@ agentx skill update --all
 ```
 
 ```text
-✓ took in notes from the account remote: fast-forward to 4c2d1e9
+✓ updated notes to the latest published version: "Tighten the summary steps"
 no skill was updated from upstream
 ```
 
 - `agentx skill check-updates` lists what the account remote holds that this machine lacks as `published from another machine`. Checking first is optional: `agentx skill update <name>` fetches the account remote itself.
-- `agentx skill update <name>` takes in what the account remote holds of one skill. `agentx skill update --all` does so for every one of your own skills on this machine.
-- When this machine has no commits of its own, the skill moves to the published commit: a fast-forward, with nothing new committed. When both machines committed, agentx merges the two with Git and commits the merge, as `notes: merge the account remote (desktop)`.
-- A skill you forked from a source takes in what the account remote holds first, then its new upstream version, as two commits.
+- `agentx skill update <name>` updates one skill to the latest published version and shows the message it was published with. `agentx skill update --all` does so for every one of your own skills on this machine.
+- When this machine has no commits of its own, the skill moves to the published commit: a fast-forward, with nothing new committed. When both machines committed, agentx merges the two with Git, commits the merge, as `notes: merge the account remote (desktop)`, and prints `✓ merged the latest published version of notes with your local edits`. The skill then reads `modified` until you publish it.
+- A skill you forked from a source is first updated to the latest published version, then to its new upstream version, as two commits.
 - Edits you have not published are recorded on the skill first, and what the account remote holds is merged with them. They stay unpublished until you [publish](#publish-a-skill) them. Publish with `-m` to publish them under your own message.
-- Take them in before you publish: [`agentx skill publish`](#publish-a-skill) never merges, and stops with exit code 6 when another machine published changes and this machine has changes of its own.
+- Update before you publish: [`agentx skill publish`](#publish-a-skill) never merges, and stops with exit code 6 when another machine published changes and this machine has changes of its own.
 - When both machines changed the same lines, the merge waits for you: see [Resolve a conflict](/cli/fork#resolve-a-conflict). Resolve it, then run `agentx skill update <name>` again.
 - A skill with no upstream (one you created with `agentx skill new`, or forked from an unmanaged or a plugin's skill) that has nothing new on the account remote is `up to date with the account remote`. One you never published has no branch there yet, and the update tells you to run `agentx skill publish <name>`. One another machine removed from the account remote, or renamed there, gets a warning naming the two ways on: remove it here, or publish it again.
 - If Git cannot reach the account remote, the update of a skill with no upstream stops with exit code 3; a skill you forked from a source gets a warning and still takes its new upstream version.
@@ -816,7 +816,7 @@ This removes the worktree and whatever you resolved in it. Your library director
 - A skill with a [merge pending](#when-your-edits-conflict) that still has files to resolve stops with exit code 4 and lists them.
 - `agentx skill update <name>` of a skill whose source you removed stops with exit code 5, and the hint names the `agentx source add` command that brings the source back. With `--all`, the skill is skipped with a warning that names the same command, and the run does not fail. Either way, the update found earlier is kept.
 - A skill its source no longer holds, shown as `upstream removed`, is kept as it is and never updated: exit code 6.
-- A skill agentx did not install has no update to apply: exit code 6. One of your own skills is updated by merging, see [Take a new upstream version](/cli/fork#take-a-new-upstream-version); one with no upstream, such as a skill you created, stops with exit code 6 when no account remote is set. With one set, its update takes in what your other machines published, see [Take in what another machine published](#take-in-what-another-machine-published).
+- A skill agentx did not install has no update to apply: exit code 6. One of your own skills is updated by merging, see [Take a new upstream version](/cli/fork#take-a-new-upstream-version); one with no upstream, such as a skill you created, stops with exit code 6 when no account remote is set. With one set, its update brings it to the version your other machines published, see [Update to what another machine published](#update-to-what-another-machine-published).
 - A skill whose library directory is gone stops with exit code 6. Install it again with `agentx skill add <source> --name <name>`, or stop managing it with `agentx skill remove <name>`.
 - A skill whose record in the account repo agentx cannot read stops with exit code 6. Run `agentx doctor` and check the account repo it names.
 - A skill whose library directory is a symlink to a directory of your own stops with exit code 6, even if you edited that directory: an update replaces the library directory, so it would remove your link. Replace the link with the directory it points to, then update again. With `--all` this skill is counted as not updated.
@@ -826,7 +826,7 @@ With `--all`, a skill that is not updated does not stop the others: agentx names
 
 ## Publish a skill
 
-Publish one of your own skills, one you created with `agentx skill new` or forked with `agentx skill fork`, to your [account remote](/cli/source#add-your-account-remote) so your other machines can install it and take in what you change:
+Publish one of your own skills, one you created with `agentx skill new` or forked with `agentx skill fork`, to your [account remote](/cli/source#add-your-account-remote) so your other machines can install it and get what you change:
 
 ```sh
 agentx skill publish release-notes -m "Cover reverted pull requests"
@@ -838,11 +838,11 @@ agentx skill publish release-notes -m "Cover reverted pull requests"
 
 - Your edits stay on this machine until you publish them. Publishing records them as one commit on the skill's history, then pushes it. There is no separate commit step.
 - Give the commit a message with `-m`. Its first line is the subject. Without `-m`, agentx writes one that names the skill, the files you changed and this machine, such as `release-notes: edit SKILL.md (laptop)`.
-- With `-m`, edits that [`agentx skill update`](#take-in-what-another-machine-published) recorded on the skill, what it merged from another machine, and commits you made with Git in the skill's worktree are published in the same one commit, under your message. A [rename](/cli/fork#rename-a-skill-of-your-own) or an update from upstream that you have not published yet keeps its own commit: agentx then warns that `-m` was not used, unless the skill also has new edits, which get your message.
+- With `-m`, edits that [`agentx skill update`](#update-to-what-another-machine-published) recorded on the skill, what it merged from another machine, and commits you made with Git in the skill's worktree are published in the same one commit, under your message. A [rename](/cli/fork#rename-a-skill-of-your-own) or an update from upstream that you have not published yet keeps its own commit: agentx then warns that `-m` was not used, unless the skill also has new edits, which get your message.
 - Run `agentx skill publish` with no name to publish every skill of your own. `-m` then gives the message of each commit it records. A bare publish never covers a skill you installed from a shared source: name it to [publish it to its source](#publish-edits-to-a-shared-source). It also leaves out a skill another machine removed from the account remote or renamed there, shown as `remote removed`, with a warning: name it to publish it again.
 - [Files that stay local](/cli/fork#files-that-stay-local), such as a `.DS_Store`, are never published.
 - Each skill goes to its own branch, `skills/<name>`. Publishing one skill leaves your other skills where they are.
-- When another machine published changes to the skill first, publishing stops with exit code 6 and records nothing: your edits stay where they are. Run [`agentx skill update <name>`](#take-in-what-another-machine-published) to take them in, then publish again. A skill with no edits and nothing new of its own has nothing to publish: agentx warns, and the publish still succeeds.
+- When another machine published changes to the skill first, publishing stops with exit code 6 and records nothing: your edits stay where they are. Run [`agentx skill update <name>`](#update-to-what-another-machine-published) to get them, then publish again. A skill with no edits and nothing new of its own has nothing to publish: agentx warns, and the publish still succeeds.
 - agentx never forces a push. When another machine published meanwhile, the push stops the same way: run `agentx skill update <name>`, then publish again. Edits recorded before a failed push go out with your next publish.
 - When the remote's host declines the push, for example a hook or a protected branch, publishing stops with exit code 6 and names the host's reason, with up to three lines the host wrote:
 

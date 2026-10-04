@@ -72,7 +72,7 @@ func newSkillPublishCommand(inv *invocation) *cobra.Command {
 			"never published. A skill another machine removed from the account remote, or\n" +
 			"renamed there, is published again only when you name it. When the account\n" +
 			"remote holds changes another machine published, nothing is recorded or\n" +
-			"pushed: run 'agentx skill update <name>' to take them in first, then publish\n" +
+			"pushed: run 'agentx skill update <name>' to get them first, then publish\n" +
 			"again. A push the account remote's host declines, by a hook or a protected\n" +
 			"branch, is reported with its reason, never forced, and a branch of the same\n" +
 			"name that is another skill is never pushed over.\n\n" +
@@ -441,7 +441,7 @@ func (inv *invocation) judgePublish(ctx context.Context, gitDir string, rec line
 // publish never merges, and an update takes them in first.
 func movedRefusal(name string) *failure {
 	return refuse(exitRefused, "the account remote holds changes to "+sanitised(name)+" that this machine lacks, published from another machine",
-		"run '"+skillCommand("update", name)+"' to take them in, then publish again")
+		"run '"+skillCommand("update", name)+"' to get them, then publish again")
 }
 
 // committing is one skill whose edits a publish records: where it is, what
@@ -797,7 +797,7 @@ func (inv *invocation) reportPublished(ctx context.Context, list []*publishing, 
 		case publishUpToDate:
 			out.print(name, " is up to date on the account remote")
 		case publishBehind:
-			out.warnWith(behindMessage(p.name), "run '"+skillCommand("update", p.name)+"' to take them in")
+			out.warnWith(behindMessage(p.name), "run '"+skillCommand("update", p.name)+"' to get them")
 		}
 		if p.recorded {
 			recorded = append(recorded, p.name)

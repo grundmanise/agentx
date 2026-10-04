@@ -136,7 +136,8 @@ func besideConflicts(body string) (merged, conflicts string) {
 // merge and still unpublished, so the remote's branch lacks it, skill diff
 // shows it against what a published, and b reads modified until b
 // publishes the merge, which then reads current. a's update fast-forwards
-// to it, so both machines hold every line either edited. A publish never
+// to it, naming the subject of the merge alone, so both machines hold every
+// line either edited. A publish never
 // takes in what the remote holds: see TestPublishNeverMerges.
 func TestScenarioDisjointEditsMergeClean(t *testing.T) {
 	t.Parallel()
@@ -162,8 +163,10 @@ func TestScenarioDisjointEditsMergeClean(t *testing.T) {
 	contains(t, "b's diff of the draft", diff, "+a draft")
 	b.mustRun("skill", "publish", "alpha")
 	equal(t, "b's state once published", b.listed("alpha")["state"], stateCurrent)
-	out = a.mustRun("--json", "skill", "update", "alpha")
-	equal(t, "a's pull", a.one(out.stdout, "pull")["outcome"], pullFastForward)
+	out = a.mustRun("skill", "update", "alpha")
+	equal(t, "a's update, naming only the subject of the newest of the three commits it lacked", out.stdout,
+		"✓ updated alpha to the latest published version: \"alpha: merge the account remote (test-host)\"\n"+
+			"alpha is up to date as of the last update check; run agentx skill check-updates to look again\n")
 	equal(t, "a's alpha", a.ref(lineage.ForkRef("alpha")), merged)
 	for _, h := range []*harness{a, b} {
 		dir := h.forkDir("alpha", "alpha")
@@ -564,6 +567,7 @@ exec `+shellWord(real)+` "$@"
 	out := a.mustRun("--json", "skill", "update", "alpha")
 	a.env["PATH"] = path
 	equal(t, "the pull", a.one(out.stdout, "pull")["outcome"], pullFastForward)
+	contains(t, "the summary", a.one(out.stdout, "result")["summary"].(string), "updated alpha to the latest published version; it is up to date with its upstream")
 	equal(t, "what the journal held", fileBody(t, held), "a's own notes\n")
 	equal(t, "a's notes.local", fileBody(t, filepath.Join(alphaA, "notes.local")), "b's notes, committed\n")
 	equal(t, "a's build.log", fileBody(t, filepath.Join(alphaA, "build.log")), "a's build\n")

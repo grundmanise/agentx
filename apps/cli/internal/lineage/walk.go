@@ -34,6 +34,7 @@ type ForkLineage struct {
 	Import     Import // the base's coordinates, when Base is not ""
 	NoUpstream bool   // the walk reached a root that is neither an import commit nor names one, as for a skill made by skill new
 	Problem    string // why the base cannot be read; "" when it can
+	Subject    string // the tip's subject, the first line of its message; set by Walk only
 }
 
 // Resolve reads a fork's lineage out of commits, the history of its tip,
@@ -131,7 +132,7 @@ func ancestor(a, tip string, commits map[string]Commit) bool {
 // second parent, whose trailers the first-parent chain does not hold. A
 // fork's branch holds its own commits and the parentless import commits
 // merged into it, so the history is small; tips that share it, as a fork of
-// a fork does, read it once.
+// a fork does, read it once. Each lineage carries its tip's subject too.
 func Walk(ctx context.Context, r *gitx.Runner, gitDir string, tips []string) (map[string]ForkLineage, error) {
 	if len(tips) == 0 {
 		return map[string]ForkLineage{}, nil
@@ -153,7 +154,9 @@ func Walk(ctx context.Context, r *gitx.Runner, gitDir string, tips []string) (ma
 	}
 	lineages := make(map[string]ForkLineage, len(tips))
 	for _, tip := range tips {
-		lineages[tip] = Resolve(tip, commits)
+		l := Resolve(tip, commits)
+		l.Subject, _, _ = strings.Cut(strings.TrimSpace(commits[tip].Message), "\n")
+		lineages[tip] = l
 	}
 	return lineages, nil
 }

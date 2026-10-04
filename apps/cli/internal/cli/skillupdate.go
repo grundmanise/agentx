@@ -40,10 +40,10 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 			"skills are recorded on its branch first, and stay unpublished until\n" +
 			"'agentx skill publish'. A conflict waits as for a skill of a shared source, and\n" +
 			"its worktree and branch stay as they are until it is applied. With an account\n" +
-			"remote set, it is fetched first, and what your other machines published of the\n" +
-			"skill is taken in first, as a commit of its own. A skill made with\n" +
-			"'agentx skill new' has no upstream: its update takes in what the account remote\n" +
-			"holds, and nothing else.\n\n" +
+			"remote set, it is fetched first, and the skill is first updated to the latest\n" +
+			"version your other machines published, as a commit of its own. A skill made\n" +
+			"with 'agentx skill new' has no upstream: its update only brings it to the latest\n" +
+			"published version.\n\n" +
 			"Pass --all instead of a name to update every managed skill the last check found\n" +
 			"an update for, and every skill of your own placed here that your other machines\n" +
 			"published to. Read an update before you apply it with\n" +
@@ -291,7 +291,7 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 			// on to judgeForkUpdate, the one way that completes it.
 			switch {
 			case slices.Contains(pulled, n):
-				inv.summary = "took in " + n + " from the account remote; it has no upstream to update from"
+				inv.summary = "updated " + n + " to the latest published version; it has no upstream to update from"
 			case removed:
 				what, hint := remoteRemovedNotice(n)
 				inv.summary = what + "; " + hint
@@ -318,7 +318,7 @@ func (inv *invocation) skillUpdate(ctx context.Context, name string) error {
 		case u == nil: // a name the last check found no update for, which only a run of one name asks about
 			inv.summary = n + " is up to date as of the last update check; run '" + checkUpdatesCommand + "' to look again"
 			if len(pulled) > 0 {
-				inv.summary = "took in " + n + " from the account remote; it is up to date with its upstream as of the last update check"
+				inv.summary = "updated " + n + " to the latest published version; it is up to date with its upstream as of the last update check"
 			}
 			inv.out.print(inv.out.paint(heading, sanitised(n)), " is up to date as of the last update check; run ",
 				inv.out.paint(label, checkUpdatesCommand), " to look again")
@@ -489,7 +489,7 @@ func (r *updateRun) accountStep(ctx context.Context, names []string, records map
 			}
 			inv.out.warn("could not fetch the account remote " + shownURL(a.entry.URL) + ", so " + what + " updated from upstream only" + why)
 		case len(dropped) == 0:
-			inv.out.warn("could not fetch the account remote " + shownURL(a.entry.URL) + ", so what your other machines published is not taken in" + why)
+			inv.out.warn("could not fetch the account remote " + shownURL(a.entry.URL) + ", so nothing was updated to the latest published version" + why)
 		}
 		return nil, dropped, nil
 	}

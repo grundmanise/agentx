@@ -258,7 +258,7 @@ func (f *forkUpdate) unrecordable(site forkSite, lost []string) *failure {
 	command := skillCommand("update", site.name)
 	what := "an update"
 	if f.pull {
-		what = "taking in what the account remote holds"
+		what = "updating it to the latest published version"
 	}
 	return unrecordableAt(site.name, site.skillDir, lost, what, command)
 }
