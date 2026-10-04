@@ -53,7 +53,7 @@ type driftEvent struct {
 	InstanceID    string   `json:"instance_id"`
 	ScanCounter   int      `json:"scan_counter"`
 	Name          string   `json:"name"`
-	Kind          string   `json:"kind"`
+	Kind          string   `json:"kind"` // managed or unmanaged, as the snapshot's library entry has it
 	State         string   `json:"state,omitempty"`
 	Drift         []string `json:"drift"` // [] when none
 	PreviousState string   `json:"previous_state,omitempty"`

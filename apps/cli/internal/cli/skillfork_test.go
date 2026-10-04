@@ -44,10 +44,15 @@ func TestSkillForkConvertsManagedSkills(t *testing.T) {
 		out := h.run("--json", "skill", "fork", name)
 		equal(t, name+": exit", out.exit, 0)
 		ev := h.librarySkill(out.stdout, name)
-		equal(t, name+": kind", ev["kind"], lineage.KindFork)
+		equal(t, name+": kind", ev["kind"], lineage.KindManaged)
 		equal(t, name+": state", ev["state"], stateCurrent)
-		for _, key := range []string{"source", "subpath", "upstream_commit", "base_hash"} {
-			equal(t, name+": "+key, ev[key], before[key])
+		// It came from where the managed skill came from, and is published
+		// to the account remote, of which this machine has none yet.
+		for key, was := range map[string]string{"upstream": "source", "upstream_subpath": "subpath", "upstream_commit": "upstream_commit", "base_hash": "base_hash"} {
+			equal(t, name+": "+key, ev[key], before[was])
+		}
+		if _, ok := ev["source"]; ok {
+			t.Errorf("%s: a skill with no account remote to publish to lists a source: %v", name, ev["source"])
 		}
 		if _, err := h.accountGitErr("rev-parse", "--verify", "-q", lineage.ManagedRef(name)); err == nil {
 			t.Errorf("%s: the import branch is still there", name)
@@ -193,10 +198,10 @@ func TestSkillForkOfAnUnmanagedSkill(t *testing.T) {
 		t.Errorf("the library symlink is %q", link)
 	}
 	ev := h.listed("notes")
-	equal(t, "kind", ev["kind"], lineage.KindFork)
+	equal(t, "kind", ev["kind"], lineage.KindManaged)
 	equal(t, "the fork id", ev["fork_id"], h.trailer(tip, lineage.TrailerForkID))
-	if _, ok := ev["source"]; ok {
-		t.Errorf("a fork of an unmanaged skill lists an upstream: %v", ev["source"])
+	if _, ok := ev["upstream"]; ok {
+		t.Errorf("a fork of an unmanaged skill lists an upstream: %v", ev["upstream"])
 	}
 }
 
@@ -560,7 +565,7 @@ exec %GIT% "$@"
 					t.Errorf("%s through the library symlink is %q, %v", file, b, err)
 				}
 			}
-			equal(t, "kind", h.listed("alpha")["kind"], lineage.KindFork)
+			equal(t, "kind", h.listed("alpha")["kind"], lineage.KindManaged)
 		})
 	}
 }

@@ -95,7 +95,7 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 		}
 	}
 	equal(t, "the renamed skill's rows", shown, 1)
-	equal(t, "a's installable skills", len(a.eventsOfType(listed.stdout, "installable_fork")), 0)
+	equal(t, "a's installable skills", len(a.eventsOfType(listed.stdout, "installable_skill")), 0)
 	all := a.mustRun("skill", "add", "--all")
 	contains(t, "a's add --all", all.stdout, "holds no skill this machine lacks")
 	equal(t, "alpha, not installed again", a.ref(lineage.ForkRef("alpha")), "")
@@ -129,7 +129,7 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 	equal(t, "the remote's renamed", remoteGit(t, a, remote, "rev-parse", "refs/heads/skills/renamed"), renamed)
 	equal(t, "the remote's alpha", remoteGit(t, a, remote, "for-each-ref", "--format=%(refname)", "refs/heads/skills/alpha"), "")
 	listed = b.mustRun("--json", "skill", "list", "--remote")
-	installable := b.eventsOfType(listed.stdout, "installable_fork")
+	installable := b.eventsOfType(listed.stdout, "installable_skill")
 	if len(installable) != 1 || installable[0]["name"] != "renamed" || installable[0]["fork_id"] != id {
 		t.Errorf("b's installable skills = %v, want renamed with alpha's fork id", installable)
 	}

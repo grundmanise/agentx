@@ -21,16 +21,17 @@ func (h *harness) trailer(rev, key string) string {
 	return h.accountGit("log", "-1", "--format=%(trailers:key="+key+",valueonly)", rev)
 }
 
-// TestSkillNewCreatesAForkFromTheTemplate creates a greenfield skill on two
-// machines. Each gets a branch whose one commit holds the template under
+// TestSkillNewCreatesAForkFromTheTemplate creates a skill with skill new on
+// two machines. Each gets a branch whose one commit holds the template under
 // the skill's directory and carries a new fork id and the machine, checked
 // out as a locked worktree whose .git file sits outside the skill, a
 // relative library symlink to the skill's directory, a symlink in each
 // client with a skills directory of its own and none in the clients that
-// read the library. The listing calls it a fork with no upstream, by its
-// fork id, and the two machines' ids differ. One machine's user set a git
-// identity, which the commit carries; the other's did not, and the
-// machine's label stands in.
+// read the library. The listing calls it a managed skill with no source,
+// since no account remote is set, and no upstream, by its fork id, and the
+// two machines' ids differ. One machine's user set a git identity, which
+// the commit carries; the other's did not, and the machine's label stands
+// in.
 func TestSkillNewCreatesAForkFromTheTemplate(t *testing.T) {
 	t.Parallel()
 	a, _ := installHarness(t)
@@ -42,9 +43,11 @@ func TestSkillNewCreatesAForkFromTheTemplate(t *testing.T) {
 		out := h.run("--json", "skill", "new", "notes", "--description", "Keep notes for the user.")
 		equal(t, "exit", out.exit, 0)
 		ev := h.one(out.stdout, "library_skill")
-		equal(t, "kind", ev["kind"], lineage.KindFork)
-		if _, ok := ev["source"]; ok {
-			t.Errorf("a greenfield skill lists an upstream: %v", ev["source"])
+		equal(t, "kind", ev["kind"], lineage.KindManaged)
+		for _, key := range []string{"source", "upstream"} {
+			if _, ok := ev[key]; ok {
+				t.Errorf("a new skill with no account remote set lists a %s: %v", key, ev[key])
+			}
 		}
 		ids[h] = h.trailer("refs/heads/skills/notes", lineage.TrailerForkID)
 		equal(t, "the event's fork id", ev["fork_id"], ids[h])
@@ -221,7 +224,7 @@ exec %GIT% "$@"
 			for _, dir := range []string{h.library, filepath.Join(h.agentx, "worktrees")} {
 				equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")
 			}
-			equal(t, "kind", h.listed("notes")["kind"], lineage.KindFork)
+			equal(t, "kind", h.listed("notes")["kind"], lineage.KindManaged)
 		})
 	}
 }

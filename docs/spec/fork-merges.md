@@ -30,7 +30,7 @@ Publishing records the fork's edits as one commit on its branch, then pushes the
 
 ## The recorded base
 
-Every merge commit agentx writes on a fork's branch carries `Agentx-Base`, naming the import commit that is the fork's base after that merge, so that the next upstream update merges with the right base. A greenfield skill has no upstream and records none.
+Every merge commit agentx writes on a fork's branch carries `Agentx-Base`, naming the import commit that is the fork's base after that merge, so that the next upstream update merges with the right base. A skill `skill new` made has no upstream and records none.
 
 For a merge of two histories of one fork:
 

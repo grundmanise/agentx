@@ -251,8 +251,9 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 	if b.ref(lineage.ForkRef("notes")) == "" || !lexists(b.forkDir("notes", "notes")) {
 		t.Error("a refused removal changed b's notes")
 	}
-	// An export of a lists notes as a fork; b holds another notes, which is
-	// different, and a fresh machine that set the account remote holds a's,
+	// An export of a lists notes as a managed skill whose source is the
+	// account remote; b holds another notes, which is different, and a
+	// fresh machine that set the account remote holds a's under skills/,
 	// present, until a publishes another commit of it.
 	file := a.exportPath("export.json")
 	a.mustRun("export", file)
@@ -267,7 +268,8 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 	fresh.setAccount(remote)
 	ev = state(fresh)
 	equal(t, "the fresh machine's notes", ev["state"], restorePresent)
-	equal(t, "its kind", ev["local_kind"], lineage.KindFork)
+	equal(t, "its kind", ev["kind"], lineage.KindManaged)
+	equal(t, "its source", ev["source"], "file://"+remote)
 	writeFile(t, filepath.Join(a.forkDir("notes", "notes"), "more.md"), "more\n")
 	a.mustRun("skill", "publish", "notes")
 	fresh.setAccount(remote)
@@ -356,7 +358,7 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	for _, rec := range b.readExportFile(file)["skills"].([]any) {
 		if r := rec.(map[string]any); r["name"] == "alpha" {
 			equal(t, "the exported upstream commit", r["upstream_commit"], second)
-			equal(t, "the exported subpath", r["subpath"], "skills/alpha")
+			equal(t, "the exported upstream subpath", r["upstream_subpath"], "skills/alpha")
 		}
 	}
 
@@ -401,6 +403,10 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	equal(t, "its source", update["source"], "file://"+remote)
 	equal(t, "its candidate", update["candidate"], published)
 	equal(t, "its upstream commit", update["upstream_commit"], "")
+	equal(t, "its kind", update["kind"], lineage.KindManaged)
+	if _, ok := update["upstream"]; ok {
+		t.Errorf("the update of what another machine published names an upstream: %v", update["upstream"])
+	}
 	equal(t, "its files", fmt.Sprint(update["files"]), "[map[path:notes.md status:added]]")
 	if lastFetched(t, b, "file://"+remote) == backdated {
 		t.Error("the check left the account remote's last_fetched as it was")

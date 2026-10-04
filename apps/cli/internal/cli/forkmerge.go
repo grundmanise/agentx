@@ -200,7 +200,7 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 		if err != nil {
 			return nil, failureOf(accountRepoFailure(err))
 		}
-		u.merged.conflicted, u.conflict = true, conflictOfSkill(name, lineage.KindFork, u.merge, files)
+		u.merged.conflicted, u.conflict = true, conflictOfSkill(name, u.merge, files)
 		return u, nil
 	}
 	// A branch that no longer holds the tip the merge started from was moved
@@ -275,7 +275,7 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 		if err != nil {
 			return nil, failureOf(accountRepoFailure(err))
 		}
-		u.conflict = conflictOfSkill(name, lineage.KindFork, u.merge, files)
+		u.conflict = conflictOfSkill(name, u.merge, files)
 		u.fork.start, u.fork.remerge = true, true
 		return u, nil
 	}

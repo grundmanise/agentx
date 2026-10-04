@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 )
 
 func newSkillListCommand(inv *invocation) *cobra.Command {
@@ -40,11 +42,12 @@ func newSkillListCommand(inv *invocation) *cobra.Command {
 //
 // With remote, the account remote is fetched first, outside the lock, and
 // every fork it holds that this machine has no branch of is listed after
-// the library's skills as installable, see installableForks. Nothing else
+// the library's skills as installable, see installableSkills. Nothing else
 // in the listing reaches the network.
 func (inv *invocation) skillList(ctx context.Context, remote bool) error {
 	inv.forksWarned = true // the warnings after the rows name them
-	gitDir, account := "", ""
+	var gitDir string
+	var account home.Source
 	if remote {
 		dir, entry, name, err := inv.accountRemote(ctx)
 		if err != nil {
@@ -53,7 +56,7 @@ func (inv *invocation) skillList(ctx context.Context, remote bool) error {
 		if err := inv.fetchRemote(ctx, dir, name, entry.URL); err != nil {
 			return err
 		}
-		gitDir, account = dir, name
+		gitDir, account = dir, entry
 	}
 	snap, err := inv.scan(ctx, lockWait, "", false)
 	if err != nil {
@@ -65,10 +68,10 @@ func (inv *invocation) skillList(ctx context.Context, remote bool) error {
 	}
 	skills, warnings := readLibrary(inv.dirs.Library)
 	warnings = append(warnings, sc.absentWarnings(inv, skills)...)
-	var installable []installableForkEvent
+	var installable []installableSkillEvent
 	if remote {
 		var skipped []string
-		if installable, skipped, err = inv.installableForks(ctx, gitDir, account, sc.records); err != nil {
+		if installable, skipped, err = inv.installableSkills(ctx, gitDir, account, sc.records); err != nil {
 			return err
 		}
 		warnings = append(warnings, skipped...)
@@ -96,9 +99,9 @@ func (inv *invocation) skillList(ctx context.Context, remote bool) error {
 }
 
 // printInstallable reports the skills the account remote holds that this
-// machine has not installed: one installable_fork event each, and a table
+// machine has not installed: one installable_skill event each, and a table
 // of them after the library's, with the commands that install them.
-func (inv *invocation) printInstallable(installable []installableForkEvent) {
+func (inv *invocation) printInstallable(installable []installableSkillEvent) {
 	out := inv.out
 	if len(installable) == 0 {
 		out.print("The account remote holds no skill this machine has not installed.")
@@ -151,19 +154,11 @@ func row(out *writer, ev librarySkillEvent) []cell {
 	if ev.State == "" {
 		state = c("-", muted)
 	}
-	upstream := c("(none)", muted)
-	if ev.Source != "" {
-		where := ev.Source
-		if ev.Subpath != nil && *ev.Subpath != "" {
-			where += "/" + *ev.Subpath
-		}
-		upstream = c(sanitised(where), plain)
-	}
 	return []cell{
 		c("  "+sanitised(ev.Name), heading),
 		c(ev.Kind, muted),
 		state,
-		upstream,
+		whereCell(ev.Source, ev.Subpath),
 		c(plural(placedIn(ev.Placements), "placement"), noteStyle),
 	}
 }
@@ -181,4 +176,18 @@ func placedIn(places []placementEvent) int {
 		ids[p.Configuration] = true
 	}
 	return len(ids)
+}
+
+// whereCell is the cell of a listing that says where a skill is published
+// to: the source's URL, with the directory in it when that is not its
+// root, sanitised, since a source's URL and its directories are not
+// agentx's words; (none) for a skill with no source.
+func whereCell(source string, subpath *string) cell {
+	if source == "" {
+		return c("(none)", muted)
+	}
+	if subpath != nil && *subpath != "" {
+		source += "/" + *subpath
+	}
+	return c(sanitised(source), plain)
 }

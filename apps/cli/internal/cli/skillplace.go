@@ -655,6 +655,7 @@ type skillContext struct {
 	records  map[string]lineage.Record
 	modes    map[string][]string
 	sources  map[string]bool        // the canonical URL of every source the settings hold
+	account  string                 // the account remote's URL, "" when none is set
 	disabled []string               // the configurations the settings disable
 	targets  []placeTarget          // every detected configuration a placement can be made in
 	observed map[string]observation // read ahead of the report, by skill name; see observeAll
@@ -692,7 +693,7 @@ func (sc skillContext) librarySkillEventFor(ctx context.Context, inv *invocation
 		places = filterPlacements(places, covered)
 	}
 	rec, managed := sc.records[lib.Name]
-	return skillFromLibrary(lib, rec, managed, sc.sources, places, universalClients(snap), sc.observationOf(ctx, inv, lib))
+	return skillFromLibrary(lib, rec, managed, sc.sources, sc.account, places, universalClients(snap), sc.observationOf(ctx, inv, lib))
 }
 
 // lineageRecords are the branches of the account repo by skill name, a

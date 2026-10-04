@@ -86,10 +86,11 @@ func TestSkillListReadsLineageFromTheBranchesAlone(t *testing.T) {
 }
 
 // TestSkillListReportsAFork reads the fork namespace too, so that a branch
-// written there is listed as a fork rather than as an unmanaged directory.
-// The branch is made with plain git and the library holds a directory of
-// its own under its name, not the symlink into the fork's worktree, so the
-// directory is not the fork's checkout and carries no state.
+// written there is listed as a managed skill (one of your own) rather
+// than as an unmanaged directory. The branch is made with plain git and
+// the library holds a directory of its own under its name, not the
+// symlink into the fork's worktree, so the directory is not the fork's
+// checkout and carries no state.
 func TestSkillListReportsAFork(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -103,7 +104,7 @@ func TestSkillListReportsAFork(t *testing.T) {
 	if len(events) != 2 {
 		t.Fatalf("%d skill events, want 2:\n%s", len(events), out.stdout)
 	}
-	equal(t, "kind", events[1]["kind"], "fork")
+	equal(t, "kind", events[1]["kind"], "managed")
 	if _, ok := events[1]["state"]; ok {
 		t.Error("a fork whose library entry is no checkout of it carries a state")
 	}

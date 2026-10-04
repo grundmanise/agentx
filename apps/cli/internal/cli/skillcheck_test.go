@@ -713,10 +713,11 @@ func TestSkillCheckSkipsARemovedSource(t *testing.T) {
 // TestSkillCheckFindsAForkUpdate: a fork is checked against its base
 // version, the import its history names, and not against its own commits,
 // so a fork with a commit of its own and an upstream that holds its base
-// has no update, and a greenfield skill, which has no upstream, is not
-// checked at all. A newer upstream version is pinned as the fork's
-// candidate and reported with kind fork, the coordinates of its base and
-// the files it changes there, which skill list shows and skill diff
+// has no update, and a skill made by skill new, which has no upstream, is
+// not checked at all. A newer upstream version is pinned as the fork's
+// candidate and reported with kind managed, the upstream it came from,
+// the coordinates of its base, no source while no account remote is set,
+// and the files it changes there, which skill list shows and skill diff
 // --update reads back. A fork named otherwise than its upstream is not
 // reported as renamed by an update that keeps the upstream's name. Once
 // the upstream no longer holds the skill, the fork just has no update: the
@@ -737,8 +738,14 @@ func TestSkillCheckFindsAForkUpdate(t *testing.T) {
 	second := s.commit("alpha revised")
 	out = h.mustRun("--json", "skill", "check-updates")
 	up := h.updateOf(out.stdout, "alpha")
-	equal(t, "kind", up["kind"], lineage.KindFork)
-	equal(t, "subpath", up["subpath"], "skills/alpha")
+	equal(t, "kind", up["kind"], lineage.KindManaged)
+	equal(t, "upstream", up["upstream"], s.url)
+	equal(t, "upstream_subpath", up["upstream_subpath"], "skills/alpha")
+	for _, key := range []string{"source", "subpath"} {
+		if _, ok := up[key]; ok {
+			t.Errorf("an update of a skill with no account remote to publish to carries a %s: %v", key, up[key])
+		}
+	}
 	equal(t, "upstream_commit", up["upstream_commit"], first)
 	equal(t, "candidate_upstream_commit", up["candidate_upstream_commit"], second)
 	equal(t, "files", files(up), "modified SKILL.md")

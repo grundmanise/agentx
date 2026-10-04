@@ -236,13 +236,13 @@ func TestServeReconcilesAtStart(t *testing.T) {
 	equal(t, "the reconcile events", strings.Join(got, "\n"), strings.Join([]string{
 		"alpha managed restored",
 		"beta managed modified",
-		"busy fork worktree missing " + busy,
-		"far fork installable",
+		"busy managed worktree missing " + busy,
+		"far managed installable",
 		"gamma managed installable",
-		"gone fork repaired",
-		"kept fork restored",
+		"gone managed repaired",
+		"kept managed restored",
 		"mine unmanaged unmanaged",
-		"orphan fork adopt candidate " + orphan,
+		"orphan managed adopt candidate " + orphan,
 	}, "\n"))
 	equal(t, "exit", p.close(), 0)
 

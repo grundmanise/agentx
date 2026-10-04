@@ -726,7 +726,7 @@ func (inv *invocation) judgePending(ctx context.Context, gitDir string, u *updat
 		if err != nil {
 			return failureOf(accountRepoFailure(err))
 		}
-		u.merged.conflicted, u.conflict = true, conflictOfSkill(u.name, lineage.KindManaged, u.merge, files)
+		u.merged.conflicted, u.conflict = true, conflictOfSkill(u.name, u.merge, files)
 		return nil
 	}
 	if s.base != u.rec.Commit {
@@ -845,7 +845,7 @@ func (r *updateRun) merge(ctx context.Context, u *updating) *failure {
 			if err != nil {
 				return failureOf(accountRepoFailure(err))
 			}
-			u.conflict = conflictOfSkill(u.name, lineage.KindManaged, u.merge, files)
+			u.conflict = conflictOfSkill(u.name, u.merge, files)
 			return nil
 		}
 	}

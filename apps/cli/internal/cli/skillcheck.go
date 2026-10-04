@@ -43,8 +43,10 @@ func newSkillCheckUpdatesCommand(inv *invocation) *cobra.Command {
 	}
 }
 
-// updateAvailableEvent is one managed skill or fork whose source holds a
-// newer version than its base version: where it came from, the version it
+// updateAvailableEvent is one managed skill whose source, or for a forked
+// skill whose upstream, holds a newer version than its base version, or
+// whose branch another machine published to the account remote: where it
+// is published to and where it came from, the version it
 // is at, a fork's being the last import merged into it, the version the
 // check pinned as its candidate and every file that version changes, each
 // path relative to the skill's directory. The serve child emits the same
@@ -54,8 +56,10 @@ type updateAvailableEvent struct {
 	InstanceID              string        `json:"instance_id,omitempty"` // serve only
 	Name                    string        `json:"name"`
 	Kind                    string        `json:"kind"`
-	Source                  string        `json:"source"`
-	Subpath                 string        `json:"subpath"`
+	Source                  string        `json:"source,omitempty"`           // where the skill is published to
+	Subpath                 *string       `json:"subpath,omitempty"`          // the directory there, for a skill of a shared source
+	Upstream                string        `json:"upstream,omitempty"`         // where a forked skill came from, which the update comes from
+	UpstreamSubpath         *string       `json:"upstream_subpath,omitempty"` // the directory there
 	BaseHash                string        `json:"base_hash"`
 	UpstreamCommit          string        `json:"upstream_commit"`
 	Candidate               string        `json:"candidate"`
@@ -477,7 +481,8 @@ func (inv *invocation) checkUpdates(ctx context.Context, serving bool) (checkRep
 	}
 	sort.Slice(announced, func(i, j int) bool { return announced[i].Name < announced[j].Name })
 	sort.Slice(rep.removed, func(i, j int) bool { return rep.removed[i].name < rep.removed[j].name })
-	if rep.updates, err = inv.describeCandidates(ctx, gitDir, announced); err != nil {
+	account, _ := accountEntry(s)
+	if rep.updates, err = inv.describeCandidates(ctx, gitDir, account.URL, announced); err != nil {
 		return rep, err
 	}
 	for _, ev := range rep.updates {
@@ -636,7 +641,7 @@ func (inv *invocation) checkAccount(ctx context.Context, gitDir string, ac *acco
 	}
 	for i, p := range behind {
 		ev := updateAvailableEvent{
-			event: newEvent("update_available"), Name: p.rec.Name, Kind: p.rec.Kind, Source: url,
+			event: newEvent("update_available"), Name: p.rec.Name, Kind: eventKind(p.rec.Kind), Source: url,
 			Candidate: p.tip, Files: []changedFile{}, local: p.rec.Commit,
 		}
 		for _, f := range changes[trees[2*i]+" "+trees[2*i+1]] {
@@ -1014,7 +1019,7 @@ func (inv *invocation) recordCheck(ctx context.Context, gitDir string, wait bool
 // candidate's, and one cat-file of every candidate's SKILL.md, whose name
 // is the one an install of that version would take, and of a fork's base
 // version's.
-func (inv *invocation) describeCandidates(ctx context.Context, gitDir string, recs []lineage.Record) ([]updateAvailableEvent, error) {
+func (inv *invocation) describeCandidates(ctx context.Context, gitDir, account string, recs []lineage.Record) ([]updateAvailableEvent, error) {
 	if len(recs) == 0 {
 		return nil, nil
 	}
@@ -1058,10 +1063,10 @@ func (inv *invocation) describeCandidates(ctx context.Context, gitDir string, re
 	for i, rec := range recs {
 		c := rec.Candidate
 		ev := updateAvailableEvent{
-			event: newEvent("update_available"), Name: rec.Name, Kind: rec.Kind,
-			Source: rec.Import.Source, Subpath: rec.Import.Path, BaseHash: rec.Import.Hash, UpstreamCommit: rec.Import.Commit,
+			event: newEvent("update_available"), Name: rec.Name, BaseHash: rec.Import.Hash, UpstreamCommit: rec.Import.Commit,
 			Candidate: c.Commit, CandidateHash: c.Import.Hash, CandidateUpstreamCommit: c.Import.Commit, Files: []changedFile{},
 		}
+		ev.Kind, ev.Source, ev.Subpath, ev.Upstream, ev.UpstreamSubpath = skillOrigin(rec, account)
 		prefix := rec.Import.Dir() + "/"
 		for _, f := range changes[rec.Tree+" "+c.Tree] {
 			f.Path = strings.TrimPrefix(f.Path, prefix)

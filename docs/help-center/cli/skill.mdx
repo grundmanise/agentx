@@ -166,13 +166,13 @@ agentx skill list --remote
 1 skill
   pdf  managed  current  https://github.com/anthropics/skills/skills/pdf  4 placements
 2 installable skills on the account remote
-  release-notes  fork  installable  https://github.com/acme/skills/release-notes
-  standup        fork  installable  (none)
+  release-notes  managed  installable  ssh://git@github.com/you/forks
+  standup        managed  installable  ssh://git@github.com/you/forks
 Install one with agentx skill add --name <name>, or all of them with agentx skill add --all.
 ```
 
 - `--remote` fetches the remote first. A remote Git cannot reach stops with exit code 3.
-- Each row names the upstream the skill's own commits record, or `(none)` for a skill you created with `agentx skill new`.
+- Each row names your account remote, where the skill is published to. With `--json`, `upstream` names where a skill you forked came from; a skill you created with `agentx skill new` has none.
 - A branch on the remote that agentx cannot install is left out with a warning: one whose name is not a valid skill name, or whose history records no fork id.
 - The old name of a skill you [renamed](/cli/fork#rename-a-fork) is not listed on a machine that holds the renamed skill, while the remote still holds it.
 
@@ -398,10 +398,9 @@ agentx skill list
   pdf    managed    current                   https://github.com/anthropics/skills/skills/pdf  4 placements
 ```
 
-Each row shows the skill, what agentx knows about it, how it stands against the version it was installed at, where it came from and how many placements it has, one per client that sees it.
+Each row shows the skill, what agentx knows about it, how it stands against the version it was installed at, where it is published to and how many placements it has, one per client that sees it.
 
-- `managed`: installed by agentx, with an upstream and a version it can compare against.
-- `fork`: a skill with a history of its own in the account repo, such as one you created with [`agentx skill new`](/cli/fork#create-a-skill) or forked with [`agentx skill fork`](/cli/fork#fork-a-skill). A skill you created has no upstream.
+- `managed`: a skill agentx keeps. Either installed from a source, which is where it is published and where its updates come from, with a version it can compare against; or one of your own, which you created with [`agentx skill new`](/cli/fork#create-a-skill), forked with [`agentx skill fork`](/cli/fork#fork-a-skill) or installed from your account remote, with a history of its own in the account repo. Your own skills are published to your [account remote](/cli/source#add-your-account-remote), and a skill you forked also records where it came from, its upstream, which its updates come from.
 - `unmanaged`: a directory in the library agentx did not install. It is inventoried and otherwise left alone.
 - `current` or `modified`: whether the directory still holds the version it was installed at, or for a fork whether it holds what you last published to your account remote, as agentx last fetched it: a fork stays `modified` until you [publish its edits](#publish-a-skill), including edits an update or a fork recorded on it. A fork you never published is `current` until you edit or update it. Every change counts, whatever tool made it: a file you edited, added or deleted, but also a file made executable, a file replaced by a symlink and a symlink added. Files git ignores do not count: see [Files that do not count](#files-that-do-not-count). See what changed with [`agentx skill diff`](#see-what-you-changed).
 - `displaced`: a client that should see the skill through a link from its own skills directory has a real directory there instead, which is what an installer that copies over links leaves. For a client you placed a copy in, it is the other way round: a link to the library where the copy should be. Put it back with [`agentx skill place <name>`](#put-back-placements).

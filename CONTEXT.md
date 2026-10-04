@@ -36,11 +36,11 @@ _Avoid_: device id, installation id
 ### Identity
 
 **Logical asset**:
-The fleet-wide identity of a skill or MCP server. For a managed skill its upstream: source and subpath. For a fork or greenfield skill its fork id. For an unmanaged skill its content. For a server its address or package. Copies on any machine, in any version, share one logical asset, and a rename changes nothing.
+The fleet-wide identity of a skill or MCP server. For a skill of a shared source its source and subpath. For one of the user's own skills its fork id, wherever it came from. For an unmanaged skill its content. For a server its address or package. Copies on any machine, in any version, share one logical asset, and a rename changes nothing.
 _Avoid_: skill id, key
 
 **Fork id**:
-The permanent identity assigned when a fork or greenfield skill is created, carried by the commit that creates it, which is never amended. Installing that published fork elsewhere preserves it, and so does renaming it; independently creating another fork assigns a different identity, even from the same upstream version.
+The permanent identity assigned when one of the user's own skills is created, by `agentx skill new` or `agentx skill fork`, carried by the commit that creates it, which is never amended. Installing that published skill elsewhere preserves it, and so does renaming it; independently creating another skill assigns a different identity, even from the same upstream version.
 
 **Physical asset**:
 One logical asset on one machine in one version, the version being the content hash for a skill and the tool signature for a server. The unit drift is evaluated on and machine views count.
@@ -54,7 +54,7 @@ The complete result of one scan of one machine. Replaced whole on every rescan, 
 ### Skill lifecycle
 
 **Source**:
-A git repository added by URL, with an access. The account remote is a source. A third-party repo is a source. Stored by its canonical URL, never with an embedded user or token.
+A git repository added by URL, with an access. The account remote is a source. A third-party repo is a source. Stored by its canonical URL, never with an embedded user or token. A managed skill's source is where it is published to: the shared source it was installed from, or the account remote for the user's own skills, which have none until an account remote is set.
 _Avoid_: registry, marketplace, catalog, remote
 
 **Shared source**:
@@ -73,11 +73,15 @@ _Avoid_: permission, write rights, writable flag
 The branch a source's `HEAD` named when it was last looked at. Shown, never followed: an unpinned source follows whatever `HEAD` names at each fetch.
 
 **Upstream**:
-The specific place a skill was installed or forked from: a source, a subpath inside it, and the version last taken. A published fork is an upstream for every other machine.
+Where a forked skill came from, which its later versions come from: a source, a subpath inside it, and the version last taken. Only a skill made by `agentx skill fork` of a skill of a shared source, or of a forked skill that has an upstream, has one; its source is the account remote. A skill of a shared source has no upstream: its newer versions come from its source.
 _Avoid_: origin, parent, remote
 
+**Kind**:
+Whether agentx keeps a skill: managed or unmanaged, and nothing else. Where a managed skill is published to is its source, and where a forked one came from its upstream, neither of them a kind.
+_Avoid_: fork, from-scratch skill, account skill (as kinds)
+
 **Managed skill**:
-A skill whose upstream and base version agentx knows, so it can be updated. Its base version is the import commit on its import branch.
+A skill agentx keeps a branch of in the account repo, so it knows its source and can update it. Either a skill of a shared source, installed with `agentx skill add <source>`, whose base version is the import commit on its import branch; or one of the user's own skills, made with `agentx skill new` or `agentx skill fork` or installed from the account remote, whose source is the account remote and whose branch holds its history.
 
 **Upstream-removed skill**:
 A managed skill whose subpath no longer holds a skill in its source, as the last update check found it: no directory there, or one without a SKILL.md. Kept as it is, never updated, shown with this state until a check finds it in the source again.
@@ -91,15 +95,11 @@ _Avoid_: orphaned, detached
 A skill found on disk whose upstream agentx cannot determine. Inventoried, never updated.
 
 **Fork**:
-A skill derived from an upstream skill and edited by the user, keeping the upstream name unless renamed. A fork supersedes the skill it was forked from in the agent configuration; a fork under a new name sits beside the skill it came from instead. Managed, unmanaged and plugin-owned skills and forks can all be forked with `agentx skill fork`. Renaming one with `agentx skill rename` keeps its fork id and history under the new name on this machine; its next publish creates the new name's branch on the account remote and deletes the old one's when the renamed skill holds all of it. Its lineage record keeps the third-party upstream so later upstream versions can be merged in. Lives in the account repo; its edits stay on this machine until it is published; a publish, or an update, fork or rename of it, records them on its branch, and only a publish pushes them.
+An action, not a kind: `agentx skill fork` makes one of the user's own skills from another skill, a managed skill whose source is the account remote and whose upstream is where it came from, keeping that skill's name unless given another. In the account repo and in this glossary, fork also names the branch and worktree that hold any of the user's own skills, one made with `agentx skill new` included. A fork supersedes the skill it was forked from in the agent configuration; a fork under a new name sits beside the skill it came from instead. Managed, unmanaged and plugin-owned skills and forks can all be forked with `agentx skill fork`. Renaming one with `agentx skill rename` keeps its fork id and history under the new name on this machine; its next publish creates the new name's branch on the account remote and deletes the old one's when the renamed skill holds all of it. Its lineage record keeps the third-party upstream so later upstream versions can be merged in. Lives in the account repo; its edits stay on this machine until it is published; a publish, or an update, fork or rename of it, records them on its branch, and only a publish pushes them.
 _Avoid_: copy, variant, override
 
-**Greenfield skill**:
-A skill created from scratch in agentx with no upstream, with `agentx skill new`. Behaves as a fork with nothing to merge from, and is listed with kind `fork`.
-_Avoid_: custom skill, new skill
-
 **Account repo**:
-The one git repository per account that holds every fork and greenfield skill as one branch per skill, every managed skill's base version as an import branch, and the last fetched state of each source. Each machine has its own clone in agentx home and checks out only the forks placed on it, one worktree per fork; import branches have no worktree; a machine without an account has the clone before the remote exists. Shared upstream versions establish lineage, separately from each fork's identity.
+The one git repository per account that holds every one of the user's own skills as one branch per skill, every managed skill's base version as an import branch, and the last fetched state of each source. Each machine has its own clone in agentx home and checks out only the forks placed on it, one worktree per fork; import branches have no worktree; a machine without an account has the clone before the remote exists. Shared upstream versions establish lineage, separately from each fork's identity.
 _Avoid_: cloud repo, library repo, fork repo
 
 **Import commit**:
@@ -119,7 +119,7 @@ The source whose settings entry carries the account flag, added with `agentx sou
 _Avoid_: cloud, server, origin, fork source
 
 **Publish**:
-An explicit user action, `agentx skill publish`, that records the edits of one of the user's own skills, a fork or a greenfield skill, as one commit on its branch in the account repo, then pushes the branch to the account remote. There is no separate commit step: edits stay on this machine until they are published. It never merges: when another machine published there first, it records and pushes nothing, and the update's account step takes that in before the next publish. Another machine with the same remote installs it from there, and takes later versions in with an update, a plain Git merge.
+An explicit user action, `agentx skill publish`, that records the edits of one of the user's own skills as one commit on its branch in the account repo, then pushes the branch to its source, the account remote. There is no separate commit step: edits stay on this machine until they are published. It never merges: when another machine published there first, it records and pushes nothing, and the update's account step takes that in before the next publish. Another machine with the same remote installs it from there, and takes later versions in with an update, a plain Git merge.
 _Avoid_: sync, share, upload
 
 **Installable skill**:
@@ -147,7 +147,7 @@ A managed skill whose on-disk content differs from its base version, or a fork h
 _Avoid_: dirty, drifted, changed
 
 **Lineage record**:
-What ties a fork, greenfield or managed skill to its upstream, meaning a source, a subpath and a version, and to its base. Read from the account repo: the lineage trailers on a fork's branch or on a managed skill's import branch. There is no separate copy.
+What ties a managed skill to its source or, for a forked one, its upstream, meaning a source, a subpath and a version, and to its base. Read from the account repo: the lineage trailers on a fork's branch or on a managed skill's import branch. There is no separate copy.
 _Avoid_: metadata
 
 **Lineage trailers**:

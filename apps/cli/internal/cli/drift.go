@@ -429,10 +429,12 @@ func newSkillContext(ctx context.Context, inv *invocation, records map[string]li
 	if err != nil {
 		inv.out.debugf("cannot read the pending merges: %v", err)
 	}
+	account, _ := accountEntry(s)
 	return skillContext{
 		records:   records,
 		modes:     modes,
 		sources:   sourceURLs(s),
+		account:   account.URL,
 		disabled:  s.DisabledConfigurations,
 		targets:   inv.detectedTargets(),
 		merges:    merges,

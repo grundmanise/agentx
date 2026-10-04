@@ -234,7 +234,7 @@ func (inv *invocation) judgePull(ctx context.Context, gitDir string, rec lineage
 		if err != nil {
 			return "", nil, failureOf(accountRepoFailure(err))
 		}
-		u.conflict, fork.start = conflictOfSkill(name, lineage.KindFork, u.merge, files), true
+		u.conflict, fork.start = conflictOfSkill(name, u.merge, files), true
 		return pullConflict, u, nil
 	}
 	// The base the merge records is the fork's own or the remote's, which

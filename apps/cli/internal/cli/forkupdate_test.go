@@ -141,7 +141,7 @@ func TestSkillUpdateMergesUpstreamIntoAFork(t *testing.T) {
 // changes; other, a fork of alpha under a new name, has its name written
 // into SKILL.md, the line next to the description the update changes,
 // which conflicts as any adjacent edit does in git. The update leaves
-// alpha's merge pending, exit 4, with a conflict of kind fork: the
+// alpha's merge pending, exit 4, with a conflict of kind managed: the
 // fork's worktree and branch are untouched, and its checkout holds the
 // merge in progress, with conflict markers one longer than the literal
 // marker line of notes.md, which stays as it is, and the merge's base,
@@ -175,7 +175,7 @@ func TestSkillUpdateOfAForkConflicts(t *testing.T) {
 	equal(t, "message", e["message"], "alpha conflicts with its update in 1 file, so the merge is pending and the fork's worktree and branch were left as they are")
 	equal(t, "hint", e["hint"], conflictHint(h, "alpha", "alpha"))
 	ev := h.one(out.stdout, "conflict")
-	equal(t, "kind", ev["kind"], lineage.KindFork)
+	equal(t, "kind", ev["kind"], lineage.KindManaged)
 	equal(t, "base", ev["base"], base)
 	equal(t, "mine", ev["mine"], tip)
 	equal(t, "theirs", ev["theirs"], candidate)

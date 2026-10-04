@@ -24,7 +24,7 @@ The skill starts from a template: a `SKILL.md` with the name and the description
 
 agentx places the skill in every enabled client, as [`agentx skill add`](/cli/skill#install-a-skill) places a skill it installs. Clients that read the library directly, such as Codex and Gemini CLI, see it there and get no link of their own.
 
-`agentx skill list` shows the skill as a `fork` with no upstream. With `--json`, its `fork_id` is the skill's permanent id: it never changes, and two skills created separately never share one, even under the same name on two machines.
+`agentx skill list` shows the skill as `managed`, with no upstream. Its source is your [account remote](/cli/source#add-your-account-remote), or `(none)` until you add one with `agentx source add <url> --account`. With `--json`, its `fork_id` is the skill's permanent id: it never changes, and two skills created separately never share one, even under the same name on two machines.
 
 ### Choose a name
 

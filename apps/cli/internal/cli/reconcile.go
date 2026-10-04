@@ -56,7 +56,7 @@ const (
 type reconcileEvent struct {
 	event
 	Name    string `json:"name"`
-	Kind    string `json:"kind"`
+	Kind    string `json:"kind"` // managed or unmanaged, see eventKind
 	Outcome string `json:"outcome"`
 	Path    string `json:"path,omitempty"` // what is in the way of an adopt candidate, the worktree of one whose worktree is missing
 }
@@ -440,7 +440,7 @@ func (inv *invocation) reconcile(ctx context.Context) ([]reconcileEvent, error) 
 		switch {
 		case held && rec.Kind == lineage.KindFork:
 			f, v := inv.reconcileFork(ctx, gitDir, rec)
-			ev.Kind, ev.Outcome, ev.Path = lineage.KindFork, v.outcome, verdictPath(f, v)
+			ev.Kind, ev.Outcome, ev.Path = lineage.KindManaged, v.outcome, verdictPath(f, v)
 			if v.outcome == outcomeRestored && repointed[name] {
 				ev.Outcome = outcomeRepaired
 			}
@@ -458,7 +458,7 @@ func (inv *invocation) reconcile(ctx context.Context) ([]reconcileEvent, error) 
 				ev.Outcome = outcomeRestored
 			}
 		case remote[name] && !inLibrary:
-			ev.Kind, ev.Outcome = lineage.KindFork, outcomeInstallable
+			ev.Kind, ev.Outcome = lineage.KindManaged, outcomeInstallable
 		default:
 			ev.Kind, ev.Outcome = lineage.KindUnmanaged, outcomeUnmanaged
 		}

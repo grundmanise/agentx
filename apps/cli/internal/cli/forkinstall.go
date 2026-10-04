@@ -29,26 +29,30 @@ import (
 // for the branch and its skill directory laid out from the commit, as a
 // fork put back by skill place is.
 
-// installableForkEvent is one fork the account remote holds that this
-// machine has no branch of, as skill list --remote lists it.
-type installableForkEvent struct {
+// installableSkillEvent is one of your own skills the account remote holds
+// that this machine has no branch of, as skill list --remote lists it. Its
+// source is the account remote; its upstream, a forked skill's, is where
+// it came from.
+type installableSkillEvent struct {
 	event
-	Name           string  `json:"name"`
-	ForkID         string  `json:"fork_id"`          // the fork's permanent id; a branch whose history records none is not listed
-	Commit         string  `json:"commit"`           // the remote tip
-	Source         string  `json:"source,omitempty"` // the canonical URL of the upstream, for a fork with a base version
-	Subpath        *string `json:"subpath,omitempty"`
-	UpstreamCommit string  `json:"upstream_commit,omitempty"`
-	BaseHash       string  `json:"base_hash,omitempty"`
+	Name            string  `json:"name"`
+	ForkID          string  `json:"fork_id"`            // the skill's permanent id; a branch whose history records none is not listed
+	Commit          string  `json:"commit"`             // the remote tip
+	Source          string  `json:"source"`             // the canonical URL of the account remote
+	Upstream        string  `json:"upstream,omitempty"` // the canonical URL a forked skill came from
+	UpstreamSubpath *string `json:"upstream_subpath,omitempty"`
+	UpstreamCommit  string  `json:"upstream_commit,omitempty"`
+	BaseHash        string  `json:"base_hash,omitempty"`
 }
 
-// installRemoteRow is what the human listing says of an installable fork,
-// in the state column the library's rows use.
+// installRemoteRow is what the human listing says, in the state column the
+// library's rows use, of one of your own skills it can install from the
+// account remote.
 const installRemoteRow = "installable"
 
-// installableForks reads the forks the account remote, the git remote
-// called remote, holds that records, the account repo's branches, hold no
-// fork branch of, sorted by name, with the provenance of each read by one
+// installableSkills reads your own skills that the account remote, the
+// settings entry account, holds and records, the account repo's branches,
+// hold no branch of, sorted by name, with the provenance of each read by one
 // walk of their remote tips. A branch whose name agentx would never give
 // a fork, or whose history records no fork id, is left out, with a
 // warning each: installing the one could not create the local branch, and
@@ -56,7 +60,8 @@ const installRemoteRow = "installable"
 // that the two branches are one fork. A branch that is a skill this
 // machine holds under another name, see heldUnderAnotherName, is left out
 // silently: it is the old name of a skill renamed here.
-func (inv *invocation) installableForks(ctx context.Context, gitDir, remote string, records map[string]lineage.Record) ([]installableForkEvent, []string, error) {
+func (inv *invocation) installableSkills(ctx context.Context, gitDir string, account home.Source, records map[string]lineage.Record) ([]installableSkillEvent, []string, error) {
+	remote := source.RemoteName(source.ID(account.URL))
 	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, remote)
 	if err != nil {
 		return nil, nil, accountRepoFailure(err)
@@ -102,13 +107,13 @@ func (inv *invocation) installableForks(ctx context.Context, gitDir, remote stri
 	}
 	sort.Strings(names)
 	sort.Strings(warnings)
-	events := make([]installableForkEvent, 0, len(names))
+	events := make([]installableSkillEvent, 0, len(names))
 	for _, name := range names {
 		l := walked[tips[name]]
-		ev := installableForkEvent{event: newEvent("installable_fork"), Name: name, ForkID: l.ID, Commit: tips[name]}
-		if l.Base != "" && l.Problem == "" {
-			subpath := l.Import.Path
-			ev.Source, ev.Subpath, ev.UpstreamCommit, ev.BaseHash = l.Import.Source, &subpath, l.Import.Commit, l.Import.Hash
+		ev := installableSkillEvent{event: newEvent("installable_skill"), Name: name, ForkID: l.ID, Commit: tips[name]}
+		_, ev.Source, _, ev.Upstream, ev.UpstreamSubpath = skillOrigin(lineage.Record{Kind: lineage.KindFork, Fork: &l}, account.URL)
+		if l.Base != "" {
+			ev.UpstreamCommit, ev.BaseHash = l.Import.Commit, l.Import.Hash
 		}
 		events = append(events, ev)
 	}
@@ -133,19 +138,12 @@ func heldUnderAnotherName(local map[string][]string, id, tip string, ancestor fu
 	return false
 }
 
-// installableRow is one line of the human listing for a fork the account
-// remote holds and this machine does not: its name, the kind and state it
-// is listed with, and where it came from.
-func installableRow(out *writer, ev installableForkEvent) []cell {
-	upstream := c("(none)", muted)
-	if ev.Source != "" {
-		where := ev.Source
-		if ev.Subpath != nil && *ev.Subpath != "" {
-			where += "/" + *ev.Subpath
-		}
-		upstream = c(sanitised(where), plain)
-	}
-	return []cell{c("  "+sanitised(ev.Name), heading), c(lineage.KindFork, muted), c(installRemoteRow, infoStyle), upstream}
+// installableRow is one line of the human listing for one of your own
+// skills the account remote holds and this machine does not: its name, the
+// kind and state it is listed with, and where it is published to, the
+// account remote.
+func installableRow(out *writer, ev installableSkillEvent) []cell {
+	return []cell{c("  "+sanitised(ev.Name), heading), c(lineage.KindManaged, muted), c(installRemoteRow, infoStyle), whereCell(ev.Source, nil)}
 }
 
 // accountAddCommand is the command line that installs the skill called
@@ -256,7 +254,7 @@ func (inv *invocation) addFromAccount(ctx context.Context, sel selection, to []s
 		return accountRepoFailure(err)
 	}
 	if sel.all {
-		if names, err = inv.everyAccountSkillBut(ctx, gitDir, remote, sel.except); err != nil || len(names) == 0 {
+		if names, err = inv.everyAccountSkillBut(ctx, gitDir, entry, sel.except); err != nil || len(names) == 0 {
 			return err
 		}
 	}
@@ -296,12 +294,12 @@ func (inv *invocation) addFromAccount(ctx context.Context, sel selection, to []s
 // refused, exit code 5, even when the account remote holds nothing to
 // install; otherwise such an account remote says so and installs nothing,
 // which is no failure, and an --except that leaves nothing is exit code 1.
-func (inv *invocation) everyAccountSkillBut(ctx context.Context, gitDir, remote string, except []string) ([]string, error) {
+func (inv *invocation) everyAccountSkillBut(ctx context.Context, gitDir string, account home.Source, except []string) ([]string, error) {
 	records, err := inv.forkRecords(ctx, gitDir)
 	if err != nil {
 		return nil, err
 	}
-	installable, warnings, err := inv.installableForks(ctx, gitDir, remote, records)
+	installable, warnings, err := inv.installableSkills(ctx, gitDir, account, records)
 	if err != nil {
 		return nil, err
 	}
@@ -310,7 +308,7 @@ func (inv *invocation) everyAccountSkillBut(ctx context.Context, gitDir, remote 
 	}
 	var unknown []string
 	for _, name := range except {
-		if !containsString(unknown, name) && !slices.ContainsFunc(installable, func(ev installableForkEvent) bool { return ev.Name == name }) {
+		if !containsString(unknown, name) && !slices.ContainsFunc(installable, func(ev installableSkillEvent) bool { return ev.Name == name }) {
 			unknown = append(unknown, name)
 		}
 	}

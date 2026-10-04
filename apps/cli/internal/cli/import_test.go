@@ -238,6 +238,27 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 		t.Fatalf("the sound document is refused: %v", err)
 	}
 	edited := func(change func(map[string]any)) string { return editedSound(t, change) }
+	// ownSkill turns the record into one of your own skills, a fork of
+	// alpha, with no account remote set: no source, and the upstream fields
+	// in place of the source's.
+	ownSkill := func(record map[string]any) {
+		delete(record, "source")
+		delete(record, "subpath")
+		record["upstream"] = "https://github.com/example/skills"
+		record["upstream_subpath"] = "skills/alpha"
+	}
+	ownWith := func(key string, value any) string {
+		return edited(func(doc map[string]any) {
+			record := doc["skills"].([]any)[0].(map[string]any)
+			ownSkill(record)
+			if key != "" {
+				record[key] = value
+			}
+		})
+	}
+	if _, err := readExport(write("sound fork", ownWith("", nil))); err != nil {
+		t.Fatalf("the sound document of a forked skill is refused: %v", err)
+	}
 	settingsWith := func(key string, value any) string {
 		return edited(func(doc map[string]any) { doc["settings"].(map[string]any)[key] = value })
 	}
@@ -257,9 +278,14 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 		{"a settings field agentx does not know", settingsWith("secrets", "x"), "not an agentx export"},
 		{"the retired auto_push setting", settingsWith("auto_push", true), "auto_push is no longer a setting"},
 		{"a label of two lines", settingsWith("label", "one\ntwo"), "one non-empty line"},
-		{"a record of another kind", recordWith("kind", "greenfield"), "neither managed nor fork"},
+		{"a record of another kind", recordWith("kind", "unmanaged"), "the kind of alpha is not managed"},
+		{"one of your own skills with a subpath", edited(func(doc map[string]any) {
+			delete(doc["skills"].([]any)[0].(map[string]any), "source")
+		}), "which have no subpath"},
+		{"a record of a shared source with an upstream", recordWith("upstream", "https://github.com/example/other"), "only your own skills have"},
 		{"a record with no commit", recordWith("commit", "HEAD"), "does not name the commit"},
 		{"a record with a bad hash", recordWith("base_hash", "nonsense"), "one upstream version"},
+		{"one of your own skills with a bad hash", ownWith("base_hash", "nonsense"), "one upstream version"},
 		{"a record that walks out", recordWith("name", "../evil"), "not a name the library and a branch can both hold"},
 		{"a record named for a nested branch", recordWith("name", "nested/deeper"), "not a name the library and a branch can both hold"},
 		{"a record given twice", edited(func(doc map[string]any) {
@@ -377,9 +403,11 @@ func TestImportRefusesADocumentItCannotRead(t *testing.T) {
 		{"settings agentx would not write", editedSound(t, func(doc map[string]any) {
 			doc["settings"].(map[string]any)["sources"] = []any{map[string]any{"url": "https://user:" + importToken + "@github.com/example/skills"}}
 		}), "must be stored as the canonical URL of a source alone"},
+		// A record of kind fork is no record agentx writes, so it is
+		// refused as any other kind but managed is.
 		{"a record agentx cannot read", editedSound(t, func(doc map[string]any) {
-			doc["skills"].([]any)[0].(map[string]any)["commit"] = "HEAD"
-		}), "does not name the commit"},
+			doc["skills"].([]any)[0].(map[string]any)["kind"] = lineage.KindFork
+		}), "the kind of alpha is not managed"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			file := to.exportPath(strings.ReplaceAll(tc.name, " ", "-") + ".json")
@@ -443,7 +471,6 @@ func TestImportListsWhatTheAccountRepoHas(t *testing.T) {
 	equal(t, "alpha", states["alpha"]["state"], "present")
 	equal(t, "beta", states["beta"]["state"], "different")
 	equal(t, "gamma", states["gamma"]["state"], "missing")
-	equal(t, "beta's local kind", states["beta"]["local_kind"], "managed")
 	equal(t, "beta's local commit", states["beta"]["local_commit"], alpha)
 	if _, ok := states["gamma"]["local_commit"]; ok {
 		t.Error("a missing skill carries a local commit")
@@ -457,31 +484,42 @@ func TestImportListsWhatTheAccountRepoHas(t *testing.T) {
 	contains(t, "stdout", text.stdout, "  gamma  managed  missing")
 }
 
-// TestRestoreStates: a branch of the name decides the state whatever the
-// account remote holds, and the remote's branch stands in only for a fork
-// the account repo holds no branch of, never for a managed skill.
+// TestRestoreStates: a record is looked up in the namespace it belongs in,
+// your own skills, with the account remote or no source at all, under
+// skills/, and a shared source's under managed/. A branch of the name
+// decides the state whatever the account remote holds, and the remote's
+// branch stands in only for one of your own skills the account repo holds
+// no branch of, never for a shared source's.
 func TestRestoreStates(t *testing.T) {
 	t.Parallel()
+	const account, shared = "https://github.com/me/skills", "https://github.com/example/skills"
 	fork := func(commit string) lineage.Record { return lineage.Record{Kind: lineage.KindFork, Commit: commit} }
+	managed := func(commit string) lineage.Record { return lineage.Record{Kind: lineage.KindManaged, Commit: commit} }
 	cases := []struct {
 		name    string
-		kind    string
+		source  string
+		account string
 		records map[string]lineage.Record
 		remote  map[string]string
 		want    string
 		local   string
 	}{
-		{"local branch only", lineage.KindFork, map[string]lineage.Record{"notes": fork("c1")}, nil, restorePresent, "c1"},
-		{"remote branch at its commit", lineage.KindFork, nil, map[string]string{"notes": "c1"}, restorePresent, "c1"},
-		{"remote branch at another commit", lineage.KindFork, nil, map[string]string{"notes": "c2"}, restoreDifferent, "c2"},
-		{"the local branch decides", lineage.KindFork, map[string]lineage.Record{"notes": fork("c2")}, map[string]string{"notes": "c1"}, restoreDifferent, "c2"},
-		{"a managed record is not matched against the remote", lineage.KindManaged, nil, map[string]string{"notes": "c1"}, restoreMissing, ""},
-		{"neither", lineage.KindFork, nil, nil, restoreMissing, ""},
+		{"own, local branch only", account, account, map[string]lineage.Record{"notes": fork("c1")}, nil, restorePresent, "c1"},
+		{"own with no source", "", "", map[string]lineage.Record{"notes": fork("c1")}, nil, restorePresent, "c1"},
+		{"own, remote branch at its commit", account, account, nil, map[string]string{"notes": "c1"}, restorePresent, "c1"},
+		{"own, remote branch at another commit", account, account, nil, map[string]string{"notes": "c2"}, restoreDifferent, "c2"},
+		{"own, the local branch decides", account, account, map[string]lineage.Record{"notes": fork("c2")}, map[string]string{"notes": "c1"}, restoreDifferent, "c2"},
+		{"own, held as a shared source's", account, account, map[string]lineage.Record{"notes": managed("c1")}, nil, restoreDifferent, "c1"},
+		{"shared, its import branch", shared, account, map[string]lineage.Record{"notes": managed("c1")}, nil, restorePresent, "c1"},
+		{"shared, held as one of your own", shared, account, map[string]lineage.Record{"notes": fork("c1")}, nil, restoreDifferent, "c1"},
+		{"shared, not matched against the remote", shared, account, nil, map[string]string{"notes": "c1"}, restoreMissing, ""},
+		{"the account remote's URL with no account remote set", account, "", nil, map[string]string{"notes": "c1"}, restoreMissing, ""},
+		{"neither", account, account, nil, nil, restoreMissing, ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			got := restoreStates([]exportSkill{{Name: "notes", Kind: c.kind, Commit: "c1"}}, c.records, c.remote)
+			got := restoreStates([]exportSkill{{Name: "notes", Kind: lineage.KindManaged, Commit: "c1", Source: c.source}}, c.records, c.remote, c.account)
 			equal(t, "state", got[0].State, c.want)
 			equal(t, "local commit", got[0].LocalCommit, c.local)
 		})

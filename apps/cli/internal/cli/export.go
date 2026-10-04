@@ -56,24 +56,31 @@ type exportMachine struct {
 }
 
 // exportSkill is one lineage record: what the account repo's branch says
-// about one skill. Source, Subpath, UpstreamCommit and BaseHash are the
-// four lineage trailers of the version the branch records, absent together
-// when the branch carries none, as a fork with nothing imported into it yet
-// does.
+// about one skill, in the fields a library_skill event carries it with,
+// see skillOrigin. Source and Subpath are where the skill is published
+// to: the source its import commit names for a skill of a shared source,
+// and the account remote, with no subpath, for your own skills, absent
+// while no account remote is set. Upstream and UpstreamSubpath are where
+// a forked skill came from. UpstreamCommit and BaseHash name the version
+// it is based on, the source's or the upstream's, and are absent, with the
+// upstream, for a skill with no such version, as one skill new made has
+// none.
 //
 // It carries a base hash and no content hash, which is the rule and not an
 // exception to it: content_hash is content that is on a machine now, and an
 // export is about what the account repo can restore and reads no library
 // directory at all.
 type exportSkill struct {
-	Name           string  `json:"name"`
-	Kind           string  `json:"kind"`   // managed or fork
-	Commit         string  `json:"commit"` // what the branch points at
-	Source         string  `json:"source,omitempty"`
-	Subpath        *string `json:"subpath,omitempty"` // "" for a skill at the source's root
-	UpstreamCommit string  `json:"upstream_commit,omitempty"`
-	BaseHash       string  `json:"base_hash,omitempty"`
-	Placed         bool    `json:"placed"` // whether the exporting machine had a placement of it
+	Name            string  `json:"name"`
+	Kind            string  `json:"kind"`   // managed
+	Commit          string  `json:"commit"` // what the branch points at
+	Source          string  `json:"source,omitempty"`
+	Subpath         *string `json:"subpath,omitempty"` // "" for a skill at the source's root
+	Upstream        string  `json:"upstream,omitempty"`
+	UpstreamSubpath *string `json:"upstream_subpath,omitempty"`
+	UpstreamCommit  string  `json:"upstream_commit,omitempty"`
+	BaseHash        string  `json:"base_hash,omitempty"`
+	Placed          bool    `json:"placed"` // whether the exporting machine had a placement of it
 }
 
 // exportEvent reports the document agentx export wrote. The records
@@ -195,10 +202,18 @@ func (inv *invocation) exportRecords(ctx context.Context) ([]exportSkill, error)
 				clipped(sanitised(name)) + " is not a name the library and a branch can both hold")
 			continue
 		}
-		e := exportSkill{Name: rec.Name, Kind: rec.Kind, Commit: rec.Commit, Placed: placed[name]}
+		if rec.Kind == lineage.KindManaged && !rec.HasImport {
+			// An import branch whose lineage cannot be read names no
+			// source, and a record with no source is one of your own
+			// skills to the reader, which would look for it under skills/.
+			// The document cannot say what it is, so it is left out and
+			// said out loud, as a name the library cannot hold is.
+			inv.out.warn("left " + sanitised(rec.Ref) + " out of the export: its commit names no source it was imported from")
+			continue
+		}
+		e := exportSkill{Name: rec.Name, Commit: rec.Commit, Placed: placed[name]}
+		e.Kind, e.Source, e.Subpath, e.Upstream, e.UpstreamSubpath = skillOrigin(rec, sc.account)
 		if imported, ok := exportedImport(rec); ok {
-			subpath := imported.Path
-			e.Source, e.Subpath = imported.Source, &subpath
 			e.UpstreamCommit, e.BaseHash = imported.Commit, imported.Hash
 		}
 		records = append(records, e)

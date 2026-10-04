@@ -15,8 +15,8 @@ import (
 // TestInstallAForkFromTheAccount lists on machine b, which installed
 // nothing and added no source, the skills machine a published, and
 // installs one by name, then the rest with --all. skill list --remote
-// fetches the account remote and lists alpha, beta and the greenfield
-// notes as installable, each with the fork id and the upstream its own
+// fetches the account remote and lists alpha, beta and notes, made by
+// skill new, as installable, each with the fork id and the upstream its own
 // commits record, notes with none. Two branches pushed by hand are left
 // out with a warning each: one whose name is outside the fork name
 // grammar, and zeta, whose history records no fork id, which an install
@@ -50,7 +50,7 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 
 	out := b.mustRun("--json", "skill", "list", "--remote")
 	listed := map[string]jsonEvent{}
-	for _, ev := range b.eventsOfType(out.stdout, "installable_fork") {
+	for _, ev := range b.eventsOfType(out.stdout, "installable_skill") {
 		listed[ev["name"].(string)] = ev
 	}
 	equal(t, "installable", strings.Join(slices.Sorted(maps.Keys(listed)), " "), "alpha beta notes")
@@ -59,12 +59,14 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 	alpha := listed["alpha"]
 	equal(t, "alpha's commit", alpha["commit"], tip)
 	equal(t, "alpha's fork id", alpha["fork_id"], a.listed("alpha")["fork_id"])
-	equal(t, "alpha's source", alpha["source"], s.url)
-	equal(t, "alpha's subpath", alpha["subpath"], "skills/alpha")
+	equal(t, "alpha's source", alpha["source"], "file://"+remote)
+	equal(t, "alpha's upstream", alpha["upstream"], s.url)
+	equal(t, "alpha's upstream subpath", alpha["upstream_subpath"], "skills/alpha")
 	equal(t, "alpha's upstream commit", alpha["upstream_commit"], a.listed("alpha")["upstream_commit"])
 	equal(t, "alpha's base hash", alpha["base_hash"], a.listed("alpha")["base_hash"])
-	if _, ok := listed["notes"]["source"]; ok {
-		t.Errorf("the greenfield notes is listed with a source: %v", listed["notes"])
+	equal(t, "notes' source", listed["notes"]["source"], "file://"+remote)
+	if _, ok := listed["notes"]["upstream"]; ok {
+		t.Errorf("notes, made by skill new, is listed with an upstream: %v", listed["notes"])
 	}
 	text := b.mustRun("skill", "list", "--remote").stdout
 	contains(t, "the text listing", text, "3 installable skills on the account remote")
@@ -81,10 +83,12 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 	out = b.mustRun("--json", "skill", "add", "--name", "alpha")
 	equal(t, "b's alpha", b.ref(lineage.ForkRef("alpha")), tip)
 	ev := b.librarySkill(out.stdout, "alpha")
-	equal(t, "kind", ev["kind"], lineage.KindFork)
+	equal(t, "kind", ev["kind"], lineage.KindManaged)
 	equal(t, "fork id", ev["fork_id"], alpha["fork_id"])
 	equal(t, "state", ev["state"], stateCurrent)
-	equal(t, "source", ev["source"], s.url)
+	equal(t, "source", ev["source"], "file://"+remote)
+	equal(t, "upstream", ev["upstream"], s.url)
+	equal(t, "upstream subpath", ev["upstream_subpath"], "skills/alpha")
 	equal(t, "the source it added", b.one(out.stdout, "source")["url"], s.url)
 	equal(t, "tracking", b.accountGit("config", "--get", "branch.skills/alpha.remote")+" "+b.accountGit("config", "--get", "branch.skills/alpha.merge"),
 		accountRemoteName(t, b)+" refs/heads/skills/alpha")
@@ -103,10 +107,13 @@ func TestInstallAForkFromTheAccount(t *testing.T) {
 	s.write("skills/alpha/notes.md", forkNotes("seven", "seven, upstream"))
 	s.commit("second version")
 	out = b.mustRun("--json", "skill", "check-updates")
-	equal(t, "the update b's check finds", b.updateOf(out.stdout, "alpha")["kind"], lineage.KindFork)
+	update := b.updateOf(out.stdout, "alpha")
+	equal(t, "the update b's check finds", update["kind"], lineage.KindManaged)
+	equal(t, "its source", update["source"], "file://"+remote)
+	equal(t, "its upstream", update["upstream"], s.url)
 
 	out = b.mustRun("--json", "skill", "list", "--remote")
-	equal(t, "installable once alpha is installed", len(b.eventsOfType(out.stdout, "installable_fork")), 2)
+	equal(t, "installable once alpha is installed", len(b.eventsOfType(out.stdout, "installable_skill")), 2)
 	notesLib := filepath.Join(b.library, "notes")
 	if err := os.MkdirAll(notesLib, 0o755); err != nil {
 		t.Fatal(err)
@@ -208,7 +215,7 @@ func TestFromAccountSupersedesAnUnmodifiedCopy(t *testing.T) {
 		t.Error("the install placed alpha into cursor, which it had been removed from")
 	}
 	ev := b.librarySkill(out.stdout, "alpha")
-	equal(t, "kind", ev["kind"], lineage.KindFork)
+	equal(t, "kind", ev["kind"], lineage.KindManaged)
 	equal(t, "state", ev["state"], stateCurrent)
 	contains(t, "the result", b.one(out.stdout, "result")["summary"].(string), "it replaces the managed skill wherever it was")
 	equal(t, "what is left beside the library", strings.Join(hiddenEntries(t, b.library), " "), "")
@@ -399,7 +406,7 @@ exec %GIT% "$@"
 			if target, _ := os.Readlink(filepath.Join(b.home, ".claude", "skills", "alpha")); target != filepath.Join(b.library, "alpha") {
 				t.Errorf("claude-code's placement points at %q", target)
 			}
-			equal(t, "kind", b.listed("alpha")["kind"], lineage.KindFork)
+			equal(t, "kind", b.listed("alpha")["kind"], lineage.KindManaged)
 			equal(t, "the branch's tracking", b.accountGit("config", "--get", "branch.skills/alpha.remote"), accountRemoteName(t, b))
 			for _, dir := range []string{b.library, filepath.Join(b.agentx, "worktrees")} {
 				equal(t, "what is left beside "+dir, strings.Join(hiddenEntries(t, dir), " "), "")

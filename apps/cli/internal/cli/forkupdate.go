@@ -214,7 +214,7 @@ func (inv *invocation) judgeForkUpdate(ctx context.Context, gitDir string, rec l
 		if err != nil {
 			return nil, failureOf(accountRepoFailure(err))
 		}
-		u.conflict, u.fork.start = conflictOfSkill(name, lineage.KindFork, u.merge, files), true
+		u.conflict, u.fork.start = conflictOfSkill(name, u.merge, files), true
 		return u, nil
 	}
 	commit, err := w.commit(ctx, u.merged.tree, []string{rec.Commit, next.Commit}, forkMessage{subject: subject, trailers: lineage.ForkTrailers{Base: next.Commit}})

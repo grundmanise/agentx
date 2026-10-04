@@ -697,7 +697,7 @@ func TestServeReportsForkDrift(t *testing.T) {
 		t.Helper()
 		e := p.nextOf("drift")
 		got := fmt.Sprint(e["name"], " ", e["kind"], " ", e["state"], " ", e["previous_state"], " [", words(e["drift"]), "]")
-		equal(t, what, got, "notes fork "+state+" "+previous+" []")
+		equal(t, what, got, "notes managed "+state+" "+previous+" []")
 	}
 
 	tip := h.ref(lineage.ForkRef("notes"))

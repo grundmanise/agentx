@@ -22,7 +22,7 @@ import (
 type conflictEvent struct {
 	event
 	Name   string         `json:"name"`
-	Kind   string         `json:"kind"`   // managed or fork
+	Kind   string         `json:"kind"`   // managed: every skill an update merges into has a branch
 	Base   string         `json:"base"`   // the merge base: the import commit a managed skill's branch, or a fork's history, names
 	Mine   string         `json:"mine"`   // the library directory as git records it, committed on base; a fork's tip
 	Theirs string         `json:"theirs"` // the update candidate
@@ -214,10 +214,11 @@ func conflictFiles(stages []string, dir string) ([]conflictFile, error) {
 	return files, nil
 }
 
-// conflictOfSkill is the conflict event of the skill called name, of kind
-// managed or fork, whose merge of m left files conflicting.
-func conflictOfSkill(name, kind string, m lineage.Merge, files []conflictFile) conflictEvent {
-	return conflictEvent{event: newEvent("conflict"), Name: name, Kind: kind, Base: m.Base, Mine: m.Mine, Theirs: m.Theirs, Files: files}
+// conflictOfSkill is the conflict event of the skill called name, whose
+// merge of m left files conflicting. Only a skill with a branch merges, so
+// its kind is managed, see eventKind.
+func conflictOfSkill(name string, m lineage.Merge, files []conflictFile) conflictEvent {
+	return conflictEvent{event: newEvent("conflict"), Name: name, Kind: lineage.KindManaged, Base: m.Base, Mine: m.Mine, Theirs: m.Theirs, Files: files}
 }
 
 // printConflicts reports a merge left pending: one conflict event, and in

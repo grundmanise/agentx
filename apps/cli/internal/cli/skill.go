@@ -294,9 +294,10 @@ func universalClients(snap scan.Snapshot) []string {
 }
 
 // skillFromLibrary builds the event of one library skill from its lineage
-// record, the canonical URLs of the sources the settings hold, the
-// placements a scan found, the universal clients that scan detected and
-// what was observed of its directory and of its places.
+// record, the canonical URLs of the sources the settings hold, the account
+// remote's, "" when none is set, the placements a scan found, the
+// universal clients that scan detected and what was observed of its
+// directory and of its places.
 //
 // Every state is derived here, on every read, and nothing is ever written
 // for one: the lineage says where the skill came from and the settings say
@@ -305,27 +306,26 @@ func universalClients(snap scan.Snapshot) []string {
 // a source is gone is its settings entry and not its ref in the account
 // repo: an entry whose ref is missing is a source this machine still has
 // and has not fetched, which is what an import leaves.
-func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, sources map[string]bool, places []placementEvent, universal []string, obs observation) librarySkillEvent {
+func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, sources map[string]bool, account string, places []placementEvent, universal []string, obs observation) librarySkillEvent {
 	ev := librarySkillEvent{event: newEvent("library_skill"), LibraryEntry: scan.LibraryEntry{
 		Name: lib.Name, Kind: lineage.KindUnmanaged, ContentHash: lib.ContentHash, Placements: places, Universal: universal,
 	}}
 	if !ok {
 		return ev
 	}
-	ev.Kind = rec.Kind
-	// The coordinates are the base version's: a managed skill's is the
-	// import commit its branch points at, and a fork's the import commit its
-	// history names, read by the walk, which a greenfield skill has none of.
-	// A fork's logical identity is its fork id, which its creation commit
-	// carries, not its root commit.
+	ev.Kind, ev.Source, ev.Subpath, ev.Upstream, ev.UpstreamSubpath = skillOrigin(rec, account)
+	// The version is the base version's: a managed skill's is the import
+	// commit its branch points at, and a fork's the import commit its
+	// history names, read by the walk, which a skill made by skill new has
+	// none of. A fork's logical identity is its fork id, which its
+	// creation commit carries, not its root commit.
 	base, hasBase := rec.Import, rec.HasImport
 	if rec.Kind == lineage.KindFork && rec.Fork != nil {
 		base, hasBase = rec.Fork.Import, rec.Fork.Base != ""
 		ev.ForkID = rec.Fork.ID
 	}
 	if hasBase {
-		subpath := base.Path
-		ev.Source, ev.Subpath, ev.UpstreamCommit, ev.BaseHash = base.Source, &subpath, base.Commit, base.Hash
+		ev.UpstreamCommit, ev.BaseHash = base.Commit, base.Hash
 	}
 	// A fork is compared with what the account remote holds of it:
 	// modified while it has edits not yet published, see unpublished. Its drift is its placements', since what

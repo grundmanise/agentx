@@ -149,18 +149,22 @@ func TestExportListsTheBranchesAndNotTheLibrary(t *testing.T) {
 	}
 
 	var names []string
-	kinds, placed := map[string]any{}, map[string]any{}
+	records := map[string]map[string]any{}
 	for _, entry := range h.readExportFile(first)["skills"].([]any) {
 		rec := entry.(map[string]any)
 		names = append(names, rec["name"].(string))
-		kinds[rec["name"].(string)] = rec["kind"]
-		placed[rec["name"].(string)] = rec["placed"]
+		records[rec["name"].(string)] = rec
 	}
 	equal(t, "the records", strings.Join(names, ","), "alpha,beta,zeta")
-	equal(t, "alpha", kinds["alpha"], "managed")
-	equal(t, "zeta", kinds["zeta"], "fork")
-	equal(t, "alpha placed", placed["alpha"], true)
-	equal(t, "beta placed", placed["beta"], false)
+	equal(t, "alpha", records["alpha"]["kind"], "managed")
+	// The fork branch is one of your own skills: managed too, with no
+	// source while no account remote is set, and the upstream its base
+	// came from.
+	equal(t, "zeta's fields", keysOf(records["zeta"]), "base_hash,commit,kind,name,placed,upstream,upstream_commit,upstream_subpath")
+	equal(t, "zeta", records["zeta"]["kind"], "managed")
+	equal(t, "zeta's upstream", records["zeta"]["upstream"], s.url)
+	equal(t, "alpha placed", records["alpha"]["placed"], true)
+	equal(t, "beta placed", records["beta"]["placed"], false)
 }
 
 // TestExportWithoutAnAccountRepo is a machine that has installed nothing:
@@ -208,12 +212,17 @@ func TestExportLeavesOutABranchTheLibraryCannotHold(t *testing.T) {
 	equal(t, "add", h.run("skill", "add", s.url, "--all").exit, 0)
 	alpha := h.accountGit("rev-parse", "refs/heads/managed/alpha")
 	h.accountGit("update-ref", "refs/heads/skills/nested/deeper", alpha)
+	// An import branch with no lineage on it names no source, which the
+	// document would read as one of your own skills.
+	bare := h.accountGit("commit-tree", "-m", "no lineage", alpha+"^{tree}")
+	h.accountGit("update-ref", "refs/heads/managed/bare", bare)
 
 	file := h.exportPath("export.json")
 	out := h.run("export", file)
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stderr", out.stderr, "left refs/heads/skills/nested/deeper out of the export")
 	contains(t, "stderr", out.stderr, "not a name the library and a branch can both hold")
+	contains(t, "stderr", out.stderr, "left refs/heads/managed/bare out of the export: its commit names no source")
 
 	doc := h.readExportFile(file)
 	var names []string
