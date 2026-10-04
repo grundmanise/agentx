@@ -298,8 +298,10 @@ func TestServeWatchesInsideSkills(t *testing.T) {
 }
 
 // TestWatchedDirsCoverEverySkillsDirectoryOnce pins what serve asks the
-// watcher for: agentx home and the account repo flat, then every tree, each
-// real path once however many clients read it.
+// watcher for: agentx home, the account repo and its logs and logs/refs flat,
+// then every tree, each real path once however many clients read it. The
+// flat logs directories are where a skill's first publish shows: it creates
+// logs/refs/remotes and everything below it at once.
 func TestWatchedDirsCoverEverySkillsDirectoryOnce(t *testing.T) {
 	t.Parallel()
 	inv := &invocation{dirs: home.Dirs{
@@ -309,10 +311,11 @@ func TestWatchedDirsCoverEverySkillsDirectoryOnce(t *testing.T) {
 		Config:  "/u/.config",
 	}}
 	dirs, trees := inv.watchedDirs()
-	if got, want := dirs[:2], []string{"/u/.agentx", gitx.AccountRepoPath("/u/.agentx")}; !reflect.DeepEqual(got, want) {
+	repo := gitx.AccountRepoPath("/u/.agentx")
+	if got, want := dirs[:4], []string{"/u/.agentx", repo, repo + "/logs", repo + "/logs/refs"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("flat directories = %v, want %v", got, want)
 	}
-	if got, want := dirs[2:], trees; !reflect.DeepEqual(got, want) {
+	if got, want := dirs[4:], trees; !reflect.DeepEqual(got, want) {
 		t.Errorf("dirs after the flat ones = %v, want the trees %v", got, want)
 	}
 	// The reflogs of the fork branches are where a commit made with git in

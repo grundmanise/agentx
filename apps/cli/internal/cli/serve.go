@@ -248,19 +248,23 @@ func (inv *invocation) reportServeCheck(rep checkReport, err error) {
 // remote-tracking branches: a publish with nothing to record, as of a
 // commit made with git, moves only the account remote's branch as the
 // account repo tracks it, which is what a fork's state is judged against,
-// see unpublished. The worktrees' own admin directories are not watched:
-// git writes an index there on every status, which would be a signal of
-// its own.
+// see unpublished. Those reflog trees appear with the first ref of their
+// kind, a skill's first publish creating logs/refs/remotes and every
+// directory below it at once, so logs and logs/refs are watched too: the
+// directory appearing there is the signal, and a sync takes the new tree in.
+// The worktrees' own admin directories are not watched: git writes an index
+// there on every status, which would be a signal of its own.
 func (inv *invocation) watchedDirs() (dirs, trees []string) {
 	h := inv.dirs.Home
-	logs := filepath.Join(gitx.AccountRepoPath(h), "logs", "refs")
-	trees = []string{filepath.Join(h, "worktrees"), inv.dirs.Library, filepath.Join(logs, "heads", "skills"), filepath.Join(logs, "remotes")}
+	logs := filepath.Join(gitx.AccountRepoPath(h), "logs")
+	refs := filepath.Join(logs, "refs")
+	trees = []string{filepath.Join(h, "worktrees"), inv.dirs.Library, filepath.Join(refs, "heads", "skills"), filepath.Join(refs, "remotes")}
 	for _, dir := range scan.UserSkillsDirs(inv.dirs) {
 		if !slices.Contains(trees, dir) {
 			trees = append(trees, dir)
 		}
 	}
-	return append([]string{h, gitx.AccountRepoPath(h)}, trees...), trees
+	return append([]string{h, gitx.AccountRepoPath(h), logs, refs}, trees...), trees
 }
 
 // sourceIndex builds the index serve answers searches from: the sources of
