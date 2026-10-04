@@ -22,12 +22,15 @@ func newSkillForkCommand(inv *invocation) *cobra.Command {
 	var newName string
 	cmd := &cobra.Command{
 		Use:   "fork <name>",
-		Short: "Fork a skill, so that its edits get a history of their own",
-		Long: "Fork the skill called <name>: a managed skill, an unmanaged one, a skill a\n" +
-			"plugin provides, or a fork. The fork gets its own branch, skills/<name>, in the\n" +
-			"account repo, whose first commit holds the skill as it is now, edits included,\n" +
-			"checked out as a worktree in agentx home, and the library holds a symlink to it.\n" +
-			"A managed skill's fork keeps its upstream, so newer versions can be merged in.\n\n" +
+		Short: "Fork a skill into one of your own, with a history you can publish",
+		Long: "Fork the skill called <name>: a skill of a shared source, an unmanaged one, a\n" +
+			"skill a plugin provides, or one of your own. The fork is one of your own skills:\n" +
+			"a managed skill whose source is your account remote, which 'agentx skill\n" +
+			"publish' publishes it to; no account remote needs to be set until then. It gets\n" +
+			"its own branch, skills/<name>, in the account repo, whose first commit holds the\n" +
+			"skill as it is now, edits included, checked out as a worktree in agentx home,\n" +
+			"and the library holds a symlink to it. The fork of a skill of a shared source\n" +
+			"keeps that source as its upstream, so newer versions can be merged in.\n\n" +
 			"Without --name the fork takes the skill's place: its library directory moves\n" +
 			"into the fork's worktree and every placement stays as it was. With --name <new>\n" +
 			"the fork is made beside the skill, under the new name, which it also writes into\n" +
@@ -714,9 +717,11 @@ func (inv *invocation) reportForked(ctx context.Context, fk *forking, done place
 	out := inv.out
 	src, name := fk.src, sanitised(fk.src.name)
 	if fk.inPlace {
-		out.emit(sc.librarySkillEventFor(ctx, inv, snap, lib, nil))
+		ev := sc.librarySkillEventFor(ctx, inv, snap, lib, nil)
+		out.emit(ev)
 		inv.summary = "forked " + name + "; the fork replaces it wherever it was"
 		out.done("forked " + out.paint(heading, name) + "; the fork replaces it wherever it was")
+		inv.noAccountRemoteHint(ev)
 		return nil
 	}
 	ev := sc.librarySkillEventFor(ctx, inv, snap, lib, targetIDs(done.placed))
@@ -748,6 +753,9 @@ func (inv *invocation) reportForked(ctx context.Context, fk *forking, done place
 	}
 	inv.printPlacementRows(fk.target, rows)
 	inv.printUniversal(ev.Universal)
+	if !fk.rename {
+		inv.noAccountRemoteHint(ev)
+	}
 	inv.summary += universalClause(ev.Universal)
 	return nil
 }

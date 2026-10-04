@@ -62,7 +62,7 @@ func TestNameTaken(t *testing.T) {
 		}
 	}
 	err := takenRefusal(records, "foo", "", "choose another name")
-	if err == nil || err.Error() != "the account repo already holds Foo as a managed skill, which differs from foo only by case" {
+	if err == nil || err.Error() != "the account repo already holds Foo as a skill of a shared source, which differs from foo only by case" {
 		t.Errorf("the refusal of a name differing by case reads %v", err)
 	}
 }

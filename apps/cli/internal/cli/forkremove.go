@@ -121,8 +121,8 @@ func (inv *invocation) judgeForkRemoval(ctx context.Context, name string, remote
 	r.there = tips[name]
 	switch {
 	case r.tip == "" && r.there == "":
-		return nil, fail(exitNotFound, "neither this machine nor the account remote holds a fork called "+sanitised(name),
-			"run 'agentx skill list --remote' to see the forks of both")
+		return nil, fail(exitNotFound, "neither this machine nor the account remote holds a skill called "+sanitised(name),
+			"run 'agentx skill list --remote' to see the skills of both")
 	case r.tip != "" && r.there != "" && r.there != r.tip:
 		records, err := inv.forkRecords(ctx, gitDir)
 		if err != nil {
@@ -187,8 +187,8 @@ func (inv *invocation) runForkRemoval(ctx context.Context, r *forkRemoval) error
 		}
 	} else if deleted == nil {
 		branch := forkBranch(r.name)
-		inv.summary = "removed " + branch + " from the account remote; this machine has no fork " + sanitised(r.name)
-		inv.out.done("deleted " + inv.out.paint(heading, branch) + " from the account remote; this machine has no fork " + sanitised(r.name))
+		inv.summary = "removed " + branch + " from the account remote; this machine has no skill called " + sanitised(r.name)
+		inv.out.done("deleted " + inv.out.paint(heading, branch) + " from the account remote; this machine has no skill called " + sanitised(r.name))
 	}
 	return deleted
 }

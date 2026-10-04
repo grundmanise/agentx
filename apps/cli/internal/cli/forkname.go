@@ -10,11 +10,11 @@ import (
 )
 
 // forkName is the Agent Skills name grammar, which every name agentx gives
-// a fork or a greenfield skill follows: lowercase letters, digits and
-// hyphens, with no hyphen at the start or the end and no two in a row. It
-// is a strict subset of the names git accepts for a branch, and two names it
-// accepts never differ only by case, which on a file system that ignores
-// case would make git's loose refs merge one branch into the other.
+// a fork or a skill made by skill new follows: lowercase letters, digits
+// and hyphens, with no hyphen at the start or the end and no two in a row.
+// It is a strict subset of the names git accepts for a branch, and two
+// names it accepts never differ only by case, which on a file system that
+// ignores case would make git's loose refs merge one branch into the other.
 var forkName = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
 // forkNameLimit is the longest name the grammar allows.
@@ -52,12 +52,12 @@ func nameTaken(records map[string]lineage.Record, name, except string) (lineage.
 }
 
 // checkForkName refuses, with exit code 6, a name agentx cannot give a new
-// fork or greenfield skill: one outside the grammar, one git would not take
-// for a branch, which the grammar already rules out and git is asked about
-// all the same, and one the account repo already holds a branch of, in
-// either namespace and whatever its case. records are the account repo's
-// branches; except is the source's own, see nameTaken; hint is what the
-// refusal of a taken name says to do.
+// fork or skill made by skill new: one outside the grammar, one git would
+// not take for a branch, which the grammar already rules out and git is
+// asked about all the same, and one the account repo already holds a branch
+// of, in either namespace and whatever its case. records are the account
+// repo's branches; except is the source's own, see nameTaken; hint is what
+// the refusal of a taken name says to do.
 func (inv *invocation) checkForkName(ctx context.Context, records map[string]lineage.Record, name, except, hint string) error {
 	if refusal := forkNameRefusal(name); refusal != "" {
 		return fail(exitRefused, refusal, "choose a name such as my-skill")
@@ -76,11 +76,11 @@ func takenRefusal(records map[string]lineage.Record, name, except, hint string) 
 	if !taken {
 		return nil
 	}
-	what := "fork"
-	if rec.Kind == lineage.KindManaged {
-		what = "managed skill"
+	what := "a skill of a shared source"
+	if rec.Kind == lineage.KindFork {
+		what = "one of your own skills"
 	}
-	message := "the account repo already holds " + sanitised(rec.Name) + " as a " + what
+	message := "the account repo already holds " + sanitised(rec.Name) + " as " + what
 	if rec.Name != name {
 		message += ", which differs from " + name + " only by case"
 	}

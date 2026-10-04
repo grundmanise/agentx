@@ -121,13 +121,13 @@ func TestSkillRemoveOfAFork(t *testing.T) {
 	for _, name := range []string{"alpha", "beta"} {
 		out = a.run("--json", "skill", "remove", name, "--remote")
 		equal(t, name+" --remote with no fork here: exit", out.exit, 0)
-		equal(t, "its summary", a.one(out.stdout, "result")["summary"], "removed skills/"+name+" from the account remote; this machine has no fork "+name)
+		equal(t, "its summary", a.one(out.stdout, "result")["summary"], "removed skills/"+name+" from the account remote; this machine has no skill called "+name)
 	}
 	equal(t, "the remote's branches", remoteGit(t, a, remote, "for-each-ref", "--format=%(refname)"), "")
 	equal(t, "a's remote-tracking branches", a.accountGit("for-each-ref", "--format=%(refname)", "refs/remotes/"), "")
 	out = a.run("skill", "remove", "beta", "--remote")
 	equal(t, "neither holds beta: exit", out.exit, 5)
-	contains(t, "neither holds beta: stderr", out.stderr, "neither this machine nor the account remote holds a fork called beta")
+	contains(t, "neither holds beta: stderr", out.stderr, "neither this machine nor the account remote holds a skill called beta")
 
 	bTips := map[string]string{"alpha": b.ref(lineage.ForkRef("alpha")), "beta": b.ref(lineage.ForkRef("beta"))}
 	b.mustRun("skill", "update", "--all")

@@ -1164,8 +1164,8 @@ func refPlan(v *imported, records map[string]lineage.Record, libPath string, abs
 	case !ok:
 		return "", true, nil
 	case rec.Kind == lineage.KindFork:
-		return "", false, refuse(exitRefused, fmt.Sprintf("%s is a fork on this machine", v.name),
-			"install the skill under another name, or remove the fork first")
+		return "", false, refuse(exitRefused, fmt.Sprintf("%s is a skill of the account remote on this machine", v.name),
+			"rename yours with '"+skillCommand("rename", v.name, "<new>")+"', or remove it with '"+skillCommand("remove", v.name)+"', then install again")
 	case rec.Commit == v.commit: // the same version again: nothing to move
 		return "", false, nil
 	case rec.HasImport && rec.Import == v.imp: // the same version, stored in an older form

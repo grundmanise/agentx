@@ -23,7 +23,7 @@ import (
 // so the worktree's .git file sits beside the skill and never in it, and
 // no agent client sees a .git entry inside a skill. The directory is named
 // after the upstream's own directory for a fork of a third-party skill and
-// after the skill for a greenfield one, and never changes. The library
+// after the skill for one made by skill new, and never changes. The library
 // entry is a symlink to that directory.
 
 // worktreesDir is where the worktrees of the forks placed on this machine

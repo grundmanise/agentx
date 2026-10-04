@@ -670,7 +670,7 @@ func uncheckedAccount(url string, err error) *failure {
 // lineage.Record.ForkBase, so that a fork is checked exactly as a managed
 // skill at its base would be. A fork's base is the import commit its
 // history names, read in one walk of the forks' histories, which serve
-// keeps by tip. A fork with no base, a greenfield skill or a fork of an
+// keeps by tip. A fork with no base, a skill made by skill new or a fork of an
 // unmanaged or a plugin's skill, has no upstream to check and is left out,
 // as is one whose history does not say which import is its base.
 //

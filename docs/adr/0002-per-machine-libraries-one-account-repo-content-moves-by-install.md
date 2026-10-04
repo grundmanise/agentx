@@ -11,6 +11,8 @@ _Amendment, 2026-10-03:_ auto-push is no longer a setting. Nothing is pushed aut
 
 _Amendment, 2026-10-03:_ edits are never committed on their own, nor by a commit step of the user's: agentx records a skill's edits when the user publishes it, see [ADR 0003](0003-account-repo-one-branch-per-fork-checked-out-as-worktrees.md).
 
+_Amendment, 2026-10-04:_ "greenfield skill" and "fork" are no longer kinds of skill. A skill is managed or unmanaged, and a managed skill's source is where it is published to: the source it was installed from, or, for the user's own skills (made by `skill new` or `skill fork`, or installed from the account remote), the account remote. A forked skill also records the upstream it came from, which it takes updates from. Where the text above names forks and greenfield skills, read the user's own skills; no account remote needs to be set until one of them is published.
+
 ## Why
 
 One mechanism, install-from-upstream, covers third-party skills and the user's own forks alike. A fork edited and published on machine A is a new upstream version, and machine B receives it as a regular update, which auto-applies when B's copy is unmodified. Explicit publish costs the near-instant propagation but means every version B receives is one the user released. A third-party upstream change is merged into the fork on whichever machine the user accepts it, then published; once published, no other machine is offered that upstream version again. Upstream versions are committed deterministically, so if a second machine merges the same version before the first publishes, the upstream side merges clean and only the two machines' own edits can conflict. Metadata sync carries no file content, so it stays small and cheap.

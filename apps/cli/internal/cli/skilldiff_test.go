@@ -190,8 +190,8 @@ func TestSkillDiffRefusesWhatHasNoBase(t *testing.T) {
 		{[]string{"nowhere"}, `the library holds no skill called "nowhere"`, 5},
 		{[]string{"mine"}, "mine is not managed by agentx, so it has no base version to", 6},
 		{[]string{"forked"}, "forked's worktree " + quotedPath(filepath.Join(h.agentx, "worktrees", "forked")) + " is missing", 6},
-		{[]string{"pdf", "--commit", "HEAD"}, "pdf is managed, not a fork, so it has no commit of its own to", 6},
-		{[]string{"mine", "--commit", "HEAD"}, "mine is not a fork, so it has no commit to", 6},
+		{[]string{"pdf", "--commit", "HEAD"}, "pdf is not a skill of the account remote, so it has no commit of its own to", 6},
+		{[]string{"mine", "--commit", "HEAD"}, "mine is not a skill of the account remote, so it has no commit to", 6},
 	} {
 		what := "diff " + strings.Join(c.args, " ")
 		out := h.run(append([]string{"--json", "skill", "diff"}, c.args...)...)
@@ -275,7 +275,7 @@ func TestSkillDiffTakesARelativeHome(t *testing.T) {
 	}
 }
 
-// TestSkillDiffOfAFork compares a greenfield skill never published, with
+// TestSkillDiffOfAFork compares a skill made by skill new and never published, with
 // a .gitignore at its worktree's root that a commit made with git put
 // there, with its creation commit and with a commit --commit names. An
 // edit, a new file, a file the root .gitignore names and a file the

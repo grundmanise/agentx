@@ -760,7 +760,7 @@ func TestSkillCheckFindsAForkUpdate(t *testing.T) {
 	equal(t, "the diff of the update", h.one(diff.stdout, "result")["summary"],
 		"the update of alpha at "+short(second)+" differs from its base version at "+short(first)+" in 1 file")
 	refused := h.run("--json", "skill", "diff", "mine", "--update")
-	equal(t, "exit of a greenfield skill's update diff", refused.exit, 6)
+	equal(t, "exit of an own skill's update diff", refused.exit, 6)
 	equal(t, "message", h.one(refused.stdout, "error")["message"], "mine has no upstream to update from")
 
 	s.run("rm", "-r", "--quiet", "skills/alpha")

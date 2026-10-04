@@ -19,9 +19,13 @@ import (
 // which is one content version found anywhere on the machine, or from a
 // sourceSkillEvent, which is one installable skill of a source. Its fields
 // are the library entry a snapshot lists, so the two always say the same.
+// own, which no event carries, is whether it is one of your own skills,
+// whose source is the account remote: its kind alone does not say, and
+// while no account remote is set neither does its source.
 type librarySkillEvent struct {
 	event
 	scan.LibraryEntry
+	own bool
 }
 
 // placementEvent is one way a configuration sees the skill: mode is what
@@ -314,6 +318,7 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 		return ev
 	}
 	ev.Kind, ev.Source, ev.Subpath, ev.Upstream, ev.UpstreamSubpath = skillOrigin(rec, account)
+	ev.own = rec.Kind == lineage.KindFork
 	// The version is the base version's: a managed skill's is the import
 	// commit its branch points at, and a fork's the import commit its
 	// history names, read by the walk, which a skill made by skill new has

@@ -12,12 +12,12 @@ import (
 )
 
 // forkWriter writes every commit agentx makes on a fork's branch: the
-// creation commit of a fork or a greenfield skill, an explicit commit of a
-// fork's edits and a merge. There is no
-// other writer, so every such commit carries the same identity, the same
-// trailers and the same environment. A commit is written when a command is
-// asked to write it, never on a timer, and none is ever amended: a commit
-// made with git directly in a fork's worktree is left as it is.
+// creation commit of a fork or a skill made by skill new, an explicit
+// commit of a fork's edits and a merge. There is no other writer, so every
+// such commit carries the same identity, the same trailers and the same
+// environment. A commit is written when a command is asked to write it,
+// never on a timer, and none is ever amended: a commit made with git
+// directly in a fork's worktree is left as it is.
 //
 // The commit is written in the isolated environment, as every object agentx
 // writes is, so nothing of the user's configuration applies to it but the
@@ -101,7 +101,8 @@ func gitDate(t time.Time, tz string) string {
 	return fmt.Sprintf("%d %s", t.Unix(), t.Format("-0700"))
 }
 
-// creationSubject is the subject of a greenfield skill's creation commit.
+// creationSubject is the subject of the creation commit of a skill made by
+// skill new.
 func creationSubject(name string) string { return "Create " + name }
 
 // mergeMessage is the message of a merge commit on a fork's branch: subject

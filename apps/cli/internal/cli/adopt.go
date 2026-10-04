@@ -231,8 +231,8 @@ func (inv *invocation) judge(c *candidate, dir bool, records map[string]lineage.
 			"a directory without a SKILL.md is not a skill; leave it as it is or remove it"))
 		return
 	case known && rec.Kind == lineage.KindFork:
-		c.refuse(refuse(exitRefused, c.entry.Name+" is a fork on this machine",
-			"a fork has a history of its own; adopting would take the place of it"))
+		c.refuse(refuse(exitRefused, c.entry.Name+" is a skill of the account remote on this machine",
+			"it has a history of its own; adopting would take the place of it"))
 		return
 	case known:
 		c.state, c.reason = adoptManaged, "agentx already manages it"

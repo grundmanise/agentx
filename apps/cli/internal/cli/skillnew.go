@@ -23,12 +23,14 @@ func newSkillNewCommand(inv *invocation) *cobra.Command {
 	var description string
 	cmd := &cobra.Command{
 		Use:   "new <name>",
-		Short: "Create a skill from the template, with a history of its own",
-		Long: "Create a greenfield skill called <name> from agentx's template: a SKILL.md with\n" +
-			"the name and the description in its frontmatter. The skill gets its own branch,\n" +
+		Short: "Create one of your own skills from the template",
+		Long: "Create a skill called <name> from agentx's template: a SKILL.md with the name\n" +
+			"and the description in its frontmatter. It is a managed skill whose source is\n" +
+			"your account remote: 'agentx skill publish <name>' publishes it there, and no\n" +
+			"account remote needs to be set until then. The skill gets its own branch,\n" +
 			"skills/<name>, in the account repo, checked out as a worktree in agentx home, and\n" +
 			"the library holds a symlink to it. It is placed into every enabled configuration,\n" +
-			"as an install places a skill, and listed as a fork with no upstream.\n\n" +
+			"as an install places a skill, and listed as managed with no upstream.\n\n" +
 			"The name must be 1 to 64 lowercase letters, digits and hyphens, with no hyphen at\n" +
 			"the start or end and no two in a row.",
 		Args: cobra.ExactArgs(1),
@@ -44,13 +46,14 @@ func newSkillNewCommand(inv *invocation) *cobra.Command {
 // frontmatter allows.
 const descriptionLimit = 1024
 
-// skillNew creates a greenfield skill: a branch of its own in the account
-// repo, whose first commit holds the template SKILL.md under a directory
-// named after the skill and carries the skill's new fork id, checked out
-// as a worktree in agentx home, with the library's symlink to the skill's
-// directory and a placement in every enabled configuration. All of it is
-// one journaled mutation; the commit is written before it, and nothing
-// points at it until the journal moves the branch there.
+// skillNew creates one of your own skills from the template: a branch of
+// its own in the account repo, whose first commit holds the template
+// SKILL.md under a directory named after the skill and carries the skill's
+// new fork id, checked out as a worktree in agentx home, with the library's
+// symlink to the skill's directory and a placement in every enabled
+// configuration. All of it is one journaled mutation; the commit is written
+// before it, and nothing points at it until the journal moves the branch
+// there.
 func (inv *invocation) skillNew(ctx context.Context, name, description string) error {
 	if description == "" {
 		description = "Describe what " + name + " does and when an agent should use it."
@@ -256,12 +259,25 @@ func (inv *invocation) reportCreated(ctx context.Context, name string, targets [
 	out.done(line)
 	inv.printPlacementRows(name, rows)
 	inv.printUniversal(ev.Universal)
+	inv.noAccountRemoteHint(ev)
 	inv.summary = "created " + name + " in " + plural(len(done.placed), "configuration")
 	if n := len(done.skipped); n > 0 {
 		inv.summary += ", " + plural(n, "placement") + " skipped"
 	}
 	inv.summary += universalClause(ev.Universal)
 	return nil
+}
+
+// noAccountRemoteHint says, in one line, that the skill ev reports, one of
+// your own just created, cannot be published until an account remote is
+// set, when none is: its source, the account remote, is then empty. skill
+// publish refuses it until one is set; nothing else needs one.
+func (inv *invocation) noAccountRemoteHint(ev librarySkillEvent) {
+	if ev.Kind != lineage.KindManaged || ev.Source != "" {
+		return
+	}
+	out := inv.out
+	out.print("No account remote is set: run ", out.paint(label, "'agentx source add <url> --account'"), " before publishing ", out.paint(heading, sanitised(ev.Name)), ".")
 }
 
 // plainScalar is a value the template can write as a plain YAML scalar
@@ -284,11 +300,11 @@ func yamlString(s string) string {
 	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"`
 }
 
-// skillTemplate is the SKILL.md a greenfield skill starts with: the Agent
-// Skills frontmatter, with the name and the description, and a heading and
-// a line that asks for the instructions. Both values are written so that
-// they read back as strings, which a name such as null or 123 would not
-// as a plain scalar.
+// skillTemplate is the SKILL.md a skill made by skill new starts with: the
+// Agent Skills frontmatter, with the name and the description, and a
+// heading and a line that asks for the instructions. Both values are
+// written so that they read back as strings, which a name such as null or
+// 123 would not as a plain scalar.
 func skillTemplate(name, description string) []byte {
 	return []byte("---\nname: " + yamlString(name) + "\ndescription: " + yamlString(description) + "\n---\n\n# " + name + "\n\n" +
 		"Write here the instructions an agent follows when it uses this skill.\n")

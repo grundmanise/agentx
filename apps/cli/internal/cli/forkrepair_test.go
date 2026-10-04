@@ -8,7 +8,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 )
 
-// forkHarness is a home with a greenfield skill called notes placed in
+// forkHarness is a home with a skill called notes, made by skill new, placed in
 // Claude Code, and where its worktree, its skill directory and its library
 // entry are.
 func forkHarness(t *testing.T) (h *harness, root, skillDir, lib string) {

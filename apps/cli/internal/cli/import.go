@@ -548,9 +548,10 @@ func (inv *invocation) printImported(path string, doc exportDocument, states []i
 	present, missing, different := restoreCounts(states)
 	out.print(out.paint(heading, plural(len(states), "skill")+" in the export"), ": ",
 		fmt.Sprintf("%d present, %d missing, %d at a different version", present, missing, different))
+	account := documentAccount(doc.Settings)
 	t := &table{}
 	for _, st := range states {
-		t.add(importRow(out, st)...)
+		t.add(importRow(out, st, account)...)
 	}
 	out.render(t, "")
 	printSourcesToAdd(out, doc.Settings.Sources)
@@ -621,13 +622,15 @@ func shellWord(text string) string {
 }
 
 // importRow is one line of the listing: the name, what the account repo
-// knows it as, what it has of it and where it came from.
-func importRow(out *writer, st importSkillEvent) []cell {
+// knows it as, what it has of it and where it is published to, account
+// being the account remote of the document's settings, to which a record
+// of one of your own skills, see ownRecord, is published.
+func importRow(out *writer, st importSkillEvent, account string) []cell {
 	state := c(st.State, okStyle)
 	if st.State != restorePresent {
 		state = c(st.State, warnStyle)
 	}
-	return []cell{c("  "+sanitised(st.Name), heading), c(st.Kind, muted), state, whereCell(st.Source, st.Subpath)}
+	return []cell{c("  "+sanitised(st.Name), heading), c(st.Kind, muted), state, sourceCell(ownRecord(st.exportSkill, account), st.Source, st.Subpath, st.Upstream, st.UpstreamSubpath, account)}
 }
 
 func restoreCounts(states []importSkillEvent) (present, missing, different int) {

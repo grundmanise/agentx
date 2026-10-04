@@ -102,8 +102,8 @@ func TestSkillHistoryMarksImportsAndForeignCommits(t *testing.T) {
 		name, message string
 		exit          int
 	}{
-		{"beta", "beta is managed, not a fork, so it has no history of its own", 6},
-		{"mine", "mine is not a fork, so it has no history", 6},
+		{"beta", "beta is not a skill of the account remote, so it has no history of its own", 6},
+		{"mine", "mine is not a skill of the account remote, so it has no history", 6},
 		{"nowhere", `the library holds no skill called "nowhere"`, 5},
 	} {
 		out := h.run("--json", "skill", "history", c.name)

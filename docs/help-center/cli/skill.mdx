@@ -166,13 +166,13 @@ agentx skill list --remote
 1 skill
   pdf  managed  current  https://github.com/anthropics/skills/skills/pdf  4 placements
 2 installable skills on the account remote
-  release-notes  managed  installable  ssh://git@github.com/you/forks
-  standup        managed  installable  ssh://git@github.com/you/forks
+  release-notes  managed  installable  ssh://git@github.com/you/forks (account)
+  standup        managed  installable  ssh://git@github.com/you/forks (account)
 Install one with agentx skill add --name <name>, or all of them with agentx skill add --all.
 ```
 
 - `--remote` fetches the remote first. A remote Git cannot reach stops with exit code 3.
-- Each row names your account remote, where the skill is published to. With `--json`, `upstream` names where a skill you forked came from; a skill you created with `agentx skill new` has none.
+- Each row names your account remote, where the skill is published to, and, for a skill you forked from an installed skill, where it came from after `from`, as `agentx skill list` shows it. A skill you created with `agentx skill new` has no upstream.
 - A branch on the remote that agentx cannot install is left out with a warning: one whose name is not a valid skill name, or whose history records no fork id.
 - The old name of a skill you [renamed](/cli/fork#rename-a-fork) is not listed on a machine that holds the renamed skill, while the remote still holds it.
 
@@ -392,16 +392,29 @@ agentx skill list
 ```
 
 ```text
-3 skills
-  docx   managed    modified, source removed  https://github.com/me/skills/docx                2 placements
-  notes  unmanaged  -                         (none)                                           2 placements
-  pdf    managed    current                   https://github.com/anthropics/skills/skills/pdf  4 placements
+5 skills
+  docx    managed    modified, source removed  https://github.com/me/skills/docx                                                               2 placements
+  my-pdf  managed    modified                  ssh://git@github.com/you/forks (account), from https://github.com/anthropics/skills/skills/pdf  4 placements
+  notes   managed    current                   ssh://git@github.com/you/forks (account)                                                        4 placements
+  pdf     managed    current                   https://github.com/anthropics/skills/skills/pdf                                                 4 placements
+  todo    unmanaged  -                         (none)                                                                                          2 placements
 ```
 
-Each row shows the skill, what agentx knows about it, how it stands against the version it was installed at, where it is published to and how many placements it has, one per client that sees it.
+Each row shows the skill, its kind, how it stands against the version it was installed at, its source and how many placements it has, one per client that sees it.
 
-- `managed`: a skill agentx keeps. Either installed from a source, which is where it is published and where its updates come from, with a version it can compare against; or one of your own, which you created with [`agentx skill new`](/cli/fork#create-a-skill), forked with [`agentx skill fork`](/cli/fork#fork-a-skill) or installed from your account remote, with a history of its own in the account repo. Your own skills are published to your [account remote](/cli/source#add-your-account-remote), and a skill you forked also records where it came from, its upstream, which its updates come from.
+The kind is one of two:
+
+- `managed`: a skill agentx keeps. Either installed from a source, with a version it can compare against; or one of your own, which you created with [`agentx skill new`](/cli/fork#create-a-skill), forked with [`agentx skill fork`](/cli/fork#fork-a-skill) or installed from your account remote, with a history of its own in the account repo.
 - `unmanaged`: a directory in the library agentx did not install. It is inventoried and otherwise left alone.
+
+The source column shows where the skill is published to:
+
+- A skill of a shared source shows the source's URL and the folder in it, as `pdf` does above. Its updates come from there.
+- One of your own skills shows your [account remote](/cli/source#add-your-account-remote), marked `(account)` as `agentx source list` marks it, or `account remote not set` until you add one. A skill you forked from an installed skill also shows where it came from, its upstream, after `from`, as `my-pdf` does above, and takes the updates of its upstream.
+- An unmanaged skill shows `(none)`.
+
+The state column shows:
+
 - `current` or `modified`: whether the directory still holds the version it was installed at, or for a fork whether it holds what you last published to your account remote, as agentx last fetched it: a fork stays `modified` until you [publish its edits](#publish-a-skill), including edits an update or a fork recorded on it. A fork you never published is `current` until you edit or update it. Every change counts, whatever tool made it: a file you edited, added or deleted, but also a file made executable, a file replaced by a symlink and a symlink added. Files git ignores do not count: see [Files that do not count](#files-that-do-not-count). See what changed with [`agentx skill diff`](#see-what-you-changed).
 - `displaced`: a client that should see the skill through a link from its own skills directory has a real directory there instead, which is what an installer that copies over links leaves. For a client you placed a copy in, it is the other way round: a link to the library where the copy should be. Put it back with [`agentx skill place <name>`](#put-back-placements).
 - `missing`: an enabled client has nothing of the skill in its own skills directory, because you placed the skill with `--to`, removed it with `--from`, or the placement was deleted. Place it in one client with `agentx skill place <name> --to <client>`, or in every client it is missing from with [`agentx skill place <name>`](#put-back-placements). Universal clients and disabled clients are never missing a skill.

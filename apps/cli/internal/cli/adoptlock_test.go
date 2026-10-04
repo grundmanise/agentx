@@ -227,7 +227,7 @@ func TestAdoptRefusesAFork(t *testing.T) {
 	out := h.run("--json", "adopt", "--all")
 	equal(t, "exit", out.exit, exitRefused.exit)
 	h.lockUnchanged(h.lockPath(), lock)
-	contains(t, "the reason", h.one(out.stdout, "adoption")["reason"].(string), "is a fork on this machine")
+	contains(t, "the reason", h.one(out.stdout, "adoption")["reason"].(string), "is a skill of the account remote on this machine")
 	if _, err := h.accountGitErr("rev-parse", "--verify", "refs/heads/managed/alpha"); err == nil {
 		t.Error("a fork was given an import branch")
 	}

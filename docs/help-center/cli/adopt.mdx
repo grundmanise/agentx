@@ -140,7 +140,7 @@ agentx adopt --skill pdf --base <commit, branch or tag>
 | Reason | What to do |
 |---|---|
 | The library entry is a symlink, or holds no `SKILL.md` | agentx manages real skill directories; leave it as it is |
-| The name is already a fork on this machine | the fork has a history of its own; nothing to adopt |
+| The name is already one of your own skills on this machine | it has a history of its own; nothing to adopt |
 | The entry names no source agentx can fetch | install it with [`agentx skill add`](/cli/skill) from a git source instead |
 | The entry names a path that is not inside a repository, or one agentx cannot record: a path carrying a control character, or opening or closing with a space | fix the entry, or install the skill instead |
 | Its source cannot be fetched | check the URL and your credentials, then run again |

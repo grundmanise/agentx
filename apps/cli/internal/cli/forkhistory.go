@@ -72,10 +72,10 @@ func (inv *invocation) skillHistory(ctx context.Context, name string) error {
 	}
 	switch _, inLibrary := librarySkill(inv.dirs.Library, name); {
 	case held && rec.Kind != lineage.KindFork:
-		return fail(exitRefused, sanitised(name)+" is managed, not a fork, so it has no history of its own",
-			"a managed skill is at the version it was installed at; fork it with '"+skillCommand("fork", name)+"' to give its edits a history")
+		return fail(exitRefused, sanitised(name)+" is not a skill of the account remote, so it has no history of its own",
+			"a skill of a shared source is at the version it was installed at; fork it with '"+skillCommand("fork", name)+"' to give its edits a history")
 	case !held && inLibrary:
-		return fail(exitRefused, sanitised(name)+" is not a fork, so it has no history",
+		return fail(exitRefused, sanitised(name)+" is not a skill of the account remote, so it has no history",
 			"fork it with '"+skillCommand("fork", name)+"' to give its edits a history")
 	case !held:
 		return inv.noLibrarySkill(name)

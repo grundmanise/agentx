@@ -189,7 +189,9 @@ func TestSkillForkOfAnUnmanagedSkill(t *testing.T) {
 	equal(t, "the original", h.listed("My_Skill")["kind"], lineage.KindUnmanaged)
 
 	text := h.mustRun("skill", "fork", "notes")
-	equal(t, "the text output", text.stdout, "✓ forked notes; the fork replaces it wherever it was\n")
+	// No account remote is set, so the fork ends with how to publish it.
+	equal(t, "the text output", text.stdout, "✓ forked notes; the fork replaces it wherever it was\n"+
+		"No account remote is set: run 'agentx source add <url> --account' before publishing notes.\n")
 	tip = h.ref(lineage.ForkRef("notes"))
 	equal(t, "the history", h.accountGit("rev-list", "--parents", lineage.ForkRef("notes")), tip)
 	equal(t, "the author", h.accountGit("log", "-1", "--format=%an <%ae>", tip), "Ada Lovelace <ada@example.com>")
@@ -371,7 +373,7 @@ func TestSkillForkRefusals(t *testing.T) {
 		says string
 	}{
 		{[]string{"nothing"}, exitNotFound, `neither the library nor any plugin holds a skill called "nothing"`},
-		{[]string{"alpha", "--name", "beta"}, exitRefused, "the account repo already holds beta as a managed skill"},
+		{[]string{"alpha", "--name", "beta"}, exitRefused, "the account repo already holds beta as a skill of a shared source"},
 		{[]string{"gamma"}, exitRefused, "is a symlink to"},
 		{[]string{"held"}, exitRefused, "worktrees/held already exists"},
 		{[]string{"beta"}, exitRefused, "beta holds a Git repository at vendor/.git"},

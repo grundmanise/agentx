@@ -34,17 +34,14 @@ func (inv *invocation) accountRecord(ctx context.Context, name string) (string, 
 
 // managedRefusal refuses a skill with no base version to read, rec being
 // its branch and ok whether it has one, each for its own reason: an
-// unmanaged skill has none, a fork's is decided by its own history, which
-// is not this command's, and a branch whose trailers agentx cannot read
-// records none it can trust.
+// unmanaged skill has none, and a branch whose trailers agentx cannot read
+// records none it can trust. Callers send one of your own skills elsewhere
+// first, since its versions are its own history.
 func managedRefusal(name string, rec lineage.Record, ok bool) error {
 	switch {
 	case !ok:
 		return fail(exitRefused, name+" is not managed by agentx, so it has no base version to compare with",
 			"run 'agentx skill list' to see which skills are managed")
-	case rec.Kind == lineage.KindFork:
-		return fail(exitRefused, name+" is a fork on this machine",
-			"a fork's versions are its own history; this command works on a managed skill")
 	case !rec.HasImport:
 		return fail(exitRefused, fmt.Sprintf("the import branch %s records no version agentx can read", rec.Ref),
 			"run 'agentx doctor' and check the account repo it names")
@@ -59,10 +56,10 @@ func managedRefusal(name string, rec lineage.Record, ok bool) error {
 // unmanaged one.
 func notAForkRefusal(name string, ok bool) error {
 	if ok {
-		return fail(exitRefused, sanitised(name)+" is managed, not a fork, so it has no commit of its own to compare with",
+		return fail(exitRefused, sanitised(name)+" is not a skill of the account remote, so it has no commit of its own to compare with",
 			"run '"+skillCommand("diff", name)+"' to compare with its base version")
 	}
-	return fail(exitRefused, sanitised(name)+" is not a fork, so it has no commit to compare with",
+	return fail(exitRefused, sanitised(name)+" is not a skill of the account remote, so it has no commit to compare with",
 		"fork it first with '"+skillCommand("fork", name)+"'")
 }
 

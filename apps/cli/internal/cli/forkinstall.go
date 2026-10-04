@@ -143,7 +143,7 @@ func heldUnderAnotherName(local map[string][]string, id, tip string, ancestor fu
 // kind and state it is listed with, and where it is published to, the
 // account remote.
 func installableRow(out *writer, ev installableSkillEvent) []cell {
-	return []cell{c("  "+sanitised(ev.Name), heading), c(lineage.KindManaged, muted), c(installRemoteRow, infoStyle), whereCell(ev.Source, nil)}
+	return []cell{c("  "+sanitised(ev.Name), heading), c(lineage.KindManaged, muted), c(installRemoteRow, infoStyle), sourceCell(true, ev.Source, nil, ev.Upstream, ev.UpstreamSubpath, ev.Source)}
 }
 
 // accountAddCommand is the command line that installs the skill called

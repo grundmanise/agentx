@@ -675,7 +675,7 @@ func (p *serveProc) nextOf(typ string) jsonEvent {
 	}
 }
 
-// TestServeReportsForkDrift runs serve over a greenfield skill and changes
+// TestServeReportsForkDrift runs serve over a skill made by skill new and changes
 // it three ways, each reaching serve through the watcher alone: an edit
 // saved through the library makes the fork modified, skill publish makes it
 // current, and, after another edit, a commit made with git in the fork's
