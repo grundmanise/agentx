@@ -165,7 +165,8 @@ type publishing struct {
 // the remote rejects is reported by what its answer means, never forced.
 // One progress event per skill follows, then its publish event, then the
 // library_skill event of each skill whose edits were recorded. Last, the
-// old name's branch of a skill renamed here goes, see dropRenamed.
+// old name's branch of a skill renamed here, whose branch the push
+// created, goes, see dropRenamed.
 func (inv *invocation) publish(ctx context.Context, name, message string) error {
 	if name != "" {
 		switch shared, err := inv.publishable(ctx, name); {

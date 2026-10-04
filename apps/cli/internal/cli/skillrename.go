@@ -22,10 +22,12 @@ func newSkillRenameCommand(inv *invocation) *cobra.Command {
 			"name that cannot be used change nothing.\n" +
 			"Unpublished edits are recorded on the old branch first, and the renamed skill\n" +
 			"keeps them, still unpublished. Files git ignores in the old worktree are deleted\n" +
-			"with it. The rename stays on this machine until 'agentx skill publish <new>',\n" +
-			"which pushes skills/<new> to the account remote and deletes skills/<old> there\n" +
-			"when <new> holds everything it holds. Another machine keeps <old> until it is\n" +
-			"removed there, and sees <new> as a skill to install.",
+			"with it. The rename stays on this machine until <new> is first published, by\n" +
+			"name or by a bare publish, which pushes skills/<new> to the account remote and\n" +
+			"deletes skills/<old> there when <new> holds everything it holds. Only that first\n" +
+			"publish of <new> does: an old branch it keeps or cannot delete is warned of\n" +
+			"once; delete it with 'agentx skill remove <old> --remote'. Another machine keeps\n" +
+			"<old> until it is removed there, and sees <new> as a skill to install.",
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return inv.skillRename(cmd.Context(), args[0], args[1])
@@ -36,15 +38,16 @@ func newSkillRenameCommand(inv *invocation) *cobra.Command {
 // skillRename renames old, one of your own skills, to newName on this
 // machine. It is the fork of a fork followed by the fork's removal, each
 // its own journaled mutation; the fork step writes no fork id, see
-// makeFork, so newName keeps old's, and the next publish of newName finds
-// old's branch on the account remote by it and deletes it, see
-// dropRenamed. Before either step runs, everything either would refuse is
-// asked: what skill fork refuses of old and of newName, see planFork, and
-// what skill remove refuses of old, see judgeForkRemoval. Old's
-// unpublished edits are recorded on its branch only then, as the fork is
-// made, see makeFork, so a refused rename records nothing. A removal that
-// fails once the fork is made says so, names both skills and the command
-// that finishes the rename. Nothing is fetched or pushed.
+// makeFork, so newName keeps old's, and the publish that creates
+// newName's branch on the account remote deletes old's there, once it is
+// the same skill by that fork id, see dropRenamed. Before either step
+// runs, everything either would refuse is asked: what skill fork refuses
+// of old and of newName, see planFork, and what skill remove refuses of
+// old, see judgeForkRemoval. Old's unpublished edits are recorded on its
+// branch only then, as the fork is made, see makeFork, so a refused
+// rename records nothing. A removal that fails once the fork is made says
+// so, names both skills and the command that finishes the rename.
+// Nothing is fetched or pushed.
 func (inv *invocation) skillRename(ctx context.Context, old, newName string) error {
 	if old == newName {
 		return fail(exitUsage, sanitised(old)+" already has that name", "give the new name the skill should have")

@@ -294,7 +294,8 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 	// The way out the hint names: b renames its notes and publishes that
 	// one, which never deletes a's notes, a different skill by its fork id.
 	b.mustRun("skill", "rename", "notes", "jottings")
-	b.mustRun("skill", "publish", "jottings")
+	out = b.mustRun("skill", "publish", "jottings")
+	excludes(t, "a's notes, another skill", out.stdout+out.stderr, "skills/notes")
 	equal(t, "the remote's jottings", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/jottings"), b.ref(lineage.ForkRef("jottings")))
 	equal(t, "the remote's notes", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/notes"), a.ref(lineage.ForkRef("notes")))
 }

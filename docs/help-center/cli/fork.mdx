@@ -299,7 +299,7 @@ A rename works on this machine alone. The old name's folder, worktree and branch
 - Files Git ignores in the old skill's worktree, such as a local `.env`, are deleted with it. Copy the ones you want into the renamed skill first.
 - The renamed skill shows as `modified` until you publish it, since the [account remote](/cli/source#add-your-account-remote) does not hold it under its new name yet. Until then, `agentx skill diff <new>` compares it with what the account remote holds under the old name, so it shows the new name and the edits you have not published.
 
-The next `agentx skill publish <new>` renames it on the account remote:
+The first publish of the new name renames it on the account remote:
 
 ```sh
 agentx skill publish changelog
@@ -311,11 +311,12 @@ agentx skill publish changelog
 ```
 
 - The publish creates the new name's branch, then deletes the old name's branch, since it holds nothing the renamed skill lacks.
+- Only this first publish of the new name deletes the old branch. If it keeps the old branch or cannot delete it, it warns once and does not try again. Delete the old branch yourself with `agentx skill remove <old> --remote`.
 - If another machine published to the old name after you renamed it, the publish keeps the old branch and warns. Install it beside the renamed skill with `agentx skill add --name <old>`, or delete it with `agentx skill remove <old> --remote`.
-- If the account remote refuses to delete the old branch, for example because it is the repository's default branch, the publish warns and still exits `0`. The next `agentx skill publish <new>` tries again.
-- Publishing a renamed skill never deletes a branch of [another skill](/cli/skill#two-skills-with-one-name) of the old name.
+- If the account remote refuses to delete the old branch, for example because it is the repository's default branch, the publish warns and still exits `0`. Make another branch the default one if that is why, then run `agentx skill remove <old> --remote`.
+- Publishing a renamed skill never deletes a branch of [another skill](/cli/skill#two-skills-with-one-name) of the old name, nor the old name's branch while this machine holds a skill of your own of that name again.
 - Another machine keeps the old name until you remove it there, and lists the renamed skill as one to install. Once the old branch is gone from the account remote, that machine shows the old name as `not published`, and a bare `agentx skill publish` there leaves it out.
-- Publishing the old name by name from a machine that still holds it puts `skills/<old>` back on the account remote. On that machine, install the renamed skill with `agentx skill add --name <new>` and remove the old one with `agentx skill remove <old>`.
+- Publishing the old name by name from a machine that still holds it puts `skills/<old>` back on the account remote, where it stays: later publishes of the renamed skill leave it be. On that machine, install the renamed skill with `agentx skill add --name <new>` and remove the old one with `agentx skill remove <old>`.
 
 If the removal fails after the renamed skill was made, the error says so. Finish the rename with the `agentx skill remove <old>` command it names.
 

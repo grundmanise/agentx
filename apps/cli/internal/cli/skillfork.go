@@ -200,7 +200,7 @@ func (inv *invocation) makeFork(ctx context.Context, fk *forking) error {
 	if fk.rename {
 		// A rename's commit carries no fork id, so the renamed skill keeps
 		// the one its history records: the same skill under a new name,
-		// which the next publish follows to the old name's branch, see
+		// whose first publish deletes the old name's branch, see
 		// dropRenamed. A history that records none gets a new one, so the
 		// renamed skill publishes as a fork of its own.
 		message.subject = lineage.RenameSubject(sanitised(src.name), fk.target)
