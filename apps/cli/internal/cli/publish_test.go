@@ -56,7 +56,7 @@ func (h *harness) record(name string) string {
 	if err != nil || c == nil {
 		h.t.Fatalf("%s holds no edits to record: %v", name, err)
 	}
-	if _, err := inv.recordEdits(ctx, w, gitDir, []*committing{c}, "", func(n string, f *failure) {
+	if _, err := inv.recordEdits(ctx, w, gitDir, []*committing{c}, "", publishWords, func(n string, f *failure) {
 		h.t.Fatalf("recording %s: %s", n, f.message)
 	}); err != nil {
 		h.t.Fatal(err)

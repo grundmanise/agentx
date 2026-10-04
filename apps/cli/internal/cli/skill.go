@@ -327,8 +327,8 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 		subpath := base.Path
 		ev.Source, ev.Subpath, ev.UpstreamCommit, ev.BaseHash = base.Source, &subpath, base.Commit, base.Hash
 	}
-	// A fork is compared with its own branch tip: modified while it has
-	// edits not yet published. Its drift is its placements', since what
+	// A fork is compared with what the account remote holds of it:
+	// modified while it has edits not yet published, see unpublished. Its drift is its placements', since what
 	// the source drift states say of a managed skill is not true of a
 	// fork, see driftOf.
 	if rec.Kind == lineage.KindFork && obs.judged {

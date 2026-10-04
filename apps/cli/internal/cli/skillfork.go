@@ -32,7 +32,10 @@ func newSkillForkCommand(inv *invocation) *cobra.Command {
 			"into the fork's worktree and every placement stays as it was. With --name <new>\n" +
 			"the fork is made beside the skill, under the new name, which it also writes into\n" +
 			"SKILL.md, and placed into the configurations the skill is placed in; the skill\n" +
-			"stays as it was. A fork, and a plugin's skill, is always forked beside it.\n\n" +
+			"stays as it was. A fork, and a plugin's skill, is always forked beside it. A\n" +
+			"fork's unpublished edits are recorded on its branch first, so the new fork holds\n" +
+			"them too; the fork keeps showing them as unpublished until 'agentx skill\n" +
+			"publish', while the new fork starts from them and reads current.\n\n" +
 			"Name a plugin's skill as <plugin>:<skill> when several plugins provide one of\n" +
 			"that name. Files git ignores are never committed.",
 		Args: cobra.ExactArgs(1),
@@ -68,9 +71,14 @@ type forking struct {
 	captured string
 	site     forkSite   // a fork's, when the source is one
 	judged   siteJudged // how the source fork's directory compared with its tip
-	commit   string     // the creation commit
-	targets  []placeTarget
-	notes    []forkNoteEvent
+	// record is the commit that records the source fork's edits, written by
+	// checkForking and applied by makeFork once nothing can refuse the
+	// fork, so a refused fork records nothing; nil when it has none.
+	record  *committing
+	writer  *forkWriter // the fork commit writer, read by checkForking for a fork's fork
+	commit  string      // the creation commit
+	targets []placeTarget
+	notes   []forkNoteEvent
 	// scanned scans the machine once, the first time it is asked, and
 	// snap keeps what it found.
 	scanned func() (scan.Snapshot, error)
@@ -163,9 +171,11 @@ func (inv *invocation) makeFork(ctx context.Context, fk *forking) error {
 	// The writer reads the user's identity and their core.excludesFile in
 	// one read of their configuration, before git reads the skill, so the
 	// ignore rules the creation commit is written under come with it.
-	w, err := inv.newForkWriter(ctx, gitDir)
-	if err != nil {
-		return err
+	w := fk.writer
+	if w == nil {
+		if w, err = inv.newForkWriter(ctx, gitDir); err != nil {
+			return err
+		}
 	}
 	root, parents, err := inv.forkContent(ctx, fk)
 	if err != nil {
@@ -188,6 +198,16 @@ func (inv *invocation) makeFork(ctx context.Context, fk *forking) error {
 			return err
 		}
 	}
+	if fk.record != nil {
+		// Nothing left refuses the fork but a change made meanwhile, so the
+		// source fork's edits are recorded on its branch now, in a journal of
+		// their own, and the fork is applied on the tip that holds them.
+		site, judged, f := inv.applyRecord(ctx, fk.record, "forked", fk.judged)
+		if f != nil {
+			return f
+		}
+		fk.src.rec, fk.site, fk.judged, fk.record = site.rec, site, judged, nil
+	}
 	var done placements
 	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error { return inv.applyFork(ctx, fk, &done) })
 	if errors.Is(err, home.ErrMovedBeforeApply) {
@@ -202,9 +222,13 @@ func (inv *invocation) makeFork(ctx context.Context, fk *forking) error {
 // checkForking runs the refusals of a fork that need no git but the
 // account repo's branches, before anything changes: a fork forked under
 // its own name, a name agentx cannot give the fork or that a branch
-// already holds, a library path or worktree that is taken, a skill whose
-// update left a merge pending, and a fork with unpublished edits, which
-// the new fork would leave behind.
+// already holds, a library path or worktree that is taken, and a skill
+// whose update left a merge pending. Then the commit that records a fork's
+// unpublished edits is written, see writeRecord, so the new fork, made from
+// it, holds them: they stay unpublished on the source fork, while the new
+// fork, compared with its creation commit, reads current. makeFork moves the
+// fork's branch to it once nothing can refuse the fork, so a refused fork,
+// or rename, records nothing.
 func (inv *invocation) checkForking(ctx context.Context, fk *forking, records map[string]lineage.Record, named bool) error {
 	src := fk.src
 	if src.kind == lineage.KindFork && fk.target == src.name {
@@ -243,20 +267,24 @@ func (inv *invocation) checkForking(ctx context.Context, fk *forking, records ma
 	case src.kind != lineage.KindFork:
 		return nil
 	}
-	// A fork is forked from its tip, so unpublished edits would stay
-	// behind in it: they are refused, as every command that leaves the
-	// fork's directory out of what it does refuses them.
+	// A fork is forked from its tip with its unpublished edits recorded on
+	// it, see writeRecord, so the new fork holds them too.
 	f, err := inv.forkSiteOf(ctx, fk.gitDir, src.rec)
 	if err != nil {
 		return err
 	}
-	if fk.judged, err = inv.judgeSite(ctx, f, false); err != nil {
+	// The writer is read here and kept for makeFork, which writes the
+	// creation commit with it.
+	w, err := inv.newForkWriter(ctx, fk.gitDir)
+	if err != nil {
 		return err
 	}
-	if !fk.judged.clean {
-		return uncommittedRefusal(src.name, "forked")
+	fk.writer = w
+	c, judged, refusal := inv.writeRecord(ctx, &w, f, nil)
+	if refusal != nil {
+		return refusal
 	}
-	fk.site, fk.dir = f, f.dir
+	fk.site, fk.dir, fk.judged, fk.record = f, f.dir, judged, c
 	return nil
 }
 
@@ -330,18 +358,22 @@ func existingAncestor(path string) string {
 // skill's directory is judged against its import commit and keeps the
 // upstream's directory name; an unmanaged skill's and a plugin's are
 // judged against nothing and named after the fork; a fork is forked from
-// its tip, which checkForking found clean, its skill directory alone, see
-// skillDirAlone. Git's ignore rules
-// decide what is recorded, and a repository nested in the directory that
-// they do not cover is refused, since git would record it as a link.
+// its tip, or from the commit that records its edits, which checkForking
+// wrote on the tip, its skill directory alone, see skillDirAlone. Git's ignore rules decide what is
+// recorded, and a repository nested in the directory that they do not
+// cover is refused, since git would record it as a link.
 func (inv *invocation) forkContent(ctx context.Context, fk *forking) (string, []string, error) {
 	src := fk.src
 	if src.kind == lineage.KindFork {
-		root, err := inv.skillDirAlone(ctx, fk.gitDir, src.rec, fk.dir)
+		tip := src.rec
+		if fk.record != nil {
+			tip.Commit, tip.Tree = fk.record.commit, fk.record.root
+		}
+		root, err := inv.skillDirAlone(ctx, fk.gitDir, tip, fk.dir)
 		if err != nil {
 			return "", nil, err
 		}
-		return root, []string{src.rec.Commit}, nil
+		return root, []string{tip.Commit}, nil
 	}
 	if fk.inPlace {
 		// What the library directory holds is captured before git reads it,
@@ -584,7 +616,7 @@ func (inv *invocation) applyFork(ctx context.Context, fk *forking, done *placeme
 			return pendingMergeRefusal(src.name, "forked")
 		}
 	case lineage.KindFork:
-		if _, err := inv.forkGuards(ctx, fk.site, fk.judged, "forked", true); err != nil {
+		if _, err := inv.forkGuards(ctx, fk.site, fk.judged, "forked"); err != nil {
 			return err
 		}
 	}

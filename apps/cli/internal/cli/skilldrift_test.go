@@ -678,9 +678,11 @@ func (p *serveProc) nextOf(typ string) jsonEvent {
 // TestServeReportsForkDrift runs serve over a greenfield skill and changes
 // it three ways, each reaching serve through the watcher alone: an edit
 // saved through the library makes the fork modified, skill publish makes it
-// current, and, after another edit, so does a commit made with git in the
-// fork's worktree, which writes nothing serve reads but the branch's
-// reflog in the account repo. Serve itself never commits an edit.
+// current, and, after another edit, a commit made with git in the fork's
+// worktree leaves it modified, since nothing published it, until a publish
+// that has nothing to record but pushes the commit, which moves only the
+// account remote's branch as the account repo tracks it. Serve itself
+// never commits an edit.
 func TestServeReportsForkDrift(t *testing.T) {
 	t.Parallel()
 	h, _ := installHarness(t)
@@ -708,6 +710,39 @@ func TestServeReportsForkDrift(t *testing.T) {
 	expect("another edit", stateModified, stateCurrent)
 	gitIn(t, h, filepath.Join(h.agentx, "worktrees", "notes"),
 		"-c", "user.name=Grace Hopper", "-c", "user.email=grace@example.com", "commit", "-q", "-a", "-m", "By hand")
-	expect("a commit made with git", stateCurrent, stateModified)
+	h.runBesideServe("skill", "publish", "notes")
+	expect("a commit made with git, then published", stateCurrent, stateModified)
 	equal(t, "exit", p.close(), 0)
+}
+
+// TestUnpublished is when one of your own skills reads modified: its skill
+// directory differs from its tip, or the tip is not the version skill diff
+// compares with: the merge base of the tip and the account remote's branch
+// as last fetched, which git is asked only when the two tips differ, or,
+// with no remote branch or one that shares no commit, the commit that
+// created it, and the tip itself when its history names none.
+func TestUnpublished(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name                 string
+		holdsTip             bool
+		tip, remote, created string
+		base                 string // what git says: the merge base of the tip and the remote's
+		want, asked          bool
+	}{
+		{"the tip is the remote's", true, "t", "t", "c", "", false, false},
+		{"the tip is behind the remote's", true, "t", "r", "c", "t", false, true},
+		{"the tip is ahead of or diverged from the remote's", true, "t", "r", "c", "b", true, true},
+		{"a remote branch sharing no commit, as created", true, "c", "r", "c", "", false, true},
+		{"a remote branch sharing no commit, a commit since", true, "t", "r", "c", "", true, true},
+		{"no remote branch, as created", true, "c", "", "c", "", false, false},
+		{"no remote branch, a commit since", true, "t", "", "c", "", true, false},
+		{"no remote branch, no creation commit", true, "t", "", "", "", false, false},
+		{"the folder differs", false, "t", "t", "c", "", true, false},
+	} {
+		asked := false
+		got := unpublished(tc.holdsTip, tc.tip, tc.remote, tc.created, func() string { asked = true; return tc.base })
+		equal(t, tc.name, got, tc.want)
+		equal(t, tc.name+": git asked", asked, tc.asked)
+	}
 }

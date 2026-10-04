@@ -66,7 +66,9 @@ func (inv *invocation) resolveForkCommit(ctx context.Context, f forkSite, arg st
 }
 
 // forkDiff shows the unpublished edits of the fork whose branch is rec:
-// how its skill directory differs from the tip, or, when commit names one,
+// how its skill directory differs from its last published version, see
+// publishedVersion, so edits an update, a fork or a failed push recorded
+// stay in the diff until they are published, or, when commit names one,
 // from that commit, any commit of the account repo whose tree holds the
 // fork's skill directory. Only the skill directory is compared, and every
 // path is relative to it.
@@ -92,13 +94,22 @@ func (inv *invocation) forkDiff(ctx context.Context, gitDir string, rec lineage.
 	if err := inv.findForkDir(ctx, &f); err != nil {
 		return err
 	}
-	v, against := f.version(), "its last commit "+short(rec.Commit)
-	if commit != "" {
-		c, err := inv.resolveForkCommit(ctx, f, commit)
+	v, at, against := f.version(), commit, ""
+	if commit == "" {
+		var err error
+		if at, against, err = inv.publishedVersion(ctx, gitDir, rec); err != nil {
+			return err
+		}
+	}
+	if commit != "" || at != rec.Commit {
+		c, err := inv.resolveForkCommit(ctx, f, at)
 		if err != nil {
 			return err
 		}
-		v, against = c.version(), "commit "+short(c.id)
+		v = c.version()
+		if commit != "" {
+			against = "commit " + short(c.id)
+		}
 	}
 	if !lexists(f.skillDir) {
 		return skillDirMissing(f)
@@ -121,6 +132,49 @@ func (inv *invocation) forkDiff(ctx context.Context, gitDir string, rec lineage.
 	}
 	inv.reportDiff(subject, f.name, against, files, len(left))
 	return nil
+}
+
+// publishedVersion is the commit skill diff compares the fork whose branch
+// is rec with, and how its line names it: the newest commit of its history
+// the account remote's branch holds, as the last fetch left it, which is
+// its last published version, read with one merge-base. A fork the account
+// remote holds no branch of, or none that shares its history, never
+// published or with no account remote set, is compared with its creation
+// commit, the one skill new or skill fork wrote, and one whose history
+// carries no fork id with its tip. Either way it is what its state is
+// judged against, see unpublished.
+func (inv *invocation) publishedVersion(ctx context.Context, gitDir string, rec lineage.Record) (string, string, error) {
+	_, remote, ok, err := inv.accountSource()
+	if err != nil {
+		return "", "", err
+	}
+	if ok {
+		ref := lineage.RemoteForkRef(remote, rec.Name)
+		values, err := inv.git.Refs(ctx).RefValues(gitDir, []string{ref})
+		if err != nil {
+			return "", "", accountRepoFailure(err)
+		}
+		if there := values[ref]; there != "" {
+			out, status, err := inv.git.IsolatedStatus(ctx, gitDir, 1, "merge-base", rec.Commit, there)
+			if err != nil {
+				return "", "", accountRepoFailure(err)
+			}
+			if base := strings.TrimSpace(out); status == 0 && base != "" {
+				return base, "its last published version " + short(base), nil
+			}
+		}
+	}
+	if rec.Fork == nil {
+		recs := map[string]lineage.Record{rec.Name: rec}
+		if err := lineage.ReadForks(ctx, inv.git, gitDir, recs, inv.forkWalks); err != nil {
+			return "", "", accountRepoFailure(err)
+		}
+		rec = recs[rec.Name]
+	}
+	if created := rec.Fork.Created; created != "" {
+		return created, "its creation commit " + short(created), nil
+	}
+	return rec.Commit, "its last commit " + short(rec.Commit), nil
 }
 
 // diffForkDir is the diff of the fork f's skill directory, read as t,

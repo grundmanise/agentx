@@ -316,8 +316,10 @@ func TestWatchedDirsCoverEverySkillsDirectoryOnce(t *testing.T) {
 		t.Errorf("dirs after the flat ones = %v, want the trees %v", got, want)
 	}
 	// The reflogs of the fork branches are where a commit made with git in
-	// a fork's worktree shows.
-	if got, want := trees[:4], []string{"/u/.agentx/worktrees", "/u/.agents/skills", gitx.AccountRepoPath("/u/.agentx") + "/logs/refs/heads/skills", "/u/.claude/skills"}; !reflect.DeepEqual(got, want) {
+	// a fork's worktree shows, and those of the remote-tracking branches
+	// where a publish that only pushes does.
+	logs := gitx.AccountRepoPath("/u/.agentx") + "/logs/refs"
+	if got, want := trees[:5], []string{"/u/.agentx/worktrees", "/u/.agents/skills", logs + "/heads/skills", logs + "/remotes", "/u/.claude/skills"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("first trees = %v, want %v", got, want)
 	}
 	seen := map[string]bool{}

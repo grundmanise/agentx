@@ -130,12 +130,14 @@ func besideConflicts(body string) (merged, conflicts string) {
 
 // TestScenarioDisjointEditsMergeClean syncs one fork a published and b
 // installed from the account remote, under the fork id a gave it. Each
-// machine edits other lines and commits. An uncommitted edit on b refuses
-// the update, exit 6, naming the fork, and changes nothing on either
-// machine or the remote; once b commits it, the same update merges clean, b
-// publishes the merge and a's update fast-forwards to it, so both machines
-// hold every line either edited. A publish never takes in what the remote
-// holds: see TestPublishNeverMergesAndNamesUncommittedForks.
+// machine edits other lines and commits, and b holds a draft it has not
+// recorded. b's update records the draft first, as a commit of its own on
+// b's tip, and merges what a published into it clean: the draft is in the
+// merge and still unpublished, so the remote's branch lacks it, skill diff
+// shows it against what a published, and b reads modified until b
+// publishes the merge, which then reads current. a's update fast-forwards
+// to it, so both machines hold every line either edited. A publish never
+// takes in what the remote holds: see TestPublishNeverMerges.
 func TestScenarioDisjointEditsMergeClean(t *testing.T) {
 	t.Parallel()
 	a, b, _, remote := scenarioHomes(t, "alpha")
@@ -146,23 +148,20 @@ func TestScenarioDisjointEditsMergeClean(t *testing.T) {
 	a.mustRun("skill", "publish", "alpha")
 	mine := b.commitFork("alpha", forkNotes("eight", "eight, b"))
 	writeFile(t, filepath.Join(alphaB, "draft.md"), "a draft\n")
-	out := b.run("--json", "skill", "update", "alpha")
-	equal(t, "the update with an uncommitted edit: exit", out.exit, 6)
-	contains(t, "its message", b.one(out.stdout, "error")["message"].(string), "alpha has unpublished edits, so it cannot be updated")
-	equal(t, "b's alpha", b.ref(lineage.ForkRef("alpha")), mine)
-	equal(t, "a's alpha", a.ref(lineage.ForkRef("alpha")), theirs)
-	equal(t, "the remote's alpha", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/alpha"), theirs)
-	equal(t, "b's notes", fileBody(t, filepath.Join(alphaB, "notes.md")), forkNotes("eight", "eight, b"))
-	equal(t, "b's draft", fileBody(t, filepath.Join(alphaB, "draft.md")), "a draft\n")
-	noCheckout(t, b, "alpha")
-
-	b.record("alpha")
-	committed := b.ref(lineage.ForkRef("alpha"))
-	out = b.mustRun("--json", "skill", "update", "alpha")
+	out := b.mustRun("--json", "skill", "update", "alpha")
 	equal(t, "the pull", b.one(out.stdout, "pull")["outcome"], pullMerged)
 	merged := b.ref(lineage.ForkRef("alpha"))
-	equal(t, "the merge's parents", b.parents(merged), committed+"\n"+theirs)
+	recorded := b.accountGit("rev-parse", merged+"^1")
+	equal(t, "the merge's parents", b.parents(merged), recorded+"\n"+theirs)
+	equal(t, "the recorded draft's parent", b.parents(recorded), mine)
+	equal(t, "what the recorded commit changes", b.accountGit("diff-tree", "--no-commit-id", "--name-only", "-r", recorded), "alpha/draft.md")
+	equal(t, "b's state after the update", b.listed("alpha")["state"], stateModified)
+	equal(t, "the remote's alpha", remoteGit(t, b, remote, "rev-parse", "refs/heads/skills/alpha"), theirs)
+	diff := b.mustRun("skill", "diff", "alpha").stdout
+	contains(t, "b's diff", diff, "alpha differs from its last published version "+short(theirs)+" in 2 files")
+	contains(t, "b's diff of the draft", diff, "+a draft")
 	b.mustRun("skill", "publish", "alpha")
+	equal(t, "b's state once published", b.listed("alpha")["state"], stateCurrent)
 	out = a.mustRun("--json", "skill", "update", "alpha")
 	equal(t, "a's pull", a.one(out.stdout, "pull")["outcome"], pullFastForward)
 	equal(t, "a's alpha", a.ref(lineage.ForkRef("alpha")), merged)

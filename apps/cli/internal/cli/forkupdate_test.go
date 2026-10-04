@@ -63,15 +63,19 @@ func (h *harness) parents(commit string) string {
 // --all. alpha has no commits of its own: its update merges clean and its
 // skill directory holds exactly the new version, besides the .DS_Store git
 // ignores in it. beta has a commit of its own, an edit away from the
-// lines the update changes and a .gitignore naming build/: the merge
-// keeps the edit and takes the update's, the ignored build/keep stays, a
-// repository nested in build/, which git cannot record, is carried over
-// whole without a refusal, and the update's own build/x replaces the
-// local file of that path, as git checkout replaces it. Each fork's branch moves to a merge commit
-// with the tip and the candidate as parents and the candidate as its
+// lines the update changes and a .gitignore naming build/, and a draft
+// not yet recorded, which the update records first, as a commit on the
+// tip, and a copy placed before the draft, which the update refreshes as
+// a copy agentx laid out: the merge keeps both edits and takes the update's, the ignored
+// build/keep stays, a repository nested in build/, which git cannot
+// record, is carried over whole without a refusal, and the update's own
+// build/x replaces the local file of that path, as git checkout replaces
+// it. Each fork's branch moves to a merge commit with its tip, beta's
+// recorded one, and the candidate as parents and the candidate as its
 // base, written with the user's identity; the candidate goes, git status
 // in each worktree is clean, nothing is pending and nothing is left
-// beside the worktrees.
+// beside the worktrees. Neither merge is published, so both forks read
+// modified until a publish.
 func TestSkillUpdateMergesUpstreamIntoAFork(t *testing.T) {
 	t.Parallel()
 	h, s, _ := forkUpdateHarness(t)
@@ -82,6 +86,8 @@ func TestSkillUpdateMergesUpstreamIntoAFork(t *testing.T) {
 	writeFile(t, filepath.Join(beta, "notes.md"), forkNotes("two", "two, mine"))
 	writeFile(t, filepath.Join(beta, ".gitignore"), "build/\n")
 	h.record("beta")
+	h.mustRun("skill", "place", "beta", "--copy")
+	writeFile(t, filepath.Join(beta, "draft.md"), "not yet recorded\n")
 	writeFile(t, filepath.Join(alpha, ".DS_Store"), "finder\n")
 	writeFile(t, mkdirs(t, filepath.Join(beta, "build"), "x"), "local build\n")
 	writeFile(t, filepath.Join(beta, "build", "keep"), "kept\n")
@@ -97,16 +103,23 @@ func TestSkillUpdateMergesUpstreamIntoAFork(t *testing.T) {
 	candidates := map[string]string{"alpha": h.ref(lineage.CandidateRef("alpha")), "beta": h.ref(lineage.CandidateRef("beta"))}
 
 	out := h.mustRun("--json", "skill", "update", "--all")
-	equal(t, "summary", h.one(out.stdout, "result")["summary"], "updated 2 skills")
+	equal(t, "summary", h.one(out.stdout, "result")["summary"], "updated 2 skills, 1 copy placement refreshed")
+	excludes(t, "beta's copy, which holds the tip its draft was recorded on", out.stdout+out.stderr, "left unchanged")
+	equal(t, "beta's copy", fileBody(t, filepath.Join(h.home, ".claude", "skills", "beta", "notes.md")), forkNotes("two", "two, mine", "seven", "seven, upstream"))
 	for _, name := range []string{"alpha", "beta"} {
 		ev := h.librarySkill(out.stdout, name)
 		equal(t, name+": upstream_commit", ev["upstream_commit"], second)
-		equal(t, name+": state", ev["state"], stateCurrent)
+		equal(t, name+": state", ev["state"], stateModified)
 		if ev["candidate"] != nil {
 			t.Errorf("%s still lists an update: %v", name, ev["candidate"])
 		}
-		tip := h.ref(lineage.ForkRef(name))
-		equal(t, name+": the merge's parents", h.parents(tip), tips[name]+"\n"+candidates[name])
+		tip, mine := h.ref(lineage.ForkRef(name)), tips[name]
+		if name == "beta" {
+			mine = h.accountGit("rev-parse", tip+"^1")
+			equal(t, "beta: the recorded commit's parent", h.parents(mine), tips[name])
+			equal(t, "beta: the recorded draft", h.accountGit("show", tip+":beta/draft.md"), "not yet recorded")
+		}
+		equal(t, name+": the merge's parents", h.parents(tip), mine+"\n"+candidates[name])
 		equal(t, name+": its base", h.trailer(tip, lineage.TrailerBase), candidates[name])
 		equal(t, name+": its subject", h.accountGit("log", "-1", "--format=%s", tip), name+": merge upstream "+short(second)+" (test-host)")
 		equal(t, name+": its author", h.accountGit("log", "-1", "--format=%an <%ae>", tip), "Fork Writer <writer@example.com>")
@@ -127,21 +140,19 @@ func TestSkillUpdateMergesUpstreamIntoAFork(t *testing.T) {
 // overlap their update's. alpha committed an edit to the line the update
 // changes; other, a fork of alpha under a new name, has its name written
 // into SKILL.md, the line next to the description the update changes,
-// which conflicts as any adjacent edit does in git. Uncommitted edits
-// refuse the update first, exit 6, and nothing changes. The update then
-// leaves alpha's merge pending, exit 4, with a conflict of kind fork: the
+// which conflicts as any adjacent edit does in git. The update leaves
+// alpha's merge pending, exit 4, with a conflict of kind fork: the
 // fork's worktree and branch are untouched, and its checkout holds the
 // merge in progress, with conflict markers one longer than the literal
 // marker line of notes.md, which stays as it is, and the merge's base,
 // mine and theirs as ORIG_HEAD, MERGE_HEAD and the Agentx-Base of
 // MERGE_MSG. Giving it up leaves the fork, its branch and the candidate
-// as they were. Once the merge is set up again and resolved with git, an
-// uncommitted edit refuses its completion, exit 6; without it, the update
-// completes the merge: the branch moves to a merge commit of the tip and
-// the candidate, which names the candidate as its base, the worktree holds
-// the resolution and keeps the .DS_Store git ignores, and the checkout and
-// the candidate are gone. other's merge, resolved and committed with git
-// in its checkout, is applied as committed.
+// as they were. Once the merge is set up again and resolved with git, the
+// update completes the merge: the branch moves to a merge commit of the
+// tip and the candidate, which names the candidate as its base, the
+// worktree holds the resolution and keeps the .DS_Store git ignores, and
+// the checkout and the candidate are gone. other's merge, resolved and
+// committed with git in its checkout, is applied as committed.
 func TestSkillUpdateOfAForkConflicts(t *testing.T) {
 	t.Parallel()
 	h, s, first := forkUpdateHarness(t)
@@ -156,13 +167,6 @@ func TestSkillUpdateOfAForkConflicts(t *testing.T) {
 	tip, candidate := h.ref(lineage.ForkRef("alpha")), h.ref(lineage.CandidateRef("alpha"))
 	base := h.accountGit("rev-parse", tip+"~2") // the commit, then the fork's creation, then the import
 
-	writeFile(t, filepath.Join(alpha, "notes.md"), forkNotes("seven", "seven, uncommitted"))
-	was := h.unchangedHome()
-	refused := h.run("--json", "skill", "update", "alpha")
-	equal(t, "exit over uncommitted edits", refused.exit, 6)
-	equal(t, "message", h.one(refused.stdout, "error")["message"], "alpha has unpublished edits, so it cannot be updated until they are published")
-	was.check(t, h, "the refused update", 0)
-	writeFile(t, filepath.Join(alpha, "notes.md"), forkNotes("seven", "seven, mine"))
 	worktree := onDisk(t, filepath.Join(h.agentx, "worktrees", "alpha"))
 
 	out := h.run("--json", "skill", "update", "alpha")
@@ -203,12 +207,6 @@ func TestSkillUpdateOfAForkConflicts(t *testing.T) {
 	resolved := forkNotes("seven", "seven, resolved")
 	writeFile(t, filepath.Join(pendingCheckout(h, "alpha"), "alpha", "notes.md"), resolved)
 	checkoutGit(t, h, "alpha", "add", "alpha/notes.md")
-	writeFile(t, filepath.Join(alpha, "SKILL.md"), skill("alpha", "Uncommitted"))
-	refused = h.run("--json", "skill", "update", "alpha")
-	equal(t, "exit of the completion over uncommitted edits", refused.exit, 6)
-	equal(t, "message", h.one(refused.stdout, "error")["message"], "alpha has unpublished edits, so it cannot be updated until they are published")
-	// The edit is undone by hand.
-	writeFile(t, filepath.Join(alpha, "SKILL.md"), skill("alpha", "The first skill"))
 	writeFile(t, filepath.Join(alpha, ".DS_Store"), "finder\n")
 
 	done := h.mustRun("skill", "update", "alpha")
@@ -474,11 +472,11 @@ func TestMarkerSize(t *testing.T) {
 }
 
 // TestForkUpdateRefusals is what refuses a fork's update before anything
-// is written besides uncommitted edits: a repository nested in its skill
-// directory that no ignore rule covers, exit 6, named, and a candidate
-// that holds the skill under another upstream directory than the fork's
-// base, exit 8. Neither changes a ref, the library, a placement or the
-// version file.
+// is written, an edit of the fork's included, which a refused update
+// does not record: a repository nested in its skill directory that no
+// ignore rule covers, exit 6, named, and a candidate that holds the skill
+// under another upstream directory than the fork's base, exit 8. Neither
+// changes a ref, the library, a placement or the version file.
 func TestForkUpdateRefusals(t *testing.T) {
 	t.Parallel()
 	h, s, _ := forkUpdateHarness(t)
@@ -486,6 +484,7 @@ func TestForkUpdateRefusals(t *testing.T) {
 	s.write("skills/alpha/notes.md", forkNotes("seven", "seven, upstream"))
 	s.commit("second version")
 	h.mustRun("skill", "check-updates")
+	writeFile(t, filepath.Join(h.forkDir("alpha", "alpha"), "notes.md"), forkNotes("two", "two, mine"))
 	vendored := filepath.Join(h.forkDir("alpha", "alpha"), "vendored")
 	writeFile(t, mkdirs(t, filepath.Join(vendored, ".git"), "HEAD"), "ref: refs/heads/main\n")
 	was := h.unchangedHome()

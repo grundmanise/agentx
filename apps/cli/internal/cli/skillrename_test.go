@@ -12,14 +12,16 @@ import (
 // TestSkillRenameIsAForkAndARemoval renames a fork on machine a, which
 // published it, while machine b installed it. Every refusal of either step
 // comes before anything changes: a name outside the grammar, a name
-// another skill has, a skill that is no fork, uncommitted edits and a merge
-// pending. The rename is then a fork of the fork under the new name, with
-// a fork id of its own and the old branch's commits as its history, placed
-// where the old one was with its copy mode, even once a commit left the
-// copy behind, and the old fork's removal;
-// the account remote keeps the old branch. Published, the renamed fork is
-// a new fork b can install, and b keeps the old one. A rename with
-// --remote deletes the old branch from the account remote too.
+// another skill has, a skill that is no fork and a merge pending. The
+// rename is then a fork of the fork under the new name, with a fork id of
+// its own and the old branch's commits as its history, placed where the
+// old one was with its copy mode, even once the commit that records an
+// edit of the old fork left the copy behind, and the old fork's removal;
+// the account remote keeps the old branch.
+// Published, the renamed fork is a new fork b can install, and b keeps the
+// old one. A rename with --remote deletes the old branch from the account
+// remote too, and one refused for commits the remote holds records none
+// of the old fork's edits.
 func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 	t.Parallel()
 	a, b, _, remote := twoHomes(t)
@@ -37,14 +39,9 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 		{"a name outside the grammar", "alpha", "Renamed", 6, "Renamed"},
 		{"a name taken", "alpha", "beta", 6, "choose another name with 'agentx skill rename alpha <new>'"},
 		{"no fork", "mine", "yours", 6, "mine is not a fork, so it cannot be renamed"},
-		{"uncommitted edits", "alpha", "renamed", 6, "alpha has unpublished edits"},
 		{"a merge pending", "alpha", "renamed", 4, "alpha has a merge pending"},
 	} {
-		switch tc.name {
-		case "uncommitted edits":
-			writeFile(t, filepath.Join(a.forkDir("alpha", "alpha"), "draft.md"), "uncommitted\n")
-		case "a merge pending":
-			remove(t, filepath.Join(a.forkDir("alpha", "alpha"), "draft.md"))
+		if tc.name == "a merge pending" {
 			a.accountGit("worktree", "add", "--quiet", "--detach", "--lock", "--reason", pendingReason, pending, old)
 		}
 		out := a.run("skill", "rename", tc.from, tc.to)
@@ -53,12 +50,11 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 		equal(t, tc.name+": refs", a.refLines(), before)
 	}
 	a.accountGit("worktree", "remove", "-f", "-f", pending)
-	// A commit leaves the copy behind the library, which a listing no
-	// longer counts as a placement; the rename keeps it all the same.
-	writeFile(t, filepath.Join(a.forkDir("alpha", "alpha"), "notes.md"), "committed after the copy\n")
-	a.record("alpha")
+	// An edit the rename records itself, as a commit that leaves the copy
+	// behind the library, which a listing no longer counts as a placement;
+	// the rename keeps it all the same.
+	writeFile(t, filepath.Join(a.forkDir("alpha", "alpha"), "notes.md"), "edited after the copy\n")
 	published := old
-	old = a.ref(lineage.ForkRef("alpha"))
 
 	out := a.run("--json", "skill", "rename", "alpha", "renamed")
 	equal(t, "exit", out.exit, 0)
@@ -68,7 +64,9 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 	equal(t, "summary", a.one(out.stdout, "result")["summary"],
 		"renamed alpha to renamed; removed alpha from the library, 1 placement, its worktree and its branch")
 	renamed := a.ref(lineage.ForkRef("renamed"))
-	equal(t, "the renamed fork's parent", a.parents(renamed), old)
+	recorded := a.parents(renamed)
+	equal(t, "the recorded commit's parent", a.parents(recorded), published)
+	equal(t, "the renamed fork's edit", a.accountGit("show", renamed+":alpha/notes.md"), "edited after the copy")
 	if id := a.trailer(renamed, lineage.TrailerForkID); id == "" || id == a.trailer(old, lineage.TrailerForkID) {
 		t.Errorf("the renamed fork's id is %q, want a new one", id)
 	}
@@ -96,9 +94,13 @@ func TestSkillRenameIsAForkAndARemoval(t *testing.T) {
 	// branch, and be in neither fork.
 	b.commitFork("beta", "b's commit\n")
 	b.mustRun("skill", "publish", "beta")
+	// The refused rename records nothing of a's edit.
+	writeFile(t, filepath.Join(a.forkDir("beta", "beta"), "draft.md"), "a's edit\n")
+	betaTip := a.ref(lineage.ForkRef("beta"))
 	refused := a.run("skill", "rename", "beta", "gamma", "--remote")
 	equal(t, "a rename over an unpulled commit: exit", refused.exit, 6)
 	contains(t, "a rename over an unpulled commit: hint", refused.stderr, "run 'agentx skill update beta' first")
+	equal(t, "a rename over an unpulled commit: beta's tip", a.ref(lineage.ForkRef("beta")), betaTip)
 	a.mustRun("skill", "update", "beta")
 	renamedOut := a.mustRun("skill", "rename", "beta", "gamma", "--remote")
 	excludes(t, "the fork step's line in a rename", renamedOut.stdout, "stays as it was")
@@ -165,7 +167,7 @@ func TestRenameFinish(t *testing.T) {
 		{"another failure", true, refuse(exitAccountRepo, "cannot read", ""),
 			"run 'agentx skill remove notes --remote' to finish the rename"},
 		{"uncommitted edits", false, uncommittedRefusal("notes", "removed"),
-			"to keep the edits, publish them with 'agentx skill publish notes', then run 'agentx skill remove jottings' and 'agentx skill rename notes jottings' again; to drop them, run 'agentx skill remove notes'"},
+			"to keep the edits, run 'agentx skill remove jottings' and 'agentx skill rename notes jottings' again, which records them; to drop them, run 'agentx skill remove notes'"},
 		{"a branch that moved", true, movedWhileRemoved("notes"),
 			"notes's branch moved since jottings was forked from it; to keep what it holds now, run 'agentx skill remove jottings' and 'agentx skill rename notes jottings --remote' again; to drop it, run 'agentx skill remove notes --remote'"},
 	} {

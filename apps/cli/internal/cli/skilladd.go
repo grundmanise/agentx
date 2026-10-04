@@ -1337,7 +1337,7 @@ func (inv *invocation) reportInstalled(ctx context.Context, b *batch, dones []*i
 		modes = map[string][]string{}
 	}
 	// The lineage is what the run just wrote, so it is not read again.
-	sc := newSkillContext(inv, map[string]lineage.Record{}, s, modes)
+	sc := newSkillContext(ctx, inv, map[string]lineage.Record{}, s, modes)
 	// The library is read once for the whole run. Reading it content-hashes
 	// every directory it holds, so reading it per installed skill costs a
 	// batch of n skills n hashes of the whole library: a run of forty was

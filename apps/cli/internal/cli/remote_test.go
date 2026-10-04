@@ -320,7 +320,9 @@ func sourceEntryOf(t *testing.T, h *harness, url string) map[string]any {
 // machines changed its line, and b added a file of its own, b's check lists
 // only what a changed since the commit both share, and b's update leaves
 // the merge pending, exit 4, reported again as the account remote's while
-// unresolved; resolved in its checkout, the next update completes it. With that merge and beta's not yet published, the
+// unresolved; resolved in its checkout, with an edit made meanwhile in its
+// worktree, the next update records the edit and completes the merge over
+// it, keeping both. With that merge and beta's not yet published, the
 // update of every skill has nothing to do and says nothing else. Last, with
 // the account remote out of reach, the update of beta only warns, while
 // that of the skill with no upstream fails, exit 3, alone or with every
@@ -436,15 +438,27 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	contains(t, "its message, still the account remote's", b.one(out.stdout, "error")["message"].(string), "notes conflicts with the account remote in 1 file")
 	writeFile(t, filepath.Join(pendingCheckout(b, "notes"), "notes", "notes.md"), forkNotes("one", "one, a", "two", "two, a and b"))
 	checkoutGit(t, b, "notes", "add", "notes/notes.md")
+	writeFile(t, filepath.Join(b.forkDir("notes", "notes"), "later.md"), "edited while the merge was pending\n")
 	out = b.mustRun("--json", "skill", "update", "notes")
 	contains(t, "the completion", b.one(out.stdout, "result")["summary"].(string), "updated notes with the merge you resolved, committed as ")
 	equal(t, "its pull events", len(b.eventsOfType(out.stdout, "pull")), 0)
-	equal(t, "the completed merge's parents", b.parents(b.ref(lineage.ForkRef("notes"))), mine+"\n"+theirs)
+	tip = b.ref(lineage.ForkRef("notes"))
+	recorded, completed := b.accountGit("rev-parse", tip+"^1"), b.accountGit("rev-parse", tip+"^2")
+	equal(t, "the edit made while the merge was pending, recorded on the tip", b.parents(recorded), mine)
+	equal(t, "the completed merge's parents", b.parents(completed), mine+"\n"+theirs)
 	equal(t, "b's notes", fileBody(t, filepath.Join(b.forkDir("notes", "notes"), "notes.md")), forkNotes("one", "one, a", "two", "two, a and b"))
+	equal(t, "the edit, kept", b.accountGit("show", tip+":notes/later.md"), "edited while the merge was pending")
 	noCheckout(t, b, "notes")
+	// An update with nothing to take in records no edit.
+	idle := filepath.Join(b.forkDir("notes", "notes"), "idle.md")
+	writeFile(t, idle, "an edit no update takes in\n")
 	out = b.mustRun("skill", "update", "--all")
 	contains(t, "the update of every skill with notes and beta ahead of the remote", out.stdout, "Nothing to update")
 	equal(t, "its warnings", out.stderr, "")
+	equal(t, "notes' tip, with an edit and nothing to take in", b.ref(lineage.ForkRef("notes")), tip)
+	if err := os.Remove(idle); err != nil {
+		t.Fatal(err)
+	}
 
 	// An account remote git cannot reach leaves the upstream's version to
 	// take in, with a warning.

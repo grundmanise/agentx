@@ -275,15 +275,16 @@ func TestSkillDiffTakesARelativeHome(t *testing.T) {
 	}
 }
 
-// TestSkillDiffOfAFork compares a greenfield skill, with a .gitignore at
-// its worktree's root that a commit made with git put there, with its last
-// commit and with an earlier one. An edit, a new file, a file the root
-// .gitignore names and a file the system-file list names make two diffs,
-// with every path relative to the skill's directory and never the root's
-// own entries; once the edits are committed the fork matches its last
-// commit and still differs from the first. A commit the account repo does
-// not hold, one that holds no skill directory of that name, and --update
-// with --commit are refused.
+// TestSkillDiffOfAFork compares a greenfield skill never published, with
+// a .gitignore at its worktree's root that a commit made with git put
+// there, with its creation commit and with a commit --commit names. An
+// edit, a new file, a file the root .gitignore names and a file the
+// system-file list names make two diffs, with every path relative to the
+// skill's directory and never the root's own entries; once the edits are
+// recorded on its branch, unpublished, the diff still shows them, and the
+// fork matches the commit they were recorded as. A commit the account
+// repo does not hold, one that holds no skill directory of that name, and
+// --update with --commit are refused.
 func TestSkillDiffOfAFork(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -294,7 +295,6 @@ func TestSkillDiffOfAFork(t *testing.T) {
 	writeFile(t, filepath.Join(root, ".gitignore"), "*.log\n")
 	gitIn(t, h, root, "add", "-A")
 	gitIn(t, h, root, "commit", "-q", "-m", "Ignore logs")
-	tip := h.ref(lineage.ForkRef("notes"))
 	writeFile(t, filepath.Join(h.library, "notes", "SKILL.md"), skill("notes", "Edited"))
 	writeFile(t, filepath.Join(h.library, "notes", "extra.md"), "extra\n")
 	writeFile(t, filepath.Join(h.library, "notes", "debug.log"), "ignored by the root .gitignore\n")
@@ -309,17 +309,16 @@ func TestSkillDiffOfAFork(t *testing.T) {
 		return strings.Join(got, ",")
 	}
 	out := h.mustRun("--json", "skill", "diff", "notes")
-	equal(t, "the diffs against the tip", files(out), "SKILL.md modified,extra.md added")
+	equal(t, "the diffs against the creation commit", files(out), "SKILL.md modified,extra.md added")
 	diffs := h.eventsOfType(out.stdout, "diff")
 	contains(t, "SKILL.md's patch", diffs[0]["patch"].(string), "diff --git a/SKILL.md b/SKILL.md\n")
-	equal(t, "the result against the tip", h.one(out.stdout, "result")["summary"], "notes differs from its last commit "+short(tip)+" in 2 files")
+	equal(t, "the result against the creation commit", h.one(out.stdout, "result")["summary"], "notes differs from its creation commit "+short(first)+" in 2 files")
 
-	h.record("notes")
-	committed := h.ref(lineage.ForkRef("notes"))
-	equal(t, "the text once committed", h.mustRun("skill", "diff", "notes").stdout, "notes matches its last commit "+short(committed)+"\n")
-	out = h.mustRun("--json", "skill", "diff", "notes", "--commit", short(first))
-	equal(t, "the diffs against the first commit", files(out), "SKILL.md modified,extra.md added")
-	equal(t, "the result against the first commit", h.one(out.stdout, "result")["summary"], "notes differs from commit "+short(first)+" in 2 files")
+	committed := h.record("notes")
+	out = h.mustRun("--json", "skill", "diff", "notes")
+	equal(t, "the diffs once recorded", files(out), "SKILL.md modified,extra.md added")
+	equal(t, "the result once recorded", h.one(out.stdout, "result")["summary"], "notes differs from its creation commit "+short(first)+" in 2 files")
+	equal(t, "the text against the recorded commit", h.mustRun("skill", "diff", "notes", "--commit", short(committed)).stdout, "notes matches commit "+short(committed)+"\n")
 
 	for _, c := range []struct {
 		args    []string

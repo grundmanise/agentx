@@ -93,18 +93,19 @@ func (inv *invocation) readForkMerge(ctx context.Context, dir string) (forkPendi
 // whose branch is rec, for an update, as the user left it resolving it with
 // git, see readForkMerge. A merge with files still unmerged, or none in
 // progress, is left as it is and reported again, exit code 4. One resolved, in
-// progress or committed, is completed, once the fork's skill directory is found
-// to hold no unpublished edits, exit code 6 otherwise, as for the update that
-// started it: the commit that completes it is the user's own commit in the
-// checkout, or the one the fork commit writer writes here, with the tree of the
-// checkout's index, the tip the merge started from and what it merged as its
-// parents, and the merge's MERGE_MSG as its message. A user's commit whose
-// message names no base is written again the same way, with the base added to
-// its message.
+// progress or committed, is completed, once the unpublished edits of the fork's
+// skill directory are recorded, see recordFirst, which makes them a commit the
+// branch gained while the merge was pending: the commit that completes it is
+// the user's own commit in the checkout, or the one the fork commit writer
+// writes here, with the tree of the checkout's index, the tip the merge
+// started from and what it merged as its parents, and the merge's MERGE_MSG as
+// its message. A user's commit whose message names no base is written again
+// the same way, with the base added to its message.
 //
 // When the fork's branch still holds that tip, the branch moves to the
 // commit, see applyFork. When it moved on, because commits were made in
-// the fork's worktree while the merge was pending, the completed merge is
+// the fork's worktree while the merge was pending, edits recorded just now
+// among them, the completed merge is
 // merged with the branch's tip in turn, on ordinary ancestry, the merge
 // base being the tip the merge started from, so that only where the new
 // commits and the completed merge overlap can conflict. That merge records
@@ -202,11 +203,32 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 		u.merged.conflicted, u.conflict = true, conflictOfSkill(name, lineage.KindFork, u.merge, files)
 		return u, nil
 	}
+	// A branch that no longer holds the tip the merge started from was moved
+	// outside agentx. It is asked before the edits are recorded, which only
+	// add a commit on the tip, so that the refusal records nothing.
+	if rec.Commit != p.mine {
+		held, err := inv.isAncestor(ctx, gitDir, p.mine, rec.Commit)
+		switch {
+		case err != nil:
+			return nil, failureOf(accountRepoFailure(err))
+		case !held:
+			return nil, refuse(exitRefused, "the branch "+rec.Ref+" moved outside agentx while the merge of "+sanitised(name)+" was pending, so the merge cannot be applied",
+				"run '"+skillCommand("update", name, "--abort")+"' to give it up, then update again")
+		}
+	}
 	w, err := inv.newForkWriter(ctx, gitDir)
 	if err != nil {
 		return nil, failureOf(err)
 	}
-	var f *failure
+	// Edits made in the fork's worktree while the merge was pending are
+	// recorded first, as a commit the branch gains: the completed merge is
+	// then merged with it, as with any commit made meanwhile.
+	u.fork.laidTip = site.rec.Commit
+	site, _, f := inv.recordFirst(ctx, &w, site, "updated", func(lost []string) *failure { return u.fork.unrecordable(site, lost) })
+	if f != nil {
+		return nil, f
+	}
+	rec.Commit, rec.Tree, u.fork.site = site.rec.Commit, site.rec.Tree, site
 	if u.fork.judged, f = inv.cleanSite(ctx, site, u.fork); f != nil {
 		return nil, f
 	}
@@ -232,14 +254,6 @@ func (inv *invocation) judgeForkCompletion(ctx context.Context, gitDir string, r
 	if rec.Commit == p.mine {
 		u.fork.stale = inv.staleCandidate(ctx, gitDir, rec, u.fork.base, u.next.Import)
 		return u, inv.layFork(ctx, u, merged)
-	}
-	_, status, err := inv.git.IsolatedStatus(ctx, gitDir, 1, "merge-base", "--is-ancestor", p.mine, rec.Commit)
-	switch {
-	case err != nil:
-		return nil, failureOf(accountRepoFailure(err))
-	case status != 0:
-		return nil, refuse(exitRefused, "the branch "+rec.Ref+" moved outside agentx while the merge of "+sanitised(name)+" was pending, so the merge cannot be applied",
-			"run '"+skillCommand("update", name, "--abort")+"' to give it up, then update again")
 	}
 	if rec.Fork != nil && rec.Fork.Base != mine.Base {
 		completed := lineage.ForkLineage{Base: u.fork.base, Import: u.next.Import}

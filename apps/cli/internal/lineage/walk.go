@@ -23,6 +23,7 @@ type Commit struct {
 // else is kept anywhere.
 type ForkLineage struct {
 	ID         string // the Agentx-Fork-ID of the nearest commit carrying one; "" when none does
+	Created    string // that commit, the fork's creation commit, which skill new or skill fork wrote; "" when none does
 	Base       string // the base import commit; "" for a greenfield skill, and when Problem says why it cannot be read
 	BaseTree   string // the base's root tree, the upstream directory as its one entry
 	Import     Import // the base's coordinates, when Base is not ""
@@ -82,7 +83,7 @@ func Resolve(tip string, commits map[string]Commit) ForkLineage {
 			break
 		}
 		if t, err := ParseFork(c.Message); err == nil && t.ForkID != "" {
-			l.ID = t.ForkID
+			l.ID, l.Created = t.ForkID, id
 			break
 		}
 		if len(c.Parents) == 0 {

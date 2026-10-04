@@ -26,15 +26,20 @@ import (
 // resolved there with git and the next update of the fork completes it,
 // see judgeForkCompletion, or it is given up.
 //
-// The update refuses while the fork has unpublished edits, as git
-// merge refuses over a dirty work tree, so they are never merged over or
-// lost: they are published first.
+// The update records the fork's unpublished edits first, as a commit of
+// their own on its branch, see recordFirst, and merges the update into the
+// tip that holds them, so they are never merged over or lost. They stay
+// unpublished until the next publish.
 
 // forkUpdate is what the update of a fork reads before the lock besides
 // what every update reads, see updating, and applies under it.
 type forkUpdate struct {
-	site   forkSite
-	judged siteJudged // the skill directory, captured and judged with its ignored files
+	site forkSite
+	// laidTip is the tip the branch held before the command recorded the
+	// skill directory's edits on it, see recordFirst: what agentx last laid
+	// out, which a copy placement of the fork may still hold.
+	laidTip string
+	judged  siteJudged // the skill directory, captured and judged with its ignored files
 	// commit is the commit the branch moves to, the merge of the update or
 	// the merge completed, "" for a merge that conflicts.
 	commit string
@@ -134,9 +139,11 @@ func (inv *invocation) forkBaseOf(ctx context.Context, gitDir string, rec lineag
 // skill under another source or upstream directory than the base, which
 // the account repo's check never pins, exit code 8; a worktree git cannot
 // work in, see worktreeHealth; and a skill directory holding a repository
-// no ignore rule covers, or unpublished edits, exit code 6. A fork
-// with no candidate, or with its base as its candidate, is up to date: u
-// and f are then both nil.
+// no ignore rule covers, or what git cannot record that the new layout
+// would discard, exit code 6. A fork with no candidate, or with its base
+// as its candidate, is up to date: u and f are then both nil. Then the
+// unpublished edits of the skill directory are recorded, see recordFirst,
+// and the fork is updated from the tip that holds them.
 //
 // The merge is merge-tree's, as a managed skill's is, see mergeVersions:
 // mine the fork's tip, theirs the candidate, and the base the import the
@@ -179,6 +186,12 @@ func (inv *invocation) judgeForkUpdate(ctx context.Context, gitDir string, rec l
 		return nil, failureOf(err)
 	}
 	fork := &forkUpdate{site: site, base: next.Commit, theirsRef: lineage.CandidateRef(name), theirs: next.Commit}
+	// Edits are recorded first, and the merge takes the tip that holds them.
+	fork.laidTip = site.rec.Commit
+	if site, _, f = inv.recordFirst(ctx, &w, site, "updated", func(lost []string) *failure { return fork.unrecordable(site, lost) }); f != nil {
+		return nil, f
+	}
+	rec, fork.site = site.rec, site
 	pre, f := inv.cleanSite(ctx, site, fork)
 	if f != nil {
 		return nil, f
@@ -217,8 +230,11 @@ func (inv *invocation) judgeForkUpdate(ctx context.Context, gitDir string, rec l
 // cleanSite judges the skill directory of the fork site before a command
 // that lays a new tip out over it, with the files git ignores in it, which
 // the new layout carries over: a repository nested in it that no ignore
-// rule covers, unpublished edits and anything else git cannot record that
-// no rule covers are refused, exit code 6, before anything is written.
+// rule covers, anything else git cannot record that no rule covers, and
+// edits made since the command recorded the ones it found, see
+// recordFirst, are refused, exit code 6. It never records anything: an
+// update judges what it does with the tip before it gets here, and a
+// commit recorded after that judgement would be laid over.
 func (inv *invocation) cleanSite(ctx context.Context, site forkSite, fork *forkUpdate) (siteJudged, *failure) {
 	pre, err := inv.judgeSite(ctx, site, true)
 	switch {
@@ -263,8 +279,8 @@ func (inv *invocation) layFork(ctx context.Context, u *updating, commit string) 
 // is pending, exit code 4, unless the update completes it; the branch,
 // which has to hold the tip the update was judged on, and the candidate;
 // the worktree, which git has to be able to work in; and the skill
-// directory, which has to hold no unpublished edits, judged again when it
-// changed, exit code 6. A refusal drops the fork alone, as a managed
+// directory, which has to hold no edits the update did not record, judged
+// again when it changed, exit code 6. A refusal drops the fork alone, as a managed
 // skill's does, and the run goes on.
 //
 // A merge that conflicts is left pending, see startMerge, with nothing
@@ -332,7 +348,7 @@ func (inv *invocation) applyForkUpdate(ctx context.Context, gitDir string, u *up
 	if err := worktreeHealth(name, site.root, site.branch); err != nil {
 		return err
 	}
-	now, err := inv.siteNow(ctx, site, u.fork.judged, "updated", true)
+	now, err := inv.siteNow(ctx, site, u.fork.judged, "updated")
 	if err != nil {
 		return err
 	}
@@ -349,15 +365,24 @@ func (inv *invocation) applyForkUpdate(ctx context.Context, gitDir string, u *up
 	}
 	m, discard, err := inv.layTipJournal(ctx, site, tipLaying{
 		commit: u.fork.commit, laid: u.fork.laid, lay: u.fork.lay, now: now, kept: kept, done: &u.done,
-		// A copy that holds the tip's skill directory holds what agentx
+		// A copy that holds the tip's skill directory, or the one of the tip
+		// the edits this command recorded were recorded on, holds what agentx
 		// placed there, and is refreshed; one holding anything else was
 		// edited where it is, and is kept.
 		placed: func() ([]version, error) {
-			sub, err := inv.git.Isolated(ctx, gitDir, "rev-parse", "--verify", "--quiet", site.rec.Commit+":"+site.dir)
-			if err != nil {
-				return nil, accountRepoFailure(err)
+			tips := []string{site.rec.Commit}
+			if laid := u.fork.laidTip; laid != "" && laid != site.rec.Commit {
+				tips = append(tips, laid)
 			}
-			return []version{treeVersion(strings.TrimSpace(sub))}, nil
+			var held []version
+			for _, tip := range tips {
+				sub, err := inv.git.Isolated(ctx, gitDir, "rev-parse", "--verify", "--quiet", tip+":"+site.dir)
+				if err != nil {
+					return nil, accountRepoFailure(err)
+				}
+				held = append(held, treeVersion(strings.TrimSpace(sub)))
+			}
+			return held, nil
 		},
 	})
 	if err != nil {

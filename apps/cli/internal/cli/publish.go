@@ -205,7 +205,7 @@ func (inv *invocation) publish(ctx context.Context, name, message string) error 
 		inv.out.warn(what + ", so -m was not used")
 	}
 	if len(ready) > 0 {
-		recorded, err := inv.recordEdits(ctx, w, gitDir, ready, message, func(n string, f *failure) {
+		recorded, err := inv.recordEdits(ctx, w, gitDir, ready, message, publishWords, func(n string, f *failure) {
 			p := byName[n]
 			p.push, p.outcome, p.f = false, publishRefused, f
 		})
@@ -436,14 +436,27 @@ func (inv *invocation) judgeEdits(ctx context.Context, gitDir string, rec lineag
 // commit changes, see commitSubject. Every commit is written before the
 // lock, and nothing points at it until one journaled mutation moves each
 // branch to its commit, see applyCommits. A skill that changed meanwhile
-// is handed to drop and left out; the rest are returned. Recording never
-// pushes.
-func (inv *invocation) recordEdits(ctx context.Context, w *forkWriter, gitDir string, ready []*committing, message string, drop func(string, *failure)) ([]*committing, error) {
+// is handed to drop and left out, refused in the words of the command
+// that records, words; the rest are returned. Recording never pushes.
+func (inv *invocation) recordEdits(ctx context.Context, w *forkWriter, gitDir string, ready []*committing, message string, words recordWords, drop func(string, *failure)) ([]*committing, error) {
 	if err := inv.writeCommits(ctx, w, gitDir, ready, message); err != nil {
 		return nil, err
 	}
-	return inv.applyCommits(ctx, gitDir, ready, drop)
+	return inv.applyCommits(ctx, gitDir, ready, words, drop)
 }
+
+// recordWords is how a command that records edits refuses a skill that
+// changed meanwhile: what the skill was being, as in "so it was not
+// published", and the hint that runs it again for the skill called name.
+type recordWords struct {
+	what  string
+	again func(name string) string
+}
+
+// publishWords are a publish's recordWords.
+var publishWords = recordWords{what: "published", again: func(name string) string {
+	return "run '" + publishCommand(name) + "' again to publish it as it is now"
+}}
 
 // writeCommits writes the commit of every skill of ready, before the lock:
 // one diff-tree reads what each changes against its tip, which the
@@ -497,7 +510,7 @@ func (inv *invocation) writeCommits(ctx context.Context, w *forkWriter, gitDir s
 // judged. A branch moved after that read, by a commit made with git in the
 // worktree, refuses the mutation before it changes anything, and the run
 // records nothing.
-func (inv *invocation) applyCommits(ctx context.Context, gitDir string, ready []*committing, drop func(string, *failure)) ([]*committing, error) {
+func (inv *invocation) applyCommits(ctx context.Context, gitDir string, ready []*committing, words recordWords, drop func(string, *failure)) ([]*committing, error) {
 	var applied []*committing
 	err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 		refs := make([]string, 0, len(ready))
@@ -520,8 +533,7 @@ func (inv *invocation) applyCommits(ctx context.Context, gitDir string, ready []
 				return err
 			}
 			if live, err := home.State(f.skillDir); err != nil || live != c.captured || values[f.rec.Ref] != f.rec.Commit {
-				drop(f.name, refuse(exitRefused, sanitised(f.name)+" changed while its edits were being recorded, so it was not published",
-					"run '"+publishCommand(f.name)+"' again to publish it as it is now"))
+				drop(f.name, refuse(exitRefused, sanitised(f.name)+" changed while its edits were being recorded, so it was not "+words.what, words.again(f.name)))
 				continue
 			}
 			m.Ref(gitDir, f.rec.Ref, f.rec.Commit, c.commit)
@@ -532,7 +544,7 @@ func (inv *invocation) applyCommits(ctx context.Context, gitDir string, ready []
 	})
 	if errors.Is(err, home.ErrMovedBeforeApply) {
 		moved := strings.TrimPrefix(home.MovedRef(err), lineage.ForkPrefix)
-		return nil, fail(exitRefused, sanitised(moved)+" changed while its edits were being recorded, so nothing was published", "run the command again")
+		return nil, fail(exitRefused, sanitised(moved)+" changed while its edits were being recorded, so nothing was "+words.what, "run the command again")
 	}
 	if err != nil {
 		return nil, mutationFailure(err)
@@ -543,8 +555,9 @@ func (inv *invocation) applyCommits(ctx context.Context, gitDir string, ready []
 // commitVerbs is what the generated subject says a commit does to a file.
 var commitVerbs = map[string]string{diffAdded: "add", diffModified: "edit", diffDeleted: "delete"}
 
-// commitSubject is the subject of the commit a publish records a skill's
-// edits as when -m gives none: the skill, the first two files the commit
+// commitSubject is the subject of the commit a publish, or an update or a
+// fork that records a skill's edits first, records them as when -m gives
+// none: the skill, the first two files the commit
 // changes, by path, each with what it does to them, how many more it
 // changes, and the label of the machine it was made on, as in "notes: edit
 // SKILL.md, add examples.md and 3 more files (laptop)". Paths and the

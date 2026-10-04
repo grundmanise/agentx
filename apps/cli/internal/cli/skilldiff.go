@@ -18,15 +18,18 @@ func newSkillDiffCommand(inv *invocation) *cobra.Command {
 	var commit string
 	cmd := &cobra.Command{
 		Use:   "diff <name>",
-		Short: "Show how a skill differs from its base version, or a fork from its last commit",
+		Short: "Show how a skill differs from its base version, or a fork from what it published",
 		Long: "Show how the library directory of a managed skill differs from its base version,\n" +
 			"the version it was installed at, as one unified diff per file. Every edit counts,\n" +
 			"whatever tool made it, a file made executable and a file turned into a symlink\n" +
 			"included. Files git ignores do not. Nothing is written to the library. With\n" +
 			"--update, show instead what the update '" + checkUpdatesCommand + "' found\n" +
 			"changes in the base version.\n\n" +
-			"For a fork, show its unpublished edits: how its skill directory differs from the\n" +
-			"last commit of its branch, or, with --commit <id>, from that commit.",
+			"For a fork, show its unpublished edits: how its skill directory differs from its\n" +
+			"last published version, the newest commit of its branch the account remote holds\n" +
+			"as last fetched, or from the commit that created it when the account remote holds\n" +
+			"none, so edits an update or a fork recorded show until they are published; or,\n" +
+			"with --commit <id>, how it differs from that commit.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			switch {
@@ -86,8 +89,8 @@ type fileDiff struct {
 // that installing that version again stores it anew without touching a
 // file.
 //
-// A fork is compared with its last commit, or with the commit given, see
-// forkDiff.
+// One of your own skills is compared with its last published version, or
+// with the commit given, see forkDiff.
 func (inv *invocation) skillDiff(ctx context.Context, name, commit string) error {
 	gitDir, rec, held, err := inv.accountRecord(ctx, name)
 	if err != nil {

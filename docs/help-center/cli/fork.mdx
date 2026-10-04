@@ -78,7 +78,7 @@ agentx skill fork pdf --name my-pdf
 
 ### Fork a fork
 
-A fork already owns its name, so fork it under a new one: `agentx skill fork my-pdf --name pdf-letters`. The new fork starts from the fork's last commit and keeps its history. Publish the fork's edits first: a fork with unpublished edits is refused.
+A fork already owns its name, so fork it under a new one: `agentx skill fork my-pdf --name pdf-letters`. The new fork starts from the fork's last commit and keeps its history. Edits you have not published are recorded on the fork first, so both forks hold them. The fork you forked keeps showing them as unpublished. The new fork starts from them, so `agentx skill list` shows it as `current` and `agentx skill diff` compares it with the commit that created it: publish it to put the edits on your account remote.
 
 The new fork holds the skill's folder alone. A file you committed with Git next to the folder, such as a `README.md` at the root of the worktree, stays with the original fork. A fork whose library entry is gone goes into no client: place the new fork with [`agentx skill place`](/cli/skill#place-a-skill-you-already-have).
 
@@ -122,7 +122,7 @@ Publishing a fork records what Git would record in any repository: files your `.
 
 ## Publish your edits
 
-Edit a fork in any editor or agent, through your library. `agentx skill list` shows it as `modified` until you publish the edits. agentx never records them on its own.
+Edit a fork in any editor or agent, through your library. `agentx skill list` shows it as `modified` until you publish the edits. agentx never publishes them on its own.
 
 ```sh
 agentx skill publish release-notes -m "Cover reverted pull requests"
@@ -130,9 +130,11 @@ agentx skill publish release-notes -m "Cover reverted pull requests"
 
 Publishing records your edits as one commit on the fork's history and pushes it to your account remote: see [Publish a skill](/cli/skill#publish-a-skill). There is no separate commit step. If you prefer, commit with Git in `~/.agentx/worktrees/<name>`: agentx keeps that commit as it is, and the next publish pushes it.
 
-### Unpublished edits block branch moves
+### Unpublished edits are kept
 
-A command that would move a fork's branch, such as [`agentx skill update <name>`](#take-a-new-upstream-version), which also [takes in what another machine published](/cli/skill#take-in-what-another-machine-published), stops with exit code 6 while the fork has unpublished edits, and names the fork. Publish them with `agentx skill publish <name>`, then run the command again. To discard them instead, put the fork's last commit back with Git in the fork's worktree, then delete the files you added:
+A command that moves a fork's branch, such as [`agentx skill update <name>`](#take-a-new-upstream-version), which also [takes in what another machine published](/cli/skill#take-in-what-another-machine-published), or [forking](#fork-a-fork) or [renaming](#rename-a-fork) a fork, first records the fork's unpublished edits as a commit on its branch, then goes ahead. Your edits are never merged over or lost, and they stay unpublished: `agentx skill list` shows the fork as `modified`, and `agentx skill diff` shows the edits, until you publish them. A new fork that forking or renaming makes starts from them instead, so it shows as `current`. If you edit the fork while such a command runs, it stops with exit code 6: run it again.
+
+To discard your edits instead, before you run such a command, put the fork's last commit back with Git in the fork's worktree, then delete the files you added:
 
 ```sh
 git -C ~/.agentx/worktrees/<name> restore --source=HEAD --staged --worktree .
@@ -140,6 +142,14 @@ git -C ~/.agentx/worktrees/<name> clean -fd
 ```
 
 Files Git ignores never count as edits, and `git clean` without `-x` leaves them where they are.
+
+To drop edits that an update, fork or rename already recorded, reset the fork's worktree to the commit `agentx skill diff <name>` compares with, such as its last published version:
+
+```sh
+git -C ~/.agentx/worktrees/<name> reset --hard <commit>
+```
+
+This drops every commit made since that one, an update's merge included.
 
 ## Read a fork's history
 
@@ -165,7 +175,7 @@ e07d5b2  2026-10-01 09:12  Create release-notes  1 file
 agentx skill diff release-notes
 ```
 
-`skill diff` shows a fork's unpublished edits: how its skill folder differs from the fork's last commit, one diff per file. Paths are relative to the skill, and [files that stay local](#files-that-stay-local) never show.
+`skill diff` shows a fork's unpublished edits: how its skill folder differs from the version you last published to your account remote, as agentx last fetched it, one diff per file. Edits an update or a fork recorded on the fork still show until you publish them. A fork you never published is compared with the commit that created it. Paths are relative to the skill, and [files that stay local](#files-that-stay-local) never show.
 
 Compare with any earlier commit instead with `--commit`, using an id `agentx skill history` lists:
 
@@ -187,9 +197,9 @@ agentx skill update release-notes
 ```
 
 - agentx always merges the new version into your fork, with the version you were last at as the base. Your commits are kept, a line you put back stays as you put it, and what changed upstream alone comes in clean.
-- The merge is committed on the fork's branch, as `release-notes: merge upstream 5d6e7f8 (laptop)`. Nothing is pushed: [publish](/cli/skill#publish-a-skill) it when you are ready.
+- The merge is committed on the fork's branch, as `release-notes: merge upstream 5d6e7f8 (laptop)`. Nothing is pushed: the fork shows as `modified` until you [publish](/cli/skill#publish-a-skill) it.
 - With an [account remote](/cli/remote) set, agentx first [takes in what your other machines published](/cli/skill#take-in-what-another-machine-published) of the fork, then merges the new version on top, as two commits. If Git cannot reach the remote, agentx warns and takes the upstream version alone.
-- Publish your edits first, or discard them as [Unpublished edits block branch moves](#unpublished-edits-block-branch-moves) shows: a fork with unpublished edits stops with exit code 6.
+- Edits you have not published are recorded on the fork first, and the merge keeps them, still unpublished. See [Unpublished edits are kept](#unpublished-edits-are-kept).
 - [Files that stay local](#files-that-stay-local) are kept. If the new version holds a file at a path your ignore rules cover, that file replaces your local one, as `git checkout` does.
 - `agentx skill update --all` updates every managed skill and fork with an update.
 - A skill you created with agentx, or forked from an unmanaged or a plugin's skill, has no upstream: with an account remote set, `skill update` takes in only what your other machines published of it; without one, it stops with exit code 6.
@@ -207,8 +217,7 @@ notes.md: both modified
 2. Run `agentx skill update <name>` again. agentx commits the merge on the fork's branch and lays it out in your fork.
 
 - Conflict markers are longer than any line of your skill that looks like one, such as a `=======` rule, so you can tell them apart.
-- Unpublished edits in your fork stop the second step with exit code 6. Publish them, or [discard them with Git](#unpublished-edits-block-branch-moves).
-- If you committed in your fork while the merge waited, agentx merges the finished merge with those commits. Where both change the same lines, the merge waits again in the same worktree, showing only that overlap: resolve it and run `agentx skill update <name>` again.
+- If you edited or committed in your fork while the merge waited, agentx records the edits first, then merges the finished merge with those commits. Where both change the same lines, the merge waits again in the same worktree, showing only that overlap: resolve it and run `agentx skill update <name>` again.
 - Give the merge up with `agentx skill update <name> --abort`. Your fork, its branch and the update stay as they were.
 
 A merge with what another machine published waits the same way when `agentx skill update` takes the account remote's commits in, and reads `release-notes conflicts with the account remote in 1 file`. Complete it with `agentx skill update <name>`. A publish never merges: while the remote holds commits this machine lacks, `agentx skill publish` does not push the fork.
@@ -283,14 +292,14 @@ A rename runs the two commands you could run yourself, and nothing else: [`agent
 
 - The renamed fork is a new fork with a fork id of its own. Its history holds every commit of the old one, and its `SKILL.md` carries the new name.
 - It is placed where the old one was, as a copy wherever the old one was a copy.
-- agentx checks both steps before running either, so a name you cannot use, unpublished edits or a merge pending stop the rename before anything changes. Publish your edits first.
+- agentx checks both steps before running either, so a name you cannot use or a merge pending stop the rename before anything changes. Edits you have not published are recorded on the old fork as the new fork is made, and the renamed fork starts from them, so it shows as `current` until you edit it again. Publish it to put the edits on your account remote.
 - Files Git ignores in the old fork's worktree, such as a local `.env`, are deleted with it. Copy the ones you want into the new fork first.
 - The old fork's branch stays on the [account remote](/cli/remote). Add `--remote` to delete it there too. When the remote's branch is a different fork of the same name, the rename stops: run it again without `--remote`. When the remote's branch holds commits another machine published and you have not taken in, the rename stops too: run `agentx skill update <old>` first.
 - Another machine sees the renamed fork, once you publish it, as a new fork to install, and keeps the old one until you remove it there.
 
 If the removal fails after the new fork was made, the error says so. Finish the rename with the `agentx skill remove <old>` command it names.
 
-If you edited or committed to the old fork while the rename ran, the removal stops, since the new fork lacks that work. To keep it, publish the edits with `agentx skill publish <old>`, remove the new fork with `agentx skill remove <new>`, and run the rename again. To drop it, run `agentx skill remove <old>`.
+If you edited or committed to the old fork while the rename ran, the removal stops, since the new fork lacks that work. To keep it, remove the new fork with `agentx skill remove <new>` and run the rename again, which records the edits. To drop it, run `agentx skill remove <old>`.
 
 ## Remove a fork
 
@@ -325,6 +334,6 @@ To take a fork out of one configuration only, use `--from`, as for any skill: se
 - `3`: `skill remove --remote` or `skill rename --remote` cannot reach the account remote, or the account remote refused to delete the fork's branch. `skill update` cannot reach it for a fork with no upstream.
 - `4`: the skill you fork, rename or remove has a merge pending. Finish or abort it with `agentx skill update <name>` first. `skill update` left a fork's merge waiting for you to [resolve](#resolve-a-conflict), or found files of it still to resolve.
 - `5`: `skill history` or `skill diff` names a skill your library does not hold; `skill place` finds no `SKILL.md` in the fork's skill folder or the folder it would adopt; `skill fork` names a skill neither your library nor a plugin holds; `skill update` names a fork whose upstream source you removed; `skill rename` names a skill your library does not hold; `skill remove --remote` names a fork neither this machine nor the account remote holds.
-- `6`: the name breaks the naming rule, the account repo already holds a skill of that name in any case, or the library or `~/.agentx/worktrees` already holds something under it. For `skill fork`: the skill is already a fork and no new name, or its own name, is given; several plugins provide the name; the library entry is a symlink of your own or sits on another file system than agentx home; the skill is itself a Git repository; the skill holds a Git repository its `.gitignore` does not cover; its `SKILL.md` cannot take the new name; or the skill changed while it was being forked. For `skill history`: the skill is not a fork. For `skill update`: the fork has no upstream and no account remote is set; the account remote holds [another fork](/cli/remote#two-forks-with-one-name) of that name, or one that shares no commit with yours; it holds a Git repository its `.gitignore` does not cover; its worktree is missing, needs repair, is not on its branch, waits for a Git command you ran there to finish, or Git is running there; its branch moved outside agentx while its merge waited; or the fork, its branch or its update changed while it was being updated. For `skill diff`: the fork's worktree or skill directory is missing; `--commit` names no commit of the account repo or a commit that holds no folder of the skill; or `--commit` is given for a skill that is not a fork. For `skill place`: a folder is in the way of the fork and `--force` is not given; `--force` is given with nothing in the way; the folder to adopt holds other files, is itself a Git repository, is a copy of another worktree, sits on another file system than agentx home, or meets a worktree that holds edits of its own or files Git ignores; the worktree is not on its branch; a Git command you ran in the worktree waits for you to finish or abort it, or Git is running there; or the fork changed while it was being placed. For `skill rename`: the skill is not a fork, or it changed while it was being renamed; with `--remote`, the account remote's branch holds commits you have not taken in. For `skill remove`: Git is running in the fork's worktree, or the fork changed while it was being removed. For `skill remove` and `skill rename` with `--remote`: no account remote is set, the name is a skill of this machine that is not a fork, or the account remote's branch is another fork. For a command that moves a fork's branch, for forking a fork and for renaming one: the fork has unpublished edits. For every exit code `agentx skill publish` uses, see [Exit codes](/cli/skill#exit-codes).
+- `6`: the name breaks the naming rule, the account repo already holds a skill of that name in any case, or the library or `~/.agentx/worktrees` already holds something under it. For `skill fork`: the skill is already a fork and no new name, or its own name, is given; several plugins provide the name; the library entry is a symlink of your own or sits on another file system than agentx home; the skill is itself a Git repository; the skill holds a Git repository its `.gitignore` does not cover; its `SKILL.md` cannot take the new name; or the skill changed while it was being forked. For `skill history`: the skill is not a fork. For `skill update`: the fork has no upstream and no account remote is set; the account remote holds [another fork](/cli/remote#two-forks-with-one-name) of that name, or one that shares no commit with yours; it holds a Git repository its `.gitignore` does not cover; its worktree is missing, needs repair, is not on its branch, waits for a Git command you ran there to finish, or Git is running there; its branch moved outside agentx while its merge waited; or the fork, its branch or its update changed while it was being updated. For `skill diff`: the fork's worktree or skill directory is missing; `--commit` names no commit of the account repo or a commit that holds no folder of the skill; or `--commit` is given for a skill that is not a fork. For `skill place`: a folder is in the way of the fork and `--force` is not given; `--force` is given with nothing in the way; the folder to adopt holds other files, is itself a Git repository, is a copy of another worktree, sits on another file system than agentx home, or meets a worktree that holds edits of its own or files Git ignores; the worktree is not on its branch; a Git command you ran in the worktree waits for you to finish or abort it, or Git is running there; or the fork changed while it was being placed. For `skill rename`: the skill is not a fork, or it changed while it was being renamed; with `--remote`, the account remote's branch holds commits you have not taken in. For `skill remove`: Git is running in the fork's worktree, or the fork changed while it was being removed. For `skill remove` and `skill rename` with `--remote`: no account remote is set, the name is a skill of this machine that is not a fork, or the account remote's branch is another fork. For a command that moves a fork's branch, for forking a fork and for renaming one: the fork changed while the command ran. For every exit code `agentx skill publish` uses, see [Exit codes](/cli/skill#exit-codes).
 - `7`: another agentx command is running. Retry when it finishes.
 - `8`: the account repo in agentx home cannot be read or written, the fork's history does not say which upstream version it is based on, or its update holds the skill in another folder. Run `agentx doctor`.

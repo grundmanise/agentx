@@ -26,8 +26,8 @@ import (
 // worktree and branch stay as they are, and the next update of the fork
 // completes it once it is resolved there with git. The account step
 // refuses a remote branch of the same name that is another fork, by its
-// fork id, and, while the fork has unpublished edits, anything that
-// would move its branch.
+// fork id. It records the fork's unpublished edits before it takes
+// anything in, see recordFirst, so they are kept, still unpublished.
 
 // pullEvent is what the account step did to one fork.
 type pullEvent struct {
@@ -140,11 +140,14 @@ func (inv *invocation) syncFork(ctx context.Context, gitDir string, rec lineage.
 // branch of, or one that holds what the fork holds already, is left as it
 // is, up to date; a remote branch whose history names another fork id than
 // the fork's, or one of the two that names none, is refused, exit code 6,
-// since two forks of one name are never tangled; then a fork whose worktree
-// git cannot work in, see worktreeHealth, and one with unpublished edits or
-// a repository nested in it that no ignore rule covers, see cleanSite, is
-// refused, exit code 6, before anything is written. A fork the account
-// remote has nothing new for is up to date whatever its worktree holds.
+// since two forks of one name are never tangled; so are a remote branch
+// that shares no commit with the fork, a fork whose worktree git cannot
+// work in, see worktreeHealth, and one with a repository nested in it that
+// no ignore rule covers or what git cannot record, see recordFirst, exit
+// code 6, before anything is written. A fork the account remote has
+// nothing new for is up to date whatever its worktree holds. Then the
+// fork's unpublished edits are recorded, see recordFirst, and what follows
+// is judged on the tip that holds them.
 //
 // A fork whose tip the remote tip descends from is fast-forwarded to it.
 // Any other is merged with it by merge-tree, with git's own merge base: a
@@ -178,7 +181,19 @@ func (inv *invocation) judgePull(ctx context.Context, gitDir string, rec lineage
 	if err != nil {
 		return "", nil, failureOf(err)
 	}
-	fork.site = site
+	// Edits are recorded first, as a commit on the tip that the remote tip
+	// does not descend from, so the fork is merged with the remote tip
+	// rather than fast-forwarded past them. The merge base read above still
+	// holds, since the remote tip does not hold the new commit.
+	// The writer is read only when there are edits to record, and then
+	// kept for the merge, which a recorded commit always makes.
+	fork.site, fork.laidTip = site, site.rec.Commit
+	var w *forkWriter
+	site, _, f := inv.recordFirst(ctx, &w, site, "updated", func(lost []string) *failure { return fork.unrecordable(site, lost) })
+	if f != nil {
+		return "", nil, f
+	}
+	rec, fork.site = site.rec, site
 	u := &updating{name: name, libPath: site.libPath, fork: fork}
 	if base == rec.Commit {
 		judged, f := inv.cleanSite(ctx, site, fork)
@@ -192,11 +207,10 @@ func (inv *invocation) judgePull(ctx context.Context, gitDir string, rec lineage
 		}
 		return pullFastForward, u, nil
 	}
-	// The writer reads the user's core.excludesFile with their identity,
-	// before git reads the skill directory with the ignore rules it names.
-	w, err := inv.newForkWriter(ctx, gitDir)
-	if err != nil {
-		return "", nil, failureOf(err)
+	if w == nil {
+		if w, err = inv.newForkWriter(ctx, gitDir); err != nil {
+			return "", nil, failureOf(err)
+		}
 	}
 	judged, f := inv.cleanSite(ctx, site, fork)
 	if f != nil {

@@ -20,8 +20,10 @@ func newSkillRenameCommand(inv *invocation) *cobra.Command {
 			"'agentx skill fork <old> --name <new>', then 'agentx skill remove <old>', with\n" +
 			"--remote passed on to the removal. The renamed skill is a new fork, with a fork\n" +
 			"id of its own, whose history holds the old one's commits, placed where the old\n" +
-			"one was. Both steps are checked before either runs, so a merge pending,\n" +
-			"unpublished edits or a name that cannot be used change nothing. Files git ignores\n" +
+			"one was. Both steps are checked before either runs, so a merge pending or a name\n" +
+			"that cannot be used change nothing. Unpublished edits are recorded on the old\n" +
+			"fork's branch first, and the renamed fork starts from them, reading current\n" +
+			"until it is edited again; publish it to push them. Files git ignores\n" +
 			"in the old fork's worktree are deleted with it. Another machine sees the renamed\n" +
 			"fork as a new fork to install, and keeps the old one until it is removed there.",
 		Args: cobra.ExactArgs(2),
@@ -38,7 +40,9 @@ func newSkillRenameCommand(inv *invocation) *cobra.Command {
 // nothing else: no rename is recorded anywhere, and the new fork has a
 // fork id of its own. Before either step runs, everything either would
 // refuse is asked: what skill fork refuses of old and of newName, see
-// planFork, and what skill remove refuses of old, see judgeForkRemoval. A
+// planFork, and what skill remove refuses of old, see judgeForkRemoval.
+// Old's unpublished edits are recorded on its branch only then, as the
+// fork is made, see makeFork, so a refused rename records nothing. A
 // removal that fails once the fork is made says so, names both skills and
 // the command that finishes the rename.
 func (inv *invocation) skillRename(ctx context.Context, old, newName string, remote bool) error {
@@ -79,10 +83,12 @@ func (inv *invocation) skillRename(ctx context.Context, old, newName string, rem
 				"run '"+skillCommand("update", old)+"' first, or rename it without --remote with '"+renameHere+"'")
 		}
 	}
-	r.guard = &forkGuard{site: fk.site, judged: fk.judged}
 	if err := inv.makeFork(ctx, fk); err != nil {
 		return err
 	}
+	// The fork recorded old's edits on its branch, see makeFork, so the
+	// removal finds the branch at the tip that holds them.
+	r.tip, r.guard = fk.src.rec.Commit, &forkGuard{site: fk.site, judged: fk.judged}
 	made := sanitised(newName) + " was created"
 	if err := inv.runForkRemoval(ctx, r, made); err != nil {
 		f := failureOf(err)
@@ -148,8 +154,7 @@ func renameFinish(old, newName, finish string, remote bool, err error) string {
 	carry := "run '" + skillCommand("remove", newName) + "' and '" + again + "' again"
 	switch {
 	case errors.Is(err, errUncommitted):
-		return "to keep the edits, publish them with '" + publishCommand(old) + "', then " + carry +
-			"; to drop them, run '" + finish + "'"
+		return "to keep the edits, " + carry + ", which records them; to drop them, run '" + finish + "'"
 	case errors.Is(err, errMovedWhileRemoved):
 		return sanitised(old) + "'s branch moved since " + sanitised(newName) + " was forked from it; to keep what it holds now, " +
 			carry + "; to drop it, run '" + finish + "'"

@@ -295,7 +295,7 @@ func (inv *invocation) applyForkRemoval(ctx context.Context, r *forkRemoval) (re
 			return err
 		}
 		if r.guard != nil {
-			if _, err := inv.forkGuards(ctx, r.guard.site, r.guard.judged, "removed", true); err != nil {
+			if _, err := inv.forkGuards(ctx, r.guard.site, r.guard.judged, "removed"); err != nil {
 				return err
 			}
 		}

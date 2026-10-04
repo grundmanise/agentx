@@ -117,7 +117,9 @@ func TestSkillPlaceRepairsAFork(t *testing.T) {
 
 	gitIn(t, h, root, "checkout", "--", "notes")
 	equal(t, "git status once checked out", gitIn(t, h, root, "status", "--porcelain"), "")
-	equal(t, "state once checked out", h.listed("notes")["state"], stateCurrent)
+	// The commit made with git is not published, so the skill still reads
+	// modified, though its directory holds its tip.
+	equal(t, "state once checked out", h.listed("notes")["state"], stateModified)
 
 	// A file git ignores is the user's, but a .DS_Store Finder left is not.
 	writeFile(t, filepath.Join(skillDir, ".DS_Store"), "finder\n")

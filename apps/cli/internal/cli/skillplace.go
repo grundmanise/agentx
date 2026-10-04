@@ -659,6 +659,9 @@ type skillContext struct {
 	targets  []placeTarget          // every detected configuration a placement can be made in
 	observed map[string]observation // read ahead of the report, by skill name; see observeAll
 	merges   map[string]bool        // the skills an update left a merge pending for, see pendingMerges
+	// published is the tip of each of your own skills' branch on the
+	// account remote as last fetched, by name, see publishedTips.
+	published map[string]string
 }
 
 func (inv *invocation) skillContext(ctx context.Context) (skillContext, error) {
@@ -674,7 +677,7 @@ func (inv *invocation) skillContext(ctx context.Context) (skillContext, error) {
 	if err != nil {
 		return skillContext{}, err
 	}
-	return newSkillContext(inv, records, s, modes), nil
+	return newSkillContext(ctx, inv, records, s, modes), nil
 }
 
 // librarySkillEventFor builds the library_skill event of one library directory from the

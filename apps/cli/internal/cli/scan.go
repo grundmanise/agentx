@@ -184,7 +184,7 @@ func (inv *invocation) inventory(ctx context.Context, wait time.Duration, projec
 				// lock the library was read under, so that an entry never
 				// pairs the library's directory with placements or content
 				// from the other side of a mutation.
-				read := newSkillContext(inv, records, s, copyMode)
+				read := newSkillContext(ctx, inv, records, s, copyMode)
 				read.observeAll(ctx, inv, sc.Library())
 				listing = &read
 				// A managed skill the library no longer holds has no entry

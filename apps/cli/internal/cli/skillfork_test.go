@@ -279,12 +279,15 @@ func TestSkillForkOfAPluginSkill(t *testing.T) {
 }
 
 // TestSkillForkOfAFork forks a fork, which only a new name can do: with
-// no name or its own it is refused, and so it is while it holds an edit nobody
-// committed. Once the edit is committed, the new fork's branch starts at
-// the fork's tip, so its history is kept, with a creation commit of its
-// own that writes the new name and leaves out the file a commit made with
-// git put beside the skill directory, and the new fork reads the upstream
-// its source came from and goes where its source is.
+// no name or its own it is refused, and so is one whose edits leave
+// SKILL.md no frontmatter to write the new name into, recording nothing.
+// An edit not yet published is recorded
+// on the fork's branch first, over a commit made with git in its
+// worktree, and the new fork's branch starts at that tip, so its history
+// and the edit are kept in both, with a creation commit of its own that
+// writes the new name and leaves out the file the commit made with git
+// put beside the skill directory, and the new fork reads the upstream its
+// source came from and goes where its source is.
 func TestSkillForkOfAFork(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -298,18 +301,26 @@ func TestSkillForkOfAFork(t *testing.T) {
 	}
 	refuses("no new name", []string{"alpha"}, exitRefused, "alpha is already a fork")
 	refuses("its own name", []string{"alpha", "--name", "alpha"}, exitRefused, "the fork is already called alpha")
-	writeFile(t, filepath.Join(h.library, "alpha", "notes.md"), "edited\n")
-	refuses("uncommitted edits", []string{"alpha", "--name", "alpha-two"}, exitRefused, "alpha has unpublished edits, so it cannot be forked")
-	h.record("alpha")
 	root := filepath.Join(h.agentx, "worktrees", "alpha")
 	writeFile(t, filepath.Join(root, "README.md"), "beside\n")
 	gitIn(t, h, root, "add", "README.md")
 	gitIn(t, h, root, "-c", "user.name=Grace Hopper", "-c", "user.email=grace@example.com", "commit", "-q", "-m", "Beside the skill")
+	// A fork refused for what the edits hold records none of them.
+	skillMD := filepath.Join(h.library, "alpha", "SKILL.md")
+	body := fileBody(t, skillMD)
+	writeFile(t, skillMD, "---\nname: alpha\n")
+	before := h.ref(lineage.ForkRef("alpha"))
+	refuses("an unclosed frontmatter", []string{"alpha", "--name", "alpha-two"}, exitRefused, "cannot write the name alpha-two into SKILL.md")
+	equal(t, "an unclosed frontmatter: the tip", h.ref(lineage.ForkRef("alpha")), before)
+	writeFile(t, skillMD, body)
+	writeFile(t, filepath.Join(h.library, "alpha", "notes.md"), "edited\n")
 
-	source := h.ref(lineage.ForkRef("alpha"))
 	h.mustRun("skill", "fork", "alpha", "--name", "alpha-two")
-	tip := h.ref(lineage.ForkRef("alpha-two"))
+	source, tip := h.ref(lineage.ForkRef("alpha")), h.ref(lineage.ForkRef("alpha-two"))
 	equal(t, "the parent", h.accountGit("rev-parse", tip+"^"), source)
+	equal(t, "what the recorded edit changes", h.accountGit("diff-tree", "--no-commit-id", "--name-only", "-r", source), "alpha/notes.md")
+	equal(t, "the edit in the fork", fileBody(t, filepath.Join(h.library, "alpha", "notes.md")), "edited\n")
+	equal(t, "the edit in the new fork", fileBody(t, filepath.Join(h.library, "alpha-two", "notes.md")), "edited\n")
 	equal(t, "the kept history", h.accountGit("rev-list", "--count", tip), "5")
 	if a, b := h.trailer(source+"^^", lineage.TrailerForkID), h.trailer(tip, lineage.TrailerForkID); a == b || b == "" {
 		t.Errorf("the fork ids are %q and %q", a, b)
