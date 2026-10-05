@@ -4,7 +4,7 @@ Status: accepted. Applies to commands that change lineage refs, worktrees, libra
 
 ## Adoption
 
-Record the actual previously installed upstream version as the base. Keep the adopted directory's current content; differences from that base remain local modifications. Never import edited local content as if it came from upstream.
+Record the actual previously installed upstream version as the base. Keep the adopted directory's current content; differences from that base remain local modifications. Add back only the files of that base the installer never copies and the directory lacks, since their absence is no edit of the user's. Never import edited local content as if it came from upstream.
 
 If the prior base cannot be established, leave the directory unmanaged. Offer an explicit base selection as the one way to adopt it anyway. It never silently replaces the directory with the latest upstream version.
 

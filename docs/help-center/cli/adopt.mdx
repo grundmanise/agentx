@@ -1,9 +1,9 @@
 ---
 title: "agentx adopt"
-description: "Take over the skills the vercel skills CLI installed, without reinstalling them or touching your files."
+description: "Take over the skills the vercel skills CLI installed, without reinstalling them or touching your edits."
 ---
 
-The vercel skills CLI installs skills into `~/.agents/skills`, the same library agentx uses, and records each install in a lock file. `agentx adopt` reads that lock file and takes those skills over. Each skill keeps its directory as it is and gains an upstream, so agentx can tell your edits apart from the version you installed.
+The vercel skills CLI installs skills into `~/.agents/skills`, the same library agentx uses, and records each install in a lock file. `agentx adopt` reads that lock file and takes those skills over. Each skill keeps the files in its directory as they are and gains an upstream, so agentx can tell your edits apart from the version you installed. agentx only adds the [files the installer left out](#files-the-installer-left-out).
 
 agentx only reads the lock file. The file stays as it is.
 
@@ -54,7 +54,7 @@ For each skill, agentx:
 1. Adds its source if you do not have it yet, as [`agentx source add`](/cli/source#pin-a-source) does, pinned to the ref in the lock file. This also brings back a source you removed.
 2. Finds the upstream version you installed and records it as the skill's [base](#how-agentx-finds-the-base).
 
-Your files stay as they are. If a skill fails, agentx still adopts the others and lists the failures at the end.
+Your files stay as they are; agentx only adds the [files the installer left out](#files-the-installer-left-out). If a skill fails, agentx still adopts the others and lists the failures at the end.
 
 Afterwards the skills are ordinary managed skills:
 
@@ -91,11 +91,25 @@ The base is the upstream version you installed. agentx compares your directory w
 agentx checks these in order and uses the first that works:
 
 1. **The folder hash in the lock file.** It names the skill's directory, or, for a skill at the root of its repository, the commit it was installed from. agentx looks for that version in the source, in the last 500 commits that changed the skill. This also works for a skill the source has since deleted.
-2. **Your directory.** If your files match the source's current version exactly, agentx records that version.
+2. **Your directory.** If your files match the source's current version exactly, apart from the [files the installer left out](#files-the-installer-left-out), agentx records that version.
 
 To name the version yourself, use `--base`. It replaces both checks. See [Choose the base yourself](#choose-the-base-yourself).
 
 If your directory differs from the base, agentx says so, and `agentx skill list` shows the skill as `modified`. See what you changed with [`agentx skill diff <name>`](/cli/skill#see-what-you-changed).
+
+## Files the installer left out
+
+The vercel skills CLI skips some files of a skill, depending on its version: `metadata.json`, `README.md`, and files or folders whose names start with `_` or `.`, such as `rules/_sections.md` or `.gitignore`. These files are part of the version you installed. Without them, the skill would look as if you deleted them.
+
+When agentx adopts a skill, it writes these files back, with the content of the version you installed:
+
+```text
+✓ adopted vercel-composition-patterns from https://github.com/vercel-labs/agent-skills under skills/composition-patterns at a5343bd
+  base 998e411: the version the lock file recorded, found in the source
+  restored README.md, metadata.json, rules/_sections.md, rules/_template.md, which the vercel skills CLI left out
+```
+
+agentx adds only the files that are missing. Files you kept or edited stay as they are. If you deleted one of these files on purpose, delete it again after adopting; `agentx skill list` then shows the skill as `modified`.
 
 ## When agentx cannot find the base
 

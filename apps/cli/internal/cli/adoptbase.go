@@ -533,7 +533,9 @@ func (inv *invocation) fillAdoption(c *candidate, listed []source.TreeEntry, bod
 	if f := v.fill(bodies, c.src.URL); f != nil {
 		return f
 	}
-	if c.base.confirm && v.hash != c.hash {
+	// The directory holds the version when it holds all of it but what the
+	// installer never copies, which the adoption restores.
+	if c.base.confirm && v.hashWithout(installerLeftOut(c.path, v)) != c.hash {
 		// The last route is spent: the directory is not the version the
 		// source has, so nothing establishes the one it was installed at.
 		return c.noVersion()
