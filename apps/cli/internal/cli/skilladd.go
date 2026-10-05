@@ -1123,7 +1123,8 @@ func (inv *invocation) libraryPlan(v *imported, libPath, state string) (libraryA
 		return libraryAction{adopt: true}, nil // write the branch, copy nothing
 	}
 	return libraryAction{}, refuse(exitRefused, fmt.Sprintf("the library already holds %s at %s", v.name, inv.dirs.Library),
-		"remove "+libPath+" and install again, or install the skill under another name by forking it")
+		"remove "+libPath+" and install again, or keep it under another name: fork it with '"+skillCommand("fork", v.name, "--name", "<new>")+
+			"', remove it with '"+skillCommand("remove", v.name)+"', then install again")
 }
 
 // refPlan decides the import branch, which is created with an expected old

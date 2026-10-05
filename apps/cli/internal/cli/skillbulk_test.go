@@ -227,6 +227,19 @@ func TestSkillAddInstallsTheRestWhenOneSkillIsBroken(t *testing.T) {
 	last := progress[len(progress)-1]
 	equal(t, "the last step", last["phase"], "rescan")
 	equal(t, "current", last["current"], last["total"])
+
+	// The hint's way to keep what was in the way works as it says: the
+	// fork under another name leaves beta in place, so the removal is what
+	// frees the name for the install.
+	equal(t, "the hint", lastError(t, h.events(out.stdout))["hint"],
+		"remove "+mine+" and install again, or keep it under another name: fork it with 'agentx skill fork beta --name <new>', remove it with 'agentx skill remove beta', then install again")
+	h.mustRun("skill", "fork", "beta", "--name", "my-beta")
+	h.mustRun("skill", "remove", "beta")
+	h.mustRun("skill", "add", s.url, "--name", "beta")
+	equal(t, "the skills in the library", strings.Join(installedNames(t, h), ","), "alpha,beta,gamma,my-beta")
+	if h.accountGit("rev-parse", "refs/heads/managed/beta") == "" {
+		t.Error("beta installed from the source has no import branch")
+	}
 }
 
 // TestSkillAddDropsASkillTheLibraryCannotName refuses a skill whose

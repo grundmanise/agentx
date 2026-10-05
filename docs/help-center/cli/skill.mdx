@@ -62,7 +62,15 @@ warning: xlsx: the library already holds xlsx at /home/me/.agents/skills
 ✓ installed pdf from https://github.com/anthropics/skills under skills/pdf at 3f2a9c1, source fetched 2026-09-22T10:00:00Z: 4 placements
   ...
 error: 1 of 3 skills could not be installed: xlsx: the library already holds xlsx at /home/me/.agents/skills
-hint: remove /home/me/.agents/skills/xlsx and install again, or install the skill under another name by forking it
+hint: remove /home/me/.agents/skills/xlsx and install again, or keep it under another name: fork it with 'agentx skill fork xlsx --name <new>', remove it with 'agentx skill remove xlsx', then install again
+```
+
+To keep the skill that holds the name, fork it under a new name, remove it, then install again. The fork alone leaves the skill in place, so the name stays taken until you remove it:
+
+```sh
+agentx skill fork xlsx --name my-xlsx
+agentx skill remove xlsx
+agentx skill add anthropics/skills --name xlsx
 ```
 
 agentx also refuses a skill whose directory name in the source holds a control character, or starts or ends with a space. Ask the source to rename the directory, or install another skill.
