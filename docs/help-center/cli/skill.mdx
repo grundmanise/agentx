@@ -23,7 +23,7 @@ agentx skill add anthropics/skills --name pdf
 
 Each row is one client's placement. For a universal client, the placement is the library entry itself. See [Clients that see every skill](#clients-that-see-every-skill).
 
-If you have not added the source yet, `skill add` adds it first, as [`agentx source add`](/cli/source) does. The source stays added even if the install fails. Name a new source by its URL. A source id works only for a source you already added.
+If you have not added the source yet, `skill add` adds it first, as [`agentx source add`](/cli/source) does. The source stays added even if the install fails. Name a new source by its URL or as `owner/repo`. A source id works only for a source you already added.
 
 For a source you already added, agentx installs from its last fetch, and the output shows when that was (`source fetched ...`). To install the latest version, add `--fetch`, or run `agentx source fetch` first:
 

@@ -28,7 +28,7 @@ Paste the URL in whatever form you have:
 | Any git server | `https://git.example.com/team/repo.git/skills` |
 | Local repository | `file:///srv/skills.git`, `/srv/skills.git` |
 
-A path after the repository, such as `owner/repo/skills`, scopes the listing to that directory. On a server other than GitHub, end the repository name with `.git` so agentx knows where the repository ends and the path begins. No part of the path can be `.`, `..` or `.git`.
+A path after the repository, such as `owner/repo/skills`, scopes the listing to that directory. On a server other than GitHub, end the repository name with `.git` so agentx knows where the repository ends and the path begins. A GitLab tree URL, with `/-/tree/<ref>/<path>`, needs no `.git`. No part of the path can be `.`, `..` or `.git`.
 
 Adding a source you already have fetches it again. The confirmation tells you what moved:
 
@@ -96,7 +96,7 @@ Authorise it with your host, then fetch the source again to check once more. `ag
 
 ### What is fetched
 
-agentx fetches only what it needs to list skills, so even a large repository costs a few megabytes. After a fetch, listing any part of the source needs no network.
+agentx fetches only what it needs to list skills: the directory trees of one branch and each skill's `SKILL.md`. If the server cannot serve such a partial fetch, agentx fetches the whole repository. After a fetch, listing any part of the source needs no network.
 
 If a fetch fails or you stop it, the source stays at the last version that arrived complete. Fetch again to get the new version.
 
