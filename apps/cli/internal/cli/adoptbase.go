@@ -245,7 +245,7 @@ func (inv *invocation) searchHistory(ctx context.Context, gitDir string, cands [
 // recorded reports whether the folder hash the lock file recorded names
 // the skill's directory as it is at commit, whose tree there is tree. The
 // hash is that tree's id, except for a skill at the root of its source:
-// the vercel CLI records the id the forge answered for the whole
+// the Vercel CLI records the id the forge answered for the whole
 // repository there, and the forge answers with the commit it read rather
 // than the commit's tree. Both are git object ids, so either one names one
 // content and nothing else.
@@ -445,7 +445,7 @@ func (inv *invocation) treesAt(ctx context.Context, gitDir string, pairs []treeR
 }
 
 // plausibleTreeID reports whether the folder hash a lock file recorded
-// could be a git object id at all. The vercel CLI writes a tree id there
+// could be a git object id at all. The Vercel CLI writes a tree id there
 // when it read one from the forge and its own digest of the folder when it
 // did not, and the second is not comparable with anything in a repository;
 // a value that cannot even be an object id is not worth a history search.

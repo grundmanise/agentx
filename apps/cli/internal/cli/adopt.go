@@ -35,7 +35,7 @@ const (
 	phaseAdopt = "adopt"
 )
 
-// adoptionEvent is one entry of the vercel skills lock file whose library
+// adoptionEvent is one entry of the Vercel skills lock file whose library
 // directory exists: where the entry says it came from, what the library
 // holds under that name now, and what agentx did or would do about it.
 type adoptionEvent struct {
@@ -49,7 +49,7 @@ type adoptionEvent struct {
 	BaseHash       string   `json:"base_hash,omitempty"`       // the content hash of the base version
 	ContentHash    string   `json:"content_hash,omitempty"`    // what the library directory holds now
 	Modified       *bool    `json:"modified,omitempty"`        // whether the directory differs from the base
-	Restored       []string `json:"restored,omitempty"`        // the files the vercel skills CLI left out that the run wrote into the directory
+	Restored       []string `json:"restored,omitempty"`        // the files the Vercel skills CLI left out that the run wrote into the directory
 	Reason         string   `json:"reason,omitempty"`          // why it was refused, or what an adoption would still have to do
 }
 
@@ -66,14 +66,14 @@ func newAdoptCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "adopt",
 		Short: "Adopt skills another tool installed into the library",
-		Long: "Take over the skills the vercel skills CLI installed into the library, so that\n" +
+		Long: "Take over the skills the Vercel skills CLI installed into the library, so that\n" +
 			"agentx knows where each one came from and can update it. Run it with\n" +
 			"no flags to see what it would adopt; nothing is written and the lock file is\n" +
 			"never touched.\n\n" +
 			"The base version recorded for a skill is the upstream version it was installed\n" +
 			"at, read from the source and verified against the lock file. The directory on\n" +
 			"disk is left as it is, so an edit made to it stays an edit; only the files of\n" +
-			"that version the vercel skills CLI never copies, such as README.md, metadata.json\n" +
+			"that version the Vercel skills CLI never copies, such as README.md, metadata.json\n" +
 			"and names starting with _ or a dot, are written into it when it lacks them. A\n" +
 			"skill whose upstream version cannot be established is left unmanaged rather than\n" +
 			"have what is on disk recorded as if it came from upstream.",
@@ -105,7 +105,7 @@ func (s adoptSelection) check() error {
 	return nil
 }
 
-// adopt reads the vercel skills lock file and reports, or adopts, the
+// adopt reads the Vercel skills lock file and reports, or adopts, the
 // skills it names that the library holds.
 //
 // Without a flag it is a preview and writes nothing at all: it takes no
@@ -373,7 +373,7 @@ func (inv *invocation) noAdoptionNamed(name string, cands []*candidate, entries 
 		}
 		hint = "the lock file names: " + strings.Join(names, ", ")
 	}
-	return fail(exitNotFound, fmt.Sprintf("no skill called %q in the vercel skills lock file", sanitised(name)), hint)
+	return fail(exitNotFound, fmt.Sprintf("no skill called %q in the Vercel skills lock file", sanitised(name)), hint)
 }
 
 // adoptRun is one run of agentx adopt that changes something: what it set
@@ -604,7 +604,7 @@ func (c *candidate) restoredLine() string {
 	for _, p := range c.restored {
 		names = append(names, sanitised(p))
 	}
-	return "restored " + strings.Join(names, ", ") + ", which the vercel skills CLI left out"
+	return "restored " + strings.Join(names, ", ") + ", which the Vercel skills CLI left out"
 }
 
 // adoptSummary is what the result event says the run did.
@@ -625,7 +625,7 @@ func adoptSummary(done []*candidate) string {
 		v := done[0].imported
 		summary += " from " + v.imp.Source + underPath(v.imp.Path) + " at " + short(v.imp.Commit)
 	} else {
-		summary += " from the vercel skills lock file"
+		summary += " from the Vercel skills lock file"
 	}
 	if modified > 0 {
 		summary += fmt.Sprintf(", %s modified since it was installed", plural(modified, "skill"))
@@ -653,12 +653,12 @@ func (c *candidate) eventOf() adoptionEvent {
 func (inv *invocation) previewAdoption(cands []*candidate, entries int) {
 	out := inv.out
 	if len(cands) == 0 {
-		out.print("No skill of the vercel skills lock file is in the library at ", out.paint(label, inv.dirs.Library), ".")
-		inv.summary = "no skill of the vercel skills lock file is in the library"
+		out.print("No skill of the Vercel skills lock file is in the library at ", out.paint(label, inv.dirs.Library), ".")
+		inv.summary = "no skill of the Vercel skills lock file is in the library"
 		return
 	}
 	counts := map[string]int{}
-	out.print(out.paint(heading, plural(len(cands), "skill")), " of the vercel skills lock file in the library")
+	out.print(out.paint(heading, plural(len(cands), "skill")), " of the Vercel skills lock file in the library")
 	t := &table{}
 	for _, c := range cands {
 		out.emit(c.eventOf())
@@ -695,7 +695,7 @@ func (a *candidate) rowOf() []cell {
 
 // previewSummary is what the result event says a preview found.
 func previewSummary(counts map[string]int, entries int) string {
-	parts := []string{fmt.Sprintf("%s of the vercel skills lock file in the library", plural(counts[adoptCandidate]+counts[adoptManaged]+counts[adoptRefused], "skill"))}
+	parts := []string{fmt.Sprintf("%s of the Vercel skills lock file in the library", plural(counts[adoptCandidate]+counts[adoptManaged]+counts[adoptRefused], "skill"))}
 	for _, what := range []struct {
 		n    int
 		text string
@@ -844,7 +844,7 @@ func (inv *invocation) stageAdoption(ctx context.Context, m *home.Mutation, gitD
 		}
 		staged, fingerprint, err := stageRestore(m, c.path, left)
 		if err != nil {
-			inv.out.warn("cannot restore the files the vercel skills CLI left out of " + c.path + ": " + err.Error() + "; the directory was left as it is")
+			inv.out.warn("cannot restore the files the Vercel skills CLI left out of " + c.path + ": " + err.Error() + "; the directory was left as it is")
 		} else {
 			m.Remove(c.path, state)
 			m.Publish(c.path, staged, fingerprint)

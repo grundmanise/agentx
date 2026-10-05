@@ -1,9 +1,9 @@
 ---
 title: "agentx adopt"
-description: "Take over the skills the vercel skills CLI installed, without reinstalling them or touching your edits."
+description: "Take over the skills the Vercel skills CLI installed, without reinstalling them or touching your edits."
 ---
 
-The vercel skills CLI installs skills into `~/.agents/skills`, the same library agentx uses, and records each install in a lock file. `agentx adopt` reads that lock file and takes those skills over. Each skill keeps the files in its directory as they are and gains an upstream, so agentx can tell your edits apart from the version you installed. agentx only adds the [files the installer left out](#files-the-installer-left-out).
+The Vercel skills CLI installs skills into `~/.agents/skills`, the same library agentx uses, and records each install in a lock file. `agentx adopt` reads that lock file and takes those skills over. Each skill keeps the files in its directory as they are and gains an upstream, so agentx can tell your edits apart from the version you installed. agentx only adds the [files the installer left out](#files-the-installer-left-out).
 
 agentx only reads the lock file. The file stays as it is.
 
@@ -14,7 +14,7 @@ agentx adopt
 ```
 
 ```text
-3 skills of the vercel skills lock file in the library
+3 skills of the Vercel skills lock file in the library
   pdf      candidate  https://github.com/anthropics/skills/skills/pdf   its source is not added yet; adopting adds and fetches it
   xlsx     managed    https://github.com/anthropics/skills/skills/xlsx  agentx already manages it
   scraper  refused    (none)                                            scraper names no source agentx can read
@@ -99,14 +99,14 @@ If your directory differs from the base, agentx says so, and `agentx skill list`
 
 ## Files the installer left out
 
-The vercel skills CLI skips some files of a skill, depending on its version: `metadata.json`, `README.md`, and files or folders whose names start with `_` or `.`, such as `rules/_sections.md` or `.gitignore`. These files are part of the version you installed. Without them, the skill would look as if you deleted them.
+The Vercel skills CLI skips some files of a skill, depending on its version: `metadata.json`, `README.md`, and files or folders whose names start with `_` or `.`, such as `rules/_sections.md` or `.gitignore`. These files are part of the version you installed. Without them, the skill would look as if you deleted them.
 
 When agentx adopts a skill, it writes these files back, with the content of the version you installed:
 
 ```text
 ✓ adopted vercel-composition-patterns from https://github.com/vercel-labs/agent-skills under skills/composition-patterns at a5343bd
   base 998e411: the version the lock file recorded, found in the source
-  restored README.md, metadata.json, rules/_sections.md, rules/_template.md, which the vercel skills CLI left out
+  restored README.md, metadata.json, rules/_sections.md, rules/_template.md, which the Vercel skills CLI left out
 ```
 
 agentx adds only the files that are missing. Files you kept or edited stay as they are. If you deleted one of these files on purpose, delete it again after adopting; `agentx skill list` then shows the skill as `modified`.
@@ -160,12 +160,12 @@ An unmanaged skill stays in your library and keeps working in every client. `age
 
 ## Where agentx reads the lock file
 
-agentx reads both files the vercel skills CLI uses:
+agentx reads both files the Vercel skills CLI uses:
 
 - `$XDG_STATE_HOME/skills/.skill-lock.json`, or `~/.local/state/skills/.skill-lock.json` when that variable is unset
 - `~/.agents/.skill-lock.json`
 
-If both files list a skill differently, agentx warns you and uses the file the vercel skills CLI writes to now: the `$XDG_STATE_HOME` one when that variable is set, and `~/.agents/.skill-lock.json` otherwise.
+If both files list a skill differently, agentx warns you and uses the file the Vercel skills CLI writes to now: the `$XDG_STATE_HOME` one when that variable is set, and `~/.agents/.skill-lock.json` otherwise.
 
 If a lock file is unreadable JSON or has no `skills` object, agentx stops. Fix the file or move it aside.
 

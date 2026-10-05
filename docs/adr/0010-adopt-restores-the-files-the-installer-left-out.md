@@ -3,9 +3,9 @@ status: accepted
 date: 2026-10-05
 ---
 
-# Adoption restores the files the vercel skills CLI left out
+# Adoption restores the files the Vercel skills CLI left out
 
-The vercel skills CLI does not copy every file of a skill into the library: no version copies `metadata.json`, versions before 1.4.1 skip `README.md`, versions before 1.4.5 skip every file or folder whose name starts with `_`, and versions 1.4.5 to 1.5.4 skip every one whose name starts with `.`. The base an adoption records is the upstream version, all of it, so a directory missing those files differed from its base, and every such skill was adopted `modified`, with `skill diff` showing deletions the user never made and a publish that would send them to the source.
+The Vercel skills CLI does not copy every file of a skill into the library: no version copies `metadata.json`, versions before 1.4.1 skip `README.md`, versions before 1.4.5 skip every file or folder whose name starts with `_`, and versions 1.4.5 to 1.5.4 skip every one whose name starts with `.`. The base an adoption records is the upstream version, all of it, so a directory missing those files differed from its base, and every such skill was adopted `modified`, with `skill diff` showing deletions the user never made and a publish that would send them to the source.
 
 `agentx adopt` therefore writes those files back into the library directory, with the base version's bytes. It writes only a file of the base that one of those versions skips and that the directory lacks, since the lock file does not record which version installed the skill. It never changes a file the directory holds, and it replaces the directory through the mutation journal, as an install does. This ends the rule that adoption writes nothing on disk: the directory still keeps every edit of the user's, and gains only content that was never theirs to remove.
 

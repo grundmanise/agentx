@@ -45,7 +45,7 @@ func TestAdoptFindsAVersionWhoseDirectoryIsGoneFromTheSource(t *testing.T) {
 }
 
 // TestAdoptFindsAVersionOfASkillAtTheRoot is the folder hash of a skill at
-// the root of its source, which the vercel CLI records as the id of the
+// the root of its source, which the Vercel CLI records as the id of the
 // commit it installed from rather than of that commit's tree. The source
 // has moved on since, so the directory is not the current version either,
 // and only the commit id establishes the one that was installed. The skill
@@ -91,7 +91,7 @@ func TestAdoptTakesTheDirectoryWhenTheFolderHashNamesNothing(t *testing.T) {
 	s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes\n"})
 	head := s.commit("the only version")
 	for _, c := range []struct{ name, hash string }{
-		{"the vercel CLI's own folder digest", strings.Repeat("7", 64)},
+		{"the Vercel CLI's own folder digest", strings.Repeat("7", 64)},
 		{"a tree id the source does not have", strings.Repeat("a", 40)},
 		{"no folder hash at all", ""},
 	} {
