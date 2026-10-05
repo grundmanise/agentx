@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,7 +82,7 @@ func adoptHarness(t *testing.T) (*harness, *sourceRepo, string, string) {
 	h.build(t, fixture{dirs: []string{".claude"}})
 	s := h.newSourceRepo("skills", true)
 	ids := s.advance("adoptHarness", func(s *sourceRepo) []string {
-		s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes\n"})
+		s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes\n", "_template.md": "a template\n"})
 		s.write("README.md", "# skills\n")
 		v1 := s.commit("the version the other tool installed")
 		return []string{v1, s.treeAt(v1, "skills/alpha")}
@@ -212,6 +213,82 @@ func TestAdoptRecordsTheInstalledVersionAndNotTheDirectory(t *testing.T) {
 	equal(t, "the import branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), branch)
 	equal(t, "the mutation counter", readVersionFile(t, h), version)
 	h.lockUnchanged(h.lockPath(), lock)
+}
+
+// TestAdoptDoesNotCallWhatTheInstallerLeftOutAModification is a skill the
+// vercel skills CLI installed without some of its files: no version copies
+// metadata.json, none before 1.4.1 copied README.md, and none before 1.4.5
+// copied a name starting with _, at any depth. The user edited nothing, so
+// the skill is adopted unmodified and listed as current, and not as a
+// directory that deleted those files.
+func TestAdoptDoesNotCallWhatTheInstallerLeftOutAModification(t *testing.T) {
+	t.Parallel()
+	s := newHarness(t).newSourceRepo("skills", true) // one source, read by every case
+	s.skill("skills/alpha", "alpha", "The first skill", map[string]string{
+		"README.md":          "# alpha\n",
+		"metadata.json":      "{}\n",
+		"rules/_sections.md": "# Sections\n",
+		"rules/rule.md":      "a rule\n",
+	})
+	s.commit("the only version")
+	left := []string{"README.md", "metadata.json", "rules/_sections.md"}
+	// The folder hash is the tree id when the vercel CLI read one from the
+	// forge, and its own digest otherwise, which leaves the directory to
+	// establish the version; both reach the same adoption.
+	for _, c := range []struct{ name, hash string }{
+		{"by the folder hash", s.tree("skills/alpha")},
+		{"by the directory", strings.Repeat("7", 64)},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			h := newHarness(t)
+			h.build(t, fixture{dirs: []string{".claude"}})
+			vercelInstall(t, h, s, "skills/alpha", "alpha")
+			want := libraryTree(t, filepath.Join(h.library, "alpha"))
+			for _, p := range left {
+				if err := os.Remove(filepath.Join(h.library, "alpha", p)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
+				Source: "owner/repo", SourceType: "github", SourceURL: s.url,
+				SkillPath: "skills/alpha/SKILL.md", SkillFolderHash: c.hash,
+			}})
+
+			out := h.run("--json", "adopt", "--all")
+			equal(t, "exit", out.exit, 0)
+			ev := h.one(out.stdout, "adoption")
+			equal(t, "state", ev["state"], adoptAdopted)
+			equal(t, "modified", ev["modified"], false)
+			equal(t, "restored", fmt.Sprint(ev["restored"]), fmt.Sprint(left))
+			sameTree(t, "the library directory", libraryTree(t, filepath.Join(h.library, "alpha")), want)
+			listed := h.one(h.mustRun("--json", "skill", "list").stdout, "library_skill")
+			equal(t, "listed state", listed["state"], stateCurrent)
+		})
+	}
+}
+
+// TestLeftOutByInstaller is the rule of the files the vercel skills CLI
+// never copies, judged on every name of the path.
+func TestLeftOutByInstaller(t *testing.T) {
+	t.Parallel()
+	for p, want := range map[string]bool{
+		"README.md":           true,
+		"metadata.json":       true,
+		"_template.md":        true,
+		"rules/_sections.md":  true,
+		"_private/notes.md":   true,
+		"docs/README.md":      true,
+		"__pycache__/x.pyc":   true,
+		"SKILL.md":            false,
+		"readme.md":           false,
+		"rules/rule.md":       false,
+		"rules/a_b.md":        false,
+		"metadata.json.bak":   false,
+		"docs/README.md.orig": false,
+	} {
+		equal(t, p, leftOutByInstaller(p), want)
+	}
 }
 
 // TestAdoptLeavesASkillUnmanagedWhenItsVersionCannotBeEstablished is the

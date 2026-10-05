@@ -48,15 +48,20 @@ func TestAdoptFindsAVersionWhoseDirectoryIsGoneFromTheSource(t *testing.T) {
 // the root of its source, which the vercel CLI records as the id of the
 // commit it installed from rather than of that commit's tree. The source
 // has moved on since, so the directory is not the current version either,
-// and only the commit id establishes the one that was installed.
+// and only the commit id establishes the one that was installed. The skill
+// is the whole repository, README.md included, which the installer left
+// out; adopting restores it, so the skill is not modified.
 func TestAdoptFindsAVersionOfASkillAtTheRoot(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	s := h.newSourceRepo("solo", true)
-	s.skill("", "solo", "A skill at the root", map[string]string{"notes.md": "notes\n"})
+	s.skill("", "solo", "A skill at the root", map[string]string{"notes.md": "notes\n", "README.md": "# solo\n"})
 	v1 := s.commit("the version the other tool installed")
 	vercelInstall(t, h, s, "", "solo")
+	if err := os.Remove(filepath.Join(h.library, "solo", "README.md")); err != nil {
+		t.Fatal(err)
+	}
 	s.write("notes.md", "notes, revised\n")
 	s.commit("a version nobody on this machine has")
 	lock := h.writeLock(h.lockPath(), map[string]lockEntry{"solo": {
@@ -71,6 +76,7 @@ func TestAdoptFindsAVersionOfASkillAtTheRoot(t *testing.T) {
 	equal(t, "state", ev["state"], adoptAdopted)
 	equal(t, "upstream_commit", ev["upstream_commit"], v1)
 	equal(t, "modified", ev["modified"], false)
+	equal(t, "restored", fmt.Sprint(ev["restored"]), "[README.md]")
 }
 
 // TestAdoptTakesTheDirectoryWhenTheFolderHashNamesNothing covers the fall

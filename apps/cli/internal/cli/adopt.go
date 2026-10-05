@@ -40,16 +40,17 @@ const (
 // holds under that name now, and what agentx did or would do about it.
 type adoptionEvent struct {
 	event
-	Name           string  `json:"name"`
-	Lock           string  `json:"lock"`                      // the lock file the entry was read from
-	Source         string  `json:"source,omitempty"`          // the canonical URL of the source it names
-	Subpath        *string `json:"subpath,omitempty"`         // the skill's directory in that source, "" for its root
-	State          string  `json:"state"`                     // candidate, adopted, managed or refused
-	UpstreamCommit string  `json:"upstream_commit,omitempty"` // the last commit that touched the skill's directory, reachable from the commit the base version was established at
-	BaseHash       string  `json:"base_hash,omitempty"`       // the content hash of the base version
-	ContentHash    string  `json:"content_hash,omitempty"`    // what the library directory holds now
-	Modified       *bool   `json:"modified,omitempty"`        // whether the directory differs from the base
-	Reason         string  `json:"reason,omitempty"`          // why it was refused, or what an adoption would still have to do
+	Name           string   `json:"name"`
+	Lock           string   `json:"lock"`                      // the lock file the entry was read from
+	Source         string   `json:"source,omitempty"`          // the canonical URL of the source it names
+	Subpath        *string  `json:"subpath,omitempty"`         // the skill's directory in that source, "" for its root
+	State          string   `json:"state"`                     // candidate, adopted, managed or refused
+	UpstreamCommit string   `json:"upstream_commit,omitempty"` // the last commit that touched the skill's directory, reachable from the commit the base version was established at
+	BaseHash       string   `json:"base_hash,omitempty"`       // the content hash of the base version
+	ContentHash    string   `json:"content_hash,omitempty"`    // what the library directory holds now
+	Modified       *bool    `json:"modified,omitempty"`        // whether the directory differs from the base
+	Restored       []string `json:"restored,omitempty"`        // the files the vercel skills CLI left out that the run wrote into the directory
+	Reason         string   `json:"reason,omitempty"`          // why it was refused, or what an adoption would still have to do
 }
 
 // adoptSelection is what one run of agentx adopt was asked to do: nothing
@@ -71,7 +72,9 @@ func newAdoptCommand(inv *invocation) *cobra.Command {
 			"never touched.\n\n" +
 			"The base version recorded for a skill is the upstream version it was installed\n" +
 			"at, read from the source and verified against the lock file. The directory on\n" +
-			"disk is left exactly as it is, so an edit made to it stays an edit. A skill whose\n" +
+			"disk is left as it is, so an edit made to it stays an edit; only the files of\n" +
+			"that version the vercel skills CLI never copies, such as README.md, metadata.json\n" +
+			"and names starting with _, are written into it when it lacks them. A skill whose\n" +
 			"upstream version cannot be established is left unmanaged rather than have what is\n" +
 			"on disk recorded as if it came from upstream.",
 		Args: cobra.NoArgs,
@@ -169,6 +172,7 @@ type candidate struct {
 	base     *basePlan // where the base version was established
 	imported *imported // the version itself, once read
 	modified bool      // the directory differs from the base
+	restored []string  // the files of the base the installer left out, written into the directory
 }
 
 // refuse records why the candidate cannot be adopted.
@@ -418,9 +422,10 @@ func (r *adoptRun) failure() *failure { return r.refusals.failure(r.selected, le
 // the base version of each from the source itself, writes the import
 // commits and points the import branches at them as one journaled mutation.
 //
-// The library directories are not touched: adoption records where a skill
-// came from and changes nothing on disk, so an edit made to a directory
-// stays an edit against the version it was installed at.
+// The library directories keep what they hold: adoption records where a
+// skill came from, so an edit made to a directory stays an edit against
+// the version it was installed at. All it adds are the files of that
+// version the installer never copies, see installerLeftOut.
 func (inv *invocation) adoptChosen(ctx context.Context, covered []*candidate, sel adoptSelection) error {
 	var chosen []*candidate // what the run acts on: a skill agentx already manages is not acted on
 	for _, c := range covered {
@@ -569,6 +574,9 @@ func (inv *invocation) reportAdopted(run *adoptRun, covered []*candidate, nothin
 		inv.out.done("adopted " + inv.out.paint(heading, sanitised(c.entry.Name)) + " from " + inv.out.paint(heading, v.imp.Source) +
 			underShown(v.imp.Path) + " at " + short(v.imp.Commit))
 		inv.out.print("  ", inv.out.paint(muted, c.baseLine()))
+		if len(c.restored) > 0 {
+			inv.out.print("  ", inv.out.paint(muted, c.restoredLine()))
+		}
 	}
 	if nothing != "" {
 		inv.out.print(strings.ToUpper(nothing[:1]) + nothing[1:] + ".")
@@ -587,6 +595,16 @@ func (c *candidate) baseLine() string {
 		line += "; the directory differs from it, so what differs is a local modification"
 	}
 	return line
+}
+
+// restoredLine names the files the run restored. Their paths are the
+// source's, so each is sanitised.
+func (c *candidate) restoredLine() string {
+	names := make([]string, 0, len(c.restored))
+	for _, p := range c.restored {
+		names = append(names, sanitised(p))
+	}
+	return "restored " + strings.Join(names, ", ") + ", which the vercel skills CLI left out"
 }
 
 // adoptSummary is what the result event says the run did.
@@ -626,6 +644,7 @@ func (c *candidate) eventOf() adoptionEvent {
 	if c.imported != nil {
 		modified := c.modified
 		ev.UpstreamCommit, ev.BaseHash, ev.Modified = c.imported.imp.Commit, c.imported.hash, &modified
+		ev.Restored = c.restored
 	}
 	return ev
 }
@@ -697,8 +716,9 @@ func previewSummary(counts map[string]int, entries int) string {
 
 // writeAdoptions writes the import commits of the established versions and
 // points the import branches at them as one journaled mutation, under the
-// exclusive lock, with every input read again under it. Nothing but refs
-// changes: the library directories are the user's and stay as they are.
+// exclusive lock, with every input read again under it. The library
+// directories are the user's: a directory changes only to gain the files
+// the installer left out of it, see stageAdoption.
 func (inv *invocation) writeAdoptions(ctx context.Context, run *adoptRun, ready []*candidate) error {
 	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
 	if err != nil {
@@ -773,11 +793,16 @@ func (inv *invocation) writeAdoptions(ctx context.Context, run *adoptRun, ready 
 // has anything to read again.
 var errNothingAdopted = errors.New("no skill of the run could be adopted")
 
-// stageAdoption records the one thing an adoption changes, the import
-// branch, after reading under the lock what the branch and the library
-// directory hold now. A base established from what the directory holds is
-// checked again here: a directory edited between the read and the lock
-// would otherwise be adopted at a version it no longer holds.
+// stageAdoption records the import branch, after reading under the lock
+// what the branch and the library directory hold now, and the directory
+// with the files the installer left out of it restored, when it lacks any.
+// Those files are the version's and no edit of the user's: left missing,
+// every one would read as a deletion the user made. The directory is
+// replaced by a copy of it with them written in, published by the same
+// mutation, as an install publishes one. A base established from what the
+// directory holds is checked again here: a directory edited between the
+// read and the lock would otherwise be adopted at a version it no longer
+// holds.
 func (inv *invocation) stageAdoption(ctx context.Context, m *home.Mutation, gitDir string, c *candidate, records map[string]lineage.Record) (*failure, error) {
 	exists, dir, err := libraryEntry(c.path)
 	if err != nil {
@@ -793,19 +818,39 @@ func (inv *invocation) stageAdoption(ctx context.Context, m *home.Mutation, gitD
 			"run 'agentx adopt' again to see what is there now"), nil
 	}
 	hash := contentHashAt(c.path)
-	if c.base.confirm && hash != c.imported.hash {
+	left := installerLeftOut(c.path, c.imported)
+	if c.base.confirm && hash != c.imported.hashWithout(left) {
 		c.hash, c.imported = hash, nil
 		return refuse(exitRefused, c.path+" changed while it was being adopted",
 			"run 'agentx adopt' again: its base version has to be established from what the directory holds now"), nil
 	}
-	// Modified is what skill list will say of the skill.
-	c.hash, c.modified = hash, !inv.holdsImported(ctx, gitDir, c.path, c.imported)
+	c.hash = hash
 	write, f := refPlan(c.imported, records, c.path, false)
 	if f != nil {
+		c.modified = !inv.holdsImported(ctx, gitDir, c.path, c.imported)
 		return f, nil
 	}
 	if write {
 		m.Ref(gitDir, lineage.ManagedRef(c.entry.Name), "", c.imported.commit)
 	}
+	// What the library holds once the run is done: the directory, with the
+	// files the installer left out restored when there are any. Modified
+	// is what skill list will say of the skill.
+	holding := c.path
+	if len(left) > 0 {
+		state, err := home.State(c.path)
+		if err != nil {
+			return nil, err
+		}
+		staged, fingerprint, err := stageRestore(m, c.path, left)
+		if err != nil {
+			inv.out.warn("cannot restore the files the vercel skills CLI left out of " + c.path + ": " + err.Error() + "; the directory was left as it is")
+		} else {
+			m.Remove(c.path, state)
+			m.Publish(c.path, staged, fingerprint)
+			holding, hash, c.restored = staged, contentHashAt(staged), paths(left)
+		}
+	}
+	c.hash, c.modified = hash, !inv.holdsImported(ctx, gitDir, holding, c.imported)
 	return nil, nil
 }
