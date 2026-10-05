@@ -80,7 +80,7 @@ The base is the upstream version you installed, not the files on your disk. That
 
 agentx establishes the version in one of these ways, and never guesses. Each is tried in turn, and a skill is left unmanaged only when none of them reaches a version:
 
-1. **The folder hash in the lock file.** It is the id of a directory in the source, so agentx looks that directory up in the source itself, at the version you fetched and back through the history of that skill. Finding it proves the content, because a git id names one set of bytes and nothing else. This works even when the skill has since been deleted from the source, because its version is still in the history. Some installs record a hash of their own instead, which names nothing in the source; agentx then moves on to the next way.
+1. **The folder hash in the lock file.** It is the id of a directory in the source, or for a skill at the root of its repository, the id of the commit it was installed from, so agentx looks that version up in the source itself, at the version you fetched and back through the history of that skill. Finding it proves the content, because a git id names one set of bytes and nothing else. This works even when the skill has since been deleted from the source, because its version is still in the history. Some installs record a hash of their own instead, which names nothing in the source; agentx then moves on to the next way.
 2. **Your directory already is the current version.** If the files match the source exactly, they are an upstream version rather than an edit of one, and agentx records that version.
 3. **You name it yourself**, with `--base`.
 

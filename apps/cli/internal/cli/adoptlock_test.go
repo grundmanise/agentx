@@ -206,7 +206,7 @@ func TestAdoptWithNoLockFile(t *testing.T) {
 	contains(t, "stdout", out.stdout, "No skill of the vercel skills lock file is in the library")
 	out = h.run("adopt", "--all")
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "Nothing left to adopt.")
+	contains(t, "stdout", out.stdout, "Already adopted.")
 }
 
 // TestAdoptRefusesAFork: a name the account repo holds as a fork has a
