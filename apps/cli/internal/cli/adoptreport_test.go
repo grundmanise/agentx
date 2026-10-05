@@ -34,6 +34,7 @@ func TestAdoptSaysWhichRefItPinnedTheSourceTo(t *testing.T) {
 	out := h.run("--json", "adopt", "--all")
 	equal(t, "exit", out.exit, exitRefused.exit)
 	contains(t, "stderr", out.stderr, "more than one ref")
+	contains(t, "stderr", out.stderr, "To change the pin, run 'agentx source add ")
 	contains(t, "stderr", out.stderr, "v1")
 	var refused string
 	for _, ev := range h.eventsOfType(out.stdout, "adoption") {

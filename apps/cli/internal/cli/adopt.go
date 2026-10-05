@@ -493,7 +493,7 @@ func (inv *invocation) addAdoptSources(ctx context.Context, run *adoptRun, ready
 			// install from it, so a lock file that records two refs of it
 			// cannot be answered in silence: the skills of the refs not taken
 			// are looked for in the history of the one that was.
-			inv.out.warn(fmt.Sprintf("%s was installed at more than one ref (%s); it is added pinned to %s. Add it at another ref with 'agentx source add %s#<ref>' and adopt again",
+			inv.out.warn(fmt.Sprintf("%s was installed at more than one ref (%s); it is added pinned to %s. To change the pin, run 'agentx source add %s#<ref>' and adopt again",
 				url, strings.Join(pinNames(recorded), ", "), pinName(pin), url))
 		}
 		if _, _, err := inv.addSource(ctx, src); err != nil {

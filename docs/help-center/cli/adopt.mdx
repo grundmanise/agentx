@@ -55,13 +55,20 @@ Adopting does three things:
 
 A source you removed comes back this way too, and the skills you installed from it no longer show `source removed`.
 
-A source holds one pin, so when its skills were installed from different refs agentx takes the first in name order and warns you:
+agentx keeps one ref for each source, its pin. The lock file records a ref for each skill, so skills from the same source can have different refs. agentx then pins the source to the ref of the skill whose name comes first alphabetically, and warns you:
 
 ```text
-warning: https://github.com/anthropics/skills was installed at more than one ref (v1.2.0, main); it is added pinned to v1.2.0. Add it at another ref with 'agentx source add https://github.com/anthropics/skills#<ref>' and adopt again
+warning: https://github.com/anthropics/skills was installed at more than one ref (v1.2.0, main); it is added pinned to v1.2.0. To change the pin, run 'agentx source add https://github.com/anthropics/skills#<ref>' and adopt again
 ```
 
-Skills installed from the other refs are looked for in the history of the pinned one. Add the source yourself first if you want another pin.
+agentx looks for the skills installed from the other refs in the history of the pinned ref. A skill it cannot find there is not adopted, see [When the version cannot be established](#when-the-version-cannot-be-established).
+
+To choose the pin yourself, add the source at that ref before you adopt. If you already have the source, this changes its pin:
+
+```sh
+agentx source add https://github.com/anthropics/skills#main
+agentx adopt --all
+```
 
 Afterwards the skills are ordinary managed skills:
 
@@ -119,7 +126,7 @@ agentx adopt --skill pdf --base v1.2.0
 
 The version is still read from the source: `--base` only chooses which version counts as your starting point. Your directory is left as it is, and the difference from that base becomes your local modification.
 
-A version that is not in the history the source follows is refused: a version of another repository is not a version of this one, and neither is a branch or a tag of this one that your pin does not reach. Add the source at the ref you want first:
+A version that is not in the history the source follows is refused: a version of another repository is not a version of this one, and neither is a branch or a tag of this one that your pin does not reach. Change the source's pin to the ref you want first:
 
 ```sh
 agentx source add https://github.com/anthropics/skills#main
