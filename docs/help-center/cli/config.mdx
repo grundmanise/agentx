@@ -3,7 +3,9 @@ title: "agentx config"
 description: "List, get and set the settings of one machine."
 ---
 
-Machine settings live in `settings.json` in agentx home, `~/.agentx` by default. They never leave the machine.
+Machine settings live in `settings.json` in agentx home, `~/.agentx` by default. agentx does not sync them. To copy them to another machine, use [`agentx export`](/cli/export).
+
+This page uses the terms configuration, library and placement. See [Key terms](/#key-terms).
 
 ## List every setting
 
@@ -21,17 +23,17 @@ sources                  []
 copy_mode                {}
 ```
 
-An empty setting shows as `(none)`. In a terminal the keys are cyan and `true` is green.
+An empty `disabled_configurations` shows as `(none)`. `sources` and `copy_mode` print as one line of JSON.
 
 | Key | Meaning |
 |---|---|
 | `schema_version` | The settings file format version. |
-| `label` | The machine label. Until you set it, it is the hostname. |
-| `accept_operations` | Whether the machine executes operations queued for it. |
-| `ignore_system_files` | Whether the files your operating system or editor leaves in a skill, such as `.DS_Store`, `Thumbs.db`, `*.swp` and `*~` backups, are ignored when agentx compares, diffs and updates it, and never committed in a skill you created. On by default. See [Files that do not count](/cli/skill#files-that-do-not-count) and [Files that stay local](/cli/fork#files-that-stay-local). |
-| `disabled_configurations` | The agent configurations left out of placements by default. Every other detected configuration is enabled. |
+| `label` | The name of this machine. It is the hostname until you set it. [`agentx machine rename`](/cli/machine) also sets it. |
+| `accept_operations` | Reserved for a later version. agentx does not use it yet. |
+| `ignore_system_files` | Whether agentx ignores files your operating system or editor leaves in a skill, such as `.DS_Store`, `Thumbs.db`, `*.swp` and `*~` backups. On by default. See [Files that do not count](/cli/skill#files-that-do-not-count) and [Files that stay local](/cli/fork#files-that-stay-local). |
+| `disabled_configurations` | The configurations agentx skips when you install or place a skill without `--to`. See [Enable or disable a configuration](#enable-or-disable-a-configuration). |
 | `sources` | The sources skills are installed from, managed with [`agentx source`](/cli/source). |
-| `copy_mode` | The skills placed as a copy instead of a symlink, per configuration. Written by `agentx skill add --copy` and `agentx skill place --copy`, and cleared by `agentx skill remove`. |
+| `copy_mode` | For each skill placed as a copy, the configurations that hold the copy. Written by `agentx skill add --copy` and `agentx skill place --copy`, and cleared by `agentx skill remove`. |
 
 ## Get one setting
 
@@ -39,7 +41,7 @@ An empty setting shows as `(none)`. In a terminal the keys are cyan and `true` i
 agentx config get label
 ```
 
-The command prints the bare value, so a script can use it directly. An unknown key exits with code 1 and lists the keys.
+The command prints the bare value, so a script can use it directly. For an unknown key, agentx exits with code 1 and lists the keys.
 
 ## Set a setting
 
@@ -57,9 +59,9 @@ You can set `label`, `accept_operations` and `ignore_system_files`:
 - `accept_operations` and `ignore_system_files` take `true` or `false`.
 - A label is one non-empty line of at most 256 bytes with no control character in it.
 
-Any other value, an unknown key, or a key this command cannot change exits with code 1.
+agentx exits with code 1 for an invalid value, an unknown key, or a key you cannot set. For a key, the error lists the keys you can set.
 
-The write is atomic: the file is replaced whole, or not at all. If another agentx command is running, the command exits with code 7 at once; retry when it finishes.
+If another agentx command is running, the command stops with exit code 7. Run it again when the other command finishes.
 
 ## Enable or disable a configuration
 
@@ -73,9 +75,15 @@ agentx config enable windsurf
 ✓ windsurf is now enabled
 ```
 
-Every agent configuration `agentx scan` detects is enabled from the start. Disable one to leave it out of placements by default; enable it to put it back. Use the id shown in parentheses by `agentx scan`. An id that is not detected exits with code 5 and lists the detected ids. Disabling a configuration does not stop its client from reading the library.
+Every configuration `agentx scan` detects starts enabled. When you install or place a skill without `--to`, agentx places it only in enabled configurations. Disable a configuration to skip it. Enable it to include it again.
 
-Enabling only decides where later installs go. To fill a newly enabled client with what you already have, add `--place-all`:
+Use the id that `agentx scan` shows in parentheses. For an id that scan does not detect, agentx exits with code 5 and lists the detected ids.
+
+A client that reads the library directly, such as Codex, still sees every skill when you disable it. See [Clients that see every skill](/cli/skill#clients-that-see-every-skill).
+
+### Place the skills you already have
+
+Enabling a client changes only where later installs go. To also place every skill in your library in that client, add `--place-all`:
 
 ```sh
 agentx config enable cursor --place-all
@@ -88,13 +96,26 @@ agentx config enable cursor --place-all
   xlsx  symlink  /home/me/.cursor/skills/xlsx -> /home/me/.agents/skills/xlsx
 ```
 
-Each skill placed gets one row: its placement in Cursor's own skills directory. A skill Claude Code also holds is one row too, although Cursor reads Claude Code's skills directory as well.
+The output has one row for each skill, with its path in Cursor's skills directory.
 
-Each skill is placed as a symlink, except in a configuration where agentx already keeps a copy of it: that one gets a copy again, as with [`agentx skill place`](/cli/skill).
+agentx places each skill as a symlink. If agentx already keeps a copy of a skill for this client, it places a copy. See [Copy instead of link](/cli/skill#copy-instead-of-link).
 
-The setting and every placement it implies are one change, written down before anything on disk moves. A run interrupted part way is finished by the next agentx command rather than undone.
+If the run stops part way, the next agentx command finishes it.
 
-A placement agentx cannot make does not fail the run. Something you put there yourself may already be at one of the paths, or agentx may be unable to write the client's skills directory. Either way, agentx leaves that path alone and names it, places the rest, and still succeeds. The client can then end up enabled with only part of the library in it:
+A client that reads the library directly, such as Codex, already sees every skill. See [Clients that see every skill](/cli/skill#clients-that-see-every-skill). For such a client, `--place-all` places nothing and lists what the client sees:
+
+```text
+✓ codex is now enabled
+✓ codex reads the library and already sees 2 skills; nothing was placed
+  pdf   library  /home/me/.agents/skills/pdf
+  xlsx  library  /home/me/.agents/skills/xlsx
+```
+
+To place one skill at a time, use [`agentx skill place`](/cli/skill#place-a-skill-you-already-have).
+
+### When a placement is skipped
+
+agentx skips a placement when something of yours is already at the path, or when it cannot write to the client's skills directory. It prints a warning for each skipped path, places the other skills, and exits with code 0. The client is then enabled with only some of your skills:
 
 ```text
 warning: /home/me/.cursor/skills/pdf is not this skill and was left as it is; no placement was made for cursor
@@ -103,9 +124,9 @@ warning: /home/me/.cursor/skills/pdf is not this skill and was left as it is; no
   xlsx  symlink  /home/me/.cursor/skills/xlsx -> /home/me/.agents/skills/xlsx
 ```
 
-Here Cursor does not see pdf at all, so pdf has no row. If agentx left Cursor's path alone and Cursor still sees the skill through another client's skills directory, as it sees a skill Claude Code holds, the skill's row shows that path instead, so the output still tells you Cursor has the skill.
+Cursor does not see pdf, so pdf has no row. If Cursor sees pdf through another client's directory, such as Claude Code's, the row shows that path.
 
-A copy agentx keeps for the client is skipped the same way when it is different from the library, for instance because you edited it. It stays exactly as it is, and the line under the warning names the commands that replace it with the library version:
+agentx also skips a copy it keeps for the client when the copy differs from the library, for example because you edited it. The copy stays as it is. The warning names the commands that replace it:
 
 ```text
 warning: cursor's copy of pdf is different from the library, so it was left unchanged (/home/me/.cursor/skills/pdf)
@@ -115,23 +136,19 @@ warning: cursor's copy of pdf is different from the library, so it was left unch
   xlsx  symlink  /home/me/.cursor/skills/xlsx -> /home/me/.agents/skills/xlsx
 ```
 
-The kept copy is not the library's pdf, so pdf has no row here either. If Cursor also sees pdf through another client's skills directory, pdf's row shows that path, as above.
-
 See [A copy that differs from the library](/cli/skill#a-copy-that-differs-from-the-library).
-
-`--place-all` belongs to `enable`; `agentx config disable --place-all` exits with code 1. Place skills one at a time with [`agentx skill place`](/cli/skill).
-
-A client that reads the library directly, such as Codex, already sees every library skill, so `--place-all` makes no entry of its own for it and says so:
-
-```text
-✓ codex is now enabled
-✓ codex reads the library and already sees 2 skills; nothing was placed
-  pdf   library  /home/me/.agents/skills/pdf
-  xlsx  library  /home/me/.agents/skills/xlsx
-```
 
 ## Fix a broken file
 
-If `settings.json` cannot be parsed, every `config` command exits with code 10 and names the file. Fix the JSON, or delete the file to start again from defaults.
+If agentx cannot parse `settings.json`, every command that reads it exits with code 10 and names the file. Fix the JSON, or delete the file to start again from defaults.
 
-If a later version of agentx wrote `settings.json`, every command that reads it exits with code 10 and says which schema version the file has. Upgrade agentx to that version instead of deleting the file: deleting it loses the sources and settings the later version keeps there. `agentx doctor` fails its `settings` row with the same hint.
+If a later version of agentx wrote `settings.json`, every command that reads it exits with code 10 and says which schema version the file has. Upgrade agentx to that version. Keep the file: it holds sources and settings the later version needs. `agentx doctor` shows the same error in its `settings` row.
+
+## Exit codes
+
+For what each code means, see [Exit codes](/cli/output#exit-codes). These causes are special to `agentx config`:
+
+- `1`: an invalid value, an unknown key, or a key you cannot set.
+- `5`: `config enable` or `config disable` names a configuration `agentx scan` does not detect.
+- `7`: another agentx command is running. `set`, `enable` and `disable` stop at once.
+- `10`: agentx cannot parse `settings.json`, or a later version of agentx wrote it. See [Fix a broken file](#fix-a-broken-file).

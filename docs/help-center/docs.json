@@ -2,7 +2,7 @@
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
   "name": "agentx",
-  "description": "The inventory manager for your agents. View, manage and sync skills, MCP servers and plugins across machines.",
+  "description": "The inventory manager for your agents. See the skills, MCP servers and plugins of every agent client, and install, update and sync skills across machines.",
   "favicon": "/favicon.svg",
   "logo": "/logo.svg",
   "colors": {

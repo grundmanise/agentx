@@ -5,7 +5,18 @@ description: "Copy one machine's settings to another, with a list of the skills 
 
 Export writes your settings and a list of your skills to a file. Import restores the settings on another machine and tells you what that machine can bring back on its own.
 
-An export holds no skill content. It records where each skill came from, never what is in it. Content comes back from your account repo, or from installing the skill again.
+An export holds no skill content. It records only where each skill came from and which version you had. The content comes back from your [account repo](/#key-terms), or when you install the skill again.
+
+## Move to a new machine
+
+1. On the old machine, run `agentx export ~/agentx-export.json`.
+2. Copy the file to the new machine.
+3. If you publish your own skills, add your account remote on the new machine with `agentx source add <url> --account`.
+4. On the new machine, run `agentx import ~/agentx-export.json`.
+5. Run each `agentx source add` line that import printed, exactly as printed. The lines keep each source's pin. If you did step 3, you can skip the `--account` line.
+6. Install your skills. For a skill of a source, run `agentx skill add <source>`, using the URL in the listing row. For your own skills, run `agentx skill add --name <name>`, or `agentx skill add --all` for all of them.
+
+If you skip step 5, `agentx skill add` and `agentx source fetch` stop with exit code 5 (`source not fetched`) and print the `agentx source add` line to run.
 
 ## Export this machine
 
@@ -22,19 +33,19 @@ The file holds:
 
 | Part | What it is |
 |---|---|
-| `settings` | Your [settings](/cli/config) exactly as the file holds them: label, sources, disabled configurations, copy modes. |
-| `skills` | One record per skill agentx manages: its name, its kind, `managed`; where it is published to, its `source`, which for your own skills is your account remote and is left out while you have none; for a skill you forked, where it came from, its `upstream`; the version it is based on; and whether this machine placed it anywhere. |
+| `settings` | Your [settings](/cli/config) as `settings.json` holds them, for example the label, your sources and their pins, disabled configurations and copy modes. |
+| `skills` | One lineage record for each skill in your account repo: the skill's name, where it is published (its source, or your account remote for your own skills), where a skill you forked came from (its upstream), the version it is based on, and whether this machine placed it. |
 | `machine` | The id and label of the machine you exported from. |
 
-The file is readable by you alone, because it holds your settings. Treat it as you treat `settings.json`.
+The file holds your settings, so treat it as you treat `settings.json`. A new file is readable by you alone. When you overwrite a file with `--force`, it keeps its old permissions.
 
-agentx refuses to overwrite a file that is already there. Pass `--force` to replace it:
+If the file is already there, export stops with exit code 6. Pass `--force` to replace it:
 
 ```sh
 agentx export ~/agentx-export.json --force
 ```
 
-A path that names a directory is refused whether or not you pass `--force`: give the path of the file to write.
+Give the path of a file. If the path is a directory, export stops with exit code 6, also with `--force`. If the parent directory does not exist, export stops with exit code 5.
 
 Two exports of an unchanged machine are the same file, byte for byte.
 
@@ -58,21 +69,29 @@ Replace the settings in /home/me/.agentx/settings.json with those of my-laptop f
 
 Import writes your settings and nothing else. It creates no account repo, fetches nothing, installs nothing and places nothing.
 
-Your source list comes back with its pins, but no source is fetched. Before you install anything from a source, run the `agentx source add` line import prints for it. Import prints these lines even when the export lists no skills. For a pinned source the line is `agentx source add <url>#<pin>`; running `agentx source add <url>` alone would unpin the source. Your account remote gets an `agentx source add <url> --account` line.
+Your sources come back with their [pins](/cli/source#pin-a-source), but agentx does not fetch them. Import prints one `agentx source add` line for each source. Run each line as printed before you install from that source. The line keeps the pin. A plain `agentx source add <url>` would remove it.
 
-Import leaves out whether you could write to each source. That depends on this machine's credentials, so agentx checks it again here.
+agentx checks write access to each source again on this machine.
 
-When the URL or the pin holds anything but letters, digits and `._/:@%+=,#-`, import puts it in single quotes, so the line runs as printed in a POSIX shell such as bash or zsh. The export file supplies both, and quoting keeps a `$`, `&` or quote in them from running as a command.
+Import quotes a URL or pin where needed, so you can paste each line into bash or zsh as printed.
 
-The listing says what this machine's account repo has of each skill:
+The listing shows whether this machine already has each skill, in its account repo or on your account remote:
 
 | State | Meaning |
 |---|---|
-| `present` | This machine holds that skill at that version: as a branch of its account repo, or, for one of your own skills, on the [account remote](/cli/source#add-your-account-remote) you set. When the library still holds the skill, place it with [`agentx skill place`](/cli/skill). One of your own skills whose branch the account repo holds but the library does not comes back with `agentx skill place <name>` too. When the library no longer holds a skill of a source, bring it back with [`agentx skill add`](/cli/skill). Install one of your own skills that only the account remote holds with [`agentx skill add --name <name>`](/cli/skill#install-your-skills-on-another-machine). |
-| `missing` | Neither the account repo nor the account remote has a branch for it. For a skill of a source, add its source with [`agentx source add`](/cli/source), then install it again with [`agentx skill add`](/cli/skill). One of your own skills you never published to the account remote cannot be restored on this machine: installing its upstream again brings back the upstream skill, not your fork of it. |
-| `different` | The account repo holds that name at another version, or as one of your own skills where the export had a skill of a source, or the other way round, or the account remote holds that skill at another version, as when it was published again after the export. |
+| `present` | This machine already has this version, in its account repo or on your [account remote](/cli/source#add-your-account-remote). |
+| `missing` | This machine has no copy of this skill. |
+| `different` | This machine has a skill with this name, but at another version, or as one of your own skills where the export has a skill of a source, or the reverse. A skill you published again after the export also reads `different`. |
 
-A fresh machine has no account repo, so every skill reads `missing` there. Add your account remote before you import, with `agentx source add <url> --account`, and the skills of yours you published read `present`: the listing then tells which of your own skills the remote keeps for you. Install each one with [`agentx skill add --name <name>`](/cli/skill#install-your-skills-on-another-machine), or all of them with `agentx skill add --all`.
+What to do next:
+
+- **Present, in your library or one of your own skills:** place it with [`agentx skill place <name>`](/cli/skill#place-a-skill-you-already-have). This also brings back one of your own skills that your account repo holds and your library does not.
+- **Present, a skill of a source that is no longer in your library:** install it again with [`agentx skill add <source>`](/cli/skill#install-a-skill).
+- **Present, one of your own skills that only your account remote holds:** install it with [`agentx skill add --name <name>`](/cli/skill#install-your-skills-on-another-machine), or all of them with `agentx skill add --all`.
+- **Missing, a skill of a source:** run the `agentx source add` line import printed, then install with [`agentx skill add <source>`](/cli/skill#install-a-skill).
+- **Missing, one of your own skills:** if you never published it, this machine cannot restore it. Installing the skill you forked it from gives you the original skill without your changes.
+
+On a fresh machine every skill reads `missing`, because there is no account repo yet. To see which of your own skills you can restore, add your account remote before you import: `agentx source add <url> --account`. The skills you published then read `present`. Install them with [`agentx skill add --name <name>`](/cli/skill#install-your-skills-on-another-machine), or all of them with `agentx skill add --all`.
 
 ## Confirm without a terminal
 
@@ -82,27 +101,14 @@ Import replaces settings, so it asks first. Pass `--yes` to answer in advance:
 agentx import ~/agentx-export.json --yes
 ```
 
-Use `--yes` in scripts and wherever there is no terminal. Without it, and without a terminal to ask at, import exits with code 6 and changes nothing. Answering anything but `y` or `yes` does the same.
-
-## Move to a new machine
-
-1. On the old machine, run `agentx export ~/agentx-export.json`.
-2. Copy the file to the new machine.
-3. If you publish your own skills, add your account remote on the new machine with `agentx source add <url> --account`.
-4. On the new machine, run `agentx import ~/agentx-export.json`.
-5. Run each `agentx source add` line the import printed, exactly as printed. It names the pin of a pinned source, `<url>#<pin>`, and `agentx source list` shows the pins too.
-6. Install what the listing calls missing: a skill of a source with `agentx skill add <source>`, and one of your own with `agentx skill add --name <name>`, or all of yours with `agentx skill add --all`.
-
-Import restores the settings and nothing else, so the sources it lists are not yet on the new machine. Until you add a source again, `agentx source fetch` and `agentx skill add` exit with code 5 and say the source was not fetched. They name the same `agentx source add` line, pin included, so following that hint keeps the pin too.
+Use `--yes` in scripts, with `--json`, and wherever there is no terminal. Without `--yes`, import exits with code 6 and changes nothing in these cases. It does the same when you answer anything other than `y` or `yes`.
 
 ## When an import is refused
 
 | Exit code | Cause |
 |---|---|
 | 5 | The file is not there. |
-| 6 | The file is not an agentx export, is truncated, is larger than 8 MiB, is of a schema version this agentx does not read, carries a field it does not know, or holds settings it would not write. |
-| 6 | A skill record agentx would not write: a kind other than `managed`, a commit that is not a commit id, a subpath on one of your own skills, an upstream on a skill of a shared source, or a version that does not add up. The message names the skill. |
-| 6 | The settings hold something agentx never writes: a URL with a token in it, in `url` or `alias`; an access other than `writable` or `read-only`; two account remotes; a pin on the account remote; another source naming the repository of the account remote; a pin or default branch that is not a ref git accepts; a date not in RFC 3339 UTC; a label with a control character in it or longer than 256 bytes; a source or a configuration listed twice; a list out of order. The message names the entry and the rule. |
-| 6 | You answered no, or there was no terminal to ask at and `--yes` was not given. |
+| 6 | The file is not a valid agentx export: it is damaged, larger than 8 MiB, from an agentx version this one cannot read, or holds a setting or skill record agentx would not write. The message names the problem. Export the file again from the other machine, or upgrade agentx. |
+| 6 | You answered no, or import could not ask (no terminal, or `--json`) and you did not pass `--yes`. |
 
 A refused import changes nothing: your settings stay exactly as they were.

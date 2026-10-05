@@ -14,4 +14,10 @@ CLI version     dev
 Schema version  1
 ```
 
-A release prints its version, such as `0.2.0`, and a nightly build prints the version it leads up to and its date, such as `0.3.0-nightly.20261001`. `dev` means a build from source. The schema version is the version of the `--json` output the desktop app reads.
+The CLI version is one of:
+
+- A release version, such as `0.2.0`.
+- A nightly version, such as `0.3.0-nightly.20261001`. It is the next release version, followed by the build date.
+- `dev`, for a build from source.
+
+The schema version is the version of the [`--json` output](/cli/output#json-output). The agentx desktop app reads this output.

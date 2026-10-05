@@ -3,9 +3,9 @@ title: "agentx source"
 description: "Add the git repositories you install skills from, fetch them again, list their skills, and remove them."
 ---
 
-A source is a git repository that holds one or more skills. Add it by URL once; agentx fetches it into its own store and lists the skills inside, so you can pick what to install. [`agentx skill add`](/cli/skill) adds the source itself when you install from a URL you have not added yet.
+A source is a git repository that holds one or more skills. Add it once by its URL. agentx fetches it and lists the skills inside, so you can choose what to install. [`agentx skill add`](/cli/skill) adds the source itself when you install from a URL you have not added yet.
 
-A source you install skills from holds skills in folders on one branch. Your [account remote](#add-your-account-remote), the repository you publish your own skills to, is the one source you add with `--account`: it holds one branch per skill.
+Your [account remote](#add-your-account-remote) is a special source: the repository you publish your own skills to.
 
 ## Add a source
 
@@ -28,38 +28,34 @@ Paste the URL in whatever form you have:
 | Any git server | `https://git.example.com/team/repo.git/skills` |
 | Local repository | `file:///srv/skills.git`, `/srv/skills.git` |
 
-Add `#<ref>` to pin the source to a branch, a tag or a commit, for example `owner/repo#v2` or `git@github.com:owner/repo.git#release/1.x`. Without a pin the source follows the repository's default branch, and so does `#HEAD`. A `tree` URL pins the branch it names; for a branch with a slash in its name, such as `release/1.x`, use `#release/1.x` instead.
+A path after the repository, such as `owner/repo/skills`, scopes the listing to that directory. On a server other than GitHub, end the repository name with `.git` so agentx knows where the repository ends and the path begins. No part of the path can be `.`, `..` or `.git`.
 
-A path after the repository, such as `owner/repo/skills`, scopes the listing to that directory. On a server other than GitHub, end the repository name with `.git` so agentx knows where the repository ends and the path begins. The path must name a directory by its plain names: `.`, `..` and `.git` are refused, however they are written.
-
-Adding a source you already have fetches it again and sets the pin to what you typed this time. The confirmation then tells you what moved:
+Adding a source you already have fetches it again. The confirmation tells you what moved:
 
 ```text
 ✓ re-fetched https://github.com/anthropics/skills, now at 9c1d0ab, was 3f2a9c1: 12 skills; write access unknown
 ✓ re-fetched https://github.com/anthropics/skills, already at 9c1d0ab: 12 skills; write access unknown
 ```
 
-### Add your account remote
+### Pin a source
 
-The account remote is the Git repository you own that you [publish](/cli/skill#publish-a-skill) your own skills to, the ones you create with `agentx skill new` or fork with `agentx skill fork`, so your [other machines can install them](/cli/skill#install-your-skills-on-another-machine). Create an empty repository on your Git host, then add it with `--account`:
+A ref is a branch, a tag or a commit of a repository. A source's pin is the ref agentx fetches for it. A source has at most one pin.
+
+To pin a source, add `#<ref>` to its URL:
 
 ```sh
-agentx source add git@github.com:you/forks.git --account
+agentx source add owner/repo#v2
 ```
 
 ```text
-✓ the account remote is now ssh://git@github.com/you/forks; it holds 0 skills; you can write to it
+✓ added https://github.com/owner/repo pinned to v2 at 3f2a9c1: 12 skills; write access unknown
 ```
 
-- Give any URL Git reaches, as for any source. agentx records it in its canonical form, and reads the path of `user@host:path` from the server's root, so on a server of your own give the full path. GitHub and GitLab URLs work either way.
-- Give the repository alone: a `#<ref>`, a path or a token in the URL is refused with exit code 1. Keep credentials in a Git credential helper or an SSH key, as for any repository.
-- agentx reaches the repository first. One Git cannot reach is refused with exit code 3, and nothing changes.
-- `agentx source list` shows it with `(account)`.
-- Only your own skills travel through it. Skills you install from other sources, their update checks and the sources themselves stay on each machine.
-- A machine without an account remote keeps the whole history of your own skills: `agentx skill history` and `agentx skill diff` work without one. Add it when you want a backup, or a second machine.
-- Adding the account remote's URL again, with or without `--account`, fetches it again.
-- Adding another URL with `--account` replaces the account remote and forgets what the old one held. Your own skills stay as they are and read `not published` until the new remote holds them: publish each one by name with `agentx skill publish <name>`. A publish with no name skips them.
-- A source you added without `--account` cannot become the account remote, whether it has the same URL or names the same repository by another URL: agentx stops with exit code 6 and changes nothing. Remove the source first with `agentx source remove <url>`, then add the account remote.
+- Without a pin, the source follows the repository's default branch. `#HEAD` does the same.
+- A `tree` URL pins the ref it names. For a branch with a slash in its name, such as `release/1.x`, use `#release/1.x`.
+- To change the pin, add the source again with the new ref. If you add it again without a ref, agentx removes the pin.
+- `agentx source fetch` and `agentx source skills` keep the pin. Given another `#<ref>`, they stop with exit code 1.
+- `agentx source list` shows the pin in its branch column.
 
 ### Credentials
 
@@ -67,7 +63,7 @@ The fetch runs with your own git, so the credential helper, SSH key and URL rewr
 
 Add each source by the URL agentx should fetch from and push to. To fetch a source over HTTPS and push to it over SSH, set Git's own `url.<base>.pushInsteadOf`, for example `git config --global url.git@github.com:.pushInsteadOf https://github.com/`.
 
-Never put a token in the URL. agentx drops it before the URL is used anywhere, and never repeats it back to you, not even in an error. For an SSH URL the `git@` part is the address rather than a credential, so it is kept and only a password is dropped. If the fetch then fails, store the credential in a git credential helper instead:
+Keep tokens out of the URL. If a URL holds a user name, a password or a token, agentx drops it and warns you. In an SSH URL, agentx keeps the user name, such as `git@`, and drops only a password. Store the credential in a Git credential helper instead:
 
 ```sh
 git config --global credential.helper store
@@ -75,7 +71,7 @@ git config --global credential.helper store
 
 ### Write access
 
-Whenever it adds a source, with `agentx source add`, `agentx skill add` or `agentx adopt`, and on every `agentx source fetch`, agentx asks git whether you may push to the source, and the line ends with the answer:
+agentx checks whether you can push to a source each time it adds one, with `agentx source add`, `agentx skill add` or `agentx adopt`, and each time you run `agentx source fetch`. The confirmation line ends with the answer:
 
 | Line ends with | Means |
 |---|---|
@@ -83,11 +79,13 @@ Whenever it adds a source, with `agentx source add`, `agentx skill add` or `agen
 | `; read-only for you` | the server said you may read the source and not write to it |
 | `; write access unknown` | git could not tell, for example because pushing needs a password git may not ask for, or the server did not answer |
 
-The check pushes nothing: it is a dry run of deleting a branch that does not exist, made with your own git, credentials, SSH configuration and URL rewrites. A setting you key on a source's URL with `includeIf "hasconfig:remote.*.url:..."`, such as the SSH key of a work account, applies to that source's check alone. Key it on the URL as `agentx source list` prints it, for example `ssh://git@github-work/**`: a pattern in the `git@host:path` form does not match. A setting you key on agentx's home directory with `includeIf "gitdir:..."` does not apply to the check: key it on the source's URL instead. The check never asks for a password or passphrase, and gives up after 30 seconds. An answer that does not come never fails the command.
+The check pushes nothing. It uses your own Git, credentials, SSH configuration and URL rewrites. It never asks for a password or passphrase, and it gives up after 30 seconds. If it gets no answer, the command still succeeds.
 
-A `writable` source can still refuse a push to a protected branch, or one a server hook rejects: a dry run does not reach those rules.
+To give the check of some sources another SSH key, key the setting on the URL as `agentx source list` prints it, for example `includeIf "hasconfig:remote.*.url:ssh://git@github-work/**"`. The check ignores patterns in the `git@host:path` form and `includeIf "gitdir:..."` settings.
 
-If your organisation uses single sign-on or an IP allow list, the server may refuse to say until you authorise your token or key. agentx warns you:
+A source you can write to can still refuse a push to a protected branch, or a push that a server hook rejects. The check cannot see those rules.
+
+If your organisation uses single sign-on or an IP allow list, the server may not report your access until you authorise your token or key. agentx then warns you:
 
 ```text
 warning: https://github.com/acme/skills: remote: The 'acme' organization has enabled or enforced SAML SSO.
@@ -98,22 +96,20 @@ Authorise it with your host, then fetch the source again to check once more. `ag
 
 ### What is fetched
 
-agentx fetches only the commits and directory trees of one branch, no tags and no file contents, then the `SKILL.md` file of every skill in the repository in one round trip. Those come down whatever path you added, so listing any part of the source afterwards needs no network. A source the size of a monorepo costs a few megabytes, not a clone. A git server that cannot serve such a partial fetch gets a full one instead; nothing changes for you.
+agentx fetches only what it needs to list skills, so even a large repository costs a few megabytes. After a fetch, listing any part of the source needs no network.
 
-A fetch lands whole or not at all. agentx fills its copy in two round trips and moves the source to the new commit only once everything has arrived, so a fetch that fails, whether from a dropped connection, a Ctrl-C or a machine that goes down, leaves the source exactly as it was. Listing and searching keep working at the last version that arrived complete. Fetch again to pick it up.
+If a fetch fails or you stop it, the source stays at the last version that arrived complete. Fetch again to get the new version.
 
 ### A failed add leaves nothing behind
 
-An add undoes itself when it cannot finish. agentx registers the repository with its own git store before it fetches, and takes that registration back if the fetch fails or if the source cannot be recorded. A source is on this machine whole or not at all, so `source list` never hides one.
-
-Taking it back needs the same lock every agentx command takes, so an add that fails while another command is running waits a few seconds for that command. If the other command outlasts the wait, the add names what it left:
+If an add cannot finish, agentx undoes it. If the add fails while another agentx command runs for too long, agentx cannot undo it. It then names what it left and how to clear it:
 
 ```text
 error: another agentx command holds the lock; the remote src-1c9d0b7e4a2f6d38 was left in the account repo and no source names it
 hint: run 'agentx source add https://github.com/anthropics/skills' to add the source and take the remote with it, or 'agentx source remove 1c9d0b7e4a2f6d38' to clear it
 ```
 
-Run either command in the hint. Adding the source again finishes the job; removing it by id clears the leftover.
+Run either command in the hint. Adding the source again finishes the add. Removing it by id clears the leftover.
 
 ## Fetch a source again
 
@@ -125,7 +121,7 @@ agentx source fetch anthropics/skills
 ✓ re-fetched https://github.com/anthropics/skills, now at 9c1d0ab, was 3f2a9c1: 13 skills; write access unknown
 ```
 
-A fetch updates what agentx knows about a source: the commit it holds, the skills inside it, and whether you may write to it. Run it when you want to see what changed upstream now.
+A fetch updates what agentx knows about a source: the commit it holds, the skills inside it, and whether you may write to it. Run it to see what changed in the source.
 
 You often do not need to. [`agentx skill check-updates`](/cli/skill#check-for-updates) fetches the sources your managed skills came from on its own. With an account remote set, it also fetches the account remote whenever one of your own skills is placed on this machine. When the desktop app opens, its [background process](/cli/serve#update-checks) fetches every source you added, once, including the ones you have not installed anything from yet.
 
@@ -140,7 +136,7 @@ Sources are fetched in parallel, a few at a time, and each one gets a line that 
 
 ```text
 ✓ re-fetched https://github.com/anthropics/skills, now at 9c1d0ab, was 3f2a9c1: 13 skills; write access unknown
-✓ re-fetched https://github.com/me/skills, already at 8b1e0f4: 4 skills; you can write to it
+✓ re-fetched https://github.com/me/skills pinned to v2, already at 8b1e0f4: 4 skills; you can write to it
 ```
 
 `--all` fetches your account remote too, after the other sources. Its line counts the skills of yours it holds:
@@ -151,13 +147,7 @@ Sources are fetched in parallel, a few at a time, and each one gets a line that 
 
 A source that fails is a warning naming it and does not stop the others. Every source that did fetch is recorded, and the command then fails, naming the ones that did not. If they all failed for the same reason, the exit code is the one that source would give on its own; if the reasons differ, it is `3`.
 
-A fetch keeps the pin the source has. To change it, add the source again with the ref you want:
-
-```sh
-agentx source add anthropics/skills#v2
-```
-
-A path in the URL is ignored here: a fetch always covers the whole source.
+A fetch keeps the source's [pin](#pin-a-source). It always covers the whole source, even when the URL holds a path.
 
 ## List your sources
 
@@ -172,7 +162,14 @@ agentx source list
   ssh://git@github.com/you/forks (account)  writable  skills/*  2 skills  2026-09-20T09:00:00Z  5e8a1c3b7d9f2a64
 ```
 
-Each row shows the canonical URL, your write access as the last add or fetch found it, the branch, the fetched commit, when it was last fetched and the source id. The branch is the pin, or for an unpinned source the default branch the repository named at the last add or fetch, or `(unpinned)` while agentx has not seen one. Your account remote is marked `(account)`: it follows the branch of every skill of yours, `skills/*`, and shows how many it held at the last fetch instead of a commit. The id is accepted wherever a URL is.
+| Column | Shows |
+|---|---|
+| URL | The source URL. Your account remote is marked `(account)` |
+| Access | `writable`, `read-only` or `unknown`, as the last add or fetch found it |
+| Branch | The [pin](#pin-a-source). For a source with no pin: the repository's default branch, or `(unpinned)` until agentx has seen it. For the account remote: `skills/*`, one branch per skill |
+| Commit | The fetched commit, or `not fetched`. For the account remote: how many skills it held at the last fetch |
+| Last fetched | When agentx last fetched the source |
+| Id | The source id. Use it wherever a command takes a URL |
 
 ## List the skills of a source
 
@@ -189,9 +186,7 @@ agentx source skills anthropics/skills
 
 Every directory with a `SKILL.md` is a skill. Hidden directories and `node_modules` are skipped.
 
-Give a path to see one part of the repository, for example `anthropics/skills/skills/pdf`, or give the source id instead of the URL. The command reads what the last `source add` fetched and never touches the network, whichever part of the source you ask for.
-
-Names and descriptions come from the repository, so agentx replaces any control characters in them with spaces, keeping one skill to a row.
+Give a path to see one part of the repository, for example `anthropics/skills/skills/pdf`. You can also name the source by its id. The command reads what the last add or fetch stored and makes no network calls. A `#<ref>` that differs from the source's pin is refused with exit code 1.
 
 ## Remove a source
 
@@ -218,26 +213,52 @@ Add the source again to fetch it anew and clear the state:
 agentx source add anthropics/skills
 ```
 
-Nothing else changes: the skills, their records and their placements are exactly as they were before you removed the source. Any pin works, since a source is identified by its URL. Installing a skill from the source by its URL, or adopting one with [`agentx adopt`](/cli/adopt), adds it again too.
+Your skills and their placements stay as they are. You can add the source at any [pin](#pin-a-source). Installing a skill from the source by its URL, or adopting one with [`agentx adopt`](/cli/adopt), also adds the source again.
 
-A command that names the removed source by its id cannot fetch it, since an id is not a URL. While a skill still records the source, the command tells you what to run instead:
+After you remove a source, commands no longer accept its id, because agentx needs the URL to fetch it. While a skill still records the source, the error names the command to run:
 
 ```text
 error: no source with id 1c9d0b7e4a2f6d38: https://github.com/anthropics/skills was removed, and the skills installed from it still name it
 hint: run 'agentx source add https://github.com/anthropics/skills' to add it again
 ```
 
-Once you take the last of those skills off the machine, with [`agentx skill remove <name>`](/cli/skill) or its `--from universal` form, nothing on this machine records the source's URL any more, and the id is refused like any other. Add the source again by its URL.
+Once you remove the last of those skills with [`agentx skill remove <name>`](/cli/skill), agentx no longer knows the source's URL. Add the source again by its URL.
 
-Removing your [account remote](#add-your-account-remote) detaches it: your own skills stay on this machine, and nothing on the remote changes.
+Removing your [account remote](#add-your-account-remote) clears it from this machine's settings. Your own skills stay on this machine, and nothing on the remote changes:
+
+```text
+✓ the account remote ssh://git@github.com/you/forks is no longer set; your skills on this machine are as they were
+```
+
+## Add your account remote
+
+The account remote is a Git repository you own. You [publish](/cli/skill#publish-a-skill) your own skills to it: the skills you create with `agentx skill new` or fork with `agentx skill fork`. Your [other machines install them](/cli/skill#install-your-skills-on-another-machine) from it. Create an empty repository on your Git host, then add it with `--account`:
+
+```sh
+agentx source add git@github.com:you/forks.git --account
+```
+
+```text
+✓ the account remote is now ssh://git@github.com/you/forks; it holds 0 skills; you can write to it
+```
+
+- Give any URL Git can reach. In the `user@host:path` form, agentx reads the path from the server's root, so on your own server give the full path, for example `git.example.com:/srv/git/forks.git`. GitHub and GitLab URLs work either way.
+- Give the repository alone: a `#<ref>`, a path or a token in the URL is refused with exit code 1. Keep credentials in a Git credential helper or an SSH key, as for any repository.
+- If Git cannot reach the repository, agentx stops with exit code 3 and changes nothing.
+- `agentx source list` shows it with `(account)`.
+- Only your own skills travel through it. Skills you install from other sources, their update checks and the sources themselves stay on each machine.
+- A machine without an account remote keeps the whole history of your own skills: `agentx skill history` and `agentx skill diff` work without one. Add it when you want a backup, or a second machine.
+- Adding the account remote's URL again, with or without `--account`, fetches it again.
+- Adding another URL with `--account` replaces the account remote. Your own skills stay on this machine. `agentx skill list` shows them as `not published` until you publish each one to the new remote with `agentx skill publish <name>`. `agentx skill publish` with no name skips them.
+- A source you added without `--account` cannot become the account remote, even under another URL for the same repository. agentx stops with exit code 6. Remove the source first with `agentx source remove <url>`, then add the account remote.
 
 ## Exit codes
 
-- `1`: the URL is not one of the accepted forms, the pin and the tree URL name different refs, the account remote's URL carries a token, a ref or a path, or `source fetch` was given neither a source nor `--all`.
-- `3`: the source cannot be reached, is not a git repository, or needs credentials git does not have. The hint names the fix. From `source fetch` over several sources, it also means they failed for different reasons; read the warnings.
-- `5`: the pinned ref or the path does not exist in the source, the source is not on this machine, or what this machine holds of it is incomplete. For an id of a source you removed, the hint names the `agentx source add` command that brings it back.
-- `6`: the URL names the repository of your account remote: list its skills with `agentx skill list --remote` and install one with `agentx skill add --name <name>`, see [Install your skills on another machine](/cli/skill#install-your-skills-on-another-machine). Also: `--account` for the URL of a source you added without it, or of one that names the same repository by another URL.
-- `7`: another agentx command is running. Retry when it finishes. An add that could not take its own half-done work back says what it left and how to clear it.
-- `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.
+For what each code means, see [Exit codes](/cli/output#exit-codes). These causes are special to `agentx source`:
 
-Each code means the same thing from every `source` command: fetching one source answers exactly as adding or listing it would.
+- `1`: the URL is not one of the accepted forms, or its `#<ref>` and its tree URL name different refs. Also: the account remote's URL carries a token, a ref or a path; `source fetch` or `source skills` names a ref other than the source's pin; or `source fetch` was given both sources and `--all`, or neither.
+- `3`: the source cannot be reached, is not a git repository, or needs credentials git does not have. The hint names the fix. From `source fetch` over several sources, it also means they failed for different reasons. Read the warnings.
+- `5`: the pinned ref or the path does not exist in the source, the source is not on this machine, or what this machine holds of it is incomplete. For an id of a source you removed, the hint names the `agentx source add` command that brings it back.
+- `6`: `source skills` names your account remote, or `source add` names its repository by another URL. List its skills with `agentx skill list --remote`, and install one with `agentx skill add --name <name>`. See [Install your skills on another machine](/cli/skill#install-your-skills-on-another-machine). Exit code 6 also means `--account` named a source you added without it, by the same or another URL.
+- `7`: another agentx command is running. Retry when it finishes. An add that could not undo its work says what it left and how to clear it.
+- `8`: the account repo in agentx home cannot be read or written. Run `agentx doctor`.

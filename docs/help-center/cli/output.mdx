@@ -1,24 +1,23 @@
 ---
 title: "Output and exit codes"
-description: "Read agentx output, logs and exit codes."
+description: "Read agentx output, logs and exit codes, and set its environment variables."
 ---
 
 ## Text output
 
-Every command prints aligned text for you to read. Tables pad their columns, a row that reports a state starts with a glyph (`✓` ok, `!` warning, `✗` failure, `•` information), and a command that changes something confirms it on one line:
+Every command prints aligned text for you to read.
+
+- Tables pad their columns.
+- A row that reports a state starts with a glyph: `✓` ok, `!` warning, `✗` failure, `•` information.
+- A command that changes something confirms it on one line, such as `agentx config set label "work laptop"`:
 
 ```text
 ✓ label is now work laptop
 ```
 
-Text that comes from somewhere else is cleaned before it is printed: tabs, newlines and other control characters become spaces, so one item stays one row and nothing can take over your terminal. That covers:
+agentx did not write some of the text it prints, such as skill names and descriptions, MCP server command lines and messages from git servers. In that text, agentx replaces tabs, newlines and other control characters with spaces. This keeps each item on one row, and that text cannot control your terminal.
 
-- the name and description a source writes for its skills, and the directory it keeps each one in;
-- the name of a directory in your library or your client's configuration;
-- the command line an MCP server is declared with;
-- what agentx passes on from other programs, including the messages a git server sends back when you add a source.
-
-Paths are quoted instead of cleaned, so you can still copy one. A path holding a control character is printed in double quotes with escapes, the way `git status` prints such a path:
+If a path holds a control character, agentx prints it in double quotes with escapes, as `git status` does. You can still copy the path:
 
 ```text
     nasty  directory  user  "/home/me/.claude/skills/na\033[31msty"
@@ -26,46 +25,56 @@ Paths are quoted instead of cleaned, so you can still copy one. A path holding a
 
 ## Colour
 
-Text output is coloured when it goes to a terminal. Each colour means one thing everywhere: green for ok and enabled, yellow for a warning, a hint and disabled, red for a failure and an error, blue for information, cyan for a key or a flag name, and dim for secondary detail.
+Text output is coloured when it goes to a terminal. Each colour has one meaning:
 
-Output piped into another program or a file carries no colour, so the text a script reads is the same as before. Control it explicitly with the global `--color` flag:
+| Colour | Meaning |
+|---|---|
+| Green | OK, enabled |
+| Yellow | Warning, hint, disabled |
+| Red | Failure, error |
+| Blue | Information |
+| Cyan | A key, a command or flag name, or a count |
+| Magenta | A tag, such as a plugin name |
+| Dim | Secondary detail |
+
+Output that goes to a file or another program has no colour, so a script reads plain text. To choose yourself, use the global `--color` flag:
 
 ```sh
 agentx --color on doctor | less -R
 agentx --color off scan
 ```
 
-Set the `NO_COLOR` environment variable to any value to turn colour off in every terminal.
+Set the `NO_COLOR` environment variable to any value, or set `TERM` to `dumb`, to turn colour off. `--color on` turns it back on.
 
 ## Logs
 
-Logs go to stderr, never to stdout. A line starting `warning:` is something to look at. Add `--verbose` to see debug lines too, such as which agentx home and library the command used.
+agentx writes logs to stderr. A line that starts with `warning:` reports a problem that did not stop the command. Add `--verbose` to also see `debug:` lines, such as which agentx home and library the command used.
 
 Some warnings put what to do on a second line, indented under the warning.
 
 ## Errors
 
-A failed command prints `error: ...` and, when there is a fix, `hint: ...` on stderr.
+A failed command prints `error: ...` on stderr. If there is a fix, a `hint: ...` line follows. With `--json`, the error is an `error` event on stdout.
 
 ## Exit codes
 
 | Exit code | Meaning |
 |---|---|
 | 0 | Success. |
-| 1 | Unknown command, bad flag or missing argument. Run `agentx help`. |
+| 1 | The command line is wrong: an unknown command, a bad flag or value, flags that cannot go together, or a missing argument. Run `agentx help`. |
 | 2 | Git is missing or older than 2.40. Install or upgrade git. |
-| 3 | A source or the [account remote](/cli/source#add-your-account-remote) is unreachable, or authentication failed, or the account remote or a shared source did not let this machine push, or the account remote refused to delete the branch of one of your own skills (see [Remove a skill of your own](/cli/fork#remove-a-skill-of-your-own)). |
-| 4 | A pending merge blocks the action, or `skill update` left one pending because [your edits conflict with the update](/cli/skill#when-your-edits-conflict), or found files of one still to resolve. `skill update` leaves one pending when [one of your own skills conflicts with the account remote](/cli/fork#resolve-a-conflict). |
-| 5 | The skill, source or configuration does not exist. |
-| 6 | A collision or an unmet precondition, such as a push the remote's host declined (see [Publish a skill](/cli/skill#publish-a-skill)), or a source that changed a skill you publish to it (see [Publish edits to a shared source](/cli/skill#publish-edits-to-a-shared-source)). |
+| 3 | agentx cannot reach a source or the [account remote](/cli/source#add-your-account-remote), or the remote denied access: authentication failed, or it did not let this machine push or [delete a branch](/cli/fork#remove-a-skill-of-your-own). Check your credentials and network. |
+| 4 | A merge is pending. Either a pending merge blocks the command, or `skill update` found a conflict and left a merge for you to resolve. See [When your edits conflict](/cli/skill#when-your-edits-conflict) and, for one of your own skills, [Resolve a conflict](/cli/fork#resolve-a-conflict). |
+| 5 | Something you named does not exist: a skill, a source, a ref or directory in a source, a configuration or a file. |
+| 6 | agentx refused because something is in the way or changed meanwhile. Examples: a name is already taken, a server rule such as a hook declined a push (see [Publish a skill](/cli/skill#publish-a-skill)), or a source changed a skill you publish to it (see [Publish edits to a shared source](/cli/skill#publish-edits-to-a-shared-source)). |
 | 7 | Another agentx command is running. Retry when it finishes. |
-| 8 | The account repo is unusable. |
-| 9 | You stopped the run with Ctrl-C, or something sent it a `SIGTERM`. |
-| 10 | An internal error. The message names the file or command involved. |
+| 8 | git cannot use the account repo, `account.git` in agentx home. Run `agentx doctor`. |
+| 9 | You stopped the run with Ctrl-C, or something sent it a `SIGTERM`. See [Stop a run](#stop-a-run). |
+| 10 | An internal error, such as a file agentx cannot read or write. Read the message and hint. If they name no cause, report it as a bug. |
 
 ## Stop a run
 
-Press Ctrl-C, or send `SIGTERM`, to stop a run. agentx stops the git command it is waiting on, prints `error: interrupted` with a hint, and exits `9`:
+To stop a run, press Ctrl-C or send `SIGTERM`. agentx stops the git command it is running, prints an error with a hint, and exits `9`:
 
 ```text
 error: interrupted
@@ -74,23 +83,21 @@ hint: run the command again; 'agentx doctor' names anything the stop left behind
 
 A change that had already started is finished before the run stops, and one that had not started leaves nothing behind.
 
-The exception is a stop sent to the whole process group agentx runs in, most commonly Ctrl-C in a terminal. Such a stop also reaches the git command agentx is running, so a change caught while it was being written to the account repo can stop part way. That is safe: agentx writes down what it is about to do before it does it, the next agentx command finishes or rolls it back, and `agentx doctor` tells you one is waiting. Run the command again when you are ready.
+Ctrl-C in a terminal also reaches the git command agentx is running, so a change can stop part way. The next agentx command finishes or rolls back that change, and `agentx doctor` shows if one is waiting. Run the command again when you are ready.
 
-Press Ctrl-C a second time to kill the run outright. That is safe for the same reason: the next agentx command finishes or rolls back what the killed run left, and `agentx doctor` shows whether anything is waiting.
+To kill a run that does not stop, press Ctrl-C a second time. The next agentx command cleans up in the same way.
 
-A run that had already finished everything you asked for exits `0`: the signal arrived too late to change the outcome, and agentx reports what it did.
+If the run had already done everything you asked, it exits `0` and reports what it did.
 
-Run agentx in the background from a script and Ctrl-C in that terminal leaves it alone, exactly as it leaves every other background job alone.
-
-## Directories
+## Environment variables
 
 | Variable | Default | Use |
 |---|---|---|
 | `AGENTX_HOME` | `~/.agentx` | Where agentx keeps its own state. |
 | `AGENTX_LIBRARY` | `~/.agents/skills` | The library of skills agentx manages. |
 
-Set either to move that directory. `agentx` reads `HOME` and `XDG_CONFIG_HOME` to find your agent clients.
+Set either variable to move that directory. agentx needs `HOME`, and reads `XDG_CONFIG_HOME` (default `~/.config`) to find your agent clients.
 
 ## JSON output
 
-Add `--json` to any command to get one JSON object per line instead of text. The agentx desktop app reads this output; you do not need it to use agentx from a terminal.
+Add `--json` to any command to print one JSON object per line. The agentx desktop app reads this output. From a terminal, the text output is all you need.

@@ -3,9 +3,13 @@ title: "Install and update"
 description: "Install agentx with Homebrew or the install script, try nightly builds and keep agentx up to date."
 ---
 
-agentx runs on macOS and Linux, on Intel and ARM. It also needs `git` 2.40 or later on your `PATH`.
+agentx runs on macOS and Linux, on x86-64 and ARM64. It needs `git` 2.40 or later on your `PATH`. [`agentx doctor`](/cli/doctor) checks this.
 
 ## Install
+
+Install with Homebrew or with the install script. Then run [`agentx doctor`](/cli/doctor) to check that this machine is ready.
+
+### With Homebrew
 
 Install with [Homebrew](https://brew.sh):
 
@@ -13,15 +17,17 @@ Install with [Homebrew](https://brew.sh):
 brew install grundmanise/tap/agentx
 ```
 
-Homebrew builds agentx from source, so the first install takes about a minute.
+Homebrew builds agentx from source, so each install and upgrade takes about a minute. Homebrew also installs a recent `git`.
 
-Or install the latest release with the install script:
+### With the install script
+
+Install the latest release with the install script:
 
 ```sh
 curl -fsSL https://agentx.wtf/install | sh
 ```
 
-The script downloads the release for your system from [GitHub](https://github.com/grundmanise/agentx/releases), checks it against the release's checksums and installs it to `~/.local/bin`. It never asks for `sudo`. If `~/.local/bin` is not on your `PATH`, the script says how to add it.
+The script downloads the release for your system from [GitHub](https://github.com/grundmanise/agentx/releases). It checks the download against the release's checksums. Then it installs `agentx` to `~/.local/bin`, without `sudo`. If `~/.local/bin` is not on your `PATH`, the script tells you how to add it. If another `agentx` comes first on your `PATH`, the script warns you.
 
 To read the script before you run it, download it first:
 
@@ -31,28 +37,28 @@ less install.sh
 sh install.sh
 ```
 
-The script takes these options, after `sh -s --` when you pipe it:
+The script takes these options. When you pipe the script to `sh`, put them after `sh -s --`, for example `curl -fsSL https://agentx.wtf/install | sh -s -- --version 0.2.0`. When you run a downloaded script, put them after its name: `sh install.sh --version 0.2.0`.
 
 | Option | Effect |
 | --- | --- |
-| `--version 0.2.0` | Install that version instead of the latest. |
+| `--version 0.2.0` | Install version 0.2.0. You cannot combine it with `--nightly`. |
 | `--nightly` | Install the newest nightly build. |
-| `--dir DIR` | Install to `DIR` instead of `~/.local/bin`. `AGENTX_INSTALL_DIR` sets the same. |
-
-Then run [`agentx doctor`](/cli/doctor) to check that this machine is ready.
+| `--dir DIR` | Install to `DIR`. The `AGENTX_INSTALL_DIR` environment variable does the same. |
 
 ## Update
 
 Update the way you installed:
 
-- **Homebrew**: run `brew upgrade agentx`.
-- **Install script**: run the install command again, with the options you used the first time. It replaces the binary in place. A running [`agentx serve`](/cli/serve) keeps the old version until it restarts.
+- **Homebrew**: run `brew upgrade agentx`. For a `--HEAD` install, run `brew upgrade --fetch-HEAD agentx`.
+- **Install script**: run the install command again. If you installed to another directory, pass the same `--dir`. Leave out `--version`, or you get the same version again. The script replaces the binary in place.
+
+A running [`agentx serve`](/cli/serve) keeps the old version until it restarts.
 
 Run [`agentx version`](/cli/version) to see which version you have.
 
 ## Try a nightly build
 
-Every night, agentx builds the latest code as a nightly, such as `0.3.0-nightly.20261001`, when it has changed. Nightlies get fixes and features first, and they have not had the testing a release has.
+Each night that the code changed and its tests passed, a new nightly build is published, such as `0.3.0-nightly.20261001`. Nightlies get fixes and features first, but they are less tested than releases. Only the 14 newest nightlies are kept.
 
 Install the newest nightly:
 
@@ -60,24 +66,26 @@ Install the newest nightly:
 curl -fsSL https://agentx.wtf/install | sh -s -- --nightly
 ```
 
-Run the same command to move to a newer nightly. To go back to the latest release, run the install command without `--nightly`.
+Run the same command to move to a newer nightly. To go back to the latest release, run the install command without `--nightly`. If GitHub refuses the command because of its rate limit, set `GITHUB_TOKEN` and run it again.
 
-With Homebrew, `brew install --HEAD grundmanise/tap/agentx` builds the latest code instead of the latest release.
+With Homebrew, run `brew install --HEAD grundmanise/tap/agentx` to build the latest code on `main`.
 
 ## Build from source
 
-Build with Go 1.27 or later:
+Build with Go 1.27.1 or later:
 
 ```sh
 git clone https://github.com/grundmanise/agentx.git
 cd agentx/apps/cli && go build -o agentx .
 ```
 
-On macOS, keep `cgo` enabled, the default, so [`agentx serve`](/cli/serve) watches through `FSEvents`.
+A binary you build this way reports its version as `dev`.
+
+On macOS, keep `cgo` enabled, which is the default. Without it, [`agentx serve`](/cli/serve#when-watching-is-not-possible) needs one open file for each watched file and can hit the system limit.
 
 ## Uninstall
 
 - **Homebrew**: run `brew uninstall agentx`.
-- **Install script**: delete `~/.local/bin/agentx`, or the file in the directory you installed to.
+- **Install script**: delete `agentx` from the directory you installed to, `~/.local/bin` by default.
 
-Uninstalling leaves agentx home, `~/.agentx`, and your skills in place.
+Uninstalling keeps your data. agentx home, `~/.agentx` by default, keeps its settings and the history of your own skills. Your skills stay in the library, `~/.agents/skills` by default. If you install agentx again over the same `~/.agentx`, it finds all your managed skills again, your own included.
