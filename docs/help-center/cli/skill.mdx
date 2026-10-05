@@ -193,7 +193,7 @@ agentx skill place pdf --to cursor
   always available to universal clients: codex, gemini-cli
 ```
 
-The first line counts the configurations you placed the skill in. Each client you named gets one row.
+The first line counts the configurations you placed the skill in, and any placements agentx skipped. Each client you named gets one row. A client whose placement was skipped gets a row only if it sees the skill through another client's skills directory, as Cursor reads Claude Code's.
 
 Name each client with `--to`, once for each. Without `--to`, agentx places the skill into every enabled client and puts back what `agentx skill list` flags there; see [Put back placements](#put-back-placements). Add `--copy` for a client that cannot follow a symlink; agentx remembers the choice, as it does for `agentx skill add --copy`. To turn a recorded copy back into a symlink, take it away with `agentx skill remove pdf --from cursor`, then place the skill again with `agentx skill place pdf --to cursor`.
 
