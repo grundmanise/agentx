@@ -23,8 +23,9 @@ stdout
 streamable
 subpaths?
 unmanaged
-vercel
+Vercel
 worktrees?
 [Rr]escans?
 [Aa]uthorise
 organisation
+zsh

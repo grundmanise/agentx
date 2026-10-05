@@ -13,7 +13,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
-// leftOutByInstaller reports whether the vercel skills CLI leaves the file
+// leftOutByInstaller reports whether the Vercel skills CLI leaves the file
 // at p, a path inside a skill directory, out of the copy it installs. It
 // judges every name on the way down, a directory's as much as the file's,
 // as that tool's copy does. No version copies metadata.json, none before

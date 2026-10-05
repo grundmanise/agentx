@@ -203,7 +203,7 @@ func TestAdoptWithNoLockFile(t *testing.T) {
 	h := newHarness(t)
 	out := h.run("adopt")
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "No skill of the vercel skills lock file is in the library")
+	contains(t, "stdout", out.stdout, "No skill of the Vercel skills lock file is in the library")
 	out = h.run("adopt", "--all")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "Already adopted.")

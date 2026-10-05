@@ -3,7 +3,7 @@ title: "agentx doctor"
 description: "Check that agentx can run: git, agentx home and the account repo."
 ---
 
-Run `agentx doctor` before your first install, or whenever something looks wrong. It only reads: it never creates or changes anything in agentx home.
+Run `agentx doctor` before your first install, or whenever something looks wrong. The command only reads. It changes nothing in [agentx home](/#key-terms), the directory where agentx keeps its state.
 
 ```sh
 agentx doctor
@@ -30,7 +30,9 @@ Clients  2 of 75 registered clients detected
 ✓ No issues detected
 ```
 
-When a row is `warn` or `fail`, the report ends with an issues block instead, repeating each one with its fix:
+## Read the report
+
+If any row is `warn` or `fail`, the report ends with a list of issues in place of `✓ No issues detected`. Each issue has its fix on a `hint:` line:
 
 ```text
 1 issue
@@ -38,7 +40,7 @@ When a row is `warn` or `fail`, the report ends with an issues block instead, re
           hint: wait for it to finish
 ```
 
-Read the last block first: it repeats every warning and failure with its fix.
+Read this list first.
 
 The rows are grouped by what they check:
 
@@ -46,33 +48,42 @@ The rows are grouped by what they check:
 - `App`: agentx's own state.
 - `Clients`: every detected agent configuration, with the count in the title.
 
-In a terminal the rows are coloured by status: green for `ok`, yellow for `warn`, red for `fail`, blue for `info`. The `source_remotes` and `staged_imports` rows appear only once the account repo exists; on a fresh machine there is nothing to read.
+Each row has a status and a mark. In a terminal, the mark and the status are coloured (see [Colour](/cli/output#colour)):
+
+| Status | Mark | Colour |
+|---|---|---|
+| `ok` | `✓` | Green |
+| `warn` | `!` | Yellow |
+| `fail` | `✗` | Red |
+| `info` | `•` | Blue |
 
 ## What it checks
 
 | Check | Meaning |
 |---|---|
 | `git` | git is in `PATH` and at least 2.40. |
-| `fork_merges` | git can merge upstream changes into skills you edited or forked, which updates need. |
-| `commit_identity` | agentx commits get the same id on every machine, whatever your git configuration. |
-| `home` | agentx home is writable, or does not exist yet. The first scan creates it. |
+| `fork_merges` | git can merge new versions from a skill's source into skills you edited or [forked](/cli/fork#fork-a-skill). Updates need this. |
+| `commit_identity` | agentx writes the same commits on every machine, so your machines agree on each skill's version. Your git configuration does not change this. |
+| `home` | agentx home is writable, or does not exist yet. agentx creates it the first time a command needs it, such as `agentx scan`. |
 | `lock` | No other agentx command holds the lock. When one does, the detail names its process id. |
-| `mutations` | No change to agentx home was cut short by a crash. When one was, the detail names its journal; run `agentx scan` to finish it. If that refuses because the file changed meanwhile, restore the file or move the journal aside. Doctor only reports. |
+| `mutations` | No change to agentx home was cut short, for example by a crash. If one was, the row names its journal, the file where agentx recorded the change. Run `agentx scan` to finish the change. If `scan` refuses, restore the file it names, or move the journal aside. |
 | `settings` | `settings.json` is valid. |
-| `account_repo` | The account repo opens, or does not exist yet. The first command that needs it creates it: `agentx source add`, with or without `--account`, `agentx skill add` of a source not added yet or with `--fetch`, or `agentx adopt` of a skill whose source is not added yet. |
-| `source_remotes` | Every source remote in the account repo belongs to a source your settings list. An add that fails clears its own remote, so this row names one only when a run was killed outright or its cleanup was refused. Run `agentx source add` with the URL the row names to add the source and take the remote with it, or `agentx source remove <id>` to clear it. For a remote that held your own skills, the hint says so: add it back with `agentx source add <url> --account` instead, since a plain add fetches them without their files. If several remotes held them, add back the one you want as your account remote and clear the others with `agentx source remove <id>`. If you already have another account remote, clear it with `agentx source remove <id>`: adding it with `--account` would replace your account remote. A remote whose URL agentx would not have written, one carrying a token for instance, is named by its source id instead, so the URL is never printed. |
-| `staged_imports` | No import is left staged. An install or an update check killed between writing its commits and publishing them leaves refs under `refs/agentx/importing/`, which hold on to the objects they name. Remove each with the `git update-ref -d` command in the hint, while no agentx command is running and `agentx serve` is stopped. |
+| `account_repo` | The [account repo](/#key-terms) opens, or does not exist yet. The first command that needs it creates it, such as `agentx source add`, `agentx skill add` or `agentx skill new`. |
+| `source_remotes` | Every source remote in the account repo belongs to a source in your settings. A source remote is the link from the account repo to a source's git repository. A killed run can leave a remote with no source. To fix it, run the command in the hint: it adds the source back with `agentx source add`, or clears the remote with `agentx source remove <id>`. If the URL may hold a token, the row shows the source id in its place. |
+| `staged_imports` | No install or update check left unfinished data behind. A killed run can leave git refs (named pointers) under `refs/agentx/importing/`. They keep unused data in the account repo. To remove them, stop `agentx serve` and wait until no other agentx command runs. Then run the `git update-ref -d` command in the hint for each ref. |
 | `library` | The library is a writable directory, or does not exist yet. The first install creates it. |
 | `client:<id>` | One row per detected agent configuration, naming the client and its configuration directory. |
-| `clients` | How many of the clients agentx knows are detected. A warning when none is: install an agent client, or check that `HOME` points at the right user. |
+| `clients` | How many of the agent clients agentx knows are on this machine. The text report shows the count next to the `Clients` title. If none is found, the check warns: install an agent client, or check that `HOME` points at the right user. |
 
-Each row is `ok`, `warn`, `fail` or `info`, marked `✓`, `!`, `✗` or `•`. Every `warn` and `fail` row is listed again at the end under `<n> issues`, with its fix as a `hint:` line under the detail.
+The `source_remotes` and `staged_imports` rows appear only when the account repo exists and opens.
 
 Add `--verbose` to see every git command doctor ran and what git printed.
 
 ## Exit codes
 
-- `2`: git is missing or older than 2.40. The hint names the fix; on Ubuntu 22.04, which ships git 2.34, install a newer git or upgrade the distribution. Every other command except `version` refuses to run until git is fixed.
-- `8`: `account.git` in agentx home exists but is not a repository git can read. Check the directory, or move it aside.
-- `9`: you stopped the run with Ctrl-C. See [Output and exit codes](/cli/output).
-- `0`: everything else, warnings included.
+doctor exits `0` even when some rows warn or fail. Only the `git` and `account_repo` checks, or a stop, give another code. See [Exit codes](/cli/output#exit-codes) for what each code means.
+
+- `0`: any other result, including warnings and other failed rows.
+- `2`: git is missing or older than 2.40. The hint names the fix. Ubuntu 22.04 ships git 2.34: install a newer git, or upgrade the distribution. Until you fix git, every other command except `version` and `help` refuses to run.
+- `8`: agentx cannot read `account.git` in agentx home as a git repository. Check the directory, or move it aside.
+- `9`: you stopped the run with Ctrl-C, or something sent it a `SIGTERM`. See [Exit codes](/cli/output#exit-codes).

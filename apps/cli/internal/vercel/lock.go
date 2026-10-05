@@ -1,4 +1,4 @@
-// Package vercel reads the lock file the vercel skills CLI writes, which is
+// Package vercel reads the lock file the Vercel skills CLI writes, which is
 // how a machine that installed skills with that tool records where each one
 // came from. Nothing here writes: the file belongs to another tool, and
 // agentx only ever reads it.
@@ -18,7 +18,7 @@ import (
 	"strings"
 )
 
-// LockName is the file the vercel skills CLI keeps its globally installed
+// LockName is the file the Vercel skills CLI keeps its globally installed
 // skills in.
 const LockName = ".skill-lock.json"
 
@@ -38,7 +38,7 @@ const maxLockBytes = 8 << 20
 var ErrLock = errors.New("not a skill lock file")
 
 // Entry is one skill of the lock file: the directory it was installed as,
-// where it came from and the folder hash the vercel CLI recorded for it.
+// where it came from and the folder hash the Vercel CLI recorded for it.
 // The hash is that tool's own and is not a content hash of agentx's; it is
 // carried so that a caller can look for a tree of the source that has that
 // id, which is what ties the entry to one upstream version.
@@ -49,13 +49,13 @@ type Entry struct {
 	SourceURL  string // the URL the skill was installed from
 	Ref        string // the branch or tag it was installed from, "" for the default branch
 	Subpath    string // the skill directory inside the source, "" for its root
-	FolderHash string // the vercel CLI's folder hash: a git tree id, a commit id for a skill at the root, or its own digest
+	FolderHash string // the Vercel CLI's folder hash: a git tree id, a commit id for a skill at the root, or its own digest
 	Plugin     string // the plugin the skill belongs to, "" for none
 	File       string // the lock file this entry was read from
 }
 
 // LockPaths are the lock files agentx reads, in the order a later one wins.
-// The vercel CLI writes $XDG_STATE_HOME/skills/.skill-lock.json when that
+// The Vercel CLI writes $XDG_STATE_HOME/skills/.skill-lock.json when that
 // variable is set and ~/.agents/.skill-lock.json when it is not, so both are
 // read and the one that tool would write now comes last: a skill both files
 // name is the one the live file records.

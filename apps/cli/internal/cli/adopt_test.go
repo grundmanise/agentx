@@ -10,7 +10,7 @@ import (
 	"testing"
 )
 
-// lockEntry is one entry of the vercel skills lock file, written as that
+// lockEntry is one entry of the Vercel skills lock file, written as that
 // tool writes it.
 type lockEntry struct {
 	Source          string `json:"source"`
@@ -24,7 +24,7 @@ type lockEntry struct {
 	PluginName      string `json:"pluginName,omitempty"`
 }
 
-// lockPath is where the vercel skills CLI keeps its lock file when
+// lockPath is where the Vercel skills CLI keeps its lock file when
 // XDG_STATE_HOME is not set, beside the library it installs into.
 func (h *harness) lockPath() string {
 	return filepath.Join(h.home, ".agents", ".skill-lock.json")
@@ -60,7 +60,7 @@ func (h *harness) lockUnchanged(path string, want []byte) {
 	}
 }
 
-// vercelInstall lays a skill out in the library the way the vercel skills
+// vercelInstall lays a skill out in the library the way the Vercel skills
 // CLI does: a plain directory copy of the source's files, with nothing
 // anywhere that says where it came from but the lock file.
 func vercelInstall(t *testing.T, h *harness, s *sourceRepo, subpath, name string) {
@@ -73,7 +73,7 @@ func vercelInstall(t *testing.T, h *harness, s *sourceRepo, subpath, name string
 	}
 }
 
-// adoptHarness is a machine the vercel skills CLI installed a skill on: a
+// adoptHarness is a machine the Vercel skills CLI installed a skill on: a
 // source with two versions of alpha, the library holding the first of them,
 // and no agentx state at all.
 func adoptHarness(t *testing.T) (*harness, *sourceRepo, string, string) {
@@ -216,7 +216,7 @@ func TestAdoptRecordsTheInstalledVersionAndNotTheDirectory(t *testing.T) {
 }
 
 // TestAdoptDoesNotCallWhatTheInstallerLeftOutAModification is a skill the
-// vercel skills CLI installed without some of its files: no version copies
+// Vercel skills CLI installed without some of its files: no version copies
 // metadata.json, none before 1.4.1 copied README.md, none before 1.4.5
 // copied a name starting with _, and none from 1.4.5 to 1.5.4 copied a name
 // starting with a dot, at any depth. The user edited nothing, so
@@ -234,7 +234,7 @@ func TestAdoptDoesNotCallWhatTheInstallerLeftOutAModification(t *testing.T) {
 	})
 	s.commit("the only version")
 	left := []string{".gitignore", "README.md", "metadata.json", "rules/_sections.md"}
-	// The folder hash is the tree id when the vercel CLI read one from the
+	// The folder hash is the tree id when the Vercel CLI read one from the
 	// forge, and its own digest otherwise, which leaves the directory to
 	// establish the version; both reach the same adoption.
 	for _, c := range []struct{ name, hash string }{
@@ -270,7 +270,7 @@ func TestAdoptDoesNotCallWhatTheInstallerLeftOutAModification(t *testing.T) {
 	}
 }
 
-// TestLeftOutByInstaller is the rule of the files the vercel skills CLI
+// TestLeftOutByInstaller is the rule of the files the Vercel skills CLI
 // never copies, judged on every name of the path.
 func TestLeftOutByInstaller(t *testing.T) {
 	t.Parallel()

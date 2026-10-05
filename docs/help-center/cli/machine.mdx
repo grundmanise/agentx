@@ -3,7 +3,7 @@ title: "agentx machine"
 description: "See the machine's stable id and label, rename it, or reset the id."
 ---
 
-Every machine has an id that survives a reinstall and a label you can change.
+agentx gives each computer a machine id and a label. The id identifies the machine in scans, exports and the commits agentx writes. It stays the same when you reinstall agentx. The label is a readable name that you can change.
 
 ## Show the machine
 
@@ -19,8 +19,10 @@ Derivation  platform
 
 `Derivation` tells you where the id comes from:
 
-- `platform`: derived from the computer's own platform id (`/etc/machine-id` on Linux, the hardware UUID on macOS) and your user id. Reinstalling agentx on the same computer gives the same id.
-- `random`: generated once and kept in `machine.json` in agentx home, because the computer has no platform id or you reset the id.
+| Value | What it means |
+|---|---|
+| `platform` | agentx computes the id from the computer's platform id and your user id. The platform id is `/etc/machine-id` on Linux and the hardware UUID on macOS. Reinstalling agentx on the same computer gives the same id. |
+| `random` | agentx generated the id and stores it in `machine.json` in agentx home (`~/.agentx` by default). This happens when the computer has no platform id, or after you [reset the id](#reset-the-id). |
 
 ## Rename the machine
 
@@ -32,7 +34,7 @@ agentx machine rename "work laptop"
 ✓ machine label is now work laptop
 ```
 
-The label defaults to the hostname until you set it. `agentx config set label` does the same thing. A label is one non-empty line of at most 256 bytes with no control character in it.
+Until you set a label, agentx uses the hostname. You can also set the label with [`agentx config set label`](/cli/config#set-a-setting). The label must be one line of at most 256 bytes, with visible text and no control characters. agentx rejects any other label with exit code 1.
 
 ## Reset the id
 
@@ -44,6 +46,6 @@ agentx machine reset-id
 ✓ machine id is now 7c1f0a2e9b3d4c5e8f6a1b2c3d4e5f60
 ```
 
-Use this when two machines report the same id, for example after cloning a virtual machine. The new id is random and stays in use even though the platform id still exists. Delete `machine.json` in agentx home to go back to the platform-derived id.
+Reset the id when two computers show the same id, for example after you clone a virtual machine. The new id is random. agentx keeps using it until you delete `machine.json` in agentx home. agentx then computes the id from the platform id again, or generates a new random id if the computer has no platform id.
 
-If another agentx command is running, `rename` and `reset-id` exit with code 7 at once; retry when it finishes.
+If another agentx command is running, `rename` and `reset-id` stop with [exit code 7](/cli/output#exit-codes). Run them again when that command finishes.
