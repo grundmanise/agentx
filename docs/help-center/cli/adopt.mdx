@@ -3,7 +3,7 @@ title: "agentx adopt"
 description: "Take over the skills the vercel skills CLI installed, without reinstalling them or touching your edits."
 ---
 
-The vercel skills CLI installs into the same library agentx uses, `~/.agents/skills`, and records what it installed in a lock file. `agentx adopt` reads that file and takes those skills over: each one keeps its directory as it is and gains an upstream, so agentx can tell your edits from the version you installed.
+The vercel skills CLI installs into the same library agentx uses, `~/.agents/skills`, and records what it installed in a lock file. `agentx adopt` reads that file and takes those skills over: each one keeps the files in its directory as they are and gains an upstream, so agentx can tell your edits from the version you installed. agentx only adds the [files the installer left out](#files-the-installer-left-out).
 
 agentx only ever reads the lock file. It is never written, not on a successful run and not on a failed one.
 
@@ -86,11 +86,11 @@ agentx establishes the version in one of these ways, and never guesses. Each is 
 
 Whichever way finds the version, the commit recorded is the one at which the skill's directory took that content, never the one you happen to have fetched or named with `--base`. An install of that version records the same commit. So two machines that adopt the same install, or one that adopts it and one that installs it, write the same import commit, whenever each of them last fetched the source.
 
-Your files are never changed, whichever way the version was found. If your directory differs from the base, agentx says so and `agentx skill list` shows the skill as `modified`. See what differs with [`agentx skill diff <name>`](/cli/skill#see-what-you-changed).
+Your existing files are never changed, whichever way the version was found; agentx only adds the files the installer left out. If your directory differs from the base, agentx says so and `agentx skill list` shows the skill as `modified`. See what differs with [`agentx skill diff <name>`](/cli/skill#see-what-you-changed).
 
 ## Files the installer left out
 
-The vercel skills CLI does not copy every file of a skill. Depending on its version, it skips `metadata.json`, `README.md`, and any file or folder whose name starts with `_`, such as `rules/_sections.md`. Those files are part of the version you installed, so a directory without them would look like you deleted them.
+The vercel skills CLI does not copy every file of a skill. Depending on its version, it skips `metadata.json`, `README.md`, and any file or folder whose name starts with `_` or `.`, such as `rules/_sections.md` or `.gitignore`. Those files are part of the version you installed, so a directory without them would look like you deleted them.
 
 Adopting writes each skipped file back into the skill's directory, with the content of the version you installed:
 

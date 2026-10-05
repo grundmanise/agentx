@@ -74,9 +74,9 @@ func newAdoptCommand(inv *invocation) *cobra.Command {
 			"at, read from the source and verified against the lock file. The directory on\n" +
 			"disk is left as it is, so an edit made to it stays an edit; only the files of\n" +
 			"that version the vercel skills CLI never copies, such as README.md, metadata.json\n" +
-			"and names starting with _, are written into it when it lacks them. A skill whose\n" +
-			"upstream version cannot be established is left unmanaged rather than have what is\n" +
-			"on disk recorded as if it came from upstream.",
+			"and names starting with _ or a dot, are written into it when it lacks them. A\n" +
+			"skill whose upstream version cannot be established is left unmanaged rather than\n" +
+			"have what is on disk recorded as if it came from upstream.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error { return inv.adopt(cmd.Context(), sel) },
 	}

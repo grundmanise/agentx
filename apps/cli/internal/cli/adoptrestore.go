@@ -17,12 +17,13 @@ import (
 // at p, a path inside a skill directory, out of the copy it installs. It
 // judges every name on the way down, a directory's as much as the file's,
 // as that tool's copy does. No version copies metadata.json, none before
-// 1.4.1 copied README.md, and none before 1.4.5 copied a name starting
-// with _. The lock file does not say which version installed a skill, so
-// a file any of them leaves out counts.
+// 1.4.1 copied README.md, none before 1.4.5 copied a name starting with _,
+// and none from 1.4.5 to 1.5.4 copied a name starting with a dot. The lock
+// file does not say which version installed a skill, so a file any of them
+// leaves out counts.
 func leftOutByInstaller(p string) bool {
 	for _, name := range strings.Split(p, "/") {
-		if name == "README.md" || name == "metadata.json" || strings.HasPrefix(name, "_") {
+		if name == "README.md" || name == "metadata.json" || strings.HasPrefix(name, "_") || strings.HasPrefix(name, ".") {
 			return true
 		}
 	}

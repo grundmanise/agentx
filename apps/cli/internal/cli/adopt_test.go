@@ -217,8 +217,9 @@ func TestAdoptRecordsTheInstalledVersionAndNotTheDirectory(t *testing.T) {
 
 // TestAdoptDoesNotCallWhatTheInstallerLeftOutAModification is a skill the
 // vercel skills CLI installed without some of its files: no version copies
-// metadata.json, none before 1.4.1 copied README.md, and none before 1.4.5
-// copied a name starting with _, at any depth. The user edited nothing, so
+// metadata.json, none before 1.4.1 copied README.md, none before 1.4.5
+// copied a name starting with _, and none from 1.4.5 to 1.5.4 copied a name
+// starting with a dot, at any depth. The user edited nothing, so
 // the skill is adopted unmodified and listed as current, and not as a
 // directory that deleted those files.
 func TestAdoptDoesNotCallWhatTheInstallerLeftOutAModification(t *testing.T) {
@@ -229,9 +230,10 @@ func TestAdoptDoesNotCallWhatTheInstallerLeftOutAModification(t *testing.T) {
 		"metadata.json":      "{}\n",
 		"rules/_sections.md": "# Sections\n",
 		"rules/rule.md":      "a rule\n",
+		".gitignore":         "*.log\n",
 	})
 	s.commit("the only version")
-	left := []string{"README.md", "metadata.json", "rules/_sections.md"}
+	left := []string{".gitignore", "README.md", "metadata.json", "rules/_sections.md"}
 	// The folder hash is the tree id when the vercel CLI read one from the
 	// forge, and its own digest otherwise, which leaves the directory to
 	// establish the version; both reach the same adoption.
@@ -273,19 +275,22 @@ func TestAdoptDoesNotCallWhatTheInstallerLeftOutAModification(t *testing.T) {
 func TestLeftOutByInstaller(t *testing.T) {
 	t.Parallel()
 	for p, want := range map[string]bool{
-		"README.md":           true,
-		"metadata.json":       true,
-		"_template.md":        true,
-		"rules/_sections.md":  true,
-		"_private/notes.md":   true,
-		"docs/README.md":      true,
-		"__pycache__/x.pyc":   true,
-		"SKILL.md":            false,
-		"readme.md":           false,
-		"rules/rule.md":       false,
-		"rules/a_b.md":        false,
-		"metadata.json.bak":   false,
-		"docs/README.md.orig": false,
+		"README.md":            true,
+		"metadata.json":        true,
+		"_template.md":         true,
+		"rules/_sections.md":   true,
+		"_private/notes.md":    true,
+		"docs/README.md":       true,
+		"__pycache__/x.pyc":    true,
+		".gitignore":           true,
+		"scripts/.env.example": true,
+		".github/workflow.yml": true,
+		"SKILL.md":             false,
+		"readme.md":            false,
+		"rules/rule.md":        false,
+		"rules/a_b.md":         false,
+		"metadata.json.bak":    false,
+		"docs/README.md.orig":  false,
 	} {
 		equal(t, p, leftOutByInstaller(p), want)
 	}
