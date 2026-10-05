@@ -429,7 +429,7 @@ func (inv *invocation) adoptChosen(ctx context.Context, covered []*candidate, se
 		}
 	}
 	if len(chosen) == 0 {
-		inv.reportAdopted(nil, covered, "nothing left to adopt")
+		inv.reportAdopted(nil, covered, "already adopted")
 		return nil
 	}
 	toAdd := sourcesToAdd(chosen)

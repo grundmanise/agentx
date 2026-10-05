@@ -44,6 +44,35 @@ func TestAdoptFindsAVersionWhoseDirectoryIsGoneFromTheSource(t *testing.T) {
 	equal(t, "the import tree", h.accountGit("ls-tree", "refs/heads/managed/alpha^{tree}"), "040000 tree "+installed+"\talpha")
 }
 
+// TestAdoptFindsAVersionOfASkillAtTheRoot is the folder hash of a skill at
+// the root of its source, which the vercel CLI records as the id of the
+// commit it installed from rather than of that commit's tree. The source
+// has moved on since, so the directory is not the current version either,
+// and only the commit id establishes the one that was installed.
+func TestAdoptFindsAVersionOfASkillAtTheRoot(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.build(t, fixture{dirs: []string{".claude"}})
+	s := h.newSourceRepo("solo", true)
+	s.skill("", "solo", "A skill at the root", map[string]string{"notes.md": "notes\n"})
+	v1 := s.commit("the version the other tool installed")
+	vercelInstall(t, h, s, "", "solo")
+	s.write("notes.md", "notes, revised\n")
+	s.commit("a version nobody on this machine has")
+	lock := h.writeLock(h.lockPath(), map[string]lockEntry{"solo": {
+		Source: "owner/solo", SourceType: "github", SourceURL: s.url,
+		SkillPath: "SKILL.md", SkillFolderHash: v1,
+	}})
+
+	out := h.run("--json", "adopt", "--all")
+	equal(t, "exit", out.exit, 0)
+	h.lockUnchanged(h.lockPath(), lock)
+	ev := h.one(out.stdout, "adoption")
+	equal(t, "state", ev["state"], adoptAdopted)
+	equal(t, "upstream_commit", ev["upstream_commit"], v1)
+	equal(t, "modified", ev["modified"], false)
+}
+
 // TestAdoptTakesTheDirectoryWhenTheFolderHashNamesNothing covers the fall
 // through between the two routes. The lock file carries that tool's own
 // folder digest, which looks like an object id and names nothing in the

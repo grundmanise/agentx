@@ -77,8 +77,9 @@ func treeish(commit, subpath string) string {
 //     one.
 //  2. The folder hash the lock file recorded is the id of the tree the
 //     source holds at that subpath, at the source's fetched commit or at
-//     one behind it. Git's own content addressing is the verification: an
-//     id that names that tree names that content and nothing else.
+//     one behind it, or for a skill at the root, the id of that commit.
+//     Git's own content addressing is the verification: an id that names
+//     that tree names that content and nothing else.
 //  3. The directory holds exactly the version the source has now, which
 //     makes the on-disk content an upstream version rather than an edit of
 //     one. This is the same adoption an install makes for a library
@@ -234,11 +235,22 @@ func (inv *invocation) searchHistory(ctx context.Context, gitDir string, cands [
 	for i, c := range owner {
 		// rev-list prints the newest commit first, so the first match is the
 		// newest commit at which the directory took that content.
-		if c.base == nil && trees[i] == c.entry.FolderHash {
+		if c.base == nil && c.recorded(pairs[i].commit, trees[i]) {
 			c.base = &basePlan{commit: pairs[i].commit, tree: trees[i], how: howRecorded}
 		}
 	}
 	return nil
+}
+
+// recorded reports whether the folder hash the lock file recorded names
+// the skill's directory as it is at commit, whose tree there is tree. The
+// hash is that tree's id, except for a skill at the root of its source:
+// the vercel CLI records the id the forge answered for the whole
+// repository there, and the forge answers with the commit it read rather
+// than the commit's tree. Both are git object ids, so either one names one
+// content and nothing else.
+func (c *candidate) recorded(commit, tree string) bool {
+	return tree != "" && (tree == c.entry.FolderHash || (c.subpath() == "" && commit == c.entry.FolderHash))
 }
 
 // upstreamCommits moves every base from the commit its version was read

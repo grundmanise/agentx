@@ -90,7 +90,7 @@ The base is the upstream version you installed. agentx compares your directory w
 
 agentx checks these in order and uses the first that works:
 
-1. **The folder hash in the lock file.** agentx looks for that version of the skill's directory in the source, in the last 500 commits that changed it. This also works for a skill the source has since deleted.
+1. **The folder hash in the lock file.** It names the skill's directory, or, for a skill at the root of its repository, the commit it was installed from. agentx looks for that version in the source, in the last 500 commits that changed the skill. This also works for a skill the source has since deleted.
 2. **Your directory.** If your files match the source's current version exactly, agentx records that version.
 
 To name the version yourself, use `--base`. It replaces both checks. See [Choose the base yourself](#choose-the-base-yourself).
