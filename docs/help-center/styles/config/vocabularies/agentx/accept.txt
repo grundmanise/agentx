@@ -28,3 +28,4 @@ worktrees?
 [Rr]escans?
 [Aa]uthorise
 organisation
+zsh
