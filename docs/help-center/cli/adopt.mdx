@@ -88,17 +88,18 @@ agentx adopt --all
 
 The base is the upstream version you installed. agentx compares your directory with it, so your edits stay yours when you update the skill later.
 
-agentx tries these ways in order and uses the first that works:
+agentx checks these in order and uses the first that works:
 
-1. **The folder hash in the lock file.** agentx looks for that version of the skill's directory in the source, from the version it fetched back through 500 commits. This also works for a skill the source has since deleted.
+1. **The folder hash in the lock file.** agentx looks for that version of the skill's directory in the source, in the last 500 commits that changed it. This also works for a skill the source has since deleted.
 2. **Your directory.** If your files match the source's current version exactly, agentx records that version.
-3. **The `--base` flag.** You name the version yourself. See [Choose the base yourself](#choose-the-base-yourself).
+
+To name the version yourself, use `--base`. It replaces both checks. See [Choose the base yourself](#choose-the-base-yourself).
 
 If your directory differs from the base, agentx says so, and `agentx skill list` shows the skill as `modified`. See what you changed with [`agentx skill diff <name>`](/cli/skill#see-what-you-changed).
 
 ## When agentx cannot find the base
 
-If all three ways fail, agentx warns you and leaves the skill unmanaged:
+If both checks fail, agentx warns you and leaves the skill unmanaged:
 
 ```text
 warning: pdf: the version pdf was installed at cannot be established: no version of skills/pdf in https://github.com/anthropics/skills at 3f2a9c1, or in the 500 commits of it behind that, has the folder hash /home/me/.agents/.skill-lock.json recorded, and the directory is not the version https://github.com/anthropics/skills at 3f2a9c1 holds
