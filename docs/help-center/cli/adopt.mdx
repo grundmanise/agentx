@@ -69,7 +69,7 @@ agentx skill list
 
 ### Skills from one source at different refs
 
-agentx keeps one ref for each source, its pin. The lock file records a ref for each skill, so skills from the same source can have different refs. agentx then pins the source to the ref of the skill whose name comes first alphabetically, and warns you:
+agentx keeps one ref for each source, its pin. The lock file records a ref for each skill, so skills from the same source can have different refs. When the skills a run adopts from one source have different refs, agentx pins the source to the ref of the first of them in alphabetical order, and warns you:
 
 ```text
 warning: https://github.com/anthropics/skills was installed at more than one ref (v1.2.0, main); it is added pinned to v1.2.0. To change the pin, run 'agentx source add https://github.com/anthropics/skills#<ref>' and adopt again
