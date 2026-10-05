@@ -51,7 +51,7 @@ agentx adopt --skill pdf --skill xlsx
 
 For each skill, agentx:
 
-1. Adds its source if you do not have it yet, as [`agentx source add`](/cli/source) does, pinned to the ref in the lock file. This also brings back a source you removed.
+1. Adds its source if you do not have it yet, as [`agentx source add`](/cli/source#pin-a-source) does, pinned to the ref in the lock file. This also brings back a source you removed.
 2. Finds the upstream version you installed and records it as the skill's [base](#how-agentx-finds-the-base).
 
 Your files stay as they are. If a skill fails, agentx still adopts the others and lists the failures at the end.
@@ -69,13 +69,13 @@ agentx skill list
 
 ### Skills from one source at different refs
 
-agentx keeps one ref for each source, its pin. The lock file records a ref for each skill, so skills from the same source can have different refs. When the skills a run adopts from one source have different refs, agentx pins the source to the ref of the first of them in alphabetical order, and warns you:
+agentx keeps one ref for each source, its pin. The lock file records a ref for each skill, so skills from the same source can have different refs. When a run adds a source, agentx pins it to the ref of the first skill the run adopts from it, in alphabetical order. If those skills have different refs, agentx warns you:
 
 ```text
 warning: https://github.com/anthropics/skills was installed at more than one ref (v1.2.0, main); it is added pinned to v1.2.0. To change the pin, run 'agentx source add https://github.com/anthropics/skills#<ref>' and adopt again
 ```
 
-agentx looks for the other skills' versions in the history of the pinned ref. If it cannot find one, see [When agentx cannot find the base](#when-agentx-cannot-find-the-base).
+agentx looks for the other skills' versions in the history of the pinned ref. A source you already have keeps its pin, and agentx looks for every skill's version in the history of that pin. If it cannot find one, see [When agentx cannot find the base](#when-agentx-cannot-find-the-base).
 
 To choose the pin yourself, add the source at that ref before you adopt. If you already have the source, this changes its pin:
 
