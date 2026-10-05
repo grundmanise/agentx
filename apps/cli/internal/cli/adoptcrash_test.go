@@ -35,15 +35,19 @@ func TestAdoptChildProcess(t *testing.T) {
 // the branch is live and nothing has recorded that it went in. The next
 // command recovers the journal, and the adoption is whole afterwards.
 //
-// The library directory is the test's other half. An adoption writes no
-// path at all, so it must be byte for byte what it was before the run, both
-// while the journal is unfinished and after it is recovered: a recovery
-// that touched the user's directory would be the very thing the command
-// exists not to do.
+// The library directory is the test's other half. The installer left
+// _template.md out of it, so the journal also replaces the directory with
+// one that holds that file, in steps that run after the branch is written.
+// The directory is byte for byte what it was before the run while the
+// journal is unfinished, and recovery adds that one file and nothing else:
+// the user's edit stays exactly as it was.
 func TestAdoptRecoversFromAKilledRun(t *testing.T) {
 	t.Parallel()
 	h, s, v1, installed := adoptHarness(t)
 	editLibrary(t, h, "alpha", "notes.md", "an edit of mine\n")
+	if err := os.Remove(filepath.Join(h.library, "alpha", "_template.md")); err != nil {
+		t.Fatal(err)
+	}
 	before := libraryTree(t, filepath.Join(h.library, "alpha"))
 	lock := h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
 		Source: "owner/repo", SourceType: "github", SourceURL: s.url,
@@ -71,6 +75,7 @@ func TestAdoptRecoversFromAKilledRun(t *testing.T) {
 	}
 	equal(t, "journals after recovery", journalCount(t, h), 0)
 	h.lockUnchanged(h.lockPath(), lock)
+	before["_template.md"] = "a template\n"
 	sameTree(t, "the library directory after recovery", libraryTree(t, filepath.Join(h.library, "alpha")), before)
 
 	list := h.run("--json", "skill", "list")

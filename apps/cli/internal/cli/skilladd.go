@@ -650,7 +650,6 @@ func (inv *invocation) importable(v *imported, taken map[string]string, src sour
 // that the library directory and the hash agree once it is written, and
 // completes the lineage the import commit will carry.
 func (v *imported) fill(bodies map[string]string, url string) *failure {
-	var files []scan.File
 	for _, e := range v.entries {
 		if !source.IsFileMode(e.Mode) {
 			continue
@@ -664,18 +663,8 @@ func (v *imported) fill(bodies map[string]string, url string) *failure {
 				"run 'agentx source fetch "+url+"' to fetch it again")
 		}
 		v.files = append(v.files, treeFile{path: e.Path, mode: e.Mode, body: body})
-		files = append(files, scan.File{Path: e.Path, Content: body})
 	}
-	// The name and description the hash covers are the frontmatter's own,
-	// empty when it has none; the directory name stands in for a missing
-	// name afterwards, as it does in a scan, and never enters the hash.
-	var name, description string
-	for _, f := range v.files {
-		if f.path == "SKILL.md" {
-			name, description, _ = scan.SkillFrontmatter(f.body)
-		}
-	}
-	v.hash = scan.ContentHash(name, description, files)
+	v.hash = contentHashOf(v.files)
 	v.imp.Hash = v.hash
 	// The one gate every import commit passes, whichever command writes it,
 	// and the whole of it rather than one coordinate: an import commit no
@@ -1183,6 +1172,22 @@ func (inv *invocation) stageCopyMode(m *home.Mutation, edit *settingsEdit, dones
 // mutation, so it is not there to copy from yet.
 func (v *imported) placeable() placeable {
 	return placeable{name: v.name, hash: v.hash, stage: v.writeFiles}
+}
+
+// contentHashOf is the content hash of a version's files. The name and
+// description it covers are the frontmatter's own, empty when it has none;
+// the directory name stands in for a missing name afterwards, as it does in
+// a scan, and never enters the hash.
+func contentHashOf(files []treeFile) string {
+	var name, description string
+	in := make([]scan.File, 0, len(files))
+	for _, f := range files {
+		if f.path == "SKILL.md" {
+			name, description, _ = scan.SkillFrontmatter(f.body)
+		}
+		in = append(in, scan.File{Path: f.path, Content: f.body})
+	}
+	return scan.ContentHash(name, description, in)
 }
 
 // writeFiles lays the imported files out under dest with the modes the
