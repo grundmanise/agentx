@@ -49,7 +49,7 @@ type Entry struct {
 	SourceURL  string // the URL the skill was installed from
 	Ref        string // the branch or tag it was installed from, "" for the default branch
 	Subpath    string // the skill directory inside the source, "" for its root
-	FolderHash string // the vercel CLI's folder hash: a git tree id, or its own digest
+	FolderHash string // the vercel CLI's folder hash: a git tree id, a commit id for a skill at the root, or its own digest
 	Plugin     string // the plugin the skill belongs to, "" for none
 	File       string // the lock file this entry was read from
 }
