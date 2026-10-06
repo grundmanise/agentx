@@ -77,7 +77,7 @@ Grouped by element. Each token points at one primitive (or at a meaning token wh
 | `accent.primary-hover` | `lime-300` | Primary button hover |
 | `accent.attention` | `amber-400` | Edited, displaced, needs a look but not broken |
 | `accent.danger` | `red-400` | Removed, unreachable, destructive |
-| `accent.yours` | `violet-400` | Your fork, your saved version, "Yours" side of a diff, publish |
+| `accent.yours` | `violet-400` | Your own skills, "Yours" side of a diff, publish |
 | `accent.theirs` | `blue-400` | "Original / update" side of a diff |
 | `on-accent` | `gray-990` | Text and icons on any accent or inverse fill |
 
@@ -308,7 +308,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 |---|---|---|
 | `timeline.dot-install` | `gray-600` | Added / found / created entries |
 | `timeline.dot-update` | `accent.primary` | Updated, adopted, put back |
-| `timeline.dot-yours` | `accent.yours` | Saved version, published, forked |
+| `timeline.dot-yours` | `accent.yours` | Published, forked |
 | `timeline.connector` | `gray-890` | 1px line between dots |
 | `timeline.meta` | `gray-500` | Relative time under an entry |
 | `timeline.more-ring` | `gray-700` | Hollow "Show all" dot ring |
@@ -612,7 +612,7 @@ Round, `logo.bg`, `padding:3–4px`, `background-size:contain`, logo from an ima
 ### Skill glyph (16px, leading the row)
 - dot (filled) – managed; `glyph.enabled` when enabled, `glyph.off` when not.
 - pencil – edited locally; `glyph.edited`.
-- fork – your fork; `glyph.enabled` when enabled and published, `glyph.off` otherwise.
+- fork – one of your own skills; `glyph.enabled` when enabled and published, `glyph.off` otherwise.
 `title` explains the state ("Fork · Enabled", "Edited locally · Not in any agent").
 
 ### Group header (lists)
@@ -656,7 +656,7 @@ Nothing loops forever.
 
 - Plain verbs: Add, Remove, Update, Fork, Publish, Review update, Put back, Adopt, Check updates.
 - Never: sync, commit, push, hunk, merge, upstream, remote, repo (say "source", "original", "your other machines", "saved version", "change").
-- "Your fork" for forks; "the original" for what a fork came from; "the update" for a new version of a managed skill.
+- "Your skills" for the user's own skills (forked or created); "the original" for the skill a fork came from; "the update" for a new version from a skill's source. Fork is an action, not a kind of skill (`CONTEXT.md`).
 - Dates over ids in rows ("Sep 14 → Sep 28"); ids with dates in Details ("3f2a9c1 · Sep 14").
 - Toasts state what happened in past tense ("Commit updated", "Put pdf back in Cursor"), and name the undo when one exists.
 - Captions are uppercase mono; everything else sentence case. No trailing periods in titles, pills or buttons.
