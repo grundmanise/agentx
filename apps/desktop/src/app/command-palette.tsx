@@ -2,6 +2,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { Command } from "cmdk";
 import { useNavigate } from "react-router";
 import { Icon, type IconName } from "@/components/icon";
+import { KeyHint } from "@/components/key-hint";
 import { screens } from "./screens";
 
 export interface PaletteItem {
@@ -44,19 +45,17 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               <Command.Input
                 autoFocus
                 placeholder="Search skills or run a command"
-                className="h-full flex-1 border-0 bg-transparent text-[17px] outline-none focus-visible:outline-none"
+                className="h-full flex-1 border-0 bg-transparent type-palette-input outline-none focus-visible:outline-none"
               />
-              <kbd className="rounded-full bg-button-secondary-bg px-2 py-[3px] font-mono text-[11px] text-text-muted">
-                esc
-              </kbd>
+              <KeyHint>esc</KeyHint>
             </div>
-            <Command.List className="max-h-[420px] overflow-auto p-2">
+            <Command.List className="max-h-105 overflow-auto p-2">
               <Command.Empty className="p-7 text-center text-text-hint">No matches</Command.Empty>
               {groups.map((g) => (
                 <Command.Group
                   key={g}
                   heading={g}
-                  className="[&_[cmdk-group-heading]]:caption [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:pt-3 [&_[cmdk-group-heading]]:pb-1.5"
+                  className="[&_[cmdk-group-heading]]:type-caption [&_[cmdk-group-heading]]:text-text-caption [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:pt-3 [&_[cmdk-group-heading]]:pb-1.5"
                 >
                   {items
                     .filter((i) => i.group === g)
@@ -68,27 +67,27 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
                           onOpenChange(false);
                           i.run();
                         }}
-                        className="group flex h-[42px] items-center gap-3 rounded-xl px-3 text-palette-row-text data-[selected=true]:bg-palette-row-active data-[selected=true]:text-text-primary"
+                        className="group flex h-10.5 items-center gap-3 rounded-palette-row px-3 text-palette-row-text data-[selected=true]:bg-palette-row-active data-[selected=true]:text-text-primary"
                       >
                         <Icon
                           name={i.icon}
                           size={15}
                           className="text-palette-icon group-data-[selected=true]:text-palette-icon-active"
                         />
-                        <span className="flex-1 text-[14px]">{i.label}</span>
-                        {i.hint && <span className="font-mono text-[12px] text-text-caption">{i.hint}</span>}
+                        <span className="flex-1 type-body">{i.label}</span>
+                        {i.hint && <span className="type-palette-hint text-text-caption">{i.hint}</span>}
                       </Command.Item>
                     ))}
                 </Command.Group>
               ))}
             </Command.List>
           </Command>
-          <div className="flex gap-[18px] border-t border-card-border px-5 py-3 text-[12px] text-text-hint">
+          <div className="flex gap-4.5 border-t border-card-border px-5 py-3 type-palette-footer text-text-hint">
             <span>
-              <span className="font-mono text-text-muted">↑↓</span> move
+              <span className="type-palette-hint text-text-muted">↑↓</span> move
             </span>
             <span>
-              <span className="font-mono text-text-muted">↵</span> run
+              <span className="type-palette-hint text-text-muted">↵</span> run
             </span>
           </div>
         </Dialog.Content>

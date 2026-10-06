@@ -4,10 +4,8 @@
  */
 export function PlaceholderScreen({ title }: { title: string }) {
   return (
-    <div className="h-full overflow-auto px-12 pt-10 pb-12">
-      <h1 className="m-0 font-serif text-[56px] leading-none font-normal tracking-[-0.02em] text-text-primary">
-        {title}
-      </h1>
+    <div className="h-full overflow-auto p-(--page-padding)">
+      <h1 className="m-0 type-page-title text-text-primary">{title}</h1>
     </div>
   );
 }

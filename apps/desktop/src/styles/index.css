@@ -47,12 +47,3 @@
     background: color-mix(in srgb, var(--color-accent-primary) 30%, transparent);
   }
 }
-
-/* Uppercase mono caption (DESIGN.md §3). */
-@utility caption {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--color-text-caption);
-}

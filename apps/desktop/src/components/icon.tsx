@@ -13,6 +13,10 @@ export const icons = {
 
 export type IconName = keyof typeof icons;
 
+/** Rendered sizes and stroke widths DESIGN.md §7 allows. */
+export type IconSize = 13 | 14 | 15 | 16 | 18;
+export type IconStroke = 1.75 | 2 | 2.25;
+
 export function Icon({
   name,
   size = 16,
@@ -20,8 +24,8 @@ export function Icon({
   className,
 }: {
   name: IconName;
-  size?: number;
-  strokeWidth?: number;
+  size?: IconSize;
+  strokeWidth?: IconStroke;
   className?: string;
 }) {
   return (

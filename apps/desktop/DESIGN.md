@@ -7,6 +7,9 @@ The visual contract for the desktop app. Code uses the semantic tokens below, ne
 - A shadow token `overlay.shadow` becomes `--shadow-overlay` (`shadow-overlay`).
 - A radius token `card.tile-radius` becomes `--radius-card-tile` (`rounded-card-tile`).
 - A layout token with one value `shell.sidebar-width` becomes `--shell-sidebar-width` (`w-(--shell-sidebar-width)`). A token given as a range (`38–40`) is guidance, not a variable; pick the value the component calls for.
+- A type token `type.page-title` becomes the utility `type-page-title`, which sets the face, size, weight, line height, tracking and case together.
+
+The Tailwind theme holds only these tokens: default colours, shadows, radii, font sizes, line heights and tracking are removed, so no class can name them. When a design needs a value no token holds, add the token here and run `pnpm tokens`.
 
 ## 1. Character
 
@@ -346,29 +349,43 @@ Body text is `text.primary`–`text.muted` on any shell, card or overlay backgro
 
 Fonts (bundled with the app from `@fontsource` packages; the app never loads anything from the network): **Instrument Serif** 400 (titles), **Geist** 400–700 (UI), **Geist Mono** 400–600 (technical).
 
-| Role | Face | Size / weight | Extra |
-|---|---|---|---|
-| Page title | Instrument Serif | 56 / 400 | `line-height:1; letter-spacing:-.02em` |
-| Inbox headline | Instrument Serif | 68 / 400 | second clause italic `text.muted` |
-| Review title | Instrument Serif | 52 / 400 | |
-| Dialog / sheet title | Instrument Serif | 36 / 400 | |
-| Startup title | Instrument Serif | 48 / 400 | |
-| Detail pane skill name | Geist | 30 / 600 | `letter-spacing:-.035em` |
-| Body | Geist | 14 / 400 | |
-| Row name | Geist | 14 / 500 | |
-| Row description | Geist | 12.5 / 400 `text.muted` | single line, ellipsis |
-| Secondary line | Geist | 13 / 400 `text.hint` | |
-| Button | Geist | 14 / 600 primary, 13.5–14 / 500 others | |
-| Pill | Geist | 11–12 / 600 | |
-| Caption | Geist Mono | 10.5–11 / 400, `letter-spacing:.16em`, uppercase, `text.caption` | |
-| Technical value | Geist Mono | 12–13 / 400 | paths, ids, dates, commands |
-| Code | Geist Mono | 12.5 / 400, `line-height:1.7–1.75` | |
+Each row is a type token: a role with its face, size, weight, line height, tracking and case. A token with one value per column becomes a `type-*` utility; a row with a range (`11–12`) is guidance, not a utility – add a token with one value when a component needs it. Text colour is a separate colour token (§2.2). An empty cell inherits.
+
+| Token | Face | Size | Weight | Line height | Tracking | Case | Element |
+|---|---|---|---|---|---|---|---|
+| `type.page-title` | serif | 56 | 400 | 1 | -0.02em | | Page title |
+| `type.inbox-headline` | serif | 68 | 400 | | | | Inbox headline; second clause italic `text.muted` |
+| `type.review-title` | serif | 52 | 400 | | | | Review title |
+| `type.dialog-title` | serif | 36 | 400 | | | | Dialog and sheet title |
+| `type.startup-title` | serif | 48 | 400 | | | | Startup title |
+| `type.skill-name` | sans | 30 | 600 | | -0.035em | | Detail pane skill name |
+| `type.body` | sans | 14 | 400 | | | | Body, palette rows |
+| `type.row-name` | sans | 14 | 500 | | | | Row name |
+| `type.row-desc` | sans | 12.5 | 400 | | | | Row description (`text.muted`, single line, ellipsis) |
+| `type.secondary` | sans | 13 | 400 | | | | Secondary line (`text.hint`) |
+| `type.button` | sans | 14 | | | | | Buttons; the variant sets the weight (600 primary, 500 others) |
+| `type.button-sm` | sans | 13.5 | | | | | Small buttons |
+| `type.pill` | sans | 11–12 | 600 | | | | Pills |
+| `type.caption` | mono | 10.5 | 400 | | 0.16em | upper | Captions (`text.caption`) |
+| `type.technical` | mono | 12–13 | 400 | | | | Paths, ids, dates, commands |
+| `type.code` | mono | 12.5 | 400 | 1.75 | | | Code pane |
+| `type.brand` | sans | 14 | 600 | | -0.01em | | Product name in the sidebar |
+| `type.nav` | sans | 14 | 500 | | | | Nav item |
+| `type.command-field` | sans | 13 | 400 | | | | Command field placeholder |
+| `type.key-hint` | mono | 11 | 400 | | | | Key hint (`esc`, `⌘K`) |
+| `type.palette-input` | sans | 17 | 400 | | | | Palette search input |
+| `type.palette-hint` | mono | 12 | 400 | | | | Hint at the end of a palette row, keys in the palette footer |
+| `type.palette-footer` | sans | 12 | 400 | | | | Palette footer (`text.hint`) |
+| `type.toast` | sans | 13.5 | 400 | | | | Toast message |
+| `type.toast-action` | sans | 13 | 600 | | | | Action inside a toast |
 
 Text wrapping: `text-wrap:pretty` on multi-line copy. Single-line cells use `white-space:nowrap; overflow:hidden; text-overflow:ellipsis`.
 
 ## 4. Layout and spacing
 
 Spacing is a semantic token per element, not a shared scale. Two tokens with the same step name (`button.gap`, `card.gap`) are independent values; change one without touching the other. Primitive px values are listed so the system can be audited, but code references the token.
+
+A size or gap inside a component that no token lists uses Tailwind's spacing steps in whole or half steps, a 2px grid (`gap-2.5` is 10px, `pb-5.5` is 22px). Never a quarter step or an arbitrary value; a value off the grid needs a token.
 
 ### Window and shell
 | Token | px | Element |
@@ -378,6 +395,7 @@ Spacing is a semantic token per element, not a shared scale. Two tokens with the
 | `shell.sidebar-padding` | 6 12 14 14 | Sidebar inner padding |
 | `shell.nav-height` | 36 | Nav item |
 | `shell.nav-gap` | 2 | Between nav items |
+| `shell.nav-icon-gap` | 11 | Icon → label in a nav item |
 | `shell.nav-group-gap` | 14 | Before Agents and before Settings |
 | `shell.command-width` | 460 | Command field |
 | `shell.command-height` | 32 | |
@@ -501,6 +519,7 @@ Spacing is a semantic token per element, not a shared scale. Two tokens with the
 | `sheet.padding` | 28 32 | |
 | `palette.width` | 640 | |
 | `palette.input-height` | 60 | |
+| `key-hint.padding` | 3 8 | Key hint (`esc`, `⌘K`) |
 | `toast.height` | 44 | |
 | `toast.padding` | 0 18 | 0 6 0 18 with an action |
 | `toast.offset` | 24 | From the bottom edge |
@@ -548,6 +567,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `shell.nav-radius` | 10 | Nav item |
 | `shell.logo-radius` | 8 | Sidebar product mark |
 | `shell.status-radius` | 9999 | Remote status |
+| `shell.command-radius` | 9999 | Command field |
 | `shell.panel-radius` | 14 | Main panel |
 | `input.radius` | 12 | Inputs, textareas |
 | `input.search-radius` | 9999 | Search field |
@@ -568,6 +588,8 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `dialog.radius` | 24 | |
 | `sheet.radius` | 20 | |
 | `palette.radius` | 20 | |
+| `palette.row-radius` | 12 | Palette rows |
+| `key-hint.radius` | 9999 | Key hint |
 | `toast.radius` | 9999 | |
 | `floating-bar.radius` | 9999 | |
 | `check.mark-radius` | 50% | Startup status circle |
@@ -633,12 +655,15 @@ Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot` round (`timeline.dot
 ### Code pane
 `code.bg`, mono 12.5, `line-height:1.75`, grid `code.gutter 1fr` (line no. `code.line-number` right-aligned · marker · text). Front-matter and keys `code.frontmatter`, headings `code.heading`, list items `code.list`, prose `code.prose`. Diff tints: added line `+` on `diff.added-bg`, removed line `−` on `diff.removed-bg` with no number.
 
+### Key hint
+`esc` in the palette and `⌘K` / `Ctrl K` in the command field (`src/components/key-hint.tsx`): `key-hint.padding`, `key-hint.radius`, `button.secondary-bg` fill, `type.key-hint` in `text.muted`.
+
 ### Inputs
 `input.height`, `input.bg`, `input.border`, `input.radius`, padding 0 `input.padding-x`, 14px; focus `input.border-focus`. Mono for URLs and commands. Search field in lists: `input.search-height`, `input.search-radius`, `input.search-padding`, icon at left, placeholder `input.placeholder`.
 
 ## 7. Iconography
 
-Stroke icons on a 24 grid, `stroke-width` 1.75–2.25, round caps/joins, 13–16px rendered. Fill only for the managed "dot" glyph. No icon fonts, no emoji. The product mark is `shell.logo-mark` on `shell.logo-bg` (`src/components/agentx-mark.tsx`), 26px `shell.logo-radius` in the sidebar, 40px `startup.logo-radius` on the startup layer, with a 1px `shell.logo-ring` ring.
+Stroke icons on a 24 grid, `stroke-width` 1.75–2.25, round caps/joins, 13–16px rendered (18 for the palette's search icon). Fill only for the managed "dot" glyph. No icon fonts, no emoji. The product mark is `shell.logo-mark` on `shell.logo-bg` (`src/components/agentx-mark.tsx`), 26px `shell.logo-radius` in the sidebar, 40px `startup.logo-radius` on the startup layer, with a 1px `shell.logo-ring` ring.
 
 ## 8. Motion
 

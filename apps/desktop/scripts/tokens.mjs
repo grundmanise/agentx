@@ -13,13 +13,13 @@ export const designPath = join(root, "DESIGN.md");
 export const tokensPath = join(root, "src/styles/tokens.css");
 
 // Returns the rows of every table, each tagged with the part of DESIGN.md it is in:
-// primitives (2.1), colors (2.2), layout (4) or radii (5).
+// primitives (2.1), colors (2.2), type (3), layout (4) or radii (5).
 function tables(markdown) {
   const out = [];
   let part = "";
   for (const line of markdown.split("\n")) {
     const top = line.match(/^## (\d+)\./)?.[1];
-    if (top) part = { 2: "colors", 4: "layout", 5: "radii" }[top] ?? "";
+    if (top) part = { 2: "colors", 3: "type", 4: "layout", 5: "radii" }[top] ?? "";
     if (line.startsWith("### 2.1")) part = "primitives";
     if (line.startsWith("### 2.2")) part = "colors";
     if (!line.startsWith("|") || /^\|[-| ]+\|$/.test(line)) continue;
@@ -43,6 +43,7 @@ export function generate(markdown) {
   const shadows = [];
   const radii = [];
   const layout = [];
+  const type = [];
   const semantic = new Set();
 
   for (const { part, cells } of rows) {
@@ -60,6 +61,17 @@ export function generate(markdown) {
       } else {
         colors.push([name, code(cells[1]) ?? cells[1]]);
       }
+    } else if (part === "type") {
+      const [face, size, weight, lineHeight, tracking, kase] = cells.slice(1).map((c) => c.trim());
+      if (!/^\d+(\.\d+)?$/.test(size)) continue; // a range is guidance
+      if (!["serif", "sans", "mono"].includes(face)) throw new Error(`unknown face ${face} for ${name}`);
+      const decls = [`font-family: var(--font-${face});`, `font-size: ${size}px;`];
+      if (weight) decls.push(`font-weight: ${weight};`);
+      if (lineHeight) decls.push(`line-height: ${lineHeight};`);
+      if (tracking) decls.push(`letter-spacing: ${tracking};`);
+      if (kase === "upper") decls.push("text-transform: uppercase;");
+      else if (kase) throw new Error(`unknown case ${kase} for ${name}`);
+      type.push([name.replace(/^type\./, ""), decls]);
     } else if (part === "layout" || part === "radii") {
       const value = cells[1];
       if (!/^-?\d+(\.\d+)?%?( -?\d+(\.\d+)?%?)*$/.test(value)) continue; // ranges and alternatives are guidance
@@ -92,11 +104,18 @@ export function generate(markdown) {
     ...[...primitives].map(([n, hex]) => `  --${n}: ${hex};`),
     "}",
     "",
-    "/* Semantic tokens: the only colours, shadows and radii components use. */",
+    "/* Semantic tokens: the only colours, shadows and radii components use. Tailwind's defaults for",
+    "   these, and its font sizes, line heights and tracking, are removed so no class can name them. */",
     "@theme static {",
     "  --color-*: initial;",
     "  --shadow-*: initial;",
+    "  --inset-shadow-*: initial;",
+    "  --drop-shadow-*: initial;",
+    "  --text-shadow-*: initial;",
     "  --radius-*: initial;",
+    "  --text-*: initial;",
+    "  --leading-*: initial;",
+    "  --tracking-*: initial;",
   ];
   for (const [name, value] of colors) {
     if (!value || value.startsWith("=")) continue; // "= parent bg": set where it is used
@@ -106,7 +125,9 @@ export function generate(markdown) {
   for (const [name, value] of radii) lines.push(`  --radius-${varName(name)}: ${value};`);
   lines.push("}", "", "/* Layout tokens with a single value. */", ":root {");
   for (const [name, value] of layout) lines.push(`  --${varName(name)}: ${value};`);
-  lines.push("}", "");
+  lines.push("}", "", "/* Type roles: the only way to set a font size. */");
+  for (const [name, decls] of type) lines.push(`@utility type-${name} {`, ...decls.map((d) => `  ${d}`), "}");
+  lines.push("");
   return lines.join("\n");
 }
 

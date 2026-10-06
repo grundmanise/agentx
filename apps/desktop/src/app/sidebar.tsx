@@ -7,10 +7,10 @@ import { screens } from "./screens";
 export function Sidebar() {
   return (
     <aside className="flex w-(--shell-sidebar-width) flex-none flex-col gap-(--shell-nav-gap) bg-shell-bg p-(--shell-sidebar-padding)">
-      <div className="flex items-center gap-2.5 px-2.5 pt-1 pb-[22px]">
+      <div className="flex items-center gap-2.5 px-2.5 pt-1 pb-5.5">
         <AgentxMark size={26} className="rounded-shell-logo" />
         {/* The machine label joins the brand once the app reads settings from the CLI. */}
-        <span className="text-[14px] font-semibold tracking-[-0.01em]">agentx</span>
+        <span className="type-brand">agentx</span>
       </div>
       <nav aria-label="Main" className="flex flex-col gap-(--shell-nav-gap)">
         {screens.map((s) => (
@@ -19,8 +19,8 @@ export function Sidebar() {
             to={s.path}
             className={({ isActive }) =>
               cn(
-                "flex h-(--shell-nav-height) items-center gap-[11px] rounded-shell-nav px-2.5 text-[14px] font-medium",
-                s.groupStart && "mt-[18px]",
+                "flex h-(--shell-nav-height) items-center gap-(--shell-nav-icon-gap) rounded-shell-nav px-2.5 type-nav",
+                s.groupStart && "mt-(--shell-nav-group-gap)",
                 isActive
                   ? "bg-shell-nav-active-bg text-shell-nav-active-text"
                   : "text-shell-nav-text hover:text-text-primary",

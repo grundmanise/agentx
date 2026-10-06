@@ -38,11 +38,18 @@
   --black: #000000;
 }
 
-/* Semantic tokens: the only colours, shadows and radii components use. */
+/* Semantic tokens: the only colours, shadows and radii components use. Tailwind's defaults for
+   these, and its font sizes, line heights and tracking, are removed so no class can name them. */
 @theme static {
   --color-*: initial;
   --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+  --text-shadow-*: initial;
   --radius-*: initial;
+  --text-*: initial;
+  --leading-*: initial;
+  --tracking-*: initial;
   --color-accent-primary: var(--lime-400);
   --color-accent-primary-hover: var(--lime-300);
   --color-accent-attention: var(--amber-400);
@@ -258,6 +265,7 @@
   --radius-shell-nav: 10px;
   --radius-shell-logo: 8px;
   --radius-shell-status: 9999px;
+  --radius-shell-command: 9999px;
   --radius-shell-panel: 14px;
   --radius-input: 12px;
   --radius-input-search: 9999px;
@@ -276,6 +284,8 @@
   --radius-dialog: 24px;
   --radius-sheet: 20px;
   --radius-palette: 20px;
+  --radius-palette-row: 12px;
+  --radius-key-hint: 9999px;
   --radius-toast: 9999px;
   --radius-floating-bar: 9999px;
   --radius-check-mark: 50%;
@@ -290,6 +300,7 @@
   --shell-sidebar-padding: 6px 12px 14px 14px;
   --shell-nav-height: 36px;
   --shell-nav-gap: 2px;
+  --shell-nav-icon-gap: 11px;
   --shell-nav-group-gap: 14px;
   --shell-command-width: 460px;
   --shell-command-height: 32px;
@@ -369,6 +380,7 @@
   --sheet-padding: 28px 32px;
   --palette-width: 640px;
   --palette-input-height: 60px;
+  --key-hint-padding: 3px 8px;
   --toast-height: 44px;
   --toast-padding: 0 18px;
   --toast-offset: 24px;
@@ -389,4 +401,126 @@
   --check-row-gap: 22px;
   --check-mark: 20px;
   --check-mark-gap: 14px;
+}
+
+/* Type roles: the only way to set a font size. */
+@utility type-page-title {
+  font-family: var(--font-serif);
+  font-size: 56px;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+@utility type-inbox-headline {
+  font-family: var(--font-serif);
+  font-size: 68px;
+  font-weight: 400;
+}
+@utility type-review-title {
+  font-family: var(--font-serif);
+  font-size: 52px;
+  font-weight: 400;
+}
+@utility type-dialog-title {
+  font-family: var(--font-serif);
+  font-size: 36px;
+  font-weight: 400;
+}
+@utility type-startup-title {
+  font-family: var(--font-serif);
+  font-size: 48px;
+  font-weight: 400;
+}
+@utility type-skill-name {
+  font-family: var(--font-sans);
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+}
+@utility type-body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 400;
+}
+@utility type-row-name {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+}
+@utility type-row-desc {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 400;
+}
+@utility type-secondary {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 400;
+}
+@utility type-button {
+  font-family: var(--font-sans);
+  font-size: 14px;
+}
+@utility type-button-sm {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+}
+@utility type-caption {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 400;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+@utility type-code {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.75;
+}
+@utility type-brand {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+@utility type-nav {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+}
+@utility type-command-field {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 400;
+}
+@utility type-key-hint {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+}
+@utility type-palette-input {
+  font-family: var(--font-sans);
+  font-size: 17px;
+  font-weight: 400;
+}
+@utility type-palette-hint {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 400;
+}
+@utility type-palette-footer {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 400;
+}
+@utility type-toast {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 400;
+}
+@utility type-toast-action {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 600;
 }
