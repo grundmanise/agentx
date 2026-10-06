@@ -369,8 +369,7 @@ func gatedGitOn(t *testing.T, h *harness, want int, pattern string) func() (peak
 	// PATH is set inside the script because the harness PATH holds this
 	// wrapper alone, so the shell would find neither ls nor sleep.
 	stubGit(t, h, fmt.Sprintf(`#!/bin/sh
-PATH=%s
-printf '+' >> %s
+%sprintf '+' >> %s
 case " $* " in
 %s)
 	: > %s/$$
@@ -385,7 +384,7 @@ esac
 status=$?
 printf '-' >> %s
 exit $status
-`, os.Getenv("PATH"), log, pattern, gate, gate, want, real, log))
+`, hostPATH(), log, pattern, gate, gate, want, real, log))
 	_ = os.Remove(log) // the --version stubGit runs to clear ETXTBSY is not one of them
 	return func() (peak, total int) {
 		marks, err := os.ReadFile(log)

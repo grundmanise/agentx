@@ -31,7 +31,7 @@ func TestServeRunsMaintenance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stubGit(t, h, "#!/bin/sh\nPATH="+os.Getenv("PATH")+"\ncase \" $* \" in *\" maintenance \"*) all=\"$*\"; echo \"${all##* maintenance }\" >> "+log+" ;; esac\nexec "+real+" \"$@\"\n")
+	stubGit(t, h, "#!/bin/sh\n"+hostPATH()+"case \" $* \" in *\" maintenance \"*) all=\"$*\"; echo \"${all##* maintenance }\" >> "+log+" ;; esac\nexec "+real+" \"$@\"\n")
 	// A lock a killed maintenance left behind would make git skip its
 	// work; one an hour old is no running git's, and serve removes it.
 	lock := filepath.Join(gitx.AccountRepoPath(h.agentx), "objects", "maintenance.lock")
