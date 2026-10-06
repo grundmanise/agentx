@@ -40,7 +40,7 @@ test:
 	cd $(CLI) && go test $(RACE) -count=1 ./...
 
 # The desktop app in apps/desktop: design tokens in sync with DESIGN.md, types, tests and the
-# frontend build. Needs Node 22 and pnpm.
+# frontend build. Needs Node 22.22.2 or later and pnpm.
 DESKTOP = apps/desktop
 
 desktop-check:
