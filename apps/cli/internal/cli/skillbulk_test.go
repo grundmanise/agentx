@@ -240,6 +240,20 @@ func TestSkillAddInstallsTheRestWhenOneSkillIsBroken(t *testing.T) {
 	if h.accountGit("rev-parse", "refs/heads/managed/beta") == "" {
 		t.Error("beta installed from the source has no import branch")
 	}
+
+	// One of your own skills in the way is renamed instead: its branch
+	// would keep the name if only its directory were removed.
+	h.mustRun("skill", "fork", "gamma")
+	writeFile(t, filepath.Join(h.library, "gamma", "SKILL.md"), "---\nname: gamma\ndescription: mine\n---\n\nmine\n")
+	out = h.run("--json", "skill", "add", s.url, "--name", "gamma")
+	equal(t, "the install over your own gamma: exit", out.exit, 6)
+	e := lastError(t, h.events(out.stdout))
+	contains(t, "its message", e["message"].(string), "the library already holds gamma")
+	equal(t, "its hint", e["hint"],
+		"rename yours with 'agentx skill rename gamma <new>', or remove it with 'agentx skill remove gamma', then install again")
+	h.mustRun("skill", "rename", "gamma", "my-gamma")
+	h.mustRun("skill", "add", s.url, "--name", "gamma")
+	equal(t, "the skills in the library", strings.Join(installedNames(t, h), ","), "alpha,beta,gamma,my-beta,my-gamma")
 }
 
 // TestSkillAddDropsASkillTheLibraryCannotName refuses a skill whose

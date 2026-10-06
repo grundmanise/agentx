@@ -1055,7 +1055,7 @@ func (inv *invocation) stageSkill(m *home.Mutation, gitDir string, v *imported, 
 	if err != nil {
 		return nil, nil, libraryFailure(inv.dirs.Library, err)
 	}
-	lib, f := inv.libraryPlan(v, libPath, state)
+	lib, f := inv.libraryPlan(v, records, libPath, state)
 	if f != nil {
 		return nil, f, nil
 	}
@@ -1112,8 +1112,12 @@ func libraryFailure(library string, err error) error {
 // the first time, adopt a directory that already holds exactly it, or
 // refuse a directory that holds something else. A dangling symlink into the
 // agentx worktrees directory counts as absent: it is a fork's placement
-// whose worktree is gone.
-func (inv *invocation) libraryPlan(v *imported, libPath, state string) (libraryAction, *failure) {
+// whose worktree is gone. The refusal's hint frees the name of one of your
+// own skills as refPlan does, since its branch keeps the name once its
+// directory is gone. Anything else is kept under another name by a fork and
+// a removal, the two steps skill rename takes for one of your own skills
+// and refuses to take for anything else.
+func (inv *invocation) libraryPlan(v *imported, records map[string]lineage.Record, libPath, state string) (libraryAction, *failure) {
 	switch {
 	case home.IsAbsent(state):
 		return libraryAction{}, nil
@@ -1122,9 +1126,18 @@ func (inv *invocation) libraryPlan(v *imported, libPath, state string) (libraryA
 	case contentHashAt(libPath) == v.hash:
 		return libraryAction{adopt: true}, nil // write the branch, copy nothing
 	}
-	return libraryAction{}, refuse(exitRefused, fmt.Sprintf("the library already holds %s at %s", v.name, inv.dirs.Library),
-		"remove "+libPath+" and install again, or keep it under another name: fork it with '"+skillCommand("fork", v.name, "--name", "<new>")+
-			"', remove it with '"+skillCommand("remove", v.name)+"', then install again")
+	hint := "remove " + libPath + " and install again, or keep it under another name: fork it with '" + skillCommand("fork", v.name, "--name", "<new>") +
+		"', remove it with '" + skillCommand("remove", v.name) + "', then install again"
+	if records[v.name].Kind == lineage.KindFork {
+		hint = ownSkillHint(v.name)
+	}
+	return libraryAction{}, refuse(exitRefused, fmt.Sprintf("the library already holds %s at %s", v.name, inv.dirs.Library), hint)
+}
+
+// ownSkillHint frees a name one of your own skills holds: by its branch,
+// which a removal of its library directory alone leaves claiming the name.
+func ownSkillHint(name string) string {
+	return "rename yours with '" + skillCommand("rename", name, "<new>") + "', or remove it with '" + skillCommand("remove", name) + "', then install again"
 }
 
 // refPlan decides the import branch, which is created with an expected old
@@ -1145,8 +1158,7 @@ func refPlan(v *imported, records map[string]lineage.Record, libPath string, abs
 	case !ok:
 		return true, nil
 	case rec.Kind == lineage.KindFork:
-		return false, refuse(exitRefused, fmt.Sprintf("%s is a skill of the account remote on this machine", v.name),
-			"rename yours with '"+skillCommand("rename", v.name, "<new>")+"', or remove it with '"+skillCommand("remove", v.name)+"', then install again")
+		return false, refuse(exitRefused, fmt.Sprintf("%s is a skill of the account remote on this machine", v.name), ownSkillHint(v.name))
 	case rec.Commit == v.commit: // the same version again: nothing to move
 		return false, nil
 	case absent:

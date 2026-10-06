@@ -73,6 +73,8 @@ agentx skill remove xlsx
 agentx skill add anthropics/skills --name xlsx
 ```
 
+If the skill that holds the name is one of your own skills, [rename it](/cli/fork#rename-a-skill-of-your-own) instead with `agentx skill rename xlsx my-xlsx`, then install again. Removing only its folder is not enough, because agentx still keeps your skill under that name.
+
 agentx also refuses a skill whose directory name in the source holds a control character, or starts or ends with a space. Ask the source to rename the directory, or install another skill.
 
 ### Clients that see every skill
