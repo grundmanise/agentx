@@ -13,7 +13,7 @@ export interface PaletteItem {
   run: () => void;
 }
 
-// 00 app shell: a case-insensitive substring match on the label.
+// A case-insensitive substring match on the label.
 const filter = (value: string, search: string) => (value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0);
 
 /**

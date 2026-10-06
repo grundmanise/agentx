@@ -9,7 +9,7 @@ export interface Screen {
   groupStart?: boolean;
 }
 
-/** Sidebar order (00 app shell): Inbox, Skills, Add · Agents, MCP servers, Plugins · Settings. */
+/** Sidebar order: Inbox, Skills, Add · Agents, MCP servers, Plugins · Settings. */
 export const screens: Screen[] = [
   { path: "/inbox", label: "Inbox", icon: "inbox" },
   { path: "/skills", label: "Skills", icon: "skills" },

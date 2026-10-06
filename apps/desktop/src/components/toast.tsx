@@ -2,7 +2,7 @@ import { toast, Toaster as Sonner } from "sonner";
 import { cn } from "@/lib/utils";
 
 /**
- * One toast at a time (00 app shell, DESIGN.md §6 "Toast"). A toast with an action stays 5s,
+ * One toast at a time (DESIGN.md §6 "Toast"). A toast with an action stays 5s,
  * one without 2.6s. A new toast replaces the one showing.
  */
 export function notify(message: string, action?: { label: string; onClick: () => void }) {
