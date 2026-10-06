@@ -12,6 +12,10 @@ The five canonical triage labels. See `docs/agents/triage-labels.md`.
 
 Single-context: `CONTEXT.md` at the root, ADRs in `docs/adr/`, specs in `docs/spec/`. See `docs/agents/domain.md`.
 
+## Desktop app
+
+Before writing UI in `apps/desktop`, read `apps/desktop/DESIGN.md` and the "Rules for components" in `apps/desktop/README.md`. Style only with the tokens in `DESIGN.md`; when a design needs a value no token holds, add the token there and run `pnpm tokens`. `pnpm lint` and `pnpm test` reject anything off the design system; fix the code, never the guard.
+
 ## Help center
 
 Keep the Help Center up to date. Whenever there's a new feature or a change in functionality, update the relevant user-facing documentation in `docs/help-center`. Keep the language clear, structured, and concise. Use an imperative tone.

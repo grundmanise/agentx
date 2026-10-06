@@ -1,6 +1,6 @@
 # agentx desktop
 
-The desktop app: a Tauri 2 window with a React and TypeScript frontend. It renders what the `agentx` CLI reports and runs CLI commands for every action. It never reads the machine, runs git or opens a network connection itself; see [ADR 0001](../../docs/adr/0001-go-cli-owns-machine-and-account-tauri-renders.md).
+The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it is the app shell with placeholder screens. By design it will only render what the `agentx` CLI reports and run CLI commands for every action; it never reads the machine, runs git or opens a network connection itself. See [ADR 0001](../../docs/adr/0001-go-cli-owns-machine-and-account-tauri-renders.md).
 
 ## What is here
 
