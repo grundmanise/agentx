@@ -388,7 +388,7 @@ func (inv *invocation) importShared(ctx context.Context, p *sharedPublish, src s
 		return inv.sharedFailure(err)
 	}
 	v := versions[0]
-	if f := inv.importable(v, nil, src); f != nil {
+	if f := inv.importable(v, src); f != nil {
 		return f
 	}
 	var refused *failure

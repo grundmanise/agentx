@@ -845,7 +845,7 @@ func (c *checkRun) compare(ctx context.Context, res source.Result, recs []lineag
 		if len(stale) == 0 {
 			continue
 		}
-		if f := c.inv.importable(v, nil, src); f != nil {
+		if f := c.inv.importable(v, src); f != nil {
 			c.refused(stale, f)
 			continue
 		}

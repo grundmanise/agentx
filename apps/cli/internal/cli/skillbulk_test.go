@@ -470,11 +470,12 @@ func TestSkillAddCopyRecordsEverySkillInOneWrite(t *testing.T) {
 	contains(t, "the result", h.one(out.stdout, "result")["summary"].(string), "6 placements as copy")
 }
 
-// TestSkillAddRefusesTwoSkillsOfOneName installs a source whose two
+// TestSkillAddSkipsTwoSkillsOfOneName installs a source whose two
 // directories carry the same frontmatter name: the library holds one
-// directory per name, so the second is dropped and named, and the first
-// still lands.
-func TestSkillAddRefusesTwoSkillsOfOneName(t *testing.T) {
+// directory per name, so the second is skipped with a warning naming it,
+// the first still lands and the run does not fail for the source's
+// mistake, nor count it among the skills a real refusal fails.
+func TestSkillAddSkipsTwoSkillsOfOneName(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
@@ -485,14 +486,34 @@ func TestSkillAddRefusesTwoSkillsOfOneName(t *testing.T) {
 	s.commit("two skills of one name")
 	equal(t, "exit", h.run("source", "add", s.url).exit, 0)
 
-	out := h.run("--json", "skill", "add", s.url, "--all")
-	equal(t, "exit", out.exit, 6)
-	equal(t, "the skills in the library", strings.Join(installedNames(t, h), ","), "other,twin")
-	contains(t, "the result", h.one(out.stdout, "result")["summary"].(string),
-		"twin under skills/second was skipped: the source has another skill named twin under skills/first")
-	if hint, ok := lastError(t, h.events(out.stdout))["hint"]; ok {
-		t.Errorf("the source's mistake has a hint to act on: %q", hint)
+	// A real refusal in the same run fails it as it would without the
+	// twin, and the twin is not one of the skills that could not be
+	// installed.
+	mine := filepath.Join(h.library, "other")
+	if err := os.MkdirAll(mine, 0o755); err != nil {
+		t.Fatal(err)
 	}
+	writeFile(t, filepath.Join(mine, "SKILL.md"), "---\nname: other\ndescription: mine\n---\n\nmine\n")
+	refused := h.run("--json", "skill", "add", s.url, "--all")
+	equal(t, "exit of the run with a refusal", refused.exit, 6)
+	summary := h.one(refused.stdout, "result")["summary"].(string)
+	contains(t, "the result of the run with a refusal", summary, "1 of 2 skills could not be installed: other: the library already holds other")
+	excludes(t, "the result of the run with a refusal", summary, "skipped")
+	if err := os.RemoveAll(mine); err != nil {
+		t.Fatal(err)
+	}
+
+	out := h.run("--json", "skill", "add", s.url, "--all")
+	equal(t, "exit", out.exit, 0)
+	equal(t, "the skills in the library", strings.Join(installedNames(t, h), ","), "other,twin")
+	result := h.one(out.stdout, "result")
+	equal(t, "ok", result["ok"], true)
+	contains(t, "the result", result["summary"].(string), ", 1 already in the library, 1 skill skipped")
+	equal(t, "the warning", h.one(out.stderr, "log")["message"],
+		"twin under skills/second was skipped: the source has another skill named twin under skills/first")
+	progress := h.eventsOfType(out.stdout, "progress")
+	last := progress[len(progress)-1]
+	equal(t, "current", last["current"], last["total"])
 
 	// Naming it resolves to one skill, as it always has: the first, which
 	// is the one the library holds, so asking for it by name is that version

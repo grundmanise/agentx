@@ -233,7 +233,8 @@ func (inv *invocation) alreadyInLibrary(arg string, to []string, asCopy bool) er
 }
 
 // batch is one run of agentx skill add: how many steps it planned, how many
-// it has reported, what it installed and the skills it had to give up on.
+// it has reported, what it installed and the skills it had to give up on or
+// passed over.
 type batch struct {
 	refusals
 	inv      *invocation
@@ -241,6 +242,7 @@ type batch struct {
 	current  int
 	total    int
 	done     []*installed // the skills that landed, in the order they were installed
+	skipped  int          // the skills passed over, see skip
 }
 
 func newBatch(inv *invocation, selected int) *batch {
@@ -267,6 +269,17 @@ func (b *batch) drop(subject string, remaining int, f *failure) {
 	if b.selected > 1 {
 		b.inv.out.warn(namedReason(subject, f.message))
 	}
+}
+
+// skip passes over a skill the run does not install and does not fail for:
+// its steps leave the budget and the count of skills the run set out to
+// install, so the run answers as though it had never been selected, and
+// the reason is a warning naming it.
+func (b *batch) skip(message string) {
+	b.total -= stepsPerSkill
+	b.selected--
+	b.skipped++
+	b.inv.out.warn(message)
 }
 
 // abandon answers a run that installed nothing: the rescan it planned never
@@ -334,7 +347,16 @@ func (inv *invocation) readVersions(ctx context.Context, b *batch, gitDir string
 	taken := map[string]string{} // library name to the subpath that claimed it
 	var kept []*imported
 	for _, v := range versions {
-		if f := inv.usable(v, taken, src); f != nil {
+		// Two skills of one name are the source's mistake, which nothing on
+		// this machine can undo: the library holds one directory per name.
+		// The first keeps the name and the second is skipped rather than
+		// refused, since every install of the whole source would otherwise
+		// fail for it.
+		if where, ok := taken[v.name]; ok {
+			b.skip(fmt.Sprintf("%s%s was skipped: the source has another skill named %s%s", v.name, underPath(v.skill.Subpath), v.name, underPath(where)))
+			continue
+		}
+		if f := inv.usable(v, src); f != nil {
 			b.drop(v.name, stepsPerSkill, f)
 			continue
 		}
@@ -595,21 +617,20 @@ func foundUpstreams(tip string, at []treeRequest, out []string) (map[treeRequest
 // usable refuses a skill the machine cannot hold before anything is read
 // for it: a name the library or the account repo cannot take, a directory
 // the import commit cannot record, an entry whose path would lay it out
-// outside the skill's directory, a directory with no regular file in it at
-// all, and a name another skill of this same batch has already claimed.
-func (inv *invocation) usable(v *imported, taken map[string]string, src source.Source) *failure {
+// outside the skill's directory and a directory with no regular file in it
+// at all.
+func (inv *invocation) usable(v *imported, src source.Source) *failure {
 	if why := nameRefusal(v.name); why != "" {
 		return refuse(exitRefused, fmt.Sprintf("%q %s", v.name, why),
 			"a name cannot be empty or hidden, or carry a separator, a space or any of ~^:?*[; fix it in the skill's SKILL.md frontmatter upstream, or install another skill")
 	}
-	return inv.importable(v, taken, src)
+	return inv.importable(v, src)
 }
 
 // importable refuses a version no import commit can be written for, which
 // is usable without the name: an update keeps the name the skill was
-// installed under, whatever the upstream calls it now. taken, when it is
-// not nil, is the names a batch has already claimed.
-func (inv *invocation) importable(v *imported, taken map[string]string, src source.Source) *failure {
+// installed under, whatever the upstream calls it now.
+func (inv *invocation) importable(v *imported, src source.Source) *failure {
 	// The directory is checked with the reader's own rule, and before the
 	// version is read, for the reason the name is: an import commit
 	// records it on one line of a trailer, and one the reader would refuse
@@ -630,13 +651,6 @@ func (inv *invocation) importable(v *imported, taken map[string]string, src sour
 			return refuse(exitRefused, fmt.Sprintf("the skill %q in %s%s holds an entry agentx will not lay out: %q", v.skill.Name, src.URL, underPath(v.skill.Subpath), e.Path),
 				"an empty, absolute, '.', '..' or '.git' path, a backslash or a NUL could be written outside the skill's directory; install another skill of the source")
 		}
-	}
-	// Two skills of one name are the source's mistake, which nothing on
-	// this machine can undo: the library holds one directory per name. The
-	// first keeps the name and the second is skipped, with no hint to act
-	// on.
-	if where, ok := taken[v.name]; ok {
-		return refuse(exitRefused, fmt.Sprintf("%s%s was skipped: the source has another skill named %s%s", v.name, underPath(v.skill.Subpath), v.name, underPath(where)), "")
 	}
 	// The same predicate the import tree is built on, so that the run
 	// refuses such a skill here, where it costs only itself, rather than in
@@ -1368,15 +1382,16 @@ func (inv *invocation) reportInstalled(ctx context.Context, b *batch, dones []*i
 		inv.out.emit(ev)
 		inv.printInstalled(done, ev)
 	}
-	inv.summary = installSummary(dones) + universalClause(universal)
+	inv.summary = installSummary(dones, b.skipped) + universalClause(universal)
 	return nil
 }
 
 // installSummary is what the result event says the run did: the skills,
 // where they came from, how many configurations now see them and what was
-// left alone. One skill reads as the one install it is; several are named
-// together, since one line stands for the whole run.
-func installSummary(dones []*installed) string {
+// left alone, the skills it passed over among them. One skill reads as the
+// one install it is; several are named together, since one line stands for
+// the whole run.
+func installSummary(dones []*installed, skippedSkills int) string {
 	first := dones[0].v
 	copies, adoptions, skipped, adopted := 0, 0, 0, 0
 	names := make([]string, 0, len(dones))
@@ -1401,6 +1416,9 @@ func installSummary(dones []*installed) string {
 		summary = strings.Replace(summary, "installed ", "adopted ", 1)
 	} else if adopted > 0 {
 		summary += fmt.Sprintf(", %d already in the library", adopted)
+	}
+	if skippedSkills > 0 {
+		summary += ", " + plural(skippedSkills, "skill") + " skipped"
 	}
 	for _, what := range []struct {
 		n    int

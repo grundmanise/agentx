@@ -77,6 +77,14 @@ If the skill that holds the name is one of your own skills, [rename it](/cli/for
 
 agentx also refuses a skill whose directory name in the source holds a control character, or starts or ends with a space. Ask the source to rename the directory, or install another skill.
 
+If a source has two skills with the same name, agentx installs the first and skips the other with a warning. The mistake is in the source, so the skip does not make the install fail:
+
+```text
+warning: pdf under skills/pdf-v2 was skipped: the source has another skill named pdf under skills/pdf
+```
+
+To get the skipped skill, ask the source to rename it.
+
 ### Clients that see every skill
 
 Some clients, such as Codex and Gemini CLI, read the library directly. These are universal clients. They see every skill in the library, so they get no link of their own. A client also becomes universal when its skills directory and the library are one directory through a symlink. For example, if `~/.claude/skills` is a symlink to the library, Claude Code reads the library, and so does Cursor, which also reads `~/.claude/skills`.
