@@ -631,9 +631,12 @@ func (inv *invocation) importable(v *imported, taken map[string]string, src sour
 				"an empty, absolute, '.', '..' or '.git' path, a backslash or a NUL could be written outside the skill's directory; install another skill of the source")
 		}
 	}
+	// Two skills of one name are the source's mistake, which nothing on
+	// this machine can undo: the library holds one directory per name. The
+	// first keeps the name and the second is skipped, with no hint to act
+	// on.
 	if where, ok := taken[v.name]; ok {
-		return refuse(exitRefused, fmt.Sprintf("%s is also the name of the skill under %s, which this run installs", v.name, where),
-			"install one of the two, or fork one of them under another name")
+		return refuse(exitRefused, fmt.Sprintf("%s%s was skipped: the source has another skill named %s%s", v.name, underPath(v.skill.Subpath), v.name, underPath(where)), "")
 	}
 	// The same predicate the import tree is built on, so that the run
 	// refuses such a skill here, where it costs only itself, rather than in

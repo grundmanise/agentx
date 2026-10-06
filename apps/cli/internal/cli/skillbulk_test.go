@@ -489,7 +489,10 @@ func TestSkillAddRefusesTwoSkillsOfOneName(t *testing.T) {
 	equal(t, "exit", out.exit, 6)
 	equal(t, "the skills in the library", strings.Join(installedNames(t, h), ","), "other,twin")
 	contains(t, "the result", h.one(out.stdout, "result")["summary"].(string),
-		"twin is also the name of the skill under skills/first, which this run installs")
+		"twin under skills/second was skipped: the source has another skill named twin under skills/first")
+	if hint, ok := lastError(t, h.events(out.stdout))["hint"]; ok {
+		t.Errorf("the source's mistake has a hint to act on: %q", hint)
+	}
 
 	// Naming it resolves to one skill, as it always has: the first, which
 	// is the one the library holds, so asking for it by name is that version
