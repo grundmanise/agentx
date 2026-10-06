@@ -655,7 +655,7 @@ Nothing loops forever.
 ## 9. Copy rules
 
 - Plain verbs: Add, Remove, Update, Fork, Publish, Review update, Put back, Adopt, Check updates.
-- Never: sync, commit, push, hunk, merge, upstream, remote, repo (say "source", "original", "your other machines", "saved version", "change").
+- Never: sync, commit, push, hunk, merge, upstream, remote, repo (say "source", "original", "your other machines", "change").
 - "Your skills" for the user's own skills (forked or created); "the original" for the skill a fork came from; "the update" for a new version from a skill's source. Fork is an action, not a kind of skill (`CONTEXT.md`).
 - Dates over ids in rows ("Sep 14 → Sep 28"); ids with dates in Details ("3f2a9c1 · Sep 14").
 - Toasts state what happened in past tense ("Commit updated", "Put pdf back in Cursor"), and name the undo when one exists.
