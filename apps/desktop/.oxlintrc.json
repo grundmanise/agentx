@@ -1,0 +1,46 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react"],
+  "jsPlugins": ["eslint-plugin-better-tailwindcss", "./lint/design-system.mjs"],
+  "settings": {
+    "better-tailwindcss": { "entryPoint": "src/styles/index.css", "tsconfig": "tsconfig.json" }
+  },
+  "rules": {
+    "design-system/no-raw-controls": "error",
+    "design-system/no-inline-style": "error",
+    "better-tailwindcss/no-unknown-classes": "error",
+    "better-tailwindcss/no-conflicting-classes": "error",
+    "better-tailwindcss/no-duplicate-classes": "error",
+    "better-tailwindcss/no-restricted-classes": [
+      "error",
+      {
+        "restrict": [
+          {
+            "pattern": "^(?:.*:)?!?[a-z-]*\\[[^\\]]*\\]$",
+            "message": "Arbitrary values are off the design system. Use a token from DESIGN.md, or add one there and run `pnpm tokens`."
+          },
+          {
+            "pattern": "^(?:.*:)?!?\\[[a-z-]+:.*\\]$",
+            "message": "Arbitrary properties are off the design system. Use a token from DESIGN.md."
+          },
+          {
+            "pattern": "^(?:.*:)?!?-?[a-z-]+-\\d+\\.(?:25|75)$",
+            "message": "Spacing uses whole or half steps (a 2px grid); a value off the grid needs a token in DESIGN.md."
+          },
+          {
+            "pattern": "^(?:.*:)?!?(?:bg|text|border(?:-[xytrblse])?|fill|stroke|ring|ring-offset|outline|divide|from|via|to|decoration|accent|caret|shadow|inset-shadow|drop-shadow|placeholder)-[a-z0-9-]+\\/(?:\\d+|\\[.*\\]|\\(.*\\))$",
+            "message": "Opacity modifiers make new colours. Use a colour token from DESIGN.md (alpha is set there)."
+          },
+          {
+            "pattern": "^(?:.*:)?!?(?:font-(?:sans|serif|mono)|leading-.+|tracking-.+)$",
+            "message": "Set the face, size, line height and tracking with a type-* role from DESIGN.md §3."
+          },
+          {
+            "pattern": "^(?:.*:)?!?rounded(?:-[a-z]{1,2})?-(?:full|none)$",
+            "message": "Use a radius token from DESIGN.md §5 (rounded-<token>)."
+          }
+        ]
+      }
+    ]
+  }
+}

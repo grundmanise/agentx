@@ -9,7 +9,7 @@ The visual contract for the desktop app. Code uses the semantic tokens below, ne
 - A layout token with one value `shell.sidebar-width` becomes `--shell-sidebar-width` (`w-(--shell-sidebar-width)`). A token given as a range (`38–40`) is guidance, not a variable; pick the value the component calls for.
 - A type token `type.page-title` becomes the utility `type-page-title`, which sets the face, size, weight, line height, tracking and case together.
 
-The Tailwind theme holds only these tokens: default colours, shadows, radii, font sizes, line heights and tracking are removed, so no class can name them. When a design needs a value no token holds, add the token here and run `pnpm tokens`.
+The Tailwind theme holds only these tokens: default colours, shadows, radii, font sizes, line heights and tracking are removed, and `pnpm lint` rejects any class Tailwind does not know, arbitrary values (`text-[13px]`), colour alpha modifiers and inline style values. When a design needs a value no token holds, add the token here and run `pnpm tokens`; see the README's rules for components.
 
 ## 1. Character
 

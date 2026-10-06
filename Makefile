@@ -39,12 +39,12 @@ RACE ?= -race
 test:
 	cd $(CLI) && go test $(RACE) -count=1 ./...
 
-# The desktop app in apps/desktop: design tokens in sync with DESIGN.md, types, tests and the
+# The desktop app in apps/desktop: types, the design-system lint, design tokens in sync with DESIGN.md, tests and the
 # frontend build. Needs Node 22.22.2 or later and pnpm.
 DESKTOP = apps/desktop
 
 desktop-check:
-	cd $(DESKTOP) && pnpm install --frozen-lockfile && pnpm typecheck && pnpm test && pnpm build
+	cd $(DESKTOP) && pnpm install --frozen-lockfile && pnpm typecheck && pnpm lint && pnpm test && pnpm build
 
 # Compiles the Tauri shell. On Linux it needs the WebKitGTK development packages.
 desktop-rust-check:
