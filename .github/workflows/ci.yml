@@ -51,3 +51,32 @@ jobs:
       # watcher's FSEvents backend; the Linux job finds the data races, and
       # `make check` keeps -race locally.
       - run: make test ${{ runner.os == 'macOS' && 'RACE=' || '' }}
+
+  desktop:
+    name: Desktop
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: apps/desktop/package.json
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/desktop/pnpm-lock.yaml
+
+      - run: make desktop-check
+
+      - name: Install WebKitGTK
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      - run: make desktop-rust-check

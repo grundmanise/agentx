@@ -12,7 +12,7 @@ GO_TOOLCHAIN = go$(shell awk '$$1 == "go" { print $$2; exit }' $(CLI)/go.mod)+au
 # Static on Linux; cgo on macOS, where the serve watcher uses FSEvents.
 CGO_ENABLED ?= $(if $(filter Darwin,$(shell uname -s)),1,0)
 
-.PHONY: check fmt fmt-check lint tidy-check build test
+.PHONY: check fmt fmt-check lint tidy-check build test desktop-check desktop-rust-check
 
 check: fmt-check lint tidy-check build test
 
@@ -38,3 +38,14 @@ RACE ?= -race
 
 test:
 	cd $(CLI) && go test $(RACE) -count=1 ./...
+
+# The desktop app in apps/desktop: design tokens in sync with DESIGN.md, types, tests and the
+# frontend build. Needs Node 22 and pnpm.
+DESKTOP = apps/desktop
+
+desktop-check:
+	cd $(DESKTOP) && pnpm install --frozen-lockfile && pnpm typecheck && pnpm test && pnpm build
+
+# Compiles the Tauri shell. On Linux it needs the WebKitGTK development packages.
+desktop-rust-check:
+	cd $(DESKTOP)/src-tauri && cargo fmt --check && cargo clippy --locked -- -D warnings

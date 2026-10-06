@@ -29,6 +29,7 @@ cd agentx
 | Path | What it holds |
 | --- | --- |
 | [`apps/cli`](apps/cli) | The Go module of the `agentx` command-line tool |
+| [`apps/desktop`](apps/desktop) | The desktop app (Tauri and React); see its [README](apps/desktop/README.md) |
 | [`CONTEXT.md`](CONTEXT.md) | The vocabulary: the terms to use in code, docs, issues and PRs |
 | [`docs/adr`](docs/adr) | Architecture decisions |
 | [`docs/spec`](docs/spec) | Contracts and specs, such as the CLI's output contract |
