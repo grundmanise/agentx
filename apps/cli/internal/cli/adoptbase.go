@@ -527,7 +527,7 @@ func (inv *invocation) fillAdoption(c *candidate, listed []source.TreeEntry, bod
 		// coordinates now, the content hash with the files.
 		imp: lineage.Import{Source: c.src.URL, Path: c.subpath(), Commit: c.base.commit},
 	}
-	if f := inv.usable(v, map[string]string{}, c.src); f != nil {
+	if f := inv.usable(v, c.src); f != nil {
 		return f
 	}
 	if f := v.fill(bodies, c.src.URL); f != nil {
