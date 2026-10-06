@@ -1129,11 +1129,9 @@ func libraryFailure(library string, err error) error {
 // the first time, adopt a directory that already holds exactly it, or
 // refuse a directory that holds something else. A dangling symlink into the
 // agentx worktrees directory counts as absent: it is a fork's placement
-// whose worktree is gone. The refusal's hint frees the name of one of your
-// own skills as refPlan does, since its branch keeps the name once its
-// directory is gone. Anything else is kept under another name by a fork and
-// a removal, the two steps skill rename takes for one of your own skills
-// and refuses to take for anything else.
+// whose worktree is gone. The refusal's hint frees the name with skill
+// rename for one of your own skills, and with skill remove for anything else,
+// which a fork under another name keeps first.
 func (inv *invocation) libraryPlan(v *imported, records map[string]lineage.Record, libPath, state string) (libraryAction, *failure) {
 	switch {
 	case home.IsAbsent(state):
@@ -1143,8 +1141,7 @@ func (inv *invocation) libraryPlan(v *imported, records map[string]lineage.Recor
 	case contentHashAt(libPath) == v.hash:
 		return libraryAction{adopt: true}, nil // write the branch, copy nothing
 	}
-	hint := "remove " + libPath + " and install again, or keep it under another name: fork it with '" + skillCommand("fork", v.name, "--name", "<new>") +
-		"', remove it with '" + skillCommand("remove", v.name) + "', then install again"
+	hint := "remove it with '" + skillCommand("remove", v.name) + "', then install again; to keep it, first fork it with '" + skillCommand("fork", v.name, "--name", "<new>") + "'"
 	if records[v.name].Kind == lineage.KindFork {
 		hint = ownSkillHint(v.name)
 	}

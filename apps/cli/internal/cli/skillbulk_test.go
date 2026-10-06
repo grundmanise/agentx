@@ -232,7 +232,7 @@ func TestSkillAddInstallsTheRestWhenOneSkillIsBroken(t *testing.T) {
 	// fork under another name leaves beta in place, so the removal is what
 	// frees the name for the install.
 	equal(t, "the hint", lastError(t, h.events(out.stdout))["hint"],
-		"remove "+mine+" and install again, or keep it under another name: fork it with 'agentx skill fork beta --name <new>', remove it with 'agentx skill remove beta', then install again")
+		"remove it with 'agentx skill remove beta', then install again; to keep it, first fork it with 'agentx skill fork beta --name <new>'")
 	h.mustRun("skill", "fork", "beta", "--name", "my-beta")
 	h.mustRun("skill", "remove", "beta")
 	h.mustRun("skill", "add", s.url, "--name", "beta")
