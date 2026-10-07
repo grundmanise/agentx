@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router";
-import { Toaster } from "@/components/toast";
-import { PlaceholderScreen } from "@/screens/placeholder";
-import { CommandPalette } from "./command-palette";
-import { screens, titles } from "./screens";
-import { Sidebar } from "./sidebar";
-import { TopBar } from "./top-bar";
+import { Toaster } from "#/components/toast.tsx";
+import { PlaceholderScreen } from "#/screens/placeholder.tsx";
+import { CommandPalette } from "#/app/command-palette.tsx";
+import { screens, titles } from "#/app/screens.ts";
+import { Sidebar } from "#/app/sidebar.tsx";
+import { TopBar } from "#/app/top-bar.tsx";
 
 export function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);

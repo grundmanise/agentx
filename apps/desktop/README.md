@@ -51,5 +51,6 @@ These rules are for anyone writing a component, people and coding agents alike. 
 - Screens and the app shell build on the components in `src/components`: native `<button>`, `<input>`, `<textarea>` and `<select>` are allowed only there. Use `Button` and its variants; add a component, or a variant to an existing one, when none fits.
 - The lint reads classes in `className`, `cn()`, `cva()` and same-file variables. Keep class strings in one of these; a class string anywhere else (such as a library's `classNames` option) goes through `cn()` so it is checked too.
 - Code generated with the shadcn CLI uses shadcn's default classes; map them to tokens and remove its `className` prop before committing, or the lint fails.
+- Import from `src` with the `#/` prefix and the file's extension: `import { Icon } from "#/components/icon.tsx"`. `#/` is a Node subpath import declared in `package.json` (`"imports"`), so TypeScript, Vite and the lint resolve it the same way, and like Node they need the extension.
 - Follow the copy rules in `DESIGN.md` §9 and the vocabulary in [`GLOSSARY.md`](../../GLOSSARY.md).
 - Show only what the CLI reports. A screen never predicts the result of a command.

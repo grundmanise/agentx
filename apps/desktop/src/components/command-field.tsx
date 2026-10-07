@@ -1,5 +1,5 @@
-import { Icon } from "@/components/icon";
-import { KeyHint } from "@/components/key-hint";
+import { Icon } from "#/components/icon.tsx";
+import { KeyHint } from "#/components/key-hint.tsx";
 
 const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
 

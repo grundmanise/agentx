@@ -1,4 +1,4 @@
-import type { IconName } from "@/components/icon";
+import type { IconName } from "#/components/icon.tsx";
 
 export interface Screen {
   /** Route path; nested routes (such as Update review under Skills) keep their parent active. */

@@ -1,8 +1,8 @@
 import { NavLink } from "react-router";
-import { AgentxMark } from "@/components/agentx-mark";
-import { Icon } from "@/components/icon";
-import { cn } from "@/lib/utils";
-import { screens } from "./screens";
+import { AgentxMark } from "#/components/agentx-mark.tsx";
+import { Icon } from "#/components/icon.tsx";
+import { cn } from "#/lib/utils.ts";
+import { screens } from "#/app/screens.ts";
 
 export function Sidebar() {
   return (

@@ -1,13 +1,13 @@
 // This file passes forbidden props on purpose, to prove the types reject them.
 /* oxlint-disable shadcn/no-restyle, react/forbid-component-props */
 import { render, screen } from "@testing-library/react";
-import { AgentxMark } from "@/components/agentx-mark";
-import { CommandField } from "@/components/command-field";
-import { Icon } from "@/components/icon";
-import { KeyHint } from "@/components/key-hint";
-import { Toaster } from "@/components/toast";
-import { Button } from "@/components/ui/button";
-import { PlaceholderScreen } from "@/screens/placeholder";
+import { AgentxMark } from "#/components/agentx-mark.tsx";
+import { CommandField } from "#/components/command-field.tsx";
+import { Icon } from "#/components/icon.tsx";
+import { KeyHint } from "#/components/key-hint.tsx";
+import { Toaster } from "#/components/toast.tsx";
+import { Button } from "#/components/ui/button.tsx";
+import { PlaceholderScreen } from "#/screens/placeholder.tsx";
 
 // Our components take no `className` or `style`: every visual choice is a typed prop.
 // `pnpm typecheck` fails if any line marked @ts-expect-error starts to compile.

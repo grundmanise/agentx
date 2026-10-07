@@ -1,10 +1,10 @@
 // Code the design-system lint must reject (`bad(<rule>)`, by that rule) or accept (`ok`), one case
 // per line.
 // src/styles/lint.test.ts runs oxlint on this file and checks every marked line.
-import { AgentxMark } from "@/components/agentx-mark";
-import { Icon } from "@/components/icon";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { AgentxMark } from "#/components/agentx-mark.tsx";
+import { Icon } from "#/components/icon.tsx";
+import { Button } from "#/components/ui/button.tsx";
+import { cn } from "#/lib/utils.ts";
 import { KeyHint } from "../../src/components/key-hint";
 
 declare const tone: string;

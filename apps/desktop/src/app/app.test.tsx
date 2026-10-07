@@ -1,7 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { notify } from "@/components/toast";
-import { renderApp } from "@/test/render";
+import { notify } from "#/components/toast.tsx";
+import { renderApp } from "#/test/render.tsx";
 
 describe("app shell", () => {
   it("opens on the Inbox and lists the screens in sidebar order", () => {

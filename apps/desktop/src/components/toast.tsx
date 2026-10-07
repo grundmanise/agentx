@@ -1,5 +1,5 @@
 import { toast, Toaster as Sonner } from "sonner";
-import { cn } from "@/lib/utils";
+import { cn } from "#/lib/utils.ts";
 
 /**
  * One toast at a time (DESIGN.md §6 "Toast"). A toast with an action stays 5s,

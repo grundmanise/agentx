@@ -4,7 +4,7 @@
   "jsPlugins": ["@shadcn/lint"],
   "settings": {
     "shadcn": {
-      "ui": ["@/components", "@/screens", "@/app"],
+      "ui": ["#/components", "#/screens", "#/app"],
       "componentImports": ["^\\.{1,2}/"],
       "note": "See DESIGN.md and src/styles/tokens.css."
     }

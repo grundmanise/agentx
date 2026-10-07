@@ -1,9 +1,9 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Command } from "cmdk";
 import { useNavigate } from "react-router";
-import { Icon, type IconName } from "@/components/icon";
-import { KeyHint } from "@/components/key-hint";
-import { screens } from "./screens";
+import { Icon, type IconName } from "#/components/icon.tsx";
+import { KeyHint } from "#/components/key-hint.tsx";
+import { screens } from "#/app/screens.ts";
 
 export interface PaletteItem {
   group: "ACTIONS" | "GO TO" | "SKILLS";

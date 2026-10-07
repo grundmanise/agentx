@@ -1,4 +1,4 @@
-import { CommandField } from "@/components/command-field";
+import { CommandField } from "#/components/command-field.tsx";
 
 /**
  * The 50px title bar. On macOS the window's own traffic lights sit in the left column; the whole
