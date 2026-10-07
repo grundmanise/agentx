@@ -25,7 +25,7 @@ func countingGit(t *testing.T, h *harness) func() []string {
 	// PATH is set inside the script because the harness PATH holds this
 	// wrapper alone; tr squashes the newlines of a commit message, so that
 	// one call is one line however many lines its arguments have.
-	stubGit(t, h, "#!/bin/sh\nPATH="+os.Getenv("PATH")+"\nprintf '%s' \"$*\" | tr '\\n' ' ' >> "+log+"\nprintf '\\n' >> "+log+"\nexec "+real+" \"$@\"\n")
+	stubGit(t, h, "#!/bin/sh\n"+hostPATH()+"printf '%s' \"$*\" | tr '\\n' ' ' >> "+log+"\nprintf '\\n' >> "+log+"\nexec "+real+" \"$@\"\n")
 	_ = os.Remove(log) // the --version stubGit runs to clear ETXTBSY is not one of them
 	return func() []string {
 		b, err := os.ReadFile(log)

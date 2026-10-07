@@ -26,6 +26,14 @@ func stubGit(t *testing.T, h *harness, script string) {
 	h.env["PATH"] = dir
 }
 
+// hostPATH is the line a wrapper stubGit installs runs to get the test
+// process's PATH back, since the harness PATH holds the wrapper alone. The
+// value is quoted: an entry with a space in it, as macOS has, would
+// otherwise end the assignment and leave the shell finding nothing.
+func hostPATH() string {
+	return "PATH=" + shellWord(os.Getenv("PATH")) + "\n"
+}
+
 // writeShim writes an executable a test is about to run and waits until it
 // can be run. The suite forks in parallel with itself and a fork duplicates
 // the write descriptor of a file being written, so a shim written here can

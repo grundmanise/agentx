@@ -89,8 +89,7 @@ func TestRemovalFailsWhenTheLibraryStillHoldsTheName(t *testing.T) {
 	// writes the library directory again as update-ref returns puts it back
 	// after the removal took it and before the rescan reads it.
 	lib := filepath.Join(h.library, "alpha")
-	stubGit(t, h, "#!/bin/sh\nPATH="+os.Getenv("PATH")+`
-for a in "$@"; do
+	stubGit(t, h, "#!/bin/sh\n"+hostPATH()+`for a in "$@"; do
 	case "$a" in
 	update-ref)
 		`+real+` "$@"; status=$?
