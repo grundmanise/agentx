@@ -20,7 +20,6 @@ export function Sidebar() {
             className={({ isActive }) =>
               cn(
                 "flex h-(--shell-nav-height) items-center gap-(--shell-nav-icon-gap) rounded-shell-nav px-2.5 type-nav",
-                s.groupStart && "mt-(--shell-nav-group-gap)",
                 isActive
                   ? "bg-shell-nav-active-bg text-shell-nav-active-text"
                   : "text-shell-nav-text hover:text-text-primary",

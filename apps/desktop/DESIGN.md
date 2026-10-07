@@ -396,7 +396,6 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `shell.nav-height` | 36 | Nav item |
 | `shell.nav-gap` | 2 | Between nav items |
 | `shell.nav-icon-gap` | 11 | Icon → label in a nav item |
-| `shell.nav-group-gap` | 14 | Before Agents and before Settings |
 | `shell.command-width` | 460 | Command field |
 | `shell.command-height` | 32 | |
 | `shell.status-height` | 30 | Remote status pill |

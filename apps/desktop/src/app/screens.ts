@@ -5,19 +5,17 @@ export interface Screen {
   path: string;
   label: string;
   icon: IconName;
-  /** Starts a new nav group, with a gap above it. */
-  groupStart?: boolean;
 }
 
-/** Sidebar order: Inbox, Skills, Add · Agents, MCP servers, Plugins · Settings. */
+/** Sidebar order, one evenly spaced list: Inbox, Skills, Add, Agents, MCP servers, Plugins, Settings. */
 export const screens: Screen[] = [
   { path: "/inbox", label: "Inbox", icon: "inbox" },
   { path: "/skills", label: "Skills", icon: "skills" },
   { path: "/add", label: "Add", icon: "add" },
-  { path: "/agents", label: "Agents", icon: "agents", groupStart: true },
+  { path: "/agents", label: "Agents", icon: "agents" },
   { path: "/servers", label: "MCP servers", icon: "servers" },
   { path: "/plugins", label: "Plugins", icon: "plugins" },
-  { path: "/settings", label: "Settings", icon: "settings", groupStart: true },
+  { path: "/settings", label: "Settings", icon: "settings" },
 ];
 
 /** The title each screen shows; Add's page is "Add skills". */
