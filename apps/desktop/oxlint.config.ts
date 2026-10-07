@@ -88,7 +88,6 @@ export default defineConfig({
   },
   settings: {
     shadcn: {
-      componentImports: ["^\\.{1,2}/"],
       note: "See DESIGN.md and src/styles/tokens.css.",
       ui: ["#/components", "#/screens", "#/app"],
     },
