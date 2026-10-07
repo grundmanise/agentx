@@ -1148,12 +1148,11 @@ func TestSourceAddTakesBackItsRemoteWhenTheLockIsHeld(t *testing.T) {
 
 // TestAReAddAtTheSamePinThatLosesTheLockKeepsItsFetch: an add of a known
 // source at the pin the settings hold publishes a later commit of the
-// branch they follow, then loses the lock for its settings write to a
-// reader, as it does to the serve scan its own fetch sets off. Its
-// take-back puts the remote back and leaves the source ref on that
-// commit, so that the add run again finds the ref where it is: moving it
-// again would have serve list the source again under the shared lock just
-// as that run wants the lock, which on a slow machine lost it every time.
+// branch they follow, then loses the lock for its settings write to
+// another command. Its take-back puts the remote back and leaves the
+// source ref on that commit, so that the add run again finds the ref where
+// it is: moving it again would have serve list the source again under the
+// shared lock just as that run wants the lock.
 func TestAReAddAtTheSamePinThatLosesTheLockKeepsItsFetch(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -1168,7 +1167,7 @@ func TestAReAddAtTheSamePinThatLosesTheLockKeepsItsFetch(t *testing.T) {
 	reached, release := gatePublish(t, h)()
 	p := h.start(sourceAddTakeBack(id), "--verbose", "source", "add", s.url)
 	reached() // the fetch is in and not yet published
-	unlock := holdReadLock(t, h)
+	unlock := holdLock(t, h)
 	release() // the run publishes, checks access and loses the lock
 	p.await() // it has started taking the remote back
 	unlock()
