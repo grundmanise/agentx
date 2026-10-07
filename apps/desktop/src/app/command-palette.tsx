@@ -68,7 +68,7 @@ export const CommandPalette = ({
                 <Command.Group
                   key={g}
                   heading={g}
-                  className="[&_[cmdk-group-heading]]:type-caption [&_[cmdk-group-heading]]:text-text-caption [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:pt-3 [&_[cmdk-group-heading]]:pb-1.5"
+                  className="[&_[cmdk-group-heading]]:type-caption [&_[cmdk-group-heading]]:text-text-muted [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:pt-3 [&_[cmdk-group-heading]]:pb-1.5"
                 >
                   {items
                     .filter((i) => i.group === g)
