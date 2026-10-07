@@ -50,7 +50,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               <KeyHint>esc</KeyHint>
             </div>
             <Command.List className="max-h-105 overflow-auto p-2">
-              <Command.Empty className="p-7 text-center text-text-hint">No matches</Command.Empty>
+              <Command.Empty className="p-7 text-center text-text-muted">No matches</Command.Empty>
               {groups.map((g) => (
                 <Command.Group
                   key={g}
@@ -82,7 +82,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               ))}
             </Command.List>
           </Command>
-          <div className="flex gap-4.5 border-t border-card-border px-5 py-3 type-palette-footer text-text-hint">
+          <div className="flex gap-4.5 border-t border-card-border px-5 py-3 type-palette-footer text-text-muted">
             <span>
               <span className="type-palette-hint text-text-muted">↑↓</span> move
             </span>
