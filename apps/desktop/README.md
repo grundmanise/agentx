@@ -9,6 +9,7 @@ The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it
 | [`DESIGN.md`](DESIGN.md) | The design system: colour, type, spacing and radius tokens, components, motion and copy rules |
 | `src/styles/tokens.css` | The tokens as CSS variables and `type-*` utilities, edited by hand. It also resets Tailwind's theme so only these tokens exist |
 | `oxlint.config.ts`, `oxfmt.config.ts` | The lint and the formatter: [Ultracite](https://www.ultracite.ai)'s presets for oxlint and oxfmt, plus the design-system lint built on [`@shadcn/lint`](https://github.com/shadcn-ui/lint) |
+| `e2e` | The end-to-end tests: [Playwright](https://playwright.dev) drives the frontend in Chromium on the Vite dev server |
 | `src/app` | The app shell: title bar, sidebar, main panel, command palette |
 | `src/screens` | One folder per screen |
 | `src/components` | Shared components; `ui` holds the shadcn/ui-based primitives |
@@ -24,11 +25,12 @@ pnpm install     # from the repository root
 cd apps/desktop
 pnpm tauri dev   # the app in its window
 pnpm dev         # the frontend alone, in a browser at http://localhost:1420
+pnpm exec playwright install chromium   # once, for the end-to-end tests
 ```
 
 | Command | What it does |
 | --- | --- |
-| `pnpm test` | Runs the tests |
+| `pnpm test` | Runs the end-to-end tests in Chromium. It starts the dev server, or uses the one already running |
 | `pnpm typecheck` | Type-checks the frontend |
 | `pnpm lint` | Runs oxlint with Ultracite's rules, type-aware rules, the TypeScript type check and the design-system lint |
 | `pnpm format` | Formats every file with oxfmt |
@@ -40,9 +42,16 @@ The app is a package of the pnpm workspace at the repository root: `pnpm-workspa
 
 From the repository root, `make check-desktop` runs what CI runs for the desktop app: the frontend checks, then cargo fmt and Clippy for the Rust side.
 
+### Tests
+
+- The end-to-end tests in `e2e` find elements by role and accessible name, as a person using a screen reader would, never by class.
+- Code the app does not reach yet, such as a component on its own or a `notify()` call, runs from a module in `e2e/harness`. A test loads it into the dev server's page with `page.addScriptTag`; the app never imports it.
+- `src/components/closed-props.test-d.tsx` holds type tests: each line marked `@ts-expect-error` must fail to compile, so `pnpm typecheck` fails when a component starts to accept a `className`, a `style` or a value outside its closed props. No test runner loads it.
+- To use a Chromium already on your machine instead of Playwright's download, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to its path.
+
 ## Rules for components
 
-These rules are for anyone writing a component, people and coding agents alike. If a value is not a decision recorded in `DESIGN.md`, the code should not pass `pnpm lint` or `pnpm test`.
+These rules are for anyone writing a component, people and coding agents alike. If a value is not a decision recorded in `DESIGN.md`, the code should not pass `pnpm typecheck` or `pnpm lint`.
 
 - Style with the semantic tokens through their Tailwind names: colours (`bg-shell-content-bg`), radii (`rounded-card`), shadows (`shadow-overlay`), layout tokens (`w-sidebar`, `pt-page-top px-page pb-page`; `DESIGN.md` §4 lists the class for each) and type roles (`type-page-title`, then a colour such as `text-text-primary`).
 - The tokens live in `src/styles/tokens.css`, edited by hand. `DESIGN.md` documents them. When the design needs a value no token holds, add the token to `tokens.css` and to its table in `DESIGN.md` in the same change, then use it. Do not reuse another element's token because the value matches.

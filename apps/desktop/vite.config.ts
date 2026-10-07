@@ -1,4 +1,3 @@
-/// <reference types="vitest/config" />
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
@@ -11,10 +10,4 @@ export default defineConfig({
   envPrefix: ["VITE_", "TAURI_ENV_"],
   plugins: [react(), tailwindcss(), svgr()],
   server: { port: 1420, strictPort: true },
-  test: {
-    css: false,
-    environment: "jsdom",
-    globals: true,
-    setupFiles: ["./src/test/setup.ts"],
-  },
 });

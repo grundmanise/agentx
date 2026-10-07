@@ -77,4 +77,10 @@ jobs:
         with:
           workspaces: apps/desktop/src-tauri
 
+      # The end-to-end tests run in Chromium, in the version the locked @playwright/test expects.
+      - name: Install Chromium
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --dir apps/desktop exec playwright install --with-deps chromium
+
       - run: make check-desktop

@@ -61,9 +61,9 @@ To run the tests without the race detector, as CI does on macOS, use `make test-
 `make lint-cli` builds that release into the build cache on first use through `go run`, locally and in
 CI alike. The build uses the Go version `apps/cli/go.mod` specifies.
 
-`make check-desktop` needs Node 24 or later (the version in [`.node-version`](.node-version)), pnpm 12
-and Rust, and on Linux the WebKitGTK development packages; see the desktop app's
-[README](apps/desktop/README.md).
+`make check-desktop` needs Node 24 or later (the version in [`.node-version`](.node-version)), pnpm 12,
+Playwright's Chromium and Rust, and on Linux the WebKitGTK development packages; see the desktop
+app's [README](apps/desktop/README.md).
 
 ## Make a change
 

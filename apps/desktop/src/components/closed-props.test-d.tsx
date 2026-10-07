@@ -1,7 +1,5 @@
 // This file passes forbidden props on purpose, to prove the types reject them.
 /* oxlint-disable shadcn/no-restyle, react/forbid-component-props */
-import { render, screen } from "@testing-library/react";
-
 import { AgentxMark } from "#/components/agentx-mark.tsx";
 import { CommandField } from "#/components/command-field.tsx";
 import { Icon } from "#/components/icon.tsx";
@@ -12,7 +10,7 @@ import { PlaceholderScreen } from "#/screens/placeholder.tsx";
 
 // Our components take no `className` or `style`: every visual choice is a typed prop.
 // `pnpm typecheck` fails if any line marked @ts-expect-error starts to compile.
-// The function is never called; it exists for the type checker.
+// Only the type checker reads this file: the app never imports it and no test runs it.
 export const rejectedProps = () => (
   <>
     {/* @ts-expect-error className is not a Button prop */}
@@ -43,29 +41,3 @@ export const rejectedProps = () => (
     <PlaceholderScreen title="Inbox" className="p-0" />
   </>
 );
-
-describe("closed props", () => {
-  it("keeps Button's classes even when a className is forced past the types", () => {
-    const forced = { className: "mt-2" } as object;
-    render(
-      <Button variant="primary" {...forced}>
-        Save
-      </Button>
-    );
-    expect(screen.getByRole("button", { name: "Save" })).not.toHaveClass(
-      "mt-2"
-    );
-  });
-
-  it("gives each product mark size its own radius", () => {
-    render(
-      <>
-        <AgentxMark size={26} />
-        <AgentxMark size={40} />
-      </>
-    );
-    const [small, large] = screen.getAllByRole("img", { name: "agentx" });
-    expect(small).toHaveClass("rounded-shell-logo");
-    expect(large).toHaveClass("rounded-startup-logo");
-  });
-});

@@ -48,8 +48,8 @@ test-cli:
 	cd $(CLI) && go test $(RACE) -count=1 ./...
 
 # The desktop app in apps/desktop: the pnpm install at the root, the frontend's types, formatting,
-# lint, tests and build, then the Tauri shell's formatting and Clippy. Needs Node 24 or later,
-# pnpm 12 and Rust; on Linux also the WebKitGTK development packages.
+# lint, end-to-end tests and build, then the Tauri shell's formatting and Clippy. Needs Node 24 or
+# later, pnpm 12, Playwright's Chromium and Rust; on Linux also the WebKitGTK development packages.
 check-desktop:
 	pnpm install --frozen-lockfile
 	cd $(DESKTOP) && pnpm typecheck && pnpm format-check && pnpm lint && pnpm test && pnpm build
