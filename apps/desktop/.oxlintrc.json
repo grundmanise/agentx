@@ -1,46 +1,54 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "react"],
-  "jsPlugins": ["eslint-plugin-better-tailwindcss", "./lint/design-system.mjs"],
+  "jsPlugins": ["@shadcn/lint"],
   "settings": {
-    "better-tailwindcss": { "entryPoint": "src/styles/index.css", "tsconfig": "tsconfig.json" }
+    "shadcn": {
+      "ui": ["@/components", "@/screens", "@/app"],
+      "componentImports": ["^\\.{1,2}/"],
+      "note": "See DESIGN.md and src/styles/tokens.css."
+    }
   },
   "rules": {
-    "design-system/no-raw-controls": "error",
-    "design-system/no-inline-style": "error",
-    "better-tailwindcss/no-unknown-classes": "error",
-    "better-tailwindcss/no-conflicting-classes": "error",
-    "better-tailwindcss/no-duplicate-classes": "error",
-    "better-tailwindcss/no-restricted-classes": [
+    "shadcn/no-restyle": [
       "error",
       {
-        "restrict": [
+        "allow": [],
+        "message": "<{{component}}> takes no className: choose its look with its typed props, or add a prop or variant in {{file}}. Place it with a wrapping element or with gap on the parent."
+      }
+    ],
+    "shadcn/no-raw-colors": "error",
+    "shadcn/no-arbitrary-values": "error",
+    "shadcn/no-inline-styles": "error",
+    "shadcn/no-unknown-classes": "error",
+    "shadcn/require-static-classes": "error",
+    "react/forbid-component-props": [
+      "error",
+      {
+        "forbid": [
           {
-            "pattern": "^(?:.*:)?!?[a-z-]*\\[[^\\]]*\\]$",
-            "message": "Arbitrary values are off the design system. Use a token from DESIGN.md, or add one there and run `pnpm tokens`."
-          },
-          {
-            "pattern": "^(?:.*:)?!?\\[[a-z-]+:.*\\]$",
-            "message": "Arbitrary properties are off the design system. Use a token from DESIGN.md."
-          },
-          {
-            "pattern": "^(?:.*:)?!?-?[a-z-]+-\\d+\\.(?:25|75)$",
-            "message": "Spacing uses whole or half steps (a 2px grid); a value off the grid needs a token in DESIGN.md."
-          },
-          {
-            "pattern": "^(?:.*:)?!?(?:bg|text|border(?:-[xytrblse])?|fill|stroke|ring|ring-offset|outline|divide|from|via|to|decoration|accent|caret|shadow|inset-shadow|drop-shadow|placeholder)-[a-z0-9-]+\\/(?:\\d+|\\[.*\\]|\\(.*\\))$",
-            "message": "Opacity modifiers make new colours. Use a colour token from DESIGN.md (alpha is set there)."
-          },
-          {
-            "pattern": "^(?:.*:)?!?(?:font-(?:sans|serif|mono)|leading-.+|tracking-.+)$",
-            "message": "Set the face, size, line height and tracking with a type-* role from DESIGN.md §3."
-          },
-          {
-            "pattern": "^(?:.*:)?!?rounded(?:-[a-z]{1,2})?-(?:full|none)$",
-            "message": "Use a radius token from DESIGN.md §5 (rounded-<token>)."
+            "propName": "style",
+            "message": "Components take typed props, not style. Add a prop or a variant to the component instead."
           }
         ]
       }
+    ],
+    "react/forbid-elements": [
+      "error",
+      {
+        "forbid": [
+          { "element": "button", "message": "Use Button from src/components/ui, or build a new control in src/components." },
+          { "element": "input", "message": "Use a component from src/components, or build a new control there." },
+          { "element": "textarea", "message": "Use a component from src/components, or build a new control there." },
+          { "element": "select", "message": "Use a component from src/components, or build a new control there." }
+        ]
+      }
     ]
-  }
+  },
+  "overrides": [
+    {
+      "files": ["src/components/**"],
+      "rules": { "react/forbid-elements": "off" }
+    }
+  ]
 }
