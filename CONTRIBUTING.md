@@ -40,23 +40,29 @@ Read the ADRs and specs that touch the area you're changing before you start.
 
 ## Development commands
 
-Run these from the repository root. Each target runs against the Go module in `apps/cli`:
+Run these from the repository root. Targets are named `<action>-<app>`. The CLI targets run against the
+Go module in `apps/cli`:
 
 | Target | What it does | Command |
 | --- | --- | --- |
-| `make fmt` | Formats every Go file in place | `gofmt -w .` |
-| `make fmt-check` | Checks that every Go file is formatted, without changing any | `gofmt -l .`, fails when any file is listed |
-| `make lint` | Runs the linters, including `go vet`, with the project's configuration | `golangci-lint run ./...` with `apps/cli/.golangci.yml` |
-| `make tidy-check` | Checks that `go.mod` and `go.sum` list exactly the dependencies the code uses | `go mod tidy`, fails when `go.mod` or `go.sum` change |
-| `make build` | Compiles every package | `go build ./...`, `CGO_ENABLED=0` on Linux and `1` on macOS |
-| `make test` | Runs every test with the race detector, never from cache | `go test -race -count=1 ./...` |
-| `make check` | Runs all the checks CI runs, in the same order | `fmt-check lint tidy-check build test` |
+| `make fmt-cli` | Formats every Go file in place | `gofmt -w .` |
+| `make fmt-check-cli` | Checks that every Go file is formatted, without changing any | `gofmt -l .`, fails when any file is listed |
+| `make lint-cli` | Runs the linters, including `go vet`, with the project's configuration | `golangci-lint run ./...` with `apps/cli/.golangci.yml` |
+| `make tidy-check-cli` | Checks that `go.mod` and `go.sum` list exactly the dependencies the code uses | `go mod tidy`, fails when `go.mod` or `go.sum` change |
+| `make build-cli` | Compiles every package | `go build ./...`, `CGO_ENABLED=0` on Linux and `1` on macOS |
+| `make test-cli` | Runs every test with the race detector, never from cache | `go test -race -count=1 ./...` |
+| `make check-cli` | Runs all the CLI checks CI runs, in the same order | `fmt-check-cli lint-cli tidy-check-cli build-cli test-cli` |
+| `make check-desktop` | Runs all the desktop app checks CI runs: the frontend, then the Tauri shell | `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, then `cargo fmt --check` and `cargo clippy --locked -- -D warnings` |
+| `make check` | Runs every check CI runs | `check-cli check-desktop` |
 
-To run the tests without the race detector, as CI does on macOS, use `make test RACE=`.
+To run the tests without the race detector, as CI does on macOS, use `make test-cli RACE=`.
 
 `golangci-lint` needs no install: its version is pinned in `apps/cli/.golangci-lint-version`, and
-`make lint` builds that release into the build cache on first use through `go run`, locally and in
+`make lint-cli` builds that release into the build cache on first use through `go run`, locally and in
 CI alike. The build uses the Go version `apps/cli/go.mod` specifies.
+
+`make check-desktop` needs Node 22.22.2 or later, pnpm 10 and Rust, and on Linux the WebKitGTK
+development packages; see the desktop app's [README](apps/desktop/README.md).
 
 ## Make a change
 
@@ -70,8 +76,9 @@ CI alike. The build uses the Go version `apps/cli/go.mod` specifies.
 - **Update the Help Center.** When you add a feature or change how one works, update the matching page
   in [`docs/help-center`](docs/help-center). Keep it clear, structured and concise, in an imperative
   tone.
-- **Run `make check`.** It runs what CI runs, in the same order. A green `make check` means a green pull
-  request. Run `make fmt` to fix formatting.
+- **Run `make check`.** It runs what CI runs: the CLI checks and the desktop app checks. A green
+  `make check` means a green pull request. It needs the tools of both apps, so to check only the side you
+  changed, run `make check-cli` or `make check-desktop`. Run `make fmt-cli` to fix Go formatting.
 
 ## Open a pull request
 

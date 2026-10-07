@@ -1,6 +1,11 @@
 # The checks CI runs: .github/workflows/ci.yml calls these targets. Run `make check` before pushing.
+#
+# Naming: `<action>-<app>`. `check-cli` and `check-desktop` run every check for one app, and `check`
+# runs both. The CLI's single steps follow the same scheme: fmt-cli, fmt-check-cli, lint-cli,
+# tidy-check-cli, build-cli and test-cli.
 
 CLI = apps/cli
+DESKTOP = apps/desktop
 # Pinned in one place.
 GOLANGCI_LINT_VERSION = $(shell cat $(CLI)/.golangci-lint-version)
 # `go run pkg@version` resolves its toolchain from that package's own go.mod and
@@ -12,40 +17,39 @@ GO_TOOLCHAIN = go$(shell awk '$$1 == "go" { print $$2; exit }' $(CLI)/go.mod)+au
 # Static on Linux; cgo on macOS, where the serve watcher uses FSEvents.
 CGO_ENABLED ?= $(if $(filter Darwin,$(shell uname -s)),1,0)
 
-.PHONY: check fmt fmt-check lint tidy-check build test desktop-check desktop-rust-check
+.PHONY: check check-cli check-desktop fmt-cli fmt-check-cli lint-cli tidy-check-cli build-cli test-cli
 
-check: fmt-check lint tidy-check build test
+check: check-cli check-desktop
 
-fmt:
+# The CLI in apps/cli. Needs Go.
+check-cli: fmt-check-cli lint-cli tidy-check-cli build-cli test-cli
+
+fmt-cli:
 	cd $(CLI) && gofmt -w .
 
-fmt-check:
-	@cd $(CLI) && files=$$(gofmt -l .) && if [ -n "$$files" ]; then echo "$$files"; echo "gofmt: the files above are not formatted, run 'make fmt'"; exit 1; fi
+fmt-check-cli:
+	@cd $(CLI) && files=$$(gofmt -l .) && if [ -n "$$files" ]; then echo "$$files"; echo "gofmt: the files above are not formatted, run 'make fmt-cli'"; exit 1; fi
 
-lint:
+lint-cli:
 	cd $(CLI) && GOTOOLCHAIN=$(GO_TOOLCHAIN) go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v$(GOLANGCI_LINT_VERSION) run ./...
 
-tidy-check:
+tidy-check-cli:
 	cd $(CLI) && go mod tidy && git diff --exit-code go.mod go.sum
 
-build:
+build-cli:
 	cd $(CLI) && CGO_ENABLED=$(CGO_ENABLED) go build ./...
 
-# `make test RACE=` runs the tests without the race detector. CI does that on
+# `make test-cli RACE=` runs the tests without the race detector. CI does that on
 # macOS, where the race detector makes the tests take too long; the Linux job
 # still finds data races.
 RACE ?= -race
 
-test:
+test-cli:
 	cd $(CLI) && go test $(RACE) -count=1 ./...
 
-# The desktop app in apps/desktop: types, the design-system lint, design tokens in sync with DESIGN.md, tests and the
-# frontend build. Needs Node 22.22.2 or later and pnpm.
-DESKTOP = apps/desktop
-
-desktop-check:
+# The desktop app in apps/desktop: the frontend's types, lint, tests and build, then the Tauri shell's
+# formatting and Clippy. Needs Node 22.22.2 or later, pnpm 10 and Rust; on Linux also the WebKitGTK
+# development packages.
+check-desktop:
 	cd $(DESKTOP) && pnpm install --frozen-lockfile && pnpm typecheck && pnpm lint && pnpm test && pnpm build
-
-# Compiles the Tauri shell. On Linux it needs the WebKitGTK development packages.
-desktop-rust-check:
 	cd $(DESKTOP)/src-tauri && cargo fmt --check && cargo clippy --locked -- -D warnings

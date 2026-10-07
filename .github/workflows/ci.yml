@@ -13,6 +13,7 @@ permissions:
   contents: read
 
 # Every check is a Makefile target, so CI and `make check` run the same commands.
+# `make check` runs `check-cli` and `check-desktop`; the CLI jobs split `check-cli` into its steps.
 jobs:
   lint:
     name: CLI lint
@@ -25,9 +26,9 @@ jobs:
           go-version-file: apps/cli/go.mod
           cache-dependency-path: apps/cli/go.sum
 
-      - run: make fmt-check
-      - run: make lint
-      - run: make tidy-check
+      - run: make fmt-check-cli
+      - run: make lint-cli
+      - run: make tidy-check-cli
 
   test:
     name: CLI test (${{ matrix.os }})
@@ -46,11 +47,11 @@ jobs:
           go-version-file: apps/cli/go.mod
           cache-dependency-path: apps/cli/go.sum
 
-      - run: make build
+      - run: make build-cli
       # The race detector runs on Linux only. The macOS job is there for the
       # watcher's FSEvents backend; the Linux job finds the data races, and
-      # `make check` keeps -race locally.
-      - run: make test ${{ runner.os == 'macOS' && 'RACE=' || '' }}
+      # `make check-cli` keeps -race locally.
+      - run: make test-cli ${{ runner.os == 'macOS' && 'RACE=' || '' }}
 
   desktop:
     name: Desktop
@@ -68,8 +69,6 @@ jobs:
           cache: pnpm
           cache-dependency-path: apps/desktop/pnpm-lock.yaml
 
-      - run: make desktop-check
-
       - name: Install WebKitGTK
         run: |
           sudo apt-get update
@@ -79,4 +78,4 @@ jobs:
         with:
           workspaces: apps/desktop/src-tauri
 
-      - run: make desktop-rust-check
+      - run: make check-desktop
