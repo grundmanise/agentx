@@ -7,7 +7,7 @@ import { CommandField } from "#/components/command-field.tsx";
 export const TopBar = ({ onOpenPalette }: { onOpenPalette: () => void }) => (
   <header
     data-tauri-drag-region
-    className="flex h-(--shell-titlebar-height) flex-none items-center px-4"
+    className="h-titlebar flex flex-none items-center px-4"
   >
     <div data-tauri-drag-region className="flex-1 self-stretch" />
     <CommandField onOpen={onOpenPalette} />

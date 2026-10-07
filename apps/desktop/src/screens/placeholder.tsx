@@ -3,7 +3,7 @@
  * nothing here shows data, since the app renders only what the CLI reports.
  */
 export const PlaceholderScreen = ({ title }: { title: string }) => (
-  <div className="h-full overflow-auto p-(--page-padding)">
+  <div className="pt-page-top px-page pb-page h-full overflow-auto">
     <h1 className="type-page-title text-text-primary m-0">{title}</h1>
   </div>
 );

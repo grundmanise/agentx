@@ -13,7 +13,7 @@
  *   1. Primitives          raw palette, outside the theme (never used by components)
  *   2. Font faces          outside the theme, used only by the type roles in section 5
  *   3. Theme               colours, shadows, radii, font weights, spacing steps
- *   4. Layout tokens       one value per element, used as `w-(--shell-sidebar-width)`
+ *   4. Layout tokens       one value per element, in the theme: `w-sidebar`, `p-page`
  *   5. Type roles          `type-*` utilities, the only way to set a font
  */
 
@@ -395,132 +395,159 @@
   --spacing-12: 48px;
 }
 
-/* 4. Layout tokens (DESIGN.md §4): one value per element, used through a variable class such as
-   `w-(--shell-sidebar-width)` or `p-(--page-padding)`. A token given as a range in DESIGN.md is
-   guidance and has no variable. */
-:root {
-  /* Window and shell (§4) */
-  --shell-titlebar-height: 50px;
-  --shell-sidebar-width: 216px;
-  --shell-sidebar-padding: 6px 12px 14px 14px;
-  --shell-nav-height: 36px;
-  --shell-nav-gap: 2px;
-  --shell-nav-icon-gap: 11px;
-  --shell-command-width: 460px;
-  --shell-command-height: 32px;
-  --shell-status-height: 30px;
-  --shell-panel-inset: 10px;
+/* 4. Layout tokens (DESIGN.md §4): one value per element, in the theme namespace of the utility
+   that uses it, so the class names the element: `--width-sidebar` is `w-sidebar`,
+   `--padding-page` is `px-page`, `--gap-nav` is `gap-nav`. Each namespace has its own names, so
+   `w-command` and `h-command` are two tokens. A padding or margin with different sides is split
+   into one token per value: the value most sides share (on a tie, the x value) takes the
+   element's name, and each other value adds its side (`pt-page-top px-page pb-page`). A zero side
+   uses the `0` step. A token given as a range in DESIGN.md is guidance and has no variable. */
+@theme static {
+  /* Window and shell */
+  --height-titlebar: 50px;
+  --width-sidebar: 216px;
+  --padding-sidebar: 14px;
+  --padding-sidebar-top: 6px;
+  --padding-sidebar-right: 12px;
+  --height-nav: 36px;
+  --gap-nav: 2px;
+  --gap-nav-icon: 11px;
+  --width-command: 460px;
+  --height-command: 32px;
+  --height-status: 30px;
+  --margin-panel: 10px;
 
   /* Pages */
-  --page-padding: 40px 48px 48px;
-  --page-title-gap: 28px;
-  --page-max-width: 1200px;
-  --split-list-width: 408px;
-  --split-header-padding: 30px 20px 0 28px;
-  --split-toolbar-padding: 20px 20px 12px 28px;
-  --split-toolbar-gap: 12px;
-  --split-filter-gap: 6px;
-  --split-list-padding: 0 12px 24px 14px;
-  --detail-padding: 34px 40px 48px;
-  --detail-max-width: 900px;
-  --detail-section-gap: 28px;
-  --detail-header-gap: 12px;
-  --detail-columns-gap: 40px;
-  --detail-kv-gap: 12px 12px;
-  --detail-kv-key-width: 96px;
+  --padding-page: 48px;
+  --padding-page-top: 40px;
+  --gap-page-title: 28px;
+  --max-width-page: 1200px;
+  --width-split-list: 408px;
+  --padding-split-header-top: 30px;
+  --padding-split-header-right: 20px;
+  --padding-split-header-left: 28px;
+  --padding-split-toolbar: 20px;
+  --padding-split-toolbar-bottom: 12px;
+  --padding-split-toolbar-left: 28px;
+  --gap-split-toolbar: 12px;
+  --gap-split-filter: 6px;
+  --padding-split-list-right: 12px;
+  --padding-split-list-bottom: 24px;
+  --padding-split-list-left: 14px;
+  --padding-detail: 40px;
+  --padding-detail-top: 34px;
+  --padding-detail-bottom: 48px;
+  --max-width-detail: 900px;
+  --gap-detail-section: 28px;
+  --gap-detail-header: 12px;
+  --gap-detail-columns: 40px;
+  --gap-detail-kv: 12px;
+  --width-detail-key: 96px;
 
   /* Lists and rows */
-  --row-padding: 11px 12px 11px 14px;
-  --row-gap: 12px;
-  --row-line-gap: 3px;
-  --row-inline-gap: 8px;
-  --row-spacing: 2px;
-  --row-glyph-col: 18px;
-  --group-padding-first: 4px 14px 8px;
-  --group-padding: 20px 14px 8px;
-  --group-gap: 8px;
-  --table-header-height: 40px;
-  --table-row-padding: 16px;
-  --table-col-gap: 24px;
+  --padding-row: 11px;
+  --padding-row-right: 12px;
+  --padding-row-left: 14px;
+  --gap-row: 12px;
+  --gap-row-line: 3px;
+  --gap-row-inline: 8px;
+  --gap-rows: 2px;
+  --width-row-glyph: 18px;
+  --padding-group: 14px;
+  --padding-group-top: 20px;
+  --padding-group-first-top: 4px;
+  --padding-group-bottom: 8px;
+  --gap-group: 8px;
+  --height-table-header: 40px;
+  --padding-table-row: 16px;
+  --gap-table-col: 24px;
 
   /* Buttons, pills, controls */
-  --button-primary-padding-x: 20px;
-  --button-gap: 8px;
-  --switch-size: 36px 22px;
-  --switch-padding: 3px;
-  --switch-knob: 16px;
-  --switch-compact-size: 30px 18px;
-  --switch-compact-knob: 14px;
-  --checkbox-size: 16px;
-  --segmented-gap: 2px;
-  --filter-height: 30px;
-  --filter-badge: 16px;
-  --agent-chip-height: 44px;
-  --agent-chip-padding: 0 8px 0 7px;
-  --agent-chip-gap: 10px;
-  --agent-chip-wrap-gap: 8px;
-  --logo-ring: 2px;
+  --padding-button-primary: 20px;
+  --gap-button: 8px;
+  --width-switch: 36px;
+  --height-switch: 22px;
+  --padding-switch: 3px;
+  --size-switch-knob: 16px;
+  --width-switch-compact: 30px;
+  --height-switch-compact: 18px;
+  --size-switch-compact-knob: 14px;
+  --size-checkbox: 16px;
+  --gap-segmented: 2px;
+  --height-filter: 30px;
+  --size-filter-badge: 16px;
+  --height-agent-chip: 44px;
+  --padding-agent-chip-right: 8px;
+  --padding-agent-chip-left: 7px;
+  --gap-agent-chip: 10px;
+  --gap-agent-chip-wrap: 8px;
+  --ring-width-logo: 2px;
 
   /* Inputs */
-  --input-height: 42px;
-  --input-padding-x: 14px;
-  --input-search-height: 36px;
-  --input-search-padding: 0 14px 0 34px;
-  --input-label-gap: 8px;
-  --input-textarea-height: 88px;
+  --height-input: 42px;
+  --padding-input: 14px;
+  --height-input-search: 36px;
+  --padding-input-search-right: 14px;
+  --padding-input-search-left: 34px;
+  --gap-input-label: 8px;
+  --height-textarea: 88px;
 
   /* Cards, banners, tiles */
-  --card-gap: 12px;
-  --card-header-gap: 14px;
-  --card-tile: 34px;
-  --card-row-padding: 10px 0;
-  --banner-padding: 14px 16px 14px 14px;
-  --banner-gap: 14px;
-  --banner-text-gap: 3px;
-  --agent-card-padding: 22px;
-  --agent-card-gap: 12px;
-  --agent-card-logo: 44px;
-  --plugin-card-padding: 22px;
-  --plugin-card-row-height: 36px;
-  --add-card-gap: 12px;
-  --add-card-min-height: 120px;
+  --gap-card: 12px;
+  --gap-card-header: 14px;
+  --size-card-tile: 34px;
+  --padding-card-row: 10px;
+  --padding-banner: 14px;
+  --padding-banner-right: 16px;
+  --gap-banner: 14px;
+  --gap-banner-text: 3px;
+  --padding-agent-card: 22px;
+  --gap-agent-card: 12px;
+  --size-agent-card-logo: 44px;
+  --padding-plugin-card: 22px;
+  --height-plugin-card-row: 36px;
+  --gap-add-card: 12px;
+  --min-height-add-card: 120px;
 
   /* Overlays */
-  --dialog-width: 480px;
-  --dialog-padding: 32px;
-  --dialog-gap: 22px;
-  --popover-gap: 16px;
-  --popover-offset: 8px;
-  --sheet-width: 420px;
-  --sheet-inset: 10px;
-  --sheet-padding: 28px 32px;
-  --palette-width: 640px;
-  --palette-input-height: 60px;
-  --palette-top: 112px;
-  --palette-list-max-height: 420px;
-  --key-hint-padding: 3px 8px;
-  --toast-height: 44px;
-  --toast-padding: 0 18px;
-  --toast-offset: 24px;
-  --floating-bar-offset: 24px;
-  --floating-bar-height: 56px;
+  --width-dialog: 480px;
+  --padding-dialog: 32px;
+  --gap-dialog: 22px;
+  --gap-popover: 16px;
+  --width-sheet: 420px;
+  --inset-sheet: 10px;
+  --padding-sheet: 32px;
+  --padding-sheet-y: 28px;
+  --width-palette: 640px;
+  --height-palette-input: 60px;
+  --inset-palette: 112px;
+  --max-height-palette-list: 420px;
+  --padding-key-hint: 8px;
+  --padding-key-hint-y: 3px;
+  --height-toast: 44px;
+  --padding-toast: 18px;
+  --inset-floating-bar: 24px;
+  --height-floating-bar: 56px;
 
   /* Code, diff, timeline, startup */
-  --code-padding-y: 14px;
-  --code-gutter: 48px 12px;
-  --file-row-padding-x: 16px;
-  --hunk-gap: 12px;
-  --hunk-header-padding: 8px 8px 8px 16px;
-  --hunk-pane-margin: 4px 8px;
-  --diff-segment: 56px 4px;
-  --diff-segment-gap: 4px;
-  --timeline-col: 12px;
-  --timeline-dot: 7px;
-  --check-column-width: 480px;
-  --check-block-gap: 36px;
-  --check-row-gap: 22px;
-  --check-mark: 20px;
-  --check-mark-gap: 14px;
+  --padding-code: 14px;
+  --grid-template-columns-code: 48px 12px 1fr;
+  --padding-file-row: 16px;
+  --gap-hunk: 12px;
+  --padding-hunk-header: 8px;
+  --padding-hunk-header-left: 16px;
+  --margin-hunk-pane: 8px;
+  --margin-hunk-pane-y: 4px;
+  --width-diff-segment: 56px;
+  --height-diff-segment: 4px;
+  --gap-diff-segment: 4px;
+  --grid-template-columns-timeline: 12px 1fr;
+  --size-timeline-dot: 7px;
+  --width-check-column: 480px;
+  --gap-check-block: 36px;
+  --gap-check-row: 22px;
+  --size-check-mark: 20px;
+  --gap-check-mark: 14px;
 }
 
 /* 5. Type roles (DESIGN.md §3): the only way to set a face, size, weight, line height and

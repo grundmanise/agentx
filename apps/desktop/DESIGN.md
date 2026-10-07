@@ -6,7 +6,7 @@ The visual contract for the desktop app. Code uses the semantic tokens below, ne
 - A tone `tone.primary` is `--color-tone-primary-fg`, `-bg` and `-border`.
 - A shadow token `overlay.shadow` is `--shadow-overlay` (`shadow-overlay`).
 - A radius token `card.tile-radius` is `--radius-card-tile` (`rounded-card-tile`).
-- A layout token with one value `shell.sidebar-width` is `--shell-sidebar-width` (`w-(--shell-sidebar-width)`). A token given as a range (`38–40`) is guidance, not a variable; pick the value the component calls for.
+- A layout token is a Tailwind theme value in the namespace of the utility that uses it, named after the element: `shell.sidebar-width` is `--width-sidebar` (`w-sidebar`), `page.padding` is `--padding-page` and `--padding-page-top` (`pt-page-top px-page pb-page`). §4 lists the class for each token. A token given as a range (`38–40`) is guidance, not a variable; pick the value the component calls for.
 - A type token `type.page-title` is the utility `type-page-title`, which sets the face, size, weight, line height, tracking and case together.
 
 The Tailwind theme holds only these tokens. `tokens.css` resets Tailwind's whole default theme (`--*: initial`), so no default colour, spacing step, radius, shadow, font, font size, weight, line height, tracking, breakpoint or animation exists. Besides the tokens above, the theme has three font weights (`font-normal`, `font-medium`, `font-semibold`) and the spacing steps of §4: a 2px grid in half steps from `0` to `12` (48px), with no base `--spacing`, so `p-13` or `top-28` produce no CSS. `pnpm lint` rejects any class Tailwind does not know and any arbitrary value (`text-[13px]`). When a design needs a value no token holds, add the token to `tokens.css` and to the table here; see the README's rules for components.
@@ -403,179 +403,181 @@ Text wrapping: `text-wrap:pretty` on multi-line copy. Single-line cells use `whi
 
 Spacing is a semantic token per element, not a shared scale. Two tokens with the same step name (`button.gap`, `card.gap`) are independent values; change one without touching the other. Primitive px values are listed so the system can be audited, but code references the token.
 
+Each token is a Tailwind theme value, and the Class column shows how code uses it. The theme variable sits in the namespace of its utility (`--width-*` for `w-*`, `--height-*` for `h-*`, `--padding-*`, `--margin-*`, `--gap-*`, `--inset-*` for `top-*` and the other sides, `--size-*`, `--max-width-*`, `--max-height-*`, `--min-height-*`, `--ring-width-*`, `--outline-width-*`, `--outline-offset-*`, `--grid-template-columns-*`) and is named after the element, so `w-command` and `h-command` are two tokens. A padding or margin with different sides is split into one theme value per value: the value most sides share takes the element's name (on a tie, the x value), and each other value adds its side (`-top`, `-right`, `-bottom`, `-left`, `-y`). A zero side uses the `0` step. Classes never read a CSS variable directly (`w-(--sidebar)`); the lint does not catch this, so review does.
+
 A size or gap inside a component that no token lists uses Tailwind's spacing steps in whole or half steps, a 2px grid (`gap-2.5` is 10px, `pb-5.5` is 22px). The steps stop at `12` (48px). Never a quarter step or an arbitrary value; a value off the grid or above 48px needs a layout token.
 
 ### Window and shell
 
-| Token | px | Element |
-| --- | --- | --- |
-| `shell.titlebar-height` | 50 | Title bar |
-| `shell.sidebar-width` | 216 | Sidebar |
-| `shell.sidebar-padding` | 6 12 14 14 | Sidebar inner padding |
-| `shell.nav-height` | 36 | Nav item |
-| `shell.nav-gap` | 2 | Between nav items |
-| `shell.nav-icon-gap` | 11 | Icon → label in a nav item |
-| `shell.command-width` | 460 | Command field |
-| `shell.command-height` | 32 |  |
-| `shell.status-height` | 30 | Remote status pill |
-| `shell.panel-inset` | 10 | Main panel inset from the right and bottom |
+| Token | px | Class | Element |
+| --- | --- | --- | --- |
+| `shell.titlebar-height` | 50 | `h-titlebar` | Title bar |
+| `shell.sidebar-width` | 216 | `w-sidebar` | Sidebar |
+| `shell.sidebar-padding` | 6 12 14 14 | `pt-sidebar-top pr-sidebar-right pb-sidebar pl-sidebar` | Sidebar inner padding |
+| `shell.nav-height` | 36 | `h-nav` | Nav item |
+| `shell.nav-gap` | 2 | `gap-nav` | Between nav items |
+| `shell.nav-icon-gap` | 11 | `gap-nav-icon` | Icon → label in a nav item |
+| `shell.command-width` | 460 | `w-command` | Command field |
+| `shell.command-height` | 32 | `h-command` |  |
+| `shell.status-height` | 30 | `h-status` | Remote status pill |
+| `shell.panel-inset` | 10 | `mr-panel mb-panel` | Main panel inset from the right and bottom |
 
 ### Pages
 
-| Token | px | Element |
-| --- | --- | --- |
-| `page.padding` | 40 48 48 | Content pages (Inbox, Agents, Servers, Plugins, Settings) |
-| `page.title-gap` | 28 | Title block → first section |
-| `page.section-gap` | 28–40 | Between sections |
-| `page.max-width` | 1200 | Inbox |
-| `split.list-width` | 408 | Skills left column |
-| `split.header-padding` | 30 20 0 28 | Skills list header |
-| `split.toolbar-padding` | 20 20 12 28 | Search + filter row block |
-| `split.toolbar-gap` | 12 | Search → filter row |
-| `split.filter-gap` | 6 | Filter button → chip → sort |
-| `split.list-padding` | 0 12 24 14 | Scrolling list |
-| `detail.padding` | 34 40 48 | Detail pane content |
-| `detail.max-width` | 900 |  |
-| `detail.section-gap` | 28 | Header → banner → agents → files → details/history |
-| `detail.header-gap` | 12 | Name row → description → actions |
-| `detail.columns-gap` | 40 | Details ↔ History |
-| `detail.kv-gap` | 12 12 | Details key/value grid (row, column) |
-| `detail.kv-key-width` | 96 |  |
+| Token | px | Class | Element |
+| --- | --- | --- | --- |
+| `page.padding` | 40 48 48 | `pt-page-top px-page pb-page` | Content pages (Inbox, Agents, Servers, Plugins, Settings) |
+| `page.title-gap` | 28 | `gap-page-title` | Title block → first section |
+| `page.section-gap` | 28–40 |  | Between sections |
+| `page.max-width` | 1200 | `max-w-page` | Inbox |
+| `split.list-width` | 408 | `w-split-list` | Skills left column |
+| `split.header-padding` | 30 20 0 28 | `pt-split-header-top pr-split-header-right pb-0 pl-split-header-left` | Skills list header |
+| `split.toolbar-padding` | 20 20 12 28 | `pt-split-toolbar pr-split-toolbar pb-split-toolbar-bottom pl-split-toolbar-left` | Search + filter row block |
+| `split.toolbar-gap` | 12 | `gap-split-toolbar` | Search → filter row |
+| `split.filter-gap` | 6 | `gap-split-filter` | Filter button → chip → sort |
+| `split.list-padding` | 0 12 24 14 | `pt-0 pr-split-list-right pb-split-list-bottom pl-split-list-left` | Scrolling list |
+| `detail.padding` | 34 40 48 | `pt-detail-top px-detail pb-detail-bottom` | Detail pane content |
+| `detail.max-width` | 900 | `max-w-detail` |  |
+| `detail.section-gap` | 28 | `gap-detail-section` | Header → banner → agents → files → details/history |
+| `detail.header-gap` | 12 | `gap-detail-header` | Name row → description → actions |
+| `detail.columns-gap` | 40 | `gap-detail-columns` | Details ↔ History |
+| `detail.kv-gap` | 12 12 | `gap-detail-kv` | Details key/value grid (row, column) |
+| `detail.kv-key-width` | 96 | `w-detail-key` |  |
 
 ### Lists and rows
 
-| Token                 | px          | Element                 |
-| --------------------- | ----------- | ----------------------- |
-| `row.padding`         | 11 12 11 14 | Split list row          |
-| `row.gap`             | 12          | Glyph → text            |
-| `row.line-gap`        | 3           | Name row → description  |
-| `row.inline-gap`      | 8           | Name → pills → chips    |
-| `row.spacing`         | 2           | Between rows            |
-| `row.glyph-col`       | 18          | Glyph column            |
-| `group.padding-first` | 4 14 8      | First group header      |
-| `group.padding`       | 20 14 8     | Later group headers     |
-| `group.gap`           | 8           | Label → count           |
-| `table.header-height` | 40          | Sticky header (servers) |
-| `table.row-padding`   | 16          | Server rows             |
-| `table.col-gap`       | 24          |                         |
+| Token | px | Class | Element |
+| --- | --- | --- | --- |
+| `row.padding` | 11 12 11 14 | `py-row pr-row-right pl-row-left` | Split list row |
+| `row.gap` | 12 | `gap-row` | Glyph → text |
+| `row.line-gap` | 3 | `gap-row-line` | Name row → description |
+| `row.inline-gap` | 8 | `gap-row-inline` | Name → pills → chips |
+| `row.spacing` | 2 | `gap-rows` | Between rows |
+| `row.glyph-col` | 18 | `w-row-glyph` | Glyph column |
+| `group.padding-first` | 4 14 8 | `pt-group-first-top px-group pb-group-bottom` | First group header |
+| `group.padding` | 20 14 8 | `pt-group-top px-group pb-group-bottom` | Later group headers |
+| `group.gap` | 8 | `gap-group` | Label → count |
+| `table.header-height` | 40 | `h-table-header` | Sticky header (servers) |
+| `table.row-padding` | 16 | `p-table-row` | Server rows |
+| `table.col-gap` | 24 | `gap-x-table-col` |  |
 
 ### Buttons, pills, controls
 
-| Token | px | Element |
-| --- | --- | --- |
-| `button.primary-height` | 38–40 |  |
-| `button.primary-padding-x` | 20 |  |
-| `button.secondary-height` | 34–38 | 34 in the detail pane, 36–38 elsewhere |
-| `button.secondary-padding-x` | 14–16 |  |
-| `button.ghost-height` | 28–36 |  |
-| `button.ghost-padding-x` | 12–16 |  |
-| `button.icon-size` | 24–38 | Square icon buttons |
-| `button.gap` | 8 | Between sibling buttons (6 in the detail action row) |
-| `button.icon-gap` | 7–8 | Icon → label inside a button |
-| `pill.height` | 18–22 | 20 in list rows, 22 in the detail header |
-| `pill.padding-x` | 7–10 |  |
-| `switch.size` | 36 22 | Track w h |
-| `switch.padding` | 3 |  |
-| `switch.knob` | 16 |  |
-| `switch.compact-size` | 30 18 | Inside agent toggle chips |
-| `switch.compact-knob` | 14 |  |
-| `checkbox.size` | 16 |  |
-| `segmented.padding` | 2–3 | Track padding |
-| `segmented.gap` | 2 |  |
-| `segmented.height` | 24–28 | Segment |
-| `segmented.padding-x` | 10–12 |  |
-| `filter.height` | 30 | Filter button and agent chip |
-| `filter.badge` | 16 | Count badge |
-| `agent-chip.height` | 44 | Agent toggle chip |
-| `agent-chip.padding` | 0 8 0 7 |  |
-| `agent-chip.gap` | 10 | Logo → name → switch |
-| `agent-chip.wrap-gap` | 8 | Between chips |
-| `logo.overlap` | −6 to −8 | Negative margin between stacked logos |
-| `logo.ring` | 2 | Ring width |
-| `logo.padding` | 3–5 | Inner padding by size (3 at 20px, 4 at 24–26, 5 at 28) |
+| Token | px | Class | Element |
+| --- | --- | --- | --- |
+| `button.primary-height` | 38–40 |  |  |
+| `button.primary-padding-x` | 20 | `px-button-primary` |  |
+| `button.secondary-height` | 34–38 |  | 34 in the detail pane, 36–38 elsewhere |
+| `button.secondary-padding-x` | 14–16 |  |  |
+| `button.ghost-height` | 28–36 |  |  |
+| `button.ghost-padding-x` | 12–16 |  |  |
+| `button.icon-size` | 24–38 |  | Square icon buttons |
+| `button.gap` | 8 | `gap-button` | Between sibling buttons (6 in the detail action row) |
+| `button.icon-gap` | 7–8 |  | Icon → label inside a button |
+| `pill.height` | 18–22 |  | 20 in list rows, 22 in the detail header |
+| `pill.padding-x` | 7–10 |  |  |
+| `switch.size` | 36 22 | `w-switch h-switch` | Track w h |
+| `switch.padding` | 3 | `p-switch` |  |
+| `switch.knob` | 16 | `size-switch-knob` |  |
+| `switch.compact-size` | 30 18 | `w-switch-compact h-switch-compact` | Inside agent toggle chips |
+| `switch.compact-knob` | 14 | `size-switch-compact-knob` |  |
+| `checkbox.size` | 16 | `size-checkbox` |  |
+| `segmented.padding` | 2–3 |  | Track padding |
+| `segmented.gap` | 2 | `gap-segmented` |  |
+| `segmented.height` | 24–28 |  | Segment |
+| `segmented.padding-x` | 10–12 |  |  |
+| `filter.height` | 30 | `h-filter` | Filter button and agent chip |
+| `filter.badge` | 16 | `size-filter-badge` | Count badge |
+| `agent-chip.height` | 44 | `h-agent-chip` | Agent toggle chip |
+| `agent-chip.padding` | 0 8 0 7 | `py-0 pr-agent-chip-right pl-agent-chip-left` |  |
+| `agent-chip.gap` | 10 | `gap-agent-chip` | Logo → name → switch |
+| `agent-chip.wrap-gap` | 8 | `gap-agent-chip-wrap` | Between chips |
+| `logo.overlap` | −6 to −8 |  | Negative margin between stacked logos |
+| `logo.ring` | 2 | `ring-logo` | Ring width |
+| `logo.padding` | 3–5 |  | Inner padding by size (3 at 20px, 4 at 24–26, 5 at 28) |
 
 ### Inputs
 
-| Token                   | px        | Element                    |
-| ----------------------- | --------- | -------------------------- |
-| `input.height`          | 42        | Dialog and settings inputs |
-| `input.padding-x`       | 14        |                            |
-| `input.search-height`   | 36        | List search field          |
-| `input.search-padding`  | 0 14 0 34 | Room for the icon          |
-| `input.label-gap`       | 8         | Label → field              |
-| `input.textarea-height` | 88        | Create dialog description  |
+| Token | px | Class | Element |
+| --- | --- | --- | --- |
+| `input.height` | 42 | `h-input` | Dialog and settings inputs |
+| `input.padding-x` | 14 | `px-input` |  |
+| `input.search-height` | 36 | `h-input-search` | List search field |
+| `input.search-padding` | 0 14 0 34 | `py-0 pr-input-search-right pl-input-search-left` | Room for the icon |
+| `input.label-gap` | 8 | `gap-input-label` | Label → field |
+| `input.textarea-height` | 88 | `h-textarea` | Create dialog description |
 
 ### Cards, banners, tiles
 
-| Token                    | px          | Element                          |
-| ------------------------ | ----------- | -------------------------------- |
-| `card.padding`           | 16–18       | Inbox card                       |
-| `card.gap`               | 12          | Between Inbox cards              |
-| `card.header-gap`        | 14          | Icon tile → text → actions       |
-| `card.tile`              | 34          | Icon tile                        |
-| `card.row-padding`       | 10 0        | Sub-rows inside the Updates card |
-| `banner.padding`         | 14 16 14 14 |                                  |
-| `banner.gap`             | 14          | Tile → text → actions            |
-| `banner.tile`            | 32–34       |                                  |
-| `banner.text-gap`        | 3           | Title → text                     |
-| `agent-card.padding`     | 22          | Agents page cards                |
-| `agent-card.gap`         | 12          | Grid gap                         |
-| `agent-card.logo`        | 44          |                                  |
-| `plugin-card.padding`    | 22          |                                  |
-| `plugin-card.row-height` | 36          | Tree rows                        |
-| `add-card.gap`           | 12          | Grid gap                         |
-| `add-card.min-height`    | 120         |                                  |
+| Token | px | Class | Element |
+| --- | --- | --- | --- |
+| `card.padding` | 16–18 |  | Inbox card |
+| `card.gap` | 12 | `gap-card` | Between Inbox cards |
+| `card.header-gap` | 14 | `gap-card-header` | Icon tile → text → actions |
+| `card.tile` | 34 | `size-card-tile` | Icon tile |
+| `card.row-padding` | 10 0 | `py-card-row px-0` | Sub-rows inside the Updates card |
+| `banner.padding` | 14 16 14 14 | `py-banner pr-banner-right pl-banner` |  |
+| `banner.gap` | 14 | `gap-banner` | Tile → text → actions |
+| `banner.tile` | 32–34 |  |  |
+| `banner.text-gap` | 3 | `gap-banner-text` | Title → text |
+| `agent-card.padding` | 22 | `p-agent-card` | Agents page cards |
+| `agent-card.gap` | 12 | `gap-agent-card` | Grid gap |
+| `agent-card.logo` | 44 | `size-agent-card-logo` |  |
+| `plugin-card.padding` | 22 | `p-plugin-card` |  |
+| `plugin-card.row-height` | 36 | `h-plugin-card-row` | Tree rows |
+| `add-card.gap` | 12 | `gap-add-card` | Grid gap |
+| `add-card.min-height` | 120 | `min-h-add-card` |  |
 
 ### Overlays
 
-| Token | px | Element |
-| --- | --- | --- |
-| `dialog.width` | 480 |  |
-| `dialog.padding` | 32 |  |
-| `dialog.gap` | 22 | Between dialog blocks |
-| `popover.width` | 280–300 |  |
-| `popover.padding` | 8–14 | 8 for row lists, 14 for grouped content |
-| `popover.gap` | 16 | Between groups |
-| `popover.row-height` | 32–34 |  |
-| `popover.offset` | 8 | Gap from its anchor |
-| `sheet.width` | 420 | History sheet |
-| `sheet.inset` | 10 | From top/right/bottom |
-| `sheet.padding` | 28 32 |  |
-| `palette.width` | 640 |  |
-| `palette.input-height` | 60 |  |
-| `palette.top` | 112 | From the window top |
-| `palette.list-max-height` | 420 | Palette result list |
-| `key-hint.padding` | 3 8 | Key hint (`esc`, `⌘K`) |
-| `toast.height` | 44 |  |
-| `toast.padding` | 0 18 | 0 6 0 18 with an action |
-| `toast.offset` | 24 | From the bottom edge |
-| `floating-bar.offset` | 24 | From the bottom edge |
-| `floating-bar.height` | 56 |  |
+| Token | px | Class | Element |
+| --- | --- | --- | --- |
+| `dialog.width` | 480 | `w-dialog` |  |
+| `dialog.padding` | 32 | `p-dialog` |  |
+| `dialog.gap` | 22 | `gap-dialog` | Between dialog blocks |
+| `popover.width` | 280–300 |  |  |
+| `popover.padding` | 8–14 |  | 8 for row lists, 14 for grouped content |
+| `popover.gap` | 16 | `gap-popover` | Between groups |
+| `popover.row-height` | 32–34 |  |  |
+| `popover.offset` | 8 | none: a number passed to the popover's `sideOffset` | Gap from its anchor |
+| `sheet.width` | 420 | `w-sheet` | History sheet |
+| `sheet.inset` | 10 | `top-sheet right-sheet bottom-sheet` | From top/right/bottom |
+| `sheet.padding` | 28 32 | `py-sheet-y px-sheet` |  |
+| `palette.width` | 640 | `w-palette` |  |
+| `palette.input-height` | 60 | `h-palette-input` |  |
+| `palette.top` | 112 | `top-palette` | From the window top |
+| `palette.list-max-height` | 420 | `max-h-palette-list` | Palette result list |
+| `key-hint.padding` | 3 8 | `py-key-hint-y px-key-hint` | Key hint (`esc`, `⌘K`) |
+| `toast.height` | 44 | `h-toast` |  |
+| `toast.padding` | 0 18 | `px-toast` (`pl-toast` with an action) | 0 6 0 18 with an action |
+| `toast.offset` | 24 | none: a number passed to Sonner's `offset` in `Toaster` | From the bottom edge |
+| `floating-bar.offset` | 24 | `bottom-floating-bar` | From the bottom edge |
+| `floating-bar.height` | 56 | `h-floating-bar` |  |
 
 ### Code, diff, timeline, startup
 
-| Token                 | px       | Element                        |
-| --------------------- | -------- | ------------------------------ |
-| `code.padding-y`      | 14       | Pane top/bottom                |
-| `code.gutter`         | 48 12    | Line-number and marker columns |
-| `code.gap`            | 10–14    | Between gutter and text        |
-| `code.max-height`     | 340–380  |                                |
-| `file-row.height`     | 44–46    | File tree row                  |
-| `file-row.padding-x`  | 16       |                                |
-| `hunk.gap`            | 12       | Between hunk blocks            |
-| `hunk.header-padding` | 8 8 8 16 |                                |
-| `hunk.pane-margin`    | 4 8      | Around the two panes           |
-| `diff.segment`        | 56 4     | Progress segment w h           |
-| `diff.segment-gap`    | 4        |                                |
-| `timeline.col`        | 12       | Dot column                     |
-| `timeline.gap`        | 12–16    | Dot → text                     |
-| `timeline.dot`        | 7        |                                |
-| `timeline.entry-gap`  | 16–20    | Bottom padding per entry       |
-| `check.column-width`  | 480      | Startup column                 |
-| `check.block-gap`     | 36       | Logo/title → checks → actions  |
-| `check.row-gap`       | 22       | Between checks                 |
-| `check.mark`          | 20       | Status circle                  |
-| `check.mark-gap`      | 14       | Mark → text                    |
+| Token | px | Class | Element |
+| --- | --- | --- | --- |
+| `code.padding-y` | 14 | `py-code` | Pane top/bottom |
+| `code.gutter` | 48 12 | `grid-cols-code` (with the text column) | Line-number and marker columns |
+| `code.gap` | 10–14 |  | Between gutter and text |
+| `code.max-height` | 340–380 |  |  |
+| `file-row.height` | 44–46 |  | File tree row |
+| `file-row.padding-x` | 16 | `px-file-row` |  |
+| `hunk.gap` | 12 | `gap-hunk` | Between hunk blocks |
+| `hunk.header-padding` | 8 8 8 16 | `py-hunk-header pr-hunk-header pl-hunk-header-left` |  |
+| `hunk.pane-margin` | 4 8 | `my-hunk-pane-y mx-hunk-pane` | Around the two panes |
+| `diff.segment` | 56 4 | `w-diff-segment h-diff-segment` | Progress segment w h |
+| `diff.segment-gap` | 4 | `gap-diff-segment` |  |
+| `timeline.col` | 12 | `grid-cols-timeline` (with the text column) | Dot column |
+| `timeline.gap` | 12–16 |  | Dot → text |
+| `timeline.dot` | 7 | `size-timeline-dot` |  |
+| `timeline.entry-gap` | 16–20 |  | Bottom padding per entry |
+| `check.column-width` | 480 | `w-check-column` | Startup column |
+| `check.block-gap` | 36 | `gap-check-block` | Logo/title → checks → actions |
+| `check.row-gap` | 22 | `gap-check-row` | Between checks |
+| `check.mark` | 20 | `size-check-mark` | Status circle |
+| `check.mark-gap` | 14 | `gap-check-mark` | Mark → text |
 
 ## 5. Radii
 

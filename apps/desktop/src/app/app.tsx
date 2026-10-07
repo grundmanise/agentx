@@ -34,7 +34,7 @@ export const App = () => {
       />
       <div className="flex min-h-0 flex-1">
         <Sidebar />
-        <main className="rounded-shell-panel border-shell-divider bg-shell-content-bg relative mr-(--shell-panel-inset) mb-(--shell-panel-inset) flex min-w-0 flex-1 flex-col overflow-hidden border">
+        <main className="rounded-shell-panel border-shell-divider bg-shell-content-bg mr-panel mb-panel relative flex min-w-0 flex-1 flex-col overflow-hidden border">
           <Routes>
             {screens.map((s) => (
               <Route

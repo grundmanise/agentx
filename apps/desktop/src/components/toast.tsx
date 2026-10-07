@@ -24,7 +24,7 @@ const classNames = {
   ),
   title: cn("pr-3"),
   toast: cn(
-    "rounded-toast border-overlay-border bg-overlay-bg type-toast text-toast-text shadow-popover flex h-(--toast-height) items-center gap-3 border pr-1.5 pl-4.5 whitespace-nowrap"
+    "rounded-toast border-overlay-border bg-overlay-bg type-toast text-toast-text shadow-popover h-toast pl-toast flex items-center gap-3 border pr-1.5 whitespace-nowrap"
   ),
 };
 

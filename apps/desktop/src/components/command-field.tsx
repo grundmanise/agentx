@@ -9,7 +9,7 @@ export const CommandField = ({ onOpen }: { onOpen: () => void }) => (
   <button
     type="button"
     onClick={onOpen}
-    className="rounded-shell-command border-input-border bg-shell-content-bg type-command-field text-shell-topbar-text hover:border-input-border-focus hover:text-text-secondary flex h-(--shell-command-height) w-(--shell-command-width) items-center gap-2.5 border pr-1.5 pl-3.5"
+    className="rounded-shell-command border-input-border bg-shell-content-bg type-command-field text-shell-topbar-text hover:border-input-border-focus hover:text-text-secondary h-command w-command flex items-center gap-2.5 border pr-1.5 pl-3.5"
   >
     <Icon name="search" size={14} strokeWidth={2} />
     <span className="flex-1 text-left">Search skills or run a command</span>

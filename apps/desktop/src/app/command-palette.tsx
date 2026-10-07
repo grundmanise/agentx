@@ -47,11 +47,11 @@ export const CommandPalette = ({
         <Dialog.Overlay className="bg-shell-scrim-strong fixed inset-0 z-50" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="rounded-palette border-overlay-border bg-overlay-bg shadow-overlay fixed top-(--palette-top) left-1/2 z-50 flex w-(--palette-width) -translate-x-1/2 flex-col overflow-hidden border"
+          className="rounded-palette border-overlay-border bg-overlay-bg shadow-overlay top-palette w-palette fixed left-1/2 z-50 flex -translate-x-1/2 flex-col overflow-hidden border"
         >
           <Dialog.Title className="sr-only">Command palette</Dialog.Title>
           <Command filter={filter} loop>
-            <div className="border-card-border flex h-(--palette-input-height) items-center gap-3 border-b px-5">
+            <div className="border-card-border h-palette-input flex items-center gap-3 border-b px-5">
               <Icon name="search" size={18} strokeWidth={2} tone="palette" />
               <Command.Input
                 autoFocus
@@ -60,7 +60,7 @@ export const CommandPalette = ({
               />
               <KeyHint>esc</KeyHint>
             </div>
-            <Command.List className="max-h-(--palette-list-max-height) overflow-auto p-2">
+            <Command.List className="max-h-palette-list overflow-auto p-2">
               <Command.Empty className="text-text-muted p-7 text-center">
                 No matches
               </Command.Empty>
