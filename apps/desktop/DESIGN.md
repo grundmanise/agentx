@@ -25,8 +25,8 @@ Two layers. **Primitives** are the raw palette and never appear in component cod
 
 Grey ramp (dark → light):
 
-| Name | Hex |
-|---|---|
+| Name       | Hex       |
+| ---------- | --------- |
 | `gray-990` | `#0b0b0c` |
 | `gray-980` | `#0e0e10` |
 | `gray-970` | `#121214` |
@@ -52,20 +52,20 @@ Grey ramp (dark → light):
 | `gray-200` | `#b4b4bb` |
 | `gray-150` | `#c9c9cf` |
 | `gray-100` | `#dcdce0` |
-| `gray-50` | `#ededef` |
+| `gray-50`  | `#ededef` |
 
 Hues:
 
-| Name | Hex |
-|---|---|
-| `lime-400` | `#d4ff4f` |
-| `lime-300` | `#e2ff7a` |
-| `amber-400` | `#ffc15e` |
-| `red-400` | `#ff7b72` |
+| Name         | Hex       |
+| ------------ | --------- |
+| `lime-400`   | `#d4ff4f` |
+| `lime-300`   | `#e2ff7a` |
+| `amber-400`  | `#ffc15e` |
+| `red-400`    | `#ff7b72` |
 | `violet-400` | `#b69cff` |
-| `blue-400` | `#7cb7ff` |
-| `white` | `#ffffff` |
-| `black` | `#000000` |
+| `blue-400`   | `#7cb7ff` |
+| `white`      | `#ffffff` |
+| `black`      | `#000000` |
 
 Alpha is written as `<primitive>/<percent>` and resolves to `rgba` of that primitive (e.g. `lime-400/12` → `rgba(212,255,79,.12)`, `black/55` → `rgba(0,0,0,.55)`).
 
@@ -74,8 +74,9 @@ Alpha is written as `<primitive>/<percent>` and resolves to `rgba` of that primi
 Grouped by element. Each token points at one primitive (or at a meaning token when the value is shared by design). §4–§6 and the app's code use these names only; two elements with a look-alike value still get their own token so one can change without the other.
 
 #### Meaning (accents and tones)
+
 | Token | Primitive | Meaning |
-|---|---|---|
+| --- | --- | --- |
 | `accent.primary` | `lime-400` | Primary action, enabled, update available, success, selection |
 | `accent.primary-hover` | `lime-300` | Primary button hover |
 | `accent.attention` | `amber-400` | Edited, displaced, needs a look but not broken |
@@ -86,17 +87,18 @@ Grouped by element. Each token points at one primitive (or at a meaning token wh
 
 Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 
-| Tone | fg | bg | border |
-|---|---|---|---|
-| `tone.primary` | `accent.primary` | `lime-400/8` | `lime-400/25` |
-| `tone.attention` | `accent.attention` | `amber-400/8` | `amber-400/25` |
-| `tone.danger` | `accent.danger` | `red-400/8` | `red-400/25` |
-| `tone.yours` | `accent.yours` | `violet-400/8` | `violet-400/25` |
-| `tone.neutral` | `gray-300` | `gray-910` | `gray-800` |
+| Tone             | fg                 | bg             | border          |
+| ---------------- | ------------------ | -------------- | --------------- |
+| `tone.primary`   | `accent.primary`   | `lime-400/8`   | `lime-400/25`   |
+| `tone.attention` | `accent.attention` | `amber-400/8`  | `amber-400/25`  |
+| `tone.danger`    | `accent.danger`    | `red-400/8`    | `red-400/25`    |
+| `tone.yours`     | `accent.yours`     | `violet-400/8` | `violet-400/25` |
+| `tone.neutral`   | `gray-300`         | `gray-910`     | `gray-800`      |
 
 #### Text (shared across elements)
+
 | Token | Primitive | Element |
-|---|---|---|
+| --- | --- | --- |
 | `text.primary` | `gray-50` | Titles, body, values |
 | `text.secondary` | `gray-200` | Secondary text, Details values |
 | `text.body` | `gray-150` | Card copy, palette rows |
@@ -107,8 +109,9 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `text.faint` | `gray-700` | Line numbers, hollow timeline ring |
 
 #### Window and shell
+
 | Token | Primitive | Element |
-|---|---|---|
+| --- | --- | --- |
 | `shell.bg` | `gray-990` | Window body, sidebar, startup layer |
 | `shell.content-bg` | `gray-970` | Content area, both split columns |
 | `shell.divider` | `gray-890` | Split column divider, section dividers, table header rule |
@@ -127,8 +130,9 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `shell.logo-ring` | `gray-860` | 1px ring around the product mark |
 
 #### Buttons
+
 | Token | Primitive | Element |
-|---|---|---|
+| --- | --- | --- |
 | `button.primary-bg` | `accent.primary` | Primary button |
 | `button.primary-hover` | `accent.primary-hover` |  |
 | `button.primary-text` | `on-accent` |  |
@@ -141,12 +145,13 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `button.danger-hover` | `red-400/10` |  |
 | `source-pill.bg` | `gray-910` | Source pill in Add, inactive (label `text.secondary`) |
 | `source-pill.active-bg` | `gray-50` | Source pill in Add, active |
-| `source-pill.active-text` | `on-accent` | |
+| `source-pill.active-text` | `on-accent` |  |
 | `button.toast-action-text` | `accent.primary` | Action inside a toast |
 
 #### Status pills
+
 | Token | Primitive | Element |
-|---|---|---|
+| --- | --- | --- |
 | `pill.update-bg` | `accent.primary` | "Update" |
 | `pill.update-text` | `on-accent` |  |
 | `pill.neutral-bg` | `gray-860` | "Not published", "Adopt", "Put back" |
@@ -160,8 +165,9 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `pill.version-text` | `gray-300` |  |
 
 #### Inputs, switches, checkboxes
+
 | Token | Primitive | Element |
-|---|---|---|
+| --- | --- | --- |
 | `input.bg` | `gray-980` | Text inputs, search fields, command field |
 | `input.border` | `gray-860` |  |
 | `input.border-focus` | `gray-700` |  |
@@ -176,8 +182,9 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `checkbox.check` | `on-accent` |  |
 
 #### Segmented control (Update review, filter State)
+
 | Token | Primitive | Element |
-|---|---|---|
+| --- | --- | --- |
 | `segmented.track-bg` | `gray-950` | Track (`gray-980` when it sits on a card) |
 | `segmented.track-border` | `gray-870` |  |
 | `segmented.text` | `gray-50` | Unselected segment; `gray-400` once another segment is chosen |
@@ -187,8 +194,9 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `segmented.neutral-selected` | `gray-850` | Filter State segments (label `text.primary`) |
 
 #### Filter row (Skills toolbar)
+
 | Token | Primitive | Element |
-|---|---|---|
+| --- | --- | --- |
 | `filter.bg` | `gray-880` | Filter button at rest |
 | `filter.text` | `gray-300` |  |
 | `filter.active-bg` | `lime-400/12` | Filter button with any filter applied |
@@ -200,8 +208,9 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `filter.sort-text` | `gray-300` | A–Z toggle |
 
 #### Lists and rows
+
 | Token | Primitive | Element |
-|---|---|---|
+| --- | --- | --- |
 | `row.hover` | `gray-920` | Skills row hover |
 | `row.selected-bg` | `gray-900` | Selected Skills row |
 | `row.selected-bar` | `accent.primary` | 2px bar on the selected row |
@@ -216,15 +225,17 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `table.header-text` | `gray-500` | Column captions |
 
 #### Skill glyph
+
 | Token | Primitive | Element |
-|---|---|---|
+| --- | --- | --- |
 | `glyph.enabled` | `accent.primary` | Managed dot / fork glyph when enabled (and published) |
 | `glyph.off` | `gray-600` | Glyph when in no agent or unpublished |
 | `glyph.edited` | `accent.attention` | Pencil glyph |
 
 #### Agent logos and toggle chips
+
 | Token | Primitive | Element |
-|---|---|---|
+| --- | --- | --- |
 | `logo.bg` | `white` | Round agent logo |
 | `logo.ring` | = parent bg | 2px ring between overlapping logos (`shell.content-bg`, `overlay.bg`, `card.bg`…) |
 | `agent-chip.off-bg` | `gray-950` | Toggle chip, off |
@@ -235,8 +246,9 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `agent-chip.text` | `gray-50` | Agent name |
 
 #### Cards and banners
+
 | Token | Primitive | Element |
-|---|---|---|
+| --- | --- | --- |
 | `card.bg` | `gray-950` | Inbox card, agent card, plugin card, file-tree card, expanded review file card |
 | `card.border` | `gray-870` |  |
 | `card.title` | `gray-50` |  |
@@ -260,8 +272,9 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `plugin.connector` | `gray-870` | Nested-content connector lines |
 
 #### Overlays (dialog, popover, palette, sheet, toast, floating bar)
+
 | Token | Primitive | Element |
-|---|---|---|
+| --- | --- | --- |
 | `overlay.bg` | `gray-940` | Dialog, popover, palette, toast, floating bar |
 | `overlay.border` | `gray-800` |  |
 | `overlay.shadow` | `0 40px 100px -20px black/80` | Dialog, palette, sheet |
@@ -279,8 +292,9 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `toast.text` | `gray-50` |  |
 
 #### Code, file tree and diffs
+
 | Token | Primitive | Element |
-|---|---|---|
+| --- | --- | --- |
 | `code.bg` | `gray-980` | Code pane, hunk block |
 | `code.border` | `gray-890` | Hunk block border |
 | `code.line-number` | `gray-700` |  |
@@ -307,18 +321,20 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `diff.progress-pending` | `gray-850` | Progress segment, pending |
 
 #### Timeline (History)
-| Token | Primitive | Element |
-|---|---|---|
-| `timeline.dot-install` | `gray-600` | Added / found / created entries |
-| `timeline.dot-update` | `accent.primary` | Updated, adopted, put back |
-| `timeline.dot-yours` | `accent.yours` | Published, forked |
-| `timeline.connector` | `gray-890` | 1px line between dots |
-| `timeline.meta` | `gray-500` | Relative time under an entry |
-| `timeline.more-ring` | `gray-700` | Hollow "Show all" dot ring |
+
+| Token                  | Primitive        | Element                         |
+| ---------------------- | ---------------- | ------------------------------- |
+| `timeline.dot-install` | `gray-600`       | Added / found / created entries |
+| `timeline.dot-update`  | `accent.primary` | Updated, adopted, put back      |
+| `timeline.dot-yours`   | `accent.yours`   | Published, forked               |
+| `timeline.connector`   | `gray-890`       | 1px line between dots           |
+| `timeline.meta`        | `gray-500`       | Relative time under an entry    |
+| `timeline.more-ring`   | `gray-700`       | Hollow "Show all" dot ring      |
 
 #### Startup checks
+
 | Token | Primitive | Element |
-|---|---|---|
+| --- | --- | --- |
 | `check.pass-bg` | `lime-400/12` | ✓ mark tile |
 | `check.pass-mark` | `accent.primary` |  |
 | `check.fail-bg` | `red-400/12` | "!" mark tile |
@@ -331,8 +347,9 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `check.fix-border` | `gray-870` |  |
 
 #### MCP servers
+
 | Token | Primitive | Element |
-|---|---|---|
+| --- | --- | --- |
 | `server.transport-bg` | `gray-880` | Transport pill |
 | `server.transport-text` | `gray-200` |  |
 | `server.command` | `gray-500` | Command / URL under the name |
@@ -343,6 +360,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `server.versions` | `accent.attention` | "{n} versions" when agents disagree |
 
 ### Contrast rules
+
 Body text is `text.primary`–`text.muted` on any shell, card or overlay background. `text.hint`–`text.faint` only for captions, counts, line numbers and placeholders at 12.5px or smaller. Never put alpha-muted text on accent fills.
 
 ## 3. Typography
@@ -352,32 +370,32 @@ Fonts (bundled with the app from `@fontsource` packages; the app never loads any
 Each row is a type token: a role with its face, size, weight, line height, tracking and case. A token with one value per column is a `type-*` utility in `tokens.css`; a row with a range (`11–12`) is guidance, not a utility – add a token with one value when a component needs it. Text colour is a separate colour token (§2.2). An empty cell inherits.
 
 | Token | Face | Size | Weight | Line height | Tracking | Case | Element |
-|---|---|---|---|---|---|---|---|
-| `type.page-title` | serif | 56 | 400 | 1 | -0.02em | | Page title |
-| `type.inbox-headline` | serif | 68 | 400 | | | | Inbox headline; second clause italic `text.muted` |
-| `type.review-title` | serif | 52 | 400 | | | | Review title |
-| `type.dialog-title` | serif | 36 | 400 | | | | Dialog and sheet title |
-| `type.startup-title` | serif | 48 | 400 | | | | Startup title |
-| `type.skill-name` | sans | 30 | 600 | | -0.035em | | Detail pane skill name |
-| `type.body` | sans | 14 | 400 | | | | Body, palette rows |
-| `type.row-name` | sans | 14 | 500 | | | | Row name |
-| `type.row-desc` | sans | 12.5 | 400 | | | | Row description (`text.muted`, single line, ellipsis) |
-| `type.secondary` | sans | 13 | 400 | | | | Secondary line (`text.hint`) |
-| `type.button` | sans | 14 | | | | | Buttons; the variant sets the weight (600 primary, 500 others) |
-| `type.button-sm` | sans | 13.5 | | | | | Small buttons |
-| `type.pill` | sans | 11–12 | 600 | | | | Pills |
-| `type.caption` | mono | 10.5 | 400 | | 0.16em | upper | Captions (`text.caption`) |
-| `type.technical` | mono | 12–13 | 400 | | | | Paths, ids, dates, commands |
-| `type.code` | mono | 12.5 | 400 | 1.75 | | | Code pane |
-| `type.brand` | sans | 14 | 600 | | -0.01em | | Product name in the sidebar |
-| `type.nav` | sans | 14 | 500 | | | | Nav item |
-| `type.command-field` | sans | 13 | 400 | | | | Command field placeholder |
-| `type.key-hint` | mono | 11 | 400 | | | | Key hint (`esc`, `⌘K`) |
-| `type.palette-input` | sans | 17 | 400 | | | | Palette search input |
-| `type.palette-hint` | mono | 12 | 400 | | | | Hint at the end of a palette row, keys in the palette footer |
-| `type.palette-footer` | sans | 12 | 400 | | | | Palette footer (`text.hint`) |
-| `type.toast` | sans | 13.5 | 400 | | | | Toast message |
-| `type.toast-action` | sans | 13 | 600 | | | | Action inside a toast |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `type.page-title` | serif | 56 | 400 | 1 | -0.02em |  | Page title |
+| `type.inbox-headline` | serif | 68 | 400 |  |  |  | Inbox headline; second clause italic `text.muted` |
+| `type.review-title` | serif | 52 | 400 |  |  |  | Review title |
+| `type.dialog-title` | serif | 36 | 400 |  |  |  | Dialog and sheet title |
+| `type.startup-title` | serif | 48 | 400 |  |  |  | Startup title |
+| `type.skill-name` | sans | 30 | 600 |  | -0.035em |  | Detail pane skill name |
+| `type.body` | sans | 14 | 400 |  |  |  | Body, palette rows |
+| `type.row-name` | sans | 14 | 500 |  |  |  | Row name |
+| `type.row-desc` | sans | 12.5 | 400 |  |  |  | Row description (`text.muted`, single line, ellipsis) |
+| `type.secondary` | sans | 13 | 400 |  |  |  | Secondary line (`text.hint`) |
+| `type.button` | sans | 14 |  |  |  |  | Buttons; the variant sets the weight (600 primary, 500 others) |
+| `type.button-sm` | sans | 13.5 |  |  |  |  | Small buttons |
+| `type.pill` | sans | 11–12 | 600 |  |  |  | Pills |
+| `type.caption` | mono | 10.5 | 400 |  | 0.16em | upper | Captions (`text.caption`) |
+| `type.technical` | mono | 12–13 | 400 |  |  |  | Paths, ids, dates, commands |
+| `type.code` | mono | 12.5 | 400 | 1.75 |  |  | Code pane |
+| `type.brand` | sans | 14 | 600 |  | -0.01em |  | Product name in the sidebar |
+| `type.nav` | sans | 14 | 500 |  |  |  | Nav item |
+| `type.command-field` | sans | 13 | 400 |  |  |  | Command field placeholder |
+| `type.key-hint` | mono | 11 | 400 |  |  |  | Key hint (`esc`, `⌘K`) |
+| `type.palette-input` | sans | 17 | 400 |  |  |  | Palette search input |
+| `type.palette-hint` | mono | 12 | 400 |  |  |  | Hint at the end of a palette row, keys in the palette footer |
+| `type.palette-footer` | sans | 12 | 400 |  |  |  | Palette footer (`text.hint`) |
+| `type.toast` | sans | 13.5 | 400 |  |  |  | Toast message |
+| `type.toast-action` | sans | 13 | 600 |  |  |  | Action inside a toast |
 
 Text wrapping: `text-wrap:pretty` on multi-line copy. Single-line cells use `white-space:nowrap; overflow:hidden; text-overflow:ellipsis`.
 
@@ -388,8 +406,9 @@ Spacing is a semantic token per element, not a shared scale. Two tokens with the
 A size or gap inside a component that no token lists uses Tailwind's spacing steps in whole or half steps, a 2px grid (`gap-2.5` is 10px, `pb-5.5` is 22px). The steps stop at `12` (48px). Never a quarter step or an arbitrary value; a value off the grid or above 48px needs a layout token.
 
 ### Window and shell
+
 | Token | px | Element |
-|---|---|---|
+| --- | --- | --- |
 | `shell.titlebar-height` | 50 | Title bar |
 | `shell.sidebar-width` | 216 | Sidebar |
 | `shell.sidebar-padding` | 6 12 14 14 | Sidebar inner padding |
@@ -397,13 +416,14 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `shell.nav-gap` | 2 | Between nav items |
 | `shell.nav-icon-gap` | 11 | Icon → label in a nav item |
 | `shell.command-width` | 460 | Command field |
-| `shell.command-height` | 32 | |
+| `shell.command-height` | 32 |  |
 | `shell.status-height` | 30 | Remote status pill |
 | `shell.panel-inset` | 10 | Main panel inset from the right and bottom |
 
 ### Pages
+
 | Token | px | Element |
-|---|---|---|
+| --- | --- | --- |
 | `page.padding` | 40 48 48 | Content pages (Inbox, Agents, Servers, Plugins, Settings) |
 | `page.title-gap` | 28 | Title block → first section |
 | `page.section-gap` | 28–40 | Between sections |
@@ -415,57 +435,59 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `split.filter-gap` | 6 | Filter button → chip → sort |
 | `split.list-padding` | 0 12 24 14 | Scrolling list |
 | `detail.padding` | 34 40 48 | Detail pane content |
-| `detail.max-width` | 900 | |
+| `detail.max-width` | 900 |  |
 | `detail.section-gap` | 28 | Header → banner → agents → files → details/history |
 | `detail.header-gap` | 12 | Name row → description → actions |
 | `detail.columns-gap` | 40 | Details ↔ History |
 | `detail.kv-gap` | 12 12 | Details key/value grid (row, column) |
-| `detail.kv-key-width` | 96 | |
+| `detail.kv-key-width` | 96 |  |
 
 ### Lists and rows
-| Token | px | Element |
-|---|---|---|
-| `row.padding` | 11 12 11 14 | Split list row |
-| `row.gap` | 12 | Glyph → text |
-| `row.line-gap` | 3 | Name row → description |
-| `row.inline-gap` | 8 | Name → pills → chips |
-| `row.spacing` | 2 | Between rows |
-| `row.glyph-col` | 18 | Glyph column |
-| `group.padding-first` | 4 14 8 | First group header |
-| `group.padding` | 20 14 8 | Later group headers |
-| `group.gap` | 8 | Label → count |
-| `table.header-height` | 40 | Sticky header (servers) |
-| `table.row-padding` | 16 | Server rows |
-| `table.col-gap` | 24 | |
+
+| Token                 | px          | Element                 |
+| --------------------- | ----------- | ----------------------- |
+| `row.padding`         | 11 12 11 14 | Split list row          |
+| `row.gap`             | 12          | Glyph → text            |
+| `row.line-gap`        | 3           | Name row → description  |
+| `row.inline-gap`      | 8           | Name → pills → chips    |
+| `row.spacing`         | 2           | Between rows            |
+| `row.glyph-col`       | 18          | Glyph column            |
+| `group.padding-first` | 4 14 8      | First group header      |
+| `group.padding`       | 20 14 8     | Later group headers     |
+| `group.gap`           | 8           | Label → count           |
+| `table.header-height` | 40          | Sticky header (servers) |
+| `table.row-padding`   | 16          | Server rows             |
+| `table.col-gap`       | 24          |                         |
 
 ### Buttons, pills, controls
+
 | Token | px | Element |
-|---|---|---|
-| `button.primary-height` | 38–40 | |
-| `button.primary-padding-x` | 20 | |
+| --- | --- | --- |
+| `button.primary-height` | 38–40 |  |
+| `button.primary-padding-x` | 20 |  |
 | `button.secondary-height` | 34–38 | 34 in the detail pane, 36–38 elsewhere |
-| `button.secondary-padding-x` | 14–16 | |
-| `button.ghost-height` | 28–36 | |
-| `button.ghost-padding-x` | 12–16 | |
+| `button.secondary-padding-x` | 14–16 |  |
+| `button.ghost-height` | 28–36 |  |
+| `button.ghost-padding-x` | 12–16 |  |
 | `button.icon-size` | 24–38 | Square icon buttons |
 | `button.gap` | 8 | Between sibling buttons (6 in the detail action row) |
 | `button.icon-gap` | 7–8 | Icon → label inside a button |
 | `pill.height` | 18–22 | 20 in list rows, 22 in the detail header |
-| `pill.padding-x` | 7–10 | |
+| `pill.padding-x` | 7–10 |  |
 | `switch.size` | 36 22 | Track w h |
-| `switch.padding` | 3 | |
-| `switch.knob` | 16 | |
+| `switch.padding` | 3 |  |
+| `switch.knob` | 16 |  |
 | `switch.compact-size` | 30 18 | Inside agent toggle chips |
-| `switch.compact-knob` | 14 | |
-| `checkbox.size` | 16 | |
+| `switch.compact-knob` | 14 |  |
+| `checkbox.size` | 16 |  |
 | `segmented.padding` | 2–3 | Track padding |
-| `segmented.gap` | 2 | |
+| `segmented.gap` | 2 |  |
 | `segmented.height` | 24–28 | Segment |
-| `segmented.padding-x` | 10–12 | |
+| `segmented.padding-x` | 10–12 |  |
 | `filter.height` | 30 | Filter button and agent chip |
 | `filter.badge` | 16 | Count badge |
 | `agent-chip.height` | 44 | Agent toggle chip |
-| `agent-chip.padding` | 0 8 0 7 | |
+| `agent-chip.padding` | 0 8 0 7 |  |
 | `agent-chip.gap` | 10 | Logo → name → switch |
 | `agent-chip.wrap-gap` | 8 | Between chips |
 | `logo.overlap` | −6 to −8 | Negative margin between stacked logos |
@@ -473,90 +495,94 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `logo.padding` | 3–5 | Inner padding by size (3 at 20px, 4 at 24–26, 5 at 28) |
 
 ### Inputs
-| Token | px | Element |
-|---|---|---|
-| `input.height` | 42 | Dialog and settings inputs |
-| `input.padding-x` | 14 | |
-| `input.search-height` | 36 | List search field |
-| `input.search-padding` | 0 14 0 34 | Room for the icon |
-| `input.label-gap` | 8 | Label → field |
-| `input.textarea-height` | 88 | Create dialog description |
+
+| Token                   | px        | Element                    |
+| ----------------------- | --------- | -------------------------- |
+| `input.height`          | 42        | Dialog and settings inputs |
+| `input.padding-x`       | 14        |                            |
+| `input.search-height`   | 36        | List search field          |
+| `input.search-padding`  | 0 14 0 34 | Room for the icon          |
+| `input.label-gap`       | 8         | Label → field              |
+| `input.textarea-height` | 88        | Create dialog description  |
 
 ### Cards, banners, tiles
-| Token | px | Element |
-|---|---|---|
-| `card.padding` | 16–18 | Inbox card |
-| `card.gap` | 12 | Between Inbox cards |
-| `card.header-gap` | 14 | Icon tile → text → actions |
-| `card.tile` | 34 | Icon tile |
-| `card.row-padding` | 10 0 | Sub-rows inside the Updates card |
-| `banner.padding` | 14 16 14 14 | |
-| `banner.gap` | 14 | Tile → text → actions |
-| `banner.tile` | 32–34 | |
-| `banner.text-gap` | 3 | Title → text |
-| `agent-card.padding` | 22 | Agents page cards |
-| `agent-card.gap` | 12 | Grid gap |
-| `agent-card.logo` | 44 | |
-| `plugin-card.padding` | 22 | |
-| `plugin-card.row-height` | 36 | Tree rows |
-| `add-card.gap` | 12 | Grid gap |
-| `add-card.min-height` | 120 | |
+
+| Token                    | px          | Element                          |
+| ------------------------ | ----------- | -------------------------------- |
+| `card.padding`           | 16–18       | Inbox card                       |
+| `card.gap`               | 12          | Between Inbox cards              |
+| `card.header-gap`        | 14          | Icon tile → text → actions       |
+| `card.tile`              | 34          | Icon tile                        |
+| `card.row-padding`       | 10 0        | Sub-rows inside the Updates card |
+| `banner.padding`         | 14 16 14 14 |                                  |
+| `banner.gap`             | 14          | Tile → text → actions            |
+| `banner.tile`            | 32–34       |                                  |
+| `banner.text-gap`        | 3           | Title → text                     |
+| `agent-card.padding`     | 22          | Agents page cards                |
+| `agent-card.gap`         | 12          | Grid gap                         |
+| `agent-card.logo`        | 44          |                                  |
+| `plugin-card.padding`    | 22          |                                  |
+| `plugin-card.row-height` | 36          | Tree rows                        |
+| `add-card.gap`           | 12          | Grid gap                         |
+| `add-card.min-height`    | 120         |                                  |
 
 ### Overlays
+
 | Token | px | Element |
-|---|---|---|
-| `dialog.width` | 480 | |
-| `dialog.padding` | 32 | |
+| --- | --- | --- |
+| `dialog.width` | 480 |  |
+| `dialog.padding` | 32 |  |
 | `dialog.gap` | 22 | Between dialog blocks |
-| `popover.width` | 280–300 | |
+| `popover.width` | 280–300 |  |
 | `popover.padding` | 8–14 | 8 for row lists, 14 for grouped content |
 | `popover.gap` | 16 | Between groups |
-| `popover.row-height` | 32–34 | |
+| `popover.row-height` | 32–34 |  |
 | `popover.offset` | 8 | Gap from its anchor |
 | `sheet.width` | 420 | History sheet |
 | `sheet.inset` | 10 | From top/right/bottom |
-| `sheet.padding` | 28 32 | |
-| `palette.width` | 640 | |
-| `palette.input-height` | 60 | |
+| `sheet.padding` | 28 32 |  |
+| `palette.width` | 640 |  |
+| `palette.input-height` | 60 |  |
 | `palette.top` | 112 | From the window top |
 | `palette.list-max-height` | 420 | Palette result list |
 | `key-hint.padding` | 3 8 | Key hint (`esc`, `⌘K`) |
-| `toast.height` | 44 | |
+| `toast.height` | 44 |  |
 | `toast.padding` | 0 18 | 0 6 0 18 with an action |
 | `toast.offset` | 24 | From the bottom edge |
 | `floating-bar.offset` | 24 | From the bottom edge |
-| `floating-bar.height` | 56 | |
+| `floating-bar.height` | 56 |  |
 
 ### Code, diff, timeline, startup
-| Token | px | Element |
-|---|---|---|
-| `code.padding-y` | 14 | Pane top/bottom |
-| `code.gutter` | 48 12 | Line-number and marker columns |
-| `code.gap` | 10–14 | Between gutter and text |
-| `code.max-height` | 340–380 | |
-| `file-row.height` | 44–46 | File tree row |
-| `file-row.padding-x` | 16 | |
-| `hunk.gap` | 12 | Between hunk blocks |
-| `hunk.header-padding` | 8 8 8 16 | |
-| `hunk.pane-margin` | 4 8 | Around the two panes |
-| `diff.segment` | 56 4 | Progress segment w h |
-| `diff.segment-gap` | 4 | |
-| `timeline.col` | 12 | Dot column |
-| `timeline.gap` | 12–16 | Dot → text |
-| `timeline.dot` | 7 | |
-| `timeline.entry-gap` | 16–20 | Bottom padding per entry |
-| `check.column-width` | 480 | Startup column |
-| `check.block-gap` | 36 | Logo/title → checks → actions |
-| `check.row-gap` | 22 | Between checks |
-| `check.mark` | 20 | Status circle |
-| `check.mark-gap` | 14 | Mark → text |
+
+| Token                 | px       | Element                        |
+| --------------------- | -------- | ------------------------------ |
+| `code.padding-y`      | 14       | Pane top/bottom                |
+| `code.gutter`         | 48 12    | Line-number and marker columns |
+| `code.gap`            | 10–14    | Between gutter and text        |
+| `code.max-height`     | 340–380  |                                |
+| `file-row.height`     | 44–46    | File tree row                  |
+| `file-row.padding-x`  | 16       |                                |
+| `hunk.gap`            | 12       | Between hunk blocks            |
+| `hunk.header-padding` | 8 8 8 16 |                                |
+| `hunk.pane-margin`    | 4 8      | Around the two panes           |
+| `diff.segment`        | 56 4     | Progress segment w h           |
+| `diff.segment-gap`    | 4        |                                |
+| `timeline.col`        | 12       | Dot column                     |
+| `timeline.gap`        | 12–16    | Dot → text                     |
+| `timeline.dot`        | 7        |                                |
+| `timeline.entry-gap`  | 16–20    | Bottom padding per entry       |
+| `check.column-width`  | 480      | Startup column                 |
+| `check.block-gap`     | 36       | Logo/title → checks → actions  |
+| `check.row-gap`       | 22       | Between checks                 |
+| `check.mark`          | 20       | Status circle                  |
+| `check.mark-gap`      | 14       | Mark → text                    |
 
 ## 5. Radii
 
 Radii are scoped the same way. Same-named steps across elements are independent.
 
 | Token | px | Element |
-|---|---|---|
+| --- | --- | --- |
 | `button.radius` | 9999 | All buttons |
 | `button.icon-radius` | 6 or 50% | Small icon buttons |
 | `pill.radius` | 9999 | Status pills, filter chip, source pills, version pill |
@@ -578,21 +604,21 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `card.radius` | 18 | Inbox cards, review file cards |
 | `card.tile-radius` | 10 | Icon tile |
 | `file-card.radius` | 16 | File tree card |
-| `banner.radius` | 18 | |
+| `banner.radius` | 18 |  |
 | `agent-card.radius` | 20 | Agents page cards |
-| `plugin-card.radius` | 20 | |
-| `add-card.radius` | 18 | |
+| `plugin-card.radius` | 20 |  |
+| `add-card.radius` | 18 |  |
 | `hunk.radius` | 14 | Hunk block |
 | `hunk.pane-radius` | 10 | Yours / theirs panes (outer corners only) |
 | `diff.segment-radius` | 4 | Progress segment |
-| `popover.radius` | 16–18 | |
-| `dialog.radius` | 24 | |
-| `sheet.radius` | 20 | |
-| `palette.radius` | 20 | |
+| `popover.radius` | 16–18 |  |
+| `dialog.radius` | 24 |  |
+| `sheet.radius` | 20 |  |
+| `palette.radius` | 20 |  |
 | `palette.row-radius` | 12 | Palette rows |
 | `key-hint.radius` | 9999 | Key hint |
-| `toast.radius` | 9999 | |
-| `floating-bar.radius` | 9999 | |
+| `toast.radius` | 9999 |  |
+| `floating-bar.radius` | 9999 |  |
 | `check.mark-radius` | 50% | Startup status circle |
 | `check.fix-radius` | 8 | Fix command chip |
 | `startup.logo-radius` | 12 | Product mark on the startup layer |
@@ -600,6 +626,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 ## 6. Components
 
 ### Buttons (height / padding / colours)
+
 - **Primary** – `button.primary-height` / 0 `button.primary-padding-x` / `button.primary-bg`, `button.primary-text`, 600; hover `button.primary-hover`. Disabled: `opacity:.3` and inert (never a grey fill).
 - **Secondary** – `button.secondary-height` / 0 `button.secondary-padding-x` / `button.secondary-bg`, `button.secondary-text`, 500; hover `button.secondary-hover`.
 - **Ghost** – `button.ghost-height` / 0 `button.ghost-padding-x` / transparent, `button.ghost-text` (or `text.muted`); hover `button.ghost-hover`, `text.primary`.
@@ -610,7 +637,9 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 Two buttons side by side: `button.gap`, primary on the right.
 
 ### Pills (status)
+
 Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, 11–12 / 600.
+
 - Update: `pill.update-bg` / `pill.update-text` (clickable).
 - Not published / Adopt: `pill.neutral-bg` / `pill.neutral-text`.
 - Removed from source: `pill.removed-bg` / `pill.removed-text`.
@@ -618,48 +647,61 @@ Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, 11–12 / 600.
 - Version (plugin): `pill.version-bg` / `pill.version-text`, mono 12.
 
 ### Switch
+
 `switch.size`, `switch.padding`, `switch.radius`; knob `switch.knob` round. On: track `switch.on-track`, knob `switch.on-knob`, `justify-content:flex-end`. Off: track `switch.off-track`, knob `switch.off-knob`. `transition: background .18s`. The whole row is the hit target. Compact variant `switch.compact-size` (knob `switch.compact-knob`) inside agent toggle chips.
 
 ### Agent toggle chip (detail pane AGENTS)
+
 Pill button `agent-chip.height`, `agent-chip.padding`, `agent-chip.gap`, `agent-chip.radius`: 28px logo(s) · name 13 / 500 · compact switch. Off: `agent-chip.off-bg` with 1px `agent-chip.off-border`. On: `agent-chip.on-bg` with `agent-chip.on-border`. Hover border `agent-chip.hover-border`. Locked: 45% opacity, `cursor:not-allowed`, `title` holds the reason; a click toasts it. Chips wrap in a row with `agent-chip.wrap-gap`.
 
 ### Checkbox (popover)
+
 16×16 round, inset ring 1.5px `checkbox.ring`; checked: `checkbox.checked-bg` fill, `checkbox.check` check.
 
 ### Segmented control
+
 Track `segmented.track-bg`, `segmented.track-border`, `segmented.radius`, `segmented.padding`, `segmented.gap`. Segments `segmented.height` high, `segmented.radius`, 12–12.5 / 500. Selected segment fills with its meaning colour (`segmented.yours-selected`, `segmented.theirs-selected`, `segmented.both-selected`, `segmented.neutral-selected`) and `on-accent`; others transparent `segmented.text`.
 
 ### Agent logo chip
+
 Round, `logo.bg`, `padding:3–4px`, `background-size:contain`, logo from an image bundled with the app (never fetched from the network). Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (agent toggle chips), 44 (agent cards). Overlap with `logo.overlap` and a `logo.ring`-wide ring (`box-shadow: 0 0 0 2px <parent bg>`). Every logo carries `title="<agent name>"`.
 
 ### Skill glyph (16px, leading the row)
+
 - dot (filled) – managed; `glyph.enabled` when enabled, `glyph.off` when not.
 - pencil – edited locally; `glyph.edited`.
-- fork – one of your own skills; `glyph.enabled` when enabled and published, `glyph.off` otherwise.
-`title` explains the state ("Fork · Enabled", "Edited locally · Not in any agent").
+- fork – one of your own skills; `glyph.enabled` when enabled and published, `glyph.off` otherwise. `title` explains the state ("Fork · Enabled", "Edited locally · Not in any agent").
 
 ### Group header (lists)
+
 Mono caption 10.5–11 / `.16em` uppercase `group.label` plus a count in `group.count`. `group.padding-first` for the first group, `group.padding` for the rest.
 
 ### Banner (detail pane)
+
 `banner.radius`, `banner.padding`, `tone.*.bg` + 1px `tone.*.border`; `banner.tile` icon tile in `tone.*.fg`; title 14 / 500 `banner.title`; text 13 `banner.text`; actions on the right.
 
 ### Card (Inbox)
+
 `card.bg`, `card.radius`, `card.border`, `card.padding`. Header grid: `card.tile` icon tile (`tone.*`) · title/tag/text · actions. Resolve animation: `opacity 0; transform: translateX(24px) scale(.985)` over 280ms, then removed.
 
 ### Toast
+
 `toast.offset` from the bottom, centred; `overlay.bg`, `overlay.border`, `toast.radius`, `toast.height`, `toast.padding`; text 13.5 `toast.text`; optional action button ghost in `button.toast-action-text`. Auto-dismiss 2.6s, or 5s when it has an action. One toast at a time.
 
 ### Timeline (history)
+
 Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot` round (`timeline.dot-install`, `timeline.dot-update`, `timeline.dot-yours` by entry kind), a 1px `timeline.connector` below it. Entry: message 14 `text.primary`, meta 12 `timeline.meta`. Final item when truncated: hollow dot (inset ring 1.5px `timeline.more-ring`) and a ghost button "Show all {n}".
 
 ### Code pane
+
 `code.bg`, mono 12.5, `line-height:1.75`, grid `code.gutter 1fr` (line no. `code.line-number` right-aligned · marker · text). Front-matter and keys `code.frontmatter`, headings `code.heading`, list items `code.list`, prose `code.prose`. Diff tints: added line `+` on `diff.added-bg`, removed line `−` on `diff.removed-bg` with no number.
 
 ### Key hint
+
 `esc` in the palette and `⌘K` / `Ctrl K` in the command field (`src/components/key-hint.tsx`): `key-hint.padding`, `key-hint.radius`, `button.secondary-bg` fill, `type.key-hint` in `text.muted`.
 
 ### Inputs
+
 `input.height`, `input.bg`, `input.border`, `input.radius`, padding 0 `input.padding-x`, 14px; focus `input.border-focus`. Mono for URLs and commands. Search field in lists: `input.search-height`, `input.search-radius`, `input.search-padding`, icon at left, placeholder `input.placeholder`.
 
 ## 7. Iconography
@@ -675,8 +717,7 @@ Stroke icons on a 24 grid, `stroke-width` 1.75–2.25, round caps/joins, 13–16
 - Card resolve: 280ms, see §6.
 - Spinner-style icons (Check updates, Check tools): one full rotation `.9–1s ease`, then a toast.
 - Diff pane choice: `opacity .2s, box-shadow .2s`.
-- Primary button enable/disable: `opacity .2s`.
-Nothing loops forever.
+- Primary button enable/disable: `opacity .2s`. Nothing loops forever.
 
 ## 9. Copy rules
 

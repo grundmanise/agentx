@@ -40,6 +40,10 @@
     outline-offset: 2px;
   }
   ::selection {
-    background: color-mix(in srgb, var(--color-accent-primary) 30%, transparent);
+    background: color-mix(
+      in srgb,
+      var(--color-accent-primary) 30%,
+      transparent
+    );
   }
 }

@@ -1,5 +1,5 @@
-import { cva } from 'class-variance-authority';
-import type { VariantProps } from 'class-variance-authority';
+import { cva } from "class-variance-authority";
+import type { VariantProps } from "class-variance-authority";
 
 // Stroke icons on a 24 grid (DESIGN.md §7). Paths come from the design mock.
 export const icons = {
@@ -29,7 +29,8 @@ const iconVariants = cva("", {
     tone: {
       current: "",
       palette: "text-palette-icon",
-      "palette-row": "text-palette-icon group-data-[selected=true]:text-palette-icon-active",
+      "palette-row":
+        "text-palette-icon group-data-[selected=true]:text-palette-icon-active",
     },
   },
 });
@@ -46,21 +47,19 @@ export const Icon = ({
   size?: IconSize;
   strokeWidth?: IconStroke;
   tone?: IconTone;
-}) => 
-  (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={strokeWidth}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-      className={iconVariants({ tone }) || undefined}
-    >
-      <path d={icons[name]} />
-    </svg>
-  )
-;
+}) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={strokeWidth}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden
+    className={iconVariants({ tone }) || undefined}
+  >
+    <path d={icons[name]} />
+  </svg>
+);

@@ -13,7 +13,12 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom", "node"]
+    "types": [
+      "vite/client",
+      "vitest/globals",
+      "@testing-library/jest-dom",
+      "node"
+    ]
   },
   "include": ["src", "vite.config.ts", "oxlint.config.ts", "oxfmt.config.ts"]
 }
