@@ -8,7 +8,8 @@ The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it
 | --- | --- |
 | [`DESIGN.md`](DESIGN.md) | The design system: colour, type, spacing and radius tokens, components, motion and copy rules |
 | `src/styles/tokens.css` | The tokens as CSS variables and `type-*` utilities, edited by hand. It also resets Tailwind's theme so only these tokens exist |
-| `.oxlintrc.json`, `lint/` | The design-system lint, built on [`@shadcn/lint`](https://github.com/shadcn-ui/lint); `lint/fixtures` holds the code it must reject |
+| `oxlint.config.ts`, `oxfmt.config.ts` | The lint and the formatter: [Ultracite](https://www.ultracite.ai)'s presets for oxlint and oxfmt, plus the design-system lint built on [`@shadcn/lint`](https://github.com/shadcn-ui/lint) |
+| `lint/fixtures` | The off-system code the design-system lint must reject |
 | `src/app` | The app shell: title bar, sidebar, main panel, command palette |
 | `src/screens` | One folder per screen |
 | `src/components` | Shared components; `ui` holds the shadcn/ui-based primitives |
@@ -29,7 +30,10 @@ pnpm dev         # the frontend alone, in a browser at http://localhost:1420
 | --- | --- |
 | `pnpm test` | Runs the tests, including the checks on `tokens.css` and on the lint |
 | `pnpm typecheck` | Type-checks the frontend |
-| `pnpm lint` | Runs the design-system lint on `src` |
+| `pnpm lint` | Runs oxlint with Ultracite's rules, type-aware rules, the TypeScript type check and the design-system lint |
+| `pnpm format` | Formats every file with oxfmt |
+| `pnpm format-check` | Checks that every file is formatted, without changing any |
+| `pnpm fix` | Applies the lint's safe fixes, then formats (`ultracite fix`) |
 | `pnpm build` | Builds the frontend into `dist` |
 
 The app is a package of the pnpm workspace at the repository root: `pnpm-workspace.yaml` lists the packages and holds the pnpm settings, and `pnpm-lock.yaml` sits next to it. Dependencies are pinned to exact versions, and `pnpm add` saves them that way. pnpm installs a version only once it has been published for a day, and runs install scripts only for the packages `allowBuilds` lists.

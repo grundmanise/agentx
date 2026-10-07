@@ -7,7 +7,7 @@ import { screens, titles } from "#/app/screens.ts";
 import { Sidebar } from "#/app/sidebar.tsx";
 import { TopBar } from "#/app/top-bar.tsx";
 
-export function App() {
+export const App = () => {
   const [paletteOpen, setPaletteOpen] = useState(false);
 
   // ⌘K / Ctrl+K toggles the palette from anywhere.
@@ -19,12 +19,12 @@ export function App() {
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () =>{  window.removeEventListener("keydown", onKey); };
   }, []);
 
   return (
     <div className="flex h-full flex-col bg-shell-bg text-text-primary">
-      <TopBar onOpenPalette={() => setPaletteOpen(true)} />
+      <TopBar onOpenPalette={() =>{  setPaletteOpen(true); }} />
       <div className="flex min-h-0 flex-1">
         <Sidebar />
         <main className="relative mr-(--shell-panel-inset) mb-(--shell-panel-inset) flex min-w-0 flex-1 flex-col overflow-hidden rounded-shell-panel border border-shell-divider bg-shell-content-bg">
@@ -40,4 +40,4 @@ export function App() {
       <Toaster />
     </div>
   );
-}
+};

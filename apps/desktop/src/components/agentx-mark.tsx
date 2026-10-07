@@ -14,18 +14,20 @@ const markVariants = cva("block flex-none ring-1 ring-shell-logo-ring", {
 });
 
 /** The product mark: the X on its tile with a hairline ring (DESIGN.md §7): 26px in the sidebar, 40px on startup. */
-export function AgentxMark({ size }: { size: 26 | 40 }) {
-  return (
+export const AgentxMark = ({ size }: { size: 26 | 40 }) => 
+  (
     <svg
       width={size}
       height={size}
       viewBox="-220.8 -666.3 822.6 822.6"
       aria-label="agentx"
+      // An inline SVG needs role="img" to be announced with its label.
+      // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
       role="img"
       className={markVariants({ size })}
     >
       <rect x="-220.8" y="-666.3" width="822.6" height="822.6" className="fill-shell-logo-bg" />
       <path d={X} className="fill-shell-logo-mark" />
     </svg>
-  );
-}
+  )
+;

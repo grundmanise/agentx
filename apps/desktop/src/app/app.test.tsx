@@ -45,7 +45,7 @@ describe("command palette", () => {
 
   it("opens from the command field and closes with Escape", async () => {
     renderApp();
-    await userEvent.click(screen.getByRole("button", { name: /Search skills or run a command/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Search skills or run a command/u }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();

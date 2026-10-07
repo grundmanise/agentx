@@ -5,15 +5,15 @@ import { defineConfig } from "vite";
 
 // Tauri serves the dev build from a fixed port and expects it to fail rather than move.
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  build: { outDir: "dist", target: "safari16" },
   clearScreen: false,
-  server: { port: 1420, strictPort: true },
   envPrefix: ["VITE_", "TAURI_ENV_"],
-  build: { target: "safari16", outDir: "dist" },
+  plugins: [react(), tailwindcss()],
+  server: { port: 1420, strictPort: true },
   test: {
+    css: false,
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],
-    css: false,
   },
 });

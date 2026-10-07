@@ -9,22 +9,22 @@ export interface Screen {
 
 /** Sidebar order, one evenly spaced list: Inbox, Skills, Add, Agents, MCP servers, Plugins, Settings. */
 export const screens: Screen[] = [
-  { path: "/inbox", label: "Inbox", icon: "inbox" },
-  { path: "/skills", label: "Skills", icon: "skills" },
-  { path: "/add", label: "Add", icon: "add" },
-  { path: "/agents", label: "Agents", icon: "agents" },
-  { path: "/servers", label: "MCP servers", icon: "servers" },
-  { path: "/plugins", label: "Plugins", icon: "plugins" },
-  { path: "/settings", label: "Settings", icon: "settings" },
+  { icon: "inbox", label: "Inbox", path: "/inbox" },
+  { icon: "skills", label: "Skills", path: "/skills" },
+  { icon: "add", label: "Add", path: "/add" },
+  { icon: "agents", label: "Agents", path: "/agents" },
+  { icon: "servers", label: "MCP servers", path: "/servers" },
+  { icon: "plugins", label: "Plugins", path: "/plugins" },
+  { icon: "settings", label: "Settings", path: "/settings" },
 ];
 
 /** The title each screen shows; Add's page is "Add skills". */
 export const titles: Record<string, string> = {
-  "/inbox": "Inbox",
-  "/skills": "Skills",
   "/add": "Add skills",
   "/agents": "Agents",
-  "/servers": "MCP servers",
+  "/inbox": "Inbox",
   "/plugins": "Plugins",
+  "/servers": "MCP servers",
   "/settings": "Settings",
+  "/skills": "Skills",
 };

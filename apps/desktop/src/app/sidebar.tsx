@@ -4,8 +4,8 @@ import { Icon } from "#/components/icon.tsx";
 import { cn } from "#/lib/utils.ts";
 import { screens } from "#/app/screens.ts";
 
-export function Sidebar() {
-  return (
+export const Sidebar = () => 
+  (
     <aside className="flex w-(--shell-sidebar-width) flex-none flex-col gap-(--shell-nav-gap) bg-shell-bg p-(--shell-sidebar-padding)">
       <div className="flex items-center gap-2.5 px-2.5 pt-1 pb-5.5">
         <AgentxMark size={26} />
@@ -32,5 +32,5 @@ export function Sidebar() {
         ))}
       </nav>
     </aside>
-  );
-}
+  )
+;

@@ -12,8 +12,8 @@ import { PlaceholderScreen } from "#/screens/placeholder.tsx";
 // Our components take no `className` or `style`: every visual choice is a typed prop.
 // `pnpm typecheck` fails if any line marked @ts-expect-error starts to compile.
 // The function is never called; it exists for the type checker.
-export function rejectedProps() {
-  return (
+export const rejectedProps = () => 
+  (
     <>
       {/* @ts-expect-error className is not a Button prop */}
       <Button className="mt-2" />
@@ -42,8 +42,8 @@ export function rejectedProps() {
       {/* @ts-expect-error className is not a PlaceholderScreen prop */}
       <PlaceholderScreen title="Inbox" className="p-0" />
     </>
-  );
-}
+  )
+;
 
 describe("closed props", () => {
   it("keeps Button's classes even when a className is forced past the types", () => {

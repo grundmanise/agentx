@@ -1,7 +1,8 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Command } from "cmdk";
 import { useNavigate } from "react-router";
-import { Icon, type IconName } from "#/components/icon.tsx";
+import { Icon } from '#/components/icon.tsx';
+import type { IconName } from '#/components/icon.tsx';
 import { KeyHint } from "#/components/key-hint.tsx";
 import { screens } from "#/app/screens.ts";
 
@@ -20,13 +21,15 @@ const filter = (value: string, search: string) => (value.toLowerCase().includes(
  * The ⌘K palette. This change wires GO TO only; ACTIONS and SKILLS come with the screens and
  * CLI commands they run.
  */
-export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export const CommandPalette = ({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) => {
   const navigate = useNavigate();
   const items: PaletteItem[] = screens.map((s) => ({
     group: "GO TO",
-    label: s.label,
     icon: s.icon,
-    run: () => navigate(s.path),
+    label: s.label,
+    run: () => {
+      void navigate(s.path);
+    },
   }));
   const groups = [...new Set(items.map((i) => i.group))];
 
@@ -71,7 +74,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
                       >
                         <Icon name={i.icon} size={15} tone="palette-row" />
                         <span className="flex-1 type-body">{i.label}</span>
-                        {i.hint && <span className="type-palette-hint text-text-caption">{i.hint}</span>}
+                        {i.hint !== undefined && <span className="type-palette-hint text-text-caption">{i.hint}</span>}
                       </Command.Item>
                     ))}
                 </Command.Group>
@@ -90,4 +93,4 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
       </Dialog.Portal>
     </Dialog.Root>
   );
-}
+};

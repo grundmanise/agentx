@@ -14,7 +14,7 @@ Single-context: `GLOSSARY.md` at the root, ADRs in `docs/adr/`, specs in `docs/s
 
 ## Desktop app
 
-Before writing UI in `apps/desktop`, read `apps/desktop/DESIGN.md` and the "Rules for components" in `apps/desktop/README.md`. Style only with the tokens in `apps/desktop/src/styles/tokens.css`, which `DESIGN.md` documents; when a design needs a value no token holds, add the token to `tokens.css` and document it in `DESIGN.md`. Our components take no `className` or `style`: give them a closed, typed prop or variant instead. `pnpm lint` and `pnpm test` reject anything off the design system; fix the code, never the guard.
+Before writing UI in `apps/desktop`, read `apps/desktop/DESIGN.md` and the "Rules for components" in `apps/desktop/README.md`. Style only with the tokens in `apps/desktop/src/styles/tokens.css`, which `DESIGN.md` documents; when a design needs a value no token holds, add the token to `tokens.css` and document it in `DESIGN.md`. Our components take no `className` or `style`: give them a closed, typed prop or variant instead. `pnpm lint` and `pnpm test` reject anything off the design system; fix the code, never the guard. Ultracite (oxlint and oxfmt) lints and formats the frontend: run `pnpm fix` in `apps/desktop` before you commit.
 
 ## Help center
 

@@ -1,11 +1,11 @@
 import { Icon } from "#/components/icon.tsx";
 import { KeyHint } from "#/components/key-hint.tsx";
 
-const isMac = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
+const isMac = typeof navigator !== "undefined" && navigator.platform.includes('Mac');
 
 /** The command field in the title bar: looks like a search input and opens the palette. */
-export function CommandField({ onOpen }: { onOpen: () => void }) {
-  return (
+export const CommandField = ({ onOpen }: { onOpen: () => void }) => 
+  (
     <button
       type="button"
       onClick={onOpen}
@@ -15,5 +15,5 @@ export function CommandField({ onOpen }: { onOpen: () => void }) {
       <span className="flex-1 text-left">Search skills or run a command</span>
       <KeyHint>{isMac ? "⌘K" : "Ctrl K"}</KeyHint>
     </button>
-  );
-}
+  )
+;
