@@ -16,7 +16,7 @@ The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it
 
 ## Develop
 
-You need Node 22.22.2+, 24.15+ or 26+, pnpm 12 and Rust. On Linux, Tauri also needs the WebKitGTK development packages ([Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)).
+You need Node 24 or later (`.node-version` at the repository root names it for version managers), pnpm 12 and Rust. On Linux, Tauri also needs the WebKitGTK development packages ([Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)).
 
 ```sh
 pnpm install     # from the repository root
