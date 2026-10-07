@@ -31,6 +31,11 @@ trustPolicyExclude:
 # tree, and Tailwind's oxide engine and the other native tools ship prebuilt per-platform packages.
 allowBuilds: {}
 
+# When the running pnpm is not the version pinned in the root packageManager field, download and
+# run the pinned one (the default, set here so the choice is explicit). pnpm 11 replaced
+# packageManagerStrict and packageManagerStrictVersion with this setting.
+pmOnFail: download
+
 # Workspace packages are linked only through an explicit `workspace:` range, never by a matching
 # version alone.
 linkWorkspacePackages: false

@@ -1,5 +1,5 @@
 // This file passes forbidden props on purpose, to prove the types reject them.
-/* oxlint-disable shadcn/no-restyle, react/forbid-component-props */
+/* oxlint-disable shadcn/no-restyle, shadcn/no-inline-styles, react/forbid-component-props */
 import { AgentxMark } from "#/components/agentx-mark.tsx";
 import { CommandField } from "#/components/command-field.tsx";
 import { Icon } from "#/components/icon.tsx";
@@ -16,13 +16,13 @@ export const rejectedProps = () => (
     {/* @ts-expect-error className is not a Button prop */}
     <Button className="mt-2" />
     {/* @ts-expect-error style is not a Button prop */}
-    <Button style={{ "--gap": "0" }} />
+    <Button style={{ marginTop: 8 }} />
     {/* @ts-expect-error variant is a closed set */}
     <Button variant="link" />
     {/* @ts-expect-error className is not an Icon prop */}
     <Icon name="search" className="text-text-primary" />
     {/* @ts-expect-error style is not an Icon prop */}
-    <Icon name="search" style={{ "--tone": "0" }} />
+    <Icon name="search" style={{ marginTop: 8 }} />
     {/* @ts-expect-error tone is a closed set */}
     <Icon name="search" tone="red" />
     {/* @ts-expect-error size is a closed set */}
@@ -34,7 +34,7 @@ export const rejectedProps = () => (
     {/* @ts-expect-error className is not a CommandField prop */}
     <CommandField onOpen={() => {}} className="w-full" />
     {/* @ts-expect-error style is not a KeyHint prop */}
-    <KeyHint style={{ "--gap": "0" }}>esc</KeyHint>
+    <KeyHint style={{ marginTop: 8 }}>esc</KeyHint>
     {/* @ts-expect-error className is not a Toaster prop */}
     <Toaster className="bottom-0" />
     {/* @ts-expect-error className is not a PlaceholderScreen prop */}
