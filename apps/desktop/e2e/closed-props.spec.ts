@@ -8,7 +8,9 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
 });
 
-test("Button drops a className forced past the types", async ({ page }) => {
+test("Button drops a className and a style forced past the types", async ({
+  page,
+}) => {
   await page.addScriptTag({
     type: "module",
     url: "/e2e/harness/forced-button.tsx",
@@ -18,6 +20,7 @@ test("Button drops a className forced past the types", async ({ page }) => {
     .getByRole("button", { name: "Save" });
   await expect(save).toBeVisible();
   await expect(save).not.toHaveClass(/\bmt-2\b/u);
+  await expect(save).not.toHaveAttribute("style");
 });
 
 test("each product mark size has its own radius", async ({ page }) => {
