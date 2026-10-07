@@ -3,19 +3,22 @@ Title: use the Conventional Commits format, such as `feat(skill): check managed 
 See CONTRIBUTING.md for the full conventions.
 -->
 
-## What changed and why
+## Summary
 
 <!-- In an imperative style, summarize what changed for users and why. Describe the implementation only
-where it's needed to understand the change. Link the issue it resolves, such as "Closes #123". -->
+where it's needed to understand the change. Optionally, link the issue it resolves, like "Closes #123". -->
 
-## Visual evidence
+## Evidence
 
-<!-- If the change affects functionality, add a screenshot, a recording or, for CLI-only changes, the
-relevant CLI output. Otherwise, write "None". -->
+<!-- Optional unless the change affects functionality or behavior. Show it before and after with
+screenshots, a recording or, for CLI-only changes, the relevant CLI output. -->
+
+- **Before:**
+- **After:**
 
 ## Checklist
 
 - [ ] `make check` passes
 - [ ] Tests cover the change in behavior
 - [ ] The Help Center in `docs/help-center` reflects the change
-- [ ] New terms match `CONTEXT.md`, and any conflict with an ADR is explained above
+- [ ] New terms match `GLOSSARY.md`, and any conflict with an ADR is explained above

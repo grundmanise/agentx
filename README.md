@@ -95,7 +95,7 @@ Other agents support skills management only at this time.
 
 | | |
 | --- | --- |
-| [`CONTEXT.md`](CONTEXT.md) | The vocabulary |
+| [`GLOSSARY.md`](GLOSSARY.md) | The vocabulary |
 | [`docs/adr`](docs/adr) | Architecture decisions |
 | [`docs/spec`](docs/spec) | Contracts & Specs |
 | [`docs/help-center`](docs/help-center) | Source of the [documentation](https://docs.agentx.wtf) |

@@ -4,7 +4,7 @@ How the engineering skills should consume this repo's domain documentation when 
 
 ## Before exploring, read these
 
-- **`CONTEXT.md`** at the repo root: the glossary for the whole product.
+- **`GLOSSARY.md`** at the repo root: the glossary for the whole product.
 - **`docs/adr/`**: read ADRs that touch the area you're about to work in.
 - **`docs/spec/`**: read the spec that covers the area.
 - **`docs/help-center/`**: Read the user-facing Help Center articles for the relevant area.
@@ -17,7 +17,7 @@ Single-context repo:
 
 ```
 /
-├── CONTEXT.md
+├── GLOSSARY.md
 ├── docs/
 │   ├── adr/
 │   │   ├── 0001-go-cli-owns-machine-and-account-tauri-renders.md
@@ -31,11 +31,11 @@ Single-context repo:
 
 ## Public and private docs
 
-This repository is public. Internal planning lives in the private `agentx-private` repository. Never link to, quote or paraphrase it, and never cite its issue, spec or requirement numbers, in `CONTEXT.md`, anything else under `docs/`, code, commit messages, PR text, branch names or a GitHub issue. If a public doc needs a decision made there, state the decision in product terms, without vendors or prices.
+This repository is public. Internal planning lives in the private `agentx-private` repository. Never link to, quote or paraphrase it, and never cite its issue, spec or requirement numbers, in `GLOSSARY.md`, anything else under `docs/`, code, commit messages, PR text, branch names or a GitHub issue. If a public doc needs a decision made there, state the decision in product terms, without vendors or prices.
 
 ## Use the glossary's vocabulary
 
-When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in `CONTEXT.md`. Don't drift to synonyms the glossary explicitly avoids.
+When your output names a domain concept (in an issue title, a refactor proposal, a hypothesis, a test name), use the term as defined in `GLOSSARY.md`. Don't drift to synonyms the glossary explicitly avoids.
 
 If the concept you need isn't in the glossary yet, that's a signal: either you're inventing language the project doesn't use (reconsider) or there's a real gap (note it for `/domain-modeling`).
 
