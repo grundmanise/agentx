@@ -11,7 +11,7 @@ where it's needed to understand the change. Optionally, link the issue it resolv
 ## Evidence
 
 <!-- Optional unless the change affects functionality or behavior. Show it before and after with
-screenshots, a recording or, for CLI-only changes, the relevant CLI output. -->
+screenshots, a recording or, for an execution-based change, the console output. -->
 
 - **Before:**
 - **After:**

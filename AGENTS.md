@@ -37,7 +37,7 @@ Before adding a test, find the one that already covers the path, and extend it i
 
 ### Titles
 
-Follow the conventional commit format. We squash-merge PRs, so the first commit message becomes the PR title.
+Follow the conventional commit format. GitHub uses the first commit message as the PR title, and we squash-merge PRs, so the PR title becomes the commit on `main`.
 
 The type decides the release notes section: `feat` for something new, `change` for a change to how an existing feature behaves, `fix` for a bug fix. See "Release notes" in `CONTRIBUTING.md`.
 
