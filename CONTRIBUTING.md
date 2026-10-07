@@ -85,7 +85,8 @@ CI alike. The build uses the Go version `apps/cli/go.mod` specifies.
   message, read [How to Write a Git Commit Message](https://cbea.ms/git-commit/); where its rules for
   the subject line differ, the Conventional Commits title above wins.
 - **Evidence**: if the change affects functionality or behavior, show it before and after with
-  screenshots, a recording or, for CLI-only changes, the relevant CLI output. Otherwise, it's optional.
+  screenshots, a recording or, for an execution-based change, the console output. Otherwise, it's
+  optional.
 - **Writing style**: don't use em dashes (`—`) anywhere; use en dashes (`–`), hyphens (`-`) or another
   suitable punctuation.
 
