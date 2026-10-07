@@ -17,16 +17,28 @@ export type IconName = keyof typeof icons;
 export type IconSize = 13 | 14 | 15 | 16 | 18;
 export type IconStroke = 1.75 | 2 | 2.25;
 
+/**
+ * The icon's colour. `current` takes the text colour around it. `palette` is the command palette's
+ * icon grey. `palette-row` is that grey, turning to the accent while its row (a `group`) is selected.
+ */
+const tones = {
+  current: undefined,
+  palette: "text-palette-icon",
+  "palette-row": "text-palette-icon group-data-[selected=true]:text-palette-icon-active",
+} as const;
+
+export type IconTone = keyof typeof tones;
+
 export function Icon({
   name,
   size = 16,
   strokeWidth = 1.75,
-  className,
+  tone = "current",
 }: {
   name: IconName;
   size?: IconSize;
   strokeWidth?: IconStroke;
-  className?: string;
+  tone?: IconTone;
 }) {
   return (
     <svg
@@ -39,7 +51,7 @@ export function Icon({
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden
-      className={className}
+      className={tones[tone]}
     >
       <path d={icons[name]} />
     </svg>

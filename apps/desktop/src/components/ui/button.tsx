@@ -1,6 +1,5 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps } from "react";
-import { cn } from "@/lib/utils";
 
 // DESIGN.md §6 "Buttons". Disabled is 30% opacity and inert, never a grey fill.
 const buttonVariants = cva(
@@ -23,12 +22,9 @@ const buttonVariants = cva(
   },
 );
 
-export function Button({
-  className,
-  variant,
-  size,
-  type = "button",
-  ...props
-}: Omit<ComponentProps<"button">, "style"> & VariantProps<typeof buttonVariants>) {
-  return <button type={type} className={cn(buttonVariants({ variant, size }), className)} {...props} />;
+/** Style comes only from `variant` and `size`: Button takes no `className` or `style`. */
+export type ButtonProps = Omit<ComponentProps<"button">, "className" | "style"> & VariantProps<typeof buttonVariants>;
+
+export function Button({ variant, size, type = "button", ...props }: ButtonProps) {
+  return <button type={type} {...props} className={buttonVariants({ variant, size })} />;
 }

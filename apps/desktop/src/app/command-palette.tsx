@@ -41,7 +41,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
           <Dialog.Title className="sr-only">Command palette</Dialog.Title>
           <Command filter={filter} loop>
             <div className="flex h-(--palette-input-height) items-center gap-3 border-b border-card-border px-5">
-              <Icon name="search" size={18} strokeWidth={2} className="text-palette-icon" />
+              <Icon name="search" size={18} strokeWidth={2} tone="palette" />
               <Command.Input
                 autoFocus
                 placeholder="Search skills or run a command"
@@ -69,11 +69,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
                         }}
                         className="group flex h-10.5 items-center gap-3 rounded-palette-row px-3 text-palette-row-text data-[selected=true]:bg-palette-row-active data-[selected=true]:text-text-primary"
                       >
-                        <Icon
-                          name={i.icon}
-                          size={15}
-                          className="text-palette-icon group-data-[selected=true]:text-palette-icon-active"
-                        />
+                        <Icon name={i.icon} size={15} tone="palette-row" />
                         <span className="flex-1 type-body">{i.label}</span>
                         {i.hint && <span className="type-palette-hint text-text-caption">{i.hint}</span>}
                       </Command.Item>

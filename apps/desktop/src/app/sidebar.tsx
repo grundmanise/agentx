@@ -8,7 +8,7 @@ export function Sidebar() {
   return (
     <aside className="flex w-(--shell-sidebar-width) flex-none flex-col gap-(--shell-nav-gap) bg-shell-bg p-(--shell-sidebar-padding)">
       <div className="flex items-center gap-2.5 px-2.5 pt-1 pb-5.5">
-        <AgentxMark size={26} className="rounded-shell-logo" />
+        <AgentxMark size={26} />
         {/* The machine label joins the brand once the app reads settings from the CLI. */}
         <span className="type-brand">agentx</span>
       </div>
