@@ -714,6 +714,8 @@ Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot` round (`timeline.dot
 
 Stroke icons on a 24 grid, `stroke-width` 1.75–2.25, round caps/joins, 13–16px rendered (18 for the palette's search icon). Fill only for the managed "dot" glyph. No icon fonts, no emoji.
 
+Each icon is one SVG file in `src/assets/icons`, drawn with `stroke="currentColor"` and no fill, so it takes the text colour around it. `Icon` (`src/components/icon.tsx`) imports each file as a component (`?react`) and sets its size, stroke width and tone. To add an icon, add its file and its entry in `icon.tsx`.
+
 The product mark is `shell.logo-mark` on `shell.logo-bg`, 26px `shell.logo-radius` in the sidebar, 40px `startup.logo-radius` on the startup layer, with a 1px `shell.logo-ring` ring (`src/components/agentx-mark.tsx`). Its image is `src/assets/agentx-mark.svg`, the one copy of the mark. The same file is the source of the app icons: after changing it, run `pnpm tauri icon src/assets/agentx-mark.svg` and keep only the files `src-tauri/tauri.conf.json` lists. Because the file stands alone, it holds the two colours as hex values (`lime-400`, `gray-990`); change them together with the tokens.
 
 ## 8. Motion

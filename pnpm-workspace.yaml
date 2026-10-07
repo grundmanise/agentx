@@ -28,3 +28,9 @@ allowBuilds: {}
 # Workspace packages are linked only through an explicit `workspace:` range, never by a matching
 # version alone.
 linkWorkspacePackages: false
+
+# Exceptions to trustPolicy, each one an exact version. semver 6.3.1 (through Babel, which
+# vite-plugin-svgr uses) is a backport released after semver 7 started publishing with
+# provenance, so it reads as a downgrade.
+trustPolicyExclude:
+  - semver@6.3.1

@@ -13,7 +13,7 @@ The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it
 | `src/app` | The app shell: title bar, sidebar, main panel, command palette |
 | `src/screens` | One folder per screen |
 | `src/components` | Shared components; `ui` holds the shadcn/ui-based primitives |
-| `src/assets` | The product mark, also the source of the app icons in `src-tauri/icons` |
+| `src/assets` | The product mark and the icons, one SVG file each. The mark is also the source of the app icons in `src-tauri/icons` |
 | `src-tauri` | The Rust side: the window, and later the CLI supervisor |
 
 ## Develop
