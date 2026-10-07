@@ -47,5 +47,5 @@ These rules are for anyone writing a component, people and coding agents alike. 
 - The lint reads classes in `className`, `cn()` and `cva()`. A class string anywhere else (such as a library's `classNames` option) goes through `cn()` so it is checked too.
 - Components take typed props for their choices (`Button`'s `variant` and `size`, `Icon`'s `size`), not free values.
 - Code generated with the shadcn CLI uses shadcn's default classes; map them to tokens before committing, or the lint fails.
-- Follow the copy rules in `DESIGN.md` §9 and the vocabulary in [`CONTEXT.md`](../../CONTEXT.md).
+- Follow the copy rules in `DESIGN.md` §9 and the vocabulary in [`GLOSSARY.md`](../../GLOSSARY.md).
 - Show only what the CLI reports. A screen never predicts the result of a command.
