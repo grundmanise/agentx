@@ -1,4 +1,4 @@
-/* Tailwind reads classes from src/ only (not docs or lint fixtures), so the build holds only
+/* Tailwind reads classes from src/ only (not the docs or the tests), so the build holds only
    what the app uses. Its default theme is replaced in tokens.css, and the base styles below use
    only its tokens. */
 @import "tailwindcss" source("..");

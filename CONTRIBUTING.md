@@ -17,11 +17,26 @@ You need:
 - `make`
 - macOS or Linux
 
+For the desktop app, you also need:
+
+- Node `24` or later – [`.node-version`](.node-version) names it for version managers
+- pnpm `12` – the exact version is `packageManager` in the root [`package.json`](package.json)
+- Rust, and on Linux the WebKitGTK development packages; see the desktop app's
+  [README](apps/desktop/README.md)
+
 Clone the repository:
 
 ```sh
 git clone https://github.com/grundmanise/agentx.git
 cd agentx
+```
+
+For the desktop app, install its dependencies from the repository root, then Playwright's Chromium
+once for its end-to-end tests:
+
+```sh
+pnpm install
+pnpm --dir apps/desktop exec playwright install chromium
 ```
 
 ## Find your way around
@@ -61,9 +76,9 @@ To run the tests without the race detector, as CI does on macOS, use `make test-
 `make lint-cli` builds that release into the build cache on first use through `go run`, locally and in
 CI alike. The build uses the Go version `apps/cli/go.mod` specifies.
 
-`make check-desktop` needs Node 24 or later (the version in [`.node-version`](.node-version)), pnpm 12,
-Playwright's Chromium and Rust, and on Linux the WebKitGTK development packages; see the desktop
-app's [README](apps/desktop/README.md).
+`make check-desktop` needs the desktop tools listed in [Set up your machine](#set-up-your-machine),
+including Playwright's Chromium. The desktop app's own commands, such as `pnpm fix`, are in its
+[README](apps/desktop/README.md).
 
 ## Make a change
 

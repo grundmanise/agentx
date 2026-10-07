@@ -19,7 +19,7 @@ Copy voice: short, plain, present tense.
 
 ## 2. Color
 
-Two layers. **Primitives** are the raw palette and never appear in component code. **Semantic tokens** name a role and point at one primitive; everything in §3–§8 and in the app's code uses semantic names only. Implement as CSS custom properties (`--color-shell-bg: var(--gray-990)`), Tailwind theme colors, or a token file; the names below are the contract.
+Two layers. **Primitives** are the raw palette and never appear in component code. **Semantic tokens** name a role and point at one primitive; everything in §3–§8 and in the app's code uses semantic names only. In `tokens.css` a semantic token is a Tailwind theme colour that points at a primitive (`--color-shell-bg: var(--gray-990)`); the names below are the contract.
 
 ### 2.1 Primitives
 

@@ -20,6 +20,12 @@ minimumReleaseAge: 1440
 # Fail when a package's publish trust drops below that of its earlier releases.
 trustPolicy: no-downgrade
 
+# Exceptions to trustPolicy, each one an exact version. semver 6.3.1 (through Babel, which
+# vite-plugin-svgr uses) is a backport released after semver 7 started publishing with
+# provenance, so it reads as a downgrade.
+trustPolicyExclude:
+  - semver@6.3.1
+
 # Install scripts run only for the packages listed here; any other package with one fails the
 # install (strictDepBuilds is on by default). No dependency needs one today: esbuild is not in the
 # tree, and Tailwind's oxide engine and the other native tools ship prebuilt per-platform packages.
@@ -28,9 +34,3 @@ allowBuilds: {}
 # Workspace packages are linked only through an explicit `workspace:` range, never by a matching
 # version alone.
 linkWorkspacePackages: false
-
-# Exceptions to trustPolicy, each one an exact version. semver 6.3.1 (through Babel, which
-# vite-plugin-svgr uses) is a backport released after semver 7 started publishing with
-# provenance, so it reads as a downgrade.
-trustPolicyExclude:
-  - semver@6.3.1
