@@ -8,9 +8,8 @@
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b --noEmit",
     "lint": "oxlint --deny-warnings src",
-    "test": "node scripts/tokens.mjs --check && vitest run",
-    "tauri": "tauri",
-    "tokens": "node scripts/tokens.mjs"
+    "test": "vitest run",
+    "tauri": "tauri"
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",

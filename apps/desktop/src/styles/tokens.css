@@ -1,7 +1,25 @@
-/* Generated from DESIGN.md by scripts/tokens.mjs. Do not edit; run `pnpm tokens`. */
+/*
+ * Design tokens for the desktop app. This file is the source of truth and is edited by hand;
+ * DESIGN.md documents every token here (its tables use dotted names: `shell.bg` is
+ * `--color-shell-bg`). When you add or change a token, update both in the same change.
+ *
+ * The Tailwind theme below is reset with `--*: initial`, so Tailwind's defaults do not exist:
+ * no default colours, spacing, radii, shadows, font sizes, weights, line heights, tracking,
+ * breakpoints, containers, blurs, easings or animations. A class works only when it names a
+ * token declared in this file. Do not add a token to make one class work; add it when the
+ * design (DESIGN.md) calls for a new value.
+ *
+ * Sections:
+ *   1. Primitives          raw palette, outside the theme (never used by components)
+ *   2. Font faces          outside the theme, used only by the type roles in section 5
+ *   3. Theme               colours, shadows, radii, font weights, spacing steps
+ *   4. Layout tokens       one value per element, used as `w-(--shell-sidebar-width)`
+ *   5. Type roles          `type-*` utilities, the only way to set a font
+ */
 
-/* Primitives: the raw palette. Never referenced from components. */
+/* 1. Primitives (DESIGN.md §2.1). Kept out of the theme so no utility class can name one. */
 :root {
+  /* Grey ramp, dark to light. */
   --gray-990: #0b0b0c;
   --gray-980: #0e0e10;
   --gray-970: #121214;
@@ -28,6 +46,8 @@
   --gray-150: #c9c9cf;
   --gray-100: #dcdce0;
   --gray-50: #ededef;
+
+  /* Accents, white and black. */
   --lime-400: #d4ff4f;
   --lime-300: #e2ff7a;
   --amber-400: #ffc15e;
@@ -38,18 +58,28 @@
   --black: #000000;
 }
 
-/* Semantic tokens: the only colours, shadows and radii components use. Tailwind's defaults for
-   these, and its font sizes, line heights and tracking, are removed so no class can name them. */
+/* 2. Font faces (DESIGN.md §3). Kept out of the theme, so `font-sans` and friends do not exist;
+   set a face with a type role. */
+:root {
+  --font-sans: "Geist Variable", system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, monospace;
+  --font-serif: "Instrument Serif", ui-serif, serif;
+}
+
+/* 3. Theme. `static` keeps every variable in the output, so CSS outside Tailwind can read them. */
 @theme static {
-  --color-*: initial;
-  --shadow-*: initial;
-  --inset-shadow-*: initial;
-  --drop-shadow-*: initial;
-  --text-shadow-*: initial;
-  --radius-*: initial;
-  --text-*: initial;
-  --leading-*: initial;
-  --tracking-*: initial;
+  /* Drop every Tailwind default. Only what follows exists. */
+  --*: initial;
+
+  /* Defaults Tailwind's base styles and plain `transition-*` classes read. */
+  --default-font-family: var(--font-sans);
+  --default-mono-font-family: var(--font-mono);
+  --default-transition-duration: 150ms;
+  --default-transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Colours (DESIGN.md §2.2): `bg-shell-bg`, `text-text-muted`, `border-card-border`. A tone
+     `tone.primary` has three colours: `-fg`, `-bg` and `-border`. */
+  /* Meaning: accents and tones (§2.2) */
   --color-accent-primary: var(--lime-400);
   --color-accent-primary-hover: var(--lime-300);
   --color-accent-attention: var(--amber-400);
@@ -72,6 +102,8 @@
   --color-tone-neutral-fg: var(--gray-300);
   --color-tone-neutral-bg: var(--gray-910);
   --color-tone-neutral-border: var(--gray-800);
+
+  /* Text, shared across elements */
   --color-text-primary: var(--gray-50);
   --color-text-secondary: var(--gray-200);
   --color-text-body: var(--gray-150);
@@ -80,6 +112,8 @@
   --color-text-caption: var(--gray-500);
   --color-text-disabled: var(--gray-600);
   --color-text-faint: var(--gray-700);
+
+  /* Window and shell */
   --color-shell-bg: var(--gray-990);
   --color-shell-content-bg: var(--gray-970);
   --color-shell-divider: var(--gray-890);
@@ -96,6 +130,8 @@
   --color-shell-logo-mark: var(--color-accent-primary);
   --color-shell-logo-bg: var(--gray-990);
   --color-shell-logo-ring: var(--gray-860);
+
+  /* Buttons */
   --color-button-primary-bg: var(--color-accent-primary);
   --color-button-primary-hover: var(--color-accent-primary-hover);
   --color-button-primary-text: var(--color-on-accent);
@@ -110,6 +146,8 @@
   --color-source-pill-active-bg: var(--gray-50);
   --color-source-pill-active-text: var(--color-on-accent);
   --color-button-toast-action-text: var(--color-accent-primary);
+
+  /* Status pills */
   --color-pill-update-bg: var(--color-accent-primary);
   --color-pill-update-text: var(--color-on-accent);
   --color-pill-neutral-bg: var(--gray-860);
@@ -121,6 +159,8 @@
   --color-pill-disabled-text: var(--color-accent-attention);
   --color-pill-version-bg: var(--gray-880);
   --color-pill-version-text: var(--gray-300);
+
+  /* Inputs, switches, checkboxes */
   --color-input-bg: var(--gray-980);
   --color-input-border: var(--gray-860);
   --color-input-border-focus: var(--gray-700);
@@ -133,6 +173,8 @@
   --color-checkbox-ring: var(--gray-700);
   --color-checkbox-checked-bg: var(--color-accent-primary);
   --color-checkbox-check: var(--color-on-accent);
+
+  /* Segmented control */
   --color-segmented-track-bg: var(--gray-950);
   --color-segmented-track-border: var(--gray-870);
   --color-segmented-text: var(--gray-50);
@@ -140,6 +182,8 @@
   --color-segmented-theirs-selected: var(--color-accent-theirs);
   --color-segmented-both-selected: var(--gray-50);
   --color-segmented-neutral-selected: var(--gray-850);
+
+  /* Filter row */
   --color-filter-bg: var(--gray-880);
   --color-filter-text: var(--gray-300);
   --color-filter-active-bg: rgb(212 255 79 / 0.12);
@@ -149,6 +193,8 @@
   --color-filter-chip-text: var(--gray-150);
   --color-filter-chip-hover: var(--gray-880);
   --color-filter-sort-text: var(--gray-300);
+
+  /* Lists and rows */
   --color-row-hover: var(--gray-920);
   --color-row-selected-bg: var(--gray-900);
   --color-row-selected-bar: var(--color-accent-primary);
@@ -161,9 +207,13 @@
   --color-group-divider-label: var(--gray-600);
   --color-table-row-hover: var(--gray-930);
   --color-table-header-text: var(--gray-500);
+
+  /* Skill glyph */
   --color-glyph-enabled: var(--color-accent-primary);
   --color-glyph-off: var(--gray-600);
   --color-glyph-edited: var(--color-accent-attention);
+
+  /* Agent logos and toggle chips */
   --color-logo-bg: var(--white);
   --color-agent-chip-off-bg: var(--gray-950);
   --color-agent-chip-off-border: var(--gray-870);
@@ -171,6 +221,8 @@
   --color-agent-chip-on-border: rgb(212 255 79 / 0.35);
   --color-agent-chip-hover-border: var(--gray-700);
   --color-agent-chip-text: var(--gray-50);
+
+  /* Cards and banners */
   --color-card-bg: var(--gray-950);
   --color-card-border: var(--gray-870);
   --color-card-title: var(--gray-50);
@@ -192,6 +244,8 @@
   --color-plugin-servers-dot: var(--color-accent-theirs);
   --color-plugin-hooks-dot: var(--color-accent-attention);
   --color-plugin-connector: var(--gray-870);
+
+  /* Overlays */
   --color-overlay-bg: var(--gray-940);
   --color-overlay-border: var(--gray-800);
   --color-popover-row-hover: var(--gray-880);
@@ -205,6 +259,8 @@
   --color-sheet-bg: var(--gray-960);
   --color-sheet-border: var(--gray-850);
   --color-toast-text: var(--gray-50);
+
+  /* Code, file tree and diffs */
   --color-code-bg: var(--gray-980);
   --color-code-border: var(--gray-890);
   --color-code-line-number: var(--gray-700);
@@ -229,12 +285,16 @@
   --color-diff-file-done: var(--color-accent-primary);
   --color-diff-progress-done: var(--color-accent-primary);
   --color-diff-progress-pending: var(--gray-850);
+
+  /* Timeline */
   --color-timeline-dot-install: var(--gray-600);
   --color-timeline-dot-update: var(--color-accent-primary);
   --color-timeline-dot-yours: var(--color-accent-yours);
   --color-timeline-connector: var(--gray-890);
   --color-timeline-meta: var(--gray-500);
   --color-timeline-more-ring: var(--gray-700);
+
+  /* Startup checks */
   --color-check-pass-bg: rgb(212 255 79 / 0.12);
   --color-check-pass-mark: var(--color-accent-primary);
   --color-check-fail-bg: rgb(255 123 114 / 0.12);
@@ -245,6 +305,8 @@
   --color-check-detail: var(--gray-400);
   --color-check-fix-bg: var(--gray-980);
   --color-check-fix-border: var(--gray-870);
+
+  /* MCP servers */
   --color-server-transport-bg: var(--gray-880);
   --color-server-transport-text: var(--gray-200);
   --color-server-command: var(--gray-500);
@@ -253,8 +315,12 @@
   --color-server-tools-fail: var(--color-accent-danger);
   --color-server-tools-none: var(--gray-600);
   --color-server-versions: var(--color-accent-attention);
+
+  /* Shadows (DESIGN.md §2.2, overlays): `shadow-overlay`. */
   --shadow-overlay: 0 40px 100px -20px rgb(0 0 0 / 0.8);
   --shadow-popover: 0 24px 60px -12px rgb(0 0 0 / 0.7);
+
+  /* Radii (DESIGN.md §5): `rounded-card`. */
   --radius-button: 9999px;
   --radius-pill: 9999px;
   --radius-switch: 9999px;
@@ -291,10 +357,49 @@
   --radius-check-mark: 50%;
   --radius-check-fix: 8px;
   --radius-startup-logo: 12px;
+
+  /* Font weights, for the few places a variant sets the weight and the type role does not. */
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  /* Spacing steps (DESIGN.md §4): a 2px grid in half steps from 0 to 48px, for a gap or size
+     inside a component that no layout token lists (`gap-2.5` is 10px, `h-9.5` is 38px). There is
+     no base `--spacing`, so only these steps exist: `p-13`, `p-3.25` and `top-28` do not. A
+     larger or off-grid value is a layout token (section 4). The `_` in a name is the `.` in a
+     class: `--spacing-2_5` is `2.5`. */
+  --spacing-0: 0px;
+  --spacing-0_5: 2px;
+  --spacing-1: 4px;
+  --spacing-1_5: 6px;
+  --spacing-2: 8px;
+  --spacing-2_5: 10px;
+  --spacing-3: 12px;
+  --spacing-3_5: 14px;
+  --spacing-4: 16px;
+  --spacing-4_5: 18px;
+  --spacing-5: 20px;
+  --spacing-5_5: 22px;
+  --spacing-6: 24px;
+  --spacing-6_5: 26px;
+  --spacing-7: 28px;
+  --spacing-7_5: 30px;
+  --spacing-8: 32px;
+  --spacing-8_5: 34px;
+  --spacing-9: 36px;
+  --spacing-9_5: 38px;
+  --spacing-10: 40px;
+  --spacing-10_5: 42px;
+  --spacing-11: 44px;
+  --spacing-11_5: 46px;
+  --spacing-12: 48px;
 }
 
-/* Layout tokens with a single value. */
+/* 4. Layout tokens (DESIGN.md §4): one value per element, used through a variable class such as
+   `w-(--shell-sidebar-width)` or `p-(--page-padding)`. A token given as a range in DESIGN.md is
+   guidance and has no variable. */
 :root {
+  /* Window and shell (§4) */
   --shell-titlebar-height: 50px;
   --shell-sidebar-width: 216px;
   --shell-sidebar-padding: 6px 12px 14px 14px;
@@ -305,6 +410,8 @@
   --shell-command-height: 32px;
   --shell-status-height: 30px;
   --shell-panel-inset: 10px;
+
+  /* Pages */
   --page-padding: 40px 48px 48px;
   --page-title-gap: 28px;
   --page-max-width: 1200px;
@@ -321,6 +428,8 @@
   --detail-columns-gap: 40px;
   --detail-kv-gap: 12px 12px;
   --detail-kv-key-width: 96px;
+
+  /* Lists and rows */
   --row-padding: 11px 12px 11px 14px;
   --row-gap: 12px;
   --row-line-gap: 3px;
@@ -333,6 +442,8 @@
   --table-header-height: 40px;
   --table-row-padding: 16px;
   --table-col-gap: 24px;
+
+  /* Buttons, pills, controls */
   --button-primary-padding-x: 20px;
   --button-gap: 8px;
   --switch-size: 36px 22px;
@@ -349,12 +460,16 @@
   --agent-chip-gap: 10px;
   --agent-chip-wrap-gap: 8px;
   --logo-ring: 2px;
+
+  /* Inputs */
   --input-height: 42px;
   --input-padding-x: 14px;
   --input-search-height: 36px;
   --input-search-padding: 0 14px 0 34px;
   --input-label-gap: 8px;
   --input-textarea-height: 88px;
+
+  /* Cards, banners, tiles */
   --card-gap: 12px;
   --card-header-gap: 14px;
   --card-tile: 34px;
@@ -369,6 +484,8 @@
   --plugin-card-row-height: 36px;
   --add-card-gap: 12px;
   --add-card-min-height: 120px;
+
+  /* Overlays */
   --dialog-width: 480px;
   --dialog-padding: 32px;
   --dialog-gap: 22px;
@@ -379,12 +496,16 @@
   --sheet-padding: 28px 32px;
   --palette-width: 640px;
   --palette-input-height: 60px;
+  --palette-top: 112px;
+  --palette-list-max-height: 420px;
   --key-hint-padding: 3px 8px;
   --toast-height: 44px;
   --toast-padding: 0 18px;
   --toast-offset: 24px;
   --floating-bar-offset: 24px;
   --floating-bar-height: 56px;
+
+  /* Code, diff, timeline, startup */
   --code-padding-y: 14px;
   --code-gutter: 48px 12px;
   --file-row-padding-x: 16px;
@@ -402,7 +523,8 @@
   --check-mark-gap: 14px;
 }
 
-/* Type roles: the only way to set a font size. */
+/* 5. Type roles (DESIGN.md §3): the only way to set a face, size, weight, line height and
+   tracking together. Add the colour with a text colour token: `type-caption text-text-caption`. */
 @utility type-page-title {
   font-family: var(--font-serif);
   font-size: 56px;

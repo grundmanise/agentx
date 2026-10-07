@@ -1,15 +1,15 @@
 # agentx desktop: design system
 
-The visual contract for the desktop app. Code uses the semantic tokens below, never a primitive or a raw value. `src/styles/tokens.css` is generated from this file by `pnpm tokens` (`scripts/tokens.mjs`), and a test fails when the two differ:
+The visual contract for the desktop app. Code uses the semantic tokens below, never a primitive or a raw value. The tokens live in `src/styles/tokens.css`, which is edited by hand and is the source of truth; this file documents them. When you add or change a token, edit `tokens.css` and the matching table here in the same change. The tables use dotted names, and `tokens.css` names them like this:
 
-- A colour token `shell.bg` becomes `--color-shell-bg`, a Tailwind colour (`bg-shell-bg`, `text-text-muted`). Primitives become `--gray-990` and so on, outside the Tailwind theme, so no utility class can name one.
-- A tone `tone.primary` becomes `--color-tone-primary-fg`, `-bg` and `-border`.
-- A shadow token `overlay.shadow` becomes `--shadow-overlay` (`shadow-overlay`).
-- A radius token `card.tile-radius` becomes `--radius-card-tile` (`rounded-card-tile`).
-- A layout token with one value `shell.sidebar-width` becomes `--shell-sidebar-width` (`w-(--shell-sidebar-width)`). A token given as a range (`38–40`) is guidance, not a variable; pick the value the component calls for.
-- A type token `type.page-title` becomes the utility `type-page-title`, which sets the face, size, weight, line height, tracking and case together.
+- A colour token `shell.bg` is `--color-shell-bg`, a Tailwind colour (`bg-shell-bg`, `text-text-muted`). Primitives are `--gray-990` and so on, outside the Tailwind theme, so no utility class can name one.
+- A tone `tone.primary` is `--color-tone-primary-fg`, `-bg` and `-border`.
+- A shadow token `overlay.shadow` is `--shadow-overlay` (`shadow-overlay`).
+- A radius token `card.tile-radius` is `--radius-card-tile` (`rounded-card-tile`).
+- A layout token with one value `shell.sidebar-width` is `--shell-sidebar-width` (`w-(--shell-sidebar-width)`). A token given as a range (`38–40`) is guidance, not a variable; pick the value the component calls for.
+- A type token `type.page-title` is the utility `type-page-title`, which sets the face, size, weight, line height, tracking and case together.
 
-The Tailwind theme holds only these tokens: default colours, shadows, radii, font sizes, line heights and tracking are removed, and `pnpm lint` rejects any class Tailwind does not know, arbitrary values (`text-[13px]`), colour alpha modifiers and inline style values. When a design needs a value no token holds, add the token here and run `pnpm tokens`; see the README's rules for components.
+The Tailwind theme holds only these tokens. `tokens.css` resets Tailwind's whole default theme (`--*: initial`), so no default colour, spacing step, radius, shadow, font, font size, weight, line height, tracking, breakpoint or animation exists. Besides the tokens above, the theme has three font weights (`font-normal`, `font-medium`, `font-semibold`) and the spacing steps of §4: a 2px grid in half steps from `0` to `12` (48px), with no base `--spacing`, so `p-13` or `top-28` produce no CSS. `pnpm lint` rejects any class Tailwind does not know and any arbitrary value (`text-[13px]`). When a design needs a value no token holds, add the token to `tokens.css` and to the table here; see the README's rules for components.
 
 ## 1. Character
 
@@ -349,7 +349,7 @@ Body text is `text.primary`–`text.muted` on any shell, card or overlay backgro
 
 Fonts (bundled with the app from `@fontsource` packages; the app never loads anything from the network): **Instrument Serif** 400 (titles), **Geist** 400–700 (UI), **Geist Mono** 400–600 (technical).
 
-Each row is a type token: a role with its face, size, weight, line height, tracking and case. A token with one value per column becomes a `type-*` utility; a row with a range (`11–12`) is guidance, not a utility – add a token with one value when a component needs it. Text colour is a separate colour token (§2.2). An empty cell inherits.
+Each row is a type token: a role with its face, size, weight, line height, tracking and case. A token with one value per column is a `type-*` utility in `tokens.css`; a row with a range (`11–12`) is guidance, not a utility – add a token with one value when a component needs it. Text colour is a separate colour token (§2.2). An empty cell inherits.
 
 | Token | Face | Size | Weight | Line height | Tracking | Case | Element |
 |---|---|---|---|---|---|---|---|
