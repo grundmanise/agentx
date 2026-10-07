@@ -29,7 +29,7 @@ cd agentx
 | Path | What it holds |
 | --- | --- |
 | [`apps/cli`](apps/cli) | The Go module of the `agentx` command-line tool |
-| [`CONTEXT.md`](CONTEXT.md) | The vocabulary: the terms to use in code, docs, issues and PRs |
+| [`GLOSSARY.md`](GLOSSARY.md) | The vocabulary: the terms to use in code, docs, issues and PRs |
 | [`docs/adr`](docs/adr) | Architecture decisions |
 | [`docs/spec`](docs/spec) | Contracts and specs, such as the CLI's output contract |
 | [`docs/help-center`](docs/help-center) | The user documentation, built with Mintlify |
@@ -59,7 +59,7 @@ CI alike. The build uses the Go version `apps/cli/go.mod` specifies.
 
 ## Make a change
 
-- **Use the vocabulary.** Name concepts as [`CONTEXT.md`](CONTEXT.md) defines them, and avoid the
+- **Use the vocabulary.** Name concepts as [`GLOSSARY.md`](GLOSSARY.md) defines them, and avoid the
   synonyms it lists. If a concept you need is missing, raise it in your issue or PR.
 - **Respect the ADRs.** If your change contradicts an architecture decision, say so in the PR and explain
   why the decision should be reopened.
@@ -84,8 +84,8 @@ CI alike. The build uses the Go version `apps/cli/go.mod` specifies.
   implementation only where it's needed to understand the change. For how to write a good commit
   message, read [How to Write a Git Commit Message](https://cbea.ms/git-commit/); where its rules for
   the subject line differ, the Conventional Commits title above wins.
-- **Visual evidence**: if the change affects functionality, include a screenshot, a recording or, for
-  CLI-only changes, the relevant CLI output.
+- **Evidence**: if the change affects functionality or behavior, show it before and after with
+  screenshots, a recording or, for CLI-only changes, the relevant CLI output. Otherwise, it's optional.
 - **Writing style**: don't use em dashes (`—`) anywhere; use en dashes (`–`), hyphens (`-`) or another
   suitable punctuation.
 
