@@ -128,6 +128,8 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `shell.logo-mark` | `accent.primary` | The X in the product mark |
 | `shell.logo-bg` | `gray-990` | Product mark tile |
 | `shell.logo-ring` | `gray-860` | 1px ring around the product mark |
+| `shell.focus-ring` | `accent.primary` | Keyboard focus outline on any element |
+| `shell.selection-bg` | `lime-400/30` | Selected text |
 
 #### Buttons
 
@@ -421,6 +423,8 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `shell.command-height` | 32 | `h-command` |  |
 | `shell.status-height` | 30 | `h-status` | Remote status pill |
 | `shell.panel-inset` | 10 | `mr-panel mb-panel` | Main panel inset from the right and bottom |
+| `shell.focus-ring-width` | 2 | none: `index.css` sets it on every element | Keyboard focus outline |
+| `shell.focus-ring-offset` | 2 | none: as above |  |
 
 ### Pages
 

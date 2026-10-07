@@ -1,5 +1,6 @@
 /* Tailwind reads classes from src/ only (not docs or lint fixtures), so the build holds only
-   what the app uses. Its default theme is replaced in tokens.css. */
+   what the app uses. Its default theme is replaced in tokens.css, and the base styles below use
+   only its tokens. */
 @import "tailwindcss" source("..");
 @import "@fontsource-variable/geist";
 @import "@fontsource-variable/geist-mono";
@@ -14,12 +15,11 @@
     height: 100%;
   }
   body {
+    @apply type-body;
     margin: 0;
     overflow: hidden;
     background: var(--color-shell-bg);
     color: var(--color-text-primary);
-    font-family: var(--font-sans);
-    font-size: 14px;
     -webkit-font-smoothing: antialiased;
     user-select: none;
     cursor: default;
@@ -36,14 +36,10 @@
     color: var(--color-input-placeholder);
   }
   :focus-visible {
-    outline: 2px solid var(--color-accent-primary);
-    outline-offset: 2px;
+    outline: var(--outline-width-focus) solid var(--color-shell-focus-ring);
+    outline-offset: var(--outline-offset-focus);
   }
   ::selection {
-    background: color-mix(
-      in srgb,
-      var(--color-accent-primary) 30%,
-      transparent
-    );
+    background: var(--color-shell-selection-bg);
   }
 }

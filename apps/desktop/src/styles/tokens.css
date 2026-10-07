@@ -130,6 +130,8 @@
   --color-shell-logo-mark: var(--color-accent-primary);
   --color-shell-logo-bg: var(--gray-990);
   --color-shell-logo-ring: var(--gray-860);
+  --color-shell-focus-ring: var(--color-accent-primary);
+  --color-shell-selection-bg: rgb(212 255 79 / 0.3);
 
   /* Buttons */
   --color-button-primary-bg: var(--color-accent-primary);
@@ -416,6 +418,8 @@
   --height-command: 32px;
   --height-status: 30px;
   --margin-panel: 10px;
+  --outline-width-focus: 2px;
+  --outline-offset-focus: 2px;
 
   /* Pages */
   --padding-page: 48px;
