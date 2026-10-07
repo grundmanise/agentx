@@ -1,3 +1,5 @@
+// This file passes forbidden props on purpose, to prove the types reject them.
+/* oxlint-disable shadcn/no-restyle, react/forbid-component-props */
 import { render, screen } from "@testing-library/react";
 import { AgentxMark } from "@/components/agentx-mark";
 import { CommandField } from "@/components/command-field";

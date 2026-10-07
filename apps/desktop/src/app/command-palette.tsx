@@ -36,7 +36,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
         <Dialog.Overlay className="fixed inset-0 z-50 bg-shell-scrim-strong" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="fixed top-28 left-1/2 z-50 flex w-(--palette-width) -translate-x-1/2 flex-col overflow-hidden rounded-palette border border-overlay-border bg-overlay-bg shadow-overlay"
+          className="fixed top-(--palette-top) left-1/2 z-50 flex w-(--palette-width) -translate-x-1/2 flex-col overflow-hidden rounded-palette border border-overlay-border bg-overlay-bg shadow-overlay"
         >
           <Dialog.Title className="sr-only">Command palette</Dialog.Title>
           <Command filter={filter} loop>
@@ -49,7 +49,7 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
               />
               <KeyHint>esc</KeyHint>
             </div>
-            <Command.List className="max-h-105 overflow-auto p-2">
+            <Command.List className="max-h-(--palette-list-max-height) overflow-auto p-2">
               <Command.Empty className="p-7 text-center text-text-muted">No matches</Command.Empty>
               {groups.map((g) => (
                 <Command.Group

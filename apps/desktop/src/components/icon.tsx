@@ -1,3 +1,5 @@
+import { cva, type VariantProps } from "class-variance-authority";
+
 // Stroke icons on a 24 grid (DESIGN.md §7). Paths come from the design mock.
 export const icons = {
   inbox:
@@ -21,13 +23,17 @@ export type IconStroke = 1.75 | 2 | 2.25;
  * The icon's colour. `current` takes the text colour around it. `palette` is the command palette's
  * icon grey. `palette-row` is that grey, turning to the accent while its row (a `group`) is selected.
  */
-const tones = {
-  current: undefined,
-  palette: "text-palette-icon",
-  "palette-row": "text-palette-icon group-data-[selected=true]:text-palette-icon-active",
-} as const;
+const iconVariants = cva("", {
+  variants: {
+    tone: {
+      current: "",
+      palette: "text-palette-icon",
+      "palette-row": "text-palette-icon group-data-[selected=true]:text-palette-icon-active",
+    },
+  },
+});
 
-export type IconTone = keyof typeof tones;
+export type IconTone = NonNullable<VariantProps<typeof iconVariants>["tone"]>;
 
 export function Icon({
   name,
@@ -51,7 +57,7 @@ export function Icon({
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden
-      className={tones[tone]}
+      className={iconVariants({ tone }) || undefined}
     >
       <path d={icons[name]} />
     </svg>
