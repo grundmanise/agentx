@@ -11,8 +11,6 @@ How the engineering skills should consume this repo's domain documentation when 
 
 If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
 
-The glossary is `GLOSSARY.md`, not `CONTEXT.md`. When a skill would create or update `CONTEXT.md`, write to `GLOSSARY.md` instead.
-
 ## File structure
 
 Single-context repo:

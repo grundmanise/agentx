@@ -6,8 +6,7 @@ See CONTRIBUTING.md for the full conventions.
 ## Summary
 
 <!-- In an imperative style, summarize what changed for users and why. Describe the implementation only
-where it's needed to understand the change. Optionally, link the issue it resolves, like "Closes #123".
-Add a diagram, a diff sketch, or a tree where it makes the change clearer. -->
+where it's needed to understand the change. Optionally, link the issue it resolves, like "Closes #123". -->
 
 ## Evidence
 
