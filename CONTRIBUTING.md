@@ -52,7 +52,7 @@ Go module in `apps/cli`:
 | `make build-cli` | Compiles every package | `go build ./...`, `CGO_ENABLED=0` on Linux and `1` on macOS |
 | `make test-cli` | Runs every test with the race detector, never from cache | `go test -race -count=1 ./...` |
 | `make check-cli` | Runs all the CLI checks CI runs, in the same order | `fmt-check-cli lint-cli tidy-check-cli build-cli test-cli` |
-| `make check-desktop` | Runs all the desktop app checks CI runs: the frontend, then the Tauri shell | `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm lint`, `pnpm test`, `pnpm build`, then `cargo fmt --check` and `cargo clippy --locked -- -D warnings` |
+| `make check-desktop` | Runs all the desktop app checks CI runs: the frontend, then the Tauri shell | `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm format-check`, `pnpm lint`, `pnpm test`, `pnpm build`, then `cargo fmt --check` and `cargo clippy --locked -- -D warnings` |
 | `make check` | Runs every check CI runs | `check-cli check-desktop` |
 
 To run the tests without the race detector, as CI does on macOS, use `make test-cli RACE=`.
@@ -79,7 +79,8 @@ and Rust, and on Linux the WebKitGTK development packages; see the desktop app's
   tone.
 - **Run `make check`.** It runs what CI runs: the CLI checks and the desktop app checks. A green
   `make check` means a green pull request. It needs the tools of both apps, so to check only the side you
-  changed, run `make check-cli` or `make check-desktop`. Run `make fmt-cli` to fix Go formatting.
+  changed, run `make check-cli` or `make check-desktop`. Run `make fmt-cli` to fix Go formatting, and
+  `pnpm fix` in `apps/desktop` to fix the desktop app's formatting and lint.
 
 ## Open a pull request
 
