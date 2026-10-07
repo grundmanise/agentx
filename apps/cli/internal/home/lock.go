@@ -130,29 +130,63 @@ func TakeServeLock(dir string) (*os.File, error) {
 	return f, err
 }
 
-// takeLock takes the exclusive advisory lock of agentx home; a held lock is
-// ErrLocked after a few quick retries. A holder that finishes frees the lock
-// at once through Unlock; the retries cover one killed while a child process
-// it had forked was not yet exec'd, which keeps the lock until its exec. It
-// creates agentx home, mutations and ops directories included, on first use,
-// since the lock file lives there.
-func takeLock(dir string) (*os.File, error) {
+// takeLock takes the exclusive advisory lock of agentx home; a lock another
+// mutation holds is ErrLocked after a few quick retries, and one that only
+// readers hold is waited for up to readerWait. A holder that finishes frees
+// the lock at once through Unlock; the retries cover one killed while a
+// child process it had forked was not yet exec'd, which keeps the lock
+// until its exec. It creates agentx home, mutations and ops directories
+// included, on first use, since the lock file lives there.
+func takeLock(dir string) (*os.File, error) { return takeLockWithin(dir, readerWait) }
+
+// takeLockWithin is takeLock waiting for readers no longer than readers.
+//
+// Readers are waited for because a scan only reads and lets go on its own,
+// and the serve child scans on every change it sees, a mutation's own git
+// writes in the account repo among them: a fetch that deletes its staging
+// ref touches the account repo's directory, and the rescan that sets off
+// holds the shared lock about when the command comes to record the fetch.
+// A command that gave up on readers would be run again, write again and
+// set off the same rescan, so a machine slow enough to lose that race once
+// lost it every time.
+func takeLockWithin(dir string, readers time.Duration) (*os.File, error) {
 	if err := createHome(dir); err != nil {
 		return nil, err
 	}
+	deadline := time.Now().Add(readers)
 	for attempt := 1; ; attempt++ {
 		f, err := flock(LockPath(dir), syscall.LOCK_EX)
-		if !errors.Is(err, ErrLocked) || attempt == lockAttempts {
+		if !errors.Is(err, ErrLocked) {
 			return f, err
+		}
+		if attempt >= lockAttempts && (time.Now().After(deadline) || !readersOnly(dir)) {
+			return nil, err
 		}
 		time.Sleep(lockRetry)
 	}
 }
 
-// A held lock is reported after lockAttempts tries lockRetry apart.
+// readersOnly reports whether the lock of agentx home dir is held by readers
+// alone: the shared lock can be taken while no mutation holds the exclusive
+// one. The shared lock is let go at once, so a command waiting for readers
+// never holds the lock while it waits.
+func readersOnly(dir string) bool {
+	f, err := flock(LockPath(dir), syscall.LOCK_SH)
+	if err != nil {
+		return false
+	}
+	Unlock(f)
+	return true
+}
+
+// A lock another mutation holds is reported after lockAttempts tries
+// lockRetry apart; one only readers hold is waited for up to readerWait,
+// generous for a scan, which only reads, and still an end to a reader that
+// hangs.
 const (
 	lockAttempts = 5
 	lockRetry    = 10 * time.Millisecond
+	readerWait   = 5 * time.Second
 )
 
 // waitLock takes the advisory lock how (shared for a scan's reads,
