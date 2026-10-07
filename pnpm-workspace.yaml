@@ -1,0 +1,30 @@
+# The pnpm workspace: one lockfile at the root for every JavaScript package.
+# Settings: https://pnpm.io/settings
+packages:
+  - apps/desktop
+  - packages/*
+
+# Dependencies are pinned to exact versions; `pnpm add` saves them without ^ or ~.
+saveExact: true
+
+# Fail the install when a peer dependency is missing or out of range, instead of a warning.
+strictPeerDependencies: true
+
+# Refuse to install a dependency whose `engines` field excludes the running Node.
+engineStrict: true
+
+# Install a version only once it has been published for a day (in minutes). Setting it here also
+# turns on minimumReleaseAgeStrict, so pnpm fails rather than fall back to a newer version.
+minimumReleaseAge: 1440
+
+# Fail when a package's publish trust drops below that of its earlier releases.
+trustPolicy: no-downgrade
+
+# Install scripts run only for the packages listed here; any other package with one fails the
+# install (strictDepBuilds is on by default). No dependency needs one today: esbuild is not in the
+# tree, and Tailwind's oxide engine and the other native tools ship prebuilt per-platform packages.
+allowBuilds: {}
+
+# Workspace packages are linked only through an explicit `workspace:` range, never by a matching
+# version alone.
+linkWorkspacePackages: false

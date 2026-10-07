@@ -16,11 +16,11 @@ The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it
 
 ## Develop
 
-You need Node 22.22.2+, 24.15+ or 26+, pnpm 10 and Rust. On Linux, Tauri also needs the WebKitGTK development packages ([Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)).
+You need Node 22.22.2+, 24.15+ or 26+, pnpm 12 and Rust. On Linux, Tauri also needs the WebKitGTK development packages ([Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)).
 
 ```sh
+pnpm install     # from the repository root
 cd apps/desktop
-pnpm install
 pnpm tauri dev   # the app in its window
 pnpm dev         # the frontend alone, in a browser at http://localhost:1420
 ```
@@ -31,6 +31,8 @@ pnpm dev         # the frontend alone, in a browser at http://localhost:1420
 | `pnpm typecheck` | Type-checks the frontend |
 | `pnpm lint` | Runs the design-system lint on `src` |
 | `pnpm build` | Builds the frontend into `dist` |
+
+The app is a package of the pnpm workspace at the repository root: `pnpm-workspace.yaml` lists the packages and holds the pnpm settings, and `pnpm-lock.yaml` sits next to it. Dependencies are pinned to exact versions, and `pnpm add` saves them that way. pnpm installs a version only once it has been published for a day, and runs install scripts only for the packages `allowBuilds` lists.
 
 From the repository root, `make check-desktop` runs what CI runs for the desktop app: the frontend checks, then cargo fmt and Clippy for the Rust side.
 
