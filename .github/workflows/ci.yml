@@ -13,6 +13,7 @@ permissions:
   contents: read
 
 # Every check is a Makefile target, so CI and `make check` run the same commands.
+# `make check` runs `check-cli` and `check-desktop`; the CLI jobs split `check-cli` into its steps.
 jobs:
   lint:
     name: CLI lint
@@ -25,9 +26,9 @@ jobs:
           go-version-file: apps/cli/go.mod
           cache-dependency-path: apps/cli/go.sum
 
-      - run: make fmt-check
-      - run: make lint
-      - run: make tidy-check
+      - run: make fmt-check-cli
+      - run: make lint-cli
+      - run: make tidy-check-cli
 
   test:
     name: CLI test (${{ matrix.os }})
@@ -46,8 +47,40 @@ jobs:
           go-version-file: apps/cli/go.mod
           cache-dependency-path: apps/cli/go.sum
 
-      - run: make build
+      - run: make build-cli
       # The race detector runs on Linux only. The macOS job is there for the
       # watcher's FSEvents backend; the Linux job finds the data races, and
-      # `make check` keeps -race locally.
-      - run: make test ${{ runner.os == 'macOS' && 'RACE=' || '' }}
+      # `make check-cli` keeps -race locally.
+      - run: make test-cli ${{ runner.os == 'macOS' && 'RACE=' || '' }}
+
+  desktop:
+    name: Desktop
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Reads the pnpm version from packageManager in the root package.json.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          # The latest LTS; package.json requires Node 24 or later.
+          node-version: lts/*
+          cache: pnpm
+
+      - name: Install WebKitGTK
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev libayatana-appindicator3-dev
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/desktop/src-tauri
+
+      # The end-to-end tests run in Chromium, in the version the locked @playwright/test expects.
+      - name: Install Chromium
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --dir apps/desktop exec playwright install --with-deps chromium
+
+      - run: make check-desktop
