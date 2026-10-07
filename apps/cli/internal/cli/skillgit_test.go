@@ -228,8 +228,7 @@ func stdinGit(t *testing.T, h *harness, sub string) func() []string {
 	// wrapper alone, so the shell would not find tee; the pipeline's status
 	// is the real git's, which is the one the caller must see.
 	stubGit(t, h, `#!/bin/sh
-PATH=`+os.Getenv("PATH")+`
-for arg in "$@"; do
+`+hostPATH()+`for arg in "$@"; do
 	case "$arg" in
 	`+sub+`)
 		tee `+dir+`/$$.in | `+real+` "$@"
