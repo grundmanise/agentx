@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"os"
+	"sync"
 	"syscall"
 	"testing"
+	"time"
 )
 
 // shareLock stands in for a child process another goroutine has forked but
@@ -100,4 +102,52 @@ func TestTheLockIsFreeOnceItsHolderFinishes(t *testing.T) {
 		}
 		Unlock(next)
 	})
+}
+
+// TestAMutationWaitsForReadersAndNotForWriters: a lock only readers hold is
+// waited for, up to a bound, and one another mutation holds is refused after
+// the quick retries, however long that bound. It measures time, so it does
+// not run in parallel.
+func TestAMutationWaitsForReadersAndNotForWriters(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		how     int           // the lock the other command holds
+		letGo   time.Duration // when it lets go; 0 holds it for the whole test
+		readers time.Duration // how long the mutation waits for readers
+		want    error
+	}{
+		{"a reader that lets go", syscall.LOCK_SH, 200 * time.Millisecond, readerWait, nil},
+		{"a reader that outlasts the wait", syscall.LOCK_SH, 0, 200 * time.Millisecond, ErrLocked},
+		{"a writer", syscall.LOCK_EX, 0, readerWait, ErrLocked},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := createHome(dir); err != nil {
+				t.Fatal(err)
+			}
+			held, err := flock(LockPath(dir), tt.how)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var once sync.Once
+			release := func() { once.Do(func() { Unlock(held) }) }
+			t.Cleanup(release)
+			if tt.letGo > 0 {
+				time.AfterFunc(tt.letGo, release)
+			}
+
+			start := time.Now()
+			f, err := takeLockWithin(dir, tt.readers)
+			took := time.Since(start)
+			if f != nil {
+				Unlock(f)
+			}
+			if !errors.Is(err, tt.want) || (tt.want == nil) != (err == nil) {
+				t.Fatalf("err = %v after %s, want %v", err, took, tt.want)
+			}
+			if tt.how == syscall.LOCK_EX && took > readerWait/5 {
+				t.Errorf("refused after %s: a writer is not waited for", took)
+			}
+		})
+	}
 }

@@ -67,7 +67,7 @@ A failed command prints `error: ...` on stderr. If there is a fix, a `hint: ...`
 | 4 | A merge is pending. Either a pending merge blocks the command, or `skill update` found a conflict and left a merge for you to resolve. See [When your edits conflict](/cli/skill#when-your-edits-conflict) and, for one of your own skills, [Resolve a conflict](/cli/fork#resolve-a-conflict). |
 | 5 | Something you named does not exist: a skill, a source, a ref or directory in a source, a configuration or a file. |
 | 6 | agentx refused because something is in the way or changed meanwhile. Examples: a name is already taken, a server rule such as a hook declined a push (see [Publish a skill](/cli/skill#publish-a-skill)), or a source changed a skill you publish to it (see [Publish edits to a shared source](/cli/skill#publish-edits-to-a-shared-source)). |
-| 7 | Another agentx command is running. Retry when it finishes. |
+| 7 | Another agentx command is running. Retry when it finishes. A command waits a few seconds for a scan, such as the desktop app reading your skills, before it stops with this code. |
 | 8 | git cannot use the account repo, `account.git` in agentx home. Run `agentx doctor`. |
 | 9 | You stopped the run with Ctrl-C, or something sent it a `SIGTERM`. See [Stop a run](#stop-a-run). |
 | 10 | An internal error, such as a file agentx cannot read or write. Read the message and hint. If they name no cause, report it as a bug. |
