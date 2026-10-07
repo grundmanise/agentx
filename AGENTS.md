@@ -10,7 +10,7 @@ The five canonical triage labels. See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
-Single-context: `CONTEXT.md` at the root, ADRs in `docs/adr/`, specs in `docs/spec/`. See `docs/agents/domain.md`.
+Single-context: `GLOSSARY.md` at the root, ADRs in `docs/adr/`, specs in `docs/spec/`. See `docs/agents/domain.md`.
 
 ## Help center
 
@@ -37,21 +37,19 @@ Before adding a test, find the one that already covers the path, and extend it i
 
 ### Titles
 
-PR and commit titles should follow the conventional commit format. We squash merge PRs, so the first commit message becomes the PR title.
+Follow the conventional commit format. GitHub uses the first commit message as the PR title, and we squash-merge PRs, so the PR title becomes the commit on `main`.
 
 The type decides the release notes section: `feat` for something new, `change` for a change to how an existing feature behaves, `fix` for a bug fix. See "Release notes" in `CONTRIBUTING.md`.
 
 ### Descriptions
 
-PR and commit descriptions should use an imperative style and provide a clear, concise summary of the changes made. They should focus on how the changes affect end users – what changed and why – rather than on how it was implemented, unless that’s essential for understanding the changes.
+For PR descriptions, follow the PR skill in `.agents/skills/pr/SKILL.md`.
+
+Write commit descriptions in an imperative style. Focus on how the change affects users, what changed and why, and describe the implementation only where it's needed to understand the change.
 
 ### Branches
 
 - Name branches after the change in product terms, such as `feat/source-removed-drift`.
-
-### Visual evidence
-
-PRs that change functionality should include visual evidence of the change in the description: a screenshot, a video recording, or, if only the CLI has changed, the relevant CLI output.
 
 ### Writing style
 
