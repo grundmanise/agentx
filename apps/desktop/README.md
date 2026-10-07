@@ -7,8 +7,8 @@ The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it
 | Path | What it holds |
 | --- | --- |
 | [`DESIGN.md`](DESIGN.md) | The design system: colour, type, spacing and radius tokens, components, motion and copy rules |
-| `src/styles/tokens.css` | The tokens as CSS variables and `type-*` utilities, generated from `DESIGN.md` |
-| `.oxlintrc.json`, `lint/` | The design-system lint and its local rules; `lint/fixtures` holds the code it must reject |
+| `src/styles/tokens.css` | The tokens as CSS variables and `type-*` utilities, edited by hand. It also resets Tailwind's theme so only these tokens exist |
+| `.oxlintrc.json`, `lint/` | The design-system lint, built on [`@shadcn/lint`](https://github.com/shadcn-ui/lint); `lint/fixtures` holds the code it must reject |
 | `src/app` | The app shell: title bar, sidebar, main panel, command palette |
 | `src/screens` | One folder per screen |
 | `src/components` | Shared components; `ui` holds the shadcn/ui-based primitives |
@@ -16,7 +16,7 @@ The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it
 
 ## Develop
 
-You need Node 22.22.2 or later, pnpm 10 and Rust. On Linux, Tauri also needs the WebKitGTK development packages ([Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)).
+You need Node 22.22.2+, 24.15+ or 26+, pnpm 10 and Rust. On Linux, Tauri also needs the WebKitGTK development packages ([Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)).
 
 ```sh
 cd apps/desktop
@@ -27,25 +27,27 @@ pnpm dev         # the frontend alone, in a browser at http://localhost:1420
 
 | Command | What it does |
 | --- | --- |
-| `pnpm test` | Checks the tokens are in sync with `DESIGN.md`, then runs the tests |
+| `pnpm test` | Runs the tests, including the checks on `tokens.css` and on the lint |
 | `pnpm typecheck` | Type-checks the frontend |
 | `pnpm lint` | Runs the design-system lint on `src` |
 | `pnpm build` | Builds the frontend into `dist` |
-| `pnpm tokens` | Regenerates `src/styles/tokens.css` after you edit `DESIGN.md` |
 
-From the repository root, `make desktop-check` runs what CI runs for the frontend, and `make desktop-rust-check` checks the Rust side.
+From the repository root, `make check-desktop` runs what CI runs for the desktop app: the frontend checks, then cargo fmt and Clippy for the Rust side.
 
 ## Rules for components
 
 These rules are for anyone writing a component, people and coding agents alike. If a value is not a decision recorded in `DESIGN.md`, the code should not pass `pnpm lint` or `pnpm test`.
 
-- Style with the semantic tokens from `DESIGN.md` through their Tailwind names: colours (`bg-shell-content-bg`), radii (`rounded-card`), shadows (`shadow-overlay`), layout tokens (`w-(--shell-sidebar-width)`, `p-(--page-padding)`) and type roles (`type-page-title`, then a colour such as `text-text-primary`). Tailwind's default colours, radii, shadows, font sizes, line heights and tracking do not exist in this app, so a class that names one does nothing, and the lint reports it as unknown.
-- A gap or size that no token lists uses Tailwind's spacing steps in whole or half steps, a 2px grid (`gap-2.5`, `h-9.5`).
-- No escape hatches. The lint rejects arbitrary values (`text-[13px]`, `rounded-[10px]`, `bg-[#fff]`), arbitrary properties, alpha modifiers on colours (`bg-card-bg/50`), `font-mono`, `leading-*` and `tracking-*` outside a type role, `rounded-full`, and inline styles. A value known only at run time goes in a custom property (`style={{ "--progress": n }}`) that a class reads (`w-(--progress)`).
-- When the design needs a value no token holds, add the token to `DESIGN.md` in the table for its element, run `pnpm tokens` and use it. Do not reuse another element's token because the value matches.
+- Style with the semantic tokens through their Tailwind names: colours (`bg-shell-content-bg`), radii (`rounded-card`), shadows (`shadow-overlay`), layout tokens (`w-(--shell-sidebar-width)`, `p-(--page-padding)`) and type roles (`type-page-title`, then a colour such as `text-text-primary`).
+- The tokens live in `src/styles/tokens.css`, edited by hand. `DESIGN.md` documents them. When the design needs a value no token holds, add the token to `tokens.css` and to its table in `DESIGN.md` in the same change, then use it. Do not reuse another element's token because the value matches.
+- The Tailwind theme holds only our tokens. `tokens.css` resets the default theme (`--*: initial`), so Tailwind's default colours, spacing, radii, shadows, fonts, font sizes, line heights, tracking and breakpoints do not exist. A class that names one produces no CSS, and the lint reports it as unknown.
+- Spacing steps go from `0` to `12` in half steps, a 2px grid (`gap-2.5`, `h-9.5`). A larger or off-grid value needs a layout token.
+- No escape hatches. The lint rejects arbitrary values (`text-[13px]`, `bg-[#fff]`), raw palette colours, unknown classes, inline styles and class strings it cannot read. A value known only at run time goes in a custom property (`style={{ "--progress": n }}`) on a plain element, and a class reads it (`w-(--progress)`).
+- The lint does not catch a few utilities that need no theme value: alpha modifiers on colours (`bg-card-bg/50`), `rounded-full` and `leading-none`. Do not use them; add a token instead.
+- Our components (anything imported from `src`) take no `className` and no `style`. Every visual choice is a closed, typed prop: `Button`'s `variant` and `size`, `Icon`'s `size`, `strokeWidth` and `tone`, `AgentxMark`'s `size`, which also sets its radius. The types reject anything else, and the lint reports a `className` or `style` on them. To place a component, wrap it in an element or use `gap` on the parent.
+- When no prop fits, add a variant to the component with `cva()`, not a prop that takes free values.
 - Screens and the app shell build on the components in `src/components`: native `<button>`, `<input>`, `<textarea>` and `<select>` are allowed only there. Use `Button` and its variants; add a component, or a variant to an existing one, when none fits.
-- The lint reads classes in `className`, `cn()` and `cva()`. A class string anywhere else (such as a library's `classNames` option) goes through `cn()` so it is checked too.
-- Components take typed props for their choices (`Button`'s `variant` and `size`, `Icon`'s `size`), not free values.
-- Code generated with the shadcn CLI uses shadcn's default classes; map them to tokens before committing, or the lint fails.
+- The lint reads classes in `className`, `cn()`, `cva()` and same-file variables. Keep class strings in one of these; a class string anywhere else (such as a library's `classNames` option) goes through `cn()` so it is checked too.
+- Code generated with the shadcn CLI uses shadcn's default classes; map them to tokens and remove its `className` prop before committing, or the lint fails.
 - Follow the copy rules in `DESIGN.md` §9 and the vocabulary in [`GLOSSARY.md`](../../GLOSSARY.md).
 - Show only what the CLI reports. A screen never predicts the result of a command.

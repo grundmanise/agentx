@@ -385,7 +385,7 @@ Text wrapping: `text-wrap:pretty` on multi-line copy. Single-line cells use `whi
 
 Spacing is a semantic token per element, not a shared scale. Two tokens with the same step name (`button.gap`, `card.gap`) are independent values; change one without touching the other. Primitive px values are listed so the system can be audited, but code references the token.
 
-A size or gap inside a component that no token lists uses Tailwind's spacing steps in whole or half steps, a 2px grid (`gap-2.5` is 10px, `pb-5.5` is 22px). Never a quarter step or an arbitrary value; a value off the grid needs a token.
+A size or gap inside a component that no token lists uses Tailwind's spacing steps in whole or half steps, a 2px grid (`gap-2.5` is 10px, `pb-5.5` is 22px). The steps stop at `12` (48px). Never a quarter step or an arbitrary value; a value off the grid or above 48px needs a layout token.
 
 ### Window and shell
 | Token | px | Element |
@@ -518,6 +518,8 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `sheet.padding` | 28 32 | |
 | `palette.width` | 640 | |
 | `palette.input-height` | 60 | |
+| `palette.top` | 112 | From the window top |
+| `palette.list-max-height` | 420 | Palette result list |
 | `key-hint.padding` | 3 8 | Key hint (`esc`, `⌘K`) |
 | `toast.height` | 44 | |
 | `toast.padding` | 0 18 | 0 6 0 18 with an action |
