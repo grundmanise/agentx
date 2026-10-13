@@ -254,8 +254,7 @@
   --color-popover-caption: var(--gray-500);
   --color-palette-row-text: var(--gray-150);
   --color-palette-row-active: var(--gray-870);
-  --color-palette-icon: var(--gray-400);
-  --color-palette-icon-active: var(--color-accent-primary);
+  --color-palette-icon: var(--gray-300);
   --color-dialog-title: var(--gray-50);
   --color-dialog-subtitle: var(--gray-400);
   --color-sheet-bg: var(--gray-960);

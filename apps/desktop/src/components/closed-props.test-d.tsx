@@ -23,8 +23,12 @@ export const rejectedProps = () => (
     <Icon name="search" className="text-text-primary" />
     {/* @ts-expect-error style is not an Icon prop */}
     <Icon name="search" style={{ marginTop: 8 }} />
-    {/* @ts-expect-error tone is a closed set */}
-    <Icon name="search" tone="red" />
+    {/* @ts-expect-error the colour is in the icon's file, so Icon takes no tone */}
+    <Icon name="search" tone="palette" />
+    {/* @ts-expect-error the stroke width is in the icon's file, so Icon takes no strokeWidth */}
+    <Icon name="search" strokeWidth={2} />
+    {/* @ts-expect-error name is a closed set */}
+    <Icon name="star" />
     {/* @ts-expect-error size is a closed set */}
     <Icon name="search" size={17} />
     {/* @ts-expect-error className is not an AgentxMark prop */}

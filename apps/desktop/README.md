@@ -12,7 +12,7 @@ The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it
 | `src/app` | The app shell: title bar, sidebar, main panel, command palette |
 | `src/screens` | The screens; today one placeholder |
 | `src/components` | Shared components; `ui` holds the shadcn/ui-based primitives |
-| `src/assets` | The product mark and the icons, one SVG file each. The mark is also the source of the app icons in `src-tauri/icons` |
+| `src/assets` | The product mark and the icons, one SVG file each, shown as `<img>` from the URL Vite gives an imported file. The mark is also the source of the app icons in `src-tauri/icons` |
 | `e2e` | The end-to-end tests: [Playwright](https://playwright.dev) drives the frontend in Chromium on the Vite dev server |
 | `oxlint.config.ts`, `oxfmt.config.ts` | The lint and the formatter: [Ultracite](https://www.ultracite.ai)'s presets for oxlint and oxfmt, plus the design-system lint built on [`@shadcn/lint`](https://github.com/shadcn-ui/lint) |
 | `src-tauri` | The Rust side: the window, and later the CLI supervisor |
@@ -76,7 +76,7 @@ These rules are for anyone writing a component, people and coding agents alike.
 
 ### Components
 
-- Our components (anything imported from `src`) take no `className` and no `style`. Every visual choice is a closed, typed prop: `Button`'s `variant` and `size`, `Icon`'s `size`, `strokeWidth` and `tone`, `AgentxMark`'s `size`, which also sets its radius. To place a component, wrap it in an element or use `gap` on the parent.
+- Our components (anything imported from `src`) take no `className` and no `style`. Every visual choice is a closed, typed prop: `Button`'s `variant` and `size`, `Icon`'s `name` and `size`, `AgentxMark`'s `size`, which also sets its radius. To place a component, wrap it in an element or use `gap` on the parent.
 - When no prop fits, add a variant to the component with `cva()`, not a prop that takes free values.
 - Native `<button>`, `<input>`, `<textarea>` and `<select>` are allowed only in `src/components`. Screens and the app shell use `Button` and the other components there; add a component, or a variant, when none fits.
 - Code generated with the shadcn CLI uses shadcn's default classes; map them to tokens and remove its `className` prop before committing.

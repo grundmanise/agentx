@@ -22,6 +22,24 @@ test("opens on the Inbox and lists the screens in sidebar order", async ({
     "page"
   );
   await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+
+  // Each link's icon is an <img> from its SVG file, loaded and hidden from screen readers.
+  const icons = nav.locator("img");
+  await expect(icons).toHaveCount(7);
+  await expect(nav.getByRole("img")).toHaveCount(0);
+  await expect
+    .poll(
+      async () =>
+        await icons.evaluateAll((imgs) =>
+          imgs.every(
+            (img) =>
+              img instanceof HTMLImageElement &&
+              img.alt === "" &&
+              img.naturalWidth > 0
+          )
+        )
+    )
+    .toBe(true);
 });
 
 test("moves between screens from the sidebar", async ({ page }) => {

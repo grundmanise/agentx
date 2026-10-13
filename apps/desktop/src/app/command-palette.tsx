@@ -52,7 +52,7 @@ export const CommandPalette = ({
           <Dialog.Title className="sr-only">Command palette</Dialog.Title>
           <Command filter={filter} loop>
             <div className="border-card-border h-palette-input flex items-center gap-3 border-b px-5">
-              <Icon name="search" size={18} strokeWidth={2} tone="palette" />
+              <Icon name="search" size={18} />
               <Command.Input
                 autoFocus
                 placeholder="Search skills or run a command"
@@ -82,7 +82,7 @@ export const CommandPalette = ({
                         }}
                         className="group rounded-palette-row text-palette-row-text data-[selected=true]:bg-palette-row-active data-[selected=true]:text-text-primary flex h-10.5 items-center gap-3 px-3"
                       >
-                        <Icon name={i.icon} size={15} tone="palette-row" />
+                        <Icon name={i.icon} size={15} />
                         <span className="type-body flex-1">{i.label}</span>
                         {i.hint !== undefined && (
                           <span className="type-palette-hint text-text-caption group-data-[selected=true]:text-text-muted">

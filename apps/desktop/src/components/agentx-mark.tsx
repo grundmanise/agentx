@@ -23,6 +23,7 @@ export const AgentxMark = ({ size }: { size: 26 | 40 }) => (
     width={size}
     height={size}
     alt="agentx"
+    draggable={false}
     className={markVariants({ size })}
   />
 );
