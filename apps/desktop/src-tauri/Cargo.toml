@@ -1,0 +1,17 @@
+[package]
+name = "agentx-desktop"
+version = "0.0.0"
+description = "The agentx desktop app"
+license = "Apache-2.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "agentx_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.1", features = [] }
+
+[dependencies]
+tauri = { version = "2.12.1", features = [] }
