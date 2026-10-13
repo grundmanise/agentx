@@ -45,8 +45,8 @@ Grey ramp (dark → light):
 | `gray-800` | `#2c2c31` |
 | `gray-700` | `#3a3a41` |
 | `gray-600` | `#4a4a52` |
-| `gray-500` | `#5d5d66` |
-| `gray-400` | `#6e6e76` |
+| `gray-500` | `#80808b` |
+| `gray-400` | `#86868e` |
 | `gray-300` | `#8b8b93` |
 | `gray-250` | `#a0a0a8` |
 | `gray-200` | `#b4b4bb` |
@@ -105,7 +105,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `text.muted` | `gray-300` | Descriptions, banner text |
 | `text.hint` | `gray-400` | Helper copy, Details keys, "+n" counts |
 | `text.caption` | `gray-500` | Uppercase mono captions, chevrons, line counts |
-| `text.disabled` | `gray-600` | Disabled glyphs, inactive dots, counts |
+| `text.disabled` | `gray-600` | Disabled text and glyphs, inactive dots |
 | `text.faint` | `gray-700` | Line numbers, hollow timeline ring |
 
 #### Window and shell
@@ -221,8 +221,8 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `row.desc` | `gray-300` | Description line |
 | `row.chip-ring` | `shell.content-bg` | 2px ring behind overlapping agent logos in rows |
 | `group.label` | `gray-300` | Source group caption |
-| `group.count` | `gray-600` | Count beside the caption |
-| `group.divider-label` | `gray-600` | "NOT IN ANY AGENT" sub-divider |
+| `group.count` | `gray-500` | Count beside the caption |
+| `group.divider-label` | `gray-500` | "NOT IN ANY AGENT" sub-divider |
 | `table.row-hover` | `gray-930` | Hover on Inbox update rows, server rows, Settings sources |
 | `table.header-text` | `gray-500` | Column captions |
 
@@ -358,12 +358,18 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `server.tools` | `gray-200` | "{n} tools" |
 | `server.tools-auth` | `accent.attention` | "needs sign-in" |
 | `server.tools-fail` | `accent.danger` | "unreachable", "timed out", "handshake failed" |
-| `server.tools-none` | `gray-600` | "Not checked" |
+| `server.tools-none` | `gray-500` | "Not checked" |
 | `server.versions` | `accent.attention` | "{n} versions" when agents disagree |
 
 ### Contrast rules
 
-Body text is `text.primary`–`text.muted` on any shell, card or overlay background. `text.hint`–`text.faint` only for captions, counts, line numbers and placeholders at 12.5px or smaller. Never put alpha-muted text on accent fills.
+Every text colour token reaches at least 4.5:1 (WCAG AA) on the backgrounds it is used on: the shell, page, card, sheet, overlay (palette, dialog, popover, toast), input and code backgrounds, the row and table hover fills, and the button and pill fills. The tightest pairs are `text.caption` (`gray-500`) on `row.hover` at 4.54:1 and `text.muted` (`gray-300`) on `palette.row-active` at 4.69:1.
+
+- Body text is `text.primary`–`text.muted`. `text.hint` and `text.caption` are for helper copy, keys, captions, counts, meta and placeholders.
+- `text.hint` and `text.caption` reach 4.5:1 on the surfaces and hover fills above, not on lighter fills. On `palette.row-active`, a button fill or a pill, use `text.muted` or lighter: a palette row's hint turns `text.muted` while the row is selected.
+- `gray-500` is the darkest grey for text a person needs to read. `text.disabled` and `text.faint` (`gray-600`, `gray-700`) stay below 4.5:1, so use them only for disabled controls, which WCAG exempts, and for line numbers and marks that are not content.
+- Check a new pairing before you use it, and keep it at 4.5:1 or more.
+- Never put alpha-muted text on accent fills.
 
 ## 3. Typography
 

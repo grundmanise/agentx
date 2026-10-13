@@ -85,7 +85,7 @@ export const CommandPalette = ({
                         <Icon name={i.icon} size={15} tone="palette-row" />
                         <span className="type-body flex-1">{i.label}</span>
                         {i.hint !== undefined && (
-                          <span className="type-palette-hint text-text-caption">
+                          <span className="type-palette-hint text-text-caption group-data-[selected=true]:text-text-muted">
                             {i.hint}
                           </span>
                         )}

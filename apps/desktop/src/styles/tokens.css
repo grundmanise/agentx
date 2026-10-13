@@ -38,8 +38,8 @@
   --gray-800: #2c2c31;
   --gray-700: #3a3a41;
   --gray-600: #4a4a52;
-  --gray-500: #5d5d66;
-  --gray-400: #6e6e76;
+  --gray-500: #80808b;
+  --gray-400: #86868e;
   --gray-300: #8b8b93;
   --gray-250: #a0a0a8;
   --gray-200: #b4b4bb;
@@ -205,8 +205,8 @@
   --color-row-desc: var(--gray-300);
   --color-row-chip-ring: var(--color-shell-content-bg);
   --color-group-label: var(--gray-300);
-  --color-group-count: var(--gray-600);
-  --color-group-divider-label: var(--gray-600);
+  --color-group-count: var(--gray-500);
+  --color-group-divider-label: var(--gray-500);
   --color-table-row-hover: var(--gray-930);
   --color-table-header-text: var(--gray-500);
 
@@ -315,7 +315,7 @@
   --color-server-tools: var(--gray-200);
   --color-server-tools-auth: var(--color-accent-attention);
   --color-server-tools-fail: var(--color-accent-danger);
-  --color-server-tools-none: var(--gray-600);
+  --color-server-tools-none: var(--gray-500);
   --color-server-versions: var(--color-accent-attention);
 
   /* Shadows (DESIGN.md §2.2, overlays): `shadow-overlay`. */
