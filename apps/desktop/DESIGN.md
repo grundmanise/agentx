@@ -77,12 +77,12 @@ Grouped by element. Each token points at one primitive (or at a meaning token wh
 
 | Token | Primitive | Meaning |
 | --- | --- | --- |
-| `accent.primary` | `lime-400` | Primary action, enabled, update available, success, selection |
+| `accent.primary` | `lime-400` | Primary action, enabled, update candidate found, success, selection |
 | `accent.primary-hover` | `lime-300` | Primary button hover |
 | `accent.attention` | `amber-400` | Edited, displaced, needs a look but not broken |
 | `accent.danger` | `red-400` | Removed, unreachable, destructive |
 | `accent.yours` | `violet-400` | Your own skills, "Yours" side of a diff, publish |
-| `accent.theirs` | `blue-400` | "Original / update" side of a diff |
+| `accent.theirs` | `blue-400` | "Base version / Update" side of a diff |
 | `on-accent` | `gray-990` | Text and icons on any accent or inverse fill |
 
 Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
@@ -121,10 +121,10 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `shell.nav-active-bg` | `gray-910` | Active nav item |
 | `shell.nav-active-text` | `gray-50` | Active nav item label |
 | `shell.nav-badge-bg` | `accent.primary` | Inbox count badge (digits `on-accent`) |
-| `shell.topbar-hover` | `gray-920` | Top-bar button hover (command field, remote status) |
-| `shell.topbar-text` | `gray-300` | Command field placeholder, remote status label |
-| `shell.status-published` | `accent.primary` | Remote-status dot, nothing to publish (halo `lime-400/15`) |
-| `shell.status-pending` | `accent.yours` | Remote-status dot, versions to publish (halo `violet-400/18`) |
+| `shell.topbar-hover` | `gray-920` | Top-bar button hover (command field, account remote status) |
+| `shell.topbar-text` | `gray-300` | Command field placeholder, account remote status label |
+| `shell.status-published` | `accent.primary` | Account remote status dot, nothing to publish (halo `lime-400/15`) |
+| `shell.status-pending` | `accent.yours` | Account remote status dot, versions to publish (halo `violet-400/18`) |
 | `shell.logo-mark` | `accent.primary` | The X in the product mark |
 | `shell.logo-bg` | `gray-990` | Product mark tile |
 | `shell.logo-ring` | `gray-860` | 1px ring around the product mark |
@@ -143,7 +143,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `button.secondary-text` | `gray-50` |  |
 | `button.ghost-text` | `gray-200` | Ghost button label (or `text.muted` in quiet spots) |
 | `button.ghost-hover` | `gray-880` | Ghost / icon button hover |
-| `button.danger-text` | `accent.danger` | Danger ghost (Remove, Cancel, Restore original) |
+| `button.danger-text` | `accent.danger` | Danger ghost (Remove, Cancel, Restore base version) |
 | `button.danger-hover` | `red-400/10` |  |
 | `source-pill.bg` | `gray-910` | Source pill in Add, inactive (label `text.secondary`) |
 | `source-pill.active-bg` | `gray-50` | Source pill in Add, active |
@@ -191,7 +191,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `segmented.track-border` | `gray-870` |  |
 | `segmented.text` | `gray-50` | Unselected segment; `gray-400` once another segment is chosen |
 | `segmented.yours-selected` | `accent.yours` | "Keep yours" (label `on-accent`) |
-| `segmented.theirs-selected` | `accent.theirs` | "Use original / update" |
+| `segmented.theirs-selected` | `accent.theirs` | "Use base version / update" |
 | `segmented.both-selected` | `gray-50` | "Keep both" |
 | `segmented.neutral-selected` | `gray-850` | Filter State segments (label `text.primary`) |
 
@@ -204,7 +204,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `filter.active-bg` | `lime-400/12` | Filter button with any filter applied |
 | `filter.active-text` | `accent.primary` |  |
 | `filter.badge-bg` | `accent.primary` | Count badge (digits `on-accent`) |
-| `filter.chip-bg` | `gray-920` | Applied agent chip |
+| `filter.chip-bg` | `gray-920` | Applied agent client chip |
 | `filter.chip-text` | `gray-150` |  |
 | `filter.chip-hover` | `gray-880` |  |
 | `filter.sort-text` | `gray-300` | A–Z toggle |
@@ -217,12 +217,12 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `row.selected-bg` | `gray-900` | Selected Skills row |
 | `row.selected-bar` | `accent.primary` | 2px bar on the selected row |
 | `row.name` | `gray-50` | Row name, enabled |
-| `row.name-off` | `gray-300` | Row name when in no agent |
+| `row.name-off` | `gray-300` | Row name when in no agent client |
 | `row.desc` | `gray-300` | Description line |
-| `row.chip-ring` | `shell.content-bg` | 2px ring behind overlapping agent logos in rows |
+| `row.chip-ring` | `shell.content-bg` | 2px ring behind overlapping agent client logos in rows |
 | `group.label` | `gray-300` | Source group caption |
 | `group.count` | `gray-500` | Count beside the caption |
-| `group.divider-label` | `gray-500` | "NOT IN ANY AGENT" sub-divider |
+| `group.divider-label` | `gray-500` | "NOT IN ANY AGENT CLIENT" sub-divider |
 | `table.row-hover` | `gray-930` | Hover on Inbox update rows, server rows, Settings sources |
 | `table.header-text` | `gray-500` | Column captions |
 
@@ -230,28 +230,28 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 
 | Token | Primitive | Element |
 | --- | --- | --- |
-| `glyph.enabled` | `accent.primary` | Managed dot / fork glyph when enabled (and published) |
-| `glyph.off` | `gray-600` | Glyph when in no agent or unpublished |
+| `glyph.enabled` | `accent.primary` | Dot or fork glyph when enabled (and, for the fork glyph, published) |
+| `glyph.off` | `gray-600` | Glyph when in no agent client or not published |
 | `glyph.edited` | `accent.attention` | Pencil glyph |
 
-#### Agent logos and toggle chips
+#### Agent client logos and toggle chips
 
 | Token | Primitive | Element |
 | --- | --- | --- |
-| `logo.bg` | `white` | Round agent logo |
+| `logo.bg` | `white` | Round agent client logo |
 | `logo.ring` | = parent bg | 2px ring between overlapping logos (`shell.content-bg`, `overlay.bg`, `card.bg`…) |
 | `agent-chip.off-bg` | `gray-950` | Toggle chip, off |
 | `agent-chip.off-border` | `gray-870` |  |
 | `agent-chip.on-bg` | `lime-400/6` | Toggle chip, on |
 | `agent-chip.on-border` | `lime-400/35` |  |
 | `agent-chip.hover-border` | `gray-700` |  |
-| `agent-chip.text` | `gray-50` | Agent name |
+| `agent-chip.text` | `gray-50` | Agent client name |
 
 #### Cards and banners
 
 | Token | Primitive | Element |
 | --- | --- | --- |
-| `card.bg` | `gray-950` | Inbox card, agent card, plugin card, file-tree card, expanded review file card |
+| `card.bg` | `gray-950` | Inbox card, agent client card, plugin card, file-tree card, expanded review file card |
 | `card.border` | `gray-870` |  |
 | `card.title` | `gray-50` |  |
 | `card.text` | `gray-300` |  |
@@ -315,8 +315,8 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `diff.removed-bg` | `red-400/8` | Removed line tint (marker "−" `accent.danger`) |
 | `diff.yours-label` | `accent.yours` | "Yours" label, dot and chosen-pane ring |
 | `diff.yours-bg` | `violet-400/6` | "Yours" pane ground |
-| `diff.theirs-label` | `accent.theirs` | "Original / Update" label, dot and chosen-pane ring |
-| `diff.theirs-bg` | `blue-400/6` | "Original / Update" pane ground |
+| `diff.theirs-label` | `accent.theirs` | "Base version / Update" label, dot and chosen-pane ring |
+| `diff.theirs-bg` | `blue-400/6` | "Base version / Update" pane ground |
 | `diff.file-pending` | `accent.attention` | File dot while changes remain |
 | `diff.file-done` | `accent.primary` | File dot when every change is decided |
 | `diff.progress-done` | `accent.primary` | Progress segment, decided |
@@ -359,7 +359,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `server.tools-auth` | `accent.attention` | "needs sign-in" |
 | `server.tools-fail` | `accent.danger` | "unreachable", "timed out", "handshake failed" |
 | `server.tools-none` | `gray-500` | "Not checked" |
-| `server.versions` | `accent.attention` | "{n} versions" when agents disagree |
+| `server.versions` | `accent.attention` | "{n} versions" when agent configurations disagree |
 
 ### Contrast rules
 
@@ -427,7 +427,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `shell.nav-icon-gap` | 11 | `gap-nav-icon` | Icon → label in a nav item |
 | `shell.command-width` | 460 | `w-command` | Command field |
 | `shell.command-height` | 32 | `h-command` |  |
-| `shell.status-height` | 30 | `h-status` | Remote status pill |
+| `shell.status-height` | 30 | `h-status` | Account remote status pill |
 | `shell.panel-inset` | 10 | `mr-panel mb-panel` | Main panel inset from the right and bottom |
 | `shell.focus-ring-width` | 2 | none: `index.css` sets it on every element | Keyboard focus outline |
 | `shell.focus-ring-offset` | 2 | none: as above |  |
@@ -489,16 +489,16 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `switch.size` | 36 22 | `w-switch h-switch` | Track w h |
 | `switch.padding` | 3 | `p-switch` |  |
 | `switch.knob` | 16 | `size-switch-knob` |  |
-| `switch.compact-size` | 30 18 | `w-switch-compact h-switch-compact` | Inside agent toggle chips |
+| `switch.compact-size` | 30 18 | `w-switch-compact h-switch-compact` | Inside agent client toggle chips |
 | `switch.compact-knob` | 14 | `size-switch-compact-knob` |  |
 | `checkbox.size` | 16 | `size-checkbox` |  |
 | `segmented.padding` | 2–3 |  | Track padding |
 | `segmented.gap` | 2 | `gap-segmented` |  |
 | `segmented.height` | 24–28 |  | Segment |
 | `segmented.padding-x` | 10–12 |  |  |
-| `filter.height` | 30 | `h-filter` | Filter button and agent chip |
+| `filter.height` | 30 | `h-filter` | Filter button and agent client chip |
 | `filter.badge` | 16 | `size-filter-badge` | Count badge |
-| `agent-chip.height` | 44 | `h-agent-chip` | Agent toggle chip |
+| `agent-chip.height` | 44 | `h-agent-chip` | Agent client toggle chip |
 | `agent-chip.padding` | 0 8 0 7 | `py-0 pr-agent-chip-right pl-agent-chip-left` |  |
 | `agent-chip.gap` | 10 | `gap-agent-chip` | Logo → name → switch |
 | `agent-chip.wrap-gap` | 8 | `gap-agent-chip-wrap` | Between chips |
@@ -601,11 +601,11 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `switch.radius` | 9999 | Track and knob |
 | `checkbox.radius` | 50% | Popover checkbox |
 | `segmented.radius` | 9999 | Track and segments |
-| `agent-chip.radius` | 9999 | Agent toggle chip |
-| `logo.radius` | 50% | Agent logo |
+| `agent-chip.radius` | 9999 | Agent client toggle chip |
+| `logo.radius` | 50% | Agent client logo |
 | `shell.nav-radius` | 10 | Nav item |
 | `shell.logo-radius` | 8 | Sidebar product mark |
-| `shell.status-radius` | 9999 | Remote status |
+| `shell.status-radius` | 9999 | Account remote status |
 | `shell.command-radius` | 9999 | Command field |
 | `shell.panel-radius` | 14 | Main panel |
 | `input.radius` | 12 | Inputs, textareas |
@@ -662,7 +662,7 @@ Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, 11–12 / 600.
 
 `switch.size`, `switch.padding`, `switch.radius`; knob `switch.knob` round. On: track `switch.on-track`, knob `switch.on-knob`, `justify-content:flex-end`. Off: track `switch.off-track`, knob `switch.off-knob`. `transition: background .18s`. The whole row is the hit target. Compact variant `switch.compact-size` (knob `switch.compact-knob`) inside agent toggle chips.
 
-### Agent toggle chip (detail pane AGENTS)
+### Agent client toggle chip (detail pane AGENTS)
 
 Pill button `agent-chip.height`, `agent-chip.padding`, `agent-chip.gap`, `agent-chip.radius`: 28px logo(s) · name 13 / 500 · compact switch. Off: `agent-chip.off-bg` with 1px `agent-chip.off-border`. On: `agent-chip.on-bg` with `agent-chip.on-border`. Hover border `agent-chip.hover-border`. Locked: 45% opacity, `cursor:not-allowed`, `title` holds the reason; a click toasts it. Chips wrap in a row with `agent-chip.wrap-gap`.
 
@@ -674,15 +674,15 @@ Pill button `agent-chip.height`, `agent-chip.padding`, `agent-chip.gap`, `agent-
 
 Track `segmented.track-bg`, `segmented.track-border`, `segmented.radius`, `segmented.padding`, `segmented.gap`. Segments `segmented.height` high, `segmented.radius`, 12–12.5 / 500. Selected segment fills with its meaning colour (`segmented.yours-selected`, `segmented.theirs-selected`, `segmented.both-selected`, `segmented.neutral-selected`) and `on-accent`; others transparent `segmented.text`.
 
-### Agent logo chip
+### Agent client logo chip
 
-Round, `logo.bg`, `padding:3–4px`, `background-size:contain`, logo from an image bundled with the app (never fetched from the network). Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (agent toggle chips), 44 (agent cards). Overlap with `logo.overlap` and a `logo.ring`-wide ring (`box-shadow: 0 0 0 2px <parent bg>`). Every logo carries `title="<agent name>"`.
+Round, `logo.bg`, `padding:3–4px`, `background-size:contain`, logo from an image bundled with the app (never fetched from the network). Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (agent client toggle chips), 44 (agent client cards). Overlap with `logo.overlap` and a `logo.ring`-wide ring (`box-shadow: 0 0 0 2px <parent bg>`). Every logo carries `title="<agent client name>"`.
 
 ### Skill glyph (16px, leading the row)
 
-- dot (filled) – managed; `glyph.enabled` when enabled, `glyph.off` when not.
+- dot (filled) – a skill of a shared source; `glyph.enabled` when enabled, `glyph.off` when not.
 - pencil – edited locally; `glyph.edited`.
-- fork – one of your own skills; `glyph.enabled` when enabled and published, `glyph.off` otherwise. `title` explains the state ("Fork · Enabled", "Edited locally · Not in any agent").
+- fork – one of your own skills; `glyph.enabled` when enabled and published, `glyph.off` otherwise. `title` explains the state ("Your skill · Enabled", "Edited locally · Not in any agent client").
 
 ### Group header (lists)
 
@@ -718,7 +718,7 @@ Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot` round (`timeline.dot
 
 ## 7. Iconography
 
-Stroke icons on a 24 grid, `stroke-width` 1.75–2.25, round caps/joins, 13–16px rendered (18 for the palette's search icon). Fill only for the managed "dot" glyph. No icon fonts, no emoji.
+Stroke icons on a 24 grid, `stroke-width` 1.75–2.25, round caps/joins, 13–16px rendered (18 for the palette's search icon). Fill only for the "dot" glyph. No icon fonts, no emoji.
 
 Each icon is a React component in `src/components/icons`, one file per icon, written by hand with its SVG markup inline: `search.tsx` exports `SearchIcon`, and the others are `AddIcon`, `AgentsIcon`, `InboxIcon`, `PluginsIcon`, `ServersIcon`, `SettingsIcon` and `SkillsIcon`. There are no icon files and no SVG loader. An icon draws with `stroke="currentColor"` (and `fill="currentColor"` for a filled shape), so it takes the text colour of its parent, and its states come from the parent:
 
@@ -744,8 +744,9 @@ The product mark is `shell.logo-mark` on `shell.logo-bg`, 26px `shell.logo-radiu
 ## 9. Copy rules
 
 - Plain verbs: Add, Remove, Update, Fork, Publish, Review update, Put back, Adopt, Check updates.
-- Never: sync, commit, push, hunk, merge, upstream, remote, repo (say "source", "original", "your other machines", "change").
-- "Your skills" for the user's own skills (forked or created); "the original" for the skill a fork came from; "the update" for a new version from a skill's source. Fork is an action, not a kind of skill (`GLOSSARY.md`).
+- Copy uses the terms in [`GLOSSARY.md`](../../GLOSSARY.md) and never a word the glossary lists under _Avoid_. Where a glossary term names the thing, use that term, such as "account remote", "account repo", "upstream" or "base version". Where this file and the glossary differ, the glossary wins.
+- For a git word the glossary has no term for, use a plain word: "change", not "hunk".
+- "Your skills" for the user's own skills (forked or created); "its upstream" for where a forked skill came from; "the update" for an update candidate, a newer version from a skill's source. Fork is an action, not a kind of skill.
 - Dates over ids in rows ("Sep 14 → Sep 28"); ids with dates in Details ("3f2a9c1 · Sep 14").
 - Toasts state what happened in past tense ("Commit updated", "Put pdf back in Cursor"), and name the undo when one exists.
 - Captions are uppercase mono; everything else sentence case. No trailing periods in titles, pills or buttons.
