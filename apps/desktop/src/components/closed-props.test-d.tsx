@@ -30,7 +30,7 @@ export const rejectedProps = () => (
     <SkillsIcon color="red" />
     {/* @ts-expect-error each icon holds its own stroke width, so it has no strokeWidth */}
     <SkillsIcon strokeWidth={2} />
-    {/* @ts-expect-error an icon size is one of the names in iconSizes */}
+    {/* @ts-expect-error an icon size is a name on the scale in iconSizes */}
     <SearchIcon size="large" />
     {/* @ts-expect-error an icon size is a name, not a pixel value */}
     <SearchIcon size={16} />

@@ -117,12 +117,12 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `shell.divider` | `gray-890` | Split column divider, section dividers, table header rule |
 | `shell.scrim` | `black/50` | Behind the history sheet |
 | `shell.scrim-strong` | `black/55` | Behind dialogs and the palette |
-| `shell.nav-text` | `gray-300` | Inactive nav item |
+| `shell.nav-text` | `gray-300` | Inactive nav item; `text.primary` on hover |
 | `shell.nav-active-bg` | `gray-910` | Active nav item |
 | `shell.nav-active-text` | `gray-50` | Active nav item label |
 | `shell.nav-badge-bg` | `accent.primary` | Inbox count badge (digits `on-accent`) |
 | `shell.topbar-hover` | `gray-920` | Top-bar button hover (command field, account remote status) |
-| `shell.topbar-text` | `gray-300` | Command field placeholder, account remote status label |
+| `shell.topbar-text` | `gray-300` | Command field placeholder and icon (`text.secondary` on hover), account remote status label |
 | `shell.status-published` | `accent.primary` | Account remote status dot, nothing to publish (halo `lime-400/15`) |
 | `shell.status-pending` | `accent.yours` | Account remote status dot, versions to publish (halo `violet-400/18`) |
 | `shell.logo-mark` | `accent.primary` | The X in the product mark |
@@ -720,26 +720,11 @@ Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot` round (`timeline.dot
 
 Stroke icons on a 24 grid, `stroke-width` 1.75–2.25, round caps/joins, 14–18px rendered at the sizes below. Fill only for the "dot" glyph. No icon fonts, no emoji.
 
-Icons and illustrations are kept apart. An icon is a React component in `src/components/icons`, written by hand, that draws in `currentColor`. An illustration or image with fixed colours (today the agentx mark) is an SVG file in `src/assets`, shown as an `<img>`.
+An icon is a hand-written React component that takes the text colour; an illustration (such as the agentx mark) is an SVG file in `src/assets` shown as `<img>`.
 
-One file per icon, with its SVG markup inline: `search.tsx` exports `SearchIcon`, and the others are `AddIcon`, `AgentsIcon`, `InboxIcon`, `PluginsIcon`, `ServersIcon`, `SettingsIcon` and `SkillsIcon`. There are no icon files and no SVG loader. An icon draws with `stroke="currentColor"` (and `fill="currentColor"` for a filled shape), so it takes the text colour of its parent, and its states come from the parent:
+Sizes: `xs` 14px, `sm` 15px, `md` 16px (the default), `lg` 18px.
 
-- Nav item: `shell.nav-text`, `text.primary` on hover, `shell.nav-active-text` on the active item.
-- Command field: `shell.topbar-text`, `text.secondary` on hover.
-- Palette: `palette.icon` for the search icon and the rows, `palette.icon-active` on the selected row. A wrapping element sets the colour.
-
-Each component holds its own stroke width: 2 for `SearchIcon`, 1.75 for the others. Its only prop is `size`, which sets its `width` and `height`; it takes no colour, `className` or `style`. Icons are decorative: they sit next to text that names them, so they have `aria-hidden` and `focusable="false"`. To add an icon, add a file in `src/components/icons` that follows the others.
-
-A size is named after where the icon sits. `iconSizes` in `src/components/icons/icon-props.ts` holds the pixels; to add a size, add a name there and a row here.
-
-| Size     | px  | Where                            |
-| -------- | --- | -------------------------------- |
-| `nav`    | 16  | Sidebar nav items; the default   |
-| `field`  | 14  | Search icon in the command field |
-| `row`    | 15  | Palette rows                     |
-| `search` | 18  | Search icon in the palette input |
-
-The product mark is `shell.logo-mark` on `shell.logo-bg`, 26px `shell.logo-radius` in the sidebar, 40px `startup.logo-radius` on the startup layer, with a 1px `shell.logo-ring` ring (`src/components/agentx-mark.tsx`). Its image is `src/assets/agentx-mark.svg`, the one copy of the mark. The same file is the source of the app icons: after changing it, run `pnpm tauri icon src/assets/agentx-mark.svg` and keep only the files `src-tauri/tauri.conf.json` lists. Because the file stands alone, it holds the two colours as hex values (`lime-400`, `gray-990`); change them together with the tokens.
+The product mark is `shell.logo-mark` on `shell.logo-bg`, 26px `shell.logo-radius` in the sidebar, 40px `startup.logo-radius` on the startup layer, with a 1px `shell.logo-ring` ring. Its SVG is also the source of the app icons: after changing it, run `pnpm tauri icon src/assets/agentx-mark.svg` and keep only the files `src-tauri/tauri.conf.json` lists. The SVG holds the two colours as hex values (`lime-400`, `gray-990`); change them together with the tokens.
 
 ## 8. Motion
 

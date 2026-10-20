@@ -2,7 +2,7 @@ import { iconSizes } from "#/components/icons/icon-props.ts";
 import type { IconProps } from "#/components/icons/icon-props.ts";
 
 /** A robot head, for Agents. Stroke icon on a 24 grid in the parent's text colour (DESIGN.md §7). */
-export const AgentsIcon = ({ size = "nav" }: IconProps) => (
+export const AgentsIcon = ({ size = "md" }: IconProps) => (
   <svg
     width={iconSizes[size]}
     height={iconSizes[size]}

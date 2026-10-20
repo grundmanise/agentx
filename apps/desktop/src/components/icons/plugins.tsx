@@ -2,7 +2,7 @@ import { iconSizes } from "#/components/icons/icon-props.ts";
 import type { IconProps } from "#/components/icons/icon-props.ts";
 
 /** A plug, for Plugins. Stroke icon on a 24 grid in the parent's text colour (DESIGN.md §7). */
-export const PluginsIcon = ({ size = "nav" }: IconProps) => (
+export const PluginsIcon = ({ size = "md" }: IconProps) => (
   <svg
     width={iconSizes[size]}
     height={iconSizes[size]}

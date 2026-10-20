@@ -2,7 +2,7 @@ import { iconSizes } from "#/components/icons/icon-props.ts";
 import type { IconProps } from "#/components/icons/icon-props.ts";
 
 /** A plus in a circle, for Add. Stroke icon on a 24 grid in the parent's text colour (DESIGN.md §7). */
-export const AddIcon = ({ size = "nav" }: IconProps) => (
+export const AddIcon = ({ size = "md" }: IconProps) => (
   <svg
     width={iconSizes[size]}
     height={iconSizes[size]}
