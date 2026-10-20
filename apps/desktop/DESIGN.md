@@ -720,7 +720,9 @@ Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot` round (`timeline.dot
 
 Stroke icons on a 24 grid, `stroke-width` 1.75–2.25, round caps/joins, 14–18px rendered at the sizes below. Fill only for the "dot" glyph. No icon fonts, no emoji.
 
-Each icon is a React component in `src/components/icons`, one file per icon, written by hand with its SVG markup inline: `search.tsx` exports `SearchIcon`, and the others are `AddIcon`, `AgentsIcon`, `InboxIcon`, `PluginsIcon`, `ServersIcon`, `SettingsIcon` and `SkillsIcon`. There are no icon files and no SVG loader. An icon draws with `stroke="currentColor"` (and `fill="currentColor"` for a filled shape), so it takes the text colour of its parent, and its states come from the parent:
+Icons and illustrations are kept apart. An icon is a React component in `src/components/icons`, written by hand, that draws in `currentColor`. An illustration or image with fixed colours (today the agentx mark) is an SVG file in `src/assets`, shown as an `<img>`.
+
+One file per icon, with its SVG markup inline: `search.tsx` exports `SearchIcon`, and the others are `AddIcon`, `AgentsIcon`, `InboxIcon`, `PluginsIcon`, `ServersIcon`, `SettingsIcon` and `SkillsIcon`. There are no icon files and no SVG loader. An icon draws with `stroke="currentColor"` (and `fill="currentColor"` for a filled shape), so it takes the text colour of its parent, and its states come from the parent:
 
 - Nav item: `shell.nav-text`, `text.primary` on hover, `shell.nav-active-text` on the active item.
 - Command field: `shell.topbar-text`, `text.secondary` on hover.
@@ -737,7 +739,7 @@ A size is named after where the icon sits. `iconSizes` in `src/components/icons/
 | `row`    | 15  | Palette rows                     |
 | `search` | 18  | Search icon in the palette input |
 
-The product mark is `shell.logo-mark` on `shell.logo-bg`, 26px `shell.logo-radius` in the sidebar, 40px `startup.logo-radius` on the startup layer, with a 1px `shell.logo-ring` ring (`src/components/agentx-mark.tsx`). Its image is `src/assets/agentx-mark.svg`, the one copy of the mark, shown as an `<img>`: unlike the icons it has fixed brand colours and never takes the text colour. The same file is the source of the app icons: after changing it, run `pnpm tauri icon src/assets/agentx-mark.svg` and keep only the files `src-tauri/tauri.conf.json` lists. Because the file stands alone, it holds the two colours as hex values (`lime-400`, `gray-990`); change them together with the tokens.
+The product mark is `shell.logo-mark` on `shell.logo-bg`, 26px `shell.logo-radius` in the sidebar, 40px `startup.logo-radius` on the startup layer, with a 1px `shell.logo-ring` ring (`src/components/agentx-mark.tsx`). Its image is `src/assets/agentx-mark.svg`, the one copy of the mark. The same file is the source of the app icons: after changing it, run `pnpm tauri icon src/assets/agentx-mark.svg` and keep only the files `src-tauri/tauri.conf.json` lists. Because the file stands alone, it holds the two colours as hex values (`lime-400`, `gray-990`); change them together with the tokens.
 
 ## 8. Motion
 
@@ -754,6 +756,7 @@ The product mark is `shell.logo-mark` on `shell.logo-bg`, 26px `shell.logo-radiu
 
 - Plain verbs: Add, Remove, Update, Fork, Publish, Review update, Put back, Adopt, Check updates.
 - Copy uses the terms in [`GLOSSARY.md`](../../GLOSSARY.md) and never a word the glossary lists under _Avoid_. Where a glossary term names the thing, use that term, such as "account remote", "account repo", "upstream" or "base version". Where this file and the glossary differ, the glossary wins.
+- Named exception: the "Agents" screen name, its nav label and the "AGENTS" captions stay as they are, although the glossary avoids "agent" for an agent client.
 - For a git word the glossary has no term for, use a plain word: "change", not "hunk".
 - "Your skills" for the user's own skills (forked or created); "its upstream" for where a forked skill came from; "the update" for an update candidate, a newer version from a skill's source. Fork is an action, not a kind of skill.
 - Dates over ids in rows ("Sep 14 → Sep 28"); ids with dates in Details ("3f2a9c1 · Sep 14").
