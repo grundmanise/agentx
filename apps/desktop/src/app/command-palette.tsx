@@ -53,7 +53,7 @@ export const CommandPalette = ({
           <Command filter={filter} loop>
             <div className="border-card-border h-palette-input flex items-center gap-3 border-b px-5">
               <span className="text-palette-icon flex">
-                <SearchIcon size={18} />
+                <SearchIcon size="search" />
               </span>
               <Command.Input
                 autoFocus
@@ -86,7 +86,7 @@ export const CommandPalette = ({
                       >
                         {/* The row icon turns to the accent while its row is selected. */}
                         <span className="text-palette-icon group-data-[selected=true]:text-palette-icon-active flex">
-                          <RowIcon size={15} />
+                          <RowIcon size="row" />
                         </span>
                         <span className="type-body flex-1">{i.label}</span>
                         {i.hint !== undefined && (

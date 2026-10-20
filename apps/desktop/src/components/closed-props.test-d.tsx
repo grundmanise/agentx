@@ -30,8 +30,10 @@ export const rejectedProps = () => (
     <SkillsIcon color="red" />
     {/* @ts-expect-error each icon holds its own stroke width, so it has no strokeWidth */}
     <SkillsIcon strokeWidth={2} />
-    {/* @ts-expect-error size is a closed set */}
-    <SearchIcon size={17} />
+    {/* @ts-expect-error an icon size is one of the names in iconSizes */}
+    <SearchIcon size="large" />
+    {/* @ts-expect-error an icon size is a name, not a pixel value */}
+    <SearchIcon size={16} />
     {/* @ts-expect-error className is not an AgentxMark prop */}
     <AgentxMark size={26} className="rounded-card" />
     {/* @ts-expect-error size is a closed set */}

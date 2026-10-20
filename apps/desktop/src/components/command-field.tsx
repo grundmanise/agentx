@@ -11,7 +11,7 @@ export const CommandField = ({ onOpen }: { onOpen: () => void }) => (
     onClick={onOpen}
     className="rounded-shell-command border-input-border bg-shell-content-bg type-command-field text-shell-topbar-text hover:border-input-border-focus hover:text-text-secondary h-command w-command flex items-center gap-2.5 border pr-1.5 pl-3.5"
   >
-    <SearchIcon size={14} />
+    <SearchIcon size="field" />
     <span className="flex-1 text-left">Search skills or run a command</span>
     <KeyHint>{isMac ? "⌘K" : "Ctrl K"}</KeyHint>
   </button>
