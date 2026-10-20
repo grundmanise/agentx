@@ -11,8 +11,8 @@ The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it
 | `src/styles/index.css` | The CSS entry: Tailwind, the fonts, the tokens and the base styles |
 | `src/app` | The app shell: title bar, sidebar, main panel, command palette |
 | `src/screens` | The screens; today one placeholder |
-| `src/components` | Shared components; `ui` holds the shadcn/ui-based primitives |
-| `src/assets` | The product mark and the icons, one SVG file each, shown as `<img>` from the URL Vite gives an imported file. The mark is also the source of the app icons in `src-tauri/icons` |
+| `src/components` | Shared components; `ui` holds the shadcn/ui-based primitives, and `icons` holds the icons, one component each with its SVG written inline |
+| `src/assets` | The product mark, an SVG file shown as an `<img>` from the URL Vite gives an imported file. It is also the source of the app icons in `src-tauri/icons` |
 | `e2e` | The end-to-end tests: [Playwright](https://playwright.dev) drives the frontend in Chromium on the Vite dev server |
 | `oxlint.config.ts`, `oxfmt.config.ts` | The lint and the formatter: [Ultracite](https://www.ultracite.ai)'s presets for oxlint and oxfmt, plus the design-system lint built on [`@shadcn/lint`](https://github.com/shadcn-ui/lint) |
 | `src-tauri` | The Rust side: the window, and later the CLI supervisor |
@@ -76,11 +76,12 @@ These rules are for anyone writing a component, people and coding agents alike.
 
 ### Components
 
-- Our components (anything imported from `src`) take no `className` and no `style`. Every visual choice is a closed, typed prop: `Button`'s `variant` and `size`, `Icon`'s `name` and `size`, `AgentxMark`'s `size`, which also sets its radius. To place a component, wrap it in an element or use `gap` on the parent.
+- Our components (anything imported from `src`) take no `className` and no `style`. Every visual choice is a closed, typed prop: `Button`'s `variant` and `size`, an icon's `size` (`SearchIcon` and the others in `src/components/icons`), `AgentxMark`'s `size`, which also sets its radius. To place a component, wrap it in an element or use `gap` on the parent.
+- An icon draws in `currentColor`, so it takes the text colour of its parent. To colour an icon, set a text colour token on the element around it; an icon has no colour prop.
 - When no prop fits, add a variant to the component with `cva()`, not a prop that takes free values.
 - Native `<button>`, `<input>`, `<textarea>` and `<select>` are allowed only in `src/components`. Screens and the app shell use `Button` and the other components there; add a component, or a variant, when none fits.
 - Code generated with the shadcn CLI uses shadcn's default classes; map them to tokens and remove its `className` prop before committing.
-- Import from `src` with the `#/` prefix and the file's extension: `import { Icon } from "#/components/icon.tsx"`. `#/` is a Node subpath import declared in `package.json` (`"imports"`), so TypeScript, Vite and the lint resolve it the same way, and like Node they need the extension.
+- Import from `src` with the `#/` prefix and the file's extension: `import { SearchIcon } from "#/components/icons/search.tsx"`. `#/` is a Node subpath import declared in `package.json` (`"imports"`), so TypeScript, Vite and the lint resolve it the same way, and like Node they need the extension.
 - Follow the copy rules in `DESIGN.md` §9 and the vocabulary in [`GLOSSARY.md`](../../GLOSSARY.md).
 - Show only what the CLI reports. A screen never predicts the result of a command.
 

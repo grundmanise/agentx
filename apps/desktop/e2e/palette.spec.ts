@@ -48,6 +48,20 @@ test("filters by substring and runs the active row with Enter", async ({
   ).toBeVisible();
 });
 
+test("turns the selected row's icon to the accent", async ({ page }) => {
+  await page.keyboard.press("Control+K");
+  const icon = (name: string) =>
+    page.getByRole("option", { name }).locator("svg");
+  // palette.icon-active on the selected row, palette.icon on the others.
+  const active = "rgb(212, 255, 79)";
+  const rest = "rgb(134, 134, 142)";
+  await expect(icon("Inbox")).toHaveCSS("stroke", active);
+  await expect(icon("Skills")).toHaveCSS("stroke", rest);
+  await page.keyboard.press("ArrowDown");
+  await expect(icon("Inbox")).toHaveCSS("stroke", rest);
+  await expect(icon("Skills")).toHaveCSS("stroke", active);
+});
+
 test("says when nothing matches", async ({ page }) => {
   await page.keyboard.press("Control+K");
   await page.keyboard.type("zzz");

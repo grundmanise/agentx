@@ -2,7 +2,6 @@ import { NavLink } from "react-router";
 
 import { screens } from "#/app/screens.ts";
 import { AgentxMark } from "#/components/agentx-mark.tsx";
-import { Icon } from "#/components/icon.tsx";
 import { cn } from "#/lib/utils.ts";
 
 export const Sidebar = () => (
@@ -13,7 +12,7 @@ export const Sidebar = () => (
       <span className="type-brand">agentx</span>
     </div>
     <nav aria-label="Main" className="gap-nav flex flex-col">
-      {screens.map((s) => (
+      {screens.map(({ icon: ScreenIcon, ...s }) => (
         <NavLink
           key={s.path}
           to={s.path}
@@ -26,7 +25,8 @@ export const Sidebar = () => (
             )
           }
         >
-          <Icon name={s.icon} />
+          {/* The icon takes the link's text colour, so it brightens with the label. */}
+          <ScreenIcon />
           <span className="flex-1">{s.label}</span>
         </NavLink>
       ))}

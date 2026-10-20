@@ -2,7 +2,8 @@
 /* oxlint-disable shadcn/no-restyle, shadcn/no-inline-styles, react/forbid-component-props */
 import { AgentxMark } from "#/components/agentx-mark.tsx";
 import { CommandField } from "#/components/command-field.tsx";
-import { Icon } from "#/components/icon.tsx";
+import { SearchIcon } from "#/components/icons/search.tsx";
+import { SkillsIcon } from "#/components/icons/skills.tsx";
 import { KeyHint } from "#/components/key-hint.tsx";
 import { Toaster } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
@@ -19,18 +20,18 @@ export const rejectedProps = () => (
     <Button style={{ marginTop: 8 }} />
     {/* @ts-expect-error variant is a closed set */}
     <Button variant="link" />
-    {/* @ts-expect-error className is not an Icon prop */}
-    <Icon name="search" className="text-text-primary" />
-    {/* @ts-expect-error style is not an Icon prop */}
-    <Icon name="search" style={{ marginTop: 8 }} />
-    {/* @ts-expect-error the colour is in the icon's file, so Icon takes no tone */}
-    <Icon name="search" tone="palette" />
-    {/* @ts-expect-error the stroke width is in the icon's file, so Icon takes no strokeWidth */}
-    <Icon name="search" strokeWidth={2} />
-    {/* @ts-expect-error name is a closed set */}
-    <Icon name="star" />
+    {/* @ts-expect-error className is not an icon prop */}
+    <SearchIcon className="text-text-primary" />
+    {/* @ts-expect-error style is not an icon prop */}
+    <SearchIcon style={{ marginTop: 8 }} />
+    {/* @ts-expect-error an icon takes its parent's text colour, so it has no tone */}
+    <SearchIcon tone="palette" />
+    {/* @ts-expect-error an icon takes its parent's text colour, so it has no color */}
+    <SkillsIcon color="red" />
+    {/* @ts-expect-error each icon holds its own stroke width, so it has no strokeWidth */}
+    <SkillsIcon strokeWidth={2} />
     {/* @ts-expect-error size is a closed set */}
-    <Icon name="search" size={17} />
+    <SearchIcon size={17} />
     {/* @ts-expect-error className is not an AgentxMark prop */}
     <AgentxMark size={26} className="rounded-card" />
     {/* @ts-expect-error size is a closed set */}

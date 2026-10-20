@@ -285,7 +285,8 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `popover.caption` | `gray-500` | SHOW / STATE / AGENTS |
 | `palette.row-text` | `gray-150` |  |
 | `palette.row-active` | `gray-870` |  |
-| `palette.icon` | `gray-300` | Search and row icons (the colour is in the icon files, §7) |
+| `palette.icon` | `gray-400` | Search icon and row icons |
+| `palette.icon-active` | `accent.primary` | Row icon in the selected row |
 | `dialog.title` | `gray-50` |  |
 | `dialog.subtitle` | `gray-400` |  |
 | `sheet.bg` | `gray-960` | History sheet body |
@@ -719,9 +720,15 @@ Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot` round (`timeline.dot
 
 Stroke icons on a 24 grid, `stroke-width` 1.75–2.25, round caps/joins, 13–16px rendered (18 for the palette's search icon). Fill only for the managed "dot" glyph. No icon fonts, no emoji.
 
-Each icon is one SVG file in `src/assets/icons`, drawn with a stroke and no fill. `Icon` (`src/components/icon.tsx`) imports each file as a URL and shows it as an `<img>` at one of the sizes above. An `<img>` cannot take the text colour around it, so each file holds its colour and stroke width as plain values: `gray-300` (`#8b8b93`, the value of `shell.nav-text`, `shell.topbar-text` and `palette.icon`), stroke width 1.75, and 2 for `search`. Icons keep that colour when their nav item or palette row is hovered or selected; the label carries the state. When you change `gray-300`, change the icon files with it. Icons are decorative: they sit next to text that names them, so they have `alt=""` and `aria-hidden`. To add an icon, add its file and its entry in `icon.tsx`.
+Each icon is a React component in `src/components/icons`, one file per icon, written by hand with its SVG markup inline: `search.tsx` exports `SearchIcon`, and the others are `AddIcon`, `AgentsIcon`, `InboxIcon`, `PluginsIcon`, `ServersIcon`, `SettingsIcon` and `SkillsIcon`. There are no icon files and no SVG loader. An icon draws with `stroke="currentColor"` (and `fill="currentColor"` for a filled shape), so it takes the text colour of its parent, and its states come from the parent:
 
-The product mark is `shell.logo-mark` on `shell.logo-bg`, 26px `shell.logo-radius` in the sidebar, 40px `startup.logo-radius` on the startup layer, with a 1px `shell.logo-ring` ring (`src/components/agentx-mark.tsx`). Its image is `src/assets/agentx-mark.svg`, the one copy of the mark. The same file is the source of the app icons: after changing it, run `pnpm tauri icon src/assets/agentx-mark.svg` and keep only the files `src-tauri/tauri.conf.json` lists. Because the file stands alone, it holds the two colours as hex values (`lime-400`, `gray-990`); change them together with the tokens.
+- Nav item: `shell.nav-text`, `text.primary` on hover, `shell.nav-active-text` on the active item.
+- Command field: `shell.topbar-text`, `text.secondary` on hover.
+- Palette: `palette.icon` for the search icon and the rows, `palette.icon-active` on the selected row. A wrapping element sets the colour.
+
+Each component holds its own stroke width: 2 for `SearchIcon`, 1.75 for the others. Its only prop is `size`, one of 13, 14, 15, 16 (the default) and 18, which sets its `width` and `height`; it takes no colour, `className` or `style`. Icons are decorative: they sit next to text that names them, so they have `aria-hidden` and `focusable="false"`. To add an icon, add a file in `src/components/icons` that follows the others.
+
+The product mark is `shell.logo-mark` on `shell.logo-bg`, 26px `shell.logo-radius` in the sidebar, 40px `startup.logo-radius` on the startup layer, with a 1px `shell.logo-ring` ring (`src/components/agentx-mark.tsx`). Its image is `src/assets/agentx-mark.svg`, the one copy of the mark, shown as an `<img>`: unlike the icons it has fixed brand colours and never takes the text colour. The same file is the source of the app icons: after changing it, run `pnpm tauri icon src/assets/agentx-mark.svg` and keep only the files `src-tauri/tauri.conf.json` lists. Because the file stands alone, it holds the two colours as hex values (`lime-400`, `gray-990`); change them together with the tokens.
 
 ## 8. Motion
 

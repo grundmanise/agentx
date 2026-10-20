@@ -3,15 +3,15 @@ import { Command } from "cmdk";
 import { useNavigate } from "react-router";
 
 import { screens } from "#/app/screens.ts";
-import { Icon } from "#/components/icon.tsx";
-import type { IconName } from "#/components/icon.tsx";
+import type { IconComponent } from "#/components/icons/icon-props.ts";
+import { SearchIcon } from "#/components/icons/search.tsx";
 import { KeyHint } from "#/components/key-hint.tsx";
 
 export interface PaletteItem {
   group: "ACTIONS" | "GO TO" | "SKILLS";
   label: string;
   hint?: string;
-  icon: IconName;
+  icon: IconComponent;
   run: () => void;
 }
 
@@ -52,7 +52,9 @@ export const CommandPalette = ({
           <Dialog.Title className="sr-only">Command palette</Dialog.Title>
           <Command filter={filter} loop>
             <div className="border-card-border h-palette-input flex items-center gap-3 border-b px-5">
-              <Icon name="search" size={18} />
+              <span className="text-palette-icon flex">
+                <SearchIcon size={18} />
+              </span>
               <Command.Input
                 autoFocus
                 placeholder="Search skills or run a command"
@@ -72,7 +74,7 @@ export const CommandPalette = ({
                 >
                   {items
                     .filter((i) => i.group === g)
-                    .map((i) => (
+                    .map(({ icon: RowIcon, ...i }) => (
                       <Command.Item
                         key={i.label}
                         value={i.label}
@@ -82,7 +84,10 @@ export const CommandPalette = ({
                         }}
                         className="group rounded-palette-row text-palette-row-text data-[selected=true]:bg-palette-row-active data-[selected=true]:text-text-primary flex h-10.5 items-center gap-3 px-3"
                       >
-                        <Icon name={i.icon} size={15} />
+                        {/* The row icon turns to the accent while its row is selected. */}
+                        <span className="text-palette-icon group-data-[selected=true]:text-palette-icon-active flex">
+                          <RowIcon size={15} />
+                        </span>
                         <span className="type-body flex-1">{i.label}</span>
                         {i.hint !== undefined && (
                           <span className="type-palette-hint text-text-caption group-data-[selected=true]:text-text-muted">
