@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
@@ -217,11 +218,14 @@ type tsGen struct {
 	envelope  reflect.Type // the struct every event embeds
 	structs   []reflect.Type
 	named     map[string]reflect.Type
+	used      map[fieldKey]bool // the lists and overrides a field took its type from
+	nullable  map[string]bool   // the JSON names of the fields that can be null
 }
 
 func newTSGen(lists []valueList, overrides []typeOverride, names map[reflect.Type]string) *tsGen {
 	g := &tsGen{lists: map[fieldKey]string{}, overrides: map[fieldKey]string{}, names: names,
-		envelope: reflect.TypeFor[event](), named: map[string]reflect.Type{}}
+		envelope: reflect.TypeFor[event](), named: map[string]reflect.Type{},
+		used: map[fieldKey]bool{}, nullable: map[string]bool{}}
 	for _, l := range lists {
 		for _, f := range l.fields {
 			g.lists[f.key()] = l.name
@@ -256,9 +260,11 @@ func (g *tsGen) structName(t reflect.Type) (string, error) {
 func (g *tsGen) typeOf(in reflect.Type, f reflect.StructField, t reflect.Type) (string, error) {
 	k := fieldKey{in, f.Name}
 	if ts, ok := g.overrides[k]; ok {
+		g.used[k] = true
 		return ts, nil
 	}
 	if list, ok := g.lists[k]; ok {
+		g.used[k] = true
 		switch {
 		case t.Kind() == reflect.String:
 			return list, nil
@@ -348,6 +354,7 @@ func (g *tsGen) members(t reflect.Type) (extends []string, envelope bool, lines 
 		}
 		if null {
 			ts += " | null"
+			g.nullable[name] = true
 		}
 		mark := ""
 		if optional {
@@ -401,16 +408,52 @@ func eventTypeName(typ string) string {
 
 // renderEventTypes is the content of eventTypesFile.
 func renderEventTypes() (string, error) {
+	_, d, err := eventTypesGen()
+	if err != nil {
+		return "", err
+	}
+	return d.render(), nil
+}
+
+// eventTypesGen is the generator of eventTypesFile once it has read every
+// event, so that it knows every field that can be null, and the
+// declarations it wrote. A value list or an override naming a field no
+// event carries is an error: the field it meant would be a plain string.
+func eventTypesGen() (*tsGen, declarations, error) {
 	g := newTSGen(valueLists, typeOverrides, typeNames)
+	d, err := g.declarations()
+	if err != nil {
+		return nil, declarations{}, err
+	}
+	for k, list := range g.lists {
+		if !g.used[k] {
+			return nil, declarations{}, fmt.Errorf("value list %s names %s.%s, which no event carries", list, k.t, k.field)
+		}
+	}
+	for k := range g.overrides {
+		if !g.used[k] {
+			return nil, declarations{}, fmt.Errorf("a type override names %s.%s, which no event carries", k.t, k.field)
+		}
+	}
+	return g, d, nil
+}
+
+// declarations are the declarations of the events and of the structs they
+// carry.
+type declarations struct {
+	events, structs []string
+}
+
+func (g *tsGen) declarations() (declarations, error) {
 	var events []string
 	for _, e := range eventTypes {
 		t := reflect.TypeOf(e.v)
 		extends, envelope, lines, err := g.members(t)
 		if err != nil {
-			return "", err
+			return declarations{}, err
 		}
 		if !envelope {
-			return "", fmt.Errorf("%s does not embed the event envelope", t)
+			return declarations{}, fmt.Errorf("%s does not embed the event envelope", t)
 		}
 		lines = append([]string{fmt.Sprintf("  type: %q;", e.name), "  schema_version: number;"}, lines...)
 		events = append(events, iface(eventTypeName(e.name), extends, lines))
@@ -420,15 +463,19 @@ func renderEventTypes() (string, error) {
 		t := g.structs[i]
 		extends, envelope, lines, err := g.members(t)
 		if err != nil {
-			return "", err
+			return declarations{}, err
 		}
 		if envelope {
-			return "", fmt.Errorf("%s embeds the event envelope but is no event type", t)
+			return declarations{}, fmt.Errorf("%s embeds the event envelope but is no event type", t)
 		}
 		name, _ := g.structName(t)
 		structs = append(structs, iface(name, extends, lines))
 	}
+	return declarations{events, structs}, nil
+}
 
+// render is the content of eventTypesFile.
+func (d declarations) render() string {
 	var b strings.Builder
 	b.WriteString(`// The types of the events the agentx CLI writes with --json, which
 // docs/spec/cli-contract.md describes. Generated from the structs the CLI
@@ -448,9 +495,9 @@ func renderEventTypes() (string, error) {
 		b.WriteString(union(l.name, members))
 	}
 	b.WriteString("\n// The objects events carry.\n")
-	b.WriteString(strings.Join(structs, "\n"))
+	b.WriteString(strings.Join(d.structs, "\n"))
 	b.WriteString("\n// One type per event type.\n")
-	b.WriteString(strings.Join(events, "\n"))
+	b.WriteString(strings.Join(d.events, "\n"))
 
 	b.WriteString("\n// Reserved by the contract and never emitted: known, and not rendered.\n")
 	names := make([]string, 0, len(eventTypes)+len(reservedEventTypes))
@@ -478,7 +525,50 @@ export interface SearchRequest {
 }
 export type ServeRequest = RefreshRequest | SearchRequest;
 `)
-	return b.String(), nil
+	return b.String()
+}
+
+// nullableFields are the JSON names of the fields the event types say can
+// be null.
+var nullableFields = sync.OnceValues(func() (map[string]bool, error) {
+	g, _, err := eventTypesGen()
+	if err != nil {
+		return nil, err
+	}
+	return g.nullable, nil
+})
+
+// checkNulls fails t for every null in event e the event types do not
+// admit. A nil slice or map marshals as null, while the types say an array
+// or an object, which is what the contract says: the app would read the
+// null without a check. The harness checks every event it parses, so the
+// whole suite holds the types to what the CLI writes.
+func checkNulls(t *testing.T, e map[string]any) {
+	t.Helper()
+	nullable, err := nullableFields()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var walk func(path string, v any)
+	walk = func(path string, v any) {
+		switch v := v.(type) {
+		case map[string]any:
+			for k, w := range v {
+				if w == nil && !nullable[k] {
+					t.Errorf("%s event: %s%s is null, which events.gen.ts does not admit", e["type"], path, k)
+				}
+				walk(path+k+".", w)
+			}
+		case []any:
+			for i, w := range v {
+				if w == nil {
+					t.Errorf("%s event: %s%d is null, which events.gen.ts does not admit", e["type"], path, i)
+				}
+				walk(fmt.Sprintf("%s%d.", path, i), w)
+			}
+		}
+	}
+	walk("", e)
 }
 
 // TestEventTypes checks that the desktop app's event types are those the

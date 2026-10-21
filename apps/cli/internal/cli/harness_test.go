@@ -244,6 +244,7 @@ func (h *harness) events(text string) []jsonEvent {
 		if err := json.Unmarshal([]byte(line), &e); err != nil {
 			h.t.Fatalf("not a JSON event: %q: %v", line, err)
 		}
+		checkNulls(h.t, e)
 		events = append(events, e)
 	}
 	return events
@@ -385,6 +386,7 @@ func (p *serveProc) next(typ string) jsonEvent {
 			if err := json.Unmarshal([]byte(line), &e); err != nil {
 				p.t.Fatalf("not a JSON event: %q: %v", line, err)
 			}
+			checkNulls(p.t, e)
 			if e["schema_version"] != float64(1) {
 				p.t.Errorf("event %v: schema_version = %v, want 1", e, e["schema_version"])
 			}
