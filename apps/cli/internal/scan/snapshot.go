@@ -60,6 +60,20 @@ type Skill struct {
 	Occurrences []Occurrence `json:"occurrences"`
 }
 
+// The kinds of an occurrence: what is at its placement path.
+const (
+	KindSymlink   = "symlink"
+	KindCopy      = "copy"
+	KindDirectory = "directory"
+)
+
+// The scopes of an occurrence: a client's user-scope skills directories,
+// or a project's under scan --project.
+const (
+	ScopeUser    = "user"
+	ScopeProject = "project"
+)
+
 type Occurrence struct {
 	ID            string `json:"id"`
 	Configuration string `json:"configuration"`
@@ -208,13 +222,13 @@ func Read(o Options) *Scan {
 		b.snap.Edges = append(b.snap.Edges, Edge{From: o.MachineID, To: conf.PhysicalID})
 		for _, dir := range dirs {
 			for _, p := range b.skillsIn(dir) {
-				b.add(conf, p, "user", "")
+				b.add(conf, p, ScopeUser, "")
 			}
 		}
 		if o.Project != "" {
 			for _, rel := range c.ProjectSkillsDirs() {
 				for _, p := range b.skillsIn(filepath.Join(o.Project, rel)) {
-					b.add(conf, p, "project", "")
+					b.add(conf, p, ScopeProject, "")
 				}
 			}
 		}
@@ -311,11 +325,11 @@ func (s *Scan) edge(from, to string) {
 func (s *Scan) kind(conf Configuration, p placement, scope string) string {
 	switch {
 	case p.symlink:
-		return "symlink"
-	case scope == "user" && slices.Contains(s.CopyMode[filepath.Base(p.path)], conf.ID):
-		return "copy"
+		return KindSymlink
+	case scope == ScopeUser && slices.Contains(s.CopyMode[filepath.Base(p.path)], conf.ID):
+		return KindCopy
 	}
-	return "directory"
+	return KindDirectory
 }
 
 // portable replaces the user's HOME with ~ so an identity does not depend

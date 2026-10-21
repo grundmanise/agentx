@@ -15,6 +15,14 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
+// The transports of a server: a local command, or a URL that speaks the
+// legacy HTTP+SSE transport or the streamable HTTP one.
+const (
+	TransportStdio          = "stdio"
+	TransportSSE            = "sse"
+	TransportStreamableHTTP = "streamable-http"
+)
+
 // Server is one declaration in a configuration file.
 type Server struct {
 	Name       string
@@ -148,11 +156,11 @@ func server(f Format, name string, e map[string]any) Server {
 	}
 	switch {
 	case s.Command != "":
-		s.Transport = "stdio"
+		s.Transport = TransportStdio
 	case sse:
-		s.Transport = "sse"
+		s.Transport = TransportSSE
 	default:
-		s.Transport = "streamable-http"
+		s.Transport = TransportStreamableHTTP
 	}
 	return s
 }

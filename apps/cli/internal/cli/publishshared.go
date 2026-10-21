@@ -546,7 +546,7 @@ func (inv *invocation) reportShared(ctx context.Context, p *sharedPublish, outco
 	if published {
 		ev.Commit, ev.Branch = p.commit, p.branch
 	}
-	out.emit(progressEvent{event: newEvent("progress"), Phase: "publish", Subject: p.name, Current: 1, Total: 1})
+	out.emit(progressEvent{event: newEvent("progress"), Phase: phasePublish, Subject: p.name, Current: 1, Total: 1})
 	out.emit(ev)
 	if f != nil {
 		return f

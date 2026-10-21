@@ -137,7 +137,7 @@ func (inv *invocation) fetchRemote(ctx context.Context, gitDir, remote, url stri
 	if err := inv.fetchForks(ctx, gitDir, remote, false); err != nil {
 		return unreachableRemote(url, err)
 	}
-	inv.out.emit(progressEvent{event: newEvent("progress"), Phase: "fetch", Subject: shownURL(url), Current: 1, Total: 1})
+	inv.out.emit(progressEvent{event: newEvent("progress"), Phase: phaseFetch, Subject: shownURL(url), Current: 1, Total: 1})
 	return nil
 }
 
@@ -310,7 +310,7 @@ func (inv *invocation) addAccount(ctx context.Context, arg string) error {
 		}
 		return takeBack(unreachableRemote(src.URL, err))
 	}
-	inv.out.emit(progressEvent{event: newEvent("progress"), Phase: "fetch", Subject: shownURL(src.URL), Current: 1, Total: 1})
+	inv.out.emit(progressEvent{event: newEvent("progress"), Phase: phaseFetch, Subject: shownURL(src.URL), Current: 1, Total: 1})
 	check := inv.checkSource(ctx, want)
 	if err := ctx.Err(); err != nil {
 		return takeBack(err)

@@ -50,7 +50,7 @@ func (d *doctor) sourceRemotes(ctx context.Context, gitDir string) {
 		if errors.As(err, &newer) {
 			hint = failureOf(err).hint
 		}
-		d.row("source_remotes", "fail", "cannot read the settings to compare the remotes with", hint)
+		d.row("source_remotes", rowFail, "cannot read the settings to compare the remotes with", hint)
 		return
 	}
 	named := make(map[string]bool, len(settings.Sources))
@@ -77,14 +77,14 @@ func (d *doctor) sourceRemotes(ctx context.Context, gitDir string) {
 		if len(remotes) > 0 {
 			detail = plural(len(remotes), "source remote") + " the settings name"
 		}
-		d.row("source_remotes", "ok", detail, "")
+		d.row("source_remotes", rowOK, detail, "")
 		return
 	}
 	sort.Strings(orphans)
 	sort.Strings(forks)
 	all := append(append([]string{}, orphans...), forks...)
 	hint := sourceRemotesHint(orphans, forks, account)
-	d.row("source_remotes", "warn", plural(len(all), "source remote")+" the settings do not name: "+strings.Join(all, ", "), hint)
+	d.row("source_remotes", rowWarn, plural(len(all), "source remote")+" the settings do not name: "+strings.Join(all, ", "), hint)
 }
 
 // sourceRemotesHint is the source_remotes hint for the orphan remotes
@@ -145,12 +145,12 @@ func remoteSubject(id, url string) string {
 func (d *doctor) stagedImports(ctx context.Context, gitDir string) {
 	out, err := d.inv.git.Isolated(ctx, gitDir, "for-each-ref", "--format=%(refname)", lineage.ImportingPrefix)
 	if err != nil {
-		d.row("staged_imports", "fail", err.Error(), "run with --verbose to see the git commands")
+		d.row("staged_imports", rowFail, err.Error(), "run with --verbose to see the git commands")
 		return
 	}
 	refs := strings.Fields(out) // a ref name holds no space, so a field is a ref
 	if len(refs) == 0 {
-		d.row("staged_imports", "ok", "no import is left staged", "")
+		d.row("staged_imports", rowOK, "no import is left staged", "")
 		return
 	}
 	runs := map[string]bool{}
@@ -163,7 +163,7 @@ func (d *doctor) stagedImports(ctx context.Context, gitDir string) {
 	if len(runs) > 1 {
 		interrupted = fmt.Sprintf("%d interrupted installs or update checks", len(runs))
 	}
-	d.row("staged_imports", "warn",
+	d.row("staged_imports", rowWarn,
 		plural(len(refs), "staging ref")+" from "+interrupted+": "+refs[0],
 		"nothing reads them and they pin what they name; delete each with 'git --git-dir="+gitDir+" update-ref -d <ref>' while no agentx command is running, agentx serve included")
 }

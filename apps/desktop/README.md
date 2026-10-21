@@ -12,6 +12,7 @@ The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it
 | `src/app` | The app shell: title bar, sidebar, main panel, command palette |
 | `src/screens` | The screens; today one placeholder |
 | `src/components` | Shared components; `ui` holds the shadcn/ui-based primitives |
+| `src/cli/events.gen.ts`, `src/cli/commands.gen.ts` | The types of the CLI's events and exit codes, and the commands and flags the CLI takes, generated from the CLI's own code. Do not edit them: after changing an event or a command in `apps/cli`, run `go test ./internal/cli -run 'TestEventTypes\|TestCommandTypes' -update` there. Those tests fail while a file is stale |
 | `src/assets` | Illustrations; today the product mark, also the source of the app icons in `src-tauri/icons` |
 | `e2e` | The end-to-end tests: [Playwright](https://playwright.dev) drives the frontend in Chromium on the Vite dev server |
 | `oxlint.config.ts`, `oxfmt.config.ts` | The lint and the formatter: [Ultracite](https://www.ultracite.ai)'s presets for oxlint and oxfmt, plus the design-system lint built on [`@shadcn/lint`](https://github.com/shadcn-ui/lint) and one rule of [`eslint-plugin-better-tailwindcss`](https://github.com/schoero/eslint-plugin-better-tailwindcss) |
@@ -37,7 +38,7 @@ Run these in `apps/desktop`:
 
 | Command | What it does |
 | --- | --- |
-| `pnpm check` | Checks without changing files (`ultracite check`): oxlint with Ultracite's rules, the type-aware rules, a type check and the design-system lint, plus the oxfmt format check |
+| `pnpm check` | Checks without changing files (`ultracite check`): oxlint with Ultracite's rules, the type-aware rules, a type check and the design-system lint, plus the oxfmt format check. The lint covers the generated files in `src/cli`, which Ultracite skips by default, so the type check covers them too |
 | `pnpm fix` | Applies the lint's safe fixes, formats, then lists what is left (`ultracite fix`) |
 | `pnpm test` | Runs the end-to-end tests in Chromium. It starts the dev server, or reuses a running one outside CI |
 | `pnpm build` | Builds the frontend into `dist` with Vite. It does not check types: `pnpm check` does, and `pnpm tauri build` runs `pnpm check` first |

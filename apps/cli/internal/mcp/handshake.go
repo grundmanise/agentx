@@ -151,9 +151,9 @@ func Handshake(ctx context.Context, s Server, env map[string]string, clientVersi
 	var c conn
 	var err error
 	switch s.Transport {
-	case "stdio":
+	case TransportStdio:
 		c, err = startStdio(ctx, s, env)
-	case "sse":
+	case TransportSSE:
 		c, err = openSSE(ctx, s.URL, requestHeaders(s, env))
 	default:
 		c = newHTTP(s.URL, requestHeaders(s, env))
@@ -248,11 +248,19 @@ func signature(items []Item) Result {
 // lists are the listing methods, each behind a capability of the initialize
 // result; a method the server does not implement lists nothing.
 var lists = []listing{
-	{"tool", "tools/list", "tools", "tools"},
-	{"prompt", "prompts/list", "prompts", "prompts"},
-	{"resource", "resources/list", "resources", "resources"},
-	{"resource_template", "resources/templates/list", "resources", "resourceTemplates"},
+	{KindTool, "tools/list", "tools", "tools"},
+	{KindPrompt, "prompts/list", "prompts", "prompts"},
+	{KindResource, "resources/list", "resources", "resources"},
+	{KindResourceTemplate, "resources/templates/list", "resources", "resourceTemplates"},
 }
+
+// The kinds of an item, one per listing method.
+const (
+	KindTool             = "tool"
+	KindPrompt           = "prompt"
+	KindResource         = "resource"
+	KindResourceTemplate = "resource_template"
+)
 
 type listing struct {
 	kind, method, capability, field string

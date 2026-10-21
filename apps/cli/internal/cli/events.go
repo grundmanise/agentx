@@ -77,6 +77,12 @@ func skillOrigin(rec lineage.Record, account string) (kind, source string, subpa
 // carried rather than left out.
 func ptr(s string) *string { return &s }
 
+// The levels of a log event.
+const (
+	levelWarn  = "warn"
+	levelDebug = "debug"
+)
+
 type logEvent struct {
 	event
 	Level   string `json:"level"`
@@ -203,7 +209,7 @@ func (w *writer) hint(msg string) {
 // warn logs at warn level.
 func (w *writer) warn(msg string) {
 	if w.json {
-		w.line(w.stderr, logEvent{event: newEvent("log"), Level: "warn", Message: msg})
+		w.line(w.stderr, logEvent{event: newEvent("log"), Level: levelWarn, Message: msg})
 		return
 	}
 	w.write(w.stderr, fmt.Sprintf("%s %s\n", w.err().paint(warnStyle, "warning:"), sanitised(msg)))
@@ -215,7 +221,7 @@ func (w *writer) warn(msg string) {
 // both, joined by "; ", and a script finds the way on where a person does.
 func (w *writer) warnWith(msg, next string) {
 	if w.json {
-		w.line(w.stderr, logEvent{event: newEvent("log"), Level: "warn", Message: msg + "; " + next})
+		w.line(w.stderr, logEvent{event: newEvent("log"), Level: levelWarn, Message: msg + "; " + next})
 		return
 	}
 	w.write(w.stderr, fmt.Sprintf("%s %s\n  %s\n", w.err().paint(warnStyle, "warning:"), sanitised(msg), sanitised(next)))
@@ -228,7 +234,7 @@ func (w *writer) debugf(format string, args ...any) {
 	}
 	msg := fmt.Sprintf(format, args...)
 	if w.json {
-		w.line(w.stderr, logEvent{event: newEvent("log"), Level: "debug", Message: msg})
+		w.line(w.stderr, logEvent{event: newEvent("log"), Level: levelDebug, Message: msg})
 		return
 	}
 	w.write(w.stderr, fmt.Sprintf("%s %s\n", w.err().paint(muted, "debug:"), sanitised(msg)))
