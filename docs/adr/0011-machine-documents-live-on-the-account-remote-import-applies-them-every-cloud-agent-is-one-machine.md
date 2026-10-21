@@ -11,13 +11,13 @@ A machine can keep a **machine document** on the account remote, on the branch `
 
 | What the document records | What import does |
 |---|---|
-| The machine settings | Replaces them, after confirming or with `--yes`, as today |
+| The machine settings | Replaces them, as today |
 | A skill this machine lacks | Installs it: one of the user's own from the account remote, a managed skill from its source at the recorded upstream commit |
 | A skill this machine holds | Sets its placements to the recorded ones, placing and removing, in the configurations detected on this machine |
 | A skill at another version | Moves it forward only: fast-forwards when the recorded commit descends from the local one, keeps the local one when it descends from the recorded one, and when they diverged or the skill is modified, leaves it as it is and reports it for `skill update` |
 | Nothing about a skill this machine holds | Leaves it as it is |
 
-A second run changes nothing. The run is one journaled mutation that touches the network; each `import_skill` event says what was done (installed, updated, placed, unplaced, kept, or skipped with the reason), and `--dry-run` keeps today's listing.
+Import now writes the library and the placements as well as the settings, so it always asks first: one `y` confirms the whole run, and anything else changes nothing. `--yes` answers in advance and is required wherever it cannot ask, as today. A second run changes nothing. The run is one journaled mutation that touches the network; each `import_skill` event says what was done (installed, updated, placed, unplaced, kept, or skipped with the reason).
 
 Every cloud agent environment, Claude Code on the web, Codex cloud, Cursor's cloud agents or any other, is one **cloud machine**: a machine with no computer of its own, whose machine id is derived from `AGENTX_PLATFORM_ID=cloud`, so that every virtual machine of every cloud agent client of the same user is the same machine. Its machine document is its only state. The desktop app and the web app write it; a cloud virtual machine only reads it. It never publishes, never runs `serve`, never uploads a snapshot, and needs only a read-only token for the account remote.
 
@@ -49,6 +49,8 @@ A cloud sync command of its own: a second way to describe a machine's skills bes
 
 Keeping the cloud machine's state in the account service: it works only when signed in, and a bring-your-own remote would have no cloud machine.
 
+A `--dry-run` that keeps today's listing: the confirmation is the guard, and the user who answers no has changed nothing, so a second mode would only be a second way to read the same document.
+
 An import that also removes every skill the document does not list: on a computer it deletes what the user installed after the document was written; on a cloud machine it buys little, since each new session starts from the snapshot.
 
 A machine per cloud agent client, or per environment: the fleet would grow with sessions and vendors while the user's choice is per skill and per client, which the placements already carry.
@@ -59,7 +61,7 @@ Only skills enabled in the agent client vendor's own account: they load in every
 
 ## Consequences
 
-`agentx export` gains a per-configuration placement list in each skill record, and the document's `schema_version` becomes 2; import reads version 1 as today, each `placed` flag meaning every configuration that was enabled. Import becomes a journaled mutation that fetches and installs, and its events and result change accordingly; `--dry-run` keeps the listing. Both gain a way to name a machine instead of a file, whose flag names are left to the change that builds them.
+`agentx export` gains a per-configuration placement list in each skill record, and the document's `schema_version` becomes 2; import reads version 1 as today, each `placed` flag meaning every configuration that was enabled. Import becomes a journaled mutation that fetches and installs, and its events and result change accordingly; its confirmation now covers the skills as well as the settings, and today's listing without applying is gone. Both gain a way to name a machine instead of a file, whose flag names are left to the change that builds them.
 
 The account remote holds `machines/<machine id>` branches beside the skills' branches, one per machine that writes a document. A fetch of the account remote's skills does not fetch them; import fetches the one it reads. The machine settings leave the machine inside a document pushed there, which the glossary's "never leaves the machine" no longer covers once this is accepted; the access fields are still reset on import.
 
