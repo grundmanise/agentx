@@ -81,6 +81,22 @@ export type ProgressPhase =
   | "adopt"
   | "rescan";
 
+// The exit code of each error code, the ok of success included.
+export const EXIT_CODES = {
+  account_repo: 8,
+  git: 2,
+  internal: 10,
+  interrupted: 9,
+  locked: 7,
+  not_found: 5,
+  ok: 0,
+  pending_merge: 4,
+  refused: 6,
+  source: 3,
+  usage: 1,
+} as const;
+export type ExitCode = (typeof EXIT_CODES)[keyof typeof EXIT_CODES];
+
 // The objects events carry.
 export interface Settings {
   schema_version: number;

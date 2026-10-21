@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -219,13 +220,12 @@ type tsGen struct {
 	structs   []reflect.Type
 	named     map[string]reflect.Type
 	used      map[fieldKey]bool // the lists and overrides a field took its type from
-	nullable  map[string]bool   // the JSON names of the fields that can be null
 }
 
 func newTSGen(lists []valueList, overrides []typeOverride, names map[reflect.Type]string) *tsGen {
 	g := &tsGen{lists: map[fieldKey]string{}, overrides: map[fieldKey]string{}, names: names,
 		envelope: reflect.TypeFor[event](), named: map[string]reflect.Type{},
-		used: map[fieldKey]bool{}, nullable: map[string]bool{}}
+		used: map[fieldKey]bool{}}
 	for _, l := range lists {
 		for _, f := range l.fields {
 			g.lists[f.key()] = l.name
@@ -354,7 +354,6 @@ func (g *tsGen) members(t reflect.Type) (extends []string, envelope bool, lines 
 		}
 		if null {
 			ts += " | null"
-			g.nullable[name] = true
 		}
 		mark := ""
 		if optional {
@@ -408,34 +407,33 @@ func eventTypeName(typ string) string {
 
 // renderEventTypes is the content of eventTypesFile.
 func renderEventTypes() (string, error) {
-	_, d, err := eventTypesGen()
+	d, err := eventTypesGen()
 	if err != nil {
 		return "", err
 	}
 	return d.render(), nil
 }
 
-// eventTypesGen is the generator of eventTypesFile once it has read every
-// event, so that it knows every field that can be null, and the
-// declarations it wrote. A value list or an override naming a field no
-// event carries is an error: the field it meant would be a plain string.
-func eventTypesGen() (*tsGen, declarations, error) {
+// eventTypesGen is the declarations of eventTypesFile. A value list or an
+// override naming a field no event carries is an error: the field it meant
+// would be a plain string.
+func eventTypesGen() (declarations, error) {
 	g := newTSGen(valueLists, typeOverrides, typeNames)
 	d, err := g.declarations()
 	if err != nil {
-		return nil, declarations{}, err
+		return declarations{}, err
 	}
 	for k, list := range g.lists {
 		if !g.used[k] {
-			return nil, declarations{}, fmt.Errorf("value list %s names %s.%s, which no event carries", list, k.t, k.field)
+			return declarations{}, fmt.Errorf("value list %s names %s.%s, which no event carries", list, k.t, k.field)
 		}
 	}
 	for k := range g.overrides {
 		if !g.used[k] {
-			return nil, declarations{}, fmt.Errorf("a type override names %s.%s, which no event carries", k.t, k.field)
+			return declarations{}, fmt.Errorf("a type override names %s.%s, which no event carries", k.t, k.field)
 		}
 	}
-	return g, d, nil
+	return d, nil
 }
 
 // declarations are the declarations of the events and of the structs they
@@ -494,6 +492,13 @@ func (d declarations) render() string {
 		}
 		b.WriteString(union(l.name, members))
 	}
+	b.WriteString("\n// The exit code of each error code, the ok of success included.\nexport const EXIT_CODES = {\n")
+	codes := slices.Clone(statuses)
+	slices.SortFunc(codes, func(a, b status) int { return strings.Compare(a.code, b.code) })
+	for _, s := range codes {
+		fmt.Fprintf(&b, "  %s: %d,\n", s.code, s.exit)
+	}
+	b.WriteString("} as const;\nexport type ExitCode = (typeof EXIT_CODES)[keyof typeof EXIT_CODES];\n")
 	b.WriteString("\n// The objects events carry.\n")
 	b.WriteString(strings.Join(d.structs, "\n"))
 	b.WriteString("\n// One type per event type.\n")
@@ -528,47 +533,179 @@ export type ServeRequest = RefreshRequest | SearchRequest;
 	return b.String()
 }
 
-// nullableFields are the JSON names of the fields the event types say can
-// be null.
-var nullableFields = sync.OnceValues(func() (map[string]bool, error) {
-	g, _, err := eventTypesGen()
-	if err != nil {
-		return nil, err
-	}
-	return g.nullable, nil
-})
+// contract is what the event types say of the events, read from the
+// structs and lists the generator reads. The harness holds every event the
+// suite parses to it, so the suite checks the types against what the CLI
+// writes: a value a value list does not name, a field the CLI leaves out
+// that the types say is always there, and a null where the types say an
+// array or an object, which a nil slice or map marshals as.
+type contract struct {
+	events    map[string]reflect.Type
+	lists     map[fieldKey]valueList
+	overrides map[fieldKey]bool
+}
 
-// checkNulls fails t for every null in event e the event types do not
-// admit. A nil slice or map marshals as null, while the types say an array
-// or an object, which is what the contract says: the app would read the
-// null without a check. The harness checks every event it parses, so the
-// whole suite holds the types to what the CLI writes.
-func checkNulls(t *testing.T, e map[string]any) {
-	t.Helper()
-	nullable, err := nullableFields()
-	if err != nil {
-		t.Fatal(err)
-	}
-	var walk func(path string, v any)
-	walk = func(path string, v any) {
-		switch v := v.(type) {
-		case map[string]any:
-			for k, w := range v {
-				if w == nil && !nullable[k] {
-					t.Errorf("%s event: %s%s is null, which events.gen.ts does not admit", e["type"], path, k)
-				}
-				walk(path+k+".", w)
-			}
-		case []any:
-			for i, w := range v {
-				if w == nil {
-					t.Errorf("%s event: %s%d is null, which events.gen.ts does not admit", e["type"], path, i)
-				}
-				walk(fmt.Sprintf("%s%d.", path, i), w)
-			}
+func newContract(events map[string]reflect.Type, lists []valueList, overrides []typeOverride) contract {
+	c := contract{events: events, lists: map[fieldKey]valueList{}, overrides: map[fieldKey]bool{}}
+	for _, l := range lists {
+		for _, f := range l.fields {
+			c.lists[f.key()] = l
 		}
 	}
-	walk("", e)
+	for _, o := range overrides {
+		c.overrides[o.key()] = true
+	}
+	return c
+}
+
+var eventContract = sync.OnceValue(func() contract {
+	events := map[string]reflect.Type{}
+	for _, e := range eventTypes {
+		events[e.name] = reflect.TypeOf(e.v)
+	}
+	return newContract(events, valueLists, typeOverrides)
+})
+
+// jsonField is one field of a struct as encoding/json writes it.
+type jsonField struct {
+	name     string
+	typ      reflect.Type // a pointer's element
+	optional bool
+	nullable bool
+	key      fieldKey
+}
+
+// jsonFields are the fields of struct t, its embedded structs' included, by
+// the rules the generator follows.
+func jsonFields(t reflect.Type) []jsonField {
+	var fields []jsonField
+	for i := range t.NumField() {
+		f := t.Field(i)
+		tag := f.Tag.Get("json")
+		if f.Anonymous && tag == "" {
+			fields = append(fields, jsonFields(f.Type)...)
+			continue
+		}
+		if !f.IsExported() || tag == "-" {
+			continue
+		}
+		name, opts, _ := strings.Cut(tag, ",")
+		optional := slices.Contains(strings.Split(opts, ","), "omitempty") || slices.Contains(strings.Split(opts, ","), "omitzero")
+		ft, nullable := f.Type, false
+		if ft.Kind() == reflect.Pointer {
+			ft, nullable = ft.Elem(), !optional
+		}
+		fields = append(fields, jsonField{name, ft, optional, nullable, fieldKey{t, f.Name}})
+	}
+	return fields
+}
+
+// problems lists what object v holds that the types of struct t do not
+// admit, each named by its path under prefix.
+func (c contract) problems(t reflect.Type, v map[string]any, prefix string) []string {
+	var out []string
+	known := map[string]bool{}
+	for _, f := range jsonFields(t) {
+		known[f.name] = true
+		w, ok := v[f.name]
+		switch {
+		case !ok:
+			if !f.optional {
+				out = append(out, prefix+f.name+" is missing")
+			}
+		case w == nil:
+			if !f.nullable {
+				out = append(out, prefix+f.name+" is null")
+			}
+		case !c.overrides[f.key]:
+			out = append(out, c.valueProblems(f.typ, w, prefix+f.name, f.key)...)
+		}
+	}
+	for _, k := range slices.Sorted(maps.Keys(v)) {
+		if !known[k] {
+			out = append(out, prefix+k+" is no field of "+t.String())
+		}
+	}
+	return out
+}
+
+// valueProblems lists what value v at path holds that Go type t, the type
+// of field k, does not admit.
+func (c contract) valueProblems(t reflect.Type, v any, path string, k fieldKey) []string {
+	wrong := func(want string) []string { return []string{fmt.Sprintf("%s is %T, not %s", path, v, want)} }
+	switch t.Kind() {
+	case reflect.String:
+		s, ok := v.(string)
+		if !ok {
+			return wrong("a string")
+		}
+		if l, ok := c.lists[k]; ok && !l.open && !slices.Contains(l.values, s) {
+			return []string{fmt.Sprintf("%s is %q, which %s does not name", path, s, l.name)}
+		}
+	case reflect.Bool:
+		if _, ok := v.(bool); !ok {
+			return wrong("a boolean")
+		}
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		if _, ok := v.(float64); !ok {
+			return wrong("a number")
+		}
+	case reflect.Slice, reflect.Array:
+		a, ok := v.([]any)
+		if !ok {
+			return wrong("an array")
+		}
+		var out []string
+		for i, w := range a {
+			p := fmt.Sprintf("%s.%d", path, i)
+			if w == nil {
+				out = append(out, p+" is null")
+				continue
+			}
+			out = append(out, c.valueProblems(t.Elem(), w, p, k)...)
+		}
+		return out
+	case reflect.Map:
+		m, ok := v.(map[string]any)
+		if !ok {
+			return wrong("an object")
+		}
+		var out []string
+		for _, key := range slices.Sorted(maps.Keys(m)) {
+			p := path + "." + key
+			if m[key] == nil {
+				out = append(out, p+" is null")
+				continue
+			}
+			out = append(out, c.valueProblems(t.Elem(), m[key], p, k)...)
+		}
+		return out
+	case reflect.Struct:
+		m, ok := v.(map[string]any)
+		if !ok {
+			return wrong("an object")
+		}
+		return c.problems(t, m, path+".")
+	}
+	return nil
+}
+
+// checkEvent fails t for everything in event e the event types do not
+// admit. The harness calls it on every event it parses.
+func checkEvent(t *testing.T, e map[string]any) {
+	t.Helper()
+	c := eventContract()
+	typ, _ := e["type"].(string)
+	st, ok := c.events[typ]
+	if !ok {
+		t.Errorf("event type %q is none of eventTypes", typ)
+		return
+	}
+	for _, p := range c.problems(st, e, "") {
+		t.Errorf("%s event does not match events.gen.ts: %s", typ, p)
+	}
 }
 
 // TestEventTypes checks that the desktop app's event types are those the
@@ -729,5 +866,60 @@ func TestTSUnion(t *testing.T) {
 		if got := union("T", tt.members); got != tt.want {
 			t.Errorf("union(%v) =\n%s\nwant\n%s", tt.members, got, tt.want)
 		}
+	}
+}
+
+func TestContractProblems(t *testing.T) {
+	t.Parallel()
+	type item struct {
+		Kind string `json:"kind"`
+	}
+	type ev struct {
+		event
+		Outcome string            `json:"outcome"`
+		Level   string            `json:"level"`
+		Note    string            `json:"note,omitempty"`
+		Base    *string           `json:"base"`
+		Count   int               `json:"count"`
+		Items   []item            `json:"items"`
+		ByName  map[string]bool   `json:"by_name,omitempty"`
+		Raw     json.RawMessage   `json:"raw,omitempty"`
+		Drift   []string          `json:"drift,omitempty"`
+		Tags    map[string]string `json:"tags,omitempty"`
+	}
+	c := newContract(nil, []valueList{
+		{name: "Outcome", values: []string{"pushed"}, fields: []fieldRef{{ev{}, "Outcome"}}},
+		{name: "Level", open: true, values: []string{"warn"}, fields: []fieldRef{{ev{}, "Level"}}},
+		{name: "ItemKind", values: []string{"tool"}, fields: []fieldRef{{item{}, "Kind"}}},
+	}, []typeOverride{{fieldRef{ev{}, "Raw"}, "unknown"}})
+	valid := func() map[string]any {
+		return map[string]any{
+			"type": "e", "schema_version": float64(1), "outcome": "pushed", "level": "trace", "base": nil,
+			"count": float64(2), "items": []any{map[string]any{"kind": "tool"}}, "raw": []any{"anything"},
+		}
+	}
+	tests := []struct {
+		name   string
+		change func(map[string]any)
+		want   []string
+	}{
+		{"valid, an open list admitting any value", func(map[string]any) {}, nil},
+		{"a field never left out is missing", func(e map[string]any) { delete(e, "count") }, []string{"count is missing"}},
+		{"null where the type is no pointer", func(e map[string]any) { e["items"] = nil }, []string{"items is null"}},
+		{"a value a closed list does not name", func(e map[string]any) { e["outcome"] = "pushd" }, []string{`outcome is "pushd", which Outcome does not name`}},
+		{"a nested value a list does not name", func(e map[string]any) { e["items"] = []any{map[string]any{"kind": "x"}} }, []string{`items.0.kind is "x", which ItemKind does not name`}},
+		{"the wrong JSON type", func(e map[string]any) { e["count"] = "2" }, []string{"count is string, not a number"}},
+		{"a null in an array", func(e map[string]any) { e["items"] = []any{nil} }, []string{"items.0 is null"}},
+		{"a field the struct does not have", func(e map[string]any) { e["extra"] = true }, []string{"extra is no field of cli.ev"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			e := valid()
+			tt.change(e)
+			if got := c.problems(reflect.TypeFor[ev](), e, ""); !slices.Equal(got, tt.want) {
+				t.Errorf("problems = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }

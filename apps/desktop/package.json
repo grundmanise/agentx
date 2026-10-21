@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "check": "ultracite check",
+    "check": "ultracite check && tsc --noEmit",
     "fix": "ultracite fix",
     "test": "playwright test",
     "tauri": "tauri"
