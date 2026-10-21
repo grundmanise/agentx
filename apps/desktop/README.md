@@ -38,7 +38,7 @@ Run these in `apps/desktop`:
 
 | Command | What it does |
 | --- | --- |
-| `pnpm check` | Checks without changing files: `ultracite check` (oxlint with Ultracite's rules, the type-aware rules, a type check and the design-system lint, plus the oxfmt format check), then `tsc --noEmit`, which also type-checks the generated files in `src/cli` that Ultracite skips |
+| `pnpm check` | Checks without changing files (`ultracite check`): oxlint with Ultracite's rules, the type-aware rules, a type check and the design-system lint, plus the oxfmt format check. The lint covers the generated files in `src/cli`, which Ultracite skips by default, so the type check covers them too |
 | `pnpm fix` | Applies the lint's safe fixes, formats, then lists what is left (`ultracite fix`) |
 | `pnpm test` | Runs the end-to-end tests in Chromium. It starts the dev server, or reuses a running one outside CI |
 | `pnpm build` | Builds the frontend into `dist` with Vite. It does not check types: `pnpm check` does, and `pnpm tauri build` runs `pnpm check` first |

@@ -488,7 +488,7 @@ func (d declarations) render() string {
 	for _, l := range valueLists {
 		members := tsLiterals(l.values)
 		if l.open {
-			members = append(members, "(string & {})")
+			members = append(members, "(string & Record<never, never>)")
 		}
 		b.WriteString(union(l.name, members))
 	}

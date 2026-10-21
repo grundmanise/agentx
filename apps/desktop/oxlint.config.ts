@@ -8,7 +8,9 @@ import shadcn from "ultracite/oxlint/shadcn";
 // src/styles/tokens.css.
 export default defineConfig({
   extends: [core, react, shadcn],
-  ignorePatterns: core.ignorePatterns,
+  // Lint the generated files in src/cli too, which Ultracite skips by default, so that the
+  // type check covers them.
+  ignorePatterns: (core.ignorePatterns ?? []).filter((p) => p !== "**/*.gen.*"),
   jsPlugins: [...shadcn.jsPlugins, "eslint-plugin-better-tailwindcss"],
   options: {
     denyWarnings: true,

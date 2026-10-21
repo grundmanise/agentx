@@ -23,7 +23,7 @@ export type DriftState =
   | "source removed"
   | "upstream removed"
   | "not published"
-  | (string & {});
+  | (string & Record<never, never>);
 export type PlacementMode = "symlink" | "copy" | "library";
 export type PlacementKind = "symlink" | "copy" | "directory" | "library";
 export type OccurrenceKind = "symlink" | "copy" | "directory";
@@ -38,7 +38,7 @@ export type HandshakeReason =
   | "failed";
 export type FileStatus = "added" | "modified" | "deleted";
 export type DoctorStatus = "ok" | "warn" | "fail" | "info";
-export type LogLevel = "warn" | "debug" | (string & {});
+export type LogLevel = "warn" | "debug" | (string & Record<never, never>);
 export type ErrorCode =
   | "usage"
   | "git"
