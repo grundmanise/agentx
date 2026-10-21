@@ -42,7 +42,7 @@ Run these in `apps/desktop`:
 | `pnpm format-check` | Checks that every file is formatted, without changing any |
 | `pnpm fix` | Applies the lint's safe fixes, formats, then lists what is left (`ultracite fix`) |
 | `pnpm test` | Runs the end-to-end tests in Chromium. It starts the dev server, or reuses a running one outside CI |
-| `pnpm build` | Type-checks with `tsc`, then builds the frontend into `dist` |
+| `pnpm build` | Builds the frontend into `dist` with Vite. It does not check types: `pnpm lint` does, and `pnpm tauri build` runs `pnpm lint` first |
 
 From the repository root, `make check-desktop` runs what CI runs for the desktop app: `pnpm install --frozen-lockfile`, then `format-check`, `lint`, `test` and `build`, then `cargo fmt --check` and Clippy for the Rust side.
 
