@@ -18,8 +18,8 @@ import (
 
 // How a machine id was derived, as agentx machine reports it.
 const (
-	derivedPlatform = "platform" // HMAC over the platform id and the uid
-	derivedRandom   = "random"   // generated once and kept in machine.json
+	DerivedPlatform = "platform" // HMAC over the platform id and the uid
+	DerivedRandom   = "random"   // generated once and kept in machine.json
 )
 
 func machinePath(dir string) string { return filepath.Join(dir, "machine.json") }
@@ -31,12 +31,12 @@ func machinePath(dir string) string { return filepath.Join(dir, "machine.json") 
 // lock's recovery needs for the ref steps of an unfinished install.
 func MachineID(dir string, env map[string]string, u RefUpdater) (id, derivation string, err error) {
 	if id, err := storedMachineID(dir); id != "" || err != nil {
-		return id, derivedRandom, err
+		return id, DerivedRandom, err
 	}
 	if pid := platformID(env); pid != "" {
 		mac := hmac.New(sha256.New, []byte("agentx-machine-id/v1"))
 		fmt.Fprintf(mac, "%s\n%d", pid, os.Getuid())
-		return hex.EncodeToString(mac.Sum(nil))[:32], derivedPlatform, nil
+		return hex.EncodeToString(mac.Sum(nil))[:32], DerivedPlatform, nil
 	}
 	err = mutate(dir, u, quick(dir), false, func() error { // the file is derived state: no version bump
 		if id, err = storedMachineID(dir); id != "" || err != nil { // stored meanwhile by another command
@@ -45,7 +45,7 @@ func MachineID(dir string, env map[string]string, u RefUpdater) (id, derivation 
 		id, err = ResetMachineID(dir)
 		return err
 	})
-	return id, derivedRandom, err
+	return id, DerivedRandom, err
 }
 
 // storedMachineID reads the id in machine.json; a missing file is "" and no error.

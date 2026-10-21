@@ -58,6 +58,10 @@ const (
 	publishBehind = "behind"
 )
 
+// phasePublish is the step a publish reports per skill, once the push
+// answered or the skill was found to need none.
+const phasePublish = "publish"
+
 func newSkillPublishCommand(inv *invocation) *cobra.Command {
 	var message string
 	cmd := &cobra.Command{
@@ -800,7 +804,7 @@ func (inv *invocation) reportPublished(ctx context.Context, list []*publishing, 
 	pushed := 0
 	var recorded []string
 	for i, p := range list {
-		out.emit(progressEvent{event: newEvent("progress"), Phase: "publish", Subject: p.name, Current: i + 1, Total: len(list)})
+		out.emit(progressEvent{event: newEvent("progress"), Phase: phasePublish, Subject: p.name, Current: i + 1, Total: len(list)})
 		out.emit(publishEvent{event: newEvent("publish"), Name: p.name, Outcome: p.outcome, Commit: p.commit, Source: url})
 		name := out.paint(heading, sanitised(p.name))
 		switch p.outcome {

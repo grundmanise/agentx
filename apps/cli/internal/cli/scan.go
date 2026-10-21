@@ -279,7 +279,7 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 			// sanitised: a path is there to be copied, and a space where a
 			// control character was names nothing on disk.
 			path := quotedPath(o.Path)
-			if o.Kind == "symlink" {
+			if o.Kind == scan.KindSymlink {
 				path += out.paint(muted, " -> "+quotedPath(o.ResolvedPath))
 			}
 			if o.Plugin != "" {

@@ -167,7 +167,7 @@ func (s *Scan) addPlugin(conf Configuration, p InstalledPlugin) {
 	s.edge(conf.PhysicalID, node.PhysicalID)
 	for _, dir := range p.Skills {
 		for _, placement := range s.pluginSkills(dir) {
-			skill := s.add(conf, placement, "user", p.Name)
+			skill := s.add(conf, placement, ScopeUser, p.Name)
 			s.edge(node.PhysicalID, skill.PhysicalID)
 		}
 	}

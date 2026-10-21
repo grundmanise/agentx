@@ -109,7 +109,7 @@ func errorCodes() []string {
 }
 
 // valueLists are the value lists of the events, each from the constants the
-// CLI writes where it has them.
+// CLI writes.
 var valueLists = []valueList{
 	{name: "SkillKind", values: []string{lineage.KindManaged, lineage.KindUnmanaged}, fields: []fieldRef{
 		{scan.LibraryEntry{}, "Kind"}, {reconcileEvent{}, "Kind"}, {driftEvent{}, "Kind"},
@@ -126,19 +126,19 @@ var valueLists = []valueList{
 	{name: "PlacementMode", values: []string{modeSymlink, modeCopy, modeLibrary}, fields: []fieldRef{
 		{scan.LibraryPlacement{}, "Mode"},
 	}},
-	{name: "PlacementKind", values: []string{"symlink", "copy", "directory", "library"}, fields: []fieldRef{
+	{name: "PlacementKind", values: []string{scan.KindSymlink, scan.KindCopy, scan.KindDirectory, modeLibrary}, fields: []fieldRef{
 		{scan.LibraryPlacement{}, "Kind"},
 	}},
-	{name: "OccurrenceKind", values: []string{"symlink", "copy", "directory"}, fields: []fieldRef{
+	{name: "OccurrenceKind", values: []string{scan.KindSymlink, scan.KindCopy, scan.KindDirectory}, fields: []fieldRef{
 		{scan.Occurrence{}, "Kind"},
 	}},
-	{name: "OccurrenceScope", values: []string{"user", "project"}, fields: []fieldRef{
+	{name: "OccurrenceScope", values: []string{scan.ScopeUser, scan.ScopeProject}, fields: []fieldRef{
 		{scan.Occurrence{}, "Scope"},
 	}},
-	{name: "Transport", values: []string{"stdio", "sse", "streamable-http"}, fields: []fieldRef{
+	{name: "Transport", values: []string{mcp.TransportStdio, mcp.TransportSSE, mcp.TransportStreamableHTTP}, fields: []fieldRef{
 		{scan.ServerOccurrence{}, "Transport"},
 	}},
-	{name: "ToolKind", values: []string{"tool", "prompt", "resource", "resource_template"}, fields: []fieldRef{
+	{name: "ToolKind", values: []string{mcp.KindTool, mcp.KindPrompt, mcp.KindResource, mcp.KindResourceTemplate}, fields: []fieldRef{
 		{home.Tool{}, "Kind"},
 	}},
 	{name: "HandshakeReason", values: []string{
@@ -149,10 +149,10 @@ var valueLists = []valueList{
 	{name: "FileStatus", values: []string{diffAdded, diffModified, diffDeleted}, fields: []fieldRef{
 		{diffEvent{}, "Status"}, {changedFile{}, "Status"},
 	}},
-	{name: "DoctorStatus", values: []string{"ok", "warn", "fail", "info"}, fields: []fieldRef{
+	{name: "DoctorStatus", values: []string{rowOK, rowWarn, rowFail, rowInfo}, fields: []fieldRef{
 		{doctorEvent{}, "Status"},
 	}},
-	{name: "LogLevel", open: true, values: []string{"warn", "debug"}, fields: []fieldRef{
+	{name: "LogLevel", open: true, values: []string{levelWarn, levelDebug}, fields: []fieldRef{
 		{logEvent{}, "Level"},
 	}},
 	{name: "ErrorCode", values: errorCodes(), fields: []fieldRef{
@@ -178,14 +178,14 @@ var valueLists = []valueList{
 	{name: "ImportState", values: []string{restorePresent, restoreMissing, restoreDifferent}, fields: []fieldRef{
 		{importSkillEvent{}, "State"},
 	}},
-	{name: "MachineDerivation", values: []string{"platform", "random"}, fields: []fieldRef{
+	{name: "MachineDerivation", values: []string{home.DerivedPlatform, home.DerivedRandom}, fields: []fieldRef{
 		{machineEvent{}, "Derivation"},
 	}},
 	{name: "SourceAccess", values: []string{home.AccessWritable, home.AccessReadOnly, home.AccessUnknown}, fields: []fieldRef{
 		{sourceEvent{}, "Access"}, {home.Source{}, "Access"},
 	}},
 	{name: "ProgressPhase", values: []string{
-		phaseFetch, "publish", phaseBlobs, phaseImport, phaseInstall, phasePlace, phaseAdopt, phaseRescan,
+		phaseFetch, phasePublish, phaseBlobs, phaseImport, phaseInstall, phasePlace, phaseAdopt, phaseRescan,
 	}, fields: []fieldRef{
 		{progressEvent{}, "Phase"},
 	}},

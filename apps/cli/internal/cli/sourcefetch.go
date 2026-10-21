@@ -152,7 +152,7 @@ func (inv *invocation) fetchSources(ctx context.Context, gitDir string, targets 
 	var done func(source.Source, int)
 	if progress {
 		done = func(s source.Source, finished int) {
-			inv.out.emit(progressEvent{event: newEvent("progress"), Phase: "fetch", Subject: s.URL, Current: finished, Total: len(targets)})
+			inv.out.emit(progressEvent{event: newEvent("progress"), Phase: phaseFetch, Subject: s.URL, Current: finished, Total: len(targets)})
 		}
 	}
 	var sharedThen func(int)

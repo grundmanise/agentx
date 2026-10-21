@@ -59,6 +59,14 @@ var doctorSections = []struct {
 	{"Clients", nil}, // client:<id> and clients
 }
 
+// The statuses of a doctor row.
+const (
+	rowOK   = "ok"
+	rowWarn = "warn"
+	rowFail = "fail"
+	rowInfo = "info"
+)
+
 // row reports one check as a doctor event and keeps it for the text report.
 func (d *doctor) row(check, status, detail, hint string) {
 	d.inv.out.emit(doctorEvent{event: newEvent("doctor"), Check: check, Status: status, Detail: detail, Hint: hint})
@@ -69,11 +77,11 @@ func (d *doctor) row(check, status, detail, hint string) {
 // style both the glyph and the status word are painted in.
 func statusStyle(status string) (string, style) {
 	switch status {
-	case "ok":
+	case rowOK:
 		return glyphOK, okStyle
-	case "warn":
+	case rowWarn:
 		return glyphWarn, warnStyle
-	case "fail":
+	case rowFail:
 		return glyphFail, failStyle
 	}
 	return glyphInfo, infoStyle
@@ -114,7 +122,7 @@ func (d *doctor) print() {
 	out.print("")
 	var issues []doctorRow
 	for _, r := range d.rows {
-		if r.status == "warn" || r.status == "fail" {
+		if r.status == rowWarn || r.status == rowFail {
 			issues = append(issues, r)
 		}
 	}
@@ -164,86 +172,86 @@ func (d *doctor) run(ctx context.Context) error {
 	v, err := inv.gitVersion(ctx)
 	if err != nil {
 		f := failureOf(err)
-		d.row("git", "fail", f.message, f.hint)
+		d.row("git", rowFail, f.message, f.hint)
 		return err
 	}
-	d.row("git", "ok", "git "+v.String(), "")
+	d.row("git", rowOK, "git "+v.String(), "")
 
 	const verbose = "run with --verbose to see the git commands"
 	commit, mergeErr, probeErr := gitx.Probe(ctx, inv.git)
 	switch {
 	case probeErr != nil:
-		d.row("fork_merges", "fail", "cannot merge upstream changes into your own skills: cannot set up the probe repository: "+probeErr.Error(), verbose)
+		d.row("fork_merges", rowFail, "cannot merge upstream changes into your own skills: cannot set up the probe repository: "+probeErr.Error(), verbose)
 	case mergeErr != nil:
-		d.row("fork_merges", "fail", "cannot merge upstream changes into your own skills: "+mergeErr.Error(), verbose)
+		d.row("fork_merges", rowFail, "cannot merge upstream changes into your own skills: "+mergeErr.Error(), verbose)
 	default:
-		d.row("fork_merges", "ok", "upstream changes can be merged into your own skills", "")
+		d.row("fork_merges", rowOK, "upstream changes can be merged into your own skills", "")
 	}
 	switch {
 	case commit == "":
-		d.row("commit_identity", "fail", "cannot check commit ids: cannot set up the probe repository: "+probeErr.Error(), verbose)
+		d.row("commit_identity", rowFail, "cannot check commit ids: cannot set up the probe repository: "+probeErr.Error(), verbose)
 	case commit != gitx.FixedCommit:
-		d.row("commit_identity", "fail", "commits would differ between machines: got "+commit+", expected "+gitx.FixedCommit, verbose)
+		d.row("commit_identity", rowFail, "commits would differ between machines: got "+commit+", expected "+gitx.FixedCommit, verbose)
 	default:
-		d.row("commit_identity", "ok", "commits get the same id on every machine", "")
+		d.row("commit_identity", rowOK, "commits get the same id on every machine", "")
 	}
 
 	h := inv.dirs.Home
 	switch info, err := os.Stat(h); {
 	case errors.Is(err, fs.ErrNotExist):
-		d.row("home", "ok", "not created yet: "+h+"; the first scan creates it", "")
+		d.row("home", rowOK, "not created yet: "+h+"; the first scan creates it", "")
 	case err != nil:
-		d.row("home", "fail", err.Error(), "")
+		d.row("home", rowFail, err.Error(), "")
 	case !info.IsDir():
-		d.row("home", "fail", h+" is not a directory", "move it aside")
+		d.row("home", rowFail, h+" is not a directory", "move it aside")
 	case unix.Access(h, unix.W_OK) != nil:
-		d.row("home", "fail", h+" is not writable", "make "+h+" writable")
+		d.row("home", rowFail, h+" is not writable", "make "+h+" writable")
 	default:
-		d.row("home", "ok", h+" is writable", "")
+		d.row("home", rowOK, h+" is writable", "")
 	}
 
 	lock := home.LockPath(inv.dirs.Home)
 	switch held, pid, err := home.LockHeld(inv.dirs.Home); {
 	case err != nil:
-		d.row("lock", "fail", err.Error(), "")
+		d.row("lock", rowFail, err.Error(), "")
 	case held && pid != "":
-		d.row("lock", "warn", "held by process "+pid+": "+lock, "wait for it to finish")
+		d.row("lock", rowWarn, "held by process "+pid+": "+lock, "wait for it to finish")
 	case held:
-		d.row("lock", "warn", "held by another agentx command: "+lock, "wait for it to finish")
+		d.row("lock", rowWarn, "held by another agentx command: "+lock, "wait for it to finish")
 	default:
-		d.row("lock", "ok", "no other agentx command is running", "")
+		d.row("lock", rowOK, "no other agentx command is running", "")
 	}
 
 	// Reported, never recovered: doctor holds no lock.
 	switch journals, err := home.Journals(inv.dirs.Home); {
 	case err != nil:
-		d.row("mutations", "fail", err.Error(), "")
+		d.row("mutations", rowFail, err.Error(), "")
 	case len(journals) > 0:
-		d.row("mutations", "warn", plural(len(journals), "unfinished mutation")+": "+journals[0], "run agentx scan to recover; when it refuses, restore the file it names or move the journal aside")
+		d.row("mutations", rowWarn, plural(len(journals), "unfinished mutation")+": "+journals[0], "run agentx scan to recover; when it refuses, restore the file it names or move the journal aside")
 	default:
-		d.row("mutations", "ok", "no interrupted changes", "")
+		d.row("mutations", rowOK, "no interrupted changes", "")
 	}
 
 	settings := home.SettingsPath(inv.dirs.Home)
 	switch _, err := inv.loadSettings(); {
 	case err != nil:
 		f := failureOf(err)
-		d.row("settings", "fail", f.message, f.hint)
+		d.row("settings", rowFail, f.message, f.hint)
 	case !exists(settings):
-		d.row("settings", "ok", "defaults: "+settings+" is not written yet", "")
+		d.row("settings", rowOK, "defaults: "+settings+" is not written yet", "")
 	default:
-		d.row("settings", "ok", settings+" is valid", "")
+		d.row("settings", rowOK, settings+" is valid", "")
 	}
 
 	var repoErr error
 	switch gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home); {
 	case err != nil:
-		d.row("account_repo", "fail", err.Error(), "")
+		d.row("account_repo", rowFail, err.Error(), "")
 		repoErr = fail(exitAccountRepo, err.Error(), "check that "+gitDir+" is a bare repository this git can read, or move it aside")
 	case !exists:
-		d.row("account_repo", "ok", "not created yet: "+gitDir, "")
+		d.row("account_repo", rowOK, "not created yet: "+gitDir, "")
 	default:
-		d.row("account_repo", "ok", gitDir+" opens", "")
+		d.row("account_repo", rowOK, gitDir+" opens", "")
 		// These read the account repo, so they follow the row that says it
 		// can be read and are left out when it cannot.
 		d.sourceRemotes(ctx, gitDir)
@@ -255,26 +263,26 @@ func (d *doctor) run(ctx context.Context) error {
 	lib := inv.dirs.Library
 	switch info, err := os.Stat(lib); {
 	case errors.Is(err, fs.ErrNotExist):
-		d.row("library", "ok", "not created yet: "+lib+"; the first install creates it", "")
+		d.row("library", rowOK, "not created yet: "+lib+"; the first install creates it", "")
 	case err != nil:
-		d.row("library", "fail", err.Error(), "")
+		d.row("library", rowFail, err.Error(), "")
 	case !info.IsDir():
-		d.row("library", "fail", lib+" is not a directory", "move it aside")
+		d.row("library", rowFail, lib+" is not a directory", "move it aside")
 	case unix.Access(lib, unix.W_OK) != nil:
-		d.row("library", "fail", lib+" is not writable", "make "+lib+" writable")
+		d.row("library", rowFail, lib+" is not writable", "make "+lib+" writable")
 	default:
-		d.row("library", "ok", lib+" is writable", "")
+		d.row("library", rowOK, lib+" is writable", "")
 	}
 
 	detected := scan.Detect(inv.dirs)
 	for _, c := range detected {
-		d.row("client:"+c.Slug(), "info", c.Name()+": "+c.ConfigDir(inv.dirs), "")
+		d.row("client:"+c.Slug(), rowInfo, c.Name()+": "+c.ConfigDir(inv.dirs), "")
 	}
 	summary := fmt.Sprintf("%d of %d registered clients detected", len(detected), scan.Registered())
 	if len(detected) == 0 {
-		d.row("clients", "warn", summary, "install an agent client or check HOME")
+		d.row("clients", rowWarn, summary, "install an agent client or check HOME")
 	} else {
-		d.row("clients", "info", summary, "")
+		d.row("clients", rowInfo, summary, "")
 	}
 	return repoErr
 }
