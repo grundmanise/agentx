@@ -15,22 +15,13 @@ import (
 )
 
 // commandTypesFile is where the desktop app reads the commands the CLI
-// takes from. It is generated from the command tree, so that a command line
-// the app builds can be checked against what the CLI parses: the app's
-// tests run against a mock of the CLI, which rejects a command line this
-// file does not admit.
+// takes from, with their flags. It is generated from the command tree, so
+// that a command line the app builds can be checked against what the CLI
+// parses: the app's tests run against a mock of the CLI, which rejects a
+// command or a flag this file does not name. How many arguments a command
+// takes is not in it: cobra keeps that as a function, which says nothing
+// until it is called.
 const commandTypesFile = "../../../desktop/src/cli/commands.gen.ts"
-
-// probedArgs is how many arguments a command's argument check is tried
-// with; a command that takes this many takes any number.
-const probedArgs = 4
-
-// cliCommand is one command the app can run: how many arguments it takes
-// and its flags, each true when it takes a value.
-type cliCommand struct {
-	minArgs, maxArgs int // maxArgs is -1 for any number
-	flags            map[string]bool
-}
 
 // flagValues gives each flag of set by name, true when it takes a value.
 // A flag whose value is optional has no form the app's check knows.
@@ -46,41 +37,16 @@ func flagValues(set *pflag.FlagSet, into map[string]bool) error {
 	return err
 }
 
-// argRange probes the argument check of cmd for the fewest and the most
-// arguments it takes. A command without a check takes any number, as cobra
-// lets a command with no subcommands do.
-func argRange(cmd *cobra.Command) (low, high int, err error) {
-	low, high = -1, -1
-	for n := 0; n <= probedArgs; n++ {
-		args := slices.Repeat([]string{"x"}, n)
-		if cmd.Args != nil && cmd.Args(cmd, args) != nil {
-			if low >= 0 && high < 0 {
-				high = n - 1
-			}
-			continue
-		}
-		if low < 0 {
-			low = n
-		} else if high >= 0 {
-			return 0, 0, fmt.Errorf("%s takes %d arguments but not %d", cmd.CommandPath(), n, high+1)
-		}
-	}
-	if low < 0 {
-		return 0, 0, fmt.Errorf("%s takes no number of arguments up to %d", cmd.CommandPath(), probedArgs)
-	}
-	return low, high, nil
-}
-
 // commandTree is every command of root that runs something, by its words
 // after the root's name, and the flags every command takes. A command
 // marked as a group only groups its subcommands; one that has subcommands
 // and is no group, as agentx machine, runs something too.
-func commandTree(root *cobra.Command) (map[string]cliCommand, map[string]bool, error) {
+func commandTree(root *cobra.Command) (map[string]map[string]bool, map[string]bool, error) {
 	global := map[string]bool{}
 	if err := flagValues(root.PersistentFlags(), global); err != nil {
 		return nil, nil, err
 	}
-	commands := map[string]cliCommand{}
+	commands := map[string]map[string]bool{}
 	var walk func(cmd *cobra.Command) error
 	walk = func(cmd *cobra.Command) error {
 		for _, sub := range cmd.Commands() {
@@ -91,10 +57,6 @@ func commandTree(root *cobra.Command) (map[string]cliCommand, map[string]bool, e
 			}
 			if sub.Annotations[annotationGroup] != "" {
 				continue
-			}
-			low, high, err := argRange(sub)
-			if err != nil {
-				return err
 			}
 			flags := map[string]bool{}
 			if err := flagValues(sub.LocalFlags(), flags); err != nil {
@@ -107,7 +69,7 @@ func commandTree(root *cobra.Command) (map[string]cliCommand, map[string]bool, e
 				delete(flags, name)
 			}
 			words := strings.TrimPrefix(sub.CommandPath(), root.Name()+" ")
-			commands[words] = cliCommand{minArgs: low, maxArgs: high, flags: flags}
+			commands[words] = flags
 		}
 		return nil
 	}
@@ -150,26 +112,16 @@ func renderCommandTypes() (string, error) {
 // not edit. To write it again, run in apps/cli:
 //   go test ./internal/cli -run TestCommandTypes -update
 
-// One command: how many arguments it takes and its flags.
-export interface CliCommand {
-  // The fewest and the most arguments; null when it takes any number.
-  args: readonly [number, number | null];
-  // Each flag by name, true when it takes a value.
-  flags: Readonly<Record<string, boolean>>;
-}
+// The flags of a command, each by name, true when it takes a value.
+export type CliFlags = Readonly<Record<string, boolean>>;
 
-// The flags every command takes, true when one takes a value.
+// The flags every command takes.
 `)
-	fmt.Fprintf(&b, "export const GLOBAL_FLAGS: Readonly<Record<string, boolean>> = %s;\n\n", tsFlags(global, ""))
-	b.WriteString("// Every command that runs something, by its words, such as \"skill add\".\n")
-	b.WriteString("export const CLI_COMMANDS: Readonly<Record<string, CliCommand>> = {\n")
+	fmt.Fprintf(&b, "export const GLOBAL_FLAGS: CliFlags = %s;\n\n", tsFlags(global, ""))
+	b.WriteString("// Every command that runs something, by its words, such as \"skill add\",\n// with its own flags.\n")
+	b.WriteString("export const CLI_COMMANDS: Readonly<Record<string, CliFlags>> = {\n")
 	for _, words := range slices.Sorted(maps.Keys(commands)) {
-		c := commands[words]
-		high := "null"
-		if c.maxArgs >= 0 {
-			high = fmt.Sprint(c.maxArgs)
-		}
-		fmt.Fprintf(&b, "  %s: {\n    args: [%d, %s],\n    flags: %s,\n  },\n", tsKey(words), c.minArgs, high, tsFlags(c.flags, "    "))
+		fmt.Fprintf(&b, "  %s: %s,\n", tsKey(words), tsFlags(commands[words], "  "))
 	}
 	b.WriteString("};\n")
 	return b.String(), nil
@@ -196,26 +148,5 @@ func TestCommandTypes(t *testing.T) {
 	}
 	if string(want) != got {
 		t.Errorf("%s is not what the command tree gives; write it again with go test ./internal/cli -run TestCommandTypes -update", filepath.Base(commandTypesFile))
-	}
-}
-
-func TestArgRange(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		args      cobra.PositionalArgs
-		low, high int
-	}{
-		{nil, 0, -1},
-		{cobra.NoArgs, 0, 0},
-		{cobra.ExactArgs(2), 2, 2},
-		{cobra.MaximumNArgs(1), 0, 1},
-		{cobra.MinimumNArgs(1), 1, -1},
-		{cobra.ArbitraryArgs, 0, -1},
-	}
-	for i, tt := range tests {
-		low, high, err := argRange(&cobra.Command{Use: "c", Args: tt.args})
-		if err != nil || low != tt.low || high != tt.high {
-			t.Errorf("case %d: argRange = %d, %d, %v, want %d, %d", i, low, high, err, tt.low, tt.high)
-		}
 	}
 }
