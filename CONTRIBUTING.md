@@ -67,7 +67,7 @@ Go module in `apps/cli`:
 | `make build-cli` | Compiles every package | `go build ./...`, `CGO_ENABLED=0` on Linux and `1` on macOS |
 | `make test-cli` | Runs every test with the race detector, never from cache | `go test -race -count=1 ./...` |
 | `make check-cli` | Runs all the CLI checks CI runs, in the same order | `fmt-check-cli lint-cli tidy-check-cli build-cli test-cli` |
-| `make check-desktop` | Runs all the desktop app checks CI runs: the frontend, then the Tauri shell | `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm format-check`, `pnpm lint`, `pnpm test`, `pnpm build`, then `cargo fmt --check` and `cargo clippy --locked -- -D warnings` |
+| `make check-desktop` | Runs all the desktop app checks CI runs: the frontend, then the Tauri shell | `pnpm install --frozen-lockfile`, `pnpm format-check`, `pnpm lint`, `pnpm test`, `pnpm build`, then `cargo fmt --check` and `cargo clippy --locked -- -D warnings` |
 | `make check` | Runs every check CI runs | `check-cli check-desktop` |
 
 To run the tests without the race detector, as CI does on macOS, use `make test-cli RACE=`.

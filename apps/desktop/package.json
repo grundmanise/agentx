@@ -9,7 +9,6 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "typecheck": "tsc -b --noEmit",
     "lint": "oxlint",
     "format": "oxfmt",
     "format-check": "oxfmt --check",

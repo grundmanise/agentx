@@ -37,15 +37,14 @@ Run these in `apps/desktop`:
 
 | Command | What it does |
 | --- | --- |
-| `pnpm typecheck` | Type-checks the frontend, the tests and the configs with `tsc` |
 | `pnpm lint` | Runs oxlint: Ultracite's rules, the type-aware rules, a type check and the design-system lint |
 | `pnpm format` | Formats every file with oxfmt |
 | `pnpm format-check` | Checks that every file is formatted, without changing any |
 | `pnpm fix` | Applies the lint's safe fixes, formats, then lists what is left (`ultracite fix`) |
 | `pnpm test` | Runs the end-to-end tests in Chromium. It starts the dev server, or reuses a running one outside CI |
-| `pnpm build` | Builds the frontend into `dist` |
+| `pnpm build` | Type-checks with `tsc`, then builds the frontend into `dist` |
 
-From the repository root, `make check-desktop` runs what CI runs for the desktop app: `pnpm install --frozen-lockfile`, then `typecheck`, `format-check`, `lint`, `test` and `build`, then `cargo fmt --check` and Clippy for the Rust side.
+From the repository root, `make check-desktop` runs what CI runs for the desktop app: `pnpm install --frozen-lockfile`, then `format-check`, `lint`, `test` and `build`, then `cargo fmt --check` and Clippy for the Rust side.
 
 ### The pnpm workspace
 
@@ -59,7 +58,7 @@ The app is a package of the pnpm workspace at the repository root. `pnpm-workspa
 
 - The tests in `e2e` find elements by role and accessible name, as a person using a screen reader would, never by class.
 - Code the app does not reach yet, such as a component on its own or a `notify()` call, runs from a module in `e2e/harness`. A test loads it into the dev server's page with `page.addScriptTag`; the app never imports it.
-- `src/components/closed-props.test-d.tsx` holds type tests. Each line marked `@ts-expect-error` must fail to compile, so `pnpm typecheck` fails when a component starts to accept a `className`, a `style` or a value outside its closed props. No test runner loads it.
+- `src/components/closed-props.test-d.tsx` holds type tests. Each line marked `@ts-expect-error` must fail to compile, so `pnpm lint` fails when a component starts to accept a `className`, a `style` or a value outside its closed props. No test runner loads it.
 - To use a Chromium already on your machine instead of Playwright's download, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to its path.
 
 ## Rules for components
@@ -86,14 +85,14 @@ These rules are for anyone writing a component, people and coding agents alike.
 
 ### What the checks catch
 
-`pnpm typecheck` and `pnpm lint` reject:
+`pnpm lint` rejects:
 
 - a `className` or `style` on our components (the types, and the lint for code the types do not see)
 - arbitrary values (`text-[13px]`, `bg-[#fff]`), raw palette colours (`bg-red-500`) and classes Tailwind does not know (`p-13`)
 - inline styles, and native controls outside `src/components`
 - class strings the lint cannot read. It reads classes in `className`, `cn()`, `cva()` and same-file variables, so a class string anywhere else (such as a library's `classNames` option) goes through `cn()`.
 
-They miss these, so check for them in review:
+It misses these, so check for them in review:
 
 - a class that reads a CSS variable (`w-(--sidebar)`)
 - alpha modifiers on colours (`bg-card-bg/50`), `rounded-full` and `leading-none`, which need no theme value
