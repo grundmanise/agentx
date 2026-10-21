@@ -1,6 +1,6 @@
 # agentx desktop
 
-The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it is the app shell with placeholder screens. By design it will only render what the `agentx` CLI reports and run CLI commands for every action; it never reads the machine, runs git or opens a network connection itself. See [ADR 0001](../../docs/adr/0001-go-cli-owns-machine-and-account-tauri-renders.md).
+The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it is the app shell with placeholder screens, and the CLI supervisor and transport the screens will use. By design it will only render what the `agentx` CLI reports and run CLI commands for every action; it never reads the machine, runs git or opens a network connection itself. See [ADR 0001](../../docs/adr/0001-go-cli-owns-machine-and-account-tauri-renders.md).
 
 ## What is here
 
@@ -12,11 +12,12 @@ The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it
 | `src/app` | The app shell: title bar, sidebar, main panel, command palette |
 | `src/screens` | The screens; today one placeholder |
 | `src/components` | Shared components; `ui` holds the shadcn/ui-based primitives |
+| `src/cli/transport.ts` | The one way to the CLI: one-shot runs whose events arrive as they are written, cancel, and the serve child's events, exits and stdin requests |
 | `src/cli/events.gen.ts`, `src/cli/commands.gen.ts` | The types of the CLI's events and exit codes, and the commands and flags the CLI takes, generated from the CLI's own code. Do not edit them: after changing an event or a command in `apps/cli`, run `go test ./internal/cli -run 'TestEventTypes\|TestCommandTypes' -update` there. Those tests fail while a file is stale |
 | `src/assets` | Illustrations; today the product mark, also the source of the app icons in `src-tauri/icons` |
-| `e2e` | The end-to-end tests: [Playwright](https://playwright.dev) drives the frontend in Chromium on the Vite dev server |
+| `e2e` | The end-to-end tests: [Playwright](https://playwright.dev) drives the frontend in Chromium on the Vite dev server. `e2e/harness/cli.ts` is the mocked CLI they run against |
 | `oxlint.config.ts`, `oxfmt.config.ts` | The lint and the formatter: [Ultracite](https://www.ultracite.ai)'s presets for oxlint and oxfmt, plus the design-system lint built on [`@shadcn/lint`](https://github.com/shadcn-ui/lint) and one rule of [`eslint-plugin-better-tailwindcss`](https://github.com/schoero/eslint-plugin-better-tailwindcss) |
-| `src-tauri` | The Rust side: the window, and later the CLI supervisor |
+| `src-tauri` | The Rust side: the window and the CLI supervisor, which reads the login shell's environment, finds the CLI, runs one-shot commands and keeps the serve child open |
 
 ## Develop
 
@@ -34,6 +35,10 @@ pnpm tauri dev                          # the app in its window
 pnpm dev                                # the frontend alone, at http://localhost:1420
 ```
 
+The app looks for `agentx` next to its executable, then on the `PATH` your login shell sets. For `pnpm tauri dev`, put a CLI on that `PATH`, for example with `go build -o ~/go/bin/agentx .` in `apps/cli`. A debug build runs any CLI version; a release build runs only the CLI of its own release.
+
+The serve child's stderr goes to `~/Library/Logs/agentx/serve.log` on macOS and `$XDG_STATE_HOME/agentx/logs/serve.log` (`~/.local/state/agentx/logs` by default) on Linux, in at most 5 files of 5 MB.
+
 Run these in `apps/desktop`:
 
 | Command | What it does |
@@ -43,7 +48,9 @@ Run these in `apps/desktop`:
 | `pnpm test` | Runs the end-to-end tests in Chromium. It starts the dev server, or reuses a running one outside CI |
 | `pnpm build` | Builds the frontend into `dist` with Vite. It does not check types: `pnpm check` does, and `pnpm tauri build` runs `pnpm check` first |
 
-From the repository root, `make check-desktop` runs what CI runs for the desktop app: `pnpm install --frozen-lockfile`, then `check`, `test` and `build`, then `cargo fmt --check` and Clippy for the Rust side.
+From the repository root, `make check-desktop` runs what CI runs for the desktop app: `pnpm install --frozen-lockfile`, then `check`, `test` and `build`, then `cargo fmt --check`, Clippy and `cargo test` for the Rust side. `cargo test` drives the supervisor against a stub CLI script.
+
+`make bundle-desktop` makes a release build with the CLI beside the app's executable. It builds the CLI with the app's version from `src-tauri/tauri.conf.json`, puts it in `src-tauri/binaries` for Tauri's `externalBin`, and runs `pnpm tauri build` with `src-tauri/tauri.bundle.conf.json`. It needs Go as well.
 
 ### The pnpm workspace
 
@@ -58,6 +65,8 @@ The app is a package of the pnpm workspace at the repository root. `pnpm-workspa
 - The tests in `e2e` find elements by role and accessible name, as a person using a screen reader would, never by class.
 - Code the app does not reach yet, such as a component on its own or a `notify()` call, runs from a module in `e2e/harness`. A test loads it into the dev server's page with `page.addScriptTag`; the app never imports it.
 - To use a Chromium already on your machine instead of Playwright's download, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to its path.
+- The dev server has no Tauri runtime. A test that imports `test` from `e2e/harness/cli.ts` runs against the mocked CLI: the app's own `transport` module talks to it as it would to the Rust supervisor. The test registers a reply per command line (a few events, typed by `events.gen.ts` with only the fields it checks, and an exit code), can hold a run open to see a pending state or a cancel, plays serve events and exits, and reads back every command line, cancel and serve request.
+- The mock refuses a command line the CLI would refuse, by `commands.gen.ts`: an unknown command or flag, a flag that takes a value given none, or a boolean flag given one. A refused line, or one with no registered reply, fails the test.
 
 ## Rules for components
 
