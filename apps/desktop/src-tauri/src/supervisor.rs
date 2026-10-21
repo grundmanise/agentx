@@ -376,7 +376,9 @@ impl Supervisor {
 
     /// Stops a one-shot run: its process group gets SIGTERM, on which agentx reports the stop and
     /// exits 9, then SIGKILL if it is still there. Returns false when no such run is going; the
-    /// cancel is then kept, and stops the run if it arrives later.
+    /// cancel is then kept, and stops the run if it arrives later. Run ids are never reused (the
+    /// transport makes each a random UUID), so a kept cancel of a run that already ended stops
+    /// nothing.
     pub fn cancel(&self, run_id: &str) -> bool {
         let mut runs = self.runs.lock().unwrap();
         let Some(control) = runs.going.get(run_id).cloned() else {
