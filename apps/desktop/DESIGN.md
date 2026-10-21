@@ -113,7 +113,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | Token | Primitive | Element |
 | --- | --- | --- |
 | `shell.bg` | `gray-990` | Window body, sidebar, startup layer |
-| `shell.content-bg` | `gray-970` | Content area, both split columns |
+| `shell.content-bg` | `gray-970` | Content area, both split columns, command field |
 | `shell.divider` | `gray-890` | Split column divider, section dividers, table header rule |
 | `shell.scrim` | `black/50` | Behind the history sheet |
 | `shell.scrim-strong` | `black/55` | Behind dialogs and the palette |
@@ -121,7 +121,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `shell.nav-active-bg` | `gray-910` | Active nav item |
 | `shell.nav-active-text` | `gray-50` | Active nav item label |
 | `shell.nav-badge-bg` | `accent.primary` | Inbox count badge (digits `on-accent`) |
-| `shell.topbar-hover` | `gray-920` | Top-bar button hover (command field, account remote status) |
+| `shell.topbar-hover` | `gray-920` | Account remote status hover (the command field changes only its border and text on hover) |
 | `shell.topbar-text` | `gray-300` | Command field placeholder and icon (`text.secondary` on hover), account remote status label |
 | `shell.status-published` | `accent.primary` | Account remote status dot, nothing to publish (halo `lime-400/15`) |
 | `shell.status-pending` | `accent.yours` | Account remote status dot, versions to publish (halo `violet-400/18`) |
@@ -168,20 +168,20 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 
 #### Inputs, switches, checkboxes
 
-| Token | Primitive | Element |
-| --- | --- | --- |
-| `input.bg` | `gray-980` | Text inputs, search fields, command field |
-| `input.border` | `gray-860` |  |
-| `input.border-focus` | `gray-700` |  |
-| `input.text` | `gray-50` |  |
-| `input.placeholder` | `gray-500` | Placeholder text and leading icon |
-| `switch.on-track` | `accent.primary` | Switch on (full and compact) |
-| `switch.on-knob` | `on-accent` |  |
-| `switch.off-track` | `gray-850` | Switch off |
-| `switch.off-knob` | `gray-400` |  |
-| `checkbox.ring` | `gray-700` | Unchecked popover checkbox |
-| `checkbox.checked-bg` | `accent.primary` |  |
-| `checkbox.check` | `on-accent` |  |
+| Token                 | Primitive        | Element                           |
+| --------------------- | ---------------- | --------------------------------- |
+| `input.bg`            | `gray-980`       | Text inputs, search fields        |
+| `input.border`        | `gray-860`       |                                   |
+| `input.border-focus`  | `gray-700`       |                                   |
+| `input.text`          | `gray-50`        |                                   |
+| `input.placeholder`   | `gray-500`       | Placeholder text and leading icon |
+| `switch.on-track`     | `accent.primary` | Switch on (full and compact)      |
+| `switch.on-knob`      | `on-accent`      |                                   |
+| `switch.off-track`    | `gray-850`       | Switch off                        |
+| `switch.off-knob`     | `gray-400`       |                                   |
+| `checkbox.ring`       | `gray-700`       | Unchecked popover checkbox        |
+| `checkbox.checked-bg` | `accent.primary` |                                   |
+| `checkbox.check`      | `on-accent`      |                                   |
 
 #### Segmented control (Update review, filter State)
 
