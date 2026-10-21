@@ -40,8 +40,6 @@ export interface Reply {
 export interface Resolution {
   path: string | null;
   found: "bundled" | "path" | null;
-  appVersion: string;
-  debug: boolean;
 }
 
 /** A registered reply, and for one that holds, what releases it. */
@@ -166,8 +164,6 @@ export class MockCli {
   private readonly running = new Map<string, Pending>();
   private readonly problems: string[] = [];
   private resolution: Resolution = {
-    appVersion: "0.0.0",
-    debug: true,
     found: "bundled",
     path: "/Applications/agentx.app/Contents/MacOS/agentx",
   };
@@ -284,8 +280,6 @@ export class MockCli {
     switch (command) {
       case "cli_resolve": {
         return {
-          app_version: this.resolution.appVersion,
-          debug: this.resolution.debug,
           found: this.resolution.found,
           path: this.resolution.path,
         };

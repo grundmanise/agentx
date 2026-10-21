@@ -79,17 +79,26 @@ fn parse(out: &[u8]) -> Option<HashMap<String, String>> {
 pub enum Found {
     /// Next to the app's executable, where a release build puts it.
     Bundled,
-    /// On the login shell's `PATH`.
+    /// On the login shell's `PATH`, which only a debug build looks at.
     Path,
 }
 
-/// Finds `agentx` next to the app's executable, then on `path`.
-pub fn resolve(exe_dir: Option<&Path>, path: Option<&str>) -> Option<(PathBuf, Found)> {
+/// Finds `agentx` next to the app's executable. A release build runs only that one: it is the CLI
+/// of the app's own release, built from the same commit, so the app never meets a CLI of another
+/// version. A debug build (`pnpm tauri dev`) has none there and looks on `path` too.
+pub fn resolve(
+    exe_dir: Option<&Path>,
+    path: Option<&str>,
+    debug: bool,
+) -> Option<(PathBuf, Found)> {
     if let Some(dir) = exe_dir {
         let bundled = dir.join("agentx");
         if is_executable(&bundled) {
             return Some((bundled, Found::Bundled));
         }
+    }
+    if !debug {
+        return None;
     }
     path?
         .split(':')
@@ -116,6 +125,35 @@ mod tests {
         assert_eq!(env["EMPTY"], "");
         assert_eq!(env["A"], "b=c");
         assert_eq!(env.len(), 3);
+    }
+
+    #[test]
+    fn only_a_debug_build_looks_on_path() {
+        let dir = std::env::temp_dir().join(format!("agentx-resolve-{}", std::process::id()));
+        let (bundled, on_path) = (dir.join("app"), dir.join("bin"));
+        for d in [&bundled, &on_path] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        let cli = on_path.join("agentx");
+        std::fs::write(&cli, "#!/bin/sh\n").unwrap();
+        std::fs::set_permissions(&cli, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let path = on_path.to_str();
+
+        assert_eq!(resolve(Some(&bundled), path, false), None);
+        assert_eq!(
+            resolve(Some(&bundled), path, true),
+            Some((cli, Found::Path))
+        );
+        let next_to_app = bundled.join("agentx");
+        std::fs::write(&next_to_app, "#!/bin/sh\n").unwrap();
+        std::fs::set_permissions(&next_to_app, std::fs::Permissions::from_mode(0o755)).unwrap();
+        for debug in [false, true] {
+            assert_eq!(
+                resolve(Some(&bundled), path, debug),
+                Some((next_to_app.clone(), Found::Bundled))
+            );
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

@@ -67,7 +67,7 @@ pub struct Config {
     pub base_env: HashMap<String, String>,
     /// Where serve's stderr is written.
     pub log_dir: PathBuf,
-    pub app_version: String,
+    /// A debug build, which also looks for the CLI on the login shell's `PATH`.
     pub debug: bool,
 }
 
@@ -77,9 +77,6 @@ pub struct Resolution {
     /// The CLI's path; absent when none was found.
     pub path: Option<PathBuf>,
     pub found: Option<Found>,
-    pub app_version: String,
-    /// Whether this is a debug build of the app, which runs any CLI version.
-    pub debug: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -236,18 +233,17 @@ impl Supervisor {
         let cli = shell::resolve(
             self.config.exe_dir.as_deref(),
             env.get("PATH").map(String::as_str),
+            self.config.debug,
         );
         Shell { env, cli }
     }
 
-    /// Where the CLI is, with the app's version and build.
+    /// Where the CLI is, and how it was found.
     pub async fn resolution(&self) -> Resolution {
         let shell = self.shell().await;
         Resolution {
             path: shell.cli.as_ref().map(|(path, _)| path.clone()),
             found: shell.cli.as_ref().map(|(_, found)| *found),
-            app_version: self.config.app_version.clone(),
-            debug: self.config.debug,
         }
     }
 

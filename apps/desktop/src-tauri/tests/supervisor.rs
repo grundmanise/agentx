@@ -95,7 +95,6 @@ impl Fixture {
                     exe_dir: Some(bin),
                     base_env,
                     log_dir: dir.join("logs"),
-                    app_version: "1.2.0".to_owned(),
                     debug: false,
                 },
                 emit,
@@ -313,8 +312,6 @@ async fn a_child_gets_the_login_shell_environment_and_json() {
     let resolution = f.sup.resolution().await;
     assert_eq!(resolution.path, Some(f.dir.join("bin/agentx")));
     assert_eq!(serde_json::to_value(resolution.found).unwrap(), "bundled");
-    assert_eq!(resolution.app_version, "1.2.0");
-    assert!(!resolution.debug);
 
     let end = f.sup.run("r1".into(), args(&["env"]), None).await.unwrap();
     assert_eq!(end.events[0]["profile"], "from-profile");

@@ -17,7 +17,7 @@ GO_TOOLCHAIN = go$(shell awk '$$1 == "go" { print $$2; exit }' $(CLI)/go.mod)+au
 # Static on Linux; cgo on macOS, where the serve watcher uses FSEvents.
 CGO_ENABLED ?= $(if $(filter Darwin,$(shell uname -s)),1,0)
 
-.PHONY: check check-cli check-desktop bundle-desktop fmt-cli fmt-check-cli lint-cli tidy-check-cli build-cli test-cli
+.PHONY: check check-cli check-desktop fmt-cli fmt-check-cli lint-cli tidy-check-cli build-cli test-cli
 
 check: check-cli check-desktop
 
@@ -55,13 +55,3 @@ check-desktop:
 	pnpm install --frozen-lockfile
 	cd $(DESKTOP) && pnpm check && pnpm test && pnpm build
 	cd $(DESKTOP)/src-tauri && cargo fmt --check && cargo clippy --locked --all-targets -- -D warnings && cargo test --locked
-
-# A release build of the desktop app with the CLI beside its executable. The app runs only a CLI of
-# its own release, so the CLI is built here with the app's version (tauri.conf.json) as its own.
-# Tauri's externalBin copies binaries/agentx-<target triple> next to the executable as agentx.
-TRIPLE = $(shell rustc -vV | sed -n 's/^host: //p')
-APP_VERSION = $(shell sed -n 's/^  "version": "\(.*\)",$$/\1/p' $(DESKTOP)/src-tauri/tauri.conf.json)
-
-bundle-desktop:
-	cd $(CLI) && CGO_ENABLED=$(CGO_ENABLED) go build -ldflags "-X github.com/grundmanise/agentx/apps/cli/internal/cli.cliVersion=$(APP_VERSION)" -o ../desktop/src-tauri/binaries/agentx-$(TRIPLE) .
-	cd $(DESKTOP) && pnpm tauri build --config src-tauri/tauri.bundle.conf.json

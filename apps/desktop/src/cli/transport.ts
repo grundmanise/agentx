@@ -49,11 +49,8 @@ export interface RunOptions {
 export interface Resolution {
   /** The CLI's path; null when none was found. */
   path: string | null;
-  /** Found next to the app, or on the login shell's PATH. */
+  /** Found next to the app, or, in a debug build, on the login shell's PATH. */
   found: "bundled" | "path" | null;
-  appVersion: string;
-  /** A debug build runs any CLI version. */
-  debug: boolean;
 }
 
 /** A line of the serve child's stdout, with the id of the child that wrote it. */
@@ -98,8 +95,6 @@ interface WireServeExit {
 interface WireResolution {
   path: string | null;
   found: "bundled" | "path" | null;
-  app_version: string;
-  debug: boolean;
 }
 
 /** A stream and the functions that feed it. Nothing waits on its reader: it holds every chunk. */
@@ -131,12 +126,10 @@ const channel = <T>() => {
   };
 };
 
-/** Where the CLI is, with the app's version and whether this is a debug build. */
+/** Where the CLI is, and how it was found. */
 export const resolveCli = async (): Promise<Resolution> => {
   const r = await invoke<WireResolution>("cli_resolve");
   return {
-    appVersion: r.app_version,
-    debug: r.debug,
     found: r.found,
     path: r.path,
   };

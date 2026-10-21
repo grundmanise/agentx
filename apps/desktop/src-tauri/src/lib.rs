@@ -18,7 +18,7 @@ use supervisor::{Config, Resolution, RunEnd, Supervisor};
 
 type Sup<'a> = State<'a, Arc<Supervisor>>;
 
-/// Where the CLI is, with the app's version and whether this is a debug build.
+/// Where the CLI is, and how it was found.
 #[tauri::command(rename_all = "snake_case")]
 async fn cli_resolve(sup: Sup<'_>) -> Result<Resolution, String> {
     Ok(sup.resolution().await)
@@ -89,7 +89,6 @@ pub fn run() {
                         .and_then(|exe| exe.parent().map(PathBuf::from)),
                     log_dir: log_dir(&base_env),
                     base_env,
-                    app_version: app.package_info().version.to_string(),
                     debug: cfg!(debug_assertions),
                 },
                 Arc::new(move |name, payload| {

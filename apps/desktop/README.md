@@ -35,7 +35,7 @@ pnpm tauri dev                          # the app in its window
 pnpm dev                                # the frontend alone, at http://localhost:1420
 ```
 
-The app looks for `agentx` next to its executable, then on the `PATH` your login shell sets. For `pnpm tauri dev`, put a CLI on that `PATH`, for example with `go build -o ~/go/bin/agentx .` in `apps/cli`. A debug build runs any CLI version; a release build runs only the CLI of its own release.
+A release build runs only the `agentx` next to its executable: the CLI of its own release, built from the same commit. A debug build (`pnpm tauri dev`) also looks on the `PATH` your login shell sets, so put a CLI there, for example with `go build -o ~/go/bin/agentx .` in `apps/cli`.
 
 The serve child's stderr goes to `~/Library/Logs/agentx/serve.log` on macOS and `$XDG_STATE_HOME/agentx/logs/serve.log` (`~/.local/state/agentx/logs` by default) on Linux, in at most 5 files of 5 MB.
 
@@ -49,8 +49,6 @@ Run these in `apps/desktop`:
 | `pnpm build` | Builds the frontend into `dist` with Vite. It does not check types: `pnpm check` does, and `pnpm tauri build` runs `pnpm check` first |
 
 From the repository root, `make check-desktop` runs what CI runs for the desktop app: `pnpm install --frozen-lockfile`, then `check`, `test` and `build`, then `cargo fmt --check`, Clippy and `cargo test` for the Rust side. `cargo test` drives the supervisor against a stub CLI script.
-
-`make bundle-desktop` makes a release build with the CLI beside the app's executable. It builds the CLI with the app's version from `src-tauri/tauri.conf.json`, puts it in `src-tauri/binaries` for Tauri's `externalBin`, and runs `pnpm tauri build` with `src-tauri/tauri.bundle.conf.json`. It needs Go as well.
 
 ### The pnpm workspace
 
