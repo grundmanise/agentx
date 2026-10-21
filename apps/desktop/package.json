@@ -9,9 +9,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "lint": "oxlint",
-    "format": "oxfmt",
-    "format-check": "oxfmt --check",
+    "check": "ultracite check",
     "fix": "ultracite fix",
     "test": "playwright test",
     "tauri": "tauri"

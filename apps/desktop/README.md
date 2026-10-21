@@ -37,14 +37,12 @@ Run these in `apps/desktop`:
 
 | Command | What it does |
 | --- | --- |
-| `pnpm lint` | Runs oxlint: Ultracite's rules, the type-aware rules, a type check and the design-system lint |
-| `pnpm format` | Formats every file with oxfmt |
-| `pnpm format-check` | Checks that every file is formatted, without changing any |
+| `pnpm check` | Checks without changing files (`ultracite check`): oxlint with Ultracite's rules, the type-aware rules, a type check and the design-system lint, plus the oxfmt format check |
 | `pnpm fix` | Applies the lint's safe fixes, formats, then lists what is left (`ultracite fix`) |
 | `pnpm test` | Runs the end-to-end tests in Chromium. It starts the dev server, or reuses a running one outside CI |
-| `pnpm build` | Builds the frontend into `dist` with Vite. It does not check types: `pnpm lint` does, and `pnpm tauri build` runs `pnpm lint` first |
+| `pnpm build` | Builds the frontend into `dist` with Vite. It does not check types: `pnpm check` does, and `pnpm tauri build` runs `pnpm check` first |
 
-From the repository root, `make check-desktop` runs what CI runs for the desktop app: `pnpm install --frozen-lockfile`, then `format-check`, `lint`, `test` and `build`, then `cargo fmt --check` and Clippy for the Rust side.
+From the repository root, `make check-desktop` runs what CI runs for the desktop app: `pnpm install --frozen-lockfile`, then `check`, `test` and `build`, then `cargo fmt --check` and Clippy for the Rust side.
 
 ### The pnpm workspace
 
@@ -84,7 +82,7 @@ These rules are for anyone writing a component, people and coding agents alike.
 
 ### What the checks catch
 
-`pnpm lint` rejects:
+`pnpm check` rejects:
 
 - a `className` or `style` on our components, at every call site
 - a value outside a closed prop, such as `variant="link"` on `Button` or `size={16}` on an icon (the type check)

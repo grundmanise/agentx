@@ -53,5 +53,5 @@ test-cli:
 # WebKitGTK development packages.
 check-desktop:
 	pnpm install --frozen-lockfile
-	cd $(DESKTOP) && pnpm format-check && pnpm lint && pnpm test && pnpm build
+	cd $(DESKTOP) && pnpm check && pnpm test && pnpm build
 	cd $(DESKTOP)/src-tauri && cargo fmt --check && cargo clippy --locked -- -D warnings
