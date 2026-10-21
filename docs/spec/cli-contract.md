@@ -47,6 +47,8 @@ Every event is one JSON object with at least:
 
 `schema_version` changes when an event changes incompatibly. A consumer refuses a CLI whose schema version it does not know. A field added to an event, and a value added to a field this document says will gain more, are not such a change and leave the version where it is: a consumer ignores a field it does not know, and shows such a value it does not know as it is written.
 
+The desktop app reads the events through types generated from the structs the CLI marshals, `apps/desktop/src/cli/events.gen.ts`, so that a change to an event reaches the app's type check. `TestEventTypes` in `apps/cli/internal/cli` writes the file with `-update` (`go test ./internal/cli -run TestEventTypes -update` in `apps/cli`) and fails while the file is not what the structs give. A field whose values this document lists is a union of those values there, from the list `eventtypes_test.go` keeps for it, and a field this document says will gain more values also admits any other string: a new value goes into that list with the change that writes it.
+
 ## Event types
 
 Every run emits exactly one `result` as its last stdout event, after any `error`.

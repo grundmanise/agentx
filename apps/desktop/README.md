@@ -12,6 +12,7 @@ The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it
 | `src/app` | The app shell: title bar, sidebar, main panel, command palette |
 | `src/screens` | The screens; today one placeholder |
 | `src/components` | Shared components; `ui` holds the shadcn/ui-based primitives |
+| `src/cli/events.gen.ts` | The types of the CLI's events, generated from the CLI's own structs. Do not edit it: after changing an event in `apps/cli`, run `go test ./internal/cli -run TestEventTypes -update` there. That test fails while the file is stale |
 | `src/assets` | Illustrations; today the product mark, also the source of the app icons in `src-tauri/icons` |
 | `e2e` | The end-to-end tests: [Playwright](https://playwright.dev) drives the frontend in Chromium on the Vite dev server |
 | `oxlint.config.ts`, `oxfmt.config.ts` | The lint and the formatter: [Ultracite](https://www.ultracite.ai)'s presets for oxlint and oxfmt, plus the design-system lint built on [`@shadcn/lint`](https://github.com/shadcn-ui/lint) and one rule of [`eslint-plugin-better-tailwindcss`](https://github.com/schoero/eslint-plugin-better-tailwindcss) |
