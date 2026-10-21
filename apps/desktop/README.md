@@ -58,7 +58,6 @@ The app is a package of the pnpm workspace at the repository root. `pnpm-workspa
 
 - The tests in `e2e` find elements by role and accessible name, as a person using a screen reader would, never by class.
 - Code the app does not reach yet, such as a component on its own or a `notify()` call, runs from a module in `e2e/harness`. A test loads it into the dev server's page with `page.addScriptTag`; the app never imports it.
-- `src/components/closed-props.test-d.tsx` holds type tests. Each line marked `@ts-expect-error` must fail to compile, so `pnpm lint` fails when a component starts to accept a `className`, a `style` or a value outside its closed props. No test runner loads it.
 - To use a Chromium already on your machine instead of Playwright's download, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to its path.
 
 ## Rules for components
@@ -87,7 +86,8 @@ These rules are for anyone writing a component, people and coding agents alike.
 
 `pnpm lint` rejects:
 
-- a `className` or `style` on our components (the types, and the lint for code the types do not see)
+- a `className` or `style` on our components, at every call site
+- a value outside a closed prop, such as `variant="link"` on `Button` or `size={16}` on an icon (the type check)
 - arbitrary values (`text-[13px]`, `bg-[#fff]`), raw palette colours (`bg-red-500`) and classes Tailwind does not know (`p-13`)
 - inline styles, and native controls outside `src/components`
 - class strings the lint cannot read. It reads classes in `className`, `cn()`, `cva()` and same-file variables, so a class string anywhere else (such as a library's `classNames` option) goes through `cn()`.
@@ -97,5 +97,3 @@ It misses these, so check for them in review:
 - a class that reads a CSS variable (`w-(--sidebar)`)
 - alpha modifiers on colours (`bg-card-bg/50`), `rounded-full` and `leading-none`, which need no theme value
 - a token reused for an element it was not made for
-
-Button also drops a `className` or `style` passed past its types at run time, and `e2e/closed-props.spec.ts` checks it.

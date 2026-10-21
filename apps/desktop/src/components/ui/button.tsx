@@ -40,11 +40,9 @@ export const Button = ({
   type = "button",
   ...props
 }: ButtonProps) => (
-  // `className` and `style` come last, so one forced past the types is dropped too.
   <button
-    {...props}
     type={type === "submit" ? "submit" : "button"}
     className={buttonVariants({ size, variant })}
-    style={undefined}
+    {...props}
   />
 );
