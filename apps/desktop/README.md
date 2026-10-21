@@ -14,7 +14,7 @@ The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it
 | `src/components` | Shared components; `ui` holds the shadcn/ui-based primitives |
 | `src/assets` | Illustrations; today the product mark, also the source of the app icons in `src-tauri/icons` |
 | `e2e` | The end-to-end tests: [Playwright](https://playwright.dev) drives the frontend in Chromium on the Vite dev server |
-| `oxlint.config.ts`, `oxfmt.config.ts` | The lint and the formatter: [Ultracite](https://www.ultracite.ai)'s presets for oxlint and oxfmt, plus the design-system lint built on [`@shadcn/lint`](https://github.com/shadcn-ui/lint) |
+| `oxlint.config.ts`, `oxfmt.config.ts` | The lint and the formatter: [Ultracite](https://www.ultracite.ai)'s presets for oxlint and oxfmt, plus the design-system lint built on [`@shadcn/lint`](https://github.com/shadcn-ui/lint) and one rule of [`eslint-plugin-better-tailwindcss`](https://github.com/schoero/eslint-plugin-better-tailwindcss) |
 | `src-tauri` | The Rust side: the window, and later the CLI supervisor |
 
 ## Develop
@@ -88,12 +88,11 @@ These rules are for anyone writing a component, people and coding agents alike.
 
 - a `className` or `style` on our components, at every call site
 - a value outside a closed prop, such as `variant="link"` on `Button` or `size={16}` on an icon (the type check)
-- arbitrary values (`text-[13px]`, `bg-[#fff]`), raw palette colours (`bg-red-500`) and classes Tailwind does not know (`p-13`)
+- arbitrary values (`text-[13px]`, `bg-[#fff]`), a class that reads a CSS variable (`w-(--sidebar)`), raw palette colours (`bg-red-500`) and classes Tailwind does not know (`p-13`)
 - inline styles, and native controls outside `src/components`
 - class strings the lint cannot read. It reads classes in `className`, `cn()`, `cva()` and same-file variables, so a class string anywhere else (such as a library's `classNames` option) goes through `cn()`.
 
 It misses these, so check for them in review:
 
-- a class that reads a CSS variable (`w-(--sidebar)`)
 - alpha modifiers on colours (`bg-card-bg/50`), `rounded-full` and `leading-none`, which need no theme value
 - a token reused for an element it was not made for

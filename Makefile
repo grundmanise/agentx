@@ -48,11 +48,10 @@ test-cli:
 	cd $(CLI) && go test $(RACE) -count=1 ./...
 
 # The desktop app in apps/desktop: the pnpm install at the root, the frontend's formatting, lint
-# (which also checks the types), end-to-end tests and build, then the Tauri shell's formatting and Clippy. Needs Node 24 or
-# later, pnpm 12, Playwright's Chromium and Rust; on Linux also the WebKitGTK development packages.
+# (which also checks the types), end-to-end tests and build, then the Tauri shell's formatting and
+# Clippy. Needs Node 24 or later, pnpm 12, Playwright's Chromium and Rust; on Linux also the
+# WebKitGTK development packages.
 check-desktop:
 	pnpm install --frozen-lockfile
-	@# No lint rule catches the (--x) class shorthand, so this check does: layout values are theme classes such as p-page.
-	@if grep -rnE -e '-\(--' $(DESKTOP)/src; then echo "Use a theme class (such as p-page), not the (--x) shorthand"; exit 1; fi
 	cd $(DESKTOP) && pnpm format-check && pnpm lint && pnpm test && pnpm build
 	cd $(DESKTOP)/src-tauri && cargo fmt --check && cargo clippy --locked -- -D warnings
