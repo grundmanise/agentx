@@ -63,6 +63,26 @@ test("a one-shot streams its events as they arrive", async ({ cli, page }) => {
   expect(cli.commands).toEqual([["version", "--json"]]);
 });
 
+test("a reader may stop reading a run's lines", async ({ cli, page }) => {
+  const version = cli.register(["version"], {
+    events: [
+      { cli_version: "1.2.0", type: "version" },
+      { ok: true, type: "result" },
+    ],
+    holdAfter: 1,
+  });
+  await page.evaluate(() => window.transport.runAndStopReading(["version"]));
+  await expect(received(page)).toHaveCount(1);
+
+  version.release();
+  await expect(received(page)).toHaveCount(2);
+  const [, result] = await items(page);
+  expect(result).toMatchObject({
+    value: { events: [{ type: "version" }, { type: "result" }], exitCode: 0 },
+    what: "result",
+  });
+});
+
 test("cancel stops a run", async ({ cli, page }) => {
   const doctor = cli.register(["doctor"], {
     events: [{ check: "git", status: "ok", type: "doctor" }],

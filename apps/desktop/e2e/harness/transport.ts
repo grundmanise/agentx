@@ -9,6 +9,7 @@ declare global {
   interface Window {
     transport: {
       run: (args: string[]) => string;
+      runAndStopReading: (args: string[]) => string;
       cancel: (runId: string) => Promise<boolean>;
       serveStart: () => Promise<number>;
       serveRequest: (request: ServeRequest) => Promise<void>;
@@ -44,6 +45,19 @@ const follow = async (r: Run) => {
   }
 };
 
+/** Reads the first line of the run, cancels its stream, then writes its result. */
+const stopReading = async (r: Run) => {
+  try {
+    const reader = r.lines.getReader();
+    const first = await reader.read();
+    write("line", first.value);
+    await reader.cancel();
+    write("result", await r.result);
+  } catch (error) {
+    write("error", String(error));
+  }
+};
+
 const followed: Promise<void>[] = [];
 
 await serve.onEvent((line) => {
@@ -58,6 +72,11 @@ window.transport = {
   run: (args) => {
     const r = run(args);
     followed.push(follow(r));
+    return r.runId;
+  },
+  runAndStopReading: (args) => {
+    const r = run(args);
+    followed.push(stopReading(r));
     return r.runId;
   },
   serveRequest: serve.request,

@@ -105,14 +105,28 @@ interface WireResolution {
 /** A stream and the functions that feed it. Nothing waits on its reader: it holds every chunk. */
 const channel = <T>() => {
   let controller: ReadableStreamDefaultController<T> | undefined;
+  // A stream its reader cancelled takes no more chunks and cannot be closed.
+  let open = true;
   const stream = new ReadableStream<T>({
+    cancel: () => {
+      open = false;
+    },
     start: (c) => {
       controller = c;
     },
   });
   return {
-    close: () => controller?.close(),
-    push: (chunk: T) => controller?.enqueue(chunk),
+    close: () => {
+      if (open) {
+        open = false;
+        controller?.close();
+      }
+    },
+    push: (chunk: T) => {
+      if (open) {
+        controller?.enqueue(chunk);
+      }
+    },
     stream,
   };
 };
@@ -173,10 +187,10 @@ export const run = (args: readonly string[], options: RunOptions = {}): Run => {
       };
     } finally {
       subscribed.delete(runId);
-      lines.close();
       for (const stop of unlisten) {
         stop();
       }
+      lines.close();
     }
   };
   return { lines: lines.stream, result: start(), runId };

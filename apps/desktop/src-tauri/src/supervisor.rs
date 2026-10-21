@@ -49,6 +49,8 @@ const BACKOFF_RESET: Duration = Duration::from_secs(60);
 /// serve holds `serve.lock`, or the watch limit), and the account repo unusable (8). A restart
 /// cannot fix them; the startup screen shows them and offers Retry, which starts serve again.
 const NO_RESTART: [i32; 3] = [2, 6, 8];
+/// How many cancels of runs that have not arrived yet are kept.
+const EARLY_CANCELS: usize = 64;
 /// How many of serve's last stderr lines its exit carries.
 const STDERR_TAIL: usize = 20;
 
@@ -151,6 +153,15 @@ struct RunControl {
     stop: Notify,
 }
 
+/// The one-shot runs going, and cancels that arrived before their run. Tauri may handle a cancel
+/// before the run it names, when both are sent at once: such a cancel is kept and stops the run as
+/// it arrives. Both are under one lock, so that a cancel and its run cannot miss each other.
+#[derive(Default)]
+struct Runs {
+    going: HashMap<String, Arc<RunControl>>,
+    early: VecDeque<String>,
+}
+
 #[derive(Default)]
 struct ServeState {
     child_id: u64,
@@ -164,7 +175,7 @@ pub struct Supervisor {
     config: Config,
     emit: Emit,
     shell: tokio::sync::Mutex<Option<Arc<Shell>>>,
-    runs: Mutex<HashMap<String, Arc<RunControl>>>,
+    runs: Mutex<Runs>,
     serve: tokio::sync::Mutex<ServeState>,
     serve_running: watch::Sender<bool>,
     serve_stop: Notify,
@@ -179,7 +190,7 @@ impl Supervisor {
             config,
             emit,
             shell: tokio::sync::Mutex::new(None),
-            runs: Mutex::new(HashMap::new()),
+            runs: Mutex::new(Runs::default()),
             serve: tokio::sync::Mutex::new(ServeState::default()),
             serve_running: watch::Sender::new(false),
             serve_stop: Notify::new(),
@@ -266,13 +277,17 @@ impl Supervisor {
         let control = Arc::new(RunControl::default());
         {
             let mut runs = self.runs.lock().unwrap();
-            if runs.contains_key(&run_id) {
+            if runs.going.contains_key(&run_id) {
                 return Err(format!("run {run_id} is already running"));
             }
-            runs.insert(run_id.clone(), control.clone());
+            if let Some(at) = runs.early.iter().position(|id| *id == run_id) {
+                runs.early.remove(at);
+                control.cancelled.store(true, Ordering::SeqCst);
+            }
+            runs.going.insert(run_id.clone(), control.clone());
         }
         let end = self.start_run(&run_id, &args, &control, deadline).await;
-        self.runs.lock().unwrap().remove(&run_id);
+        self.runs.lock().unwrap().going.remove(&run_id);
         let end = end?;
         (self.emit)(RUN_END, to_value(&end));
         Ok(end)
@@ -364,11 +379,18 @@ impl Supervisor {
     }
 
     /// Stops a one-shot run: its process group gets SIGTERM, on which agentx reports the stop and
-    /// exits 9, then SIGKILL if it is still there. Returns false when no such run is going.
+    /// exits 9, then SIGKILL if it is still there. Returns false when no such run is going; the
+    /// cancel is then kept, and stops the run if it arrives later.
     pub fn cancel(&self, run_id: &str) -> bool {
-        let Some(control) = self.runs.lock().unwrap().get(run_id).cloned() else {
+        let mut runs = self.runs.lock().unwrap();
+        let Some(control) = runs.going.get(run_id).cloned() else {
+            if runs.early.len() == EARLY_CANCELS {
+                runs.early.pop_front();
+            }
+            runs.early.push_back(run_id.to_owned());
             return false;
         };
+        drop(runs);
         control.cancelled.store(true, Ordering::SeqCst);
         control.stop.notify_one();
         true
@@ -440,6 +462,14 @@ impl Supervisor {
             tokio::select! {
                 () = tokio::time::sleep(wait) => {}
                 () = self.serve_stop.notified() => {}
+            }
+            // Closing the window wakes the wait: stop before reading the login shell for nothing.
+            {
+                let mut state = self.serve.lock().await;
+                if state.stopping {
+                    self.serve_ended(&mut state);
+                    return None;
+                }
             }
             // The environment is captured again, so that a change to the user's shell profile
             // reaches the next child.
@@ -539,7 +569,7 @@ impl Supervisor {
     /// on which it emits its `result` and exits, and its process group is killed if it has not
     /// within 3s.
     pub async fn shutdown(&self) {
-        for control in self.runs.lock().unwrap().values() {
+        for control in self.runs.lock().unwrap().going.values() {
             control.cancelled.store(true, Ordering::SeqCst);
             match control.pid.load(Ordering::SeqCst) {
                 0 => {}

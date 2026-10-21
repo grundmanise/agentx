@@ -295,6 +295,19 @@ async fn a_cancel_while_the_login_shell_is_read_stops_the_run_before_it_starts()
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_cancel_that_arrives_before_its_run_stops_it() {
+    let f = Fixture::new("cancel-first");
+    assert!(!f.sup.cancel("r1"), "no run r1 yet");
+    let end = f.sup.run("r1".into(), args(&["hang"]), None).await.unwrap();
+    assert!(end.cancelled);
+    assert!(!f.dir.join("grandchild").exists(), "the CLI started");
+    // The kept cancel was used up: the next run of another id runs.
+    let end = f.sup.run("r2".into(), args(&["env"]), None).await.unwrap();
+    assert!(!end.cancelled);
+    assert_eq!(end.exit_code, Some(0));
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_child_gets_the_login_shell_environment_and_json() {
     let f = Fixture::new("env");
     let resolution = f.sup.resolution().await;
