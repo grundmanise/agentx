@@ -59,8 +59,6 @@ A session start hook rather than the setup script alone. The setup script runs o
 
 Keeping a separate export format of lineage records beside the inventory: two descriptions of the same skills that drift apart; the inventory already holds every field the export wrote.
 
-A command to turn skills off of its own, such as `unplace`: `skill remove --from` already takes a skill out of one configuration and keeps it on the machine, on a computer and on the cloud machine alike, and the account service's operations take the same two commands.
-
 Every machine's placements on a `machines/<machine id>` branch of its own, pushed by agentx as a copy of its disk after each change: it gives an always current backup and a fleet view in plain Git, but the fleet view also needs presence and drift, which only the account service has, every look for a change costs a Git operation, and agentx would push on its own. It stays open as a fleet view for a bring-your-own remote with no account.
 
 Every machine's branch as the truth of its placements, written by the web app as well as by the machine and applied to its disk: it would let the web app change a computer, but the disk and the branch would both be written, so agentx would need a two-way sync that merges against the last applied commit and never undoes what the user or another installer changed on the disk. A computer is changed from elsewhere by an operation through the account service instead: a command that runs once, under the same rules as on the computer. The cloud machine can take the branch as its truth because nothing else writes its disk and its disk does not last.
