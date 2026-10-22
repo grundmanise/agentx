@@ -49,7 +49,7 @@ One logical asset on one machine in one version, the version being the content h
 One placement of a physical asset inside one agent configuration.
 
 **Inventory**:
-The complete result of one scan of one machine: its agent configurations with their skills, MCP servers and plugins. Replaced whole on every rescan, never edited. A snapshot is an inventory saved with the machine settings.
+The complete result of one scan of one machine: its agent configurations with their skills, MCP servers and plugins. Replaced whole on every rescan, never edited. A snapshot is an inventory saved with the machine settings, which, unlike a scan's, may be partial.
 _Avoid_: scan result, state
 
 **Snapshot**:
@@ -57,7 +57,7 @@ An inventory saved with the machine settings, in a file or on the account remote
 _Avoid_: machine snapshot, machine document, export file, profile, manifest, pinned (for an entry's version)
 
 **Cloud machine**:
-The one machine that stands for every cloud agent environment of the user, such as Claude Code on the web, Codex cloud or Cursor's cloud agents. It has no computer of its own: its snapshot is its only state. Its skills are turned on and off with the same `skill place` and `skill remove` as a computer's, naming the machine, which commit to its snapshot instead of changing a disk. Each session's virtual machine applies it and never writes it.
+The one machine that stands for every agent client the user runs in the cloud, such as Claude Code on the web, Codex cloud or Cursor's cloud agents. It has no computer of its own: its snapshot is its only state. Its skills are turned on and off with the same `skill place` and `skill remove` as a computer's, naming the machine, which commit to its snapshot instead of changing a disk. Each session applies it when it starts and never writes it.
 _Avoid_: cloud, cloud environment, virtual machine, remote machine
 
 ### Skill lifecycle
@@ -225,7 +225,7 @@ The registered incarnation of a machine on the account service. A replacement in
 _Avoid_: epoch, session
 
 **Operation**:
-A user-requested change to one machine (install, place, remove, update), the same commands the user runs on that machine, queued until that machine's agentx executes it. Has a state: pending, claimed, applied, failed, skipped, cancelled or needs-input. Delivering an operation twice changes nothing. A bulk install is a batch of install operations, not a new kind. There is no separate move operation; a move installs on the destination first, then removes from the source after the destination confirms the requested content and placements.
+A user-requested change to one machine (install, place, remove, update), the same commands the user runs on that machine, queued until that machine's agentx executes it. The cloud machine takes none, since nothing runs between its sessions to execute one: its snapshot is changed directly. Has a state: pending, claimed, applied, failed, skipped, cancelled or needs-input. Delivering an operation twice changes nothing. A bulk install is a batch of install operations, not a new kind. There is no separate move operation; a move installs on the destination first, then removes from the source after the destination confirms the requested content and placements.
 _Avoid_: task, job, command, intent, move
 
 **Operation record**:
