@@ -53,11 +53,11 @@ The complete result of one scan of one machine: its agent configurations with th
 _Avoid_: scan result, state
 
 **Snapshot**:
-An inventory saved with the machine settings, in a file or on the account remote, where each machine has at most one. Leaves out what only describes the machine it was taken on: absolute paths, state and drift, scan counters and physical ids. Import applies it: it installs and places the skills it lists, each at its version or, for an entry with no version, which follows, at the latest; it skips a skill it cannot install, such as an unmanaged skill, and ignores MCP servers and plugins for now. A computer takes its own as a backup, with every entry exact; the cloud machine's is edited in the web app and may be partial. A scan's inventory is always complete.
+An inventory saved with the machine settings, in a file or on the account remote, where each machine has at most one. Leaves out what only describes the machine it was taken on: absolute paths, state and drift, scan counters and physical ids. Import applies it: it installs and places the skills it lists, each at its version or, for an entry with no version, which follows, at the latest; it skips a skill it cannot install, such as an unmanaged skill, and ignores MCP servers and plugins for now. A computer takes its own as a backup, with every entry exact; the cloud machine's is written by `skill place` and `skill remove` naming it, from the desktop app or the CLI, or by the web app, and may be partial. A scan's inventory is always complete.
 _Avoid_: machine snapshot, machine document, export file, profile, manifest, pinned (for an entry's version)
 
 **Cloud machine**:
-The one machine that stands for every cloud agent environment of the user, such as Claude Code on the web, Codex cloud or Cursor's cloud agents. It has no computer of its own: its snapshot is its only state. Each session's virtual machine applies it and never writes it.
+The one machine that stands for every cloud agent environment of the user, such as Claude Code on the web, Codex cloud or Cursor's cloud agents. It has no computer of its own: its snapshot is its only state. Its skills are turned on and off with the same `skill place` and `skill remove` as a computer's, naming the machine, which commit to its snapshot instead of changing a disk. Each session's virtual machine applies it and never writes it.
 _Avoid_: cloud, cloud environment, virtual machine, remote machine
 
 ### Skill lifecycle
@@ -225,7 +225,7 @@ The registered incarnation of a machine on the account service. A replacement in
 _Avoid_: epoch, session
 
 **Operation**:
-A user-requested change to one machine (install, remove, update), queued until that machine's agentx executes it. Has a state: pending, claimed, applied, failed, skipped, cancelled or needs-input. Delivering an operation twice changes nothing. A bulk install is a batch of install operations, not a new kind. There is no separate move operation; a move installs on the destination first, then removes from the source after the destination confirms the requested content and placements.
+A user-requested change to one machine (install, place, remove, update), the same commands the user runs on that machine, queued until that machine's agentx executes it. Has a state: pending, claimed, applied, failed, skipped, cancelled or needs-input. Delivering an operation twice changes nothing. A bulk install is a batch of install operations, not a new kind. There is no separate move operation; a move installs on the destination first, then removes from the source after the destination confirms the requested content and placements.
 _Avoid_: task, job, command, intent, move
 
 **Operation record**:
