@@ -29,9 +29,9 @@ A snapshot has three kinds of writer. A computer exports its own snapshot, as a 
 
 Import now writes the library and the placements as well as the settings, so it always asks first: one `y` confirms the whole run, and anything else changes nothing. `--yes` answers in advance and is required wherever it cannot ask, as today. A second run changes nothing while the snapshot, the versions it follows and the machine stay as they were; it moves an entry that follows to a newer version when one appears, and applies a skill it skipped once the reason is gone. The run is one journaled mutation that touches the network; each `import_skill` event says what was done (installed, updated, placed, unplaced, kept, or skipped with the reason).
 
-Every cloud agent environment, Claude Code on the web, Codex cloud, Cursor's cloud agents or any other, is one **cloud machine**: a machine with no computer of its own, whose machine id is derived from `AGENTX_PLATFORM_ID=cloud`, so that every virtual machine of every cloud agent client of the same user is the same machine. Its snapshot is its only state. The desktop app and the web app write it; a cloud virtual machine only reads it. It never publishes, never runs `serve`, never uploads an inventory, and needs only a read-only token for the account remote.
+Every cloud agent environment, Claude Code on the web, Codex cloud, Cursor's cloud agents or any other, is one **cloud machine**: a machine with no computer of its own, whose machine id is the fixed name `cloud` rather than one derived on a computer, so that its snapshot is always on `machines/cloud`, whatever virtual machine, user or vendor reads it. A cloud virtual machine never needs a machine id of its own: it writes nothing, and the hook names the snapshot it applies. Its snapshot is its only state. The desktop app and the web app write it; a cloud virtual machine only reads it. It never publishes, never runs `serve`, never uploads an inventory, and needs only a read-only token for the account remote.
 
-A cloud environment's setup script installs agentx, runs `agentx source add <account remote> --account`, and adds a session start hook to the agent client's own user settings in the virtual machine, which runs `agentx import` of the cloud machine's snapshot with `--yes` on every session start and resume. The setup script never fails the environment: a failed install or import leaves the session to start without the skills.
+Claude Code on the web is the first cloud environment this supports; Codex cloud, Cursor's cloud agents and others join as their own start hooks are confirmed. A cloud environment's setup script installs agentx, runs `agentx source add <account remote> --account`, and adds a session start hook to the agent client's own user settings in the virtual machine, which runs `agentx import` of the snapshot on `machines/cloud` with `--yes` on every session start and resume. The setup script never fails the environment: a failed install or import leaves the session to start without the skills.
 
 ```mermaid
 flowchart LR
@@ -68,6 +68,8 @@ A web app that writes complete entries: an import commit's id is derived by agen
 A `--dry-run` that keeps today's listing: the confirmation is the guard, and the user who answers no has changed nothing, so a second mode would only be a second way to read the same snapshot.
 
 An import that also removes every skill the snapshot does not list: on a computer it deletes what the user installed after the snapshot was written; on a cloud machine it buys little, since each new session starts from the environment's cached disk.
+
+Deriving the cloud machine's id on each virtual machine, as a computer's is derived: the derivation mixes in the operating system user, so a vendor that runs agentx as another user would read another branch, and a cloud virtual machine has nothing to write under an id of its own.
 
 A machine per cloud agent client, or per environment: the fleet would grow with sessions and vendors while the user's choice is per skill and per client, which the placements already carry.
 
