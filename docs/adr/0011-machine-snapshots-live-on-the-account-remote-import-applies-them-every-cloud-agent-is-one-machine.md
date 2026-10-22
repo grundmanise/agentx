@@ -1,6 +1,6 @@
 ---
-status: proposed
-date: 2026-10-21
+status: accepted
+date: 2026-10-22
 ---
 
 # Machine snapshots live on the account remote, import applies them, and every cloud agent is one machine
