@@ -49,19 +49,15 @@ One logical asset on one machine in one version, the version being the content h
 One placement of a physical asset inside one agent configuration.
 
 **Inventory**:
-The complete result of one scan of one machine: its agent configurations with their skills, MCP servers and plugins. Replaced whole on every rescan, never edited. What a machine holds, as found; a machine snapshot is what it should hold.
-_Avoid_: snapshot, scan result, state
+The complete result of one scan of one machine: its agent configurations with their skills, MCP servers and plugins. Replaced whole on every rescan, never edited. A snapshot is an inventory saved with the machine settings.
+_Avoid_: scan result, state
 
-**Machine snapshot**:
-What a machine should hold: the skills it has, each at an exact version or following the latest, the agent configurations each is placed in, and, when it says so, its machine settings. One per machine, kept on the account remote, and never holding skill content. A computer takes its own as a backup; a computer can seed another machine's; the cloud machine's is edited in the web app. Import applies it.
-_Avoid_: snapshot alone, machine document, profile, manifest, export
-
-**Following record**:
-A record of a machine snapshot that names no version, so that import takes the latest: the account remote's tip for one of the user's own skills, the newest version on its source's pin for a managed skill. A record that names a version is exact. A backup holds exact records.
-_Avoid_: pinned, unpinned, floating
+**Snapshot**:
+An inventory saved with the machine settings, in a file or on the account remote, where each machine has at most one. Leaves out what only describes the machine it was taken on: absolute paths, state and drift, scan counters and physical ids. Import applies it: it installs and places the skills it lists, each at its version or, for an entry with no version, which follows, at the latest; it skips a skill it cannot install, such as an unmanaged skill, and ignores MCP servers and plugins for now. A computer takes its own as a backup, with every entry exact; the cloud machine's is edited in the web app and may be partial. A scan's inventory is always complete.
+_Avoid_: machine snapshot, machine document, export file, profile, manifest, pinned (for an entry's version)
 
 **Cloud machine**:
-The one machine that stands for every cloud agent environment of the user, such as Claude Code on the web, Codex cloud or Cursor's cloud agents. It has no computer of its own: its machine snapshot is its only state. Each session's virtual machine applies it and never writes it.
+The one machine that stands for every cloud agent environment of the user, such as Claude Code on the web, Codex cloud or Cursor's cloud agents. It has no computer of its own: its snapshot is its only state. Each session's virtual machine applies it and never writes it.
 _Avoid_: cloud, cloud environment, virtual machine, remote machine
 
 ### Skill lifecycle
@@ -132,7 +128,7 @@ Something of the user's where a fork placed on this machine belongs: a directory
 _Avoid_: orphan, stray directory
 
 **Account remote**:
-The source whose settings entry carries the account flag, added with `agentx source add <url> --account`: the repository account repos push forks to and fetch them from. In the MVP it is a Git repository the user owns; later, hosted by agentx once the machine is signed in. Only the user's own skills' branches and machine snapshots travel through it.
+The source whose settings entry carries the account flag, added with `agentx source add <url> --account`: the repository account repos push forks to and fetch them from. In the MVP it is a Git repository the user owns; later, hosted by agentx once the machine is signed in. Only the user's own skills' branches and snapshots travel through it.
 _Avoid_: cloud, server, origin, fork source
 
 **Publish**:
@@ -207,7 +203,7 @@ _Avoid_: original, parent, snapshot
 The ~/.agentx directory holding the account repo clone with its worktrees, the machine settings, local mutation journals and in-flight operation records. There is no database. Agents read forks through symlinks from the library into those worktrees; nothing else in it is read by agents.
 
 **Machine settings**:
-The one file in agentx home holding what only this machine decides: its label, enabled configurations, sources and their pins, and copy modes. Leaves the machine only inside a machine snapshot or an export file.
+The one file in agentx home holding what only this machine decides: its label, enabled configurations, sources and their pins, and copy modes. Leaves the machine only inside a snapshot.
 _Avoid_: config, preferences, local state
 
 **Enabled configuration**:
