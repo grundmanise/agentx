@@ -5,16 +5,18 @@ date: 2026-10-21
 
 # Machine documents live on the account remote, import applies them, and every cloud agent is one machine
 
-A machine can keep a **machine document** on the account remote, on the branch `machines/<machine id>`. The document is the one `agentx export` writes today, with one change: each skill record lists the agent configurations the skill is placed in, by client id, where it now holds a single `placed` flag. `agentx export` can write it to that branch, pushed with a lease and never forced, as a publish is; `agentx import` can read it from there as well as from a file.
+A machine can keep a **machine document** on the account remote, on the branch `machines/<machine id>`. The document is the one `agentx export` writes today, with one change: each skill record lists the agent configurations the skill is placed in, by client id, where it now holds a single `placed` flag. `agentx export` can write it to that branch when the user names a machine, pushed with a lease and never forced, as a publish is, and only then: no export, and nothing else, ever pushes a document on its own. `agentx import` can read it from there as well as from a file.
+
+A document has three kinds of writer. A computer exports its own document, as a backup it can be restored from. A computer exports to another machine's branch to seed it, such as "make the cloud like this machine". The web app edits a document directly, committing through the account remote host's API with the branch's current commit as the expected parent, so that a commit over another writer's change is refused and the web app reads the document again; no export is involved. A writer leaves out any field of a record it cannot fill: a record needs the skill's name, its source and subpath when it is not one of the user's own, and its placements; the commit, upstream commit and content hash an export writes are optional, and so are the settings. A record with no version **follows**: import takes the latest version, the account remote's tip for one of the user's own skills and the source's current version for a managed skill. A record with a version is **pinned** to it. An export pins every record, so a restore is exact; the web app writes following records.
 
 `agentx import` applies the document instead of only listing it:
 
 | What the document records | What import does |
 |---|---|
-| The machine settings | Replaces them, as today |
-| A skill this machine lacks | Installs it: one of the user's own from the account remote, a managed skill from its source at the recorded upstream commit |
+| The machine settings | Replaces them, as today; a document without settings leaves them as they are |
+| A skill this machine lacks | Installs it: one of the user's own from the account remote, a managed skill from its source, at the recorded version, or at the latest one for a following record |
 | A skill this machine holds | Sets its placements to the recorded ones, placing and removing, in the configurations detected on this machine |
-| A skill at another version | Moves it forward only: fast-forwards when the recorded commit descends from the local one, keeps the local one when it descends from the recorded one, and when they diverged or the skill is modified, leaves it as it is and reports it for `skill update` |
+| A skill at another version, or a following record with a newer version available | Moves it forward only: fast-forwards when the recorded commit descends from the local one, keeps the local one when it descends from the recorded one, and when they diverged or the skill is modified, leaves it as it is and reports it for `skill update` |
 | Nothing about a skill this machine holds | Leaves it as it is |
 
 Import now writes the library and the placements as well as the settings, so it always asks first: one `y` confirms the whole run, and anything else changes nothing. `--yes` answers in advance and is required wherever it cannot ask, as today. A second run changes nothing. The run is one journaled mutation that touches the network; each `import_skill` event says what was done (installed, updated, placed, unplaced, kept, or skipped with the reason).
@@ -49,6 +51,8 @@ A cloud sync command of its own: a second way to describe a machine's skills bes
 
 Keeping the cloud machine's state in the account service: it works only when signed in, and a bring-your-own remote would have no cloud machine.
 
+A web app that writes complete records: an import commit's id is derived by agentx from the tree it imports and its trailers, so the web app would have to repeat agentx's import to compute it. The machine that installs computes it, as every install does.
+
 A `--dry-run` that keeps today's listing: the confirmation is the guard, and the user who answers no has changed nothing, so a second mode would only be a second way to read the same document.
 
 An import that also removes every skill the document does not list: on a computer it deletes what the user installed after the document was written; on a cloud machine it buys little, since each new session starts from the snapshot.
@@ -68,6 +72,8 @@ The events change by addition only, so the output schema version stays `1`. `imp
 The account remote holds `machines/<machine id>` branches beside the skills' branches, one per machine that writes a document. A fetch of the account remote's skills does not fetch them; import fetches the one it reads. The machine settings leave the machine inside a document pushed there, which the glossary's "never leaves the machine" no longer covers once this is accepted; the access fields are still reset on import.
 
 A universal client, such as Codex or Gemini CLI, sees every skill in the library, so a record with no placements does not hide a skill from it: on a cloud machine such a client gets a skill only when the document lists it, and a skill is kept from it by leaving the record out.
+
+A new computer can be set up from another machine's document: an import of the other machine's branch installs and places what it lists, once. After that the two machines are independent, as every machine's library is; nothing keeps them alike. Without a document, a new computer adds the account remote and installs the user's own skills with `skill add --all`, as today, and a skill of a shared source is installed again from that source.
 
 A skill left out of the document stays on a cloud virtual machine that already installed it, until the next new session starts from the snapshot.
 
