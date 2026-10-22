@@ -26,7 +26,7 @@ A bundle of skills, MCP servers, hooks and subagents installed from a marketplac
 _Avoid_: extension, package
 
 **Machine**:
-One developer computer that has been scanned. Root of one snapshot.
+One developer computer that has been scanned, root of one inventory; or the cloud machine.
 _Avoid_: device, host, node
 
 **Machine id**:
@@ -48,8 +48,21 @@ One logical asset on one machine in one version, the version being the content h
 **Occurrence**:
 One placement of a physical asset inside one agent configuration.
 
-**Snapshot**:
-The complete result of one scan of one machine. Replaced whole on every rescan, never edited.
+**Inventory**:
+The complete result of one scan of one machine: its agent configurations with their skills, MCP servers and plugins. Replaced whole on every rescan, never edited. What a machine holds, as found; a machine snapshot is what it should hold.
+_Avoid_: snapshot, scan result, state
+
+**Machine snapshot**:
+What a machine should hold: the skills it has, each at an exact version or following the latest, the agent configurations each is placed in, and, when it says so, its machine settings. One per machine, kept on the account remote, and never holding skill content. A computer takes its own as a backup; a computer can seed another machine's; the cloud machine's is edited in the web app. Import applies it.
+_Avoid_: snapshot alone, machine document, profile, manifest, export
+
+**Following record**:
+A record of a machine snapshot that names no version, so that import takes the latest: the account remote's tip for one of the user's own skills, the newest version on its source's pin for a managed skill. A record that names a version is exact. A backup holds exact records.
+_Avoid_: pinned, unpinned, floating
+
+**Cloud machine**:
+The one machine that stands for every cloud agent environment of the user, such as Claude Code on the web, Codex cloud or Cursor's cloud agents. It has no computer of its own: its machine snapshot is its only state. Each session's virtual machine applies it and never writes it.
+_Avoid_: cloud, cloud environment, virtual machine, remote machine
 
 ### Skill lifecycle
 
@@ -119,7 +132,7 @@ Something of the user's where a fork placed on this machine belongs: a directory
 _Avoid_: orphan, stray directory
 
 **Account remote**:
-The source whose settings entry carries the account flag, added with `agentx source add <url> --account`: the repository account repos push forks to and fetch them from. In the MVP it is a Git repository the user owns; later, hosted by agentx once the machine is signed in. Only fork branches travel through it.
+The source whose settings entry carries the account flag, added with `agentx source add <url> --account`: the repository account repos push forks to and fetch them from. In the MVP it is a Git repository the user owns; later, hosted by agentx once the machine is signed in. Only the user's own skills' branches and machine snapshots travel through it.
 _Avoid_: cloud, server, origin, fork source
 
 **Publish**:
@@ -194,7 +207,7 @@ _Avoid_: original, parent, snapshot
 The ~/.agentx directory holding the account repo clone with its worktrees, the machine settings, local mutation journals and in-flight operation records. There is no database. Agents read forks through symlinks from the library into those worktrees; nothing else in it is read by agents.
 
 **Machine settings**:
-The one file in agentx home holding what only this machine decides: its label, enabled configurations, sources and their pins, and copy modes. Never leaves the machine; `agentx export` copies it.
+The one file in agentx home holding what only this machine decides: its label, enabled configurations, sources and their pins, and copy modes. Leaves the machine only inside a machine snapshot or an export file.
 _Avoid_: config, preferences, local state
 
 **Enabled configuration**:
@@ -208,7 +221,7 @@ One user's identity on the account service. Optional; the app is complete withou
 _Avoid_: user, workspace, team
 
 **Account service**:
-The hosted service that keeps the account's machine records, snapshots and operations once signed in, and tells a machine when something changed. Never carries skill content.
+The hosted service that keeps the account's machine records, inventories and operations once signed in, and tells a machine when something changed. Never carries skill content.
 _Avoid_: sync server, backend, cloud, sync engine
 
 **Install generation**:
