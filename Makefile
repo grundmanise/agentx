@@ -48,10 +48,10 @@ test-cli:
 	cd $(CLI) && go test $(RACE) -count=1 ./...
 
 # The desktop app in apps/desktop: the pnpm install at the root, the frontend's formatting, lint
-# (which also checks the types), end-to-end tests and build, then the Tauri shell's formatting and
-# Clippy. Needs Node 24 or later, pnpm 12, Playwright's Chromium and Rust; on Linux also the
-# WebKitGTK development packages.
+# (which also checks the types), end-to-end tests and build, then the Tauri shell's formatting,
+# Clippy and tests. Needs Node 24 or later, pnpm 12, Playwright's Chromium and Rust; on Linux also
+# the WebKitGTK development packages.
 check-desktop:
 	pnpm install --frozen-lockfile
 	cd $(DESKTOP) && pnpm check && pnpm test && pnpm build
-	cd $(DESKTOP)/src-tauri && cargo fmt --check && cargo clippy --locked -- -D warnings
+	cd $(DESKTOP)/src-tauri && cargo fmt --check && cargo clippy --locked --all-targets -- -D warnings && cargo test --locked

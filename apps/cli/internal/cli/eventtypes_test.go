@@ -590,7 +590,8 @@ func jsonFields(t reflect.Type) []jsonField {
 			continue
 		}
 		name, opts, _ := strings.Cut(tag, ",")
-		optional := slices.Contains(strings.Split(opts, ","), "omitempty") || slices.Contains(strings.Split(opts, ","), "omitzero")
+		options := strings.Split(opts, ",")
+		optional := slices.Contains(options, "omitempty") || slices.Contains(options, "omitzero")
 		ft, nullable := f.Type, false
 		if ft.Kind() == reflect.Pointer {
 			ft, nullable = ft.Elem(), !optional
