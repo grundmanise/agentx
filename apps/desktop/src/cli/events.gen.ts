@@ -5,7 +5,7 @@
 
 // The output schema version this app reads. An event of another version is
 // refused.
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 // What every event starts with.
 export interface Envelope {
@@ -152,7 +152,7 @@ export interface ExportSkill {
   placed: boolean;
 }
 
-export interface Snapshot {
+export interface Inventory {
   instance_id: string;
   scan_counter: number;
   machine: Machine;
@@ -482,8 +482,8 @@ export interface LogEvent {
   message: string;
 }
 
-export interface SnapshotEvent extends Snapshot {
-  type: "snapshot";
+export interface InventoryEvent extends Inventory {
+  type: "inventory";
   schema_version: number;
 }
 
@@ -585,7 +585,7 @@ export type CliEvent =
   | ErrorEvent
   | ResultEvent
   | LogEvent
-  | SnapshotEvent
+  | InventoryEvent
   | DoctorEvent
   | AdoptionEvent
   | ReconcileEvent

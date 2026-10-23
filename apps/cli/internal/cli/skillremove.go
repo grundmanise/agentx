@@ -728,7 +728,7 @@ func universalRefusal(named []string, name string) string {
 // reports what is there now, the way an install does: the rescan is what
 // the report is read from, not what the command meant to do.
 func (inv *invocation) reportRemoved(ctx context.Context, plan removalPlan, targets []placeTarget) error {
-	snap, err := inv.scan(ctx, lockWait, "", false)
+	inventory, err := inv.scan(ctx, lockWait, "", false)
 	if err != nil {
 		return err
 	}
@@ -745,10 +745,10 @@ func (inv *invocation) reportRemoved(ctx context.Context, plan removalPlan, targ
 		if err != nil {
 			return err
 		}
-		inv.out.emit(sc.librarySkillEventFor(ctx, inv, snap, lib, targetIDs(targets)))
+		inv.out.emit(sc.librarySkillEventFor(ctx, inv, inventory, lib, targetIDs(targets)))
 	}
 	if plan.whole {
-		inv.warnStillSeen(snap, plan, targetIDs(targets))
+		inv.warnStillSeen(inventory, plan, targetIDs(targets))
 	}
 	if !plan.quiet {
 		inv.printRemoved(plan)
@@ -771,13 +771,13 @@ func (inv *invocation) reportRemoved(ctx context.Context, plan removalPlan, targ
 //
 // A placement the run already reported as left in place is not named twice:
 // its own warning said the configuration still sees it.
-func (inv *invocation) warnStillSeen(snap scan.Snapshot, plan removalPlan, covered []string) {
+func (inv *invocation) warnStillSeen(inventory scan.Inventory, plan removalPlan, covered []string) {
 	said := make(map[string]bool, len(plan.kept))
 	for _, s := range plan.kept {
 		said[s.path] = true
 	}
 	var left []string
-	for _, node := range snap.Skills {
+	for _, node := range inventory.Skills {
 		if node.Name != plan.name {
 			continue
 		}

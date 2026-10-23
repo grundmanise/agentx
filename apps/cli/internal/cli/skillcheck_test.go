@@ -193,8 +193,8 @@ func TestSkillCheckReportsAnUpdateAndPinsIt(t *testing.T) {
 		t.Error("beta, which has no update, carries a candidate")
 	}
 	contains(t, "skill list", h.mustRun("skill", "list").stdout, "  alpha  managed  current, update available  ")
-	if entry := h.snapshotLibrary("alpha"); entry["candidate"] == nil {
-		t.Errorf("the snapshot's entry carries no candidate: %v", entry)
+	if entry := h.inventoryLibrary("alpha"); entry["candidate"] == nil {
+		t.Errorf("the inventory's entry carries no candidate: %v", entry)
 	}
 }
 
@@ -1428,8 +1428,8 @@ exec `+real+` "$@"
 }
 
 // TestServeChecksForUpdates runs serve: the check starts once the initial
-// snapshot is out and announces the update the source holds, with the
-// instance id of this serve, and the snapshot its write sets off carries
+// inventory is out and announces the update the source holds, with the
+// instance id of this serve, and the inventory its write sets off carries
 // the candidate. A single pass checks nothing.
 func TestServeChecksForUpdates(t *testing.T) {
 	t.Parallel()
@@ -1443,24 +1443,24 @@ func TestServeChecksForUpdates(t *testing.T) {
 	equal(t, "the candidate after serve --once", h.ref(lineage.CandidateRef("alpha")), "")
 
 	p := h.serve(t, "--json")
-	first := p.next("snapshot")
+	first := p.next("inventory")
 	update, events := p.nextUpdate(func(e jsonEvent) bool { return e["candidate_upstream_commit"] == second })
 	equal(t, "name", update["name"], "alpha")
 	equal(t, "instance_id", update["instance_id"], first["instance_id"])
 	equal(t, "the candidate", h.ref(lineage.CandidateRef("alpha")), update["candidate"])
 	// The write that pinned it bumped the version file, and the rescan that
 	// sets off, or the one this refresh asks for, carries the candidate in
-	// the snapshot the desktop app applies.
+	// the inventory the desktop app applies.
 	p.send(`{"type":"refresh","request_id":"after"}`)
 	events = append(events, p.until("after")...)
 	var last jsonEvent
 	for _, e := range events {
-		if e["type"] == "snapshot" {
+		if e["type"] == "inventory" {
 			last = e
 		}
 	}
 	if last == nil {
-		t.Fatal("no snapshot after the check wrote its candidate")
+		t.Fatal("no inventory after the check wrote its candidate")
 	}
 	var entry map[string]any
 	for _, e := range last["library"].([]any) {
@@ -1470,13 +1470,13 @@ func TestServeChecksForUpdates(t *testing.T) {
 	}
 	cand, ok := entry["candidate"].(map[string]any)
 	if !ok {
-		t.Fatalf("the last snapshot's alpha carries no candidate: %v", entry)
+		t.Fatalf("the last inventory's alpha carries no candidate: %v", entry)
 	}
-	equal(t, "the snapshot's candidate", cand["upstream_commit"], second)
+	equal(t, "the inventory's candidate", cand["upstream_commit"], second)
 	equal(t, "exit", p.close(), 0)
 }
 
-// TestServeChecksInTextMode runs serve without --json, whose snapshot lists
+// TestServeChecksInTextMode runs serve without --json, whose inventory lists
 // no library: it checks all the same, since the settings hold a source, and
 // prints one line per update, the upstream commit the skill is at, the one
 // its candidate pins and how many files the update changes.
@@ -1486,9 +1486,9 @@ func TestServeChecksInTextMode(t *testing.T) {
 	s.skill("skills/alpha", "alpha", "The first skill, revised", nil)
 	second := s.commit("second version")
 	p := h.serve(t)
-	p.line("snapshot 1: 1 configuration, 2 skills")
+	p.line("inventory 1: 1 configuration, 2 skills")
 	want := "update alpha: " + short(first) + " -> " + short(second) + ", 1 file"
-	// The rescan the check's write sets off prints a snapshot line of its
+	// The rescan the check's write sets off prints an inventory line of its
 	// own, before or after the update's.
 	deadline := time.After(serveDeadline)
 	for got := ""; got == ""; {
@@ -1497,7 +1497,7 @@ func TestServeChecksInTextMode(t *testing.T) {
 			if !ok {
 				t.Fatal("serve ended before the update line")
 			}
-			if !strings.HasPrefix(line, "snapshot ") {
+			if !strings.HasPrefix(line, "inventory ") {
 				got = line
 				equal(t, "the update line", got, want)
 			}
@@ -1516,7 +1516,7 @@ func TestServeChecksInTextMode(t *testing.T) {
 // scan read the lineage with the same git, so the gate lets the first two
 // such reads by, which are the reconciliation's and the initial scan's,
 // and holds the third, which is the read of the check serve starts once
-// that scan's snapshot is out.
+// that scan's inventory is out.
 func gateCheckLineage(t *testing.T, h *harness) (arm func() (reached, release func())) {
 	t.Helper()
 	dir := t.TempDir()
@@ -1559,7 +1559,7 @@ func TestServeCheckWaitsForTheLock(t *testing.T) {
 			second := s.commit("second version")
 			reached, proceed := tc.gate(t, h)()
 			p := h.serve(t, "--json")
-			p.next("snapshot")
+			p.next("inventory")
 			reached()
 			unlock := tc.hold(t, h)
 			proceed()
@@ -1598,7 +1598,7 @@ func TestServeWarnsAboutASourceItCannotCheck(t *testing.T) {
 	}
 
 	p := h.serve(t, "--json")
-	p.next("snapshot")
+	p.next("inventory")
 	update, _ := p.nextUpdate(func(e jsonEvent) bool { return e["name"] == "alpha" && e["candidate_upstream_commit"] == second })
 	equal(t, "alpha's candidate", h.ref(lineage.CandidateRef("alpha")), update["candidate"])
 	p.send(`{"type":"refresh","request_id":"alive"}`)

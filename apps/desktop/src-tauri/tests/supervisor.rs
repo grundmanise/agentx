@@ -34,7 +34,7 @@ env)
   ;;
 serve)
   mode=$(cat "$STUB_DIR/serve-mode")
-  printf '{"type":"snapshot","profile":"%s"}\n' "$AGENTX_STUB_PROFILE"
+  printf '{"type":"inventory","profile":"%s"}\n' "$AGENTX_STUB_PROFILE"
   echo '{"type":"log","schema_version":1,"level":"debug","message":"serve started"}' >&2
   case "$mode" in
   echo)
@@ -326,7 +326,7 @@ async fn serve_takes_requests_logs_its_stderr_and_stops_with_the_window() {
     assert_eq!(f.sup.serve_start().await.unwrap(), child, "one serve child");
     let first = f.wait_for(SERVE_LINE, 1).await;
     assert_eq!(first[0].1["child_id"], child);
-    assert_eq!(first[0].1["event"]["type"], "snapshot");
+    assert_eq!(first[0].1["event"]["type"], "inventory");
 
     let request = r#"{"type":"refresh","request_id":"q1"}"#;
     f.sup.serve_request(request).await.unwrap();

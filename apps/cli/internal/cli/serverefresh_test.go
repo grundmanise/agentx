@@ -129,7 +129,7 @@ func TestServeRefreshesEverySource(t *testing.T) {
 	calls := countingGit(t, h)
 	before := mutationVersion(t, h)
 	p := h.serve(t, "--json")
-	p.next("snapshot")
+	p.next("inventory")
 	// The check at launch fetches both sources and stamps both, the one no
 	// skill came from included, in its one write.
 	h.awaitWrite(t, before)
@@ -202,7 +202,7 @@ func TestServeWarnsOnceAboutAnUnfetchedSourceWhileAnotherMoves(t *testing.T) {
 
 	before := mutationVersion(t, h)
 	p := h.serve(t, "--json")
-	p.next("snapshot")
+	p.next("inventory")
 	h.awaitWrite(t, before) // the check at launch, which fetched one
 	one.skill("skills/delta", "delta", "A skill added upstream", nil)
 	one.commit("delta")
@@ -258,10 +258,10 @@ func TestServeRefreshSpawnsBoundedGit(t *testing.T) {
 	calls := countingGit(t, h)
 	before := mutationVersion(t, h)
 	// JSON, as the desktop app runs it, so that the rescans read the
-	// library's lineage. The snapshot of thirty skills is a line of about
+	// library's lineage. The inventory of thirty skills is a line of about
 	// 40 KB, which the harness reads whole: it stops at 64 KB.
 	p := h.serve(t, "--json")
-	p.next("snapshot")
+	p.next("inventory")
 	h.awaitWrite(t, before)
 	p.send(`{"type":"refresh","request_id":"settled"}`)
 	p.until("settled")
@@ -306,7 +306,7 @@ func TestServeRefreshesNothingWithoutASource(t *testing.T) {
 			calls := countingGit(t, h)
 			version := mutationVersion(t, h)
 			p := h.serve(t, "--json")
-			p.next("snapshot")
+			p.next("inventory")
 			p.send(`{"type":"refresh","request_id":"settled"}`)
 			p.until("settled")
 			// Serve stops only once the check it started at launch has
@@ -348,7 +348,7 @@ func TestServeWarnsAboutSourcesAnImportBrought(t *testing.T) {
 	version := mutationVersion(t, h)
 	calls := countingGit(t, h)
 	p := h.serve(t, "--json")
-	p.next("snapshot")
+	p.next("inventory")
 	var want []string
 	for _, s := range []*sourceRepo{one, two} {
 		line := "update check: source not fetched: " + s.url

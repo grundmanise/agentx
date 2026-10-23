@@ -33,7 +33,7 @@ type forkSource struct {
 // directory, or, where several plugins provide one of that name, as
 // <plugin>:<skill>. scanned is the scan the plugins are read from, run
 // only when the name is none of the library's or the account repo's.
-func (inv *invocation) forkSourceOf(arg string, records map[string]lineage.Record, scanned func() (scan.Snapshot, error)) (forkSource, error) {
+func (inv *invocation) forkSourceOf(arg string, records map[string]lineage.Record, scanned func() (scan.Inventory, error)) (forkSource, error) {
 	if lib, ok := librarySkill(inv.dirs.Library, arg); ok {
 		src := forkSource{kind: lineage.KindUnmanaged, name: arg, lib: lib, held: true, dir: lib.ResolvedPath}
 		if rec, ok := records[arg]; ok {
@@ -48,11 +48,11 @@ func (inv *invocation) forkSourceOf(arg string, records map[string]lineage.Recor
 		}
 		return forkSource{kind: lineage.KindFork, name: arg, rec: rec}, nil
 	}
-	snap, err := scanned()
+	inventory, err := scanned()
 	if err != nil {
 		return forkSource{}, err
 	}
-	o, err := pluginOccurrence(snap, arg)
+	o, err := pluginOccurrence(inventory, arg)
 	if err != nil {
 		return forkSource{}, err
 	}
@@ -65,14 +65,14 @@ func (inv *invocation) forkSourceOf(arg string, records map[string]lineage.Recor
 // several plugins provide is refused with the plugins named, and the
 // plugin's own copies in several configurations are one skill, read from
 // the first by configuration. Pure.
-func pluginOccurrence(snap scan.Snapshot, arg string) (scan.Occurrence, error) {
+func pluginOccurrence(inventory scan.Inventory, arg string) (scan.Occurrence, error) {
 	plugin, skill, qualified := strings.Cut(arg, ":")
 	if !qualified {
 		plugin, skill = "", arg
 	}
 	var found []scan.Occurrence
 	plugins := map[string]bool{}
-	for _, node := range snap.Skills {
+	for _, node := range inventory.Skills {
 		for _, o := range node.Occurrences {
 			if o.Plugin == "" || o.Scope != "user" || filepath.Base(o.Path) != skill || (qualified && o.Plugin != plugin) {
 				continue
@@ -107,10 +107,10 @@ func pluginOccurrence(snap scan.Snapshot, arg string) (scan.Occurrence, error) {
 // pluginConfigurations are the configurations of the scan that have the
 // plugin and do not record it as turned off, sorted by id: the ones a fork
 // of one of its skills is placed into and noted for.
-func pluginConfigurations(snap scan.Snapshot, plugin string) []string {
+func pluginConfigurations(inventory scan.Inventory, plugin string) []string {
 	seen := map[string]bool{}
 	var ids []string
-	for _, p := range snap.Plugins {
+	for _, p := range inventory.Plugins {
 		if p.Name != plugin || (p.Enabled != nil && !*p.Enabled) || seen[p.Configuration] {
 			continue
 		}

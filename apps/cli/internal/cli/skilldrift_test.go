@@ -100,8 +100,8 @@ func TestModifiedIsDecidedByTreeID(t *testing.T) {
 
 	writeFile(t, filepath.Join(lib, "a.md"), "an edit\n")
 	expect("an edit", stateModified, false)
-	// The snapshot the desktop app applies says the same.
-	equal(t, "the snapshot's state", h.snapshotLibrary("pdf")["state"], stateModified)
+	// The inventory the desktop app applies says the same.
+	equal(t, "the inventory's state", h.inventoryLibrary("pdf")["state"], stateModified)
 }
 
 // TestARootSkillIsComparedUnderTheRepositoryName installs a skill that is a
@@ -151,7 +151,7 @@ func TestPlacementDriftIsReadAtEachConfigurationsOwnPlace(t *testing.T) {
 	remove(t, claude)
 	copyTree(t, lib, claude)
 	expect("a directory where a link was", "displaced")
-	equal(t, "the snapshot's drift", drift(h.snapshotLibrary("alpha")), "displaced")
+	equal(t, "the inventory's drift", drift(h.inventoryLibrary("alpha")), "displaced")
 	equal(t, "the state beside it", h.listed("alpha")["state"], stateCurrent)
 	remove(t, claude)
 	link(t, lib, claude)
@@ -230,7 +230,7 @@ func TestASharedPlaceIsJudgedOnce(t *testing.T) {
 	expect := func(t *testing.T, h *harness, what, want, text string) {
 		t.Helper()
 		equal(t, what, drift(h.listed("alpha")), want)
-		equal(t, what+" in the snapshot", drift(h.snapshotLibrary("alpha")), want)
+		equal(t, what+" in the inventory", drift(h.inventoryLibrary("alpha")), want)
 		contains(t, what+" in skill list", h.mustRun("skill", "list").stdout, "alpha  managed  "+text+"  file://")
 	}
 
@@ -385,8 +385,8 @@ func words(v any) string {
 // goes through every state: edited in an editor, missing a placement,
 // displaced from another, put back by hand, its source removed and added
 // again, and left without its branch. Each change is followed by one drift
-// event, after the snapshot that shows it and naming that snapshot, with the
-// state and drift before and after; the first snapshot is where every
+// event, after the inventory that shows it and naming that inventory, with the
+// state and drift before and after; the first inventory is where every
 // state starts and is followed by none. A source removed and added again
 // changes the settings alone, and serve follows them as it follows the
 // library.
@@ -395,28 +395,28 @@ func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	p := h.serve(t, "--json")
-	first := p.next("snapshot")
+	first := p.next("inventory")
 	p.send(`{"type":"refresh","request_id":"start"}`)
-	equal(t, "the event after the first snapshot", p.next("refresh_complete")["request_id"], "start")
+	equal(t, "the event after the first inventory", p.next("refresh_complete")["request_id"], "start")
 
 	change := func(id string, do func()) jsonEvent {
 		t.Helper()
 		do()
 		p.send(`{"type":"refresh","request_id":"` + id + `"}`)
-		var snap, found jsonEvent
+		var inventory, found jsonEvent
 		for _, e := range p.until(id) {
 			switch e["type"] {
-			case "snapshot":
-				snap = e
+			case "inventory":
+				inventory = e
 			case "drift":
 				if found != nil {
 					t.Fatalf("%s: a second drift event %v after %v", id, e, found)
 				}
-				if snap == nil {
-					t.Fatalf("%s: a drift event before any snapshot: %v", id, e)
+				if inventory == nil {
+					t.Fatalf("%s: a drift event before any inventory: %v", id, e)
 				}
 				found = e
-				equal(t, id+": scan_counter", e["scan_counter"], snap["scan_counter"])
+				equal(t, id+": scan_counter", e["scan_counter"], inventory["scan_counter"])
 				equal(t, id+": instance_id", e["instance_id"], first["instance_id"])
 			}
 		}
@@ -442,11 +442,11 @@ func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 	notes := filepath.Join(lib, "notes.md")
 	installed := readText(t, notes)
 	// An edit saved in an editor reaches serve through the watcher alone:
-	// no refresh is asked for, and the drift follows the snapshot it made.
+	// no refresh is asked for, and the drift follows the inventory it made.
 	replaceFile(t, notes, "edited in an editor\n")
-	snap := p.next("snapshot")
+	inventory := p.next("inventory")
 	edited := p.next("drift")
-	equal(t, "edited: scan_counter", edited["scan_counter"], snap["scan_counter"])
+	equal(t, "edited: scan_counter", edited["scan_counter"], inventory["scan_counter"])
 	expect(edited, "managed", stateModified, "", stateCurrent, "")
 
 	claude := filepath.Join(h.home, ".claude", "skills", "alpha")
@@ -462,20 +462,20 @@ func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 		"managed", stateCurrent, "displaced,missing", stateCurrent, "displaced,missing,source removed")
 
 	// A skill that arrives in the library is no transition, of its own or
-	// of the skill beside it: the snapshot says so itself.
+	// of the skill beside it: the inventory says so itself.
 	h.runBesideServe("skill", "add", s.url, "--name", "beta")
 	p.send(`{"type":"refresh","request_id":"arrived"}`)
 	var arrived jsonEvent
 	for _, e := range p.until("arrived") {
 		switch e["type"] {
-		case "snapshot":
+		case "inventory":
 			arrived = e
 		case "drift":
 			t.Errorf("a drift event when beta arrived: %v", e)
 		}
 	}
 	if arrived == nil || len(arrived["library"].([]any)) != 2 {
-		t.Fatalf("the snapshot after beta arrived = %v, want alpha and beta", arrived)
+		t.Fatalf("the inventory after beta arrived = %v, want alpha and beta", arrived)
 	}
 	expect(change("unmanaged", func() { h.accountGit("update-ref", "-d", "refs/heads/managed/alpha") }),
 		"unmanaged", "", "", stateCurrent, "displaced,missing")
@@ -483,20 +483,20 @@ func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 	equal(t, "exit", p.close(), 0)
 	p.next("result")
 	// A single pass has nothing to compare with and emits no drift; its
-	// snapshot shows the skill as it now is.
+	// inventory shows the skill as it now is.
 	out := h.serveOnce("--json")
-	if got := strings.Join(h.types(h.events(out.stdout)), ","); got != "snapshot,result" {
-		t.Errorf("serve --once emitted %s, want snapshot,result", got)
+	if got := strings.Join(h.types(h.events(out.stdout)), ","); got != "inventory,result" {
+		t.Errorf("serve --once emitted %s, want inventory,result", got)
 	}
-	library := h.one(out.stdout, "snapshot")["library"].([]any)
+	library := h.one(out.stdout, "inventory")["library"].([]any)
 	if len(library) != 2 {
-		t.Fatalf("the snapshot's library = %v, want alpha and beta", library)
+		t.Fatalf("the inventory's library = %v, want alpha and beta", library)
 	}
 	entry := library[0].(map[string]any)
-	equal(t, "the snapshot's first skill", entry["name"], "alpha")
-	equal(t, "the snapshot's kind", entry["kind"], "unmanaged")
+	equal(t, "the inventory's first skill", entry["name"], "alpha")
+	equal(t, "the inventory's kind", entry["kind"], "unmanaged")
 	if _, ok := entry["state"]; ok {
-		t.Errorf("an unmanaged skill carries a state in the snapshot: %v", entry["state"])
+		t.Errorf("an unmanaged skill carries a state in the inventory: %v", entry["state"])
 	}
 }
 
@@ -523,18 +523,18 @@ func TestAdoptionAndListingAgreeOnModified(t *testing.T) {
 // TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning: a managed skill
 // whose library directory was deleted outside agentx has no library entry,
 // so no state and no drift, and is named in one warning instead, by skill
-// list and in the snapshot's warnings alike, with the install that lays
+// list and in the inventory's warnings alike, with the install that lays
 // the directory out again and the removal that stops managing it. Leaving
-// the library is no drift transition: serve says it through the snapshot
+// the library is no drift transition: serve says it through the inventory
 // and its warning.
 func TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	p := h.serve(t, "--json")
-	p.next("snapshot")
+	p.next("inventory")
 	p.send(`{"type":"refresh","request_id":"start"}`)
-	equal(t, "the event after the first snapshot", p.next("refresh_complete")["request_id"], "start")
+	equal(t, "the event after the first inventory", p.next("refresh_complete")["request_id"], "start")
 
 	// One rename takes the whole directory away, so the watcher never sees
 	// the skill half deleted, which would be an edit of its own.
@@ -544,26 +544,26 @@ func TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning(t *testing.T) {
 	want := "alpha is managed in the account repo but the library holds no skill directory for it; run 'agentx skill add " +
 		shellWord(s.url) + " --name alpha' to install it again, or 'agentx skill remove alpha' to stop managing it"
 	p.send(`{"type":"refresh","request_id":"gone"}`)
-	var snap jsonEvent
+	var inventory jsonEvent
 	for _, e := range p.until("gone") {
 		switch e["type"] {
-		case "snapshot":
-			snap = e
+		case "inventory":
+			inventory = e
 		case "drift":
 			t.Errorf("a drift event for a skill that left the library: %v", e)
 		}
 	}
-	if snap == nil {
-		t.Fatal("no snapshot after the library directory went")
+	if inventory == nil {
+		t.Fatal("no inventory after the library directory went")
 	}
-	equal(t, "the snapshot's library", len(snap["library"].([]any)), 0)
+	equal(t, "the inventory's library", len(inventory["library"].([]any)), 0)
 	var named []string
-	for _, w := range snap["warnings"].([]any) {
+	for _, w := range inventory["warnings"].([]any) {
 		if strings.Contains(w.(string), "alpha is managed") {
 			named = append(named, w.(string))
 		}
 	}
-	equal(t, "the snapshot's warnings about alpha", strings.Join(named, "\n"), want)
+	equal(t, "the inventory's warnings about alpha", strings.Join(named, "\n"), want)
 	equal(t, "exit", p.close(), 0)
 	p.next("result")
 
@@ -587,7 +587,7 @@ func TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning(t *testing.T) {
 // TestAManagedSkillWithoutItsSKILLmdNamesTheDirectory: a library directory
 // that lost its SKILL.md is not the skill, and an install refuses to write
 // over it, so the warning says to move it aside first, in skill list and
-// in the snapshot alike. Doing what it says installs the skill again.
+// in the inventory alike. Doing what it says installs the skill again.
 func TestAManagedSkillWithoutItsSKILLmdNamesTheDirectory(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -599,12 +599,12 @@ func TestAManagedSkillWithoutItsSKILLmdNamesTheDirectory(t *testing.T) {
 	equal(t, "skill list's warnings", strings.Join(warnings(h, h.mustRun("--json", "skill", "list").stderr), "\n"), want)
 	out := h.serveOnce("--json")
 	var named []string
-	for _, w := range h.one(out.stdout, "snapshot")["warnings"].([]any) {
+	for _, w := range h.one(out.stdout, "inventory")["warnings"].([]any) {
 		if strings.Contains(w.(string), "alpha is managed") {
 			named = append(named, w.(string))
 		}
 	}
-	equal(t, "the snapshot's warnings about alpha", strings.Join(named, "\n"), want)
+	equal(t, "the inventory's warnings about alpha", strings.Join(named, "\n"), want)
 
 	remove(t, lib)
 	h.mustRun("skill", "add", s.url, "--name", "alpha")
@@ -690,10 +690,10 @@ func TestServeReportsForkDrift(t *testing.T) {
 	h.mustRun("skill", "new", "notes")
 	h.setAccount(newAccountRemote(t, h))
 	p := h.serve(t, "--json")
-	first := p.next("snapshot")["library"].([]any)
+	first := p.next("inventory")["library"].([]any)
 	equal(t, "the fork's first state", first[0].(map[string]any)["state"], stateCurrent)
 	p.send(`{"type":"refresh","request_id":"start"}`)
-	equal(t, "the event after the first snapshot", p.next("refresh_complete")["request_id"], "start")
+	equal(t, "the event after the first inventory", p.next("refresh_complete")["request_id"], "start")
 	expect := func(what, state, previous string, drift ...string) {
 		t.Helper()
 		e := p.nextOf("drift")

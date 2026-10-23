@@ -40,7 +40,7 @@ test("a one-shot streams its events as they arrive", async ({ cli, page }) => {
   expect(await items(page)).toEqual([
     {
       value: {
-        event: { cli_version: "1.2.0", schema_version: 1, type: "version" },
+        event: { cli_version: "1.2.0", schema_version: 2, type: "version" },
         kind: "event",
       },
       what: "line",
@@ -111,14 +111,14 @@ test("serve's events arrive in order, with their child id", async ({
   expect(
     await page.evaluate(async () => await window.transport.serveStart())
   ).toBe(1);
-  await cli.serveEmit([{ type: "snapshot" }, { type: "refresh_complete" }]);
+  await cli.serveEmit([{ type: "inventory" }, { type: "refresh_complete" }]);
 
   await expect(received(page)).toHaveCount(2);
   expect(await items(page)).toEqual([
     {
       value: {
         childId: 1,
-        event: { schema_version: 1, type: "snapshot" },
+        event: { schema_version: 2, type: "inventory" },
         kind: "event",
       },
       what: "serve",
@@ -126,7 +126,7 @@ test("serve's events arrive in order, with their child id", async ({
     {
       value: {
         childId: 1,
-        event: { schema_version: 1, type: "refresh_complete" },
+        event: { schema_version: 2, type: "refresh_complete" },
         kind: "event",
       },
       what: "serve",
@@ -153,10 +153,10 @@ test("a serve exit is reported, and later events carry the new child's id", asyn
   page,
 }) => {
   await page.evaluate(async () => await window.transport.serveStart());
-  await cli.serveEmit([{ type: "snapshot" }]);
+  await cli.serveEmit([{ type: "inventory" }]);
   await cli.serveExit(1, ["first line", "second line"]);
   cli.serveRestart(2);
-  await cli.serveEmit([{ type: "snapshot" }]);
+  await cli.serveEmit([{ type: "inventory" }]);
 
   await expect(received(page)).toHaveCount(3);
   const [first, exit, next] = await items(page);

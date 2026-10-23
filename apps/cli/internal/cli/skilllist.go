@@ -61,7 +61,7 @@ func (inv *invocation) skillList(ctx context.Context, remote bool) error {
 		}
 		gitDir, account = dir, entry
 	}
-	snap, err := inv.scan(ctx, lockWait, "", false)
+	inventory, err := inv.scan(ctx, lockWait, "", false)
 	if err != nil {
 		return err
 	}
@@ -86,7 +86,7 @@ func (inv *invocation) skillList(ctx context.Context, remote bool) error {
 		out.print(out.paint(heading, plural(len(skills), "skill")))
 		t := &table{}
 		for _, lib := range skills {
-			ev := sc.librarySkillEventFor(ctx, inv, snap, lib, nil) // every placement, not only a command's own
+			ev := sc.librarySkillEventFor(ctx, inv, inventory, lib, nil) // every placement, not only a command's own
 			out.emit(ev)
 			t.add(row(out, ev, sc.account)...)
 		}

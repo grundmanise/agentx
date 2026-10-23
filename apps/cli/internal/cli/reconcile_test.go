@@ -72,17 +72,17 @@ func TestClassifyFork(t *testing.T) {
 	}
 }
 
-// reconciled reads serve's stdout up to its first snapshot, which it
+// reconciled reads serve's stdout up to its first inventory, which it
 // returns with the reconcile events before it, in order; any other event
-// before the snapshot fails the test.
-func (p *serveProc) reconciled() (events []jsonEvent, snapshot jsonEvent) {
+// before the inventory fails the test.
+func (p *serveProc) reconciled() (events []jsonEvent, inventory jsonEvent) {
 	p.t.Helper()
 	deadline := time.After(serveDeadline)
 	for {
 		select {
 		case line, ok := <-p.lines:
 			if !ok {
-				p.t.Fatal("serve ended before its first snapshot")
+				p.t.Fatal("serve ended before its first inventory")
 			}
 			var e jsonEvent
 			if err := json.Unmarshal([]byte(line), &e); err != nil {
@@ -91,13 +91,13 @@ func (p *serveProc) reconciled() (events []jsonEvent, snapshot jsonEvent) {
 			switch e["type"] {
 			case "reconcile":
 				events = append(events, e)
-			case "snapshot":
+			case "inventory":
 				return events, e
 			default:
-				p.t.Fatalf("serve emitted %v before its first snapshot", e)
+				p.t.Fatalf("serve emitted %v before its first inventory", e)
 			}
 		case <-deadline:
-			p.t.Fatalf("no snapshot within %s", serveDeadline)
+			p.t.Fatalf("no inventory within %s", serveDeadline)
 		}
 	}
 }
@@ -163,7 +163,7 @@ func TestForkWarningsSayWhatIsMissing(t *testing.T) {
 // TestServeReconcilesAtStart starts serve over a home built by earlier
 // commands, as agentx installed again over an existing agentx home finds
 // it, and reads one reconcile event per skill name, sorted, before the
-// first snapshot: a managed skill that holds its base, a .DS_Store of its
+// first inventory: a managed skill that holds its base, a .DS_Store of its
 // own beside it, is restored, an edited one modified, one whose library
 // directory went installable, and so is a fork only the account remote's
 // branches hold; a fork placed as it was is restored, and stays its
@@ -224,7 +224,7 @@ func TestServeReconcilesAtStart(t *testing.T) {
 	version := mutationVersion(t, h)
 
 	p := h.serve(t, "--json")
-	events, snap := p.reconciled()
+	events, inventory := p.reconciled()
 	var got []string
 	for _, e := range events {
 		line := e["name"].(string) + " " + e["kind"].(string) + " " + e["outcome"].(string)
@@ -261,7 +261,7 @@ func TestServeReconcilesAtStart(t *testing.T) {
 	if home.RegisteredIn(gitx.AccountRepoPath(h.agentx), orphan) {
 		t.Error("the adopt candidate was registered")
 	}
-	contains(t, "the snapshot's warnings", strings.Join(stringsOf(snap["warnings"]), "\n"),
+	contains(t, "the inventory's warnings", strings.Join(stringsOf(inventory["warnings"]), "\n"),
 		orphan+" is in the way of orphan's worktree; run 'agentx skill place orphan --force' to adopt it")
 	list := h.accountGit("worktree", "list", "--porcelain")
 	if strings.Contains(list, stray) {

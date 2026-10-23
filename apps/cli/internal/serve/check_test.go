@@ -11,7 +11,7 @@ import (
 )
 
 // TestTheCheckRunsOnceAtLaunch drives Run with a check that reports at
-// once: it starts once the initial snapshot is out, its report is made, and
+// once: it starts once the initial inventory is out, its report is made, and
 // no other check follows it, however many refreshes serve answers after it.
 // A second job holds on until serve stops, which stops it, and Run returns
 // only once it has.
@@ -24,9 +24,9 @@ func TestTheCheckRunsOnceAtLaunch(t *testing.T) {
 	defer stdinW.Close()
 	defer stdinR.Close()
 
-	var snapshots, checks atomic.Int32
+	var inventories, checks atomic.Int32
 	var held atomic.Bool           // the second job, still running when serve stops, ended
-	started := make(chan int32, 1) // the snapshots out when the check started
+	started := make(chan int32, 1) // the inventories out when the check started
 	reported := make(chan struct{}, 1)
 	acked := make(chan string, 4)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -34,15 +34,15 @@ func TestTheCheckRunsOnceAtLaunch(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		done <- Run(ctx, Options{
-			Scan:            func(context.Context) (scan.Snapshot, error) { return scan.Snapshot{}, nil },
+			Scan:            func(context.Context) (scan.Inventory, error) { return scan.Inventory{}, nil },
 			Stdin:           stdinR,
-			Snapshot:        func(scan.Snapshot) { snapshots.Add(1) },
+			Inventory:       func(scan.Inventory) { inventories.Add(1) },
 			RefreshComplete: func(id string, _ int, _ error) { acked <- id },
 			BadRequest:      func(string, string) {},
 			Warn:            func(string) {},
 			Check: func(context.Context) func() {
 				if checks.Add(1) == 1 {
-					started <- snapshots.Load()
+					started <- inventories.Load()
 				}
 				return func() { reported <- struct{}{} }
 			},
@@ -57,7 +57,7 @@ func TestTheCheckRunsOnceAtLaunch(t *testing.T) {
 	select {
 	case n := <-started:
 		if n == 0 {
-			t.Error("the check started before the initial snapshot was out")
+			t.Error("the check started before the initial inventory was out")
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("no check started at launch")

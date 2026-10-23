@@ -14,12 +14,12 @@ agentx serve
 ```
 
 ```text
-snapshot 1: 3 configurations, 5 skills
+inventory 1: 3 configurations, 5 skills
 update pdf: 3f2a9c1 -> 8b1e0f4, 2 files
-snapshot 2: 3 configurations, 5 skills
+inventory 2: 3 configurations, 5 skills
 ```
 
-Each `snapshot` line means the inventory changed. A change that leaves the inventory as it was prints nothing. Each `update` line is a skill with an update available. To stop serve, press Ctrl-C or close its stdin. Serve then exits with code `0`.
+The first `inventory` line is the inventory when serve starts. Each later `inventory` line means the inventory changed. A change that leaves the inventory as it was prints nothing. Each `update` line is a skill with an update available. To stop serve, press Ctrl-C or close its stdin. Serve then exits with code `0`.
 
 The desktop app runs serve with [`--json`](/cli/output#json-output). The JSON output also carries the whole inventory and a notice each time a skill changes state.
 
@@ -27,7 +27,7 @@ The desktop app runs serve with [`--json`](/cli/output#json-output). The JSON ou
 
 Serve watches agentx home (`~/.agentx`), the library and the skills directory of every agent client agentx knows, such as `~/.claude/skills`. It does not watch the clients' MCP configuration files: a change there shows at the next rescan.
 
-Serve sees a skill added, removed or edited, whatever tool made the change. The next snapshot shows it. A skill of your own shows as `modified` as soon as you edit it, and as `current` again once you [publish](/cli/skill#publish-a-skill) it with `agentx skill publish`. A commit you make with Git does not publish your edits. Serve never publishes or commits for you.
+Serve sees a skill added, removed or edited, whatever tool made the change. The next inventory shows it. A skill of your own shows as `modified` as soon as you edit it, and as `current` again once you [publish](/cli/skill#publish-a-skill) it with `agentx skill publish`. A commit you make with Git does not publish your edits. Serve never publishes or commits for you.
 
 ## What serve repairs at start
 
@@ -36,7 +36,7 @@ When serve starts, it checks each skill on disk and repairs what it can. It prin
 ```text
 reconcile beta: modified
 reconcile release-notes: repaired
-snapshot 1: 3 configurations, 6 skills
+inventory 1: 3 configurations, 6 skills
 ```
 
 | Outcome | What it means | What to do |
@@ -54,7 +54,7 @@ Serve repairs only what is missing or broken. It does not delete or overwrite yo
 
 ## Update checks
 
-When serve starts, it checks your [managed skills](/cli/skill#list-your-skills) for updates once, right after the first snapshot, as [`agentx skill check-updates`](/cli/skill#check-for-updates) does. To check again later, run `agentx skill check-updates`. The check runs in the background, so scans go on while it waits on the network.
+When serve starts, it checks your [managed skills](/cli/skill#list-your-skills) for updates once, right after the first inventory, as [`agentx skill check-updates`](/cli/skill#check-for-updates) does. To check again later, run `agentx skill check-updates`. The check runs in the background, so scans go on while it waits on the network.
 
 The check also:
 
@@ -83,7 +83,7 @@ When serve starts, it tidies the account repo (`~/.agentx/account.git`) in the b
 agentx serve --once
 ```
 
-Serve scans once, prints the snapshot and exits. It repairs nothing, watches nothing and runs no update check or maintenance. To read the full inventory, run [`agentx scan`](/cli/scan).
+Serve scans once, prints the inventory and exits. It repairs nothing, watches nothing and runs no update check or maintenance. To read the full inventory, run [`agentx scan`](/cli/scan).
 
 ## One serve per home
 

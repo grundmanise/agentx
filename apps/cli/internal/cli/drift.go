@@ -38,7 +38,7 @@ const (
 // observation is what the drift of one library skill is judged from beside
 // its lineage and the settings: whether its directory holds its base
 // version, and what the configurations' own places hold. It is read from
-// the filesystem, so a snapshot reads it under the lock it reads the
+// the filesystem, so an inventory reads it under the lock it reads the
 // library under, and every other report reads it with the rest of what it
 // reports on.
 type observation struct {
@@ -165,7 +165,7 @@ func unpublished(holdsTip bool, tip, remoteTip, created string, mergeBase func()
 }
 
 // observeAll reads the observation of every skill of the library ahead of
-// the report, for a snapshot, which composes its library entries after it
+// the report, for an inventory, which composes its library entries after it
 // released the lock the reads have to happen under.
 func (sc *skillContext) observeAll(ctx context.Context, inv *invocation, libs []scan.LibrarySkill) {
 	sc.observed = make(map[string]observation, len(libs))
@@ -392,7 +392,7 @@ func (sc skillContext) absentManaged(libs []scan.LibrarySkill) []string {
 // machine whatever the source holds. A directory still at the library
 // path, one that lost its SKILL.md, has to be moved aside first for an
 // install, which refuses to write over it. skill list prints the warnings
-// and a snapshot carries them, so the user and the desktop app both learn
+// and an inventory carries them, so the user and the desktop app both learn
 // that the skill is gone. Whether the path is taken is read from the
 // filesystem; nothing here runs git or reads a source.
 //

@@ -39,42 +39,42 @@ type searchEvent struct {
 }
 
 // driftEvent says that one skill of the library is no longer in the state
-// the last snapshot showed it in: its state, its drift, or both changed
-// between two snapshots of one serve process. It is a notification and
-// nothing more: the snapshot before it carries the skill as it now is, and
-// is what a consumer applies. It names the snapshot it follows by instance
-// and counter, so that a consumer that ignores a snapshot ignores its drift
+// the last inventory showed it in: its state, its drift, or both changed
+// between two inventories of one serve process. It is a notification and
+// nothing more: the inventory before it carries the skill as it now is, and
+// is what a consumer applies. It names the inventory it follows by instance
+// and counter, so that a consumer that ignores an inventory ignores its drift
 // events with it.
 type driftEvent struct {
 	event
 	InstanceID    string   `json:"instance_id"`
 	ScanCounter   int      `json:"scan_counter"`
 	Name          string   `json:"name"`
-	Kind          string   `json:"kind"` // managed or unmanaged, as the snapshot's library entry has it
+	Kind          string   `json:"kind"` // managed or unmanaged, as the inventory's library entry has it
 	State         string   `json:"state,omitempty"`
 	Drift         []string `json:"drift"` // [] when none
 	PreviousState string   `json:"previous_state,omitempty"`
 	PreviousDrift []string `json:"previous_drift"` // [] when none
 }
 
-// driftTransitions are the drift events of one snapshot against the library
-// of the snapshot before it, one per skill in both whose state or drift
+// driftTransitions are the drift events of one inventory against the library
+// of the inventory before it, one per skill in both whose state or drift
 // changed, in the library's order, which is by name. Nothing is a
-// transition against no snapshot at all: the first snapshot of a serve is
+// transition against no inventory at all: the first inventory of a serve is
 // where every state starts, not a change of one. A skill that arrives or
-// leaves the library is not one either: the snapshot says so itself.
-func driftTransitions(prev map[string]scan.LibraryEntry, snap scan.Snapshot) []driftEvent {
+// leaves the library is not one either: the inventory says so itself.
+func driftTransitions(prev map[string]scan.LibraryEntry, inventory scan.Inventory) []driftEvent {
 	if prev == nil {
 		return nil
 	}
 	var events []driftEvent
-	for _, e := range snap.Library {
+	for _, e := range inventory.Library {
 		p, ok := prev[e.Name]
 		if !ok || p.State == e.State && slices.Equal(p.Drift, e.Drift) {
 			continue
 		}
 		events = append(events, driftEvent{
-			event: newEvent("drift"), InstanceID: snap.InstanceID, ScanCounter: snap.ScanCounter,
+			event: newEvent("drift"), InstanceID: inventory.InstanceID, ScanCounter: inventory.ScanCounter,
 			Name: e.Name, Kind: e.Kind, State: e.State, Drift: nonNil(e.Drift),
 			PreviousState: p.State, PreviousDrift: nonNil(p.Drift),
 		})
@@ -82,7 +82,7 @@ func driftTransitions(prev map[string]scan.LibraryEntry, snap scan.Snapshot) []d
 	return events
 }
 
-// libraryByName indexes a snapshot's library for the next comparison.
+// libraryByName indexes an inventory's library for the next comparison.
 func libraryByName(entries []scan.LibraryEntry) map[string]scan.LibraryEntry {
 	byName := make(map[string]scan.LibraryEntry, len(entries))
 	for _, e := range entries {
@@ -102,7 +102,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 	var once bool
 	cmd := &cobra.Command{
 		Use:   "serve",
-		Short: "Watch for changes and stream a snapshot on each one, until stdin closes",
+		Short: "Watch for changes and stream an inventory on each one, until stdin closes",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			lock, err := home.TakeServeLock(inv.dirs.Home)
@@ -116,10 +116,10 @@ func newServeCommand(inv *invocation) *cobra.Command {
 			inv.instanceID() // fixed here, before two goroutines report it
 			inv.verdicts = map[string]keptVerdict{}
 			inv.forkWalks = lineage.NewWalkCache()
-			inv.forksWarned = true // reconciliation and every snapshot name them
+			inv.forksWarned = true // reconciliation and every inventory name them
 			if !once {
 				// Reconciliation reports and repairs before the first scan,
-				// so the snapshot shows what it put back. One that cannot
+				// so the inventory shows what it put back. One that cannot
 				// run leaves serve to report what the scan finds.
 				if err := inv.serveReconcile(cmd.Context()); err != nil {
 					if cmd.Context().Err() != nil {
@@ -129,12 +129,12 @@ func newServeCommand(inv *invocation) *cobra.Command {
 				}
 			}
 			dirs, trees := inv.watchedDirs()
-			// The library of the last snapshot emitted, which the next one's
-			// drift is told against. Snapshots are reported from the loop's
+			// The library of the last inventory emitted, which the next one's
+			// drift is told against. Inventories are reported from the loop's
 			// goroutine alone, so nothing else touches it.
 			var library map[string]scan.LibraryEntry
 			err = serve.Run(cmd.Context(), serve.Options{
-				Scan:  func(ctx context.Context) (scan.Snapshot, error) { return inv.snapshot(ctx, 0, "", false) },
+				Scan:  func(ctx context.Context) (scan.Inventory, error) { return inv.inventory(ctx, 0, "", false) },
 				Index: inv.sourceIndex,
 				Watch: dirs,
 				Trees: trees,
@@ -142,14 +142,14 @@ func newServeCommand(inv *invocation) *cobra.Command {
 				Stdin: cmd.InOrStdin(),
 				Check: inv.serveCheck,
 				Jobs:  []serve.Job{inv.maintenanceJob},
-				Snapshot: func(snap scan.Snapshot) {
-					inv.out.emit(snapshotEvent{event: newEvent("snapshot"), Snapshot: snap})
-					inv.out.print(inv.out.paint(heading, fmt.Sprintf("snapshot %d", snap.ScanCounter)), ": ",
-						plural(len(snap.Configurations), "configuration"), ", ", plural(len(snap.Skills), "skill"))
-					for _, ev := range driftTransitions(library, snap) {
+				Inventory: func(inventory scan.Inventory) {
+					inv.out.emit(inventoryEvent{event: newEvent("inventory"), Inventory: inventory})
+					inv.out.print(inv.out.paint(heading, fmt.Sprintf("inventory %d", inventory.ScanCounter)), ": ",
+						plural(len(inventory.Configurations), "configuration"), ", ", plural(len(inventory.Skills), "skill"))
+					for _, ev := range driftTransitions(library, inventory) {
 						inv.out.emit(ev)
 					}
-					library = libraryByName(snap.Library)
+					library = libraryByName(inventory.Library)
 				},
 				RefreshComplete: func(id string, counter int, err error) {
 					ev := refreshCompleteEvent{event: newEvent("refresh_complete"), RequestID: id, InstanceID: inv.instanceID(), OK: err == nil, ScanCounter: counter}
@@ -157,7 +157,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 						ev.Error = err.Error()
 						inv.out.print(inv.out.paint(heading, "refresh "+id), ": ", inv.out.paint(failStyle, "failed"), ": ", err.Error())
 					} else {
-						inv.out.print(inv.out.paint(heading, "refresh "+id), ": ", inv.out.paint(okStyle, "ok"), fmt.Sprintf(", snapshot %d", counter))
+						inv.out.print(inv.out.paint(heading, "refresh "+id), ": ", inv.out.paint(okStyle, "ok"), fmt.Sprintf(", inventory %d", counter))
 					}
 					inv.out.emit(ev)
 				},
@@ -176,12 +176,12 @@ func newServeCommand(inv *invocation) *cobra.Command {
 			return err
 		},
 	}
-	cmd.Flags().BoolVar(&once, "once", false, "scan once, emit the snapshot and exit")
+	cmd.Flags().BoolVar(&once, "once", false, "scan once, emit the inventory and exit")
 	return cmd
 }
 
 // serveCheck is the serve child's update check, run once, off its loop,
-// as soon as its initial snapshot is out: after that, updates are checked
+// as soon as its initial inventory is out: after that, updates are checked
 // for only when the user asks, with skill check-updates. It is the check
 // skill check-updates runs, the account remote included, over every source
 // of the settings rather than only the sources a managed skill came from,
@@ -196,7 +196,7 @@ func newServeCommand(inv *invocation) *cobra.Command {
 // runs no git at all, and neither does one with no account repo; a source
 // an import wrote stays a source not fetched, account repo or not, until
 // source add adds it. The rescan its write of the version file sets off
-// brings the candidates and markers it wrote into the next snapshot, and
+// brings the candidates and markers it wrote into the next inventory, and
 // every source ref it moved into the source index.
 func (inv *invocation) serveCheck(ctx context.Context) func() {
 	rep, err := inv.checkUpdates(ctx, true, "")

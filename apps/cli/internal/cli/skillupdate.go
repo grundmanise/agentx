@@ -1141,7 +1141,7 @@ func conflictHintAt(name, path string) string {
 func (r *updateRun) reportApplied(ctx context.Context) error {
 	inv := r.inv
 	slices.SortFunc(r.applied, func(a, b *updating) int { return strings.Compare(a.name, b.name) })
-	snap, err := inv.scan(ctx, lockWait, "", false)
+	inventory, err := inv.scan(ctx, lockWait, "", false)
 	if err != nil {
 		return err
 	}
@@ -1163,7 +1163,7 @@ func (r *updateRun) reportApplied(ctx context.Context) error {
 		case !ok:
 			return fail(exitInternal, "the library holds no "+u.name+" after updating it", "run 'agentx doctor' and check the library it names")
 		}
-		inv.out.emit(sc.librarySkillEventFor(ctx, inv, snap, lib, nil))
+		inv.out.emit(sc.librarySkillEventFor(ctx, inv, inventory, lib, nil))
 	}
 	out := inv.out
 	if !r.all {

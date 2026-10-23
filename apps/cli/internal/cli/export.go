@@ -30,7 +30,7 @@ const settingsSchemaVersion = home.SettingsSchemaVersion
 // machine settings as the file holds them and one lineage record per branch
 // of the account repo.
 //
-// It holds no snapshot, no tree and no file of any skill. A skill is
+// It holds no inventory, no tree and no file of any skill. A skill is
 // restored by the account repo, which holds the content, or by installing
 // it again from its source; an export carries the coordinates that name
 // those versions and nothing they could be reconstructed from. That is what
@@ -98,7 +98,7 @@ func newExportCommand(inv *invocation) *cobra.Command {
 		Short: "Write the settings and a lineage record per skill to a file",
 		Long: "Write this machine's settings and one lineage record per branch of the account\n" +
 			"repo to <file> as one JSON document.\n\n" +
-			"The document holds no snapshot and no skill content: a record names where a\n" +
+			"The document holds no inventory and no skill content: a record names where a\n" +
 			"skill came from, not what is in it. Restore the settings on another machine\n" +
 			"with 'agentx import'; the content comes back from the account repo or from\n" +
 			"installing the skill again.\n\n" +
@@ -241,14 +241,14 @@ func exportedImport(rec lineage.Record) (lineage.Import, bool) {
 // directory, the library entry of a client that reads the library included.
 // Only the answer, a boolean, reaches the export.
 func (inv *invocation) placedSkills(ctx context.Context, sc skillContext) (map[string]bool, error) {
-	snap, err := inv.scan(ctx, lockWait, "", false)
+	inventory, err := inv.scan(ctx, lockWait, "", false)
 	if err != nil {
 		return nil, err
 	}
 	skills, _ := readLibrary(inv.dirs.Library)
 	placed := make(map[string]bool, len(skills))
 	for _, lib := range skills {
-		placed[lib.Name] = len(inv.placements(snap, lib, sc.modes)) > 0
+		placed[lib.Name] = len(inv.placements(inventory, lib, sc.modes)) > 0
 	}
 	return placed, nil
 }

@@ -14,7 +14,7 @@ import (
 )
 
 // serveHarness is a harness with a Codex configuration, which reads the
-// library directly, so that a library change shows up in the snapshot.
+// library directly, so that a library change shows up in the inventory.
 func serveHarness(t *testing.T) *harness {
 	t.Helper()
 	h := newHarness(t)
@@ -90,7 +90,7 @@ func skillNames(e jsonEvent) []string {
 	return names
 }
 
-func TestServeOnceEmitsInitialSnapshot(t *testing.T) {
+func TestServeOnceEmitsInitialInventory(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
 	h.addLibrarySkill(t, "commit")
@@ -99,7 +99,7 @@ func TestServeOnceEmitsInitialSnapshot(t *testing.T) {
 		out := h.serveOnce("--json")
 		equal(t, "exit", out.exit, 0)
 		events := h.events(out.stdout)
-		if got, want := h.types(events), []string{"snapshot", "result"}; !reflect.DeepEqual(got, want) {
+		if got, want := h.types(events), []string{"inventory", "result"}; !reflect.DeepEqual(got, want) {
 			t.Fatalf("event types = %v, want %v", got, want)
 		}
 		equal(t, "scan_counter", events[0]["scan_counter"], float64(1))
@@ -113,14 +113,14 @@ func TestServeOnceEmitsInitialSnapshot(t *testing.T) {
 
 	out := h.serveOnce()
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "snapshot 1: 1 configuration, 1 skill")
+	contains(t, "stdout", out.stdout, "inventory 1: 1 configuration, 1 skill")
 }
 
 func TestServeRefusesASecondChild(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
 	p := h.serve(t, "--json")
-	p.next("snapshot")
+	p.next("inventory")
 
 	out := h.run("serve", "--json")
 	equal(t, "exit", out.exit, 6)
@@ -146,8 +146,8 @@ func TestServeAnswersRequests(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
 	p := h.serve(t, "--json")
-	snap := p.next("snapshot")
-	equal(t, "scan_counter", snap["scan_counter"], float64(1))
+	inventory := p.next("inventory")
+	equal(t, "scan_counter", inventory["scan_counter"], float64(1))
 
 	p.send(`{"type":"bogus"}`)
 	e := p.next("error")
@@ -164,7 +164,7 @@ func TestServeAnswersRequests(t *testing.T) {
 	p.send(`{"type":"refresh","request_id":"r1"}`)
 	e = p.next("refresh_complete")
 	equal(t, "request_id", e["request_id"], "r1")
-	equal(t, "instance_id", e["instance_id"], snap["instance_id"])
+	equal(t, "instance_id", e["instance_id"], inventory["instance_id"])
 	equal(t, "ok", e["ok"], true)
 	equal(t, "scan_counter", e["scan_counter"], float64(1))
 
@@ -177,7 +177,7 @@ func TestServeWaitsForTheMutationLockAndCoalescesRefreshes(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
 	p := h.serve(t, "--json")
-	p.next("snapshot")
+	p.next("inventory")
 
 	// A mutation in progress: the rescan the requests ask for cannot begin
 	// until the exclusive lock is released, so both requests share it.
@@ -196,9 +196,9 @@ func TestServeWaitsForTheMutationLockAndCoalescesRefreshes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	snap := p.next("snapshot")
-	equal(t, "scan_counter", snap["scan_counter"], float64(2))
-	equal(t, "skills", strings.Join(skillNames(snap), " "), "review")
+	inventory := p.next("inventory")
+	equal(t, "scan_counter", inventory["scan_counter"], float64(2))
+	equal(t, "skills", strings.Join(skillNames(inventory), " "), "review")
 	for _, id := range []string{"r1", "r2"} {
 		e := p.next("refresh_complete")
 		equal(t, "request_id", e["request_id"], id)
@@ -208,18 +208,18 @@ func TestServeWaitsForTheMutationLockAndCoalescesRefreshes(t *testing.T) {
 	equal(t, "exit", p.close(), 0)
 }
 
-func TestServeRescansOnVersionBumpWithoutSnapshot(t *testing.T) {
+func TestServeRescansOnVersionBumpWithoutInventory(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
 	p := h.serve(t, "--json")
-	p.next("snapshot")
+	p.next("inventory")
 	// Wait until serve is idle: its first scan created the lock file, a
 	// change in agentx home that schedules one more scan, and a mutation
 	// that meets a scan's read section exits 7 instead of waiting.
 	p.send(`{"type":"refresh","request_id":"idle"}`)
 	p.next("refresh_complete")
 
-	// A one-shot mutation that changes nothing the snapshot shows.
+	// A one-shot mutation that changes nothing the inventory shows.
 	out := h.run("config", "set", "accept_operations", "true")
 	equal(t, "exit", out.exit, 0)
 	equal(t, "version", readVersion(t, h), 1)
@@ -228,11 +228,11 @@ func TestServeRescansOnVersionBumpWithoutSnapshot(t *testing.T) {
 	equal(t, "request_id", e["request_id"], "after-bump")
 	equal(t, "scan_counter", e["scan_counter"], float64(1))
 
-	// A change the snapshot shows: the counter moves and the snapshot precedes the acknowledgement.
+	// A change the inventory shows: the counter moves and the inventory precedes the acknowledgement.
 	h.addLibrarySkill(t, "commit")
 	p.send(`{"type":"refresh","request_id":"after-skill"}`)
-	snap := p.next("snapshot")
-	equal(t, "scan_counter", snap["scan_counter"], float64(2))
+	inventory := p.next("inventory")
+	equal(t, "scan_counter", inventory["scan_counter"], float64(2))
 	e = p.next("refresh_complete")
 	equal(t, "request_id", e["request_id"], "after-skill")
 	equal(t, "scan_counter", e["scan_counter"], float64(2))
@@ -248,24 +248,24 @@ func TestServeWatchesTheLibrary(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
 	p := h.serve(t, "--json")
-	p.next("snapshot")
+	p.next("inventory")
 
 	h.addLibrarySkill(t, "commit")
-	snap := p.next("snapshot")
-	equal(t, "scan_counter", snap["scan_counter"], float64(2))
-	equal(t, "skills", strings.Join(skillNames(snap), " "), "commit")
+	inventory := p.next("inventory")
+	equal(t, "scan_counter", inventory["scan_counter"], float64(2))
+	equal(t, "skills", strings.Join(skillNames(inventory), " "), "commit")
 
 	h.editLibrarySkill(t, "commit", "Write a commit message")
-	snap = p.next("snapshot")
-	equal(t, "scan_counter", snap["scan_counter"], float64(3))
-	equal(t, "skills", strings.Join(skillDescriptions(snap), " "), "Write a commit message")
+	inventory = p.next("inventory")
+	equal(t, "scan_counter", inventory["scan_counter"], float64(3))
+	equal(t, "skills", strings.Join(skillDescriptions(inventory), " "), "Write a commit message")
 
 	if err := os.RemoveAll(filepath.Join(h.library, "commit")); err != nil {
 		t.Fatal(err)
 	}
-	snap = p.next("snapshot")
-	equal(t, "scan_counter", snap["scan_counter"], float64(4))
-	equal(t, "skills", strings.Join(skillNames(snap), " "), "")
+	inventory = p.next("inventory")
+	equal(t, "scan_counter", inventory["scan_counter"], float64(4))
+	equal(t, "skills", strings.Join(skillNames(inventory), " "), "")
 
 	p.send(`{"type":"refresh","request_id":"r1"}`)
 	e := p.next("refresh_complete")
@@ -281,8 +281,8 @@ func TestServeWatchesInsideSkills(t *testing.T) {
 	h := serveHarness(t)
 	h.addLibrarySkill(t, "commit")
 	p := h.serve(t, "--json")
-	snap := p.next("snapshot")
-	equal(t, "skills", strings.Join(skillDescriptions(snap), " "), "A commit skill")
+	inventory := p.next("inventory")
+	equal(t, "skills", strings.Join(skillDescriptions(inventory), " "), "A commit skill")
 	// Wait until serve is idle: its first scan created the lock file, a
 	// change in agentx home that schedules one more scan.
 	p.send(`{"type":"refresh","request_id":"idle"}`)
@@ -290,9 +290,9 @@ func TestServeWatchesInsideSkills(t *testing.T) {
 
 	// An edit inside the skill directory is a change signal: no refresh is requested.
 	h.editLibrarySkill(t, "commit", "Write a commit message")
-	snap = p.next("snapshot")
-	equal(t, "scan_counter", snap["scan_counter"], float64(2))
-	equal(t, "skills", strings.Join(skillDescriptions(snap), " "), "Write a commit message")
+	inventory = p.next("inventory")
+	equal(t, "scan_counter", inventory["scan_counter"], float64(2))
+	equal(t, "skills", strings.Join(skillDescriptions(inventory), " "), "Write a commit message")
 	equal(t, "exit", p.close(), 0)
 	equal(t, "stderr", p.stderr.String(), "")
 }
@@ -350,8 +350,8 @@ func TestServeWatchesAClientSkillsDirectory(t *testing.T) {
 	skills := filepath.Join(h.home, ".claude", "skills")
 	h.addSkill(t, skills, "commit")
 	p := h.serve(t, "--json")
-	snap := p.next("snapshot")
-	equal(t, "skills", strings.Join(skillDescriptions(snap), " "), "A commit skill")
+	inventory := p.next("inventory")
+	equal(t, "skills", strings.Join(skillDescriptions(inventory), " "), "A commit skill")
 	// Wait until serve is idle: its first scan created the lock file, a
 	// change in agentx home that schedules one more scan.
 	p.send(`{"type":"refresh","request_id":"idle"}`)
@@ -359,16 +359,16 @@ func TestServeWatchesAClientSkillsDirectory(t *testing.T) {
 
 	// An edit inside the skill directory is a change signal: no refresh is requested.
 	h.editSkill(t, skills, "commit", "Write a commit message")
-	snap = p.next("snapshot")
-	equal(t, "scan_counter", snap["scan_counter"], float64(2))
-	equal(t, "skills", strings.Join(skillDescriptions(snap), " "), "Write a commit message")
+	inventory = p.next("inventory")
+	equal(t, "scan_counter", inventory["scan_counter"], float64(2))
+	equal(t, "skills", strings.Join(skillDescriptions(inventory), " "), "Write a commit message")
 
 	// So is a skill added to that directory. Skill nodes are ordered by
 	// identity, which is content, so the names are compared sorted.
 	h.addSkill(t, skills, "review")
-	snap = p.next("snapshot")
-	equal(t, "scan_counter", snap["scan_counter"], float64(3))
-	names := skillNames(snap)
+	inventory = p.next("inventory")
+	equal(t, "scan_counter", inventory["scan_counter"], float64(3))
+	names := skillNames(inventory)
 	sort.Strings(names)
 	equal(t, "skills", strings.Join(names, " "), "commit review")
 	equal(t, "exit", p.close(), 0)
@@ -380,8 +380,8 @@ func TestServeWatchesAClientSkillsDirectory(t *testing.T) {
 // succeeds, with the library listed empty and a warning saying why, so the
 // desktop app keeps the rest of its inventory; the first scan after the
 // repair gives the library back. A skill edited meanwhile comes back
-// modified with no drift event: the snapshot before it held no library, so
-// the skill arrives in the library, which the snapshot says itself.
+// modified with no drift event: the inventory before it held no library, so
+// the skill arrives in the library, which the inventory says itself.
 func TestServeKeepsServingWhenTheAccountRepoCannotBeRead(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -401,14 +401,14 @@ func TestServeKeepsServingWhenTheAccountRepoCannotBeRead(t *testing.T) {
 		}
 	}
 	p := h.serve(t, "--json")
-	first := p.next("snapshot")
+	first := p.next("inventory")
 	equal(t, "library at start", len(first["library"].([]any)), 1)
 	p.send(`{"type":"refresh","request_id":"idle"}`)
 	p.next("refresh_complete")
 
 	setHead("garbage\n")
 	p.send(`{"type":"refresh","request_id":"broken"}`)
-	broken := p.next("snapshot")
+	broken := p.next("inventory")
 	equal(t, "library while broken", len(broken["library"].([]any)), 0)
 	equal(t, "skills while broken", strings.Join(skillNames(broken), " "), "alpha")
 	warnings := broken["warnings"].([]any)
@@ -426,14 +426,14 @@ func TestServeKeepsServingWhenTheAccountRepoCannotBeRead(t *testing.T) {
 	var repaired jsonEvent
 	for _, e := range events {
 		switch e["type"] {
-		case "snapshot":
+		case "inventory":
 			repaired = e
 		case "drift":
-			t.Errorf("a drift event for a skill the snapshot before did not list: %v", e)
+			t.Errorf("a drift event for a skill the inventory before did not list: %v", e)
 		}
 	}
 	if repaired == nil {
-		t.Fatal("no snapshot after the repair")
+		t.Fatal("no inventory after the repair")
 	}
 	library := repaired["library"].([]any)
 	if len(library) != 1 {
@@ -451,7 +451,7 @@ func TestServeEndsOnCancel(t *testing.T) {
 	t.Parallel()
 	h := serveHarness(t)
 	p := h.serve(t, "--json")
-	p.next("snapshot")
+	p.next("inventory")
 	equal(t, "exit", p.cancelRun(), 0)
 	p.next("result")
 	equal(t, "stderr", p.stderr.String(), "")

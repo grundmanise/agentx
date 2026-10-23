@@ -397,7 +397,7 @@ func (inv *invocation) reportForks(ctx context.Context, names []string) error {
 	if len(names) == 0 {
 		return nil
 	}
-	snap, err := inv.scan(ctx, lockWait, "", false)
+	inventory, err := inv.scan(ctx, lockWait, "", false)
 	if err != nil {
 		return err
 	}
@@ -408,7 +408,7 @@ func (inv *invocation) reportForks(ctx context.Context, names []string) error {
 	libs := librarySkills(inv.dirs.Library)
 	for _, n := range names {
 		if lib, ok := libs[n]; ok {
-			inv.out.emit(sc.librarySkillEventFor(ctx, inv, snap, lib, nil))
+			inv.out.emit(sc.librarySkillEventFor(ctx, inv, inventory, lib, nil))
 		}
 	}
 	return nil

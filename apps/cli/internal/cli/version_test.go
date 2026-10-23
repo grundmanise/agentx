@@ -12,7 +12,7 @@ func TestVersionHuman(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "CLI version")
 	contains(t, "stdout", out.stdout, cliVersion)
-	contains(t, "stdout", out.stdout, "Schema version  1")
+	contains(t, "stdout", out.stdout, "Schema version  2")
 	equal(t, "stderr", out.stderr, "")
 }
 
@@ -23,7 +23,7 @@ func TestVersionJSON(t *testing.T) {
 		out := h.run(args...)
 		equal(t, "exit", out.exit, 0)
 		equal(t, "stderr", out.stderr, "")
-		contains(t, "stdout", out.stdout, `"schema_version":1,`)
+		contains(t, "stdout", out.stdout, `"schema_version":2,`)
 		events := h.events(out.stdout)
 		if got, want := h.types(events), []string{"version", "result"}; !reflect.DeepEqual(got, want) {
 			t.Fatalf("event types = %v, want %v", got, want)
