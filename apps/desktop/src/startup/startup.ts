@@ -2,7 +2,7 @@
 // `version`, then `doctor`, then starts the serve child and waits for its first inventory. All of
 // that runs out of sight: the screens mount once it passes, and the layer shows only when a check
 // fails, when a command exits with code 8, and in manual mode. A launch that runs over 2 seconds
-// says so in the empty panel. The only commands it runs are `version`, `doctor` and `serve`: it
+// says what it does in the empty panel. The only commands it runs are `version`, `doctor` and `serve`: it
 // changes nothing on disk.
 import { useSyncExternalStore } from "react";
 
@@ -19,10 +19,17 @@ import { readChecks } from "#/startup/checks.ts";
 import type { Findings, Problem } from "#/startup/checks.ts";
 
 /** How long a check may take before it fails. A launch normally takes well under a second. */
-const CHECK_DEADLINE_MS = 30_000;
+export const CHECK_DEADLINE_MS = 30_000;
 const deadline = `${CHECK_DEADLINE_MS / 1000} seconds`;
 /** How long the checks run out of sight before the empty panel says that they run. */
 const SLOW_AFTER_MS = 2000;
+
+/** What the sequence waits for, and since when (`Date.now()`): a check's deadline counts from then. */
+export interface Step {
+  /** "machine" while the CLI, `version` and `doctor` run; "inventory" while serve scans. */
+  kind: "machine" | "inventory";
+  startedAt: number;
+}
 
 export interface StartupState {
   /** Whether the layer shows. */
@@ -34,6 +41,8 @@ export interface StartupState {
   running: boolean;
   /** The sequence has run for over SLOW_AFTER_MS. */
   slow: boolean;
+  /** What the running sequence waits for. */
+  step: Step | undefined;
   /** The sequence runs again after a failure. */
   retrying: boolean;
   findings: Findings;
@@ -48,6 +57,7 @@ let state: StartupState = {
   // The launch sequence starts with the app.
   running: true,
   slow: false,
+  step: undefined,
 };
 const listeners = new Set<() => void>();
 
@@ -198,7 +208,13 @@ const sequence = async () => {
       update({ findings });
     }
   };
+  const stepTo = (kind: Step["kind"]) => {
+    if (mine === generation) {
+      update({ step: { kind, startedAt: Date.now() } });
+    }
+  };
   update({ findings, running: true, slow: false });
+  stepTo("machine");
   const slowTimer = setTimeout(() => {
     if (mine === generation) {
       update({ slow: true });
@@ -211,6 +227,7 @@ const sequence = async () => {
       return;
     }
 
+    stepTo("machine");
     const version = await oneShot(["version"]);
     if ("error" in version) {
       found({ version });
@@ -230,6 +247,7 @@ const sequence = async () => {
     }
     found({ version: { cliVersion: cliVersion.cli_version } });
 
+    stepTo("machine");
     const doctor = await oneShot(["doctor"]);
     if ("error" in doctor) {
       found({ doctor: { error: doctor.error, exitCode: null, rows: [] } });
@@ -258,6 +276,7 @@ const sequence = async () => {
       return;
     }
 
+    stepTo("inventory");
     let childId: number;
     try {
       childId = await serve.start();
@@ -277,6 +296,7 @@ const sequence = async () => {
         retrying: false,
         running: false,
         slow: false,
+        step: undefined,
       });
     }
   }

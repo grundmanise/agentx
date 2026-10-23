@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 import { Navigate, Outlet, Route, Routes } from "react-router";
 
 import { CommandPalette } from "#/app/command-palette.tsx";
+import { LaunchProgress } from "#/app/launch-progress.tsx";
 import { screens, titles } from "#/app/screens.ts";
 import { Sidebar } from "#/app/sidebar.tsx";
 import { StartupLayer } from "#/app/startup-layer.tsx";
 import { TopBar } from "#/app/top-bar.tsx";
-import { Spinner } from "#/components/spinner.tsx";
 import { Toaster } from "#/components/toast.tsx";
 import { PlaceholderScreen } from "#/screens/placeholder.tsx";
 import { launch, useStartup } from "#/startup/startup.ts";
@@ -63,11 +63,8 @@ export const App = () => {
             aria-busy={!startup.ready}
             className="rounded-shell-panel border-shell-divider bg-shell-content-bg mr-panel mb-panel relative flex min-w-0 flex-1 flex-col overflow-hidden border"
           >
-            {!startup.ready && startup.slow && (
-              <output className="animate-fade-in type-secondary text-text-muted flex flex-1 items-center justify-center gap-2">
-                <Spinner />
-                Checking this machine
-              </output>
+            {!startup.ready && startup.slow && startup.step && (
+              <LaunchProgress step={startup.step} />
             )}
             <Routes>
               {/* No screen mounts until the checks pass: none runs a command before they do. */}

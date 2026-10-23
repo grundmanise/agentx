@@ -97,7 +97,9 @@ const counts = (inventory: InventoryEvent) => {
   const own = managed.filter(
     (s) => s.fork_id !== undefined || s.source === undefined
   ).length;
-  return `${own} of your skills, ${managed.length - own} from sources`;
+  return managed.length === 0
+    ? "No skills yet"
+    : `${own} of your skills, ${managed.length - own} from sources`;
 };
 
 /** A check read from doctor rows. */
@@ -199,14 +201,17 @@ const watchingCheck = ({ serve }: Findings): Check => {
       status: "fail",
     };
   }
-  const agents = plural(
-    serve.inventory.configurations.length,
-    "agent",
-    "agents"
-  );
+  const found = serve.inventory.configurations.length;
   return {
     label: labels[4],
-    lines: [{ text: `Found ${agents}` }],
+    lines: [
+      {
+        text:
+          found === 0
+            ? "No agents found"
+            : `Found ${plural(found, "agent", "agents")}`,
+      },
+    ],
     status: "pass",
   };
 };

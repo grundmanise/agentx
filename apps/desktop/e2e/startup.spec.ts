@@ -100,7 +100,14 @@ test("a passing launch checks the machine out of sight and opens the Inbox", asy
   expect(cli.serveStarts).toBe(1);
 });
 
-test("a launch that runs over 2 seconds says that the checks run", async ({
+/** Stops the page's timers before it loads; the test moves the clock on. */
+const pauseTimers = async (page: Page) => {
+  await page.clock.install({ time: new Date("2026-10-23T10:00:00Z") });
+  await page.clock.pauseAt(new Date("2026-10-23T10:00:01Z"));
+};
+const progress = (page: Page) => page.getByRole("main").locator("output");
+
+test("a launch over 2 seconds says what it checks, and from 5 seconds when it times out", async ({
   cli,
   page,
 }) => {
@@ -109,23 +116,67 @@ test("a launch that runs over 2 seconds says that the checks run", async ({
     holdAfter: 0,
   });
   await watchLayer(page);
-  // Stop the page's timers before it loads; the test moves the clock on.
-  await page.clock.install({ time: new Date("2026-10-23T10:00:00Z") });
-  await page.clock.pauseAt(new Date("2026-10-23T10:00:01Z"));
+  await pauseTimers(page);
   await page.goto("/");
   await doctor.started;
-  const checking = page
-    .getByRole("status")
-    .filter({ hasText: "Checking this machine" });
   await page.clock.runFor(1999);
-  await expect(checking).toHaveCount(0);
+  await expect(progress(page)).toHaveCount(0);
   await page.clock.runFor(1);
-  await expect(checking).toBeVisible();
+  await expect(progress(page)).toContainText("Checking this machine");
+  await expect(progress(page)).not.toContainText("times out");
+
+  await page.clock.runFor(3000);
+  await expect(progress(page)).toContainText(
+    "Taking longer than usual · times out in 25s"
+  );
+  await page.clock.runFor(1000);
+  await expect(progress(page)).toContainText("times out in 24s");
 
   doctor.release();
   await expect(inbox(page)).toBeVisible();
-  await expect(checking).toHaveCount(0);
+  await expect(progress(page)).toHaveCount(0);
   await expect(layerShown(page)).toHaveCount(0);
+});
+
+test("while serve scans, the panel names skills, MCP servers and plugins in turn", async ({
+  cli,
+  page,
+}) => {
+  cli.onServeStart({ events: [] });
+  await watchLayer(page);
+  await pauseTimers(page);
+  await page.goto("/");
+  await expect.poll(() => cli.serveStarts).toBe(1);
+  const named = (text: string) =>
+    progress(page).getByText(text, { exact: true });
+
+  await page.clock.runFor(2000);
+  await expect(named("Looking for skills")).toBeVisible();
+  await page.clock.runFor(1500);
+  await expect(named("Looking for MCP servers")).toBeVisible();
+  await page.clock.runFor(1500);
+  await expect(named("Looking for plugins")).toBeVisible();
+  await expect(progress(page)).toContainText("times out in 25s");
+  await page.clock.runFor(1500);
+  await expect(named("Looking for skills")).toBeVisible();
+
+  await cli.serveEmit([firstInventory()]);
+  await expect(inbox(page)).toBeVisible();
+  await expect(progress(page)).toHaveCount(0);
+  await expect(layerShown(page)).toHaveCount(0);
+});
+
+test("a machine with no skills and no agents passes", async ({ cli, page }) => {
+  cli.onServeStart({ events: [firstInventory([])] });
+  await page.goto("/");
+  await expect(inbox(page)).toBeVisible();
+
+  await runChecks(page);
+  await expect(title(page)).toHaveText("You're all set");
+  await expect(row(page, "Account repo opens")).toContainText("No skills yet");
+  await expect(row(page, "Watching this machine")).toContainText(
+    "No agents found"
+  );
 });
 
 test("a CLI that is not found stops at check 1 and runs nothing", async ({

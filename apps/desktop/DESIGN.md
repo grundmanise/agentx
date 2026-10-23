@@ -738,7 +738,7 @@ The product mark is `shell.logo-mark` on `shell.logo-bg`, 26px `shell.logo-radiu
 - Card resolve: 280ms, see §6.
 - Spinner-style icons (Check updates, Check tools): one full rotation `.9–1s ease`, then a toast.
 - Startup check running (`animate-check-spin`): the status ring turns once a second, linear, while its check runs, and stops when the check settles.
-- Screens fade in (`animate-fade-in`): opacity 0 → 1 over `.2s ease-out` when they mount, once the startup checks pass. Nothing waits on purpose: a passing launch shows no startup layer. A launch whose checks run for over 2s shows a `Spinner` and "Checking this machine" (`type.secondary`, `text.muted`) in the middle of the empty panel, faded in the same way, until the checks settle.
+- Screens fade in (`animate-fade-in`): opacity 0 → 1 over `.2s ease-out` when they mount, once the startup checks pass. Nothing waits on purpose: a passing launch shows no startup layer. A launch whose checks run for over 2s shows a `Spinner` and what the checks do (`type.secondary`, `text.muted`) in the middle of the empty panel, faded in the same way, until the checks settle: "Checking this machine" while `version` and `doctor` run, then "Looking for skills", "Looking for MCP servers" and "Looking for plugins" in turn, each for 1.5s and faded in, while serve scans. From 5s into a check, a line below (`type.row-desc`, `text.hint`) counts down to its deadline: "Taking longer than usual · times out in 25s".
 - Diff pane choice: `opacity .2s, box-shadow .2s`.
 - Primary button enable/disable: `opacity .2s`. Nothing loops forever.
 
