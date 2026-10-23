@@ -108,7 +108,7 @@ Each line of the listing says what import did with that skill:
 
 The last column names the configurations the skill is placed in now.
 
-Run the same import again and it changes nothing: every skill reads `kept`, and import fetches nothing. It installs a skill it skipped once the reason is gone.
+Run the same import again and it changes nothing: every skill reads `kept`, or `skipped` for the same reason as before. Import fetches nothing for a skill the snapshot names at an exact version. It fetches a skill that follows the latest version again, and moves it forward when a newer version exists. It installs a skill it skipped once the reason is gone.
 
 If your settings name a source that no skill of the snapshot comes from, import does not fetch it. It prints an `agentx source add` line for each such source. Run the line as printed before you install from that source. The line keeps the source's [pin](/cli/source#pin-a-source), and import quotes a URL or pin where needed, so you can paste it into bash or zsh.
 
