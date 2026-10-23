@@ -55,6 +55,8 @@ Give the path of a file. If the path is a directory, export stops with exit code
 
 If a skill in your library has a name agentx cannot store as a branch, export leaves it out of the snapshot and prints a warning that names it.
 
+If agentx cannot read your library, or part of it, export prints a warning for each problem, as `agentx skill list` does, and the snapshot leaves out what it could not read. Fix the problem the warning names and export again.
+
 ## Import onto another machine
 
 ```sh

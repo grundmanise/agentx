@@ -243,9 +243,14 @@ func (inv *invocation) snapshot(ctx context.Context) (snapshot, error) {
 
 // snapshotSkills is one entry per skill of the library, sorted by name, as
 // the inventory lists the library, with the commit each one's branch
-// points at.
+// points at. What it cannot read of the library is a warning, as skill
+// list gives it, so a library it cannot list is said out loud rather than
+// written as a snapshot with no skills and a silent success.
 func (inv *invocation) snapshotSkills(sc skillContext, inventory scan.Inventory) []snapshotSkill {
-	libs, _ := readLibrary(inv.dirs.Library)
+	libs, warnings := readLibrary(inv.dirs.Library)
+	for _, w := range warnings {
+		inv.out.warn(w)
+	}
 	skills := make([]snapshotSkill, 0, len(libs))
 	for _, lib := range libs {
 		if nameRefusal(lib.Name) != "" {

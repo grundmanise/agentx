@@ -223,7 +223,8 @@ func TestExportRefusesAPathItCannotWrite(t *testing.T) {
 // which would read as one of your own skills, are no entries this very
 // CLI's reader accepts, and the reader refuses the whole snapshot, so one
 // stray directory cost the settings restore too. Each is left out and said
-// out loud instead.
+// out loud instead, and so is what export cannot read of the library, as
+// skill list says it.
 func TestExportLeavesOutWhatItsReaderRefuses(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -236,6 +237,9 @@ func TestExportLeavesOutWhatItsReaderRefuses(t *testing.T) {
 		}
 		writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: odd\ndescription: by hand\n---\n\nodd\n")
 	}
+	if err := os.Symlink(filepath.Join(h.library, "nowhere"), filepath.Join(h.library, "dangling")); err != nil {
+		t.Fatal(err)
+	}
 	bare := h.accountGit("commit-tree", "-m", "no lineage", alpha+"^{tree}")
 	h.accountGit("update-ref", "refs/heads/managed/bare", bare)
 
@@ -244,6 +248,7 @@ func TestExportLeavesOutWhatItsReaderRefuses(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stderr", out.stderr, "left has space out of the snapshot: it is not a name the library and a branch can both hold")
 	contains(t, "stderr", out.stderr, "left refs/heads/managed/bare out of the snapshot: its commit names no source")
+	contains(t, "stderr", out.stderr, "dangling: broken symlink, skipped")
 
 	doc := h.readExportFile(file)
 	var names []string
