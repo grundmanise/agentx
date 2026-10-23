@@ -346,8 +346,6 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `check.label` | `gray-50` | Check title |
 | `check.label-pending` | `gray-300` | Check title while waiting or running |
 | `check.detail` | `gray-400` | Mono detail line |
-| `check.fix-bg` | `gray-980` | Fix command chip |
-| `check.fix-border` | `gray-870` |  |
 
 #### MCP servers
 
@@ -385,8 +383,8 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.review-title` | serif | 52 | 400 |  |  |  | Review title |
 | `type.dialog-title` | serif | 36 | 400 |  |  |  | Dialog and sheet title |
 | `type.startup-title` | serif | 48 | 400 | 1 | -0.02em |  | Startup title |
-| `type.startup-subtitle` | sans | 15 | 400 | 1.5 |  |  | Startup subtitle (`text.muted`) |
-| `type.check-detail` | mono | 12.5 | 400 | 1.5 |  |  | Startup check detail (`check.detail`) and fix chip |
+| `type.check-detail` | mono | 12.5 | 400 | 1.5 |  |  | Startup check detail (`check.detail`) |
+| `type.check-hint` | sans | 13 | 400 | 1.5 |  |  | Startup check hint callout (`text.secondary`) |
 | `type.skill-name` | sans | 30 | 600 |  | -0.035em |  | Detail pane skill name |
 | `type.body` | sans | 14 | 400 |  |  |  | Body, palette rows |
 | `type.row-name` | sans | 14 | 500 |  |  |  | Row name |
@@ -635,7 +633,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `toast.radius` | 9999 |  |
 | `floating-bar.radius` | 9999 |  |
 | `check.mark-radius` | 50% | Startup status circle |
-| `check.fix-radius` | 8 | Fix command chip |
+| `check.hint-radius` | 8 | Startup check hint callout (`tone.danger` for a failure, `tone.attention` for a warning: bg + 1px border) |
 | `startup.logo-radius` | 12 | Product mark on the startup layer |
 
 ## 6. Components

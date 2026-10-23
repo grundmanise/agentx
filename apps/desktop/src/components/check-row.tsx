@@ -1,7 +1,5 @@
 import { cva } from "class-variance-authority";
-import type { KeyboardEvent } from "react";
 
-import { CopyIcon } from "#/components/icons/copy.tsx";
 import type { Check, CheckStatus } from "#/startup/checks.ts";
 
 const statusNames: Record<CheckStatus, string> = {
@@ -79,48 +77,28 @@ const StatusMark = ({ status }: { status: CheckStatus }) => (
   </svg>
 );
 
-/**
- * The CLI's hint for a failed or warning check, exactly as it wrote it. The chip is a button that
- * copies it; with focus on it, ⌘C / Ctrl+C copies it too.
- */
-const FixChip = ({
-  hint,
-  onCopy,
-}: {
-  hint: string;
-  onCopy: (text: string) => void;
-}) => (
-  <button
-    type="button"
-    aria-label={`Copy fix: ${hint}`}
-    onClick={() => {
-      onCopy(hint);
-    }}
-    onKeyDown={(e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c") {
-        e.preventDefault();
-        onCopy(hint);
-      }
-    }}
-    className="rounded-check-fix border-check-fix-border bg-check-fix-bg text-text-secondary hover:text-text-primary mt-1.5 flex items-start gap-2 border py-1.5 pr-2 pl-2.5 text-left"
-  >
-    <code className="type-check-detail min-w-0 flex-1 wrap-break-word">
-      {hint}
-    </code>
-    <span className="text-text-hint flex h-4.5 flex-none items-center">
-      <CopyIcon size="xs" />
-    </span>
-  </button>
+const hintVariants = cva(
+  "rounded-check-hint type-check-hint text-text-secondary mt-1.5 border px-3 py-2 wrap-break-word",
+  {
+    variants: {
+      status: {
+        fail: "border-tone-danger-border bg-tone-danger-bg",
+        warn: "border-tone-attention-border bg-tone-attention-bg",
+      },
+    },
+  }
+);
+
+/** The CLI's hint for a failed or warning check, exactly as it wrote it, in a callout. */
+const Hint = ({ hint, status }: { hint: string; status: "fail" | "warn" }) => (
+  <p className={hintVariants({ status })}>
+    <span className="sr-only">Fix: </span>
+    {hint}
+  </p>
 );
 
 /** One startup check: its status circle, label, detail lines and the CLI's fix for each. */
-export const CheckRow = ({
-  check,
-  onCopy,
-}: {
-  check: Check;
-  onCopy: (text: string) => void;
-}) => {
+export const CheckRow = ({ check }: { check: Check }) => {
   const settled = check.status !== "waiting" && check.status !== "running";
   return (
     <li className="gap-check-mark flex">
@@ -147,9 +125,10 @@ export const CheckRow = ({
             >
               {line.text}
             </span>
-            {line.hint !== undefined && settled && (
-              <FixChip hint={line.hint} onCopy={onCopy} />
-            )}
+            {line.hint !== undefined &&
+              (check.status === "fail" || check.status === "warn") && (
+                <Hint hint={line.hint} status={check.status} />
+              )}
           </div>
         ))}
       </div>

@@ -29,14 +29,11 @@ export const StartupLayer = () => {
   const { checks, failure } = readChecks(findings, running);
 
   let title = "You're all set";
-  let subtitle: string | undefined = "Watching your agents for changes.";
   let primary: { label: string; act: () => void } | undefined;
   if (running) {
     title = "Checking this machine";
-    subtitle = undefined;
   } else if (failure !== undefined) {
     title = failure;
-    subtitle = "Nothing on this machine was changed.";
     primary = { act: retry, label: "Retry" };
   } else if (mode === "manual") {
     primary = {
@@ -74,23 +71,12 @@ export const StartupLayer = () => {
       <div className="w-check-column gap-check-block my-auto flex flex-none flex-col py-6">
         <AgentxMark size={40} />
         <h1 className="type-startup-title text-text-primary m-0">{title}</h1>
-        {subtitle !== undefined && (
-          <p className="type-startup-subtitle text-text-muted m-0">
-            {subtitle}
-          </p>
-        )}
         <ul
           aria-label="Checks"
           className="gap-check-row m-0 flex list-none flex-col p-0"
         >
           {checks.map((check) => (
-            <CheckRow
-              key={check.label}
-              check={check}
-              onCopy={(text) => {
-                void copy(text, "Fix copied");
-              }}
-            />
+            <CheckRow key={check.label} check={check} />
           ))}
         </ul>
         <div className="flex items-center gap-2">

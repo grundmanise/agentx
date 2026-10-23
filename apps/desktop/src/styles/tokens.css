@@ -306,8 +306,6 @@
   --color-check-label: var(--gray-50);
   --color-check-label-pending: var(--gray-300);
   --color-check-detail: var(--gray-400);
-  --color-check-fix-bg: var(--gray-980);
-  --color-check-fix-border: var(--gray-870);
 
   /* MCP servers */
   --color-server-transport-bg: var(--gray-880);
@@ -372,7 +370,7 @@
   --radius-toast: 9999px;
   --radius-floating-bar: 9999px;
   --radius-check-mark: 50%;
-  --radius-check-fix: 8px;
+  --radius-check-hint: 8px;
   --radius-startup-logo: 12px;
 
   /* Font weights, for the few places a variant sets the weight and the type role does not. */
@@ -600,9 +598,9 @@
   line-height: 1;
   letter-spacing: -0.02em;
 }
-@utility type-startup-subtitle {
+@utility type-check-hint {
   font-family: var(--font-sans);
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 400;
   line-height: 1.5;
 }

@@ -192,9 +192,6 @@ test("a CLI that is not found stops at check 1 and runs nothing", async ({
   await expect(
     row(page, "Watching this machine").getByText("Waiting:", { exact: true })
   ).toBeVisible();
-  await expect(layer(page)).toContainText(
-    "Nothing on this machine was changed."
-  );
   expect(cli.commands).toEqual([]);
   expect(cli.serveStarts).toBe(0);
 });
@@ -209,9 +206,8 @@ test("an old git blocks with the CLI's hint as the fix", async ({
   const git = row(page, "git 2.40 or newer");
   await expect(git.getByText("Failed:", { exact: true })).toBeVisible();
   await expect(git).toContainText(oldGit.detail);
-  await expect(
-    git.getByRole("button", { name: `Copy fix: ${oldGit.hint}` })
-  ).toHaveText(oldGit.hint);
+  await expect(git.getByRole("paragraph")).toHaveText(`Fix: ${oldGit.hint}`);
+  await expect(git.getByRole("button")).toHaveCount(0);
   await expect(
     row(page, "Home folder is writable").getByText("Waiting:", { exact: true })
   ).toBeVisible();
@@ -255,9 +251,7 @@ test("a warning does not block, and manual mode shows it", async ({
     account.getByText("Passed with a warning:", { exact: true })
   ).toBeVisible();
   await expect(account).toContainText(lock.detail);
-  await expect(
-    account.getByRole("button", { name: `Copy fix: ${lock.hint}` })
-  ).toBeVisible();
+  await expect(account.getByRole("paragraph")).toHaveText(`Fix: ${lock.hint}`);
 });
 
 test("serve refused fails check 5 with serve's message and hint", async ({
@@ -276,9 +270,9 @@ test("serve refused fails check 5 with serve's message and hint", async ({
   const watching = row(page, "Watching this machine");
   await expect(watching.getByText("Failed:", { exact: true })).toBeVisible();
   await expect(watching).toContainText(refused.message);
-  await expect(
-    watching.getByRole("button", { name: `Copy fix: ${refused.hint}` })
-  ).toBeVisible();
+  await expect(watching.getByRole("paragraph")).toHaveText(
+    `Fix: ${refused.hint}`
+  );
   expect(cli.commands).toEqual(launchLines);
 });
 
@@ -338,18 +332,6 @@ test("Copy report copies doctor's output in the CLI's layout", async ({
   );
 });
 
-test("⌘C on a fix chip copies the CLI's hint", async ({ cli, page }) => {
-  cli.register(["doctor"], { events: [oldGit], exitCode: 2 });
-  await page.goto("/");
-  await expect(title(page)).toHaveText("Update git to continue");
-  await page.getByRole("button", { name: `Copy fix: ${oldGit.hint}` }).focus();
-  await page.keyboard.press("ControlOrMeta+C");
-  await expect(page.getByText("Fix copied")).toBeVisible();
-  expect(
-    await page.evaluate(async () => await navigator.clipboard.readText())
-  ).toBe(oldGit.hint);
-});
-
 test("manual mode shows every check and waits for Open agentx, which goes to Settings", async ({
   cli,
   page,
@@ -374,7 +356,6 @@ test("manual mode shows every check and waits for Open agentx, which goes to Set
 
   await runChecks(page);
   await expect(title(page)).toHaveText("You're all set");
-  await expect(layer(page)).toContainText("Watching your agents for changes.");
   await expect(rows(page).getByText("Passed:", { exact: true })).toHaveCount(5);
   await expect(row(page, "agentx command line")).toContainText(
     `${cliVersion} at ${bundled}`
