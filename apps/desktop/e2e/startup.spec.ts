@@ -4,7 +4,7 @@ import {
   cliVersion,
   doctorWith,
   expect,
-  firstSnapshot,
+  firstInventory,
   test,
 } from "./harness/cli.ts";
 
@@ -59,7 +59,7 @@ const unusableRepo = {
   type: "doctor",
 } as const;
 
-/** A library entry as a snapshot lists it. */
+/** A library entry as an inventory lists it. */
 const skill = (name: string, more: { fork_id?: string; source?: string }) => ({
   content_hash: "sha256:0",
   kind: "managed" as const,
@@ -306,7 +306,7 @@ test("manual mode shows every check and waits for Open agentx, which goes to Set
   cli.onServeStart({
     events: [
       {
-        ...firstSnapshot(["claude-code", "codex", "cursor"]),
+        ...firstInventory(["claude-code", "codex", "cursor"]),
         library: [
           skill("notes", { fork_id: "f1" }),
           skill("review", {
@@ -370,7 +370,7 @@ test("a check that passes its deadline fails, and Retry runs it again", async ({
   await expect(inbox(page)).toBeVisible();
 });
 
-test("a serve child that writes no snapshot fails check 5 at the deadline", async ({
+test("a serve child that writes no inventory fails check 5 at the deadline", async ({
   cli,
   page,
 }) => {
@@ -386,11 +386,11 @@ test("a serve child that writes no snapshot fails check 5 at the deadline", asyn
     .toBe(1);
   await expect(title(page)).toHaveText("agentx can't watch this machine");
   await expect(row(page, "Watching this machine")).toContainText(
-    "agentx serve wrote no snapshot in 30 seconds"
+    "agentx serve wrote no inventory in 30 seconds"
   );
 
-  // The slow child keeps running; its late snapshot answers Retry.
-  await cli.serveEmit([firstSnapshot()]);
+  // The slow child keeps running; its late inventory answers Retry.
+  await cli.serveEmit([firstInventory()]);
   await page.getByRole("button", { name: "Retry" }).click();
   await expect(inbox(page)).toBeVisible();
   expect(cli.serveStarts).toBe(1);

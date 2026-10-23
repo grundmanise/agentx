@@ -1,5 +1,5 @@
 // The launch sequence and the state of the startup layer. On launch the app resolves the CLI, runs
-// `version`, then `doctor`, then starts the serve child and waits for its first snapshot. All of
+// `version`, then `doctor`, then starts the serve child and waits for its first inventory. All of
 // that runs out of sight: the screens mount once it passes, and the layer shows only when a check
 // fails, when a command exits with code 8, and in manual mode. A launch that runs over 2 seconds
 // says so in the empty panel. The only commands it runs are `version`, `doctor` and `serve`: it
@@ -11,7 +11,7 @@ import type {
   CliEvent,
   DoctorEvent,
   ReconcileEvent,
-  SnapshotEvent,
+  InventoryEvent,
 } from "#/cli/events.gen.ts";
 import { onRunEnd, resolveCli, run, serve } from "#/cli/transport.ts";
 import type { RunResult } from "#/cli/transport.ts";
@@ -69,11 +69,11 @@ export const useStartup = (): StartupState =>
     () => state
   );
 
-/** The reconcile events serve wrote before its first snapshot, kept for the Inbox. */
+/** The reconcile events serve wrote before its first inventory, kept for the Inbox. */
 export const earlyReconciles: ReconcileEvent[] = [];
 
-// What the serve children reported: the last snapshot and the last exit, with the child's id.
-let lastSnapshot: { childId: number; event: SnapshotEvent } | undefined;
+// What the serve children reported: the last inventory and the last exit, with the child's id.
+let lastInventory: { childId: number; event: InventoryEvent } | undefined;
 let lastExit:
   | { childId: number; problem: Problem; restarting: boolean }
   | undefined;
@@ -92,10 +92,10 @@ const problemOf = (events: CliEvent[], fallback: string): Problem => {
     : { hint: error.hint, message: error.message };
 };
 
-type ServeOutcome = { snapshot: SnapshotEvent } | { error: Problem };
+type ServeOutcome = { inventory: InventoryEvent } | { error: Problem };
 
 /**
- * What serve child `childId`, or a later one, has reported: its first snapshot or its exit, if
+ * What serve child `childId`, or a later one, has reported: its first inventory or its exit, if
  * either is in. `ended` is a child that had already ended, with a restart to come, when the wait
  * began: not the answer, since the next child is.
  */
@@ -104,8 +104,8 @@ const outcomeOf = (
   ended: typeof lastExit
 ): ServeOutcome | undefined => {
   const after = Math.max(childId, (ended?.childId ?? 0) + 1);
-  if (lastSnapshot !== undefined && lastSnapshot.childId >= after) {
-    return { snapshot: lastSnapshot.event };
+  if (lastInventory !== undefined && lastInventory.childId >= after) {
+    return { inventory: lastInventory.event };
   }
   if (
     lastExit !== undefined &&
@@ -118,7 +118,7 @@ const outcomeOf = (
 };
 
 /**
- * Waits for serve child `childId`, or a later one, to write a snapshot or to exit, until the
+ * Waits for serve child `childId`, or a later one, to write an inventory or to exit, until the
  * deadline. A child that is only slow keeps running: a Retry waits for it again.
  */
 const serveOutcome = async (childId: number): Promise<ServeOutcome> => {
@@ -139,7 +139,7 @@ const serveOutcome = async (childId: number): Promise<ServeOutcome> => {
       timer = setTimeout(() => {
         controller.enqueue({
           error: {
-            message: `agentx serve wrote no snapshot in ${deadline}`,
+            message: `agentx serve wrote no inventory in ${deadline}`,
           },
         });
       }, CHECK_DEADLINE_MS);
@@ -298,9 +298,9 @@ const listen = async () => {
       return;
     }
     const { event } = line;
-    if (event.type === "snapshot") {
-      lastSnapshot = { childId: line.childId, event };
-    } else if (event.type === "reconcile" && lastSnapshot === undefined) {
+    if (event.type === "inventory") {
+      lastInventory = { childId: line.childId, event };
+    } else if (event.type === "reconcile" && lastInventory === undefined) {
       earlyReconciles.push(event);
     } else if (event.type === "error") {
       serveErrors.set(line.childId, problemOf([event], event.message));

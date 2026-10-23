@@ -1,10 +1,10 @@
 // The five startup checks, read from what the launch sequence found: the CLI's resolution, its
-// `version` and `doctor` output, and the serve child's first snapshot. Nothing here looks at the
+// `version` and `doctor` output, and the serve child's first inventory. Nothing here looks at the
 // machine; every detail and hint is the CLI's own text.
 import type {
   DoctorEvent,
   DoctorStatus,
-  SnapshotEvent,
+  InventoryEvent,
 } from "#/cli/events.gen.ts";
 
 /** An error the CLI reported, or why a command could not run. */
@@ -19,7 +19,7 @@ export interface Findings {
   cli?: { path: string | null };
   version?: { cliVersion: string } | { error: Problem };
   doctor?: { rows: DoctorEvent[]; exitCode: number | null; error?: Problem };
-  serve?: { snapshot: SnapshotEvent } | { error: Problem };
+  serve?: { inventory: InventoryEvent } | { error: Problem };
 }
 
 export type CheckStatus = "waiting" | "running" | "pass" | "warn" | "fail";
@@ -90,9 +90,9 @@ const problemLine = (problem: Problem): CheckLine =>
     ? { text: problem.message }
     : { hint: problem.hint, text: problem.message };
 
-/** Your own skills and those from sources, as the library of the first snapshot holds them. */
-const counts = (snapshot: SnapshotEvent) => {
-  const managed = snapshot.library.filter((s) => s.kind === "managed");
+/** Your own skills and those from sources, as the library of the first inventory holds them. */
+const counts = (inventory: InventoryEvent) => {
+  const managed = inventory.library.filter((s) => s.kind === "managed");
   // Your own skills carry a fork id, or have no source while no account remote is set.
   const own = managed.filter(
     (s) => s.fork_id !== undefined || s.source === undefined
@@ -161,7 +161,7 @@ const couldNotCheck = (doctor: Findings["doctor"]) =>
       [...groups[2], ...groups[3], ...groups[4]].includes(r.check)
   );
 
-/** Checks 2 to 4, from doctor's rows; check 4 counts skills once the first snapshot is in. */
+/** Checks 2 to 4, from doctor's rows; check 4 counts skills once the first inventory is in. */
 const doctorChecks = ({ doctor, serve }: Findings): Check[] => {
   if (doctor === undefined) {
     return [pending(1), pending(2), pending(3)];
@@ -180,14 +180,14 @@ const doctorChecks = ({ doctor, serve }: Findings): Check[] => {
   if (
     account?.status === "pass" &&
     serve !== undefined &&
-    "snapshot" in serve
+    "inventory" in serve
   ) {
-    checks[2] = { ...account, lines: [{ text: counts(serve.snapshot) }] };
+    checks[2] = { ...account, lines: [{ text: counts(serve.inventory) }] };
   }
   return checks;
 };
 
-/** Check 5: the serve child's first snapshot. */
+/** Check 5: the serve child's first inventory. */
 const watchingCheck = ({ serve }: Findings): Check => {
   if (serve === undefined) {
     return pending(4);
@@ -200,7 +200,7 @@ const watchingCheck = ({ serve }: Findings): Check => {
     };
   }
   const agents = plural(
-    serve.snapshot.configurations.length,
+    serve.inventory.configurations.length,
     "agent",
     "agents"
   );

@@ -14,7 +14,7 @@
 // reply, fails the test once it ends, unless the test takes it with takeRefusals().
 //
 // The app checks the machine on launch (src/startup/startup.ts), so the mock starts out with a
-// passing launch: `version` and `doctor` replies, and a serve child that writes its first snapshot
+// passing launch: `version` and `doctor` replies, and a serve child that writes its first inventory
 // when it starts. A test replaces them with register() and onServeStart().
 import { once } from "node:events";
 
@@ -53,7 +53,7 @@ export interface ServeStart {
   exit?: { code: number; stderr?: string[] };
 }
 
-/** A configuration as a snapshot lists it. */
+/** A configuration as an inventory lists it. */
 export const configuration = (id: string) => ({
   client: id,
   enabled: true,
@@ -65,13 +65,13 @@ export const configuration = (id: string) => ({
   reads_library: false,
 });
 
-/** A serve child's first snapshot, with these configurations. */
-export const firstSnapshot = (configurations = ["claude-code", "codex"]) =>
+/** A serve child's first inventory, with these configurations. */
+export const firstInventory = (configurations = ["claude-code", "codex"]) =>
   ({
     configurations: configurations.map(configuration),
     library: [],
     scan_counter: 1,
-    type: "snapshot",
+    type: "inventory",
   }) satisfies InlineEvent;
 
 /** Doctor's rows on a machine where everything passes. */
@@ -267,7 +267,7 @@ export class MockCli {
   };
   private childId = 1;
   private serving = false;
-  private serveStart: ServeStart = { events: [firstSnapshot()] };
+  private serveStart: ServeStart = { events: [firstInventory()] };
 
   constructor(page: Page) {
     this.page = page;
