@@ -48,8 +48,7 @@ const settingsSchemaVersion = home.SettingsSchemaVersion
 // the latest version.
 //
 // The snapshot is a pure function of the machine's state: two exports of
-// an unchanged machine are byte-identical, so a snapshot can be diffed or
-// kept under version control.
+// an unchanged machine are byte-identical, so two snapshots can be diffed.
 type snapshot struct {
 	SchemaVersion  int                     `json:"schema_version"`
 	Machine        *exportMachine          `json:"machine,omitempty"`
@@ -167,7 +166,9 @@ func newExportCommand(inv *invocation) *cobra.Command {
 			"configurations it is placed in, and the MCP servers and plugins as found.\n\n" +
 			"The snapshot holds no skill content. Read it on another machine with\n" +
 			"'agentx import'.\n\n" +
-			"The file holds the machine settings, so it is written readable by you alone.",
+			"The file holds the machine settings and each MCP server's command, arguments\n" +
+			"and URL as written, which can hold a token, so it is written readable by you\n" +
+			"alone. Do not commit it to a public repository.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return inv.export(cmd.Context(), args[0], force)

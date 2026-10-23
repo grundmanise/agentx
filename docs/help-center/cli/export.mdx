@@ -41,9 +41,9 @@ The file holds:
 | `plugins` | Each plugin, with its marketplace, version and configuration. |
 | `machine` | The id and label of the machine you exported from. |
 
-A snapshot leaves out what only describes this machine: where agentx found each configuration, skill and plugin on disk, whether a skill is modified or has drifted, and the ids `agentx scan` uses. Two exports of an unchanged machine are the same file, byte for byte, so you can keep snapshots under version control and compare them.
+A snapshot leaves out what only describes this machine: where agentx found each configuration, skill and plugin on disk, whether a skill is modified or has drifted, and the ids `agentx scan` uses. Two exports of an unchanged machine are the same file, byte for byte, so you can compare them.
 
-The file holds your settings and the commands your MCP servers start with, so treat it as you treat `settings.json`. A new file is readable by you alone. When you overwrite a file with `--force`, it keeps its old permissions.
+A snapshot keeps each MCP server's command, arguments and URL as your configuration writes them, and these can hold a token. Treat the file like a secret, and do not commit it to a public repository. A new file is readable by you alone. When you overwrite a file with `--force`, it keeps its old permissions.
 
 If the file is already there, export stops with exit code 6. Pass `--force` to replace it:
 
