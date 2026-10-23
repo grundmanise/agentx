@@ -11,7 +11,7 @@ const looking = [
   "Looking for plugins",
 ];
 const LOOK_MS = 1500;
-/** From this far into a check, the panel says when the check times out. */
+/** From this far into a check, the panel says how much longer the check keeps trying. */
 const COUNTDOWN_AFTER_MS = 5000;
 
 /** When the caller mounted, and the time now, read again every half second while mounted. */
@@ -33,8 +33,8 @@ const useClock = () => {
 
 /**
  * What a launch that runs over 2 seconds shows in the empty panel: what the checks do now and,
- * from 5 seconds into a check, when that check times out. A screen reader hears each step once,
- * not each turn of the text or each second of the countdown.
+ * from 5 seconds into a check, how much longer that check keeps trying. A screen reader hears
+ * each step once, not each turn of the text or each second of the countdown.
  */
 export const LaunchProgress = ({ step }: { step: Step }) => {
   const { now, shownAt } = useClock();
@@ -68,7 +68,7 @@ export const LaunchProgress = ({ step }: { step: Step }) => {
       </span>
       {late && (
         <span aria-hidden className="type-row-desc text-text-hint">
-          Taking longer than usual · times out in {left}s
+          Taking longer than usual · trying for {left}s more
         </span>
       )}
     </output>

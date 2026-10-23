@@ -107,7 +107,7 @@ const pauseTimers = async (page: Page) => {
 };
 const progress = (page: Page) => page.getByRole("main").locator("output");
 
-test("a launch over 2 seconds says what it checks, and from 5 seconds when it times out", async ({
+test("a launch over 2 seconds says what it checks, and from 5 seconds how much longer it tries", async ({
   cli,
   page,
 }) => {
@@ -123,14 +123,14 @@ test("a launch over 2 seconds says what it checks, and from 5 seconds when it ti
   await expect(progress(page)).toHaveCount(0);
   await page.clock.runFor(1);
   await expect(progress(page)).toContainText("Checking this machine");
-  await expect(progress(page)).not.toContainText("times out");
+  await expect(progress(page)).not.toContainText("trying for");
 
   await page.clock.runFor(3000);
   await expect(progress(page)).toContainText(
-    "Taking longer than usual · times out in 25s"
+    "Taking longer than usual · trying for 25s more"
   );
   await page.clock.runFor(1000);
-  await expect(progress(page)).toContainText("times out in 24s");
+  await expect(progress(page)).toContainText("trying for 24s more");
 
   doctor.release();
   await expect(inbox(page)).toBeVisible();
@@ -156,7 +156,7 @@ test("while serve scans, the panel names skills, MCP servers and plugins in turn
   await expect(named("Looking for MCP servers")).toBeVisible();
   await page.clock.runFor(1500);
   await expect(named("Looking for plugins")).toBeVisible();
-  await expect(progress(page)).toContainText("times out in 25s");
+  await expect(progress(page)).toContainText("trying for 25s more");
   await page.clock.runFor(1500);
   await expect(named("Looking for skills")).toBeVisible();
 
