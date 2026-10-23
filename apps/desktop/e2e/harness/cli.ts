@@ -37,7 +37,7 @@ export interface Reply {
   /** The log events on stderr, sent after the events. */
   logs?: Partial<Omit<LogEvent, "type">>[];
   exitCode?: number;
-  /** Holds the run after this many events, until release() or a cancel. */
+  /** Holds the run after this many events, until release(), expire() or a cancel. */
   holdAfter?: number;
 }
 
@@ -140,6 +140,8 @@ export const doctorWith = (...changes: InlineEvent[]): InlineEvent[] =>
 export interface Registered {
   /** Sends the rest of the events and ends the run. */
   release: () => void;
+  /** Ends the run as the supervisor does when its deadline passes. */
+  expire: () => void;
   /** Resolves with the run id once the app has run the command line. */
   started: Promise<string>;
 }
@@ -248,6 +250,8 @@ export class MockCli {
   readonly commands: string[][] = [];
   /** The run id of every cancel. */
   readonly cancels: string[] = [];
+  /** The deadline of every run, in order; null for a run with none. */
+  readonly deadlines: (number | null)[] = [];
   /** Every line written to serve's stdin. */
   readonly serveRequests: string[] = [];
   /** How many times the app started serve. */
@@ -301,6 +305,9 @@ export class MockCli {
     const signals = new EventTarget();
     this.replies.set(line(args), { reply, signals });
     return {
+      expire: () => {
+        signals.dispatchEvent(new CustomEvent("resume", { detail: "expire" }));
+      },
       release: () => {
         signals.dispatchEvent(new CustomEvent("resume", { detail: "release" }));
       },
@@ -390,6 +397,8 @@ export class MockCli {
       }
       case "cli_run": {
         const runArgs = field(args, "args");
+        const deadline = field(args, "deadline_ms");
+        this.deadlines.push(typeof deadline === "number" ? deadline : null);
         return await this.run(
           Array.isArray(runArgs) ? runArgs.map(String) : [],
           String(field(args, "run_id"))
@@ -462,10 +471,13 @@ export class MockCli {
     this.running.set(runId, pending);
     signals.dispatchEvent(new CustomEvent("started", { detail: runId }));
     await send(events.slice(0, held));
-    const cancelled = (await resumed) === "cancel";
+    const resumedWith = await resumed;
+    const cancelled = resumedWith === "cancel";
+    const timedOut = resumedWith === "expire";
     this.running.delete(runId);
-    const sent = cancelled ? events.slice(0, held) : events;
-    if (!cancelled) {
+    const stopped = cancelled || timedOut;
+    const sent = stopped ? events.slice(0, held) : events;
+    if (!stopped) {
       await send(events.slice(held));
     }
     const logs = (reply.logs ?? []).map((log) => full({ type: "log", ...log }));
@@ -476,12 +488,12 @@ export class MockCli {
     const end = {
       cancelled,
       events: sent,
-      // A cancel stops agentx with SIGTERM, on which it reports the stop and exits 9.
-      exit_code: cancelled ? 9 : (reply.exitCode ?? 0),
+      // A cancel or a deadline stops agentx with SIGTERM, on which it reports the stop and exits 9.
+      exit_code: stopped ? 9 : (reply.exitCode ?? 0),
       invalid: [],
       logs,
       run_id: runId,
-      timed_out: false,
+      timed_out: timedOut,
     };
     await this.emit("cli-run-end", [end]);
     return end;

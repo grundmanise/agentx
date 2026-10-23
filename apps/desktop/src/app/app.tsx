@@ -21,6 +21,10 @@ const Screen = ({ ready }: { ready: boolean }) =>
 export const App = () => {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const startup = useStartup();
+  // The layer closes the palette: it does not come back when the layer goes.
+  if (startup.open && paletteOpen) {
+    setPaletteOpen(false);
+  }
 
   useEffect(() => {
     launch();
@@ -74,10 +78,7 @@ export const App = () => {
           </main>
         </div>
       )}
-      <CommandPalette
-        open={paletteOpen && !startup.open}
-        onOpenChange={setPaletteOpen}
-      />
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       <Toaster />
     </div>
   );

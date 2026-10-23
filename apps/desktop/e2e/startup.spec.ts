@@ -322,6 +322,70 @@ test("manual mode shows every check and waits for Open agentx, which goes to Set
   expect(cli.serveStarts).toBe(1);
 });
 
+test("a check that passes its deadline fails, and Retry runs it again", async ({
+  cli,
+  page,
+}) => {
+  const doctor = cli.register(["doctor"], { holdAfter: 0 });
+  await page.goto("/");
+  await doctor.started;
+  doctor.expire();
+  await expect(title(page)).toHaveText("agentx can't check this machine");
+  await expect(row(page, "git 2.40 or newer")).toContainText(
+    "agentx doctor did not finish in 30 seconds"
+  );
+  expect(cli.deadlines).toEqual([30_000, 30_000]);
+  expect(cli.serveStarts).toBe(0);
+
+  cli.register(["doctor"], { events: doctorWith() });
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect(inbox(page)).toBeVisible();
+});
+
+test("a serve child that writes no snapshot fails check 5 at the deadline", async ({
+  cli,
+  page,
+}) => {
+  cli.onServeStart({ events: [] });
+  await page.clock.install();
+  await page.goto("/");
+  await expect.poll(() => cli.serveStarts).toBe(1);
+  await expect
+    .poll(async () => {
+      await page.clock.runFor(10_000);
+      return await layer(page).count();
+    })
+    .toBe(1);
+  await expect(title(page)).toHaveText("agentx can't watch this machine");
+  await expect(row(page, "Watching this machine")).toContainText(
+    "agentx serve wrote no snapshot in 30 seconds"
+  );
+
+  // The slow child keeps running; its late snapshot answers Retry.
+  await cli.serveEmit([firstSnapshot()]);
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect(inbox(page)).toBeVisible();
+  expect(cli.serveStarts).toBe(1);
+});
+
+test("the layer closes the palette, which stays closed after it", async ({
+  cli,
+  page,
+}) => {
+  await page.goto("/");
+  await expect(inbox(page)).toBeVisible();
+  await page.keyboard.press("Control+K");
+  await expect(page.getByRole("dialog")).toBeVisible();
+
+  cli.register(["doctor"], { events: doctorWith(unusableRepo), exitCode: 8 });
+  await cli.serveExit(8, [], null);
+  await expect(title(page)).toHaveText("agentx can't open its account repo");
+  cli.register(["doctor"], { events: doctorWith() });
+  await page.getByRole("button", { name: "Retry" }).click();
+  await expect(inbox(page)).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
 test("a serve exit with code 8 after launch brings the checks back", async ({
   cli,
   page,

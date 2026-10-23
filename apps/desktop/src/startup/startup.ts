@@ -17,6 +17,10 @@ import type { RunResult } from "#/cli/transport.ts";
 import { readChecks } from "#/startup/checks.ts";
 import type { Findings, Problem } from "#/startup/checks.ts";
 
+/** How long a check may take before it fails. A launch normally takes well under a second. */
+const CHECK_DEADLINE_MS = 30_000;
+const deadline = `${CHECK_DEADLINE_MS / 1000} seconds`;
+
 export interface StartupState {
   /** Whether the layer shows. */
   open: boolean;
@@ -107,10 +111,14 @@ const outcomeOf = (
   return undefined;
 };
 
-/** Waits for serve child `childId`, or a later one, to write a snapshot or to exit. */
+/**
+ * Waits for serve child `childId`, or a later one, to write a snapshot or to exit, until the
+ * deadline. A child that is only slow keeps running: a Retry waits for it again.
+ */
 const serveOutcome = async (childId: number): Promise<ServeOutcome> => {
   const ended = lastExit?.restarting === true ? lastExit : undefined;
   const checks: (() => void)[] = [];
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const outcomes = new ReadableStream<ServeOutcome>({
     start: (controller) => {
       const check = () => {
@@ -122,6 +130,13 @@ const serveOutcome = async (childId: number): Promise<ServeOutcome> => {
       };
       checks.push(check);
       serveWaiters.add(check);
+      timer = setTimeout(() => {
+        controller.enqueue({
+          error: {
+            message: `agentx serve wrote no snapshot in ${deadline}`,
+          },
+        });
+      }, CHECK_DEADLINE_MS);
       check();
     },
   });
@@ -132,20 +147,31 @@ const serveOutcome = async (childId: number): Promise<ServeOutcome> => {
     }
     return value;
   } finally {
+    clearTimeout(timer);
     for (const check of checks) {
       serveWaiters.delete(check);
     }
   }
 };
 
-/** Runs a one-shot as part of the sequence; a CLI that could not start is reported as a problem. */
+/**
+ * Runs a one-shot as part of the sequence; a CLI that could not start, or did not finish by the
+ * deadline, is reported as a problem.
+ */
 const oneShot = async (
   args: string[]
 ): Promise<RunResult | { error: Problem }> => {
-  const started = run(args);
+  const started = run(args, { deadlineMs: CHECK_DEADLINE_MS });
   ownRuns.add(started.runId);
   try {
-    return await started.result;
+    const result = await started.result;
+    return result.timedOut
+      ? {
+          error: {
+            message: `agentx ${args.join(" ")} did not finish in ${deadline}`,
+          },
+        }
+      : result;
   } catch (error) {
     return { error: { message: String(error) } };
   } finally {
