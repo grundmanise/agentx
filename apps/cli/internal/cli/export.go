@@ -170,8 +170,8 @@ func newExportCommand(inv *invocation) *cobra.Command {
 		Long: "Write a snapshot of this machine to <file>: its settings, its agent\n" +
 			"configurations, every skill of the library with its source, its version and the\n" +
 			"configurations it is placed in, and the MCP servers and plugins as found.\n\n" +
-			"The snapshot holds no skill content and no path of this machine. Read it on\n" +
-			"another machine with 'agentx import'.\n\n" +
+			"The snapshot holds no skill content. Read it on another machine with\n" +
+			"'agentx import'.\n\n" +
 			"The file holds the machine settings, so it is written readable by you alone.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {

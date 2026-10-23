@@ -37,13 +37,13 @@ The file holds:
 | `settings` | Your [settings](/cli/config) as `settings.json` holds them, for example the label, your sources and their pins, disabled configurations and copy modes. |
 | `configurations` | Each agent configuration on this machine, by its id, such as `claude-code`, and whether it is enabled. |
 | `skills` | One entry for each skill in your library: its name, whether agentx manages it, where it is published (its source, or your account remote for your own skills), where a skill you forked came from (its upstream), the version it is at, and the configurations it is placed in. |
-| `mcp_servers` | Each MCP server, with the tools it exposed and the configurations that declare it. Only the names of environment variables and headers are kept, never their values. |
+| `mcp_servers` | Each MCP server, with the tools it exposed, the configurations that declare it, and the command, arguments or URL each one declares, as written there. Only the names of environment variables and headers are kept, never their values. |
 | `plugins` | Each plugin, with its marketplace, version and configuration. |
 | `machine` | The id and label of the machine you exported from. |
 
-A snapshot leaves out what only describes this machine: paths on disk, whether a skill is modified or has drifted, and the ids `agentx scan` uses. Two exports of an unchanged machine are the same file, byte for byte, so you can keep snapshots under version control and compare them.
+A snapshot leaves out what only describes this machine: where agentx found each configuration, skill and plugin on disk, whether a skill is modified or has drifted, and the ids `agentx scan` uses. Two exports of an unchanged machine are the same file, byte for byte, so you can keep snapshots under version control and compare them.
 
-The file holds your settings, so treat it as you treat `settings.json`. A new file is readable by you alone. When you overwrite a file with `--force`, it keeps its old permissions.
+The file holds your settings and the commands your MCP servers start with, so treat it as you treat `settings.json`. A new file is readable by you alone. When you overwrite a file with `--force`, it keeps its old permissions.
 
 If the file is already there, export stops with exit code 6. Pass `--force` to replace it:
 
