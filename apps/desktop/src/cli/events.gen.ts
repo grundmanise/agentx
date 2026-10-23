@@ -139,17 +139,18 @@ export interface ConflictFile {
   theirs: string | null;
 }
 
-export interface ExportSkill {
+export interface SnapshotSkill {
   name: string;
   kind: SkillKind;
-  commit: string;
+  fork_id?: string;
+  commit?: string;
   source?: string;
   subpath?: string;
   upstream?: string;
   upstream_subpath?: string;
   upstream_commit?: string;
   base_hash?: string;
-  placed: boolean;
+  placements: string[];
 }
 
 export interface Inventory {
@@ -421,9 +422,10 @@ export interface ExportEvent {
   skills: number;
 }
 
-export interface ImportSkillEvent extends ExportSkill {
+export interface ImportSkillEvent extends SnapshotSkill {
   type: "import_skill";
   schema_version: number;
+  placed: boolean;
   state: ImportState;
   local_commit?: string;
 }

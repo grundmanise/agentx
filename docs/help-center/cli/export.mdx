@@ -1,32 +1,33 @@
 ---
 title: "agentx export and import"
-description: "Copy one machine's settings to another, with a list of the skills to bring back."
+description: "Save a snapshot of one machine, with its settings, and restore the settings on another."
 ---
 
-Export writes your settings and a list of your skills to a file. Import restores the settings on another machine and tells you what that machine can bring back on its own.
+Export writes a snapshot of this machine to a file: your settings, your agent configurations, the skills in your library with where each one is placed, and the MCP servers and plugins agentx found. Import restores the settings on another machine and tells you which skills that machine can bring back on its own.
 
-An export holds no skill content. It records only where each skill came from and which version you had. The content comes back from your [account repo](/#key-terms), or when you install the skill again.
+A snapshot holds no skill content. For each skill it records where the skill comes from, which version you had and which configurations you placed it in. The content comes back from your [account repo](/#key-terms), or when you install the skill again.
 
 ## Move to a new machine
 
-1. On the old machine, run `agentx export ~/agentx-export.json`.
+1. On the old machine, run `agentx export ~/agentx-snapshot.json`.
 2. Copy the file to the new machine.
 3. If you publish your own skills, add your account remote on the new machine with `agentx source add <url> --account`.
-4. On the new machine, run `agentx import ~/agentx-export.json`.
+4. On the new machine, run `agentx import ~/agentx-snapshot.json`.
 5. Run each `agentx source add` line that import printed, exactly as printed. The lines keep each source's pin. If you did step 3, you can skip the `--account` line.
 6. Install your skills. For a skill of a source, run `agentx skill add <source>`, using the URL in the listing row. For your own skills, run `agentx skill add --name <name>`, or `agentx skill add --all` for all of them.
+7. Place each skill where the listing row says it was placed, with `agentx skill place <name> --to <configuration>`.
 
 If you skip step 5, `agentx skill add` and `agentx source fetch` stop with exit code 5 (`source not fetched`) and print the `agentx source add` line to run.
 
 ## Export this machine
 
 ```sh
-agentx export ~/agentx-export.json
+agentx export ~/agentx-snapshot.json
 ```
 
 ```text
-✓ exported the settings and 12 lineage records to /home/me/agentx-export.json
-  the export holds no skill content: the account repo and 'agentx skill add' restore that
+✓ exported the settings and 12 skills to /home/me/agentx-snapshot.json
+  the snapshot names each skill's source, version and placements, and holds no skill content
 ```
 
 The file holds:
@@ -34,34 +35,39 @@ The file holds:
 | Part | What it is |
 |---|---|
 | `settings` | Your [settings](/cli/config) as `settings.json` holds them, for example the label, your sources and their pins, disabled configurations and copy modes. |
-| `skills` | One lineage record for each skill in your account repo: the skill's name, where it is published (its source, or your account remote for your own skills), where a skill you forked came from (its upstream), the version it is based on, and whether this machine placed it. |
+| `configurations` | Each agent configuration on this machine, by its id, such as `claude-code`, and whether it is enabled. |
+| `skills` | One entry for each skill in your library: its name, whether agentx manages it, where it is published (its source, or your account remote for your own skills), where a skill you forked came from (its upstream), the version it is at, and the configurations it is placed in. |
+| `mcp_servers` | Each MCP server, with the tools it exposed and the configurations that declare it. Only the names of environment variables and headers are kept, never their values. |
+| `plugins` | Each plugin, with its marketplace, version and configuration. |
 | `machine` | The id and label of the machine you exported from. |
+
+A snapshot leaves out what only describes this machine: paths on disk, whether a skill is modified or has drifted, and the ids `agentx scan` uses. Two exports of an unchanged machine are the same file, byte for byte, so you can keep snapshots under version control and compare them.
 
 The file holds your settings, so treat it as you treat `settings.json`. A new file is readable by you alone. When you overwrite a file with `--force`, it keeps its old permissions.
 
 If the file is already there, export stops with exit code 6. Pass `--force` to replace it:
 
 ```sh
-agentx export ~/agentx-export.json --force
+agentx export ~/agentx-snapshot.json --force
 ```
 
 Give the path of a file. If the path is a directory, export stops with exit code 6, also with `--force`. If the parent directory does not exist, export stops with exit code 5.
 
-Two exports of an unchanged machine are the same file, byte for byte.
+If a skill in your library has a name agentx cannot store as a branch, export leaves it out of the snapshot and prints a warning that names it.
 
 ## Import onto another machine
 
 ```sh
-agentx import ~/agentx-export.json
+agentx import ~/agentx-snapshot.json
 ```
 
 ```text
-Replace the settings in /home/me/.agentx/settings.json with those of my-laptop from /home/me/agentx-export.json? [y/N] y
-✓ imported the settings of my-laptop from /home/me/agentx-export.json
-3 skills in the export: 1 present, 1 missing, 1 at a different version
-  pdf     managed  present    https://github.com/example/skills/skills/pdf
-  xlsx    managed  missing    https://github.com/example/skills/skills/xlsx
-  review  managed  different  ssh://git@github.com/you/forks (account)
+Replace the settings in /home/me/.agentx/settings.json with those of my-laptop from /home/me/agentx-snapshot.json? [y/N] y
+✓ imported the settings of my-laptop from /home/me/agentx-snapshot.json
+3 skills in the snapshot: 1 present, 1 missing, 1 at a different version
+  pdf     managed  present    https://github.com/example/skills/skills/pdf   placed in claude-code, codex
+  xlsx    managed  missing    https://github.com/example/skills/skills/xlsx  placed in claude-code
+  review  managed  different  ssh://git@github.com/you/forks (account)       not placed
   only the settings were written: add each source again, then install a missing skill with 'agentx skill add <source>', or one of your own with 'agentx skill add --name <name>'
     agentx source add https://github.com/example/skills#release
     agentx source add ssh://git@github.com/you/forks --account
@@ -81,7 +87,9 @@ The listing shows whether this machine already has each skill, in its account re
 |---|---|
 | `present` | This machine already has this version, in its account repo or on your [account remote](/cli/source#add-your-account-remote). |
 | `missing` | This machine has no copy of this skill. |
-| `different` | This machine has a skill with this name, but at another version, or as one of your own skills where the export has a skill of a source, or the reverse. A skill you published again after the export also reads `different`. |
+| `different` | This machine has a skill with this name, but at another version, or as one of your own skills where the snapshot has a skill of a source, or the reverse. A skill you published again after the export also reads `different`. |
+
+The last column names the configurations the skill was placed in. A skill that agentx does not manage reads `unmanaged`, with `(none)` as its source: agentx cannot install it on another machine, so copy it yourself.
 
 What to do next:
 
@@ -93,12 +101,20 @@ What to do next:
 
 On a fresh machine every skill reads `missing`, because there is no account repo yet. To see which of your own skills you can restore, add your account remote before you import: `agentx source add <url> --account`. The skills you published then read `present`. Install them with [`agentx skill add --name <name>`](/cli/skill#install-your-skills-on-another-machine), or all of them with `agentx skill add --all`.
 
+### Import an older export
+
+Import also reads a file that an earlier version of agentx exported. That file records whether each skill was placed, not where. Import shows such a skill as placed in every configuration on this machine that the file's settings leave enabled.
+
+### Import a snapshot without settings
+
+A snapshot that another tool wrote can leave out the settings, and list only each skill's name, source and placements. Import then leaves your settings as they are, writes nothing and does not ask. It still lists each skill.
+
 ## Confirm without a terminal
 
 Import replaces settings, so it asks first. Pass `--yes` to answer in advance:
 
 ```sh
-agentx import ~/agentx-export.json --yes
+agentx import ~/agentx-snapshot.json --yes
 ```
 
 Use `--yes` in scripts, with `--json`, and wherever there is no terminal. Without `--yes`, import exits with code 6 and changes nothing in these cases. It does the same when you answer anything other than `y` or `yes`.
@@ -108,7 +124,7 @@ Use `--yes` in scripts, with `--json`, and wherever there is no terminal. Withou
 | Exit code | Cause |
 |---|---|
 | 5 | The file is not there. |
-| 6 | The file is not a valid agentx export: it is damaged, larger than 8 MiB, from an agentx version this one cannot read, or holds a setting or skill record agentx would not write. The message names the problem. Export the file again from the other machine, or upgrade agentx. |
+| 6 | The file is not a valid agentx snapshot: it is damaged, larger than 8 MiB, from an agentx version this one cannot read, or holds a setting or skill entry agentx would not write. The message names the problem. Export the file again from the other machine, or upgrade agentx. |
 | 6 | You answered no, or import could not ask (no terminal, or `--json`) and you did not pass `--yes`. |
 
 A refused import changes nothing: your settings stay exactly as they were.

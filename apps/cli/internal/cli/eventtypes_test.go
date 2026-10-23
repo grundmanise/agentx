@@ -114,7 +114,7 @@ func errorCodes() []string {
 var valueLists = []valueList{
 	{name: "SkillKind", values: []string{lineage.KindManaged, lineage.KindUnmanaged}, fields: []fieldRef{
 		{scan.LibraryEntry{}, "Kind"}, {reconcileEvent{}, "Kind"}, {driftEvent{}, "Kind"},
-		{updateAvailableEvent{}, "Kind"}, {conflictEvent{}, "Kind"}, {exportSkill{}, "Kind"},
+		{updateAvailableEvent{}, "Kind"}, {conflictEvent{}, "Kind"}, {snapshotSkill{}, "Kind"},
 	}},
 	{name: "SkillState", values: []string{stateCurrent, stateModified}, fields: []fieldRef{
 		{scan.LibraryEntry{}, "State"}, {driftEvent{}, "State"}, {driftEvent{}, "PreviousState"},
