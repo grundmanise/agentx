@@ -1,7 +1,8 @@
 // The launch sequence and the state of the startup layer. On launch the app resolves the CLI, runs
-// `version`, then `doctor`, then starts the serve child and waits for its first snapshot. The
-// layer shows until all of that passes, and comes back whenever a command exits with code 8.
-// The only commands it runs are `version`, `doctor` and `serve`: it changes nothing on disk.
+// `version`, then `doctor`, then starts the serve child and waits for its first snapshot. All of
+// that runs out of sight: the screens mount once it passes, and the layer shows only when a check
+// fails, when a command exits with code 8, and in manual mode. The only commands it runs are
+// `version`, `doctor` and `serve`: it changes nothing on disk.
 import { useSyncExternalStore } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
@@ -16,13 +17,12 @@ import type { RunResult } from "#/cli/transport.ts";
 import { readChecks } from "#/startup/checks.ts";
 import type { Findings, Problem } from "#/startup/checks.ts";
 
-/** How long a passing launch stays on screen before the app opens. */
-const OPEN_AFTER_MS = 600;
-
 export interface StartupState {
   /** Whether the layer shows. */
   open: boolean;
-  /** "launch" opens the app once the checks pass; "manual" waits for Open agentx. */
+  /** The checks passed once: the screens may mount. */
+  ready: boolean;
+  /** "launch" closes the layer once the checks pass; "manual" waits for Open agentx. */
   mode: "launch" | "manual";
   running: boolean;
   /** The sequence runs again after a failure. */
@@ -33,7 +33,8 @@ export interface StartupState {
 let state: StartupState = {
   findings: {},
   mode: "launch",
-  open: true,
+  open: false,
+  ready: false,
   retrying: false,
   // The launch sequence starts with the app.
   running: true,
@@ -154,12 +155,10 @@ const oneShot = async (
 
 // Each sequence gets a number; a later one makes the earlier one's findings stale.
 let generation = 0;
-let openTimer: ReturnType<typeof setTimeout> | undefined;
 
 const sequence = async () => {
   generation += 1;
   const mine = generation;
-  clearTimeout(openTimer);
   let findings: Findings = {};
   const found = (more: Findings) => {
     findings = { ...findings, ...more };
@@ -232,12 +231,14 @@ const sequence = async () => {
     found({ serve: await serveOutcome(childId) });
   } finally {
     if (mine === generation) {
-      update({ retrying: false, running: false });
-      if (state.mode === "launch" && readChecks(findings, false).passed) {
-        openTimer = setTimeout(() => {
-          update({ open: false });
-        }, OPEN_AFTER_MS);
-      }
+      const { passed } = readChecks(findings, false);
+      update({
+        // A failure shows the layer; a pass closes it at once, except in manual mode.
+        open: !passed || state.mode === "manual",
+        ready: state.ready || passed,
+        retrying: false,
+        running: false,
+      });
     }
   }
 };

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Navigate, Route, Routes } from "react-router";
+import { Navigate, Outlet, Route, Routes } from "react-router";
 
 import { CommandPalette } from "#/app/command-palette.tsx";
 import { screens, titles } from "#/app/screens.ts";
@@ -9,6 +9,14 @@ import { TopBar } from "#/app/top-bar.tsx";
 import { Toaster } from "#/components/toast.tsx";
 import { PlaceholderScreen } from "#/screens/placeholder.tsx";
 import { launch, useStartup } from "#/startup/startup.ts";
+
+/** The screen of the current route, faded in; nothing until the startup checks pass. */
+const Screen = ({ ready }: { ready: boolean }) =>
+  ready ? (
+    <div className="animate-fade-in flex min-h-0 flex-1 flex-col">
+      <Outlet />
+    </div>
+  ) : null;
 
 export const App = () => {
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -41,21 +49,26 @@ export const App = () => {
           setPaletteOpen(true);
         }}
       />
-      {/* While the checks show, no screen mounts: none runs a command before they pass. */}
       {startup.open ? (
         <StartupLayer />
       ) : (
         <div className="flex min-h-0 flex-1">
           <Sidebar />
-          <main className="rounded-shell-panel border-shell-divider bg-shell-content-bg mr-panel mb-panel relative flex min-w-0 flex-1 flex-col overflow-hidden border">
+          <main
+            aria-busy={!startup.ready}
+            className="rounded-shell-panel border-shell-divider bg-shell-content-bg mr-panel mb-panel relative flex min-w-0 flex-1 flex-col overflow-hidden border"
+          >
             <Routes>
-              {screens.map((s) => (
-                <Route
-                  key={s.path}
-                  path={`${s.path}/*`}
-                  element={<PlaceholderScreen title={titles[s.path]} />}
-                />
-              ))}
+              {/* No screen mounts until the checks pass: none runs a command before they do. */}
+              <Route element={<Screen ready={startup.ready} />}>
+                {screens.map((s) => (
+                  <Route
+                    key={s.path}
+                    path={`${s.path}/*`}
+                    element={<PlaceholderScreen title={titles[s.path]} />}
+                  />
+                ))}
+              </Route>
               <Route path="*" element={<Navigate to="/inbox" replace />} />
             </Routes>
           </main>

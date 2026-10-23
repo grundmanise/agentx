@@ -19,9 +19,9 @@ const copy = async (text: string, toast: string) => {
 };
 
 /**
- * The startup layer: checks that this machine can run agentx before anything else shows. It
- * names the first failure, shows the CLI's fix for it, and offers Retry. In manual mode
- * (Settings › Run checks) it waits for Open agentx once everything passes.
+ * The startup layer: shows when a check that this machine can run agentx fails. It names the
+ * first failure, shows the CLI's fix for it, and offers Retry. In manual mode (Settings › Run
+ * checks) it shows every check and waits for Open agentx once everything passes.
  */
 export const StartupLayer = () => {
   const { findings, mode, retrying, running } = useStartup();

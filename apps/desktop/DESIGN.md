@@ -738,6 +738,7 @@ The product mark is `shell.logo-mark` on `shell.logo-bg`, 26px `shell.logo-radiu
 - Card resolve: 280ms, see §6.
 - Spinner-style icons (Check updates, Check tools): one full rotation `.9–1s ease`, then a toast.
 - Startup check running (`animate-check-spin`): the status ring turns once a second, linear, while its check runs, and stops when the check settles.
+- Screens fade in (`animate-fade-in`): opacity 0 → 1 over `.2s ease-out` when they mount, once the startup checks pass. Nothing waits on purpose: a passing launch shows no startup layer.
 - Diff pane choice: `opacity .2s, box-shadow .2s`.
 - Primary button enable/disable: `opacity .2s`. Nothing loops forever.
 

@@ -31,13 +31,24 @@ const oldGit = {
   type: "doctor",
 } as const;
 
-/**
- * Stops the page's timers before it loads, so that a passing launch stays on screen until the
- * test moves the clock on.
- */
-const pauseTimers = async (page: Page) => {
-  await page.clock.install({ time: new Date("2026-10-23T10:00:00Z") });
-  await page.clock.pauseAt(new Date("2026-10-23T10:00:01Z"));
+/** Marks the page's root with data-layer-shown once the startup layer has shown, even briefly. */
+const watchLayer = async (page: Page) => {
+  await page.addInitScript(() => {
+    new MutationObserver(() => {
+      if (document.querySelector('[aria-label="Startup checks"]') !== null) {
+        document.documentElement.dataset.layerShown = "";
+      }
+    }).observe(document, { childList: true, subtree: true });
+  });
+};
+const layerShown = (page: Page) => page.locator("html[data-layer-shown]");
+
+/** Opens manual mode, as Settings › Run checks will; until it exists, a harness module does. */
+const runChecks = async (page: Page) => {
+  await page.addScriptTag({
+    type: "module",
+    url: "/e2e/harness/run-checks.ts",
+  });
 };
 
 const unusableRepo = {
@@ -62,50 +73,29 @@ test.beforeEach(async ({ context }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
 });
 
-test("a passing launch checks the machine and opens the Inbox", async ({
+test("a passing launch checks the machine out of sight and opens the Inbox", async ({
   cli,
   page,
 }) => {
-  cli.onServeStart({
-    events: [
-      {
-        ...firstSnapshot(["claude-code", "codex", "cursor"]),
-        library: [
-          skill("notes", { fork_id: "f1" }),
-          skill("review", {
-            fork_id: "f2",
-            source: "https://github.com/me/skills",
-          }),
-          skill("pdf", { source: "https://github.com/acme/skills" }),
-        ],
-      },
-    ],
+  const doctor = cli.register(["doctor"], {
+    events: doctorWith(),
+    holdAfter: 0,
   });
-  await pauseTimers(page);
+  await watchLayer(page);
   await page.goto("/");
-  await expect(title(page)).toHaveText("You're all set");
-  await expect(rows(page).getByText("Passed:", { exact: true })).toHaveCount(5);
-  await expect(row(page, "agentx command line")).toContainText(
-    `${cliVersion} at ${bundled}`
+  await doctor.started;
+  // While the checks run, the shell shows the Inbox selected, its panel is empty, and no layer shows.
+  await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "true");
+  await expect(page.getByRole("link", { name: "Inbox" })).toHaveAttribute(
+    "aria-current",
+    "page"
   );
-  await expect(row(page, "git 2.40 or newer")).toContainText("git 2.43.0");
-  await expect(row(page, "Account repo opens")).toContainText(
-    "2 of your skills, 1 from sources"
-  );
-  await expect(row(page, "Watching this machine")).toContainText(
-    "Found 3 agents"
-  );
-  // No command field while the checks show.
-  await expect(
-    page.getByRole("button", { name: /Search skills/u })
-  ).toHaveCount(0);
+  await expect(inbox(page)).toHaveCount(0);
+  doctor.release();
 
-  // The Inbox opens 600ms after the checks pass.
-  await page.clock.runFor(590);
-  await expect(layer(page)).toBeVisible();
-  await page.clock.runFor(10);
   await expect(inbox(page)).toBeVisible();
-  await expect(layer(page)).toHaveCount(0);
+  await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "false");
+  await expect(layerShown(page)).toHaveCount(0);
   expect(cli.commands).toEqual(launchLines);
   expect(cli.serveStarts).toBe(1);
 });
@@ -161,7 +151,10 @@ test("an unusable account repo blocks at check 4", async ({ cli, page }) => {
   expect(cli.serveStarts).toBe(0);
 });
 
-test("a warning shows but does not block", async ({ cli, page }) => {
+test("a warning does not block, and manual mode shows it", async ({
+  cli,
+  page,
+}) => {
   const lock = {
     check: "lock",
     detail: "held by agentx (pid 4242)",
@@ -170,10 +163,15 @@ test("a warning shows but does not block", async ({ cli, page }) => {
     type: "doctor",
   } as const;
   cli.register(["doctor"], { events: doctorWith(lock) });
-  await pauseTimers(page);
+  await watchLayer(page);
   await page.goto("/");
-  const account = row(page, "Account repo opens");
+  await expect(inbox(page)).toBeVisible();
+  await expect(layerShown(page)).toHaveCount(0);
+  expect(cli.serveStarts).toBe(1);
+
+  await runChecks(page);
   await expect(title(page)).toHaveText("You're all set");
+  const account = row(page, "Account repo opens");
   await expect(
     account.getByText("Passed with a warning:", { exact: true })
   ).toBeVisible();
@@ -181,10 +179,6 @@ test("a warning shows but does not block", async ({ cli, page }) => {
   await expect(
     account.getByRole("button", { name: `Copy fix: ${lock.hint}` })
   ).toBeVisible();
-
-  await page.clock.resume();
-  await expect(inbox(page)).toBeVisible();
-  expect(cli.serveStarts).toBe(1);
 });
 
 test("serve refused fails check 5 with serve's message and hint", async ({
@@ -224,7 +218,9 @@ test("Retry runs everything again", async ({ cli, page }) => {
   await expect(title(page)).toHaveText("Checking this machine");
   doctor.release();
 
+  // A pass closes the layer at once.
   await expect(inbox(page)).toBeVisible();
+  await expect(layer(page)).toHaveCount(0);
   expect(cli.commands).toEqual([...launchLines, ...launchLines]);
   expect(cli.serveStarts).toBe(1);
 });
@@ -275,21 +271,46 @@ test("⌘C on a fix chip copies the CLI's hint", async ({ cli, page }) => {
   ).toBe(oldGit.hint);
 });
 
-test("manual mode waits for Open agentx, which goes to Settings", async ({
+test("manual mode shows every check and waits for Open agentx, which goes to Settings", async ({
   cli,
   page,
 }) => {
+  cli.onServeStart({
+    events: [
+      {
+        ...firstSnapshot(["claude-code", "codex", "cursor"]),
+        library: [
+          skill("notes", { fork_id: "f1" }),
+          skill("review", {
+            fork_id: "f2",
+            source: "https://github.com/me/skills",
+          }),
+          skill("pdf", { source: "https://github.com/acme/skills" }),
+        ],
+      },
+    ],
+  });
   await page.goto("/");
   await expect(inbox(page)).toBeVisible();
 
-  // Until Settings › Run checks exists, a harness module opens manual mode.
-  await page.addScriptTag({
-    type: "module",
-    url: "/e2e/harness/run-checks.ts",
-  });
+  await runChecks(page);
   await expect(title(page)).toHaveText("You're all set");
   await expect(layer(page)).toContainText("Watching your agents for changes.");
   await expect(rows(page).getByText("Passed:", { exact: true })).toHaveCount(5);
+  await expect(row(page, "agentx command line")).toContainText(
+    `${cliVersion} at ${bundled}`
+  );
+  await expect(row(page, "git 2.40 or newer")).toContainText("git 2.43.0");
+  await expect(row(page, "Account repo opens")).toContainText(
+    "2 of your skills, 1 from sources"
+  );
+  await expect(row(page, "Watching this machine")).toContainText(
+    "Found 3 agents"
+  );
+  // No command field while the layer shows.
+  await expect(
+    page.getByRole("button", { name: /Search skills/u })
+  ).toHaveCount(0);
   // It stays until Open agentx.
   await page.waitForTimeout(800);
   await expect(layer(page)).toBeVisible();
