@@ -19,7 +19,7 @@ update pdf: 3f2a9c1 -> 8b1e0f4, 2 files
 inventory 2: 3 configurations, 5 skills
 ```
 
-Each `inventory` line means the inventory changed. A change that leaves the inventory as it was prints nothing. Each `update` line is a skill with an update available. To stop serve, press Ctrl-C or close its stdin. Serve then exits with code `0`.
+The first `inventory` line is the inventory when serve starts. Each later `inventory` line means the inventory changed. A change that leaves the inventory as it was prints nothing. Each `update` line is a skill with an update available. To stop serve, press Ctrl-C or close its stdin. Serve then exits with code `0`.
 
 The desktop app runs serve with [`--json`](/cli/output#json-output). The JSON output also carries the whole inventory and a notice each time a skill changes state.
 
