@@ -53,7 +53,7 @@ var eventTypes = []struct {
 	{"error", errorEvent{}},
 	{"result", resultEvent{}},
 	{"log", logEvent{}},
-	{"snapshot", snapshotEvent{}},
+	{"inventory", inventoryEvent{}},
 	{"doctor", doctorEvent{}},
 	{"adoption", adoptionEvent{}},
 	{"reconcile", reconcileEvent{}},

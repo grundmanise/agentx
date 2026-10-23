@@ -101,3 +101,5 @@ Set either variable to move that directory. agentx needs `HOME`, and reads `XDG_
 ## JSON output
 
 Add `--json` to any command to print one JSON object per line. The agentx desktop app reads this output. From a terminal, the text output is all you need.
+
+Each object carries its `type` and the output `schema_version`, which [`agentx version`](/cli/version) prints. Schema version `2` names the result of a scan `inventory`, emitted by `agentx scan` and `agentx serve`; version `1` called it `snapshot`. If a script reads `snapshot` events, change it to read `inventory` events.

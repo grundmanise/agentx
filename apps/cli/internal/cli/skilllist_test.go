@@ -150,7 +150,7 @@ func TestSkillListWithoutALibrary(t *testing.T) {
 }
 
 // TestSkillListSpawnsOneGitProcessWhateverTheDrift counts the git processes
-// of a listing and of a snapshot over skills that differ every way drift
+// of a listing and of an inventory over skills that differ every way drift
 // reads: alpha edited, a file of it made executable, with a candidate and a
 // pending merge; beta displaced in one configuration, missing from another,
 // removed upstream, and holding a file the system-file list names; a skill
@@ -236,16 +236,16 @@ func TestSkillListSpawnsOneGitProcessWhateverTheDrift(t *testing.T) {
 	contains(t, "skill list", list.stdout, "modified, update available, merge pending  ")
 	count("skill list", calls())
 	before := len(calls())
-	snap := h.snapshot(t)
-	count("the snapshot", calls()[before:])
+	inventory := h.inventory(t)
+	count("the inventory", calls()[before:])
 	states := map[string]string{}
-	for _, e := range snap["library"].([]any) {
+	for _, e := range inventory["library"].([]any) {
 		entry := e.(map[string]any)
 		states[entry["name"].(string)] = fmt.Sprint(entry["state"]) + " " + drift(entry) + " " + fmt.Sprint(entry["pending_merge"])
 	}
-	equal(t, "alpha in the snapshot", states["alpha"], stateModified+"  true")
-	equal(t, "beta in the snapshot", states["beta"], stateCurrent+" displaced,missing,upstream removed <nil>")
-	contains(t, "the snapshot's warnings", fmt.Sprint(snap["warnings"]), ghost)
+	equal(t, "alpha in the inventory", states["alpha"], stateModified+"  true")
+	equal(t, "beta in the inventory", states["beta"], stateCurrent+" displaced,missing,upstream removed <nil>")
+	contains(t, "the inventory's warnings", fmt.Sprint(inventory["warnings"]), ghost)
 }
 
 // TestSkillListSanitisesTheName covers a library directory

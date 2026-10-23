@@ -236,7 +236,7 @@ func (inv *invocation) forkLink(libPath, target string) (string, error) {
 // install reports one: the library_skill event of what the rescan found, a
 // confirmation and one row per configuration it was placed in.
 func (inv *invocation) reportCreated(ctx context.Context, name string, targets []placeTarget, done placements) error {
-	snap, err := inv.scan(ctx, lockWait, "", false)
+	inventory, err := inv.scan(ctx, lockWait, "", false)
 	if err != nil {
 		return err
 	}
@@ -248,7 +248,7 @@ func (inv *invocation) reportCreated(ctx context.Context, name string, targets [
 	if err != nil {
 		return err
 	}
-	ev := sc.librarySkillEventFor(ctx, inv, snap, lib, targetIDs(done.placed))
+	ev := sc.librarySkillEventFor(ctx, inv, inventory, lib, targetIDs(done.placed))
 	inv.out.emit(ev)
 	out := inv.out
 	rows := inv.ownPlacements(name, done.placed, ev.Placements)

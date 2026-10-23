@@ -37,7 +37,7 @@ var expanders = map[Format]expander{
 
 // expanded is s with its command, arguments, environment, working
 // directory, URL and headers expanded from env, and its working directory
-// located, see SetRoot. The result goes to the handshake alone: a snapshot
+// located, see SetRoot. The result goes to the handshake alone: an inventory
 // records the declaration as written.
 func (s Server) expanded(env map[string]string) Server {
 	if x := expanders[s.format]; x != nil {

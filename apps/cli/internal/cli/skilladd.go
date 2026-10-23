@@ -1344,7 +1344,7 @@ func (inv *invocation) reportInstalled(ctx context.Context, b *batch, dones []*i
 	for _, done := range dones {
 		b.step(phaseInstall, done.v.name)
 	}
-	snap, err := inv.scan(ctx, lockWait, "", false)
+	inventory, err := inv.scan(ctx, lockWait, "", false)
 	if err != nil {
 		return err
 	}
@@ -1367,7 +1367,7 @@ func (inv *invocation) reportInstalled(ctx context.Context, b *batch, dones []*i
 	// Every universal client sees every skill of the run through the
 	// library, whatever the targets were, so the run names them all, the
 	// disabled ones and those --to left out included.
-	universal := universalClients(snap)
+	universal := universalClients(inventory)
 	for _, done := range dones {
 		lib, found := library[done.v.name]
 		if !found {
@@ -1375,7 +1375,7 @@ func (inv *invocation) reportInstalled(ctx context.Context, b *batch, dones []*i
 		}
 		sc.records[done.v.name] = lineage.Record{Name: done.v.name, Kind: lineage.KindManaged, Ref: lineage.ManagedRef(done.v.name),
 			Commit: done.v.commit, Tree: done.v.tree, Import: done.v.imp, HasImport: true}
-		ev := sc.librarySkillEventFor(ctx, inv, snap, lib, targetIDs(done.placed))
+		ev := sc.librarySkillEventFor(ctx, inv, inventory, lib, targetIDs(done.placed))
 		inv.out.emit(ev)
 		inv.printInstalled(done, ev)
 	}

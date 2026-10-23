@@ -31,21 +31,21 @@ func (h *harness) librarySkill(text, name string) jsonEvent {
 	return nil
 }
 
-// snapshotLibrary returns the entry of the named skill in the library of
-// the snapshot serve --once emits, the snapshot the desktop app applies.
-func (h *harness) snapshotLibrary(name string) map[string]any {
+// inventoryLibrary returns the entry of the named skill in the library of
+// the inventory serve --once emits, the inventory the desktop app applies.
+func (h *harness) inventoryLibrary(name string) map[string]any {
 	h.t.Helper()
 	out := h.serveOnce("--json")
 	if out.exit != 0 {
 		h.t.Fatalf("serve --once: exit %d\n%s", out.exit, out.stderr)
 	}
-	snap := h.one(out.stdout, "snapshot")
-	for _, e := range snap["library"].([]any) {
+	inventory := h.one(out.stdout, "inventory")
+	for _, e := range inventory["library"].([]any) {
 		if entry := e.(map[string]any); entry["name"] == name {
 			return entry
 		}
 	}
-	h.t.Fatalf("the snapshot's library holds no %s:\n%s", name, out.stdout)
+	h.t.Fatalf("the inventory's library holds no %s:\n%s", name, out.stdout)
 	return nil
 }
 
@@ -71,7 +71,7 @@ func drift(entry map[string]any) string {
 
 // TestSourceRemovedIsReportedAndClearedByAddingTheSourceAgain is the whole
 // life of the state: a managed skill whose source is removed keeps its
-// coordinates and is listed, and put in the snapshot, as source removed;
+// coordinates and is listed, and put in the inventory, as source removed;
 // an install from that source by id is refused with the command that
 // brings the source back; and running that command gives back the listing
 // the machine had before the removal, byte for byte, with the skill, its
@@ -104,12 +104,12 @@ func TestSourceRemovedIsReportedAndClearedByAddingTheSourceAgain(t *testing.T) {
 	contains(t, "skill list", afterText, "current, source removed")
 	contains(t, "skill list", afterText, s.url+"/skills/alpha")
 
-	// The snapshot says the same, in the same words: it is what the
+	// The inventory says the same, in the same words: it is what the
 	// desktop app shows, and a one-shot listing may not tell it otherwise.
-	entry := h.snapshotLibrary("alpha")
-	equal(t, "snapshot drift", drift(entry), "source removed")
+	entry := h.inventoryLibrary("alpha")
+	equal(t, "inventory drift", drift(entry), "source removed")
 	for _, field := range coordinates {
-		equal(t, "snapshot "+field, entry[field], before[field])
+		equal(t, "inventory "+field, entry[field], before[field])
 	}
 	listed := map[string]any{}
 	if err := json.Unmarshal([]byte(strings.SplitN(afterJSON, "\n", 2)[0]), &listed); err != nil {
@@ -118,7 +118,7 @@ func TestSourceRemovedIsReportedAndClearedByAddingTheSourceAgain(t *testing.T) {
 	delete(listed, "type")
 	delete(listed, "schema_version")
 	if !reflect.DeepEqual(entry, listed) {
-		t.Errorf("the snapshot and skill list disagree about alpha:\nsnapshot:  %v\nskill list: %v", entry, listed)
+		t.Errorf("the inventory and skill list disagree about alpha:\ninventory:  %v\nskill list: %v", entry, listed)
 	}
 
 	// An install that names the source by id cannot fetch it, since an id
@@ -150,8 +150,8 @@ func TestSourceRemovedIsReportedAndClearedByAddingTheSourceAgain(t *testing.T) {
 	if got := h.mustRun("skill", "list").stdout; got != beforeText {
 		t.Errorf("the listing differs from before the removal:\nbefore:\n%safter:\n%s", beforeText, got)
 	}
-	if got := drift(h.snapshotLibrary("alpha")); got != "" {
-		t.Errorf("the snapshot still carries drift %q after the source was added again", got)
+	if got := drift(h.inventoryLibrary("alpha")); got != "" {
+		t.Errorf("the inventory still carries drift %q after the source was added again", got)
 	}
 
 	// The install the hint was given for now goes through.
@@ -180,7 +180,7 @@ func TestSourceRemovedIsReadFromTheSettings(t *testing.T) {
 	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	beforeJSON := h.mustRun("--json", "skill", "list").stdout
 	before := h.librarySkill(beforeJSON, "alpha")
-	equal(t, "snapshot drift before", drift(h.snapshotLibrary("alpha")), "")
+	equal(t, "inventory drift before", drift(h.inventoryLibrary("alpha")), "")
 	settings, err := home.LoadSettings(h.agentx)
 	if err != nil {
 		t.Fatal(err)
@@ -211,7 +211,7 @@ func TestSourceRemovedIsReadFromTheSettings(t *testing.T) {
 	for _, field := range coordinates {
 		equal(t, field, after[field], before[field])
 	}
-	equal(t, "snapshot drift", drift(h.snapshotLibrary("alpha")), "source removed")
+	equal(t, "inventory drift", drift(h.inventoryLibrary("alpha")), "source removed")
 	refused := h.run("--json", "skill", "add", source.ID(s.url), "--name", "beta")
 	equal(t, "refused exit", refused.exit, 5)
 	equal(t, "refused hint", h.one(refused.stdout, "error")["hint"], removedHint(s.url))
@@ -226,7 +226,7 @@ func TestSourceRemovedIsReadFromTheSettings(t *testing.T) {
 	if got := h.mustRun("--json", "skill", "list").stdout; got != beforeJSON {
 		t.Errorf("the JSON listing differs once the entry is back:\nbefore:\n%safter:\n%s", beforeJSON, got)
 	}
-	equal(t, "snapshot drift once the entry is back", drift(h.snapshotLibrary("alpha")), "")
+	equal(t, "inventory drift once the entry is back", drift(h.inventoryLibrary("alpha")), "")
 }
 
 // TestImportedSettingsDecideSourceRemoved imports settings that do not hold
@@ -247,7 +247,7 @@ func TestImportedSettingsDecideSourceRemoved(t *testing.T) {
 
 	h.mustRun("import", elsewhere, "--yes")
 	equal(t, "drift under settings without the source", drift(h.librarySkill(h.mustRun("--json", "skill", "list").stdout, "alpha")), "source removed")
-	equal(t, "snapshot drift", drift(h.snapshotLibrary("alpha")), "source removed")
+	equal(t, "inventory drift", drift(h.inventoryLibrary("alpha")), "source removed")
 
 	h.mustRun("source", "remove", s.url) // takes the ref the import left behind, and no entry
 	h.mustRun("import", here, "--yes")

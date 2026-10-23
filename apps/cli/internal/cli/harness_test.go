@@ -250,13 +250,13 @@ func (h *harness) events(text string) []jsonEvent {
 	return events
 }
 
-// types lists the event types in order; every event must carry schema_version 1.
+// types lists the event types in order; every event must carry the current schema_version.
 func (h *harness) types(events []jsonEvent) []string {
 	h.t.Helper()
 	var types []string
 	for _, e := range events {
-		if e["schema_version"] != float64(1) {
-			h.t.Errorf("event %v: schema_version = %v, want 1", e, e["schema_version"])
+		if e["schema_version"] != float64(schemaVersion) {
+			h.t.Errorf("event %v: schema_version = %v, want %d", e, e["schema_version"], schemaVersion)
 		}
 		types = append(types, e["type"].(string))
 	}
@@ -387,8 +387,8 @@ func (p *serveProc) next(typ string) jsonEvent {
 				p.t.Fatalf("not a JSON event: %q: %v", line, err)
 			}
 			checkEvent(p.t, e)
-			if e["schema_version"] != float64(1) {
-				p.t.Errorf("event %v: schema_version = %v, want 1", e, e["schema_version"])
+			if e["schema_version"] != float64(schemaVersion) {
+				p.t.Errorf("event %v: schema_version = %v, want %d", e, e["schema_version"], schemaVersion)
 			}
 			if e["type"] == "reconcile" && typ != "reconcile" {
 				continue

@@ -45,7 +45,7 @@ func keysOf(m map[string]any) string {
 // document turns on: an export names where a skill came from and carries
 // nothing it could be reconstructed from. The skill's description, the
 // bytes of its files and a secret-looking value inside one of them appear
-// nowhere in the export, and the document holds no snapshot.
+// nowhere in the export, and the document holds no inventory.
 func TestExportCarriesCoordinatesAndNoContent(t *testing.T) {
 	t.Parallel()
 	const (
@@ -76,7 +76,7 @@ func TestExportCarriesCoordinatesAndNoContent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, leaked := range []string{description, body, secret, "SKILL.md", "notes.md", "snapshot"} {
+	for _, leaked := range []string{description, body, secret, "SKILL.md", "notes.md", "inventory"} {
 		if bytes.Contains(raw, []byte(leaked)) {
 			t.Errorf("the export carries %q:\n%s", leaked, raw)
 		}

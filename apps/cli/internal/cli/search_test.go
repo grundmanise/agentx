@@ -84,11 +84,11 @@ func TestServeAnswersSearchFromTheSourceIndex(t *testing.T) {
 	h := serveHarness(t)
 	alpha, beta := h.searchSources(t)
 	p := h.serve(t, "--json")
-	snap := p.next("snapshot")
+	inventory := p.next("inventory")
 
 	p.send(`{"type":"search","request_id":"s1","query":"commit"}`)
 	e := p.next("search")
-	equal(t, "instance_id", e["instance_id"], snap["instance_id"])
+	equal(t, "instance_id", e["instance_id"], inventory["instance_id"])
 	// Sorted by source canonical URL, then name: alpha before beta, and
 	// inside alpha the name match before the description match.
 	want := []string{
@@ -142,7 +142,7 @@ func TestServeAnswersSearchWhileAScanWaits(t *testing.T) {
 	calls := countingGit(t, h)
 	version := mutationVersion(t, h)
 	p := h.serve(t, "--json")
-	p.next("snapshot")
+	p.next("inventory")
 	p.search("idle", "review") // the index is built: its first scan has run
 	// The check serve runs at launch fetches both sources and ends in one
 	// write, whose rescan rebuilds the index; once a refresh asked for after
@@ -186,7 +186,7 @@ func TestServeReindexesWhenSourcesChange(t *testing.T) {
 	h := serveHarness(t)
 	requireGit(t)
 	p := h.serve(t, "--json")
-	p.next("snapshot")
+	p.next("inventory")
 	if got := p.search("s0", "commit"); len(got) != 0 {
 		t.Errorf("results before any source = %q", got)
 	}
@@ -239,7 +239,7 @@ func TestServePrintsSearchLines(t *testing.T) {
 	h := serveHarness(t)
 	h.searchSources(t)
 	p := h.serve(t)
-	p.line("snapshot 1: 1 configuration, 0 skills")
+	p.line("inventory 1: 1 configuration, 0 skills")
 	p.send(`{"type":"search","request_id":"s1","query":"commit"}`)
 	p.line("search s1: 3 results")
 	p.send(`{"type":"search","request_id":"s2","query":"deploy"}`)
@@ -268,7 +268,7 @@ func TestSourceRefNeverShowsAnIncompleteFetch(t *testing.T) {
 
 	before := mutationVersion(t, h)
 	p := h.serve(t, "--json")
-	p.next("snapshot")
+	p.next("inventory")
 	whole := []string{s.url + " commit commit"}
 	if got := p.search("s0", "commit"); !reflect.DeepEqual(got, whole) {
 		t.Fatalf("results before the fetch = %q, want %q", got, whole)

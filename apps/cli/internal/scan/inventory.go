@@ -18,11 +18,12 @@ type Options struct {
 	Project    string              // absolute project root; empty scans user scope only
 	Disabled   []string            // configuration ids the user disabled
 	CopyMode   map[string][]string // skill directory name to the configuration ids holding a copy
-	Library    bool                // also list the library's own directories, for a snapshot that reports them
+	Library    bool                // also list the library's own directories, for an inventory that reports them
 }
 
-// Snapshot is the inventory of one machine, the snapshot event without its envelope.
-type Snapshot struct {
+// Inventory is the complete result of one scan of one machine, the
+// inventory event without its envelope.
+type Inventory struct {
 	InstanceID     string          `json:"instance_id"`
 	ScanCounter    int             `json:"scan_counter"`
 	Machine        Machine         `json:"machine"`
@@ -87,8 +88,8 @@ type Occurrence struct {
 // LibraryEntry is one skill directory of the library as agentx reports it:
 // what it is called, what agentx knows it as, where it came from, how it
 // stands against the version it came from and where it is seen from. It is
-// what the library_skill event carries and what a snapshot lists under
-// library, one shape in both, so that the desktop app reading snapshots and
+// what the library_skill event carries and what an inventory lists under
+// library, one shape in both, so that the desktop app reading inventories and
 // a script reading skill list are told the same thing about a skill. A skill
 // node is something else: one content version found anywhere on the
 // machine, which knows nothing of lineage.
@@ -185,7 +186,7 @@ type Edge struct {
 
 // Read performs the local reads of one scan under the caller's shared lock.
 // Nothing is written; what cannot be read becomes a warning. Handshake the
-// declared servers outside the lock, then compose with Snapshot.
+// declared servers outside the lock, then compose with Inventory.
 func Read(o Options) *Scan {
 	b := &Scan{
 		Options: o,
@@ -194,7 +195,7 @@ func Read(o Options) *Scan {
 		servers: map[string]*Server{},
 		plugins: map[string]bool{},
 		seen:    map[string]bool{},
-		snap: Snapshot{
+		inventory: Inventory{
 			InstanceID:     o.InstanceID,
 			ScanCounter:    1,
 			Machine:        Machine{ID: o.MachineID, Label: o.Label},
@@ -218,8 +219,8 @@ func Read(o Options) *Scan {
 		}
 		conf.PhysicalID = id("configuration", o.MachineID, conf.ID, b.portable(conf.Path))
 		conf.LogicalID = conf.PhysicalID
-		b.snap.Configurations = append(b.snap.Configurations, conf)
-		b.snap.Edges = append(b.snap.Edges, Edge{From: o.MachineID, To: conf.PhysicalID})
+		b.inventory.Configurations = append(b.inventory.Configurations, conf)
+		b.inventory.Edges = append(b.inventory.Edges, Edge{From: o.MachineID, To: conf.PhysicalID})
 		for _, dir := range dirs {
 			for _, p := range b.skillsIn(dir) {
 				b.add(conf, p, ScopeUser, "")
@@ -249,18 +250,18 @@ func Read(o Options) *Scan {
 	return b
 }
 
-// Scan is one scan between its local reads and its snapshot.
+// Scan is one scan between its local reads and its inventory.
 type Scan struct {
 	Options
 	*scanner
-	nodes    map[string]*Skill  // by content hash
-	servers  map[string]*Server // by physical id
-	plugins  map[string]bool    // physical ids already recorded
-	seen     map[string]bool    // occurrence and edge ids already recorded
-	declared []*declaration
-	stored   map[string]home.Handshake // from the handshakes file, by logical id
-	library  []LibrarySkill            // the library's own directories, read only when Options.Library asks
-	snap     Snapshot
+	nodes     map[string]*Skill  // by content hash
+	servers   map[string]*Server // by physical id
+	plugins   map[string]bool    // physical ids already recorded
+	seen      map[string]bool    // occurrence and edge ids already recorded
+	declared  []*declaration
+	stored    map[string]home.Handshake // from the handshakes file, by logical id
+	library   []LibrarySkill            // the library's own directories, read only when Options.Library asks
+	inventory Inventory
 }
 
 // Library is the skills the library held when Read ran, sorted by name, or
@@ -271,15 +272,15 @@ type Scan struct {
 // could not be read in it is one of the scan's warnings.
 func (s *Scan) Library() []LibrarySkill { return s.library }
 
-// Warn adds a warning of the caller's own to the snapshot, for something it
+// Warn adds a warning of the caller's own to the inventory, for something it
 // reads beside the scan, under the same lock, and could not. It is sorted in
-// with the scan's own warnings when Snapshot composes them and, like them,
+// with the scan's own warnings when Inventory composes them and, like them,
 // never fails the scan.
 func (s *Scan) Warn(message string) { s.warn(message) }
 
-// Snapshot composes the inventory, once per Scan, and returns it with the
+// Inventory composes the inventory, once per Scan, and returns it with the
 // handshakes this scan took, by server logical id, for the handshakes file.
-func (s *Scan) Snapshot() (Snapshot, map[string]home.Handshake) {
+func (s *Scan) Inventory() (Inventory, map[string]home.Handshake) {
 	fresh := s.composeServers()
 	return s.finish(), fresh
 }
@@ -318,7 +319,7 @@ func (s *Scan) add(conf Configuration, p placement, scope, plugin string) *Skill
 func (s *Scan) edge(from, to string) {
 	if key := from + ">" + to; !s.seen[key] {
 		s.seen[key] = true
-		s.snap.Edges = append(s.snap.Edges, Edge{From: from, To: to})
+		s.inventory.Edges = append(s.inventory.Edges, Edge{From: from, To: to})
 	}
 }
 
@@ -345,24 +346,26 @@ func (s *Scan) portable(path string) string {
 }
 
 // finish orders everything so two scans of one machine are byte-identical.
-func (s *Scan) finish() Snapshot {
+func (s *Scan) finish() Inventory {
 	for _, node := range s.nodes {
 		sort.Slice(node.Occurrences, func(i, j int) bool { return node.Occurrences[i].ID < node.Occurrences[j].ID })
-		s.snap.Skills = append(s.snap.Skills, *node)
+		s.inventory.Skills = append(s.inventory.Skills, *node)
 	}
-	sort.Slice(s.snap.Skills, func(i, j int) bool { return s.snap.Skills[i].PhysicalID < s.snap.Skills[j].PhysicalID })
+	sort.Slice(s.inventory.Skills, func(i, j int) bool { return s.inventory.Skills[i].PhysicalID < s.inventory.Skills[j].PhysicalID })
 	for _, node := range s.servers {
 		sort.Slice(node.Occurrences, func(i, j int) bool { return node.Occurrences[i].ID < node.Occurrences[j].ID })
-		s.snap.MCPServers = append(s.snap.MCPServers, *node)
+		s.inventory.MCPServers = append(s.inventory.MCPServers, *node)
 	}
-	sort.Slice(s.snap.MCPServers, func(i, j int) bool { return s.snap.MCPServers[i].PhysicalID < s.snap.MCPServers[j].PhysicalID })
-	sort.Slice(s.snap.Plugins, func(i, j int) bool { return s.snap.Plugins[i].PhysicalID < s.snap.Plugins[j].PhysicalID })
-	sort.Slice(s.snap.Edges, func(i, j int) bool {
-		if s.snap.Edges[i].From != s.snap.Edges[j].From {
-			return s.snap.Edges[i].From < s.snap.Edges[j].From
-		}
-		return s.snap.Edges[i].To < s.snap.Edges[j].To
+	sort.Slice(s.inventory.MCPServers, func(i, j int) bool {
+		return s.inventory.MCPServers[i].PhysicalID < s.inventory.MCPServers[j].PhysicalID
 	})
-	s.snap.Warnings = s.sortedWarnings()
-	return s.snap
+	sort.Slice(s.inventory.Plugins, func(i, j int) bool { return s.inventory.Plugins[i].PhysicalID < s.inventory.Plugins[j].PhysicalID })
+	sort.Slice(s.inventory.Edges, func(i, j int) bool {
+		if s.inventory.Edges[i].From != s.inventory.Edges[j].From {
+			return s.inventory.Edges[i].From < s.inventory.Edges[j].From
+		}
+		return s.inventory.Edges[i].To < s.inventory.Edges[j].To
+	})
+	s.inventory.Warnings = s.sortedWarnings()
+	return s.inventory
 }

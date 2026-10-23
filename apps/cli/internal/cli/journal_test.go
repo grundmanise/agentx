@@ -97,7 +97,7 @@ func TestScanResumesAStagedJournal(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	equal(t, "stderr", out.stderr, "")
 	events := h.events(out.stdout)
-	equal(t, "snapshot label", events[0]["machine"].(map[string]any)["label"], "two")
+	equal(t, "inventory label", events[0]["machine"].(map[string]any)["label"], "two")
 	equal(t, "label", readSettingsFile(t, h)["label"], "two")
 	gone(t, "journal", journal)
 	gone(t, "staged file", staged)
@@ -195,24 +195,24 @@ func TestServeRecoversAJournalOnRescan(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	live := filepath.Join(h.agentx, "settings.json")
 	p := h.serve(t, "--json")
-	snap := p.next("snapshot")
-	equal(t, "label", snap["machine"].(map[string]any)["label"], "one")
+	inventory := p.next("inventory")
+	equal(t, "label", inventory["machine"].(map[string]any)["label"], "one")
 	p.send(`{"type":"refresh","request_id":"idle"}`)
 	p.next("refresh_complete")
 
 	// A mutation that stopped after staging: the rescan the refresh asks for resumes it.
 	journal, _ := writeJournal(t, h, "1000-aaaa", "staged", sha(readFile(t, live)), relabel(t, h, "two"))
 	p.send(`{"type":"refresh","request_id":"r1"}`)
-	snap = p.next("snapshot")
-	equal(t, "scan_counter", snap["scan_counter"], float64(2))
-	equal(t, "label", snap["machine"].(map[string]any)["label"], "two")
+	inventory = p.next("inventory")
+	equal(t, "scan_counter", inventory["scan_counter"], float64(2))
+	equal(t, "label", inventory["machine"].(map[string]any)["label"], "two")
 	e := p.next("refresh_complete")
 	equal(t, "request_id", e["request_id"], "r1")
 	equal(t, "ok", e["ok"], true)
 	gone(t, "journal", journal)
 	equal(t, "version", readVersion(t, h), 2)
 
-	// One whose live file was edited meanwhile: no fresh inventory, the last snapshot stands.
+	// One whose live file was edited meanwhile: no fresh inventory, the last inventory stands.
 	journal, _ = writeJournal(t, h, "2000-bbbb", "staged", sha([]byte("{}\n")), relabel(t, h, "three"))
 	p.send(`{"type":"refresh","request_id":"r2"}`)
 	e = p.next("refresh_complete")
@@ -224,7 +224,7 @@ func TestServeRecoversAJournalOnRescan(t *testing.T) {
 	}
 	equal(t, "label", readSettingsFile(t, h)["label"], "two")
 
-	// Moving the journal aside resolves it; the snapshot is unchanged.
+	// Moving the journal aside resolves it; the inventory is unchanged.
 	if err := os.Rename(journal, journal+".aside"); err != nil {
 		t.Fatal(err)
 	}

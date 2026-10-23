@@ -84,10 +84,10 @@ func handshakeFixture(web string) fixture {
 	}
 }
 
-// serverNodes groups the server nodes of a snapshot by name.
-func serverNodes(snap jsonEvent) map[string][]map[string]any {
+// serverNodes groups the server nodes of an inventory by name.
+func serverNodes(inventory jsonEvent) map[string][]map[string]any {
 	nodes := map[string][]map[string]any{}
-	for _, s := range snap["mcp_servers"].([]any) {
+	for _, s := range inventory["mcp_servers"].([]any) {
 		node := s.(map[string]any)
 		nodes[node["name"].(string)] = append(nodes[node["name"].(string)], node)
 	}
@@ -141,11 +141,11 @@ func TestScanHandshake(t *testing.T) {
 	equal(t, "exit", out.exit, 0)
 	noSecret(args, out)
 	events := h.events(out.stdout)
-	if got, want := h.types(events), []string{"snapshot", "result"}; !reflect.DeepEqual(got, want) {
+	if got, want := h.types(events), []string{"inventory", "result"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("event types = %v, want %v", got, want)
 	}
-	snap := events[0]
-	nodes := serverNodes(snap)
+	inventory := events[0]
+	nodes := serverNodes(inventory)
 	hex64 := regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 	// The same command line with different environments: one logical server,
@@ -198,7 +198,7 @@ func TestScanHandshake(t *testing.T) {
 			}
 		}
 	}
-	// Why each one failed, with a hint, for a consumer of the snapshot.
+	// Why each one failed, with a hint, for a consumer of the inventory.
 	for name, reason := range map[string]string{"hang": "timeout", "linger": "timeout", "exit": "failed", "missing": "not_found", "locked": "unauthorized"} {
 		node := nodes[name][0]
 		equal(t, name+" signature", node["signature"], "none")
@@ -214,7 +214,7 @@ func TestScanHandshake(t *testing.T) {
 	if _, ok := web["occurrences"].([]any)[0].(map[string]any)["handshake_error"]; ok {
 		t.Errorf("web carries a handshake_error: %v", web)
 	}
-	warnings := fmt.Sprint(snap["warnings"])
+	warnings := fmt.Sprint(inventory["warnings"])
 	for _, want := range []string{
 		"~/.claude.json: server hang: timed out after 1s",
 		"~/.claude.json: server linger: timed out after 1s",
@@ -226,7 +226,7 @@ func TestScanHandshake(t *testing.T) {
 	} {
 		contains(t, "warnings", h.portable(warnings), want)
 	}
-	equal(t, "warnings", len(snap["warnings"].([]any)), 6)
+	equal(t, "warnings", len(inventory["warnings"].([]any)), 6)
 
 	// The handshakes file, corrupt before, now keeps the last signature per
 	// logical server and nothing for a server that failed; it is derived
@@ -253,7 +253,7 @@ func TestScanHandshake(t *testing.T) {
 
 	// A plain scan reuses the stored signature: the two declarations now
 	// merge into one node, and no occurrence claims a handshake.
-	after := h.snapshot(t)
+	after := h.inventory(t)
 	equal(t, "warnings after", len(after["warnings"].([]any)), 0)
 	plain := serverNodes(after)
 	equal(t, "fix nodes after", len(plain["fix"]), 1)
@@ -372,8 +372,8 @@ enabled = false
 	h.env["ANTHROPIC_API_KEY"] = "secret-hand-header-value"
 	h.env["AGENTX_TEST_BIN"] = mcpServer
 
-	snap := h.snapshot(t, "--handshake")
-	nodes := serverNodes(snap)
+	inventory := h.inventory(t, "--handshake")
+	nodes := serverNodes(inventory)
 	occurrence := func(name string) map[string]any {
 		t.Helper()
 		equal(t, name+" nodes", len(nodes[name]), 1)
@@ -392,7 +392,7 @@ enabled = false
 		}
 	}
 	equal(t, "bearer header keys", fmt.Sprint(occurrence("bearer")["header_keys"]), "[Authorization]")
-	// The snapshot records the declaration as written, never an expansion.
+	// The inventory records the declaration as written, never an expansion.
 	equal(t, "claude-key url", occurrence("claude-key")["url"], "${AGENTX_TEST_WEB}")
 	equal(t, "claude-local command", occurrence("claude-local")["command"], "${AGENTX_TEST_BIN}")
 	credential, _ := occurrence("claude-credential")["handshake_error"].(map[string]any)
@@ -412,8 +412,8 @@ enabled = false
 			t.Errorf("%s carries a handshake_error: %v", name, occ)
 		}
 	}
-	warnings := fmt.Sprint(snap["warnings"])
-	equal(t, "warnings", len(snap["warnings"].([]any)), 2)
+	warnings := fmt.Sprint(inventory["warnings"])
+	equal(t, "warnings", len(inventory["warnings"].([]any)), 2)
 	contains(t, "warnings", warnings, "server unset: initialize: HTTP 401 Unauthorized")
 	contains(t, "warnings", warnings, "server claude-credential: initialize: HTTP 401 Unauthorized")
 

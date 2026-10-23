@@ -263,7 +263,7 @@ func (inv *invocation) abortMerge(ctx context.Context, name string) error {
 	}
 	inv.summary = "gave up the merge of " + name + kept
 	if lib, ok := librarySkill(inv.dirs.Library, name); ok {
-		snap, err := inv.scan(ctx, lockWait, "", false)
+		inventory, err := inv.scan(ctx, lockWait, "", false)
 		if err != nil {
 			return err
 		}
@@ -271,7 +271,7 @@ func (inv *invocation) abortMerge(ctx context.Context, name string) error {
 		if err != nil {
 			return err
 		}
-		inv.out.emit(sc.librarySkillEventFor(ctx, inv, snap, lib, nil))
+		inv.out.emit(sc.librarySkillEventFor(ctx, inv, inventory, lib, nil))
 	}
 	inv.out.done("gave up the merge of " + inv.out.paint(heading, sanitised(name)) + kept)
 	return nil

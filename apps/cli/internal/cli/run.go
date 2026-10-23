@@ -24,7 +24,7 @@ type invocation struct {
 	out      *writer
 	dirs     home.Dirs
 	git      *gitx.Runner
-	instance string // the instance_id snapshots carry, fixed once per run
+	instance string // the instance_id inventories carry, fixed once per run
 	parsed   bool   // set once cobra has parsed the command line; errors after that are agentx's own
 	summary  string // what the result event says about a run that succeeded
 

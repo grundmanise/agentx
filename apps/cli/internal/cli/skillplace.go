@@ -627,7 +627,7 @@ func isLibraryDirectory(path, libPath string) bool {
 // placements in the event are what the rescan found, not what the command
 // meant to make.
 func (inv *invocation) reportPlaced(ctx context.Context, name string, targets []placeTarget, done placements) error {
-	snap, err := inv.scan(ctx, lockWait, "", false)
+	inventory, err := inv.scan(ctx, lockWait, "", false)
 	if err != nil {
 		return err
 	}
@@ -639,7 +639,7 @@ func (inv *invocation) reportPlaced(ctx context.Context, name string, targets []
 	if err != nil {
 		return err
 	}
-	ev := sc.librarySkillEventFor(ctx, inv, snap, lib, targetIDs(targets))
+	ev := sc.librarySkillEventFor(ctx, inv, inventory, lib, targetIDs(targets))
 	inv.out.emit(ev)
 	inv.printPlaced(lib, targets, done, ev)
 	inv.summary = placeSummary(name, done) + universalClause(ev.Universal)
@@ -690,13 +690,13 @@ func (inv *invocation) skillContext(ctx context.Context) (skillContext, error) {
 // which is what a listing of the whole library does. The universal clients
 // are every one the rescan detected, covered or not: they see the skill
 // through the library whatever the command covered.
-func (sc skillContext) librarySkillEventFor(ctx context.Context, inv *invocation, snap scan.Snapshot, lib scan.LibrarySkill, covered []string) librarySkillEvent {
-	places := inv.placements(snap, lib, sc.modes)
+func (sc skillContext) librarySkillEventFor(ctx context.Context, inv *invocation, inventory scan.Inventory, lib scan.LibrarySkill, covered []string) librarySkillEvent {
+	places := inv.placements(inventory, lib, sc.modes)
 	if covered != nil {
 		places = filterPlacements(places, covered)
 	}
 	rec, managed := sc.records[lib.Name]
-	return skillFromLibrary(lib, rec, managed, sc.sources, sc.account, places, universalClients(snap), sc.observationOf(ctx, inv, lib))
+	return skillFromLibrary(lib, rec, managed, sc.sources, sc.account, places, universalClients(inventory), sc.observationOf(ctx, inv, lib))
 }
 
 // lineageRecords are the branches of the account repo by skill name, a

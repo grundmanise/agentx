@@ -712,7 +712,7 @@ func noAccountSkill(f forkSite) error {
 // per configuration it was placed in.
 func (inv *invocation) reportAccountInstall(ctx context.Context, in *accountInstall, done placements) error {
 	f := in.site
-	snap, err := inv.scan(ctx, lockWait, "", false)
+	inventory, err := inv.scan(ctx, lockWait, "", false)
 	if err != nil {
 		return err
 	}
@@ -728,7 +728,7 @@ func (inv *invocation) reportAccountInstall(ctx context.Context, in *accountInst
 	if in.managed == nil {
 		covered = targetIDs(done.placed)
 	}
-	ev := sc.librarySkillEventFor(ctx, inv, snap, lib, covered)
+	ev := sc.librarySkillEventFor(ctx, inv, inventory, lib, covered)
 	inv.out.emit(ev)
 	out, name := inv.out, sanitised(f.name)
 	line := "installed " + out.paint(heading, name) + " from the account remote at " + short(f.rec.Commit)

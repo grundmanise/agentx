@@ -12,7 +12,7 @@ import (
 
 // schemaVersion is the output schema every event carries. Bump it when an
 // event changes incompatibly.
-const schemaVersion = 1
+const schemaVersion = 2
 
 // event is the envelope every JSON line starts with. Event structs embed it.
 type event struct {
@@ -199,7 +199,7 @@ func (w *writer) done(msg string) {
 }
 
 // hint says on stderr what to do about the warnings above it; in JSON mode
-// the snapshot carries the hints.
+// the inventory carries the hints.
 func (w *writer) hint(msg string) {
 	if !w.json {
 		w.write(w.stderr, fmt.Sprintf("%s %s\n", w.err().paint(warnStyle, "hint:"), sanitised(msg)))
