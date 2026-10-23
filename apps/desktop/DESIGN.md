@@ -343,7 +343,8 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `check.fail-mark` | `accent.danger` |  |
 | `check.wait-bg` | `gray-880` | Pending mark tile |
 | `check.wait-mark` | `gray-500` |  |
-| `check.label` | `gray-50` | Check title (`gray-300` while pending) |
+| `check.label` | `gray-50` | Check title |
+| `check.label-pending` | `gray-300` | Check title while waiting or running |
 | `check.detail` | `gray-400` | Mono detail line |
 | `check.fix-bg` | `gray-980` | Fix command chip |
 | `check.fix-border` | `gray-870` |  |
@@ -383,7 +384,9 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.inbox-headline` | serif | 68 | 400 |  |  |  | Inbox headline; second clause italic `text.muted` |
 | `type.review-title` | serif | 52 | 400 |  |  |  | Review title |
 | `type.dialog-title` | serif | 36 | 400 |  |  |  | Dialog and sheet title |
-| `type.startup-title` | serif | 48 | 400 |  |  |  | Startup title |
+| `type.startup-title` | serif | 48 | 400 | 1 | -0.02em |  | Startup title |
+| `type.startup-subtitle` | sans | 15 | 400 | 1.5 |  |  | Startup subtitle (`text.muted`) |
+| `type.check-detail` | mono | 12.5 | 400 | 1.5 |  |  | Startup check detail (`check.detail`) and fix chip |
 | `type.skill-name` | sans | 30 | 600 |  | -0.035em |  | Detail pane skill name |
 | `type.body` | sans | 14 | 400 |  |  |  | Body, palette rows |
 | `type.row-name` | sans | 14 | 500 |  |  |  | Row name |
@@ -734,6 +737,7 @@ The product mark is `shell.logo-mark` on `shell.logo-bg`, 26px `shell.logo-radiu
 - Floating bar: `translateY(24px) → 0`, opacity 0 → 1, `.22s ease`.
 - Card resolve: 280ms, see §6.
 - Spinner-style icons (Check updates, Check tools): one full rotation `.9–1s ease`, then a toast.
+- Startup check running (`animate-check-spin`): the status ring turns once a second, linear, while its check runs, and stops when the check settles.
 - Diff pane choice: `opacity .2s, box-shadow .2s`.
 - Primary button enable/disable: `opacity .2s`. Nothing loops forever.
 

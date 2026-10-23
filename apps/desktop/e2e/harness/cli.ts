@@ -12,6 +12,10 @@
 //
 // A command line the CLI would refuse (by src/cli/commands.gen.ts), or one with no registered
 // reply, fails the test once it ends, unless the test takes it with takeRefusals().
+//
+// The app checks the machine on launch (src/startup/startup.ts), so the mock starts out with a
+// passing launch: `version` and `doctor` replies, and a serve child that writes its first snapshot
+// when it starts. A test replaces them with register() and onServeStart().
 import { once } from "node:events";
 
 import { test as base } from "@playwright/test";
@@ -41,6 +45,96 @@ export interface Resolution {
   path: string | null;
   found: "bundled" | "path" | null;
 }
+
+/** What a serve child does when the app starts it: writes these events, then exits if asked to. */
+export interface ServeStart {
+  events?: InlineEvent[];
+  /** Ends the child after its events; the supervisor restarts it unless the code is 2, 6 or 8. */
+  exit?: { code: number; stderr?: string[] };
+}
+
+/** A configuration as a snapshot lists it. */
+export const configuration = (id: string) => ({
+  client: id,
+  enabled: true,
+  id,
+  logical_id: id,
+  name: id,
+  path: `/home/me/.${id}`,
+  physical_id: id,
+  reads_library: false,
+});
+
+/** A serve child's first snapshot, with these configurations. */
+export const firstSnapshot = (configurations = ["claude-code", "codex"]) =>
+  ({
+    configurations: configurations.map(configuration),
+    library: [],
+    scan_counter: 1,
+    type: "snapshot",
+  }) satisfies InlineEvent;
+
+/** Doctor's rows on a machine where everything passes. */
+export const passingDoctor: InlineEvent[] = [
+  { check: "git", detail: "git 2.43.0", status: "ok", type: "doctor" },
+  {
+    check: "fork_merges",
+    detail: "merge-tree works",
+    status: "ok",
+    type: "doctor",
+  },
+  {
+    check: "commit_identity",
+    detail: "commit ids match",
+    status: "ok",
+    type: "doctor",
+  },
+  { check: "home", detail: "/home/me/.agentx", status: "ok", type: "doctor" },
+  { check: "lock", detail: "free", status: "ok", type: "doctor" },
+  {
+    check: "mutations",
+    detail: "none unfinished",
+    status: "ok",
+    type: "doctor",
+  },
+  {
+    check: "settings",
+    detail: "/home/me/.agentx/settings.json",
+    status: "ok",
+    type: "doctor",
+  },
+  {
+    check: "account_repo",
+    detail: "/home/me/.agentx/account.git",
+    status: "ok",
+    type: "doctor",
+  },
+  {
+    check: "library",
+    detail: "/home/me/.agents/skills",
+    status: "ok",
+    type: "doctor",
+  },
+  {
+    check: "clients",
+    detail: "2 of 12 registered clients detected",
+    status: "info",
+    type: "doctor",
+  },
+];
+
+/** The CLI version a passing launch reports. */
+export const cliVersion = "1.2.0";
+
+/** Doctor's passing rows with `changes` put in place of the rows of the same check. */
+export const doctorWith = (...changes: InlineEvent[]): InlineEvent[] =>
+  passingDoctor.map(
+    (row) =>
+      changes.find(
+        (c) =>
+          c.type === "doctor" && row.type === "doctor" && c.check === row.check
+      ) ?? row
+  );
 
 /** A registered reply, and for one that holds, what releases it. */
 export interface Registered {
@@ -169,9 +263,14 @@ export class MockCli {
   };
   private childId = 1;
   private serving = false;
+  private serveStart: ServeStart = { events: [firstSnapshot()] };
 
   constructor(page: Page) {
     this.page = page;
+    this.register(["version"], {
+      events: [{ cli_version: cliVersion, type: "version" }],
+    });
+    this.register(["doctor"], { events: passingDoctor });
   }
 
   async install() {
@@ -254,6 +353,11 @@ export class MockCli {
     ]);
   }
 
+  /** What every later serve child does when the app starts it. */
+  onServeStart(start: ServeStart) {
+    this.serveStart = start;
+  }
+
   /** Starts a new serve child, as the supervisor's restart does; its id goes on later events. */
   serveRestart(childId: number) {
     this.childId = childId;
@@ -301,8 +405,21 @@ export class MockCli {
         return pending !== undefined;
       }
       case "serve_start": {
+        if (this.serving) {
+          return this.childId;
+        }
+        // A child that ended is followed by a new one, with the next id.
+        if (this.serveStarts > 0) {
+          this.childId += 1;
+        }
         this.serveStarts += 1;
         this.serving = true;
+        const { events = [], exit } = this.serveStart;
+        await this.serveEmit(events);
+        if (exit !== undefined) {
+          const restart = [2, 6, 8].includes(exit.code) ? null : 500;
+          await this.serveExit(exit.code, exit.stderr, restart);
+        }
         return this.childId;
       }
       case "serve_request": {
