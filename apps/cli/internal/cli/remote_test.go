@@ -290,6 +290,17 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 	equal(t, "the fresh machine's notes", ev["state"], restorePresent)
 	equal(t, "its kind", ev["kind"], lineage.KindManaged)
 	equal(t, "its source", ev["source"], "file://"+remote)
+	equal(t, "what the import did", ev["action"], importInstalled)
+	// a publishes again, and an entry that follows takes the fresh machine's
+	// notes forward to it.
+	writeFile(t, filepath.Join(a.forkDir("notes", "notes"), "more.md"), "more\n")
+	a.mustRun("skill", "publish", "notes")
+	follows := editedExport(t, a, file, "follows.json", func(doc map[string]any) {
+		delete(doc["skills"].([]any)[0].(map[string]any), "commit")
+	})
+	ev = fresh.one(fresh.mustRun("--json", "import", follows, "--yes").stdout, "import_skill")
+	equal(t, "the entry that follows", ev["action"], importUpdated)
+	equal(t, "the fresh machine's notes", fresh.ref(lineage.ForkRef("notes")), a.ref(lineage.ForkRef("notes")))
 
 	// The way out the hint names: b renames its notes and publishes that
 	// one, which never deletes a's notes, a different skill by its fork id.

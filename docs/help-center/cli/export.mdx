@@ -1,23 +1,19 @@
 ---
 title: "agentx export and import"
-description: "Save a snapshot of one machine, with its settings, and restore the settings on another."
+description: "Save a snapshot of one machine, with its settings, and apply it to another."
 ---
 
-Export writes a snapshot of this machine to a file: your settings, your agent configurations, the skills in your library with where each one is placed, and the MCP servers and plugins agentx found. Import restores the settings on another machine and tells you which skills that machine can bring back on its own.
+Export writes a snapshot of this machine to a file: your settings, your agent configurations, the skills in your library with where each one is placed, and the MCP servers and plugins agentx found. Import applies a snapshot: it restores the settings, installs the skills, and places each one where the snapshot says.
 
-A snapshot holds no skill content. For each skill it records where the skill comes from, which version you had and which configurations you placed it in. The content comes back from your [account repo](/#key-terms), or when you install the skill again.
+A snapshot holds no skill content. For each skill it records where the skill comes from, which version you had and which configurations you placed it in. Import installs the content again from each skill's source, or from your [account remote](/cli/source#add-your-account-remote) for your own skills.
 
 ## Move to a new machine
 
 1. On the old machine, run `agentx export ~/agentx-snapshot.json`.
 2. Copy the file to the new machine.
-3. If you publish your own skills, add your account remote on the new machine with `agentx source add <url> --account`.
-4. On the new machine, run `agentx import ~/agentx-snapshot.json`.
-5. Run each `agentx source add` line that import printed, exactly as printed. The lines keep each source's pin. If you did step 3, you can skip the `--account` line.
-6. Install your skills. For a skill of a source, run `agentx skill add <source>`, using the URL in the listing row. For your own skills, run `agentx skill add --name <name>`, or `agentx skill add --all` for all of them.
-7. Place each skill where the listing row says it was placed, with `agentx skill place <name> --to <configuration>`.
+3. On the new machine, run `agentx import ~/agentx-snapshot.json`, and answer `y`.
 
-If you skip step 5, `agentx skill add` and `agentx source fetch` stop with exit code 5 (`source not fetched`) and print the `agentx source add` line to run.
+Import installs each skill at the version you had and places it in the same configurations. Use the same steps to restore a machine from its own snapshot, for example after you removed your skills.
 
 ## Export this machine
 
@@ -64,52 +60,65 @@ agentx import ~/agentx-snapshot.json
 ```
 
 ```text
-Replace the settings in /home/me/.agentx/settings.json with those of my-laptop from /home/me/agentx-snapshot.json? [y/N] y
+Replace the settings in /home/me/.agentx/settings.json with those of my-laptop from /home/me/agentx-snapshot.json, and install, update and place its 4 skills? [y/N] y
 ✓ imported the settings of my-laptop from /home/me/agentx-snapshot.json
-3 skills in the snapshot: 1 present, 1 missing, 1 at a different version
-  pdf     managed  present    https://github.com/example/skills/skills/pdf   placed in claude-code, codex
-  xlsx    managed  missing    https://github.com/example/skills/skills/xlsx  placed in claude-code
-  review  managed  different  ssh://git@github.com/you/forks (account)       not placed
-  only the settings were written: add each source again, then install a missing skill with 'agentx skill add <source>', or one of your own with 'agentx skill add --name <name>'
-    agentx source add https://github.com/example/skills#release
-    agentx source add ssh://git@github.com/you/forks --account
+4 skills in the snapshot: 1 installed, 1 updated, 1 kept, 1 skipped
+  pdf     managed    installed  https://github.com/example/skills/skills/pdf   placed in claude-code, codex
+  xlsx    managed    updated    https://github.com/example/skills/skills/xlsx  placed in claude-code
+  review  managed    kept       ssh://git@github.com/you/forks (account)       not placed
+  notes   unmanaged  skipped    (none)                                         not placed
+  skipped notes: notes is unmanaged, so there is no source to install it from
 ```
 
-Import writes your settings and nothing else. It creates no account repo, fetches nothing, installs nothing and places nothing.
+Import asks once. Answer `y` or `yes` to apply the whole snapshot. Any other answer changes nothing, so answering no is how you check a snapshot first. Import then does this:
 
-Your sources come back with their [pins](/cli/source#pin-a-source), but agentx does not fetch them. Import prints one `agentx source add` line for each source. Run each line as printed before you install from that source. The line keeps the pin. A plain `agentx source add <url>` would remove it.
-
-agentx checks write access to each source again on this machine.
-
-Import quotes a URL or pin where needed, so you can paste each line into bash or zsh as printed.
-
-The listing shows whether this machine already has each skill, in its account repo or on your account remote:
-
-| State | Meaning |
+| The snapshot has | What import does |
 |---|---|
-| `present` | This machine already has this version, in its account repo or on your [account remote](/cli/source#add-your-account-remote). |
-| `missing` | This machine has no copy of this skill. |
-| `different` | This machine has a skill with this name, but at another version, or as one of your own skills where the snapshot has a skill of a source, or the reverse. A skill you published again after the export also reads `different`. |
+| Settings | Replaces your settings with them. agentx checks write access to each source again on this machine. |
+| A skill this machine lacks | Installs it. A skill of a source comes from that source, which import adds and fetches. One of your own comes from your account remote. |
+| A skill at a newer version | Updates it to that version. |
+| A skill this machine has | Places it in the configurations the snapshot names, and takes it out of the others. Only the configurations agentx detects on this machine count. |
+| A skill it cannot install | Skips it, and prints why. |
+| MCP servers and plugins | Nothing, for now. |
 
-The last column names the configurations the skill was placed in. A skill that agentx does not manage reads `unmanaged`, with `(none)` as its source: agentx cannot install it on another machine, so copy it yourself.
+Import never deletes a skill. A skill in your library that the snapshot does not list stays as it is.
 
-What to do next:
+Import only moves a skill forward:
 
-- **Present, in your library or one of your own skills:** place it with [`agentx skill place <name>`](/cli/skill#place-a-skill-you-already-have). This also brings back one of your own skills that your account repo holds and your library does not.
-- **Present, a skill of a source that is no longer in your library:** install it again with [`agentx skill add <source>`](/cli/skill#install-a-skill).
-- **Present, one of your own skills that only your account remote holds:** install it with [`agentx skill add --name <name>`](/cli/skill#install-your-skills-on-another-machine), or all of them with `agentx skill add --all`.
-- **Missing, a skill of a source:** run the `agentx source add` line import printed, then install with [`agentx skill add <source>`](/cli/skill#install-a-skill).
-- **Missing, one of your own skills:** if you never published it, this machine cannot restore it. Installing the skill you forked it from gives you the original skill without your changes.
+- A skill that is newer on this machine than in the snapshot stays at its version.
+- A skill you edited and did not publish stays as it is. Import skips it and tells you to run [`agentx skill update <name>`](/cli/skill#a-skill-you-edited), which merges your edits with the newer version.
+- A skill whose history went another way on this machine is skipped too. Run `agentx skill update <name>` to merge it.
 
-On a fresh machine every skill reads `missing`, because there is no account repo yet. To see which of your own skills you can restore, add your account remote before you import: `agentx source add <url> --account`. The skills you published then read `present`. Install them with [`agentx skill add --name <name>`](/cli/skill#install-your-skills-on-another-machine), or all of them with `agentx skill add --all`.
+Codex and Gemini CLI read your library, so they see every skill in it, whatever the snapshot says.
+
+To install your own skills, import needs your account remote. The snapshot's settings bring it along. If the snapshot has no settings, add it first with `agentx source add <url> --account`.
+
+Each line of the listing says what import did with that skill:
+
+| Action | Meaning |
+|---|---|
+| `installed` | This machine did not have the skill. Import installed it and placed it. |
+| `updated` | Import moved the skill to the version the snapshot names, or to the latest version. |
+| `placed` | The skill was at its version. Import placed it in a configuration it was missing from. |
+| `unplaced` | The skill was at its version. Import only took it out of configurations. |
+| `kept` | Nothing changed: the skill is at its version, or newer, and placed as the snapshot says. |
+| `skipped` | Import left the skill as it is. The line under the listing says why. |
+
+The last column names the configurations the skill is placed in now.
+
+Run the same import again and it changes nothing: every skill reads `kept`, and import fetches nothing. It installs a skill it skipped once the reason is gone.
+
+If your settings name a source that no skill of the snapshot comes from, import does not fetch it. It prints an `agentx source add` line for each such source. Run the line as printed before you install from that source. The line keeps the source's [pin](/cli/source#pin-a-source), and import quotes a URL or pin where needed, so you can paste it into bash or zsh.
+
+If import stops part way, for example because the machine shut down, the next agentx command finishes the change import was making. Run the import again to apply the rest.
 
 ### Import a snapshot without settings
 
-A snapshot that another tool wrote can leave out the settings, and list only each skill's name, source and placements. Import then leaves your settings as they are, writes nothing and does not ask. It still lists each skill.
+A snapshot that another tool wrote can leave out the settings, and list only each skill's name, source and placements. Import then leaves your settings as they are, and installs the latest version of each skill. A source the snapshot names that you have not added yet is added.
 
 ## Confirm without a terminal
 
-Import replaces settings, so it asks first. Pass `--yes` to answer in advance:
+Import changes your settings and your skills, so it asks first. Pass `--yes` to answer in advance:
 
 ```sh
 agentx import ~/agentx-snapshot.json --yes
@@ -126,4 +135,4 @@ Use `--yes` in scripts, with `--json`, and wherever there is no terminal. Withou
 | 6 | The file is an export from an earlier version of agentx. Import no longer reads that format. Export the file again on the other machine with this version of agentx. |
 | 6 | You answered no, or import could not ask (no terminal, or `--json`) and you did not pass `--yes`. |
 
-A refused import changes nothing: your settings stay exactly as they were.
+A refused import changes nothing: your settings and your skills stay exactly as they were. A skill import skips does not make it fail: the import goes on with the others and exits with code 0.
