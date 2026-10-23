@@ -324,7 +324,7 @@ func TestSourceCell(t *testing.T) {
 	w := &writer{}
 	equal(t, "skill list", row(w, librarySkillEvent{LibraryEntry: scan.LibraryEntry{Kind: lineage.KindManaged, Source: account, Upstream: up}, own: true}, account)[3].text,
 		account+" (account), from "+up)
-	equal(t, "import", importRow(w, importSkillEvent{exportSkill: exportSkill{Name: "notes", Kind: lineage.KindManaged}}, account)[3].text,
+	equal(t, "import", importRow(w, importSkillEvent{snapshotSkill: snapshotSkill{Name: "notes", Kind: lineage.KindManaged}}, account)[3].text,
 		account+" (account)")
 	equal(t, "skill list --remote", installableRow(w, installableSkillEvent{Name: "alpha", Source: account, Upstream: up, UpstreamSubpath: &dir})[3].text,
 		account+" (account), from "+up+"/tools/pdf")

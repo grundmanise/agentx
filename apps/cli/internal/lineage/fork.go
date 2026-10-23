@@ -45,6 +45,10 @@ var (
 	trailerLine = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9-]*:[ \t]`)
 )
 
+// IsForkID reports whether s has the shape of a fork id, which is what a
+// reader outside this package checks one it was handed with.
+func IsForkID(s string) bool { return forkID.MatchString(s) }
+
 // ParseFork reads the fork trailers of a commit message, from its trailer
 // block alone, as Parse reads an import commit's: a user's message that
 // quotes a trailer in its body is not lineage. One of the three given twice,

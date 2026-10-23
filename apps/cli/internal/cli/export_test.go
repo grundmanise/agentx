@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -42,10 +43,12 @@ func keysOf(m map[string]any) string {
 }
 
 // TestExportCarriesCoordinatesAndNoContent is the constraint the whole
-// document turns on: an export names where a skill came from and carries
-// nothing it could be reconstructed from. The skill's description, the
-// bytes of its files and a secret-looking value inside one of them appear
-// nowhere in the export, and the document holds no inventory.
+// snapshot turns on: it names where a skill came from, its version and its
+// placements, and carries nothing it could be reconstructed from and
+// nothing that only describes this machine. The skill's description, the
+// bytes of its files, a secret-looking value inside one of them, the paths
+// of this machine and the inventory's ids, state and drift appear nowhere
+// in it.
 func TestExportCarriesCoordinatesAndNoContent(t *testing.T) {
 	t.Parallel()
 	const (
@@ -76,7 +79,10 @@ func TestExportCarriesCoordinatesAndNoContent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, leaked := range []string{description, body, secret, "SKILL.md", "notes.md", "inventory"} {
+	for _, leaked := range []string{
+		description, body, secret, "SKILL.md", "notes.md", h.library, filepath.Join(h.home, ".claude"),
+		"physical_id", "logical_id", "content_hash", "edges", "warnings", "drift", "instance_id", "scan_counter",
+	} {
 		if bytes.Contains(raw, []byte(leaked)) {
 			t.Errorf("the export carries %q:\n%s", leaked, raw)
 		}
@@ -89,50 +95,56 @@ func TestExportCarriesCoordinatesAndNoContent(t *testing.T) {
 	equal(t, "mode", info.Mode().Perm().String(), "-rw-------")
 
 	doc := h.readExportFile(file)
-	equal(t, "the document's fields", keysOf(doc), "machine,schema_version,settings,skills")
-	equal(t, "schema_version", doc["schema_version"], float64(1))
+	equal(t, "the snapshot's fields", keysOf(doc), "configurations,machine,mcp_servers,plugins,schema_version,settings,skills")
+	equal(t, "schema_version", doc["schema_version"], float64(2))
 	equal(t, "machine.label", doc["machine"].(map[string]any)["label"], "test-host")
+	confs := doc["configurations"].([]any)
+	equal(t, "configurations", len(confs), 2)
+	equal(t, "a configuration's fields", keysOf(confs[0].(map[string]any)), "client,enabled,id,name,reads_library")
 	skills := doc["skills"].([]any)
 	if len(skills) != 1 {
 		t.Fatalf("%d records, want 1:\n%s", len(skills), raw)
 	}
 	rec := skills[0].(map[string]any)
-	equal(t, "the record's fields", keysOf(rec), "base_hash,commit,kind,name,placed,source,subpath,upstream_commit")
+	equal(t, "the entry's fields", keysOf(rec), "base_hash,commit,kind,name,placements,source,subpath,upstream_commit")
 	equal(t, "name", rec["name"], "keeper")
 	equal(t, "kind", rec["kind"], "managed")
 	equal(t, "source", rec["source"], s.url)
 	equal(t, "subpath", rec["subpath"], "skills/keeper")
 	equal(t, "upstream_commit", rec["upstream_commit"], head)
-	equal(t, "placed", rec["placed"], true)
+	// Codex reads the library, so the library entry is its placement.
+	equal(t, "placements", fmt.Sprint(rec["placements"]), "[claude-code codex]")
 	equal(t, "commit", rec["commit"], h.accountGit("rev-parse", "refs/heads/managed/keeper"))
 
-	// A record carries the base version the branch records and no hash of
+	// An entry carries the base version the branch records and no hash of
 	// any directory, so its base_hash is the base_hash the listing reports
 	// for the same skill: one datum under one name in both.
 	list := h.run("--json", "skill", "list")
 	equal(t, "base_hash", rec["base_hash"], h.one(list.stdout, "library_skill")["base_hash"])
 }
 
-// TestExportListsTheBranchesAndNotTheLibrary is the shape of the listing:
-// one record per branch of the account repo, sorted by name, whatever this
-// machine's library happens to hold. A directory nothing manages is no
-// lineage record and is left out. A record tells a skill the machine placed
-// somewhere from one it only holds in the library, which is what tells a
-// reader what that machine was actually using. And the document is a pure
+// TestExportListsTheLibraryWithItsPlacements is the shape of the listing
+// and the round trip: one entry per skill of the library, sorted by name,
+// a directory nothing manages included, as unmanaged, and a branch the
+// library holds no directory of left out, as the inventory leaves it out.
+// Each entry names the configurations the skill is placed in, which an
+// import reads back as they were: a skill placed in two of three
+// configurations comes back placed in those two. And the snapshot is a pure
 // function of the machine's state: nothing about the run, not a date and
 // not an order, reaches it, so two exports of an unchanged machine are one
 // file.
-func TestExportListsTheBranchesAndNotTheLibrary(t *testing.T) {
+func TestExportListsTheLibraryWithItsPlacements(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	// Claude Code and Cursor keep their own skills directories, so a skill
-	// with no placement is seen by no client at all.
-	h.build(t, fixture{dirs: []string{".claude", ".cursor"}})
+	// Three clients that each keep their own skills directory and read no
+	// other's, so a placement is in one configuration alone.
+	h.build(t, fixture{dirs: []string{".claude", ".copilot", ".codeium/windsurf"}})
 	s, _, _ := h.standardSource(true)
 	h.mustRun("source", "add", s.url)
 	h.mustRun("skill", "add", s.url, "--all")
-	h.mustRun("skill", "remove", "beta", "--from", "claude-code", "--from", "cursor")
-	// A fork branch, which nothing creates yet, and a directory put in the
+	h.mustRun("skill", "remove", "alpha", "--from", "windsurf")
+	h.mustRun("skill", "remove", "beta", "--from", "claude-code", "--from", "github-copilot", "--from", "windsurf")
+	// A fork branch with no library directory, and a directory put in the
 	// library by hand, which no branch knows about.
 	h.accountGit("update-ref", "refs/heads/skills/zeta", h.accountGit("rev-parse", "refs/heads/managed/alpha"))
 	byHand := filepath.Join(h.library, "mine")
@@ -149,22 +161,29 @@ func TestExportListsTheBranchesAndNotTheLibrary(t *testing.T) {
 	}
 
 	var names []string
-	records := map[string]map[string]any{}
+	entries := map[string]map[string]any{}
 	for _, entry := range h.readExportFile(first)["skills"].([]any) {
-		rec := entry.(map[string]any)
-		names = append(names, rec["name"].(string))
-		records[rec["name"].(string)] = rec
+		e := entry.(map[string]any)
+		names = append(names, e["name"].(string))
+		entries[e["name"].(string)] = e
 	}
-	equal(t, "the records", strings.Join(names, ","), "alpha,beta,zeta")
-	equal(t, "alpha", records["alpha"]["kind"], "managed")
-	// The fork branch is one of your own skills: managed too, with no
-	// source while no account remote is set, and the upstream its base
-	// came from.
-	equal(t, "zeta's fields", keysOf(records["zeta"]), "base_hash,commit,kind,name,placed,upstream,upstream_commit,upstream_subpath")
-	equal(t, "zeta", records["zeta"]["kind"], "managed")
-	equal(t, "zeta's upstream", records["zeta"]["upstream"], s.url)
-	equal(t, "alpha placed", records["alpha"]["placed"], true)
-	equal(t, "beta placed", records["beta"]["placed"], false)
+	equal(t, "the entries", strings.Join(names, ","), "alpha,beta,mine")
+	equal(t, "alpha placements", fmt.Sprint(entries["alpha"]["placements"]), "[claude-code github-copilot]")
+	equal(t, "beta placements", fmt.Sprint(entries["beta"]["placements"]), "[]")
+	equal(t, "mine's fields", keysOf(entries["mine"]), "kind,name,placements")
+	equal(t, "mine", entries["mine"]["kind"], "unmanaged")
+
+	to := newHarness(t)
+	to.build(t, fixture{dirs: []string{".claude"}})
+	out := to.run("--json", "import", first, "--yes")
+	equal(t, "import", out.exit, 0)
+	imported := map[string]jsonEvent{}
+	for _, e := range to.eventsOfType(out.stdout, "import_skill") {
+		imported[e["name"].(string)] = e
+	}
+	equal(t, "alpha imported", fmt.Sprint(imported["alpha"]["placements"]), "[claude-code github-copilot]")
+	equal(t, "beta imported", fmt.Sprint(imported["beta"]["placements"]), "[]")
+	equal(t, "mine imported", imported["mine"]["kind"], "unmanaged")
 }
 
 // TestExportWithoutAnAccountRepo is a machine that has installed nothing:
@@ -179,9 +198,9 @@ func TestExportWithoutAnAccountRepo(t *testing.T) {
 	file := h.exportPath("export.json")
 	out := h.run("export", file)
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "exported the settings and 0 lineage records")
+	contains(t, "stdout", out.stdout, "exported the settings and 0 skills")
 	doc := h.readExportFile(file)
-	equal(t, "records", len(doc["skills"].([]any)), 0)
+	equal(t, "entries", len(doc["skills"].([]any)), 0)
 	equal(t, "label", doc["settings"].(map[string]any)["label"], "fresh")
 	if _, err := os.Stat(filepath.Join(h.agentx, "account.git")); err == nil {
 		t.Error("the export created an account repo")
@@ -199,45 +218,52 @@ func TestExportRefusesAPathItCannotWrite(t *testing.T) {
 	contains(t, "stderr", out.stderr, "does not exist")
 }
 
-// TestExportLeavesOutABranchTheLibraryCannotHold: agentx makes one branch
-// per skill, whose name is one library directory, but the two lineage
-// namespaces are shared with the account remote, so a fetch or a stray
-// push can put refs/heads/skills/nested/deeper there. Exporting it wrote a
-// record this very CLI's reader refuses, and the reader refuses the whole
-// document, so one stray branch cost the settings restore too. The branch
-// is left out and said out loud instead.
-func TestExportLeavesOutABranchTheLibraryCannotHold(t *testing.T) {
+// TestExportLeavesOutWhatItsReaderRefuses: a library directory whose name
+// no branch can carry, and one whose import branch carries no lineage,
+// which would read as one of your own skills, are no entries this very
+// CLI's reader accepts, and the reader refuses the whole snapshot, so one
+// stray directory cost the settings restore too. Each is left out and said
+// out loud instead, and so is what export cannot read of the library, as
+// skill list says it.
+func TestExportLeavesOutWhatItsReaderRefuses(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	equal(t, "add", h.run("skill", "add", s.url, "--all").exit, 0)
 	alpha := h.accountGit("rev-parse", "refs/heads/managed/alpha")
-	h.accountGit("update-ref", "refs/heads/skills/nested/deeper", alpha)
-	// An import branch with no lineage on it names no source, which the
-	// document would read as one of your own skills.
+	for _, name := range []string{"has space", "bare"} {
+		dir := filepath.Join(h.library, name)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeFile(t, filepath.Join(dir, "SKILL.md"), "---\nname: odd\ndescription: by hand\n---\n\nodd\n")
+	}
+	if err := os.Symlink(filepath.Join(h.library, "nowhere"), filepath.Join(h.library, "dangling")); err != nil {
+		t.Fatal(err)
+	}
 	bare := h.accountGit("commit-tree", "-m", "no lineage", alpha+"^{tree}")
 	h.accountGit("update-ref", "refs/heads/managed/bare", bare)
 
 	file := h.exportPath("export.json")
 	out := h.run("export", file)
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stderr", out.stderr, "left refs/heads/skills/nested/deeper out of the export")
-	contains(t, "stderr", out.stderr, "not a name the library and a branch can both hold")
-	contains(t, "stderr", out.stderr, "left refs/heads/managed/bare out of the export: its commit names no source")
+	contains(t, "stderr", out.stderr, "left has space out of the snapshot: it is not a name the library and a branch can both hold")
+	contains(t, "stderr", out.stderr, "left refs/heads/managed/bare out of the snapshot: its commit names no source")
+	contains(t, "stderr", out.stderr, "dangling: broken symlink, skipped")
 
 	doc := h.readExportFile(file)
 	var names []string
-	for _, rec := range doc["skills"].([]any) {
-		names = append(names, rec.(map[string]any)["name"].(string))
+	for _, e := range doc["skills"].([]any) {
+		names = append(names, e.(map[string]any)["name"].(string))
 	}
-	equal(t, "the records", strings.Join(names, ","), "alpha,beta")
+	equal(t, "the entries", strings.Join(names, ","), "alpha,beta")
 
-	// The point of leaving it out: the document agentx writes is one agentx
-	// reads, so the settings still come back on the other machine.
+	// The point of leaving them out: the snapshot agentx writes is one
+	// agentx reads, so the settings still come back on the other machine.
 	to := newHarness(t)
 	to.build(t, fixture{dirs: []string{".claude"}})
 	in := to.run("import", file, "--yes")
 	equal(t, "import", in.exit, 0)
-	contains(t, "stdout", in.stdout, "2 skills in the export")
+	contains(t, "stdout", in.stdout, "2 skills in the snapshot")
 }
 
 // TestExportRefusesADirectoryWithAHintThatHelps: --force overwrites a file
@@ -270,5 +296,5 @@ func TestExportRefusesADirectoryWithAHintThatHelps(t *testing.T) {
 	contains(t, "stderr", again.stderr, "pass --force to overwrite it")
 	equal(t, "the file", readText(t, file), "not an export\n")
 	equal(t, "with --force", h.run("export", file, "--force").exit, 0)
-	equal(t, "schema_version", h.readExportFile(file)["schema_version"], float64(1))
+	equal(t, "schema_version", h.readExportFile(file)["schema_version"], float64(2))
 }
