@@ -224,7 +224,7 @@ func (r *applyRun) fetch(ctx context.Context, states []importSkillEvent) error {
 	account := false
 	for _, st := range states {
 		e := st.snapshotSkill
-		if e.Kind == lineage.KindUnmanaged {
+		if e.Kind == lineage.KindUnmanaged || r.gone(e) != nil {
 			continue
 		}
 		if rec, ok := r.records[e.Name]; ok && e.Commit != "" && rec.Commit == e.Commit {
@@ -313,6 +313,10 @@ func (r *applyRun) fetchAccount(ctx context.Context) error {
 // goes on; a stop, or an error that is no refusal, ends the run.
 func (r *applyRun) entry(ctx context.Context, st *importSkillEvent) error {
 	e := st.snapshotSkill
+	if f := r.gone(e); f != nil {
+		st.Action, st.Reason = importSkipped, f.message
+		return nil
+	}
 	var action string
 	var err error
 	switch {
@@ -341,6 +345,23 @@ func skipped(ctx context.Context, err error) (*failure, bool) {
 		return nil, false
 	}
 	return f, true
+}
+
+// gone skips an entry of a skill the account repo holds a branch of and the
+// library holds no skill directory of, its directory, or its fork's
+// worktree, deleted by hand: such a skill is not at its version and placed,
+// so it is not kept, and the way back is the one skill list names. nil for
+// any other entry.
+func (r *applyRun) gone(e snapshotSkill) *failure {
+	rec, ok := r.records[e.Name]
+	if _, held := r.held[e.Name]; e.Kind == lineage.KindUnmanaged || !ok || held {
+		return nil
+	}
+	if rec.Kind == lineage.KindFork {
+		return skip(e.Name + " is one of your own skills, and the library holds no skill directory for it; check it out again from its branch with '" + skillCommand("place", e.Name) + "'")
+	}
+	what, wayOut := skillContext{records: r.records}.absentNotice(r.inv, e.Name)
+	return skip(what + "; " + wayOut)
 }
 
 // skip is the refusal that skips an entry for why.

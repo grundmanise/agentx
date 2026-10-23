@@ -125,7 +125,8 @@ func TestImportRestoresTheSettingsByteForByte(t *testing.T) {
 // at, placed where it was, an unmanaged one is skipped with the reason and
 // the run goes on, and the snapshot of the restored machine is the one it
 // was restored from. A second import of it changes nothing and fetches
-// nothing.
+// nothing. One whose library directory was deleted by hand is skipped with
+// the way back.
 func TestImportRestoresAMachine(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -187,6 +188,47 @@ func TestImportRestoresAMachine(t *testing.T) {
 	}
 	equal(t, "alpha moved", fmt.Sprint(actions["alpha"]["action"], " ", actions["alpha"]["placements"]), "placed [codex cursor gemini-cli]")
 	equal(t, "beta taken out", fmt.Sprint(actions["beta"]["action"], " ", actions["beta"]["placements"]), "unplaced [codex gemini-cli]")
+
+	// A skill whose library directory was deleted by hand is not kept as
+	// though it were there: it is skipped, with the way back.
+	remove(t, filepath.Join(h.library, "alpha"))
+	out = h.mustRun("--json", "import", first, "--yes")
+	for _, e := range h.eventsOfType(out.stdout, "import_skill") {
+		actions[e["name"].(string)] = e
+	}
+	equal(t, "alpha deleted by hand", actions["alpha"]["action"], importSkipped)
+	contains(t, "its reason", actions["alpha"]["reason"].(string), "alpha is managed in the account repo but the library holds no skill directory for it; run 'agentx skill add ")
+}
+
+// TestImportSkipsASkillTheLibraryLost: an entry whose branch the account
+// repo holds and whose library directory is gone is skipped with the way
+// back, skill place for one of your own, which checks it out again; any
+// other entry is applied.
+func TestImportSkipsASkillTheLibraryLost(t *testing.T) {
+	t.Parallel()
+	r := &applyRun{
+		inv: &invocation{dirs: home.Dirs{Library: t.TempDir()}},
+		records: map[string]lineage.Record{
+			"notes": {Name: "notes", Kind: lineage.KindFork},
+			"alpha": {Name: "alpha", Kind: lineage.KindManaged},
+		},
+		held: map[string]librarySkillEvent{"alpha": {}},
+	}
+	for _, tc := range []struct {
+		entry snapshotSkill
+		why   string
+	}{
+		{snapshotSkill{Name: "notes", Kind: lineage.KindManaged}, "notes is one of your own skills, and the library holds no skill directory for it; check it out again from its branch with 'agentx skill place notes'"},
+		{snapshotSkill{Name: "alpha", Kind: lineage.KindManaged}, ""},
+		{snapshotSkill{Name: "gamma", Kind: lineage.KindManaged}, ""},
+		{snapshotSkill{Name: "notes", Kind: lineage.KindUnmanaged}, ""},
+	} {
+		why := ""
+		if f := r.gone(tc.entry); f != nil {
+			why = f.message
+		}
+		equal(t, tc.entry.Name+" "+tc.entry.Kind, why, tc.why)
+	}
 }
 
 // TestImportMovesSkillsForwardOnly: a skill the machine holds moves to the
