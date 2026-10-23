@@ -178,6 +178,7 @@ Use `--yes` in scripts, with `--json`, and wherever there is no terminal. Withou
 | 5 | The file is not there, or the account remote has no branch for the machine you named. |
 | 6 | The file is not a valid agentx snapshot: it is damaged, larger than 8 MiB, from an agentx version this one cannot read, or holds a setting or skill entry agentx would not write. The message names the problem. Export the file again from the other machine, or upgrade agentx. |
 | 6 | The file is an export from an earlier version of agentx. Import no longer reads that format. Export the file again on the other machine with this version of agentx. |
+| 6 | With `--machine`: no account remote is set, or the machine's branch holds no `snapshot.json`. Add the account remote with `agentx source add <url> --account`. |
 | 6 | You answered no, or import could not ask (no terminal, or `--json`) and you did not pass `--yes`. |
 
 A refused import changes nothing: your settings and your skills stay exactly as they were. A skill import skips does not make it fail: the import goes on with the others and exits with code 0.

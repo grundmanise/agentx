@@ -101,7 +101,8 @@ func TestExportToAMachineAndImportFromIt(t *testing.T) {
 // --from takes one out, and remove without --from deletes the entry; each
 // event names the commit pushed, and nothing on this machine's disk
 // changes. --from naming a universal client is refused, and so are a
-// computer's id, --remote beside --machine, and a push over a branch
+// computer's id, --copy, a --to no client of the registry has, --remote
+// beside --machine, a file or --force beside export's, and a push over a branch
 // another writer moved since it was read, with a hint to run it again.
 func TestSkillPlaceAndRemoveOnTheCloudMachine(t *testing.T) {
 	t.Parallel()
@@ -140,11 +141,18 @@ func TestSkillPlaceAndRemoveOnTheCloudMachine(t *testing.T) {
 	contains(t, "its error", refused.stderr, "codex reads the library directly, so alpha cannot be removed from it alone")
 	contains(t, "its hint", refused.stderr, "agentx skill remove alpha --machine cloud")
 
-	for _, args := range [][]string{
-		{"skill", "place", "alpha", "--machine", strings.Repeat("a", 32)},
-		{"skill", "remove", "alpha", "--machine", "cloud", "--remote"},
+	for _, tc := range []struct {
+		args []string
+		exit int
+	}{
+		{[]string{"skill", "place", "alpha", "--machine", strings.Repeat("a", 32)}, 1},
+		{[]string{"skill", "place", "alpha", "--machine", "cloud", "--copy"}, 1},
+		{[]string{"skill", "place", "alpha", "--machine", "cloud", "--to", "universal"}, 5},
+		{[]string{"skill", "remove", "alpha", "--machine", "cloud", "--remote"}, 1},
+		{[]string{"export", h.exportPath("cloud.json"), "--machine", "cloud"}, 1},
+		{[]string{"export", "--machine", "cloud", "--force"}, 1},
 	} {
-		equal(t, strings.Join(args, " ")+": exit", h.run(args...).exit, 1)
+		equal(t, strings.Join(tc.args, " ")+": exit", h.run(tc.args...).exit, tc.exit)
 	}
 
 	out = h.run("--json", "skill", "remove", "alpha", "--machine", "cloud")

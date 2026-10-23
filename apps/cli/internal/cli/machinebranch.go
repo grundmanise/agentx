@@ -272,6 +272,14 @@ func (inv *invocation) placeOnMachine(ctx context.Context, id, name string, to [
 		if !configurationID(c) {
 			return fail(exitUsage, clipped(sanitised(c))+" is not a configuration id", "give a configuration id, such as claude-code")
 		}
+		// The cloud machine's configurations are not detected here, so an id
+		// is held to the registry instead: a typo, or the reserved
+		// universal, would otherwise be pushed as a placement no client
+		// ever reads.
+		if _, ok := scan.Lookup(c); !ok {
+			return fail(exitNotFound, fmt.Sprintf("configuration %q is not one agentx knows", c),
+				"give the configuration id of an agent client, such as claude-code")
+		}
 	}
 	if why := nameRefusal(name); why != "" {
 		return fail(exitUsage, fmt.Sprintf("%q %s", clipped(name), why), "give the name of a skill")
