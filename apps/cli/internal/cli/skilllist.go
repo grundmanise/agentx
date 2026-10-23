@@ -175,11 +175,7 @@ func row(out *writer, ev librarySkillEvent, account string) []cell {
 // prints, one per configuration, and the event above still carries every
 // path.
 func placedIn(places []placementEvent) int {
-	ids := map[string]bool{}
-	for _, p := range places {
-		ids[p.Configuration] = true
-	}
-	return len(ids)
+	return len(placementIDs(places))
 }
 
 // sourceCell is the cell of a listing that says where a skill is published

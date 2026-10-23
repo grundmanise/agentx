@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -62,12 +63,12 @@ func exportedFrom(t *testing.T) (*harness, string) {
 	return h, file
 }
 
-// plainExport is an export a test can read without installing anything: a
+// plainExport is a snapshot a test can read without installing anything: a
 // machine with settings of its own and no account repo, exported by the
-// command itself, with one sound lineage record put into the document
-// afterwards. Writing that record rather than installing a skill for it
-// keeps a test about reading a document from paying for a fetch, and every
-// test that an export of real branches is what this reads is elsewhere.
+// command itself, with one sound entry put into the snapshot afterwards.
+// Writing that entry rather than installing a skill for it keeps a test
+// about reading a snapshot from paying for a fetch, and every test that a
+// snapshot of real branches is what this reads is elsewhere.
 func plainExport(t *testing.T) (*harness, string) {
 	t.Helper()
 	h := newHarness(t)
@@ -85,7 +86,7 @@ func plainExport(t *testing.T) (*harness, string) {
 		"subpath":         "skills/alpha",
 		"upstream_commit": strings.Repeat("b", 40),
 		"base_hash":       strings.Repeat("c", 64),
-		"placed":          true,
+		"placements":      []any{"claude-code"},
 	}}
 	b, err := json.Marshal(doc)
 	if err != nil {
@@ -116,7 +117,7 @@ func TestImportRestoresTheSettingsByteForByte(t *testing.T) {
 		t.Errorf("the settings were not restored byte for byte:\nexported:\n%s\nimported:\n%s", before, after)
 	}
 	contains(t, "stdout", out.stdout, "imported the settings of first-laptop")
-	contains(t, "stdout", out.stdout, "2 skills in the export: 0 present, 2 missing, 0 at a different version")
+	contains(t, "stdout", out.stdout, "2 skills in the snapshot: 0 present, 2 missing, 0 at a different version")
 	contains(t, "stdout", out.stdout, "  alpha  managed  missing  "+fixtureURL("skills")+"/skills/alpha")
 	contains(t, "stdout", out.stdout, "  beta   managed  missing  "+fixtureURL("skills")+"/skills/beta")
 	contains(t, "stdout", out.stdout, "only the settings were written")
@@ -190,27 +191,55 @@ func TestImportAsksBeforeItWrites(t *testing.T) {
 	}
 }
 
-// soundExport is a document agentx would write, with one sound lineage
-// record, which each case of the refusal tests below changes in one place.
-const soundExport = `{"schema_version": 1,
+// TestImportOfAPartialSnapshot: a writer other than export may write a
+// snapshot of names, sources and placements alone, with no settings. An
+// import reads it and lists it; with no settings to replace it writes
+// nothing, and so has nothing to ask, terminal or not.
+func TestImportOfAPartialSnapshot(t *testing.T) {
+	t.Parallel()
+	to := newHarness(t)
+	to.build(t, fixture{dirs: []string{".claude"}})
+	equal(t, "label", to.run("config", "set", "label", "keep-me").exit, 0)
+	before := readText(t, home.SettingsPath(to.agentx))
+	file := to.exportPath("partial.json")
+	writeFile(t, file, `{"schema_version": 2, "skills": [{"name": "alpha",
+		"source": "https://github.com/example/skills", "subpath": "skills/alpha", "placements": ["claude-code"]}]}`)
+
+	out := to.run("import", file)
+	equal(t, "exit", out.exit, 0)
+	contains(t, "stdout", out.stdout, "it holds no settings, so the settings were left as they are")
+	contains(t, "stdout", out.stdout, "  alpha  managed  missing  https://github.com/example/skills/skills/alpha  placed in claude-code")
+	contains(t, "stdout", out.stdout, "  nothing was written: install a missing skill with 'agentx skill add <source>'")
+	js := to.run("--json", "import", file)
+	equal(t, "summary", to.one(js.stdout, "result")["summary"],
+		"read "+file+", which holds no settings: 0 of 1 skill present, 1 missing, 0 at a different version")
+	equal(t, "the settings event", to.one(js.stdout, "settings")["settings"].(map[string]any)["label"], "keep-me")
+	equal(t, "the settings", readText(t, home.SettingsPath(to.agentx)), before)
+}
+
+// soundSnapshot is a snapshot agentx would write, with one sound entry,
+// which each case of the refusal tests below changes in one place.
+const soundSnapshot = `{"schema_version": 2,
  "machine": {"id": "0123456789abcdef0123456789abcdef", "label": "first-laptop"},
  "settings": {"schema_version": 1, "label": "first-laptop", "accept_operations": false,
   "ignore_system_files": true, "disabled_configurations": [], "sources": [], "copy_mode": {}},
+ "configurations": [{"id": "claude-code", "client": "claude-code", "name": "Claude Code", "enabled": true, "reads_library": false}],
  "skills": [{"name": "alpha", "kind": "managed", "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "source": "https://github.com/example/skills", "subpath": "skills/alpha",
   "upstream_commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-  "base_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "placed": true}]}
+  "base_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "placements": ["claude-code"]}],
+ "mcp_servers": [], "plugins": []}
 `
 
 // importToken is a credential that would be unmistakable in a settings
 // file, an event or an export if any of them ever carried one.
 const importToken = "ghp_NotARealTokenJustForThisTest"
 
-// editedSound is soundExport with one thing changed.
+// editedSound is soundSnapshot with one thing changed.
 func editedSound(t *testing.T, change func(doc map[string]any)) string {
 	t.Helper()
 	var doc map[string]any
-	if err := json.Unmarshal([]byte(soundExport), &doc); err != nil {
+	if err := json.Unmarshal([]byte(soundSnapshot), &doc); err != nil {
 		t.Fatal(err)
 	}
 	change(doc)
@@ -221,11 +250,14 @@ func editedSound(t *testing.T, change func(doc map[string]any)) string {
 	return string(b)
 }
 
-// TestReadExportRefusesWhatAgentxWouldNotWrite: an export is a file from
+// TestReadExportRefusesWhatAgentxWouldNotWrite: a snapshot is a file from
 // somewhere else, so every shape of broken one is refused by readExport,
 // before the lock and before any write, and the refusal repeats no
-// credential the document carried. TestValidSettingsCoversEveryFieldOfTheSettings
-// holds every field of the settings to a check here.
+// credential the snapshot carried. A partial snapshot, with only names,
+// sources and placements, is not broken. The export document of version
+// 1 an earlier agentx wrote is refused as any other version is.
+// TestValidSettingsCoversEveryFieldOfTheSettings holds every field of the
+// settings to a check here.
 func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -234,8 +266,20 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 		writeFile(t, path, content)
 		return path
 	}
-	if _, err := readExport(write("sound", soundExport)); err != nil {
-		t.Fatalf("the sound document is refused: %v", err)
+	for name, content := range map[string]string{
+		"sound": soundSnapshot,
+		"partial": `{"schema_version": 2, "skills": [
+			{"name": "alpha", "source": "https://github.com/example/skills", "subpath": "skills/alpha", "placements": ["claude-code", "cursor"]},
+			{"name": "notes", "placements": []},
+			{"name": "mine", "kind": "unmanaged", "placements": ["claude-code"]}]}`,
+	} {
+		snap, err := readExport(write(name, content), importTarget{})
+		if err != nil {
+			t.Fatalf("the %s snapshot is refused: %v", name, err)
+		}
+		if name == "partial" && (snap.Settings != nil || snap.Skills[0].Kind != "managed" || len(snap.Skills[1].Placements) != 0) {
+			t.Errorf("the partial snapshot reads as %+v", snap)
+		}
 	}
 	edited := func(change func(map[string]any)) string { return editedSound(t, change) }
 	// ownSkill turns the record into one of your own skills, a fork of
@@ -256,7 +300,7 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 			}
 		})
 	}
-	if _, err := readExport(write("sound fork", ownWith("", nil))); err != nil {
+	if _, err := readExport(write("sound fork", ownWith("", nil)), importTarget{}); err != nil {
 		t.Fatalf("the sound document of a forked skill is refused: %v", err)
 	}
 	settingsWith := func(key string, value any) string {
@@ -267,17 +311,45 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 	}
 	credentialed := "https://user:" + importToken + "@github.com/example/skills"
 	for _, tc := range []struct{ name, content, says string }{
-		{"empty", "", "not an agentx export"},
-		{"not json", "{ not json", "not an agentx export"},
-		{"truncated", soundExport[:len(soundExport)/2], "not an agentx export"},
-		{"trailing rubbish", soundExport + "}", "not an agentx export"},
+		{"empty", "", "not an agentx snapshot"},
+		{"not json", "{ not json", "not an agentx snapshot"},
+		{"truncated", soundSnapshot[:len(soundSnapshot)/2], "not an agentx snapshot"},
+		{"trailing rubbish", soundSnapshot + "}", "not an agentx snapshot"},
 		{"no version", `{"settings":{},"skills":[]}`, "carries no schema_version"},
-		{"a later version", edited(func(doc map[string]any) { doc["schema_version"] = 2 }), "schema version 2"},
-		{"a field agentx does not know", edited(func(doc map[string]any) { doc["snapshot"] = map[string]any{} }), "not an agentx export"},
+		{"a later version", edited(func(doc map[string]any) { doc["schema_version"] = 3 }), "schema version 3, and this agentx reads version 2"},
+		{"the export document of version 1", edited(func(doc map[string]any) { doc["schema_version"] = 1 }), "schema version 1, and this agentx reads version 2"},
+		{"a field agentx does not know", edited(func(doc map[string]any) { doc["inventory"] = map[string]any{} }), "not an agentx snapshot"},
+		{"a server field agentx does not know", edited(func(doc map[string]any) {
+			doc["mcp_servers"] = []any{map[string]any{"name": "s", "physical_id": "x"}}
+		}), "not an agentx snapshot"},
 		{"later settings", settingsWith("schema_version", 2), "schema_version is 2"},
-		{"a settings field agentx does not know", settingsWith("secrets", "x"), "not an agentx export"},
+		{"a settings field agentx does not know", settingsWith("secrets", "x"), "not an agentx snapshot"},
 		{"a label of two lines", settingsWith("label", "one\ntwo"), "one non-empty line"},
-		{"a record of another kind", recordWith("kind", "unmanaged"), "the kind of alpha is not managed"},
+		{"an entry of another kind", recordWith("kind", "fork"), "the kind of alpha is neither managed nor unmanaged"},
+		{"an unmanaged entry with a source", recordWith("kind", "unmanaged"), "unmanaged, which has no source and no version"},
+		{"an entry with no placements", edited(func(doc map[string]any) {
+			delete(doc["skills"].([]any)[0].(map[string]any), "placements")
+		}), "lists no placements"},
+		{"placements out of order", recordWith("placements", []any{"cursor", "claude-code"}), "must be sorted"},
+		{"a placement that is no configuration", recordWith("placements", []any{"\u001b[31mcursor"}), "not a configuration id"},
+		{"an entry that follows with a base", edited(func(doc map[string]any) {
+			delete(doc["skills"].([]any)[0].(map[string]any), "commit")
+		}), "follows the latest version"},
+		{"an entry that follows with no folder", edited(func(doc map[string]any) {
+			e := doc["skills"].([]any)[0].(map[string]any)
+			for _, key := range []string{"commit", "upstream_commit", "base_hash", "subpath"} {
+				delete(e, key)
+			}
+		}), "not its folder in it"},
+		{"an entry that follows from a URL that is no source", edited(func(doc map[string]any) {
+			e := doc["skills"].([]any)[0].(map[string]any)
+			for _, key := range []string{"commit", "upstream_commit", "base_hash"} {
+				delete(e, key)
+			}
+			e["source"] = credentialed
+		}), "canonical URL of a source"},
+		{"a fork id on a shared source's entry", recordWith("fork_id", "0b3f6c9e-2d4a-4f1e-9a7b-1c2d3e4f5a6b"), "only your own skills have"},
+		{"a fork id that is not one", ownWith("fork_id", "nonsense"), "not one"},
 		{"one of your own skills with a subpath", edited(func(doc map[string]any) {
 			delete(doc["skills"].([]any)[0].(map[string]any), "source")
 		}), "which have no subpath"},
@@ -370,7 +442,7 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 		{"a label of a thousand characters", settingsWith("label", strings.Repeat("l", 1000)), "at most 256 bytes"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := readExport(write(tc.name, tc.content))
+			_, err := readExport(write(tc.name, tc.content), importTarget{})
 			var f *failure
 			if !errors.As(err, &f) || f.status != exitRefused {
 				t.Fatalf("readExport = %v, want a refusal", err)
@@ -398,15 +470,15 @@ func TestImportRefusesADocumentItCannotRead(t *testing.T) {
 		name, content string
 		says          string
 	}{
-		{"not json", "{ not json", "not an agentx export"},
+		{"not json", "{ not json", "not an agentx snapshot"},
 		{"settings agentx would not write", editedSound(t, func(doc map[string]any) {
 			doc["settings"].(map[string]any)["sources"] = []any{map[string]any{"url": "https://user:" + importToken + "@github.com/example/skills"}}
 		}), "must be stored as the canonical URL of a source alone"},
-		// A record of any kind but managed is no record agentx writes, so it
-		// is refused.
-		{"a record agentx cannot read", editedSound(t, func(doc map[string]any) {
+		// An entry of any kind but managed and unmanaged is no entry agentx
+		// writes, so it is refused.
+		{"an entry agentx cannot read", editedSound(t, func(doc map[string]any) {
 			doc["skills"].([]any)[0].(map[string]any)["kind"] = lineage.KindFork
-		}), "the kind of alpha is not managed"},
+		}), "the kind of alpha is neither managed nor unmanaged"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			file := to.exportPath(strings.ReplaceAll(tc.name, " ", "-") + ".json")
@@ -431,8 +503,10 @@ func TestImportRefusesADocumentItCannotRead(t *testing.T) {
 	// The sound document still imports after all of that, so the refusals
 	// were about the documents and not about the machine.
 	good := to.exportPath("sound.json")
-	writeFile(t, good, soundExport)
-	equal(t, "the sound document", to.run("import", good, "--yes").exit, 0)
+	writeFile(t, good, soundSnapshot)
+	out := to.run("--json", "import", good, "--yes")
+	equal(t, "the sound snapshot", out.exit, 0)
+	equal(t, "its placements", fmt.Sprint(to.one(out.stdout, "import_skill")["placements"]), "[claude-code]")
 }
 
 // TestImportListsWhatTheAccountRepoHas is the point of the listing: one
@@ -478,7 +552,7 @@ func TestImportListsWhatTheAccountRepoHas(t *testing.T) {
 		"imported the settings from "+file+": 1 of 3 skills present, 1 missing, 1 at a different version")
 
 	text := h.run("import", file, "--yes")
-	contains(t, "stdout", text.stdout, "3 skills in the export: 1 present, 1 missing, 1 at a different version")
+	contains(t, "stdout", text.stdout, "3 skills in the snapshot: 1 present, 1 missing, 1 at a different version")
 	contains(t, "stdout", text.stdout, "  alpha  managed  present")
 	contains(t, "stdout", text.stdout, "  gamma  managed  missing")
 }
@@ -496,6 +570,8 @@ func TestRestoreStates(t *testing.T) {
 	managed := func(commit string) lineage.Record { return lineage.Record{Kind: lineage.KindManaged, Commit: commit} }
 	cases := []struct {
 		name    string
+		kind    string
+		commit  string
 		source  string
 		account string
 		records map[string]lineage.Record
@@ -503,22 +579,26 @@ func TestRestoreStates(t *testing.T) {
 		want    string
 		local   string
 	}{
-		{"own, local branch only", account, account, map[string]lineage.Record{"notes": fork("c1")}, nil, restorePresent, "c1"},
-		{"own with no source", "", "", map[string]lineage.Record{"notes": fork("c1")}, nil, restorePresent, "c1"},
-		{"own, remote branch at its commit", account, account, nil, map[string]string{"notes": "c1"}, restorePresent, "c1"},
-		{"own, remote branch at another commit", account, account, nil, map[string]string{"notes": "c2"}, restoreDifferent, "c2"},
-		{"own, the local branch decides", account, account, map[string]lineage.Record{"notes": fork("c2")}, map[string]string{"notes": "c1"}, restoreDifferent, "c2"},
-		{"own, held as a shared source's", account, account, map[string]lineage.Record{"notes": managed("c1")}, nil, restoreDifferent, "c1"},
-		{"shared, its import branch", shared, account, map[string]lineage.Record{"notes": managed("c1")}, nil, restorePresent, "c1"},
-		{"shared, held as one of your own", shared, account, map[string]lineage.Record{"notes": fork("c1")}, nil, restoreDifferent, "c1"},
-		{"shared, not matched against the remote", shared, account, nil, map[string]string{"notes": "c1"}, restoreMissing, ""},
-		{"the account remote's URL with no account remote set", account, "", nil, map[string]string{"notes": "c1"}, restoreMissing, ""},
-		{"neither", account, account, nil, nil, restoreMissing, ""},
+		{"own, local branch only", "", "c1", account, account, map[string]lineage.Record{"notes": fork("c1")}, nil, restorePresent, "c1"},
+		{"own with no source", "", "c1", "", "", map[string]lineage.Record{"notes": fork("c1")}, nil, restorePresent, "c1"},
+		{"own, remote branch at its commit", "", "c1", account, account, nil, map[string]string{"notes": "c1"}, restorePresent, "c1"},
+		{"own, remote branch at another commit", "", "c1", account, account, nil, map[string]string{"notes": "c2"}, restoreDifferent, "c2"},
+		{"own, the local branch decides", "", "c1", account, account, map[string]lineage.Record{"notes": fork("c2")}, map[string]string{"notes": "c1"}, restoreDifferent, "c2"},
+		{"own, held as a shared source's", "", "c1", account, account, map[string]lineage.Record{"notes": managed("c1")}, nil, restoreDifferent, "c1"},
+		{"own that follows, at any commit", "", "", account, account, map[string]lineage.Record{"notes": fork("c2")}, nil, restorePresent, "c2"},
+		{"shared, its import branch", "", "c1", shared, account, map[string]lineage.Record{"notes": managed("c1")}, nil, restorePresent, "c1"},
+		{"shared, held as one of your own", "", "c1", shared, account, map[string]lineage.Record{"notes": fork("c1")}, nil, restoreDifferent, "c1"},
+		{"shared, not matched against the remote", "", "c1", shared, account, nil, map[string]string{"notes": "c1"}, restoreMissing, ""},
+		{"shared that follows, held as one of your own", "", "", shared, account, map[string]lineage.Record{"notes": fork("c2")}, nil, restoreDifferent, "c2"},
+		{"the account remote's URL with no account remote set", "", "c1", account, "", nil, map[string]string{"notes": "c1"}, restoreMissing, ""},
+		{"neither", "", "c1", account, account, nil, nil, restoreMissing, ""},
+		{"unmanaged, not matched against the remote", lineage.KindUnmanaged, "", "", account, nil, map[string]string{"notes": "c1"}, restoreMissing, ""},
+		{"unmanaged, a branch of its name", lineage.KindUnmanaged, "", "", account, map[string]lineage.Record{"notes": fork("c1")}, nil, restoreDifferent, "c1"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			got := restoreStates([]exportSkill{{Name: "notes", Kind: lineage.KindManaged, Commit: "c1", Source: c.source}}, c.records, c.remote, c.account)
+			got := restoreStates([]snapshotSkill{{Name: "notes", Kind: c.kind, Commit: c.commit, Source: c.source}}, c.records, c.remote, c.account)
 			equal(t, "state", got[0].State, c.want)
 			equal(t, "local commit", got[0].LocalCommit, c.local)
 		})
@@ -601,7 +681,7 @@ func TestImportReadsTheAnswer(t *testing.T) {
 			out:  &writer{stdout: &stdout, stderr: &stderr, env: map[string]string{}},
 			dirs: home.Dirs{Home: filepath.Join("tmp", "agentx")},
 		}
-		doc := exportDocument{Machine: exportMachine{Label: "first-laptop"}}
+		doc := snapshot{Machine: &exportMachine{Label: "first-laptop"}}
 		err := inv.askToImport("export.json", doc, strings.NewReader(tc.answer))
 		if (err == nil) != tc.yes {
 			t.Errorf("the answer %q gave %v, want yes = %v", tc.answer, err, tc.yes)
@@ -627,12 +707,12 @@ func TestImportFillsInWhatADocumentLeavesOut(t *testing.T) {
 	to := newHarness(t)
 	to.build(t, fixture{dirs: []string{".claude"}})
 	file := to.exportPath("minimal.json")
-	writeFile(t, file, `{"schema_version":1,"machine":{"id":"0123456789abcdef0123456789abcdef","label":"other"},`+
+	writeFile(t, file, `{"schema_version":2,"machine":{"id":"0123456789abcdef0123456789abcdef","label":"other"},`+
 		`"settings":{"schema_version":1},"skills":[]}`)
 
 	out := to.run("import", file, "--yes")
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "No skills in the export.")
+	contains(t, "stdout", out.stdout, "No skills in the snapshot.")
 	equal(t, "the settings", readText(t, home.SettingsPath(to.agentx)), `{
   "schema_version": 1,
   "accept_operations": false,
@@ -645,7 +725,7 @@ func TestImportFillsInWhatADocumentLeavesOut(t *testing.T) {
 	equal(t, "config list", to.run("config", "list").exit, 0)
 	js := to.run("--json", "import", file, "--yes")
 	equal(t, "summary", to.one(js.stdout, "result")["summary"],
-		"imported the settings from "+file+": the export lists no skills")
+		"imported the settings from "+file+": the snapshot lists no skills")
 }
 
 // TestImportSaysWhyWithoutEchoingTheDocument: the reason a document was
@@ -657,11 +737,11 @@ func TestImportSaysWhyWithoutEchoingTheDocument(t *testing.T) {
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	file := h.exportPath("evil.json")
-	writeFile(t, file, "{\"schema_version\": 1, \"\\u001b[31mred\\r\": 1}")
+	writeFile(t, file, "{\"schema_version\": 2, \"\\u001b[31mred\\r\": 1}")
 
 	out := h.run("import", file, "--yes")
 	equal(t, "exit", out.exit, 6)
-	contains(t, "stderr", out.stderr, "not an agentx export")
+	contains(t, "stderr", out.stderr, "not an agentx snapshot")
 	if strings.ContainsAny(out.stderr, "\x1b\r") {
 		t.Errorf("the refusal carried a control character from the document: %q", out.stderr)
 	}
@@ -731,7 +811,7 @@ func TestImportRefusesADocumentNoMachineWrote(t *testing.T) {
 	before := readText(t, home.SettingsPath(h.agentx))
 
 	file := h.exportPath("enormous.json")
-	head := `{"schema_version":1,"machine":{"id":"0123456789abcdef0123456789abcdef","label":"a"},` +
+	head := `{"schema_version":2,"machine":{"id":"0123456789abcdef0123456789abcdef","label":"a"},` +
 		`"settings":{"schema_version":1,"label":"`
 	writeFile(t, file, head+strings.Repeat("L", documentLimit)+`"},"skills":[]}`)
 
@@ -951,7 +1031,7 @@ func TestImportWithNoSkillsStillNamesTheSourcesToAdd(t *testing.T) {
 	to.build(t, fixture{dirs: []string{".claude"}})
 	out := to.run("import", file, "--yes")
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "No skills in the export.\n"+
+	contains(t, "stdout", out.stdout, "No skills in the snapshot.\n"+
 		"  only the settings were written: add each source again, then install a missing skill with 'agentx skill add <source>', or one of your own with 'agentx skill add --name <name>'\n"+
 		"    agentx source add https://github.com/example/skills#release\n"+
 		"    agentx source add https://github.com/me/forks --account\n")
