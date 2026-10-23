@@ -15,7 +15,7 @@ import (
 // TestServeRunsMaintenance starts serve over a home whose account repo
 // holds an install, has no record of a maintenance and holds a maintenance
 // lock a killed git left behind. It removes the lock and runs one off its
-// loop, after its snapshot: the loose-objects and incremental-repack
+// loop, after its inventory: the loose-objects and incremental-repack
 // tasks, then the pack-refs task, and never git maintenance start. When a
 // run is due is maintenanceDue's, see TestMaintenanceIsDueOnceADay; every
 // other serve of the tests finds a fresh record and runs none.
@@ -42,7 +42,7 @@ func TestServeRunsMaintenance(t *testing.T) {
 	}
 	since := time.Now()
 	p := h.serve(t, "--json")
-	p.next("snapshot")
+	p.next("inventory")
 	awaitTrue(t, "maintenance", func() bool {
 		last, ok := home.Maintained(h.agentx)
 		return ok && !last.Before(since.Truncate(time.Second))

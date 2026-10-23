@@ -18,11 +18,11 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 )
 
-var update = flag.Bool("update", false, "rewrite the golden snapshot files from the current output")
+var update = flag.Bool("update", false, "rewrite the golden inventory files from the current output")
 
 // fixture builds one machine under the harness's HOME. Paths are relative to
 // HOME, link targets too. The library is moved under HOME so that every path
-// in the snapshot starts with it.
+// in the inventory starts with it.
 type fixture struct {
 	files    map[string]string
 	links    map[string]string
@@ -139,7 +139,7 @@ var fixtures = map[string]fixture{
 	},
 	// No client here reads the library, so a warning about a directory of
 	// it can only come from the scan's own read of the library, the one
-	// the snapshot's library entries are built from.
+	// the inventory's library entries are built from.
 	"library-broken-symlink": {
 		files: map[string]string{
 			".claude/skills/commit/SKILL.md": skill("commit", "Write a commit message"),
@@ -353,18 +353,18 @@ func TestScanGolden(t *testing.T) {
 			}
 
 			events := h.events(first.stdout)
-			if got, want := h.types(events), []string{"snapshot", "result"}; !reflect.DeepEqual(got, want) {
+			if got, want := h.types(events), []string{"inventory", "result"}; !reflect.DeepEqual(got, want) {
 				t.Fatalf("event types = %v, want %v", got, want)
 			}
 			// No value a configuration file holds secret reaches the
-			// snapshot; TestScanPrintsWhatTheSnapshotHolds checks the text.
+			// inventory; TestScanPrintsWhatTheInventoryHolds checks the text.
 			for _, secret := range secrets(f) {
 				if strings.Contains(first.stdout, secret) {
-					t.Errorf("the snapshot carries %q", secret)
+					t.Errorf("the inventory carries %q", secret)
 				}
 			}
 			got := h.portable(strings.SplitN(first.stdout, "\n", 2)[0] + "\n")
-			path := filepath.Join("testdata", "golden", name+".snapshot.json")
+			path := filepath.Join("testdata", "golden", name+".inventory.json")
 			if *update {
 				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 					t.Fatal(err)
@@ -379,29 +379,29 @@ func TestScanGolden(t *testing.T) {
 				t.Fatalf("%v; run go test ./internal/cli -run TestScanGolden -update to create it", err)
 			}
 			if got != string(want) {
-				t.Errorf("snapshot differs from %s; run go test ./internal/cli -run TestScanGolden -update after checking the diff\ngot:\n%s\nwant:\n%s", path, got, want)
+				t.Errorf("inventory differs from %s; run go test ./internal/cli -run TestScanGolden -update after checking the diff\ngot:\n%s\nwant:\n%s", path, got, want)
 			}
 		})
 	}
 }
 
-// snapshot runs a JSON scan and returns the snapshot event.
-func (h *harness) snapshot(t *testing.T, args ...string) jsonEvent {
+// inventory runs a JSON scan and returns the inventory event.
+func (h *harness) inventory(t *testing.T, args ...string) jsonEvent {
 	t.Helper()
 	out := h.run(append([]string{"--json", "scan"}, args...)...)
 	equal(t, "exit", out.exit, 0)
 	events := h.events(out.stdout)
-	if got, want := h.types(events), []string{"snapshot", "result"}; !reflect.DeepEqual(got, want) {
+	if got, want := h.types(events), []string{"inventory", "result"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("event types = %v, want %v", got, want)
 	}
 	return events[0]
 }
 
 // occurrences lists "configuration kind scope path" for every occurrence of the named skill.
-func occurrences(t *testing.T, h *harness, snap jsonEvent, name string) []string {
+func occurrences(t *testing.T, h *harness, inventory jsonEvent, name string) []string {
 	t.Helper()
 	var rows []string
-	for _, s := range snap["skills"].([]any) {
+	for _, s := range inventory["skills"].([]any) {
 		skill := s.(map[string]any)
 		if skill["name"] != name {
 			continue
@@ -423,15 +423,15 @@ func TestScanCursorSeesClaudeSkill(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	h.build(t, fixtures["cursor-sees-claude"])
-	snap := h.snapshot(t)
+	inventory := h.inventory(t)
 
-	equal(t, "machine.id", snap["machine"].(map[string]any)["id"], "0123456789abcdef0123456789abcdef")
-	equal(t, "machine.label", snap["machine"].(map[string]any)["label"], "test-host")
-	equal(t, "instance_id", snap["instance_id"], "instance-test")
-	equal(t, "scan_counter", snap["scan_counter"], float64(1))
+	equal(t, "machine.id", inventory["machine"].(map[string]any)["id"], "0123456789abcdef0123456789abcdef")
+	equal(t, "machine.label", inventory["machine"].(map[string]any)["label"], "test-host")
+	equal(t, "instance_id", inventory["instance_id"], "instance-test")
+	equal(t, "scan_counter", inventory["scan_counter"], float64(1))
 
 	var slugs []string
-	for _, c := range snap["configurations"].([]any) {
+	for _, c := range inventory["configurations"].([]any) {
 		conf := c.(map[string]any)
 		slugs = append(slugs, conf["id"].(string))
 		equal(t, "enabled", conf["enabled"], true)
@@ -439,15 +439,15 @@ func TestScanCursorSeesClaudeSkill(t *testing.T) {
 	if want := []string{"claude-code", "cursor"}; !reflect.DeepEqual(slugs, want) {
 		t.Errorf("configurations = %v, want %v", slugs, want)
 	}
-	equal(t, "skill count", len(snap["skills"].([]any)), 1)
+	equal(t, "skill count", len(inventory["skills"].([]any)), 1)
 	want := []string{
 		"claude-code directory user ~/.claude/skills/commit",
 		"cursor directory user ~/.claude/skills/commit",
 	}
-	if got := occurrences(t, h, snap, "commit"); !reflect.DeepEqual(got, want) {
+	if got := occurrences(t, h, inventory, "commit"); !reflect.DeepEqual(got, want) {
 		t.Errorf("occurrences = %v, want %v", got, want)
 	}
-	equal(t, "edges", len(snap["edges"].([]any)), 4) // machine to two configurations, two configurations to one skill
+	equal(t, "edges", len(inventory["edges"].([]any)), 4) // machine to two configurations, two configurations to one skill
 
 	out := h.run("scan")
 	equal(t, "exit", out.exit, 0)
@@ -463,9 +463,9 @@ func TestScanSymlinkChainAndLibrary(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	h.build(t, fixtures["symlink-chain"])
-	snap := h.snapshot(t)
+	inventory := h.inventory(t)
 
-	equal(t, "skill count", len(snap["skills"].([]any)), 1)
+	equal(t, "skill count", len(inventory["skills"].([]any)), 1)
 	want := []string{
 		"claude-code symlink user ~/.claude/skills/commit",
 		"codex directory user ~/.agents/skills/commit",
@@ -474,10 +474,10 @@ func TestScanSymlinkChainAndLibrary(t *testing.T) {
 		"cursor symlink user ~/.codex/skills/commit",
 		"cursor symlink user ~/.cursor/skills/commit",
 	}
-	if got := occurrences(t, h, snap, "commit"); !reflect.DeepEqual(got, want) {
+	if got := occurrences(t, h, inventory, "commit"); !reflect.DeepEqual(got, want) {
 		t.Errorf("occurrences = %v, want %v", got, want)
 	}
-	for _, o := range snap["skills"].([]any)[0].(map[string]any)["occurrences"].([]any) {
+	for _, o := range inventory["skills"].([]any)[0].(map[string]any)["occurrences"].([]any) {
 		equal(t, "resolved_path", h.portable(o.(map[string]any)["resolved_path"].(string)), "~/.agents/skills/commit")
 	}
 
@@ -488,7 +488,7 @@ func TestScanSymlinkChainAndLibrary(t *testing.T) {
 // TestScanSanitisesUntrustedNames covers a skill whose frontmatter names it
 // with the characters a terminal obeys. A SKILL.md comes from wherever the
 // skill did, so the text inventory prints the name as Streams prescribes,
-// while the snapshot event carries it as the file wrote it.
+// while the inventory event carries it as the file wrote it.
 func TestScanSanitisesUntrustedNames(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -497,7 +497,7 @@ func TestScanSanitisesUntrustedNames(t *testing.T) {
 		".claude/skills/nasty/SKILL.md": "---\n" + `name: "na\tsty \x1b[31mRED\x1b[0m"` + "\n" + `description: "two\nlines"` + "\n---\n",
 	}})
 
-	skills := h.snapshot(t)["skills"].([]any)
+	skills := h.inventory(t)["skills"].([]any)
 	if len(skills) != 1 {
 		t.Fatalf("skills = %v, want one", skills)
 	}
@@ -519,10 +519,10 @@ func TestScanProjectScope(t *testing.T) {
 	h.build(t, fixtures["project-scope"])
 	project := filepath.Join(h.home, "work", "app")
 
-	snap := h.snapshot(t, "--project", project)
+	inventory := h.inventory(t, "--project", project)
 	got := map[string][]string{}
 	for _, name := range []string{"commit", "migrate", "lint", "release", "x"} {
-		got[name] = occurrences(t, h, snap, name)
+		got[name] = occurrences(t, h, inventory, name)
 	}
 	want := map[string][]string{
 		"commit":  {"claude-code directory user ~/.claude/skills/commit", "cursor directory user ~/.claude/skills/commit"},
@@ -536,7 +536,7 @@ func TestScanProjectScope(t *testing.T) {
 	}
 
 	// Without the flag only user scope is scanned; nothing was written to the project.
-	equal(t, "user-scope skills", len(h.snapshot(t)["skills"].([]any)), 1)
+	equal(t, "user-scope skills", len(h.inventory(t)["skills"].([]any)), 1)
 	equal(t, "project entries", listDir(t, project), ".agents .claude .cursor .github")
 
 	out := h.run("--json", "scan", "--project", filepath.Join(h.home, "nowhere"))
@@ -555,8 +555,8 @@ func TestScanConfigurationFlag(t *testing.T) {
 	h := newHarness(t)
 	h.build(t, fixtures["cursor-sees-claude"])
 
-	whole := h.snapshot(t)
-	targeted := h.snapshot(t, "--configuration", "cursor")
+	whole := h.inventory(t)
+	targeted := h.inventory(t, "--configuration", "cursor")
 	if !reflect.DeepEqual(whole, targeted) {
 		t.Errorf("a targeted scan differs from the whole scan:\n%v\n%v", whole, targeted)
 	}
@@ -593,15 +593,15 @@ func TestConfigEnableDisable(t *testing.T) {
 	h := newHarness(t)
 	h.build(t, fixtures["cursor-sees-claude"])
 
-	enabled := func(snap jsonEvent) map[string]bool {
+	enabled := func(inventory jsonEvent) map[string]bool {
 		m := map[string]bool{}
-		for _, c := range snap["configurations"].([]any) {
+		for _, c := range inventory["configurations"].([]any) {
 			conf := c.(map[string]any)
 			m[conf["id"].(string)] = conf["enabled"].(bool)
 		}
 		return m
 	}
-	if got, want := enabled(h.snapshot(t)), (map[string]bool{"claude-code": true, "cursor": true}); !reflect.DeepEqual(got, want) {
+	if got, want := enabled(h.inventory(t)), (map[string]bool{"claude-code": true, "cursor": true}); !reflect.DeepEqual(got, want) {
 		t.Errorf("enabled = %v, want %v", got, want)
 	}
 
@@ -619,7 +619,7 @@ func TestConfigEnableDisable(t *testing.T) {
 	if got, want := readSettingsFile(t, h)["disabled_configurations"], []any{"cursor"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("disabled_configurations = %v, want %v", got, want)
 	}
-	if got, want := enabled(h.snapshot(t)), (map[string]bool{"claude-code": true, "cursor": false}); !reflect.DeepEqual(got, want) {
+	if got, want := enabled(h.inventory(t)), (map[string]bool{"claude-code": true, "cursor": false}); !reflect.DeepEqual(got, want) {
 		t.Errorf("enabled = %v, want %v", got, want)
 	}
 	out = h.run("config", "list")
@@ -673,12 +673,12 @@ func TestScanSpawnBudget(t *testing.T) {
 	h.env["PATH"] = bin + string(os.PathListSeparator) + os.Getenv("PATH")
 
 	start := time.Now()
-	snap := h.snapshot(t)
+	inventory := h.inventory(t)
 	if elapsed := time.Since(start); elapsed > 3*time.Second {
 		t.Errorf("scan took %s, want a fraction of a second", elapsed)
 	}
-	equal(t, "skills", len(snap["skills"].([]any)), 100)
-	for _, s := range snap["skills"].([]any) {
+	equal(t, "skills", len(inventory["skills"].([]any)), 100)
+	for _, s := range inventory["skills"].([]any) {
 		equal(t, "occurrences per skill", len(s.(map[string]any)["occurrences"].([]any)), 4) // claude-code, codex, cursor, gemini-cli
 	}
 	// The startup gate runs `git --version` once; the scan itself spawns
@@ -689,9 +689,9 @@ func TestScanSpawnBudget(t *testing.T) {
 	}
 }
 
-// TestScanListsTheLibrary is the library in the snapshot: every skill of
+// TestScanListsTheLibrary is the library in the inventory: every skill of
 // it as skill list lists it, lineage, state and placements alike, since the
-// snapshot is what the desktop app shows and a one-shot listing may not
+// inventory is what the desktop app shows and a one-shot listing may not
 // tell a script anything else. The lineage costs the scan one for-each-ref
 // after the check of the account repo, however many skills the library
 // holds.
@@ -712,9 +712,9 @@ func TestScanListsTheLibrary(t *testing.T) {
 	}
 
 	calls := countingGit(t, h)
-	snap := h.snapshot(t)
-	if got := snap["library"].([]any); !reflect.DeepEqual(got, listed) {
-		t.Errorf("the snapshot's library differs from skill list:\nsnapshot:   %v\nskill list: %v", got, listed)
+	inventory := h.inventory(t)
+	if got := inventory["library"].([]any); !reflect.DeepEqual(got, listed) {
+		t.Errorf("the inventory's library differs from skill list:\ninventory:   %v\nskill list: %v", got, listed)
 	}
 	refs := 0
 	for _, call := range calls() {
@@ -745,14 +745,14 @@ func TestScanListsTheLibrary(t *testing.T) {
 	}
 }
 
-// accountRepoWarning ends the one warning a snapshot carries when git
+// accountRepoWarning ends the one warning an inventory carries when git
 // cannot read the account repo: the library is left out, and the reader is
 // sent to doctor and to the repo, whose error the warning begins with.
 const accountRepoWarning = "; the library is not listed, run 'agentx doctor' and check the account repo it names"
 
 // TestScanListsNoLibraryWhenTheAccountRepoCannotBeRead breaks the account
 // repo under a managed skill. Neither scan nor serve reads it for anything
-// in the snapshot but the library's lineage, so each still inventories the
+// in the inventory but the library's lineage, so each still inventories the
 // machine and exits 0: the library is listed empty, rather than with every
 // skill in it called unmanaged, and one warning names the account repo and
 // the command that looks into it. skill list, which is there to report the
@@ -764,19 +764,19 @@ func TestScanListsNoLibraryWhenTheAccountRepoCannotBeRead(t *testing.T) {
 	account := gitx.AccountRepoPath(h.agentx)
 	writeFile(t, filepath.Join(account, "HEAD"), "garbage\n")
 
-	snap := h.snapshot(t)
-	equal(t, "configurations", len(snap["configurations"].([]any)), 4)
-	equal(t, "skills", strings.Join(skillNames(snap), " "), "alpha")
-	equal(t, "library", len(snap["library"].([]any)), 0)
-	warnings := snap["warnings"].([]any)
+	inventory := h.inventory(t)
+	equal(t, "configurations", len(inventory["configurations"].([]any)), 4)
+	equal(t, "skills", strings.Join(skillNames(inventory), " "), "alpha")
+	equal(t, "library", len(inventory["library"].([]any)), 0)
+	warnings := inventory["warnings"].([]any)
 	if len(warnings) != 1 || !strings.Contains(warnings[0].(string), account) || !strings.HasSuffix(warnings[0].(string), accountRepoWarning) {
 		t.Errorf("warnings = %q, want one naming %s and ending %q", warnings, account, accountRepoWarning)
 	}
 
 	served := h.serveOnce("--json")
 	equal(t, "serve exit", served.exit, 0)
-	if fromServe := h.one(served.stdout, "snapshot"); !reflect.DeepEqual(fromServe, snap) {
-		t.Errorf("serve --once and scan disagree:\nserve: %v\nscan:  %v", fromServe, snap)
+	if fromServe := h.one(served.stdout, "inventory"); !reflect.DeepEqual(fromServe, inventory) {
+		t.Errorf("serve --once and scan disagree:\nserve: %v\nscan:  %v", fromServe, inventory)
 	}
 
 	// A text scan reads no lineage, so it has nothing to warn about.
@@ -795,7 +795,7 @@ func TestScanListsNoLibraryWhenTheAccountRepoCannotBeRead(t *testing.T) {
 // TestScanWarnsOfABranchDoctorDoesNotRead breaks the account repo in a way
 // doctor does not see: the commit a managed skill's import branch points at
 // is gone. The repo still opens, which is what doctor's account_repo row
-// asks of it, and only reading the branches fails. So the snapshot's
+// asks of it, and only reading the branches fails. So the inventory's
 // warning carries git's error, which says what is wrong, and sends the
 // reader to the repo it names as well as to doctor, which on its own would
 // answer that the repo is fine.
@@ -810,9 +810,9 @@ func TestScanWarnsOfABranchDoctorDoesNotRead(t *testing.T) {
 		t.Fatalf("the import commit is not a loose object: %v", err)
 	}
 
-	snap := h.snapshot(t)
-	equal(t, "library", len(snap["library"].([]any)), 0)
-	warnings := snap["warnings"].([]any)
+	inventory := h.inventory(t)
+	equal(t, "library", len(inventory["library"].([]any)), 0)
+	warnings := inventory["warnings"].([]any)
 	if len(warnings) != 1 || !strings.Contains(warnings[0].(string), account) ||
 		!strings.Contains(warnings[0].(string), "missing object") || !strings.HasSuffix(warnings[0].(string), accountRepoWarning) {
 		t.Errorf("warnings = %q, want one naming %s and the missing object, ending %q", warnings, account, accountRepoWarning)
@@ -833,12 +833,12 @@ func secrets(f fixture) []string {
 	return found
 }
 
-// TestScanPrintsWhatTheSnapshotHolds is the text half of the golden
-// snapshots, which pin every server, plugin, edge and warning a scan finds:
+// TestScanPrintsWhatTheInventoryHolds is the text half of the golden
+// inventories, which pin every server, plugin, edge and warning a scan finds:
 // the inventory prints the servers and the plugins, each warning goes to
 // stderr, and no secret value of a configuration file reaches either
-// stream, which TestScanGolden checks of the snapshot.
-func TestScanPrintsWhatTheSnapshotHolds(t *testing.T) {
+// stream, which TestScanGolden checks of the inventory.
+func TestScanPrintsWhatTheInventoryHolds(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		fixture  string
@@ -992,8 +992,8 @@ func TestScanQuotesPathsAndSanitisesDeclarations(t *testing.T) {
 		}
 	}
 
-	// The snapshot carries every one of them as it was read.
-	skills := h.snapshot(t)["skills"].([]any)
+	// The inventory carries every one of them as it was read.
+	skills := h.inventory(t)["skills"].([]any)
 	var paths []string
 	for _, s := range skills {
 		for _, o := range s.(map[string]any)["occurrences"].([]any) {
@@ -1001,6 +1001,6 @@ func TestScanQuotesPathsAndSanitisesDeclarations(t *testing.T) {
 		}
 	}
 	if !slices.Contains(paths, "~/.claude/skills/na\x1b[31msty") {
-		t.Errorf("the snapshot does not carry the path as it is: %q", paths)
+		t.Errorf("the inventory does not carry the path as it is: %q", paths)
 	}
 }

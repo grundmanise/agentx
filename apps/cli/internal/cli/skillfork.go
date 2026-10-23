@@ -89,9 +89,9 @@ type forking struct {
 	targets []placeTarget
 	notes   []forkNoteEvent
 	// scanned scans the machine once, the first time it is asked, and
-	// snap keeps what it found.
-	scanned func() (scan.Snapshot, error)
-	snap    *scan.Snapshot
+	// inventory keeps what it found.
+	scanned   func() (scan.Inventory, error)
+	inventory *scan.Inventory
 }
 
 // skillFork forks the skill arg names, under newName when it is given and
@@ -141,15 +141,15 @@ func (inv *invocation) planFork(ctx context.Context, arg, newName string, rename
 		}
 	}
 	fk := &forking{gitDir: gitDir, rename: rename}
-	fk.scanned = func() (scan.Snapshot, error) {
-		if fk.snap == nil {
+	fk.scanned = func() (scan.Inventory, error) {
+		if fk.inventory == nil {
 			s, err := inv.scan(ctx, lockWait, "", false)
 			if err != nil {
-				return scan.Snapshot{}, err
+				return scan.Inventory{}, err
 			}
-			fk.snap = &s
+			fk.inventory = &s
 		}
-		return *fk.snap, nil
+		return *fk.inventory, nil
 	}
 	src, err := inv.forkSourceOf(arg, records, fk.scanned)
 	if err != nil {
@@ -531,12 +531,12 @@ func forkSubject(src forkSource, target string) string {
 // library sees the fork whatever it is placed in, and is said to; a
 // disabled configuration that has the plugin and does not read the library
 // sees no fork, and gets no note.
-func (inv *invocation) planBeside(fk *forking, snap scan.Snapshot) error {
+func (inv *invocation) planBeside(fk *forking, inventory scan.Inventory) error {
 	ids := map[string]bool{}
 	src := fk.src
 	switch {
 	case src.kind == kindPlugin:
-		for _, id := range pluginConfigurations(snap, src.plugin) {
+		for _, id := range pluginConfigurations(inventory, src.plugin) {
 			ids[id] = true
 		}
 		enabled, err := inv.placementTargets(nil)
@@ -546,7 +546,7 @@ func (inv *invocation) planBeside(fk *forking, snap scan.Snapshot) error {
 		// A configuration has the fork beside the plugin's copy when the fork
 		// is placed into it or its client reads the library; one agentx
 		// leaves alone, which has the plugin all the same, gets no note.
-		universal := universalClients(snap)
+		universal := universalClients(inventory)
 		var sees []string
 		for _, t := range enabled {
 			if ids[t.id] {
@@ -571,7 +571,7 @@ func (inv *invocation) planBeside(fk *forking, snap scan.Snapshot) error {
 			return err
 		}
 		detected := inv.detectedTargets()
-		for _, p := range inv.placements(snap, src.lib, modes) {
+		for _, p := range inv.placements(inventory, src.lib, modes) {
 			for _, t := range detected {
 				if t.id == p.Configuration && p.Path == t.ownPlace(inv.dirs.Library, src.name) {
 					ids[t.id] = true
@@ -707,7 +707,7 @@ func (inv *invocation) forkInPlace(ctx context.Context, fk *forking, rec lineage
 // confirmation with one row per configuration a fork beside its source
 // was placed in.
 func (inv *invocation) reportForked(ctx context.Context, fk *forking, done placements) error {
-	snap, err := inv.scan(ctx, lockWait, "", false)
+	inventory, err := inv.scan(ctx, lockWait, "", false)
 	if err != nil {
 		return err
 	}
@@ -723,17 +723,17 @@ func (inv *invocation) reportForked(ctx context.Context, fk *forking, done place
 	out := inv.out
 	src, name := fk.src, sanitised(fk.src.name)
 	if fk.inPlace {
-		ev := sc.librarySkillEventFor(ctx, inv, snap, lib, nil)
+		ev := sc.librarySkillEventFor(ctx, inv, inventory, lib, nil)
 		out.emit(ev)
 		inv.summary = "forked " + name + "; the fork replaces it wherever it was"
 		out.done("forked " + out.paint(heading, name) + "; the fork replaces it wherever it was")
 		inv.noAccountRemoteHint(ev)
 		return nil
 	}
-	ev := sc.librarySkillEventFor(ctx, inv, snap, lib, targetIDs(done.placed))
+	ev := sc.librarySkillEventFor(ctx, inv, inventory, lib, targetIDs(done.placed))
 	out.emit(ev)
 	if from, ok := libs[src.name]; ok && src.held {
-		out.emit(sc.librarySkillEventFor(ctx, inv, snap, from, nil))
+		out.emit(sc.librarySkillEventFor(ctx, inv, inventory, from, nil))
 	}
 	for _, n := range fk.notes {
 		out.emit(n)

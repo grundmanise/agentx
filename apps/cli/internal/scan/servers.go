@@ -13,7 +13,7 @@ import (
 const noSignature = "none"
 
 // declaration is one server declared in one configuration file. Its node is
-// built when the snapshot is composed, since the physical identity depends
+// built when the inventory is composed, since the physical identity depends
 // on the handshake.
 type declaration struct {
 	conf     Configuration
@@ -162,7 +162,7 @@ func (s *Scan) addPlugin(conf Configuration, p InstalledPlugin) {
 	node.PhysicalID = id("plugin", node.LogicalID, s.MachineID, conf.PhysicalID, p.Version)
 	if !s.plugins[node.PhysicalID] {
 		s.plugins[node.PhysicalID] = true
-		s.snap.Plugins = append(s.snap.Plugins, node)
+		s.inventory.Plugins = append(s.inventory.Plugins, node)
 	}
 	s.edge(conf.PhysicalID, node.PhysicalID)
 	for _, dir := range p.Skills {

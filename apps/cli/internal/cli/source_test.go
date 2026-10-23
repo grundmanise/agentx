@@ -427,10 +427,10 @@ func TestSourceSkills(t *testing.T) {
 	equal(t, "source.commit", src["commit"], head)
 	equal(t, "source.skills", src["skills"], float64(4))
 	want := []jsonEvent{
-		{"type": "source_skill", "schema_version": float64(1), "source": id, "subpath": "skills/alpha", "name": "alpha", "description": "The first skill", "tree": s.tree("skills/alpha")},
-		{"type": "source_skill", "schema_version": float64(1), "source": id, "subpath": "skills/alpha/nested", "name": "alpha-nested", "description": "Nested inside alpha", "tree": s.tree("skills/alpha/nested")},
-		{"type": "source_skill", "schema_version": float64(1), "source": id, "subpath": "skills/beta", "name": "beta", "description": "", "tree": s.tree("skills/beta")},
-		{"type": "source_skill", "schema_version": float64(1), "source": id, "subpath": "tools/gamma", "name": "gamma", "description": "Outside skills", "tree": s.tree("tools/gamma")},
+		{"type": "source_skill", "schema_version": float64(schemaVersion), "source": id, "subpath": "skills/alpha", "name": "alpha", "description": "The first skill", "tree": s.tree("skills/alpha")},
+		{"type": "source_skill", "schema_version": float64(schemaVersion), "source": id, "subpath": "skills/alpha/nested", "name": "alpha-nested", "description": "Nested inside alpha", "tree": s.tree("skills/alpha/nested")},
+		{"type": "source_skill", "schema_version": float64(schemaVersion), "source": id, "subpath": "skills/beta", "name": "beta", "description": "", "tree": s.tree("skills/beta")},
+		{"type": "source_skill", "schema_version": float64(schemaVersion), "source": id, "subpath": "tools/gamma", "name": "gamma", "description": "Outside skills", "tree": s.tree("tools/gamma")},
 	}
 	if !reflect.DeepEqual(skills, want) {
 		t.Errorf("skills = %v\nwant %v", skills, want)

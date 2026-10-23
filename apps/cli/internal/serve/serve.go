@@ -36,7 +36,7 @@ var ErrWatch = errors.New("cannot watch for changes")
 // returns is called from the loop's goroutine, as every other report
 // function is.
 type Options struct {
-	Scan  func(ctx context.Context) (scan.Snapshot, error)                               // one whole scan; ctx bounds its wait for the lock
+	Scan  func(ctx context.Context) (scan.Inventory, error)                              // one whole scan; ctx bounds its wait for the lock
 	Index func(ctx context.Context, prev *source.Index) (*source.Index, []string, error) // the source index after a scan, prev being the last one built; nil indexes nothing
 	Watch []string                                                                       // directories to watch, in order; a missing one is retried before each rescan
 	Trees []string                                                                       // directories whose subdirectories, present or added later, are watched too
@@ -44,7 +44,7 @@ type Options struct {
 	Stdin io.Reader                                                                      // request lines
 
 	// Check is the update check, run once, off the loop's goroutine, after
-	// the initial snapshot; it returns what reports its outcome, nil for
+	// the initial inventory; it returns what reports its outcome, nil for
 	// nothing to report. nil checks nothing, and so does Once. It is the
 	// first of the jobs, see Job.
 	Check Job
@@ -52,7 +52,7 @@ type Options struct {
 	// repo's maintenance.
 	Jobs []Job
 
-	Snapshot        func(scan.Snapshot)                                   // a changed whole snapshot, counter set
+	Inventory       func(scan.Inventory)                                  // a changed whole inventory, counter set
 	RefreshComplete func(requestID string, counter int, err error)        // the acknowledgement of one refresh request
 	Search          func(requestID, query string, results []source.Match) // the answer to one search request
 	BadRequest      func(message, hint string)                            // a stdin line that is not a request
@@ -60,7 +60,7 @@ type Options struct {
 }
 
 // Job is one job serve runs once, off the loop's goroutine, once the initial
-// snapshot is out; jobs run beside each other. The report a run returns, nil
+// inventory is out; jobs run beside each other. The report a run returns, nil
 // for nothing to report, is made on the loop's goroutine, where every other
 // report is. Under Once no job runs, and Run waits for a run still going,
 // stopped by its context, before it returns.
@@ -73,7 +73,7 @@ const (
 )
 
 // Run serves until ctx is done, stdin closes or, under Once, the initial
-// snapshot is emitted. It returns an error when the initial scan fails or
+// inventory is emitted. It returns an error when the initial scan fails or
 // when watching fails, at start or later, wrapped in ErrWatch; a cancelled
 // ctx is a clean end.
 func Run(ctx context.Context, o Options) error {
@@ -108,7 +108,7 @@ func Run(ctx context.Context, o Options) error {
 
 	// The update check and every other job run off this goroutine, since a
 	// check waits on the network for as long as its sources take and a
-	// rescan may not wait for it: each once, now that the initial snapshot
+	// rescan may not wait for it: each once, now that the initial inventory
 	// is out. The report of one that ended comes back over ended and is made
 	// here, where every other report is.
 	jobs := o.Jobs
@@ -195,8 +195,8 @@ func Run(ctx context.Context, o Options) error {
 // loop is the state one serve child keeps between scans.
 type loop struct {
 	Options
-	last    []byte   // canonical bytes of the last emitted snapshot
-	counter int      // scan_counter of the last emitted snapshot; 0 before the first
+	last    []byte   // canonical bytes of the last emitted inventory
+	counter int      // scan_counter of the last emitted inventory; 0 before the first
 	pending []string // refresh request ids received before the next scan
 
 	index  atomic.Pointer[source.Index] // what searches are answered from; replaced whole after a scan
@@ -237,13 +237,13 @@ func (l *loop) initial(ctx context.Context) error {
 	return nil
 }
 
-// scan runs one scan and emits the snapshot when it changed, then one
+// scan runs one scan and emits the inventory when it changed, then one
 // acknowledgement per refresh request received before the scan began. The
 // initial scan always emits. Nothing is emitted once ctx is done.
 func (l *loop) scan(ctx context.Context) error {
 	pending := l.pending
 	l.pending = nil
-	snap, err := l.Scan(ctx)
+	inventory, err := l.Scan(ctx)
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -253,12 +253,12 @@ func (l *loop) scan(ctx context.Context) error {
 		}
 		return err
 	}
-	b := canonical(snap)
+	b := canonical(inventory)
 	if l.counter == 0 || !bytes.Equal(b, l.last) {
 		l.counter++
 		l.last = b
-		snap.ScanCounter = l.counter
-		l.Snapshot(snap)
+		inventory.ScanCounter = l.counter
+		l.Inventory(inventory)
 	}
 	l.reindex(ctx)
 	for _, id := range pending {
@@ -267,10 +267,10 @@ func (l *loop) scan(ctx context.Context) error {
 	return nil
 }
 
-// reindex rebuilds the source index after a scan has emitted its snapshot
+// reindex rebuilds the source index after a scan has emitted its inventory
 // and before that scan's acknowledgements go out, so that a refresh
 // acknowledged after a source was added, fetched again or removed is
-// answered from the new index, while the snapshot never waits for the lock
+// answered from the new index, while the inventory never waits for the lock
 // this takes. A rebuild that fails leaves the last index in force. Nothing
 // is indexed under Once, which reads no requests.
 func (l *loop) reindex(ctx context.Context) {
@@ -291,13 +291,13 @@ func (l *loop) reindex(ctx context.Context) {
 	l.index.Store(idx)
 }
 
-// canonical serialises a snapshot without the counter, the one field that
+// canonical serialises an inventory without the counter, the one field that
 // differs between identical inventories of one serve process.
-func canonical(snap scan.Snapshot) []byte {
-	snap.ScanCounter = 0
-	b, err := json.Marshal(snap)
+func canonical(inventory scan.Inventory) []byte {
+	inventory.ScanCounter = 0
+	b, err := json.Marshal(inventory)
 	if err != nil {
-		panic(err) // a snapshot is plain structs; marshalling cannot fail
+		panic(err) // an inventory is plain structs; marshalling cannot fail
 	}
 	return b
 }

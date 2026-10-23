@@ -20,9 +20,9 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 )
 
-type snapshotEvent struct {
+type inventoryEvent struct {
 	event
-	scan.Snapshot
+	scan.Inventory
 }
 
 func newScanCommand(inv *invocation) *cobra.Command {
@@ -38,13 +38,13 @@ func newScanCommand(inv *invocation) *cobra.Command {
 					return err
 				}
 			}
-			snap, err := inv.snapshot(cmd.Context(), lockWait, project, handshake)
+			inventory, err := inv.inventory(cmd.Context(), lockWait, project, handshake)
 			if err != nil {
 				return err
 			}
-			inv.out.emit(snapshotEvent{event: newEvent("snapshot"), Snapshot: snap})
+			inv.out.emit(inventoryEvent{event: newEvent("inventory"), Inventory: inventory})
 			if !inv.out.json {
-				inv.printSnapshot(snap)
+				inv.printInventory(inventory)
 			}
 			return nil
 		},
@@ -71,30 +71,31 @@ const lockWait = time.Second
 // lock is recovered under the exclusive one, and the reads start over: no
 // inventory is composed from half-applied state.
 //
-// Its snapshot lists no library: it is the scan a command runs for the
+// Its inventory lists no library: it is the scan a command runs for the
 // placements it reports, after its own change for a mutation such as skill
 // add or skill remove, and on its own for a read-only command such as skill
 // list or export. Each of those commands takes the lineage it needs itself,
-// once, if it needs any. The snapshot a scan or serve emits is snapshot's.
-func (inv *invocation) scan(ctx context.Context, wait time.Duration, project string, handshake bool) (scan.Snapshot, error) {
-	return inv.inventory(ctx, wait, project, handshake, false)
+// once, if it needs any. The inventory a scan or serve emits is inventory's,
+// which lists the library too.
+func (inv *invocation) scan(ctx context.Context, wait time.Duration, project string, handshake bool) (scan.Inventory, error) {
+	return inv.scanMachine(ctx, wait, project, handshake, false)
 }
 
-// snapshot is the scan whose snapshot is emitted, by agentx scan and by
+// inventory is the scan that is emitted, by agentx scan and by
 // every scan of agentx serve: the scan above, with the library listed as
 // agentx skill list lists it. The lineage it takes is read under the same
-// shared lock as the settings and the filesystem, in one for-each-ref, so a
-// snapshot never pairs a library directory with lineage from either side
-// of a mutation; and a snapshot carries drift, which the desktop app takes
-// from the snapshot alone.
+// shared lock as the settings and the filesystem, in one for-each-ref, so an
+// inventory never pairs a library directory with lineage from either side
+// of a mutation; and an inventory carries drift, which the desktop app takes
+// from the inventory alone.
 //
 // The library's directories are read either way, so that a scan warns
 // about the same library directories with and without --json. Its lineage
-// is read only for a snapshot emitted as JSON, the one output that lists
+// is read only for an inventory emitted as JSON, the one output that lists
 // the entries: without --json nothing prints them, so a text scan runs no
 // git for them and cannot fail on the account repo.
 //
-// An account repo git cannot read costs the snapshot its library and
+// An account repo git cannot read costs the inventory its library and
 // nothing else. The library is listed empty and one warning carries git's
 // error and sends the reader to agentx doctor and to the account repo it
 // names, while the configurations, the skills, the servers and the plugins
@@ -106,33 +107,33 @@ func (inv *invocation) scan(ctx context.Context, wait time.Duration, project str
 // branch whose commit is gone. Listing the library without its lineage
 // instead would call every managed skill unmanaged, which is not true.
 // skill list, which exists to report the lineage, still fails on it.
-func (inv *invocation) snapshot(ctx context.Context, wait time.Duration, project string, handshake bool) (scan.Snapshot, error) {
-	return inv.inventory(ctx, wait, project, handshake, true)
+func (inv *invocation) inventory(ctx context.Context, wait time.Duration, project string, handshake bool) (scan.Inventory, error) {
+	return inv.scanMachine(ctx, wait, project, handshake, true)
 }
 
-// inventory is scan and snapshot, the library read when library says so.
-func (inv *invocation) inventory(ctx context.Context, wait time.Duration, project string, handshake, library bool) (scan.Snapshot, error) {
+// scanMachine is scan and inventory, the library read when library says so.
+func (inv *invocation) scanMachine(ctx context.Context, wait time.Duration, project string, handshake, library bool) (scan.Inventory, error) {
 	timeout := handshakeTimeout
 	if v := inv.env["AGENTX_HANDSHAKE_TIMEOUT"]; handshake && v != "" {
 		d, err := time.ParseDuration(v)
 		if err != nil || d <= 0 {
-			return scan.Snapshot{}, fail(exitUsage, "AGENTX_HANDSHAKE_TIMEOUT "+v+" is not a duration", "set it like 10s or 500ms, or unset it")
+			return scan.Inventory{}, fail(exitUsage, "AGENTX_HANDSHAKE_TIMEOUT "+v+" is not a duration", "set it like 10s or 500ms, or unset it")
 		}
 		timeout = d
 	}
 	if project != "" {
 		abs, err := filepath.Abs(project)
 		if err != nil {
-			return scan.Snapshot{}, err
+			return scan.Inventory{}, err
 		}
 		if info, err := os.Stat(abs); err != nil || !info.IsDir() {
-			return scan.Snapshot{}, fail(exitNotFound, "project directory "+abs+" does not exist", "pass the root of a repository to --project")
+			return scan.Inventory{}, fail(exitNotFound, "project directory "+abs+" does not exist", "pass the root of a repository to --project")
 		}
 		project = abs
 	}
 	machineID, _, err := home.MachineID(inv.dirs.Home, inv.env, inv.refs(ctx))
 	if err != nil {
-		return scan.Snapshot{}, err
+		return scan.Inventory{}, err
 	}
 	lockCtx := ctx
 	if wait > 0 {
@@ -140,7 +141,7 @@ func (inv *invocation) inventory(ctx context.Context, wait time.Duration, projec
 		lockCtx, cancel = context.WithTimeout(ctx, wait)
 		defer cancel()
 	}
-	listed := library && inv.out.json // whether the snapshot's library entries are built and emitted
+	listed := library && inv.out.json // whether the inventory's library entries are built and emitted
 	var sc *scan.Scan
 	var listing *skillContext // what the library entries are built from, read with the rest; nil lists none
 	for sc == nil {
@@ -174,7 +175,7 @@ func (inv *invocation) inventory(ctx context.Context, wait time.Duration, projec
 			if !inv.forksWarned {
 				// Read, not written, under serve, where the update check
 				// reads it at the same time.
-				inv.forksWarned = true // the snapshot's warnings name them
+				inv.forksWarned = true // the inventory's warnings name them
 			}
 			records, err := inv.lineageRecords(ctx)
 			var f *failure
@@ -207,24 +208,24 @@ func (inv *invocation) inventory(ctx context.Context, wait time.Duration, projec
 			err = home.Recover(lockCtx, inv.dirs.Home, inv.refs(ctx))
 		}
 		if err != nil {
-			return scan.Snapshot{}, err
+			return scan.Inventory{}, err
 		}
 	}
 	if handshake {
 		sc.Handshake(ctx, scan.HandshakeOptions{Env: inv.env, Timeout: timeout, Version: cliVersion, Debug: inv.out.debugf})
 	}
-	snap, fresh := sc.Snapshot()
+	inventory, fresh := sc.Inventory()
 	if listing != nil {
 		for _, lib := range sc.Library() {
-			snap.Library = append(snap.Library, listing.librarySkillEventFor(ctx, inv, snap, lib, nil).LibraryEntry)
+			inventory.Library = append(inventory.Library, listing.librarySkillEventFor(ctx, inv, inventory, lib, nil).LibraryEntry)
 		}
 	}
 	if len(fresh) > 0 {
 		if err := home.SaveHandshakes(inv.dirs.Home, inv.refs(ctx), fresh); err != nil {
-			return scan.Snapshot{}, err
+			return scan.Inventory{}, err
 		}
 	}
-	return snap, nil
+	return inventory, nil
 }
 
 // instanceID is fresh per process; AGENTX_INSTANCE_ID fixes it for tests.
@@ -256,18 +257,18 @@ func (inv *invocation) detectedConfiguration(slug string) error {
 	return fail(exitNotFound, fmt.Sprintf("configuration %q is not detected", slug), hint)
 }
 
-// printSnapshot writes the human inventory: one summary line counting the
+// printInventory writes the human inventory: one summary line counting the
 // machine, then one section per configuration with its skills, servers and
 // plugins as labelled blocks. Warnings go to stderr, followed by one hint per
 // kind of handshake failure.
-func (inv *invocation) printSnapshot(snap scan.Snapshot) {
+func (inv *invocation) printInventory(inventory scan.Inventory) {
 	out := inv.out
 	// Counts per configuration and, keyed by configuration and plugin name,
 	// per plugin: what each one carries.
 	nSkills, nServers, nPlugins := map[string]int{}, map[string]int{}, map[string]int{}
 	pluginSkills, pluginServers := map[string]int{}, map[string]int{}
 	skills := map[string]*table{} // name, kind, scope, placement
-	for _, s := range snap.Skills {
+	for _, s := range inventory.Skills {
 		for _, o := range s.Occurrences {
 			nSkills[o.Configuration]++
 			if o.Plugin != "" {
@@ -293,7 +294,7 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 	}
 	servers := map[string]*table{} // name, transport, command line or URL, what a handshake found, why it failed, (disabled)
 	var hints []string             // one per kind of handshake failure, in the order met
-	for _, s := range snap.MCPServers {
+	for _, s := range inventory.MCPServers {
 		for _, o := range s.Occurrences {
 			nServers[o.Configuration]++
 			if o.Plugin != "" {
@@ -328,7 +329,7 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 		}
 	}
 	plugins := map[string]*table{} // name, version, what it provides, (disabled)
-	for _, p := range snap.Plugins {
+	for _, p := range inventory.Plugins {
 		nPlugins[p.Configuration]++
 		cells := []cell{c(sanitised(p.Name), heading), c(sanitised(p.Version), plain)}
 		if provides := counts(pluginSkills[p.Configuration+"\x00"+p.Name], "skill", pluginServers[p.Configuration+"\x00"+p.Name], "server"); provides != "" {
@@ -339,14 +340,14 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 		}
 		block(plugins, p.Configuration).add(cells...)
 	}
-	if len(snap.Configurations) == 0 {
+	if len(inventory.Configurations) == 0 {
 		out.print(out.paint(warnStyle, "No agent configurations detected."))
 		out.print(out.paint(muted, "A configuration is detected by its directory, such as ~/.claude or ~/.cursor; check HOME."))
 		return
 	}
-	out.print(out.paint(noteStyle.Bold(true), plural(len(snap.Configurations), "configuration")+", "+
-		plural(len(snap.Skills), "skill")+", "+plural(len(snap.MCPServers), "server")+", "+plural(len(snap.Plugins), "plugin")+" detected"))
-	for _, conf := range snap.Configurations {
+	out.print(out.paint(noteStyle.Bold(true), plural(len(inventory.Configurations), "configuration")+", "+
+		plural(len(inventory.Skills), "skill")+", "+plural(len(inventory.MCPServers), "server")+", "+plural(len(inventory.Plugins), "plugin")+" detected"))
+	for _, conf := range inventory.Configurations {
 		out.print("")
 		state := out.paint(okStyle, "enabled")
 		if !conf.Enabled {
@@ -375,7 +376,7 @@ func (inv *invocation) printSnapshot(snap scan.Snapshot) {
 			out.print("  ", out.paint(muted, "no skills, servers or plugins"))
 		}
 	}
-	for _, w := range snap.Warnings {
+	for _, w := range inventory.Warnings {
 		out.warn(w)
 	}
 	for _, h := range hints {

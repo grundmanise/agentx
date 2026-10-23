@@ -15,10 +15,10 @@ import (
 
 // librarySkillEvent is one skill of the library: what it is called, where
 // it came from and where it can be seen from. It is named for the library
-// so that nothing has to tell it apart from the skill node of a snapshot,
+// so that nothing has to tell it apart from the skill node of an inventory,
 // which is one content version found anywhere on the machine, or from a
 // sourceSkillEvent, which is one installable skill of a source. Its fields
-// are the library entry a snapshot lists, so the two always say the same.
+// are the library entry an inventory lists, so the two always say the same.
 // own, which no event carries, is whether it is one of your own skills,
 // whose source is the account remote: its kind alone does not say, and
 // while no account remote is set neither does its source.
@@ -183,15 +183,15 @@ func (inv *invocation) libraryPath(name string) string {
 	return filepath.Join(inv.dirs.Library, name)
 }
 
-// placements maps a library skill to what a snapshot found: every
+// placements maps a library skill to what an inventory found: every
 // occurrence that resolves to its library directory, and every copy of its
 // content placed under its name, which resolves to itself. Placements are
 // sorted by configuration, then path, so two listings of an unchanged
 // machine are byte-identical.
-func (inv *invocation) placements(snap scan.Snapshot, lib scan.LibrarySkill, copyMode map[string][]string) []placementEvent {
+func (inv *invocation) placements(inventory scan.Inventory, lib scan.LibrarySkill, copyMode map[string][]string) []placementEvent {
 	found := []placementEvent{}
 	atLibrary := libraryEntryOf(lib, inv.dirs.Library)
-	for _, node := range snap.Skills {
+	for _, node := range inventory.Skills {
 		for _, o := range node.Occurrences {
 			if o.Plugin != "" || o.Scope != "user" {
 				continue // a plugin's skill and a project's are not placements of the library
@@ -294,15 +294,15 @@ func sortPlacements(p []placementEvent) {
 
 // universalClients are the configurations of the scan whose client reads the
 // library as one of its own skills directories, reads_library in the
-// snapshot, sorted by id as the snapshot sorts them. Every one of them sees
+// inventory, sorted by id as the inventory sorts them. Every one of them sees
 // every skill of the library, enabled or not and whatever --to named, since
 // the library entry is its placement: no command that places a skill can
 // keep it from them, and a command that places one says who they are. A
 // client that is not installed sees nothing and is not named, and a machine
 // with none names none.
-func universalClients(snap scan.Snapshot) []string {
+func universalClients(inventory scan.Inventory) []string {
 	ids := []string{}
-	for _, c := range snap.Configurations {
+	for _, c := range inventory.Configurations {
 		if c.ReadsLibrary {
 			ids = append(ids, c.ID)
 		}

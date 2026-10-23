@@ -630,7 +630,7 @@ func TestEveryClientReadingTheLibraryIsUniversal(t *testing.T) {
 // TestUniversalClientsOfASkillWhoseSourceWasRemoved: removing a source
 // changes nothing of who sees the skills installed from it. The universal
 // clients still read the library entry, so placing the skill names them
-// beside its source removed, and the snapshot entry says what the listing
+// beside its source removed, and the inventory entry says what the listing
 // says. Removing the skill from one of them is still refused, with the hint
 // that offers the whole removal, and --from universal is that removal: it
 // takes the import branch too, which was the last record of the removed
@@ -651,9 +651,9 @@ func TestUniversalClientsOfASkillWhoseSourceWasRemoved(t *testing.T) {
 		"placed alpha in 1 configuration; always available to universal clients: codex, gemini-cli")
 	listed := h.librarySkill(h.mustRun("--json", "skill", "list").stdout, "alpha")
 	equal(t, "universal of skill list", universalOf(t, listed), "codex,gemini-cli")
-	entry := h.snapshotLibrary("alpha")
-	equal(t, "drift of the snapshot", drift(entry), "source removed")
-	equal(t, "universal of the snapshot", universalOf(t, entry), "codex,gemini-cli")
+	entry := h.inventoryLibrary("alpha")
+	equal(t, "drift of the inventory", drift(entry), "source removed")
+	equal(t, "universal of the inventory", universalOf(t, entry), "codex,gemini-cli")
 
 	branch := h.accountGit("rev-parse", "refs/heads/managed/alpha")
 	refused := h.run("skill", "remove", "alpha", "--from", "codex")

@@ -173,7 +173,7 @@ func TestServeKeepsGitsVerdictUntilTheSkillChanges(t *testing.T) {
 		return n
 	}
 	p := h.serve(t, "--json")
-	p.next("snapshot")
+	p.next("inventory")
 	first := overSkills()
 	if first == 0 {
 		t.Fatal("the first scan ran no git over the edited skill")

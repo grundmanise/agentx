@@ -52,7 +52,7 @@ const (
 )
 
 // reconcileEvent is the outcome of one skill name, emitted by a
-// long-running serve before its first snapshot.
+// long-running serve before its first inventory.
 type reconcileEvent struct {
 	event
 	Name    string `json:"name"`
@@ -346,7 +346,7 @@ func (inv *invocation) linkedForkDir(name string) (string, bool) {
 // warns of every fork the listing would warn of, see forkWarnings, so that
 // a fork whose worktree is missing is named by whatever command runs next,
 // not only by skill list. It reads files alone for the warnings. A command
-// whose own output carries them, skill list, a snapshot and serve, or that
+// whose own output carries them, skill list, an inventory and serve, or that
 // puts the fork back, skill place, sets forksWarned first.
 func (inv *invocation) listLineage(ctx context.Context, gitDir string) (map[string]lineage.Record, error) {
 	records, err := lineage.List(ctx, inv.git, gitDir)

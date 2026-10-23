@@ -442,7 +442,7 @@ func TestPluginOccurrence(t *testing.T) {
 	occ := func(plugin, config, path, scope string) scan.Occurrence {
 		return scan.Occurrence{Plugin: plugin, Configuration: config, Path: path, ResolvedPath: path, Scope: scope}
 	}
-	snap := scan.Snapshot{Skills: []scan.Skill{
+	inventory := scan.Inventory{Skills: []scan.Skill{
 		{Occurrences: []scan.Occurrence{occ("fmt", "codex", "/c/fmt/skills/format", "user"), occ("fmt", "claude-code", "/a/fmt/skills/format", "user")}},
 		{Occurrences: []scan.Occurrence{occ("lint", "claude-code", "/a/lint/skills/check", "user"), occ("", "claude-code", "/u/skills/check", "user")}},
 		{Occurrences: []scan.Occurrence{occ("style", "claude-code", "/a/style/skills/check", "user"), occ("proj", "claude-code", "/p/proj/skills/only", "project")}},
@@ -458,7 +458,7 @@ func TestPluginOccurrence(t *testing.T) {
 		{"lint:format", "", exitNotFound.exit},
 		{"only", "", exitNotFound.exit},
 	} {
-		o, err := pluginOccurrence(snap, tc.arg)
+		o, err := pluginOccurrence(inventory, tc.arg)
 		code := 0
 		if f := (*failure)(nil); errors.As(err, &f) {
 			code = f.status.exit
