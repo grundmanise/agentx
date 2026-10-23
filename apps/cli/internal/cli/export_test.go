@@ -181,8 +181,8 @@ func TestExportListsTheLibraryWithItsPlacements(t *testing.T) {
 	for _, e := range to.eventsOfType(out.stdout, "import_skill") {
 		imported[e["name"].(string)] = e
 	}
-	equal(t, "alpha imported", fmt.Sprint(imported["alpha"]["placements"], " ", imported["alpha"]["placed"]), "[claude-code github-copilot] true")
-	equal(t, "beta imported", fmt.Sprint(imported["beta"]["placements"], " ", imported["beta"]["placed"]), "[] false")
+	equal(t, "alpha imported", fmt.Sprint(imported["alpha"]["placements"]), "[claude-code github-copilot]")
+	equal(t, "beta imported", fmt.Sprint(imported["beta"]["placements"]), "[]")
 	equal(t, "mine imported", imported["mine"]["kind"], "unmanaged")
 }
 

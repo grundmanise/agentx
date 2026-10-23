@@ -231,18 +231,6 @@ const soundSnapshot = `{"schema_version": 2,
  "mcp_servers": [], "plugins": []}
 `
 
-// soundExport is a version 1 export document agentx would have written,
-// with one sound lineage record.
-const soundExport = `{"schema_version": 1,
- "machine": {"id": "0123456789abcdef0123456789abcdef", "label": "first-laptop"},
- "settings": {"schema_version": 1, "label": "first-laptop", "accept_operations": false,
-  "ignore_system_files": true, "disabled_configurations": [], "sources": [], "copy_mode": {}},
- "skills": [{"name": "alpha", "kind": "managed", "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-  "source": "https://github.com/example/skills", "subpath": "skills/alpha",
-  "upstream_commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-  "base_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "placed": true}]}
-`
-
 // importToken is a credential that would be unmistakable in a settings
 // file, an event or an export if any of them ever carried one.
 const importToken = "ghp_NotARealTokenJustForThisTest"
@@ -250,14 +238,8 @@ const importToken = "ghp_NotARealTokenJustForThisTest"
 // editedSound is soundSnapshot with one thing changed.
 func editedSound(t *testing.T, change func(doc map[string]any)) string {
 	t.Helper()
-	return editedDoc(t, soundSnapshot, change)
-}
-
-// editedDoc is the document sound with one thing changed.
-func editedDoc(t *testing.T, sound string, change func(doc map[string]any)) string {
-	t.Helper()
 	var doc map[string]any
-	if err := json.Unmarshal([]byte(sound), &doc); err != nil {
+	if err := json.Unmarshal([]byte(soundSnapshot), &doc); err != nil {
 		t.Fatal(err)
 	}
 	change(doc)
@@ -272,7 +254,8 @@ func editedDoc(t *testing.T, sound string, change func(doc map[string]any)) stri
 // somewhere else, so every shape of broken one is refused by readExport,
 // before the lock and before any write, and the refusal repeats no
 // credential the snapshot carried. A partial snapshot, with only names,
-// sources and placements, is not broken, and nor is a version 1 export.
+// sources and placements, is not broken. The export document of version
+// 1 an earlier agentx wrote is refused as any other version is.
 // TestValidSettingsCoversEveryFieldOfTheSettings holds every field of the
 // settings to a check here.
 func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
@@ -284,8 +267,7 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 		return path
 	}
 	for name, content := range map[string]string{
-		"sound":    soundSnapshot,
-		"sound v1": soundExport,
+		"sound": soundSnapshot,
 		"partial": `{"schema_version": 2, "skills": [
 			{"name": "alpha", "source": "https://github.com/example/skills", "subpath": "skills/alpha", "placements": ["claude-code", "cursor"]},
 			{"name": "notes", "placements": []},
@@ -295,14 +277,11 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 		if err != nil {
 			t.Fatalf("the %s snapshot is refused: %v", name, err)
 		}
-		if name == "partial" && (snap.Settings != nil || snap.Skills[0].Kind != "managed" || !snap.Skills[0].placed || snap.Skills[1].placed) {
+		if name == "partial" && (snap.Settings != nil || snap.Skills[0].Kind != "managed" || len(snap.Skills[1].Placements) != 0) {
 			t.Errorf("the partial snapshot reads as %+v", snap)
 		}
 	}
 	edited := func(change func(map[string]any)) string { return editedSound(t, change) }
-	v1With := func(key string, value any) string {
-		return editedDoc(t, soundExport, func(doc map[string]any) { doc["skills"].([]any)[0].(map[string]any)[key] = value })
-	}
 	// ownSkill turns the record into one of your own skills, a fork of
 	// alpha, with no account remote set: no source, and the upstream fields
 	// in place of the source's.
@@ -337,7 +316,8 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 		{"truncated", soundSnapshot[:len(soundSnapshot)/2], "not an agentx snapshot"},
 		{"trailing rubbish", soundSnapshot + "}", "not an agentx snapshot"},
 		{"no version", `{"settings":{},"skills":[]}`, "carries no schema_version"},
-		{"a later version", edited(func(doc map[string]any) { doc["schema_version"] = 3 }), "schema version 3"},
+		{"a later version", edited(func(doc map[string]any) { doc["schema_version"] = 3 }), "schema version 3, and this agentx reads version 2"},
+		{"the export document of version 1", edited(func(doc map[string]any) { doc["schema_version"] = 1 }), "schema version 1, and this agentx reads version 2"},
 		{"a field agentx does not know", edited(func(doc map[string]any) { doc["inventory"] = map[string]any{} }), "not an agentx snapshot"},
 		{"a server field agentx does not know", edited(func(doc map[string]any) {
 			doc["mcp_servers"] = []any{map[string]any{"name": "s", "physical_id": "x"}}
@@ -370,8 +350,6 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 		}), "canonical URL of a source"},
 		{"a fork id on a shared source's entry", recordWith("fork_id", "0b3f6c9e-2d4a-4f1e-9a7b-1c2d3e4f5a6b"), "only your own skills have"},
 		{"a fork id that is not one", ownWith("fork_id", "nonsense"), "not one"},
-		{"a v1 record of another kind", v1With("kind", "unmanaged"), "the kind of alpha is not managed"},
-		{"a v1 record with no commit", v1With("commit", ""), "does not name the commit"},
 		{"one of your own skills with a subpath", edited(func(doc map[string]any) {
 			delete(doc["skills"].([]any)[0].(map[string]any), "source")
 		}), "which have no subpath"},
@@ -523,13 +501,11 @@ func TestImportRefusesADocumentItCannotRead(t *testing.T) {
 	})
 
 	// The sound document still imports after all of that, so the refusals
-	// were about the documents and not about the machine. It is a version 1
-	// export, whose placed flag stands for every configuration detected
-	// here that its settings leave enabled.
+	// were about the documents and not about the machine.
 	good := to.exportPath("sound.json")
-	writeFile(t, good, soundExport)
+	writeFile(t, good, soundSnapshot)
 	out := to.run("--json", "import", good, "--yes")
-	equal(t, "the sound version 1 document", out.exit, 0)
+	equal(t, "the sound snapshot", out.exit, 0)
 	equal(t, "its placements", fmt.Sprint(to.one(out.stdout, "import_skill")["placements"]), "[claude-code]")
 }
 
@@ -731,7 +707,7 @@ func TestImportFillsInWhatADocumentLeavesOut(t *testing.T) {
 	to := newHarness(t)
 	to.build(t, fixture{dirs: []string{".claude"}})
 	file := to.exportPath("minimal.json")
-	writeFile(t, file, `{"schema_version":1,"machine":{"id":"0123456789abcdef0123456789abcdef","label":"other"},`+
+	writeFile(t, file, `{"schema_version":2,"machine":{"id":"0123456789abcdef0123456789abcdef","label":"other"},`+
 		`"settings":{"schema_version":1},"skills":[]}`)
 
 	out := to.run("import", file, "--yes")
@@ -761,7 +737,7 @@ func TestImportSaysWhyWithoutEchoingTheDocument(t *testing.T) {
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	file := h.exportPath("evil.json")
-	writeFile(t, file, "{\"schema_version\": 1, \"\\u001b[31mred\\r\": 1}")
+	writeFile(t, file, "{\"schema_version\": 2, \"\\u001b[31mred\\r\": 1}")
 
 	out := h.run("import", file, "--yes")
 	equal(t, "exit", out.exit, 6)
@@ -835,7 +811,7 @@ func TestImportRefusesADocumentNoMachineWrote(t *testing.T) {
 	before := readText(t, home.SettingsPath(h.agentx))
 
 	file := h.exportPath("enormous.json")
-	head := `{"schema_version":1,"machine":{"id":"0123456789abcdef0123456789abcdef","label":"a"},` +
+	head := `{"schema_version":2,"machine":{"id":"0123456789abcdef0123456789abcdef","label":"a"},` +
 		`"settings":{"schema_version":1,"label":"`
 	writeFile(t, file, head+strings.Repeat("L", documentLimit)+`"},"skills":[]}`)
 

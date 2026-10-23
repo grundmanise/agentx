@@ -104,3 +104,5 @@ Two things are not yet verified: the hook from a setup script on a brand-new clo
 A cloud virtual machine needs a token that reads the account remote. At this stage it is written into the environment's setup script, which only the user controls, so it must be read-only and revocable.
 
 _Note, 2026-10-23:_ The live `snapshot` event is now the `inventory` event, and the specs, the Help Center and the code call the result of a scan an inventory. Renaming the event moved the output schema version to `2`; the import events above, which change by addition only, leave it there.
+
+_Note, 2026-10-23:_ Import does not read a version 1 export document, as above: it reads a snapshot alone and refuses version 1 as it refuses any version it does not know, so an export an earlier agentx wrote is exported again with this one. `import_skill` drops `placed`, which only a version 1 record needed beside `placements`; output schema version `2` was not yet released, so it stays `2`.

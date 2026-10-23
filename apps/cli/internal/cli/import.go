@@ -20,7 +20,6 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
-	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 )
 
@@ -33,34 +32,6 @@ const (
 	restoreDifferent = "different"
 )
 
-// exportDocument is the version 1 export document, which agentx export
-// wrote before it wrote a snapshot: the machine settings and one lineage
-// record per branch of the account repo. An import still reads one, see
-// readExport, each record an exact entry of a snapshot.
-type exportDocument struct {
-	SchemaVersion int           `json:"schema_version"`
-	Machine       exportMachine `json:"machine"`
-	Settings      home.Settings `json:"settings"`
-	Skills        []exportSkill `json:"skills"`
-}
-
-// exportSkill is one lineage record of a version 1 export document: an
-// entry of a snapshot, of kind managed and always with its commit, with
-// placed, whether the exporting machine had a placement of it, in place of
-// the configurations it was placed in.
-type exportSkill struct {
-	Name            string  `json:"name"`
-	Kind            string  `json:"kind"`
-	Commit          string  `json:"commit"`
-	Source          string  `json:"source,omitempty"`
-	Subpath         *string `json:"subpath,omitempty"`
-	Upstream        string  `json:"upstream,omitempty"`
-	UpstreamSubpath *string `json:"upstream_subpath,omitempty"`
-	UpstreamCommit  string  `json:"upstream_commit,omitempty"`
-	BaseHash        string  `json:"base_hash,omitempty"`
-	Placed          bool    `json:"placed"`
-}
-
 // importSkillEvent is one skill entry of a snapshot with what this
 // machine's account repo holds for it. It is not a librarySkillEvent: that
 // one is a directory of the library, while this one is an entry of a
@@ -68,19 +39,15 @@ type exportSkill struct {
 type importSkillEvent struct {
 	event
 	snapshotSkill
-	Placed      bool   `json:"placed"`                 // whether the snapshot places it in any configuration
 	State       string `json:"state"`                  // present, missing or different
 	LocalCommit string `json:"local_commit,omitempty"` // the commit the account repo holds the name at, when it holds it
 }
 
 // importTarget is what an import reads a snapshot against on this machine:
 // the account remote its settings set, which an entry of one of your own
-// skills names when the snapshot holds no settings of its own, and the
-// configurations detected here, which a version 1 record's placed flag
-// stands for.
+// skills names when the snapshot holds no settings of its own.
 type importTarget struct {
-	account  string
-	detected []string
+	account string
 }
 
 func newImportCommand(inv *invocation) *cobra.Command {
@@ -122,9 +89,6 @@ func (inv *invocation) importSettings(ctx context.Context, path string, yes bool
 		return err
 	}
 	target := importTarget{account: documentAccount(here)}
-	for _, c := range scan.Detect(inv.dirs) {
-		target.detected = append(target.detected, c.Slug())
-	}
 	doc, err := readExport(path, target)
 	if err != nil {
 		return err
@@ -213,18 +177,13 @@ func readDocument(path string) ([]byte, error) {
 	return b, nil
 }
 
-// readExport reads the snapshot at path, or a version 1 export document,
-// and refuses anything that is not one this agentx can restore. Every
-// refusal happens here, before the lock and before any write: a file that
-// is truncated, that is not JSON, that is of another schema version, that
-// carries a field this version does not know or that holds settings agentx
-// would not write itself leaves the settings on disk exactly as they were.
-//
-// A version 1 document comes back as the snapshot it stands for: each
-// lineage record an exact entry, and each placed flag every configuration
-// detected on this machine that the document's settings leave enabled,
-// see importTarget, since the document never said which configurations
-// those were.
+// readExport reads the snapshot at path and refuses anything that is not
+// one this agentx can restore. Every refusal happens here, before the lock
+// and before any write: a file that is truncated, that is not JSON, that is
+// of another schema version, the export document of version 1 an earlier
+// agentx wrote included, that carries a field this version does not know or
+// that holds settings agentx would not write itself leaves the settings on
+// disk exactly as they were.
 func readExport(path string, target importTarget) (snapshot, error) {
 	b, err := readDocument(path)
 	switch {
@@ -251,13 +210,6 @@ func readExport(path string, target importTarget) (snapshot, error) {
 	switch {
 	case envelope.SchemaVersion == nil:
 		return snapshot{}, notAnExport(path, "it carries no schema_version")
-	case *envelope.SchemaVersion == 1:
-		var doc exportDocument
-		doc.Settings.IgnoreSystemFiles = true // the default, as for a settings file without the key
-		if err := decodeStrictly(b, &doc); err != nil {
-			return snapshot{}, notAnExport(path, err.Error())
-		}
-		snap = fromExportDocument(doc, target)
 	case *envelope.SchemaVersion == snapshotSchemaVersion:
 		if len(envelope.Settings) > 0 {
 			snap.Settings = &home.Settings{IgnoreSystemFiles: true} // the default, as for a settings file without the key
@@ -267,7 +219,7 @@ func readExport(path string, target importTarget) (snapshot, error) {
 		}
 	default:
 		return snapshot{}, fail(exitRefused,
-			fmt.Sprintf("%s is a snapshot of schema version %d, and this agentx reads versions 1 and %d", path, *envelope.SchemaVersion, snapshotSchemaVersion),
+			fmt.Sprintf("%s is a snapshot of schema version %d, and this agentx reads version %d", path, *envelope.SchemaVersion, snapshotSchemaVersion),
 			"export it again from that machine with this version of agentx, or upgrade agentx here")
 	}
 	if snap.Settings != nil {
@@ -276,16 +228,12 @@ func readExport(path string, target importTarget) (snapshot, error) {
 			return snapshot{}, err
 		}
 	}
-	if err := validEntries(path, snap.Skills, snapshotAccount(snap, target), snap.SchemaVersion == 1); err != nil {
+	if err := validEntries(path, snap.Skills, snapshotAccount(snap, target)); err != nil {
 		return snapshot{}, err
 	}
 	for i := range snap.Skills {
-		e := &snap.Skills[i]
-		if e.Kind == "" {
-			e.Kind = lineage.KindManaged
-		}
-		if snap.SchemaVersion != 1 {
-			e.placed = len(e.Placements) > 0
+		if snap.Skills[i].Kind == "" {
+			snap.Skills[i].Kind = lineage.KindManaged
 		}
 	}
 	return snap, nil
@@ -299,32 +247,6 @@ func decodeStrictly(b []byte, v any) error {
 	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.DisallowUnknownFields()
 	return dec.Decode(v)
-}
-
-// fromExportDocument is the snapshot a version 1 export document stands
-// for, see readExport.
-func fromExportDocument(doc exportDocument, target importTarget) snapshot {
-	enabled := []string{}
-	for _, id := range target.detected {
-		if !slices.Contains(doc.Settings.DisabledConfigurations, id) {
-			enabled = append(enabled, id)
-		}
-	}
-	sort.Strings(enabled)
-	snap := snapshot{SchemaVersion: doc.SchemaVersion, Machine: &doc.Machine, Settings: &doc.Settings, Skills: []snapshotSkill{}}
-	for _, rec := range doc.Skills {
-		e := snapshotSkill{
-			Name: rec.Name, Kind: rec.Kind, Commit: rec.Commit,
-			Source: rec.Source, Subpath: rec.Subpath, Upstream: rec.Upstream, UpstreamSubpath: rec.UpstreamSubpath,
-			UpstreamCommit: rec.UpstreamCommit, BaseHash: rec.BaseHash,
-			Placements: []string{}, placed: rec.Placed,
-		}
-		if rec.Placed {
-			e.Placements = slices.Clone(enabled)
-		}
-		snap.Skills = append(snap.Skills, e)
-	}
-	return snap
 }
 
 // notAnExport refuses a file that is not a snapshot this agentx reads. The
@@ -522,11 +444,7 @@ func recordedImport(e snapshotSkill, own bool) (lineage.Import, bool) {
 // import commit passes before it is written, which is that reader itself on
 // the message the commit would carry, so an exact entry this command
 // accepts is exactly one a branch could hold.
-//
-// v1 holds the records of a version 1 export document to what that
-// document always held: the kind managed and a commit. Its subpath was
-// left out for a skill at the root of its source.
-func validEntries(path string, skills []snapshotSkill, account string, v1 bool) error {
+func validEntries(path string, skills []snapshotSkill, account string) error {
 	refuse := func(why string) error {
 		return fail(exitRefused, path+" lists a skill agentx cannot read: "+sanitised(why),
 			"fix the snapshot, or export it again from the machine it came from")
@@ -541,11 +459,9 @@ func validEntries(path string, skills []snapshotSkill, account string, v1 bool) 
 			return refuse(fmt.Sprintf("the entry at position %d is named %q, which is not a name the library and a branch can both hold", i+1, clipped(e.Name)))
 		case seen[e.Name]:
 			return refuse(e.Name + " is listed twice")
-		case v1 && e.Kind != lineage.KindManaged:
-			return refuse("the kind of " + e.Name + " is not " + lineage.KindManaged)
 		case e.Kind != "" && e.Kind != lineage.KindManaged && e.Kind != lineage.KindUnmanaged:
 			return refuse("the kind of " + e.Name + " is neither " + lineage.KindManaged + " nor " + lineage.KindUnmanaged)
-		case v1 && !lineage.IsObjectID(e.Commit), e.Commit != "" && !lineage.IsObjectID(e.Commit):
+		case e.Commit != "" && !lineage.IsObjectID(e.Commit):
 			return refuse(e.Name + " does not name the commit its branch points at")
 		}
 		seen[e.Name] = true
@@ -569,7 +485,7 @@ func validEntries(path string, skills []snapshotSkill, account string, v1 bool) 
 			return refuse(e.Name + " names a fork id, which only your own skills have")
 		case e.ForkID != "" && !lineage.IsForkID(e.ForkID):
 			return refuse(e.Name + " names a fork id that is not one")
-		case !own && !v1 && e.Subpath == nil:
+		case !own && e.Subpath == nil:
 			return refuse(e.Name + " names its source and not its folder in it, the subpath")
 		}
 		imported, named := recordedImport(e, own)
@@ -637,7 +553,7 @@ func placementsRefusal(e snapshotSkill) string {
 func restoreStates(skills []snapshotSkill, records map[string]lineage.Record, remote map[string]string, account string) []importSkillEvent {
 	states := make([]importSkillEvent, 0, len(skills))
 	for _, e := range skills {
-		st := importSkillEvent{event: newEvent("import_skill"), snapshotSkill: e, Placed: e.placed, State: restoreMissing}
+		st := importSkillEvent{event: newEvent("import_skill"), snapshotSkill: e, State: restoreMissing}
 		have, local := records[e.Name]
 		if e.Kind == lineage.KindUnmanaged {
 			if local {

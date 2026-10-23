@@ -101,10 +101,6 @@ What to do next:
 
 On a fresh machine every skill reads `missing`, because there is no account repo yet. To see which of your own skills you can restore, add your account remote before you import: `agentx source add <url> --account`. The skills you published then read `present`. Install them with [`agentx skill add --name <name>`](/cli/skill#install-your-skills-on-another-machine), or all of them with `agentx skill add --all`.
 
-### Import an older export
-
-Import also reads a file that an earlier version of agentx exported. That file records whether each skill was placed, not where. Import shows such a skill as placed in every configuration on this machine that the file's settings leave enabled.
-
 ### Import a snapshot without settings
 
 A snapshot that another tool wrote can leave out the settings, and list only each skill's name, source and placements. Import then leaves your settings as they are, writes nothing and does not ask. It still lists each skill.
@@ -125,6 +121,7 @@ Use `--yes` in scripts, with `--json`, and wherever there is no terminal. Withou
 |---|---|
 | 5 | The file is not there. |
 | 6 | The file is not a valid agentx snapshot: it is damaged, larger than 8 MiB, from an agentx version this one cannot read, or holds a setting or skill entry agentx would not write. The message names the problem. Export the file again from the other machine, or upgrade agentx. |
+| 6 | The file is an export from an earlier version of agentx. Import no longer reads that format. Export the file again on the other machine with this version of agentx. |
 | 6 | You answered no, or import could not ask (no terminal, or `--json`) and you did not pass `--yes`. |
 
 A refused import changes nothing: your settings stay exactly as they were.

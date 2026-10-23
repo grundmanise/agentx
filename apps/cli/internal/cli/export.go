@@ -22,8 +22,8 @@ import (
 // writes. It is the version of that document alone: the settings object
 // inside it carries the settings schema version, and an event carries the
 // output schema version. Version 1 was the export document of lineage
-// records, which an import still reads, see exportDocument; a reader
-// refuses any other version.
+// records an earlier agentx wrote; a reader refuses it like any other
+// version but this one.
 const snapshotSchemaVersion = 2
 
 // settingsSchemaVersion is the version of the machine settings file this
@@ -93,10 +93,6 @@ type snapshotConfiguration struct {
 // follows the latest version; one with a commit is exact. Placements are
 // the configurations the skill is placed in, by id, sorted, the library
 // entry of a universal client included.
-//
-// placed is what an import_skill event reports beside the placements:
-// whether the skill is placed anywhere, which a version 1 export recorded
-// in place of them.
 type snapshotSkill struct {
 	Name            string   `json:"name"`
 	Kind            string   `json:"kind"`              // managed or unmanaged; an entry that leaves it out is managed
@@ -109,7 +105,6 @@ type snapshotSkill struct {
 	UpstreamCommit  string   `json:"upstream_commit,omitempty"`
 	BaseHash        string   `json:"base_hash,omitempty"`
 	Placements      []string `json:"placements"`
-	placed          bool
 }
 
 // snapshotServer is one MCP server node of the inventory, without its ids

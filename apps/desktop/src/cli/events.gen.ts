@@ -425,7 +425,6 @@ export interface ExportEvent {
 export interface ImportSkillEvent extends SnapshotSkill {
   type: "import_skill";
   schema_version: number;
-  placed: boolean;
   state: ImportState;
   local_commit?: string;
 }
