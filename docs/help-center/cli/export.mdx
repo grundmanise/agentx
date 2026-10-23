@@ -74,7 +74,7 @@ Import asks once. Answer `y` or `yes` to apply the whole snapshot. Any other ans
 
 | The snapshot has | What import does |
 |---|---|
-| Settings | Replaces your settings with them. agentx checks write access to each source again on this machine. |
+| Settings | Replaces your settings with them, but keeps this machine's URL of your account remote, see below. agentx checks write access to each source again on this machine. |
 | A skill this machine lacks | Installs it. A skill of a source comes from that source, which import adds and fetches. One of your own comes from your account remote. |
 | A skill at a newer version | Updates it to that version. |
 | A skill this machine has | Places it in the configurations the snapshot names, and takes it out of the others. Only the configurations agentx detects on this machine count. |
@@ -94,6 +94,8 @@ Import only moves a skill forward:
 Codex and Gemini CLI read your library, so they see every skill in it, whatever the snapshot says.
 
 To install your own skills, import needs your account remote. The snapshot's settings bring it along. If the snapshot has no settings, add it first with `agentx source add <url> --account`.
+
+One repository can have more than one URL. Your laptop may reach your account remote over SSH, as `git@github.com:me/agentx-account.git`, while a cloud agent reaches it over HTTPS, as `https://github.com/me/agentx-account`, with a token that can only read. Import treats both as your account remote, because they have the same host and path. When the snapshot's account remote is the same repository as this machine's, import keeps this machine's URL, so each machine goes on reaching it its own way. When the snapshot names another repository, import switches this machine to that one. A host alias from your SSH configuration, such as `github-work`, does not count as the host it stands for here, because import reads no SSH configuration.
 
 Each line of the listing says what import did with that skill:
 

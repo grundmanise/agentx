@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
+	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 )
 
 // machineSnapshot is what the branch of the machine id on the bare
@@ -38,13 +40,23 @@ func machineSnapshot(t *testing.T, h *harness, remote, id string) (tip string, d
 // import names the branch, restores the settings and installs and places
 // every skill the branch lists, in the configurations detected there. A
 // machine whose branch the remote does not hold is exit code 5.
+//
+// The first home reaches the account remote by an SSH URL and the second,
+// as the cloud machine does, by an HTTPS URL of the same repository, and
+// can reach no other: alpha, one of your own skills on the first, is one
+// of your own on the second too, installed from the account remote, and
+// the second keeps its own URL of the account remote.
 func TestExportToAMachineAndImportFromIt(t *testing.T) {
 	t.Parallel()
+	const overSSH, overHTTPS = "git@example.com:me/agentx-account.git", "https://example.com/me/agentx-account"
 	a, s := installHarness(t)
 	a.mustRun("config", "set", "label", "first-laptop")
 	a.mustRun("skill", "add", s.url, "--all", "--to", "claude-code")
+	a.mustRun("skill", "fork", "alpha")
 	remote := newAccountRemote(t, a)
-	a.setAccount(remote)
+	a.reachAs(remote, "ssh://git@example.com/me/agentx-account")
+	a.setAccount(overSSH)
+	a.mustRun("skill", "publish", "alpha")
 
 	file := a.exportPath("export.json")
 	a.mustRun("export", file)
@@ -72,7 +84,8 @@ func TestExportToAMachineAndImportFromIt(t *testing.T) {
 	b := newHarness(t)
 	b.build(t, fixture{dirs: []string{".claude"}})
 	b.rewrite(s)
-	b.setAccount(remote)
+	b.reachAs(remote, overHTTPS)
+	b.setAccount(overHTTPS)
 	writeShim(t, filepath.Join(remote, "hooks", "pre-receive"), "#!/bin/sh\necho 'read only' >&2\nexit 1\n")
 	out = b.run("--json", "import", "--machine", "cloud", "--yes")
 	equal(t, "import --machine: exit", out.exit, 0)
@@ -83,6 +96,15 @@ func TestExportToAMachineAndImportFromIt(t *testing.T) {
 	}
 	equal(t, "the skills imported", strings.Join(applied, ", "), "alpha installed [claude-code], beta installed [claude-code]")
 	equal(t, "import's summary", b.one(out.stdout, "result")["summary"], "imported the settings from machines/cloud: 2 installed")
+	settings, err := home.LoadSettings(b.agentx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	account, _ := accountEntry(settings)
+	equal(t, "the second home's account remote", account.URL, overHTTPS)
+	if _, err := b.accountGitErr("rev-parse", "--verify", "--quiet", lineage.ForkRef("alpha")); err != nil {
+		t.Errorf("alpha is not one of your own skills on the second home: %v", err)
+	}
 	for _, name := range []string{"alpha", "beta"} {
 		if !lexists(filepath.Join(b.home, ".claude", "skills", name)) {
 			t.Errorf("%s is not placed in claude-code on the second home", name)
@@ -93,6 +115,22 @@ func TestExportToAMachineAndImportFromIt(t *testing.T) {
 	out = b.run("import", "--machine", strings.Repeat("0", 32), "--yes")
 	equal(t, "import of a machine with no branch: exit", out.exit, 5)
 	contains(t, "its error", out.stderr, "the account remote holds no machines/"+strings.Repeat("0", 32))
+}
+
+// reachAs makes h's git reach the bare repository remote at url, as
+// url.<base>.insteadOf does, beside every mapping h's git configuration
+// holds already: a machine that reaches the account remote by that URL and
+// by no other.
+func (h *harness) reachAs(remote, url string) {
+	h.t.Helper()
+	f, err := os.OpenFile(filepath.Join(h.home, ".gitconfig"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	defer f.Close()
+	if _, err := f.WriteString("[url \"file://" + remote + "\"]\n\tinsteadOf = " + url + "\n"); err != nil {
+		h.t.Fatal(err)
+	}
 }
 
 // TestSkillPlaceAndRemoveOnTheCloudMachine turns a skill on and off on the
