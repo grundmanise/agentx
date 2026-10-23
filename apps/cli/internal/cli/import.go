@@ -56,8 +56,9 @@ type importTarget struct {
 
 func newImportCommand(inv *invocation) *cobra.Command {
 	var yes bool
+	var machine string
 	cmd := &cobra.Command{
-		Use:   "import <file>",
+		Use:   "import (<file> | --machine <id>)",
 		Short: "Apply a snapshot to this machine: its settings, its skills and their placements",
 		Long: "Apply the snapshot at <file> to this machine, after confirming: replace the\n" +
 			"settings with the snapshot's, install each skill it lists that this machine\n" +
@@ -72,30 +73,48 @@ func newImportCommand(inv *invocation) *cobra.Command {
 			"the reason. A skill the snapshot does not list is left as it is, and MCP\n" +
 			"servers and plugins are not applied. A snapshot that holds no settings leaves\n" +
 			"them as they are.\n\n" +
+			"With --machine <id>, read the snapshot from the branch machines/<id> of the\n" +
+			"account remote instead of a file, fetching that one branch and pushing\n" +
+			"nothing, so a credential that can only read is enough, and apply it as a\n" +
+			"file's.\n\n" +
 			"The command asks once before it changes anything. Pass --yes to import without\n" +
 			"asking, which is required whenever it cannot ask: with --json, or when either\n" +
 			"stream is not a terminal.",
-		Args: cobra.ExactArgs(1),
+		Args: func(cmd *cobra.Command, args []string) error {
+			return snapshotArgs(args, machine, "import", "the file to read")
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return inv.importSnapshot(cmd.Context(), args[0], yes, cmd.InOrStdin())
+			path := ""
+			if len(args) > 0 {
+				path = args[0]
+			}
+			return inv.importSnapshot(cmd.Context(), path, machine, yes, cmd.InOrStdin())
 		},
 	}
 	cmd.Flags().BoolVar(&yes, "yes", false, "apply the snapshot without asking")
+	cmd.Flags().StringVar(&machine, "machine", "", "read the snapshot from the branch machines/<id> of the account remote instead of a file: cloud, or a computer's machine id")
 	return cmd
 }
 
-// importSnapshot reads the snapshot at path and applies it, see
-// applySnapshot.
+// importSnapshot reads a snapshot and applies it, see applySnapshot. The
+// snapshot is the file at path, or, when machine names one, what that
+// machine's branch on the account remote holds, see importMachine, whose
+// name, machines/<id>, then stands for the file in every line.
 //
 // The snapshot is read and validated whole before anything is locked, so
 // that a snapshot agentx will not accept costs the machine nothing at all.
-func (inv *invocation) importSnapshot(ctx context.Context, path string, yes bool, in io.Reader) error {
+func (inv *invocation) importSnapshot(ctx context.Context, path, machine string, yes bool, in io.Reader) error {
 	here, err := inv.loadSettings()
 	if err != nil {
 		return err
 	}
 	target := importTarget{account: documentAccount(here)}
-	doc, err := readExport(path, target)
+	var doc snapshot
+	if machine != "" {
+		doc, path, err = inv.importMachine(ctx, machine, target)
+	} else {
+		doc, err = readExport(path, target)
+	}
 	if err != nil {
 		return err
 	}
@@ -174,6 +193,12 @@ func readExport(path string, target importTarget) (snapshot, error) {
 	case err != nil:
 		return snapshot{}, fail(exitRefused, "read "+path+": "+err.Error(), "give the path of a snapshot 'agentx export' wrote")
 	}
+	return decodeSnapshot(path, b, target)
+}
+
+// decodeSnapshot reads b, the snapshot path names, a file or a machine's
+// branch on the account remote, as readExport describes.
+func decodeSnapshot(path string, b []byte, target importTarget) (snapshot, error) {
 	// The version is read first and on its own: a document of a schema this
 	// CLI does not know is refused for that reason rather than for whichever
 	// field of it happens to have changed.

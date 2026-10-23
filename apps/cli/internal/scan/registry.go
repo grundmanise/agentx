@@ -40,3 +40,16 @@ var pluginForkNotes = map[string]string{
 // plugin's skill beside the plugin's own copy, which agentx leaves in
 // place, and "" for a client nothing is known of.
 func PluginForkNote(slug string) string { return pluginForkNotes[slug] }
+
+// Lookup is the registered client whose slug is id, ok false when the
+// registry knows none: a configuration id names its client this way on any
+// machine, including one whose disk agentx cannot read, such as the cloud
+// machine.
+func Lookup(id string) (c Client, ok bool) {
+	for _, c := range registry {
+		if c.Slug() == id {
+			return c, true
+		}
+	}
+	return nil, false
+}
