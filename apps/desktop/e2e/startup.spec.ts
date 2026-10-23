@@ -100,6 +100,34 @@ test("a passing launch checks the machine out of sight and opens the Inbox", asy
   expect(cli.serveStarts).toBe(1);
 });
 
+test("a launch that runs over 2 seconds says that the checks run", async ({
+  cli,
+  page,
+}) => {
+  const doctor = cli.register(["doctor"], {
+    events: doctorWith(),
+    holdAfter: 0,
+  });
+  await watchLayer(page);
+  // Stop the page's timers before it loads; the test moves the clock on.
+  await page.clock.install({ time: new Date("2026-10-23T10:00:00Z") });
+  await page.clock.pauseAt(new Date("2026-10-23T10:00:01Z"));
+  await page.goto("/");
+  await doctor.started;
+  const checking = page
+    .getByRole("status")
+    .filter({ hasText: "Checking this machine" });
+  await page.clock.runFor(1999);
+  await expect(checking).toHaveCount(0);
+  await page.clock.runFor(1);
+  await expect(checking).toBeVisible();
+
+  doctor.release();
+  await expect(inbox(page)).toBeVisible();
+  await expect(checking).toHaveCount(0);
+  await expect(layerShown(page)).toHaveCount(0);
+});
+
 test("a CLI that is not found stops at check 1 and runs nothing", async ({
   cli,
   page,

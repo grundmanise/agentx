@@ -10,7 +10,7 @@ The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it
 | `src/styles/tokens.css` | The tokens as Tailwind theme values and `type-*` utilities, edited by hand. It also resets Tailwind's default theme, so only these tokens exist |
 | `src/styles/index.css` | The CSS entry: Tailwind, the fonts, the tokens and the base styles |
 | `src/app` | The app shell: title bar, sidebar, main panel, command palette, and the startup layer |
-| `src/startup` | The launch sequence: it resolves the CLI and runs `version`, `doctor` and `serve` before any screen mounts, and again when a command exits with code 8. It runs out of sight; the startup layer shows only when a check fails, and in manual mode. `checks.ts` reads the five checks and the report from the CLI's output |
+| `src/startup` | The launch sequence: it resolves the CLI and runs `version`, `doctor` and `serve` before any screen mounts, and again when a command exits with code 8. It runs out of sight; the startup layer shows only when a check fails, and in manual mode. A launch that runs over 2 seconds shows "Checking this machine" in the empty panel. `checks.ts` reads the five checks and the report from the CLI's output |
 | `src/screens` | The screens; today one placeholder |
 | `src/components` | Shared components; `ui` holds the shadcn/ui-based primitives |
 | `src/cli/transport.ts` | The one way to the CLI: one-shot runs whose events arrive as they are written, cancel, and the serve child's events, exits and stdin requests |

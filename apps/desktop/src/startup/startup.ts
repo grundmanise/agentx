@@ -1,8 +1,9 @@
 // The launch sequence and the state of the startup layer. On launch the app resolves the CLI, runs
 // `version`, then `doctor`, then starts the serve child and waits for its first snapshot. All of
 // that runs out of sight: the screens mount once it passes, and the layer shows only when a check
-// fails, when a command exits with code 8, and in manual mode. The only commands it runs are
-// `version`, `doctor` and `serve`: it changes nothing on disk.
+// fails, when a command exits with code 8, and in manual mode. A launch that runs over 2 seconds
+// says so in the empty panel. The only commands it runs are `version`, `doctor` and `serve`: it
+// changes nothing on disk.
 import { useSyncExternalStore } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
@@ -20,6 +21,8 @@ import type { Findings, Problem } from "#/startup/checks.ts";
 /** How long a check may take before it fails. A launch normally takes well under a second. */
 const CHECK_DEADLINE_MS = 30_000;
 const deadline = `${CHECK_DEADLINE_MS / 1000} seconds`;
+/** How long the checks run out of sight before the empty panel says that they run. */
+const SLOW_AFTER_MS = 2000;
 
 export interface StartupState {
   /** Whether the layer shows. */
@@ -29,6 +32,8 @@ export interface StartupState {
   /** "launch" closes the layer once the checks pass; "manual" waits for Open agentx. */
   mode: "launch" | "manual";
   running: boolean;
+  /** The sequence has run for over SLOW_AFTER_MS. */
+  slow: boolean;
   /** The sequence runs again after a failure. */
   retrying: boolean;
   findings: Findings;
@@ -42,6 +47,7 @@ let state: StartupState = {
   retrying: false,
   // The launch sequence starts with the app.
   running: true,
+  slow: false,
 };
 const listeners = new Set<() => void>();
 
@@ -192,7 +198,12 @@ const sequence = async () => {
       update({ findings });
     }
   };
-  update({ findings, running: true });
+  update({ findings, running: true, slow: false });
+  const slowTimer = setTimeout(() => {
+    if (mine === generation) {
+      update({ slow: true });
+    }
+  }, SLOW_AFTER_MS);
   try {
     const resolution = await resolveCli().catch(() => ({ path: null }));
     found({ cli: { path: resolution.path } });
@@ -256,6 +267,7 @@ const sequence = async () => {
     }
     found({ serve: await serveOutcome(childId) });
   } finally {
+    clearTimeout(slowTimer);
     if (mine === generation) {
       const { passed } = readChecks(findings, false);
       update({
@@ -264,6 +276,7 @@ const sequence = async () => {
         ready: state.ready || passed,
         retrying: false,
         running: false,
+        slow: false,
       });
     }
   }
