@@ -14,6 +14,7 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
+	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 )
 
 // machineSnapshot is what the branch of the machine id on the bare
@@ -217,6 +218,38 @@ func TestSkillPlaceAndRemoveOnTheCloudMachine(t *testing.T) {
 	contains(t, "its error", moved.stderr, "machines/cloud on the account remote changed since it was read, so nothing was pushed")
 	contains(t, "its hint", moved.stderr, "run 'agentx skill place alpha --to claude-code --machine cloud' again")
 	equal(t, "the other writer's tip", remoteGit(t, h, remote, "rev-parse", "refs/heads/machines/cloud"), other)
+}
+
+// TestCloudUniversal: a client is universal on the cloud machine when it
+// reads the library on a fresh home, as codex does and claude-code does
+// not, whatever links this machine's disk holds: a skills directory linked
+// to the library here makes no client universal there.
+func TestCloudUniversal(t *testing.T) {
+	t.Parallel()
+	user := t.TempDir()
+	fresh := home.Dirs{User: user, Library: filepath.Join(user, ".agents", "skills")}
+	for _, id := range scan.Slugs() {
+		c, _ := scan.Lookup(id)
+		equal(t, id, cloudUniversal(id), scan.ReadsLibrary(c, fresh))
+	}
+	equal(t, "codex", cloudUniversal("codex"), true)
+	equal(t, "claude-code", cloudUniversal("claude-code"), false)
+	equal(t, "an id the registry does not know", cloudUniversal("nope"), false)
+
+	linked := t.TempDir()
+	here := home.Dirs{User: linked, Library: filepath.Join(linked, ".agents", "skills")}
+	if err := os.MkdirAll(here.Library, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(linked, ".claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(here.Library, filepath.Join(linked, ".claude", "skills")); err != nil {
+		t.Fatal(err)
+	}
+	c, _ := scan.Lookup("claude-code")
+	equal(t, "claude-code linked to the library here", scan.ReadsLibrary(c, here), true)
+	equal(t, "claude-code on the cloud machine", cloudUniversal("claude-code"), false)
 }
 
 // TestCloudRemoval: --from naming a universal client is refused whatever

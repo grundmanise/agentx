@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
 	"strings"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
+	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
 	"github.com/grundmanise/agentx/apps/cli/internal/scan"
 )
@@ -347,7 +349,7 @@ func (inv *invocation) removeFromMachine(ctx context.Context, id, name string, f
 			return fail(exitUsage, clipped(sanitised(c))+" is not a configuration id", "give a configuration id, such as claude-code, or universal")
 		}
 	}
-	if err := cloudRemoval(name, from, inv.universalClient); err != nil {
+	if err := cloudRemoval(name, from, cloudUniversal); err != nil {
 		return err
 	}
 	b, err := inv.readMachineBranch(ctx, id)
@@ -411,14 +413,25 @@ func (inv *invocation) importTargetHere() importTarget {
 	return target
 }
 
-// universalClient reports whether the configuration id names a client
-// that reads the library, which on any machine sees every skill the
-// library holds, see scan.ReadsLibrary. A client the registry does not
-// know is not one.
-func (inv *invocation) universalClient(id string) bool {
+// cloudUniversal reports whether the configuration id names a client that
+// reads the library on the cloud machine, which sees every skill the
+// library holds. The cloud machine's disk is not this one's, so the answer
+// is the registry's alone: a client whose skills directories name the
+// library, at the default place, of a home made fresh. A symlink or an
+// AGENTX_LIBRARY on this machine changes nothing. A client the registry
+// does not know is not one.
+func cloudUniversal(id string) bool {
 	c, ok := scan.Lookup(id)
-	return ok && scan.ReadsLibrary(c, inv.dirs)
+	if !ok {
+		return false
+	}
+	d := home.Dirs{User: cloudUser, Library: filepath.Join(cloudUser, ".agents", "skills")}
+	return slices.Contains(c.SkillsDirs(d), d.Library)
 }
+
+// cloudUser is the home cloudUniversal reads the registry in: any path
+// will do, since only where the library is beside it matters.
+const cloudUser = "/home/cloud"
 
 // cloudRemoval refuses a removal from the cloud machine that cannot be
 // made, before anything is read: --from naming a universal client, which

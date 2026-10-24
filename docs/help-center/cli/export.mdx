@@ -124,6 +124,8 @@ A snapshot that another tool wrote can leave out the settings, and list only eac
 
 Instead of a file, export can write the snapshot to your [account remote](/cli/source#add-your-account-remote), on the branch `machines/<machine id>`, and import can read it from there. The branch holds one file, `snapshot.json`, the same file an export to a file writes. agentx writes to the account remote only when you name a machine with `--machine`, and never on its own.
 
+The snapshot on the branch keeps each MCP server's command, arguments and URL, as a snapshot file does, and these can hold a token. Anyone who can read your account remote can read them, a cloud agent's read-only token included. Keep the account remote private, and give read access only to people and agents you trust with those values.
+
 ### Back up this machine
 
 Find this machine's id with [`agentx machine`](/cli/machine), then export to it:
