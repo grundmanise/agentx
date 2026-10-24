@@ -12,7 +12,7 @@
  * Sections:
  *   1. Primitives          raw palette, outside the theme (never used by components)
  *   2. Font faces          outside the theme, used only by the type roles in section 5
- *   3. Theme               colours, shadows, radii, font weights, spacing steps
+ *   3. Theme               colours, shadows, radii, font weights, spacing steps, animations
  *   4. Layout tokens       one value per element, in the theme: `w-sidebar`, `p-page`
  *   5. Type roles          `type-*` utilities, the only way to set a font
  */
@@ -304,9 +304,8 @@
   --color-check-wait-bg: var(--gray-880);
   --color-check-wait-mark: var(--gray-500);
   --color-check-label: var(--gray-50);
+  --color-check-label-pending: var(--gray-300);
   --color-check-detail: var(--gray-400);
-  --color-check-fix-bg: var(--gray-980);
-  --color-check-fix-border: var(--gray-870);
 
   /* MCP servers */
   --color-server-transport-bg: var(--gray-880);
@@ -317,6 +316,20 @@
   --color-server-tools-fail: var(--color-accent-danger);
   --color-server-tools-none: var(--gray-500);
   --color-server-versions: var(--color-accent-attention);
+
+  /* Animations (DESIGN.md §8): `animate-check-spin`. */
+  --animate-check-spin: check-spin 1s linear infinite;
+  @keyframes check-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  --animate-fade-in: fade-in 0.2s ease-out;
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
 
   /* Shadows (DESIGN.md §2.2, overlays): `shadow-overlay`. */
   --shadow-overlay: 0 40px 100px -20px rgb(0 0 0 / 0.8);
@@ -357,7 +370,7 @@
   --radius-toast: 9999px;
   --radius-floating-bar: 9999px;
   --radius-check-mark: 50%;
-  --radius-check-fix: 8px;
+  --radius-check-hint: 8px;
   --radius-startup-logo: 12px;
 
   /* Font weights, for the few places a variant sets the weight and the type role does not. */
@@ -582,6 +595,20 @@
   font-family: var(--font-serif);
   font-size: 48px;
   font-weight: 400;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+@utility type-check-hint {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+@utility type-check-detail {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.5;
 }
 @utility type-skill-name {
   font-family: var(--font-sans);

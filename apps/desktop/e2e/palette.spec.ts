@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./harness/cli.ts";
 
 const placeholder = "Search skills or run a command";
 

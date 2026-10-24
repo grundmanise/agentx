@@ -12,6 +12,10 @@
 //
 // A command line the CLI would refuse (by src/cli/commands.gen.ts), or one with no registered
 // reply, fails the test once it ends, unless the test takes it with takeRefusals().
+//
+// The app checks the machine on launch (src/startup/startup.ts), so the mock starts out with a
+// passing launch: `version` and `doctor` replies, and a serve child that writes its first inventory
+// when it starts. A test replaces them with register() and onServeStart().
 import { once } from "node:events";
 
 import { test as base } from "@playwright/test";
@@ -33,7 +37,7 @@ export interface Reply {
   /** The log events on stderr, sent after the events. */
   logs?: Partial<Omit<LogEvent, "type">>[];
   exitCode?: number;
-  /** Holds the run after this many events, until release() or a cancel. */
+  /** Holds the run after this many events, until release(), expire() or a cancel. */
   holdAfter?: number;
 }
 
@@ -42,10 +46,102 @@ export interface Resolution {
   found: "bundled" | "path" | null;
 }
 
+/** What a serve child does when the app starts it: writes these events, then exits if asked to. */
+export interface ServeStart {
+  events?: InlineEvent[];
+  /** Ends the child after its events; the supervisor restarts it unless the code is 2, 6 or 8. */
+  exit?: { code: number; stderr?: string[] };
+}
+
+/** A configuration as an inventory lists it. */
+export const configuration = (id: string) => ({
+  client: id,
+  enabled: true,
+  id,
+  logical_id: id,
+  name: id,
+  path: `/home/me/.${id}`,
+  physical_id: id,
+  reads_library: false,
+});
+
+/** A serve child's first inventory, with these configurations. */
+export const firstInventory = (configurations = ["claude-code", "codex"]) =>
+  ({
+    configurations: configurations.map(configuration),
+    library: [],
+    scan_counter: 1,
+    type: "inventory",
+  }) satisfies InlineEvent;
+
+/** Doctor's rows on a machine where everything passes. */
+export const passingDoctor: InlineEvent[] = [
+  { check: "git", detail: "git 2.43.0", status: "ok", type: "doctor" },
+  {
+    check: "fork_merges",
+    detail: "merge-tree works",
+    status: "ok",
+    type: "doctor",
+  },
+  {
+    check: "commit_identity",
+    detail: "commit ids match",
+    status: "ok",
+    type: "doctor",
+  },
+  { check: "home", detail: "/home/me/.agentx", status: "ok", type: "doctor" },
+  { check: "lock", detail: "free", status: "ok", type: "doctor" },
+  {
+    check: "mutations",
+    detail: "none unfinished",
+    status: "ok",
+    type: "doctor",
+  },
+  {
+    check: "settings",
+    detail: "/home/me/.agentx/settings.json",
+    status: "ok",
+    type: "doctor",
+  },
+  {
+    check: "account_repo",
+    detail: "/home/me/.agentx/account.git",
+    status: "ok",
+    type: "doctor",
+  },
+  {
+    check: "library",
+    detail: "/home/me/.agents/skills",
+    status: "ok",
+    type: "doctor",
+  },
+  {
+    check: "clients",
+    detail: "2 of 12 registered clients detected",
+    status: "info",
+    type: "doctor",
+  },
+];
+
+/** The CLI version a passing launch reports. */
+export const cliVersion = "1.2.0";
+
+/** Doctor's passing rows with `changes` put in place of the rows of the same check. */
+export const doctorWith = (...changes: InlineEvent[]): InlineEvent[] =>
+  passingDoctor.map(
+    (row) =>
+      changes.find(
+        (c) =>
+          c.type === "doctor" && row.type === "doctor" && c.check === row.check
+      ) ?? row
+  );
+
 /** A registered reply, and for one that holds, what releases it. */
 export interface Registered {
   /** Sends the rest of the events and ends the run. */
   release: () => void;
+  /** Ends the run as the supervisor does when its deadline passes. */
+  expire: () => void;
   /** Resolves with the run id once the app has run the command line. */
   started: Promise<string>;
 }
@@ -154,6 +250,8 @@ export class MockCli {
   readonly commands: string[][] = [];
   /** The run id of every cancel. */
   readonly cancels: string[] = [];
+  /** The deadline of every run, in order; null for a run with none. */
+  readonly deadlines: (number | null)[] = [];
   /** Every line written to serve's stdin. */
   readonly serveRequests: string[] = [];
   /** How many times the app started serve. */
@@ -169,9 +267,14 @@ export class MockCli {
   };
   private childId = 1;
   private serving = false;
+  private serveStart: ServeStart = { events: [firstInventory()] };
 
   constructor(page: Page) {
     this.page = page;
+    this.register(["version"], {
+      events: [{ cli_version: cliVersion, type: "version" }],
+    });
+    this.register(["doctor"], { events: passingDoctor });
   }
 
   async install() {
@@ -202,6 +305,9 @@ export class MockCli {
     const signals = new EventTarget();
     this.replies.set(line(args), { reply, signals });
     return {
+      expire: () => {
+        signals.dispatchEvent(new CustomEvent("resume", { detail: "expire" }));
+      },
       release: () => {
         signals.dispatchEvent(new CustomEvent("resume", { detail: "release" }));
       },
@@ -254,6 +360,11 @@ export class MockCli {
     ]);
   }
 
+  /** What every later serve child does when the app starts it. */
+  onServeStart(start: ServeStart) {
+    this.serveStart = start;
+  }
+
   /** Starts a new serve child, as the supervisor's restart does; its id goes on later events. */
   serveRestart(childId: number) {
     this.childId = childId;
@@ -286,6 +397,8 @@ export class MockCli {
       }
       case "cli_run": {
         const runArgs = field(args, "args");
+        const deadline = field(args, "deadline_ms");
+        this.deadlines.push(typeof deadline === "number" ? deadline : null);
         return await this.run(
           Array.isArray(runArgs) ? runArgs.map(String) : [],
           String(field(args, "run_id"))
@@ -301,8 +414,21 @@ export class MockCli {
         return pending !== undefined;
       }
       case "serve_start": {
+        if (this.serving) {
+          return this.childId;
+        }
+        // A child that ended is followed by a new one, with the next id.
+        if (this.serveStarts > 0) {
+          this.childId += 1;
+        }
         this.serveStarts += 1;
         this.serving = true;
+        const { events = [], exit } = this.serveStart;
+        await this.serveEmit(events);
+        if (exit !== undefined) {
+          const restart = [2, 6, 8].includes(exit.code) ? null : 500;
+          await this.serveExit(exit.code, exit.stderr, restart);
+        }
         return this.childId;
       }
       case "serve_request": {
@@ -345,10 +471,13 @@ export class MockCli {
     this.running.set(runId, pending);
     signals.dispatchEvent(new CustomEvent("started", { detail: runId }));
     await send(events.slice(0, held));
-    const cancelled = (await resumed) === "cancel";
+    const resumedWith = await resumed;
+    const cancelled = resumedWith === "cancel";
+    const timedOut = resumedWith === "expire";
     this.running.delete(runId);
-    const sent = cancelled ? events.slice(0, held) : events;
-    if (!cancelled) {
+    const stopped = cancelled || timedOut;
+    const sent = stopped ? events.slice(0, held) : events;
+    if (!stopped) {
       await send(events.slice(held));
     }
     const logs = (reply.logs ?? []).map((log) => full({ type: "log", ...log }));
@@ -359,12 +488,12 @@ export class MockCli {
     const end = {
       cancelled,
       events: sent,
-      // A cancel stops agentx with SIGTERM, on which it reports the stop and exits 9.
-      exit_code: cancelled ? 9 : (reply.exitCode ?? 0),
+      // A cancel or a deadline stops agentx with SIGTERM, on which it reports the stop and exits 9.
+      exit_code: stopped ? 9 : (reply.exitCode ?? 0),
       invalid: [],
       logs,
       run_id: runId,
-      timed_out: false,
+      timed_out: timedOut,
     };
     await this.emit("cli-run-end", [end]);
     return end;

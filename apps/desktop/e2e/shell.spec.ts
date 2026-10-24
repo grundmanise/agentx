@@ -1,5 +1,6 @@
-import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
+
+import { expect, test } from "./harness/cli.ts";
 
 const main = (page: Page) => page.getByRole("navigation", { name: "Main" });
 

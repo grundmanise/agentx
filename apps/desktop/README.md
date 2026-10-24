@@ -1,6 +1,6 @@
 # agentx desktop
 
-The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it is the app shell with placeholder screens, and the CLI supervisor and transport the screens will use. By design it will only render what the `agentx` CLI reports and run CLI commands for every action; it never reads the machine, runs git or opens a network connection itself. See [ADR 0001](../../docs/adr/0001-go-cli-owns-machine-and-account-tauri-renders.md).
+The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it is the app shell with placeholder screens, the startup checks, and the CLI supervisor and transport the screens will use. By design it will only render what the `agentx` CLI reports and run CLI commands for every action; it never reads the machine, runs git or opens a network connection itself. See [ADR 0001](../../docs/adr/0001-go-cli-owns-machine-and-account-tauri-renders.md).
 
 ## What is here
 
@@ -9,7 +9,8 @@ The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it
 | [`DESIGN.md`](DESIGN.md) | The design system: colour, type, spacing and radius tokens, components, motion and copy rules |
 | `src/styles/tokens.css` | The tokens as Tailwind theme values and `type-*` utilities, edited by hand. It also resets Tailwind's default theme, so only these tokens exist |
 | `src/styles/index.css` | The CSS entry: Tailwind, the fonts, the tokens and the base styles |
-| `src/app` | The app shell: title bar, sidebar, main panel, command palette |
+| `src/app` | The app shell: title bar, sidebar, main panel, command palette, and the startup layer |
+| `src/startup` | The launch sequence: it resolves the CLI and runs `version`, `doctor` and `serve` before any screen mounts, and again when a command exits with code 8. It runs out of sight; the startup layer shows only when a check fails, and in manual mode. A launch that runs over 2 seconds says what it checks in the empty panel, and from 5 seconds into a check, how much longer that check keeps trying (`src/app/launch-progress.tsx`). `checks.ts` reads the five checks and the report from the CLI's output |
 | `src/screens` | The screens; today one placeholder |
 | `src/components` | Shared components; `ui` holds the shadcn/ui-based primitives |
 | `src/cli/transport.ts` | The one way to the CLI: one-shot runs whose events arrive as they are written, cancel, and the serve child's events, exits and stdin requests |
@@ -63,7 +64,7 @@ The app is a package of the pnpm workspace at the repository root. `pnpm-workspa
 - The tests in `e2e` find elements by role and accessible name, as a person using a screen reader would, never by class.
 - Code the app does not reach yet, such as a component on its own or a `notify()` call, runs from a module in `e2e/harness`. A test loads it into the dev server's page with `page.addScriptTag`; the app never imports it.
 - To use a Chromium already on your machine instead of Playwright's download, set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to its path.
-- The dev server has no Tauri runtime. A test that imports `test` from `e2e/harness/cli.ts` runs against the mocked CLI: the app's own `transport` module talks to it as it would to the Rust supervisor. The test registers a reply per command line (a few events, typed by `events.gen.ts` with only the fields it checks, and an exit code), can hold a run open to see a pending state or a cancel, plays serve events and exits, and reads back every command line, cancel and serve request.
+- The dev server has no Tauri runtime. A test that imports `test` from `e2e/harness/cli.ts` runs against the mocked CLI: the app's own `transport` module talks to it as it would to the Rust supervisor. Every test that loads the app imports it, since the app checks the machine on launch: the mock starts with a passing launch (`version` and `doctor` replies, and a serve child that writes its first inventory), which a test replaces with `register()` and `onServeStart()`. The test registers a reply per command line (a few events, typed by `events.gen.ts` with only the fields it checks, and an exit code), can hold a run open to see a pending state or a cancel, plays serve events and exits, and reads back every command line, cancel and serve request.
 - The mock refuses a command line the CLI would refuse, by `commands.gen.ts`: an unknown command or flag, a flag that takes a value given none, or a boolean flag given one. A refused line, or one with no registered reply, fails the test.
 
 ## Rules for components

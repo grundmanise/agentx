@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./harness/cli.ts";
 
 // The harness module renders the product mark at both of its sizes on load.
 test.beforeEach(async ({ page }) => {
