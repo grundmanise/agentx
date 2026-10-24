@@ -198,6 +198,14 @@ export const cancel = async (runId: string): Promise<boolean> => {
   return await invoke<boolean>("cli_cancel", { run_id: runId });
 };
 
+/** Calls `handle` with the run id and exit code each time any one-shot run ends. */
+export const onRunEnd = async (
+  handle: (end: { runId: string; exitCode: number | null }) => void
+): Promise<UnlistenFn> =>
+  await listen<WireRunEnd>("cli-run-end", ({ payload }) => {
+    handle({ exitCode: payload.exit_code, runId: payload.run_id });
+  });
+
 /** Starts the serve child unless one runs, and gives its child id. */
 const startServe = async (): Promise<number> =>
   await invoke<number>("serve_start");

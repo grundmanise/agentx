@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./harness/cli.ts";
 
 test("shows one toast at a time, with its action", async ({ page }) => {
   await page.goto("/");

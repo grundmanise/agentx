@@ -5,9 +5,11 @@ import { expect, test } from "./harness/cli.ts";
 // Nothing renders CLI data yet, so a harness module calls the transport module and writes what it
 // receives into the page: one list item per line, result, serve line or serve exit, as
 // "<what> <JSON>".
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ cli, page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+  // The launch checks ran version and doctor; each test reads only its own command lines.
+  cli.commands.splice(0);
   await page.addScriptTag({ type: "module", url: "/e2e/harness/transport.ts" });
   await page.waitForFunction(() => "transport" in window);
 });
@@ -183,7 +185,7 @@ test("the mock refuses a command line the CLI would refuse", async ({
     window.transport.run(["skill", "add", u, "--tooo", "x"]);
     window.transport.run(["skill", "addd", u]);
     window.transport.run(["skill", "list", "--remote=yes"]);
-    window.transport.run(["doctor"]);
+    window.transport.run(["machine"]);
   }, url);
 
   await expect(received(page)).toHaveCount(4);
@@ -192,7 +194,7 @@ test("the mock refuses a command line the CLI would refuse", async ({
     `"skill add ${url} --tooo x": agentx skill add has no flag --tooo`,
     `"skill addd ${url}": agentx skill has no command "addd"`,
     `"skill list --remote=yes": --remote is a boolean flag and takes no value, but was given "yes"`,
-    `"doctor": the test registered no reply`,
+    `"machine": the test registered no reply`,
   ]);
   const errors = await items(page);
   expect(errors.map((item) => item.what)).toEqual([
@@ -205,6 +207,6 @@ test("the mock refuses a command line the CLI would refuse", async ({
     ["skill", "add", url, "--tooo", "x", "--json"],
     ["skill", "addd", url, "--json"],
     ["skill", "list", "--remote=yes", "--json"],
-    ["doctor", "--json"],
+    ["machine", "--json"],
   ]);
 });
