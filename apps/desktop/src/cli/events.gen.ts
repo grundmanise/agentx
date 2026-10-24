@@ -425,7 +425,9 @@ export interface ConflictEvent {
 export interface ExportEvent {
   type: "export";
   schema_version: number;
-  path: string;
+  path?: string;
+  machine?: string;
+  commit?: string;
   skills: number;
 }
 
@@ -436,6 +438,16 @@ export interface ImportSkillEvent extends SnapshotSkill {
   local_commit?: string;
   action: ImportAction;
   reason?: string;
+}
+
+export interface MachineSkillEvent {
+  type: "machine_skill";
+  schema_version: number;
+  machine: string;
+  name: string;
+  placements: string[];
+  removed: boolean;
+  commit: string;
 }
 
 export interface PullEvent {
@@ -589,6 +601,7 @@ export type CliEvent =
   | ConflictEvent
   | ExportEvent
   | ImportSkillEvent
+  | MachineSkillEvent
   | PullEvent
   | PublishEvent
   | InstallableSkillEvent

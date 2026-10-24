@@ -47,6 +47,7 @@ var eventTypes = []struct {
 	{"conflict", conflictEvent{}},
 	{"export", exportEvent{}},
 	{"import_skill", importSkillEvent{}},
+	{"machine_skill", machineSkillEvent{}},
 	{"pull", pullEvent{}},
 	{"publish", publishEvent{}},
 	{"installable_skill", installableSkillEvent{}},

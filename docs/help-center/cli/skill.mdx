@@ -852,17 +852,54 @@ Removing one of your own skills from the machine also deletes its local history.
 
 `--remote` applies only to your own skills, the ones on your account remote. For a skill of another source, or one with no source, agentx refuses it with exit code 6 and changes nothing. Remove the skill from this machine with `agentx skill remove <name>`.
 
+## Turn skills on for your cloud agents
+
+Every agent you run in the cloud, such as Claude Code on the web, is one [cloud machine](/#key-terms). It has no disk that lasts, so its skills live in its snapshot on your [account remote](/cli/source#add-your-account-remote), on the branch `machines/cloud`. Each cloud session reads that snapshot when it starts. To apply it yourself, for example in a cloud environment's setup script, run `agentx import --machine cloud --yes`, see [Restore from the account remote](/cli/export#restore-from-the-account-remote). Turn a skill on and off there with the same commands you use on this machine, adding `--machine cloud`. Nothing on this machine changes.
+
+Place a skill on the cloud machine:
+
+```sh
+agentx skill place pdf --machine cloud
+```
+
+```text
+✓ placed pdf on the cloud machine in claude-code, codex: pushed 4c2e9a1 to machines/cloud
+```
+
+Without `--to`, agentx places the skill in every configuration this machine enables. Name configurations with `--to`, once for each:
+
+```sh
+agentx skill place pdf --machine cloud --to claude-code
+```
+
+The cloud machine always takes the latest version of the skill: the account remote's for one of your own skills, and the source's for a skill of a source. Publish your own skills first. If the account remote does not hold one yet, agentx warns that the cloud machine cannot install it until you run `agentx skill publish <name>`. A skill that agentx does not manage has no source, so agentx refuses to place it on the cloud machine.
+
+Take a skill away from some configurations, or off the cloud machine:
+
+```sh
+agentx skill remove pdf --machine cloud --from claude-code
+agentx skill remove pdf --machine cloud
+```
+
+Without `--from`, or with `--from universal`, agentx deletes the skill from the cloud machine's snapshot. A [universal client](#clients-that-see-every-skill) sees every skill the snapshot lists, so `--from` naming one is refused with exit code 6.
+
+Each command writes one commit to `machines/cloud` and pushes it. agentx never forces the push. If another machine or the web app changed the snapshot since agentx read it, the command stops with exit code 6 and pushes nothing. Run it again: it reads the snapshot again first.
+
+- `--machine` accepts only `cloud`. A computer's skills live on its own disk, so run the command on that computer.
+- `--copy` and `--force` change this machine's disk, and `--remote` deletes a skill's branch, so agentx refuses each of them with `--machine`.
+- To copy every skill of this machine to the cloud machine at once, export a snapshot to it: see [Seed another machine](/cli/export#seed-another-machine).
+
 ## Exit codes
 
 For what each code means, and for codes 2 and 9, see [Exit codes](/cli/output#exit-codes). These causes are special to `agentx skill`:
 
 | Code | Typical causes |
 |---|---|
-| 1 | Flags that contradict each other, such as `--all` with `--name`, `--except` without `--all`, `--remote` with `--from <client>`, or `--from universal` with a client that is not universal. A ref other than the source's pin. `skill add` given the name of a library skill, or, with no source, given `--fetch` or neither `--name` nor `--all`. |
+| 1 | Flags that contradict each other, such as `--all` with `--name`, `--except` without `--all`, `--remote` with `--from <client>` or with `--machine`, or `--from universal` with a client that is not universal. A `--machine` other than `cloud`. A ref other than the source's pin. `skill add` given the name of a library skill, or, with no source, given `--fetch` or neither `--name` nor `--all`. |
 | 3 | A source or the account remote cannot be fetched, or does not let this machine push. |
 | 4 | A merge is pending: `skill update` left one, or one blocks the command. See [When your edits conflict](#when-your-edits-conflict). |
 | 5 | A source, skill, path or configuration you named does not exist, or you removed the skill's source. For a removed source, the hint names the `agentx source add` command that brings it back. |
-| 6 | The library already holds another skill of that name; a directory differs and `--force` is not given; another machine published first; the host declined the push; `--remote` for a skill that is not your own; `--from` names a universal client; a managed skill whose record agentx cannot read (run `agentx doctor`). An interrupted change must be resolved first: the message names the file to restore. To keep the file as it is, move the journal in `~/.agentx/mutations` aside. For one of your own skills, see [Your own skills](/cli/fork#exit-codes). |
+| 6 | The library already holds another skill of that name; a directory differs and `--force` is not given; another machine published first; the host declined the push; the cloud machine's snapshot changed since agentx read it; `--remote` for a skill that is not your own; `--from` names a universal client; a managed skill whose record agentx cannot read (run `agentx doctor`). An interrupted change must be resolved first: the message names the file to restore. To keep the file as it is, move the journal in `~/.agentx/mutations` aside. For one of your own skills, see [Your own skills](/cli/fork#exit-codes). |
 | 7 | Another agentx command is running. Retry when it finishes. |
 | 8 | agentx cannot read or write the account repo. Run `agentx doctor`. |
 | 10 | agentx could not read its settings file, or hit an error it has no better answer for. Run `agentx doctor`. |

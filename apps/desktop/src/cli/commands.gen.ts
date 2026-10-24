@@ -30,8 +30,10 @@ export const CLI_COMMANDS: Readonly<Record<string, CliFlags>> = {
   doctor: {},
   export: {
     force: false,
+    machine: true,
   },
   import: {
+    machine: true,
     yes: false,
   },
   machine: {},
@@ -71,6 +73,7 @@ export const CLI_COMMANDS: Readonly<Record<string, CliFlags>> = {
   "skill place": {
     copy: false,
     force: false,
+    machine: true,
     to: true,
   },
   "skill publish": {
@@ -78,6 +81,7 @@ export const CLI_COMMANDS: Readonly<Record<string, CliFlags>> = {
   },
   "skill remove": {
     from: true,
+    machine: true,
     remote: false,
   },
   "skill rename": {},

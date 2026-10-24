@@ -207,7 +207,7 @@ func accountURL(arg string) (source.Source, *failure) {
 // and the repository would be fetched both ways. Pure but for resolve.
 func accountRefusal(s home.Settings, want home.Source, resolve func(host string) string) *failure {
 	for _, shared := range s.Sources {
-		if shared.Account || (shared.URL != want.URL && !sameRepository(want, shared, resolve)) {
+		if shared.Account || (shared.URL != want.URL && !sameRepository(want.URL, shared.URL, resolve)) {
 			continue
 		}
 		what := want.URL + " is a shared source"
