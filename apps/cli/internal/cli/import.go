@@ -33,14 +33,18 @@ const (
 )
 
 // importSkillEvent is one skill entry of a snapshot with what this
-// machine's account repo holds for it. It is not a librarySkillEvent: that
-// one is a directory of the library, while this one is an entry of a
-// snapshot, of a skill that may be on no machine at all.
+// machine held of it before the import and what the import did with it.
+// It is not a librarySkillEvent: that one is a directory of the library,
+// while this one is an entry of a snapshot, of a skill that may be on no
+// machine at all. Its placements are the configurations the skill is
+// placed in once the import is done.
 type importSkillEvent struct {
 	event
 	snapshotSkill
-	State       string `json:"state"`                  // present, missing or different
-	LocalCommit string `json:"local_commit,omitempty"` // the commit the account repo holds the name at, when it holds it
+	State       string `json:"state"`                  // present, missing or different, before the import
+	LocalCommit string `json:"local_commit,omitempty"` // the commit the account repo held the name at before the import, when it held it
+	Action      string `json:"action"`                 // what the import did, see importActions
+	Reason      string `json:"reason,omitempty"`       // why it was skipped, for the action skipped alone
 }
 
 // importTarget is what an import reads a snapshot against on this machine:
@@ -54,36 +58,38 @@ func newImportCommand(inv *invocation) *cobra.Command {
 	var yes bool
 	cmd := &cobra.Command{
 		Use:   "import <file>",
-		Short: "Restore the settings from a snapshot and list what the account repo can restore",
-		Long: "Replace this machine's settings with those of the snapshot at <file>, after\n" +
-			"confirming, and list every skill the snapshot records against what the account\n" +
-			"repo of this machine holds. A snapshot that holds no settings leaves them as\n" +
-			"they are.\n\n" +
-			"It writes the settings and nothing else: it creates no account repo, fetches\n" +
-			"nothing, installs nothing and places nothing. A skill the account repo already\n" +
-			"holds is restored by placing it; one it is missing comes back by installing it\n" +
-			"again from its source.\n\n" +
-			"The command asks before it writes. Pass --yes to import without asking, which\n" +
-			"is required whenever it cannot ask: with --json, or when either stream is not\n" +
-			"a terminal.",
+		Short: "Apply a snapshot to this machine: its settings, its skills and their placements",
+		Long: "Apply the snapshot at <file> to this machine, after confirming: replace the\n" +
+			"settings with the snapshot's, install each skill it lists that this machine\n" +
+			"lacks, move each one it holds forward to the version the snapshot names, and\n" +
+			"place each one in the configurations the snapshot records, in those detected\n" +
+			"here.\n\n" +
+			"A skill of a source is installed from that source, and one of your own from the\n" +
+			"account remote. An entry with no version takes the latest one. A skill is only\n" +
+			"ever moved forward: one that is ahead is kept, and one that holds edits or\n" +
+			"whose history diverged is left as it is and reported, for 'agentx skill update'.\n" +
+			"A skill the import cannot install, such as an unmanaged one, is skipped with\n" +
+			"the reason. A skill the snapshot does not list is left as it is, and MCP\n" +
+			"servers and plugins are not applied. A snapshot that holds no settings leaves\n" +
+			"them as they are.\n\n" +
+			"The command asks once before it changes anything. Pass --yes to import without\n" +
+			"asking, which is required whenever it cannot ask: with --json, or when either\n" +
+			"stream is not a terminal.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return inv.importSettings(cmd.Context(), args[0], yes, cmd.InOrStdin())
+			return inv.importSnapshot(cmd.Context(), args[0], yes, cmd.InOrStdin())
 		},
 	}
-	cmd.Flags().BoolVar(&yes, "yes", false, "replace the settings without asking")
+	cmd.Flags().BoolVar(&yes, "yes", false, "apply the snapshot without asking")
 	return cmd
 }
 
-// importSettings restores the settings of a snapshot and reports what the
-// account repo can restore of the skills it records.
+// importSnapshot reads the snapshot at path and applies it, see
+// applySnapshot.
 //
-// The snapshot is read and validated whole before anything is locked, and
-// the account repo is read before anything is written, so that a snapshot
-// agentx will not accept costs the settings on disk nothing at all. The one
-// write is the settings file, through the mutation journal as every
-// settings write is, and a snapshot that holds no settings writes nothing.
-func (inv *invocation) importSettings(ctx context.Context, path string, yes bool, in io.Reader) error {
+// The snapshot is read and validated whole before anything is locked, so
+// that a snapshot agentx will not accept costs the machine nothing at all.
+func (inv *invocation) importSnapshot(ctx context.Context, path string, yes bool, in io.Reader) error {
 	here, err := inv.loadSettings()
 	if err != nil {
 		return err
@@ -93,35 +99,7 @@ func (inv *invocation) importSettings(ctx context.Context, path string, yes bool
 	if err != nil {
 		return err
 	}
-	records, err := inv.lineageRecords(ctx)
-	if err != nil {
-		return err
-	}
-	remote, err := inv.remoteTips(ctx)
-	if err != nil {
-		return err
-	}
-	account := snapshotAccount(doc, target)
-	states := restoreStates(doc.Skills, records, remote, account)
-	if doc.Settings != nil {
-		if err := inv.confirmImport(path, doc, in, yes); err != nil {
-			return err
-		}
-		forgetAccess(doc.Settings)
-		if err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
-			return home.SaveSettings(inv.dirs.Home, *doc.Settings)
-		}); err != nil {
-			return mutationFailure(err)
-		}
-		here = *doc.Settings
-	}
-	inv.emitSettings(here)
-	for _, st := range states {
-		inv.out.emit(st)
-	}
-	inv.printImported(path, doc, states, here)
-	inv.summary = importSummary(path, doc.Settings != nil, states)
-	return nil
+	return inv.applySnapshot(ctx, path, doc, yes, in)
 }
 
 // snapshotAccount is the account remote the entries of doc are read
@@ -603,52 +581,69 @@ func (inv *invocation) remoteTips(ctx context.Context) (map[string]string, error
 	return tips, nil
 }
 
-// confirmImport asks before the settings are replaced. An import overwrites
-// what only this machine decides, so it is never the default answer:
-// without --yes the command asks, and where it cannot ask it refuses rather
-// than assuming. It can ask only when a person is there to answer, which is
-// when the run is not in JSON mode and both the stream the question goes to
-// and the stream the answer comes from are terminals. The desktop app and
-// every script are on the other side of that line and pass --yes.
+// confirmImport asks once before anything is changed or fetched. An import
+// overwrites what only this machine decides, the settings, and writes the
+// library and the placements, so it is never the default answer: without
+// --yes the command asks, and where it cannot ask it refuses rather than
+// assuming. It can ask only when a person is there to answer, which is when
+// the run is not in JSON mode and both the stream the question goes to and
+// the stream the answer comes from are terminals. The desktop app and every
+// script are on the other side of that line and pass --yes.
 func (inv *invocation) confirmImport(path string, doc snapshot, in io.Reader, yes bool) error {
 	if yes {
 		return nil
 	}
 	if inv.out.json || !isTerminal(in) || !isTerminal(inv.out.stdout) {
-		return fail(exitRefused,
-			"importing replaces the settings in "+home.SettingsPath(inv.dirs.Home)+", and there is no terminal to confirm at",
+		var does []string
+		if doc.Settings != nil {
+			does = append(does, "replaces the settings in "+home.SettingsPath(inv.dirs.Home))
+		}
+		if len(doc.Skills) > 0 {
+			does = append(does, "installs, updates and places the skills of "+path)
+		}
+		return fail(exitRefused, "importing "+strings.Join(does, " and ")+", and there is no terminal to confirm at",
 			"run it again with --yes to import without asking")
 	}
 	return inv.askToImport(path, doc, in)
 }
 
 // askToImport puts the question and reads the answer. Anything but yes is a
-// refusal: the answer to a question about replacing a file is yes or it is
-// no, and a stream that ends without one has not said yes. The read error
-// is not looked at for the same reason: what was read stands on its own,
-// and a line that ended in end-of-file rather than a newline is an answer
-// like any other.
+// refusal: the answer to a question about changing the machine is yes or it
+// is no, and a stream that ends without one has not said yes. The read
+// error is not looked at for the same reason: what was read stands on its
+// own, and a line that ended in end-of-file rather than a newline is an
+// answer like any other.
 func (inv *invocation) askToImport(path string, doc snapshot, in io.Reader) error {
-	whose := "those"
-	if doc.Machine != nil && doc.Machine.Label != "" {
-		whose += " of " + sanitised(doc.Machine.Label)
+	var question string
+	if doc.Settings != nil {
+		whose := "those"
+		if doc.Machine != nil && doc.Machine.Label != "" {
+			whose += " of " + sanitised(doc.Machine.Label)
+		}
+		question = "Replace the settings in " + home.SettingsPath(inv.dirs.Home) + " with " + whose + " from " + path
+		if n := len(doc.Skills); n > 0 {
+			question += ", and install, update and place its " + plural(n, "skill")
+		}
+	} else {
+		question = "Install, update and place the " + plural(len(doc.Skills), "skill") + " of " + path
 	}
-	inv.out.prompt("Replace the settings in " + home.SettingsPath(inv.dirs.Home) + " with " + whose + " from " + path + "? [y/N] ")
+	inv.out.prompt(question + "? [y/N] ")
 	answer, _ := bufio.NewReader(in).ReadString('\n')
 	switch strings.ToLower(strings.TrimSpace(answer)) {
 	case "y", "yes":
 		return nil
 	}
-	return fail(exitRefused, "the import was declined: the settings were not changed",
+	return fail(exitRefused, "the import was declined: nothing was changed",
 		"run it again with --yes to import without asking")
 }
 
 // printImported writes the confirmation, then one row per entry of the
-// snapshot with what the account repo has of it. Every value the snapshot
-// supplies is sanitised: agentx did not write it, and a file handed from
-// another machine may hold anything. settings are the settings the machine
-// now has, the snapshot's or, for one that holds none, its own.
-func (inv *invocation) printImported(path string, doc snapshot, states []importSkillEvent, settings home.Settings) {
+// snapshot with what the import did, then the reason of each skip. Every
+// value the snapshot supplies is sanitised: agentx did not write it, and a
+// file handed from another machine may hold anything. settings are the
+// settings the machine now has, the snapshot's or, for one that holds none,
+// its own, and fetched the sources the run fetched, by canonical URL.
+func (inv *invocation) printImported(ctx context.Context, path string, doc snapshot, states []importSkillEvent, settings home.Settings, fetched map[string]bool) {
 	out := inv.out
 	switch {
 	case doc.Settings == nil:
@@ -658,67 +653,60 @@ func (inv *invocation) printImported(path string, doc snapshot, states []importS
 	default:
 		out.done("imported the settings from " + out.paint(heading, path))
 	}
-	closing := func() {
-		if doc.Settings == nil {
-			printNothingWritten(out, settings.Sources)
-			return
-		}
-		printSourcesToAdd(out, settings.Sources)
-	}
 	if len(states) == 0 {
 		out.print("No skills in the snapshot.")
-		// A machine that added sources and installed nothing still has
-		// sources to add again, and this is the only place that says how.
-		if doc.Settings != nil && len(settings.Sources) > 0 {
-			printSourcesToAdd(out, settings.Sources)
+	} else {
+		out.print(out.paint(heading, plural(len(states), "skill")+" in the snapshot"), ": ", actionCounts(states))
+		account := documentAccount(settings)
+		t := &table{}
+		for _, st := range states {
+			t.add(importRow(out, st, account)...)
 		}
-		return
+		out.render(t, "")
+		for _, st := range states {
+			if st.Action == importSkipped {
+				out.print("  ", out.paint(warnStyle, "skipped "+sanitised(st.Name)+": "+sanitised(st.Reason)))
+			}
+		}
 	}
-	present, missing, different := restoreCounts(states)
-	out.print(out.paint(heading, plural(len(states), "skill")+" in the snapshot"), ": ",
-		fmt.Sprintf("%d present, %d missing, %d at a different version", present, missing, different))
-	account := documentAccount(settings)
-	t := &table{}
-	for _, st := range states {
-		t.add(importRow(out, st, account)...)
+	if doc.Settings != nil {
+		printSourcesToAdd(out, inv.sourcesToAdd(ctx, settings, fetched))
 	}
-	out.render(t, "")
-	closing()
 }
 
-// printNothingWritten is the closing line of an import of a snapshot that
-// holds no settings: nothing was written, and the sources this machine
-// already has are the ones to install from.
-func printNothingWritten(out *writer, sources []home.Source) {
-	install := "install a missing skill with 'agentx skill add <source>'"
-	if slices.ContainsFunc(sources, func(src home.Source) bool { return src.Account }) {
-		install += ", or one of your own with 'agentx skill add --name <name>'"
+// sourcesToAdd are the sources of settings this machine has not added,
+// which no skill of the import needed and so the run did not fetch: an
+// import restores the settings entry of a source and nothing of the source
+// itself, so on the machine an import just made such a source has no
+// remote in the account repo, or no account repo at all, and has to be
+// added again before a skill can be installed from it. A source whose
+// remote is there, as this machine wrote it, needs nothing.
+func (inv *invocation) sourcesToAdd(ctx context.Context, settings home.Settings, fetched map[string]bool) []home.Source {
+	var remotes map[string]source.Remote
+	if gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home); err == nil && exists {
+		remotes = source.Remotes(ctx, inv.git, gitDir)
 	}
-	out.print("  ", out.paint(muted, "nothing was written: "+install))
+	var missing []home.Source
+	for _, src := range settings.Sources {
+		if r, ok := remotes[source.ID(src.URL)]; fetched[src.URL] || ok && r == source.RemoteOf(src) {
+			continue
+		}
+		missing = append(missing, src)
+	}
+	return missing
 }
 
-// printSourcesToAdd writes the closing line of an import. An import
-// restores the settings entry of a source and nothing of the source itself:
-// no account repo is created and no remote configured, so on the machine an
-// import just made, skill add answers that the source was never added.
-// source add is the step that has to come first, and nothing said so. It is
-// printed per source as the settings now hold it: source add writes the pin
-// its argument names, so the bare URL would unpin the source this import
-// just restored. The account remote is attached again with source add
-// --account, and your own skills are installed from it by name.
+// printSourcesToAdd writes the closing line of an import that restored
+// sources this machine has not added, see sourcesToAdd, and under it the
+// source add that adds each one again. It is printed per source as the
+// settings now hold it: source add writes the pin its argument names, so
+// the bare URL would unpin the source this import just restored. The
+// account remote is attached again with source add --account.
 func printSourcesToAdd(out *writer, sources []home.Source) {
 	if len(sources) == 0 {
-		out.print("  ", out.paint(muted, "only the settings were written: install a missing skill with 'agentx skill add <source>'"))
 		return
 	}
-	install := "install a missing skill with 'agentx skill add <source>'"
-	for _, src := range sources {
-		if src.Account {
-			install += ", or one of your own with 'agentx skill add --name <name>'"
-			break
-		}
-	}
-	out.print("  ", out.paint(muted, "only the settings were written: add each source again, then "+install))
+	out.print("  ", out.paint(muted, "add the other sources of the settings again before you install from them:"))
 	for _, src := range sources {
 		out.print("    ", out.paint(label, sourceAddLine(src)))
 	}
@@ -768,16 +756,18 @@ func shellWord(text string) string {
 	return "'" + strings.ReplaceAll(text, "'", `'\''`) + "'"
 }
 
-// importRow is one line of the listing: the name, what the account repo
-// knows it as, what it has of it, where it is published to and the
-// configurations the snapshot places it in, account being the account
-// remote the snapshot is read against, to which an entry of one of your
-// own skills, see ownRecord, is published. An unmanaged skill is published
-// nowhere.
+// importRow is one line of the report: the name, what the account repo
+// knows it as, what the import did, where it is published to and the
+// configurations it is placed in now, account being the account remote the
+// snapshot is read against, to which an entry of one of your own skills,
+// see ownRecord, is published. An unmanaged skill is published nowhere.
 func importRow(out *writer, st importSkillEvent, account string) []cell {
-	state := c(st.State, okStyle)
-	if st.State != restorePresent {
-		state = c(st.State, warnStyle)
+	action := c(st.Action, okStyle)
+	switch st.Action {
+	case importSkipped:
+		action = c(st.Action, warnStyle)
+	case importKept:
+		action = c(st.Action, muted)
 	}
 	source := c("(none)", muted)
 	if st.Kind != lineage.KindUnmanaged {
@@ -787,21 +777,29 @@ func importRow(out *writer, st importSkillEvent, account string) []cell {
 	if len(st.Placements) > 0 {
 		placed = c("placed in "+strings.Join(st.Placements, ", "), plain)
 	}
-	return []cell{c("  "+sanitised(st.Name), heading), c(st.Kind, muted), state, source, placed}
+	return []cell{c("  "+sanitised(st.Name), heading), c(st.Kind, muted), action, source, placed}
 }
 
-func restoreCounts(states []importSkillEvent) (present, missing, different int) {
+// actionCounts says what an import did with the skills of the snapshot:
+// how many entries took each action, in the order of importActions,
+// leaving out the actions none took, and starting with "no skill changed"
+// when every entry was kept or skipped.
+func actionCounts(states []importSkillEvent) string {
+	counts := map[string]int{}
 	for _, st := range states {
-		switch st.State {
-		case restorePresent:
-			present++
-		case restoreMissing:
-			missing++
-		default:
-			different++
+		counts[st.Action]++
+	}
+	var parts []string
+	for _, action := range importActions {
+		if n := counts[action]; n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", n, action))
 		}
 	}
-	return present, missing, different
+	said := strings.Join(parts, ", ")
+	if counts[importKept]+counts[importSkipped] == len(states) {
+		said = "no skill changed, " + said
+	}
+	return said
 }
 
 // importSummary is what the result event says the import did, settings
@@ -814,7 +812,5 @@ func importSummary(path string, settings bool, states []importSkillEvent) string
 	if len(states) == 0 {
 		return done + ": the snapshot lists no skills"
 	}
-	present, missing, different := restoreCounts(states)
-	return fmt.Sprintf("%s: %d of %s present, %d missing, %d at a different version",
-		done, present, plural(len(states), "skill"), missing, different)
+	return done + ": " + actionCounts(states)
 }

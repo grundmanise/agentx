@@ -179,6 +179,9 @@ var valueLists = []valueList{
 	{name: "ImportState", values: []string{restorePresent, restoreMissing, restoreDifferent}, fields: []fieldRef{
 		{importSkillEvent{}, "State"},
 	}},
+	{name: "ImportAction", values: importActions, fields: []fieldRef{
+		{importSkillEvent{}, "Action"},
+	}},
 	{name: "MachineDerivation", values: []string{home.DerivedPlatform, home.DerivedRandom}, fields: []fieldRef{
 		{machineEvent{}, "Derivation"},
 	}},

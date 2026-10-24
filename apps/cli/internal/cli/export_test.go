@@ -181,7 +181,8 @@ func TestExportListsTheLibraryWithItsPlacements(t *testing.T) {
 	for _, e := range to.eventsOfType(out.stdout, "import_skill") {
 		imported[e["name"].(string)] = e
 	}
-	equal(t, "alpha imported", fmt.Sprint(imported["alpha"]["placements"]), "[claude-code github-copilot]")
+	// Placed where it was in the configurations detected here.
+	equal(t, "alpha imported", fmt.Sprint(imported["alpha"]["placements"]), "[claude-code]")
 	equal(t, "beta imported", fmt.Sprint(imported["beta"]["placements"]), "[]")
 	equal(t, "mine imported", imported["mine"]["kind"], "unmanaged")
 }
@@ -261,9 +262,11 @@ func TestExportLeavesOutWhatItsReaderRefuses(t *testing.T) {
 	// agentx reads, so the settings still come back on the other machine.
 	to := newHarness(t)
 	to.build(t, fixture{dirs: []string{".claude"}})
+	// The importing machine reaches the source the way the exporting one does.
+	writeFile(t, filepath.Join(to.home, ".gitconfig"), readText(t, filepath.Join(h.home, ".gitconfig")))
 	in := to.run("import", file, "--yes")
 	equal(t, "import", in.exit, 0)
-	contains(t, "stdout", in.stdout, "2 skills in the snapshot")
+	contains(t, "stdout", in.stdout, "2 skills in the snapshot: 2 installed")
 }
 
 // TestExportRefusesADirectoryWithAHintThatHelps: --force overwrites a file

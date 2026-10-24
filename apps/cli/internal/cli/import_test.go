@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -63,9 +64,10 @@ func exportedFrom(t *testing.T) (*harness, string) {
 	return h, file
 }
 
-// plainExport is a snapshot a test can read without installing anything: a
-// machine with settings of its own and no account repo, exported by the
-// command itself, with one sound entry put into the snapshot afterwards.
+// plainExport is a snapshot a test can import without installing anything:
+// a machine with settings of its own and no account repo, exported by the
+// command itself, with one sound entry put into the snapshot afterwards, an
+// unmanaged skill, which an import skips without reaching any source.
 // Writing that entry rather than installing a skill for it keeps a test
 // about reading a snapshot from paying for a fetch, and every test that a
 // snapshot of real branches is what this reads is elsewhere.
@@ -78,16 +80,7 @@ func plainExport(t *testing.T) (*harness, string) {
 	equal(t, "export", h.run("export", file).exit, 0)
 
 	doc := h.readExportFile(file)
-	doc["skills"] = []any{map[string]any{
-		"name":            "alpha",
-		"kind":            "managed",
-		"commit":          strings.Repeat("a", 40),
-		"source":          "https://github.com/example/skills",
-		"subpath":         "skills/alpha",
-		"upstream_commit": strings.Repeat("b", 40),
-		"base_hash":       strings.Repeat("c", 64),
-		"placements":      []any{"claude-code"},
-	}}
+	doc["skills"] = []any{map[string]any{"name": "alpha", "kind": "unmanaged", "placements": []any{"claude-code"}}}
 	b, err := json.Marshal(doc)
 	if err != nil {
 		t.Fatal(err)
@@ -109,52 +102,268 @@ func TestImportRestoresTheSettingsByteForByte(t *testing.T) {
 		t.Fatalf("the access fields are still in\n%s", before)
 	}
 
+	// Installing a skill fetches its source, which records when it did, so
+	// the settings are compared on a snapshot of the settings alone.
+	settingsOnly := editedExport(t, from, file, "settings.json", func(doc map[string]any) { doc["skills"] = []any{} })
+
 	to := newHarness(t)
 	to.build(t, fixture{dirs: []string{".claude"}})
-	out := to.run("import", file, "--yes")
+	out := to.run("import", settingsOnly, "--yes")
 	equal(t, "exit", out.exit, 0)
 	if after := readText(t, home.SettingsPath(to.agentx)); after != before {
 		t.Errorf("the settings were not restored byte for byte:\nexported:\n%s\nimported:\n%s", before, after)
 	}
 	contains(t, "stdout", out.stdout, "imported the settings of first-laptop")
-	contains(t, "stdout", out.stdout, "2 skills in the snapshot: 0 present, 2 missing, 0 at a different version")
-	contains(t, "stdout", out.stdout, "  alpha  managed  missing  "+fixtureURL("skills")+"/skills/alpha")
-	contains(t, "stdout", out.stdout, "  beta   managed  missing  "+fixtureURL("skills")+"/skills/beta")
-	contains(t, "stdout", out.stdout, "only the settings were written")
 
 	// The settings are now this machine's own, read by every command.
 	equal(t, "label", strings.TrimSpace(to.run("config", "get", "label").stdout), "first-laptop")
 	contains(t, "sources", to.run("source", "list").stdout, "2 sources")
 }
 
-// TestImportWritesNothingButTheSettings is the whole of what an import
-// does: no account repo, no library, no placement, no fetch. A fresh home
-// holds the settings file and the files any lock leaves behind, and
-// nothing else.
-func TestImportWritesNothingButTheSettings(t *testing.T) {
+// TestImportRestoresAMachine is the restore an import is for: export,
+// remove every skill, import. Each skill comes back at the version it was
+// at, placed where it was, an unmanaged one is skipped with the reason and
+// the run goes on, and the snapshot of the restored machine is the one it
+// was restored from. A second import of it changes nothing and fetches
+// nothing. One whose library directory was deleted by hand is skipped with
+// the way back.
+func TestImportRestoresAMachine(t *testing.T) {
 	t.Parallel()
-	_, file := plainExport(t)
-	to := newHarness(t)
-	to.build(t, fixture{dirs: []string{".claude", ".cursor"}})
-	before := entriesOf(t, to.agentx)
-	equal(t, "exit", to.run("import", file, "--yes").exit, 0)
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--all")
+	h.mustRun("skill", "remove", "beta", "--from", "claude-code")
+	byHand := filepath.Join(h.library, "mine")
+	if err := os.MkdirAll(byHand, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(byHand, "SKILL.md"), "---\nname: mine\ndescription: made here\n---\n\nmine\n")
+	first := h.exportPath("first.json")
+	h.mustRun("export", first)
+	before := h.readExportFile(first)["skills"].([]any)
 
-	var added []string
-	for _, name := range entriesOf(t, to.agentx) {
-		if !slices.Contains(before, name) {
-			added = append(added, name)
+	h.mustRun("skill", "remove", "alpha")
+	h.mustRun("skill", "remove", "beta")
+	remove(t, byHand)
+	out := h.mustRun("--json", "import", first, "--yes")
+	actions := map[string]jsonEvent{}
+	for _, e := range h.eventsOfType(out.stdout, "import_skill") {
+		actions[e["name"].(string)] = e
+	}
+	equal(t, "alpha", actions["alpha"]["action"], importInstalled)
+	equal(t, "alpha's state before", actions["alpha"]["state"], restoreMissing)
+	equal(t, "beta", actions["beta"]["action"], importInstalled)
+	equal(t, "beta's placements", fmt.Sprint(actions["beta"]["placements"]), "[codex cursor gemini-cli]")
+	equal(t, "mine", actions["mine"]["action"], importSkipped)
+	contains(t, "mine's reason", actions["mine"]["reason"].(string), "mine is unmanaged, so there is no source to install it from")
+	equal(t, "summary", h.one(out.stdout, "result")["summary"], "imported the settings from "+first+": 2 installed, 1 skipped")
+	if lexists(filepath.Join(h.home, ".claude", "skills", "beta")) {
+		t.Error("beta was placed in claude-code, which the snapshot does not name")
+	}
+
+	second := h.exportPath("second.json")
+	h.mustRun("export", second)
+	after := h.readExportFile(second)["skills"].([]any)
+	equal(t, "the restored skills", fmt.Sprint(after), fmt.Sprint(before[:2]))
+
+	again := h.mustRun("--json", "--verbose", "import", first, "--yes")
+	equal(t, "the second import", h.one(again.stdout, "result")["summary"],
+		"imported the settings from "+first+": no skill changed, 2 kept, 1 skipped")
+	equal(t, "fetches of the second import", fetches(again.stderr), 0)
+	text := h.mustRun("import", first, "--yes")
+	contains(t, "stdout", text.stdout, "3 skills in the snapshot: no skill changed, 2 kept, 1 skipped")
+	contains(t, "stdout", text.stdout, "  alpha  managed    kept     "+fixtureURL("skills")+"/skills/alpha")
+	contains(t, "stdout", text.stdout, "  skipped mine: mine is unmanaged, so there is no source to install it from")
+
+	// Placements moved between configurations: alpha from Claude Code to
+	// Cursor, and beta out of every configuration but the clients that read
+	// the library, which see it there whatever the snapshot says.
+	moved := editedExport(t, h, first, "moved.json", func(doc map[string]any) {
+		skills := doc["skills"].([]any)
+		skills[0].(map[string]any)["placements"] = []any{"cursor"}
+		skills[1].(map[string]any)["placements"] = []any{}
+	})
+	out = h.mustRun("--json", "import", moved, "--yes")
+	for _, e := range h.eventsOfType(out.stdout, "import_skill") {
+		actions[e["name"].(string)] = e
+	}
+	equal(t, "alpha moved", fmt.Sprint(actions["alpha"]["action"], " ", actions["alpha"]["placements"]), "placed [codex cursor gemini-cli]")
+	equal(t, "beta taken out", fmt.Sprint(actions["beta"]["action"], " ", actions["beta"]["placements"]), "unplaced [codex gemini-cli]")
+
+	// A skill whose library directory was deleted by hand is not kept as
+	// though it were there: it is skipped, with the way back.
+	remove(t, filepath.Join(h.library, "alpha"))
+	out = h.mustRun("--json", "import", first, "--yes")
+	for _, e := range h.eventsOfType(out.stdout, "import_skill") {
+		actions[e["name"].(string)] = e
+	}
+	equal(t, "alpha deleted by hand", actions["alpha"]["action"], importSkipped)
+	contains(t, "its reason", actions["alpha"]["reason"].(string), "alpha is managed in the account repo but the library holds no skill directory for it; run 'agentx skill add ")
+}
+
+// TestImportSkipsASkillTheLibraryLost: an entry whose branch the account
+// repo holds and whose library directory is gone is skipped with the way
+// back, skill place for one of your own, which checks it out again; any
+// other entry is applied.
+func TestImportSkipsASkillTheLibraryLost(t *testing.T) {
+	t.Parallel()
+	r := &applyRun{
+		inv: &invocation{dirs: home.Dirs{Library: t.TempDir()}},
+		records: map[string]lineage.Record{
+			"notes": {Name: "notes", Kind: lineage.KindFork},
+			"alpha": {Name: "alpha", Kind: lineage.KindManaged},
+		},
+		held: map[string]librarySkillEvent{"alpha": {}},
+	}
+	for _, tc := range []struct {
+		entry snapshotSkill
+		why   string
+	}{
+		{snapshotSkill{Name: "notes", Kind: lineage.KindManaged}, "notes is one of your own skills, and the library holds no skill directory for it; check it out again from its branch with 'agentx skill place notes'"},
+		{snapshotSkill{Name: "alpha", Kind: lineage.KindManaged}, ""},
+		{snapshotSkill{Name: "gamma", Kind: lineage.KindManaged}, ""},
+		{snapshotSkill{Name: "notes", Kind: lineage.KindUnmanaged}, ""},
+	} {
+		why := ""
+		if f := r.gone(tc.entry); f != nil {
+			why = f.message
+		}
+		equal(t, tc.entry.Name+" "+tc.entry.Kind, why, tc.why)
+	}
+}
+
+// TestImportMovesSkillsForwardOnly: a skill the machine holds moves to the
+// version the snapshot names, or the latest for an entry that follows, only
+// when that is newer; one ahead of it is kept, and one that holds edits is
+// left as it is and skipped with the reason. An exact entry the machine
+// lacks is installed at its version, however far its source moved since.
+func TestImportMovesSkillsForwardOnly(t *testing.T) {
+	t.Parallel()
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--all")
+	old := h.exportPath("old.json")
+	h.mustRun("export", old)
+	oldAlpha := h.accountGit("rev-parse", "refs/heads/managed/alpha")
+
+	s.skill("skills/alpha", "alpha", "The first skill, once more", nil)
+	s.skill("skills/beta", "beta", "The second skill, revised", nil)
+	head := strings.TrimSpace(s.commit("third version"))
+	writeFile(t, filepath.Join(h.library, "beta", "draft.md"), "an edit\n")
+	follow := h.exportPath("follow.json")
+	writeFile(t, follow, `{"schema_version": 2, "skills": [
+		{"name": "alpha", "source": "`+s.url+`", "subpath": "skills/alpha", "placements": ["claude-code", "cursor"]},
+		{"name": "beta", "source": "`+s.url+`", "subpath": "skills/beta", "placements": ["claude-code", "cursor"]}]}`)
+
+	out := h.mustRun("--json", "import", follow, "--yes")
+	did := map[string]jsonEvent{}
+	for _, e := range h.eventsOfType(out.stdout, "import_skill") {
+		did[e["name"].(string)] = e
+	}
+	equal(t, "alpha", did["alpha"]["action"], importUpdated)
+	equal(t, "alpha's version", h.librarySkill(h.mustRun("--json", "skill", "list").stdout, "alpha")["upstream_commit"], head)
+	equal(t, "beta", did["beta"]["action"], importSkipped)
+	contains(t, "beta's reason", did["beta"]["reason"].(string), "beta holds edits not yet published, which an import never merges")
+	equal(t, "beta's edit", readText(t, filepath.Join(h.library, "beta", "draft.md")), "an edit\n")
+
+	// alpha is ahead of the version the old snapshot names, and beta is at it.
+	out = h.mustRun("--json", "import", old, "--yes")
+	equal(t, "the old snapshot", h.one(out.stdout, "result")["summary"], "imported the settings from "+old+": no skill changed, 2 kept")
+
+	h.mustRun("skill", "remove", "alpha")
+	out = h.mustRun("--json", "import", old, "--yes")
+	equal(t, "the old snapshot without alpha", h.one(out.stdout, "result")["summary"], "imported the settings from "+old+": 1 installed, 1 kept")
+	equal(t, "alpha's branch", h.accountGit("rev-parse", "refs/heads/managed/alpha"), oldAlpha)
+}
+
+// importChildEnv marks the process TestImportIsFinishedAfterAKill starts
+// and carries the snapshot it imports.
+const importChildEnv = "AGENTX_TEST_IMPORT_CHILD"
+
+// TestImportChildProcess is not a test: it is the body of that process,
+// which imports against the parent's temporary home and is killed in the
+// middle of it. It does nothing when the variable that marks it is not set.
+func TestImportChildProcess(t *testing.T) {
+	file := os.Getenv(importChildEnv)
+	if file == "" {
+		t.Skip("not the import child process")
+	}
+	env := map[string]string{}
+	for _, kv := range os.Environ() {
+		if k, v, ok := strings.Cut(kv, "="); ok {
+			env[k] = v
 		}
 	}
-	// The settings file, and what taking the lock leaves behind.
-	equal(t, "what the import added to agentx home", strings.Join(added, ","), "lock,mutations,ops,settings.json,version")
-	if journals, err := home.Journals(to.agentx); err != nil || len(journals) != 0 {
-		t.Errorf("journals = %v, %v, want none", journals, err)
+	os.Exit(Run(context.Background(), []string{"import", file, "--yes"}, env, strings.NewReader(""), os.Stdout, os.Stderr))
+}
+
+// TestImportIsFinishedAfterAKill kills an import once the first skill's
+// install has written its import branch and before its library directory:
+// each skill is installed by a journaled mutation of its own, so the
+// machine is left with the journal of that one install, which the next
+// command finishes, and a second import installs the rest. Recovery from
+// every boundary of an install is TestSkillAddRecoversFromAKilledBatch's
+// and internal/home's.
+func TestImportIsFinishedAfterAKill(t *testing.T) {
+	t.Parallel()
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--all")
+	file := h.exportPath("export.json")
+	h.mustRun("export", file)
+	h.mustRun("skill", "remove", "alpha")
+	h.mustRun("skill", "remove", "beta")
+
+	// The wrapper kills its own parent, the agentx process, right after the
+	// ref step of the first install, the one that creates an import branch:
+	// every fetch writes refs through update-ref too.
+	out := killedChild(t, h, "TestImportChildProcess", importChildEnv, file, `
+case " $* " in
+*" update-ref --stdin "*)
+	input=$(cat)
+	printf '%s\n' "$input" | %GIT% "$@"
+	status=$?
+	case "$input" in *refs/heads/managed/*) kill -9 $PPID ;; esac
+	exit $status
+	;;
+esac
+exec %GIT% "$@"
+`)
+	if _, err := os.Stat(filepath.Join(h.library, "alpha")); err == nil {
+		t.Fatalf("the killed import got as far as the library of alpha:\n%s", out)
 	}
-	if entries, err := os.ReadDir(to.library); err == nil && len(entries) > 0 {
-		t.Errorf("the import filled the library: %v", entries)
+	_, kinds := journalKinds(t, h)
+	equal(t, "the journal of alpha's install", kinds, "ref, publish, link")
+
+	h.mustRun("config", "set", "label", "recovered")
+	equal(t, "journals after recovery", journalCount(t, h), 0)
+	if _, err := os.Readlink(filepath.Join(h.home, ".claude", "skills", "alpha")); err != nil {
+		t.Errorf("alpha's placement was not recovered: %v", err)
 	}
-	if entries, err := os.ReadDir(filepath.Join(to.home, ".claude", "skills")); err == nil && len(entries) > 0 {
-		t.Errorf("the import made a placement: %v", entries)
+	again := h.mustRun("--json", "import", file, "--yes")
+	equal(t, "the import after it", h.one(again.stdout, "result")["summary"], "imported the settings from "+file+": 1 installed, 1 kept")
+}
+
+// TestPlaceInto: an import places a skill in each detected configuration
+// the snapshot names, but in none whose client sees it already: one that
+// reads the library, and one that reads the skills directory of another
+// configuration it is placed in, as Cursor reads Claude Code's.
+func TestPlaceInto(t *testing.T) {
+	t.Parallel()
+	claude, cursor := placeTarget{id: "claude-code", dir: "/h/.claude/skills"}, placeTarget{id: "cursor", dir: "/h/.cursor/skills"}
+	codex := placeTarget{id: "codex", dir: "/h/.agents/skills", readsLibrary: true}
+	r := &applyRun{
+		targets: []placeTarget{claude, codex, cursor},
+		reads:   map[string][]string{"cursor": {cursor.dir, claude.dir}, "claude-code": {claude.dir}, "codex": {codex.dir}},
+	}
+	for _, tc := range []struct {
+		want []string
+		into string
+	}{
+		{[]string{"claude-code", "codex", "cursor"}, "claude-code"},
+		{[]string{"codex", "cursor"}, "cursor"},
+		{[]string{"claude-code", "gemini-cli"}, "claude-code"},
+		{[]string{"codex"}, ""},
+		{[]string{}, ""},
+	} {
+		equal(t, strings.Join(tc.want, ","), strings.Join(targetIDs(r.placeInto(tc.want)), ","), tc.into)
 	}
 }
 
@@ -193,28 +402,30 @@ func TestImportAsksBeforeItWrites(t *testing.T) {
 
 // TestImportOfAPartialSnapshot: a writer other than export may write a
 // snapshot of names, sources and placements alone, with no settings. An
-// import reads it and lists it; with no settings to replace it writes
-// nothing, and so has nothing to ask, terminal or not.
+// import installs the latest version of each skill it lists, in the
+// configurations it names, and leaves the settings as they are. It still
+// writes the library, so it asks first, and refuses where it cannot ask.
 func TestImportOfAPartialSnapshot(t *testing.T) {
 	t.Parallel()
-	to := newHarness(t)
-	to.build(t, fixture{dirs: []string{".claude"}})
-	equal(t, "label", to.run("config", "set", "label", "keep-me").exit, 0)
-	before := readText(t, home.SettingsPath(to.agentx))
+	to, s := installHarness(t)
+	to.mustRun("config", "set", "label", "keep-me")
 	file := to.exportPath("partial.json")
 	writeFile(t, file, `{"schema_version": 2, "skills": [{"name": "alpha",
-		"source": "https://github.com/example/skills", "subpath": "skills/alpha", "placements": ["claude-code"]}]}`)
+		"source": "`+s.url+`", "subpath": "skills/alpha", "placements": ["claude-code"]}]}`)
 
-	out := to.run("import", file)
-	equal(t, "exit", out.exit, 0)
+	refused := to.run("import", file)
+	equal(t, "without --yes", refused.exit, 6)
+	contains(t, "stderr", refused.stderr, "importing installs, updates and places the skills of "+file+", and there is no terminal to confirm at")
+
+	out := to.mustRun("import", file, "--yes")
 	contains(t, "stdout", out.stdout, "it holds no settings, so the settings were left as they are")
-	contains(t, "stdout", out.stdout, "  alpha  managed  missing  https://github.com/example/skills/skills/alpha  placed in claude-code")
-	contains(t, "stdout", out.stdout, "  nothing was written: install a missing skill with 'agentx skill add <source>'")
-	js := to.run("--json", "import", file)
-	equal(t, "summary", to.one(js.stdout, "result")["summary"],
-		"read "+file+", which holds no settings: 0 of 1 skill present, 1 missing, 0 at a different version")
-	equal(t, "the settings event", to.one(js.stdout, "settings")["settings"].(map[string]any)["label"], "keep-me")
-	equal(t, "the settings", readText(t, home.SettingsPath(to.agentx)), before)
+	contains(t, "stdout", out.stdout, "  alpha  managed  installed  "+s.url+"/skills/alpha  placed in claude-code")
+	alpha := to.librarySkill(to.mustRun("--json", "skill", "list").stdout, "alpha")
+	equal(t, "the version installed", alpha["upstream_commit"], strings.TrimSpace(s.query("rev-parse", "HEAD")))
+	if lexists(filepath.Join(to.home, ".cursor", "skills", "alpha")) {
+		t.Error("alpha was placed in cursor, which the snapshot does not name")
+	}
+	equal(t, "the label", strings.TrimSpace(to.mustRun("config", "get", "label").stdout), "keep-me")
 }
 
 // soundSnapshot is a snapshot agentx would write, with one sound entry,
@@ -504,14 +715,17 @@ func TestImportRefusesADocumentItCannotRead(t *testing.T) {
 	// were about the documents and not about the machine.
 	good := to.exportPath("sound.json")
 	writeFile(t, good, soundSnapshot)
-	out := to.run("--json", "import", good, "--yes")
-	equal(t, "the sound snapshot", out.exit, 0)
-	equal(t, "its placements", fmt.Sprint(to.one(out.stdout, "import_skill")["placements"]), "[claude-code]")
+	snap, err := readExport(good, importTarget{})
+	if err != nil {
+		t.Fatalf("the sound snapshot is refused: %v", err)
+	}
+	equal(t, "its placements", fmt.Sprint(snap.Skills[0].Placements), "[claude-code]")
 }
 
-// TestImportListsWhatTheAccountRepoHas is the point of the listing: one
-// line per record of the export saying whether this machine's account repo
-// holds that skill, is missing it, or holds it at another version.
+// TestImportListsWhatTheAccountRepoHas: each import_skill event says what
+// this machine's account repo held of the skill before the run, which it
+// holds, is missing, or holds at another version, beside what the import
+// did about it.
 func TestImportListsWhatTheAccountRepoHas(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -548,13 +762,13 @@ func TestImportListsWhatTheAccountRepoHas(t *testing.T) {
 	if _, ok := states["gamma"]["local_commit"]; ok {
 		t.Error("a missing skill carries a local commit")
 	}
+	equal(t, "alpha's action", states["alpha"]["action"], importKept)
+	equal(t, "gamma's action", states["gamma"]["action"], importInstalled)
+	// beta's branch names alpha's version, which is no version of beta.
+	equal(t, "beta's action", states["beta"]["action"], importSkipped)
+	contains(t, "beta's reason", states["beta"]["reason"].(string), "beta on this machine comes from another source or folder than the one the snapshot names")
 	equal(t, "summary", h.one(out.stdout, "result")["summary"],
-		"imported the settings from "+file+": 1 of 3 skills present, 1 missing, 1 at a different version")
-
-	text := h.run("import", file, "--yes")
-	contains(t, "stdout", text.stdout, "3 skills in the snapshot: 1 present, 1 missing, 1 at a different version")
-	contains(t, "stdout", text.stdout, "  alpha  managed  present")
-	contains(t, "stdout", text.stdout, "  gamma  managed  missing")
+		"imported the settings from "+file+": 1 installed, 1 kept, 1 skipped")
 }
 
 // TestRestoreStates: a record is looked up in the namespace it belongs in,
@@ -681,14 +895,14 @@ func TestImportReadsTheAnswer(t *testing.T) {
 			out:  &writer{stdout: &stdout, stderr: &stderr, env: map[string]string{}},
 			dirs: home.Dirs{Home: filepath.Join("tmp", "agentx")},
 		}
-		doc := snapshot{Machine: &exportMachine{Label: "first-laptop"}}
+		doc := snapshot{Machine: &exportMachine{Label: "first-laptop"}, Settings: &home.Settings{}, Skills: make([]snapshotSkill, 2)}
 		err := inv.askToImport("export.json", doc, strings.NewReader(tc.answer))
 		if (err == nil) != tc.yes {
 			t.Errorf("the answer %q gave %v, want yes = %v", tc.answer, err, tc.yes)
 		}
 		contains(t, "the question", stdout.String(),
 			"Replace the settings in "+filepath.Join("tmp", "agentx", "settings.json")+
-				" with those of first-laptop from export.json? [y/N] ")
+				" with those of first-laptop from export.json, and install, update and place its 2 skills? [y/N] ")
 		if err != nil {
 			var f *failure
 			if !errors.As(err, &f) || f.status != exitRefused {
@@ -833,12 +1047,13 @@ func TestImportRefusesADocumentNoMachineWrote(t *testing.T) {
 // TestImportSaysWhatToRunNext: an import restores the settings entry of a
 // source and nothing of the source itself, no account repo and no remote,
 // so on the machine it made skill add, source fetch and source skills
-// answer that the source was never fetched, with a source add to run. The
-// import's closing line prints one source add per source, and each of
-// those refusals names one, with the pin the settings hold: source add
-// writes the pin its argument names, so a bare URL would unpin the very
+// answer that the source was never fetched, with a source add to run. An
+// import fetches the sources its skills come from, and its closing line
+// prints one source add per source of the settings it did not need, and
+// each of those refusals names one, with the pin the settings hold: source
+// add writes the pin its argument names, so a bare URL would unpin the very
 // source the import restored. This is the one test of that hint's text.
-// Running the lines keeps every pin, and skill add then installs.
+// Running the line keeps the pin, and skill add then installs.
 func TestImportSaysWhatToRunNext(t *testing.T) {
 	t.Parallel()
 	from, file := exportedFrom(t)
@@ -847,11 +1062,10 @@ func TestImportSaysWhatToRunNext(t *testing.T) {
 		t.Fatal(err)
 	}
 	i := slices.IndexFunc(exported.Sources, func(src home.Source) bool { return src.Pin != "" })
-	j := slices.IndexFunc(exported.Sources, func(src home.Source) bool { return src.Pin == "" })
-	if i < 0 || j < 0 {
+	if i < 0 || !slices.ContainsFunc(exported.Sources, func(src home.Source) bool { return src.Pin == "" }) {
 		t.Fatalf("the exporting machine should have a pinned and an unpinned source: %+v", exported.Sources)
 	}
-	pinned, unpinned := exported.Sources[i], exported.Sources[j]
+	pinned := exported.Sources[i]
 	pinnedArg := pinned.URL + "#" + pinned.Pin
 	pins := func(s home.Settings) map[string]string {
 		m := map[string]string{}
@@ -867,10 +1081,10 @@ func TestImportSaysWhatToRunNext(t *testing.T) {
 	writeFile(t, filepath.Join(to.home, ".gitconfig"), readText(t, filepath.Join(from.home, ".gitconfig")))
 	out := to.run("import", file, "--yes")
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "only the settings were written: add each source again, then install a missing skill with 'agentx skill add <source>'")
-	printed := printedSourceAdds(t, out.stdout, t.TempDir())
-	slices.Sort(printed)
-	if want := []string{pinnedArg, unpinned.URL}; !slices.Equal(printed, slices.Sorted(slices.Values(want))) {
+	contains(t, "stdout", out.stdout, "  add the other sources of the settings again before you install from them:\n")
+	// The skills of the snapshot come from the unpinned source, which the
+	// import fetched; the pinned one is left to add.
+	if printed, want := printedSourceAdds(t, out.stdout, t.TempDir()), []string{pinnedArg}; !slices.Equal(printed, want) {
 		t.Errorf("the printed source add lines read back as %q, want %q\n%s", printed, want, out.stdout)
 	}
 
@@ -897,8 +1111,6 @@ func TestImportSaysWhatToRunNext(t *testing.T) {
 			}
 		}
 	}
-	hinted("no account repo")
-	equal(t, "source add of the unpinned source", to.run("source", "add", unpinned.URL).exit, 0)
 	hinted("an account repo without the source")
 
 	// Following the hint keeps the pin, and skill add then installs.
@@ -914,8 +1126,7 @@ func TestImportSaysWhatToRunNext(t *testing.T) {
 }
 
 // TestImportWithNoSourceNamesNoSourceAdd: settings with no source have none
-// to add again, so the closing line goes straight to skill add, which adds
-// a source it is given by URL itself.
+// to add again, so no closing line names source add.
 func TestImportWithNoSourceNamesNoSourceAdd(t *testing.T) {
 	t.Parallel()
 	_, file := plainExport(t)
@@ -923,7 +1134,6 @@ func TestImportWithNoSourceNamesNoSourceAdd(t *testing.T) {
 	to.build(t, fixture{dirs: []string{".claude"}})
 	out := to.run("import", file, "--yes")
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "only the settings were written: install a missing skill with 'agentx skill add <source>'")
 	if strings.Contains(out.stdout, "source add") {
 		t.Errorf("an import that restored no source names source add:\n%s", out.stdout)
 	}
@@ -1011,9 +1221,10 @@ func TestImportQuotesTheSourceAddItPrints(t *testing.T) {
 }
 
 // TestImportWithNoSkillsStillNamesTheSourcesToAdd: a machine that added
-// sources and installed nothing exports no lineage record, and its sources
-// still have to be added again on the machine an import makes. The source
-// add lines follow the line saying the export lists no skills.
+// sources and installed nothing exports no skill, so an import fetches
+// nothing, and its sources still have to be added again on the machine an
+// import makes. The source add lines follow the line saying the snapshot
+// lists no skills.
 func TestImportWithNoSkillsStillNamesTheSourcesToAdd(t *testing.T) {
 	t.Parallel()
 	h, good := plainExport(t)
@@ -1032,7 +1243,7 @@ func TestImportWithNoSkillsStillNamesTheSourcesToAdd(t *testing.T) {
 	out := to.run("import", file, "--yes")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "No skills in the snapshot.\n"+
-		"  only the settings were written: add each source again, then install a missing skill with 'agentx skill add <source>', or one of your own with 'agentx skill add --name <name>'\n"+
+		"  add the other sources of the settings again before you install from them:\n"+
 		"    agentx source add https://github.com/example/skills#release\n"+
 		"    agentx source add https://github.com/me/forks --account\n")
 
