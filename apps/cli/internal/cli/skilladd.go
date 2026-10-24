@@ -163,6 +163,19 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 	if err != nil {
 		return err
 	}
+	return inv.installSkills(ctx, gitDir, src, entry.LastFetched, listing.Commit, skills, targets, asCopy)
+}
+
+// installSkills is the install of skill add once the source is fetched and
+// the skills are chosen: it reads their versions at tip, a commit of the
+// source the account repo holds, out of the account repo, writes their
+// import commits through one fast-import, then publishes the library
+// directories, the import branches and the placements in targets as one
+// journaled mutation, and reads the affected configurations again. fetched
+// is when the source was last fetched, as its settings entry records it.
+// An import installs a skill of a snapshot through it, at the version the
+// snapshot names.
+func (inv *invocation) installSkills(ctx context.Context, gitDir string, src source.Source, fetched, tip string, skills []source.Skill, targets []placeTarget, asCopy bool) error {
 	// The lock is taken and released before the network: it recovers an
 	// unfinished journal and refuses a run that could not finish anyway,
 	// while the blobs are fetched outside it, so a slow network never
@@ -171,12 +184,12 @@ func (inv *invocation) skillAdd(ctx context.Context, arg string, sel selection, 
 		return err
 	}
 	b := newBatch(inv, len(skills))
-	versions, err := inv.readVersions(ctx, b, gitDir, src, listing.Commit, skills)
+	versions, err := inv.readVersions(ctx, b, gitDir, src, tip, skills)
 	if err != nil {
 		return err
 	}
 	for _, v := range versions {
-		v.fetched = entry.LastFetched
+		v.fetched = fetched
 	}
 	if len(versions) == 0 {
 		return b.abandon()

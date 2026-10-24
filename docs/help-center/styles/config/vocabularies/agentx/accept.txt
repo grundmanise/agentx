@@ -23,6 +23,7 @@ stdout
 streamable
 subpaths?
 unmanaged
+unplaced
 Vercel
 worktrees?
 [Rr]escans?

@@ -71,7 +71,7 @@ warning: update check: https://github.com/me/skills: git fetch: fatal: unable to
 
 Serve keeps running. Other `update check:` warnings name a skill or source the check could not check, and say what to do next.
 
-Serve does not fetch a source that [`agentx import`](/cli/export#import-onto-another-machine) wrote until you add it again. Its warning says `source not fetched`. Run `agentx source add <url>`. For a [pinned](/cli/source#pin-a-source) source, run `agentx source add <url>#<ref>` so it keeps its pin.
+Serve does not fetch a source that [`agentx import`](/cli/export#import-onto-another-machine) wrote, and that no imported skill comes from, until you add it again. Its warning says `source not fetched`. Run `agentx source add <url>`. For a [pinned](/cli/source#pin-a-source) source, run `agentx source add <url>#<ref>` so it keeps its pin.
 
 ## Maintenance
 

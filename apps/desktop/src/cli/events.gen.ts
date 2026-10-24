@@ -69,6 +69,13 @@ export type ReconcileOutcome =
   | "unmanaged";
 export type AdoptionState = "candidate" | "adopted" | "managed" | "refused";
 export type ImportState = "present" | "missing" | "different";
+export type ImportAction =
+  | "installed"
+  | "updated"
+  | "placed"
+  | "unplaced"
+  | "kept"
+  | "skipped";
 export type MachineDerivation = "platform" | "random";
 export type SourceAccess = "writable" | "read-only" | "unknown";
 export type ProgressPhase =
@@ -427,6 +434,8 @@ export interface ImportSkillEvent extends SnapshotSkill {
   schema_version: number;
   state: ImportState;
   local_commit?: string;
+  action: ImportAction;
+  reason?: string;
 }
 
 export interface PullEvent {
