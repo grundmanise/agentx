@@ -142,7 +142,7 @@ func (h *harness) reachAs(remote, url string) {
 // --from takes one out, and remove without --from deletes the entry; each
 // event names the commit pushed, and nothing on this machine's disk
 // changes. --from naming a universal client is refused, and so are a
-// computer's id, --copy, a --to no client of the registry has, --remote
+// computer's id, --force, a --to no client of the registry has, --remote
 // beside --machine, a file or --force beside export's, and a push over a branch
 // another writer moved since it was read, with a hint to run it again.
 func TestSkillPlaceAndRemoveOnTheCloudMachine(t *testing.T) {
@@ -198,7 +198,7 @@ func TestSkillPlaceAndRemoveOnTheCloudMachine(t *testing.T) {
 		exit int
 	}{
 		{[]string{"skill", "place", "alpha", "--machine", strings.Repeat("a", 32)}, 1},
-		{[]string{"skill", "place", "alpha", "--machine", "cloud", "--copy"}, 1},
+		{[]string{"skill", "place", "alpha", "--machine", "cloud", "--force"}, 1},
 		{[]string{"skill", "place", "alpha", "--machine", "cloud", "--to", "universal"}, 5},
 		{[]string{"skill", "remove", "alpha", "--machine", "cloud", "--remote"}, 1},
 		{[]string{"export", h.exportPath("cloud.json"), "--machine", "cloud"}, 1},
@@ -231,6 +231,48 @@ func TestSkillPlaceAndRemoveOnTheCloudMachine(t *testing.T) {
 	contains(t, "its error", moved.stderr, "machines/cloud on the account remote changed since it was read, so nothing was pushed")
 	contains(t, "its hint", moved.stderr, "run 'agentx skill place alpha --to claude-code --machine cloud' again")
 	equal(t, "the other writer's tip", remoteGit(t, h, remote, "rev-parse", "refs/heads/machines/cloud"), other)
+}
+
+// TestPlaceACopyOnTheCloudMachineAndImportIt: skill place --machine cloud
+// --copy records the configurations it places the skill in in the
+// snapshot's copy_mode, as skill place --copy records them on a computer,
+// and skill remove --from takes them out again. A second home whose account
+// remote is the same repository by another URL imports the branch: it
+// keeps its own URL of the account remote, and the skill is placed in
+// cursor as a copy, a real directory.
+func TestPlaceACopyOnTheCloudMachineAndImportIt(t *testing.T) {
+	t.Parallel()
+	const overSSH, overHTTPS = "git@example.com:me/agentx-account.git", "https://example.com/me/agentx-account"
+	a, s := installHarness(t)
+	a.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code")
+	remote := newAccountRemote(t, a)
+	a.reachAs(remote, "ssh://git@example.com/me/agentx-account")
+	a.setAccount(overSSH)
+	a.mustRun("skill", "place", "alpha", "--machine", "cloud", "--to", "cursor", "--copy")
+	_, doc, _ := machineSnapshot(t, a, remote, "cloud")
+	equal(t, "copy_mode after place --copy", fmt.Sprint(doc["settings"].(map[string]any)["copy_mode"]), "map[alpha:[cursor]]")
+
+	b := newHarness(t)
+	b.build(t, fixture{dirs: []string{".cursor"}})
+	b.rewrite(s)
+	b.reachAs(remote, overHTTPS)
+	b.setAccount(overHTTPS)
+	out := b.run("import", "--machine", "cloud", "--yes")
+	equal(t, "import --machine: exit", out.exit, 0)
+	settings, err := home.LoadSettings(b.agentx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	account, _ := accountEntry(settings)
+	equal(t, "the second home's account remote", account.URL, overHTTPS)
+	info, err := os.Lstat(filepath.Join(b.home, ".cursor", "skills", "alpha"))
+	if err != nil || !info.IsDir() {
+		t.Errorf("alpha is not placed in cursor as a copy: %v %v", info, err)
+	}
+
+	a.mustRun("skill", "remove", "alpha", "--machine", "cloud", "--from", "cursor")
+	_, doc, _ = machineSnapshot(t, a, remote, "cloud")
+	equal(t, "copy_mode after remove --from", fmt.Sprint(doc["settings"].(map[string]any)["copy_mode"]), "map[]")
 }
 
 // TestCloudUniversal: a client is universal on the cloud machine when it

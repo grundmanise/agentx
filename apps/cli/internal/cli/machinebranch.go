@@ -264,14 +264,17 @@ type machineSkillEvent struct {
 // a skill this machine does not hold, as the snapshot already lists it. A
 // branch the account remote does not hold yet is born with the settings of
 // a fresh home and this machine's account remote, as a snapshot always
-// holds its machine's settings.
+// holds its machine's settings. With asCopy, the configurations it places
+// the skill in are recorded in the snapshot's copy_mode, as skill place
+// --copy records them in this machine's, but for a universal client, which
+// holds no copy.
 func (inv *invocation) placeOnMachine(ctx context.Context, id, name string, to []string, asCopy, force bool) error {
 	if err := cloudOnly(id); err != nil {
 		return err
 	}
-	if asCopy || force {
-		return fail(exitUsage, "--copy and --force change this machine's disk, and --machine changes none",
-			"drop them to place the skill on the "+cloudMachine+" machine")
+	if force {
+		return fail(exitUsage, "--force replaces what is in the way on this machine's disk, and --machine changes none",
+			"drop it to place the skill on the "+cloudMachine+" machine")
 	}
 	for _, c := range to {
 		if !configurationID(c) {
@@ -328,8 +331,15 @@ func (inv *invocation) placeOnMachine(ctx context.Context, id, name string, to [
 		return err
 	}
 	placeInSnapshot(&snap, entry, ids)
+	if asCopy {
+		if err := editCopies(&snap, func(e *settingsEdit) {
+			e.addCopies(name, slices.DeleteFunc(slices.Clone(ids), cloudUniversal))
+		}); err != nil {
+			return err
+		}
+	}
 	placed := snapshotEntry(snap, name)
-	command := skillCommand("place", name, append(placeFlags(to, false), "--machine", id)...)
+	command := skillCommand("place", name, append(placeFlags(to, asCopy), "--machine", id)...)
 	commit, pushed, err := inv.pushSnapshot(ctx, b, snap, "Place "+name+" in "+strings.Join(placed.Placements, ", "), command)
 	if err != nil {
 		return err
@@ -341,8 +351,9 @@ func (inv *invocation) placeOnMachine(ctx context.Context, id, name string, to [
 
 // removeFromMachine is skill remove naming the cloud machine: it takes the
 // configurations from names out of the skill's entry in the cloud
-// machine's snapshot, or, without from or with --from universal, deletes
-// the entry, and changes nothing on this machine's disk. A universal
+// machine's snapshot, and out of its copy_mode, or, without from or with
+// --from universal, deletes the entry and its copy_mode, and changes
+// nothing on this machine's disk. A universal
 // client named in from is refused, as on a computer: it sees every skill
 // the snapshot lists, so it cannot lose one alone.
 func (inv *invocation) removeFromMachine(ctx context.Context, id, name string, from []string, remote bool) error {
@@ -374,6 +385,15 @@ func (inv *invocation) removeFromMachine(ctx context.Context, id, name string, f
 		return fail(exitNotFound, "the "+id+" machine has no skill called "+sanitised(name),
 			"the "+id+" machine has the skills its snapshot on "+b.name()+" lists")
 	}
+	if err := editCopies(&snap, func(e *settingsEdit) {
+		if whole {
+			e.dropSkill(name)
+		} else {
+			e.dropCopies(name, namedConfigurations(from))
+		}
+	}); err != nil {
+		return err
+	}
 	subject, done := "Remove "+name, "took "+name+" off the "+id+" machine"
 	placements := []string{}
 	if !whole {
@@ -399,6 +419,22 @@ func (inv *invocation) reportMachine(b machineBranch, done, commit string, pushe
 	}
 	inv.out.done(line)
 	inv.summary = line
+	return nil
+}
+
+// editCopies changes the copy_mode of snap's settings with the helpers
+// that change this machine's, so that it keeps the same meaning and form.
+func editCopies(snap *snapshot, change func(*settingsEdit)) error {
+	modes, err := snap.Settings.CopyModes()
+	if err != nil {
+		return fail(exitInternal, err.Error(), "")
+	}
+	e := &settingsEdit{s: snap.Settings, modes: modes}
+	change(e)
+	if err := e.s.SetCopyModes(e.modes); err != nil {
+		return fail(exitInternal, err.Error(), "")
+	}
+	snap.Settings = e.s
 	return nil
 }
 

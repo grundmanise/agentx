@@ -42,7 +42,8 @@ func newSkillPlaceCommand(inv *invocation) *cobra.Command {
 			"entry, which follows the latest version, is committed to the branch\n" +
 			"machines/cloud of the account remote and pushed, and nothing on this machine's\n" +
 			"disk changes. Without --to, it is placed in every configuration this machine\n" +
-			"enables.",
+			"enables. With --copy, the snapshot's copy_mode records a copy in those\n" +
+			"configurations, so the cloud machine places a copy there. --force is refused.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cmd.Flags().Changed("machine") {
