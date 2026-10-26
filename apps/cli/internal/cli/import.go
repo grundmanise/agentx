@@ -190,7 +190,7 @@ func decodeSnapshot(path string, b []byte) (snapshot, error) {
 	if err := json.Unmarshal(b, &envelope); err != nil {
 		return snapshot{}, notAnExport(path, err.Error())
 	}
-	snap := snapshot{Settings: home.Settings{IgnoreSystemFiles: true}} // the default, as for a settings file without the key
+	snap := snapshot{Settings: home.DefaultSettings()} // a field left out reads as a settings file reads it
 	switch {
 	case envelope.SchemaVersion == nil:
 		return snapshot{}, notAnExport(path, "it carries no schema_version")
@@ -234,8 +234,12 @@ func decodeStrictly(b []byte, v any) error {
 // sanitised the way every value agentx did not write is before it is
 // printed: a snapshot from another machine may hold anything.
 func notAnExport(path, why string) error {
-	return fail(exitRefused, path+" is not an agentx snapshot: "+sanitised(why), "give the path of a snapshot 'agentx export' wrote")
+	return fail(exitRefused, path+" is not an agentx snapshot: "+sanitised(why), notAnExportHint)
 }
+
+// notAnExportHint is the hint of notAnExport, which a machine's branch
+// replaces with its own.
+const notAnExportHint = "give the path of a snapshot 'agentx export' wrote"
 
 // validSettings refuses a settings object agentx would not have written
 // itself, since importing it would leave the machine with a settings file

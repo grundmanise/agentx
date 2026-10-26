@@ -114,6 +114,9 @@ func (inv *invocation) branchSnapshot(ctx context.Context, b machineBranch) (sna
 			"write a snapshot to it with 'agentx export --machine "+b.id+"'")
 	}
 	snap, err = decodeSnapshot(b.name(), data)
+	if f := (*failure)(nil); errors.As(err, &f) && f.hint == notAnExportHint {
+		f.hint = "write a snapshot to it with 'agentx export --machine " + b.id + "'"
+	}
 	return snap, err == nil, err
 }
 

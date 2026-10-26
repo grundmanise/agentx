@@ -134,6 +134,48 @@ func (h *harness) reachAs(remote, url string) {
 	}
 }
 
+// TestABranchWithNoSettingsIsRefused: a machine's branch whose snapshot
+// holds no settings is refused, exit code 6, by import and by place, with
+// a hint that names writing the branch again rather than a file's path.
+func TestABranchWithNoSettingsIsRefused(t *testing.T) {
+	t.Parallel()
+	h, s := installHarness(t)
+	h.mustRun("skill", "add", s.url, "--name", "alpha", "--to", "claude-code")
+	remote := newAccountRemote(t, h)
+	h.setAccount(remote)
+	h.mustRun("skill", "place", "alpha", "--machine", "cloud")
+	tip, doc, _ := machineSnapshot(t, h, remote, "cloud")
+	delete(doc, "settings")
+	data, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(t.TempDir(), gitx.SnapshotFile)
+	if err := os.WriteFile(file, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	blob := remoteGit(t, h, remote, "hash-object", "-w", file)
+	mktree := exec.Command("git", "-C", remote, "mktree")
+	mktree.Stdin = strings.NewReader("100644 blob " + blob + "\t" + gitx.SnapshotFile + "\n")
+	tree, err := mktree.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	commit := remoteGit(t, h, remote, "-c", "user.name=t", "-c", "user.email=t@example.com",
+		"commit-tree", strings.TrimSpace(string(tree)), "-p", tip, "-m", "drop the settings")
+	remoteGit(t, h, remote, "update-ref", "refs/heads/"+gitx.MachineBranch("cloud"), commit)
+
+	for _, args := range [][]string{
+		{"import", "--machine", "cloud", "--yes"},
+		{"skill", "place", "alpha", "--machine", "cloud", "--to", "cursor"},
+	} {
+		out := h.run(args...)
+		equal(t, strings.Join(args, " ")+": exit", out.exit, 6)
+		contains(t, strings.Join(args, " ")+": its error", out.stderr, "carries no settings")
+		contains(t, strings.Join(args, " ")+": its hint", out.stderr, "agentx export --machine cloud")
+	}
+}
+
 // TestSkillPlaceAndRemoveOnTheCloudMachine turns a skill on and off on the
 // cloud machine: place without --to commits its entry, which follows, in
 // every configuration this machine enables, to machines/cloud, which it
