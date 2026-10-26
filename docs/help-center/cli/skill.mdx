@@ -872,6 +872,12 @@ Without `--to`, agentx places the skill in every configuration this machine enab
 agentx skill place pdf --machine cloud --to claude-code
 ```
 
+Add `--copy` to give those configurations a copy instead of a symlink, as on this machine. The snapshot's settings remember the choice. When you remove the skill from a configuration with `--from`, that configuration no longer gets a copy:
+
+```sh
+agentx skill place pdf --machine cloud --to cursor --copy
+```
+
 The cloud machine always takes the latest version of the skill: the account remote's for one of your own skills, and the source's for a skill of a source. Publish your own skills first. If the account remote does not hold one yet, agentx warns that the cloud machine cannot install it until you run `agentx skill publish <name>`. A skill that agentx does not manage has no source, so agentx refuses to place it on the cloud machine.
 
 Take a skill away from some configurations, or off the cloud machine:
@@ -886,7 +892,7 @@ Without `--from`, or with `--from universal`, agentx deletes the skill from the 
 Each command writes one commit to `machines/cloud` and pushes it. agentx never forces the push. If another machine or the web app changed the snapshot since agentx read it, the command stops with exit code 6 and pushes nothing. Run it again: it reads the snapshot again first.
 
 - `--machine` accepts only `cloud`. A computer's skills live on its own disk, so run the command on that computer.
-- `--copy` and `--force` change this machine's disk, and `--remote` deletes a skill's branch, so agentx refuses each of them with `--machine`.
+- `--force` replaces a directory on this machine's disk, and `--remote` deletes a skill's branch, so agentx refuses each of them with `--machine`.
 - To copy every skill of this machine to the cloud machine at once, export a snapshot to it: see [Seed another machine](/cli/export#seed-another-machine).
 
 ## Exit codes

@@ -164,11 +164,19 @@ func (e *NewerSettingsError) Error() string {
 	return fmt.Sprintf("%s is of settings schema version %d, and this agentx reads version %d", e.Path, e.Version, SettingsSchemaVersion)
 }
 
+// DefaultSettings are the settings of a home with no settings file, as a
+// fresh home has.
+func DefaultSettings() Settings {
+	s := Settings{SchemaVersion: SettingsSchemaVersion, IgnoreSystemFiles: true}
+	Normalise(&s)
+	return s
+}
+
 // LoadSettings reads the settings file whole. A missing file means
 // defaults, and so does a missing key. A file of a later schema version is
 // a *NewerSettingsError.
 func LoadSettings(dir string) (Settings, error) {
-	s := Settings{SchemaVersion: SettingsSchemaVersion, IgnoreSystemFiles: true}
+	s := DefaultSettings()
 	path := SettingsPath(dir)
 	b, err := os.ReadFile(path)
 	switch {
