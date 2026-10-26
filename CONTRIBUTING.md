@@ -119,7 +119,7 @@ Keep each pull request to one change. A maintainer reviews it once CI is green.
 
 ### Release notes
 
-The release notes list the commits that change `apps/cli`, by the type of their title:
+The release notes list the commits that change `apps/cli` or `apps/desktop`, by the type of their title:
 
 | Type | Section |
 | --- | --- |
@@ -157,11 +157,13 @@ Don't report a security vulnerability in a public issue.
 
 Maintainers release through the Release workflow in
 [`.github/workflows/release.yml`](.github/workflows/release.yml). Every release builds the CLI for
-Linux and macOS on amd64 and arm64 and publishes the archives and their checksums to
-[GitHub Releases](https://github.com/grundmanise/agentx/releases).
+Linux and macOS on amd64 and arm64, and the desktop app for macOS as one universal app with the CLI
+inside it. It publishes the CLI archives, the app's disk image `agentx_desktop_darwin_universal.dmg`
+and their checksums to [GitHub Releases](https://github.com/grundmanise/agentx/releases).
 
 - **Nightly**: every night at 03:17 UTC, the workflow releases the head of `main` as a prerelease, such
-  as `v0.3.0-nightly.20261001`, when `apps/cli` changed since the last nightly and CI passed on it. The
+  as `v0.3.0-nightly.20261001`, when `apps/cli` or `apps/desktop` changed since the last nightly and CI
+  passed on it. The
   version is the next release the commits call for: a breaking change bumps the minor version (the
   major from 1.0 on), a `feat` or `change` the minor, anything else the patch. The 14 newest nightlies
   are kept.
@@ -173,6 +175,48 @@ The install script is served from `https://agentx.wtf/install`, which redirects 
 [`scripts/install.sh`](scripts/install.sh) on `main`. The Homebrew formula lives in
 [grundmanise/homebrew-tap](https://github.com/grundmanise/homebrew-tap), generated from
 [`packaging/homebrew/agentx.rb`](packaging/homebrew/agentx.rb).
+
+### Release secrets
+
+The workflow reads these Actions secrets, under Settings → Secrets and variables → Actions. Without
+them a release still publishes, but the step that needs them shows a warning and does less:
+
+| Secret | What it holds | Without it |
+| --- | --- | --- |
+| `APPLE_CERTIFICATE` | The Developer ID Application certificate and its private key, as a `.p12` file in base64 | The app is signed ad hoc and not notarized. macOS blocks it until the user allows it in System Settings → Privacy & Security |
+| `APPLE_CERTIFICATE_PASSWORD` | The password of that `.p12` file | |
+| `APPLE_API_ISSUER` | The issuer ID of an App Store Connect API key | The app is signed but not notarized, and macOS blocks it the same way |
+| `APPLE_API_KEY` | The key ID of that API key | |
+| `APPLE_API_PRIVATE_KEY` | The contents of the key's `.p8` file | |
+| `HOMEBREW_TAP_DEPLOY_KEY` | The private half of a deploy key with write access to `grundmanise/homebrew-tap` | Stable releases don't update the Homebrew formula |
+
+To make the Apple secrets, with a membership of the Apple Developer Program:
+
+1. **Certificate.** Only the account holder can make a Developer ID certificate. In Xcode, open
+   Settings → Accounts, select the team, click Manage Certificates, then + → Developer ID Application.
+   In Keychain Access, find "Developer ID Application: …" under My Certificates, right-click it, choose
+   Export and save it as a `.p12` file with a password. Then:
+
+   ```sh
+   base64 -i certificate.p12 | pbcopy   # paste as APPLE_CERTIFICATE
+   rm certificate.p12
+   ```
+
+   The password is `APPLE_CERTIFICATE_PASSWORD`.
+2. **API key.** In [App Store Connect](https://appstoreconnect.apple.com/access/integrations/api), open
+   Users and Access → Integrations → App Store Connect API, and generate a team key with the Developer
+   role. The issuer ID above the table is `APPLE_API_ISSUER` and the key's Key ID is `APPLE_API_KEY`.
+   Download the key, which Apple allows only once, and paste the whole `.p8` file, from
+   `-----BEGIN PRIVATE KEY-----` to `-----END PRIVATE KEY-----`, as `APPLE_API_PRIVATE_KEY`.
+
+To make the deploy key:
+
+```sh
+ssh-keygen -t ed25519 -N "" -C "agentx release" -f homebrew_tap
+```
+
+Add `homebrew_tap.pub` as a deploy key of `grundmanise/homebrew-tap`, with **Allow write access**
+checked, and the contents of `homebrew_tap` as `HOMEBREW_TAP_DEPLOY_KEY`. Then delete both files.
 
 ## License
 

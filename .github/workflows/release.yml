@@ -1,6 +1,6 @@
 name: Release
 
-# Nightly: every night, a prerelease of main, when the CLI changed since the last nightly.
+# Nightly: every night, a prerelease of main, when the CLI or the app changed since the last nightly.
 # Stable: run by hand from the Actions tab. It promotes a nightly, or another commit on
 # main, by tagging that commit vX.Y.Z and building it again with the stable version.
 # See "Releases" in CONTRIBUTING.md.
@@ -80,13 +80,13 @@ jobs:
           latest_stable=$(git tag --list 'v*' --sort=-v:refname | stable_tag | sed -n 1p)
           latest_nightly=$(git tag --list 'v*-nightly.*' --sort=-v:refname | sed -n 1p)
 
-          # The version after the latest stable release, from the types of the CLI commits
-          # up to $1: a breaking change bumps the major version (the minor before 1.0), a
-          # feat or change the minor, anything else the patch.
+          # The version after the latest stable release, from the types of the CLI and app
+          # commits up to $1: a breaking change bumps the major version (the minor before 1.0),
+          # a feat or change the minor, anything else the patch.
           next_version() {
             current=${latest_stable#v}
             IFS=. read -r major minor patch <<< "${current:-0.0.0}"
-            log=$(git log --format='%s%n%b' ${latest_stable:+"$latest_stable.."}"$1" -- apps/cli)
+            log=$(git log --format='%s%n%b' ${latest_stable:+"$latest_stable.."}"$1" -- apps/cli apps/desktop)
             breaking='^[a-z]+(\([^)]*\))?!:|^BREAKING[ -]CHANGE:'
             if [ "$major" -gt 0 ] && grep -qE "$breaking" <<< "$log"; then
               echo "$((major + 1)).0.0"
@@ -100,8 +100,8 @@ jobs:
           if [ "$CHANNEL" = nightly ]; then
             sha=$(git rev-parse origin/main)
             short=$(git rev-parse --short "$sha")
-            if [ -n "$latest_nightly" ] && git diff --quiet "$latest_nightly" "$sha" -- apps/cli; then
-              skip "the CLI has not changed since $latest_nightly"
+            if [ -n "$latest_nightly" ] && git diff --quiet "$latest_nightly" "$sha" -- apps/cli apps/desktop; then
+              skip "the CLI and the app have not changed since $latest_nightly"
             fi
             released=$(git tag --points-at "$sha" | stable_tag)
             [ -z "$released" ] || skip "$short is already released as $released"
@@ -123,7 +123,9 @@ jobs:
             [ -z "$released" ] || fail "$short is already released as $released"
             if [ -n "$latest_stable" ]; then
               git merge-base --is-ancestor "$latest_stable" "$sha" || fail "$short is older than $latest_stable"
-              if git diff --quiet "$latest_stable" "$sha" -- apps/cli; then fail "the CLI has not changed since $latest_stable"; fi
+              if git diff --quiet "$latest_stable" "$sha" -- apps/cli apps/desktop; then
+                fail "the CLI and the app have not changed since $latest_stable"
+              fi
             fi
             ci_passed "$sha" || fail "CI has not passed on $short"
             version=${VERSION#v}
@@ -143,7 +145,7 @@ jobs:
           git checkout -q "$sha"
           {
             if [ "$CHANNEL" = nightly ]; then
-              echo "Nightly build of main at $short. Install it with \`curl -fsSL https://agentx.wtf/install | sh -s -- --nightly\`."
+              echo "Nightly build of main at $short. Install the CLI with \`curl -fsSL https://agentx.wtf/install | sh -s -- --nightly\`, or download the macOS app, \`agentx_desktop_darwin_universal.dmg\`, below."
               echo
             fi
             notes=$(git-cliff --config "$RUNNER_TEMP/cliff.toml" ${previous:+"$previous..HEAD"} | sed '/./,$!d')
@@ -227,9 +229,114 @@ jobs:
           path: dist/${{ env.NAME }}.tar.gz
           if-no-files-found: error
 
+  # One universal app for Apple silicon and Intel Macs. The CLI goes inside the app, next to its
+  # executable, where a release build of the app looks for it: the two Mac builds above, merged.
+  desktop:
+    name: Build the macOS app
+    needs: [plan, build]
+    runs-on: macos-latest
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+      TARGET: universal-apple-darwin
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.plan.outputs.sha }}
+          persist-credentials: false
+
+      # Reads the pnpm version from packageManager in the root package.json.
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+
+      # No cache, as for the CLI.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: lts/*
+
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal --target aarch64-apple-darwin,x86_64-apple-darwin
+          rustup default stable
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: agentx_darwin_*
+          path: dist
+          merge-multiple: true
+
+      # Tauri copies dist/agentx-<target> into the app as agentx.
+      - name: Merge the CLI builds
+        working-directory: dist
+        run: |
+          for arch in amd64 arm64; do
+            mkdir "$arch"
+            tar -xzf "agentx_darwin_$arch.tar.gz" -C "$arch" agentx
+          done
+          lipo -create amd64/agentx arm64/agentx -output "agentx-$TARGET"
+          lipo -info "agentx-$TARGET"
+
+      - run: pnpm install --frozen-lockfile
+
+      # Before the Apple secrets are in the environment, so no frontend tool sees them.
+      - name: Build the frontend
+        working-directory: apps/desktop
+        run: pnpm check && pnpm build
+
+      # With the secrets, Tauri imports the certificate into a temporary keychain, signs the app
+      # and the CLI inside it, and notarizes the app. Without them the app is signed ad hoc: it
+      # runs, but macOS asks the user to allow it in System Settings first.
+      - name: Build the app
+        id: app
+        working-directory: apps/desktop
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "::warning title=App not signed::add the APPLE_CERTIFICATE secrets, see Releases in CONTRIBUTING.md"
+            unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_API_ISSUER APPLE_API_KEY
+            export APPLE_SIGNING_IDENTITY=-
+          elif [ -z "$APPLE_API_PRIVATE_KEY" ]; then
+            echo "::warning title=App not notarized::add the APPLE_API secrets, see Releases in CONTRIBUTING.md"
+            unset APPLE_API_ISSUER APPLE_API_KEY
+          else
+            export APPLE_API_KEY_PATH=$RUNNER_TEMP/AuthKey.p8
+            (umask 077 && printf '%s\n' "$APPLE_API_PRIVATE_KEY" > "$APPLE_API_KEY_PATH")
+            echo "notarized=true" >> "$GITHUB_OUTPUT"
+          fi
+          unset APPLE_API_PRIVATE_KEY
+          config=$(jq -nc --arg version "$VERSION" --arg cli "$GITHUB_WORKSPACE/dist/agentx" \
+            '{version: $version, build: {beforeBuildCommand: null}, bundle: {externalBin: [$cli]}}')
+          pnpm tauri build --target "$TARGET" --bundles app,dmg --config "$config"
+
+      # The release asset has no version in its name, like the CLI archives, so
+      # releases/latest/download/agentx_desktop_darwin_universal.dmg always gets the newest.
+      - name: Check the app
+        working-directory: apps/desktop/src-tauri/target/${{ env.TARGET }}/release/bundle
+        env:
+          NOTARIZED: ${{ steps.app.outputs.notarized }}
+        run: |
+          app=macos/agentx.app
+          codesign --verify --deep --strict --verbose=2 "$app"
+          "$app/Contents/MacOS/agentx" version --json | tee /dev/stderr | grep -F "\"cli_version\":\"$VERSION\""
+          if [ "$NOTARIZED" = true ]; then
+            xcrun stapler validate "$app"
+            spctl --assess --type execute --verbose=2 "$app"
+          fi
+          mkdir "$RUNNER_TEMP/app"
+          mv dmg/*.dmg "$RUNNER_TEMP/app/agentx_desktop_darwin_universal.dmg"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: agentx_desktop_darwin_universal
+          path: ${{ runner.temp }}/app/agentx_desktop_darwin_universal.dmg
+          if-no-files-found: error
+
   publish:
     name: Publish
-    needs: [plan, build]
+    needs: [plan, build, desktop]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -261,9 +368,9 @@ jobs:
             echo "::notice title=Already published::$TAG"
             exit 0
           fi
-          sha256sum agentx_*.tar.gz > checksums.txt
+          sha256sum agentx_*.tar.gz agentx_*.dmg > checksums.txt
           if [ "$CHANNEL" = nightly ]; then latest=(--prerelease --latest=false); else latest=(--latest); fi
-          gh release create "$TAG" agentx_*.tar.gz checksums.txt \
+          gh release create "$TAG" agentx_*.tar.gz agentx_*.dmg checksums.txt \
             --target "$SHA" --title "$TAG" --notes-file notes.md "${latest[@]}"
 
       # The formula lives in grundmanise/homebrew-tap, which this workflow's token cannot

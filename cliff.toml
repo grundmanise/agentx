@@ -1,4 +1,4 @@
-# Release notes for the CLI, written by git-cliff in .github/workflows/release.yml.
+# Release notes for the CLI and the desktop app, written by git-cliff in .github/workflows/release.yml.
 # The commit type picks the section: see "Release notes" in CONTRIBUTING.md.
 # Preview the notes for a range: git cliff v0.1.0..main
 
@@ -14,8 +14,8 @@ body = """
 trim = true
 
 [git]
-# Only commits that change the CLI.
-include_paths = ["apps/cli/**"]
+# Only commits that change the CLI or the app.
+include_paths = ["apps/cli/**", "apps/desktop/**"]
 # The workflow passes the range since the previous release, so a tag inside it,
 # such as a stable release among nightlies, doesn't split the list.
 ignore_tags = ".*"
