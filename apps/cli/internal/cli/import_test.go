@@ -249,7 +249,7 @@ func TestImportMovesSkillsForwardOnly(t *testing.T) {
 	head := strings.TrimSpace(s.commit("third version"))
 	writeFile(t, filepath.Join(h.library, "beta", "draft.md"), "an edit\n")
 	follow := h.exportPath("follow.json")
-	writeFile(t, follow, `{"schema_version": 2, "skills": [
+	writeFile(t, follow, `{"schema_version": 2, "settings": {"schema_version": 1}, "skills": [
 		{"name": "alpha", "source": "`+s.url+`", "subpath": "skills/alpha", "placements": ["claude-code", "cursor"]},
 		{"name": "beta", "source": "`+s.url+`", "subpath": "skills/beta", "placements": ["claude-code", "cursor"]}]}`)
 
@@ -401,31 +401,32 @@ func TestImportAsksBeforeItWrites(t *testing.T) {
 }
 
 // TestImportOfAPartialSnapshot: a writer other than export may write a
-// snapshot of names, sources and placements alone, with no settings. An
-// import installs the latest version of each skill it lists, in the
-// configurations it names, and leaves the settings as they are. It still
-// writes the library, so it asks first, and refuses where it cannot ask.
+// snapshot of the settings, names, sources and placements alone. An import
+// replaces the settings and installs the latest version of each skill it
+// lists, in the configurations it names. It asks first, and refuses where
+// it cannot ask.
 func TestImportOfAPartialSnapshot(t *testing.T) {
 	t.Parallel()
 	to, s := installHarness(t)
-	to.mustRun("config", "set", "label", "keep-me")
+	to.mustRun("config", "set", "label", "old-label")
 	file := to.exportPath("partial.json")
-	writeFile(t, file, `{"schema_version": 2, "skills": [{"name": "alpha",
+	writeFile(t, file, `{"schema_version": 2, "settings": {"schema_version": 1, "label": "new-label"}, "skills": [{"name": "alpha",
 		"source": "`+s.url+`", "subpath": "skills/alpha", "placements": ["claude-code"]}]}`)
 
 	refused := to.run("import", file)
 	equal(t, "without --yes", refused.exit, 6)
-	contains(t, "stderr", refused.stderr, "importing installs, updates and places the skills of "+file+", and there is no terminal to confirm at")
+	contains(t, "stderr", refused.stderr, "importing replaces the settings in "+home.SettingsPath(to.agentx)+
+		" and installs, updates and places the skills of "+file+", and there is no terminal to confirm at")
 
 	out := to.mustRun("import", file, "--yes")
-	contains(t, "stdout", out.stdout, "it holds no settings, so the settings were left as they are")
+	contains(t, "stdout", out.stdout, "imported the settings from "+file)
 	contains(t, "stdout", out.stdout, "  alpha  managed  installed  "+s.url+"/skills/alpha  placed in claude-code")
 	alpha := to.librarySkill(to.mustRun("--json", "skill", "list").stdout, "alpha")
 	equal(t, "the version installed", alpha["upstream_commit"], strings.TrimSpace(s.query("rev-parse", "HEAD")))
 	if lexists(filepath.Join(to.home, ".cursor", "skills", "alpha")) {
 		t.Error("alpha was placed in cursor, which the snapshot does not name")
 	}
-	equal(t, "the label", strings.TrimSpace(to.mustRun("config", "get", "label").stdout), "keep-me")
+	equal(t, "the label", strings.TrimSpace(to.mustRun("config", "get", "label").stdout), "new-label")
 }
 
 // soundSnapshot is a snapshot agentx would write, with one sound entry,
@@ -464,9 +465,10 @@ func editedSound(t *testing.T, change func(doc map[string]any)) string {
 // TestReadExportRefusesWhatAgentxWouldNotWrite: a snapshot is a file from
 // somewhere else, so every shape of broken one is refused by readExport,
 // before the lock and before any write, and the refusal repeats no
-// credential the snapshot carried. A partial snapshot, with only names,
-// sources and placements, is not broken. The export document of version
-// 1 an earlier agentx wrote is refused as any other version is.
+// credential the snapshot carried. A partial snapshot, with only settings,
+// names, sources and placements, is not broken; one with no settings is.
+// The export document of version 1 an earlier agentx wrote is refused as
+// any other version is.
 // TestValidSettingsCoversEveryFieldOfTheSettings holds every field of the
 // settings to a check here.
 func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
@@ -479,16 +481,16 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 	}
 	for name, content := range map[string]string{
 		"sound": soundSnapshot,
-		"partial": `{"schema_version": 2, "skills": [
+		"partial": `{"schema_version": 2, "settings": {"schema_version": 1}, "skills": [
 			{"name": "alpha", "source": "https://github.com/example/skills", "subpath": "skills/alpha", "placements": ["claude-code", "cursor"]},
 			{"name": "notes", "placements": []},
 			{"name": "mine", "kind": "unmanaged", "placements": ["claude-code"]}]}`,
 	} {
-		snap, err := readExport(write(name, content), importTarget{})
+		snap, err := readExport(write(name, content))
 		if err != nil {
 			t.Fatalf("the %s snapshot is refused: %v", name, err)
 		}
-		if name == "partial" && (snap.Settings != nil || snap.Skills[0].Kind != "managed" || len(snap.Skills[1].Placements) != 0) {
+		if name == "partial" && (!snap.Settings.IgnoreSystemFiles || snap.Skills[0].Kind != "managed" || len(snap.Skills[1].Placements) != 0) {
 			t.Errorf("the partial snapshot reads as %+v", snap)
 		}
 	}
@@ -511,7 +513,7 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 			}
 		})
 	}
-	if _, err := readExport(write("sound fork", ownWith("", nil)), importTarget{}); err != nil {
+	if _, err := readExport(write("sound fork", ownWith("", nil))); err != nil {
 		t.Fatalf("the sound document of a forked skill is refused: %v", err)
 	}
 	settingsWith := func(key string, value any) string {
@@ -527,6 +529,7 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 		{"truncated", soundSnapshot[:len(soundSnapshot)/2], "not an agentx snapshot"},
 		{"trailing rubbish", soundSnapshot + "}", "not an agentx snapshot"},
 		{"no version", `{"settings":{},"skills":[]}`, "carries no schema_version"},
+		{"settings of JSON null", edited(func(doc map[string]any) { doc["settings"] = nil }), "carries no settings"},
 		{"a later version", edited(func(doc map[string]any) { doc["schema_version"] = 3 }), "schema version 3, and this agentx reads version 2"},
 		{"the export document of version 1", edited(func(doc map[string]any) { doc["schema_version"] = 1 }), "schema version 1, and this agentx reads version 2"},
 		{"a field agentx does not know", edited(func(doc map[string]any) { doc["inventory"] = map[string]any{} }), "not an agentx snapshot"},
@@ -653,7 +656,7 @@ func TestReadExportRefusesWhatAgentxWouldNotWrite(t *testing.T) {
 		{"a label of a thousand characters", settingsWith("label", strings.Repeat("l", 1000)), "at most 256 bytes"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := readExport(write(tc.name, tc.content), importTarget{})
+			_, err := readExport(write(tc.name, tc.content))
 			var f *failure
 			if !errors.As(err, &f) || f.status != exitRefused {
 				t.Fatalf("readExport = %v, want a refusal", err)
@@ -682,6 +685,7 @@ func TestImportRefusesADocumentItCannotRead(t *testing.T) {
 		says          string
 	}{
 		{"not json", "{ not json", "not an agentx snapshot"},
+		{"a snapshot with no settings", editedSound(t, func(doc map[string]any) { delete(doc, "settings") }), "is not an agentx snapshot: it carries no settings"},
 		{"settings agentx would not write", editedSound(t, func(doc map[string]any) {
 			doc["settings"].(map[string]any)["sources"] = []any{map[string]any{"url": "https://user:" + importToken + "@github.com/example/skills"}}
 		}), "must be stored as the canonical URL of a source alone"},
@@ -715,7 +719,7 @@ func TestImportRefusesADocumentItCannotRead(t *testing.T) {
 	// were about the documents and not about the machine.
 	good := to.exportPath("sound.json")
 	writeFile(t, good, soundSnapshot)
-	snap, err := readExport(good, importTarget{})
+	snap, err := readExport(good)
 	if err != nil {
 		t.Fatalf("the sound snapshot is refused: %v", err)
 	}
@@ -969,7 +973,7 @@ func TestImportReadsTheAnswer(t *testing.T) {
 			out:  &writer{stdout: &stdout, stderr: &stderr, env: map[string]string{}},
 			dirs: home.Dirs{Home: filepath.Join("tmp", "agentx")},
 		}
-		doc := snapshot{Machine: &exportMachine{Label: "first-laptop"}, Settings: &home.Settings{}, Skills: make([]snapshotSkill, 2)}
+		doc := snapshot{Machine: &exportMachine{Label: "first-laptop"}, Settings: home.Settings{}, Skills: make([]snapshotSkill, 2)}
 		err := inv.askToImport("export.json", doc, strings.NewReader(tc.answer))
 		if (err == nil) != tc.yes {
 			t.Errorf("the answer %q gave %v, want yes = %v", tc.answer, err, tc.yes)

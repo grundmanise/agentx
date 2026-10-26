@@ -5,7 +5,7 @@ description: "Save a snapshot of one machine, with its settings, to a file or yo
 
 Export writes a snapshot of this machine to a file, or to your account remote: your settings, your agent configurations, the skills in your library with where each one is placed, and the MCP servers and plugins agentx found. Import applies a snapshot: it restores the settings, installs the skills, and places each one where the snapshot says.
 
-A snapshot holds no skill content. For each skill it records where the skill comes from, which version you had and which configurations you placed it in. Import installs the content again from each skill's source, or from your [account remote](/cli/source#add-your-account-remote) for your own skills.
+A snapshot is the whole state of one machine, so it always holds that machine's settings. A snapshot holds no skill content. For each skill it records where the skill comes from, which version you had and which configurations you placed it in. Import installs the content again from each skill's source, or from your [account remote](/cli/source#add-your-account-remote) for your own skills.
 
 ## Move to a new machine
 
@@ -93,7 +93,7 @@ Import only moves a skill forward:
 
 Codex and Gemini CLI read your library, so they see every skill in it, whatever the snapshot says.
 
-To install your own skills, import needs your account remote. The snapshot's settings bring it along. If the snapshot has no settings, add it first with `agentx source add <url> --account`.
+To install your own skills, import needs your account remote. The snapshot's settings bring it along.
 
 One repository can have more than one URL. Your laptop may reach your account remote over SSH, as `git@github.com:me/agentx-account.git`, while a cloud agent reaches it over HTTPS, as `https://github.com/me/agentx-account`, with a token that can only read. Import treats both as your account remote, because they have the same host and path. When the snapshot's account remote is the same repository as this machine's, import keeps this machine's URL, so each machine goes on reaching it its own way. When the snapshot names another repository, import switches this machine to that one. A host alias from your SSH configuration, such as `github-work`, does not count as the host it stands for here, because import reads no SSH configuration.
 
@@ -115,10 +115,6 @@ Run the same import again and it changes nothing: every skill reads `kept`, or `
 If your settings name a source that no skill of the snapshot comes from, import does not fetch it. It prints an `agentx source add` line for each such source. Run the line as printed before you install from that source. The line keeps the source's [pin](/cli/source#pin-a-source), and import quotes a URL or pin where needed, so you can paste it into bash or zsh.
 
 If import stops part way, for example because the machine shut down, the next agentx command finishes the change import was making. Run the import again to apply the rest.
-
-### Import a snapshot without settings
-
-A snapshot that another tool wrote can leave out the settings, and list only each skill's name, source and placements. Import then leaves your settings as they are, and installs the latest version of each skill. A source the snapshot names that you have not added yet is added.
 
 ## Keep a snapshot on your account remote
 
@@ -180,7 +176,7 @@ Use `--yes` in scripts, with `--json`, and wherever there is no terminal. Withou
 |---|---|
 | 3 | The account remote cannot be reached. |
 | 5 | The file is not there, or the account remote has no branch for the machine you named. |
-| 6 | The file is not a valid agentx snapshot: it is damaged, larger than 8 MiB, from an agentx version this one cannot read, or holds a setting or skill entry agentx would not write. The message names the problem. Export the file again from the other machine, or upgrade agentx. |
+| 6 | The file is not a valid agentx snapshot: it is damaged, larger than 8 MiB, from an agentx version this one cannot read, holds no settings, or holds a setting or skill entry agentx would not write. The message names the problem. Export the file again from the other machine, or upgrade agentx. |
 | 6 | The file is an export from an earlier version of agentx. Import no longer reads that format. Export the file again on the other machine with this version of agentx. |
 | 6 | With `--machine`: no account remote is set, or the machine's branch holds no `snapshot.json`. Add the account remote with `agentx source add <url> --account`. |
 | 6 | You answered no, or import could not ask (no terminal, or `--json`) and you did not pass `--yes`. |

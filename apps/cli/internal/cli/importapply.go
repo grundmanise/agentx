@@ -37,18 +37,18 @@ var importActions = []string{importInstalled, importUpdated, importPlaced, impor
 // What the machine holds of each entry is read first, and is what each
 // import_skill event's state and local_commit report. Then the command asks
 // once, see confirmImport, before it writes or fetches anything, and only a
-// yes goes on: the settings are replaced, when the snapshot holds any, and
-// every skill entry is applied, see applyRun. Each change is made by the
-// command that makes it on its own – skill add, skill update, skill place
-// and skill remove – each one journaled mutation, so a run stopped part way
-// leaves at most one unfinished journal, which the next command finishes as
-// it finishes any other, and a second run applies the rest.
+// yes goes on: the settings are replaced, and every skill entry is applied,
+// see applyRun. Each change is made by the command that makes it on its own
+// – skill add, skill update, skill place and skill remove – each one
+// journaled mutation, so a run stopped part way leaves at most one
+// unfinished journal, which the next command finishes as it finishes any
+// other, and a second run applies the rest.
 func (inv *invocation) applySnapshot(ctx context.Context, origin string, doc snapshot, yes bool, in io.Reader) error {
 	here, err := inv.loadSettings()
 	if err != nil {
 		return err
 	}
-	account := snapshotAccount(doc, importTarget{account: documentAccount(here)})
+	account := documentAccount(doc.Settings)
 	records, err := inv.lineageRecords(ctx)
 	if err != nil {
 		return err
@@ -58,22 +58,17 @@ func (inv *invocation) applySnapshot(ctx context.Context, origin string, doc sna
 		return err
 	}
 	states := restoreStates(doc.Skills, records, remote, account)
-	if doc.Settings != nil || len(doc.Skills) > 0 {
-		if err := inv.confirmImport(origin, doc, in, yes); err != nil {
-			return err
-		}
+	if err := inv.confirmImport(origin, doc, in, yes); err != nil {
+		return err
 	}
-	if doc.Settings != nil {
-		forgetAccess(doc.Settings)
-		keepAccountRemote(doc.Settings, here)
-		if err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
-			return home.SaveSettings(inv.dirs.Home, *doc.Settings)
-		}); err != nil {
-			return mutationFailure(err)
-		}
-		here = *doc.Settings
+	forgetAccess(&doc.Settings)
+	keepAccountRemote(&doc.Settings, here)
+	if err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
+		return home.SaveSettings(inv.dirs.Home, doc.Settings)
+	}); err != nil {
+		return mutationFailure(err)
 	}
-	inv.emitSettings(here)
+	inv.emitSettings(doc.Settings)
 	run := &applyRun{inv: inv, account: account}
 	if err := run.apply(ctx, states); err != nil {
 		return err
@@ -81,8 +76,8 @@ func (inv *invocation) applySnapshot(ctx context.Context, origin string, doc sna
 	for _, st := range states {
 		inv.out.emit(st)
 	}
-	inv.printImported(ctx, origin, doc, states, here, run.fetched)
-	inv.summary = importSummary(origin, doc.Settings != nil, states)
+	inv.printImported(ctx, origin, doc, states, doc.Settings, run.fetched)
+	inv.summary = importSummary(origin, states)
 	return nil
 }
 
@@ -113,7 +108,7 @@ func (inv *invocation) applySnapshot(ctx context.Context, origin string, doc sna
 // plugins are not applied.
 type applyRun struct {
 	inv     *invocation
-	account string // the account remote the snapshot is read against, see snapshotAccount
+	account string // the account remote the snapshot's settings set, which the snapshot is read against
 	gitDir  string
 	records map[string]lineage.Record    // the branches of the account repo by name, before the run
 	library map[string]scan.LibrarySkill // the library before the run

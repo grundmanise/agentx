@@ -136,7 +136,9 @@ func (h *harness) reachAs(remote, url string) {
 
 // TestSkillPlaceAndRemoveOnTheCloudMachine turns a skill on and off on the
 // cloud machine: place without --to commits its entry, which follows, in
-// every configuration this machine enables, to machines/cloud; remove
+// every configuration this machine enables, to machines/cloud, which it
+// creates with the settings of a fresh home and this machine's account
+// remote entry, without its access; remove
 // --from takes one out, and remove without --from deletes the entry; each
 // event names the commit pushed, and nothing on this machine's disk
 // changes. --from naming a universal client is refused, and so are a
@@ -168,6 +170,17 @@ func TestSkillPlaceAndRemoveOnTheCloudMachine(t *testing.T) {
 	equal(t, "the entry's fields", keysOf(entry), "kind,name,placements,source,subpath")
 	equal(t, "the entry's source", entry["source"], s.url)
 	equal(t, "the commit's subject", remoteGit(t, h, remote, "log", "-1", "--format=%s", tip), "Place alpha in claude-code, codex, cursor, gemini-cli")
+	here, err := home.LoadSettings(h.agentx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	account, _ := accountEntry(here)
+	born := doc["settings"].(map[string]any)
+	equal(t, "the settings the branch is born with", fmt.Sprint(born["schema_version"], born["ignore_system_files"], born["copy_mode"]), "1 true map[]")
+	sources := born["sources"].([]any)
+	equal(t, "the sources it is born with", len(sources), 1)
+	equal(t, "the account entry's fields, without the access", keysOf(sources[0].(map[string]any)), "account,last_fetched,url")
+	equal(t, "the account entry's URL", sources[0].(map[string]any)["url"], account.URL)
 
 	text := h.run("skill", "remove", "alpha", "--machine", "cloud", "--from", "cursor")
 	equal(t, "remove --from: exit", text.exit, 0)
@@ -287,7 +300,7 @@ func TestPlaceAndRemoveInASnapshot(t *testing.T) {
 	t.Parallel()
 	exact := snapshotSkill{Name: "pdf", Kind: "managed", Commit: strings.Repeat("a", 40), Source: "https://github.com/example/skills",
 		Subpath: ptr("skills/pdf"), UpstreamCommit: strings.Repeat("b", 40), BaseHash: strings.Repeat("c", 64), Placements: []string{"codex"}}
-	snap := snapshot{Skills: []snapshotSkill{exact}}
+	snap := snapshot{Settings: home.DefaultSettings(), Skills: []snapshotSkill{exact}}
 
 	placeInSnapshot(&snap, snapshotSkill{Name: "alpha", Kind: "managed", Source: exact.Source, Subpath: ptr("skills/alpha")}, []string{"cursor"})
 	placeInSnapshot(&snap, exact, []string{"cursor", "codex"})
@@ -295,7 +308,9 @@ func TestPlaceAndRemoveInASnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	equal(t, "the snapshot", string(b), `{"schema_version":2,"configurations":[],"skills":[`+
+	equal(t, "the snapshot", string(b), `{"schema_version":2,`+
+		`"settings":{"schema_version":1,"accept_operations":false,"ignore_system_files":true,"disabled_configurations":[],"sources":[],"copy_mode":{}},`+
+		`"configurations":[],"skills":[`+
 		`{"name":"alpha","kind":"managed","source":"https://github.com/example/skills","subpath":"skills/alpha","placements":["cursor"]},`+
 		`{"name":"pdf","kind":"managed","source":"https://github.com/example/skills","subpath":"skills/pdf","placements":["codex","cursor"]}],`+
 		`"mcp_servers":[],"plugins":[]}`)

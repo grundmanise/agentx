@@ -97,7 +97,7 @@ func (inv *invocation) readMachineBranch(ctx context.Context, id string) (machin
 // anything import would refuse of a file, see decodeSnapshot, and a tip
 // whose tree holds no snapshot file, exit code 6. A branch with no tip
 // holds no snapshot: found is false.
-func (inv *invocation) branchSnapshot(ctx context.Context, b machineBranch, target importTarget) (snap snapshot, found bool, err error) {
+func (inv *invocation) branchSnapshot(ctx context.Context, b machineBranch) (snap snapshot, found bool, err error) {
 	if b.tip == "" {
 		return snapshot{}, false, nil
 	}
@@ -113,7 +113,7 @@ func (inv *invocation) branchSnapshot(ctx context.Context, b machineBranch, targ
 			fmt.Sprintf("%s on the account remote holds a snapshot larger than %d bytes, which is more than any machine's settings and skills come to", b.name(), documentLimit),
 			"write a snapshot to it with 'agentx export --machine "+b.id+"'")
 	}
-	snap, err = decodeSnapshot(b.name(), data, target)
+	snap, err = decodeSnapshot(b.name(), data)
 	return snap, err == nil, err
 }
 
@@ -121,12 +121,12 @@ func (inv *invocation) branchSnapshot(ctx context.Context, b machineBranch, targ
 // lines give it, the branch's: it is what the rest of the import reads, as
 // the snapshot of a file is. A machine whose branch the account remote
 // does not hold is exit code 5.
-func (inv *invocation) importMachine(ctx context.Context, id string, target importTarget) (snapshot, string, error) {
+func (inv *invocation) importMachine(ctx context.Context, id string) (snapshot, string, error) {
 	b, err := inv.readMachineBranch(ctx, id)
 	if err != nil {
 		return snapshot{}, "", err
 	}
-	snap, found, err := inv.branchSnapshot(ctx, b, target)
+	snap, found, err := inv.branchSnapshot(ctx, b)
 	if err != nil {
 		return snapshot{}, "", err
 	}
@@ -261,7 +261,10 @@ type machineSkillEvent struct {
 // to names, or every one this machine enables, added to its placements, to
 // the cloud machine's snapshot, and changes nothing on this machine's
 // disk. The entry is the skill as this machine's library knows it, or, for
-// a skill this machine does not hold, as the snapshot already lists it.
+// a skill this machine does not hold, as the snapshot already lists it. A
+// branch the account remote does not hold yet is born with the settings of
+// a fresh home and this machine's account remote, as a snapshot always
+// holds its machine's settings.
 func (inv *invocation) placeOnMachine(ctx context.Context, id, name string, to []string, asCopy, force bool) error {
 	if err := cloudOnly(id); err != nil {
 		return err
@@ -286,14 +289,14 @@ func (inv *invocation) placeOnMachine(ctx context.Context, id, name string, to [
 	if why := nameRefusal(name); why != "" {
 		return fail(exitUsage, fmt.Sprintf("%q %s", clipped(name), why), "give the name of a skill")
 	}
+	here, err := inv.loadSettings()
+	if err != nil {
+		return err
+	}
 	ids := slices.Clone(to)
 	if len(ids) == 0 {
-		s, err := inv.loadSettings()
-		if err != nil {
-			return err
-		}
 		for _, t := range inv.detectedTargets() {
-			if !containsString(s.DisabledConfigurations, t.id) {
+			if !containsString(here.DisabledConfigurations, t.id) {
 				ids = append(ids, t.id)
 			}
 		}
@@ -310,9 +313,15 @@ func (inv *invocation) placeOnMachine(ctx context.Context, id, name string, to [
 	if err != nil {
 		return err
 	}
-	snap, _, err := inv.branchSnapshot(ctx, b, inv.importTargetHere())
+	snap, found, err := inv.branchSnapshot(ctx, b)
 	if err != nil {
 		return err
+	}
+	if !found {
+		account, _ := accountEntry(here) // set, or readMachineBranch had refused
+		snap.Settings = home.DefaultSettings()
+		snap.Settings.SetSource(account)
+		forgetAccess(&snap.Settings)
 	}
 	entry, err := inv.machineEntry(sc, snap, name)
 	if err != nil {
@@ -356,7 +365,7 @@ func (inv *invocation) removeFromMachine(ctx context.Context, id, name string, f
 	if err != nil {
 		return err
 	}
-	snap, _, err := inv.branchSnapshot(ctx, b, inv.importTargetHere())
+	snap, _, err := inv.branchSnapshot(ctx, b)
 	if err != nil {
 		return err
 	}
@@ -401,16 +410,6 @@ func fromFlags(from []string) []string {
 		flags = append(flags, "--from", shellWord(id))
 	}
 	return flags
-}
-
-// importTargetHere is what a snapshot is read against on this machine, see
-// importTarget.
-func (inv *invocation) importTargetHere() importTarget {
-	target := importTarget{}
-	if s, err := inv.loadSettings(); err == nil {
-		target.account = documentAccount(s)
-	}
-	return target
 }
 
 // cloudUniversal reports whether the configuration id names a client that

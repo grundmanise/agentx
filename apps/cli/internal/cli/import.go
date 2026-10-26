@@ -47,13 +47,6 @@ type importSkillEvent struct {
 	Reason      string `json:"reason,omitempty"`       // why it was skipped, for the action skipped alone
 }
 
-// importTarget is what an import reads a snapshot against on this machine:
-// the account remote its settings set, which an entry of one of your own
-// skills names when the snapshot holds no settings of its own.
-type importTarget struct {
-	account string
-}
-
 func newImportCommand(inv *invocation) *cobra.Command {
 	var yes bool
 	var machine string
@@ -71,9 +64,8 @@ func newImportCommand(inv *invocation) *cobra.Command {
 			"whose history diverged is left as it is and reported, for 'agentx skill update'.\n" +
 			"A skill the import cannot install, such as an unmanaged one, is skipped with\n" +
 			"the reason. A skill the snapshot does not list is left as it is, and MCP\n" +
-			"servers and plugins are not applied. A snapshot that holds no settings leaves\n" +
-			"them as they are. Settings whose account remote is this machine's\n" +
-			"repository, by another URL, keep this machine's URL of it.\n\n" +
+			"servers and plugins are not applied. Settings whose account remote is this\n" +
+			"machine's repository, by another URL, keep this machine's URL of it.\n\n" +
 			"With --machine <id>, read the snapshot from the branch machines/<id> of the\n" +
 			"account remote instead of a file, fetching that one branch and pushing\n" +
 			"nothing, so a credential that can only read is enough, and apply it as a\n" +
@@ -105,32 +97,17 @@ func newImportCommand(inv *invocation) *cobra.Command {
 // The snapshot is read and validated whole before anything is locked, so
 // that a snapshot agentx will not accept costs the machine nothing at all.
 func (inv *invocation) importSnapshot(ctx context.Context, path, machine string, yes bool, in io.Reader) error {
-	here, err := inv.loadSettings()
-	if err != nil {
-		return err
-	}
-	target := importTarget{account: documentAccount(here)}
 	var doc snapshot
+	var err error
 	if machine != "" {
-		doc, path, err = inv.importMachine(ctx, machine, target)
+		doc, path, err = inv.importMachine(ctx, machine)
 	} else {
-		doc, err = readExport(path, target)
+		doc, err = readExport(path)
 	}
 	if err != nil {
 		return err
 	}
 	return inv.applySnapshot(ctx, path, doc, yes, in)
-}
-
-// snapshotAccount is the account remote the entries of doc are read
-// against: the one its settings set, or, for a snapshot that holds no
-// settings, the one this machine's set, which an import then leaves as
-// they are.
-func snapshotAccount(doc snapshot, target importTarget) string {
-	if doc.Settings != nil {
-		return documentAccount(*doc.Settings)
-	}
-	return target.account
 }
 
 // forgetAccess takes out of s what another machine found it could do at
@@ -179,10 +156,10 @@ func readDocument(path string) ([]byte, error) {
 // one this agentx can restore. Every refusal happens here, before the lock
 // and before any write: a file that is truncated, that is not JSON, that is
 // of another schema version, the export document of version 1 an earlier
-// agentx wrote included, that carries a field this version does not know or
-// that holds settings agentx would not write itself leaves the settings on
-// disk exactly as they were.
-func readExport(path string, target importTarget) (snapshot, error) {
+// agentx wrote included, that carries a field this version does not know,
+// that holds no settings or that holds settings agentx would not write
+// itself leaves the settings on disk exactly as they were.
+func readExport(path string) (snapshot, error) {
 	b, err := readDocument(path)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
@@ -194,12 +171,15 @@ func readExport(path string, target importTarget) (snapshot, error) {
 	case err != nil:
 		return snapshot{}, fail(exitRefused, "read "+path+": "+err.Error(), "give the path of a snapshot 'agentx export' wrote")
 	}
-	return decodeSnapshot(path, b, target)
+	return decodeSnapshot(path, b)
 }
 
 // decodeSnapshot reads b, the snapshot path names, a file or a machine's
-// branch on the account remote, as readExport describes.
-func decodeSnapshot(path string, b []byte, target importTarget) (snapshot, error) {
+// branch on the account remote, as readExport describes. A snapshot is one
+// machine's whole state, so it always holds that machine's settings, and
+// the entries of your own skills are read against the account remote they
+// set.
+func decodeSnapshot(path string, b []byte) (snapshot, error) {
 	// The version is read first and on its own: a document of a schema this
 	// CLI does not know is refused for that reason rather than for whichever
 	// field of it happens to have changed.
@@ -210,29 +190,25 @@ func decodeSnapshot(path string, b []byte, target importTarget) (snapshot, error
 	if err := json.Unmarshal(b, &envelope); err != nil {
 		return snapshot{}, notAnExport(path, err.Error())
 	}
-	var snap snapshot
+	snap := snapshot{Settings: home.Settings{IgnoreSystemFiles: true}} // the default, as for a settings file without the key
 	switch {
 	case envelope.SchemaVersion == nil:
 		return snapshot{}, notAnExport(path, "it carries no schema_version")
-	case *envelope.SchemaVersion == snapshotSchemaVersion:
-		if len(envelope.Settings) > 0 {
-			snap.Settings = &home.Settings{IgnoreSystemFiles: true} // the default, as for a settings file without the key
-		}
-		if err := decodeStrictly(b, &snap); err != nil {
-			return snapshot{}, notAnExport(path, err.Error())
-		}
-	default:
+	case *envelope.SchemaVersion != snapshotSchemaVersion:
 		return snapshot{}, fail(exitRefused,
 			fmt.Sprintf("%s is a snapshot of schema version %d, and this agentx reads version %d", path, *envelope.SchemaVersion, snapshotSchemaVersion),
 			"export it again from that machine with this version of agentx, or upgrade agentx here")
+	case len(envelope.Settings) == 0 || string(envelope.Settings) == "null":
+		return snapshot{}, notAnExport(path, "it carries no settings")
 	}
-	if snap.Settings != nil {
-		home.Normalise(snap.Settings) // a snapshot may leave out what a settings file agentx wrote always holds
-		if err := validSettings(path, *snap.Settings); err != nil {
-			return snapshot{}, err
-		}
+	if err := decodeStrictly(b, &snap); err != nil {
+		return snapshot{}, notAnExport(path, err.Error())
 	}
-	if err := validEntries(path, snap.Skills, snapshotAccount(snap, target)); err != nil {
+	home.Normalise(&snap.Settings) // a snapshot may leave out what a settings file agentx wrote always holds
+	if err := validSettings(path, snap.Settings); err != nil {
+		return snapshot{}, err
+	}
+	if err := validEntries(path, snap.Skills, documentAccount(snap.Settings)); err != nil {
 		return snapshot{}, err
 	}
 	for i := range snap.Skills {
@@ -654,14 +630,11 @@ func (inv *invocation) confirmImport(path string, doc snapshot, in io.Reader, ye
 		return nil
 	}
 	if inv.out.json || !isTerminal(in) || !isTerminal(inv.out.stdout) {
-		var does []string
-		if doc.Settings != nil {
-			does = append(does, "replaces the settings in "+home.SettingsPath(inv.dirs.Home))
-		}
+		does := "replaces the settings in " + home.SettingsPath(inv.dirs.Home)
 		if len(doc.Skills) > 0 {
-			does = append(does, "installs, updates and places the skills of "+path)
+			does += " and installs, updates and places the skills of " + path
 		}
-		return fail(exitRefused, "importing "+strings.Join(does, " and ")+", and there is no terminal to confirm at",
+		return fail(exitRefused, "importing "+does+", and there is no terminal to confirm at",
 			"run it again with --yes to import without asking")
 	}
 	return inv.askToImport(path, doc, in)
@@ -674,18 +647,13 @@ func (inv *invocation) confirmImport(path string, doc snapshot, in io.Reader, ye
 // own, and a line that ended in end-of-file rather than a newline is an
 // answer like any other.
 func (inv *invocation) askToImport(path string, doc snapshot, in io.Reader) error {
-	var question string
-	if doc.Settings != nil {
-		whose := "those"
-		if doc.Machine != nil && doc.Machine.Label != "" {
-			whose += " of " + sanitised(doc.Machine.Label)
-		}
-		question = "Replace the settings in " + home.SettingsPath(inv.dirs.Home) + " with " + whose + " from " + path
-		if n := len(doc.Skills); n > 0 {
-			question += ", and install, update and place its " + plural(n, "skill")
-		}
-	} else {
-		question = "Install, update and place the " + plural(len(doc.Skills), "skill") + " of " + path
+	whose := "those"
+	if doc.Machine != nil && doc.Machine.Label != "" {
+		whose += " of " + sanitised(doc.Machine.Label)
+	}
+	question := "Replace the settings in " + home.SettingsPath(inv.dirs.Home) + " with " + whose + " from " + path
+	if n := len(doc.Skills); n > 0 {
+		question += ", and install, update and place its " + plural(n, "skill")
 	}
 	inv.out.prompt(question + "? [y/N] ")
 	answer, _ := bufio.NewReader(in).ReadString('\n')
@@ -701,16 +669,13 @@ func (inv *invocation) askToImport(path string, doc snapshot, in io.Reader) erro
 // snapshot with what the import did, then the reason of each skip. Every
 // value the snapshot supplies is sanitised: agentx did not write it, and a
 // file handed from another machine may hold anything. settings are the
-// settings the machine now has, the snapshot's or, for one that holds none,
-// its own, and fetched the sources the run fetched, by canonical URL.
+// settings the machine now has, and fetched the sources the run fetched,
+// by canonical URL.
 func (inv *invocation) printImported(ctx context.Context, path string, doc snapshot, states []importSkillEvent, settings home.Settings, fetched map[string]bool) {
 	out := inv.out
-	switch {
-	case doc.Settings == nil:
-		out.done("read " + out.paint(heading, path) + ": it holds no settings, so the settings were left as they are")
-	case doc.Machine != nil && doc.Machine.Label != "":
+	if doc.Machine != nil && doc.Machine.Label != "" {
 		out.done("imported the settings of " + out.paint(heading, sanitised(doc.Machine.Label)) + " from " + out.paint(heading, path))
-	default:
+	} else {
 		out.done("imported the settings from " + out.paint(heading, path))
 	}
 	if len(states) == 0 {
@@ -729,9 +694,7 @@ func (inv *invocation) printImported(ctx context.Context, path string, doc snaps
 			}
 		}
 	}
-	if doc.Settings != nil {
-		printSourcesToAdd(out, inv.sourcesToAdd(ctx, settings, fetched))
-	}
+	printSourcesToAdd(out, inv.sourcesToAdd(ctx, settings, fetched))
 }
 
 // sourcesToAdd are the sources of settings this machine has not added,
@@ -862,13 +825,9 @@ func actionCounts(states []importSkillEvent) string {
 	return said
 }
 
-// importSummary is what the result event says the import did, settings
-// being whether the snapshot held settings it wrote.
-func importSummary(path string, settings bool, states []importSkillEvent) string {
+// importSummary is what the result event says the import did.
+func importSummary(path string, states []importSkillEvent) string {
 	done := "imported the settings from " + path
-	if !settings {
-		done = "read " + path + ", which holds no settings"
-	}
 	if len(states) == 0 {
 		return done + ": the snapshot lists no skills"
 	}
