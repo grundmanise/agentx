@@ -65,6 +65,7 @@ func (inv *invocation) applySnapshot(ctx context.Context, origin string, doc sna
 	}
 	if doc.Settings != nil {
 		forgetAccess(doc.Settings)
+		keepAccountRemote(doc.Settings, here)
 		if err := home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
 			return home.SaveSettings(inv.dirs.Home, *doc.Settings)
 		}); err != nil {

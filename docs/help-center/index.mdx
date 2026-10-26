@@ -44,7 +44,8 @@ agentx also needs `git` 2.40 or later on your `PATH`. Run [`agentx doctor`](/cli
 - **Your own skills**: skills you create with `agentx skill new` or fork with `agentx skill fork`. A skill you fork from an installed skill keeps its **upstream**, the skill it came from, so you can take in newer versions.
 - **Account remote**: a git repository you own. agentx publishes your own skills there, so your other machines can install them. See [Add your account remote](/cli/source#add-your-account-remote).
 - **Shared source**: any source other than your account remote.
-- **Snapshot**: a file that `agentx export` writes: this machine's settings, agent configurations, skills with their placements, MCP servers and plugins. It holds no skill content.
+- **Snapshot**: what `agentx export` writes, to a file or to a machine's branch on your account remote: this machine's settings, agent configurations, skills with their placements, MCP servers and plugins. It holds no skill content. `agentx import` applies one.
+- **Cloud machine**: the one machine that stands for every agent you run in the cloud, such as Claude Code on the web. Its machine id is `cloud`, and its snapshot on your account remote is its only state. See [Turn skills on for your cloud agents](/cli/skill#turn-skills-on-for-your-cloud-agents).
 - **agentx home**: `~/.agentx`, where agentx keeps its own state. It holds the **account repo**, a git repository that records where each skill came from, which version you installed, and the history of your own skills.
 
 ## See what your agents have

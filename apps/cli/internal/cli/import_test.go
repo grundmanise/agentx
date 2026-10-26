@@ -819,6 +819,80 @@ func TestRestoreStates(t *testing.T) {
 	}
 }
 
+// TestAccountRepository is when a source names the repository of the
+// account remote: by its repository, over HTTPS and over SSH alike, and
+// never through a host alias, since a snapshot is read with no SSH
+// configuration. An entry of your own skills is one whose source does, so
+// a snapshot written where the account remote is an SSH URL reads the same
+// on the cloud machine, which reaches it over HTTPS.
+func TestAccountRepository(t *testing.T) {
+	t.Parallel()
+	const account = "https://github.com/me/agentx-account"
+	for _, c := range []struct {
+		url, account string
+		want         bool
+	}{
+		{account, account, true},
+		{"ssh://git@github.com/me/agentx-account", account, true},
+		{"git@github.com:me/agentx-account.git", account, true},
+		{account, "ssh://git@github.com:22/me/agentx-account", true},
+		{"ssh://git@ssh.github.com:443/me/agentx-account", account, true},
+		{"ssh://git@github-work/me/agentx-account", account, false},
+		{"https://gitlab.com/me/agentx-account", account, false},
+		{"https://github.com/me/agentx-skills", account, false},
+		{"file:///srv/me/agentx-account", "ssh://git@host/srv/me/agentx-account", false},
+		{account, "", false},
+		{"", "", false},
+	} {
+		equal(t, c.url+" names the repository of "+c.account, accountRepository(c.url, c.account), c.want)
+		e := snapshotSkill{Name: "notes", Kind: lineage.KindManaged, Source: c.url}
+		equal(t, c.url+" is one of your own against "+c.account, ownRecord(e, c.account), c.want || c.url == "")
+	}
+}
+
+// TestKeepAccountRemote: settings an import writes keep this machine's
+// account remote, its URL and what it found it can do there, when theirs
+// names the same repository, and keep their own otherwise.
+func TestKeepAccountRemote(t *testing.T) {
+	t.Parallel()
+	const shared = "https://github.com/acme/skills"
+	cloud := home.Source{URL: "https://github.com/me/agentx-account", Account: true, Access: home.AccessReadOnly, AccessChecked: "2026-10-02T10:00:00Z"}
+	here := home.Settings{Sources: []home.Source{cloud}}
+	for _, c := range []struct {
+		name, theirs, want string
+	}{
+		{"its SSH URL", "ssh://git@github.com/me/agentx-account", cloud.URL},
+		{"its own URL", cloud.URL, cloud.URL},
+		{"another repository", "ssh://git@github.com/me/other-account", "ssh://git@github.com/me/other-account"},
+		{"a host alias", "ssh://git@github-work/me/agentx-account", "ssh://git@github-work/me/agentx-account"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			s := home.Settings{Sources: []home.Source{{URL: shared}, {URL: c.theirs, Account: true}}}
+			sort.Slice(s.Sources, func(i, j int) bool { return s.Sources[i].URL < s.Sources[j].URL })
+			keepAccountRemote(&s, here)
+			entry, _ := accountEntry(s)
+			equal(t, "the account remote", entry.URL, c.want)
+			if c.want == cloud.URL {
+				equal(t, "its access", entry.Access, cloud.Access)
+			} else {
+				equal(t, "its access", entry.Access, "")
+			}
+			if !slices.IsSortedFunc(s.Sources, func(a, b home.Source) int { return strings.Compare(a.URL, b.URL) }) {
+				t.Errorf("the sources are not sorted: %v", s.Sources)
+			}
+			if why := sourcesRefusal(s.Sources, nil); why != "" {
+				t.Errorf("the settings would be refused: %s", why)
+			}
+		})
+	}
+	s := home.Settings{Sources: []home.Source{{URL: shared}}}
+	keepAccountRemote(&s, here)
+	if _, ok := accountEntry(s); ok {
+		t.Errorf("settings with no account remote gained one: %v", s.Sources)
+	}
+}
+
 // TestImportOntoAMachineWithNoAccountRepo: everything the export lists is
 // missing, and the repo is not created to find that out, also when the
 // machine's settings name an account remote, as an earlier import leaves

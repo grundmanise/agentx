@@ -78,7 +78,7 @@ func sourcesRefusal(sources []home.Source, resolve func(host string) string) str
 			continue
 		}
 		for _, shared := range sources {
-			if !shared.Account && sameRepository(account, shared, resolve) {
+			if !shared.Account && sameRepository(account.URL, shared.URL, resolve) {
 				return shared.URL + " and the account remote " + account.URL + " name one repository"
 			}
 		}
@@ -86,13 +86,16 @@ func sourcesRefusal(sources []home.Source, resolve func(host string) string) str
 	return ""
 }
 
-// sameRepository reports whether the URLs of a and b name one repository.
-func sameRepository(a, b home.Source, resolve func(host string) string) bool {
-	x, err := source.ParseAddress(a.URL)
+// sameRepository reports whether the URLs a and b name one repository, see
+// source.SameRepository: over HTTPS and over SSH alike, each SSH host read
+// through resolve, or as itself when resolve is nil. A URL that is not one
+// names no repository, not even one spelled the same.
+func sameRepository(a, b string, resolve func(host string) string) bool {
+	x, err := source.ParseAddress(a)
 	if err != nil {
 		return false
 	}
-	y, err := source.ParseAddress(b.URL)
+	y, err := source.ParseAddress(b)
 	if err != nil {
 		return false
 	}
@@ -104,7 +107,7 @@ func sameRepository(a, b home.Source, resolve func(host string) string) bool {
 // repository, through resolve.
 func forkSourceRefusal(s home.Settings, src home.Source, resolve func(host string) string) *failure {
 	for _, fork := range s.Sources {
-		if fork.Account && (fork.URL == src.URL || sameRepository(src, fork, resolve)) {
+		if fork.Account && (fork.URL == src.URL || sameRepository(src.URL, fork.URL, resolve)) {
 			return forkSourceIs(src.URL, fork)
 		}
 	}
