@@ -83,6 +83,24 @@ test("after a restart, shows the inventory as stale until the new child's first 
   await expect(staleBar(page)).toHaveCount(0);
 });
 
+test("a restarted child that ends for good before its first line says so", async ({
+  cli,
+  page,
+}) => {
+  await launch(cli, page);
+  await cli.serveExit(null);
+  await expect(staleBar(page)).toHaveText("Reconnecting to agentx…");
+
+  cli.serveRestart(2);
+  await cli.serveExit(6, ["another agentx serve is running"], null);
+  await expect(staleBar(page)).toContainText(
+    "Couldn't read this machine: another agentx serve is running"
+  );
+  await expect(
+    staleBar(page).getByRole("button", { name: "Retry" })
+  ).toBeVisible();
+});
+
 test("ignores an old child's events after a restart", async ({ cli, page }) => {
   await launch(cli, page);
   const sentToOld = await refresh(cli, page);

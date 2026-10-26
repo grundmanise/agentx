@@ -173,7 +173,9 @@ const onExit = (exit: ServeExit) => {
       restarting: exit.restarting,
     },
   });
-  if (exit.childId === active) {
+  // A restarted child is active only from its first line: one that ends before it writes any
+  // still says whether serve comes back.
+  if (exit.childId >= active) {
     set({
       freshness: exit.restarting
         ? { kind: "stale" }
