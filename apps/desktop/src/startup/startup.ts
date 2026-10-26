@@ -4,7 +4,7 @@
 // fails, when a command exits with code 8, and in manual mode. A launch that runs over 2 seconds
 // says what it does in the empty panel. The only commands it runs are `version`, `doctor` and `serve`: it
 // changes nothing on disk.
-import { useSyncExternalStore } from "react";
+import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type {
@@ -48,7 +48,8 @@ export interface StartupState {
   findings: Findings;
 }
 
-let state: StartupState = {
+/** The startup state. Outside React, getState() reads it and setState() changes it. */
+export const useStartup = create<StartupState>()(() => ({
   findings: {},
   mode: "launch",
   open: false,
@@ -58,26 +59,11 @@ let state: StartupState = {
   running: true,
   slow: false,
   step: undefined,
-};
-const listeners = new Set<() => void>();
+}));
 
 const update = (patch: Partial<StartupState>) => {
-  state = { ...state, ...patch };
-  for (const listener of listeners) {
-    listener();
-  }
+  useStartup.setState(patch);
 };
-
-export const useStartup = (): StartupState =>
-  useSyncExternalStore(
-    (listener) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-    () => state
-  );
 
 /** The reconcile events serve wrote before its first inventory, kept for the Inbox. */
 export const earlyReconciles: ReconcileEvent[] = [];
@@ -291,8 +277,8 @@ const sequence = async () => {
       const { passed } = readChecks(findings, false);
       update({
         // A failure shows the layer; a pass closes it at once, except in manual mode.
-        open: !passed || state.mode === "manual",
-        ready: state.ready || passed,
+        open: !passed || useStartup.getState().mode === "manual",
+        ready: useStartup.getState().ready || passed,
         retrying: false,
         running: false,
         slow: false,
@@ -304,7 +290,7 @@ const sequence = async () => {
 
 /** A command exited with code 8: the account repo is unusable, so the checks run again. */
 const accountRepoLost = () => {
-  if (state.running) {
+  if (useStartup.getState().running) {
     return;
   }
   update({ mode: "launch", open: true });
