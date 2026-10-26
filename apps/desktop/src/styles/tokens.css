@@ -368,6 +368,7 @@
   --radius-palette-row: 12px;
   --radius-key-hint: 9999px;
   --radius-toast: 9999px;
+  --radius-toast-detail: 18px;
   --radius-floating-bar: 9999px;
   --radius-check-mark: 50%;
   --radius-check-hint: 8px;
@@ -543,6 +544,10 @@
   --padding-key-hint-y: 3px;
   --height-toast: 44px;
   --padding-toast: 18px;
+  --width-toast-detail: 440px;
+  --padding-toast-detail: 12px;
+  --height-stale-bar: 36px;
+  --padding-stale-bar: 16px;
   --inset-floating-bar: 24px;
   --height-floating-bar: 56px;
 
@@ -663,6 +668,11 @@
   font-weight: 600;
   letter-spacing: -0.01em;
 }
+@utility type-machine-label {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 400;
+}
 @utility type-nav {
   font-family: var(--font-sans);
   font-size: 14px;
@@ -697,6 +707,12 @@
   font-family: var(--font-sans);
   font-size: 13.5px;
   font-weight: 400;
+}
+@utility type-notice {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
 }
 @utility type-toast-action {
   font-family: var(--font-sans);

@@ -1,15 +1,18 @@
 import { useEffect, useState } from "react";
-import { Navigate, Outlet, Route, Routes } from "react-router";
+import { Navigate, Outlet, Route, Routes, useNavigate } from "react-router";
 
 import { CommandPalette } from "#/app/command-palette.tsx";
 import { LaunchProgress } from "#/app/launch-progress.tsx";
 import { screens, titles } from "#/app/screens.ts";
 import { Sidebar } from "#/app/sidebar.tsx";
+import { StaleBar } from "#/app/stale-bar.tsx";
 import { StartupLayer } from "#/app/startup-layer.tsx";
 import { TopBar } from "#/app/top-bar.tsx";
 import { Toaster } from "#/components/toast.tsx";
+import { setNavigate } from "#/lib/navigate.ts";
 import { PlaceholderScreen } from "#/screens/placeholder.tsx";
 import { launch, useStartup } from "#/startup/startup.ts";
+import { startLoaders } from "#/store/loaders.ts";
 
 /** The screen of the current route, faded in; nothing until the startup checks pass. */
 const Screen = ({ ready }: { ready: boolean }) =>
@@ -30,6 +33,19 @@ export const App = () => {
   useEffect(() => {
     launch();
   }, []);
+
+  // The store loads its slices once the checks pass: nothing runs a command before they do.
+  useEffect(() => {
+    if (startup.ready) {
+      startLoaders();
+    }
+  }, [startup.ready]);
+
+  // The command runner navigates from outside React, as on exit code 4.
+  const navigate = useNavigate();
+  useEffect(() => {
+    setNavigate(navigate);
+  }, [navigate]);
 
   // ⌘K / Ctrl+K toggles the palette from anywhere but the startup layer.
   useEffect(() => {
@@ -66,6 +82,7 @@ export const App = () => {
             {!startup.ready && startup.slow && startup.step && (
               <LaunchProgress step={startup.step} />
             )}
+            {startup.ready && <StaleBar />}
             <Routes>
               {/* No screen mounts until the checks pass: none runs a command before they do. */}
               <Route element={<Screen ready={startup.ready} />}>

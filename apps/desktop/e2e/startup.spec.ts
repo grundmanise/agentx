@@ -5,8 +5,10 @@ import {
   doctorWith,
   expect,
   firstInventory,
+  loadLines,
   test,
 } from "./harness/cli.ts";
+import type { MockCli } from "./harness/cli.ts";
 
 const bundled = "/Applications/agentx.app/Contents/MacOS/agentx";
 const launchLines = [
@@ -22,6 +24,14 @@ const rows = (page: Page) =>
 const row = (page: Page, label: string) =>
   rows(page).filter({ hasText: label });
 const inbox = (page: Page) => page.getByRole("heading", { name: "Inbox" });
+
+/**
+ * Waits for the launch and the store's reads once the checks pass, which the app runs out of
+ * sight, so that the commands a test triggers next come after them.
+ */
+const launched = async (cli: MockCli) => {
+  await expect.poll(() => cli.commands).toEqual([...launchLines, ...loadLines]);
+};
 
 const oldGit = {
   check: "git",
@@ -96,7 +106,7 @@ test("a passing launch checks the machine out of sight and opens the Inbox", asy
   await expect(inbox(page)).toBeVisible();
   await expect(page.getByRole("main")).toHaveAttribute("aria-busy", "false");
   await expect(layerShown(page)).toHaveCount(0);
-  expect(cli.commands).toEqual(launchLines);
+  await launched(cli);
   expect(cli.serveStarts).toBe(1);
 });
 
@@ -170,6 +180,7 @@ test("a machine with no skills and no agents passes", async ({ cli, page }) => {
   cli.onServeStart({ events: [firstInventory([])] });
   await page.goto("/");
   await expect(inbox(page)).toBeVisible();
+  await launched(cli);
 
   await runChecks(page);
   await expect(title(page)).toHaveText("You're all set");
@@ -243,6 +254,7 @@ test("a warning does not block, and manual mode shows it", async ({
   await expect(inbox(page)).toBeVisible();
   await expect(layerShown(page)).toHaveCount(0);
   expect(cli.serveStarts).toBe(1);
+  await launched(cli);
 
   await runChecks(page);
   await expect(title(page)).toHaveText("You're all set");
@@ -294,7 +306,9 @@ test("Retry runs everything again", async ({ cli, page }) => {
   // A pass closes the layer at once.
   await expect(inbox(page)).toBeVisible();
   await expect(layer(page)).toHaveCount(0);
-  expect(cli.commands).toEqual([...launchLines, ...launchLines]);
+  await expect
+    .poll(() => cli.commands)
+    .toEqual([...launchLines, ...launchLines, ...loadLines]);
   expect(cli.serveStarts).toBe(1);
 });
 
@@ -305,7 +319,9 @@ test("Enter retries", async ({ cli, page }) => {
   cli.register(["doctor"], { events: doctorWith() });
   await page.keyboard.press("Enter");
   await expect(inbox(page)).toBeVisible();
-  expect(cli.commands).toEqual([...launchLines, ...launchLines]);
+  await expect
+    .poll(() => cli.commands)
+    .toEqual([...launchLines, ...launchLines, ...loadLines]);
 });
 
 test("Copy report copies doctor's output in the CLI's layout", async ({
@@ -353,6 +369,7 @@ test("manual mode shows every check and waits for Open agentx, which goes to Set
   });
   await page.goto("/");
   await expect(inbox(page)).toBeVisible();
+  await launched(cli);
 
   await runChecks(page);
   await expect(title(page)).toHaveText("You're all set");
@@ -378,7 +395,7 @@ test("manual mode shows every check and waits for Open agentx, which goes to Set
   await page.getByRole("button", { name: "Open agentx" }).click();
   await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
   // The serve child already running answered check 5; none was started again.
-  expect(cli.commands).toEqual([...launchLines, ...launchLines]);
+  expect(cli.commands).toEqual([...launchLines, ...loadLines, ...launchLines]);
   expect(cli.serveStarts).toBe(1);
 });
 
@@ -452,12 +469,13 @@ test("a serve exit with code 8 after launch brings the checks back", async ({
 }) => {
   await page.goto("/");
   await expect(inbox(page)).toBeVisible();
+  await launched(cli);
 
   cli.register(["doctor"], { events: doctorWith(unusableRepo), exitCode: 8 });
   await cli.serveExit(8, [], null);
   await expect(title(page)).toHaveText("agentx can't open its account repo");
   await expect(inbox(page)).toHaveCount(0);
-  expect(cli.commands).toEqual([...launchLines, ...launchLines]);
+  expect(cli.commands).toEqual([...launchLines, ...loadLines, ...launchLines]);
 });
 
 test("a one-shot exiting with code 8 brings the checks back", async ({
@@ -466,6 +484,7 @@ test("a one-shot exiting with code 8 brings the checks back", async ({
 }) => {
   await page.goto("/");
   await expect(inbox(page)).toBeVisible();
+  await launched(cli);
   await page.addScriptTag({ type: "module", url: "/e2e/harness/transport.ts" });
   await page.waitForFunction(() => "transport" in window);
 
@@ -475,6 +494,7 @@ test("a one-shot exiting with code 8 brings the checks back", async ({
   await expect(title(page)).toHaveText("agentx can't open its account repo");
   expect(cli.commands).toEqual([
     ...launchLines,
+    ...loadLines,
     ["scan", "--json"],
     ...launchLines,
   ]);
