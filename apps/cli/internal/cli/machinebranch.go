@@ -97,7 +97,7 @@ func (inv *invocation) readMachineBranch(ctx context.Context, id string) (machin
 // anything import would refuse of a file, see decodeSnapshot, and a tip
 // whose tree holds no snapshot file, exit code 6. A branch with no tip
 // holds no snapshot: found is false.
-func (inv *invocation) branchSnapshot(ctx context.Context, b machineBranch, target importTarget) (snap snapshot, found bool, err error) {
+func (inv *invocation) branchSnapshot(ctx context.Context, b machineBranch) (snap snapshot, found bool, err error) {
 	if b.tip == "" {
 		return snapshot{}, false, nil
 	}
@@ -113,7 +113,10 @@ func (inv *invocation) branchSnapshot(ctx context.Context, b machineBranch, targ
 			fmt.Sprintf("%s on the account remote holds a snapshot larger than %d bytes, which is more than any machine's settings and skills come to", b.name(), documentLimit),
 			"write a snapshot to it with 'agentx export --machine "+b.id+"'")
 	}
-	snap, err = decodeSnapshot(b.name(), data, target)
+	snap, err = decodeSnapshot(b.name(), data)
+	if f := (*failure)(nil); errors.As(err, &f) && f.hint == notAnExportHint {
+		f.hint = "write a snapshot to it with 'agentx export --machine " + b.id + "'"
+	}
 	return snap, err == nil, err
 }
 
@@ -121,12 +124,12 @@ func (inv *invocation) branchSnapshot(ctx context.Context, b machineBranch, targ
 // lines give it, the branch's: it is what the rest of the import reads, as
 // the snapshot of a file is. A machine whose branch the account remote
 // does not hold is exit code 5.
-func (inv *invocation) importMachine(ctx context.Context, id string, target importTarget) (snapshot, string, error) {
+func (inv *invocation) importMachine(ctx context.Context, id string) (snapshot, string, error) {
 	b, err := inv.readMachineBranch(ctx, id)
 	if err != nil {
 		return snapshot{}, "", err
 	}
-	snap, found, err := inv.branchSnapshot(ctx, b, target)
+	snap, found, err := inv.branchSnapshot(ctx, b)
 	if err != nil {
 		return snapshot{}, "", err
 	}
@@ -261,14 +264,20 @@ type machineSkillEvent struct {
 // to names, or every one this machine enables, added to its placements, to
 // the cloud machine's snapshot, and changes nothing on this machine's
 // disk. The entry is the skill as this machine's library knows it, or, for
-// a skill this machine does not hold, as the snapshot already lists it.
+// a skill this machine does not hold, as the snapshot already lists it. A
+// branch the account remote does not hold yet is born with the settings of
+// a fresh home and this machine's account remote, as a snapshot always
+// holds its machine's settings. With asCopy, the configurations it places
+// the skill in are recorded in the snapshot's copy_mode, as skill place
+// --copy records them in this machine's, but for a universal client, which
+// holds no copy.
 func (inv *invocation) placeOnMachine(ctx context.Context, id, name string, to []string, asCopy, force bool) error {
 	if err := cloudOnly(id); err != nil {
 		return err
 	}
-	if asCopy || force {
-		return fail(exitUsage, "--copy and --force change this machine's disk, and --machine changes none",
-			"drop them to place the skill on the "+cloudMachine+" machine")
+	if force {
+		return fail(exitUsage, "--force replaces what is in the way on this machine's disk, and --machine changes none",
+			"drop it to place the skill on the "+cloudMachine+" machine")
 	}
 	for _, c := range to {
 		if !configurationID(c) {
@@ -286,14 +295,14 @@ func (inv *invocation) placeOnMachine(ctx context.Context, id, name string, to [
 	if why := nameRefusal(name); why != "" {
 		return fail(exitUsage, fmt.Sprintf("%q %s", clipped(name), why), "give the name of a skill")
 	}
+	here, err := inv.loadSettings()
+	if err != nil {
+		return err
+	}
 	ids := slices.Clone(to)
 	if len(ids) == 0 {
-		s, err := inv.loadSettings()
-		if err != nil {
-			return err
-		}
 		for _, t := range inv.detectedTargets() {
-			if !containsString(s.DisabledConfigurations, t.id) {
+			if !containsString(here.DisabledConfigurations, t.id) {
 				ids = append(ids, t.id)
 			}
 		}
@@ -310,17 +319,30 @@ func (inv *invocation) placeOnMachine(ctx context.Context, id, name string, to [
 	if err != nil {
 		return err
 	}
-	snap, _, err := inv.branchSnapshot(ctx, b, inv.importTargetHere())
+	snap, found, err := inv.branchSnapshot(ctx, b)
 	if err != nil {
 		return err
+	}
+	if !found {
+		account, _ := accountEntry(here) // set, or readMachineBranch had refused
+		snap.Settings = home.DefaultSettings()
+		snap.Settings.SetSource(account)
+		forgetAccess(&snap.Settings)
 	}
 	entry, err := inv.machineEntry(sc, snap, name)
 	if err != nil {
 		return err
 	}
 	placeInSnapshot(&snap, entry, ids)
+	if asCopy {
+		if err := editCopies(&snap, func(e *settingsEdit) {
+			e.addCopies(name, slices.DeleteFunc(slices.Clone(ids), cloudUniversal))
+		}); err != nil {
+			return err
+		}
+	}
 	placed := snapshotEntry(snap, name)
-	command := skillCommand("place", name, append(placeFlags(to, false), "--machine", id)...)
+	command := skillCommand("place", name, append(placeFlags(to, asCopy), "--machine", id)...)
 	commit, pushed, err := inv.pushSnapshot(ctx, b, snap, "Place "+name+" in "+strings.Join(placed.Placements, ", "), command)
 	if err != nil {
 		return err
@@ -332,8 +354,9 @@ func (inv *invocation) placeOnMachine(ctx context.Context, id, name string, to [
 
 // removeFromMachine is skill remove naming the cloud machine: it takes the
 // configurations from names out of the skill's entry in the cloud
-// machine's snapshot, or, without from or with --from universal, deletes
-// the entry, and changes nothing on this machine's disk. A universal
+// machine's snapshot, and out of its copy_mode, or, without from or with
+// --from universal, deletes the entry and its copy_mode, and changes
+// nothing on this machine's disk. A universal
 // client named in from is refused, as on a computer: it sees every skill
 // the snapshot lists, so it cannot lose one alone.
 func (inv *invocation) removeFromMachine(ctx context.Context, id, name string, from []string, remote bool) error {
@@ -356,7 +379,7 @@ func (inv *invocation) removeFromMachine(ctx context.Context, id, name string, f
 	if err != nil {
 		return err
 	}
-	snap, _, err := inv.branchSnapshot(ctx, b, inv.importTargetHere())
+	snap, _, err := inv.branchSnapshot(ctx, b)
 	if err != nil {
 		return err
 	}
@@ -364,6 +387,15 @@ func (inv *invocation) removeFromMachine(ctx context.Context, id, name string, f
 	if !ok {
 		return fail(exitNotFound, "the "+id+" machine has no skill called "+sanitised(name),
 			"the "+id+" machine has the skills its snapshot on "+b.name()+" lists")
+	}
+	if err := editCopies(&snap, func(e *settingsEdit) {
+		if whole {
+			e.dropSkill(name)
+		} else {
+			e.dropCopies(name, namedConfigurations(from))
+		}
+	}); err != nil {
+		return err
 	}
 	subject, done := "Remove "+name, "took "+name+" off the "+id+" machine"
 	placements := []string{}
@@ -393,6 +425,22 @@ func (inv *invocation) reportMachine(b machineBranch, done, commit string, pushe
 	return nil
 }
 
+// editCopies changes the copy_mode of snap's settings with the helpers
+// that change this machine's, so that it keeps the same meaning and form.
+func editCopies(snap *snapshot, change func(*settingsEdit)) error {
+	modes, err := snap.Settings.CopyModes()
+	if err != nil {
+		return fail(exitInternal, err.Error(), "")
+	}
+	e := &settingsEdit{s: snap.Settings, modes: modes}
+	change(e)
+	if err := e.s.SetCopyModes(e.modes); err != nil {
+		return fail(exitInternal, err.Error(), "")
+	}
+	snap.Settings = e.s
+	return nil
+}
+
 // fromFlags are the --from a run of skill remove was given, as a command a
 // hint names repeats them.
 func fromFlags(from []string) []string {
@@ -401,16 +449,6 @@ func fromFlags(from []string) []string {
 		flags = append(flags, "--from", shellWord(id))
 	}
 	return flags
-}
-
-// importTargetHere is what a snapshot is read against on this machine, see
-// importTarget.
-func (inv *invocation) importTargetHere() importTarget {
-	target := importTarget{}
-	if s, err := inv.loadSettings(); err == nil {
-		target.account = documentAccount(s)
-	}
-	return target
 }
 
 // cloudUniversal reports whether the configuration id names a client that

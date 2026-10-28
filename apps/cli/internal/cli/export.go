@@ -41,18 +41,19 @@ const settingsSchemaVersion = home.SettingsSchemaVersion
 // physical and logical ids, the occurrence ids and the edges. Nothing it
 // holds is the content of a skill.
 //
+// A snapshot is one machine's whole state, so it always holds the settings.
 // An export writes every part, with every skill it can name exactly; any
 // other writer may write a partial snapshot, see readExport: the machine,
-// the settings, the configurations, the servers and the plugins may be
-// left out, and so may each skill's version, an entry with none following
-// the latest version.
+// the configurations, the servers and the plugins may be left out, and so
+// may each skill's version, an entry with none following the latest
+// version.
 //
 // The snapshot is a pure function of the machine's state: two exports of
 // an unchanged machine are byte-identical, so two snapshots can be diffed.
 type snapshot struct {
 	SchemaVersion  int                     `json:"schema_version"`
 	Machine        *exportMachine          `json:"machine,omitempty"`
-	Settings       *home.Settings          `json:"settings,omitempty"`
+	Settings       home.Settings           `json:"settings"`
 	Configurations []snapshotConfiguration `json:"configurations"`
 	Skills         []snapshotSkill         `json:"skills"`
 	MCPServers     []snapshotServer        `json:"mcp_servers"`
@@ -270,7 +271,7 @@ func (inv *invocation) snapshot(ctx context.Context) (snapshot, error) {
 	return snapshot{
 		SchemaVersion:  snapshotSchemaVersion,
 		Machine:        &exportMachine{ID: id, Label: inv.label(s)},
-		Settings:       &s,
+		Settings:       s,
 		Configurations: snapshotConfigurations(inventory),
 		Skills:         inv.snapshotSkills(sc, inventory),
 		MCPServers:     snapshotServers(inventory),
