@@ -3,7 +3,7 @@ name: Release
 # Nightly: every night, a prerelease of main, when the CLI or the app changed since the last nightly.
 # Stable: run by hand from the Actions tab. It promotes a nightly, or another commit on
 # main, by tagging that commit vX.Y.Z and building it again with the stable version.
-# See "Releases" in CONTRIBUTING.md.
+# See RELEASING.md.
 on:
   schedule:
     - cron: "17 3 * * *"
@@ -296,11 +296,11 @@ jobs:
           APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
         run: |
           if [ -z "$APPLE_CERTIFICATE" ] || [ -z "$APPLE_CERTIFICATE_PASSWORD" ]; then
-            echo "::warning title=App not signed::add the APPLE_CERTIFICATE secrets, see Releases in CONTRIBUTING.md"
+            echo "::warning title=App not signed::add the APPLE_CERTIFICATE secrets, see RELEASING.md"
             unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_API_ISSUER APPLE_API_KEY
             export APPLE_SIGNING_IDENTITY=-
           elif [ -z "$APPLE_API_PRIVATE_KEY" ] || [ -z "$APPLE_API_KEY" ] || [ -z "$APPLE_API_ISSUER" ]; then
-            echo "::warning title=App not notarized::add the APPLE_API secrets, see Releases in CONTRIBUTING.md"
+            echo "::warning title=App not notarized::add the APPLE_API secrets, see RELEASING.md"
             unset APPLE_API_ISSUER APPLE_API_KEY
           else
             export APPLE_API_KEY_PATH=$RUNNER_TEMP/AuthKey.p8
@@ -382,7 +382,7 @@ jobs:
           DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
         run: |
           if [ -z "$DEPLOY_KEY" ]; then
-            echo "::warning title=Homebrew formula not updated::add the HOMEBREW_TAP_DEPLOY_KEY secret, see Releases in CONTRIBUTING.md"
+            echo "::warning title=Homebrew formula not updated::add the HOMEBREW_TAP_DEPLOY_KEY secret, see RELEASING.md"
             exit 0
           fi
           source_sha=$(curl -fsSL "https://github.com/$GH_REPO/archive/refs/tags/$TAG.tar.gz" | sha256sum | cut -d' ' -f1)
