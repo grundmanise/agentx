@@ -395,8 +395,8 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.pill` | sans | 11.5 | 600 |  |  |  | Pills, the letter of a monogram logo |
 | `type.segment` | sans | 12.5 | 500 |  |  |  | Segmented control labels |
 | `type.caption` | mono | 10.5 | 400 |  | 0.16em | upper | Captions (`text.caption`) |
-| `type.technical` | mono | 12.5 | 400 |  |  |  | Paths, ids, dates, commands; the count beside a page title (`text.caption`) |
-| `type.technical-sm` | mono | 12 | 400 |  |  |  | The count beside a group header (`group.count`), the count in a SHOW pill, the mono tag beside a nested row |
+| `type.technical` | mono | 12.5 | 400 |  |  |  | Paths, ids, dates, commands; a skill's origin in the detail header (`text.caption`) |
+| `type.technical-sm` | mono | 12 | 400 |  |  |  | Details values (`text.secondary`), file status in the History sheet, the mono tag beside a nested row |
 | `type.code` | mono | 12.5 | 400 | 1.75 |  |  | Code pane |
 | `type.brand` | sans | 14 | 600 |  | -0.01em |  | Product name in the sidebar |
 | `type.machine-label` | sans | 12 | 400 |  |  |  | Machine label under the product name (`text.muted`) |
@@ -408,6 +408,11 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.palette-footer` | sans | 12 | 400 |  |  |  | Palette footer (`text.hint`) |
 | `type.toast` | sans | 13.5 | 400 |  |  |  | Toast message |
 | `type.toast-action` | sans | 13 | 600 |  |  |  | Action inside a toast |
+| `type.detail-desc` | sans | 14.5 | 400 | 1.5 |  |  | Detail pane description (`text.muted`, `text-wrap:pretty`) |
+| `type.banner-title` | sans | 14 | 500 |  |  |  | Banner title (`banner.title`); its text is `type.secondary` in `banner.text` |
+| `type.agent-chip` | sans | 13 | 500 |  |  |  | Agent client name in a toggle chip |
+| `type.timeline-entry` | sans | 13.5 | 400 |  |  |  | Timeline entry subject (`text.primary`) |
+| `type.timeline-meta` | sans | 12 | 400 |  |  |  | Timeline entry meta (`text.caption`) |
 | `type.notice` | sans | 13 | 400 | 1.5 |  |  | Stale bar text; hint and warnings in an error toast |
 
 Text wrapping: `text-wrap:pretty` on multi-line copy. Single-line cells use `white-space:nowrap; overflow:hidden; text-overflow:ellipsis`.
@@ -726,11 +731,15 @@ The machine's label from the inventory, under the product name in the sidebar: `
 
 ### Timeline (history)
 
-Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot` round (`timeline.dot-install`, `timeline.dot-update`, `timeline.dot-yours` by entry kind), a 1px `timeline.connector` below it. Entry: message 14 `text.primary`, meta 12 `timeline.meta`. Final item when truncated: hollow dot (inset ring 1.5px `timeline.more-ring`) and a ghost button "Show all {n}".
+Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot` round (`timeline.dot-install` for an upstream import, `timeline.dot-update` for a commit made with Git, `timeline.dot-yours` for one agentx wrote), a 1px `timeline.connector` below it. Entry: subject `type.timeline-entry` in `text.primary`, meta `type.timeline-meta` in `timeline.meta` ("{date} · {n} files", then "made with Git" or "from the original"). Final item when truncated: hollow dot (inset ring 1.5px `timeline.more-ring`) and a ghost button "Show all {n}", which opens the History sheet.
 
 ### Popover (Filter)
 
 `popover.width`, `popover.radius`, `overlay.bg` with 1px `overlay.border` and `popover.shadow`, 14px padding, `popover.gap` between its groups, `popover.offset` below its anchor. Each group opens with a caption in `popover.caption`. SHOW is a row of pills (`type.secondary`, count in `type.technical-sm` `text.caption`; the chosen one `button.secondary-bg` and `text.primary`), STATE a segmented control, AGENTS rows of `popover.row-radius` with the round checkbox, a 20px logo and the name. Reset filters is a ghost button, shown while a filter is applied. A click outside or Escape closes it.
+
+### Sheet (History)
+
+`sheet.width`, inset `sheet.inset` from the top, right and bottom, `sheet.bg` with 1px `sheet.border`, `sheet.radius`, `overlay.shadow`, `sheet.padding`, over `shell.scrim`. Title in `type.dialog-title`, the subject's name under it in `type.technical` `text.caption`, a ghost Close at the top right. Escape or Close closes it.
 
 ### Agent client logo chip, monogram
 

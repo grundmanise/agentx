@@ -6,6 +6,7 @@ import { create } from "zustand";
 
 import type {
   AdoptionEvent,
+  HistoryEvent,
   InventoryEvent,
   ReconcileEvent,
   Settings,
@@ -79,6 +80,8 @@ export interface AppState {
   pending: Record<string, string>;
   /** Newest first, at most ACTIVITY_LIMIT entries. */
   activity: ActivityEntry[];
+  /** The history of each of your own skills read so far, by name, newest commit first. */
+  histories: Record<string, HistoryEvent[]>;
 }
 
 export const useAppStore = create<AppState>()(() => ({
@@ -86,6 +89,7 @@ export const useAppStore = create<AppState>()(() => ({
   adoption: [],
   applied: undefined,
   freshness: { kind: "stale" },
+  histories: {},
   inventory: undefined,
   pending: {},
   reconciles: [],

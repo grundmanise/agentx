@@ -40,6 +40,10 @@ const names = async (where: Locator) =>
         ""
     )
   );
+const detail = (page: Page) =>
+  page.getByRole("region", { name: "Skill details" });
+const pane = (page: Page, name: string) =>
+  detail(page).getByRole("article", { name });
 const filters = (page: Page) => page.getByRole("dialog", { name: "Filters" });
 
 /** Whether a command line is one the launch or the store's reads run, whichever order they come in. */
@@ -183,6 +187,9 @@ test.describe("the list", () => {
     const logos = row(page, "scratch").getByRole("img");
     expect(await names(logos)).toEqual(["Zed"]);
     await expect(logos.first()).toHaveAttribute("src", /^data:image\/svg/u);
+    expect(
+      await names(page.getByRole("region", { name: "Agents" }).getByRole("img"))
+    ).toEqual(["Claude Code", "Zed"]);
     expect(outside).toEqual([]);
   });
 });
@@ -367,6 +374,7 @@ test.describe("keyboard", () => {
     await page.keyboard.press("ArrowDown");
     // From the last of YOUR SKILLS into the first source.
     await expect(row(page, "pdf")).toHaveAttribute("aria-current", "true");
+    await expect(pane(page, "pdf")).toBeVisible();
     await page.keyboard.press("k");
     await expect(row(page, "release-notes")).toHaveAttribute(
       "aria-current",
@@ -380,6 +388,184 @@ test.describe("keyboard", () => {
     // Typing in the search field is not moving the selection.
     await page.getByRole("searchbox").pressSequentially("kj");
     await expect(list(page).getByText("No skills match")).toBeVisible();
-    await expect(page).toHaveURL(/#\/skills\/pdf-letters$/u);
+    await expect(pane(page, "pdf-letters")).toBeVisible();
+  });
+});
+
+test.describe("the detail pane", () => {
+  test("a skill of a source: no command runs, and no history is kept", async ({
+    cli,
+    page,
+  }) => {
+    await openSkills(cli, page, "/#/skills/pdf");
+    const article = pane(page, "pdf");
+    await expect(article).toMatchAriaSnapshot(`
+      - article "pdf":
+        - text: Skill · Enabled
+        - heading "pdf" [level=1]
+        - text: acme/skills
+        - paragraph: Read and convert PDF files
+        - region "Agents":
+          - heading "Agents" [level=2]
+          - switch "Claude Code" [checked]
+          - switch "Cursor"
+          - switch "Universal" [checked]
+        - region "Files":
+          - heading "Files" [level=2]
+        - region "Details":
+          - heading "Details" [level=2]
+          - term: Source
+          - definition: https://github.com/acme/skills/pdf
+          - term: Version
+          - definition: 3f2a9c1
+          - term: State
+          - definition: current
+        - region "History":
+          - heading "History" [level=2]
+          - paragraph: History is kept for your own skills
+    `);
+    expect(later(cli)).toEqual([]);
+  });
+
+  test("one of your own skills: its history, with Show all opening the sheet", async ({
+    cli,
+    page,
+  }) => {
+    await openSkills(cli, page, "/#/skills/pdf-letters");
+    const article = pane(page, "pdf-letters");
+    await expect(article.getByRole("list", { name: "History" })).toBeVisible();
+    expect(later(cli)).toEqual([["skill", "history", "pdf-letters", "--json"]]);
+    await expect(article).toMatchAriaSnapshot(`
+      - article "pdf-letters":
+        - text: Your skill · Enabled
+        - heading "pdf-letters" [level=1]
+        - text: from acme/skills
+        - paragraph: Read PDFs and write letters from them
+        - region "Agents":
+          - heading "Agents" [level=2]
+          - switch "Claude Code" [checked]
+          - switch "Cursor"
+          - switch "Universal" [checked]
+        - region "Files":
+          - heading "Files" [level=2]
+        - region "Details":
+          - heading "Details" [level=2]
+          - term: Forked from
+          - definition: https://github.com/acme/skills/pdf
+          - term: Based on
+          - definition: 3f2a9c1
+          - term: Published to
+          - definition: git@github.com:me/account.git
+          - term: Files
+          - definition: /home/me/.agentx/worktrees/pdf-letters/pdf-letters
+          - term: Id
+          - definition: f0f0f0f
+        - region "History":
+          - heading "History" [level=2]
+          - list "History":
+            - listitem: /Tighten the examples\\s+Oct 2(, 2026)?\\s+· 1 file · made with Git/
+            - listitem: /pdf-letters:\\sedit SKILL\\.md and add examples\\.md \\(studio-mac\\)\\s+Oct 2(, 2026)?\\s+· 2 files/
+            - listitem: /pdf-letters:\\sedit SKILL\\.md \\(studio-mac\\)\\s+Oct 1(, 2026)?\\s+· 1 file/
+            - listitem:
+              - button "Show all 5"
+    `);
+
+    await article.getByRole("button", { name: "Show all 5" }).click();
+    const sheet = page.getByRole("dialog", { name: "History" });
+    await expect(sheet).toContainText("pdf-letters");
+    const entries = sheet
+      .getByRole("list", { name: "All history" })
+      .getByRole("listitem");
+    await expect(entries).toHaveCount(5);
+    await expect(entries.last()).toContainText("from the original");
+    await sheet
+      .getByRole("button", { name: "Import pdf from acme/skills" })
+      .click();
+    const files = sheet
+      .getByRole("list", { name: "Files of Import pdf from acme/skills" })
+      .getByRole("listitem");
+    await expect(files).toHaveText(["addedSKILL.md", "addedreference.md"]);
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
+    // The history was read once: selecting the skill again does not read it again.
+    await row(page, "pdf").click();
+    await row(page, "pdf-letters").click();
+    await expect(article.getByRole("list", { name: "History" })).toBeVisible();
+    expect(later(cli)).toEqual([["skill", "history", "pdf-letters", "--json"]]);
+  });
+
+  test("a plugin's skill and an unmanaged one", async ({ cli, page }) => {
+    await openSkills(cli, page, "/#/skills/skill%3Ah-commit");
+    await expect(pane(page, "commit-helper")).toMatchAriaSnapshot(`
+      - article "commit-helper":
+        - text: Plugin skill · Enabled
+        - heading "commit-helper" [level=1]
+        - text: acme-tools plugin
+        - paragraph: Write commit messages the way the team does
+        - region "Agents":
+          - heading "Agents" [level=2]
+          - switch "Claude Code" [checked]
+          - switch "Cursor"
+          - switch "Universal"
+        - region "Files":
+          - heading "Files" [level=2]
+        - region "Details":
+          - heading "Details" [level=2]
+          - term: Plugin
+          - definition: acme-tools 1.4.0
+          - term: Marketplace
+          - definition: acme-marketplace
+          - term: Agent
+          - definition: Claude Code
+        - region "History":
+          - heading "History" [level=2]
+          - paragraph: History is kept for your own skills
+    `);
+
+    await row(page, "scratch").click();
+    await expect(pane(page, "scratch")).toMatchAriaSnapshot(`
+      - article "scratch":
+        - text: Unmanaged · Enabled
+        - heading "scratch" [level=1]
+        - text: skills CLI
+        - paragraph: Notes the skills CLI installed
+        - region "Agents":
+          - heading "Agents" [level=2]
+          - switch "Claude Code"
+          - switch "Cursor"
+          - switch "Universal" [checked]
+        - region "Files":
+          - heading "Files" [level=2]
+        - region "Details":
+          - heading "Details" [level=2]
+          - term: Found at
+          - definition: /home/me/.agents/skills/scratch
+          - term: Installed by
+          - definition: skills CLI · https://github.com/vercel/skills
+        - region "History":
+          - heading "History" [level=2]
+          - paragraph: History is kept for your own skills
+    `);
+    expect(later(cli)).toEqual([]);
+  });
+
+  test("an upstream-removed skill shows the banner, and a displaced placement its chip", async ({
+    cli,
+    page,
+  }) => {
+    await openSkills(cli, page, "/#/skills/gone");
+    const article = pane(page, "gone");
+    await expect(
+      article.getByRole("note", { name: "Removed from its source" })
+    ).toContainText("It still works but won't get updates.");
+    await expect(article.getByText("Removed from source")).toBeVisible();
+
+    await row(page, "release-notes").click();
+    const cursor = pane(page, "release-notes").getByRole("switch", {
+      name: "Cursor",
+    });
+    await expect(cursor).toBeChecked();
+    await expect(cursor).toContainText("displaced");
+    await expect(pane(page, "release-notes").getByRole("note")).toHaveCount(0);
   });
 });

@@ -47,6 +47,37 @@ export const loadAdoption = async () => {
   }));
 };
 
+// The version of each skill whose history was read, or is being read: name → version.
+const historyVersions = new Map<string, string>();
+
+/**
+ * Loads the history of one of your own skills: `skill history <name>`, a read. `version` names
+ * what the history is of, such as the skill's content and state from the inventory: the same
+ * version is read once, however often the skill is selected, and a change to it reads again.
+ */
+export const loadHistory = async (name: string, version: string) => {
+  if (historyVersions.get(name) === version) {
+    return;
+  }
+  historyVersions.set(name, version);
+  const outcome = await runCommand(["skill", "history", name], {
+    label: `history ${name}`,
+  });
+  if (outcome.exitCode === 0) {
+    if (historyVersions.get(name) === version) {
+      useAppStore.setState((s) => ({
+        histories: {
+          ...s.histories,
+          [name]: outcome.events.filter((e) => e.type === "history"),
+        },
+      }));
+    }
+  } else if (historyVersions.get(name) === version) {
+    // A failed read is tried again the next time the skill is selected.
+    historyVersions.delete(name);
+  }
+};
+
 /** What to load again after a command that may have changed something. */
 const afterCommand = ({ args, command, events, exitCode, read }: Finished) => {
   if (read) {
