@@ -41,6 +41,7 @@ var eventTypes = []struct {
 	{"progress", progressEvent{}},
 	{"library_skill", librarySkillEvent{}},
 	{"diff", diffEvent{}},
+	{"skill_file", skillFileEvent{}},
 	{"history", historyEvent{}},
 	{"fork_note", forkNoteEvent{}},
 	{"update_available", updateAvailableEvent{}},
