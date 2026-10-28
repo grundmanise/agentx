@@ -13,6 +13,7 @@ import type {
   SkillRow,
   SortOrder,
 } from "#/screens/skills/projection.ts";
+import { SkillDetail } from "#/screens/skills/skill-detail.tsx";
 import { SkillList } from "#/screens/skills/skill-list.tsx";
 import { useAppStore } from "#/store/store.ts";
 
@@ -48,7 +49,7 @@ const inField = (target: EventTarget | null) =>
 
 /**
  * The Skills screen: every skill on the machine in one list grouped by where it comes from, and
- * the pane of the selected one. Read-only: nothing here changes the machine. The selection
+ * the detail pane of the selected one. Read-only: nothing here changes the machine. The selection
  * is the route, so another screen can open a skill by its path.
  */
 export const SkillsScreen = () => {
@@ -134,10 +135,17 @@ export const SkillsScreen = () => {
         aria-label="Skill details"
         className="bg-shell-content-bg min-w-0 flex-1 overflow-auto"
       >
-        {/* The detail pane comes in a later change; until then, the selected skill's name. */}
-        <p className="type-secondary text-text-hint pt-detail-top px-detail m-0">
-          {selected === undefined ? "No skills on this machine" : selected.name}
-        </p>
+        {selected === undefined ? (
+          <p className="type-secondary text-text-hint pt-detail-top px-detail m-0">
+            {rows.length === 0 ? "No skills on this machine" : "Select a skill"}
+          </p>
+        ) : (
+          <SkillDetail
+            key={selected.key}
+            row={selected}
+            configurations={configurations}
+          />
+        )}
       </section>
     </div>
   );
