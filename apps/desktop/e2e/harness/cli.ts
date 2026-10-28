@@ -389,6 +389,24 @@ export class MockCli {
   }
 
   /**
+   * Emits serve stderr log events under the current child id, or `childId` for a child that
+   * ended, as the supervisor reports them: each a `log` line.
+   */
+  async serveLog(
+    logs: Partial<Omit<LogEvent, "type">>[],
+    childId = this.childId
+  ) {
+    await this.emit(
+      "serve-event",
+      logs.map((log) => ({
+        child_id: childId,
+        event: full({ type: "log", ...log }),
+        kind: "log",
+      }))
+    );
+  }
+
+  /**
    * Ends the current serve child, as the supervisor reports it: with a restart after
    * `restartInMs`, or none when it is null.
    */
