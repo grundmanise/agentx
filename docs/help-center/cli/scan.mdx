@@ -123,9 +123,16 @@ Plugins are listed under the configuration they are installed in, with their ver
 | Claude Code | The install records in `~/.claude/plugins/installed_plugins.json` and each plugin's directory. |
 | Codex | The `[plugins."<name>@<marketplace>"]` tables in `~/.codex/config.toml` and the plugin copies under `~/.codex/plugins/cache`. A plugin, or a plugin's server, with `enabled = false` shows `(disabled)`. A plugin installed through your account has no table, so it shows no enabled state. |
 | Cursor | Your local plugins under `~/.cursor/plugins/local` and the marketplace plugins cached under `~/.cursor/plugins/cache`. Cursor stores which plugins are enabled in your account, so a listed plugin may be turned off. Claude Code plugins that Cursor also loads are listed under Claude Code only. |
-| Gemini CLI | The extensions under `~/.gemini/extensions`. |
+| Gemini CLI | The extensions under `~/.gemini/extensions`. An extension reports no hooks and no icon. |
 
 A plugin's version is what its manifest or install record says. Without one, a Codex plugin or a Cursor marketplace plugin shows its cache directory name, such as `local` or a commit id.
+
+### Hooks and icons
+
+With `--json`, each plugin also lists its hooks and carries its icon, so that the desktop app can show them without reading the plugin's files:
+
+- `hooks` lists one entry per hook the plugin declares, with the event it runs on and a name. agentx reads the plugin's `hooks/hooks.json` and the hooks its manifest declares, and never reports a hook's command line. A hook has no name of its own in any client, so agentx names it after its status message when it has one, else after the script or program it runs, else after what it is (`prompt`, `agent`, `http`, or the tool of an MCP tool hook).
+- `icon` is the plugin's own icon, as a data URL you can put in an `<img>`, when the manifest names an image file inside the plugin: `icon` for Claude Code, `logo` for Cursor, `interface.logo` or `interface.composerIcon` for Codex. The file must be a PNG, a JPEG or an SVG of at most 64 KiB. agentx removes scripts and event handlers from an SVG before carrying it. A plugin whose manifest names no image, an image outside the plugin, over the limit or in another format, or an image at a URL, which agentx never fetches, has no `icon`.
 
 ## Include a project
 
@@ -151,6 +158,7 @@ These problems do not stop the scan. agentx prints each one on stderr as `warnin
 - A server whose handshake failed. See [Fix a failed handshake](#fix-a-failed-handshake).
 - A plugin manifest that cannot be read. The warning names the file.
 - A Cursor plugin copy that Cursor did not finish writing: agentx does not list it. A Cursor plugin manifest path that leads outside the plugin: agentx skips that path.
+- A plugin hooks file that cannot be read, or a plugin icon that leads outside the plugin, is over 64 KiB, is missing or is not a PNG, a JPEG or an SVG: agentx reports the plugin without it. The warning names the manifest.
 - A broken symlink in a skills directory: agentx skips it.
 - A `SKILL.md` whose frontmatter is not valid YAML or has no name: agentx names the skill after its directory.
 - A symlink inside a skill that points outside the skill: agentx skips that file.
