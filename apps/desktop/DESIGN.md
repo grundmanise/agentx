@@ -392,9 +392,10 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.secondary` | sans | 13 | 400 |  |  |  | Secondary line (`text.hint`) |
 | `type.button` | sans | 14 |  |  |  |  | Buttons; the variant sets the weight (600 primary, 500 others) |
 | `type.button-sm` | sans | 13.5 |  |  |  |  | Small buttons |
-| `type.pill` | sans | 11–12 | 600 |  |  |  | Pills |
+| `type.pill` | sans | 11.5 | 600 |  |  |  | Pills, the letter of a monogram logo |
 | `type.caption` | mono | 10.5 | 400 |  | 0.16em | upper | Captions (`text.caption`) |
-| `type.technical` | mono | 12–13 | 400 |  |  |  | Paths, ids, dates, commands |
+| `type.technical` | mono | 12.5 | 400 |  |  |  | Paths, ids, dates, commands; the count beside a page title (`text.caption`) |
+| `type.technical-sm` | mono | 12 | 400 |  |  |  | The count beside a group header (`group.count`), the mono tag beside a nested row |
 | `type.code` | mono | 12.5 | 400 | 1.75 |  |  | Code pane |
 | `type.brand` | sans | 14 | 600 |  | -0.01em |  | Product name in the sidebar |
 | `type.machine-label` | sans | 12 | 400 |  |  |  | Machine label under the product name (`text.muted`) |
@@ -510,6 +511,8 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `logo.overlap` | −6 to −8 |  | Negative margin between stacked logos |
 | `logo.ring` | 2 | `ring-logo` | Ring width |
 | `logo.padding` | 3–5 |  | Inner padding by size (3 at 20px, 4 at 24–26, 5 at 28) |
+| `logo.padding-sm` | 3 | `p-logo-sm` | 16 and 20px logos |
+| `logo.padding-lg` | 5 | `p-logo-lg` | 28px logos |
 
 ### Inputs
 
@@ -723,6 +726,10 @@ The machine's label from the inventory, under the product name in the sidebar: `
 ### Timeline (history)
 
 Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot` round (`timeline.dot-install`, `timeline.dot-update`, `timeline.dot-yours` by entry kind), a 1px `timeline.connector` below it. Entry: message 14 `text.primary`, meta 12 `timeline.meta`. Final item when truncated: hollow dot (inset ring 1.5px `timeline.more-ring`) and a ghost button "Show all {n}".
+
+### Agent client logo chip, monogram
+
+A client with no bundled logo shows the first letter of its name in `type.pill`, `on-accent` on `logo.bg`, drawn as an image like every other logo.
 
 ### Code pane
 

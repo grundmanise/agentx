@@ -500,6 +500,8 @@
   --gap-agent-chip: 10px;
   --gap-agent-chip-wrap: 8px;
   --ring-width-logo: 2px;
+  --padding-logo-sm: 3px;
+  --padding-logo-lg: 5px;
 
   /* Inputs */
   --height-input: 42px;
@@ -717,5 +719,20 @@
 @utility type-toast-action {
   font-family: var(--font-sans);
   font-size: 13px;
+  font-weight: 600;
+}
+@utility type-technical {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 400;
+}
+@utility type-technical-sm {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 400;
+}
+@utility type-pill {
+  font-family: var(--font-sans);
+  font-size: 11.5px;
   font-weight: 600;
 }
