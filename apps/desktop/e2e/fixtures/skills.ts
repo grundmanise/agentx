@@ -248,6 +248,7 @@ export const skills: SkillNode[] = [
 export const plugins: Plugin[] = [
   {
     configuration: "claude-code",
+    hooks: [],
     logical_id: "plugin:acme-tools",
     marketplace: "acme-marketplace",
     name: "acme-tools",

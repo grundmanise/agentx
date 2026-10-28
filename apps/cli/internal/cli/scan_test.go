@@ -33,6 +33,13 @@ type fixture struct {
 
 const skillMD = "---\nname: %s\ndescription: %s\n---\n\n# %s\n"
 
+// pngIcon and jpegIcon are the signatures the scan recognises an icon's
+// format by; the rest of an image is not read, so a fixture needs no more.
+const (
+	pngIcon  = "\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
+	jpegIcon = "\xFF\xD8\xFF\xE0JFIF"
+)
+
 func skill(name, description string) string {
 	return fmt.Sprintf(skillMD, name, description, name)
 }
@@ -237,8 +244,14 @@ var fixtures = map[string]fixture{
 	"plugins": {
 		dirs: []string{".codex", ".cursor"},
 		files: map[string]string{
-			".claude/plugins/installed_plugins.json":                                      `{"version": 2, "plugins": {"formatter@acme-tools": [{"scope": "user", "installPath": "$HOME/.claude/plugins/cache/acme-tools/formatter/1.2.0", "version": "1.2.0", "installedAt": "2026-09-01T00:00:00Z"}], "legacy@acme-tools": {"version": "0.1.0"}, "gone@acme-tools": [{"installPath": "$HOME/.claude/plugins/cache/acme-tools/gone/2.0.0", "version": "2.0.0"}]}}`,
-			".claude/plugins/cache/acme-tools/formatter/1.2.0/.claude-plugin/plugin.json": `{"name": "formatter", "version": "1.2.0", "description": "Format code"}`,
+			".claude/plugins/installed_plugins.json": `{"version": 2, "plugins": {"formatter@acme-tools": [{"scope": "user", "installPath": "$HOME/.claude/plugins/cache/acme-tools/formatter/1.2.0", "version": "1.2.0", "installedAt": "2026-09-01T00:00:00Z"}], "legacy@acme-tools": {"version": "0.1.0"}, "gone@acme-tools": [{"installPath": "$HOME/.claude/plugins/cache/acme-tools/gone/2.0.0", "version": "2.0.0"}]}}`,
+			// formatter: hooks in the default file and in both shapes the
+			// manifest declares them, a file and an inline event map, all
+			// read; a PNG icon inside the plugin.
+			".claude/plugins/cache/acme-tools/formatter/1.2.0/.claude-plugin/plugin.json": `{"name": "formatter", "version": "1.2.0", "description": "Format code", "icon": "./logo.png", "hooks": ["./config/extra-hooks.json", {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/check.sh", "statusMessage": "Checking the command"}]}]}]}`,
+			".claude/plugins/cache/acme-tools/formatter/1.2.0/hooks/hooks.json":           `{"description": "Formatting", "hooks": {"PostToolUse": [{"matcher": "Write|Edit", "hooks": [{"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/format.sh"}]}]}}`,
+			".claude/plugins/cache/acme-tools/formatter/1.2.0/config/extra-hooks.json":    `{"hooks": {"SessionStart": [{"hooks": [{"type": "prompt", "prompt": "Summarise the repository"}]}]}}`,
+			".claude/plugins/cache/acme-tools/formatter/1.2.0/logo.png":                   pngIcon,
 			".claude/plugins/cache/acme-tools/formatter/1.2.0/skills/format/SKILL.md":     skill("format", "Format the code"),
 			".claude/plugins/cache/acme-tools/formatter/1.2.0/.mcp.json":                  `{"mcpServers": {"formatter-db": {"command": "npx", "args": ["-y", "@acme/formatter-mcp"], "env": {"DB_TOKEN": "secret-plugin-env-value"}}}}`,
 			".claude/skills/format/SKILL.md":                                              skill("format", "Format the code"),
@@ -257,11 +270,18 @@ var fixtures = map[string]fixture{
 			// the table disables one of its two servers.
 			".codex/plugins/cache/personal/alpha/1.2.3/.codex-plugin/plugin.json": `{"name": "alpha", "version": "1.2.3"}`,
 			".codex/plugins/cache/personal/alpha/1.2.3/skills/old/SKILL.md":       skill("old", "Must not appear"),
-			".codex/plugins/cache/personal/alpha/local/.codex-plugin/plugin.json": `{"name": "alpha", "description": "Alpha tools", "mcpServers": "./conf/mcp.json"}`,
+			// alpha: the manifest names a hooks file, which replaces the
+			// default one, and a composer icon, a JPEG.
+			".codex/plugins/cache/personal/alpha/local/.codex-plugin/plugin.json": `{"name": "alpha", "description": "Alpha tools", "mcpServers": "./conf/mcp.json", "hooks": "./conf/hooks.json", "interface": {"composerIcon": "./assets/alpha.jpg"}}`,
+			".codex/plugins/cache/personal/alpha/local/conf/hooks.json":           `{"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "python3 ${PLUGIN_ROOT}/hooks/session_start.py"}]}]}}`,
+			".codex/plugins/cache/personal/alpha/local/hooks/hooks.json":          `{"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "./must-not-appear.sh"}]}]}}`,
+			".codex/plugins/cache/personal/alpha/local/assets/alpha.jpg":          jpegIcon,
 			".codex/plugins/cache/personal/alpha/local/skills/one/SKILL.md":       skill("one", "The first skill"),
 			".codex/plugins/cache/personal/alpha/local/conf/mcp.json":             `{"mcpServers": {"alpha-db": {"command": "npx", "args": ["-y", "@acme/alpha-mcp"], "env": {"DB_TOKEN": "secret-codex-plugin-env-value"}}, "alpha-web": {"url": "https://mcp.example.com/alpha"}}}`,
-			// beta: disabled, agent-plugins manifest at the root, servers in mcp.json.
-			".codex/plugins/cache/team/beta/0.4.0/plugin.json":         `{"$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json", "name": "beta", "version": "0.4.0"}`,
+			// beta: disabled, agent-plugins manifest at the root, servers in
+			// mcp.json, hooks and logo under the com.openai extension.
+			".codex/plugins/cache/team/beta/0.4.0/plugin.json":         `{"$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json", "name": "beta", "version": "0.4.0", "extensions": {"com.openai": {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [{"type": "mcp_tool", "server": "agent-srv", "tool": "audit"}]}]}, "interface": {"logo": "./assets/logo.png"}}}}`,
+			".codex/plugins/cache/team/beta/0.4.0/assets/logo.png":     pngIcon,
 			".codex/plugins/cache/team/beta/0.4.0/mcp.json":            `{"$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json", "mcpServers": {"agent-srv": {"type": "http", "url": "https://mcp.example.com/beta", "http_headers": {"X-Key": "secret-codex-plugin-header-value"}, "env_http_headers": {"X-Env": "BETA_ENV"}}}}`,
 			".codex/plugins/cache/team/beta/0.4.0/skills/two/SKILL.md": skill("two", "The second skill"),
 			// broken: a manifest that is not JSON.
@@ -275,8 +295,11 @@ var fixtures = map[string]fixture{
 			".codex/plugins/cache/team/delta/1.10.0/extra/four/SKILL.md":       skill("four", "The fourth skill"),
 			".codex/plugins/cache/team/delta/1.10.0/skills/ignored/SKILL.md":   skill("ignored", "Must not appear"),
 			// gamma: a cache entry without a config key, a legacy .claude-plugin
-			// manifest, a bare server map in .mcp.json.
-			".codex/plugins/cache/team/gamma/2.0.0/.claude-plugin/plugin.json":  `{"name": "gamma", "version": "2.0.0"}`,
+			// manifest, a bare server map in .mcp.json, the default hooks
+			// file, and a logo over the limit.
+			".codex/plugins/cache/team/gamma/2.0.0/.claude-plugin/plugin.json":  `{"name": "gamma", "version": "2.0.0", "interface": {"logo": "./big.png"}}`,
+			".codex/plugins/cache/team/gamma/2.0.0/hooks/hooks.json":            `{"hooks": {"PostToolUse": [{"hooks": [{"type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/tidy.sh", "statusMessage": "Tidying"}]}]}}`,
+			".codex/plugins/cache/team/gamma/2.0.0/big.png":                     pngIcon + strings.Repeat("a", 64*1024),
 			".codex/plugins/cache/team/gamma/2.0.0/skills/three/SKILL.md":       skill("three", "The third skill"),
 			".codex/plugins/cache/team/gamma/2.0.0/.mcp.json":                   `{"gamma-srv": {"command": "python", "args": ["-m", "gamma"]}}`,
 			".codex/plugins/cache/team/gamma/.codex-remote-plugin-install.json": `{"schema_version": 1, "remote_plugin_id": "gamma-remote"}`,
@@ -286,7 +309,11 @@ var fixtures = map[string]fixture{
 		files: map[string]string{
 			// local: both manifest formats, a plugin without a manifest, a
 			// manifest that is not JSON, a file, a hidden directory.
-			".cursor/plugins/local/agent-std/plugin.json":                    `{"$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json", "name": "agent-std", "version": "0.1.0"}`,
+			// agent-std also has hooks in the default file, in Cursor's flat
+			// shape, and an SVG logo whose script and handler are dropped.
+			".cursor/plugins/local/agent-std/plugin.json":                    `{"$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json", "name": "agent-std", "version": "0.1.0", "logo": "./assets/logo.svg"}`,
+			".cursor/plugins/local/agent-std/hooks/hooks.json":               `{"version": 1, "hooks": {"afterFileEdit": [{"command": "./scripts/format-code.sh"}], "beforeShellExecution": [{"command": "${CURSOR_PLUGIN_ROOT}/scripts/guard.sh", "matcher": "rm|curl"}]}}`,
+			".cursor/plugins/local/agent-std/assets/logo.svg":                `<svg xmlns="http://www.w3.org/2000/svg" onload="run()"><script>run()</script><rect width="8" height="8"/></svg>`,
 			".cursor/plugins/local/agent-std/skills/lint/SKILL.md":           skill("lint", "Lint the code"),
 			".cursor/plugins/local/agent-std/mcp.json":                       `{"mcpServers": {"std-srv": {"command": "${CURSOR_PLUGIN_ROOT}/bin/srv", "args": ["--root", "${CURSOR_PLUGIN_ROOT}"], "env": {"TOKEN": "secret-cursor-plugin-env-value"}}}}`,
 			".cursor/plugins/local/cursor-fmt/.cursor-plugin/plugin.json":    `{"name": "cursor-fmt", "version": "1.0.0", "description": "Format"}`,
@@ -299,29 +326,35 @@ var fixtures = map[string]fixture{
 			".cursor/plugins/local/README.md":                                "not a plugin\n",
 			// mani: the manifest names the skills root without the ./, one skill
 			// by its own directory, one path that leaves the plugin, and
-			// declares its server inline.
-			".cursor/plugins/local/mani/.cursor-plugin/plugin.json": `{"name": "mani", "version": "0.2.0", "skills": ["tools", "solo/draft", "../outside"], "mcpServers": {"mani-srv": {"command": "${CURSOR_PLUGIN_ROOT}/bin/mani", "env": {"KEY": "secret-cursor-inline-env-value"}}}}`,
+			// declares its server and its hooks inline, so the default hooks
+			// file is not read; its logo leaves the plugin.
+			".cursor/plugins/local/mani/.cursor-plugin/plugin.json": `{"name": "mani", "version": "0.2.0", "skills": ["tools", "solo/draft", "../outside"], "logo": "../outside.png", "hooks": {"sessionStart": [{"command": "bin/hello"}]}, "mcpServers": {"mani-srv": {"command": "${CURSOR_PLUGIN_ROOT}/bin/mani", "env": {"KEY": "secret-cursor-inline-env-value"}}}}`,
+			".cursor/plugins/local/mani/hooks/hooks.json":           `{"hooks": {"stop": [{"command": "./must-not-appear.sh"}]}}`,
 			".cursor/plugins/local/mani/tools/plan/SKILL.md":        skill("plan", "Plan the work"),
 			".cursor/plugins/local/mani/solo/draft/SKILL.md":        skill("draft", "Draft the text"),
 			".cursor/plugins/local/mani/skills/ignored/SKILL.md":    skill("ignored", "Must not appear"),
 			// named: the manifest names the server file; mcp.json is not read.
-			".cursor/plugins/local/named/.cursor-plugin/plugin.json": `{"name": "named", "version": "0.3.0", "mcpServers": "./conf/servers.json"}`,
+			// Its logo is a symlink that resolves outside the plugin.
+			".cursor/plugins/local/named/.cursor-plugin/plugin.json": `{"name": "named", "version": "0.3.0", "mcpServers": "./conf/servers.json", "logo": "assets/logo.svg"}`,
 			".cursor/plugins/local/named/conf/servers.json":          `{"mcpServers": {"named-srv": {"url": "https://named.example.com/mcp"}}}`,
 			".cursor/plugins/local/named/mcp.json":                   `{"mcpServers": {"decoy-srv": {"command": "decoy"}}}`,
 			"elsewhere/escaped/.cursor-plugin/plugin.json":           `{"name": "escaped", "version": "1.0.0"}`,
+			"elsewhere/logo.svg":                                     `<svg xmlns="http://www.w3.org/2000/svg"/>`,
 			// cache: a commit SHA and a release tag as version directories, one
 			// entry without the completion marker.
 			".cursor/plugins/cache/cursor-public/thermos/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b/.cache-complete":            "",
-			".cursor/plugins/cache/cursor-public/thermos/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b/.cursor-plugin/plugin.json": `{"name": "thermos", "description": "Keep it warm"}`,
+			".cursor/plugins/cache/cursor-public/thermos/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b/.cursor-plugin/plugin.json": `{"name": "thermos", "description": "Keep it warm", "logo": "https://example.com/thermos.png"}`,
 			".cursor/plugins/cache/cursor-public/thermos/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b/skills/brew/SKILL.md":       skill("brew", "Brew tea"),
 			".cursor/plugins/cache/cursor-public/thermos/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b/.mcp.json":                  `{"mcpServers": {"thermos-api": {"url": "https://api.thermos.example.com/mcp", "headers": {"Authorization": "secret-cursor-plugin-header-value"}}}}`,
 			".cursor/plugins/cache/acme-team/tools/release_v1.2.0/.cache-complete":                                            "",
-			".cursor/plugins/cache/acme-team/tools/release_v1.2.0/.claude-plugin/plugin.json":                                 `{"name": "tools", "version": "1.2.0"}`,
+			".cursor/plugins/cache/acme-team/tools/release_v1.2.0/.claude-plugin/plugin.json":                                 `{"name": "tools", "version": "1.2.0", "icon": "./icon.png"}`,
+			".cursor/plugins/cache/acme-team/tools/release_v1.2.0/icon.png":                                                   pngIcon,
 			".cursor/plugins/cache/cursor-public/half/0000000000000000000000000000000000000000/.cursor-plugin/plugin.json":    `{"name": "half"}`,
 		},
 		links: map[string]string{
-			".cursor/plugins/local/escape": "elsewhere/escaped",
-			".cursor/plugins/local/linked": ".cursor/plugins/local/.store/stored",
+			".cursor/plugins/local/escape":                "elsewhere/escaped",
+			".cursor/plugins/local/linked":                ".cursor/plugins/local/.store/stored",
+			".cursor/plugins/local/named/assets/logo.svg": "elsewhere/logo.svg",
 		},
 	},
 }
@@ -886,6 +919,7 @@ func TestScanPrintsWhatTheInventoryHolds(t *testing.T) {
 		{fixture: "codex-plugins", secrets: 3, warnings: []string{
 			"~/.codex/config.toml: plugin key \"no-marketplace\" is not <name>@<marketplace>, skipped",
 			"~/.codex/plugins/cache/personal/broken/1.0.0/.codex-plugin/plugin.json: invalid JSON, skipped",
+			"~/.codex/plugins/cache/team/gamma/2.0.0/.claude-plugin/plugin.json: interface.logo \"./big.png\" is 65552 bytes, over the 64 KiB limit, skipped",
 			"~/.codex/plugins/cache/team/ghost: plugin ghost@team is not installed there, skipped",
 		}, stdout: func(t *testing.T, h *harness, stdout string) {
 			contains(t, "stdout", stdout, "  plugins:\n")
@@ -908,7 +942,9 @@ func TestScanPrintsWhatTheInventoryHolds(t *testing.T) {
 			"~/.cursor/plugins/cache/cursor-public/half/0000000000000000000000000000000000000000: incomplete plugin cache, skipped",
 			"~/.cursor/plugins/local/bad/.cursor-plugin/plugin.json: invalid JSON, skipped",
 			"~/.cursor/plugins/local/escape: symlink resolves outside ~/.cursor/plugins/local, skipped",
+			"~/.cursor/plugins/local/mani/.cursor-plugin/plugin.json: logo path \"../outside.png\" must be relative and stay inside the plugin, skipped",
 			"~/.cursor/plugins/local/mani/.cursor-plugin/plugin.json: skills path \"../outside\" must be relative and stay inside the plugin, skipped",
+			"~/.cursor/plugins/local/named/.cursor-plugin/plugin.json: logo path \"assets/logo.svg\" resolves outside the plugin, skipped",
 		}, stdout: func(t *testing.T, h *harness, stdout string) {
 			contains(t, "stdout", stdout, "  plugins:\n")
 			contains(t, "stdout", h.portable(stdout), "~/.cursor/plugins/local/agent-std/bin/srv --root ~/.cursor/plugins/local/agent-std  (plugin agent-std)")
