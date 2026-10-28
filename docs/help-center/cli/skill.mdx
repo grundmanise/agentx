@@ -420,6 +420,31 @@ agentx skill add anthropics/skills --name pdf
 
 Removing deletes the skill and all your edits, so run `agentx skill diff pdf` first and save what you want to keep. Adding it again installs the version from the source's last fetch, which may be newer than yours. Pass `--copy` or `--to` again if you used them: removing the skill forgets them.
 
+## Read a skill's files
+
+See every file of a skill as it is on this machine, with its size and line count:
+
+```sh
+agentx skill files pdf
+```
+
+```text
+pdf has 5 files in /home/me/.agents/skills/pdf
+  SKILL.md                   412 bytes     14 lines
+  forms.md                   1270 bytes    31 lines
+  logo.png                   8192 bytes    binary
+  node_modules/dep/index.js  19 bytes      1 line        ignored
+  reference.pdf              310400 bytes  over 256 KiB
+```
+
+The desktop app uses this command to show a skill's files. It reads every file and changes nothing. With `--json`, each file is one event that also carries the file's content, as text with `U+FFFD` for a byte that is not valid UTF-8. A binary file, one with a NUL byte among its first 8000, and a file over 256 KiB are described, never printed: the event says `binary` or `truncated` and carries no content.
+
+- Name a skill of your library by its name, and a plugin's skill as for [`agentx skill fork`](/cli/fork#fork-a-plugins-skill): by its name, or as `<plugin>:<name>` when several plugins provide one of that name.
+- To read a skill directory that one client holds on its own, which is neither in your library nor a plugin's, name the client with `--configuration`: `agentx skill files commit --configuration claude-code`.
+- A file git ignores in a library skill, such as a `node_modules` directory, is marked `ignored`. These are the [files that do not count](#files-that-do-not-count), which `skill diff` leaves out.
+- A symlink to a file is read as the file an agent reads through it. A symlink to a directory, a `.git` directory and anything that is not a file are left out with a warning.
+- A skill, a plugin's skill or a configuration you name that does not exist stops the command with exit code 5.
+
 ## Check for updates
 
 Look for newer versions of the skills you installed, including the ones you forked:
