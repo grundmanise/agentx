@@ -67,9 +67,11 @@ type updateAvailableEvent struct {
 	UpstreamSubpath         *string       `json:"upstream_subpath,omitempty"` // the directory there
 	BaseHash                string        `json:"base_hash"`
 	UpstreamCommit          string        `json:"upstream_commit"`
+	UpstreamTime            string        `json:"upstream_time,omitempty"` // when the base version's upstream commit was made, RFC 3339 in UTC; absent for an update another machine published
 	Candidate               string        `json:"candidate"`
 	CandidateHash           string        `json:"candidate_hash"`
 	CandidateUpstreamCommit string        `json:"candidate_upstream_commit"`
+	CandidateUpstreamTime   string        `json:"candidate_upstream_time,omitempty"` // when the newer version was made, RFC 3339 in UTC: its upstream commit's time, or the account remote tip's
 	Files                   []changedFile `json:"files"`
 	UpstreamName            string        `json:"upstream_name,omitempty"` // present when the upstream names the skill otherwise
 
@@ -582,7 +584,7 @@ func (inv *invocation) checkAccount(ctx context.Context, gitDir string, ac *acco
 		return nil
 	}
 	ac.fetched = true
-	tips, err := lineage.ListRemote(ctx, inv.git, gitDir, source.RemoteName(source.ID(url)))
+	tips, err := lineage.ListRemoteTips(ctx, inv.git, gitDir, source.RemoteName(source.ID(url)))
 	if err != nil {
 		return accountRepoFailure(err)
 	}
@@ -597,10 +599,11 @@ func (inv *invocation) checkAccount(ctx context.Context, gitDir string, ac *acco
 	type published struct {
 		rec            lineage.Record
 		dir, base, tip string
+		when           string // the tip's committer time, when the other machine recorded it
 	}
 	var behind []published
 	for _, rec := range ac.placed {
-		tip := tips[rec.Name]
+		tip := tips[rec.Name].Commit
 		if tip == "" || tip == rec.Commit {
 			ac.skills = append(ac.skills, rec.Name)
 			continue
@@ -625,7 +628,7 @@ func (inv *invocation) checkAccount(ctx context.Context, gitDir string, ac *acco
 			continue
 		}
 		ac.skills = append(ac.skills, rec.Name)
-		behind = append(behind, published{rec: rec, dir: dir, base: base, tip: tip})
+		behind = append(behind, published{rec: rec, dir: dir, base: base, tip: tip, when: tips[rec.Name].Time})
 	}
 	if len(behind) == 0 {
 		return nil
@@ -657,7 +660,7 @@ func (inv *invocation) checkAccount(ctx context.Context, gitDir string, ac *acco
 	for i, p := range behind {
 		ev := updateAvailableEvent{
 			event: newEvent("update_available"), Name: p.rec.Name, Kind: eventKind(p.rec.Kind), Source: url,
-			Candidate: p.tip, Files: []changedFile{}, local: p.rec.Commit,
+			Candidate: p.tip, CandidateUpstreamTime: p.when, Files: []changedFile{}, local: p.rec.Commit,
 		}
 		for _, f := range changes[trees[2*i]+" "+trees[2*i+1]] {
 			f.Path = strings.TrimPrefix(f.Path, p.dir+"/")
@@ -1005,7 +1008,7 @@ func (inv *invocation) recordCheck(ctx context.Context, gitDir string, wait bool
 				m.Ref(gitDir, lineage.CandidateRef(fd.name), candidate, setCandidate)
 				rec.Candidate = nil
 				if setCandidate != "" {
-					rec.Candidate = &lineage.Candidate{Commit: setCandidate, Tree: fd.v.tree, Import: fd.v.imp, HasImport: true}
+					rec.Candidate = &lineage.Candidate{Commit: setCandidate, Tree: fd.v.tree, Time: lineage.UpstreamTime(fd.v.when), Import: fd.v.imp, HasImport: true}
 					moved[fd.name] = true
 				}
 			}
@@ -1078,8 +1081,8 @@ func (inv *invocation) describeCandidates(ctx context.Context, gitDir, account s
 	for i, rec := range recs {
 		c := rec.Candidate
 		ev := updateAvailableEvent{
-			event: newEvent("update_available"), Name: rec.Name, BaseHash: rec.Import.Hash, UpstreamCommit: rec.Import.Commit,
-			Candidate: c.Commit, CandidateHash: c.Import.Hash, CandidateUpstreamCommit: c.Import.Commit, Files: []changedFile{},
+			event: newEvent("update_available"), Name: rec.Name, BaseHash: rec.Import.Hash, UpstreamCommit: rec.Import.Commit, UpstreamTime: rec.Time,
+			Candidate: c.Commit, CandidateHash: c.Import.Hash, CandidateUpstreamCommit: c.Import.Commit, CandidateUpstreamTime: c.Time, Files: []changedFile{},
 		}
 		ev.Kind, ev.Source, ev.Subpath, ev.Upstream, ev.UpstreamSubpath = skillOrigin(rec, account)
 		prefix := rec.Import.Dir() + "/"

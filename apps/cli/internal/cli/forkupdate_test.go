@@ -109,6 +109,7 @@ func TestSkillUpdateMergesUpstreamIntoAFork(t *testing.T) {
 	for _, name := range []string{"alpha", "beta"} {
 		ev := h.librarySkill(out.stdout, name)
 		equal(t, name+": upstream_commit", ev["upstream_commit"], second)
+		equal(t, name+": upstream_time, the new base's, read by the walk", ev["upstream_time"], fixedTime)
 		equal(t, name+": state", ev["state"], stateModified)
 		if ev["candidate"] != nil {
 			t.Errorf("%s still lists an update: %v", name, ev["candidate"])
