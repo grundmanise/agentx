@@ -150,6 +150,31 @@ impl Fixture {
         }
     }
 
+    /// The serve lines of `kind` so far. Serve's stdout and stderr are read apart, so a line of
+    /// one arrives before or after a line of the other.
+    fn serve_lines(&self, kind: &str) -> Vec<(Instant, Value)> {
+        self.emitted(SERVE_LINE)
+            .into_iter()
+            .filter(|(_, l)| l["kind"] == kind)
+            .collect()
+    }
+
+    /// Waits until `count` serve lines of `kind` were emitted.
+    async fn wait_for_serve(&self, kind: &str, count: usize) -> Vec<(Instant, Value)> {
+        let start = Instant::now();
+        loop {
+            let got = self.serve_lines(kind);
+            if got.len() >= count {
+                return got;
+            }
+            assert!(
+                start.elapsed() < Duration::from_secs(10),
+                "waited for {count} serve lines of kind {kind}, got {got:?}"
+            );
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    }
+
     fn grandchild(&self) -> u32 {
         fs::read_to_string(self.dir.join("grandchild"))
             .unwrap()
@@ -319,20 +344,30 @@ async fn a_child_gets_the_login_shell_environment_and_json() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn serve_takes_requests_logs_its_stderr_and_stops_with_the_window() {
+async fn serve_takes_requests_reports_and_logs_its_stderr_and_stops_with_the_window() {
     let f = Fixture::new("serve");
     f.serve_mode("echo");
     let child = f.sup.serve_start().await.unwrap();
     assert_eq!(f.sup.serve_start().await.unwrap(), child, "one serve child");
-    let first = f.wait_for(SERVE_LINE, 1).await;
+    let first = f.wait_for_serve("event", 1).await;
     assert_eq!(first[0].1["child_id"], child);
     assert_eq!(first[0].1["event"]["type"], "inventory");
+    // Its stderr reaches the app as log lines, as a one-shot's does.
+    let logs = f.wait_for_serve("log", 1).await;
+    assert_eq!(
+        logs[0].1,
+        json!({
+            "child_id": child,
+            "kind": "log",
+            "event": {"type": "log", "schema_version": 1, "level": "debug", "message": "serve started"},
+        })
+    );
 
     let request = r#"{"type":"refresh","request_id":"q1"}"#;
     f.sup.serve_request(request).await.unwrap();
-    let lines = f.wait_for(SERVE_LINE, 2).await;
+    let events = f.wait_for_serve("event", 2).await;
     assert_eq!(
-        lines[1].1["event"]["request"],
+        events[1].1["event"]["request"],
         json!({"type": "refresh", "request_id": "q1"})
     );
     assert!(f.sup.serve_request("not json").await.is_err());
@@ -342,8 +377,9 @@ async fn serve_takes_requests_logs_its_stderr_and_stops_with_the_window() {
     let exits = f.wait_for(SERVE_EXIT, 1).await;
     assert_eq!(exits[0].1["exit_code"], 0);
     assert_eq!(exits[0].1["restarting"], false);
-    let lines = f.emitted(SERVE_LINE);
-    assert_eq!(lines.last().unwrap().1["event"]["type"], "result");
+    let events = f.serve_lines("event");
+    assert_eq!(events.last().unwrap().1["event"]["type"], "result");
+    assert_eq!(f.serve_lines("log").len(), 1, "the one debug line");
     let log = fs::read_to_string(f.dir.join("logs/serve.log")).unwrap();
     assert!(log.contains("serve started"), "{log}");
     assert!(f.sup.serve_request(request).await.is_err(), "serve is gone");
@@ -359,7 +395,7 @@ async fn serve_is_restarted_with_backoff_and_a_fresh_environment() {
     let exits_and_lines = f.wait_for(SERVE_EXIT, 3).await;
     f.sup.shutdown().await;
 
-    let lines = f.emitted(SERVE_LINE);
+    let lines = f.serve_lines("event");
     let summary: Vec<(Value, Value, Value)> = exits_and_lines
         .iter()
         .map(|(_, e)| {
@@ -382,6 +418,11 @@ async fn serve_is_restarted_with_backoff_and_a_fresh_environment() {
         exits[0].1["stderr"].as_array().unwrap().last().unwrap(),
         "boom"
     );
+    // A stderr line that is not a log event is reported as invalid, as a one-shot's is.
+    assert_eq!(
+        f.serve_lines("invalid")[0].1,
+        json!({"child_id": 1, "kind": "invalid", "stream": "stderr", "line": "boom"})
+    );
     // Each child starts only after its delay.
     let started = |id: u64| lines.iter().find(|(_, l)| l["child_id"] == id).unwrap().0;
     assert!(started(2) - exits_and_lines[0].0 >= Duration::from_millis(450));
@@ -402,7 +443,7 @@ async fn a_refused_serve_is_not_restarted_in_a_loop() {
     let exits = f.wait_for(SERVE_EXIT, 1).await;
     assert_eq!(exits[0].1["exit_code"], 6);
     assert_eq!(exits[0].1["restarting"], false);
-    assert_eq!(f.emitted(SERVE_LINE)[1].1["event"]["type"], "error");
+    assert_eq!(f.serve_lines("event")[1].1["event"]["type"], "error");
 
     tokio::time::sleep(Duration::from_millis(1200)).await;
     assert_eq!(f.emitted(SERVE_EXIT).len(), 1, "serve was restarted");
