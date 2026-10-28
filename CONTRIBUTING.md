@@ -155,8 +155,15 @@ Don't report a security vulnerability in a public issue.
 
 ## Releases
 
-Maintainers publish the releases. [`RELEASING.md`](RELEASING.md) covers the Release workflow and the
-secrets it needs.
+agentx has two kinds of release:
+
+- **Nightly**: a prerelease of `main`, published every night at 03:17 UTC when the CLI or the desktop
+  app changed and CI passed.
+- **Stable**: a maintainer starts it by hand, once a nightly has proved good enough. It promotes that
+  nightly to a version such as `v0.3.0`.
+
+Your merged change reaches users first in a nightly, then in the next stable release. To publish a
+release, see [`RELEASING.md`](RELEASING.md).
 
 ## License
 

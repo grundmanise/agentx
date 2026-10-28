@@ -15,9 +15,10 @@ and their checksums to [GitHub Releases](https://github.com/grundmanise/agentx/r
   passed on it. The version is the next release the commits call for: a breaking change bumps the
   minor version (the major from 1.0 on), a `feat` or `change` the minor, anything else the patch. The
   14 newest nightlies are kept.
-- **Stable**: the Release workflow is triggered manually. By default it promotes the newest nightly:
-  it tags that nightly's commit, such as `v0.3.0`, and builds it again, so `agentx version` prints the
-  release version. The workflow also automatically updates the Homebrew formula.
+- **Stable**: run the Release workflow by hand, from the Actions tab, once a nightly has proved good
+  enough to promote. By default it promotes the newest nightly: it tags that nightly's commit, such as
+  `v0.3.0`, and builds it again, so `agentx version` prints the release version. It also updates the
+  Homebrew formula.
 
 The install script is served from `https://agentx.wtf/install`, which redirects to
 [`scripts/install.sh`](scripts/install.sh) on `main`. The Homebrew formula lives in
