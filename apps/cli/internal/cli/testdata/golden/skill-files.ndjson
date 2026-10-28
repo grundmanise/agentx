@@ -1,0 +1,13 @@
+{"type":"skill_file","schema_version":2,"name":"pdf","path":".gitignore","size":14,"binary":false,"lines":1,"content":"node_modules/\n"}
+{"type":"skill_file","schema_version":2,"name":"pdf","path":"SKILL.md","size":63,"binary":false,"lines":6,"content":"---\nname: pdf\ndescription: Named by its frontmatter\n---\n\n# pdf\n"}
+{"type":"skill_file","schema_version":2,"name":"pdf","path":"a.md","size":15,"binary":false,"lines":1,"content":"the same bytes\n"}
+{"type":"skill_file","schema_version":2,"name":"pdf","path":"alias.md","size":15,"binary":false,"lines":1,"content":"the same bytes\n"}
+{"type":"skill_file","schema_version":2,"name":"pdf","path":"b.md","size":15,"binary":false,"lines":1,"content":"the same bytes\n"}
+{"type":"skill_file","schema_version":2,"name":"pdf","path":"big.md","size":262154,"binary":false,"truncated":true}
+{"type":"skill_file","schema_version":2,"name":"pdf","path":"bin/run.sh","size":19,"binary":false,"lines":2,"content":"#!/bin/sh\necho run\n"}
+{"type":"skill_file","schema_version":2,"name":"pdf","path":"c.md","size":13,"binary":false,"lines":1,"content":"a third file\n"}
+{"type":"skill_file","schema_version":2,"name":"pdf","path":"empty.md","size":0,"binary":false,"lines":0,"content":""}
+{"type":"skill_file","schema_version":2,"name":"pdf","path":"logo.png","size":16,"binary":true}
+{"type":"skill_file","schema_version":2,"name":"pdf","path":"node_modules/dep/index.js","size":19,"binary":false,"lines":1,"content":"module.exports = 1\n","ignored":true}
+{"type":"skill_file","schema_version":2,"name":"pdf","path":"notes.md","size":57,"binary":false,"lines":1,"content":"tab\there, an escape \u001b[31m, caf� and no newline at the end"}
+{"type":"result","schema_version":2,"ok":true,"summary":"pdf has 12 files"}

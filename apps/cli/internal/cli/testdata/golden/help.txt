@@ -21,6 +21,7 @@ SKILLS
   skill rename <old> <new>        Rename one of your own skills
   skill diff <name>               Show unpublished edits, or what an update changes
   skill history <name>            List the commits of one of your own skills
+  skill files <name>              Read every file of a skill, with its content
 
 UPDATES AND PUBLISHING
   skill check-updates             Look for upstream updates and other machines' edits
