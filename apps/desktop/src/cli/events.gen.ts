@@ -378,6 +378,19 @@ export interface DiffEvent {
   patch: string;
 }
 
+export interface SkillFileEvent {
+  type: "skill_file";
+  schema_version: number;
+  name: string;
+  path: string;
+  size: number;
+  binary: boolean;
+  lines?: number;
+  content?: string;
+  truncated?: boolean;
+  ignored?: boolean;
+}
+
 export interface HistoryEvent {
   type: "history";
   schema_version: number;
@@ -603,6 +616,7 @@ export type CliEvent =
   | ProgressEvent
   | LibrarySkillEvent
   | DiffEvent
+  | SkillFileEvent
   | HistoryEvent
   | ForkNoteEvent
   | UpdateAvailableEvent
