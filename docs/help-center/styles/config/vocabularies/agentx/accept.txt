@@ -33,3 +33,6 @@ zsh
 Skillshare
 AppImage
 KiB
+MiB
+GiB
+TiB

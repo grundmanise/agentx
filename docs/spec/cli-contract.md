@@ -84,6 +84,11 @@ Every run emits exactly one `result` as its last stdout event, after any `error`
 | `id` | string | the machine id, 32 lowercase hex characters |
 | `label` | string | the machine label |
 | `derivation` | string | `platform` when the id is derived from the platform id, `random` when it comes from `machine.json` |
+| `home` | string | agentx home, as `AGENTX_HOME` resolved it (see [Agentx home](#agentx-home)) |
+| `settings_file` | string | the machine settings file, `settings.json` in agentx home (see [Machine settings](#machine-settings)) |
+| `library` | string | the library, as `AGENTX_LIBRARY` resolved it |
+| `account_repo` | string | the account repo, `account.git` in agentx home; absent until it is created (see [Account repo](#account-repo)) |
+| `account_repo_bytes` | integer | the size on disk of the account repo: the sizes of the regular files under `account.git` added up, read without a git process, a symlink counting nothing and never followed. A fork's worktree lies under `worktrees/` in agentx home, outside the repository, so what it holds is not counted. Absent with `account_repo` |
 
 `source`, emitted by every `agentx source` command, one per source (see [Sources](#sources)), the account remote included (see [Account remote](#account-remote)), by `agentx skill add` for the source it installs from, and by `agentx skill add` with no source for the upstream source of a skill it installs from the account remote, when it adds one (see **Installing from the account remote** under [Account remote](#account-remote)):
 
@@ -450,7 +455,7 @@ The machine id names one computer across reinstalls. It is derived, in this orde
 2. Otherwise, when a platform id exists, the machine id is HMAC-SHA256 with the key `agentx-machine-id/v1` over the message `<platform id> LF <uid>`, where `LF` is one newline byte and `<uid>` is the numeric user id in decimal, rendered as the first 32 lowercase hex characters of the MAC. The derivation is `platform`. The platform id is `AGENTX_PLATFORM_ID` when the variable is set, else the content of `/etc/machine-id` without surrounding whitespace on Linux, else `IOPlatformUUID` from `ioreg -rd1 -c IOPlatformExpertDevice` on macOS.
 3. Otherwise 16 random bytes are generated once, under the lock, stored as hex in `machine.json`, and used from then on as in 1.
 
-`agentx machine` prints the id, the label and the derivation. `agentx machine rename <label>` sets the label in the settings file. `agentx machine reset-id` writes a new random id to `machine.json`; from then on the id is random even where a platform id exists, until the file is deleted. Without `--json`, `machine` prints a `key  value` table with the rows `Machine id`, `Label` and `Derivation`, and the two mutations print one confirmation line: `✓ machine label is now <label>` or `✓ machine id is now <id>`.
+`agentx machine` prints the id, the label and the derivation, and where agentx keeps its files: agentx home, the settings file, the library and, once it exists, the account repo with its size on disk, each as the `machine` event carries it, so that a consumer such as the desktop app shows the paths and the size without computing anything about the machine. `agentx machine rename <label>` sets the label in the settings file. `agentx machine reset-id` writes a new random id to `machine.json`; from then on the id is random even where a platform id exists, until the file is deleted. Without `--json`, `machine` prints a `key  value` table with the rows `Machine id`, `Label`, `Derivation`, `Home`, `Settings`, `Library` and `Account repo`, the last `<path> (<size>)`, the size in bytes below one KiB and with one decimal in KiB, MiB, GiB or TiB above, or `not created yet`; the two mutations print one confirmation line: `✓ machine label is now <label>` or `✓ machine id is now <id>`.
 
 ## Lock and version file
 
