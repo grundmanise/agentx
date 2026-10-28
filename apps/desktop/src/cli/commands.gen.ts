@@ -60,6 +60,9 @@ export const CLI_COMMANDS: Readonly<Record<string, CliFlags>> = {
     commit: true,
     update: false,
   },
+  "skill files": {
+    configuration: true,
+  },
   "skill fork": {
     name: true,
   },
