@@ -1,10 +1,61 @@
 import { useNavigate } from "react-router";
 
 import type { Configuration } from "#/cli/events.gen.ts";
+import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
+import { FilterChip, SortToggle } from "#/components/filter-controls.tsx";
+import { SearchField } from "#/components/search-field.tsx";
 import { Button } from "#/components/ui/button.tsx";
-import { forksOf } from "#/screens/skills/projection.ts";
-import type { Group, SkillRow } from "#/screens/skills/projection.ts";
+import { FilterPopover } from "#/screens/skills/filter-popover.tsx";
+import { forksOf, UNIVERSAL } from "#/screens/skills/projection.ts";
+import type {
+  Filters,
+  Group,
+  SkillRow,
+  SortOrder,
+} from "#/screens/skills/projection.ts";
 import { SkillRowItem } from "#/screens/skills/skill-row.tsx";
+
+/** What the agent chip says: the one agent chosen, or how many. */
+const agentChipLabel = (agents: string[], chosen: Configuration[]): string => {
+  const [one] = agents;
+  if (agents.length !== 1 || one === undefined) {
+    return `${agents.length} agents`;
+  }
+  if (one === UNIVERSAL) {
+    return "Universal";
+  }
+  return chosen[0]?.name ?? one;
+};
+
+/** The chip in the filter row that echoes the agent filter: one agent, or how many. */
+const AgentFilterChip = ({
+  agents,
+  configurations,
+  onClear,
+}: {
+  agents: string[];
+  configurations: Configuration[];
+  onClear: () => void;
+}) => {
+  const universal = configurations.filter((c) => c.reads_library);
+  const chosen = agents
+    .flatMap((id) =>
+      id === UNIVERSAL ? universal : configurations.filter((c) => c.id === id)
+    )
+    .filter((c, i, all) => all.indexOf(c) === i);
+  const [single] = chosen;
+  const oneAgent = agents.length === 1 && agents[0] !== UNIVERSAL;
+  return (
+    <FilterChip clearLabel="Clear agents" onClear={onClear}>
+      {oneAgent && single !== undefined ? (
+        <AgentLogo client={single} size={16} />
+      ) : (
+        <LogoStack clients={chosen} size={16} />
+      )}
+      <span className="truncate">{agentChipLabel(agents, chosen)}</span>
+    </FilterChip>
+  );
+};
 
 const GroupHeader = ({
   label,
@@ -28,21 +79,29 @@ const GroupHeader = ({
 );
 
 /**
- * The left column of the Skills screen: title and count, the Add button, and the rows in their
- * groups. Forks under a new name are nested under their original.
+ * The left column of the Skills screen: title and count, the Add button, the search field, the
+ * filter row, and the rows in their groups. Forks under a new name are nested under their original.
  */
 export const SkillList = ({
   rows,
   groups,
   configurations,
+  filters,
+  onFilters,
+  order,
+  onOrder,
   selectedKey,
   onSelect,
 }: {
-  /** Every row. */
+  /** Every row, before the filters. */
   rows: SkillRow[];
-  /** The rows, grouped. */
+  /** The rows that pass the filters, grouped. */
   groups: Group[];
   configurations: Configuration[];
+  filters: Filters;
+  onFilters: (filters: Filters) => void;
+  order: SortOrder;
+  onOrder: (order: SortOrder) => void;
   selectedKey: string | undefined;
   onSelect: (row: SkillRow) => void;
 }) => {
@@ -52,7 +111,7 @@ export const SkillList = ({
       aria-label="Skills list"
       className="w-split-list bg-shell-content-bg border-shell-divider flex flex-none flex-col border-r"
     >
-      <div className="pt-split-header-top pr-split-header-right pb-split-toolbar-bottom pl-split-header-left flex items-end justify-between gap-3">
+      <div className="pt-split-header-top pr-split-header-right pl-split-header-left flex items-end justify-between gap-3 pb-0">
         <div className="flex items-baseline gap-3">
           <h1 className="type-page-title text-text-primary m-0">Skills</h1>
           <span
@@ -73,6 +132,40 @@ export const SkillList = ({
           >
             Add
           </Button>
+        </div>
+      </div>
+      <div className="pt-split-toolbar pr-split-toolbar pb-split-toolbar-bottom pl-split-toolbar-left gap-split-toolbar flex flex-col">
+        <SearchField
+          label="Filter skills by name"
+          placeholder="Filter"
+          value={filters.name}
+          onChange={(name) => {
+            onFilters({ ...filters, name });
+          }}
+        />
+        <div className="gap-split-filter flex min-w-0 items-center">
+          <FilterPopover
+            rows={rows}
+            configurations={configurations}
+            filters={filters}
+            onChange={onFilters}
+          />
+          {filters.agents.length > 0 && (
+            <AgentFilterChip
+              agents={filters.agents}
+              configurations={configurations}
+              onClear={() => {
+                onFilters({ ...filters, agents: [] });
+              }}
+            />
+          )}
+          <span className="flex-1" />
+          <SortToggle
+            descending={order === "desc"}
+            onToggle={() => {
+              onOrder(order === "asc" ? "desc" : "asc");
+            }}
+          />
         </div>
       </div>
       <nav
