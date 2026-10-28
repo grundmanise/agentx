@@ -1,9 +1,9 @@
 ---
 title: "agentx machine"
-description: "See the machine's stable id and label, rename it, or reset the id."
+description: "See the machine's stable id and label and where agentx keeps its files, rename the machine, or reset the id."
 ---
 
-agentx gives each computer a machine id and a label. The id identifies the machine in scans, snapshots and the commits agentx writes. It stays the same when you reinstall agentx. The label is a readable name that you can change.
+agentx gives each computer a machine id and a label. The id identifies the machine in scans, snapshots and the commits agentx writes. It stays the same when you reinstall agentx. The label is a readable name that you can change. The same command shows where agentx keeps its files on this machine.
 
 ## Show the machine
 
@@ -12,9 +12,13 @@ agentx machine
 ```
 
 ```text
-Machine id  3ea501b8fb5db1ad3cc85268972d7012
-Label       my-laptop
-Derivation  platform
+Machine id    3ea501b8fb5db1ad3cc85268972d7012
+Label         my-laptop
+Derivation    platform
+Home          /home/me/.agentx
+Settings      /home/me/.agentx/settings.json
+Library       /home/me/.agents/skills
+Account repo  /home/me/.agentx/account.git (2.3 MiB)
 ```
 
 `Derivation` tells you where the id comes from:
@@ -23,6 +27,21 @@ Derivation  platform
 |---|---|
 | `platform` | agentx computes the id from the computer's platform id and your user id. The platform id is `/etc/machine-id` on Linux and the hardware UUID on macOS. Reinstalling agentx on the same computer gives the same id. |
 | `random` | agentx generated the id and stores it in `machine.json` in agentx home (`~/.agentx` by default). This happens when the computer has no platform id, or after you [reset the id](#reset-the-id). |
+
+## See where agentx keeps its files
+
+The last four rows say where agentx keeps its files on this machine:
+
+| Row | What it is |
+|---|---|
+| `Home` | [agentx home](/#key-terms), `~/.agentx` unless `AGENTX_HOME` says otherwise. Everything agentx keeps on this machine lives here. |
+| `Settings` | the [machine settings](/cli/config) file, `settings.json` in agentx home. |
+| `Library` | the [library](/#key-terms), `~/.agents/skills` unless `AGENTX_LIBRARY` says otherwise, where agentx installs skills. |
+| `Account repo` | the [account repo](/#key-terms), `account.git` in agentx home, and its size on disk. It shows `not created yet` until the first command that needs it, such as `agentx source add` or `agentx skill new`, creates it. |
+
+The size counts the files in `account.git` alone. The worktrees of your own skills, under `worktrees` in agentx home, are not part of it. There is no cache to clear: what agentx fetched from your sources lives in the account repo.
+
+With `--json`, the `machine` event carries the same as `home`, `settings_file`, `library`, `account_repo` and `account_repo_bytes`. The last two are absent until the account repo exists. See [Environment variables](/cli/output#environment-variables) for `AGENTX_HOME` and `AGENTX_LIBRARY`.
 
 ## Rename the machine
 
