@@ -295,11 +295,11 @@ jobs:
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY }}
         run: |
-          if [ -z "$APPLE_CERTIFICATE" ]; then
+          if [ -z "$APPLE_CERTIFICATE" ] || [ -z "$APPLE_CERTIFICATE_PASSWORD" ]; then
             echo "::warning title=App not signed::add the APPLE_CERTIFICATE secrets, see Releases in CONTRIBUTING.md"
             unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_API_ISSUER APPLE_API_KEY
             export APPLE_SIGNING_IDENTITY=-
-          elif [ -z "$APPLE_API_PRIVATE_KEY" ]; then
+          elif [ -z "$APPLE_API_PRIVATE_KEY" ] || [ -z "$APPLE_API_KEY" ] || [ -z "$APPLE_API_ISSUER" ]; then
             echo "::warning title=App not notarized::add the APPLE_API secrets, see Releases in CONTRIBUTING.md"
             unset APPLE_API_ISSUER APPLE_API_KEY
           else
