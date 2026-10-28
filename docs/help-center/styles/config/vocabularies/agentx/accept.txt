@@ -30,3 +30,7 @@ worktrees?
 [Aa]uthorise
 organisation
 zsh
+KiB
+MiB
+GiB
+TiB
