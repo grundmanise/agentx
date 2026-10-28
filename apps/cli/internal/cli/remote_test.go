@@ -428,6 +428,13 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	equal(t, "its source", update["source"], "file://"+remote)
 	equal(t, "its candidate", update["candidate"], published)
 	equal(t, "its upstream commit", update["upstream_commit"], "")
+	// The update is dated with the remote tip's committer time, when the
+	// other machine recorded it, and no base version's date, since it has
+	// no upstream version.
+	equal(t, "its candidate's time", update["candidate_upstream_time"], lineage.UpstreamTime(b.accountGit("log", "-1", "--format=%ct", published)))
+	if _, ok := update["upstream_time"]; ok {
+		t.Errorf("the update of what another machine published dates a base version: %v", update["upstream_time"])
+	}
 	equal(t, "its kind", update["kind"], lineage.KindManaged)
 	if _, ok := update["upstream"]; ok {
 		t.Errorf("the update of what another machine published names an upstream: %v", update["upstream"])

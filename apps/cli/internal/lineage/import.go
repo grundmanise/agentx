@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
@@ -604,6 +605,24 @@ func Dropped(entries []source.TreeEntry) []string {
 	}
 	sort.Strings(dropped)
 	return dropped
+}
+
+// UpstreamTime turns a committer time git printed, epoch seconds alone or
+// with the offset the commit was written with, as %ct, %(committerdate:unix)
+// and an import commit's own date print it, into the time an event reports:
+// RFC 3339 in UTC, the instant with no offset of its own, so that the date
+// of a version reads the same on every machine. It is "" for anything else,
+// as for a ref that holds no commit, which an event then leaves out.
+func UpstreamTime(when string) string {
+	epoch, _, _ := strings.Cut(strings.TrimSpace(when), " ")
+	if epoch == "" || strings.TrimLeft(epoch, "0123456789") != "" {
+		return ""
+	}
+	n, err := strconv.ParseInt(epoch, 10, 64)
+	if err != nil {
+		return ""
+	}
+	return time.Unix(n, 0).UTC().Format(time.RFC3339)
 }
 
 // UpstreamDate turns the upstream commit's committer time, epoch seconds as

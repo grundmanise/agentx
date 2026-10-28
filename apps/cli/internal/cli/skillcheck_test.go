@@ -119,7 +119,10 @@ func TestSkillCheckReportsAnUpdateAndPinsIt(t *testing.T) {
 	base := h.listed("alpha")
 
 	s.skill("skills/alpha", "alpha", "The first skill", map[string]string{"notes.md": "alpha notes, revised\n", "extra.md": "new\n"})
-	second := s.commit("second version")
+	// At a time of its own, with an offset, so that the date the check
+	// reports for the newer version is told from the fixture's fixed date
+	// and shown to be the instant in UTC.
+	second := s.commitAt("second version", secondEpoch+" +0545")
 	if err := os.Rename(other.gitDir, other.gitDir+".gone"); err != nil {
 		t.Fatal(err)
 	}
@@ -146,6 +149,10 @@ func TestSkillCheckReportsAnUpdateAndPinsIt(t *testing.T) {
 	equal(t, "base_hash", up["base_hash"], base["base_hash"])
 	equal(t, "upstream_commit", up["upstream_commit"], first)
 	equal(t, "candidate_upstream_commit", up["candidate_upstream_commit"], second)
+	// Each version is dated with its upstream commit's committer time, which
+	// its import commit carries, in UTC.
+	equal(t, "upstream_time", up["upstream_time"], fixedTime)
+	equal(t, "candidate_upstream_time", up["candidate_upstream_time"], secondTime)
 	equal(t, "files", files(up), "added extra.md, modified notes.md")
 	if _, ok := up["upstream_name"]; ok {
 		t.Errorf("an update that keeps the name carries upstream_name %v", up["upstream_name"])
@@ -188,15 +195,29 @@ func TestSkillCheckReportsAnUpdateAndPinsIt(t *testing.T) {
 		t.Fatalf("skill list carries no candidate: %v", listed)
 	}
 	equal(t, "candidate.upstream_commit", cand["upstream_commit"], second)
+	equal(t, "candidate.upstream_time", cand["upstream_time"], secondTime)
 	equal(t, "candidate.content_hash", cand["content_hash"], up["candidate_hash"])
+	equal(t, "upstream_time", listed["upstream_time"], fixedTime)
 	if _, ok := h.listed("beta")["candidate"]; ok {
 		t.Error("beta, which has no update, carries a candidate")
 	}
 	contains(t, "skill list", h.mustRun("skill", "list").stdout, "  alpha  managed  current, update available  ")
 	if entry := h.inventoryLibrary("alpha"); entry["candidate"] == nil {
 		t.Errorf("the inventory's entry carries no candidate: %v", entry)
+	} else {
+		equal(t, "the inventory's candidate.upstream_time", entry["candidate"].(map[string]any)["upstream_time"], secondTime)
 	}
 }
+
+// The dates the events report versions by, as the fixtures make them:
+// fixedTime is gitx.FixedDate, the date of every commit the isolated
+// environment writes, and secondTime is secondEpoch, the committer time a
+// test gives a version of its own, both RFC 3339 in UTC.
+const (
+	fixedTime   = "2000-01-01T00:00:00Z"
+	secondEpoch = "1710000000"
+	secondTime  = "2024-03-09T16:00:00Z"
+)
 
 // TestSkillCheckLeavesAnUnreachableSourcesSkillsAsTheyAre: a source that
 // cannot be fetched says nothing about what it holds now, so the candidate
