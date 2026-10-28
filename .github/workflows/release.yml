@@ -276,10 +276,11 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Before the Apple secrets are in the environment, so no frontend tool sees them.
+      # Before the Apple secrets are in the environment, so no frontend tool sees them. No
+      # pnpm check: the plan job releases only a commit whose CI passed, and CI runs it.
       - name: Build the frontend
         working-directory: apps/desktop
-        run: pnpm check && pnpm build
+        run: pnpm build
 
       # With the secrets, Tauri imports the certificate into a temporary keychain, signs the app
       # and the CLI inside it, and notarizes the app. Without them the app is signed ad hoc: it
