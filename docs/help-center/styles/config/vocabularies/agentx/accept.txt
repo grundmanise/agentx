@@ -32,3 +32,4 @@ organisation
 zsh
 Skillshare
 AppImage
+KiB
