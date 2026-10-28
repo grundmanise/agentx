@@ -114,8 +114,9 @@ test("serve's events arrive in order, with their child id", async ({
     await page.evaluate(async () => await window.transport.serveStart())
   ).toBe(1);
   await cli.serveEmit([{ type: "search" }, { type: "refresh_complete" }]);
+  await cli.serveLog([{ level: "warn", message: "careful" }]);
 
-  await expect(received(page)).toHaveCount(2);
+  await expect(received(page)).toHaveCount(3);
   expect(await items(page)).toEqual([
     {
       value: {
@@ -130,6 +131,19 @@ test("serve's events arrive in order, with their child id", async ({
         childId: 1,
         event: { schema_version: 2, type: "refresh_complete" },
         kind: "event",
+      },
+      what: "serve",
+    },
+    {
+      value: {
+        childId: 1,
+        event: {
+          level: "warn",
+          message: "careful",
+          schema_version: 2,
+          type: "log",
+        },
+        kind: "log",
       },
       what: "serve",
     },

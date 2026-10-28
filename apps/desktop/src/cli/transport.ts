@@ -1,6 +1,6 @@
 // The app's one way to the CLI. It wraps the Tauri commands and events of the Rust supervisor:
 // one-shot runs whose lines arrive as they are written, and the one serve child the window keeps
-// open. Events are typed by events.gen.ts, which is generated from the CLI of this app's own
+// open, whose stdout and stderr arrive the same way. Events are typed by events.gen.ts, which is generated from the CLI of this app's own
 // release, so no schema_version is checked here. An event of a type the app does not know is
 // passed on as it came.
 import { invoke } from "@tauri-apps/api/core";
@@ -53,9 +53,13 @@ export interface Resolution {
   found: "bundled" | "path" | null;
 }
 
-/** A line of the serve child's stdout, with the id of the child that wrote it. */
+/**
+ * One line of the serve child's output, with the id of the child that wrote it: an event on
+ * stdout, a log event on stderr, or an invalid line.
+ */
 export type ServeLine = { childId: number } & (
   | { kind: "event"; event: CliEvent }
+  | { kind: "log"; event: LogEvent }
   | ({ kind: "invalid" } & InvalidLine)
 );
 
@@ -83,6 +87,7 @@ interface WireRunEnd {
 }
 type WireServeLine = (
   | { kind: "event"; event: CliEvent }
+  | { kind: "log"; event: LogEvent }
   | ({ kind: "invalid" } & InvalidLine)
 ) & { child_id: number };
 interface WireServeExit {
@@ -210,7 +215,7 @@ export const onRunEnd = async (
 const startServe = async (): Promise<number> =>
   await invoke<number>("serve_start");
 
-/** Calls `handle` with every line of every serve child's stdout, in order. */
+/** Calls `handle` with every line of every serve child's output, each stream in order. */
 const onServeLine = async (
   handle: (line: ServeLine) => void
 ): Promise<UnlistenFn> =>
