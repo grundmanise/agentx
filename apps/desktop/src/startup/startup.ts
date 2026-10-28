@@ -4,19 +4,21 @@
 // fails, when a command exits with code 8, and in manual mode. A launch that runs over 2 seconds
 // says what it does in the empty panel. The only commands it runs are `version`, `doctor` and `serve`: it
 // changes nothing on disk.
-import { useSyncExternalStore } from "react";
+import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type {
   CliEvent,
   DoctorEvent,
-  ReconcileEvent,
   InventoryEvent,
 } from "#/cli/events.gen.ts";
-import { onRunEnd, resolveCli, run, serve } from "#/cli/transport.ts";
+import { onRunEnd, resolveCli, run } from "#/cli/transport.ts";
 import type { RunResult } from "#/cli/transport.ts";
 import { readChecks } from "#/startup/checks.ts";
 import type { Findings, Problem } from "#/startup/checks.ts";
+import { connect, startServe } from "#/store/feed.ts";
+import { useAppStore } from "#/store/store.ts";
+import type { ServeEnd } from "#/store/store.ts";
 
 /** How long a check may take before it fails. A launch normally takes well under a second. */
 export const CHECK_DEADLINE_MS = 30_000;
@@ -48,7 +50,8 @@ export interface StartupState {
   findings: Findings;
 }
 
-let state: StartupState = {
+/** The startup state. Outside React, getState() reads it and setState() changes it. */
+export const useStartup = create<StartupState>()(() => ({
   findings: {},
   mode: "launch",
   open: false,
@@ -58,37 +61,12 @@ let state: StartupState = {
   running: true,
   slow: false,
   step: undefined,
-};
-const listeners = new Set<() => void>();
+}));
 
 const update = (patch: Partial<StartupState>) => {
-  state = { ...state, ...patch };
-  for (const listener of listeners) {
-    listener();
-  }
+  useStartup.setState(patch);
 };
 
-export const useStartup = (): StartupState =>
-  useSyncExternalStore(
-    (listener) => {
-      listeners.add(listener);
-      return () => {
-        listeners.delete(listener);
-      };
-    },
-    () => state
-  );
-
-/** The reconcile events serve wrote before its first inventory, kept for the Inbox. */
-export const earlyReconciles: ReconcileEvent[] = [];
-
-// What the serve children reported: the last inventory and the last exit, with the child's id.
-let lastInventory: { childId: number; event: InventoryEvent } | undefined;
-let lastExit:
-  | { childId: number; problem: Problem; restarting: boolean }
-  | undefined;
-const serveErrors = new Map<number, Problem>();
-const serveWaiters = new Set<() => void>();
 // The one-shot runs the sequence started: their exit 8 is a check result, not a reason to restart.
 const ownRuns = new Set<string>();
 
@@ -111,18 +89,23 @@ type ServeOutcome = { inventory: InventoryEvent } | { error: Problem };
  */
 const outcomeOf = (
   childId: number,
-  ended: typeof lastExit
+  ended: ServeEnd | undefined
 ): ServeOutcome | undefined => {
+  const { applied, inventory, serveEnd } = useAppStore.getState();
   const after = Math.max(childId, (ended?.childId ?? 0) + 1);
-  if (lastInventory !== undefined && lastInventory.childId >= after) {
-    return { inventory: lastInventory.event };
+  if (
+    applied !== undefined &&
+    inventory !== undefined &&
+    applied.childId >= after
+  ) {
+    return { inventory };
   }
   if (
-    lastExit !== undefined &&
-    lastExit !== ended &&
-    lastExit.childId >= childId
+    serveEnd !== undefined &&
+    serveEnd !== ended &&
+    serveEnd.childId >= childId
   ) {
-    return { error: lastExit.problem };
+    return { error: serveEnd.problem };
   }
   return undefined;
 };
@@ -132,20 +115,19 @@ const outcomeOf = (
  * deadline. A child that is only slow keeps running: a Retry waits for it again.
  */
 const serveOutcome = async (childId: number): Promise<ServeOutcome> => {
-  const ended = lastExit?.restarting === true ? lastExit : undefined;
-  const checks: (() => void)[] = [];
+  const { serveEnd } = useAppStore.getState();
+  const ended = serveEnd?.restarting === true ? serveEnd : undefined;
+  let unsubscribe: (() => void) | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const outcomes = new ReadableStream<ServeOutcome>({
     start: (controller) => {
       const check = () => {
         const outcome = outcomeOf(childId, ended);
         if (outcome !== undefined) {
-          serveWaiters.delete(check);
           controller.enqueue(outcome);
         }
       };
-      checks.push(check);
-      serveWaiters.add(check);
+      unsubscribe = useAppStore.subscribe(check);
       timer = setTimeout(() => {
         controller.enqueue({
           error: {
@@ -164,9 +146,7 @@ const serveOutcome = async (childId: number): Promise<ServeOutcome> => {
     return value;
   } finally {
     clearTimeout(timer);
-    for (const check of checks) {
-      serveWaiters.delete(check);
-    }
+    unsubscribe?.();
   }
 };
 
@@ -279,7 +259,7 @@ const sequence = async () => {
     stepTo("inventory");
     let childId: number;
     try {
-      childId = await serve.start();
+      childId = await startServe();
     } catch (error) {
       found({ serve: { error: { message: String(error) } } });
       return;
@@ -291,8 +271,8 @@ const sequence = async () => {
       const { passed } = readChecks(findings, false);
       update({
         // A failure shows the layer; a pass closes it at once, except in manual mode.
-        open: !passed || state.mode === "manual",
-        ready: state.ready || passed,
+        open: !passed || useStartup.getState().mode === "manual",
+        ready: useStartup.getState().ready || passed,
         retrying: false,
         running: false,
         slow: false,
@@ -304,44 +284,20 @@ const sequence = async () => {
 
 /** A command exited with code 8: the account repo is unusable, so the checks run again. */
 const accountRepoLost = () => {
-  if (state.running) {
+  if (useStartup.getState().running) {
     return;
   }
   update({ mode: "launch", open: true });
   void sequence();
 };
 
-/** Subscribes to serve's events and exits and to every one-shot's end. */
+/** Runs the checks again whenever a serve child or a one-shot exits with code 8. */
 const listen = async () => {
-  await serve.onEvent((line) => {
-    if (line.kind !== "event") {
-      return;
-    }
-    const { event } = line;
-    if (event.type === "inventory") {
-      lastInventory = { childId: line.childId, event };
-    } else if (event.type === "reconcile" && lastInventory === undefined) {
-      earlyReconciles.push(event);
-    } else if (event.type === "error") {
-      serveErrors.set(line.childId, problemOf([event], event.message));
-    }
-    for (const wake of serveWaiters) {
-      wake();
-    }
-  });
-  await serve.onExit((exit) => {
-    const code = exit.exitCode === null ? "a signal" : `code ${exit.exitCode}`;
-    lastExit = {
-      childId: exit.childId,
-      problem: serveErrors.get(exit.childId) ?? {
-        message: exit.stderr.at(-1) ?? `agentx serve stopped with ${code}`,
-      },
-      restarting: exit.restarting,
-    };
-    for (const wake of serveWaiters) {
-      wake();
-    }
-    if (exit.exitCode === EXIT_CODES.account_repo) {
+  useAppStore.subscribe(({ serveEnd }, previous) => {
+    if (
+      serveEnd !== previous.serveEnd &&
+      serveEnd?.exitCode === EXIT_CODES.account_repo
+    ) {
       accountRepoLost();
     }
   });
@@ -359,6 +315,7 @@ export const launch = () => {
   if (!launched) {
     launched = true;
     void (async () => {
+      await connect();
       await listen();
       await sequence();
     })();

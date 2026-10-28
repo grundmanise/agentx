@@ -113,14 +113,14 @@ test("serve's events arrive in order, with their child id", async ({
   expect(
     await page.evaluate(async () => await window.transport.serveStart())
   ).toBe(1);
-  await cli.serveEmit([{ type: "inventory" }, { type: "refresh_complete" }]);
+  await cli.serveEmit([{ type: "search" }, { type: "refresh_complete" }]);
 
   await expect(received(page)).toHaveCount(2);
   expect(await items(page)).toEqual([
     {
       value: {
         childId: 1,
-        event: { schema_version: 2, type: "inventory" },
+        event: { schema_version: 2, type: "search" },
         kind: "event",
       },
       what: "serve",
