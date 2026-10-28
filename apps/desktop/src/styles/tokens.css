@@ -366,6 +366,8 @@
   --radius-sheet: 20px;
   --radius-palette: 20px;
   --radius-palette-row: 12px;
+  --radius-popover: 16px;
+  --radius-popover-row: 10px;
   --radius-key-hint: 9999px;
   --radius-toast: 9999px;
   --radius-toast-detail: 18px;
@@ -534,6 +536,7 @@
   --padding-dialog: 32px;
   --gap-dialog: 22px;
   --gap-popover: 16px;
+  --width-popover: 300px;
   --width-sheet: 420px;
   --inset-sheet: 10px;
   --padding-sheet: 32px;
@@ -735,4 +738,9 @@
   font-family: var(--font-sans);
   font-size: 11.5px;
   font-weight: 600;
+}
+@utility type-segment {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
 }

@@ -393,9 +393,10 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.button` | sans | 14 |  |  |  |  | Buttons; the variant sets the weight (600 primary, 500 others) |
 | `type.button-sm` | sans | 13.5 |  |  |  |  | Small buttons |
 | `type.pill` | sans | 11.5 | 600 |  |  |  | Pills, the letter of a monogram logo |
+| `type.segment` | sans | 12.5 | 500 |  |  |  | Segmented control labels |
 | `type.caption` | mono | 10.5 | 400 |  | 0.16em | upper | Captions (`text.caption`) |
 | `type.technical` | mono | 12.5 | 400 |  |  |  | Paths, ids, dates, commands; the count beside a page title (`text.caption`) |
-| `type.technical-sm` | mono | 12 | 400 |  |  |  | The count beside a group header (`group.count`), the mono tag beside a nested row |
+| `type.technical-sm` | mono | 12 | 400 |  |  |  | The count beside a group header (`group.count`), the count in a SHOW pill, the mono tag beside a nested row |
 | `type.code` | mono | 12.5 | 400 | 1.75 |  |  | Code pane |
 | `type.brand` | sans | 14 | 600 |  | -0.01em |  | Product name in the sidebar |
 | `type.machine-label` | sans | 12 | 400 |  |  |  | Machine label under the product name (`text.muted`) |
@@ -553,7 +554,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `dialog.width` | 480 | `w-dialog` |  |
 | `dialog.padding` | 32 | `p-dialog` |  |
 | `dialog.gap` | 22 | `gap-dialog` | Between dialog blocks |
-| `popover.width` | 280–300 |  |  |
+| `popover.width` | 300 | `w-popover` | Filter popover |
 | `popover.padding` | 8–14 |  | 8 for row lists, 14 for grouped content |
 | `popover.gap` | 16 | `gap-popover` | Between groups |
 | `popover.row-height` | 32–34 |  |  |
@@ -622,7 +623,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `input.search-radius` | 9999 | Search field |
 | `row.radius` | 12 | Split list rows |
 | `table.row-radius` | 14 | Server rows |
-| `popover.row-radius` | 9–10 | Popover rows, Reset button |
+| `popover.row-radius` | 10 | Popover rows, Reset button |
 | `card.radius` | 18 | Inbox cards, review file cards |
 | `card.tile-radius` | 10 | Icon tile |
 | `file-card.radius` | 16 | File tree card |
@@ -633,7 +634,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `hunk.radius` | 14 | Hunk block |
 | `hunk.pane-radius` | 10 | Yours / theirs panes (outer corners only) |
 | `diff.segment-radius` | 4 | Progress segment |
-| `popover.radius` | 16–18 |  |
+| `popover.radius` | 16 |  |
 | `dialog.radius` | 24 |  |
 | `sheet.radius` | 20 |  |
 | `palette.radius` | 20 |  |
@@ -726,6 +727,10 @@ The machine's label from the inventory, under the product name in the sidebar: `
 ### Timeline (history)
 
 Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot` round (`timeline.dot-install`, `timeline.dot-update`, `timeline.dot-yours` by entry kind), a 1px `timeline.connector` below it. Entry: message 14 `text.primary`, meta 12 `timeline.meta`. Final item when truncated: hollow dot (inset ring 1.5px `timeline.more-ring`) and a ghost button "Show all {n}".
+
+### Popover (Filter)
+
+`popover.width`, `popover.radius`, `overlay.bg` with 1px `overlay.border` and `popover.shadow`, 14px padding, `popover.gap` between its groups, `popover.offset` below its anchor. Each group opens with a caption in `popover.caption`. SHOW is a row of pills (`type.secondary`, count in `type.technical-sm` `text.caption`; the chosen one `button.secondary-bg` and `text.primary`), STATE a segmented control, AGENTS rows of `popover.row-radius` with the round checkbox, a 20px logo and the name. Reset filters is a ghost button, shown while a filter is applied. A click outside or Escape closes it.
 
 ### Agent client logo chip, monogram
 
