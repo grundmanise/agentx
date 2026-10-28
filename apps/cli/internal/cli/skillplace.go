@@ -20,6 +20,7 @@ import (
 func newSkillPlaceCommand(inv *invocation) *cobra.Command {
 	var to []string
 	var asCopy, force bool
+	var machine string
 	cmd := &cobra.Command{
 		Use:   "place <name>",
 		Short: "Place a skill the library already holds, or put its placements back",
@@ -36,12 +37,22 @@ func newSkillPlaceCommand(inv *invocation) *cobra.Command {
 			"For one of your own skills, it first puts back what it needs on this machine:\n" +
 			"its worktree, checked out again from its branch, and its library symlink. A\n" +
 			"directory in the way of either stops the command: --force adopts it, keeping\n" +
-			"every file as an unpublished edit of the skill.",
+			"every file as an unpublished edit of the skill.\n\n" +
+			"With --machine cloud, place the skill on the cloud machine instead: the skill's\n" +
+			"entry, which follows the latest version, is committed to the branch\n" +
+			"machines/cloud of the account remote and pushed, and nothing on this machine's\n" +
+			"disk changes. Without --to, it is placed in every configuration this machine\n" +
+			"enables. With --copy, the snapshot's copy_mode records a copy in those\n" +
+			"configurations, so the cloud machine places a copy there. --force is refused.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("machine") {
+				return inv.placeOnMachine(cmd.Context(), machine, args[0], to, asCopy, force)
+			}
 			return inv.skillPlace(cmd.Context(), args[0], to, asCopy, force)
 		},
 	}
+	cmd.Flags().StringVar(&machine, "machine", "", "place the skill on this machine instead, by its branch on the account remote; only cloud is accepted")
 	cmd.Flags().StringArrayVar(&to, "to", nil, "the configuration to place the skill in, instead of every enabled one; give it again for each")
 	cmd.Flags().BoolVar(&asCopy, "copy", false, "place a copy instead of a symlink")
 	cmd.Flags().BoolVar(&force, "force", false,

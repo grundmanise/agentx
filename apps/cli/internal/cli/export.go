@@ -41,18 +41,19 @@ const settingsSchemaVersion = home.SettingsSchemaVersion
 // physical and logical ids, the occurrence ids and the edges. Nothing it
 // holds is the content of a skill.
 //
+// A snapshot is one machine's whole state, so it always holds the settings.
 // An export writes every part, with every skill it can name exactly; any
 // other writer may write a partial snapshot, see readExport: the machine,
-// the settings, the configurations, the servers and the plugins may be
-// left out, and so may each skill's version, an entry with none following
-// the latest version.
+// the configurations, the servers and the plugins may be left out, and so
+// may each skill's version, an entry with none following the latest
+// version.
 //
 // The snapshot is a pure function of the machine's state: two exports of
 // an unchanged machine are byte-identical, so two snapshots can be diffed.
 type snapshot struct {
 	SchemaVersion  int                     `json:"schema_version"`
 	Machine        *exportMachine          `json:"machine,omitempty"`
-	Settings       *home.Settings          `json:"settings,omitempty"`
+	Settings       home.Settings           `json:"settings"`
 	Configurations []snapshotConfiguration `json:"configurations"`
 	Skills         []snapshotSkill         `json:"skills"`
 	MCPServers     []snapshotServer        `json:"mcp_servers"`
@@ -148,34 +149,70 @@ type snapshotPlugin struct {
 }
 
 // exportEvent reports the snapshot agentx export wrote. The entries
-// themselves are in the file; the event says where it is and how many
-// skills it holds.
+// themselves are in the file or on the branch; the event says where it is
+// and how many skills it holds: a file by its path, or a machine's branch
+// on the account remote by the machine id and the commit that holds it.
 type exportEvent struct {
 	event
-	Path   string `json:"path"`
-	Skills int    `json:"skills"`
+	Path    string `json:"path,omitempty"`    // the file, absent for a machine's branch
+	Machine string `json:"machine,omitempty"` // the machine whose branch holds it, absent for a file
+	Commit  string `json:"commit,omitempty"`  // the tip of machines/<machine> now, absent for a file
+	Skills  int    `json:"skills"`
 }
 
 func newExportCommand(inv *invocation) *cobra.Command {
 	var force bool
+	var machine string
 	cmd := &cobra.Command{
-		Use:   "export <file>",
-		Short: "Write a snapshot of this machine, with its settings, to a file",
+		Use:   "export (<file> | --machine <id>)",
+		Short: "Write a snapshot of this machine, with its settings, to a file or the account remote",
 		Long: "Write a snapshot of this machine to <file>: its settings, its agent\n" +
 			"configurations, every skill of the library with its source, its version and the\n" +
 			"configurations it is placed in, and the MCP servers and plugins as found.\n\n" +
+			"With --machine <id>, write it to the branch machines/<id> of the account remote\n" +
+			"instead, as one commit pushed with a lease and never forced: this machine's own\n" +
+			"id keeps a backup there, and another machine's, such as cloud, seeds that\n" +
+			"machine with this one's skills. Nothing is pushed unless a machine is named.\n\n" +
 			"The snapshot holds no skill content. Read it on another machine with\n" +
 			"'agentx import'.\n\n" +
 			"The file holds the machine settings and each MCP server's command, arguments\n" +
 			"and URL as written, which can hold a token, so it is written readable by you\n" +
 			"alone. Do not commit it to a public repository.",
-		Args: cobra.ExactArgs(1),
+		Args: func(cmd *cobra.Command, args []string) error {
+			return snapshotArgs(args, machine, "export", "the file to write")
+		},
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if machine != "" {
+				if force {
+					return fail(exitUsage, "--force overwrites a file, and --machine writes no file",
+						"drop --force: a machine's branch takes a new commit on the one it holds")
+				}
+				return inv.exportToMachine(cmd.Context(), machine)
+			}
 			return inv.export(cmd.Context(), args[0], force)
 		},
 	}
 	cmd.Flags().BoolVar(&force, "force", false, "overwrite the file when it is already there")
+	cmd.Flags().StringVar(&machine, "machine", "", "write the snapshot to the branch machines/<id> of the account remote instead of a file: cloud, or a computer's machine id")
 	return cmd
+}
+
+// snapshotArgs holds export and import to one place a snapshot is written
+// to or read from: a file, the one argument, or a machine's branch, named
+// with --machine, and never both. what is the argument's meaning, for the
+// message.
+func snapshotArgs(args []string, machine, verb, what string) error {
+	switch {
+	case machine != "" && len(args) > 0:
+		return fail(exitUsage, "a file and --machine cannot both be given",
+			"give the file, or --machine to "+verb+" the snapshot on the account remote")
+	case machine != "":
+		return machineArg(machine)
+	case len(args) != 1:
+		return fail(exitUsage, verb+" takes one argument, "+what+", or --machine <id>",
+			"run 'agentx "+verb+" --help' for usage")
+	}
+	return nil
 }
 
 // export writes the snapshot to path.
@@ -234,7 +271,7 @@ func (inv *invocation) snapshot(ctx context.Context) (snapshot, error) {
 	return snapshot{
 		SchemaVersion:  snapshotSchemaVersion,
 		Machine:        &exportMachine{ID: id, Label: inv.label(s)},
-		Settings:       &s,
+		Settings:       s,
 		Configurations: snapshotConfigurations(inventory),
 		Skills:         inv.snapshotSkills(sc, inventory),
 		MCPServers:     snapshotServers(inventory),

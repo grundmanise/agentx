@@ -20,6 +20,7 @@ import (
 func newSkillRemoveCommand(inv *invocation) *cobra.Command {
 	var from []string
 	var remote bool
+	var machine string
 	cmd := &cobra.Command{
 		Use:   "remove <name> [--remote]",
 		Short: "Remove a skill from one configuration or from the machine",
@@ -38,12 +39,21 @@ func newSkillRemoveCommand(inv *invocation) *cobra.Command {
 			"Removing one of your own skills also deletes its worktree, with any unpublished\n" +
 			"edits and files git ignores, its branch and its update candidate. --remote deletes\n" +
 			"its branch on the account remote too, also when this machine no longer has it.\n" +
-			"Other machines keep it until it is removed there.",
+			"Other machines keep it until it is removed there.\n\n" +
+			"With --machine cloud, remove the skill from the cloud machine instead: the\n" +
+			"configurations --from names are taken out of the skill's entry on the branch\n" +
+			"machines/cloud of the account remote, or, with --from universal or without\n" +
+			"--from, the entry is deleted, and the commit is pushed. Nothing on this\n" +
+			"machine's disk changes.",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("machine") {
+				return inv.removeFromMachine(cmd.Context(), machine, args[0], from, remote)
+			}
 			return inv.skillRemove(cmd.Context(), args[0], from, remote)
 		},
 	}
+	cmd.Flags().StringVar(&machine, "machine", "", "remove the skill from this machine instead, by its branch on the account remote; only cloud is accepted")
 	cmd.Flags().StringArrayVar(&from, "from", nil,
 		"remove only the placement in this configuration, or give universal to take the skill off the machine; give it again for each")
 	cmd.Flags().BoolVar(&remote, "remote", false, "remove one of your own skills from the account remote too")
