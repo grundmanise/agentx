@@ -313,6 +313,11 @@ export interface MachineEvent {
   id: string;
   label: string;
   derivation: MachineDerivation;
+  home: string;
+  settings_file: string;
+  library: string;
+  account_repo?: string;
+  account_repo_bytes?: number;
 }
 
 export interface SourceEvent {
