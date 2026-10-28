@@ -30,3 +30,7 @@ worktrees?
 [Aa]uthorise
 organisation
 zsh
+KiB
+JPEG
+PNG
+SVG

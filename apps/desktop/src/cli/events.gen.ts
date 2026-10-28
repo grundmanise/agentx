@@ -248,6 +248,8 @@ export interface Plugin {
   configuration: string;
   path: string;
   enabled?: boolean;
+  hooks: Hook[];
+  icon?: string;
 }
 
 export interface Edge {
@@ -286,6 +288,11 @@ export interface ServerOccurrence {
   handshake_error?: HandshakeError;
   plugin?: string;
   enabled?: boolean;
+}
+
+export interface Hook {
+  event: string;
+  name: string;
 }
 
 export interface HandshakeError {
