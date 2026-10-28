@@ -124,6 +124,7 @@ export interface LibraryEntry {
   upstream?: string;
   upstream_subpath?: string;
   upstream_commit?: string;
+  upstream_time?: string;
   base_hash?: string;
   content_hash: string;
   state?: SkillState;
@@ -194,6 +195,7 @@ export interface SettingsSource {
 
 export interface LibraryCandidate {
   upstream_commit: string;
+  upstream_time?: string;
   content_hash: string;
 }
 
@@ -404,9 +406,11 @@ export interface UpdateAvailableEvent {
   upstream_subpath?: string;
   base_hash: string;
   upstream_commit: string;
+  upstream_time?: string;
   candidate: string;
   candidate_hash: string;
   candidate_upstream_commit: string;
+  candidate_upstream_time?: string;
   files: ChangedFile[];
   upstream_name?: string;
 }
