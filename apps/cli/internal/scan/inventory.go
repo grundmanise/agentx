@@ -177,6 +177,8 @@ type Plugin struct {
 	Configuration string `json:"configuration"`
 	Path          string `json:"path"`
 	Enabled       *bool  `json:"enabled,omitempty"` // only for a client that records it
+	Hooks         []Hook `json:"hooks"`             // the hooks it declares, sorted by event then name
+	Icon          string `json:"icon,omitempty"`    // its own icon as a data URL, when its manifest names one inside the plugin
 }
 
 type Edge struct {

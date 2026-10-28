@@ -158,6 +158,11 @@ func (s *Scan) addPlugin(conf Configuration, p InstalledPlugin) {
 		Configuration: conf.ID,
 		Path:          p.Path,
 		Enabled:       p.Enabled,
+		Hooks:         p.Hooks,
+		Icon:          p.Icon,
+	}
+	if node.Hooks == nil {
+		node.Hooks = []Hook{}
 	}
 	node.PhysicalID = id("plugin", node.LogicalID, s.MachineID, conf.PhysicalID, p.Version)
 	if !s.plugins[node.PhysicalID] {
