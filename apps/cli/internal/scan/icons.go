@@ -103,9 +103,8 @@ var (
 
 // sanitizeSVG removes what could run as code from an SVG document: every
 // script element, every on* event handler attribute and every href or
-// xlink:href attribute whose value, once its entities are decoded and the
-// characters a browser ignores are dropped, names the javascript scheme.
-// Everything else is kept byte for byte.
+// xlink:href attribute whose value is not one safeHref allows. Everything
+// else is kept byte for byte.
 func sanitizeSVG(b []byte) []byte {
 	b = svgScript.ReplaceAll(b, nil)
 	return svgTag.ReplaceAllFunc(b, func(tag []byte) []byte {
@@ -116,13 +115,32 @@ func sanitizeSVG(b []byte) []byte {
 			switch {
 			case strings.HasPrefix(name, "on"):
 				return nil
-			case name == "href" || name == "xlink:href":
-				v := controls.ReplaceAllString(html.UnescapeString(value), "")
-				if strings.HasPrefix(strings.ToLower(v), "javascript:") {
-					return nil
-				}
+			case (name == "href" || name == "xlink:href") && !safeHref(value):
+				return nil
 			}
 			return attr
 		})
 	})
+}
+
+// safeHref reports whether an href value is one the icon keeps: once its
+// entities are decoded, and the control characters and spaces a browser
+// ignores are dropped, it is empty, a fragment, a relative reference with
+// no scheme, or an http or https URL. Every other scheme, javascript, data,
+// vbscript and anything unknown, is dropped: a list of what is allowed
+// cannot miss a scheme the way a list of what is forbidden can.
+func safeHref(value string) bool {
+	v := strings.ToLower(controls.ReplaceAllString(html.UnescapeString(value), ""))
+	if v == "" || strings.HasPrefix(v, "#") {
+		return true
+	}
+	colon := strings.Index(v, ":")
+	if colon < 0 {
+		return true
+	}
+	if end := strings.IndexAny(v, "/?#"); end >= 0 && end < colon {
+		return true // the colon is inside the path or the query: no scheme
+	}
+	scheme := v[:colon]
+	return scheme == "http" || scheme == "https"
 }

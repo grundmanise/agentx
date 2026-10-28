@@ -9,9 +9,9 @@ import (
 )
 
 // TestSanitizeSVG covers what the sanitizer removes from an SVG, every
-// script element, every event handler attribute and every href that names
-// the javascript scheme however it is spelled, and that it leaves the rest
-// of the document as it was.
+// script element, every event handler attribute and every href whose scheme
+// is not http or https however it is spelled, and that it leaves the rest
+// of the document, fragments and relative references included, as it was.
 func TestSanitizeSVG(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -29,7 +29,11 @@ func TestSanitizeSVG(t *testing.T) {
 		{"xlink href with case and spaces", `<svg><a xlink:href=" JavaScript:alert(1)">x</a></svg>`, `<svg><a>x</a></svg>`},
 		{"entity-encoded scheme", `<svg><a href="&#106;avascript:alert(1)">x</a></svg>`, `<svg><a>x</a></svg>`},
 		{"tab inside the scheme", "<svg><a href='java\tscript:alert(1)'>x</a></svg>", `<svg><a>x</a></svg>`},
-		{"other hrefs kept", `<svg><use href="#shape"/><a xlink:href="https://example.com">x</a><image href="data:image/png;base64,AA=="/></svg>`, `<svg><use href="#shape"/><a xlink:href="https://example.com">x</a><image href="data:image/png;base64,AA=="/></svg>`},
+		{"data href", `<svg><image href="data:image/svg+xml,%3Csvg%3E"/><a xlink:href=" DATA:text/html,x">x</a></svg>`, `<svg><image/><a>x</a></svg>`},
+		{"vbscript href", `<svg><a href="vbscript:msgbox(1)">x</a><a xlink:href="&#118;BScript:x">y</a></svg>`, `<svg><a>x</a><a>y</a></svg>`},
+		{"unknown scheme", `<svg><a href="file:///etc/passwd">x</a></svg>`, `<svg><a>x</a></svg>`},
+		{"fragment, relative and https kept", `<svg><use href="#shape"/><image href="./assets/a.png"/><image xlink:href="img/b.png?v=1:2"/><a xlink:href="HTTPS://example.com/x">x</a><a href="http://example.com">y</a></svg>`, `<svg><use href="#shape"/><image href="./assets/a.png"/><image xlink:href="img/b.png?v=1:2"/><a xlink:href="HTTPS://example.com/x">x</a><a href="http://example.com">y</a></svg>`},
+		{"empty href kept", `<svg><a href="">x</a></svg>`, `<svg><a href="">x</a></svg>`},
 		{"a > inside a value hides nothing", `<svg><a href="javascript:1>2" onclick="x">x</a></svg>`, `<svg><a>x</a></svg>`},
 		{"text content kept", `<svg><text>onclick="not an attribute"</text></svg>`, `<svg><text>onclick="not an attribute"</text></svg>`},
 	}
