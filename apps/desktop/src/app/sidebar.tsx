@@ -3,13 +3,24 @@ import { NavLink } from "react-router";
 import { screens } from "#/app/screens.ts";
 import { AgentxMark } from "#/components/agentx-mark.tsx";
 import { cn } from "#/lib/utils.ts";
+import { useAppStore } from "#/store/store.ts";
+
+/** This machine's label, from the inventory, under the product name. */
+const MachineLabel = () => {
+  const label = useAppStore((s) => s.inventory?.machine.label);
+  return label === undefined ? null : (
+    <span className="type-machine-label text-text-muted truncate">{label}</span>
+  );
+};
 
 export const Sidebar = () => (
   <aside className="bg-shell-bg w-sidebar gap-nav pt-sidebar-top pr-sidebar-right pb-sidebar pl-sidebar flex flex-none flex-col">
     <div className="flex items-center gap-2.5 px-2.5 pt-1 pb-5.5">
       <AgentxMark size={26} />
-      {/* The machine label joins the brand once the app reads settings from the CLI. */}
-      <span className="type-brand">agentx</span>
+      <div className="flex min-w-0 flex-col">
+        <span className="type-brand">agentx</span>
+        <MachineLabel />
+      </div>
     </div>
     <nav aria-label="Main" className="gap-nav flex flex-col">
       {screens.map(({ icon: ScreenIcon, ...s }) => (
