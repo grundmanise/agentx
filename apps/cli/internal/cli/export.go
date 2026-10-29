@@ -311,7 +311,6 @@ func (inv *invocation) export(ctx context.Context, path string, force bool) erro
 	out := inv.out
 	out.done("exported the settings and " + out.paint(noteStyle, plural(len(snap.Skills), "skill")) +
 		" to " + out.paint(heading, path))
-	out.print("  ", out.paint(muted, "the snapshot names each skill's source, version and placements, and holds no skill content"))
 	inv.summary = fmt.Sprintf("exported the settings and %s to %s", plural(len(snap.Skills), "skill"), path)
 	return nil
 }

@@ -23,7 +23,6 @@ agentx export
 
 ```text
 ✓ exported the settings and 12 skills to /home/me/.agents/skills/snapshot.json
-  the snapshot names each skill's source, version and placements, and holds no skill content
 ```
 
 Export writes the file to your [library](/#key-terms), next to your skills, where every agent that reads the library leaves it alone. Without a name, the file is `snapshot.json`. Give a name to keep more than one snapshot:
@@ -34,7 +33,6 @@ agentx export work-laptop
 
 ```text
 ✓ exported the settings and 12 skills to /home/me/.agents/skills/work-laptop.json
-  the snapshot names each skill's source, version and placements, and holds no skill content
 ```
 
 The name is a file name without an extension. Export adds `.json`. A name with an extension, a slash, or a leading dot stops export with exit code 1. `agentx export --help` prints the path of the file export writes.
@@ -147,7 +145,6 @@ agentx export --machine 0123456789abcdef0123456789abcdef
 
 ```text
 ✓ exported the settings and 12 skills to machines/0123456789abcdef0123456789abcdef on the account remote at 4c2e9a1
-  the snapshot names each skill's source, version and placements, and holds no skill content
 ```
 
 Each export writes one commit and pushes it. agentx never forces the push. If the snapshot is unchanged since the last export, agentx pushes nothing and says so.
