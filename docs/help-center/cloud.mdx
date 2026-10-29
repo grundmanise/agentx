@@ -167,15 +167,9 @@ The token is in the environment's setup script. If someone else can read the scr
 
 ### A skill is missing in a session
 
-Read the import log. Ask the agent in the session to run this command, or run it yourself:
+The hook writes the output of every import to `/tmp/agentx-import.log`. The log names each skill that the import skipped, and why.
 
-```sh
-cat /tmp/agentx-import.log
-```
-
-The log holds the output of every import since the session's computer started. It names each skill that the import skipped, and why. To see the skills that agentx installed, run `~/.local/bin/agentx skill list`.
-
-Or ask the agent to find the cause:
+Ask the agent:
 
 ```text
 An agentx skill is missing in this session. Find out why from
@@ -188,9 +182,9 @@ Leave out tokens and anything private.
 
 ### The import log is missing
 
-The hook did not run. Look for the error in the setup output of the environment.
+The hook did not run. The cause is often a step of the setup script that failed. The environment's setup output shows the error.
 
-Or ask the agent to find the cause:
+Ask the agent:
 
 ```text
 /tmp/agentx-import.log is missing, so the agentx hook did not run in this session.
