@@ -134,17 +134,6 @@ The hook runs `agentx import --machine cloud --yes` each time a session starts o
 
 The script always exits 0, so the environment starts even if a step fails. The setup output shows the error.
 
-## Check that it works
-
-In a session, ask the agent to run these commands, or run them yourself:
-
-```sh
-cat /tmp/agentx-import.log
-~/.local/bin/agentx skill list
-```
-
-The log holds the output of every import since the session's computer started, and names each skill the import skipped and why. If the log is missing, the hook did not run: check the setup output of the environment.
-
 ## Change the cloud machine's skills
 
 On your computer, turn skills on and off for the cloud machine with the same commands you use on your computer, plus `--machine cloud`:
@@ -173,3 +162,19 @@ The next session that starts or resumes applies the change. A session that alrea
 ## Revoke the token
 
 The token is in the environment's setup script. If someone else can read the script, or you stop using the environment, revoke the token with your Git host. On GitHub, open **Settings**, then **Developer settings**, then **Personal access tokens**, then **Fine-grained tokens**, and delete it. Then create a new token and paste it into the script.
+
+## Troubleshooting
+
+### A skill is missing in a session
+
+Read the import log. Ask the agent in the session to run this command, or run it yourself:
+
+```sh
+cat /tmp/agentx-import.log
+```
+
+The log holds the output of every import since the session's computer started. It names each skill that the import skipped, and why. To see the skills that agentx installed, run `~/.local/bin/agentx skill list`.
+
+### The import log is missing
+
+The hook did not run. Look for the error in the setup output of the environment.
