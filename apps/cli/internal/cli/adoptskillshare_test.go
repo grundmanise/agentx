@@ -58,6 +58,8 @@ func skillshareInstall(t *testing.T, h *harness, s *sourceRepo, subpath, key str
 // source under the name the library already shows it as: the link gives way
 // to a real directory, Skillshare's folder and store stay as they are, and
 // a record of a tracked repository, a local path or an agent is left alone.
+// Skillshare still syncs into the library, so the run says what to do
+// before uninstalling there.
 func TestAdoptInstallsWhatSkillshareInstalled(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -79,10 +81,13 @@ func TestAdoptInstallsWhatSkillshareInstalled(t *testing.T) {
 		"reviewer":  {Source: "github.com/owner/agents/reviewer.md", Type: "github-subdir", Kind: "agent"},
 		"../escape": {Source: "github.com/owner/repo/skills/alpha", Type: "github-subdir", RepoURL: s.url, Subdir: "skills/alpha"},
 	})
+	writeFile(t, mkdirs(t, filepath.Join(h.config, "skillshare"), "config.yaml"),
+		"mode: merge\ntargets:\n  claude:\n    skills:\n      path: ~/.claude/skills\n  universal:\n    skills:\n      path: "+h.library+"\n")
 	before := libraryTree(t, h.skillshareSkills())
 
 	out := h.run("--json", "adopt", "--all")
 	equal(t, "exit", out.exit, exitRefused.exit)
+	contains(t, "stderr", out.stderr, "run 'skillshare target universal --skills=false' before you uninstall")
 	h.lockUnchanged(filepath.Join(h.skillshareSkills(), skillshare.StoreName), store)
 	sameTree(t, "Skillshare's folder", libraryTree(t, h.skillshareSkills()), before)
 	contains(t, "stderr", out.stderr, "../escape")

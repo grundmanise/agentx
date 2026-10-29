@@ -76,34 +76,75 @@ func Locate(env map[string]string, configHome string) Paths {
 	return p
 }
 
-// SkillsDir is the folder Skillshare installs skills into, which is where
-// the store is: sources.skills in the configuration, else its older source
-// key, else skills below the base directory. A configuration that is not
-// there leaves the default; one that cannot be read as YAML is an ErrStore,
+// Config is what agentx reads out of Skillshare's configuration: the
+// folder it installs skills into, and the tools it syncs them into.
+type Config struct {
+	Skills  string   // the folder Skillshare installs skills into, where the store is
+	Targets []Target // the tools Skillshare syncs skills into, in name order
+}
+
+// Target is one tool Skillshare syncs skills into: the folder it links or
+// copies them into, and whether it still does.
+type Target struct {
+	Name    string
+	Path    string
+	Enabled bool // skills are synced into it; false once skillshare target <name> --skills=false
+}
+
+// ReadConfig reads the configuration. The skills folder is sources.skills,
+// else the older source key, else skills below the base directory; a
+// target's folder is skills.path, else its older path key. A leading ~ in
+// either stands for the user's home. A configuration that is not there
+// leaves the defaults; one that cannot be read as YAML is an ErrStore,
 // since the folder it names may be anywhere.
-func SkillsDir(p Paths, userHome string) (string, error) {
+func ReadConfig(p Paths, userHome string) (Config, error) {
+	cfg := Config{Skills: filepath.Join(p.Base, "skills")}
 	b, err := readBounded(p.Config)
 	if errors.Is(err, fs.ErrNotExist) {
-		return filepath.Join(p.Base, "skills"), nil
+		return cfg, nil
 	}
 	if err != nil {
-		return "", err
+		return Config{}, err
 	}
-	var cfg struct {
+	var file struct {
 		Sources struct {
 			Skills string `yaml:"skills"`
 		} `yaml:"sources"`
-		Source string `yaml:"source"`
+		Source  string `yaml:"source"`
+		Targets map[string]struct {
+			Path   string `yaml:"path"`
+			Skills struct {
+				Path    string `yaml:"path"`
+				Enabled *bool  `yaml:"enabled"`
+			} `yaml:"skills"`
+		} `yaml:"targets"`
 	}
-	if err := yaml.Unmarshal(b, &cfg); err != nil {
-		return "", fmt.Errorf("%w: %s: %v", ErrStore, p.Config, err)
+	if err := yaml.Unmarshal(b, &file); err != nil {
+		return Config{}, fmt.Errorf("%w: %s: %v", ErrStore, p.Config, err)
 	}
-	for _, dir := range []string{cfg.Sources.Skills, cfg.Source} {
+	for _, dir := range []string{file.Sources.Skills, file.Source} {
 		if dir = strings.TrimSpace(dir); dir != "" {
-			return expandHome(dir, userHome), nil
+			cfg.Skills = expandHome(dir, userHome)
+			break
 		}
 	}
-	return filepath.Join(p.Base, "skills"), nil
+	names := make([]string, 0, len(file.Targets))
+	for name := range file.Targets {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		t := file.Targets[name]
+		path := strings.TrimSpace(t.Skills.Path)
+		if path == "" {
+			path = strings.TrimSpace(t.Path)
+		}
+		if path == "" {
+			continue
+		}
+		cfg.Targets = append(cfg.Targets, Target{Name: name, Path: expandHome(path, userHome), Enabled: t.Skills.Enabled == nil || *t.Skills.Enabled})
+	}
+	return cfg, nil
 }
 
 // expandHome replaces a leading ~ with the user's home, as Skillshare

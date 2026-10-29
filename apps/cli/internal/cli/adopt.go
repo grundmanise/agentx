@@ -156,11 +156,11 @@ func (inv *invocation) readRecords() ([]record, error) {
 	for _, e := range entries {
 		records = append(records, vercelRecord(e))
 	}
-	paths := skillshare.Locate(inv.env, inv.dirs.Config)
-	skills, err := skillshare.SkillsDir(paths, inv.dirs.User)
+	cfg, err := inv.skillshareConfig()
 	if err != nil {
 		return nil, recordFailure(err)
 	}
+	skills := cfg.Skills
 	stored, warnings, err := skillshare.Read(skills)
 	for _, w := range warnings {
 		inv.out.warn(w)
@@ -188,6 +188,11 @@ func (inv *invocation) readRecords() ([]record, error) {
 	}
 	sort.SliceStable(records, func(i, j int) bool { return records[i].name < records[j].name })
 	return records, nil
+}
+
+// skillshareConfig reads Skillshare's configuration on this machine.
+func (inv *invocation) skillshareConfig() (skillshare.Config, error) {
+	return skillshare.ReadConfig(skillshare.Locate(inv.env, inv.dirs.Config), inv.dirs.User)
 }
 
 // recordFailure answers a record file that is not one: the same exit code
@@ -319,7 +324,13 @@ func (inv *invocation) judge(c *candidate, records map[string]lineage.Record, s 
 			"it has a history of its own; adopting would take the place of it"))
 		return
 	case known:
+		// Left alone, and still shown with the source the record names
+		// when it names one agentx can read.
 		c.state, c.reason = adoptManaged, "agentx already manages it"
+		if src, f := adoptSource(c.rec); f == nil {
+			src.Stripped = false
+			c.src = src
+		}
 		return
 	case c.rec.refusal != nil:
 		c.refuse(c.rec.refusal)
@@ -504,6 +515,7 @@ func (inv *invocation) adoptChosen(ctx context.Context, covered []*candidate) er
 	}
 	inv.summary = "adopted " + strings.TrimPrefix(strings.TrimPrefix(inv.summary, "installed "), "adopted ")
 	inv.reportAdopted(b, covered)
+	inv.warnSkillshareSyncs(covered)
 	if f := b.failure(); f != nil {
 		return f
 	}
@@ -700,6 +712,34 @@ func (inv *invocation) reportAdopted(b *batch, covered []*candidate) {
 			c.refuse(refused[c.rec.name])
 		}
 		inv.out.emit(c.eventOf())
+	}
+}
+
+// warnSkillshareSyncs warns once, after a run adopted a skill Skillshare
+// installed, when Skillshare still syncs skills into the library: its next
+// sync after that skill is uninstalled there prunes the library entry, the
+// adopted directory included, since its manifest still names it. The
+// warning names the target and the command that stops the sync, which is
+// the one step the hand-over needs before the uninstall.
+func (inv *invocation) warnSkillshareSyncs(covered []*candidate) {
+	adopted := false
+	for _, c := range covered {
+		adopted = adopted || c.state == adoptAdopted && c.rec.tool == toolSkillshare
+	}
+	if !adopted {
+		return
+	}
+	cfg, err := inv.skillshareConfig()
+	if err != nil {
+		return // read already, and reported, before the run
+	}
+	library := canonicalPath(inv.dirs.Library)
+	for _, t := range cfg.Targets {
+		if t.Enabled && canonicalPath(t.Path) == library {
+			inv.out.warn(fmt.Sprintf("Skillshare still syncs skills into the library as its target %s, and its next sync after a skill is uninstalled there removes that skill from the library; run 'skillshare target %s --skills=false' before you uninstall an adopted skill from Skillshare",
+				sanitised(t.Name), sanitised(t.Name)))
+			return
+		}
 	}
 }
 
