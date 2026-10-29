@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -160,26 +161,31 @@ type exportEvent struct {
 	Skills  int    `json:"skills"`
 }
 
+// defaultSnapshot is the name of the file agentx export writes when no name
+// is given: snapshot.json in the library, the name a machine's branch holds
+// it under too.
+const defaultSnapshot = "snapshot"
+
 func newExportCommand(inv *invocation) *cobra.Command {
 	var force bool
 	var machine string
 	cmd := &cobra.Command{
-		Use:   "export (<file> | --machine <id>)",
-		Short: "Write a snapshot of this machine, with its settings, to a file or the account remote",
-		Long: "Write a snapshot of this machine to <file>: its settings, its agent\n" +
-			"configurations, every skill of the library with its source, its version and the\n" +
-			"configurations it is placed in, and the MCP servers and plugins as found.\n\n" +
-			"With --machine <id>, write it to the branch machines/<id> of the account remote\n" +
-			"instead, as one commit pushed with a lease and never forced: this machine's own\n" +
-			"id keeps a backup there, and another machine's, such as cloud, seeds that\n" +
-			"machine with this one's skills. Nothing is pushed unless a machine is named.\n\n" +
-			"The snapshot holds no skill content. Read it on another machine with\n" +
-			"'agentx import'.\n\n" +
-			"The file holds the machine settings and each MCP server's command, arguments\n" +
-			"and URL as written, which can hold a token, so it is written readable by you\n" +
-			"alone. Do not commit it to a public repository.",
+		Use:   "export [<name> | --machine <id>]",
+		Short: "Write a snapshot of this machine, with its settings, to the library or the account remote",
 		Args: func(cmd *cobra.Command, args []string) error {
-			return snapshotArgs(args, machine, "export", "the file to write")
+			switch {
+			case len(args) > 1:
+				return fail(exitUsage, "export takes at most one argument, the snapshot's name",
+					"run 'agentx export --help' for usage")
+			case machine != "" && len(args) == 1:
+				return fail(exitUsage, "a name and --machine cannot both be given",
+					"give the name, or --machine to export the snapshot to the account remote")
+			case machine != "":
+				return machineArg(machine)
+			case len(args) == 1:
+				return snapshotName(args[0])
+			}
+			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if machine != "" {
@@ -189,33 +195,101 @@ func newExportCommand(inv *invocation) *cobra.Command {
 				}
 				return inv.exportToMachine(cmd.Context(), machine)
 			}
-			return inv.export(cmd.Context(), args[0], force)
+			name := defaultSnapshot
+			if len(args) == 1 {
+				name = args[0]
+			}
+			return inv.export(cmd.Context(), inv.snapshotPath(name), force)
 		},
 	}
 	cmd.Flags().BoolVar(&force, "force", false, "overwrite the file when it is already there")
 	cmd.Flags().StringVar(&machine, "machine", "", "write the snapshot to the branch machines/<id> of the account remote instead of a file: cloud, or a computer's machine id")
+	// The long help names this machine's id and the file the export writes,
+	// which are known before the command runs: help is printed before the
+	// root's PersistentPreRunE resolves the directories, so it resolves them
+	// itself.
+	cmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		cmd.Long = inv.exportHelp()
+		inv.help(cmd, args)
+	})
 	return cmd
 }
 
-// snapshotArgs holds export and import to one place a snapshot is written
-// to or read from: a file, the one argument, or a machine's branch, named
-// with --machine, and never both. what is the argument's meaning, for the
-// message.
-func snapshotArgs(args []string, machine, verb, what string) error {
+// exportHelp is the long help of export, with the file a plain export
+// writes and this machine's id filled in. Neither is read when it cannot
+// be: without a home directory the help names the library in words, and a
+// machine whose id is not generated yet is sent to 'agentx machine', which
+// generates it.
+func (inv *invocation) exportHelp() string {
+	file := "  snapshot.json in the library\n"
+	id := "This machine's id is not generated yet: 'agentx machine' prints it.\n"
+	dirs := inv.dirs
+	if dirs.Home == "" {
+		dirs, _ = home.Resolve(inv.env)
+	}
+	if dirs.Library != "" {
+		file = "  " + filepath.Join(dirs.Library, defaultSnapshot+".json") + "\n"
+	}
+	if dirs.Home != "" {
+		if known, err := home.KnownMachineID(dirs.Home, inv.env); err == nil && known != "" {
+			id = "This machine's id is " + known + ".\n"
+		}
+	}
+	return "Write a snapshot of this machine to a file in the library: its settings, its\n" +
+		"agent configurations, every skill with its source, version and placements, and\n" +
+		"the MCP servers and plugins as found. The snapshot holds no skill content.\n" +
+		"'agentx import' applies it on another machine.\n\n" +
+		"The file is snapshot.json in the library, or <name>.json when a name is given:\n" +
+		file + "\n" +
+		"With --machine <id>, write the snapshot to the branch machines/<id> of the\n" +
+		"account remote instead, as one commit, never forced. Export to this machine's\n" +
+		"id to keep a backup there, and to cloud, or another computer's id, to seed\n" +
+		"that machine with this machine's skills. Nothing is pushed without --machine.\n" +
+		id + "\n" +
+		"The snapshot holds the settings and each MCP server's command, arguments and\n" +
+		"URL as written, which can hold a token. The file is readable by you alone. Do\n" +
+		"not commit it to a public repository."
+}
+
+// snapshotName holds the name of a snapshot to a file name the library can
+// hold beside its skills: no path, so the file stays in the library, and no
+// extension, since export adds .json. A hidden name, which is one with a
+// leading dot, has an extension by that rule.
+func snapshotName(name string) error {
 	switch {
-	case machine != "" && len(args) > 0:
-		return fail(exitUsage, "a file and --machine cannot both be given",
-			"give the file, or --machine to "+verb+" the snapshot on the account remote")
-	case machine != "":
-		return machineArg(machine)
-	case len(args) != 1:
-		return fail(exitUsage, verb+" takes one argument, "+what+", or --machine <id>",
-			"run 'agentx "+verb+" --help' for usage")
+	case name == "" || name == "." || name == "..",
+		strings.ContainsAny(name, `/\`),
+		filepath.Ext(name) != "":
+		return fail(exitUsage, clipped(sanitised(name))+" is not a snapshot name",
+			"give a file name without an extension or a slash: export writes <name>.json to the library")
 	}
 	return nil
 }
 
-// export writes the snapshot to path.
+// snapshotPath is the file export writes the snapshot named name to:
+// <name>.json in the library, beside the skills.
+func (inv *invocation) snapshotPath(name string) string {
+	return filepath.Join(inv.dirs.Library, name+".json")
+}
+
+// importArgs holds import to one place a snapshot is read from: a file,
+// the one argument, or a machine's branch, named with --machine, and never
+// both.
+func importArgs(args []string, machine string) error {
+	switch {
+	case machine != "" && len(args) > 0:
+		return fail(exitUsage, "a file and --machine cannot both be given",
+			"give the file, or --machine to import the snapshot from the account remote")
+	case machine != "":
+		return machineArg(machine)
+	case len(args) != 1:
+		return fail(exitUsage, "import takes one argument, the file to read, or --machine <id>",
+			"run 'agentx import --help' for usage")
+	}
+	return nil
+}
+
+// export writes the snapshot to path, a file in the library.
 func (inv *invocation) export(ctx context.Context, path string, force bool) error {
 	snap, err := inv.snapshot(ctx)
 	if err != nil {
@@ -223,6 +297,11 @@ func (inv *invocation) export(ctx context.Context, path string, force bool) erro
 	}
 	b, err := json.MarshalIndent(snap, "", "  ")
 	if err != nil {
+		return fail(exitInternal, err.Error(), "")
+	}
+	// The library is where the file goes, and a machine that installed
+	// nothing yet has none.
+	if err := os.MkdirAll(inv.dirs.Library, 0o755); err != nil {
 		return fail(exitInternal, err.Error(), "")
 	}
 	if err := writeExport(path, append(b, '\n'), force); err != nil {
@@ -401,7 +480,7 @@ func writeExport(path string, b []byte, force bool) error {
 	// a fix that does not exist, and with the flag the open fails as an
 	// internal error over what is really a path that names the wrong thing.
 	if info, err := os.Stat(path); err == nil && info.IsDir() {
-		return fail(exitRefused, path+" is a directory", "give the path of the file to write")
+		return fail(exitRefused, path+" is a directory", "give another name")
 	}
 	flags := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
 	if !force {
@@ -410,9 +489,9 @@ func writeExport(path string, b []byte, force bool) error {
 	f, err := os.OpenFile(path, flags, 0o600)
 	switch {
 	case errors.Is(err, fs.ErrExist):
-		return fail(exitRefused, path+" is already there", "choose another path, or pass --force to overwrite it")
+		return fail(exitRefused, path+" is already there", "give another name, or pass --force to overwrite it")
 	case errors.Is(err, fs.ErrNotExist):
-		return fail(exitNotFound, "the directory "+filepath.Dir(path)+" does not exist", "create it, or choose another path")
+		return fail(exitNotFound, "the directory "+filepath.Dir(path)+" does not exist", "create it")
 	case err != nil:
 		return fail(exitInternal, err.Error(), "")
 	}
