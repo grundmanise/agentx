@@ -119,7 +119,7 @@ Keep each pull request to one change. A maintainer reviews it once CI is green.
 
 ### Release notes
 
-The release notes list the commits that change `apps/cli`, by the type of their title:
+The release notes list the commits that change `apps/cli` or `apps/desktop`, by the type of their title:
 
 | Type | Section |
 | --- | --- |
@@ -155,24 +155,15 @@ Don't report a security vulnerability in a public issue.
 
 ## Releases
 
-Maintainers release through the Release workflow in
-[`.github/workflows/release.yml`](.github/workflows/release.yml). Every release builds the CLI for
-Linux and macOS on amd64 and arm64 and publishes the archives and their checksums to
-[GitHub Releases](https://github.com/grundmanise/agentx/releases).
+agentx has two kinds of release:
 
-- **Nightly**: every night at 03:17 UTC, the workflow releases the head of `main` as a prerelease, such
-  as `v0.3.0-nightly.20261001`, when `apps/cli` changed since the last nightly and CI passed on it. The
-  version is the next release the commits call for: a breaking change bumps the minor version (the
-  major from 1.0 on), a `feat` or `change` the minor, anything else the patch. The 14 newest nightlies
-  are kept.
-- **Stable**: the Release workflow is triggered manually. By default it promotes the newest nightly:
-  it tags that nightly's commit, such as `v0.3.0`, and builds it again, so `agentx version` prints the
-  release version. The workflow also automatically updates the Homebrew formula.
+- **Nightly**: a prerelease of `main`, published every night at 03:17 UTC when the CLI or the desktop
+  app changed and CI passed.
+- **Stable**: a maintainer starts it by hand, once a nightly has proved good enough. It promotes that
+  nightly to a version such as `v0.3.0`.
 
-The install script is served from `https://agentx.wtf/install`, which redirects to
-[`scripts/install.sh`](scripts/install.sh) on `main`. The Homebrew formula lives in
-[grundmanise/homebrew-tap](https://github.com/grundmanise/homebrew-tap), generated from
-[`packaging/homebrew/agentx.rb`](packaging/homebrew/agentx.rb).
+Your merged change reaches users first in a nightly, then in the next stable release. To publish a
+release, see [`RELEASING.md`](RELEASING.md).
 
 ## License
 

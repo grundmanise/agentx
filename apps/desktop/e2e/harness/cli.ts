@@ -15,7 +15,9 @@
 //
 // The app checks the machine on launch (src/startup/startup.ts), so the mock starts out with a
 // passing launch: `version` and `doctor` replies, and a serve child that writes its first inventory
-// when it starts. A test replaces them with register() and onServeStart().
+// when it starts. Once the checks pass the store loads its slices (src/store/loaders.ts), so the
+// mock answers `config list`, `source list` and `adopt` too. A test replaces any of them with
+// register() and onServeStart().
 import { once } from "node:events";
 
 import { test as base } from "@playwright/test";
@@ -65,7 +67,13 @@ export const configuration = (id: string) => ({
   reads_library: false,
 });
 
-/** A serve child's first inventory, with these configurations. */
+/** The label of the machine a passing launch reports. */
+export const machineLabel = "studio-mac";
+
+/**
+ * A serve child's first inventory, with these configurations. Serve adds the fields an inventory
+ * must have (serveEmit), its child's instance id among them.
+ */
 export const firstInventory = (configurations = ["claude-code", "codex"]) =>
   ({
     configurations: configurations.map(configuration),
@@ -121,6 +129,13 @@ export const passingDoctor: InlineEvent[] = [
     status: "info",
     type: "doctor",
   },
+];
+
+/** The reads the store runs once the checks pass (src/store/loaders.ts), with --json. */
+export const loadLines = [
+  ["config", "list", "--json"],
+  ["source", "list", "--json"],
+  ["adopt", "--json"],
 ];
 
 /** The CLI version a passing launch reports. */
@@ -254,6 +269,18 @@ export class MockCli {
   readonly deadlines: (number | null)[] = [];
   /** Every line written to serve's stdin. */
   readonly serveRequests: string[] = [];
+  /** The request id of every line written to serve's stdin, in order. */
+  get requestIds(): string[] {
+    return this.serveRequests.map((written) => {
+      const request: unknown = JSON.parse(written);
+      return typeof request === "object" &&
+        request !== null &&
+        "request_id" in request
+        ? String(request.request_id)
+        : "";
+    });
+  }
+
   /** How many times the app started serve. */
   serveStarts = 0;
 
@@ -275,6 +302,9 @@ export class MockCli {
       events: [{ cli_version: cliVersion, type: "version" }],
     });
     this.register(["doctor"], { events: passingDoctor });
+    this.register(["config", "list"], { events: [{ type: "settings" }] });
+    this.register(["source", "list"]);
+    this.register(["adopt"]);
   }
 
   async install() {
@@ -327,13 +357,32 @@ export class MockCli {
     }
   }
 
-  /** Emits serve stdout events under the current child id. */
-  async serveEmit(events: InlineEvent[]) {
+  /**
+   * Emits serve stdout events under the current child id, or `childId` for a child that ended. An
+   * inventory gets the fields it must have and the test left out: no items, this machine, and
+   * `instance-<child id>`.
+   */
+  async serveEmit(events: InlineEvent[], childId = this.childId) {
     await this.emit(
       "serve-event",
       events.map((event) => ({
-        child_id: this.childId,
-        event: full(event),
+        child_id: childId,
+        event: full(
+          event.type === "inventory"
+            ? {
+                configurations: [],
+                edges: [],
+                instance_id: `instance-${childId}`,
+                library: [],
+                machine: { id: "machine-1", label: machineLabel },
+                mcp_servers: [],
+                plugins: [],
+                skills: [],
+                warnings: [],
+                ...event,
+              }
+            : event
+        ),
         kind: "event",
       }))
     );

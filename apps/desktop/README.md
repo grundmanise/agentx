@@ -11,8 +11,10 @@ The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it
 | `src/styles/index.css` | The CSS entry: Tailwind, the fonts, the tokens and the base styles |
 | `src/app` | The app shell: title bar, sidebar, main panel, command palette, and the startup layer |
 | `src/startup` | The launch sequence: it resolves the CLI and runs `version`, `doctor` and `serve` before any screen mounts, and again when a command exits with code 8. It runs out of sight; the startup layer shows only when a check fails, and in manual mode. A launch that runs over 2 seconds says what it checks in the empty panel, and from 5 seconds into a check, how much longer that check keeps trying (`src/app/launch-progress.tsx`). `checks.ts` reads the five checks and the report from the CLI's output |
+| `src/store` | The app's data from the CLI, in one zustand store (`store.ts`). `feed.ts` applies the serve child's events by `docs/spec/inventory-ordering.md` and asks serve to scan again. `runner.ts` is the one way a control runs a command: it shows the command as pending, reports the outcome by exit code as a toast and an activity entry, and asks for a refresh after any command that may change something. `loaders.ts` fills settings, sources and the adoption preview from one-shot reads |
 | `src/screens` | The screens; today one placeholder |
 | `src/components` | Shared components; `ui` holds the shadcn/ui-based primitives |
+| `src/lib` | Small helpers: `cn()` in `utils.ts`, and `navigate.ts`, which lets code outside React change the route |
 | `src/cli/transport.ts` | The one way to the CLI: one-shot runs whose events arrive as they are written, cancel, and the serve child's events, exits and stdin requests |
 | `src/cli/events.gen.ts`, `src/cli/commands.gen.ts` | The types of the CLI's events and exit codes, and the commands and flags the CLI takes, generated from the CLI's own code. Do not edit them: after changing an event or a command in `apps/cli`, run `go test ./internal/cli -run 'TestEventTypes\|TestCommandTypes' -update` there. Those tests fail while a file is stale |
 | `src/assets` | Illustrations; today the product mark, also the source of the app icons in `src-tauri/icons` |
@@ -88,6 +90,7 @@ These rules are for anyone writing a component, people and coding agents alike.
 - Import from `src` with the `#/` prefix and the file's extension: `import { SearchIcon } from "#/components/icons/search.tsx"`. `#/` is a Node subpath import declared in `package.json` (`"imports"`), so TypeScript, Vite and the lint resolve it the same way, and like Node they need the extension.
 - Follow the copy rules in `DESIGN.md` §9 and the vocabulary in [`GLOSSARY.md`](../../GLOSSARY.md).
 - Show only what the CLI reports. A screen never predicts the result of a command.
+- Read CLI data from `useAppStore` (`src/store/store.ts`) with a selector, and run a command with `runCommand` (`src/store/runner.ts`), never with the transport directly. The screen redraws from the inventory that follows the command.
 
 ### What the checks catch
 
