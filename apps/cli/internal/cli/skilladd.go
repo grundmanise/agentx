@@ -322,6 +322,7 @@ type imported struct {
 	dropped []string // entries left out of the import: symlinks and submodules
 	when    string   // the upstream committer time as "<epoch> +0000"
 	fetched string   // when the source was last fetched, as the settings record it
+	replace bool     // another tool installed this skill: whatever the library holds under its name gives way to the version
 	imp     lineage.Import
 	commit  string // the import commit, once written
 	tree    string // the tree of that commit, the upstream directory alone
@@ -491,6 +492,12 @@ type upstream struct {
 // another time, leaves the import commit of an unchanged skill as it was.
 func upstreamReads(tip string, subpaths []string) [][]string {
 	return upstreamReadsAt(tip, atTip(tip, subpaths))
+}
+
+// treeRequest is one <commit>:<subpath> a batch of tree lookups asks about.
+type treeRequest struct {
+	commit  string
+	subpath string
 }
 
 // upstreamReadsAt are the reads that find the upstream commit of each
@@ -1142,7 +1149,8 @@ func libraryFailure(library string, err error) error {
 // the first time, adopt a directory that already holds exactly it, or
 // refuse a directory that holds something else. A dangling symlink into the
 // agentx worktrees directory counts as absent: it is a fork's placement
-// whose worktree is gone. The refusal's hint frees the name with skill
+// whose worktree is gone. An adoption displaces whatever another tool put
+// there instead, the one case a library entry gives way without a word. The refusal's hint frees the name with skill
 // rename for one of your own skills, and with skill remove for anything else,
 // which a fork under another name keeps first.
 func (inv *invocation) libraryPlan(v *imported, records map[string]lineage.Record, libPath, state string) (libraryAction, *failure) {
@@ -1151,8 +1159,15 @@ func (inv *invocation) libraryPlan(v *imported, records map[string]lineage.Recor
 		return libraryAction{}, nil
 	case home.IsDangling(libPath) && inv.intoWorktrees(libPath):
 		return libraryAction{displace: true}, nil
+	case v.replace && records[v.name].Kind != lineage.KindFork && !home.IsDir(state):
+		// Another tool's symlink into its own folder, or a file: nothing
+		// the library holds, whatever it leads to.
+		return libraryAction{displace: true}, nil
 	case contentHashAt(libPath) == v.hash:
 		return libraryAction{adopt: true}, nil // write the branch, copy nothing
+	case v.replace && records[v.name].Kind != lineage.KindFork:
+		// The directory another tool copied, edited since or not.
+		return libraryAction{displace: true}, nil
 	}
 	hint := "remove it with '" + skillCommand("remove", v.name) + "', then install again; to keep it, first fork it with '" + skillCommand("fork", v.name, "--name", "<new>") + "'"
 	if records[v.name].Kind == lineage.KindFork {
@@ -1484,7 +1499,7 @@ func (inv *invocation) printInstalled(done *installed, ev librarySkillEvent) {
 	out, v := inv.out, done.v
 	rows := inv.ownPlacements(v.name, done.placed, ev.Placements)
 	what := "installed"
-	if done.adopted {
+	if done.adopted || v.replace {
 		what = "adopted"
 	}
 	line := what + " " + out.paint(heading, sanitised(v.name)) + " from " + out.paint(heading, v.imp.Source) + underShown(v.imp.Path) +
