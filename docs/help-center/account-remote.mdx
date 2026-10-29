@@ -28,8 +28,8 @@ agentx writes two kinds of branches, and does not use any other branch, such as 
 
 Create a repository on any Git host, such as GitHub or GitLab. Only these choices matter to agentx:
 
-- **Private or public**: make it private. A snapshot keeps each MCP server's command, arguments and URL, and these can hold a token. Each machine then needs Git credentials for it, such as an SSH key or a credential helper, and a cloud agent needs a [read-only token](/cloud#create-a-read-only-token). A public account remote needs no credentials to read, but anyone can read your skills and snapshots.
-- **First files**: they do not matter. The repository can be empty, or have a README, a license or a `.gitignore` on its default branch. agentx does not use that branch.
+- **Private or public**: make it private. A snapshot keeps each MCP server's command, arguments and URL, and these can hold a token. Each machine then needs Git credentials for it, such as an SSH key or a credential helper, and a cloud agent needs a [read-only token](/cloud#create-a-read-only-token). A public account remote needs no credentials to read over HTTPS, but anyone can read your skills and snapshots. An SSH URL needs an SSH key, even for a public repository.
+- **First files**: choose any. The repository can be empty, or have a README, a license or a `.gitignore` on its default branch, because agentx does not use that branch.
 - **Access**: a machine that publishes or exports needs write access. A machine that only installs and imports needs read access.
 - **A new repository**: use a repository that is not a source on any machine. One repository cannot be both a shared source and the account remote.
 
