@@ -19,7 +19,7 @@ agentx treats all your cloud agents as one machine, the **cloud machine**. The c
 
 You need:
 
-- An [account remote](/cli/source#add-your-account-remote) that Git can reach over HTTPS, such as `https://github.com/you/skills`. The session needs the HTTPS URL, because the token works only over HTTPS. Your computer can keep an SSH URL for the same repository.
+- An [account remote](/cli/source#add-your-account-remote) that Git can reach over HTTPS, such as `https://github.com/you/skills`. The session needs the HTTPS URL: it has no SSH key, and the token works only over HTTPS. Your computer can keep an SSH URL for the same repository.
 - Skills on the cloud machine. On your computer, copy all of its skills to the cloud machine:
 
   ```sh
@@ -92,13 +92,7 @@ curl -fsSL https://raw.githubusercontent.com/grundmanise/agentx/main/scripts/ins
 	sh -s -- "$@" --dir "$bin"
 
 # 2. Let Git read the account remote with the token, for that repository alone.
-#    The token stays in a file only you can read, never in Git's configuration.
-token_file="$HOME/.config/agentx-cloud/token"
-(umask 077 && mkdir -p "${token_file%/*}" && printf '%s\n' "$ACCOUNT_TOKEN" > "$token_file")
-git config --global --unset-all "credential.$remote.helper"
-git config --global --add "credential.$remote.helper" ""
-git config --global --add "credential.$remote.helper" \
-	"!f() { if [ \"\$1\" = get ]; then echo username=x-access-token; echo \"password=\$(cat '$token_file')\"; fi; }; f"
+git config --global "credential.$remote.helper" "!f() { echo username=x-access-token; echo password=$ACCOUNT_TOKEN; }; f"
 
 # 3. Add the account remote.
 "$agentx" source add "$remote" --account
@@ -124,16 +118,21 @@ with open(path, "w") as f:
     json.dump(settings, f, indent=2)
     f.write("\n")
 EOF
+
+# Never fail the environment. An error above stays in the setup output.
+exit 0
 ```
 
 ### What the script does
 
 1. Installs agentx to `~/.local/bin` with the [install script](/install#with-the-install-script): the newest [nightly build](/install#try-a-nightly-build) for `nightly`, or the latest release for `stable`.
-2. Stores the token in `~/.config/agentx-cloud/token`, readable by you alone, and sets a Git credential helper that hands it to Git for the account remote and no other repository. The token never appears in a URL, in Git's configuration or in the setup output.
+2. Sets a Git credential helper in `~/.gitconfig` that gives the token to Git for the account remote and no other repository.
 3. Adds the account remote with `agentx source add <url> --account`.
 4. Adds a `SessionStart` hook to `~/.claude/settings.json`. It keeps every other setting and hook in the file, and replaces only an earlier agentx hook, so running the script again adds no second hook.
 
 The hook runs `agentx import --machine cloud --yes` each time a session starts or resumes. The import installs the skills that the snapshot on `machines/cloud` lists, and places them. Then the hook asks Claude Code to look for skills again, so a skill the import installs is there in that same session. See [Restore from the account remote](/cli/export#restore-from-the-account-remote).
+
+The script always exits 0, so the environment starts even if a step fails. The setup output shows the error.
 
 ## Check that it works
 
