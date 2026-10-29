@@ -23,7 +23,6 @@ agentx export ~/agentx-snapshot.json
 
 ```text
 ✓ exported the settings and 12 skills to /home/me/agentx-snapshot.json
-  the snapshot names each skill's source, version and placements, and holds no skill content
 ```
 
 The file holds:
@@ -132,7 +131,6 @@ agentx export --machine 0123456789abcdef0123456789abcdef
 
 ```text
 ✓ exported the settings and 12 skills to machines/0123456789abcdef0123456789abcdef on the account remote at 4c2e9a1
-  the snapshot names each skill's source, version and placements, and holds no skill content
 ```
 
 Each export writes one commit and pushes it. agentx never forces the push. If the snapshot is unchanged since the last export, agentx pushes nothing and says so.
