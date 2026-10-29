@@ -48,7 +48,7 @@ On another Git host, create a token with read access to that one repository. If 
 ## Set up Claude Code on the web
 
 1. Copy the [setup script](#the-setup-script) below.
-2. Replace the two values at its top: `ACCOUNT_REMOTE` with the HTTPS URL of your account remote, and `ACCOUNT_TOKEN` with your read-only token. For a public account remote, leave `ACCOUNT_TOKEN` empty. If `agentx source list` shows an SSH URL on your computer, such as `git@github.com:you/skills.git`, enter the HTTPS URL of the same repository, `https://github.com/you/skills`.
+2. Set the three values at its top: `AGENTX_VERSION` to `nightly` or `stable`, `ACCOUNT_REMOTE` to the HTTPS URL of your account remote, and `ACCOUNT_TOKEN` to your read-only token. For a public account remote, leave `ACCOUNT_TOKEN` empty. If `agentx source list` shows an SSH URL on your computer, such as `git@github.com:you/skills.git`, enter the HTTPS URL of the same repository, `https://github.com/you/skills`.
 3. In Claude Code on the web, open the settings of the environment you work in.
 4. Paste the script into the environment's setup script, and save.
 5. If the environment limits network access, allow `github.com`, `api.github.com`, `raw.githubusercontent.com`, `objects.githubusercontent.com`, `release-assets.githubusercontent.com` and the host of your account remote.
@@ -61,8 +61,11 @@ Every session in that environment now gets the cloud machine's skills. To use th
 ```bash
 #!/bin/bash
 # agentx setup script: brings the cloud machine's skills to every session.
-# Fill in the two values below, then paste the whole script as the setup script.
+# Fill in the three values below, then paste the whole script as the setup script.
 
+# The agentx build to install: "nightly" for the newest nightly build,
+# or "stable" for the latest release.
+AGENTX_VERSION="nightly"
 # The HTTPS URL of your account remote. The token works only over HTTPS.
 ACCOUNT_REMOTE="https://github.com/you/skills"
 # A token that can only read the account remote. Leave it empty for a public one.
@@ -74,16 +77,14 @@ agentx="$bin/agentx"
 remote=${ACCOUNT_REMOTE%/}
 remote=${remote%.git}
 
-# 1. Install agentx, a single binary, without Homebrew: the latest release,
-#    or the newest nightly build while agentx has no release.
-installer=$(mktemp)
-if curl -fsSL https://raw.githubusercontent.com/grundmanise/agentx/main/scripts/install.sh -o "$installer"; then
-	sh "$installer" --dir "$bin" || {
-		say "installing the newest nightly build instead"
-		sh "$installer" --nightly --dir "$bin"
-	}
-fi
-rm -f "$installer"
+# 1. Install agentx, a single binary, without Homebrew.
+case $AGENTX_VERSION in
+	nightly) set -- --nightly ;;
+	stable) set -- ;;
+	*) say "set AGENTX_VERSION to nightly or stable"; exit 0 ;;
+esac
+curl -fsSL https://raw.githubusercontent.com/grundmanise/agentx/main/scripts/install.sh |
+	sh -s -- "$@" --dir "$bin"
 if [ ! -x "$agentx" ]; then
 	say "agentx did not install; sessions start without your skills"
 	exit 0
@@ -106,13 +107,13 @@ fi
 "$agentx" source add "$remote" --account ||
 	say "could not add $remote; check the URL and the token"
 
-# 4. Merge, never replace, a SessionStart hook into ~/.claude/settings.json.
-#    On every start and resume it applies the cloud machine's snapshot,
-#    logs to /tmp/agentx-import.log, asks Claude Code to look for skills
-#    again, and exits 0, so a session always starts.
-merge_hook() {
-	python3 - "$@" << 'EOF'
-import json, os, shutil, sys
+# 4. Add a SessionStart hook to ~/.claude/settings.json, keeping every other
+#    setting and hook. On every start and resume it applies the cloud machine's
+#    snapshot, logs to /tmp/agentx-import.log, asks Claude Code to look for
+#    skills again, and exits 0, so a session always starts.
+hook="\"$agentx\" import --machine cloud --yes >> /tmp/agentx-import.log 2>&1; echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"reloadSkills\":true}}'; exit 0"
+python3 - "$HOME/.claude/settings.json" "$hook" << 'EOF' || say "could not add the hook to ~/.claude/settings.json"
+import json, os, sys
 
 path, command = os.path.realpath(sys.argv[1]), sys.argv[2]
 try:
@@ -121,31 +122,18 @@ try:
 except FileNotFoundError:
     text = ""
 try:
-    settings = json.loads(text) if text.strip() else {}
+    settings = json.loads(text.strip() or "{}")
     groups = settings.setdefault("hooks", {}).setdefault("SessionStart", [])
-    # Replace an earlier agentx hook, and keep every other hook.
-    for group in list(groups):
-        hooks = group.get("hooks", [])
-        kept = [h for h in hooks if "import --machine cloud" not in str(h.get("command", ""))]
-        if len(kept) < len(hooks):
-            group["hooks"] = kept
-            if not kept:
-                groups.remove(group)
+    # Drop an earlier agentx hook, so running the script again adds no second one.
+    groups[:] = [g for g in groups if "import --machine cloud" not in json.dumps(g)]
     groups.append({"matcher": "startup|resume", "hooks": [{"type": "command", "command": command, "timeout": 300}]})
 except (ValueError, AttributeError, TypeError):
     sys.exit(sys.argv[1] + " is not settings this script can read, so it is left as it is")
 os.makedirs(os.path.dirname(path), exist_ok=True)
-with open(path + ".agentx", "w") as f:
+with open(path, "w") as f:
     json.dump(settings, f, indent=2)
     f.write("\n")
-if os.path.exists(path):
-    shutil.copymode(path, path + ".agentx")
-os.replace(path + ".agentx", path)
 EOF
-}
-hook="\"$agentx\" import --machine cloud --yes >> /tmp/agentx-import.log 2>&1; echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"reloadSkills\":true}}'; exit 0"
-merge_hook "$HOME/.claude/settings.json" "$hook" ||
-	say "could not add the hook to ~/.claude/settings.json"
 
 # Never fail the environment.
 exit 0
@@ -153,7 +141,7 @@ exit 0
 
 ### What the script does
 
-1. Installs agentx to `~/.local/bin` with the [install script](/install#with-the-install-script). Until agentx has its first release, the script installs the newest [nightly build](/install#try-a-nightly-build). After that, it installs the latest release, with no change to the script.
+1. Installs agentx to `~/.local/bin` with the [install script](/install#with-the-install-script): the newest [nightly build](/install#try-a-nightly-build) when `AGENTX_VERSION` is `nightly`, or the latest release when it is `stable`. agentx has no release yet, so use `nightly` until it has one.
 2. Stores the token in `~/.config/agentx-cloud/token`, readable by you alone, and sets a Git credential helper that hands it to Git for the account remote and no other repository. The token never appears in a URL, in Git's configuration or in the setup output.
 3. Adds the account remote with `agentx source add <url> --account`.
 4. Adds a `SessionStart` hook to `~/.claude/settings.json`. It keeps every other setting and hook in the file, and replaces only an earlier agentx hook, so running the script again adds no second hook. If the file is not valid JSON, the script leaves it as it is.
