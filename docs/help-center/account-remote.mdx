@@ -1,0 +1,44 @@
+---
+title: "Account remote"
+description: "The Git repository you own that carries your own skills and the snapshot of each machine to your other machines and your cloud agents."
+---
+
+Your account remote is a Git repository you own. agentx uses it to move what is yours between machines: your own skills, and a snapshot of each machine.
+
+You need it only for that. On a single machine, agentx works without it: the account repo in `~/.agentx` keeps the full history of your own skills.
+
+## When you need it
+
+- **A second machine**: publish your own skills on one machine, and install them on another.
+- **A backup**: export a snapshot of a machine, and restore it after a reinstall or on a new computer.
+- **Cloud agents**: the cloud machine has no computer of its own, so its snapshot on the account remote is its only state. See [Cloud agents](/cloud).
+
+Skills from a shared source never go through the account remote. Each machine installs them from their source.
+
+## What it holds
+
+agentx writes two kinds of branches, and does not use any other branch, such as `main`.
+
+| Branch | Holds | Written by | Read by |
+|---|---|---|---|
+| `skills/<name>` | One of your own skills, with its history. | `agentx skill publish` | `agentx skill add --name <name>` and `agentx skill update` on your other machines |
+| `machines/<id>` | The snapshot of one machine: its settings, and its skills with their placements. It holds no skill content. | `agentx export --machine <id>`, and `agentx skill place` or `agentx skill remove` with `--machine cloud` | `agentx import --machine <id>`, and each cloud agent session |
+
+## Create it
+
+Create a repository on any Git host, such as GitHub or GitLab. Only these choices matter to agentx:
+
+- **Private or public**: make it private. A snapshot keeps each MCP server's command, arguments and URL, and these can hold a token. Each machine then needs Git credentials for it, such as an SSH key or a credential helper, and a cloud agent needs a [read-only token](/cloud#create-a-read-only-token). A public account remote needs no credentials to read, but anyone can read your skills and snapshots.
+- **First files**: they do not matter. The repository can be empty, or have a README, a license or a `.gitignore` on its default branch. agentx does not use that branch.
+- **Access**: a machine that publishes or exports needs write access. A machine that only installs and imports needs read access.
+- **A new repository**: use a repository that is not a source on any machine. One repository cannot be both a shared source and the account remote.
+
+## Add it
+
+On each machine, add the repository with `--account`:
+
+```sh
+agentx source add git@github.com:you/skills.git --account
+```
+
+Each machine can use its own URL for the same repository, such as SSH on your computer and HTTPS for a cloud agent. For the details, see [Add your account remote](/cli/source#add-your-account-remote). For how import treats two URLs of one repository, see [Import onto another machine](/cli/export#import-onto-another-machine).

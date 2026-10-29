@@ -5,7 +5,7 @@ description: "Bring your skills to cloud agent sessions with a setup script that
 
 A cloud agent, such as Claude Code on the web, starts every session on a fresh computer in the cloud. Your skills reach it only if you commit them to the repository the session works on, or if agentx brings them.
 
-agentx treats all your cloud agents as one machine, the **cloud machine**. The cloud machine has no computer of its own. Its snapshot lists its skills and where each skill is placed. The snapshot is on your [account remote](/cli/source#add-your-account-remote), on the branch `machines/cloud`. When a session starts, it reads the snapshot and installs the skills. A session never writes to your account remote.
+agentx treats all your cloud agents as one machine, the **cloud machine**. The cloud machine has no computer of its own. Its snapshot lists its skills and where each skill is placed. The snapshot is on your [account remote](/account-remote), on the branch `machines/cloud`. When a session starts, it reads the snapshot and installs the skills. A session never writes to your account remote.
 
 ## Supported environments
 
@@ -19,7 +19,7 @@ agentx treats all your cloud agents as one machine, the **cloud machine**. The c
 
 You need:
 
-- An [account remote](/cli/source#add-your-account-remote) that Git can reach over HTTPS, such as `https://github.com/you/skills`. The session needs the HTTPS URL: it has no SSH key, and the token works only over HTTPS. Your computer can keep an SSH URL for the same repository.
+- An [account remote](/account-remote) that Git can reach over HTTPS, such as `https://github.com/you/skills`. The session needs the HTTPS URL: it has no SSH key, and the token works only over HTTPS. Your computer can keep an SSH URL for the same repository.
 - Skills on the cloud machine. On your computer, copy all of its skills to the cloud machine:
 
   ```sh
