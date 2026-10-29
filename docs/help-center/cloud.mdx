@@ -165,6 +165,21 @@ The token is in the environment's setup script. If someone else can read the scr
 
 ## Troubleshooting
 
+### Ask the agent to find the cause
+
+Paste this prompt into a session:
+
+```text
+My agentx skills are missing or wrong in this session. Find out why.
+Start with /tmp/agentx-import.log and https://docs.agentx.wtf/cloud.
+If the cause is in my setup, fix it or tell me what to change.
+If it is a bug in agentx, open an issue in https://github.com/grundmanise/agentx
+with its bug report template and steps to reproduce. If you cannot open it,
+give me the text. Leave out tokens and anything private.
+```
+
+To find the cause yourself, use the steps below.
+
 ### A skill is missing in a session
 
 Read the import log. Ask the agent in the session to run this command, or run it yourself:
