@@ -171,7 +171,7 @@ func newExportCommand(inv *invocation) *cobra.Command {
 	var machine string
 	cmd := &cobra.Command{
 		Use:   "export [<name> | --machine <id>]",
-		Short: "Write a snapshot of this machine, with its settings, to the library or the account remote",
+		Short: "Write a snapshot of this machine to the library or the account remote",
 		Args: func(cmd *cobra.Command, args []string) error {
 			switch {
 			case len(args) > 1:
@@ -202,8 +202,8 @@ func newExportCommand(inv *invocation) *cobra.Command {
 			return inv.export(cmd.Context(), inv.snapshotPath(name), force)
 		},
 	}
-	cmd.Flags().BoolVar(&force, "force", false, "overwrite the file when it is already there")
-	cmd.Flags().StringVar(&machine, "machine", "", "write the snapshot to the branch machines/<id> of the account remote instead of a file: cloud, or a computer's machine id")
+	cmd.Flags().BoolVar(&force, "force", false, "replace the file when one of that name is there")
+	cmd.Flags().StringVar(&machine, "machine", "", "write to the branch machines/<id> of the account remote instead: cloud, or a computer's machine id")
 	// The long help names this machine's id and the file the export writes,
 	// which are known before the command runs: help is printed before the
 	// root's PersistentPreRunE resolves the directories, so it resolves them
@@ -216,13 +216,13 @@ func newExportCommand(inv *invocation) *cobra.Command {
 }
 
 // exportHelp is the long help of export, with the file a plain export
-// writes and this machine's id filled in. Neither is read when it cannot
+// writes and this machine's id filled in. Each is read only when it can
 // be: without a home directory the help names the library in words, and a
-// machine whose id is not generated yet is sent to 'agentx machine', which
-// generates it.
+// machine whose id is still to be generated is sent to 'agentx machine',
+// which generates it.
 func (inv *invocation) exportHelp() string {
 	file := "  snapshot.json in the library\n"
-	id := "This machine's id is not generated yet: 'agentx machine' prints it.\n"
+	id := "'agentx machine' generates and prints this machine's id.\n"
 	dirs := inv.dirs
 	if dirs.Home == "" {
 		dirs, _ = home.Resolve(inv.env)
@@ -232,23 +232,21 @@ func (inv *invocation) exportHelp() string {
 	}
 	if dirs.Home != "" {
 		if known, err := home.KnownMachineID(dirs.Home, inv.env); err == nil && known != "" {
-			id = "This machine's id is " + known + ".\n"
+			id = "'agentx machine' prints this machine's id: " + known + ".\n"
 		}
 	}
-	return "Write a snapshot of this machine to a file in the library: its settings, its\n" +
-		"agent configurations, every skill with its source, version and placements, and\n" +
-		"the MCP servers and plugins as found. The snapshot holds no skill content.\n" +
-		"'agentx import' applies it on another machine.\n\n" +
-		"The file is snapshot.json in the library, or <name>.json when a name is given:\n" +
+	return "Write a snapshot of this machine: its settings, its agent configurations, its\n" +
+		"skills with their source, version and placements, and its MCP servers and\n" +
+		"plugins. Skill content stays out of it: 'agentx import' installs each skill\n" +
+		"again from its source.\n\n" +
+		"The snapshot goes to the library, as snapshot.json or as <name>.json:\n" +
 		file + "\n" +
-		"With --machine <id>, write the snapshot to the branch machines/<id> of the\n" +
-		"account remote instead, as one commit, never forced. Export to this machine's\n" +
-		"id to keep a backup there, and to cloud, or another computer's id, to seed\n" +
-		"that machine with this machine's skills. Nothing is pushed without --machine.\n" +
+		"With --machine <id>, it goes to the branch machines/<id> of the account remote\n" +
+		"instead, as one pushed commit. Use this machine's id to keep a backup there.\n" +
+		"Use cloud, or another computer's id, to give that machine these skills.\n" +
 		id + "\n" +
-		"The snapshot holds the settings and each MCP server's command, arguments and\n" +
-		"URL as written, which can hold a token. The file is readable by you alone. Do\n" +
-		"not commit it to a public repository."
+		"The snapshot keeps each MCP server's command, arguments and URL as written,\n" +
+		"which can hold a token, so the file is readable by you alone. Keep it private."
 }
 
 // snapshotName holds the name of a snapshot to a file name the library can

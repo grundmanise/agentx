@@ -278,8 +278,8 @@ func TestExportHelpNamesTheMachineAndTheFile(t *testing.T) {
 	for _, args := range [][]string{{"export", "--help"}, {"help", "export"}} {
 		out := h.run(args...)
 		equal(t, strings.Join(args, " ")+": exit", out.exit, 0)
-		contains(t, "stdout", out.stdout, "The file is snapshot.json in the library, or <name>.json when a name is given:\n  "+h.snapshotPath(defaultSnapshot)+"\n")
-		contains(t, "stdout", out.stdout, "This machine's id is "+id+".\n")
+		contains(t, "stdout", out.stdout, "The snapshot goes to the library, as snapshot.json or as <name>.json:\n  "+h.snapshotPath(defaultSnapshot)+"\n")
+		contains(t, "stdout", out.stdout, "'agentx machine' prints this machine's id: "+id+".\n")
 		contains(t, "stdout", out.stdout, "Usage:\n  agentx export [<name> | --machine <id>] [flags]\n")
 	}
 }
