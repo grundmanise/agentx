@@ -10,7 +10,7 @@ A snapshot is the whole state of one machine, so it always holds that machine's 
 ## Move to a new machine
 
 1. On the old machine, run `agentx export`. It writes `snapshot.json` to your library, `~/.agents/skills` by default.
-2. Copy the file to the new machine.
+2. Copy the file to the new machine, for example to `~/snapshot.json`.
 3. On the new machine, run `agentx import ~/snapshot.json`, and answer `y`.
 
 Import installs each skill at the version you had and places it in the same configurations. Use the same steps to restore a machine from its own snapshot, for example after you removed your skills.
