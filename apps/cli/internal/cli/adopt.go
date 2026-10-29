@@ -146,7 +146,7 @@ func (inv *invocation) adopt(ctx context.Context, sel adoptSelection) error {
 // and can make nothing of.
 func lockFailure(err error) error {
 	if errors.Is(err, vercel.ErrLock) {
-		return fail(exitInternal, err.Error(), "fix the file or move it aside; agentx never writes it")
+		return fail(exitInternal, err.Error(), "fix the file or move it aside")
 	}
 	return fail(exitInternal, err.Error(), "check that the lock file is readable")
 }

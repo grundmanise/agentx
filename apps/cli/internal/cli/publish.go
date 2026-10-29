@@ -769,7 +769,7 @@ func (inv *invocation) pushForks(ctx context.Context, gitDir, remote, url, name 
 			p.outcome, p.f = publishMoved, movedRefusal(p.name)
 		case gitx.PushDeclined:
 			p.outcome, p.f = publishDeclined, refuse(exitRefused, "the account remote declined "+branch+": "+sanitised(reason),
-				"agentx never forces a push; once the account remote takes it, "+again)
+				"once the account remote takes it, "+again)
 		case gitx.PushDenied:
 			p.outcome, p.f = publishDenied, refuse(exitSource, "the account remote "+shownURL(url)+" did not let this machine push "+branch+": "+sanitised(reason),
 				deniedHint(gitx.DeniedFix(reason))+", then "+again)
