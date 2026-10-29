@@ -3,7 +3,7 @@ title: "Your own skills"
 description: "Create skills of your own, or fork installed ones, each with a history in the account repo."
 ---
 
-Your own skills are the skills you create with `agentx skill new` or fork with `agentx skill fork`. agentx keeps the history of each one in the [account repo](/#key-terms) on this machine, `~/.agentx/account.git`. To use them on your other machines, publish them to your [account remote](/cli/source#add-your-account-remote), a Git repository you own. You need an account remote only when you publish. Every client sees your own skills like any other skill.
+Your own skills are the skills you create with `agentx skill new` or fork with `agentx skill fork`. agentx keeps the history of each one in the [account repo](/#key-terms) on this machine, `~/.agentx/account.git`. To use them on your other machines, publish them to your [account remote](/account-remote), a Git repository you own. You need an account remote only when you publish. Every client sees your own skills like any other skill.
 
 A skill you fork from an installed skill keeps its upstream, the skill it came from, so you can take in newer versions later. A skill you create has no upstream.
 
@@ -195,7 +195,7 @@ agentx skill update release-notes
 
 - agentx merges the new version into your fork. Your changes are kept, and upstream changes to lines you did not touch come in.
 - The merge is committed on the skill's branch, as `release-notes: merge upstream 5d6e7f8 (laptop)`. Nothing is pushed: the fork shows as `modified` until you [publish](/cli/skill#publish-a-skill) it.
-- With an [account remote](/cli/source#add-your-account-remote) set, agentx first [updates the fork to what your other machines published](/cli/skill#update-to-what-another-machine-published), then merges the new version on top, as two commits. If Git cannot reach the remote, agentx warns and takes the upstream version alone.
+- With an [account remote](/account-remote) set, agentx first [updates the fork to what your other machines published](/cli/skill#update-to-what-another-machine-published), then merges the new version on top, as two commits. If Git cannot reach the remote, agentx warns and takes the upstream version alone.
 - Your unpublished edits are kept. See [Unpublished edits are kept](#unpublished-edits-are-kept).
 - [Files that stay local](#files-that-stay-local) are kept. If the new version holds a file at a path your ignore rules cover, that file replaces your local one, as `git checkout` does.
 - `agentx skill update --all` updates every managed skill with an update, your own skills included.
