@@ -31,6 +31,7 @@ You need:
 
 `agentx export --machine cloud` copies your computer's settings, skills and placements to the cloud machine:
 
+- The snapshot keeps each MCP server's command, arguments and URL as your configuration writes them, and these can hold a token. Keep the account remote private, or remove such values from your configuration before you export.
 - It replaces the cloud machine's whole snapshot. A skill you placed only on the cloud machine, or a `--copy` you gave with `--machine cloud`, is gone until you place it again.
 - A skill from a shared source stays at the version your computer had. To move it to a newer version, export again, or run `agentx skill place <name> --machine cloud`. After that, sessions take its latest version.
 - Sessions install your own skills at their latest version on the account remote.
@@ -92,9 +93,9 @@ case $AGENTX_VERSION in
 	stable) set -- ;;
 	*) say "set AGENTX_VERSION to nightly or stable"; exit 0 ;;
 esac
-curl -fsSL https://raw.githubusercontent.com/grundmanise/agentx/main/scripts/install.sh |
-	sh -s -- "$@" --dir "$bin"
-if [ ! -x "$agentx" ]; then
+set -o pipefail
+if ! curl -fsSL https://raw.githubusercontent.com/grundmanise/agentx/main/scripts/install.sh |
+	sh -s -- "$@" --dir "$bin" || [ ! -x "$agentx" ]; then
 	say "agentx did not install; sessions start without your skills"
 	exit 0
 fi
@@ -134,7 +135,9 @@ try:
     settings = json.loads(text.strip() or "{}")
     groups = settings.setdefault("hooks", {}).setdefault("SessionStart", [])
     # Drop an earlier agentx hook, so running the script again adds no second one.
-    groups[:] = [g for g in groups if "import --machine cloud" not in json.dumps(g)]
+    for g in groups:
+        g["hooks"] = [h for h in g.get("hooks", []) if "import --machine cloud" not in str(h.get("command"))]
+    groups[:] = [g for g in groups if g["hooks"]]
     groups.append({"matcher": "startup|resume", "hooks": [{"type": "command", "command": command, "timeout": 300}]})
 except (ValueError, AttributeError, TypeError):
     sys.exit(sys.argv[1] + " is not settings this script can read, so it is left as it is")
