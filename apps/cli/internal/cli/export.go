@@ -246,7 +246,7 @@ func (inv *invocation) exportHelp() string {
 		"Use cloud, or another computer's id, to give that machine these skills.\n" +
 		id + "\n" +
 		"The snapshot keeps each MCP server's command, arguments and URL as written,\n" +
-		"which can hold a token, so the file is readable by you alone. Keep it private."
+		"which can hold a token. Keep it private."
 }
 
 // snapshotName holds the name of a snapshot to a file name the library can
