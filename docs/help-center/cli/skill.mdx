@@ -144,7 +144,7 @@ To replace the copy with the library version, run the command on the second line
 
 ### Install your skills on another machine
 
-Your own skills, the ones you create or fork and then publish to your [account remote](/cli/source#add-your-account-remote), install on another machine from that remote. Add the same remote there with `agentx source add <url> --account`, then list the skills it holds that this machine has not installed:
+Your own skills, the ones you create or fork and then publish to your [account remote](/account-remote), install on another machine from that remote. Add the same remote there with `agentx source add <url> --account`, then list the skills it holds that this machine has not installed:
 
 ```sh
 agentx skill list --remote
@@ -317,7 +317,7 @@ Each row shows the skill, its kind, whether it holds edits you have not publishe
 The source column shows where the skill is published to:
 
 - A skill of a shared source shows the source's URL and the folder in it, as `pdf` does above. Its updates come from there.
-- One of your own skills shows your [account remote](/cli/source#add-your-account-remote), marked `(account)`, or `account remote not set` until you add one. A skill you forked from an installed skill also shows its upstream after `from`, as `my-pdf` does above, and takes the updates of its upstream.
+- One of your own skills shows your [account remote](/account-remote), marked `(account)`, or `account remote not set` until you add one. A skill you forked from an installed skill also shows its upstream after `from`, as `my-pdf` does above, and takes the updates of its upstream.
 - An unmanaged skill shows `(none)`.
 
 The state column shows:
@@ -545,7 +545,7 @@ If a file of the skill changes while the update writes it, agentx stops with exi
 
 ### Update to what another machine published
 
-Your own skills travel between your machines through the [account remote](/cli/source#add-your-account-remote): the ones you created with `agentx skill new`, forked with `agentx skill fork`, or installed from the account remote. Update them to the latest version you published from another machine the way you take an update:
+Your own skills travel between your machines through the [account remote](/account-remote): the ones you created with `agentx skill new`, forked with `agentx skill fork`, or installed from the account remote. Update them to the latest version you published from another machine the way you take an update:
 
 ```sh
 agentx skill check-updates
@@ -661,7 +661,7 @@ With `--all`, agentx updates every skill it can and names each one it could not.
 
 ## Publish a skill
 
-Publish one of your own skills, one you created with `agentx skill new` or forked with `agentx skill fork`, to your [account remote](/cli/source#add-your-account-remote) so your other machines can install it and get what you change:
+Publish one of your own skills, one you created with `agentx skill new` or forked with `agentx skill fork`, to your [account remote](/account-remote) so your other machines can install it and get what you change:
 
 ```sh
 agentx skill publish release-notes -m "Cover reverted pull requests"
@@ -697,7 +697,7 @@ agentx skill publish release-notes -m "Cover reverted pull requests"
   - Credentials that only allow reading, or none: check the git credential helper or SSH key you use for the remote.
   - A host SSH does not trust yet: connect to it once with `ssh` to add its key to `known_hosts`.
   - An organisation that requires single sign-on or an IP allow list: authorise your token or key for the organisation, or allow this machine's IP address.
-- Publishing needs an [account remote](/cli/source#add-your-account-remote). Without one, it stops with exit code 6 and names `agentx source add <url> --account`.
+- Publishing needs an [account remote](/account-remote). Without one, it stops with exit code 6 and names `agentx source add <url> --account`.
 - A skill agentx does not manage has no source to publish to: fork it with `agentx skill fork <name>` to make it one of your own.
 - To delete a skill's branch from the remote, remove the skill with [`agentx skill remove <name> --remote`](/cli/fork#remove-a-skill-of-your-own).
 
@@ -854,7 +854,7 @@ Removing one of your own skills from the machine also deletes its local history.
 
 ## Turn skills on for your cloud agents
 
-Every agent you run in the cloud, such as Claude Code on the web, is one [cloud machine](/#key-terms). It has no disk that lasts, so its skills live in its snapshot on your [account remote](/cli/source#add-your-account-remote), on the branch `machines/cloud`. Each cloud session reads that snapshot when it starts. To apply it yourself, for example in a cloud environment's setup script, run `agentx import --machine cloud --yes`, see [Restore from the account remote](/cli/export#restore-from-the-account-remote). Turn a skill on and off there with the same commands you use on this machine, adding `--machine cloud`. Nothing on this machine changes.
+Every agent you run in the cloud, such as Claude Code on the web, is one [cloud machine](/#key-terms). It has no disk that lasts, so its skills live in its snapshot on your [account remote](/account-remote), on the branch `machines/cloud`. Each cloud session reads that snapshot when it starts. To apply it yourself, for example in a cloud environment's setup script, run `agentx import --machine cloud --yes`, see [Restore from the account remote](/cli/export#restore-from-the-account-remote). Turn a skill on and off there with the same commands you use on this machine, adding `--machine cloud`. Nothing on this machine changes.
 
 Place a skill on the cloud machine:
 

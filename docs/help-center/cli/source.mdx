@@ -232,7 +232,9 @@ Removing your [account remote](#add-your-account-remote) clears it from this mac
 
 ## Add your account remote
 
-The account remote is a Git repository you own. You [publish](/cli/skill#publish-a-skill) your own skills to it: the skills you create with `agentx skill new` or fork with `agentx skill fork`. Your [other machines install them](/cli/skill#install-your-skills-on-another-machine) from it. Create an empty repository on your Git host, then add it with `--account`:
+The account remote is a Git repository you own. You [publish](/cli/skill#publish-a-skill) your own skills to it: the skills you create with `agentx skill new` or fork with `agentx skill fork`. Your [other machines install them](/cli/skill#install-your-skills-on-another-machine) from it. For why you need one and what to choose when you create it, see [Account remote](/account-remote).
+
+Create a repository on your Git host, then add it with `--account`:
 
 ```sh
 agentx source add git@github.com:you/forks.git --account

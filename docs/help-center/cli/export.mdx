@@ -5,7 +5,7 @@ description: "Save a snapshot of one machine, with its settings, to a file or yo
 
 Export writes a snapshot of this machine to a file, or to your account remote: your settings, your agent configurations, the skills in your library with where each one is placed, and the MCP servers and plugins agentx found. Import applies a snapshot: it restores the settings, installs the skills, and places each one where the snapshot says.
 
-A snapshot is the whole state of one machine, so it always holds that machine's settings. A snapshot holds no skill content. For each skill it records where the skill comes from, which version you had and which configurations you placed it in. Import installs the content again from each skill's source, or from your [account remote](/cli/source#add-your-account-remote) for your own skills.
+A snapshot is the whole state of one machine, so it always holds that machine's settings. A snapshot holds no skill content. For each skill it records where the skill comes from, which version you had and which configurations you placed it in. Import installs the content again from each skill's source, or from your [account remote](/account-remote) for your own skills.
 
 ## Move to a new machine
 
@@ -118,7 +118,7 @@ If import stops part way, for example because the machine shut down, the next ag
 
 ## Keep a snapshot on your account remote
 
-Instead of a file, export can write the snapshot to your [account remote](/cli/source#add-your-account-remote), on the branch `machines/<machine id>`, and import can read it from there. The branch holds one file, `snapshot.json`, the same file an export to a file writes. agentx writes to the account remote only when you name a machine with `--machine`, and never on its own.
+Instead of a file, export can write the snapshot to your [account remote](/account-remote), on the branch `machines/<machine id>`, and import can read it from there. The branch holds one file, `snapshot.json`, the same file an export to a file writes. agentx writes to the account remote only when you name a machine with `--machine`, and never on its own.
 
 The snapshot on the branch keeps each MCP server's command, arguments and URL, as a snapshot file does, and these can hold a token. Anyone who can read your account remote can read them, a cloud agent's read-only token included. Keep the account remote private, and give read access only to people and agents you trust with those values.
 
