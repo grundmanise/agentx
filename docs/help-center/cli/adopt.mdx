@@ -1,11 +1,11 @@
 ---
 title: "agentx adopt"
-description: "Take over the skills the Vercel skills CLI installed, without reinstalling them or touching your edits."
+description: "Take over the skills the Vercel skills CLI or Skillshare installed, so agentx can update them."
 ---
 
-The Vercel skills CLI installs skills into `~/.agents/skills`, the same library agentx uses, and records each install in a lock file. `agentx adopt` reads that lock file and takes those skills over. Each skill keeps the files in its directory as they are and gains an upstream, so agentx can tell your edits apart from the version you installed. agentx only adds the [files the installer left out](#files-the-installer-left-out).
+The Vercel skills CLI and Skillshare both record where each skill they installed came from. `agentx adopt` reads those records and installs each skill from its source, the way [`agentx skill add`](/cli/skill#install-a-skill) does. Afterwards agentx manages the skill: it knows the source and can update it.
 
-agentx only reads the lock file. The file stays as it is.
+agentx only reads the other tool's files. They stay as they are.
 
 ## See what can be adopted
 
@@ -14,10 +14,10 @@ agentx adopt
 ```
 
 ```text
-3 skills of the Vercel skills lock file in the library
-  pdf      candidate  https://github.com/anthropics/skills/skills/pdf   its source is not added yet; adopting adds and fetches it
-  xlsx     managed    https://github.com/anthropics/skills/skills/xlsx  agentx already manages it
-  scraper  refused    (none)                                            scraper names no source agentx can read
+3 skills installed by another tool
+  pdf      vercel      candidate  https://github.com/anthropics/skills/skills/pdf   its source is not added yet; adopting adds and fetches it
+  xlsx     skillshare  managed    https://github.com/anthropics/skills/skills/xlsx  agentx already manages it
+  scraper  vercel      refused    (none)                                            scraper names no source agentx can read
 Adopt them with agentx adopt --all.
 ```
 
@@ -39,8 +39,9 @@ agentx adopt --all
 
 ```text
 ✓ added https://github.com/anthropics/skills at 3f2a9c1: 12 skills; write access unknown
-✓ adopted pdf from https://github.com/anthropics/skills under skills/pdf at 9c1d0ab
-  base 4e7b21c: the version the lock file recorded, found in the source; the directory differs from it, so what differs is a local modification
+✓ adopted pdf from https://github.com/anthropics/skills under skills/pdf at 9c1d0ab: 2 placements
+  claude-code  symlink  /home/me/.claude/skills/pdf -> /home/me/.agents/skills/pdf
+  cursor       symlink  /home/me/.cursor/skills/pdf -> /home/me/.agents/skills/pdf
 ```
 
 Or name skills with `--skill`, once for each:
@@ -51,10 +52,10 @@ agentx adopt --skill pdf --skill xlsx
 
 For each skill, agentx:
 
-1. Adds its source if you do not have it yet, as [`agentx source add`](/cli/source#pin-a-source) does, pinned to the ref in the lock file. This also brings back a source you removed.
-2. Finds the upstream version you installed and records it as the skill's [base](#how-agentx-finds-the-base).
+1. Adds its source if you do not have it yet, as [`agentx source add`](/cli/source#pin-a-source) does, pinned to the ref the record names. This also brings back a source you removed.
+2. Installs the skill from that source at the version the source holds now, and places it in every enabled client, as `agentx skill add` does.
 
-Your files stay as they are; agentx only adds the [files the installer left out](#files-the-installer-left-out). If a skill fails, agentx still adopts the others and lists the failures at the end.
+If a skill fails, agentx still adopts the others and lists the failures at the end.
 
 Afterwards the skills are ordinary managed skills:
 
@@ -64,109 +65,84 @@ agentx skill list
 
 ```text
 1 skill
-  pdf  managed  modified  https://github.com/anthropics/skills/skills/pdf  4 placements
+  pdf  managed  current  https://github.com/anthropics/skills/skills/pdf  2 placements
 ```
+
+## What happens to the directory
+
+Adopting replaces what the other tool left in the library with the version it installs. That covers the directory the Vercel skills CLI copied, the symlink Skillshare puts in `~/.agents/skills`, and any edit you made in there.
+
+To keep an edit, fork the skill first. A fork keeps your files and their history, under a name of your choice:
+
+```sh
+agentx skill fork pdf --name my-pdf
+agentx adopt --skill pdf
+```
+
+Skillshare keeps its own copy of each skill in its folder, `~/.config/skillshare/skills` by default. agentx never touches that folder, so your edits there stay.
+
+## After adopting from the Vercel skills CLI
+
+The Vercel skills CLI installs into `~/.agents/skills`, the library itself, and links your clients' folders to it, so after adopting nothing else moves: the library directory is agentx's, and the links are the placements. Stop using that CLI for the adopted skills. Good to know: `skills update` rewrites the library directory with the newest upstream version, which agentx then shows as `modified` against the version it installed; `skills remove` deletes the directory and its lock entry, and `agentx skill list` then names the `agentx skill add` command that installs the skill again.
+
+## After adopting from Skillshare
+
+Adopting moves a skill to agentx completely: the library gets a real directory, and Skillshare's links in your clients' folders, such as `~/.claude/skills/pdf`, become links to the library. You are done with Skillshare for that skill. Uninstall Skillshare, or stop running it, and leave its folder as it is or delete it.
+
+Good to know: Skillshare does not know about the adoption. If you run `skillshare sync` afterwards, it puts its own links back, or removes the adopted directory once you uninstalled the skill there, and your clients read Skillshare's copy again. Running `agentx adopt --all` again repairs that: agentx installs each such skill again and the adoption is whole. A skill you also uninstalled from Skillshare is no longer in its records, so `agentx adopt` cannot see it; `agentx skill list` then names the `agentx skill add` command that installs it again.
 
 ### Skills from one source at different refs
 
-agentx keeps one ref for each source, its pin. The lock file records a ref for each skill, so skills from the same source can have different refs. When a run adds a source, agentx pins it to the ref of the first skill the run adopts from it, in alphabetical order. If those skills have different refs, agentx warns you:
+agentx keeps one ref for each source, its pin. The records name a ref for each skill, so skills from the same source can have different refs. When a run adds a source, agentx pins it to the ref of the first skill the run adopts from it, in alphabetical order. If those skills have different refs, agentx warns you:
 
 ```text
 warning: https://github.com/anthropics/skills was installed at more than one ref (v1.2.0, main); it is added pinned to v1.2.0. To change the pin, run 'agentx source add https://github.com/anthropics/skills#<ref>' and adopt again
 ```
 
-agentx looks for the other skills' versions in the history of the pinned ref. A source you already have keeps its pin, and agentx looks for every skill's version in the history of that pin. If it cannot find one, see [When agentx cannot find the base](#when-agentx-cannot-find-the-base).
-
-To choose the pin yourself, add the source at that ref before you adopt. If you already have the source, this changes its pin:
+A source you already have keeps its pin. To choose the pin yourself, add the source at that ref before you adopt. If you already have the source, this changes its pin:
 
 ```sh
 agentx source add https://github.com/anthropics/skills#main
 agentx adopt --all
 ```
 
-## How agentx finds the base
+## Grouped Skillshare skills
 
-The base is the upstream version you installed. agentx compares your directory with it, so your edits stay yours when you update the skill later.
-
-agentx checks these in order and uses the first that works:
-
-1. **The folder hash in the lock file.** It names the skill's directory, or, for a skill at the root of its repository, the commit it was installed from. agentx looks for that version in the source, in the last 500 commits that changed the skill. This also works for a skill the source has since deleted.
-2. **Your directory.** If your files match the source's current version exactly, apart from the [files the installer left out](#files-the-installer-left-out), agentx records that version.
-
-To name the version yourself, use `--base`. It replaces both checks. See [Choose the base yourself](#choose-the-base-yourself).
-
-If your directory differs from the base, agentx says so, and `agentx skill list` shows the skill as `modified`. See what you changed with [`agentx skill diff <name>`](/cli/skill#see-what-you-changed).
-
-## Files the installer left out
-
-The Vercel skills CLI skips some files of a skill, depending on its version: `metadata.json`, `README.md`, and files or folders whose names start with `_` or `.`, such as `rules/_sections.md` or `.gitignore`. These files are part of the version you installed. Without them, the skill would look as if you deleted them.
-
-When agentx adopts a skill, it writes these files back, with the content of the version you installed:
-
-```text
-✓ adopted vercel-composition-patterns from https://github.com/vercel-labs/agent-skills under skills/composition-patterns at a5343bd
-  base 998e411: the version the lock file recorded, found in the source
-  restored README.md, metadata.json, rules/_sections.md, rules/_template.md, which the Vercel skills CLI left out
-```
-
-agentx adds only the files that are missing. Files you kept or edited stay as they are. If you deleted one of these files on purpose, delete it again after adopting; `agentx skill list` then shows the skill as `modified`.
-
-## When agentx cannot find the base
-
-If both checks fail, agentx warns you and leaves the skill unmanaged:
-
-```text
-warning: pdf: the version pdf was installed at cannot be established: no version of skills/pdf in https://github.com/anthropics/skills at 3f2a9c1, or in the 500 commits of it behind that, has the folder hash /home/me/.agents/.skill-lock.json recorded, and the directory is not the version https://github.com/anthropics/skills at 3f2a9c1 holds
-error: 1 of 3 skills could not be adopted: ...
-hint: leave it unmanaged, or name the version it came from with 'agentx adopt --skill pdf --base <commit, branch or tag>'
-```
-
-This usually means the lock file has no usable folder hash, and you edited the skill after you installed it. agentx records only upstream versions as a base, so it leaves the choice to you: name the version, or leave the skill unmanaged.
-
-### Choose the base yourself
-
-Name the version you installed:
+Skillshare can install a skill into a group, such as `frontend/ui`. In every tool's skills folder it names that skill `frontend__ui`, with two underscores. agentx adopts it under that name. To shorten it, rename the skill afterwards:
 
 ```sh
-agentx adopt --skill pdf --base v1.2.0
+agentx skill rename frontend__ui ui
 ```
-
-```text
-✓ adopted pdf from https://github.com/anthropics/skills under skills/pdf at 7d40a19
-  base 1b9e05f: the version named with --base; the directory differs from it, so what differs is a local modification
-```
-
-- `--base` takes a commit, a branch or a tag of the source, with one `--skill`.
-- Name branches and tags as the repository publishes them. `git ls-remote <url>` lists them.
-- The version must be in the history of the source's pin. To use a version from another branch, change the pin first:
-
-```sh
-agentx source add https://github.com/anthropics/skills#main
-```
-
-### Leave it unmanaged
-
-An unmanaged skill stays in your library and keeps working in every client. `agentx skill list` shows it as `unmanaged`, and agentx leaves its updates to you. To adopt it later, run `agentx adopt --skill <name> --base <commit, branch or tag>`.
 
 ## Refused skills
 
 | Reason | What to do |
 |---|---|
-| The library entry is a symlink, or has no `SKILL.md` | Leave it as it is. agentx manages real skill directories only |
 | One of your own skills on this machine has the same name | Nothing: that skill already has its own history |
-| The lock file names no source agentx can fetch | Install the skill from a git source with [`agentx skill add`](/cli/skill) |
-| The lock file names a path outside the repository, or a path with a control character or a leading or trailing space | Fix the entry, or install the skill instead |
+| The record names no source agentx can fetch, such as a local path | Install the skill from a git source with [`agentx skill add`](/cli/skill) |
+| Skillshare tracks the whole repository, as a `_name` folder with skills inside | Add the repository with `agentx source add` and install its skills with `agentx skill add` |
+| The record names a path outside the repository, or a path with a control character or a leading or trailing space | Fix the entry, or install the skill instead |
+| The source no longer holds a skill at that path | Leave it unmanaged, or install another skill |
 | agentx cannot fetch the source | Check the URL and your credentials, then run again |
 
-## Where agentx reads the lock file
+A refused skill stays in your library as it is and keeps working in every client. `agentx skill list` shows it as `unmanaged`.
 
-agentx reads both files the Vercel skills CLI uses:
+## Where agentx reads the records
+
+For the Vercel skills CLI, agentx reads both lock files:
 
 - `$XDG_STATE_HOME/skills/.skill-lock.json`, or `~/.local/state/skills/.skill-lock.json` when that variable is unset
 - `~/.agents/.skill-lock.json`
 
 If both files list a skill differently, agentx warns you and uses the file the Vercel skills CLI writes to now: the `$XDG_STATE_HOME` one when that variable is set, and `~/.agents/.skill-lock.json` otherwise.
 
-If a lock file is unreadable JSON or has no `skills` object, agentx stops. Fix the file or move it aside.
+For Skillshare, agentx reads `.metadata.json` in the folder Skillshare installs into:
 
-agentx skips an entry that is not an object or names no source. If one field has the wrong type of value, agentx warns you, drops that field and reads the rest of the entry.
+- `~/.config/skillshare/skills` by default, or under `$XDG_CONFIG_HOME` when that variable is set
+- the folder `sources.skills` names in `~/.config/skillshare/config.yaml`, or the older `source` key, when either is set
+
+Skillshare migrates its older `registry.yaml` and the `.skillshare-meta.json` files beside each skill into `.metadata.json` the next time it runs. If agentx finds nothing to adopt, run a Skillshare command such as `skillshare list` first.
+
+If a record file is unreadable JSON, or a configuration file is unreadable YAML, agentx stops. Fix the file or move it aside.
+
+agentx skips an entry that is not an object or names no source. If one field has the wrong type of value, agentx warns you, drops that field and reads the rest of the entry. A skill both tools recorded is adopted from the Vercel skills CLI's record, with a warning.

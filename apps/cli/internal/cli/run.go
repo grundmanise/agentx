@@ -180,6 +180,7 @@ func newRoot(inv *invocation) *cobra.Command {
 	root.SetUsageFunc(inv.usage)
 
 	root.AddCommand(newVersionCommand(inv))
+	root.AddCommand(newUpdateCommand(inv))
 	root.AddCommand(newConfigCommand(inv))
 	root.AddCommand(newMachineCommand(inv))
 	root.AddCommand(newSourceCommand(inv))

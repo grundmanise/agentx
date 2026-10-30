@@ -17,7 +17,6 @@ export const GLOBAL_FLAGS: CliFlags = {
 export const CLI_COMMANDS: Readonly<Record<string, CliFlags>> = {
   adopt: {
     all: false,
-    base: true,
     skill: true,
   },
   "config disable": {},
@@ -98,5 +97,11 @@ export const CLI_COMMANDS: Readonly<Record<string, CliFlags>> = {
   "source list": {},
   "source remove": {},
   "source skills": {},
+  update: {
+    check: false,
+    nightly: false,
+    stable: false,
+    version: true,
+  },
   version: {},
 };

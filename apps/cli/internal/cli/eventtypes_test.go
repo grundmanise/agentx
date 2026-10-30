@@ -34,6 +34,7 @@ var eventTypes = []struct {
 	v    any
 }{
 	{"version", versionEvent{}},
+	{"update", updateEvent{}},
 	{"settings", settingsEvent{}},
 	{"machine", machineEvent{}},
 	{"source", sourceEvent{}},
@@ -154,6 +155,12 @@ var valueLists = []valueList{
 	{name: "DoctorStatus", values: []string{rowOK, rowWarn, rowFail, rowInfo}, fields: []fieldRef{
 		{doctorEvent{}, "Status"},
 	}},
+	{name: "UpdateState", values: []string{cliCurrent, cliAvailable, cliUpdated}, fields: []fieldRef{
+		{updateEvent{}, "State"},
+	}},
+	{name: "UpdateChannel", values: []string{channelStable, channelNightly}, fields: []fieldRef{
+		{updateEvent{}, "Channel"},
+	}},
 	{name: "LogLevel", open: true, values: []string{levelWarn, levelDebug}, fields: []fieldRef{
 		{logEvent{}, "Level"},
 	}},
@@ -190,7 +197,7 @@ var valueLists = []valueList{
 		{sourceEvent{}, "Access"}, {home.Source{}, "Access"},
 	}},
 	{name: "ProgressPhase", values: []string{
-		phaseFetch, phasePublish, phaseBlobs, phaseImport, phaseInstall, phasePlace, phaseAdopt, phaseRescan,
+		phaseFetch, phasePublish, phaseBlobs, phaseImport, phaseInstall, phasePlace, phaseRescan,
 	}, fields: []fieldRef{
 		{progressEvent{}, "Phase"},
 	}},

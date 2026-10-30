@@ -201,25 +201,6 @@ func TestSkillDiffRefusesWhatHasNoBase(t *testing.T) {
 	sameTree(t, "the unmanaged skill", libraryTree(t, filepath.Join(h.library, "mine")), map[string]string{"SKILL.md": skill("mine", "My own")})
 }
 
-// TestAdoptionOffersNoDiff: choosing a base when adopting records it and
-// shows no diff; comparing is skill diff's, after the adoption.
-func TestAdoptionOffersNoDiff(t *testing.T) {
-	t.Parallel()
-	h, s, v1, _ := adoptHarness(t)
-	editLibrary(t, h, "alpha", "notes.md", "alpha notes, and a line of mine\n")
-	h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
-		Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/alpha",
-	}})
-	out := h.mustRun("--json", "adopt", "--skill", "alpha", "--base", v1)
-	if diffs := h.eventsOfType(out.stdout, "diff"); len(diffs) != 0 {
-		t.Errorf("adopt emitted diff events: %v", diffs)
-	}
-	diffs := h.eventsOfType(h.mustRun("--json", "skill", "diff", "alpha").stdout, "diff")
-	if len(diffs) != 1 || diffs[0]["path"] != "notes.md" {
-		t.Errorf("skill diff after the adoption = %v, want notes.md", diffs)
-	}
-}
-
 // TestIgnoreRulesAndAttributesApplyAsGitAppliesThem: a skill holding a
 // .gitignore that ignores everything and a .gitattributes that asks for
 // CRLF line endings is compared as git compares a work tree. A file the

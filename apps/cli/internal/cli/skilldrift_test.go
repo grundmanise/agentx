@@ -500,26 +500,6 @@ func TestServeEmitsADriftEventOnEachTransition(t *testing.T) {
 	}
 }
 
-// TestAdoptionAndListingAgreeOnModified: the other tool's copy of the
-// version differs from it by one exec bit alone. Adopting records the
-// version the lock file names, and both the adoption and every listing
-// after it call the directory modified, by the one comparison there is.
-func TestAdoptionAndListingAgreeOnModified(t *testing.T) {
-	t.Parallel()
-	h, s, _, installed := adoptHarness(t)
-	chmod(t, filepath.Join(h.library, "alpha", "notes.md"), 0o755)
-	h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
-		Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/alpha", SkillFolderHash: installed,
-	}})
-	out := h.mustRun("--json", "adopt", "--skill", "alpha")
-	ev := h.one(out.stdout, "adoption")
-	equal(t, "the adoption's modified", ev["modified"], true)
-	equal(t, "the adoption's content_hash", ev["content_hash"], ev["base_hash"])
-	equal(t, "the listing's state", h.listed("alpha")["state"], stateModified)
-	chmod(t, filepath.Join(h.library, "alpha", "notes.md"), 0o644)
-	equal(t, "the listing's state with the bit put back", h.listed("alpha")["state"], stateCurrent)
-}
-
 // TestAManagedSkillWithoutItsDirectoryIsNamedInAWarning: a managed skill
 // whose library directory was deleted outside agentx has no library entry,
 // so no state and no drift, and is named in one warning instead, by skill

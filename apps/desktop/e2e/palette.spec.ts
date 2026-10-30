@@ -54,3 +54,36 @@ test("says when nothing matches", async ({ page }) => {
   await expect(page.getByText("No matches")).toBeVisible();
   await expect(page.getByRole("option")).toHaveCount(0);
 });
+
+test("Check for agentx updates runs the check and says what it found", async ({
+  cli,
+  page,
+}) => {
+  cli.register(["update", "--check"], {
+    events: [
+      {
+        channel: "stable",
+        current_version: "1.2.0",
+        path: "/Applications/agentx.app/Contents/MacOS/agentx",
+        state: "available",
+        type: "update",
+        version: "1.3.0",
+      },
+      { ok: true, type: "result" },
+    ],
+  });
+  await page.keyboard.press("Control+K");
+  await page.keyboard.type("agentx up");
+  await expect(page.getByRole("option")).toHaveText([
+    "Check for agentx updates",
+  ]);
+  await page.keyboard.press("Enter");
+  await expect(
+    page
+      .getByRole("region", { name: /^Notifications/u })
+      .getByText("agentx 1.3.0 is available, you have 1.2.0")
+  ).toBeVisible();
+  expect(cli.commands).toContainEqual(["update", "--check", "--json"]);
+  // A check changes nothing: no refresh follows it.
+  expect(cli.serveRequests).toEqual([]);
+});

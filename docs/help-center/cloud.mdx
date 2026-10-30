@@ -1,0 +1,196 @@
+---
+title: "Cloud agents"
+description: "Bring your skills to cloud agent sessions with a setup script that installs agentx and applies the cloud machine's snapshot at every session start."
+---
+
+A cloud agent, such as Claude Code on the web, starts every session on a fresh computer in the cloud. Your skills reach it only if you commit them to the repository the session works on, or if agentx brings them.
+
+agentx treats all your cloud agents as one machine, the **cloud machine**. The cloud machine has no computer of its own. Its snapshot lists its skills and where each skill is placed. The snapshot is on your [account remote](/account-remote), on the branch `machines/cloud`. When a session starts, it reads the snapshot and installs the skills. A session never writes to your account remote.
+
+## Supported environments
+
+| Environment | Status |
+|---|---|
+| Claude Code on the web | Supported |
+| Codex cloud | Not yet: its start hook is not confirmed |
+| Cursor's cloud agents | Not yet: its start hook is not confirmed |
+
+## Before you start
+
+You need:
+
+- An [account remote](/account-remote) that Git can reach over HTTPS, such as `https://github.com/you/agentx-account`. The session needs the HTTPS URL: it has no SSH key, and the token works only over HTTPS. Your computer can keep an SSH URL for the same repository.
+- Skills on the cloud machine. On your computer, copy all of its skills to the cloud machine:
+
+  ```sh
+  agentx export --machine cloud
+  ```
+
+  Or turn on one skill at a time, see [Change the cloud machine's skills](#change-the-cloud-machines-skills). Until the cloud machine has a snapshot, sessions start without your skills.
+- A token that can only read the account remote. See [Create a read-only token](#create-a-read-only-token).
+
+`agentx export --machine cloud` copies your computer's settings, skills and placements to the cloud machine:
+
+- The snapshot keeps each MCP server's command, arguments and URL as your configuration writes them, and these can hold a token. Keep the account remote private, or remove such values from your configuration before you export.
+- It replaces the cloud machine's whole snapshot. A skill you placed only on the cloud machine, or a `--copy` you gave with `--machine cloud`, is gone until you place it again.
+- A skill from a shared source stays at the version your computer had. To move it to a newer version, export again, or run `agentx skill place <name> --machine cloud`. After that, sessions take its latest version.
+- Sessions install your own skills at their latest version on the account remote.
+
+See [Seed another machine](/cli/export#seed-another-machine).
+
+## Create a read-only token
+
+The setup script holds the token, so give it the least access that works: read access to the account remote and nothing else.
+
+On GitHub, create a fine-grained personal access token:
+
+1. Open **Settings**, then **Developer settings**, then **Personal access tokens**, then **Fine-grained tokens**, and select **Generate new token**.
+2. Set an expiration date.
+3. Under **Repository access**, select **Only select repositories** and pick your account remote.
+4. Under **Permissions**, set **Contents** to **Read-only**. Leave every other permission at **No access**.
+5. Generate the token and copy it.
+
+On another Git host, create a token with read access to that one repository. If your account remote is public, you need no token.
+
+## Set up Claude Code on the web
+
+1. Copy the [setup script](#the-setup-script) below.
+2. Set the three values at its top:
+   - `AGENTX_VERSION`: `nightly` or `stable`.
+   - `ACCOUNT_REMOTE`: the HTTPS URL of your account remote. If `agentx source list` shows an SSH URL, such as `git@github.com:you/agentx-account.git`, use the HTTPS URL of the same repository, `https://github.com/you/agentx-account`.
+   - `ACCOUNT_TOKEN`: your read-only token. For a public account remote, leave it empty.
+3. In Claude Code on the web, open the settings of the environment you work in.
+4. Paste the script into the environment's setup script, and save.
+5. If the environment limits network access, allow `github.com`, `api.github.com`, `raw.githubusercontent.com`, `objects.githubusercontent.com`, `release-assets.githubusercontent.com` and the host of your account remote.
+6. Start a new session.
+
+Every session in that environment now gets the cloud machine's skills. To use them in another environment, repeat these steps there.
+
+### The setup script
+
+```bash
+#!/bin/bash
+# agentx setup script: brings the cloud machine's skills to every session.
+# Fill in the three values below, then paste the whole script as the setup script.
+
+# The agentx build to install: "nightly" for the newest nightly build,
+# or "stable" for the latest release.
+AGENTX_VERSION="nightly"
+# The HTTPS URL of your account remote. The token works only over HTTPS.
+ACCOUNT_REMOTE="https://github.com/you/agentx-account"
+# A token that can only read the account remote. Leave it empty for a public one.
+ACCOUNT_TOKEN="paste-a-read-only-token-here"
+
+bin="$HOME/.local/bin"
+agentx="$bin/agentx"
+remote=${ACCOUNT_REMOTE%/}
+remote=${remote%.git}
+
+# 1. Install agentx, a single binary, without Homebrew.
+[ "$AGENTX_VERSION" = nightly ] && set -- --nightly
+curl -fsSL https://raw.githubusercontent.com/grundmanise/agentx/main/scripts/install.sh |
+	sh -s -- "$@" --dir "$bin"
+
+# 2. Let Git read the account remote with the token, for that repository alone.
+git config --global "credential.$remote.helper" "!f() { echo username=x-access-token; echo password=$ACCOUNT_TOKEN; }; f"
+
+# 3. Add the account remote.
+"$agentx" source add "$remote" --account
+
+# 4. Add a SessionStart hook to ~/.claude/settings.json, keeping every other
+#    setting and hook. On every start and resume it applies the cloud machine's
+#    snapshot, logs to /tmp/agentx-import.log, and asks Claude Code to look for
+#    skills again.
+hook="\"$agentx\" import --machine cloud --yes >> /tmp/agentx-import.log 2>&1; echo '{\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"reloadSkills\":true}}'"
+python3 - "$HOME/.claude/settings.json" "$hook" << 'EOF'
+import json, os, sys
+
+path, command = os.path.realpath(sys.argv[1]), sys.argv[2]
+settings = json.load(open(path)) if os.path.exists(path) else {}
+groups = settings.setdefault("hooks", {}).setdefault("SessionStart", [])
+# Drop an earlier agentx hook, so running the script again adds no second one.
+for g in groups:
+    g["hooks"] = [h for h in g["hooks"] if "import --machine cloud" not in h.get("command", "")]
+groups[:] = [g for g in groups if g["hooks"]]
+groups.append({"matcher": "startup|resume", "hooks": [{"type": "command", "command": command, "timeout": 300}]})
+os.makedirs(os.path.dirname(path), exist_ok=True)
+with open(path, "w") as f:
+    json.dump(settings, f, indent=2)
+    f.write("\n")
+EOF
+
+# Never fail the environment. An error above stays in the setup output.
+exit 0
+```
+
+### What the script does
+
+1. Installs agentx to `~/.local/bin` with the [install script](/install#with-the-install-script): the newest [nightly build](/install#try-a-nightly-build) for `nightly`, or the latest release for `stable`.
+2. Sets a Git credential helper in `~/.gitconfig` that gives the token to Git for the account remote and no other repository.
+3. Adds the account remote with `agentx source add <url> --account`.
+4. Adds a `SessionStart` hook to `~/.claude/settings.json`. It keeps every other setting and hook in the file, and replaces only an earlier agentx hook, so running the script again adds no second hook.
+
+The hook runs `agentx import --machine cloud --yes` each time a session starts or resumes. The import installs the skills that the snapshot on `machines/cloud` lists, and places them. Then the hook asks Claude Code to look for skills again, so a skill the import installs is there in that same session. See [Restore from the account remote](/cli/export#restore-from-the-account-remote).
+
+The script always exits 0, so the environment starts even if a step fails. The setup output shows the error.
+
+## Change the cloud machine's skills
+
+On your computer, turn skills on and off for the cloud machine with the same commands you use on your computer, plus `--machine cloud`:
+
+```sh
+agentx skill place <name> --machine cloud
+agentx skill place <name> --machine cloud --to claude-code
+agentx skill remove <name> --machine cloud --from claude-code
+agentx skill remove <name> --machine cloud
+```
+
+- `skill place` without `--to` places the skill in every configuration your computer detects and enables. Sessions then take the skill's latest version.
+- Add `--copy` to `skill place` for a client that cannot follow a symlink. Sessions then give that client a copy of the skill.
+- `skill remove` with `--from` takes the skill out of those configurations and keeps it on the cloud machine. Without `--from`, it takes the skill off the cloud machine.
+- Each command commits to `machines/cloud` on your account remote, pushes, and changes nothing on your computer.
+- A later `agentx export --machine cloud` replaces all of these changes with your computer's skills and settings.
+
+The next session that starts or resumes applies the change. A session that already installed a skill you took off keeps it until a new session starts. For the details and the refusals, see [Turn skills on for your cloud agents](/cli/skill#turn-skills-on-for-your-cloud-agents).
+
+## Limits
+
+- The hook relies on Claude Code reading `~/.claude/settings.json` on the session's own computer. This works in Claude Code on the web today, but Claude Code does not document it, so it can change.
+- The token reads only the account remote. If a skill comes from a source the session cannot reach, such as another private repository or an SSH URL, the import skips it, and the log says why.
+- A session reads the cloud machine's snapshot and never writes it. Edits you make to a skill in a session stay in that session.
+
+## Revoke the token
+
+The token is in the environment's setup script. If someone else can read the script, or you stop using the environment, revoke the token with your Git host. On GitHub, open **Settings**, then **Developer settings**, then **Personal access tokens**, then **Fine-grained tokens**, and delete it. Then create a new token and paste it into the script.
+
+## Troubleshooting
+
+### A skill is missing in a session
+
+The hook writes the output of every import to `/tmp/agentx-import.log`. The log names each skill that the import skipped, and why.
+
+Ask the agent:
+
+```text
+An agentx skill is missing in this session. Find out why from
+/tmp/agentx-import.log and ~/.local/bin/agentx skill list.
+See https://docs.agentx.wtf/cloud. Fix the cause or tell me what to change.
+If it is a bug in agentx, open an issue in https://github.com/grundmanise/agentx
+with its bug report template and steps to reproduce, or give me the text.
+Leave out tokens and anything private.
+```
+
+### The import log is missing
+
+The hook did not run. The cause is often a step of the setup script that failed. The environment's setup output shows the error.
+
+Ask the agent:
+
+```text
+/tmp/agentx-import.log is missing, so the agentx hook did not run in this session.
+Find out why. See https://docs.agentx.wtf/cloud for what the setup script does.
+Fix the cause or tell me what to change in the setup script.
+If it is a bug in agentx, open an issue in https://github.com/grundmanise/agentx
+with its bug report template and steps to reproduce, or give me the text.
+Leave out tokens and anything private.
+```
