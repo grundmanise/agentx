@@ -411,7 +411,7 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.detail-desc` | sans | 14.5 | 400 | 1.5 |  |  | Detail pane description (`text.muted`, `text-wrap:pretty`) |
 | `type.banner-title` | sans | 14 | 500 |  |  |  | Banner title (`banner.title`); its text is `type.secondary` in `banner.text` |
 | `type.agent-chip` | sans | 13 | 500 |  |  |  | Agent client name in a toggle chip |
-| `type.timeline-entry` | sans | 13.5 | 400 |  |  |  | Timeline entry subject (`text.primary`) |
+| `type.timeline-entry` | sans | 13.5 | 400 | 20px |  |  | Timeline entry subject (`text.primary`); its line height is `timeline.line`, so the dot beside it sits on the first line |
 | `type.timeline-meta` | sans | 12 | 400 |  |  |  | Timeline entry meta (`text.caption`) |
 | `type.notice` | sans | 13 | 400 | 1.5 |  |  | Stale bar text; hint and warnings in an error toast |
 
@@ -598,6 +598,8 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `timeline.col` | 12 | `grid-cols-timeline` (with the text column) | Dot column |
 | `timeline.gap` | 12–16 |  | Dot → text |
 | `timeline.dot` | 7 | `size-timeline-dot` |  |
+| `timeline.line` | 20 | `h-timeline-line` | The box the dot is centred in beside a plain entry: the line height of `type.timeline-entry` |
+| `timeline.button-line` | 34 | `h-timeline-button-line` | The box the dot is centred in beside an entry whose first line is a small button (the expandable entries of the History sheet, the "Show all {n}" row) |
 | `timeline.entry-gap` | 16–20 |  | Bottom padding per entry |
 | `check.column-width` | 480 | `w-check-column` | Startup column |
 | `check.block-gap` | 36 | `gap-check-block` | Logo/title → checks → actions |
@@ -731,7 +733,7 @@ The machine's label from the inventory, under the product name in the sidebar: `
 
 ### Timeline (history)
 
-Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot` round (`timeline.dot-install` for an upstream import, `timeline.dot-update` for a commit made with Git, `timeline.dot-yours` for one agentx wrote), a 1px `timeline.connector` below it. Entry: subject `type.timeline-entry` in `text.primary`, meta `type.timeline-meta` in `timeline.meta` ("{date} · {n} files", then "made with Git" or "from the original"). Final item when truncated: hollow dot (inset ring 1.5px `timeline.more-ring`) and a ghost button "Show all {n}", which opens the History sheet.
+Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot` round (`timeline.dot-install` for an upstream import, `timeline.dot-update` for a commit made with Git, `timeline.dot-yours` for one agentx wrote), centred in a box as high as the entry's first line (`timeline.line` beside the subject text, `timeline.button-line` beside a small button), a 1px `timeline.connector` from the bottom of that box to the next entry. Entry: subject `type.timeline-entry` in `text.primary`, meta `type.timeline-meta` in `timeline.meta` ("{date} · {n} files", then "made with Git" or "from the original"). Final item when truncated: hollow dot (inset ring 1.5px `timeline.more-ring`) and a ghost button "Show all {n}", which opens the History sheet.
 
 ### Popover (Filter)
 
