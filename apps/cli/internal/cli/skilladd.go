@@ -38,8 +38,9 @@ func newSkillAddCommand(inv *invocation) *cobra.Command {
 	var to []string
 	var asCopy, fetch bool
 	cmd := &cobra.Command{
-		Use:   "add [<source>[/<subpath>]] [--name <name>]... [--all [--except <name>]...]",
-		Short: "Install skills from a source, or your own from the account remote, into the library and place them",
+		Use:         "add [<source>[/<subpath>]] [--name <name>]... [--all [--except <name>]...]",
+		Short:       "Install skills from a source and place them",
+		Annotations: map[string]string{annotationSection: "skills", annotationSynopsis: "<source>"},
 		Long: "Install skills from a source into the library and place them in every enabled\n" +
 			"configuration. A source URL this machine has not added yet is added first, as\n" +
 			"'agentx source add' would; an added source is installed from as it was last\n" +
@@ -52,6 +53,13 @@ func newSkillAddCommand(inv *invocation) *cobra.Command {
 			"to the same branch. 'agentx skill list --remote' lists them. A managed copy of\n" +
 			"the skill's upstream that holds its base version gives way to it and keeps its\n" +
 			"placements; any other directory the library holds of the name is refused.",
+		Example: examples(
+			"agentx skill add anthropics/skills --name pdf", "install one skill from a GitHub repository",
+			"agentx skill add anthropics/skills --all --except pdf", "install every other skill of the source",
+			"agentx skill add owner/repo#v2 --name pdf --to cursor", "install from a pinned tag, into one client",
+			"agentx skill add anthropics/skills --name pdf --fetch", "fetch the source again first",
+			"agentx skill add --name release-notes", "install one of your own from the account remote",
+		),
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Flags that contradict each other are refused before anything

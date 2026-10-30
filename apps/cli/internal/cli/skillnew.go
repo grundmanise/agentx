@@ -22,8 +22,9 @@ import (
 func newSkillNewCommand(inv *invocation) *cobra.Command {
 	var description string
 	cmd := &cobra.Command{
-		Use:   "new <name>",
-		Short: "Create one of your own skills from the template",
+		Use:         "new <name>",
+		Short:       "Create a skill of your own from the template",
+		Annotations: map[string]string{annotationSection: "skills"},
 		Long: "Create a skill called <name> from agentx's template: a SKILL.md with the name\n" +
 			"and the description in its frontmatter. It is a managed skill whose source is\n" +
 			"your account remote: 'agentx skill publish <name>' publishes it there, and no\n" +
@@ -33,6 +34,10 @@ func newSkillNewCommand(inv *invocation) *cobra.Command {
 			"as an install places a skill, and listed as managed with no upstream.\n\n" +
 			"The name must be 1 to 64 lowercase letters, digits and hyphens, with no hyphen at\n" +
 			"the start or end and no two in a row.",
+		Example: examples(
+			"agentx skill new release-notes", "create it and place it in every enabled client",
+			"agentx skill new release-notes --description \"Draft release notes\"", "set its description",
+		),
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return inv.skillNew(cmd.Context(), args[0], description)

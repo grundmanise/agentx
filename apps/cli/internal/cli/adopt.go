@@ -65,8 +65,14 @@ type adoptSelection struct {
 func newAdoptCommand(inv *invocation) *cobra.Command {
 	var sel adoptSelection
 	cmd := &cobra.Command{
-		Use:   "adopt",
-		Short: "Install the skills another tool installed, so that agentx manages them",
+		Use:         "adopt",
+		Short:       "Adopt skills the Vercel skills CLI or Skillshare installed",
+		Annotations: map[string]string{annotationSection: "diagnostics"},
+		Example: examples(
+			"agentx adopt", "preview what would be adopted; nothing is written",
+			"agentx adopt --all", "adopt every skill another tool installed",
+			"agentx adopt --skill pdf --skill xlsx", "adopt two skills by name",
+		),
 		Long: "Take over the skills the Vercel skills CLI or Skillshare installed, so that agentx\n" +
 			"knows where each one came from and can update it. Run it with no flags to see\n" +
 			"what it would adopt; nothing is written and the other tool's files are never\n" +

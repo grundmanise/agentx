@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"reflect"
 	"regexp"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/spf13/cobra"
 )
 
 var escapes = regexp.MustCompile(`\x1b\[[0-9;]*m`)
@@ -164,22 +166,72 @@ func TestTableAlignsPaintedCells(t *testing.T) {
 	equal(t, "width", lipgloss.Width("\x1b[1;31m✓\x1b[0m ab"), 4)
 }
 
+// TestHelpSections pins the shape of a help page: the sectioned command
+// list of a group and of the root, the two example columns, the one-line
+// global flags of a command page and the full ones of the root, and the
+// banner. The rows themselves come from the command data, so only the
+// structure around them is pinned here.
 func TestHelpSections(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	out := h.run("config", "--help")
 	equal(t, "exit", out.exit, 0)
 	for _, s := range []string{
-		"Read and change the settings\n\nUsage:\n  agentx config [command]\n",
-		"Commands:\n",
-		"  disable  Leave a configuration out of placements by default\n",
-		"  list     Print every setting\n",
-		"Global flags:\n",
-		"      --color string  colour the text output: on or off; left out, a terminal gets colour and a pipe does not\n",
-		"      --json          write newline-delimited JSON events to stdout\n",
-		`Use "agentx config [command] --help" for more information about a command.`,
+		"Read and change the settings\n\nUsage:\n  agentx config <command> [arguments]\n\nSETTINGS\n  list ",
+		"  get <key>  ",
+		"  disable <configuration>  Leave a client out of placements by default\n",
+		"\nExamples:\n  agentx config list  ",
+		"\nGlobal flags: --json, --verbose, --color (see 'agentx --help')\n\nRun 'agentx config <command> --help' for the details, flags and examples of a command.\n",
 	} {
 		contains(t, "stdout", out.stdout, s)
+	}
+	for _, s := range []string{"Commands:", "Flags:\n", "--help  help for"} {
+		if strings.Contains(out.stdout, s) {
+			t.Errorf("config --help still prints %q:\n%s", s, out.stdout)
+		}
+	}
+
+	out = h.run("--help")
+	equal(t, "exit", out.exit, 0)
+	for _, s := range []string{
+		strings.Join(banner, "\n") + "\n\nInventory agent clients, skills, MCP servers and plugins\nhttps://docs.agentx.wtf\n\nUsage:\n  agentx [--json] [--verbose] [--color on|off] <command> [arguments]\n\nSKILLS\n  skill add <source>  ",
+		"\nUPDATES AND PUBLISHING\n  skill check-updates  ",
+		"\nSOURCES\n  source add <url>  ",
+		"\nMACHINES\n  machine  ",
+		"\nSETTINGS\n  config list  ",
+		"\nINVENTORY AND DIAGNOSTICS\n  scan  ",
+		"\nExamples:\n" +
+			"  agentx skill add anthropics/skills --name pdf  install one skill into every enabled client\n" +
+			"  agentx skill new release-notes                 create a skill of your own\n" +
+			"  agentx skill check-updates                     see what changed upstream before you update\n" +
+			"  agentx export --machine cloud                  seed the cloud machine with this one's skills\n" +
+			"\nGlobal flags:\n" +
+			"      --color string  colour the text output: on or off; left out, a terminal gets colour and a pipe does not\n" +
+			"      --json          write newline-delimited JSON events to stdout\n" +
+			"      --verbose       log at debug level on stderr\n" +
+			"\nRun 'agentx <command> --help' for the details, flags and examples of a command.\n",
+	} {
+		contains(t, "stdout", out.stdout, s)
+	}
+	if strings.Contains(out.stdout, "\n  help ") {
+		t.Errorf("the root lists cobra's help command:\n%s", out.stdout)
+	}
+	equal(t, "the dim line is the root's only on other pages", strings.Contains(out.stdout, "Global flags: --json"), false)
+
+	// A runnable command with children is a row of its own page's section
+	// and keeps its own usage line.
+	out = h.run("machine", "--help")
+	contains(t, "stdout", out.stdout, "Usage:\n  agentx machine [flags]\n  agentx machine <command> [arguments]\n\nMACHINES\n  rename <label>  ")
+	contains(t, "stdout", out.stdout, "Run 'agentx machine <command> --help' for")
+
+	// An unknown help topic gets the usage block: the list without the
+	// banner or the examples.
+	out = h.run("help", "bogus")
+	contains(t, "stdout", out.stdout, "Usage:\n  agentx [--json] [--verbose] [--color on|off] <command> [arguments]\n\nSKILLS\n")
+	for _, s := range []string{banner[1], "Examples:"} {
+		if strings.Contains(out.stdout, s) {
+			t.Errorf("the usage block prints %q:\n%s", s, out.stdout)
+		}
 	}
 
 	out = h.run("--color=on", "scan", "--help")
@@ -187,6 +239,152 @@ func TestHelpSections(t *testing.T) {
 	contains(t, "stdout", out.stdout, "\x1b[1mFlags:\x1b[0m\n")
 	contains(t, "stdout", out.stdout, "\x1b[36m    --handshake\x1b[0m")
 	contains(t, "stdout", out.stdout, "\x1b[36m    --project string\x1b[0m")
+	contains(t, "stdout", out.stdout, "\n\x1b[2mGlobal flags: --json, --verbose, --color (see 'agentx --help')\x1b[0m\n")
+
+	out = h.run("--color=on", "config", "--help")
+	contains(t, "stdout", out.stdout, "\x1b[1mSETTINGS\x1b[0m\n  \x1b[36mlist\x1b[0m")
+	contains(t, "stdout", out.stdout, "  \x1b[36mget <key>\x1b[0m")
+	contains(t, "stdout", out.stdout, "\x1b[1mExamples:\x1b[0m\n  \x1b[36magentx config list\x1b[0m")
+	contains(t, "stdout", out.stdout, "Run \x1b[36m'agentx config <command> --help'\x1b[0m for")
+
+	out = h.run("--color=on", "--help")
+	contains(t, "stdout", out.stdout, "\x1b[36m"+banner[0]+"\x1b[0m\n\x1b[36m"+banner[1]+"\x1b[0m\n")
+	contains(t, "stdout", out.stdout, "\x1b[1mInventory agent clients, skills, MCP servers and plugins\x1b[0m\n\x1b[2mhttps://docs.agentx.wtf\x1b[0m\n")
+	contains(t, "stdout", out.stdout, "\x1b[1mGlobal flags:\x1b[0m\n  \x1b[36m    --color string\x1b[0m")
+}
+
+// TestHelpSynopsis pins the first column of a command's row: its path below
+// the page's command, then the arguments of its Use line or the shorter
+// ones annotationSynopsis gives.
+func TestHelpSynopsis(t *testing.T) {
+	t.Parallel()
+	root := &cobra.Command{Use: "agentx"}
+	skill := &cobra.Command{Use: "skill"}
+	add := &cobra.Command{Use: "add [<source>[/<subpath>]] [--name <name>]...", Annotations: map[string]string{annotationSynopsis: "<source>"}}
+	list := &cobra.Command{Use: "list"}
+	rename := &cobra.Command{Use: "rename <old> <new>"}
+	bare := &cobra.Command{Use: "publish [<name>]", Annotations: map[string]string{annotationSynopsis: ""}}
+	skill.AddCommand(add, list, rename, bare)
+	root.AddCommand(skill)
+	tests := []struct {
+		name string
+		page *cobra.Command
+		cmd  *cobra.Command
+		want string
+	}{
+		{"an override replaces the arguments of Use", root, add, "skill add <source>"},
+		{"a group page drops the group's name", skill, add, "add <source>"},
+		{"a name alone", root, list, "skill list"},
+		{"the arguments of Use", skill, rename, "rename <old> <new>"},
+		{"an empty override hides the arguments", root, bare, "skill publish"},
+		{"a group is its path", root, skill, "skill"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := synopsis(tt.page, tt.cmd); got != tt.want {
+				t.Errorf("synopsis = %q, want %q", got, tt.want)
+			}
+		})
+	}
+
+	args := []struct{ use, want string }{
+		{"list", ""},
+		{"get <key>", "<key>"},
+		{"export [<name> | --machine <id>]", "[<name> | --machine <id>]"},
+		{"  set   <key> <value>  ", "<key> <value>"},
+		{"", ""},
+	}
+	for _, tt := range args {
+		if got := useArgs(tt.use); got != tt.want {
+			t.Errorf("useArgs(%q) = %q, want %q", tt.use, got, tt.want)
+		}
+	}
+}
+
+// TestHelpExampleSplit pins how an Example line becomes two columns: split
+// at its first tab, and left whole without one.
+func TestHelpExampleSplit(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name, line, command, description string
+		ok                               bool
+	}{
+		{"a command and its description", "agentx scan\tinventory every client", "agentx scan", "inventory every client", true},
+		{"the first tab splits", "agentx scan\ta\tb", "agentx scan", "a\tb", true},
+		{"a line without a tab is kept whole", "agentx scan   inventory", "agentx scan   inventory", "", false},
+		{"an empty description", "agentx scan\t", "agentx scan", "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			command, description, ok := splitExample(tt.line)
+			equal(t, "command", command, tt.command)
+			equal(t, "description", description, tt.description)
+			equal(t, "ok", ok, tt.ok)
+		})
+	}
+	equal(t, "examples joins pairs with a tab", examples("a", "b", "c", "d"), "a\tb\nc\td")
+
+	var out bytes.Buffer
+	writeExamples(&out, ink{}, "agentx scan\tinventory\nplain line\nagentx scan --json\tas events", 0)
+	equal(t, "columns", out.String(), "  agentx scan         inventory\n  plain line\n  agentx scan --json  as events\n")
+}
+
+// TestHelpTreeIsComplete walks the command tree and holds every command to
+// the help contract: a runnable command falls in a section one of its
+// ancestors or itself names, a Short fits a row and ends without a full
+// stop, and every Example line is a command line starting with agentx, a
+// tab and a description. A command that breaks the contract would still
+// render, in the last section or as one column, which is why a test guards
+// it rather than the renderer.
+func TestHelpTreeIsComplete(t *testing.T) {
+	t.Parallel()
+	known := map[string]bool{}
+	for _, s := range sections {
+		known[s.id] = true
+	}
+	root := newRoot(&invocation{env: map[string]string{}, out: &writer{}})
+	var walk func(cmd *cobra.Command)
+	walk = func(cmd *cobra.Command) {
+		path := cmd.CommandPath()
+		if id, set := cmd.Annotations[annotationSection]; set && !known[id] {
+			t.Errorf("%s: section %q is not one of sections", path, id)
+		}
+		if cmd.Runnable() && cmd.Annotations[annotationGroup] == "" && cmd.HasParent() {
+			if _, set := cmd.Annotations[annotationSection]; !set && !inherits(cmd) {
+				t.Errorf("%s: no section of its own or of an ancestor", path)
+			}
+		}
+		if cmd.HasParent() && cmd.IsAvailableCommand() {
+			if len(cmd.Short) > 60 || strings.HasSuffix(cmd.Short, ".") || cmd.Short == "" {
+				t.Errorf("%s: Short %q is empty, over 60 characters or ends with a full stop", path, cmd.Short)
+			}
+		}
+		for _, line := range strings.Split(cmd.Example, "\n") {
+			if cmd.Example == "" {
+				break
+			}
+			command, description, ok := splitExample(line)
+			if !ok || description == "" || !strings.HasPrefix(command, "agentx") {
+				t.Errorf("%s: Example line %q is not a command line, a tab and a description", path, line)
+			}
+		}
+		for _, sub := range cmd.Commands() {
+			if sub.IsAvailableCommand() {
+				walk(sub)
+			}
+		}
+	}
+	walk(root)
+}
+
+// inherits reports whether an ancestor of cmd names a section.
+func inherits(cmd *cobra.Command) bool {
+	for c := cmd.Parent(); c != nil; c = c.Parent() {
+		if c.Annotations[annotationSection] != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // TestQuotedPath pins the rule for a path, which is the rule sanitised
@@ -290,4 +488,79 @@ func TestStderrIsSanitisedByTheWriter(t *testing.T) {
 	}
 	equal(t, "log.message", messages[0], raw)
 	equal(t, "the message of a warning with a line under it", messages[1], raw+"; "+raw)
+}
+
+// TestWrapWords pins how the last column of a help row is wrapped: at
+// spaces, to the width, with a word wider than the width on a line of its
+// own, and left whole when the width is narrow or the text is painted.
+func TestWrapWords(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		text  string
+		width int
+		want  []string
+	}{
+		{"text that fits is one line", "place a copy", 40, []string{"place a copy"}},
+		{"a break falls at a space", "replace a displaced directory whose content differs", 30, []string{"replace a displaced directory", "whose content differs"}},
+		{"a word wider than the width gets its own line", "see https://docs.agentx.wtf/cli/skill#place-a-skill now", 30, []string{"see", "https://docs.agentx.wtf/cli/skill#place-a-skill", "now"}},
+		{"a width under minWrap leaves the text whole", "one two three four five six seven", 20, []string{"one two three four five six seven"}},
+		{"painted text is never split", "\x1b[1mone\x1b[0m two three four five six seven eight", 24, []string{"\x1b[1mone\x1b[0m two three four five six seven eight"}},
+		{"wide characters count by their cells", "日本語 日本語 日本語 日本語 日本語", 24, []string{"日本語 日本語 日本語", "日本語 日本語"}},
+		{"empty stays empty", "", 40, []string{""}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := wrapWords(tt.text, tt.width); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("wrapWords(%q, %d) = %q, want %q", tt.text, tt.width, got, tt.want)
+			}
+		})
+	}
+
+	// A table wraps only its last column, and continues it under itself.
+	tb := &table{wrap: 40}
+	tb.add(c("--force", label), c("replace a displaced directory whose content differs from the library", plain))
+	tb.add(c("--copy", label), c("place a copy", plain))
+	var out bytes.Buffer
+	tb.render(&out, ink{}, "  ")
+	equal(t, "wrapped", out.String(), "  --force  replace a displaced directory\n           whose content differs from\n           the library\n  --copy   place a copy\n")
+}
+
+// helpGoldenFile is the whole of agentx --help, pinned once. Write it again
+// with go test ./internal/cli -run TestHelpGolden -update.
+const helpGoldenFile = "testdata/golden/help.txt"
+
+// TestHelpGolden pins the root page exactly, and the wrapping a terminal of
+// 80 columns gets, which the environment's COLUMNS stands in for.
+func TestHelpGolden(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	out := h.run("--help")
+	equal(t, "exit", out.exit, 0)
+	if *update {
+		if err := os.WriteFile(helpGoldenFile, []byte(out.stdout), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	} else {
+		want, err := os.ReadFile(helpGoldenFile)
+		if err != nil {
+			t.Fatalf("%v; write it with go test ./internal/cli -run TestHelpGolden -update", err)
+		}
+		equal(t, "agentx --help", out.stdout, string(want))
+	}
+
+	h.env["COLUMNS"] = "80"
+	out = h.run("skill", "place", "--help")
+	equal(t, "exit", out.exit, 0)
+	contains(t, "stdout", out.stdout, "      --machine string  place the skill on this machine instead, by its branch\n                        on the account remote; only cloud is accepted\n")
+	for _, line := range strings.Split(out.stdout, "\n") {
+		if strings.HasPrefix(line, "      --") && len(line) > 80 {
+			t.Errorf("a flag row runs past 80 columns: %q", line)
+		}
+	}
+	out = h.run("--json", "skill", "place", "--help")
+	contains(t, "stderr", out.stderr, "      --machine string  place the skill on this machine instead, by its branch\n")
+	delete(h.env, "COLUMNS")
+	out = h.run("skill", "place", "--help")
+	contains(t, "stdout", out.stdout, "      --machine string  place the skill on this machine instead, by its branch on the account remote; only cloud is accepted\n")
 }
