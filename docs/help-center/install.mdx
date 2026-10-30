@@ -27,7 +27,7 @@ To install the CLI alone, on macOS or Linux:
 brew install grundmanise/tap/agentx-cli
 ```
 
-Homebrew builds the CLI from source, so each install and upgrade of `agentx-cli` takes about a minute. You cannot install both: each puts `agentx` on your `PATH`.
+Homebrew builds the CLI from source, so each install and upgrade of `agentx-cli` takes about a minute. You cannot install both: each puts `agentx` on your `PATH`, and Homebrew refuses the second.
 
 ### Install the app
 
@@ -35,13 +35,15 @@ Download the app from the latest [release](https://github.com/grundmanise/agentx
 
 | System | Download | Install |
 | --- | --- | --- |
-| macOS, Apple silicon | [`agentx_desktop_darwin_arm64.dmg`](https://github.com/grundmanise/agentx/releases/latest/download/agentx_desktop_darwin_arm64.dmg) | Open the disk image and drag agentx to your Applications folder. The app is signed and notarized, so macOS opens it without a prompt. |
+| macOS, Apple silicon | [`agentx_desktop_darwin_arm64.dmg`](https://github.com/grundmanise/agentx/releases/latest/download/agentx_desktop_darwin_arm64.dmg) | Open the disk image and drag agentx to your Applications folder. Releases are signed and notarized. If macOS blocks a build, allow it under System Settings → Privacy & Security. |
 | Linux, Debian or Ubuntu, x86-64 | [`agentx_desktop_linux_amd64.deb`](https://github.com/grundmanise/agentx/releases/latest/download/agentx_desktop_linux_amd64.deb) | `sudo apt install ./agentx_desktop_linux_amd64.deb` |
 | Linux, Debian or Ubuntu, ARM64 | [`agentx_desktop_linux_arm64.deb`](https://github.com/grundmanise/agentx/releases/latest/download/agentx_desktop_linux_arm64.deb) | `sudo apt install ./agentx_desktop_linux_arm64.deb` |
-| Linux, any distribution, x86-64 | [`agentx_desktop_linux_amd64.AppImage`](https://github.com/grundmanise/agentx/releases/latest/download/agentx_desktop_linux_amd64.AppImage) | `chmod +x agentx_desktop_linux_amd64.AppImage`, then run it |
-| Linux, any distribution, ARM64 | [`agentx_desktop_linux_arm64.AppImage`](https://github.com/grundmanise/agentx/releases/latest/download/agentx_desktop_linux_arm64.AppImage) | `chmod +x agentx_desktop_linux_arm64.AppImage`, then run it |
+| Linux, other distributions, x86-64 | [`agentx_desktop_linux_amd64.AppImage`](https://github.com/grundmanise/agentx/releases/latest/download/agentx_desktop_linux_amd64.AppImage) | `chmod +x agentx_desktop_linux_amd64.AppImage`, then run it |
+| Linux, other distributions, ARM64 | [`agentx_desktop_linux_arm64.AppImage`](https://github.com/grundmanise/agentx/releases/latest/download/agentx_desktop_linux_arm64.AppImage) | `chmod +x agentx_desktop_linux_arm64.AppImage`, then run it |
 
-Each package carries the CLI of the same version, and the app runs only that one. The `.deb` also puts the `agentx` command on your `PATH` and installs `git`. The disk image and the AppImage do not: to use the CLI from a terminal as well, install it with the cask, as above, or with the install script. The Linux packages run on distributions from 2022 on, such as Ubuntu 22.04 and Debian 12.
+Each package carries the CLI of the same version, and the app runs only that one. The `.deb` also puts the `agentx` command on your `PATH` and installs `git` if you have none. The disk image and the AppImage do not: to use the CLI from a terminal as well, install it with the cask, as above, or with the install script.
+
+The Linux packages run on glibc distributions from 2022 on, such as Ubuntu 22.04 and Debian 12. Those two ship a `git` older than 2.40, which agentx needs: install a newer one first, from the [git-core PPA](https://launchpad.net/~git-core/+archive/ubuntu/ppa) on Ubuntu or from backports on Debian. [`agentx doctor`](/cli/doctor) and the app's startup check report the version they find. An AppImage needs FUSE 2: if it does not start, install your distribution's `libfuse2` package, or run it with `--appimage-extract-and-run`.
 
 The release's `checksums.txt` lists the SHA-256 checksum of every download.
 

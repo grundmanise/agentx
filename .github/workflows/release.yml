@@ -408,7 +408,7 @@ jobs:
           mkdir "$RUNNER_TEMP/app" "$RUNNER_TEMP/deb"
           dpkg-deb -x deb/*.deb "$RUNNER_TEMP/deb"
           "$RUNNER_TEMP/deb/usr/bin/agentx" version --json | tee /dev/stderr | grep -F "\"cli_version\":\"$VERSION\""
-          (cd appimage && ./*.AppImage --appimage-extract > /dev/null)
+          (cd appimage && image=(./*.AppImage) && "${image[0]}" --appimage-extract > /dev/null)
           appimage/squashfs-root/usr/bin/agentx version --json | tee /dev/stderr | grep -F "\"cli_version\":\"$VERSION\""
           mv deb/*.deb "$RUNNER_TEMP/app/$NAME.deb"
           mv appimage/*.AppImage "$RUNNER_TEMP/app/$NAME.AppImage"

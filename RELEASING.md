@@ -37,8 +37,8 @@ commit:
 | Cask `agentx` | `agentx.cask.rb` | The app from its disk image, with the CLI inside it linked onto `PATH`. For Apple silicon Macs. Updated only when the release's app was notarized, since Gatekeeper blocks an unnotarized download |
 | Formula `agentx-cli` | `agentx-cli.rb` | The CLI alone, built from source. For macOS and Linux |
 
-The two conflict, since both put `agentx` on `PATH`. Edit the templates, not the tap: the next
-release overwrites the tap's copies.
+Both link `agentx` into Homebrew's `bin`, so Homebrew refuses to install the second next to the
+first. Edit the templates, not the tap: the next release overwrites the tap's copies.
 
 To test a tap change before a release, fill in the templates by hand and push them to a branch of the
 tap. Then check that branch out in your local copy of the tap, `$(brew --repository grundmanise/tap)`,
