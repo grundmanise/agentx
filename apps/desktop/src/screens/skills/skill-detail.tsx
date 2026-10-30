@@ -5,12 +5,13 @@ import { AgentChip } from "#/components/agent-chip.tsx";
 import type { AgentChipState } from "#/components/agent-chip.tsx";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { AlertIcon } from "#/components/icons/alert.tsx";
-import { Pill } from "#/components/pill.tsx";
+import { Pill, PillButton } from "#/components/pill.tsx";
 import { SkillGlyph } from "#/components/skill-glyph.tsx";
 import { bannerFor } from "#/screens/skills/banners.ts";
 import type { Banner } from "#/screens/skills/banners.ts";
 import { detailsOf } from "#/screens/skills/details.ts";
 import { HistorySection } from "#/screens/skills/history.tsx";
+import { openSkill } from "#/screens/skills/open.ts";
 import {
   glyphLit,
   glyphOf,
@@ -114,15 +115,18 @@ const Agents = ({
 };
 
 /**
- * The right pane: what the CLI reports about one skill. Header, origin and pills; description; the
- * action row (empty until the changes that add actions); one banner; AGENTS; FILES; then DETAILS
- * and HISTORY side by side.
+ * The right pane: what the CLI reports about one skill. Header, origin, pills and a pill per fork
+ * made from it under a new name, which opens that fork; description; the action row (empty until
+ * the changes that add actions); one banner; AGENTS; FILES; then DETAILS and HISTORY side by side.
  */
 export const SkillDetail = ({
   row,
+  forks,
   configurations,
 }: {
   row: SkillRow;
+  /** The forks made from this skill under a new name. */
+  forks: SkillRow[];
   configurations: Configuration[];
 }) => {
   const banner = bannerFor(row);
@@ -150,6 +154,30 @@ export const SkillDetail = ({
             <Pill key={pill.kind} tone={pillTones[pill.kind]} size="detail">
               {pill.label}
             </Pill>
+          ))}
+          {forks.map((fork) => (
+            <PillButton
+              key={fork.key}
+              tone="neutral"
+              size="detail"
+              label={`Forked as ${fork.name}`}
+              title={`Forked as ${fork.name}`}
+              icon={
+                <SkillGlyph
+                  shape="fork"
+                  lit={false}
+                  size={12}
+                  tone="inherit"
+                  title={`Forked as ${fork.name}`}
+                  decorative
+                />
+              }
+              onClick={() => {
+                openSkill(fork.key);
+              }}
+            >
+              {fork.name}
+            </PillButton>
           ))}
         </div>
         {row.description !== "" && (

@@ -6,18 +6,27 @@ export type GlyphShape = "dot" | "pencil" | "fork";
 const glyphVariants = cva("block flex-none", {
   variants: {
     size: {
+      12: "size-3",
       16: "size-4",
       18: "size-4.5",
     },
     tone: {
+      caption: "text-text-caption",
       edited: "text-glyph-edited",
+      inherit: "",
       lit: "text-glyph-enabled",
       off: "text-glyph-off",
     },
   },
 });
 
-const toneOf = (shape: GlyphShape, lit: boolean) => {
+/** How the glyph is coloured: by the skill's state, or as its parent says for a marker. */
+export type GlyphTone = "state" | "caption" | "inherit";
+
+const toneOf = (shape: GlyphShape, lit: boolean, tone: GlyphTone) => {
+  if (tone !== "state") {
+    return tone;
+  }
   if (shape === "pencil") {
     return "edited";
   }
@@ -28,25 +37,31 @@ const toneOf = (shape: GlyphShape, lit: boolean) => {
  * The glyph leading a skill row and the detail header: a filled dot for a skill of a source or an
  * unmanaged one, a pencil when it was edited, a fork for one of your own. `lit` is `glyph.enabled`;
  * the pencil is always `glyph.edited`. The title says what the glyph means, as a tooltip and to a
- * screen reader.
+ * screen reader. At 12px it is a marker beside a row's name or in a pill: the fork glyph on the
+ * original of a fork made under a new name, in `caption` or in its parent's colour.
  */
 export const SkillGlyph = ({
   shape,
   lit,
   title,
   size = 16,
+  tone = "state",
+  decorative = false,
 }: {
   shape: GlyphShape;
   lit: boolean;
   title: string;
-  size?: 16 | 18;
+  size?: 12 | 16 | 18;
+  tone?: GlyphTone;
+  /** Inside a control that names itself: the glyph then adds nothing to its name. */
+  decorative?: boolean;
 }) => (
   <span title={title} className="flex">
     <svg
       viewBox="0 0 16 16"
       aria-hidden
       focusable="false"
-      className={glyphVariants({ size, tone: toneOf(shape, lit) })}
+      className={glyphVariants({ size, tone: toneOf(shape, lit, tone) })}
     >
       {shape === "dot" && <circle cx="8" cy="8" r="4" fill="currentColor" />}
       {shape === "pencil" && (
@@ -74,6 +89,6 @@ export const SkillGlyph = ({
         </g>
       )}
     </svg>
-    <span className="sr-only">{title}</span>
+    {!decorative && <span className="sr-only">{title}</span>}
   </span>
 );

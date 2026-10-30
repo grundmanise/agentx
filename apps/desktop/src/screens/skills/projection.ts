@@ -333,7 +333,7 @@ export const groupRows = (rows: SkillRow[], order: SortOrder): Group[] => {
   });
 };
 
-/** The rows forked from `row` under a new name, nested under it. */
+/** The rows forked from `row` under a new name: the original carries a marker for each. */
 export const forksOf = (row: SkillRow, rows: SkillRow[]) =>
   sorted(
     rows.filter((r) => r.forkedFrom === row.name),

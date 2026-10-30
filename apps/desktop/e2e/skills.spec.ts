@@ -93,14 +93,24 @@ test.describe("the list", () => {
       "pdf-letters",
       "release-notes",
     ]);
-    // The fork made under a new name is also nested under its original.
+    // The fork made under a new name is listed once; its original carries a marker for it.
     expect(await rowNames(group(page, "ACME/SKILLS (2)"))).toEqual([
       "pdf",
-      "pdf-letters, your skill",
       "review",
     ]);
-    await expect(row(page, "pdf-letters, your skill")).toContainText(
-      "your skill"
+    await expect(
+      row(page, "pdf").getByTitle("Forked as pdf-letters")
+    ).toBeAttached();
+    await expect(
+      row(page, "pdf").getByText("Forked as pdf-letters")
+    ).toBeAttached();
+    await expect(list(page).getByTitle(/^Forked as/u)).toHaveCount(1);
+    // Selecting the fork highlights exactly one row.
+    await row(page, "pdf-letters").click();
+    await expect(list(page).locator("[aria-current=true]")).toHaveCount(1);
+    await expect(row(page, "pdf-letters")).toHaveAttribute(
+      "aria-current",
+      "true"
     );
     expect(await rowNames(group(page, "ON DISK (2)"))).toEqual([
       "notes",
@@ -203,11 +213,7 @@ test.describe("filters", () => {
     await page
       .getByRole("searchbox", { name: "Filter skills by name" })
       .fill("PDF");
-    expect(await rowNames(list(page))).toEqual([
-      "pdf-letters",
-      "pdf",
-      "pdf-letters, your skill",
-    ]);
+    expect(await rowNames(list(page))).toEqual(["pdf-letters", "pdf"]);
     await page.getByRole("searchbox").fill("zzz");
     await expect(list(page).getByText("No skills match")).toBeVisible();
   });
@@ -237,7 +243,7 @@ test.describe("filters", () => {
 
     await filters(page).getByRole("button", { name: "Reset filters" }).click();
     await expect(page.getByLabel("9 skills")).toBeVisible();
-    expect(await rowNames(list(page))).toHaveLength(10);
+    expect(await rowNames(list(page))).toHaveLength(9);
     await expect(
       filters(page).getByRole("button", { name: "Reset filters" })
     ).toHaveCount(0);
@@ -253,7 +259,7 @@ test.describe("filters", () => {
     await page.getByRole("button", { name: "Filter" }).click();
     const state = filters(page).getByRole("group", { name: "State" });
     await state.getByRole("radio", { name: "Enabled" }).check();
-    expect(await rowNames(list(page))).toHaveLength(10);
+    expect(await rowNames(list(page))).toHaveLength(9);
     // Every library skill is in a universal client here: none is disabled.
     await state.getByRole("radio", { name: "Disabled" }).check();
     await expect(list(page).getByText("No skills match")).toBeVisible();
@@ -305,7 +311,6 @@ test.describe("filters", () => {
       "pdf-letters",
       "release-notes",
       "pdf",
-      "pdf-letters, your skill",
       "review",
       "gone",
       "commit-helper",
@@ -314,7 +319,7 @@ test.describe("filters", () => {
 
     await agents.getByRole("checkbox", { name: /^Universal/u }).check();
     await expect(chip).toContainText("3 agents");
-    expect(await rowNames(list(page))).toHaveLength(10);
+    expect(await rowNames(list(page))).toHaveLength(9);
 
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Clear agents" }).click();
@@ -338,7 +343,6 @@ test.describe("filters", () => {
     expect(await rowNames(group(page, "ACME/SKILLS (2)"))).toEqual([
       "review",
       "pdf",
-      "pdf-letters, your skill",
     ]);
     // The groups keep their order.
     await expect(list(page).getByRole("region").first()).toHaveAccessibleName(
@@ -404,6 +408,7 @@ test.describe("the detail pane", () => {
         - text: Skill · Enabled
         - heading "pdf" [level=1]
         - text: acme/skills
+        - button "Forked as pdf-letters"
         - paragraph: Read and convert PDF files
         - region "Agents":
           - heading "Agents" [level=2]
@@ -425,6 +430,13 @@ test.describe("the detail pane", () => {
           - paragraph: History is kept for your own skills
     `);
     expect(later(cli)).toEqual([]);
+    // The fork pill opens the fork.
+    await article
+      .getByRole("button", { name: "Forked as pdf-letters" })
+      .click();
+    await expect(pane(page, "pdf-letters")).toBeVisible();
+    await expect(page).toHaveURL(/#\/skills\/pdf-letters$/u);
+    await expect(list(page).locator("[aria-current=true]")).toHaveCount(1);
   });
 
   test("one of your own skills: its history, with Show all opening the sheet", async ({

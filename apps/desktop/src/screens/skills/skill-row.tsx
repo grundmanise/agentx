@@ -18,21 +18,22 @@ export const pillTones: Record<PillKind, PillTone> = {
 };
 
 /**
- * One skill in the list: glyph, name, pills and the logos of the agent clients that see it, then
- * its description. A nested row, a fork under a new name shown under its original, carries the
- * tag "your skill". Selecting it shows the skill in the detail pane.
+ * One skill in the list: glyph, name, pills, a small fork marker for each fork made from it under
+ * a new name, and the logos of the agent clients that see it, then its description. Selecting it
+ * shows the skill in the detail pane.
  */
 export const SkillRowItem = ({
   row,
+  forks,
   configurations,
   selected,
-  nested = false,
   onSelect,
 }: {
   row: SkillRow;
+  /** The forks made from this skill under a new name, each marked on the row. */
+  forks: SkillRow[];
   configurations: Configuration[];
   selected: boolean;
-  nested?: boolean;
   onSelect: () => void;
 }) => {
   const clients = row.agents
@@ -40,11 +41,7 @@ export const SkillRowItem = ({
     .filter((c) => c !== undefined);
   const shown = clients.slice(0, MAX_LOGOS);
   return (
-    <ListRow
-      label={nested ? `${row.name}, your skill` : row.name}
-      selected={selected}
-      onSelect={onSelect}
-    >
+    <ListRow label={row.name} selected={selected} onSelect={onSelect}>
       <span className="w-row-glyph flex h-5 flex-none items-center justify-center">
         <SkillGlyph
           shape={glyphOf(row)}
@@ -63,15 +60,20 @@ export const SkillRowItem = ({
           >
             {row.name}
           </span>
-          {nested && (
-            <span className="type-technical-sm text-text-caption flex-none">
-              your skill
-            </span>
-          )}
           {row.pills.map((pill) => (
             <Pill key={pill.kind} tone={pillTones[pill.kind]}>
               {pill.label}
             </Pill>
+          ))}
+          {forks.map((fork) => (
+            <SkillGlyph
+              key={fork.key}
+              shape="fork"
+              lit={false}
+              size={12}
+              tone="caption"
+              title={`Forked as ${fork.name}`}
+            />
           ))}
           <span className="flex-1" />
           {shown.length > 0 && (

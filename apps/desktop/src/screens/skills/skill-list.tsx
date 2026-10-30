@@ -80,7 +80,8 @@ const GroupHeader = ({
 
 /**
  * The left column of the Skills screen: title and count, the Add button, the search field, the
- * filter row, and the rows in their groups. Forks under a new name are nested under their original.
+ * filter row, and the rows in their groups. A fork made under a new name is one row, in YOUR
+ * SKILLS; its original carries a marker for it.
  */
 export const SkillList = ({
   rows,
@@ -188,38 +189,19 @@ export const SkillList = ({
                 first={i === 0}
               />
               <ul className="gap-rows m-0 flex list-none flex-col p-0">
-                {group.rows.map((row) => {
-                  const forks = forksOf(row, rows);
-                  return (
-                    <li key={row.key} className="gap-rows flex flex-col">
-                      <SkillRowItem
-                        row={row}
-                        configurations={configurations}
-                        selected={row.key === selectedKey}
-                        onSelect={() => {
-                          onSelect(row);
-                        }}
-                      />
-                      {forks.length > 0 && (
-                        <ul className="gap-rows m-0 flex list-none flex-col p-0 pl-4.5">
-                          {forks.map((fork) => (
-                            <li key={fork.key} className="flex">
-                              <SkillRowItem
-                                row={fork}
-                                configurations={configurations}
-                                selected={fork.key === selectedKey}
-                                nested
-                                onSelect={() => {
-                                  onSelect(fork);
-                                }}
-                              />
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </li>
-                  );
-                })}
+                {group.rows.map((row) => (
+                  <li key={row.key} className="flex">
+                    <SkillRowItem
+                      row={row}
+                      forks={forksOf(row, rows)}
+                      configurations={configurations}
+                      selected={row.key === selectedKey}
+                      onSelect={() => {
+                        onSelect(row);
+                      }}
+                    />
+                  </li>
+                ))}
               </ul>
             </section>
           ))
