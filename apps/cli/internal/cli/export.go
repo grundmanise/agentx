@@ -170,8 +170,15 @@ func newExportCommand(inv *invocation) *cobra.Command {
 	var force bool
 	var machine string
 	cmd := &cobra.Command{
-		Use:   "export [<name> | --machine <id>]",
-		Short: "Write a snapshot of this machine to the library or the account remote",
+		Use:         "export [<name> | --machine <id>]",
+		Short:       "Write a snapshot to the library or the account remote",
+		Annotations: map[string]string{annotationSection: "machines", annotationSynopsis: "[<name>]|--machine <id>"},
+		Example: examples(
+			"agentx export", "write snapshot.json to the library",
+			"agentx export work-laptop --force", "write work-laptop.json, replacing one that is there",
+			"agentx export --machine cloud", "seed the cloud machine with this one's skills",
+			"agentx export --machine <id>", "a backup on the remote; 'agentx machine' prints the id",
+		),
 		Args: func(cmd *cobra.Command, args []string) error {
 			switch {
 			case len(args) > 1:

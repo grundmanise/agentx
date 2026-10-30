@@ -36,8 +36,13 @@ type fetchTarget struct {
 func newSourceFetchCommand(inv *invocation) *cobra.Command {
 	var all bool
 	cmd := &cobra.Command{
-		Use:   "fetch [<url|id>...]",
-		Short: "Fetch added sources again and report what moved",
+		Use:         "fetch [<url|id>...]",
+		Short:       "Fetch sources again and report what moved",
+		Annotations: map[string]string{annotationSection: "sources"},
+		Example: examples(
+			"agentx source fetch anthropics/skills", "fetch one source again",
+			"agentx source fetch --all", "fetch every source of this machine",
+		),
 		Long: "Fetch added sources again and report what moved. Name one or more sources by URL\n" +
 			"or id, or pass --all to fetch every source of this machine. A path in a URL is\n" +
 			"ignored: a fetch covers the whole source, whatever part of it you name.",
