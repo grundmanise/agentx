@@ -206,7 +206,7 @@ const HistorySheet = ({
 export const HistorySection = ({ row }: { row: SkillRow }) => {
   const yours = row.kind === "yours";
   const version = versionOf(row);
-  const entries = useAppStore((s) => s.histories[row.name]);
+  const read = useAppStore((s) => s.histories[row.name]);
   const [sheetOpen, setSheetOpen] = useState(false);
 
   useEffect(() => {
@@ -222,11 +222,20 @@ export const HistorySection = ({ row }: { row: SkillRow }) => {
       </p>
     );
   }
-  if (entries === undefined) {
+  // A read of another version is not this version's history.
+  if (read === undefined || read.version !== version) {
     return (
       <p className="type-secondary text-text-hint m-0">Reading the history…</p>
     );
   }
+  if (read.failed) {
+    return (
+      <p className="type-secondary text-text-hint m-0">
+        The history could not be read
+      </p>
+    );
+  }
+  const { entries } = read;
   if (entries.length === 0) {
     return <p className="type-secondary text-text-hint m-0">No history yet</p>;
   }

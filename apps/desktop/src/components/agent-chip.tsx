@@ -58,7 +58,7 @@ export const AgentChip = ({
       role="switch"
       aria-checked={on}
       aria-readonly
-      aria-label={name}
+      aria-label={state === "displaced" ? `${name}, displaced` : name}
       title={state === "displaced" ? `${name} · Displaced` : undefined}
       className={chipVariants({ on })}
     >

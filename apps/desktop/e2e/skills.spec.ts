@@ -101,9 +101,9 @@ test.describe("the list", () => {
     await expect(
       row(page, "pdf").getByTitle("Forked as pdf-letters")
     ).toBeAttached();
-    await expect(
-      row(page, "pdf").getByText("Forked as pdf-letters")
-    ).toBeAttached();
+    await expect(row(page, "pdf")).toHaveAccessibleDescription(
+      "Skill · Enabled. Forked as pdf-letters. Read and convert PDF files"
+    );
     await expect(list(page).getByTitle(/^Forked as/u)).toHaveCount(1);
     // Selecting the fork highlights exactly one row.
     await row(page, "pdf-letters").click();
@@ -125,7 +125,7 @@ test.describe("the list", () => {
     await openSkills(cli, page);
     const pdf = row(page, "pdf");
     await expect(pdf).toContainText("Read and convert PDF files");
-    await expect(pdf.getByText("Skill · Enabled")).toBeAttached();
+    await expect(pdf).toHaveAccessibleDescription(/^Skill · Enabled\./u);
     expect(await names(pdf.getByRole("img"))).toEqual([
       "Claude Code",
       "Codex",
@@ -133,23 +133,27 @@ test.describe("the list", () => {
     ]);
 
     const draft = row(page, "draft");
-    await expect(draft.getByText("Not published")).toBeVisible();
-    await expect(draft.getByText("Your skill · Enabled")).toBeAttached();
+    await expect(
+      draft.getByText("Not published", { exact: true })
+    ).toBeVisible();
+    await expect(draft).toHaveAccessibleDescription(
+      "Your skill · Enabled. Not published. A skill you started and never published"
+    );
     expect(await names(draft.getByRole("img"))).toEqual([
       "Codex",
       "Gemini CLI",
     ]);
 
     await expect(
-      row(page, "gone").getByText("Removed from source")
+      row(page, "gone").getByText("Removed from source", { exact: true })
     ).toBeVisible();
-    await expect(
-      row(page, "review").getByText("Edited · Enabled")
-    ).toBeAttached();
+    await expect(row(page, "review")).toHaveAccessibleDescription(
+      /^Edited · Enabled\./u
+    );
     await expect(row(page, "release-notes").getByRole("img")).toHaveCount(4);
-    await expect(
-      row(page, "commit-helper").getByText("Plugin skill · Enabled")
-    ).toBeAttached();
+    await expect(row(page, "commit-helper")).toHaveAccessibleDescription(
+      /^Plugin skill · Enabled\./u
+    );
     expect(await names(row(page, "notes").getByRole("img"))).toEqual([
       "Cursor",
     ]);
@@ -522,6 +526,27 @@ test.describe("the detail pane", () => {
     await row(page, "pdf-letters").click();
     await expect(article.getByRole("list", { name: "History" })).toBeVisible();
     expect(later(cli)).toEqual([["skill", "history", "pdf-letters", "--json"]]);
+
+    // The skill changes and its history cannot be read: the entries of the version before
+    // are not shown as if they were this version's.
+    cli.register(["skill", "history", "pdf-letters"], { exitCode: 1 });
+    await cli.serveEmit([
+      {
+        ...inventory,
+        library: inventory.library.map((e) =>
+          e.name === "pdf-letters" ? { ...e, state: "modified" } : e
+        ),
+        scan_counter: 2,
+      },
+    ]);
+    await expect(
+      article.getByText("The history could not be read")
+    ).toBeVisible();
+    await expect(article.getByRole("list", { name: "History" })).toHaveCount(0);
+    expect(later(cli)).toEqual([
+      ["skill", "history", "pdf-letters", "--json"],
+      ["skill", "history", "pdf-letters", "--json"],
+    ]);
   });
 
   test("a plugin's skill and an unmanaged one", async ({ cli, page }) => {
@@ -592,7 +617,8 @@ test.describe("the detail pane", () => {
 
     await row(page, "release-notes").click();
     const cursor = pane(page, "release-notes").getByRole("switch", {
-      name: "Cursor",
+      exact: true,
+      name: "Cursor, displaced",
     });
     await expect(cursor).toBeChecked();
     await expect(cursor).toContainText("displaced");

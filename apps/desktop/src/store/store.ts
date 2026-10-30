@@ -80,9 +80,17 @@ export interface AppState {
   pending: Record<string, string>;
   /** Newest first, at most ACTIVITY_LIMIT entries. */
   activity: ActivityEntry[];
-  /** The history of each of your own skills read so far, by name, newest commit first. */
-  histories: Record<string, HistoryEvent[]>;
+  /** The history of each of your own skills read so far, by name. */
+  histories: Record<string, HistoryRead>;
 }
+
+/**
+ * One read of `skill history <name>`, kept with the version of the skill it was read for, so
+ * that a change to the skill never shows the entries of the version before it.
+ */
+export type HistoryRead =
+  | { version: string; entries: HistoryEvent[]; failed?: undefined }
+  | { version: string; entries?: undefined; failed: true };
 
 export const useAppStore = create<AppState>()(() => ({
   activity: [],

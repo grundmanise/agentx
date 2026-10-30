@@ -78,9 +78,7 @@ export const FilterPopover = ({
       open={open}
       onOpenChange={setOpen}
       label="Filters"
-      trigger={
-        <FilterButton count={count} aria-expanded={open} aria-controls={id} />
-      }
+      trigger={<FilterButton count={count} />}
     >
       <ChoiceGroup caption="Show">
         <div className="flex flex-wrap gap-1">
