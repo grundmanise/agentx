@@ -99,16 +99,15 @@ func newUpdateCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update",
 		Short: "Update agentx to the latest release, or check for one",
-		Long: `Update agentx to the latest release, or check for one.
-
-Replaces the agentx that runs this command with the release for this system, downloaded from
-https://github.com/` + releaseRepo + `/releases and checked against the release's checksums. A nightly
-build follows the nightlies and a release follows the releases; --nightly and --stable move
-between the two, and --version installs one version.
-
-An agentx that Homebrew installed is updated with 'brew upgrade agentx', and the one inside the
-agentx desktop app is updated with the app: both are refused here. A build from source has no
-release to take: build it again.`,
+		Long: "Replace the agentx that runs this command with the release for this system,\n" +
+			"downloaded from https://github.com/" + releaseRepo + "/releases and checked\n" +
+			"against the release's checksums. A nightly build follows the nightlies and a\n" +
+			"release follows the releases; --nightly and --stable move between the two, and\n" +
+			"--version installs one version. --check says what the channel offers and\n" +
+			"changes nothing.\n\n" +
+			"An agentx that Homebrew installed is updated with 'brew upgrade agentx', and\n" +
+			"the one inside the agentx desktop app is updated with the app: both are\n" +
+			"refused here. A build from source has no release to take: build it again.",
 		Annotations: map[string]string{annotationSection: "diagnostics"},
 		Args:        cobra.NoArgs,
 		Example: examples(
