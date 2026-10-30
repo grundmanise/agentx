@@ -445,27 +445,6 @@ jobs:
           path: dist
           merge-multiple: true
 
-      # The first stable release that pushes the cask also removes the old `agentx` formula from
-      # the tap, below. Its notes tell the formula's users how to move.
-      - name: Add the Homebrew move to the notes
-        if: env.CHANNEL == 'stable'
-        env:
-          DEPLOY_KEY: ${{ secrets.HOMEBREW_TAP_DEPLOY_KEY }}
-        run: |
-          [ -n "$DEPLOY_KEY" ] || exit 0
-          gh api "repos/$TAP/contents/Formula/agentx.rb" --silent 2> /dev/null || exit 0
-          cat >> dist/notes.md <<'EOF'
-
-          ### Homebrew
-
-          `brew install grundmanise/tap/agentx` now installs the desktop app, with the CLI inside it, and `brew install grundmanise/tap/agentx-cli` installs the CLI alone. If you installed the CLI with the old `agentx` formula, move once:
-
-          ```sh
-          brew uninstall --formula agentx
-          brew install grundmanise/tap/agentx-cli   # or grundmanise/tap/agentx, for the app with its CLI
-          ```
-          EOF
-
       # Creating the release creates the tag at the commit. A tag pushed with this
       # workflow's token starts no other workflow, which is why the build runs above.
       # A re-run of this job finds the release and goes on to the steps below.
@@ -485,9 +464,7 @@ jobs:
       # The tap, grundmanise/homebrew-tap, holds the cask `agentx`, the app with its CLI, for
       # notarized apps only, and the formula `agentx-cli`, the CLI built from source. This
       # workflow's token cannot write to it; a deploy key with write access to that one
-      # repository can. The commit also removes `Formula/agentx.rb`, the formula the cask
-      # replaced, and adds no rename, which would make `brew install grundmanise/tap/agentx`
-      # install the formula instead of the cask.
+      # repository can. A formula named agentx would shadow the cask, so none may stay in the tap.
       - name: Update the Homebrew tap
         if: env.CHANNEL == 'stable'
         env:

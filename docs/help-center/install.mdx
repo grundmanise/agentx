@@ -29,15 +29,6 @@ brew install grundmanise/tap/agentx-cli
 
 Homebrew builds the CLI from source, so each install and upgrade of `agentx-cli` takes about a minute. You cannot install both: each puts `agentx` on your `PATH`.
 
-If you installed the CLI before the app existed, with `brew install grundmanise/tap/agentx`, that formula is now the app. Move once:
-
-```sh
-brew uninstall --formula agentx
-brew install grundmanise/tap/agentx-cli   # or grundmanise/tap/agentx, for the app with its CLI
-```
-
-Your data stays: the move replaces only the program.
-
 ### Install the app
 
 Download the app from the latest [release](https://github.com/grundmanise/agentx/releases/latest):

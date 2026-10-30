@@ -37,10 +37,9 @@ commit:
 | Cask `agentx` | `agentx.cask.rb` | The app from its disk image, with the CLI inside it linked onto `PATH`. For Apple silicon Macs. Updated only when the release's app was notarized, since Gatekeeper blocks an unnotarized download |
 | Formula `agentx-cli` | `agentx-cli.rb` | The CLI alone, built from source. For macOS and Linux |
 
-The two conflict, since both put `agentx` on `PATH`. The same commit removes the old formula
-`Formula/agentx.rb`, which the cask replaced, from the tap if it is still there, and that release's
-notes tell its users to move with `brew uninstall --formula agentx`, then install the cask or
-`agentx-cli`. Edit the templates, not the tap: the next release overwrites the tap's copies.
+The two conflict, since both put `agentx` on `PATH`. A formula named `agentx` would shadow the cask,
+so the commit removes `Formula/agentx.rb` if the tap still has one. Edit the templates, not the tap:
+the next release overwrites the tap's copies.
 
 To test a tap change before a release, fill in the templates by hand and push them to a branch of the
 tap. Then check that branch out in your local copy of the tap, `$(brew --repository grundmanise/tap)`,
