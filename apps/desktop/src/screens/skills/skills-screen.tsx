@@ -4,6 +4,7 @@ import { useNavigate, useParams } from "react-router";
 import { skillPath } from "#/screens/skills/open.ts";
 import {
   filterRows,
+  forksOf,
   groupRows,
   noFilters,
   projectRows,
@@ -143,6 +144,7 @@ export const SkillsScreen = () => {
           <SkillDetail
             key={selected.key}
             row={selected}
+            forks={forksOf(selected, rows)}
             configurations={configurations}
           />
         )}
