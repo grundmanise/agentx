@@ -45,7 +45,7 @@ export const CommandPalette = ({
     {
       group: "ACTIONS",
       icon: UpdateIcon,
-      label: "Check for agentx updates",
+      label: "Check for updates",
       run: () => {
         void checkForUpdates();
       },

@@ -55,7 +55,7 @@ test("says when nothing matches", async ({ page }) => {
   await expect(page.getByRole("option")).toHaveCount(0);
 });
 
-test("Check for agentx updates runs the check and says what it found", async ({
+test("Check for updates runs the check and says what it found", async ({
   cli,
   page,
 }) => {
@@ -73,9 +73,9 @@ test("Check for agentx updates runs the check and says what it found", async ({
     ],
   });
   await page.keyboard.press("Control+K");
-  await page.keyboard.type("agentx up");
+  await page.keyboard.type("updates");
   await expect(page.getByRole("option")).toHaveText([
-    "Check for agentx updates",
+    "Check for updates",
   ]);
   await page.keyboard.press("Enter");
   await expect(
