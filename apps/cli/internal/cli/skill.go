@@ -336,14 +336,17 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 	// commit its branch points at, and a fork's the import commit its
 	// history names, read by the walk, which a skill made by skill new has
 	// none of. A fork's logical identity is its fork id, which its
-	// creation commit carries, not its root commit.
-	base, hasBase := rec.Import, rec.HasImport
+	// creation commit carries, not its root commit. The version's date is
+	// its import commit's committer time, the upstream commit's, which came
+	// with the lineage: the for-each-ref read a branch's, the walk a fork's
+	// base's.
+	base, hasBase, when := rec.Import, rec.HasImport, rec.Time
 	if rec.Kind == lineage.KindFork && rec.Fork != nil {
-		base, hasBase = rec.Fork.Import, rec.Fork.Base != ""
+		base, hasBase, when = rec.Fork.Import, rec.Fork.Base != "", rec.Fork.BaseTime
 		ev.ForkID = rec.Fork.ID
 	}
 	if hasBase {
-		ev.UpstreamCommit, ev.BaseHash = base.Commit, base.Hash
+		ev.UpstreamCommit, ev.UpstreamTime, ev.BaseHash = base.Commit, when, base.Hash
 	}
 	// A fork is compared with what the account remote holds of it:
 	// modified while it has edits not yet published, see unpublished. Its drift is its placements', since what
@@ -360,7 +363,7 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 	// A fork's update is a newer version of the upstream its base came
 	// from, judged against that base, whatever its own commits hold.
 	if next, ok := rec.ForkCandidate(); ok {
-		ev.Candidate = &scan.LibraryCandidate{UpstreamCommit: next.Import.Commit, ContentHash: next.Import.Hash}
+		ev.Candidate = &scan.LibraryCandidate{UpstreamCommit: next.Import.Commit, UpstreamTime: next.Time, ContentHash: next.Import.Hash}
 	}
 	// A managed skill's base version is the import commit its branch points
 	// at, so the directory can be compared with that commit's tree.
@@ -381,7 +384,7 @@ func skillFromLibrary(lib scan.LibrarySkill, rec lineage.Record, ok bool, source
 		// candidate ref, in the for-each-ref that read the lineage. A
 		// candidate the branch already holds is no update; see AtCandidate.
 		if next, ok := rec.AtCandidate(); ok {
-			ev.Candidate = &scan.LibraryCandidate{UpstreamCommit: next.Import.Commit, ContentHash: next.Import.Hash}
+			ev.Candidate = &scan.LibraryCandidate{UpstreamCommit: next.Import.Commit, UpstreamTime: next.Time, ContentHash: next.Import.Hash}
 		}
 		// A merge an update left pending is its checkout under agentx
 		// home, which the context read with one read of the directory.

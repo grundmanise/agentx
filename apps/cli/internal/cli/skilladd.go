@@ -1410,7 +1410,7 @@ func (inv *invocation) reportInstalled(ctx context.Context, b *batch, dones []*i
 			return fail(exitInternal, "the library holds no "+done.v.name+" after installing it", "run 'agentx doctor' and check the library it names")
 		}
 		sc.records[done.v.name] = lineage.Record{Name: done.v.name, Kind: lineage.KindManaged, Ref: lineage.ManagedRef(done.v.name),
-			Commit: done.v.commit, Tree: done.v.tree, Import: done.v.imp, HasImport: true}
+			Commit: done.v.commit, Tree: done.v.tree, Time: lineage.UpstreamTime(done.v.when), Import: done.v.imp, HasImport: true}
 		ev := sc.librarySkillEventFor(ctx, inv, inventory, lib, targetIDs(done.placed))
 		inv.out.emit(ev)
 		inv.printInstalled(done, ev)
