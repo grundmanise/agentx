@@ -1,30 +1,41 @@
 ---
 title: "agentx export and import"
-description: "Save a snapshot of one machine, with its settings, to a file or your account remote, and apply it to another."
+description: "Save a snapshot of one machine, with its settings, to a file in your library or to your account remote, and apply it to another."
 ---
 
-Export writes a snapshot of this machine to a file, or to your account remote: your settings, your agent configurations, the skills in your library with where each one is placed, and the MCP servers and plugins agentx found. Import applies a snapshot: it restores the settings, installs the skills, and places each one where the snapshot says.
+Export writes a snapshot of this machine to a file in your library, or to your account remote: your settings, your agent configurations, the skills in your library with where each one is placed, and the MCP servers and plugins agentx found. Import applies a snapshot: it restores the settings, installs the skills, and places each one where the snapshot says.
 
-A snapshot is the whole state of one machine, so it always holds that machine's settings. A snapshot holds no skill content. For each skill it records where the skill comes from, which version you had and which configurations you placed it in. Import installs the content again from each skill's source, or from your [account remote](/cli/source#add-your-account-remote) for your own skills.
+A snapshot is the whole state of one machine, so it always holds that machine's settings. A snapshot holds no skill content. For each skill it records where the skill comes from, which version you had and which configurations you placed it in. Import installs the content again from each skill's source, or from your [account remote](/account-remote) for your own skills.
 
 ## Move to a new machine
 
-1. On the old machine, run `agentx export ~/agentx-snapshot.json`.
-2. Copy the file to the new machine.
-3. On the new machine, run `agentx import ~/agentx-snapshot.json`, and answer `y`.
+1. On the old machine, run `agentx export`. It writes `snapshot.json` to your library, `~/.agents/skills` by default.
+2. Copy the file to the new machine, for example to `~/snapshot.json`.
+3. On the new machine, run `agentx import ~/snapshot.json`, and answer `y`.
 
 Import installs each skill at the version you had and places it in the same configurations. Use the same steps to restore a machine from its own snapshot, for example after you removed your skills.
 
 ## Export this machine
 
 ```sh
-agentx export ~/agentx-snapshot.json
+agentx export
 ```
 
 ```text
-✓ exported the settings and 12 skills to /home/me/agentx-snapshot.json
-  the snapshot names each skill's source, version and placements, and holds no skill content
+✓ exported the settings and 12 skills to /home/me/.agents/skills/snapshot.json
 ```
+
+Export writes the file to your [library](/#key-terms), next to your skills, where every agent that reads the library leaves it alone. Without a name, the file is `snapshot.json`. Give a name to keep more than one snapshot:
+
+```sh
+agentx export work-laptop
+```
+
+```text
+✓ exported the settings and 12 skills to /home/me/.agents/skills/work-laptop.json
+```
+
+The name is a file name without an extension. Export adds `.json`. A name with an extension, a slash, or a leading dot stops export with exit code 1. `agentx export --help` prints the path of the file export writes.
 
 The file holds:
 
@@ -44,10 +55,10 @@ A snapshot keeps each MCP server's command, arguments and URL as your configurat
 If the file is already there, export stops with exit code 6. Pass `--force` to replace it:
 
 ```sh
-agentx export ~/agentx-snapshot.json --force
+agentx export --force
 ```
 
-Give the path of a file. If the path is a directory, export stops with exit code 6, also with `--force`. If the parent directory does not exist, export stops with exit code 5.
+If a directory of that name is in the library, export stops with exit code 6, also with `--force`. If you have no library yet, export creates it.
 
 If a skill in your library has a name agentx cannot store as a branch, export leaves it out of the snapshot and prints a warning that names it.
 
@@ -55,18 +66,20 @@ If agentx cannot read your library, or part of it, export prints a warning for e
 
 ## Import onto another machine
 
+Import takes the path of a snapshot file:
+
 ```sh
-agentx import ~/agentx-snapshot.json
+agentx import ~/snapshot.json
 ```
 
 ```text
-Replace the settings in /home/me/.agentx/settings.json with those of my-laptop from /home/me/agentx-snapshot.json, and install, update and place its 4 skills? [y/N] y
-✓ imported the settings of my-laptop from /home/me/agentx-snapshot.json
+Replace the settings in /home/me/.agentx/settings.json with those of my-laptop from /home/me/snapshot.json, and install, update and place its 4 skills? [y/N] y
+✓ imported the settings of my-laptop from /home/me/snapshot.json
 4 skills in the snapshot: 1 installed, 1 updated, 1 kept, 1 skipped
-  pdf     managed    installed  https://github.com/example/skills/skills/pdf   placed in claude-code, codex
-  xlsx    managed    updated    https://github.com/example/skills/skills/xlsx  placed in claude-code
-  review  managed    kept       ssh://git@github.com/you/forks (account)       not placed
-  notes   unmanaged  skipped    (none)                                         not placed
+  pdf     managed    installed  https://github.com/example/skills/skills/pdf       placed in claude-code, codex
+  xlsx    managed    updated    https://github.com/example/skills/skills/xlsx      placed in claude-code
+  review  managed    kept       ssh://git@github.com/you/agentx-account (account)  not placed
+  notes   unmanaged  skipped    (none)                                             not placed
   skipped notes: notes is unmanaged, so there is no source to install it from
 ```
 
@@ -95,7 +108,7 @@ Codex and Gemini CLI read your library, so they see every skill in it, whatever 
 
 To install your own skills, import needs your account remote. The snapshot's settings bring it along.
 
-One repository can have more than one URL. Your laptop may reach your account remote over SSH, as `git@github.com:me/agentx-account.git`, while a cloud agent reaches it over HTTPS, as `https://github.com/me/agentx-account`, with a token that can only read. Import treats both as your account remote, because they have the same host and path. When the snapshot's account remote is the same repository as this machine's, import keeps this machine's URL, so each machine goes on reaching it its own way. When the snapshot names another repository, import switches this machine to that one. A host alias from your SSH configuration, such as `github-work`, does not count as the host it stands for here, because import reads no SSH configuration.
+One repository can have more than one URL. Your laptop may reach your account remote over SSH, as `git@github.com:you/agentx-account.git`, while a cloud agent reaches it over HTTPS, as `https://github.com/you/agentx-account`, with a token that can only read. Import treats both as your account remote, because they have the same host and path. When the snapshot's account remote is the same repository as this machine's, import keeps this machine's URL, so each machine goes on reaching it its own way. When the snapshot names another repository, import switches this machine to that one. A host alias from your SSH configuration, such as `github-work`, does not count as the host it stands for here, because import reads no SSH configuration.
 
 Each line of the listing says what import did with that skill:
 
@@ -118,13 +131,13 @@ If import stops part way, for example because the machine shut down, the next ag
 
 ## Keep a snapshot on your account remote
 
-Instead of a file, export can write the snapshot to your [account remote](/cli/source#add-your-account-remote), on the branch `machines/<machine id>`, and import can read it from there. The branch holds one file, `snapshot.json`, the same file an export to a file writes. agentx writes to the account remote only when you name a machine with `--machine`, and never on its own.
+Instead of a file, export can write the snapshot to your [account remote](/account-remote), on the branch `machines/<machine id>`, and import can read it from there. The branch holds one file, `snapshot.json`, the same file an export to a file writes. agentx writes to the account remote only when you name a machine with `--machine`, and never on its own.
 
 The snapshot on the branch keeps each MCP server's command, arguments and URL, as a snapshot file does, and these can hold a token. Anyone who can read your account remote can read them, a cloud agent's read-only token included. Keep the account remote private, and give read access only to people and agents you trust with those values.
 
 ### Back up this machine
 
-Find this machine's id with [`agentx machine`](/cli/machine), then export to it:
+Export to this machine's id. `agentx export --help` prints it, and so does [`agentx machine`](/cli/machine):
 
 ```sh
 agentx export --machine 0123456789abcdef0123456789abcdef
@@ -132,7 +145,6 @@ agentx export --machine 0123456789abcdef0123456789abcdef
 
 ```text
 ✓ exported the settings and 12 skills to machines/0123456789abcdef0123456789abcdef on the account remote at 4c2e9a1
-  the snapshot names each skill's source, version and placements, and holds no skill content
 ```
 
 Each export writes one commit and pushes it. agentx never forces the push. If the snapshot is unchanged since the last export, agentx pushes nothing and says so.
@@ -165,7 +177,7 @@ If the account remote has no branch for that machine, import stops with exit cod
 Import changes your settings and your skills, so it asks first. Pass `--yes` to answer in advance:
 
 ```sh
-agentx import ~/agentx-snapshot.json --yes
+agentx import ~/snapshot.json --yes
 ```
 
 Use `--yes` in scripts, with `--json`, and wherever there is no terminal. Without `--yes`, import exits with code 6 and changes nothing in these cases. It does the same when you answer anything other than `y` or `yes`.

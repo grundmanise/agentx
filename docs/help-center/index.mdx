@@ -42,7 +42,7 @@ agentx also needs `git` 2.40 or later on your `PATH`. Run [`agentx doctor`](/cli
 - **Source**: a git repository you install skills from. Your account remote is also a source.
 - **Pin**: the branch, tag or commit a source follows. A source without a pin follows the repository's default branch. See [Pin a source](/cli/source#pin-a-source).
 - **Your own skills**: skills you create with `agentx skill new` or fork with `agentx skill fork`. A skill you fork from an installed skill keeps its **upstream**, the skill it came from, so you can take in newer versions.
-- **Account remote**: a git repository you own. agentx publishes your own skills there, so your other machines can install them. See [Add your account remote](/cli/source#add-your-account-remote).
+- **Account remote**: a git repository you own. agentx publishes your own skills there, so your other machines can install them. See [Account remote](/account-remote).
 - **Shared source**: any source other than your account remote.
 - **Snapshot**: what `agentx export` writes, to a file or to a machine's branch on your account remote: this machine's settings, agent configurations, skills with their placements, MCP servers and plugins. It holds no skill content. `agentx import` applies one.
 - **Cloud machine**: the one machine that stands for every agent you run in the cloud, such as Claude Code on the web. Its machine id is `cloud`, and its snapshot on your account remote is its only state. See [Turn skills on for your cloud agents](/cli/skill#turn-skills-on-for-your-cloud-agents).
@@ -93,6 +93,11 @@ $ agentx skill add anthropics/skills --name pdf
 agentx adds the source, installs the skill into the library and links it into each client. Codex and Gemini CLI read the library directly, so they need no link (see [Clients that see every skill](/cli/skill#clients-that-see-every-skill)). See [`agentx skill`](/cli/skill) to place, update and remove skills.
 
 ## Learn more
+
+### Account remote and cloud agents
+
+- [Account remote](/account-remote): the repository that carries your own skills and the snapshot of each machine between your machines.
+- [Cloud agents](/cloud): bring your skills to every session of a cloud agent, such as Claude Code on the web.
 
 ### Inventory
 

@@ -335,8 +335,7 @@ func TestServeWarnsAboutSourcesAnImportBrought(t *testing.T) {
 	from := newHarness(t)
 	from.build(t, fixture{dirs: []string{".claude"}})
 	one, two := from.fetchSources(t)
-	file := from.exportPath("export.json")
-	from.mustRun("export", file)
+	file := from.exportSnapshot("export")
 
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})

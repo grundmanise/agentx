@@ -63,7 +63,7 @@ A failed command prints `error: ...` on stderr. If there is a fix, a `hint: ...`
 | 0 | Success. |
 | 1 | The command line is wrong: an unknown command, a bad flag or value, flags that cannot go together, or a missing argument. Run `agentx help`. |
 | 2 | Git is missing or older than 2.40. Install or upgrade git. |
-| 3 | agentx cannot reach a source or the [account remote](/cli/source#add-your-account-remote), or the remote denied access: authentication failed, or it did not let this machine push or [delete a branch](/cli/fork#remove-a-skill-of-your-own). Check your credentials and network. |
+| 3 | agentx cannot reach a source or the [account remote](/account-remote), or the remote denied access: authentication failed, or it did not let this machine push or [delete a branch](/cli/fork#remove-a-skill-of-your-own). Check your credentials and network. |
 | 4 | A merge is pending. Either a pending merge blocks the command, or `skill update` found a conflict and left a merge for you to resolve. See [When your edits conflict](/cli/skill#when-your-edits-conflict) and, for one of your own skills, [Resolve a conflict](/cli/fork#resolve-a-conflict). |
 | 5 | Something you named does not exist: a skill, a source, a ref or directory in a source, a configuration or a file. |
 | 6 | agentx refused because something is in the way or changed meanwhile. Examples: a name is already taken, a server rule such as a hook declined a push (see [Publish a skill](/cli/skill#publish-a-skill)), or a source changed a skill you publish to it (see [Publish edits to a shared source](/cli/skill#publish-edits-to-a-shared-source)). |
