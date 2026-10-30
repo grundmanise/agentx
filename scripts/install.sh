@@ -123,6 +123,7 @@ detect_platform() {
 	if [ "$os" = darwin ] && [ "$arch" = amd64 ] && [ "$(sysctl -n sysctl.proc_translated 2> /dev/null)" = 1 ]; then
 		arch=arm64
 	fi
+	[ "${os}_$arch" != darwin_amd64 ] || die "agentx runs on Macs with Apple silicon, not on Intel Macs"
 	echo "${os}_$arch"
 }
 

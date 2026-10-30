@@ -6,9 +6,9 @@ This guide is for maintainers. Contributors don't need it: see [`CONTRIBUTING.md
 
 Releases go through the Release workflow in
 [`.github/workflows/release.yml`](.github/workflows/release.yml). Every release builds the CLI for
-Linux and macOS on amd64 and arm64, and the desktop app for macOS as one universal app with the CLI
-inside it. It publishes the CLI archives, the app's disk image `agentx_desktop_darwin_universal.dmg`
-and their checksums to [GitHub Releases](https://github.com/grundmanise/agentx/releases).
+Linux on amd64 and arm64 and for macOS on arm64, and the desktop app for Apple silicon Macs with the
+CLI inside it. Intel Macs are not supported. It publishes the CLI archives, the app's disk image
+`agentx_desktop_darwin_arm64.dmg` and their checksums to [GitHub Releases](https://github.com/grundmanise/agentx/releases).
 
 - **Nightly**: once a day, the workflow releases the head of `main` as a prerelease, such
   as `v0.3.0-nightly.20261001`, when `apps/cli` or `apps/desktop` changed since the last nightly and CI
