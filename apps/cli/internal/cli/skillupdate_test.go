@@ -1727,18 +1727,19 @@ func TestSkillUpdateOffersNoUpdateWhoseLineageItCannotRead(t *testing.T) {
 }
 
 // TestSkillUpdateOfAnAdoptedSkill: a skill another tool installed and
-// agentx adopted, with nothing edited, is a managed skill like any other.
-// The check finds the version its source moved on to, and the update lays
-// it out and moves the branch there, while the other tool's lock file is
-// never written.
+// agentx adopted is a managed skill like any other. Adopting installed the
+// version the source held then; the check finds the version it moved on to
+// since, and the update lays it out and moves the branch there, while the
+// other tool's lock file is never written.
 func TestSkillUpdateOfAnAdoptedSkill(t *testing.T) {
 	t.Parallel()
-	h, s, _, installed := adoptHarness(t)
+	h, s, _, _ := adoptHarness(t)
 	lock := h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
-		Source: "owner/repo", SourceType: "github", SourceURL: s.url,
-		SkillPath: "skills/alpha/SKILL.md", SkillFolderHash: installed,
+		Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/alpha/SKILL.md",
 	}})
 	h.mustRun("adopt", "--all")
+	s.write("skills/alpha/notes.md", "alpha notes, revised again\n")
+	s.commit("a third version")
 	h.mustRun("skill", "check-updates")
 	candidate := h.ref(lineage.CandidateRef("alpha"))
 	if candidate == "" {
@@ -1747,7 +1748,7 @@ func TestSkillUpdateOfAnAdoptedSkill(t *testing.T) {
 
 	h.mustRun("skill", "update", "alpha")
 	equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), candidate)
-	equal(t, "notes.md", fileBody(t, filepath.Join(h.library, "alpha", "notes.md")), "alpha notes, revised\n")
+	equal(t, "notes.md", fileBody(t, filepath.Join(h.library, "alpha", "notes.md")), "alpha notes, revised again\n")
 	equal(t, "state", h.listed("alpha")["state"], stateCurrent)
 	h.lockUnchanged(h.lockPath(), lock)
 }

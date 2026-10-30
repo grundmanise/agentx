@@ -85,7 +85,6 @@ export type ProgressPhase =
   | "import"
   | "install"
   | "place"
-  | "adopt"
   | "rescan";
 
 // The exit code of each error code, the ok of success included.
@@ -522,15 +521,11 @@ export interface AdoptionEvent {
   type: "adoption";
   schema_version: number;
   name: string;
-  lock: string;
+  tool: string;
+  file: string;
   source?: string;
   subpath?: string;
   state: AdoptionState;
-  upstream_commit?: string;
-  base_hash?: string;
-  content_hash?: string;
-  modified?: boolean;
-  restored?: string[];
   reason?: string;
 }
 

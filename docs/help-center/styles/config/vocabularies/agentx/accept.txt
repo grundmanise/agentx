@@ -30,3 +30,4 @@ worktrees?
 [Aa]uthorise
 organisation
 zsh
+Skillshare
