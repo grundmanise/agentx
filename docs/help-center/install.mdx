@@ -1,27 +1,55 @@
 ---
 title: "Install and update"
-description: "Install agentx with Homebrew or the install script, try nightly builds and keep agentx up to date."
+description: "Install the agentx app or the CLI with Homebrew, a package or the install script, try nightly builds and keep agentx up to date."
 ---
+
+agentx is a desktop app and a command line tool, the CLI. The app carries the CLI of its own version inside it, so one install gives you both. The CLI also installs on its own, for a machine with no desktop.
 
 agentx runs on Macs with Apple silicon, and on Linux on x86-64 and ARM64. It needs `git` 2.40 or later on your `PATH`. [`agentx doctor`](/cli/doctor) checks this.
 
 ## Install
 
-Install with Homebrew or with the install script. Then run [`agentx doctor`](/cli/doctor) to check that this machine is ready.
+Install with Homebrew, with a package or with the install script. Then run [`agentx doctor`](/cli/doctor) to check that this machine is ready.
 
 ### With Homebrew
 
-Install with [Homebrew](https://brew.sh):
+On macOS, install the app with its CLI with [Homebrew](https://brew.sh):
 
 ```sh
 brew install grundmanise/tap/agentx
 ```
 
-Homebrew builds agentx from source, so each install and upgrade takes about a minute. Homebrew also installs a recent `git`.
+This puts agentx in your Applications folder and the `agentx` command on your `PATH`, both at the same version. Homebrew also installs a recent `git`.
+
+To install the CLI alone, on macOS or Linux:
+
+```sh
+brew install grundmanise/tap/agentx-cli
+```
+
+Homebrew builds the CLI from source, so each install and upgrade of `agentx-cli` takes about a minute. You cannot install both: each puts `agentx` on your `PATH`, and Homebrew refuses the second.
+
+### Install the app
+
+Download the app from the latest [release](https://github.com/grundmanise/agentx/releases/latest):
+
+| System | Download | Install |
+| --- | --- | --- |
+| macOS, Apple silicon | [`agentx_desktop_darwin_arm64.dmg`](https://github.com/grundmanise/agentx/releases/latest/download/agentx_desktop_darwin_arm64.dmg) | Open the disk image and drag agentx to your Applications folder. Releases are signed and notarized. If macOS blocks a build, allow it under System Settings → Privacy & Security. |
+| Linux, Debian or Ubuntu, x86-64 | [`agentx_desktop_linux_amd64.deb`](https://github.com/grundmanise/agentx/releases/latest/download/agentx_desktop_linux_amd64.deb) | `sudo apt install ./agentx_desktop_linux_amd64.deb` |
+| Linux, Debian or Ubuntu, ARM64 | [`agentx_desktop_linux_arm64.deb`](https://github.com/grundmanise/agentx/releases/latest/download/agentx_desktop_linux_arm64.deb) | `sudo apt install ./agentx_desktop_linux_arm64.deb` |
+| Linux, other distributions, x86-64 | [`agentx_desktop_linux_amd64.AppImage`](https://github.com/grundmanise/agentx/releases/latest/download/agentx_desktop_linux_amd64.AppImage) | `chmod +x agentx_desktop_linux_amd64.AppImage`, then run it |
+| Linux, other distributions, ARM64 | [`agentx_desktop_linux_arm64.AppImage`](https://github.com/grundmanise/agentx/releases/latest/download/agentx_desktop_linux_arm64.AppImage) | `chmod +x agentx_desktop_linux_arm64.AppImage`, then run it |
+
+Each package carries the CLI of the same version, and the app runs only that one. The `.deb` also puts the `agentx` command on your `PATH` and installs `git` if you have none. The disk image and the AppImage do not: to use the CLI from a terminal as well, install it with the cask, as above, or with the install script.
+
+The Linux packages run on glibc distributions from 2022 on, such as Ubuntu 22.04 and Debian 12. Those two ship a `git` older than 2.40, which agentx needs: install a newer one first, from the [git-core PPA](https://launchpad.net/~git-core/+archive/ubuntu/ppa) on Ubuntu or from backports on Debian. [`agentx doctor`](/cli/doctor) and the app's startup check report the version they find. An AppImage needs FUSE 2: if it does not start, install your distribution's `libfuse2` package, or run it with `--appimage-extract-and-run`.
+
+The release's `checksums.txt` lists the SHA-256 checksum of every download.
 
 ### With the install script
 
-Install the latest release with the install script:
+Install the latest release of the CLI with the install script:
 
 ```sh
 curl -fsSL https://agentx.wtf/install | sh
@@ -51,10 +79,11 @@ The script takes these options. When you pipe the script to `sh`, put them after
 
 Update the way you installed:
 
-- **Homebrew**: run `brew upgrade agentx`. For a `--HEAD` install, run `brew upgrade --fetch-HEAD agentx`.
+- **Homebrew**: run `brew upgrade agentx` for the app with its CLI, or `brew upgrade agentx-cli` for the CLI alone. For a `--HEAD` install, run `brew upgrade --fetch-HEAD agentx-cli`.
+- **App package**: download the newest package from [Install the app](#install-the-app) and install it over the old one. The app has no updater yet.
 - **Install script**: run the install command again. If you installed to another directory, pass the same `--dir`. Leave out `--version`, or you get the same version again. The script replaces the binary in place.
 
-A running [`agentx serve`](/cli/serve) keeps the old version until it restarts.
+A running [`agentx serve`](/cli/serve) keeps the old version until it restarts. Quit and open the app to run the new version.
 
 Run [`agentx version`](/cli/version) to see which version you have.
 
@@ -62,7 +91,7 @@ Run [`agentx version`](/cli/version) to see which version you have.
 
 Each night that the code changed and its tests passed, a new nightly build is published, such as `0.3.0-nightly.20261001`. Nightlies get fixes and features first, but they are less tested than releases. Only the 14 newest nightlies are kept.
 
-Install the newest nightly:
+Install the newest nightly of the CLI:
 
 ```sh
 curl -fsSL https://agentx.wtf/install | sh -s -- --nightly
@@ -70,11 +99,13 @@ curl -fsSL https://agentx.wtf/install | sh -s -- --nightly
 
 Run the same command to move to a newer nightly. To go back to the latest release, run the install command without `--nightly`. If GitHub refuses the command because of its rate limit, set `GITHUB_TOKEN` and run it again.
 
-With Homebrew, run `brew install --HEAD grundmanise/tap/agentx` to build the latest code on `main`.
+For a nightly of the app, download its package from the nightly's page under [releases](https://github.com/grundmanise/agentx/releases), and install it as in [Install the app](#install-the-app).
+
+With Homebrew, run `brew install --HEAD grundmanise/tap/agentx-cli` to build the latest code of the CLI on `main`.
 
 ## Build from source
 
-Build with Go 1.27.1 or later:
+Build the CLI with Go 1.27.1 or later:
 
 ```sh
 git clone https://github.com/grundmanise/agentx.git
@@ -85,9 +116,14 @@ A binary you build this way reports its version as `dev`.
 
 On macOS, keep `cgo` enabled, which is the default. Without it, [`agentx serve`](/cli/serve#when-watching-is-not-possible) needs one open file for each watched file and can hit the system limit.
 
+To build the app, see the desktop app's [README](https://github.com/grundmanise/agentx/blob/main/apps/desktop/README.md).
+
 ## Uninstall
 
-- **Homebrew**: run `brew uninstall agentx`.
+- **Homebrew**: run `brew uninstall agentx` for the app, or `brew uninstall agentx-cli` for the CLI. To remove the app's own caches and logs as well, run `brew uninstall --zap agentx`; this leaves your data.
+- **macOS disk image**: move agentx from your Applications folder to the Trash.
+- **Linux `.deb`**: run `sudo apt remove agentx`.
+- **AppImage**: delete the file.
 - **Install script**: delete `agentx` from the directory you installed to, `~/.local/bin` by default.
 
 Uninstalling keeps your data. agentx home, `~/.agentx` by default, keeps its settings and the history of your own skills. Your skills stay in the library, `~/.agents/skills` by default. If you install agentx again over the same `~/.agentx`, it finds all your managed skills again, your own included.

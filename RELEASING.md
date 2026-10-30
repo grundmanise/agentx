@@ -6,9 +6,11 @@ This guide is for maintainers. Contributors don't need it: see [`CONTRIBUTING.md
 
 Releases go through the Release workflow in
 [`.github/workflows/release.yml`](.github/workflows/release.yml). Every release builds the CLI for
-Linux on amd64 and arm64 and for macOS on arm64, and the desktop app for Apple silicon Macs with the
-CLI inside it. It publishes the CLI archives, the app's disk image `agentx_desktop_darwin_arm64.dmg`
-and their checksums to [GitHub Releases](https://github.com/grundmanise/agentx/releases).
+Linux on amd64 and arm64 and for macOS on arm64, and the desktop app with the CLI inside it: for
+Apple silicon Macs as the disk image `agentx_desktop_darwin_arm64.dmg`, and for Linux on amd64 and
+arm64 as `agentx_desktop_linux_<arch>.deb` and `agentx_desktop_linux_<arch>.AppImage`. It publishes
+the CLI archives, the app packages and their checksums to
+[GitHub Releases](https://github.com/grundmanise/agentx/releases).
 
 - **Nightly**: once a day, the workflow releases the head of `main` as a prerelease, such
   as `v0.3.0-nightly.20261001`, when `apps/cli` or `apps/desktop` changed since the last nightly and CI
@@ -19,12 +21,29 @@ and their checksums to [GitHub Releases](https://github.com/grundmanise/agentx/r
 - **Stable**: run the Release workflow by hand, from the Actions tab, once a nightly has proved good
   enough to promote. By default it promotes the newest nightly: it tags that nightly's commit, such as
   `v0.3.0`, and builds it again, so `agentx version` prints the release version. It also updates the
-  Homebrew formula.
+  Homebrew tap.
 
 The install script is served from `https://agentx.wtf/install`, which redirects to
-[`scripts/install.sh`](scripts/install.sh) on `main`. The Homebrew formula lives in
-[grundmanise/homebrew-tap](https://github.com/grundmanise/homebrew-tap), generated from
-[`packaging/homebrew/agentx.rb`](packaging/homebrew/agentx.rb).
+[`scripts/install.sh`](scripts/install.sh) on `main`.
+
+## Homebrew
+
+[grundmanise/homebrew-tap](https://github.com/grundmanise/homebrew-tap) holds two packages, which
+each stable release writes from the templates in [`packaging/homebrew`](packaging/homebrew), in one
+commit:
+
+| Package | Template | What it installs |
+| --- | --- | --- |
+| Cask `agentx` | `agentx.cask.rb` | The app from its disk image, with the CLI inside it linked onto `PATH`. For Apple silicon Macs. Updated only when the release's app was notarized, since Gatekeeper blocks an unnotarized download |
+| Formula `agentx-cli` | `agentx-cli.rb` | The CLI alone, built from source. For macOS and Linux |
+
+Both link `agentx` into Homebrew's `bin`, so Homebrew refuses to install the second next to the
+first. Edit the templates, not the tap: the next release overwrites the tap's copies.
+
+To test a tap change before a release, fill in the templates by hand and push them to a branch of the
+tap. Then check that branch out in your local copy of the tap, `$(brew --repository grundmanise/tap)`,
+and run `brew audit --cask agentx`, `brew install --cask agentx`, `brew install agentx-cli`, which the
+cask refuses, and `brew uninstall` of each. Check out `main` again when you are done.
 
 ## Secrets
 
@@ -35,10 +54,10 @@ them a release still publishes, but the step that needs them shows a warning and
 | --- | --- | --- |
 | `APPLE_CERTIFICATE` | The Developer ID Application certificate and its private key, as a `.p12` file in base64 | The app is signed ad hoc and not notarized. macOS blocks it until the user allows it in System Settings → Privacy & Security |
 | `APPLE_CERTIFICATE_PASSWORD` | The password of that `.p12` file | |
-| `APPLE_API_ISSUER` | The issuer ID of an App Store Connect API key | The app is signed but not notarized, and macOS blocks it the same way |
+| `APPLE_API_ISSUER` | The issuer ID of an App Store Connect API key | The app is signed but not notarized, and macOS blocks it the same way. A stable release leaves the Homebrew cask as it was |
 | `APPLE_API_KEY` | The key ID of that API key | |
 | `APPLE_API_PRIVATE_KEY` | The contents of the key's `.p8` file | |
-| `HOMEBREW_TAP_DEPLOY_KEY` | The private half of a deploy key with write access to `grundmanise/homebrew-tap` | Stable releases don't update the Homebrew formula |
+| `HOMEBREW_TAP_DEPLOY_KEY` | The private half of a deploy key with write access to `grundmanise/homebrew-tap` | Stable releases don't update the Homebrew cask and formula |
 
 To make the Apple secrets, with a membership of the Apple Developer Program:
 

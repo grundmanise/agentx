@@ -49,7 +49,7 @@ pnpm --dir apps/desktop exec playwright install chromium
 | [`docs/adr`](docs/adr) | Architecture decisions |
 | [`docs/spec`](docs/spec) | Contracts and specs, such as the CLI's output contract |
 | [`docs/help-center`](docs/help-center) | The user documentation, built with Mintlify |
-| [`scripts/install.sh`](scripts/install.sh), [`packaging`](packaging) | The install script and the Homebrew formula template |
+| [`scripts/install.sh`](scripts/install.sh), [`packaging`](packaging) | The install script and the templates of the Homebrew cask and formula |
 
 Read the ADRs and specs that touch the area you're changing before you start.
 
