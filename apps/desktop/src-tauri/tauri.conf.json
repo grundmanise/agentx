@@ -27,6 +27,12 @@
   "bundle": {
     "active": true,
     "targets": ["app", "dmg", "deb", "appimage"],
+    "shortDescription": "Inventory manager for your agents' skills, MCP servers and plugins",
+    "linux": {
+      "deb": {
+        "depends": ["git"]
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
