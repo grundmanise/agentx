@@ -464,7 +464,7 @@ jobs:
       # The tap, grundmanise/homebrew-tap, holds the cask `agentx`, the app with its CLI, for
       # notarized apps only, and the formula `agentx-cli`, the CLI built from source. This
       # workflow's token cannot write to it; a deploy key with write access to that one
-      # repository can. A formula named agentx would shadow the cask, so none may stay in the tap.
+      # repository can.
       - name: Update the Homebrew tap
         if: env.CHANNEL == 'stable'
         env:
@@ -490,7 +490,6 @@ jobs:
             echo "::warning title=Homebrew cask not updated::the app was not notarized, see RELEASING.md"
           fi
           cd "$dir"
-          git rm -q --ignore-unmatch Formula/agentx.rb
           git add Formula Casks
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
             commit -m "agentx $VERSION"
