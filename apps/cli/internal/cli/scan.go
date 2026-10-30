@@ -29,9 +29,16 @@ func newScanCommand(inv *invocation) *cobra.Command {
 	var project, configuration string
 	var handshake bool
 	cmd := &cobra.Command{
-		Use:   "scan",
-		Short: "Inventory the agent configurations with their skills, MCP servers and plugins",
-		Args:  cobra.NoArgs,
+		Use:         "scan",
+		Short:       "Inventory the clients, their skills, MCP servers and plugins",
+		Annotations: map[string]string{annotationSection: "diagnostics"},
+		Args:        cobra.NoArgs,
+		Example: examples(
+			"agentx scan", "inventory every client on this machine",
+			"agentx scan --project .", "also the project-scope skills under this directory",
+			"agentx scan --handshake", "also connect to each MCP server and record its tools",
+			"agentx scan --json", "the inventory as JSON events, for a script",
+		),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if configuration != "" {
 				if err := inv.detectedConfiguration(configuration); err != nil {

@@ -111,23 +111,31 @@ const mergePending = "merge pending"
 func newSkillCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "skill",
-		Short:       "Install, create, fork, publish, place, compare, update, rename and remove skills, check them for updates, and list what the library holds",
-		Annotations: map[string]string{annotationGroup: "true"},
-		Args:        cobra.NoArgs,
-		RunE:        needSubcommand(inv, "no skill command given", "run 'agentx skill --help' to list commands"),
+		Short:       "Install, create, fork, update, publish and remove skills",
+		Annotations: map[string]string{annotationGroup: "true", annotationSection: "skills"},
+		Example: examples(
+			"agentx skill add anthropics/skills --name pdf", "install one skill into every enabled client",
+			"agentx skill list --remote", "also list your skills not installed here",
+			"agentx skill fork pdf --name my-pdf", "fork a skill beside the original",
+			"agentx skill check-updates", "find updates, then update <name> or --all",
+			"agentx skill publish release-notes", "push your edits to the account remote",
+		),
+		Args: cobra.NoArgs,
+		RunE: needSubcommand(inv, "no skill command given", "run 'agentx skill --help' to list commands"),
 	}
+	// The order is the display order of the help pages.
 	cmd.AddCommand(newSkillAddCommand(inv))
 	cmd.AddCommand(newSkillNewCommand(inv))
 	cmd.AddCommand(newSkillForkCommand(inv))
-	cmd.AddCommand(newSkillPublishCommand(inv))
-	cmd.AddCommand(newSkillHistoryCommand(inv))
+	cmd.AddCommand(newSkillListCommand(inv))
 	cmd.AddCommand(newSkillPlaceCommand(inv))
 	cmd.AddCommand(newSkillRemoveCommand(inv))
 	cmd.AddCommand(newSkillRenameCommand(inv))
 	cmd.AddCommand(newSkillDiffCommand(inv))
+	cmd.AddCommand(newSkillHistoryCommand(inv))
 	cmd.AddCommand(newSkillCheckUpdatesCommand(inv))
 	cmd.AddCommand(newSkillUpdateCommand(inv))
-	cmd.AddCommand(newSkillListCommand(inv))
+	cmd.AddCommand(newSkillPublishCommand(inv))
 	return cmd
 }
 

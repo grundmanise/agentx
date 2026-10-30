@@ -22,8 +22,9 @@ func newSkillRemoveCommand(inv *invocation) *cobra.Command {
 	var remote bool
 	var machine string
 	cmd := &cobra.Command{
-		Use:   "remove <name> [--remote]",
-		Short: "Remove a skill from one configuration or from the machine",
+		Use:         "remove <name> [--remote]",
+		Short:       "Remove a skill from a client or from the machine",
+		Annotations: map[string]string{annotationSection: "skills", annotationSynopsis: "<name>"},
 		Long: "Remove a skill from the configurations --from names, or, with --from universal or\n" +
 			"without --from, take it off the machine: every placement, the library directory,\n" +
 			"the import branch and what the settings recorded about it.\n\n" +
@@ -45,6 +46,12 @@ func newSkillRemoveCommand(inv *invocation) *cobra.Command {
 			"machines/cloud of the account remote, or, with --from universal or without\n" +
 			"--from, the entry is deleted, and the commit is pushed. Nothing on this\n" +
 			"machine's disk changes.",
+		Example: examples(
+			"agentx skill remove pdf", "take the skill off this machine",
+			"agentx skill remove pdf --from cursor", "remove only its placement in one client",
+			"agentx skill remove release-notes --remote", "also delete its branch on the account remote",
+			"agentx skill remove pdf --machine cloud", "remove it from the cloud machine",
+		),
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cmd.Flags().Changed("machine") {

@@ -49,30 +49,43 @@ type sourceSkillEvent struct {
 func newSourceCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "source",
-		Short:       "Add, fetch, list and remove the sources skills are installed from",
-		Annotations: map[string]string{annotationGroup: "true"},
+		Short:       "Add, fetch, list and remove the sources skills come from",
+		Annotations: map[string]string{annotationGroup: "true", annotationSection: "sources"},
 		Args:        cobra.NoArgs,
-		RunE:        needSubcommand(inv, "no source command given", "run 'agentx source --help' to list commands"),
+		Example: examples(
+			"agentx source add anthropics/skills", "add a GitHub repository",
+			"agentx source add owner/repo#v2", "add it pinned to a tag or branch",
+			"agentx source add git@github.com:you/agentx-account.git --account", "set your account remote",
+			"agentx source skills anthropics/skills", "see what a source offers",
+			"agentx source fetch --all", "refresh every source",
+		),
+		RunE: needSubcommand(inv, "no source command given", "run 'agentx source --help' to list commands"),
 	}
 	cmd.AddCommand(newSourceAddCommand(inv))
+	cmd.AddCommand(&cobra.Command{
+		Use:         "list",
+		Short:       "List the sources of this machine",
+		Annotations: map[string]string{annotationSection: "sources"},
+		Args:        cobra.NoArgs,
+		Example:     examples("agentx source list", "every source with its URL and id"),
+		RunE:        func(cmd *cobra.Command, args []string) error { return inv.sourceList(cmd.Context()) },
+	})
+	cmd.AddCommand(&cobra.Command{
+		Use:         "skills <url|id>",
+		Short:       "List the installable skills of a source",
+		Annotations: map[string]string{annotationSection: "sources"},
+		Args:        cobra.ExactArgs(1),
+		Example:     examples("agentx source skills anthropics/skills", "the skills a source holds, as last fetched"),
+		RunE:        func(cmd *cobra.Command, args []string) error { return inv.sourceSkills(cmd.Context(), args[0]) },
+	})
 	cmd.AddCommand(newSourceFetchCommand(inv))
 	cmd.AddCommand(&cobra.Command{
-		Use:   "list",
-		Short: "List the sources of this machine",
-		Args:  cobra.NoArgs,
-		RunE:  func(cmd *cobra.Command, args []string) error { return inv.sourceList(cmd.Context()) },
-	})
-	cmd.AddCommand(&cobra.Command{
-		Use:   "skills <url|id>",
-		Short: "List the installable skills of a source",
-		Args:  cobra.ExactArgs(1),
-		RunE:  func(cmd *cobra.Command, args []string) error { return inv.sourceSkills(cmd.Context(), args[0]) },
-	})
-	cmd.AddCommand(&cobra.Command{
-		Use:   "remove <url|id>",
-		Short: "Remove a source and what was fetched from it",
-		Args:  cobra.ExactArgs(1),
-		RunE:  func(cmd *cobra.Command, args []string) error { return inv.sourceRemove(cmd.Context(), args[0]) },
+		Use:         "remove <url|id>",
+		Short:       "Remove a source and what was fetched from it",
+		Annotations: map[string]string{annotationSection: "sources"},
+		Args:        cobra.ExactArgs(1),
+		Example:     examples("agentx source remove anthropics/skills", "remove it and what was fetched from it"),
+		RunE:        func(cmd *cobra.Command, args []string) error { return inv.sourceRemove(cmd.Context(), args[0]) },
 	})
 	return cmd
 }
@@ -80,8 +93,15 @@ func newSourceCommand(inv *invocation) *cobra.Command {
 func newSourceAddCommand(inv *invocation) *cobra.Command {
 	var account bool
 	cmd := &cobra.Command{
-		Use:   "add <url>",
-		Short: "Fetch a git repository and add it as a source",
+		Use:         "add <url>",
+		Short:       "Fetch a git repository and add it as a source",
+		Annotations: map[string]string{annotationSection: "sources"},
+		Example: examples(
+			"agentx source add anthropics/skills", "a GitHub repository, by owner/repo",
+			"agentx source add anthropics/skills/document-skills", "only the skills under one folder",
+			"agentx source add owner/repo#v2", "pinned to a tag or branch",
+			"agentx source add git@github.com:you/agentx-account.git --account", "as your account remote",
+		),
 		Long: "Fetch a git repository and add it as a source. The URL is owner/repo or\n" +
 			"owner/repo/subpath for GitHub, a GitHub or GitLab URL with an optional tree\n" +
 			"path, an SSH URL or host:path, a file:// URL or an absolute path, any of them\n" +

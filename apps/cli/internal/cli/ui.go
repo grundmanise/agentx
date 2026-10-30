@@ -3,7 +3,9 @@ package cli
 import (
 	"io"
 	"os"
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -279,6 +281,13 @@ func c(text string, st style) cell { return cell{text: text, style: st} }
 // text, and lipgloss/table, which pads the last cell of a row to its column.
 type table struct {
 	rows [][]cell
+	// minWidths are widths the columns are padded to at least, so that the
+	// tables of one page, the sections of a command list, share one column.
+	minWidths []int
+	// wrap is the width of the terminal, when known, and the last column of
+	// a row is wrapped to it; zero leaves every row on one line, which is
+	// what a pipe gets. See wrapWords for what is wrapped.
+	wrap int
 }
 
 func (t *table) add(cells ...cell) { t.rows = append(t.rows, cells) }
@@ -304,7 +313,7 @@ func (t *table) sortRows() {
 
 // render writes the rows to out, each prefixed with indent.
 func (t *table) render(out io.Writer, k ink, indent string) {
-	var widths []int
+	widths := slices.Clone(t.minWidths)
 	for _, row := range t.rows {
 		if len(row) == 1 {
 			continue
@@ -323,13 +332,76 @@ func (t *table) render(out io.Writer, k ink, indent string) {
 			last--
 		}
 		b.WriteString(indent)
+		start := len(indent) // the column the next cell starts in
 		for i := 0; i <= last; i++ {
+			if i == last && i > 0 && t.wrap > 0 {
+				lines := wrapWords(row[i].text, t.wrap-start)
+				for j, line := range lines {
+					if j > 0 {
+						b.WriteByte('\n')
+						b.WriteString(strings.Repeat(" ", start))
+					}
+					b.WriteString(k.paint(row[i].style, line))
+				}
+				continue
+			}
 			b.WriteString(k.paint(row[i].style, row[i].text))
 			if i < last {
 				b.WriteString(strings.Repeat(" ", widths[i]-lipgloss.Width(row[i].text)+2))
+				start += widths[i] + 2
 			}
 		}
 		b.WriteByte('\n')
 	}
 	_, _ = io.WriteString(out, b.String())
+}
+
+// minWrap is the narrowest column worth wrapping: below it a long
+// description reads better running off the edge than one word per line.
+const minWrap = 24
+
+// wrapWords breaks text into lines of at most width cells at its spaces,
+// greedily; a word wider than the width gets a line of its own. Text that
+// fits, text that carries an escape sequence, which lipgloss would measure
+// but a break could split, and a width under minWrap come back as the one
+// line they are.
+func wrapWords(text string, width int) []string {
+	if width < minWrap || lipgloss.Width(text) <= width || strings.Contains(text, "\x1b") {
+		return []string{text}
+	}
+	var lines []string
+	var line strings.Builder
+	for _, word := range strings.Fields(text) {
+		switch {
+		case line.Len() == 0:
+			line.WriteString(word)
+		case lipgloss.Width(line.String())+1+lipgloss.Width(word) <= width:
+			line.WriteByte(' ')
+			line.WriteString(word)
+		default:
+			lines = append(lines, line.String())
+			line.Reset()
+			line.WriteString(word)
+		}
+	}
+	if line.Len() > 0 {
+		lines = append(lines, line.String())
+	}
+	return lines
+}
+
+// columns is the width of the terminal out is, for wrapping: COLUMNS when
+// the environment sets it to a number, so that a test or a script can fix
+// it; else the terminal's own width; else zero, for a pipe, which keeps
+// every line whole.
+func (w *writer) columns(out io.Writer) int {
+	if n, err := strconv.Atoi(w.env["COLUMNS"]); err == nil && n > 0 {
+		return n
+	}
+	if f, ok := out.(*os.File); ok {
+		if width, _, err := term.GetSize(int(f.Fd())); err == nil && width > 0 {
+			return width
+		}
+	}
+	return 0
 }

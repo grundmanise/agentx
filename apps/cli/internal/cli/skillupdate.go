@@ -22,8 +22,9 @@ import (
 func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 	var all, abort bool
 	cmd := &cobra.Command{
-		Use:   "update [<name>] [--abort]",
-		Short: "Apply the update the last check found to a managed skill",
+		Use:         "update [<name>] [--abort]",
+		Short:       "Apply the update the last check found",
+		Annotations: map[string]string{annotationSection: "updates", annotationSynopsis: "<name>"},
 		Long: "Replace the library directory of a managed skill with the newer upstream version\n" +
 			"'" + checkUpdatesCommand + "' found for it, and record that version as the one the\n" +
 			"skill is at. A skill edited since it was installed keeps its edits: they are\n" +
@@ -48,6 +49,11 @@ func newSkillUpdateCommand(inv *invocation) *cobra.Command {
 			"an update for, and every skill of your own placed here that your other machines\n" +
 			"published to. Read an update before you apply it with\n" +
 			"'agentx skill diff <name> --update'.",
+		Example: examples(
+			"agentx skill update pdf", "apply the update found for one skill",
+			"agentx skill update --all", "apply every update the last check found",
+			"agentx skill update docx --abort", "give up a merge that conflicted",
+		),
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			const hint = "name the skill to update, or run 'agentx skill update --all' to update every skill the last check found an update for"

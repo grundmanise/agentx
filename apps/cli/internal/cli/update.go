@@ -109,7 +109,13 @@ between the two, and --version installs one version.
 An agentx that Homebrew installed is updated with 'brew upgrade agentx', and the one inside the
 agentx desktop app is updated with the app: both are refused here. A build from source has no
 release to take: build it again.`,
-		Args: cobra.NoArgs,
+		Annotations: map[string]string{annotationSection: "diagnostics"},
+		Args:        cobra.NoArgs,
+		Example: examples(
+			"agentx update", "replace this agentx with the latest release",
+			"agentx update --check", "say whether a newer version is out; nothing is written",
+			"agentx update --nightly", "move to the newest nightly build",
+		),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			given := 0
 			for _, on := range []bool{sel.nightly, sel.stable, sel.version != ""} {
