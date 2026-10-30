@@ -1,5 +1,6 @@
 import { cva } from "class-variance-authority";
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 
 import type { HistoryEvent } from "#/cli/events.gen.ts";
 import { ChevronIcon } from "#/components/icons/chevron.tsx";
@@ -12,7 +13,7 @@ import { useAppStore } from "#/store/store.ts";
 /** How many entries the timeline shows before "Show all". */
 const SHOWN = 3;
 
-const dotVariants = cva("size-timeline-dot rounded-pill mt-1.5 block", {
+const dotVariants = cva("size-timeline-dot rounded-pill block", {
   variants: {
     kind: {
       foreign: "bg-timeline-dot-update",
@@ -30,6 +31,35 @@ const kindOf = (e: HistoryEvent) => {
 };
 
 const files = (n: number) => (n === 1 ? "1 file" : `${n} files`);
+
+/**
+ * The dot column of a timeline entry: `children` (the dot) centred in a box as high as the
+ * entry's first line, a line of text or a small button, then the connector down to the next
+ * entry, so every dot sits on its entry's first line and the line stays continuous.
+ */
+const DotColumn = ({
+  button,
+  last,
+  children,
+}: {
+  /** The first line beside the dot is a small button, not a line of text. */
+  button: boolean;
+  last: boolean;
+  children: ReactNode;
+}) => (
+  <span className="flex flex-col items-center">
+    <span
+      className={
+        button
+          ? "h-timeline-button-line flex flex-none items-center"
+          : "h-timeline-line flex flex-none items-center"
+      }
+    >
+      {children}
+    </span>
+    {!last && <span className="bg-timeline-connector w-px flex-1" />}
+  </span>
+);
 
 /** The author date of a commit: "Oct 2", with the year when it is not this year's. */
 export const formatDate = (time: string) => {
@@ -77,10 +107,9 @@ const Entry = ({
   const [open, setOpen] = useState(false);
   return (
     <li className="grid-cols-timeline grid gap-x-3">
-      <span className="flex flex-col items-center">
+      <DotColumn button={expandable} last={last}>
         <span className={dotVariants({ kind: kindOf(entry) })} />
-        {!last && <span className="bg-timeline-connector mt-1.5 w-px flex-1" />}
-      </span>
+      </DotColumn>
       <div
         className={
           last ? "flex min-w-0 flex-col" : "flex min-w-0 flex-col pb-4"
@@ -211,12 +240,12 @@ export const HistorySection = ({ row }: { row: SkillRow }) => {
         ))}
         {more && (
           <li className="grid-cols-timeline grid gap-x-3">
-            <span className="flex flex-col items-center">
+            <DotColumn button last>
               <svg
                 viewBox="0 0 8 8"
                 aria-hidden
                 focusable="false"
-                className="size-timeline-dot mt-1.5 block"
+                className="size-timeline-dot block"
               >
                 <circle
                   cx="4"
@@ -227,8 +256,8 @@ export const HistorySection = ({ row }: { row: SkillRow }) => {
                   className="stroke-timeline-more-ring"
                 />
               </svg>
-            </span>
-            <div className="-mt-1 flex">
+            </DotColumn>
+            <div className="flex">
               <Button
                 variant="ghost"
                 size="sm"
