@@ -24,7 +24,8 @@ const filterButtonVariants = cva(
 
 /**
  * The Filter button that opens the popover: `filter.bg` at rest, `filter.active-bg` with a count
- * badge while any filter is applied.
+ * badge while any filter is applied. As the popover's trigger it takes what the popover gives it
+ * (its state attributes, the click and the ref) and passes them to the button.
  */
 export const FilterButton = ({
   count,
@@ -33,8 +34,6 @@ export const FilterButton = ({
   /** How many filters are applied; 0 shows the button at rest. */
   count: number;
   onClick?: () => void;
-  "aria-expanded"?: boolean;
-  "aria-controls"?: string;
 }) => (
   <button
     type="button"

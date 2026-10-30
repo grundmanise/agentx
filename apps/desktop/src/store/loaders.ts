@@ -60,20 +60,34 @@ export const loadHistory = async (name: string, version: string) => {
     return;
   }
   historyVersions.set(name, version);
+  // The entries of the version before, if any, are not this version's: they go first.
+  useAppStore.setState((s) => {
+    const { [name]: previous, ...rest } = s.histories;
+    return previous === undefined || previous.version === version
+      ? s
+      : { histories: rest };
+  });
   const outcome = await runCommand(["skill", "history", name], {
     label: `history ${name}`,
   });
+  if (historyVersions.get(name) !== version) {
+    return;
+  }
   if (outcome.exitCode === 0) {
-    if (historyVersions.get(name) === version) {
-      useAppStore.setState((s) => ({
-        histories: {
-          ...s.histories,
-          [name]: outcome.events.filter((e) => e.type === "history"),
+    useAppStore.setState((s) => ({
+      histories: {
+        ...s.histories,
+        [name]: {
+          entries: outcome.events.filter((e) => e.type === "history"),
+          version,
         },
-      }));
-    }
-  } else if (historyVersions.get(name) === version) {
-    // A failed read is tried again the next time the skill is selected.
+      },
+    }));
+  } else {
+    // A failed read is kept as such, and tried again the next time the skill is selected.
+    useAppStore.setState((s) => ({
+      histories: { ...s.histories, [name]: { failed: true, version } },
+    }));
     historyVersions.delete(name);
   }
 };

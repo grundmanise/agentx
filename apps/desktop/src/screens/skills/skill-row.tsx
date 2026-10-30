@@ -40,8 +40,21 @@ export const SkillRowItem = ({
     .map((id) => configurations.find((c) => c.id === id))
     .filter((c) => c !== undefined);
   const shown = clients.slice(0, MAX_LOGOS);
+  const description = [
+    glyphTitle(row),
+    ...row.pills.map((pill) => pill.label),
+    ...forks.map((fork) => `Forked as ${fork.name}`),
+    row.description,
+  ]
+    .filter((part) => part !== "")
+    .join(". ");
   return (
-    <ListRow label={row.name} selected={selected} onSelect={onSelect}>
+    <ListRow
+      label={row.name}
+      description={description}
+      selected={selected}
+      onSelect={onSelect}
+    >
       <span className="w-row-glyph flex h-5 flex-none items-center justify-center">
         <SkillGlyph
           shape={glyphOf(row)}
