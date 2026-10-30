@@ -38,17 +38,10 @@ export const commandOf = (args: readonly string[]): string => {
   return name ?? words[0] ?? "";
 };
 
-/**
- * Whether `args` change nothing. `adopt` with no flag is a preview, which writes nothing, and
- * `update --check` only asks which version is out.
- */
+/** Whether `args` change nothing. `adopt` with no flag is a preview, which writes nothing. */
 export const isRead = (args: readonly string[]) => {
   const command = commandOf(args);
-  return (
-    READS.has(command) ||
-    (command === "adopt" && args.length === 1) ||
-    (command === "update" && args.includes("--check"))
-  );
+  return READS.has(command) || (command === "adopt" && args.length === 1);
 };
 
 export interface CommandOptions {

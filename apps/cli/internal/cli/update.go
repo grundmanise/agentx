@@ -241,7 +241,7 @@ func managedElsewhere(path string) error {
 			return fail(exitRefused, "agentx at "+quotedPath(path)+" was installed by Homebrew", "run 'brew upgrade agentx'")
 		case strings.HasSuffix(part, ".app") && i+1 < len(parts) && parts[i+1] == "Contents":
 			return fail(exitRefused, "agentx at "+quotedPath(path)+" is the one inside the agentx app, which updates it",
-				"download the newer app from https://github.com/"+releaseRepo+"/releases")
+				"update the agentx app instead")
 		}
 	}
 	return nil

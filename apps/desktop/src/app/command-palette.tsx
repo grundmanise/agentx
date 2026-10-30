@@ -5,9 +5,7 @@ import { useNavigate } from "react-router";
 import { screens } from "#/app/screens.ts";
 import type { IconComponent } from "#/components/icons/icon-props.ts";
 import { SearchIcon } from "#/components/icons/search.tsx";
-import { UpdateIcon } from "#/components/icons/update.tsx";
 import { KeyHint } from "#/components/key-hint.tsx";
-import { checkForUpdates } from "#/store/update.ts";
 
 export interface PaletteItem {
   group: "ACTIONS" | "GO TO" | "SKILLS";
@@ -22,8 +20,8 @@ const filter = (value: string, search: string) =>
   value.toLowerCase().includes(search.toLowerCase()) ? 1 : 0;
 
 /**
- * The ⌘K palette: GO TO reaches every screen, and ACTIONS runs the CLI commands wired so far.
- * SKILLS comes with the screens.
+ * The ⌘K palette. This change wires GO TO only; ACTIONS and SKILLS come with the screens and
+ * CLI commands they run.
  */
 export const CommandPalette = ({
   open,
@@ -33,24 +31,14 @@ export const CommandPalette = ({
   onOpenChange: (open: boolean) => void;
 }) => {
   const navigate = useNavigate();
-  const items: PaletteItem[] = [
-    ...screens.map((s): PaletteItem => ({
-      group: "GO TO",
-      icon: s.icon,
-      label: s.label,
-      run: () => {
-        void navigate(s.path);
-      },
-    })),
-    {
-      group: "ACTIONS",
-      icon: UpdateIcon,
-      label: "Check for updates",
-      run: () => {
-        void checkForUpdates();
-      },
+  const items: PaletteItem[] = screens.map((s) => ({
+    group: "GO TO",
+    icon: s.icon,
+    label: s.label,
+    run: () => {
+      void navigate(s.path);
     },
-  ];
+  }));
   const groups = [...new Set(items.map((i) => i.group))];
 
   return (
