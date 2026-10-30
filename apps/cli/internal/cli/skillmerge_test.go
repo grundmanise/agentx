@@ -697,52 +697,6 @@ func TestSkillCheckDuringAPendingMergeMovesOnlyTheCandidate(t *testing.T) {
 	equal(t, "the update listed once applied", listed["candidate"].(map[string]any)["upstream_commit"], third)
 }
 
-// TestSkillUpdateOfASkillAdoptedWithItsEdits: a skill another tool
-// installed and the user edited, adopted with its edits kept at the version
-// it was installed from, is modified from the start. Its update merges
-// those edits: an edit the update leaves alone is kept on the new version,
-// and one it overlaps conflicts, leaving the directory as it was. The other
-// tool's lock file is never written.
-func TestSkillUpdateOfASkillAdoptedWithItsEdits(t *testing.T) {
-	t.Parallel()
-	for _, c := range []struct {
-		name, file, content string
-		conflicts           bool
-	}{
-		{name: "an edit the update leaves alone", file: "mine.md", content: "a file of my own\n"},
-		{name: "an edit the update overlaps", file: "notes.md", content: "alpha notes, mine\n", conflicts: true},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			t.Parallel()
-			h, s, v1, _ := adoptHarness(t)
-			editLibrary(t, h, "alpha", c.file, c.content)
-			lock := h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
-				Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/alpha", SkillFolderHash: "",
-			}})
-			h.mustRun("adopt", "--skill", "alpha", "--base", v1)
-			equal(t, "state once adopted", h.listed("alpha")["state"], stateModified)
-			h.mustRun("skill", "check-updates")
-			candidate := h.ref(lineage.CandidateRef("alpha"))
-			library := onDisk(t, h.library)
-
-			out := h.run("--json", "skill", "update", "alpha")
-			if c.conflicts {
-				equal(t, "exit", out.exit, 4)
-				equal(t, "files", conflictPaths(h.one(out.stdout, "conflict")), "notes.md")
-				equal(t, "the library", onDisk(t, h.library), library)
-				equal(t, "the candidate", h.ref(lineage.CandidateRef("alpha")), candidate)
-			} else {
-				equal(t, "exit", out.exit, 0)
-				equal(t, "the import branch", h.ref(lineage.ManagedRef("alpha")), candidate)
-				equal(t, "notes.md", fileBody(t, filepath.Join(h.library, "alpha", "notes.md")), "alpha notes, revised\n")
-				equal(t, c.file, fileBody(t, filepath.Join(h.library, "alpha", c.file)), c.content)
-				equal(t, "state", h.listed("alpha")["state"], stateModified)
-			}
-			h.lockUnchanged(h.lockPath(), lock)
-		})
-	}
-}
-
 // TestSkillUpdateMergeRecoversAtEveryBoundary kills a clean merge with
 // SIGKILL once its journal is on disk. A merge journals the steps a
 // replacement does, in the same order, with the merged version staged in

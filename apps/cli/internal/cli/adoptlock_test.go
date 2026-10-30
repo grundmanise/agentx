@@ -10,13 +10,15 @@ import (
 // TestAdoptJudgesEveryUntrustedEntry runs one lock file holding every shape
 // a third party's file, or a user's hand, can put in it. The file is read,
 // never trusted: an entry that cannot name a library directory is left out
-// before any path is built from it, one whose directory is not a skill of
-// the library is refused, and the file is the same afterwards.
+// before any path is built from it, one that names no source agentx can
+// fetch is refused, and the file is the same afterwards. What the library
+// holds under the name does not decide: a symlink or a directory without a
+// SKILL.md is what that tool left there, and adopting replaces it.
 func TestAdoptJudgesEveryUntrustedEntry(t *testing.T) {
 	t.Parallel()
-	h, s, _, installed := adoptHarness(t)
+	h, s, _, _ := adoptHarness(t)
 	entry := func(subpath string) lockEntry {
-		return lockEntry{Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: subpath, SkillFolderHash: installed}
+		return lockEntry{Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: subpath}
 	}
 	// A symlink in the library, a directory that is no skill, and a name the
 	// library could never hold as a directory.
@@ -73,8 +75,8 @@ func TestAdoptJudgesEveryUntrustedEntry(t *testing.T) {
 	}
 	for _, c := range []struct{ name, state, reason string }{
 		{"alpha", adoptCandidate, ""},
-		{"linked", adoptRefused, "is not a directory the library holds"},
-		{"notaskill", adoptRefused, "holds no SKILL.md"},
+		{"linked", adoptCandidate, ""},
+		{"notaskill", adoptCandidate, ""},
 		{"escaping", adoptRefused, "which is not a directory of"},
 		{"newline", adoptRefused, "which is not a directory of"},
 		{"wellknown", adoptRefused, "not a git repository agentx can fetch"},
@@ -103,10 +105,9 @@ func TestAdoptJudgesEveryUntrustedEntry(t *testing.T) {
 // reaches git, so no run can be talked into reading outside the source.
 func TestAdoptRefusesAnEscapingSubpathBeforeItReadsAnything(t *testing.T) {
 	t.Parallel()
-	h, s, _, installed := adoptHarness(t)
+	h, s, _, _ := adoptHarness(t)
 	lock := h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
-		Source: "owner/repo", SourceType: "github", SourceURL: s.url,
-		SkillPath: "../../../etc/passwd", SkillFolderHash: installed,
+		Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "../../../etc/passwd",
 	}})
 	out := h.run("--json", "adopt", "--all")
 	equal(t, "exit", out.exit, exitRefused.exit)
@@ -121,11 +122,11 @@ func TestAdoptRefusesAnEscapingSubpathBeforeItReadsAnything(t *testing.T) {
 // output, exactly as it does not for 'agentx source add'.
 func TestAdoptDropsACredentialInTheURL(t *testing.T) {
 	t.Parallel()
-	h, s, _, installed := adoptHarness(t)
+	h, s, _, _ := adoptHarness(t)
 	h.rewrite(s, "https://github.com/owner/repo")
 	lock := h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
 		Source: "owner/repo", SourceType: "github", SourceURL: "https://carol:s3cr3t@github.com/owner/repo",
-		SkillPath: "skills/alpha", SkillFolderHash: installed,
+		SkillPath: "skills/alpha",
 	}})
 
 	out := h.run("--json", "adopt", "--all")
@@ -153,7 +154,8 @@ func TestAdoptDropsACredentialInTheURL(t *testing.T) {
 // TestAdoptRefusesALockFileItCannotRead: a file that is not a lock file is
 // not an empty lock file, since a user asking to adopt what it holds may
 // not be told that it holds nothing. vercel.TestReadFileRefusesWhatIsNotALockFile
-// has every shape of one.
+// has every shape of one, and skillshare.TestReadRefusesWhatIsNotAStore the
+// same for Skillshare's store, which answers through the same path.
 func TestAdoptRefusesALockFileItCannotRead(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -173,17 +175,15 @@ func TestAdoptRefusesALockFileItCannotRead(t *testing.T) {
 // both files name.
 func TestAdoptReadsBothLocations(t *testing.T) {
 	t.Parallel()
-	h, s, _, installed := adoptHarness(t)
+	h, s, _, _ := adoptHarness(t)
 	state := filepath.Join(h.home, "state")
 	h.env["XDG_STATE_HOME"] = state
 	xdg := filepath.Join(state, "skills", ".skill-lock.json")
 	stale := h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
-		Source: "owner/gone", SourceType: "github", SourceURL: "https://github.com/owner/gone",
-		SkillPath: "skills/alpha", SkillFolderHash: installed,
+		Source: "owner/gone", SourceType: "github", SourceURL: "https://github.com/owner/gone", SkillPath: "skills/alpha",
 	}})
 	live := h.writeLock(xdg, map[string]lockEntry{"alpha": {
-		Source: "owner/repo", SourceType: "github", SourceURL: s.url,
-		SkillPath: "skills/alpha", SkillFolderHash: installed,
+		Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/alpha",
 	}})
 
 	out := h.run("--json", "adopt", "--all")
@@ -191,19 +191,19 @@ func TestAdoptReadsBothLocations(t *testing.T) {
 	h.lockUnchanged(h.lockPath(), stale)
 	h.lockUnchanged(xdg, live)
 	ev := h.one(out.stdout, "adoption")
-	equal(t, "the lock file used", ev["lock"], xdg)
+	equal(t, "the lock file used", ev["file"], xdg)
 	equal(t, "the source", ev["source"], s.url)
 	contains(t, "stderr", out.stderr, "with different coordinates")
 }
 
-// TestAdoptWithNoLockFile says so and exits 0: a machine that never used
-// that tool has nothing to adopt, which is not a failure.
-func TestAdoptWithNoLockFile(t *testing.T) {
+// TestAdoptWithNoRecords says so and exits 0: a machine that never used
+// another tool has nothing to adopt, which is not a failure.
+func TestAdoptWithNoRecords(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	out := h.run("adopt")
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "No skill of the Vercel skills lock file is in the library")
+	contains(t, "stdout", out.stdout, "Nothing to adopt")
 	out = h.run("adopt", "--all")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stdout", out.stdout, "Already adopted.")
@@ -214,14 +214,13 @@ func TestAdoptWithNoLockFile(t *testing.T) {
 // place.
 func TestAdoptRefusesAFork(t *testing.T) {
 	t.Parallel()
-	h, s, v1, installed := adoptHarness(t)
+	h, s, v1, _ := adoptHarness(t)
 	if out := h.run("source", "add", s.url); out.exit != 0 {
 		t.Fatalf("source add: exit %d\n%s", out.exit, out.stderr)
 	}
 	h.accountGit("update-ref", "refs/heads/skills/alpha", v1)
 	lock := h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
-		Source: "owner/repo", SourceType: "github", SourceURL: s.url,
-		SkillPath: "skills/alpha", SkillFolderHash: installed,
+		Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/alpha",
 	}})
 
 	out := h.run("--json", "adopt", "--all")
@@ -234,35 +233,34 @@ func TestAdoptRefusesAFork(t *testing.T) {
 }
 
 // TestAdoptOneSkillOfSeveral covers a run that adopts what it can and says
-// what it could not: the skills that landed are managed and the one that
-// could not be established is unmanaged, with the run answering for it.
-// The run reports one adoption event per skill in name order, whichever
-// order the flags named them in.
+// what it could not: the skill that landed is managed, the one whose
+// directory the source no longer holds is left unmanaged, and the run
+// answers for it. The run reports one adoption event per skill in name
+// order, whichever order the flags named them in.
 func TestAdoptOneSkillOfSeveral(t *testing.T) {
 	t.Parallel()
-	h, s, _, installed := adoptHarness(t)
+	h, s, _, _ := adoptHarness(t)
 	s.skill("skills/beta", "beta", "The second skill", nil)
 	s.commit("a second skill")
 	vercelInstall(t, h, s, "skills/beta", "beta")
-	editLibrary(t, h, "beta", "SKILL.md", skill("beta", "edited by hand"))
 	h.writeLock(h.lockPath(), map[string]lockEntry{
-		"alpha": {Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/alpha", SkillFolderHash: installed},
-		"beta":  {Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/beta", SkillFolderHash: ""},
+		"alpha": {Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/alpha"},
+		"beta":  {Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/moved/beta"},
 	})
 
 	out := h.run("--json", "adopt", "--skill", "beta", "--skill", "alpha")
-	equal(t, "exit", out.exit, exitRefused.exit)
-	contains(t, "stderr", out.stderr, "beta: the version beta was installed at cannot be established")
+	equal(t, "exit", out.exit, exitNotFound.exit)
+	contains(t, "stderr", out.stderr, "beta: "+s.url+" holds no skill at skills/moved/beta now")
 	var events []string
 	for _, ev := range h.eventsOfType(out.stdout, "adoption") {
 		events = append(events, ev["name"].(string)+" "+ev["state"].(string))
 	}
 	equal(t, "the adoption events", strings.Join(events, ", "), "alpha "+adoptAdopted+", beta "+adoptRefused)
 	if _, err := h.accountGitErr("rev-parse", "--verify", "refs/heads/managed/beta"); err == nil {
-		t.Error("beta was adopted although its version could not be established")
+		t.Error("beta was adopted although the source holds no skill at its subpath")
 	}
 	if h.accountGit("rev-parse", "--verify", "refs/heads/managed/alpha") == "" {
-		t.Error("alpha was not adopted although its version was established")
+		t.Error("alpha was not adopted although the source holds it")
 	}
 	list := h.run("--json", "skill", "list")
 	kinds := map[string]any{}
@@ -271,32 +269,4 @@ func TestAdoptOneSkillOfSeveral(t *testing.T) {
 	}
 	equal(t, "alpha", kinds["alpha"], "managed")
 	equal(t, "beta", kinds["beta"], "unmanaged")
-}
-
-// TestAdoptRefusesAFolderHashOfAnotherSource: the lock file is a hint and
-// never an authority. Its folder hash is looked up in the source the entry
-// names and nowhere else, so a tree id that another repository put in the
-// account repo establishes nothing here, however readable that object is.
-func TestAdoptRefusesAFolderHashOfAnotherSource(t *testing.T) {
-	t.Parallel()
-	h, s, _, _ := adoptHarness(t)
-	editLibrary(t, h, "alpha", "notes.md", "an edit of mine\n")
-	other := h.newSourceRepo("other", true)
-	other.skill("skills/alpha", "alpha", "Another repository's skill of the same name", nil)
-	other.commit("elsewhere")
-	if out := h.run("source", "add", other.url); out.exit != 0 {
-		t.Fatalf("source add: exit %d\n%s", out.exit, out.stderr)
-	}
-	elsewhere := other.tree("skills/alpha")
-	h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
-		Source: "owner/repo", SourceType: "github", SourceURL: s.url,
-		SkillPath: "skills/alpha", SkillFolderHash: elsewhere,
-	}})
-
-	out := h.run("--json", "adopt", "--all")
-	equal(t, "exit", out.exit, exitRefused.exit)
-	if _, err := h.accountGitErr("rev-parse", "--verify", "refs/heads/managed/alpha"); err == nil {
-		t.Error("a tree of another source was accepted as this skill's upstream version")
-	}
-	contains(t, "the reason", h.one(out.stdout, "adoption")["reason"].(string), "cannot be established")
 }

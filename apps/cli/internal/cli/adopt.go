@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -14,75 +15,71 @@ import (
 	"github.com/grundmanise/agentx/apps/cli/internal/gitx"
 	"github.com/grundmanise/agentx/apps/cli/internal/home"
 	"github.com/grundmanise/agentx/apps/cli/internal/lineage"
+	"github.com/grundmanise/agentx/apps/cli/internal/skillshare"
 	"github.com/grundmanise/agentx/apps/cli/internal/source"
 	"github.com/grundmanise/agentx/apps/cli/internal/vercel"
 )
 
-// The states one entry of the lock file is reported in. A preview reports
-// candidate, managed and refused; a run that adopts reports adopted in
-// place of candidate.
+// The tools whose install records agentx adopt reads.
+const (
+	toolVercel     = "vercel"     // the Vercel skills CLI, which installs into the library and keeps a lock file
+	toolSkillshare = "skillshare" // Skillshare, which installs into a folder of its own and keeps a metadata store
+)
+
+// The states one record is reported in. A preview reports candidate,
+// managed and refused; a run that adopts reports adopted in place of
+// candidate.
 const (
 	adoptCandidate = "candidate" // it can be adopted
-	adoptAdopted   = "adopted"   // this run wrote its import branch
+	adoptAdopted   = "adopted"   // this run installed it
 	adoptManaged   = "managed"   // agentx already knows the skill
 	adoptRefused   = "refused"   // it cannot be adopted, and why
 )
 
-// The steps an adoption reports: one per source it has to add, which is
-// the fetch of 'agentx source add', and one per skill it adopts.
-const (
-	phaseFetch = "fetch"
-	phaseAdopt = "adopt"
-)
-
-// adoptionEvent is one entry of the Vercel skills lock file whose library
-// directory exists: where the entry says it came from, what the library
-// holds under that name now, and what agentx did or would do about it.
+// adoptionEvent is one skill another tool installed, as that tool recorded
+// it: where the record says it came from, and what agentx did or would do
+// about it.
 type adoptionEvent struct {
 	event
-	Name           string   `json:"name"`
-	Lock           string   `json:"lock"`                      // the lock file the entry was read from
-	Source         string   `json:"source,omitempty"`          // the canonical URL of the source it names
-	Subpath        *string  `json:"subpath,omitempty"`         // the skill's directory in that source, "" for its root
-	State          string   `json:"state"`                     // candidate, adopted, managed or refused
-	UpstreamCommit string   `json:"upstream_commit,omitempty"` // the last commit that touched the skill's directory, reachable from the commit the base version was established at
-	BaseHash       string   `json:"base_hash,omitempty"`       // the content hash of the base version
-	ContentHash    string   `json:"content_hash,omitempty"`    // what the library directory holds now
-	Modified       *bool    `json:"modified,omitempty"`        // whether the directory differs from the base
-	Restored       []string `json:"restored,omitempty"`        // the files the Vercel skills CLI left out that the run wrote into the directory
-	Reason         string   `json:"reason,omitempty"`          // why it was refused, or what an adoption would still have to do
+	Name    string  `json:"name"`
+	Tool    string  `json:"tool"`              // the tool that installed it: vercel or skillshare
+	File    string  `json:"file"`              // the file the record was read from
+	Source  string  `json:"source,omitempty"`  // the canonical URL of the source it names
+	Subpath *string `json:"subpath,omitempty"` // the skill's directory in that source, "" for its root
+	State   string  `json:"state"`             // candidate, adopted, managed or refused
+	Reason  string  `json:"reason,omitempty"`  // why it was refused, or what an adoption would still have to do
 }
 
+// phaseFetch is the step a run reports for one source it fetches: the one
+// agentx adopt adds, and the ones source fetch, check-updates, publish and
+// the account commands fetch.
+const phaseFetch = "fetch"
+
 // adoptSelection is what one run of agentx adopt was asked to do: nothing
-// but look, adopt the skills named, or adopt every one the lock file holds.
+// but look, adopt the skills named, or adopt every one recorded.
 type adoptSelection struct {
 	names []string
 	all   bool
-	base  string // the ref or commit an explicit base selection names
 }
 
 func newAdoptCommand(inv *invocation) *cobra.Command {
 	var sel adoptSelection
 	cmd := &cobra.Command{
 		Use:   "adopt",
-		Short: "Adopt skills another tool installed into the library",
-		Long: "Take over the skills the Vercel skills CLI installed into the library, so that\n" +
-			"agentx knows where each one came from and can update it. Run it with\n" +
-			"no flags to see what it would adopt; nothing is written and the lock file is\n" +
-			"never touched.\n\n" +
-			"The base version recorded for a skill is the upstream version it was installed\n" +
-			"at, read from the source and verified against the lock file. The directory on\n" +
-			"disk is left as it is, so an edit made to it stays an edit; only the files of\n" +
-			"that version the Vercel skills CLI never copies, such as README.md, metadata.json\n" +
-			"and names starting with _ or a dot, are written into it when it lacks them. A\n" +
-			"skill whose upstream version cannot be established is left unmanaged rather than\n" +
-			"have what is on disk recorded as if it came from upstream.",
+		Short: "Install the skills another tool installed, so that agentx manages them",
+		Long: "Take over the skills the Vercel skills CLI or Skillshare installed, so that agentx\n" +
+			"knows where each one came from and can update it. Run it with no flags to see\n" +
+			"what it would adopt; nothing is written and the other tool's files are never\n" +
+			"touched.\n\n" +
+			"Adopting a skill installs it from its source, as 'agentx skill add' does, at the\n" +
+			"version the source holds now, and places it in every enabled configuration.\n" +
+			"Whatever the library holds under the skill's name gives way to that version, an\n" +
+			"edit made to it included: fork the skill first to keep one.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error { return inv.adopt(cmd.Context(), sel) },
 	}
 	cmd.Flags().StringArrayVar(&sel.names, "skill", nil, "the skill to adopt, by its name in the library; give it again for each")
-	cmd.Flags().BoolVar(&sel.all, "all", false, "adopt every skill of the lock file that can be adopted")
-	cmd.Flags().StringVar(&sel.base, "base", "", "with one --skill, the commit id, branch or tag of the source to record as its base version")
+	cmd.Flags().BoolVar(&sel.all, "all", false, "adopt every recorded skill that can be adopted")
 	return cmd
 }
 
@@ -91,88 +88,190 @@ func (s adoptSelection) adopting() bool { return s.all || len(s.names) > 0 }
 
 // check refuses a combination of flags that asks for two things at once.
 func (s adoptSelection) check() error {
-	switch {
-	case s.all && len(s.names) > 0:
+	if s.all && len(s.names) > 0 {
 		return fail(exitUsage, "--all and --skill cannot both be given",
-			"--all adopts every skill of the lock file; drop it to adopt the ones you name")
-	case s.base != "" && len(s.names) != 1:
-		return fail(exitUsage, "--base chooses the base version of one skill",
-			"give --skill once beside --base, since a base names one version of one skill")
-	case s.base != "" && !source.ValidRef(s.base):
-		return fail(exitUsage, fmt.Sprintf("--base %q is not a commit or ref git accepts", s.base),
-			"name a commit, a branch or a tag of the source")
+			"--all adopts every recorded skill; drop it to adopt the ones you name")
 	}
 	return nil
 }
 
-// adopt reads the Vercel skills lock file and reports, or adopts, the
-// skills it names that the library holds.
+// adopt reads what the other tools installed and reports, or adopts, the
+// skills they recorded.
 //
 // Without a flag it is a preview and writes nothing at all: it takes no
 // lock, creates neither agentx home nor the account repo, and reaches for
-// no network. The lock file is never written, on any path.
+// no network. The other tools' files are never written, on any path.
 func (inv *invocation) adopt(ctx context.Context, sel adoptSelection) error {
 	if err := sel.check(); err != nil {
 		return err
 	}
+	records, err := inv.readRecords()
+	if err != nil {
+		return err
+	}
+	lineage, err := inv.lineageRecords(ctx)
+	if err != nil {
+		return err
+	}
+	cands, err := inv.adoptCandidates(records, lineage)
+	if err != nil {
+		return err
+	}
+	if !sel.adopting() {
+		inv.previewAdoption(cands, len(records))
+		return nil
+	}
+	chosen, err := inv.chooseAdoptions(cands, records, sel)
+	if err != nil {
+		return err
+	}
+	return inv.adoptChosen(ctx, chosen)
+}
+
+// record is one skill another tool installed, as that tool recorded it:
+// what an install from its source needs, and where that tool put it.
+type record struct {
+	tool    string
+	name    string   // the library directory name
+	file    string   // the file the record was read from
+	dir     string   // the directory that tool installed the skill into; "" for the library entry, built once the name is known safe
+	links   string   // the folder that tool keeps skills in and links into clients' folders, "" for a tool that links nothing
+	urls    []string // the forms the record names its source in, tried in order
+	ref     string   // the branch or tag it was installed from, "" for the default branch
+	subpath string   // the skill's directory inside the source, "" for its root
+	refusal *failure // what the record itself rules out, before any source is looked at
+}
+
+// readRecords reads the install records of every tool, in name order. A
+// name both tools record is one warning, and the Vercel skills CLI's record
+// is the one used: its directory is the library entry itself.
+func (inv *invocation) readRecords() ([]record, error) {
 	entries, warnings, err := vercel.Read(vercel.LockPaths(inv.env, inv.dirs.User))
 	for _, w := range warnings {
 		inv.out.warn(w)
 	}
 	if err != nil {
-		return lockFailure(err)
+		return nil, recordFailure(err)
 	}
-	records, err := inv.lineageRecords(ctx)
+	var records []record
+	for _, e := range entries {
+		records = append(records, vercelRecord(e))
+	}
+	cfg, err := inv.skillshareConfig()
 	if err != nil {
-		return err
+		return nil, recordFailure(err)
 	}
-	cands, err := inv.adoptCandidates(entries, records)
+	skills := cfg.Skills
+	stored, warnings, err := skillshare.Read(skills)
+	for _, w := range warnings {
+		inv.out.warn(w)
+	}
 	if err != nil {
-		return err
+		return nil, recordFailure(err)
 	}
-	if !sel.adopting() {
-		inv.previewAdoption(cands, len(entries))
-		return nil
+	byName := map[string]record{}
+	for _, r := range records {
+		byName[r.name] = r
 	}
-	chosen, err := inv.chooseAdoptions(cands, entries, sel)
-	if err != nil {
-		return err
+	for _, e := range stored {
+		r, warning := skillshareRecord(skills, e)
+		if warning != "" {
+			inv.out.warn(warning)
+		}
+		if r.name == "" {
+			continue
+		}
+		if have, ok := byName[r.name]; ok {
+			inv.out.warn(fmt.Sprintf("%s is recorded in %s and in %s; the record in %s is the one used", sanitised(r.name), have.file, r.file, have.file))
+			continue
+		}
+		records = append(records, r)
 	}
-	return inv.adoptChosen(ctx, chosen, sel)
+	sort.SliceStable(records, func(i, j int) bool { return records[i].name < records[j].name })
+	return records, nil
 }
 
-// lockFailure answers a lock file that is not one: the same exit code an
-// unreadable settings file has, since both are a file agentx reads whole
+// skillshareConfig reads Skillshare's configuration on this machine.
+func (inv *invocation) skillshareConfig() (skillshare.Config, error) {
+	return skillshare.ReadConfig(skillshare.Locate(inv.env, inv.dirs.Config), inv.dirs.User)
+}
+
+// recordFailure answers a record file that is not one: the same exit code
+// an unreadable settings file has, since both are a file agentx reads whole
 // and can make nothing of.
-func lockFailure(err error) error {
-	if errors.Is(err, vercel.ErrLock) {
+func recordFailure(err error) error {
+	if errors.Is(err, vercel.ErrLock) || errors.Is(err, skillshare.ErrStore) {
 		return fail(exitInternal, err.Error(), "fix the file or move it aside")
 	}
-	return fail(exitInternal, err.Error(), "check that the lock file is readable")
+	return fail(exitInternal, err.Error(), "check that the file is readable")
 }
 
-// candidate is one entry of the lock file whose library directory exists,
-// with what agentx makes of it.
+// vercelRecord is the record of one entry of the Vercel skills lock file.
+// That tool installs into the library, so the directory is the library
+// entry. The URL the entry was installed from is read first and its
+// normalised identifier second, so that a URL agentx does not accept, a
+// GitHub blob page among them, still leaves owner/repo to fall back on.
+func vercelRecord(e vercel.Entry) record {
+	r := record{tool: toolVercel, name: e.Name, file: e.File, ref: e.Ref, subpath: e.Subpath, urls: nonEmpty(e.SourceURL, e.Source)}
+	switch e.SourceType {
+	case "github", "gitlab", "git", "":
+	default:
+		r.refusal = refuse(exitRefused,
+			fmt.Sprintf("%s was installed from a %s source, which is not a git repository agentx can fetch", e.Name, sanitised(e.SourceType)),
+			"install it again with 'agentx skill add <git source>', or leave it unmanaged")
+	}
+	return r
+}
+
+// skillshareRecord is the record of one entry of Skillshare's store, whose
+// directory is below the folder Skillshare installs into. An agent is no
+// skill and is passed over without a word; a key that would reach outside
+// that folder is left out with the warning returned.
+func skillshareRecord(skills string, e skillshare.Entry) (record, string) {
+	if e.Kind == "agent" {
+		return record{}, ""
+	}
+	if err := source.CheckPath(e.Name); err != nil {
+		return record{}, fmt.Sprintf("%q in %s is not a directory of %s and is left out", sanitised(e.Name), e.File, skills)
+	}
+	r := record{
+		tool: toolSkillshare, name: skillshare.LibraryName(e.Name), file: e.File,
+		dir: filepath.Join(skills, filepath.FromSlash(e.Name)), links: skills,
+		ref: e.Branch, subpath: e.Subdir, urls: nonEmpty(e.RepoURL, e.Source),
+	}
+	switch kind := strings.TrimSuffix(e.Type, "-subdir"); {
+	case e.Tracked:
+		r.refusal = refuse(exitRefused, r.name+" is a repository Skillshare tracks as a whole, with skills inside it",
+			"add the repository with 'agentx source add <url>' and install its skills with 'agentx skill add'")
+	case kind == "github", kind == "git-https", kind == "git-ssh", kind == "":
+	default:
+		r.refusal = refuse(exitRefused,
+			fmt.Sprintf("%s was installed from a %s source, which is not a git repository agentx can fetch", r.name, sanitised(kind)),
+			"install it again with 'agentx skill add <git source>', or leave it unmanaged")
+	}
+	return r, ""
+}
+
+func nonEmpty(values ...string) []string {
+	var kept []string
+	for _, v := range values {
+		if v != "" {
+			kept = append(kept, v)
+		}
+	}
+	return kept
+}
+
+// candidate is one record whose directory exists, with what agentx makes
+// of it.
 type candidate struct {
-	entry vercel.Entry
-	path  string // the library directory
-	hash  string // the content hash of that directory now
-
-	src   source.Source // the source the entry names, empty when it names none agentx can use
-	added bool          // the settings already hold that source
-
+	rec    record
+	src    source.Source // the source the record names, empty when it names none agentx can use
+	entry  home.Source   // the settings entry of that source, when added
+	added  bool          // the settings already hold that source
 	state  string
 	reason string
 	fail   *failure // the refusal, which is how a run asked to adopt it answers
-
-	tip      string // the commit this machine fetched the source at
-	tipTree  string // the tree of the skill's directory there, empty when the source no longer has it
-	searched bool   // the folder hash was looked for in the history of that directory
-
-	base     *basePlan // where the base version was established
-	imported *imported // the version itself, once read
-	modified bool      // the directory differs from the base
-	restored []string  // the files of the base the installer left out, written into the directory
 }
 
 // refuse records why the candidate cannot be adopted.
@@ -180,160 +279,152 @@ func (c *candidate) refuse(f *failure) {
 	c.state, c.reason, c.fail = adoptRefused, f.message, f
 }
 
-// subpath is the skill's directory inside its source.
-func (c *candidate) subpath() string { return c.entry.Subpath }
-
-// adoptCandidates turns the lock file's entries into candidates: one per
-// entry whose library directory exists, in the order the entries are
-// sorted, which is by name. An entry the library does not hold is no
-// candidate at all, since there is nothing on this machine to adopt.
-func (inv *invocation) adoptCandidates(entries []vercel.Entry, records map[string]lineage.Record) ([]*candidate, error) {
+// adoptCandidates turns the records into candidates: one per record whose
+// directory exists, in name order. A record whose directory is gone is no
+// candidate at all, since the user removed what that tool installed.
+func (inv *invocation) adoptCandidates(records []record, lineage map[string]lineage.Record) ([]*candidate, error) {
 	s, err := inv.loadSettings()
 	if err != nil {
 		return nil, err
 	}
 	var cands []*candidate
-	for _, e := range entries {
-		if why := nameRefusal(e.Name); why != "" {
+	for _, r := range records {
+		if why := nameRefusal(r.name); why != "" {
 			// The name would have to become a library directory and a
 			// branch, and it is refused in the words of whichever cannot
 			// hold it. Nothing is looked up under it: a name that walks out
 			// of the library may not be joined to a path.
-			inv.out.warn(fmt.Sprintf("%q in %s %s and is left out", sanitised(e.Name), e.File, why))
+			inv.out.warn(fmt.Sprintf("%q in %s %s and is left out", sanitised(r.name), r.file, why))
 			continue
 		}
-		c := &candidate{entry: e, path: inv.libraryPath(e.Name), state: adoptCandidate}
-		exists, dir, err := libraryEntry(c.path)
+		if r.dir == "" {
+			r.dir = inv.libraryPath(r.name)
+		}
+		exists, err := entryExists(r.dir)
 		if err != nil {
-			inv.out.warn(c.path + " could not be read and is left out: " + err.Error())
+			inv.out.warn(r.dir + " could not be read and is left out: " + err.Error())
 			continue
 		}
 		if !exists {
-			continue // the lock file names it, this machine does not have it
+			continue // the record names it, this machine no longer has it
 		}
-		if dir {
-			c.hash = contentHashAt(c.path)
-		}
-		inv.judge(c, dir, records, s.FindSource)
+		c := &candidate{rec: r, state: adoptCandidate}
+		inv.judge(c, lineage, s)
 		cands = append(cands, c)
 	}
 	return cands, nil
 }
 
 // judge decides what can be done with one candidate from what is on this
-// machine alone: what the library directory is, what the account repo
-// already knows about the name, and whether the entry names a source agentx
-// can fetch.
-func (inv *invocation) judge(c *candidate, dir bool, records map[string]lineage.Record, findSource func(string) int) {
-	switch rec, known := records[c.entry.Name]; {
-	case !dir:
-		c.refuse(refuse(exitRefused, c.path+" is not a directory the library holds",
-			"a skill agentx manages is a real directory in the library; leave this one as it is"))
-		return
-	case c.hash == "":
-		c.refuse(refuse(exitRefused, c.path+" holds no SKILL.md and is no skill of the library",
-			"a directory without a SKILL.md is not a skill; leave it as it is or remove it"))
-		return
+// machine alone: what the account repo already knows about the name, what
+// the record rules out, and whether it names a source agentx can fetch.
+func (inv *invocation) judge(c *candidate, records map[string]lineage.Record, s home.Settings) {
+	switch rec, known := records[c.rec.name]; {
 	case known && rec.Kind == lineage.KindFork:
-		c.refuse(refuse(exitRefused, c.entry.Name+" is a skill of the account remote on this machine",
+		c.refuse(refuse(exitRefused, c.rec.name+" is a skill of the account remote on this machine",
 			"it has a history of its own; adopting would take the place of it"))
 		return
-	case known:
+	case known && isRealDirectory(inv.libraryPath(c.rec.name)):
+		// Left alone, and still shown with the source the record names
+		// when it names one agentx can read.
 		c.state, c.reason = adoptManaged, "agentx already manages it"
+		if src, f := adoptSource(c.rec); f == nil {
+			src.Stripped = false
+			c.src = src
+		}
+		return
+	case c.rec.refusal != nil:
+		c.refuse(c.rec.refusal)
 		return
 	}
-	src, f := adoptSource(c.entry)
+	src, f := adoptSource(c.rec)
 	if f != nil {
 		c.refuse(f)
 		return
 	}
 	if src.Stripped {
-		inv.out.warn("the user or token in the URL of " + sanitised(c.entry.Name) + " was dropped: agentx never stores credentials; put them in a git credential helper (git config credential.helper) or an SSH key")
+		inv.out.warn("the user or token in the URL of " + sanitised(c.rec.name) + " was dropped: agentx never stores credentials; put them in a git credential helper (git config credential.helper) or an SSH key")
 		src.Stripped = false
 	}
-	if !lineage.ValidPath(c.entry.Subpath) {
+	if !lineage.ValidPath(c.rec.subpath) {
 		// Quoted and not sanitised: a directory a trailer cannot carry is
 		// one padded with spaces as often as one holding a control
 		// character, and turning either into a space would name a
-		// directory the lock file does not.
-		c.refuse(refuse(exitRefused, fmt.Sprintf("%s names %q, which is not a directory of %s", c.entry.File, c.entry.Subpath, src.URL),
-			"fix the entry in the lock file, or install the skill with 'agentx skill add'"))
+		// directory the record does not.
+		c.refuse(refuse(exitRefused, fmt.Sprintf("%s names %q, which is not a directory of %s", c.rec.file, c.rec.subpath, src.URL),
+			"fix the entry, or install the skill with 'agentx skill add'"))
 		return
 	}
-	c.src, c.added = src, findSource(src.URL) >= 0
-	if !c.added {
+	c.src = src
+	if i := s.FindSource(src.URL); i >= 0 {
+		c.added, c.entry = true, s.Sources[i]
+	} else {
 		c.reason = "its source is not added yet; adopting adds and fetches it"
 	}
+	if _, known := records[c.rec.name]; known {
+		// Managed, but the library no longer holds it as a directory: the
+		// other tool took it back, or the user removed it. Adopting again
+		// installs it again, and moves the branch when the source moved on.
+		c.reason = "agentx manages it but the library no longer holds it; adopting installs it again"
+	}
 }
 
-// libraryEntry says what the library holds at path: whether anything is
-// there, and whether it is a real directory. The journal's own reading of a
-// path is not used here: it fingerprints a directory, which costs a full
-// read of every file in it, and an adoption needs only to tell a directory
-// from a link.
-func libraryEntry(path string) (exists, dir bool, err error) {
+// isRealDirectory reports whether path is a real directory: what the library
+// holds for a managed skill, as against nothing or another tool's link.
+func isRealDirectory(path string) bool {
 	info, err := os.Lstat(path)
+	return err == nil && info.IsDir()
+}
+
+// entryExists says whether anything is at path, a symlink included: what
+// another tool installed is there whatever shape it took.
+func entryExists(path string) (bool, error) {
+	_, err := os.Lstat(path)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		return false, false, nil
+		return false, nil
 	case err != nil:
-		return false, false, err
+		return false, err
 	}
-	return true, info.IsDir(), nil
+	return true, nil
 }
 
-// adoptSource is the source a lock entry names, canonicalised the way every
-// source agentx stores is. The URL the entry was installed from is read
-// first and its normalised identifier second, so that a URL agentx does not
-// accept, a GitHub blob page among them, still leaves owner/repo to fall
-// back on. A user or token in either is dropped before the URL is used
-// anywhere, as it is for 'agentx source add'.
-func adoptSource(e vercel.Entry) (source.Source, *failure) {
-	switch e.SourceType {
-	case "github", "gitlab", "git", "":
-	default:
-		return source.Source{}, refuse(exitRefused,
-			fmt.Sprintf("%s was installed from a %s source, which is not a git repository agentx can fetch", e.Name, sanitised(e.SourceType)),
-			"install it again with 'agentx skill add <git source>', or leave it unmanaged")
-	}
-	for _, raw := range []string{e.SourceURL, e.Source} {
-		if raw == "" {
-			continue
-		}
+// adoptSource is the source a record names, canonicalised the way every
+// source agentx stores is. A user or token in it is dropped before the URL
+// is used anywhere, as it is for 'agentx source add'.
+func adoptSource(r record) (source.Source, *failure) {
+	for _, raw := range r.urls {
 		src, err := source.Parse(raw)
 		if err != nil {
 			continue
 		}
-		// The subpath and the ref of the entry decide, not the ones a tree
-		// URL happens to carry: skillPath is what that tool recorded about
-		// this skill, and the URL may name the whole repository.
+		// The subpath and the ref of the record decide, not the ones a
+		// tree URL happens to carry: the record says what was installed,
+		// and the URL may name the whole repository.
 		ref := src.Ref
-		if e.Ref != "" && source.ValidRef(e.Ref) {
-			ref = e.Ref
+		if r.ref != "" && source.ValidRef(r.ref) {
+			ref = r.ref
 		}
 		src.Subpath, src.Ref = "", ref
 		return src, nil
 	}
 	return source.Source{}, refuse(exitRefused,
-		fmt.Sprintf("%s names no source agentx can read", e.Name),
+		fmt.Sprintf("%s names no source agentx can read", r.name),
 		"accepted forms: "+source.Forms)
 }
 
-// chooseAdoptions picks the entries a run covers: every candidate with
-// --all, or exactly those --skill names. A name the lock file does not hold
-// at all fails the run before anything is fetched, the way a --skill that
-// names no skill of a source does.
-//
-// What it returns is in name order, whatever order the flags were given in,
-// because the run reports in the order it acts: one order for a run over
-// the same skills however they were asked for.
-func (inv *invocation) chooseAdoptions(cands []*candidate, entries []vercel.Entry, sel adoptSelection) ([]*candidate, error) {
+// chooseAdoptions picks the records a run covers: every candidate with
+// --all, or exactly those --skill names. A name no record holds fails the
+// run before anything is fetched, the way a --skill that names no skill of
+// a source does. What it returns is in name order, whatever order the
+// flags were given in.
+func (inv *invocation) chooseAdoptions(cands []*candidate, records []record, sel adoptSelection) ([]*candidate, error) {
 	if sel.all {
 		return cands, nil
 	}
 	byName := map[string]*candidate{}
 	for _, c := range cands {
-		byName[c.entry.Name] = c
+		byName[c.rec.name] = c
 	}
 	var chosen []*candidate
 	seen := map[string]bool{}
@@ -344,196 +435,246 @@ func (inv *invocation) chooseAdoptions(cands []*candidate, entries []vercel.Entr
 		seen[name] = true
 		c, ok := byName[name]
 		if !ok {
-			return nil, inv.noAdoptionNamed(name, cands, entries)
+			return nil, noAdoptionNamed(name, cands, records)
 		}
 		chosen = append(chosen, c)
 	}
-	sort.Slice(chosen, func(i, j int) bool { return chosen[i].entry.Name < chosen[j].entry.Name })
+	sort.Slice(chosen, func(i, j int) bool { return chosen[i].rec.name < chosen[j].rec.name })
 	return chosen, nil
 }
 
-// noAdoptionNamed answers a --skill the run cannot place: the lock file may
-// not name it at all, or may name it for a directory the library does not
-// hold, which are different things to fix.
-func (inv *invocation) noAdoptionNamed(name string, cands []*candidate, entries []vercel.Entry) error {
-	for _, e := range entries {
-		if e.Name == name {
-			return fail(exitNotFound, fmt.Sprintf("the library holds no %q at %s, which %s says was installed there", name, inv.libraryPath(name), e.File),
+// noAdoptionNamed answers a --skill the run cannot place: no record may
+// name it, or one may name it for a directory that is gone, which are
+// different things to fix.
+func noAdoptionNamed(name string, cands []*candidate, records []record) error {
+	for _, r := range records {
+		if r.name == name {
+			return fail(exitNotFound, fmt.Sprintf("%s says %q was installed, and this machine no longer holds it", r.file, name),
 				"run 'agentx adopt' to see what can be adopted")
 		}
 	}
 	names := make([]string, 0, len(cands))
 	for _, c := range cands {
-		names = append(names, sanitised(c.entry.Name))
+		names = append(names, sanitised(c.rec.name))
 	}
 	hint := "run 'agentx adopt' to see what can be adopted"
 	if len(names) > 0 {
 		if len(names) > namesInAHint {
 			names = append(names[:namesInAHint], "...")
 		}
-		hint = "the lock file names: " + strings.Join(names, ", ")
+		hint = "the records name: " + strings.Join(names, ", ")
 	}
-	return fail(exitNotFound, fmt.Sprintf("no skill called %q in the Vercel skills lock file", sanitised(name)), hint)
+	return fail(exitNotFound, fmt.Sprintf("no skill called %q was installed by the Vercel skills CLI or Skillshare", sanitised(name)), hint)
 }
 
-// adoptRun is one run of agentx adopt that changes something: what it set
-// out to do, how many steps it has reported, what it adopted and the skills
-// it had to leave unmanaged.
-type adoptRun struct {
-	refusals
-	inv      *invocation
-	selected int
-	current  int
-	total    int
-	done     []*candidate
-}
-
-func newAdoptRun(inv *invocation, selected, sources int) *adoptRun {
-	return &adoptRun{
-		refusals: refusals{verb: "adopted", mixed: "run 'agentx adopt' to see what is left, and adopt the rest one at a time"},
-		inv:      inv,
-		selected: selected,
-		total:    selected + sources,
-	}
-}
-
-// step reports one finished step of the run.
-func (r *adoptRun) step(phase, subject string) {
-	r.current++
-	r.inv.progress(phase, subject, r.current, r.total)
-}
-
-// drop gives up on one skill: the step it will no longer run leaves the
-// budget, so a run that ends still counts up to its total.
-func (r *adoptRun) drop(c *candidate, f *failure) {
-	if c.state != adoptRefused {
-		c.refuse(f)
-	}
-	r.total--
-	r.add(c.entry.Name, f)
-	if r.selected > 1 {
-		r.inv.out.warn(namedReason(c.entry.Name, f.message))
-	}
-}
-
-func (r *adoptRun) failure() *failure { return r.refusals.failure(r.selected, len(r.done)) }
-
-// adoptChosen adds the sources the covered skills came from, establishes
-// the base version of each from the source itself, writes the import
-// commits and points the import branches at them as one journaled mutation.
-//
-// The library directories keep what they hold: adoption records where a
-// skill came from, so an edit made to a directory stays an edit against
-// the version it was installed at. All it adds are the files of that
-// version the installer never copies, see installerLeftOut.
-func (inv *invocation) adoptChosen(ctx context.Context, covered []*candidate, sel adoptSelection) error {
-	var chosen []*candidate // what the run acts on: a skill agentx already manages is not acted on
+// adoptChosen installs every chosen skill from its source, as skill add
+// installs one: the source is added and fetched when the settings do not
+// hold it, the version at its pin is read out of the account repo, the
+// import commits are written, and the library directories, the import
+// branches and the placements land as one journaled mutation. A skill
+// agentx already manages is not acted on.
+func (inv *invocation) adoptChosen(ctx context.Context, covered []*candidate) error {
+	var chosen []*candidate
 	for _, c := range covered {
 		if c.state != adoptManaged {
 			chosen = append(chosen, c)
 		}
 	}
 	if len(chosen) == 0 {
-		inv.reportAdopted(nil, covered, "already adopted")
+		inv.reportAdopted(nil, covered)
+		inv.out.print("Already adopted.")
+		inv.summary = "already adopted"
 		return nil
 	}
-	toAdd := sourcesToAdd(chosen)
-	run := newAdoptRun(inv, len(chosen), len(toAdd))
+	targets, err := inv.placementTargets(nil)
+	if err != nil {
+		return err
+	}
+	b := newBatch(inv, len(chosen))
+	b.verb, b.mixed = "adopted", "run 'agentx adopt' to see what is left, and adopt the rest one at a time"
 	var ready []*candidate
 	for _, c := range chosen {
 		if c.fail != nil {
-			run.drop(c, c.fail)
+			b.drop(c.rec.name, stepsPerSkill, c.fail)
 			continue
 		}
 		ready = append(ready, c)
 	}
-	ready = inv.addAdoptSources(ctx, run, ready, toAdd)
-	if len(ready) > 0 {
-		var err error
-		if ready, err = inv.readAdoptBases(ctx, run, ready, sel); err != nil {
-			return err
-		}
+	versions, gitDir, err := inv.adoptVersions(ctx, b, ready)
+	if err != nil {
+		return err
 	}
-	if len(ready) > 0 {
-		if err := inv.writeAdoptions(ctx, run, ready); err != nil {
-			return err
-		}
+	if len(versions) == 0 {
+		inv.reportAdopted(b, covered)
+		return b.abandon()
 	}
-	inv.reportAdopted(run, covered, "")
-	if f := run.failure(); f != nil {
+	run := lineage.NewRun()
+	if err := inv.writeImports(ctx, b, gitDir, run, versions); err != nil {
+		return err
+	}
+	dones, journaled, err := inv.install(ctx, b, gitDir, versions, targets, false)
+	if err != nil {
+		if !journaled {
+			inv.dropImporting(ctx, gitDir, run, len(versions))
+		}
+		return err
+	}
+	inv.dropImporting(ctx, gitDir, run, len(versions))
+	if len(dones) == 0 {
+		inv.reportAdopted(b, covered)
+		return b.abandon()
+	}
+	if err := inv.reportInstalled(ctx, b, dones); err != nil {
+		return err
+	}
+	inv.summary = "adopted " + strings.TrimPrefix(strings.TrimPrefix(inv.summary, "installed "), "adopted ")
+	inv.reportAdopted(b, covered)
+	if f := b.failure(); f != nil {
 		return f
 	}
 	return nil
 }
 
-// sourcesToAdd are the canonical URLs of the chosen skills' sources that
-// the settings do not hold yet, in the order the skills name them, so that
-// a run adds each source once.
-func sourcesToAdd(chosen []*candidate) []string {
+// adoptVersions reads the version each candidate is adopted at: the skill
+// at its subpath in its source, at the pin this machine holds, the source
+// added and fetched first when the settings do not hold it. A source that
+// cannot be added or read costs its own skills and no others. It returns
+// the versions, filled, and the account repo they were read from.
+func (inv *invocation) adoptVersions(ctx context.Context, b *batch, ready []*candidate) ([]*imported, string, error) {
+	if len(ready) == 0 {
+		return nil, "", nil
+	}
+	// The lock is taken and released before the network, as an install
+	// takes it: it recovers an unfinished journal and refuses a run that
+	// could not finish anyway.
+	if err := home.MutateQuiet(inv.dirs.Home, inv.refs(ctx), func() error { return nil }); err != nil {
+		return nil, "", err
+	}
 	var urls []string
-	seen := map[string]bool{}
-	for _, c := range chosen {
-		if c.fail != nil || c.added || c.src.URL == "" || seen[c.src.URL] {
+	bySource := map[string][]*candidate{}
+	for _, c := range ready {
+		if bySource[c.src.URL] == nil {
+			urls = append(urls, c.src.URL)
+		}
+		bySource[c.src.URL] = append(bySource[c.src.URL], c)
+	}
+	var versions []*imported
+	var gitDir string
+	for _, url := range urls {
+		cands := bySource[url]
+		dropAll := func(f *failure) {
+			for _, c := range cands {
+				b.drop(c.rec.name, stepsPerSkill, f)
+			}
+		}
+		listing, fetched, f, err := inv.adoptListing(ctx, b, url, cands)
+		if err != nil {
+			return nil, "", err
+		}
+		if f != nil {
+			dropAll(f)
 			continue
 		}
-		seen[c.src.URL] = true
-		urls = append(urls, c.src.URL)
+		if gitDir == "" {
+			if gitDir, _, err = gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home); err != nil {
+				return nil, "", accountRepoFailure(err)
+			}
+		}
+		var skills []source.Skill
+		var owners []*candidate
+		for _, c := range cands {
+			sk, ok := skillAt(listing, c.rec.subpath)
+			if !ok {
+				b.drop(c.rec.name, stepsPerSkill, refuse(exitNotFound, fmt.Sprintf("%s holds no skill at %s now", url, dirOrRoot(c.rec.subpath)),
+					"the source moved or removed it; leave the skill unmanaged, or install another with 'agentx skill add'"))
+				continue
+			}
+			// The library keeps the name the skill was installed under,
+			// whatever its SKILL.md calls it, as an update keeps it.
+			sk.Name = c.rec.name
+			skills = append(skills, sk)
+			owners = append(owners, c)
+		}
+		if len(skills) == 0 {
+			continue
+		}
+		src := source.Source{URL: url}
+		read, err := inv.readVersions(ctx, b, gitDir, src, listing.Commit, skills)
+		if err != nil {
+			return nil, "", err
+		}
+		for i, v := range read {
+			v.fetched, v.replace, v.links = fetched, true, owners[i].rec.links
+		}
+		versions = append(versions, read...)
 	}
-	return urls
+	return versions, gitDir, nil
 }
 
-// addAdoptSources adds every source the run needs and does not have, which
-// is the whole of 'agentx source add' and not a fetch of its own. A source
-// that cannot be added costs its own skills and no others.
-func (inv *invocation) addAdoptSources(ctx context.Context, run *adoptRun, ready []*candidate, urls []string) []*candidate {
-	if len(urls) == 0 {
-		return ready
-	}
-	failed := map[string]*failure{}
-	for _, url := range urls {
-		pin, recorded := adoptPin(ready, url)
-		src := source.Source{URL: url, Ref: pin}
+// adoptListing is what one source holds at its pin: the listing of the
+// fetch that adds it when the settings do not hold it, else the listing of
+// the account repo as it was last fetched. A source the run cannot read is
+// the failure returned, which costs its skills; an error is the run's.
+func (inv *invocation) adoptListing(ctx context.Context, b *batch, url string, cands []*candidate) (listing source.Listing, fetched string, f *failure, err error) {
+	if !cands[0].added {
+		pin, recorded := adoptPin(cands)
 		if len(recorded) > 1 {
-			// One source has one pin on a machine, and it governs every later
-			// install from it, so a lock file that records two refs of it
-			// cannot be answered in silence: the skills of the refs not taken
-			// are looked for in the history of the one that was.
+			// One source has one pin on a machine, and it governs every
+			// later install from it, so records of two refs of it cannot
+			// be answered in silence.
 			inv.out.warn(fmt.Sprintf("%s was installed at more than one ref (%s); it is added pinned to %s. To change the pin, run 'agentx source add %s#<ref>' and adopt again",
 				url, strings.Join(pinNames(recorded), ", "), pinName(pin), url))
 		}
-		if _, _, err := inv.addSource(ctx, src); err != nil {
-			var f *failure
-			if !errors.As(err, &f) {
-				f = refuse(exitInternal, err.Error(), "run 'agentx doctor' and check what it names")
-			}
-			failed[url] = f
-			run.total-- // the fetch step this source will not report leaves the budget
-			continue
+		b.total++ // the fetch step of the source
+		listing, entry, err := inv.addSource(ctx, source.Source{URL: url, Ref: pin})
+		if err != nil {
+			b.total--
+			return listing, "", failureOf(err), nil
 		}
-		run.step(phaseFetch, url)
+		b.step(phaseFetch, url)
+		return listing, entry.LastFetched, nil, nil
 	}
-	if len(failed) == 0 {
-		return ready
+	entry := cands[0].entry
+	pinned := source.Source{URL: url, Ref: entry.Pin}
+	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	if err != nil {
+		return listing, "", nil, accountRepoFailure(err)
 	}
-	var kept []*candidate
-	for _, c := range ready {
-		if f, bad := failed[c.src.URL]; bad {
-			run.drop(c, f)
-			continue
-		}
-		kept = append(kept, c)
+	if !exists {
+		return listing, "", failureOf(sourceFailure(source.NotFetched(url), pinned)), nil
 	}
-	return kept
+	if listing, err = source.List(ctx, inv.git, gitDir, source.Source{URL: url}); err != nil {
+		return listing, "", failureOf(sourceFailure(err, pinned)), nil
+	}
+	return listing, entry.LastFetched, nil, nil
 }
 
-// adoptPin is the ref a source is added at and every ref the covered
-// entries recorded for it, in name order. A lock file records a ref per
-// skill and a machine holds one pin per source, so the first entry in name
-// order decides and the caller says so when they disagree.
-func adoptPin(ready []*candidate, url string) (pin string, recorded []string) {
+// skillAt is the skill the listing holds at subpath.
+func skillAt(listing source.Listing, subpath string) (source.Skill, bool) {
+	for _, sk := range listing.Skills {
+		if sk.Subpath == subpath {
+			return sk, true
+		}
+	}
+	return source.Skill{}, false
+}
+
+// dirOrRoot names a subpath for a message, the repository root included.
+func dirOrRoot(subpath string) string {
+	if subpath == "" {
+		return "its root"
+	}
+	return subpath
+}
+
+// adoptPin is the ref a source is added at and every ref the candidates
+// recorded for it, in name order. A tool records a ref per skill and a
+// machine holds one pin per source, so the first candidate in name order
+// decides and the caller says so when they disagree.
+func adoptPin(cands []*candidate) (pin string, recorded []string) {
 	seen := map[string]bool{}
-	for _, c := range ready {
-		if c.src.URL != url || seen[c.src.Ref] {
+	for _, c := range cands {
+		if seen[c.src.Ref] {
 			continue
 		}
 		seen[c.src.Ref] = true
@@ -545,7 +686,7 @@ func adoptPin(ready []*candidate, url string) (pin string, recorded []string) {
 	return pin, recorded
 }
 
-// pinName is how a pin reads in a message; the lock file wrote it, so it is
+// pinName is how a pin reads in a message; another tool wrote it, so it is
 // sanitised like everything else that came from there.
 func pinName(ref string) string {
 	if ref == "" {
@@ -562,103 +703,53 @@ func pinNames(refs []string) []string {
 	return names
 }
 
-// reportAdopted emits one event per entry the run covered, in name order,
-// and prints what it did.
-func (inv *invocation) reportAdopted(run *adoptRun, covered []*candidate, nothing string) {
+// reportAdopted emits one adoption event per candidate the run covered, in
+// name order, as the run left it: adopted for a skill that landed, refused
+// with its reason for one the run gave up on, managed for one it never
+// acted on. The skills that landed were reported as an install reports
+// them already.
+func (inv *invocation) reportAdopted(b *batch, covered []*candidate) {
+	landed := map[string]bool{}
+	refused := map[string]*failure{}
+	if b != nil {
+		for _, done := range b.done {
+			landed[done.v.name] = true
+		}
+		for _, broken := range b.broken {
+			refused[broken.subject] = broken.fail
+		}
+	}
 	for _, c := range covered {
+		switch {
+		case landed[c.rec.name]:
+			c.state, c.reason = adoptAdopted, ""
+		case refused[c.rec.name] != nil:
+			c.refuse(refused[c.rec.name])
+		}
 		inv.out.emit(c.eventOf())
-		if c.state != adoptAdopted {
-			continue
-		}
-		v := c.imported
-		inv.out.done("adopted " + inv.out.paint(heading, sanitised(c.entry.Name)) + " from " + inv.out.paint(heading, v.imp.Source) +
-			underShown(v.imp.Path) + " at " + short(v.imp.Commit))
-		inv.out.print("  ", inv.out.paint(muted, c.baseLine()))
-		if len(c.restored) > 0 {
-			inv.out.print("  ", inv.out.paint(muted, c.restoredLine()))
-		}
 	}
-	if nothing != "" {
-		inv.out.print(strings.ToUpper(nothing[:1]) + nothing[1:] + ".")
-		inv.summary = nothing
-		return
-	}
-	inv.summary = adoptSummary(run.done)
-}
-
-// baseLine says what the library directory holds against the base the
-// adoption recorded: the whole point of the command, since a directory that
-// differs is a modification of that version and not a version of its own.
-func (c *candidate) baseLine() string {
-	line := "base " + short(c.imported.hash) + ": " + c.base.how
-	if c.modified {
-		line += "; the directory differs from it, so what differs is a local modification"
-	}
-	return line
-}
-
-// restoredLine names the files the run restored. Their paths are the
-// source's, so each is sanitised.
-func (c *candidate) restoredLine() string {
-	names := make([]string, 0, len(c.restored))
-	for _, p := range c.restored {
-		names = append(names, sanitised(p))
-	}
-	return "restored " + strings.Join(names, ", ") + ", which the Vercel skills CLI left out"
-}
-
-// adoptSummary is what the result event says the run did.
-func adoptSummary(done []*candidate) string {
-	if len(done) == 0 {
-		return "nothing was adopted"
-	}
-	names := make([]string, 0, len(done))
-	modified := 0
-	for _, c := range done {
-		names = append(names, c.entry.Name)
-		if c.modified {
-			modified++
-		}
-	}
-	summary := "adopted " + strings.Join(names, ", ")
-	if len(done) == 1 {
-		v := done[0].imported
-		summary += " from " + v.imp.Source + underPath(v.imp.Path) + " at " + short(v.imp.Commit)
-	} else {
-		summary += " from the Vercel skills lock file"
-	}
-	if modified > 0 {
-		summary += fmt.Sprintf(", %s modified since it was installed", plural(modified, "skill"))
-	}
-	return summary
 }
 
 // eventOf is the adoption event of one candidate.
 func (c *candidate) eventOf() adoptionEvent {
-	ev := adoptionEvent{event: newEvent("adoption"), Name: c.entry.Name, Lock: c.entry.File,
-		State: c.state, ContentHash: c.hash, Reason: c.reason}
+	ev := adoptionEvent{event: newEvent("adoption"), Name: c.rec.name, Tool: c.rec.tool, File: c.rec.file, State: c.state, Reason: c.reason}
 	if c.src.URL != "" {
-		subpath := c.subpath()
+		subpath := c.rec.subpath
 		ev.Source, ev.Subpath = c.src.URL, &subpath
-	}
-	if c.imported != nil {
-		modified := c.modified
-		ev.UpstreamCommit, ev.BaseHash, ev.Modified = c.imported.imp.Commit, c.imported.hash, &modified
-		ev.Restored = c.restored
 	}
 	return ev
 }
 
 // previewAdoption reports what an adoption would do and changes nothing.
-func (inv *invocation) previewAdoption(cands []*candidate, entries int) {
+func (inv *invocation) previewAdoption(cands []*candidate, records int) {
 	out := inv.out
 	if len(cands) == 0 {
-		out.print("No skill of the Vercel skills lock file is in the library at ", out.paint(label, inv.dirs.Library), ".")
-		inv.summary = "no skill of the Vercel skills lock file is in the library"
+		out.print("Nothing to adopt: no skill installed by the Vercel skills CLI or Skillshare is on this machine.")
+		inv.summary = "nothing to adopt"
 		return
 	}
 	counts := map[string]int{}
-	out.print(out.paint(heading, plural(len(cands), "skill")), " of the Vercel skills lock file in the library")
+	out.print(out.paint(heading, plural(len(cands), "skill")), " installed by another tool")
 	t := &table{}
 	for _, c := range cands {
 		out.emit(c.eventOf())
@@ -669,33 +760,34 @@ func (inv *invocation) previewAdoption(cands []*candidate, entries int) {
 	if counts[adoptCandidate] > 0 {
 		out.print("Adopt them with ", out.paint(label, "agentx adopt --all"), ".")
 	}
-	inv.summary = previewSummary(counts, entries)
+	inv.summary = previewSummary(counts, records)
 }
 
-// rowOf is one row of the preview listing. Every field the lock file
-// supplied is sanitised: it is text agentx did not write.
-func (a *candidate) rowOf() []cell {
-	state := c(a.state, muted)
-	switch a.state {
+// rowOf is one row of the preview listing. Every field the record supplied
+// is sanitised: it is text agentx did not write.
+func (c *candidate) rowOf() []cell {
+	state := cell{text: c.state, style: muted}
+	switch c.state {
 	case adoptCandidate:
-		state = c(a.state, okStyle)
+		state.style = okStyle
 	case adoptRefused:
-		state = c(a.state, warnStyle)
+		state.style = warnStyle
 	}
-	where := c("(none)", muted)
-	if a.src.URL != "" {
-		text := a.src.URL
-		if a.subpath() != "" {
-			text += "/" + a.subpath()
+	where := cell{text: "(none)", style: muted}
+	if c.src.URL != "" {
+		text := c.src.URL
+		if c.rec.subpath != "" {
+			text += "/" + c.rec.subpath
 		}
-		where = c(sanitised(text), plain)
+		where = cell{text: sanitised(text), style: plain}
 	}
-	return []cell{c("  "+sanitised(a.entry.Name), heading), state, where, c(sanitised(a.reason), muted)}
+	return []cell{{text: "  " + sanitised(c.rec.name), style: heading}, {text: c.rec.tool, style: muted}, state, where, {text: sanitised(c.reason), style: muted}}
 }
 
 // previewSummary is what the result event says a preview found.
-func previewSummary(counts map[string]int, entries int) string {
-	parts := []string{fmt.Sprintf("%s of the Vercel skills lock file in the library", plural(counts[adoptCandidate]+counts[adoptManaged]+counts[adoptRefused], "skill"))}
+func previewSummary(counts map[string]int, records int) string {
+	found := counts[adoptCandidate] + counts[adoptManaged] + counts[adoptRefused]
+	parts := []string{plural(found, "skill") + " installed by another tool"}
 	for _, what := range []struct {
 		n    int
 		text string
@@ -708,149 +800,8 @@ func previewSummary(counts map[string]int, entries int) string {
 			parts = append(parts, fmt.Sprintf("%d %s", what.n, what.text))
 		}
 	}
-	if entries > counts[adoptCandidate]+counts[adoptManaged]+counts[adoptRefused] {
-		parts = append(parts, fmt.Sprintf("%d not in the library", entries-counts[adoptCandidate]-counts[adoptManaged]-counts[adoptRefused]))
+	if records > found {
+		parts = append(parts, fmt.Sprintf("%d no longer on this machine", records-found))
 	}
 	return strings.Join(parts, ", ")
-}
-
-// writeAdoptions writes the import commits of the established versions and
-// points the import branches at them as one journaled mutation, under the
-// exclusive lock, with every input read again under it. The library
-// directories are the user's: a directory changes only to gain the files
-// the installer left out of it, see stageAdoption.
-func (inv *invocation) writeAdoptions(ctx context.Context, run *adoptRun, ready []*candidate) error {
-	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
-	if err != nil {
-		return accountRepoFailure(err)
-	}
-	if !exists {
-		return fail(exitNotFound, "no source has been added on this machine", "run 'agentx source add <url>' for the source the skills came from")
-	}
-	versions := make([]lineage.Version, 0, len(ready))
-	for _, c := range ready {
-		versions = append(versions, c.imported.version())
-	}
-	runID := lineage.NewRun()
-	commits, trees, err := lineage.WriteAll(ctx, inv.git, gitDir, runID, versions)
-	if err != nil {
-		return accountRepoFailure(err)
-	}
-	for i, c := range ready {
-		c.imported.commit, c.imported.tree = commits[i], trees[i]
-	}
-	journaled := false
-	err = home.Mutate(inv.dirs.Home, inv.refs(ctx), func() error {
-		records, err := inv.listLineage(ctx, gitDir)
-		if err != nil {
-			return accountRepoFailure(err)
-		}
-		m := home.NewMutation(inv.dirs.Home)
-		for _, c := range ready {
-			f, err := inv.stageAdoption(ctx, m, gitDir, c, records)
-			switch {
-			case err != nil:
-				m.Discard()
-				return err
-			case f != nil:
-				run.drop(c, f)
-				continue
-			}
-			run.done = append(run.done, c)
-		}
-		if len(run.done) == 0 {
-			m.Discard()
-			return errNothingAdopted
-		}
-		journaled = !m.Empty()
-		return m.Apply(inv.refs(ctx))
-	})
-	if err != nil && !journaled {
-		// Nothing was written that recovery could need, so the run takes its
-		// staging refs with it and leaves the account repo as it was.
-		inv.dropImporting(ctx, gitDir, runID, len(versions))
-	} else if err == nil {
-		inv.dropImporting(ctx, gitDir, runID, len(versions))
-	}
-	if errors.Is(err, errNothingAdopted) {
-		run.done = nil
-		return nil // every skill was refused; the run answers for them
-	}
-	if err != nil {
-		run.done = nil
-		return mutationFailure(err)
-	}
-	for _, c := range run.done {
-		c.state, c.reason = adoptAdopted, ""
-		run.step(phaseAdopt, c.entry.Name)
-	}
-	return nil
-}
-
-// errNothingAdopted ends the mutation of a run whose every skill was
-// refused under the lock, so that the lock is released without the version
-// file being rewritten: nothing changed, and nothing watching agentx home
-// has anything to read again.
-var errNothingAdopted = errors.New("no skill of the run could be adopted")
-
-// stageAdoption records the import branch, after reading under the lock
-// what the branch and the library directory hold now, and the directory
-// with the files the installer left out of it restored, when it lacks any.
-// Those files are the version's and no edit of the user's: left missing,
-// every one would read as a deletion the user made. The directory is
-// replaced by a copy of it with them written in, published by the same
-// mutation, as an install publishes one. A base established from what the
-// directory holds is checked again here: a directory edited between the
-// read and the lock would otherwise be adopted at a version it no longer
-// holds.
-func (inv *invocation) stageAdoption(ctx context.Context, m *home.Mutation, gitDir string, c *candidate, records map[string]lineage.Record) (*failure, error) {
-	exists, dir, err := libraryEntry(c.path)
-	if err != nil {
-		return nil, err
-	}
-	// What the event reports of the directory is what this read found,
-	// refused or not: content_hash is what the library holds now, and a
-	// candidate this leaves unadopted has no base version to be modified
-	// against.
-	if !exists || !dir {
-		c.hash, c.imported = "", nil
-		return refuse(exitRefused, c.path+" is no longer a directory the library holds",
-			"run 'agentx adopt' again to see what is there now"), nil
-	}
-	hash := contentHashAt(c.path)
-	left := installerLeftOut(c.path, c.imported)
-	if c.base.confirm && hash != c.imported.hashWithout(left) {
-		c.hash, c.imported = hash, nil
-		return refuse(exitRefused, c.path+" changed while it was being adopted",
-			"run 'agentx adopt' again: its base version has to be established from what the directory holds now"), nil
-	}
-	c.hash = hash
-	write, f := refPlan(c.imported, records, c.path, false)
-	if f != nil {
-		c.modified = !inv.holdsImported(ctx, gitDir, c.path, c.imported)
-		return f, nil
-	}
-	if write {
-		m.Ref(gitDir, lineage.ManagedRef(c.entry.Name), "", c.imported.commit)
-	}
-	// What the library holds once the run is done: the directory, with the
-	// files the installer left out restored when there are any. Modified
-	// is what skill list will say of the skill.
-	holding := c.path
-	if len(left) > 0 {
-		state, err := home.State(c.path)
-		if err != nil {
-			return nil, err
-		}
-		staged, fingerprint, err := stageRestore(m, c.path, left)
-		if err != nil {
-			inv.out.warn("cannot restore the files the Vercel skills CLI left out of " + c.path + ": " + err.Error() + "; the directory was left as it is")
-		} else {
-			m.Remove(c.path, state)
-			m.Publish(c.path, staged, fingerprint)
-			holding, hash, c.restored = staged, contentHashAt(staged), paths(left)
-		}
-	}
-	c.hash, c.modified = hash, !inv.holdsImported(ctx, gitDir, holding, c.imported)
-	return nil, nil
 }

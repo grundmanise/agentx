@@ -50,12 +50,6 @@ func treeVersion(tree string) version {
 	return version{load: tree, holds: func(id string) bool { return id == tree }}
 }
 
-// importedVersion is the version an adoption establishes, once its import
-// commit is written.
-func importedVersion(v *imported) version {
-	return version{load: v.commit + ":" + v.dir, holds: func(id string) bool { return treeid.Wrap(v.dir, id) == v.tree }}
-}
-
 // fastHolds decides without git that the directory read as t holds v. A
 // directory holding what git cannot record never does, as before git
 // decided anything.
@@ -200,26 +194,6 @@ type verdictKey struct {
 	id           string // the directory's tree id
 	load         string // the version it was compared with
 	ignoreSystem bool
-}
-
-// holdsImported is adoption's verdict on the directory at path against the
-// version it is adopted at, reached as a listing reaches its state, so the
-// two agree. A directory that cannot be read, or that git cannot compare,
-// does not hold it.
-func (inv *invocation) holdsImported(ctx context.Context, gitDir, path string, v *imported) bool {
-	real, err := filepath.EvalSymlinks(path)
-	if err != nil {
-		return false
-	}
-	tree, err := treeid.Read(real)
-	if err != nil {
-		return false
-	}
-	j, err := inv.judgeDir(ctx, gitDir, real, tree, importedVersion(v), false)
-	if err != nil {
-		inv.out.debugf("cannot compare %s with the version it is adopted at: %v", path, err)
-	}
-	return err == nil && j.holds
 }
 
 // stageVersion lays a version out at dest with lay and checks that what it
