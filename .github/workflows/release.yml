@@ -263,7 +263,8 @@ jobs:
           path: dist
           merge-multiple: true
 
-      # Tauri copies dist/agentx-<target> into the app as agentx.
+      # Tauri copies dist/agentx-<target> into the app as agentx. A universal build also compiles
+      # the app once per architecture, and each compile looks for dist/agentx-<its own target>.
       - name: Merge the CLI builds
         working-directory: dist
         run: |
@@ -271,6 +272,8 @@ jobs:
             mkdir "$arch"
             tar -xzf "agentx_darwin_$arch.tar.gz" -C "$arch" agentx
           done
+          cp amd64/agentx agentx-x86_64-apple-darwin
+          cp arm64/agentx agentx-aarch64-apple-darwin
           lipo -create amd64/agentx arm64/agentx -output "agentx-$TARGET"
           lipo -info "agentx-$TARGET"
 

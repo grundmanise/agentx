@@ -10,11 +10,12 @@ Linux and macOS on amd64 and arm64, and the desktop app for macOS as one univers
 inside it. It publishes the CLI archives, the app's disk image `agentx_desktop_darwin_universal.dmg`
 and their checksums to [GitHub Releases](https://github.com/grundmanise/agentx/releases).
 
-- **Nightly**: every night at 03:17 UTC, the workflow releases the head of `main` as a prerelease, such
+- **Nightly**: once a day, the workflow releases the head of `main` as a prerelease, such
   as `v0.3.0-nightly.20261001`, when `apps/cli` or `apps/desktop` changed since the last nightly and CI
   passed on it. The version is the next release the commits call for: a breaking change bumps the
   minor version (the major from 1.0 on), a `feat` or `change` the minor, anything else the patch. The
-  14 newest nightlies are kept.
+  14 newest nightlies are kept. The run is scheduled for 03:17 UTC, but GitHub starts scheduled runs
+  late when it is busy, often by several hours.
 - **Stable**: run the Release workflow by hand, from the Actions tab, once a nightly has proved good
   enough to promote. By default it promotes the newest nightly: it tags that nightly's commit, such as
   `v0.3.0`, and builds it again, so `agentx version` prints the release version. It also updates the
