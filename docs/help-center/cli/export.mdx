@@ -76,10 +76,10 @@ agentx import ~/snapshot.json
 Replace the settings in /home/me/.agentx/settings.json with those of my-laptop from /home/me/snapshot.json, and install, update and place its 4 skills? [y/N] y
 ✓ imported the settings of my-laptop from /home/me/snapshot.json
 4 skills in the snapshot: 1 installed, 1 updated, 1 kept, 1 skipped
-  pdf     managed    installed  https://github.com/example/skills/skills/pdf   placed in claude-code, codex
-  xlsx    managed    updated    https://github.com/example/skills/skills/xlsx  placed in claude-code
-  review  managed    kept       ssh://git@github.com/you/forks (account)       not placed
-  notes   unmanaged  skipped    (none)                                         not placed
+  pdf     managed    installed  https://github.com/example/skills/skills/pdf       placed in claude-code, codex
+  xlsx    managed    updated    https://github.com/example/skills/skills/xlsx      placed in claude-code
+  review  managed    kept       ssh://git@github.com/you/agentx-account (account)  not placed
+  notes   unmanaged  skipped    (none)                                             not placed
   skipped notes: notes is unmanaged, so there is no source to install it from
 ```
 
@@ -108,7 +108,7 @@ Codex and Gemini CLI read your library, so they see every skill in it, whatever 
 
 To install your own skills, import needs your account remote. The snapshot's settings bring it along.
 
-One repository can have more than one URL. Your laptop may reach your account remote over SSH, as `git@github.com:me/agentx-account.git`, while a cloud agent reaches it over HTTPS, as `https://github.com/me/agentx-account`, with a token that can only read. Import treats both as your account remote, because they have the same host and path. When the snapshot's account remote is the same repository as this machine's, import keeps this machine's URL, so each machine goes on reaching it its own way. When the snapshot names another repository, import switches this machine to that one. A host alias from your SSH configuration, such as `github-work`, does not count as the host it stands for here, because import reads no SSH configuration.
+One repository can have more than one URL. Your laptop may reach your account remote over SSH, as `git@github.com:you/agentx-account.git`, while a cloud agent reaches it over HTTPS, as `https://github.com/you/agentx-account`, with a token that can only read. Import treats both as your account remote, because they have the same host and path. When the snapshot's account remote is the same repository as this machine's, import keeps this machine's URL, so each machine goes on reaching it its own way. When the snapshot names another repository, import switches this machine to that one. A host alias from your SSH configuration, such as `github-work`, does not count as the host it stands for here, because import reads no SSH configuration.
 
 Each line of the listing says what import did with that skill:
 
