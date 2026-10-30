@@ -744,7 +744,7 @@ An icon is a hand-written React component that takes the text colour; an illustr
 
 Sizes: `xs` 14px, `sm` 15px, `md` 16px (the default), `lg` 18px.
 
-The product mark is `shell.logo-mark` on `shell.logo-bg`, 26px `shell.logo-radius` in the sidebar, 40px `startup.logo-radius` on the startup layer, with a 1px `shell.logo-ring` ring. Its SVG is also the source of the app icons: after changing it, run `pnpm tauri icon src/assets/agentx-mark.svg` and keep only the files `src-tauri/tauri.conf.json` lists. The SVG holds the two colours as hex values (`lime-400`, `gray-990`); change them together with the tokens.
+The product mark is `shell.logo-mark` on `shell.logo-bg`, 30px `shell.logo-radius` in the sidebar (the height of the product name and machine label beside it), 40px `startup.logo-radius` on the startup layer, with a 1px `shell.logo-ring` ring. Its SVG is also the source of the app icons: after changing it, run `pnpm tauri icon src/assets/agentx-mark.svg` and keep only the files `src-tauri/tauri.conf.json` lists. The SVG holds the two colours as hex values (`lime-400`, `gray-990`); change them together with the tokens.
 
 ## 8. Motion
 
