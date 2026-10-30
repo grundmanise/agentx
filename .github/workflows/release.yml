@@ -297,8 +297,14 @@ jobs:
             echo "::warning title=App not notarized::add the APPLE_API secrets, see RELEASING.md"
             unset APPLE_API_ISSUER APPLE_API_KEY
           else
+            # openssl rejects anything but a private key, and writes a valid one back as a clean
+            # .p8 file, so a pasting slip fails here with a message, before the build.
             export APPLE_API_KEY_PATH=$RUNNER_TEMP/AuthKey.p8
-            (umask 077 && printf '%s\n' "$APPLE_API_PRIVATE_KEY" > "$APPLE_API_KEY_PATH")
+            (umask 077 && printf '%s\n' "$APPLE_API_PRIVATE_KEY" > "$RUNNER_TEMP/AuthKey.raw")
+            if ! (umask 077 && openssl pkey -in "$RUNNER_TEMP/AuthKey.raw" -out "$APPLE_API_KEY_PATH" 2> /dev/null); then
+              echo "::error title=APPLE_API_PRIVATE_KEY is not a private key::paste the AuthKey_<key ID>.p8 file as it is, from -----BEGIN PRIVATE KEY----- to -----END PRIVATE KEY-----, see RELEASING.md"
+              exit 1
+            fi
             echo "notarized=true" >> "$GITHUB_OUTPUT"
           fi
           unset APPLE_API_PRIVATE_KEY

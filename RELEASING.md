@@ -56,8 +56,13 @@ To make the Apple secrets, with a membership of the Apple Developer Program:
 2. **API key.** In [App Store Connect](https://appstoreconnect.apple.com/access/integrations/api), open
    Users and Access → Integrations → App Store Connect API, and generate a team key with the Developer
    role. The issuer ID above the table is `APPLE_API_ISSUER` and the key's Key ID is `APPLE_API_KEY`.
-   Download the key, which Apple allows only once, and paste the whole `.p8` file, from
-   `-----BEGIN PRIVATE KEY-----` to `-----END PRIVATE KEY-----`, as `APPLE_API_PRIVATE_KEY`.
+   Download the key, which Apple allows only once, and paste the whole `.p8` file as plain text, from
+   `-----BEGIN PRIVATE KEY-----` to `-----END PRIVATE KEY-----`, as `APPLE_API_PRIVATE_KEY`. Unlike
+   the certificate, it goes in as it is:
+
+   ```sh
+   pbcopy < AuthKey_<key ID>.p8   # paste as APPLE_API_PRIVATE_KEY
+   ```
 
 To make the deploy key:
 
