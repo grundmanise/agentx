@@ -13,6 +13,44 @@ import (
 // RunE shows help, so its usage names no flags of its own.
 const annotationGroup = "agentx.group"
 
+// annotationSection names the help section a runnable command is listed
+// under, by the id of one of sections. A command without one is listed
+// under its parent's section.
+const annotationSection = "agentx.section"
+
+// annotationSynopsis is the arguments a command list shows after the
+// command's name, for a command whose Use line is too long for a row:
+// "<source>" for skill add. The Use line stays on the command's own page.
+const annotationSynopsis = "agentx.synopsis"
+
+// section is one heading of the command list, on the root page and on the
+// page of a group whose commands fall under it.
+type section struct{ id, title string }
+
+// sections is every heading, in the order the lists print them.
+var sections = []section{
+	{"skills", "Skills"},
+	{"updates", "Updates and publishing"},
+	{"sources", "Sources"},
+	{"machines", "Machines"},
+	{"settings", "Settings"},
+	{"diagnostics", "Inventory and diagnostics"},
+}
+
+// examples builds a command's Example text from pairs of a command line
+// and what it does: one example per line, the two parts separated by a
+// tab, which the help renderer aligns as two columns.
+func examples(pairs ...string) string {
+	if len(pairs)%2 != 0 {
+		panic("examples: a command line without a description")
+	}
+	var lines []string
+	for i := 0; i < len(pairs); i += 2 {
+		lines = append(lines, pairs[i]+"\t"+pairs[i+1])
+	}
+	return strings.Join(lines, "\n")
+}
+
 // help renders a command's help: its description, then its usage. Cobra's
 // default template is plain; this one paints section titles, command names
 // and flag names on a terminal and prints the same text bare elsewhere.
