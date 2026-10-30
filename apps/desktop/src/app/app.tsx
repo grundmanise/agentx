@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { ReactElement } from "react";
 import { Navigate, Outlet, Route, Routes, useNavigate } from "react-router";
 
 import { CommandPalette } from "#/app/command-palette.tsx";
@@ -11,8 +12,14 @@ import { TopBar } from "#/app/top-bar.tsx";
 import { Toaster } from "#/components/toast.tsx";
 import { setNavigate } from "#/lib/navigate.ts";
 import { PlaceholderScreen } from "#/screens/placeholder.tsx";
+import { SkillsScreen } from "#/screens/skills/skills-screen.tsx";
 import { launch, useStartup } from "#/startup/startup.ts";
 import { startLoaders } from "#/store/loaders.ts";
+
+/** The screens built so far, by route; the others show their placeholder. */
+const built: Record<string, ReactElement> = {
+  "/skills": <SkillsScreen />,
+};
 
 /** The screen of the current route, faded in; nothing until the startup checks pass. */
 const Screen = ({ ready }: { ready: boolean }) =>
@@ -90,7 +97,11 @@ export const App = () => {
                   <Route
                     key={s.path}
                     path={`${s.path}/*`}
-                    element={<PlaceholderScreen title={titles[s.path]} />}
+                    element={
+                      built[s.path] ?? (
+                        <PlaceholderScreen title={titles[s.path]} />
+                      )
+                    }
                   />
                 ))}
               </Route>

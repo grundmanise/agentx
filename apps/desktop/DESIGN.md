@@ -392,9 +392,11 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.secondary` | sans | 13 | 400 |  |  |  | Secondary line (`text.hint`) |
 | `type.button` | sans | 14 |  |  |  |  | Buttons; the variant sets the weight (600 primary, 500 others) |
 | `type.button-sm` | sans | 13.5 |  |  |  |  | Small buttons |
-| `type.pill` | sans | 11–12 | 600 |  |  |  | Pills |
+| `type.pill` | sans | 11.5 | 600 |  |  |  | Pills, the letter of a monogram logo |
+| `type.segment` | sans | 12.5 | 500 |  |  |  | Segmented control labels |
 | `type.caption` | mono | 10.5 | 400 |  | 0.16em | upper | Captions (`text.caption`) |
-| `type.technical` | mono | 12–13 | 400 |  |  |  | Paths, ids, dates, commands |
+| `type.technical` | mono | 12.5 | 400 |  |  |  | Paths, ids, dates, commands; a skill's origin in the detail header (`text.caption`) |
+| `type.technical-sm` | mono | 12 | 400 |  |  |  | Details values (`text.secondary`), file status in the History sheet, the count beside a group header |
 | `type.code` | mono | 12.5 | 400 | 1.75 |  |  | Code pane |
 | `type.brand` | sans | 14 | 600 |  | -0.01em |  | Product name in the sidebar |
 | `type.machine-label` | sans | 12 | 400 |  |  |  | Machine label under the product name (`text.muted`) |
@@ -406,6 +408,11 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.palette-footer` | sans | 12 | 400 |  |  |  | Palette footer (`text.hint`) |
 | `type.toast` | sans | 13.5 | 400 |  |  |  | Toast message |
 | `type.toast-action` | sans | 13 | 600 |  |  |  | Action inside a toast |
+| `type.detail-desc` | sans | 14.5 | 400 | 1.5 |  |  | Detail pane description (`text.muted`, `text-wrap:pretty`) |
+| `type.banner-title` | sans | 14 | 500 |  |  |  | Banner title (`banner.title`); its text is `type.secondary` in `banner.text` |
+| `type.agent-chip` | sans | 13 | 500 |  |  |  | Agent client name in a toggle chip |
+| `type.timeline-entry` | sans | 13.5 | 400 | 20px |  |  | Timeline entry subject (`text.primary`); its line height is `timeline.line`, so the dot beside it sits on the first line |
+| `type.timeline-meta` | sans | 12 | 400 |  |  |  | Timeline entry meta (`text.caption`) |
 | `type.notice` | sans | 13 | 400 | 1.5 |  |  | Stale bar text; hint and warnings in an error toast |
 
 Text wrapping: `text-wrap:pretty` on multi-line copy. Single-line cells use `white-space:nowrap; overflow:hidden; text-overflow:ellipsis`.
@@ -510,6 +517,8 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `logo.overlap` | −6 to −8 |  | Negative margin between stacked logos |
 | `logo.ring` | 2 | `ring-logo` | Ring width |
 | `logo.padding` | 3–5 |  | Inner padding by size (3 at 20px, 4 at 24–26, 5 at 28) |
+| `logo.padding-sm` | 3 | `p-logo-sm` | 16 and 20px logos |
+| `logo.padding-lg` | 5 | `p-logo-lg` | 28px logos |
 
 ### Inputs
 
@@ -550,7 +559,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `dialog.width` | 480 | `w-dialog` |  |
 | `dialog.padding` | 32 | `p-dialog` |  |
 | `dialog.gap` | 22 | `gap-dialog` | Between dialog blocks |
-| `popover.width` | 280–300 |  |  |
+| `popover.width` | 300 | `w-popover` | Filter popover |
 | `popover.padding` | 8–14 |  | 8 for row lists, 14 for grouped content |
 | `popover.gap` | 16 | `gap-popover` | Between groups |
 | `popover.row-height` | 32–34 |  |  |
@@ -589,6 +598,8 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `timeline.col` | 12 | `grid-cols-timeline` (with the text column) | Dot column |
 | `timeline.gap` | 12–16 |  | Dot → text |
 | `timeline.dot` | 7 | `size-timeline-dot` |  |
+| `timeline.line` | 20 | `h-timeline-line` | The box the dot is centred in beside a plain entry: the line height of `type.timeline-entry` |
+| `timeline.button-line` | 32 | `h-timeline-button-line` | The box the dot is centred in beside an entry whose first line is a wrapping small button (the expandable entries of the History sheet, the "Show all {n}" row): the button's top padding (6) plus one `timeline.line` |
 | `timeline.entry-gap` | 16–20 |  | Bottom padding per entry |
 | `check.column-width` | 480 | `w-check-column` | Startup column |
 | `check.block-gap` | 36 | `gap-check-block` | Logo/title → checks → actions |
@@ -619,7 +630,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `input.search-radius` | 9999 | Search field |
 | `row.radius` | 12 | Split list rows |
 | `table.row-radius` | 14 | Server rows |
-| `popover.row-radius` | 9–10 | Popover rows, Reset button |
+| `popover.row-radius` | 10 | Popover rows, Reset button |
 | `card.radius` | 18 | Inbox cards, review file cards |
 | `card.tile-radius` | 10 | Icon tile |
 | `file-card.radius` | 16 | File tree card |
@@ -630,7 +641,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `hunk.radius` | 14 | Hunk block |
 | `hunk.pane-radius` | 10 | Yours / theirs panes (outer corners only) |
 | `diff.segment-radius` | 4 | Progress segment |
-| `popover.radius` | 16–18 |  |
+| `popover.radius` | 16 |  |
 | `dialog.radius` | 24 |  |
 | `sheet.radius` | 20 |  |
 | `palette.radius` | 20 |  |
@@ -650,6 +661,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 - **Primary** – `button.primary-height` / 0 `button.primary-padding-x` / `button.primary-bg`, `button.primary-text`, 600; hover `button.primary-hover`. Disabled: `opacity:.3` and inert (never a grey fill).
 - **Secondary** – `button.secondary-height` / 0 `button.secondary-padding-x` / `button.secondary-bg`, `button.secondary-text`, 500; hover `button.secondary-hover`.
 - **Ghost** – `button.ghost-height` / 0 `button.ghost-padding-x` / transparent, `button.ghost-text` (or `text.muted`); hover `button.ghost-hover`, `text.primary`.
+- **Small, wrapping** – a small button whose label is a sentence (a commit's subject in the History sheet, "Show all {n}"): at least 34 high, 6 `button.ghost-padding-x`, left-aligned, the label wraps in `timeline.line` lines and the button grows with them; never clipped, never scrolled.
 - **Danger** – ghost in `button.danger-text`; hover `button.danger-hover`.
 - **Icon** – `button.icon-size` square, `button.radius` or `button.icon-radius`, transparent; hover `button.ghost-hover`.
 - **Toast action** – ghost with `button.toast-action-text` on `overlay.bg`.
@@ -665,6 +677,7 @@ Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, 11–12 / 600.
 - Removed from source: `pill.removed-bg` / `pill.removed-text`.
 - Disabled (plugin): `pill.disabled-bg` / `pill.disabled-text`.
 - Version (plugin): `pill.version-bg` / `pill.version-text`, mono 12.
+- Fork (on the original of a fork made under a new name, in the detail header): `pill.neutral-bg` / `pill.neutral-text`, the 12px fork glyph in the text colour, then the fork's name; hover `pill.neutral-hover`. `title` "Forked as {fork name}"; a click opens the fork. One pill per fork.
 
 ### Switch
 
@@ -691,6 +704,7 @@ Round, `logo.bg`, `padding:3–4px`, `background-size:contain`, logo from an ima
 - dot (filled) – a skill of a shared source; `glyph.enabled` when enabled, `glyph.off` when not.
 - pencil – edited locally; `glyph.edited`.
 - fork – one of your own skills; `glyph.enabled` when enabled and published, `glyph.off` otherwise. `title` explains the state ("Your skill · Enabled", "Edited locally · Not in any agent client").
+- fork marker (12px, after the pills of a row) – the original of a fork made under a new name, in `text.caption`, one per fork; `title` "Forked as {fork name}". A marker, not a control: the fork is listed once, in YOUR SKILLS.
 
 ### Group header (lists)
 
@@ -722,7 +736,19 @@ The machine's label from the inventory, under the product name in the sidebar: `
 
 ### Timeline (history)
 
-Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot` round (`timeline.dot-install`, `timeline.dot-update`, `timeline.dot-yours` by entry kind), a 1px `timeline.connector` below it. Entry: message 14 `text.primary`, meta 12 `timeline.meta`. Final item when truncated: hollow dot (inset ring 1.5px `timeline.more-ring`) and a ghost button "Show all {n}".
+Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot` round (`timeline.dot-install` for an upstream import, `timeline.dot-update` for a commit made with Git, `timeline.dot-yours` for one agentx wrote), centred in a box as high as the entry's first line (`timeline.line` beside the subject text, `timeline.button-line` beside a small button), a 1px `timeline.connector` from the bottom of that box to the next entry. Entry: subject `type.timeline-entry` in `text.primary`, meta `type.timeline-meta` in `timeline.meta` ("{date} · {n} files", then "made with Git" or "from the original"). Final item when truncated: hollow dot (inset ring 1.5px `timeline.more-ring`) and a ghost button "Show all {n}", which opens the History sheet.
+
+### Popover (Filter)
+
+`popover.width`, `popover.radius`, `overlay.bg` with 1px `overlay.border` and `popover.shadow`, 14px padding, `popover.gap` between its groups, `popover.offset` below its anchor. Each group opens with a caption in `popover.caption`. SHOW is a row of pills (`type.secondary`, count in `type.technical-sm` `text.caption`; the chosen one `button.secondary-bg` and `text.primary`), STATE a segmented control, AGENTS rows of `popover.row-radius` with the round checkbox, a 20px logo and the name. Reset filters is a ghost button, shown while a filter is applied. A click outside or Escape closes it.
+
+### Sheet (History)
+
+`sheet.width`, inset `sheet.inset` from the top, right and bottom, `sheet.bg` with 1px `sheet.border`, `sheet.radius`, `overlay.shadow`, `sheet.padding`, over `shell.scrim`. Title in `type.dialog-title`, the subject's name under it in `type.technical` `text.caption`, a ghost Close at the top right. Escape or Close closes it. Its content scrolls down only: a long line wraps, it never clips or scrolls sideways.
+
+### Agent client logo chip, monogram
+
+A client with no bundled logo shows the first letter of its name in `type.pill`, `on-accent` on `logo.bg`, drawn as an image like every other logo.
 
 ### Code pane
 

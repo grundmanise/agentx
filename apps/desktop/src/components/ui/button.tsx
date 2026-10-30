@@ -2,16 +2,21 @@ import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
 import type { ComponentProps } from "react";
 
-// DESIGN.md §6 "Buttons". Disabled is 30% opacity and inert, never a grey fill.
+// DESIGN.md §6 "Buttons". Disabled is 30% opacity and inert, never a grey fill. A button is one
+// line, except `sm-wrap`: a small button whose label wraps, as tall as its lines, for a label that
+// is a sentence (a commit's subject in the History sheet).
 const buttonVariants = cva(
-  "rounded-button inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap transition-opacity duration-200 disabled:pointer-events-none disabled:opacity-30",
+  "rounded-button inline-flex shrink-0 gap-2 transition-opacity duration-200 disabled:pointer-events-none disabled:opacity-30",
   {
     defaultVariants: { size: "default", variant: "secondary" },
     variants: {
       size: {
-        default: "type-button h-9.5 px-4",
-        icon: "type-button size-8 p-0",
-        sm: "type-button-sm h-8.5 px-3.5",
+        default:
+          "type-button h-9.5 items-center justify-center px-4 whitespace-nowrap",
+        icon: "type-button size-8 items-center justify-center p-0 whitespace-nowrap",
+        sm: "type-button-sm h-8.5 items-center justify-center px-3.5 whitespace-nowrap",
+        "sm-wrap":
+          "type-button-sm min-h-8.5 items-start justify-start px-3.5 py-1.5 text-left whitespace-normal",
       },
       variant: {
         danger:
