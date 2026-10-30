@@ -201,7 +201,7 @@ func (inv *invocation) skillshareConfig() (skillshare.Config, error) {
 // and can make nothing of.
 func recordFailure(err error) error {
 	if errors.Is(err, vercel.ErrLock) || errors.Is(err, skillshare.ErrStore) {
-		return fail(exitInternal, err.Error(), "fix the file or move it aside; agentx never writes it")
+		return fail(exitInternal, err.Error(), "fix the file or move it aside")
 	}
 	return fail(exitInternal, err.Error(), "check that the file is readable")
 }

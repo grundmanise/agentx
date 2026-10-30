@@ -469,7 +469,7 @@ func (inv *invocation) pushShared(ctx context.Context, p *sharedPublish) error {
 			again+", which checks the source first and says what to do when it changed "+p.name)
 	case class == gitx.PushDeclined:
 		outcome, f = publishDeclined, refuse(exitRefused, shownURL(url)+" declined "+p.branch+": "+sanitised(reason),
-			"agentx never forces a push; once "+shownURL(url)+" takes it, "+again)
+			"once "+shownURL(url)+" takes it, "+again)
 	case class == gitx.PushDenied:
 		outcome, f = publishDenied, refuse(exitSource, shownURL(url)+" did not let this machine push "+p.branch+": "+sanitised(reason),
 			deniedHint(gitx.DeniedFix(reason))+", then "+again)

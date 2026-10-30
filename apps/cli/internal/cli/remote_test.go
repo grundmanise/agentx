@@ -228,7 +228,7 @@ func TestPublishNeverMerges(t *testing.T) {
 	equal(t, "its outcome", b.one(out.stdout, "publish")["outcome"], publishDeclined)
 	e = b.one(out.stdout, "error")
 	equal(t, "its message", e["message"], "the account remote declined skills/alpha: pre-receive hook declined: no pushes on Fridays")
-	contains(t, "its hint", e["hint"].(string), "agentx never forces a push")
+	equal(t, "its hint", e["hint"], "once the account remote takes it, run 'agentx skill publish alpha' again")
 	if strings.Contains(e["hint"].(string), "skill update") {
 		t.Errorf("a declined push's hint names the update: %q", e["hint"])
 	}

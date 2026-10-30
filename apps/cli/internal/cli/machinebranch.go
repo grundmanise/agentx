@@ -194,10 +194,10 @@ func (inv *invocation) pushSnapshot(ctx context.Context, b machineBranch, snap s
 		return commit, true, nil
 	case class == gitx.PushMoved:
 		return "", false, fail(exitRefused, branch+" on the account remote changed since it was read, so nothing was pushed",
-			run+": it reads "+branch+" again first; agentx never forces a push")
+			run+": it reads "+branch+" again first")
 	case class == gitx.PushDeclined:
 		return "", false, fail(exitRefused, "the account remote declined "+branch+": "+sanitised(reason),
-			"agentx never forces a push; once the account remote takes it, "+run)
+			"once the account remote takes it, "+run)
 	case class == gitx.PushDenied:
 		return "", false, fail(exitSource, "the account remote "+shownURL(b.url)+" did not let this machine push "+branch+": "+sanitised(reason),
 			deniedHint(gitx.DeniedFix(reason))+", then "+run)
