@@ -490,6 +490,24 @@ test.describe("the detail pane", () => {
       .getByRole("listitem");
     await expect(entries).toHaveCount(5);
     await expect(entries.last()).toContainText("from the original");
+    // A long subject wraps inside the sheet; the sheet never scrolls sideways.
+    const long = sheet.getByRole("button", {
+      name: "pdf-letters: edit SKILL.md and add examples.md (studio-mac)",
+    });
+    const line = await long.evaluate((el) => el.getBoundingClientRect().height);
+    expect(line).toBeGreaterThan(40);
+    const sideways = async () =>
+      await sheet.getByRole("list", { name: "All history" }).evaluate((el) => {
+        const box = el.parentElement;
+        return box === null ? -1 : box.scrollWidth - box.clientWidth;
+      });
+    expect(await sideways()).toBe(0);
+    await long.click();
+    await expect(
+      sheet.getByRole("list", { name: /^Files of pdf-letters: edit/u })
+    ).toBeVisible();
+    expect(await sideways()).toBe(0);
+    await long.click();
     await sheet
       .getByRole("button", { name: "Import pdf from acme/skills" })
       .click();

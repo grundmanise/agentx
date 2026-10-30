@@ -34,15 +34,16 @@ const files = (n: number) => (n === 1 ? "1 file" : `${n} files`);
 
 /**
  * The dot column of a timeline entry: `children` (the dot) centred in a box as high as the
- * entry's first line, a line of text or a small button, then the connector down to the next
- * entry, so every dot sits on its entry's first line and the line stays continuous.
+ * entry's first line, a line of text or the first line of a wrapping small button, then the
+ * connector down to the next entry, so every dot sits on its entry's first line and the line
+ * stays continuous.
  */
 const DotColumn = ({
   button,
   last,
   children,
 }: {
-  /** The first line beside the dot is a small button, not a line of text. */
+  /** The first line beside the dot is the first line of a wrapping small button, not plain text. */
   button: boolean;
   last: boolean;
   children: ReactNode;
@@ -116,19 +117,22 @@ const Entry = ({
         }
       >
         {expandable ? (
-          <div className="-ml-3.5 flex">
+          // A block, so the button shrinks to fit the column and its subject wraps inside it.
+          <div className="-ml-3.5">
             <Button
               variant="ghost"
-              size="sm"
+              size="sm-wrap"
               aria-expanded={open}
               onClick={() => {
                 setOpen((o) => !o);
               }}
             >
-              <span className={open ? "flex rotate-90" : "flex"}>
-                <ChevronIcon size="xs" />
+              <span className="h-timeline-line flex flex-none items-center">
+                <span className={open ? "flex rotate-90" : "flex"}>
+                  <ChevronIcon size="xs" />
+                </span>
               </span>
-              <span className="type-timeline-entry text-text-primary truncate">
+              <span className="type-timeline-entry text-text-primary">
                 {entry.subject}
               </span>
             </Button>
@@ -260,7 +264,7 @@ export const HistorySection = ({ row }: { row: SkillRow }) => {
             <div className="flex">
               <Button
                 variant="ghost"
-                size="sm"
+                size="sm-wrap"
                 onClick={() => {
                   setSheetOpen(true);
                 }}
