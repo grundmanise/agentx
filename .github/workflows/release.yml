@@ -145,7 +145,7 @@ jobs:
           git checkout -q "$sha"
           {
             if [ "$CHANNEL" = nightly ]; then
-              echo "Nightly build of main at $short. Install the CLI with \`curl -fsSL https://agentx.wtf/install | sh -s -- --nightly\`, or download the macOS app, \`agentx_desktop_darwin_universal.dmg\`, below."
+              echo "Nightly build of main at $short. Install the CLI with \`curl -fsSL https://agentx.wtf/install | sh -s -- --nightly\`, or download the macOS app, \`agentx_desktop_darwin_arm64.dmg\`, below."
               echo
             fi
             notes=$(git-cliff --config "$RUNNER_TEMP/cliff.toml" ${previous:+"$previous..HEAD"} | sed '/./,$!d')
@@ -181,7 +181,6 @@ jobs:
         include:
           - { goos: linux, goarch: amd64, runner: ubuntu-latest }
           - { goos: linux, goarch: arm64, runner: ubuntu-latest }
-          - { goos: darwin, goarch: amd64, runner: macos-latest }
           - { goos: darwin, goarch: arm64, runner: macos-latest }
     runs-on: ${{ matrix.runner }}
     env:
@@ -200,7 +199,6 @@ jobs:
           cache: false
 
       # Static on Linux; cgo on macOS for the FSEvents watcher, as in the Makefile.
-      # Both macOS architectures build on one runner: Go passes -arch to clang.
       - name: Build
         env:
           GOOS: ${{ matrix.goos }}
@@ -229,15 +227,15 @@ jobs:
           path: dist/${{ env.NAME }}.tar.gz
           if-no-files-found: error
 
-  # One universal app for Apple silicon and Intel Macs. The CLI goes inside the app, next to its
-  # executable, where a release build of the app looks for it: the two Mac builds above, merged.
+  # The app for Apple silicon Macs. The CLI goes inside the app, next to its executable, where a
+  # release build of the app looks for it: the darwin/arm64 build above.
   desktop:
     name: Build the macOS app
     needs: [plan, build]
     runs-on: macos-latest
     env:
       VERSION: ${{ needs.plan.outputs.version }}
-      TARGET: universal-apple-darwin
+      TARGET: aarch64-apple-darwin
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -254,25 +252,21 @@ jobs:
 
       - name: Install Rust
         run: |
-          rustup toolchain install stable --profile minimal --target aarch64-apple-darwin,x86_64-apple-darwin
+          rustup toolchain install stable --profile minimal --target "$TARGET"
           rustup default stable
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: agentx_darwin_*
+          pattern: agentx_darwin_arm64
           path: dist
           merge-multiple: true
 
       # Tauri copies dist/agentx-<target> into the app as agentx.
-      - name: Merge the CLI builds
+      - name: Unpack the CLI
         working-directory: dist
         run: |
-          for arch in amd64 arm64; do
-            mkdir "$arch"
-            tar -xzf "agentx_darwin_$arch.tar.gz" -C "$arch" agentx
-          done
-          lipo -create amd64/agentx arm64/agentx -output "agentx-$TARGET"
-          lipo -info "agentx-$TARGET"
+          tar -xzf agentx_darwin_arm64.tar.gz agentx
+          mv agentx "agentx-$TARGET"
 
       - run: pnpm install --frozen-lockfile
 
@@ -313,7 +307,7 @@ jobs:
           pnpm tauri build --target "$TARGET" --bundles app,dmg --config "$config"
 
       # The release asset has no version in its name, like the CLI archives, so
-      # releases/latest/download/agentx_desktop_darwin_universal.dmg always gets the newest.
+      # releases/latest/download/agentx_desktop_darwin_arm64.dmg always gets the newest.
       - name: Check the app
         working-directory: apps/desktop/src-tauri/target/${{ env.TARGET }}/release/bundle
         env:
@@ -327,12 +321,12 @@ jobs:
             spctl --assess --type execute --verbose=2 "$app"
           fi
           mkdir "$RUNNER_TEMP/app"
-          mv dmg/*.dmg "$RUNNER_TEMP/app/agentx_desktop_darwin_universal.dmg"
+          mv dmg/*.dmg "$RUNNER_TEMP/app/agentx_desktop_darwin_arm64.dmg"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: agentx_desktop_darwin_universal
-          path: ${{ runner.temp }}/app/agentx_desktop_darwin_universal.dmg
+          name: agentx_desktop_darwin_arm64
+          path: ${{ runner.temp }}/app/agentx_desktop_darwin_arm64.dmg
           if-no-files-found: error
 
   publish:
