@@ -279,7 +279,7 @@ func TestExportHelpNamesTheMachineAndTheFile(t *testing.T) {
 		out := h.run(args...)
 		equal(t, strings.Join(args, " ")+": exit", out.exit, 0)
 		contains(t, "stdout", out.stdout, "The snapshot goes to the library, as snapshot.json or as <name>.json:\n  "+h.snapshotPath(defaultSnapshot)+"\n")
-		contains(t, "stdout", out.stdout, "'agentx machine' prints this machine's id: "+id+".\n")
+		contains(t, "stdout", out.stdout, "Use this machine's id ("+id+") to keep a\n")
 		contains(t, "stdout", out.stdout, "Usage:\n  agentx export [<name> | --machine <id>] [flags]\n")
 	}
 }

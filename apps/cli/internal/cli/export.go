@@ -222,7 +222,7 @@ func newExportCommand(inv *invocation) *cobra.Command {
 // which generates it.
 func (inv *invocation) exportHelp() string {
 	file := "  snapshot.json in the library\n"
-	id := "'agentx machine' generates and prints this machine's id.\n"
+	id := "'agentx machine' prints it"
 	dirs := inv.dirs
 	if dirs.Home == "" {
 		dirs, _ = home.Resolve(inv.env)
@@ -232,19 +232,18 @@ func (inv *invocation) exportHelp() string {
 	}
 	if dirs.Home != "" {
 		if known, err := home.KnownMachineID(dirs.Home, inv.env); err == nil && known != "" {
-			id = "'agentx machine' prints this machine's id: " + known + ".\n"
+			id = known
 		}
 	}
-	return "Write a snapshot of this machine: its settings, its agent configurations, its\n" +
-		"skills with their source, version and placements, and its MCP servers and\n" +
-		"plugins. Skill content stays out of it: 'agentx import' installs each skill\n" +
-		"again from its source.\n\n" +
+	return "Write a snapshot of this machine: its settings, agent configurations, skill\n" +
+		"list, versions and placements, and its MCP servers and plugins. Use 'agentx\n" +
+		"import' to restore from the snapshot.\n\n" +
 		"The snapshot goes to the library, as snapshot.json or as <name>.json:\n" +
 		file + "\n" +
-		"With --machine <id>, it goes to the branch machines/<id> of the account remote\n" +
-		"instead, as one pushed commit. Use this machine's id to keep a backup there.\n" +
-		"Use cloud, or another computer's id, to give that machine these skills.\n" +
-		id + "\n" +
+		"With --machine <id>, it is committed to the branch machines/<id> of the account\n" +
+		"remote. Use this machine's id (" + id + ") to keep a\n" +
+		"backup on the remote. Use 'cloud', or another computer's id, to sync this\n" +
+		"machine with another.\n\n" +
 		"The snapshot keeps each MCP server's command, arguments and URL as written,\n" +
 		"which can hold a token. Keep it private."
 }
