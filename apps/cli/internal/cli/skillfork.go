@@ -21,8 +21,9 @@ import (
 func newSkillForkCommand(inv *invocation) *cobra.Command {
 	var newName string
 	cmd := &cobra.Command{
-		Use:   "fork <name>",
-		Short: "Fork a skill into one of your own, with a history you can publish",
+		Use:         "fork <name>",
+		Short:       "Fork a skill into one of your own, with a history",
+		Annotations: map[string]string{annotationSection: "skills"},
 		Long: "Fork the skill called <name>: a skill of a shared source, an unmanaged one, a\n" +
 			"skill a plugin provides, or one of your own. The fork is one of your own skills:\n" +
 			"a managed skill whose source is your account remote, which 'agentx skill\n" +
@@ -43,6 +44,11 @@ func newSkillForkCommand(inv *invocation) *cobra.Command {
 			"them and reads current.\n\n" +
 			"Name a plugin's skill as <plugin>:<skill> when several plugins provide one of\n" +
 			"that name. Files git ignores are never committed.",
+		Example: examples(
+			"agentx skill fork pdf", "fork in place: the fork takes over the placements",
+			"agentx skill fork pdf --name my-pdf", "fork beside it, under a new name",
+			"agentx skill fork formatter:format", "fork a plugin's skill when several provide the name",
+		),
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return inv.skillFork(cmd.Context(), args[0], newName)

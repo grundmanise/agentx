@@ -12,8 +12,9 @@ import (
 func newSkillListCommand(inv *invocation) *cobra.Command {
 	var remote bool
 	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List the skills in the library with their sources and placements",
+		Use:         "list",
+		Short:       "List the library: sources, states and placements",
+		Annotations: map[string]string{annotationSection: "skills"},
 		Long: "List the skills in the library: each one's kind, state, source (where it is\n" +
 			"published to, and for one of your own forked from a skill of a shared source,\n" +
 			"the upstream it came from) and placements. With --remote, fetch the account\n" +
@@ -22,6 +23,10 @@ func newSkillListCommand(inv *invocation) *cobra.Command {
 			"with 'agentx skill add --all'. A managed skill reads modified while it holds\n" +
 			"edits not yet published, whatever its source; 'agentx skill diff <name>' shows\n" +
 			"them and 'agentx skill publish <name>' publishes them.",
+		Example: examples(
+			"agentx skill list", "every skill with its source, state and placements",
+			"agentx skill list --remote", "also the account remote's skills not installed here",
+		),
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error { return inv.skillList(cmd.Context(), remote) },
 	}
