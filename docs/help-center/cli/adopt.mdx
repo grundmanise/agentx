@@ -81,6 +81,10 @@ agentx adopt --skill pdf
 
 Skillshare keeps its own copy of each skill in its folder, `~/.config/skillshare/skills` by default. agentx never touches that folder, so your edits there stay.
 
+## After adopting from the Vercel skills CLI
+
+The Vercel skills CLI installs into `~/.agents/skills`, the library itself, and links your clients' folders to it, so after adopting nothing else moves: the library directory is agentx's, and the links are the placements. Stop using that CLI for the adopted skills. Good to know: `skills update` rewrites the library directory with the newest upstream version, which agentx then shows as `modified` against the version it installed; `skills remove` deletes the directory and its lock entry, and `agentx skill list` then names the `agentx skill add` command that installs the skill again.
+
 ## After adopting from Skillshare
 
 Adopting moves a skill to agentx completely: the library gets a real directory, and Skillshare's links in your clients' folders, such as `~/.claude/skills/pdf`, become links to the library. You are done with Skillshare for that skill. Uninstall Skillshare, or stop running it, and leave its folder as it is or delete it.

@@ -67,15 +67,27 @@ func (h *harness) lockUnchanged(path string, want []byte) {
 	}
 }
 
-// vercelInstall lays a skill out in the library the way the Vercel skills
-// CLI does: a plain directory copy of the source's files, with nothing
-// anywhere that says where it came from but the lock file.
+// vercelInstall lays a skill out the way the Vercel skills CLI does: a
+// plain directory copy of the source's files in the library, with nothing
+// anywhere that says where it came from but the lock file, and in each
+// client's folder a relative symlink to that directory.
 func vercelInstall(t *testing.T, h *harness, s *sourceRepo, subpath, name string) {
 	t.Helper()
 	if err := os.MkdirAll(h.library, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := copyTreeTo(filepath.Join(s.work, subpath), filepath.Join(h.library, name)); err != nil {
+		t.Fatal(err)
+	}
+	client := filepath.Join(h.home, ".claude", "skills")
+	if err := os.MkdirAll(client, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rel, err := filepath.Rel(client, filepath.Join(h.library, name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(rel, filepath.Join(client, name)); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -186,9 +198,15 @@ func TestAdoptInstallsTheVersionTheSourceHoldsNow(t *testing.T) {
 		t.Errorf("progress phases = %v, want %s", phases, adoptPhases)
 	}
 	contains(t, "the summary", h.one(out.stdout, "result")["summary"].(string), "adopted alpha from "+s.url)
-	if _, err := os.Readlink(filepath.Join(h.home, ".claude", "skills", "alpha")); err != nil {
-		t.Errorf("the skill was not placed in the client: %v", err)
+	// The Vercel CLI's link in the client's folder already leads to the
+	// library directory, so it is the placement, kept as it is.
+	if link, err := os.Readlink(filepath.Join(h.home, ".claude", "skills", "alpha")); err != nil || filepath.IsAbs(link) {
+		t.Errorf("the client's link is %q (%v), want the Vercel CLI's relative link kept", link, err)
 	}
+	if strings.Contains(out.stderr, "no placement was made") {
+		t.Errorf("the Vercel CLI's link was not taken as the placement:\n%s", out.stderr)
+	}
+	equal(t, "placements", len(installed["placements"].([]any)), 1)
 
 	preview := h.run("--json", "adopt")
 	equal(t, "exit", preview.exit, 0)
