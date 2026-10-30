@@ -97,5 +97,11 @@ export const CLI_COMMANDS: Readonly<Record<string, CliFlags>> = {
   "source list": {},
   "source remove": {},
   "source skills": {},
+  update: {
+    check: false,
+    nightly: false,
+    stable: false,
+    version: true,
+  },
   version: {},
 };

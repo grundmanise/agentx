@@ -23,5 +23,5 @@ The CLI needs binaries people can install, a nightly channel for early testers a
 
 - A pull request's title decides its place in the release notes, so the types in `CONTRIBUTING.md` carry meaning: `feat` for something new, `change` for a change to an existing feature, `fix` for a bug fix.
 - Stable releases need a maintainer to run the workflow; nothing is released on merge.
-- Updating is running the install script again or `brew upgrade`. An `agentx upgrade` command can reuse the same release files later.
+- Updating is `agentx update`, which reuses the same release files and checksums as the install script, or running the script again, or `brew upgrade` for a Homebrew install, which `agentx update` refuses.
 - Homebrew installs take about a minute, since they build from source. Once the binaries are signed and notarized, the tap can switch to a cask of the release binaries.

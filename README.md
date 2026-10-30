@@ -53,8 +53,9 @@ Or with the install script, which puts the latest release in `~/.local/bin`:
 curl -fsSL https://agentx.wtf/install | sh
 ```
 
-For the newest nightly build, end the command with `sh -s -- --nightly`. See
-[Install and update](https://docs.agentx.wtf/install) for updates, options and uninstalling.
+For the newest nightly build, end the command with `sh -s -- --nightly`. Later, `agentx update` gets
+the newest release. See [Install and update](https://docs.agentx.wtf/install) for options and
+uninstalling.
 
 To build from source instead, use Go `1.27` or later:
 
