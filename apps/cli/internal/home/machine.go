@@ -34,9 +34,7 @@ func MachineID(dir string, env map[string]string, u RefUpdater) (id, derivation 
 		return id, DerivedRandom, err
 	}
 	if pid := platformID(env); pid != "" {
-		mac := hmac.New(sha256.New, []byte("agentx-machine-id/v1"))
-		fmt.Fprintf(mac, "%s\n%d", pid, os.Getuid())
-		return hex.EncodeToString(mac.Sum(nil))[:32], DerivedPlatform, nil
+		return platformMachineID(pid), DerivedPlatform, nil
 	}
 	err = mutate(dir, u, quick(dir), false, func() error { // the file is derived state: no version bump
 		if id, err = storedMachineID(dir); id != "" || err != nil { // stored meanwhile by another command
@@ -46,6 +44,27 @@ func MachineID(dir string, env map[string]string, u RefUpdater) (id, derivation 
 		return err
 	})
 	return id, DerivedRandom, err
+}
+
+// KnownMachineID is the id MachineID returns when it has nothing to write:
+// the stored one, else the platform one, else "" for a machine whose id
+// would have to be generated first. Help text reads it, so that printing
+// help takes no lock and creates no file.
+func KnownMachineID(dir string, env map[string]string) (string, error) {
+	if id, err := storedMachineID(dir); id != "" || err != nil {
+		return id, err
+	}
+	if pid := platformID(env); pid != "" {
+		return platformMachineID(pid), nil
+	}
+	return "", nil
+}
+
+// platformMachineID derives the machine id from the platform id and the uid.
+func platformMachineID(pid string) string {
+	mac := hmac.New(sha256.New, []byte("agentx-machine-id/v1"))
+	fmt.Fprintf(mac, "%s\n%d", pid, os.Getuid())
+	return hex.EncodeToString(mac.Sum(nil))[:32]
 }
 
 // storedMachineID reads the id in machine.json; a missing file is "" and no error.

@@ -11,10 +11,24 @@ import (
 	"testing"
 )
 
-// exportPath is a path for an export file beside the harness directories,
-// outside agentx home and outside the library.
+// exportPath is a path for a snapshot file a test writes by hand, beside
+// the harness directories, outside agentx home and outside the library.
 func (h *harness) exportPath(name string) string {
 	return filepath.Join(filepath.Dir(h.home), name)
+}
+
+// snapshotPath is the file export writes the snapshot named name to:
+// <name>.json in the library.
+func (h *harness) snapshotPath(name string) string {
+	return filepath.Join(h.library, name+".json")
+}
+
+// exportSnapshot exports the snapshot named name and returns the file it
+// wrote.
+func (h *harness) exportSnapshot(name string) string {
+	h.t.Helper()
+	h.mustRun("export", name)
+	return h.snapshotPath(name)
 }
 
 // readExportFile reads an export document as a map, which is what the
@@ -68,8 +82,8 @@ func TestExportCarriesCoordinatesAndNoContent(t *testing.T) {
 	equal(t, "source add", h.run("source", "add", s.url).exit, 0)
 	equal(t, "skill add", h.run("skill", "add", s.url, "--name", "keeper").exit, 0)
 
-	file := h.exportPath("export.json")
-	out := h.run("--json", "export", file)
+	file := h.snapshotPath(defaultSnapshot)
+	out := h.run("--json", "export")
 	equal(t, "exit", out.exit, 0)
 	ev := h.one(out.stdout, "export")
 	equal(t, "export.path", ev["path"], file)
@@ -153,9 +167,9 @@ func TestExportListsTheLibraryWithItsPlacements(t *testing.T) {
 	}
 	writeFile(t, filepath.Join(byHand, "SKILL.md"), "---\nname: mine\ndescription: made here\n---\n\nmine\n")
 
-	first, second := h.exportPath("first.json"), h.exportPath("second.json")
-	equal(t, "first", h.run("export", first).exit, 0)
-	equal(t, "second", h.run("export", second).exit, 0)
+	// The first snapshot is in the library when the second is taken, and is
+	// no skill of it.
+	first, second := h.exportSnapshot("first"), h.exportSnapshot("second")
 	if a, b := readText(t, first), readText(t, second); a != b {
 		t.Errorf("two exports of one machine differ:\n%s\n%s", a, b)
 	}
@@ -188,18 +202,22 @@ func TestExportListsTheLibraryWithItsPlacements(t *testing.T) {
 }
 
 // TestExportWithoutAnAccountRepo is a machine that has installed nothing:
-// the settings are exported, the listing is empty, and no account repo is
-// created to answer the question.
+// the settings are exported, the listing is empty, no account repo is
+// created to answer the question, and the library, which such a machine
+// has none of yet, is created for the file.
 func TestExportWithoutAnAccountRepo(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	equal(t, "label", h.run("config", "set", "label", "fresh").exit, 0)
+	if err := os.RemoveAll(h.library); err != nil {
+		t.Fatal(err)
+	}
 
-	file := h.exportPath("export.json")
-	out := h.run("export", file)
+	file := h.snapshotPath(defaultSnapshot)
+	out := h.run("export")
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "exported the settings and 0 skills")
+	contains(t, "stdout", out.stdout, "exported the settings and 0 skills to "+file)
 	doc := h.readExportFile(file)
 	equal(t, "entries", len(doc["skills"].([]any)), 0)
 	equal(t, "label", doc["settings"].(map[string]any)["label"], "fresh")
@@ -208,15 +226,62 @@ func TestExportWithoutAnAccountRepo(t *testing.T) {
 	}
 }
 
-// TestExportRefusesAPathItCannotWrite names the directory rather than
-// leaving the user with git's or the operating system's words.
-func TestExportRefusesAPathItCannotWrite(t *testing.T) {
+// TestSnapshotName pins what a snapshot's name may be: a file name with no
+// extension, which export completes with .json, and no path, which would
+// take the file out of the library.
+func TestSnapshotName(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		ok   bool
+	}{
+		{"snapshot", true},
+		{"work-laptop", true},
+		{"backup 2", true},
+		{"", false},
+		{".", false},
+		{"..", false},
+		{".hidden", false},
+		{"backup.json", false},
+		{"v1.2", false},
+		{"a/b", false},
+		{`a\b`, false},
+	} {
+		err := snapshotName(tc.name)
+		if (err == nil) != tc.ok {
+			t.Errorf("%q: ok %v, got %v", tc.name, tc.ok, err)
+		}
+	}
+}
+
+// TestExportRefusesANameWithAnExtension is the one refusal of a name, with
+// the hint that says the rule; TestSnapshotName has the rest of them.
+func TestExportRefusesANameWithAnExtension(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
-	h.build(t, fixture{dirs: []string{".claude"}})
-	out := h.run("export", h.exportPath(filepath.Join("nowhere", "export.json")))
-	equal(t, "exit", out.exit, 5)
-	contains(t, "stderr", out.stderr, "does not exist")
+	out := h.run("export", "backup.json")
+	equal(t, "exit", out.exit, 1)
+	contains(t, "stderr", out.stderr, "backup.json is not a snapshot name")
+	contains(t, "stderr", out.stderr, "give a file name without an extension or a slash: export writes <name>.json to the library")
+	if _, err := os.Stat(h.snapshotPath("backup")); err == nil {
+		t.Error("the refused export wrote a file")
+	}
+}
+
+// TestExportHelpNamesTheMachineAndTheFile: the help says where the file
+// goes and what this machine's id is, so that a backup needs no other
+// command first.
+func TestExportHelpNamesTheMachineAndTheFile(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	id := h.one(h.run("--json", "machine").stdout, "machine")["id"].(string)
+	for _, args := range [][]string{{"export", "--help"}, {"help", "export"}} {
+		out := h.run(args...)
+		equal(t, strings.Join(args, " ")+": exit", out.exit, 0)
+		contains(t, "stdout", out.stdout, "The snapshot goes to the library, as snapshot.json or as <name>.json:\n  "+h.snapshotPath(defaultSnapshot)+"\n")
+		contains(t, "stdout", out.stdout, "Use this machine's id ("+id+") to keep a\n")
+		contains(t, "stdout", out.stdout, "Usage:\n  agentx export [<name> | --machine <id>] [flags]\n")
+	}
 }
 
 // TestExportLeavesOutWhatItsReaderRefuses: a library directory whose name
@@ -244,8 +309,8 @@ func TestExportLeavesOutWhatItsReaderRefuses(t *testing.T) {
 	bare := h.accountGit("commit-tree", "-m", "no lineage", alpha+"^{tree}")
 	h.accountGit("update-ref", "refs/heads/managed/bare", bare)
 
-	file := h.exportPath("export.json")
-	out := h.run("export", file)
+	file := h.snapshotPath(defaultSnapshot)
+	out := h.run("export")
 	equal(t, "exit", out.exit, 0)
 	contains(t, "stderr", out.stderr, "left has space out of the snapshot: it is not a name the library and a branch can both hold")
 	contains(t, "stderr", out.stderr, "left refs/heads/managed/bare out of the snapshot: its commit names no source")
@@ -277,27 +342,27 @@ func TestExportRefusesADirectoryWithAHintThatHelps(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
-	dir := h.exportPath("a-directory")
+	dir := h.snapshotPath("a-directory")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, args := range [][]string{{"export", dir}, {"export", dir, "--force"}} {
+	for _, args := range [][]string{{"export", "a-directory"}, {"export", "a-directory", "--force"}} {
 		out := h.run(args...)
 		equal(t, strings.Join(args, " ")+" exit", out.exit, 6)
 		contains(t, "stderr", out.stderr, dir+" is a directory")
-		contains(t, "stderr", out.stderr, "give the path of the file to write")
+		contains(t, "stderr", out.stderr, "give another name")
 		if strings.Contains(out.stderr, "--force") {
 			t.Errorf("the hint offers a flag that cannot help:\n%s", out.stderr)
 		}
 	}
 	// A file that is already there still names --force, which does help,
 	// and what the file holds is not agentx's to lose until it is given.
-	file := h.exportPath("export.json")
+	file := h.snapshotPath("backup")
 	writeFile(t, file, "not an export\n")
-	again := h.run("export", file)
+	again := h.run("export", "backup")
 	equal(t, "exit", again.exit, 6)
 	contains(t, "stderr", again.stderr, "pass --force to overwrite it")
 	equal(t, "the file", readText(t, file), "not an export\n")
-	equal(t, "with --force", h.run("export", file, "--force").exit, 0)
+	equal(t, "with --force", h.run("export", "backup", "--force").exit, 0)
 	equal(t, "schema_version", h.readExportFile(file)["schema_version"], float64(2))
 }

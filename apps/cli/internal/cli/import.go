@@ -74,7 +74,7 @@ func newImportCommand(inv *invocation) *cobra.Command {
 			"asking, which is required whenever it cannot ask: with --json, or when either\n" +
 			"stream is not a terminal.",
 		Args: func(cmd *cobra.Command, args []string) error {
-			return snapshotArgs(args, machine, "import", "the file to read")
+			return importArgs(args, machine)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			path := ""

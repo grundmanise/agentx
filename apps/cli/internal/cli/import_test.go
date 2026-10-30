@@ -59,8 +59,7 @@ func exportedFrom(t *testing.T) (*harness, string) {
 	other.commit("one skill")
 	equal(t, "source add", h.run("source", "add", other.url+"#main").exit, 0)
 
-	file := h.exportPath("export.json")
-	equal(t, "export", h.run("export", file).exit, 0)
+	file := h.exportSnapshot("export")
 	return h, file
 }
 
@@ -76,8 +75,7 @@ func plainExport(t *testing.T) (*harness, string) {
 	h := newHarness(t)
 	h.build(t, fixture{dirs: []string{".claude"}})
 	equal(t, "label", h.run("config", "set", "label", "first-laptop").exit, 0)
-	file := h.exportPath("export.json")
-	equal(t, "export", h.run("export", file).exit, 0)
+	file := h.exportSnapshot("export")
 
 	doc := h.readExportFile(file)
 	doc["skills"] = []any{map[string]any{"name": "alpha", "kind": "unmanaged", "placements": []any{"claude-code"}}}
@@ -137,8 +135,7 @@ func TestImportRestoresAMachine(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeFile(t, filepath.Join(byHand, "SKILL.md"), "---\nname: mine\ndescription: made here\n---\n\nmine\n")
-	first := h.exportPath("first.json")
-	h.mustRun("export", first)
+	first := h.exportSnapshot("first")
 	before := h.readExportFile(first)["skills"].([]any)
 
 	h.mustRun("skill", "remove", "alpha")
@@ -160,8 +157,7 @@ func TestImportRestoresAMachine(t *testing.T) {
 		t.Error("beta was placed in claude-code, which the snapshot does not name")
 	}
 
-	second := h.exportPath("second.json")
-	h.mustRun("export", second)
+	second := h.exportSnapshot("second")
 	after := h.readExportFile(second)["skills"].([]any)
 	equal(t, "the restored skills", fmt.Sprint(after), fmt.Sprint(before[:2]))
 
@@ -240,8 +236,7 @@ func TestImportMovesSkillsForwardOnly(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--all")
-	old := h.exportPath("old.json")
-	h.mustRun("export", old)
+	old := h.exportSnapshot("old")
 	oldAlpha := h.accountGit("rev-parse", "refs/heads/managed/alpha")
 
 	s.skill("skills/alpha", "alpha", "The first skill, once more", nil)
@@ -306,8 +301,7 @@ func TestImportIsFinishedAfterAKill(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--all")
-	file := h.exportPath("export.json")
-	h.mustRun("export", file)
+	file := h.exportSnapshot("export")
 	h.mustRun("skill", "remove", "alpha")
 	h.mustRun("skill", "remove", "beta")
 
@@ -740,8 +734,7 @@ func TestImportListsWhatTheAccountRepoHas(t *testing.T) {
 	equal(t, "add", h.run("skill", "add", s.url, "--all").exit, 0)
 	equal(t, "add gamma", h.run("skill", "add", other.url).exit, 0)
 
-	file := h.exportPath("export.json")
-	equal(t, "export", h.run("export", file).exit, 0)
+	file := h.exportSnapshot("export")
 
 	// beta's branch moves to another commit, and gamma leaves the machine.
 	alpha := h.accountGit("rev-parse", "refs/heads/managed/alpha")
@@ -931,26 +924,25 @@ func TestImportOntoAMachineWithNoAccountRepo(t *testing.T) {
 }
 
 // TestNothingReadsAnExportAutomatically: an export is read when a person
-// asks for it and never otherwise. One left in agentx home, broken, is read
-// by no command.
+// asks for it and never otherwise. The one export writes into the library,
+// broken, is read by no command, and skill list does not list it.
 func TestNothingReadsAnExportAutomatically(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
 	equal(t, "add", h.run("skill", "add", s.url, "--all").exit, 0)
-	inHome := filepath.Join(h.agentx, "export.json")
-	equal(t, "export", h.run("export", inHome).exit, 0)
+	inLibrary := h.exportSnapshot(defaultSnapshot)
 	settings := readText(t, home.SettingsPath(h.agentx))
 	list := h.run("--json", "skill", "list").stdout
 
 	// Whatever it holds, nothing looks at it.
-	writeFile(t, inHome, "{ not an export at all")
+	writeFile(t, inLibrary, "{ not an export at all")
 	for _, args := range [][]string{
 		{"scan"}, {"config", "list"}, {"skill", "list"}, {"source", "list"}, {"machine"}, {"doctor"},
 	} {
 		out := h.run(args...)
 		equal(t, strings.Join(args, " "), out.exit, 0)
 	}
-	equal(t, "the file", readText(t, inHome), "{ not an export at all")
+	equal(t, "the file", readText(t, inLibrary), "{ not an export at all")
 	equal(t, "the settings", readText(t, home.SettingsPath(h.agentx)), settings)
 	equal(t, "the listing", h.run("--json", "skill", "list").stdout, list)
 }
