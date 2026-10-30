@@ -19,7 +19,7 @@ agentx treats all your cloud agents as one machine, the **cloud machine**. The c
 
 You need:
 
-- An [account remote](/account-remote) that Git can reach over HTTPS, such as `https://github.com/you/forks`. The session needs the HTTPS URL: it has no SSH key, and the token works only over HTTPS. Your computer can keep an SSH URL for the same repository.
+- An [account remote](/account-remote) that Git can reach over HTTPS, such as `https://github.com/you/agentx-account`. The session needs the HTTPS URL: it has no SSH key, and the token works only over HTTPS. Your computer can keep an SSH URL for the same repository.
 - Skills on the cloud machine. On your computer, copy all of its skills to the cloud machine:
 
   ```sh
@@ -57,7 +57,7 @@ On another Git host, create a token with read access to that one repository. If 
 1. Copy the [setup script](#the-setup-script) below.
 2. Set the three values at its top:
    - `AGENTX_VERSION`: `nightly` or `stable`.
-   - `ACCOUNT_REMOTE`: the HTTPS URL of your account remote. If `agentx source list` shows an SSH URL, such as `git@github.com:you/forks.git`, use the HTTPS URL of the same repository, `https://github.com/you/forks`.
+   - `ACCOUNT_REMOTE`: the HTTPS URL of your account remote. If `agentx source list` shows an SSH URL, such as `git@github.com:you/agentx-account.git`, use the HTTPS URL of the same repository, `https://github.com/you/agentx-account`.
    - `ACCOUNT_TOKEN`: your read-only token. For a public account remote, leave it empty.
 3. In Claude Code on the web, open the settings of the environment you work in.
 4. Paste the script into the environment's setup script, and save.
@@ -77,7 +77,7 @@ Every session in that environment now gets the cloud machine's skills. To use th
 # or "stable" for the latest release.
 AGENTX_VERSION="nightly"
 # The HTTPS URL of your account remote. The token works only over HTTPS.
-ACCOUNT_REMOTE="https://github.com/you/forks"
+ACCOUNT_REMOTE="https://github.com/you/agentx-account"
 # A token that can only read the account remote. Leave it empty for a public one.
 ACCOUNT_TOKEN="paste-a-read-only-token-here"
 
