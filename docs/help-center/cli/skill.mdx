@@ -154,8 +154,8 @@ agentx skill list --remote
 1 skill
   pdf  managed  current  https://github.com/anthropics/skills/skills/pdf  4 placements
 2 installable skills on the account remote
-  release-notes  managed  installable  ssh://git@github.com/you/forks (account)
-  standup        managed  installable  ssh://git@github.com/you/forks (account)
+  release-notes  managed  installable  ssh://git@github.com/you/agentx-account (account)
+  standup        managed  installable  ssh://git@github.com/you/agentx-account (account)
 Install one with agentx skill add --name <name>, or all of them with agentx skill add --all.
 ```
 
@@ -300,11 +300,11 @@ agentx skill list
 
 ```text
 5 skills
-  docx    managed    modified, source removed  https://github.com/me/skills/docx                                                               2 placements
-  my-pdf  managed    modified                  ssh://git@github.com/you/forks (account), from https://github.com/anthropics/skills/skills/pdf  4 placements
-  notes   managed    current                   ssh://git@github.com/you/forks (account)                                                        4 placements
-  pdf     managed    current                   https://github.com/anthropics/skills/skills/pdf                                                 4 placements
-  todo    unmanaged  -                         (none)                                                                                          2 placements
+  docx    managed    modified, source removed  https://github.com/me/skills/docx                                                                        2 placements
+  my-pdf  managed    modified                  ssh://git@github.com/you/agentx-account (account), from https://github.com/anthropics/skills/skills/pdf  4 placements
+  notes   managed    current                   ssh://git@github.com/you/agentx-account (account)                                                        4 placements
+  pdf     managed    current                   https://github.com/anthropics/skills/skills/pdf                                                          4 placements
+  todo    unmanaged  -                         (none)                                                                                                   2 placements
 ```
 
 Each row shows the skill, its kind, whether it holds edits you have not published, its source and how many placements it has, one per client that sees it.
