@@ -74,9 +74,7 @@ test("Check for updates runs the check and says what it found", async ({
   });
   await page.keyboard.press("Control+K");
   await page.keyboard.type("updates");
-  await expect(page.getByRole("option")).toHaveText([
-    "Check for updates",
-  ]);
+  await expect(page.getByRole("option")).toHaveText(["Check for updates"]);
   await page.keyboard.press("Enter");
   await expect(
     page
