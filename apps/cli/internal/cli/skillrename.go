@@ -13,8 +13,9 @@ import (
 
 func newSkillRenameCommand(inv *invocation) *cobra.Command {
 	return &cobra.Command{
-		Use:   "rename <old> <new>",
-		Short: "Rename one of your skills",
+		Use:         "rename <old> <new>",
+		Short:       "Rename one of your own skills",
+		Annotations: map[string]string{annotationSection: "skills"},
 		Long: "Rename the skill called <old>, one of your own skills, to <new> on this machine,\n" +
 			"placed where <old> was. The renamed skill is the same skill: it keeps its id and\n" +
 			"its history, and a commit on top writes the new name into SKILL.md. Everything\n" +
@@ -28,6 +29,9 @@ func newSkillRenameCommand(inv *invocation) *cobra.Command {
 			"publish of <new> does: an old branch it keeps or cannot delete is warned of\n" +
 			"once; delete it with 'agentx skill remove <old> --remote'. Another machine keeps\n" +
 			"<old> until it is removed there, and sees <new> as a skill to install.",
+		Example: examples(
+			"agentx skill rename release-notes changelog", "rename it here; the next publish renames the branch",
+		),
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return inv.skillRename(cmd.Context(), args[0], args[1])

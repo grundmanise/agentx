@@ -51,8 +51,14 @@ func newImportCommand(inv *invocation) *cobra.Command {
 	var yes bool
 	var machine string
 	cmd := &cobra.Command{
-		Use:   "import (<file> | --machine <id>)",
-		Short: "Apply a snapshot to this machine: its settings, its skills and their placements",
+		Use:         "import (<file> | --machine <id>)",
+		Short:       "Apply a snapshot: settings, skills and placements",
+		Annotations: map[string]string{annotationSection: "machines", annotationSynopsis: "<file>|--machine <id>"},
+		Example: examples(
+			"agentx import ~/.agents/skills/snapshot.json", "apply a snapshot file, after confirming",
+			"agentx import --machine cloud", "apply the cloud machine's snapshot",
+			"agentx import snapshot.json --yes", "apply without asking, for a script",
+		),
 		Long: "Apply the snapshot at <file> to this machine, after confirming: replace the\n" +
 			"settings with the snapshot's, install each skill it lists that this machine\n" +
 			"lacks, move each one it holds forward to the version the snapshot names, and\n" +

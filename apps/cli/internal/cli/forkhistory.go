@@ -13,13 +13,17 @@ import (
 
 func newSkillHistoryCommand(inv *invocation) *cobra.Command {
 	return &cobra.Command{
-		Use:   "history <name>",
-		Short: "List the commits of one of your own skills, newest first",
+		Use:         "history <name>",
+		Short:       "List the commits of one of your own skills",
+		Annotations: map[string]string{annotationSection: "skills"},
 		Long: "List every commit of <name>, one of your own skills, newest first: the commits\n" +
 			"agentx wrote, those made with git in its worktree, which are marked foreign, and\n" +
 			"the upstream imports it was forked from or merged, which are marked import.\n" +
 			"Each names the files it changes in the skill's directory, a merge against its\n" +
 			"first parent. Nothing is written.",
+		Example: examples(
+			"agentx skill history release-notes", "every commit, newest first",
+		),
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return inv.skillHistory(cmd.Context(), args[0])
