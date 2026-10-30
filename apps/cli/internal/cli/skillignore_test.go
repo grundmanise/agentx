@@ -126,21 +126,6 @@ func TestAGitattributesConversionApplies(t *testing.T) {
 	equal(t, "state with the conversion", h.listed("pdf")["state"], stateCurrent)
 }
 
-// TestAdoptionIgnoresASystemFile: a directory adopted at the version it
-// holds is not modified for a .DS_Store beside it, as skill list says
-// afterwards.
-func TestAdoptionIgnoresASystemFile(t *testing.T) {
-	t.Parallel()
-	h, s, v1, _ := adoptHarness(t)
-	writeFile(t, filepath.Join(h.library, "alpha", ".DS_Store"), "finder\n")
-	h.writeLock(h.lockPath(), map[string]lockEntry{"alpha": {
-		Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/alpha",
-	}})
-	out := h.mustRun("--json", "adopt", "--skill", "alpha", "--base", v1)
-	equal(t, "modified", h.one(out.stdout, "adoption")["modified"], false)
-	equal(t, "state", h.listed("alpha")["state"], stateCurrent)
-}
-
 // TestConfigSetIgnoreSystemFilesWritesTheList: the setting is on by
 // default, and setting it writes the list to the account repo's
 // info/exclude, or empties the file, at once.

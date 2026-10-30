@@ -228,7 +228,7 @@ func TestPublishNeverMerges(t *testing.T) {
 	equal(t, "its outcome", b.one(out.stdout, "publish")["outcome"], publishDeclined)
 	e = b.one(out.stdout, "error")
 	equal(t, "its message", e["message"], "the account remote declined skills/alpha: pre-receive hook declined: no pushes on Fridays")
-	contains(t, "its hint", e["hint"].(string), "agentx never forces a push")
+	equal(t, "its hint", e["hint"], "once the account remote takes it, run 'agentx skill publish alpha' again")
 	if strings.Contains(e["hint"].(string), "skill update") {
 		t.Errorf("a declined push's hint names the update: %q", e["hint"])
 	}
@@ -282,8 +282,7 @@ func TestPublishRefusesADifferentFork(t *testing.T) {
 	// account remote, and a fresh machine that set the account remote holds
 	// a's under skills/, present. Which state each mix of local and remote
 	// branches gives is TestRestoreStates'.
-	file := a.exportPath("export.json")
-	a.mustRun("export", file)
+	file := a.exportSnapshot("export")
 	fresh := newHarness(t)
 	fresh.setAccount(remote)
 	ev := fresh.one(fresh.mustRun("--json", "import", file, "--yes").stdout, "import_skill")
@@ -380,8 +379,7 @@ func TestSkillUpdateOfAForkPullsThenMerges(t *testing.T) {
 	equal(t, "the candidate", b.ref(lineage.CandidateRef("alpha")), "")
 
 	// An export names the version the fork is based on now, not its tip's.
-	file := b.exportPath("export.json")
-	b.mustRun("export", file)
+	file := b.exportSnapshot("export")
 	for _, rec := range b.readExportFile(file)["skills"].([]any) {
 		if r := rec.(map[string]any); r["name"] == "alpha" {
 			equal(t, "the exported upstream commit", r["upstream_commit"], second)

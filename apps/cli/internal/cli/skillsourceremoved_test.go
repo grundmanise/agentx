@@ -242,8 +242,7 @@ func TestImportedSettingsDecideSourceRemoved(t *testing.T) {
 	h, s := installHarness(t)
 	h.mustRun("skill", "add", s.url, "--name", "alpha")
 	beforeJSON := h.mustRun("--json", "skill", "list").stdout
-	here := h.exportPath("here.json")
-	h.mustRun("export", here)
+	here := h.exportSnapshot("here")
 
 	h.mustRun("import", elsewhere, "--yes")
 	equal(t, "drift under settings without the source", drift(h.librarySkill(h.mustRun("--json", "skill", "list").stdout, "alpha")), "source removed")

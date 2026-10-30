@@ -3,7 +3,7 @@ title: "Install and update"
 description: "Install agentx with Homebrew or the install script, try nightly builds and keep agentx up to date."
 ---
 
-agentx runs on macOS and Linux, on x86-64 and ARM64. It needs `git` 2.40 or later on your `PATH`. [`agentx doctor`](/cli/doctor) checks this.
+agentx runs on Macs with Apple silicon, and on Linux on x86-64 and ARM64. It needs `git` 2.40 or later on your `PATH`. [`agentx doctor`](/cli/doctor) checks this.
 
 ## Install
 
@@ -28,6 +28,8 @@ curl -fsSL https://agentx.wtf/install | sh
 ```
 
 The script downloads the release for your system from [GitHub](https://github.com/grundmanise/agentx/releases). It checks the download against the release's checksums. Then it installs `agentx` to `~/.local/bin`, without `sudo`. If `~/.local/bin` is not on your `PATH`, the script tells you how to add it. If another `agentx` comes first on your `PATH`, the script warns you.
+
+To install agentx in a cloud agent's environment, use the setup script in [Cloud agents](/cloud).
 
 To read the script before you run it, download it first:
 

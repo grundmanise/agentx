@@ -397,6 +397,7 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.technical` | mono | 12–13 | 400 |  |  |  | Paths, ids, dates, commands |
 | `type.code` | mono | 12.5 | 400 | 1.75 |  |  | Code pane |
 | `type.brand` | sans | 14 | 600 |  | -0.01em |  | Product name in the sidebar |
+| `type.machine-label` | sans | 12 | 400 |  |  |  | Machine label under the product name (`text.muted`) |
 | `type.nav` | sans | 14 | 500 |  |  |  | Nav item |
 | `type.command-field` | sans | 13 | 400 |  |  |  | Command field placeholder |
 | `type.key-hint` | mono | 11 | 400 |  |  |  | Key hint (`esc`, `⌘K`) |
@@ -405,6 +406,7 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.palette-footer` | sans | 12 | 400 |  |  |  | Palette footer (`text.hint`) |
 | `type.toast` | sans | 13.5 | 400 |  |  |  | Toast message |
 | `type.toast-action` | sans | 13 | 600 |  |  |  | Action inside a toast |
+| `type.notice` | sans | 13 | 400 | 1.5 |  |  | Stale bar text; hint and warnings in an error toast |
 
 Text wrapping: `text-wrap:pretty` on multi-line copy. Single-line cells use `white-space:nowrap; overflow:hidden; text-overflow:ellipsis`.
 
@@ -430,6 +432,8 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `shell.command-height` | 32 | `h-command` |  |
 | `shell.status-height` | 30 | `h-status` | Account remote status pill |
 | `shell.panel-inset` | 10 | `mr-panel mb-panel` | Main panel inset from the right and bottom |
+| `stale-bar.height` | 36 | `h-stale-bar` | Stale bar at the top of the main panel |
+| `stale-bar.padding` | 0 16 | `px-stale-bar` |  |
 | `shell.focus-ring-width` | 2 | none: `index.css` sets it on every element | Keyboard focus outline |
 | `shell.focus-ring-offset` | 2 | none: as above |  |
 
@@ -562,6 +566,8 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `toast.height` | 44 | `h-toast` |  |
 | `toast.padding` | 0 18 | `px-toast` (`pl-toast` with an action) | 0 6 0 18 with an action |
 | `toast.offset` | 24 | none: a number passed to Sonner's `offset` in `Toaster` | From the bottom edge |
+| `toast.detail-width` | 440 | `w-toast-detail` | Error toast |
+| `toast.detail-padding` | 12 6 12 18 | `py-toast-detail pr-1.5 pl-toast` |  |
 | `floating-bar.offset` | 24 | `bottom-floating-bar` | From the bottom edge |
 | `floating-bar.height` | 56 | `h-floating-bar` |  |
 
@@ -631,6 +637,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `palette.row-radius` | 12 | Palette rows |
 | `key-hint.radius` | 9999 | Key hint |
 | `toast.radius` | 9999 |  |
+| `toast.detail-radius` | 18 | Error toast |
 | `floating-bar.radius` | 9999 |  |
 | `check.mark-radius` | 50% | Startup status circle |
 | `check.hint-radius` | 8 | Startup check hint callout (`tone.danger` for a failure, `tone.attention` for a warning: bg + 1px border) |
@@ -701,6 +708,18 @@ Mono caption 10.5–11 / `.16em` uppercase `group.label` plus a count in `group.
 
 `toast.offset` from the bottom, centred; `overlay.bg`, `overlay.border`, `toast.radius`, `toast.height`, `toast.padding`; text 13.5 `toast.text`; optional action button ghost in `button.toast-action-text`. Auto-dismiss 2.6s, or 5s when it has an action. One toast at a time.
 
+### Error toast
+
+A command that fails for a reason the app does not handle itself (`src/store/runner.ts`). Same place, `overlay.bg` and `overlay.border` as the toast, with `popover.shadow`, `toast.detail-radius`, `toast.detail-width` and `toast.detail-padding`. The CLI's message in `type.toast`, `toast.text`; its hint below in `type.notice`, `text.muted`; each warning the CLI logged in `type.notice`, `tone.attention.fg`. A ghost Dismiss on the right. It stays until dismissed when it has a hint, and goes after 5s without one. It replaces the toast shown, like any toast.
+
+### Stale bar
+
+A bar across the top of the main panel while the screens show an inventory that may be out of date (`src/app/stale-bar.tsx`): `stale-bar.height`, `stale-bar.padding`, a 1px bottom border, text in `type.notice`, `text.secondary`. While serve restarts: `tone.attention` bg and border, a `Spinner` and "Reconnecting to agentx…". When a scan fails or serve stops for good: `tone.danger` bg and border, "Couldn't read this machine: " and the reason, and a ghost small Retry on the right. Nothing shows while the inventory is fresh.
+
+### Machine label
+
+The machine's label from the inventory, under the product name in the sidebar: `type.machine-label`, `text.muted`, one line with an ellipsis.
+
 ### Timeline (history)
 
 Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot` round (`timeline.dot-install`, `timeline.dot-update`, `timeline.dot-yours` by entry kind), a 1px `timeline.connector` below it. Entry: message 14 `text.primary`, meta 12 `timeline.meta`. Final item when truncated: hollow dot (inset ring 1.5px `timeline.more-ring`) and a ghost button "Show all {n}".
@@ -725,7 +744,7 @@ An icon is a hand-written React component that takes the text colour; an illustr
 
 Sizes: `xs` 14px, `sm` 15px, `md` 16px (the default), `lg` 18px.
 
-The product mark is `shell.logo-mark` on `shell.logo-bg`, 26px `shell.logo-radius` in the sidebar, 40px `startup.logo-radius` on the startup layer, with a 1px `shell.logo-ring` ring. Its SVG is also the source of the app icons: after changing it, run `pnpm tauri icon src/assets/agentx-mark.svg` and keep only the files `src-tauri/tauri.conf.json` lists. The SVG holds the two colours as hex values (`lime-400`, `gray-990`); change them together with the tokens.
+The product mark is `shell.logo-mark` on `shell.logo-bg`, 30px `shell.logo-radius` in the sidebar (the height of the product name and machine label beside it), 40px `startup.logo-radius` on the startup layer, with a 1px `shell.logo-ring` ring. Its SVG is also the source of the app icons: after changing it, run `pnpm tauri icon src/assets/agentx-mark.svg` and keep only the files `src-tauri/tauri.conf.json` lists. The SVG holds the two colours as hex values (`lime-400`, `gray-990`); change them together with the tokens.
 
 ## 8. Motion
 

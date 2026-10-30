@@ -190,7 +190,7 @@ var valueLists = []valueList{
 		{sourceEvent{}, "Access"}, {home.Source{}, "Access"},
 	}},
 	{name: "ProgressPhase", values: []string{
-		phaseFetch, phasePublish, phaseBlobs, phaseImport, phaseInstall, phasePlace, phaseAdopt, phaseRescan,
+		phaseFetch, phasePublish, phaseBlobs, phaseImport, phaseInstall, phasePlace, phaseRescan,
 	}, fields: []fieldRef{
 		{progressEvent{}, "Phase"},
 	}},

@@ -99,6 +99,10 @@ type placeable struct {
 	name  string
 	hash  string
 	stage func(dest string) error
+	// foreignLinks is a folder another tool keeps skills in, "" for none:
+	// a placement that is a symlink into it is that tool's and gives way,
+	// which is what adopting a skill that tool installed asks for.
+	foreignLinks string
 }
 
 // detectedTargets is every detected configuration a placement can be made
@@ -419,6 +423,11 @@ func (inv *invocation) stagePlacement(m *home.Mutation, p placeable, t placeTarg
 		// kept, since replacing it would take what it holds with it.
 		inv.keepCopy(done, t, placePath, p.name)
 		return
+	case home.IsLink(state) && p.foreignLinks != "" && linkInto(placePath, p.foreignLinks):
+		// The link another tool made into its own folder, for the skill
+		// this run adopts from that tool: it gives way to agentx's, or the
+		// client would keep reading that tool's copy.
+		displace = true
 	default:
 		// A link is refused for being a link and not for where it leads: it
 		// may well resolve to this very version, and saying it is not this
@@ -609,6 +618,22 @@ func sameTarget(path, libPath string) bool {
 		link = filepath.Join(filepath.Dir(path), link)
 	}
 	return filepath.Clean(link) == filepath.Clean(libPath)
+}
+
+// linkInto reports whether the symlink at path leads into dir or is dir
+// itself. A relative link is read from the directory it sits in, and both
+// sides are compared by their real paths, so that no spelling of either
+// through a symlink hides it.
+func linkInto(path, dir string) bool {
+	link, err := os.Readlink(path)
+	if err != nil {
+		return false
+	}
+	if !filepath.IsAbs(link) {
+		link = filepath.Join(filepath.Dir(canonicalPath(path)), link)
+	}
+	link, dir = canonicalPath(link), canonicalPath(dir)
+	return link == dir || strings.HasPrefix(link, dir+string(filepath.Separator))
 }
 
 // isLibraryDirectory reports whether path is a real directory, not a link,

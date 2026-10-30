@@ -58,6 +58,7 @@ Write commit descriptions in an imperative style. Focus on how the change affect
 ### Writing style
 
 - Never use em dashes (`—`); instead, use en dashes (`–`) or hyphens (`-`).
+- State what is true, and stop. Don't add a negation that repeats it, such as "runs on Macs with Apple silicon, not on Intel Macs".
 
 ### Public repository
 

@@ -59,8 +59,7 @@ func TestExportToAMachineAndImportFromIt(t *testing.T) {
 	a.setAccount(overSSH)
 	a.mustRun("skill", "publish", "alpha")
 
-	file := a.exportPath("export.json")
-	a.mustRun("export", file)
+	file := a.exportSnapshot("export")
 	equal(t, "the remote's machine branches after an export to a file", remoteGit(t, a, remote, "for-each-ref", "refs/heads/machines/"), "")
 
 	out := a.run("--json", "export", "--machine", "cloud")
@@ -243,7 +242,7 @@ func TestSkillPlaceAndRemoveOnTheCloudMachine(t *testing.T) {
 		{[]string{"skill", "place", "alpha", "--machine", "cloud", "--force"}, 1},
 		{[]string{"skill", "place", "alpha", "--machine", "cloud", "--to", "universal"}, 5},
 		{[]string{"skill", "remove", "alpha", "--machine", "cloud", "--remote"}, 1},
-		{[]string{"export", h.exportPath("cloud.json"), "--machine", "cloud"}, 1},
+		{[]string{"export", "cloud", "--machine", "cloud"}, 1},
 		{[]string{"export", "--machine", "cloud", "--force"}, 1},
 	} {
 		equal(t, strings.Join(tc.args, " ")+": exit", h.run(tc.args...).exit, tc.exit)

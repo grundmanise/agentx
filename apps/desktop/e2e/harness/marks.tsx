@@ -5,7 +5,7 @@ import { mount } from "./mount.tsx";
 
 mount(
   <>
-    <AgentxMark size={26} />
+    <AgentxMark size={30} />
     <AgentxMark size={40} />
   </>
 );
