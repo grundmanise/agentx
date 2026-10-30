@@ -81,30 +81,11 @@ agentx adopt --skill pdf
 
 Skillshare keeps its own copy of each skill in its folder, `~/.config/skillshare/skills` by default. agentx never touches that folder, so your edits there stay.
 
-## Hand a skill over from Skillshare
+## After adopting from Skillshare
 
-After adopting, Skillshare still lists the skill and still syncs it. Its links in other clients' folders, such as `~/.claude/skills/pdf`, still point at Skillshare's copy, and agentx leaves a link it did not make alone, so the adopted skill has no placements yet. Hand the skill over in this order:
+Adopting moves a skill to agentx completely: the library gets a real directory, and Skillshare's links in your clients' folders, such as `~/.claude/skills/pdf`, become links to the library. You are done with Skillshare for that skill. Uninstall Skillshare, or stop running it, and leave its folder as it is or delete it.
 
-1. Stop Skillshare from syncing skills into the library. Skip this step and Skillshare's next sync after the uninstall deletes the adopted directory from `~/.agents/skills`. agentx warns you about this after adopting, naming the target:
-
-   ```sh
-   skillshare target universal --skills=false
-   ```
-
-2. Remove the skill from Skillshare, and sync so that its links in the other clients go:
-
-   ```sh
-   skillshare uninstall pdf --force
-   skillshare sync
-   ```
-
-3. Place the skill with agentx:
-
-   ```sh
-   agentx skill place pdf
-   ```
-
-Skillshare's own copy goes to its trash, where it stays for seven days.
+Good to know: Skillshare does not know about the adoption. If you run `skillshare sync` afterwards, it puts its own links back, or removes the adopted directory once you uninstalled the skill there, and your clients read Skillshare's copy again. Running `agentx adopt --all` again repairs that: agentx installs each such skill again and the adoption is whole. A skill you also uninstalled from Skillshare is no longer in its records, so `agentx adopt` cannot see it; `agentx skill list` then names the `agentx skill add` command that installs it again.
 
 ### Skills from one source at different refs
 

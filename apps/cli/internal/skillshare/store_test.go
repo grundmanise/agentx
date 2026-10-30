@@ -2,7 +2,6 @@ package skillshare
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -86,45 +85,6 @@ func TestReadConfigRefusesAConfigurationItCannotRead(t *testing.T) {
 	write(t, p.Config, "sources: [\n")
 	if _, err := ReadConfig(p, home); !errors.Is(err, ErrStore) {
 		t.Errorf("error = %v, want an ErrStore", err)
-	}
-}
-
-// TestReadConfigTargets reads the tools Skillshare syncs into, in both
-// shapes its configuration has had, in name order, with one whose skills
-// were turned off read as such.
-func TestReadConfigTargets(t *testing.T) {
-	t.Parallel()
-	home := t.TempDir()
-	p := Locate(map[string]string{}, filepath.Join(home, ".config"))
-	write(t, p.Config, `targets:
-  universal:
-    skills:
-      path: ~/.agents/skills
-      enabled: false
-  cursor:
-    path: ~/.cursor/skills
-  claude:
-    skills:
-      path: /abs/.claude/skills
-  mcp-only:
-    mcp:
-      path: ~/.x/mcp.json
-`)
-	cfg, err := ReadConfig(p, home)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got []string
-	for _, tg := range cfg.Targets {
-		got = append(got, fmt.Sprintf("%s %s %v", tg.Name, tg.Path, tg.Enabled))
-	}
-	want := []string{
-		"claude /abs/.claude/skills true",
-		"cursor " + filepath.Join(home, ".cursor", "skills") + " true",
-		"universal " + filepath.Join(home, ".agents", "skills") + " false",
-	}
-	if strings.Join(got, "\n") != strings.Join(want, "\n") {
-		t.Errorf("targets =\n%s\nwant\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
 }
 

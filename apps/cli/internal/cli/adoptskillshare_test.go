@@ -47,8 +47,73 @@ func skillshareInstall(t *testing.T, h *harness, s *sourceRepo, subpath, key str
 	if err := os.MkdirAll(h.library, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(dir, filepath.Join(h.library, skillshare.LibraryName(key))); err != nil {
+	for _, folder := range []string{h.library, filepath.Join(h.home, ".claude", "skills")} {
+		if err := os.MkdirAll(folder, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(dir, filepath.Join(folder, skillshare.LibraryName(key))); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// TestAdoptAgainAfterSkillshareTookTheSkillBack: a Skillshare sync after
+// the adoption puts its link back in the library, or removes the directory
+// once the skill is uninstalled there, and the source may have moved on.
+// Adopting again installs the skill again, moving the branch to the version
+// installed, so the adoption is whole afterwards.
+func TestAdoptAgainAfterSkillshareTookTheSkillBack(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.build(t, fixture{dirs: []string{".claude"}})
+	s := h.newSourceRepo("skills", true)
+	s.skill("skills/alpha", "alpha", "The first skill", nil)
+	s.skill("skills/beta", "beta", "The second skill", nil)
+	s.commit("two skills")
+	skillshareInstall(t, h, s, "skills/alpha", "alpha")
+	skillshareInstall(t, h, s, "skills/beta", "beta")
+	h.writeStore(h.skillshareSkills(), map[string]storeEntry{
+		"alpha": {Source: "github.com/owner/repo/skills/alpha", Type: "github-subdir", RepoURL: s.url, Subdir: "skills/alpha"},
+		"beta":  {Source: "github.com/owner/repo/skills/beta", Type: "github-subdir", RepoURL: s.url, Subdir: "skills/beta"},
+	})
+	h.mustRun("adopt", "--all")
+	first := h.accountGit("rev-parse", "--verify", "refs/heads/managed/alpha")
+
+	// Skillshare's sync put its link back for alpha and pruned beta, and
+	// the source has a newer alpha since.
+	if err := os.RemoveAll(filepath.Join(h.library, "alpha")); err != nil {
 		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(h.skillshareSkills(), "alpha"), filepath.Join(h.library, "alpha")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(filepath.Join(h.library, "beta")); err != nil {
+		t.Fatal(err)
+	}
+	s.skill("skills/alpha", "alpha", "The first skill, revised", nil)
+	s.commit("alpha revised")
+	h.mustRun("source", "fetch", s.url)
+
+	preview := h.run("--json", "adopt")
+	for _, ev := range h.eventsOfType(preview.stdout, "adoption") {
+		equal(t, ev["name"].(string)+" state", ev["state"], adoptCandidate)
+		contains(t, ev["name"].(string)+" reason", ev["reason"].(string), "the library no longer holds it")
+	}
+	out := h.run("--json", "adopt", "--all")
+	equal(t, "exit", out.exit, 0)
+	for _, name := range []string{"alpha", "beta"} {
+		if info, err := os.Lstat(filepath.Join(h.library, name)); err != nil || !info.IsDir() {
+			t.Errorf("%s is not a real directory of the library after adopting again: %v", name, err)
+		}
+	}
+	if again := h.accountGit("rev-parse", "--verify", "refs/heads/managed/alpha"); again == first {
+		t.Error("alpha's branch did not move to the revised version")
+	}
+	equal(t, "alpha's SKILL.md", fileBody(t, filepath.Join(h.library, "alpha", "SKILL.md")), skill("alpha", "The first skill, revised"))
+	list := h.run("--json", "skill", "list")
+	for _, ev := range h.eventsOfType(list.stdout, "library_skill") {
+		equal(t, ev["name"].(string)+" kind", ev["kind"], "managed")
+		equal(t, ev["name"].(string)+" state", ev["state"], stateCurrent)
 	}
 }
 
@@ -56,10 +121,9 @@ func skillshareInstall(t *testing.T, h *harness, s *sourceRepo, subpath, key str
 // directory in its own folder and links it into the library, and a grouped
 // skill lives below a group folder there. Adopting installs each from its
 // source under the name the library already shows it as: the link gives way
-// to a real directory, Skillshare's folder and store stay as they are, and
-// a record of a tracked repository, a local path or an agent is left alone.
-// Skillshare still syncs into the library, so the run says what to do
-// before uninstalling there.
+// to a real directory, so does Skillshare's link in a client's folder,
+// Skillshare's folder and store stay as they are, and a record of a tracked
+// repository, a local path or an agent is left alone.
 func TestAdoptInstallsWhatSkillshareInstalled(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -81,13 +145,10 @@ func TestAdoptInstallsWhatSkillshareInstalled(t *testing.T) {
 		"reviewer":  {Source: "github.com/owner/agents/reviewer.md", Type: "github-subdir", Kind: "agent"},
 		"../escape": {Source: "github.com/owner/repo/skills/alpha", Type: "github-subdir", RepoURL: s.url, Subdir: "skills/alpha"},
 	})
-	writeFile(t, mkdirs(t, filepath.Join(h.config, "skillshare"), "config.yaml"),
-		"mode: merge\ntargets:\n  claude:\n    skills:\n      path: ~/.claude/skills\n  universal:\n    skills:\n      path: "+h.library+"\n")
 	before := libraryTree(t, h.skillshareSkills())
 
 	out := h.run("--json", "adopt", "--all")
 	equal(t, "exit", out.exit, exitRefused.exit)
-	contains(t, "stderr", out.stderr, "run 'skillshare target universal --skills=false' before you uninstall")
 	h.lockUnchanged(filepath.Join(h.skillshareSkills(), skillshare.StoreName), store)
 	sameTree(t, "Skillshare's folder", libraryTree(t, h.skillshareSkills()), before)
 	contains(t, "stderr", out.stderr, "../escape")
@@ -123,6 +184,9 @@ func TestAdoptInstallsWhatSkillshareInstalled(t *testing.T) {
 		sameTree(t, name, libraryTree(t, path), libraryTree(t, filepath.Join(s.work, subpath)))
 		if h.accountGit("rev-parse", "--verify", "refs/heads/managed/"+name) == "" {
 			t.Errorf("%s has no import branch", name)
+		}
+		if link, err := os.Readlink(filepath.Join(h.home, ".claude", "skills", name)); err != nil || link != path {
+			t.Errorf("the client's placement of %s is %q (%v), want a link to the library", name, link, err)
 		}
 	}
 	list := h.run("--json", "skill", "list")

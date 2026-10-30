@@ -77,26 +77,17 @@ func Locate(env map[string]string, configHome string) Paths {
 }
 
 // Config is what agentx reads out of Skillshare's configuration: the
-// folder it installs skills into, and the tools it syncs them into.
+// folder it installs skills into, where the store is and where the links
+// it makes in every client's folder lead.
 type Config struct {
-	Skills  string   // the folder Skillshare installs skills into, where the store is
-	Targets []Target // the tools Skillshare syncs skills into, in name order
-}
-
-// Target is one tool Skillshare syncs skills into: the folder it links or
-// copies them into, and whether it still does.
-type Target struct {
-	Name    string
-	Path    string
-	Enabled bool // skills are synced into it; false once skillshare target <name> --skills=false
+	Skills string
 }
 
 // ReadConfig reads the configuration. The skills folder is sources.skills,
-// else the older source key, else skills below the base directory; a
-// target's folder is skills.path, else its older path key. A leading ~ in
-// either stands for the user's home. A configuration that is not there
-// leaves the defaults; one that cannot be read as YAML is an ErrStore,
-// since the folder it names may be anywhere.
+// else the older source key, else skills below the base directory, a
+// leading ~ standing for the user's home. A configuration that is not
+// there leaves the default; one that cannot be read as YAML is an
+// ErrStore, since the folder it names may be anywhere.
 func ReadConfig(p Paths, userHome string) (Config, error) {
 	cfg := Config{Skills: filepath.Join(p.Base, "skills")}
 	b, err := readBounded(p.Config)
@@ -110,14 +101,7 @@ func ReadConfig(p Paths, userHome string) (Config, error) {
 		Sources struct {
 			Skills string `yaml:"skills"`
 		} `yaml:"sources"`
-		Source  string `yaml:"source"`
-		Targets map[string]struct {
-			Path   string `yaml:"path"`
-			Skills struct {
-				Path    string `yaml:"path"`
-				Enabled *bool  `yaml:"enabled"`
-			} `yaml:"skills"`
-		} `yaml:"targets"`
+		Source string `yaml:"source"`
 	}
 	if err := yaml.Unmarshal(b, &file); err != nil {
 		return Config{}, fmt.Errorf("%w: %s: %v", ErrStore, p.Config, err)
@@ -127,22 +111,6 @@ func ReadConfig(p Paths, userHome string) (Config, error) {
 			cfg.Skills = expandHome(dir, userHome)
 			break
 		}
-	}
-	names := make([]string, 0, len(file.Targets))
-	for name := range file.Targets {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		t := file.Targets[name]
-		path := strings.TrimSpace(t.Skills.Path)
-		if path == "" {
-			path = strings.TrimSpace(t.Path)
-		}
-		if path == "" {
-			continue
-		}
-		cfg.Targets = append(cfg.Targets, Target{Name: name, Path: expandHome(path, userHome), Enabled: t.Skills.Enabled == nil || *t.Skills.Enabled})
 	}
 	return cfg, nil
 }

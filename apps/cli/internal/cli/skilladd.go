@@ -322,7 +322,8 @@ type imported struct {
 	dropped []string // entries left out of the import: symlinks and submodules
 	when    string   // the upstream committer time as "<epoch> +0000"
 	fetched string   // when the source was last fetched, as the settings record it
-	replace bool     // another tool installed this skill: whatever the library holds under its name gives way to the version
+	replace bool     // another tool installed this skill: whatever the library holds under its name gives way to the version, and so does a branch at another version
+	links   string   // with replace, the folder that tool keeps skills in: a placement linking into it is that tool's and gives way
 	imp     lineage.Import
 	commit  string // the import commit, once written
 	tree    string // the tree of that commit, the upstream directory alone
@@ -1102,7 +1103,9 @@ func (inv *invocation) stageSkill(m *home.Mutation, gitDir string, v *imported, 
 	}
 	done := &installed{v: v, adopted: lib.adopt}
 	if write {
-		m.Ref(gitDir, lineage.ManagedRef(v.name), "", v.commit)
+		// From nothing for a name the account repo does not know, and from
+		// the commit it holds for one an adoption moves.
+		m.Ref(gitDir, lineage.ManagedRef(v.name), records[v.name].Commit, v.commit)
 	}
 	if !lib.adopt {
 		if lib.displace {
@@ -1203,6 +1206,11 @@ func refPlan(v *imported, records map[string]lineage.Record, libPath string, abs
 		return false, refuse(exitRefused, fmt.Sprintf("%s is a skill of the account remote on this machine", v.name), ownSkillHint(v.name))
 	case rec.Commit == v.commit: // the same version again: nothing to move
 		return false, nil
+	case v.replace:
+		// An adoption of a name agentx manages whose library entry is gone
+		// or is another tool's link again: the branch moves to the version
+		// installed, as an update moves it, from the commit it holds.
+		return true, nil
 	case absent:
 		return false, refuse(exitRefused, fmt.Sprintf("%s is already managed at another version, which the library no longer holds", v.name),
 			"run '"+skillCommand("remove", v.name)+"' to stop managing that version, then install again to get the version the source holds now")
@@ -1226,7 +1234,7 @@ func (inv *invocation) stageCopyMode(m *home.Mutation, edit *settingsEdit, dones
 // run is laid out from. The library directory is published by the same
 // mutation, so it is not there to copy from yet.
 func (v *imported) placeable() placeable {
-	return placeable{name: v.name, hash: v.hash, stage: v.writeFiles}
+	return placeable{name: v.name, hash: v.hash, stage: v.writeFiles, foreignLinks: v.links}
 }
 
 // contentHashOf is the content hash of a version's files. The name and
