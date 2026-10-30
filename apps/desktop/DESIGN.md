@@ -599,7 +599,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `timeline.gap` | 12–16 |  | Dot → text |
 | `timeline.dot` | 7 | `size-timeline-dot` |  |
 | `timeline.line` | 20 | `h-timeline-line` | The box the dot is centred in beside a plain entry: the line height of `type.timeline-entry` |
-| `timeline.button-line` | 34 | `h-timeline-button-line` | The box the dot is centred in beside an entry whose first line is a small button (the expandable entries of the History sheet, the "Show all {n}" row) |
+| `timeline.button-line` | 32 | `h-timeline-button-line` | The box the dot is centred in beside an entry whose first line is a wrapping small button (the expandable entries of the History sheet, the "Show all {n}" row): the button's top padding (6) plus one `timeline.line` |
 | `timeline.entry-gap` | 16–20 |  | Bottom padding per entry |
 | `check.column-width` | 480 | `w-check-column` | Startup column |
 | `check.block-gap` | 36 | `gap-check-block` | Logo/title → checks → actions |
@@ -661,6 +661,7 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 - **Primary** – `button.primary-height` / 0 `button.primary-padding-x` / `button.primary-bg`, `button.primary-text`, 600; hover `button.primary-hover`. Disabled: `opacity:.3` and inert (never a grey fill).
 - **Secondary** – `button.secondary-height` / 0 `button.secondary-padding-x` / `button.secondary-bg`, `button.secondary-text`, 500; hover `button.secondary-hover`.
 - **Ghost** – `button.ghost-height` / 0 `button.ghost-padding-x` / transparent, `button.ghost-text` (or `text.muted`); hover `button.ghost-hover`, `text.primary`.
+- **Small, wrapping** – a small button whose label is a sentence (a commit's subject in the History sheet, "Show all {n}"): at least 34 high, 6 `button.ghost-padding-x`, left-aligned, the label wraps in `timeline.line` lines and the button grows with them; never clipped, never scrolled.
 - **Danger** – ghost in `button.danger-text`; hover `button.danger-hover`.
 - **Icon** – `button.icon-size` square, `button.radius` or `button.icon-radius`, transparent; hover `button.ghost-hover`.
 - **Toast action** – ghost with `button.toast-action-text` on `overlay.bg`.
@@ -743,7 +744,7 @@ Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot` round (`timeline.dot
 
 ### Sheet (History)
 
-`sheet.width`, inset `sheet.inset` from the top, right and bottom, `sheet.bg` with 1px `sheet.border`, `sheet.radius`, `overlay.shadow`, `sheet.padding`, over `shell.scrim`. Title in `type.dialog-title`, the subject's name under it in `type.technical` `text.caption`, a ghost Close at the top right. Escape or Close closes it.
+`sheet.width`, inset `sheet.inset` from the top, right and bottom, `sheet.bg` with 1px `sheet.border`, `sheet.radius`, `overlay.shadow`, `sheet.padding`, over `shell.scrim`. Title in `type.dialog-title`, the subject's name under it in `type.technical` `text.caption`, a ghost Close at the top right. Escape or Close closes it. Its content scrolls down only: a long line wraps, it never clips or scrolls sideways.
 
 ### Agent client logo chip, monogram
 
