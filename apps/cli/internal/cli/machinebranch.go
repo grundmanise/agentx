@@ -243,7 +243,6 @@ func (inv *invocation) exportToMachine(ctx context.Context, id string) error {
 		done = where + " holds this snapshot already, at " + short(commit) + ", so nothing was pushed"
 	}
 	out.done(done)
-	out.print("  ", out.paint(muted, "the snapshot names each skill's source, version and placements, and holds no skill content"))
 	inv.summary = done
 	return nil
 }
