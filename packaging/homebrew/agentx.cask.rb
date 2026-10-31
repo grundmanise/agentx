@@ -22,7 +22,7 @@ cask "agentx" do
   depends_on arch: :arm64
   # agentx runs git 2.40 or later, newer than some macOS versions ship.
   depends_on formula: "git"
-  # The formula agentx-cli also links agentx, so Homebrew refuses to install this cask next to it.
+  # The formula agentx-cli also links agentx. Installed next to it, this cask skips its link.
 
   app "agentx.app"
   binary "#{appdir}/agentx.app/Contents/MacOS/agentx"
