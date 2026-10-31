@@ -30,7 +30,7 @@
     "shortDescription": "Inventory manager for your agents' skills, MCP servers and plugins",
     "linux": {
       "deb": {
-        "depends": ["git"]
+        "depends": ["git (>= 1:2.40)"]
       }
     },
     "icon": [
