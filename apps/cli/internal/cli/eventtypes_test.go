@@ -34,6 +34,7 @@ var eventTypes = []struct {
 	v    any
 }{
 	{"version", versionEvent{}},
+	{"update", updateEvent{}},
 	{"settings", settingsEvent{}},
 	{"machine", machineEvent{}},
 	{"source", sourceEvent{}},
@@ -153,6 +154,12 @@ var valueLists = []valueList{
 	}},
 	{name: "DoctorStatus", values: []string{rowOK, rowWarn, rowFail, rowInfo}, fields: []fieldRef{
 		{doctorEvent{}, "Status"},
+	}},
+	{name: "UpdateState", values: []string{cliCurrent, cliAvailable, cliUpdated}, fields: []fieldRef{
+		{updateEvent{}, "State"},
+	}},
+	{name: "UpdateChannel", values: []string{channelStable, channelNightly}, fields: []fieldRef{
+		{updateEvent{}, "Channel"},
 	}},
 	{name: "LogLevel", open: true, values: []string{levelWarn, levelDebug}, fields: []fieldRef{
 		{logEvent{}, "Level"},

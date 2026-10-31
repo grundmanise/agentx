@@ -49,10 +49,17 @@ The script takes these options. When you pipe the script to `sh`, put them after
 
 ## Update
 
-Update the way you installed:
+If you installed with the install script, update with agentx itself:
 
-- **Homebrew**: run `brew upgrade agentx`. For a `--HEAD` install, run `brew upgrade --fetch-HEAD agentx`.
-- **Install script**: run the install command again. If you installed to another directory, pass the same `--dir`. Leave out `--version`, or you get the same version again. The script replaces the binary in place.
+```sh
+agentx update
+```
+
+It downloads the latest release for your system, checks it against the release's checksums and replaces the `agentx` that ran it. See [`agentx update`](/cli/update) for checking without installing, nightly builds and installing one version.
+
+If you installed with Homebrew, run `brew upgrade agentx`. For a `--HEAD` install, run `brew upgrade --fetch-HEAD agentx`. `agentx update` refuses an agentx that Homebrew installed, and tells you so.
+
+Running the install command again also updates. If you installed to another directory, pass the same `--dir`. Leave out `--version`, or you get the same version again.
 
 A running [`agentx serve`](/cli/serve) keeps the old version until it restarts.
 
@@ -68,7 +75,7 @@ Install the newest nightly:
 curl -fsSL https://agentx.wtf/install | sh -s -- --nightly
 ```
 
-Run the same command to move to a newer nightly. To go back to the latest release, run the install command without `--nightly`. If GitHub refuses the command because of its rate limit, set `GITHUB_TOKEN` and run it again.
+Once you run a nightly, `agentx update` moves you to the newest nightly, and `agentx update --stable` takes you back to the latest release. Running the install command again does the same: with `--nightly` for a newer nightly, without it for the latest release. If GitHub refuses the command because of its rate limit, set `GITHUB_TOKEN` and run it again.
 
 With Homebrew, run `brew install --HEAD grundmanise/tap/agentx` to build the latest code on `main`.
 
