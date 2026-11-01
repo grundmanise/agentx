@@ -40,7 +40,7 @@ func TestSkillListReportsManagedAndUnmanaged(t *testing.T) {
 	equal(t, "the first base hash", managed["base_hash"], managed["content_hash"])
 	equal(t, "the second name", unmanaged["name"], "mine")
 	equal(t, "the second kind", unmanaged["kind"], "unmanaged")
-	for _, field := range []string{"source", "subpath", "upstream_commit", "base_hash", "state"} {
+	for _, field := range []string{"source", "subpath", "upstream_commit", "upstream_time", "base_hash", "state"} {
 		if _, ok := unmanaged[field]; ok {
 			t.Errorf("an unmanaged skill carries %s: %v", field, unmanaged[field])
 		}
