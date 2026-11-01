@@ -26,9 +26,11 @@ type doctorEvent struct {
 
 func newDoctorCommand(inv *invocation) *cobra.Command {
 	return &cobra.Command{
-		Use:   "doctor",
-		Short: "Check that agentx can run: git, agentx home and the account repo",
-		Args:  cobra.NoArgs,
+		Use:         "doctor",
+		Short:       "Check that agentx can run: git, home and the account repo",
+		Annotations: map[string]string{annotationSection: "diagnostics"},
+		Args:        cobra.NoArgs,
+		Example:     examples("agentx doctor", "check git, agentx home and the account repo"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			d := &doctor{inv: inv}
 			err := d.run(cmd.Context())

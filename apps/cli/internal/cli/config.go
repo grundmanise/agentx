@@ -29,14 +29,22 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:         "config",
 		Short:       "Read and change the settings",
-		Annotations: map[string]string{annotationGroup: "true"},
+		Annotations: map[string]string{annotationGroup: "true", annotationSection: "settings"},
 		Args:        cobra.NoArgs,
-		RunE:        needSubcommand(inv, "no config command given", "run 'agentx config --help' to list commands"),
+		Example: examples(
+			"agentx config list", "every setting",
+			`agentx config set label "work laptop"`, "name this machine",
+			"agentx config disable cursor", "keep new skills out of one client",
+			"agentx config enable cursor --place-all", "enable a client and place every skill in it",
+		),
+		RunE: needSubcommand(inv, "no config command given", "run 'agentx config --help' to list commands"),
 	}
 	cmd.AddCommand(&cobra.Command{
-		Use:   "list",
-		Short: "Print every setting",
-		Args:  cobra.NoArgs,
+		Use:         "list",
+		Short:       "Print every setting",
+		Annotations: map[string]string{annotationSection: "settings"},
+		Args:        cobra.NoArgs,
+		Example:     examples("agentx config list", "every setting and its value"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := inv.loadSettings()
 			if err != nil {
@@ -48,9 +56,11 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
-		Use:   "get <key>",
-		Short: "Print one setting",
-		Args:  cobra.ExactArgs(1),
+		Use:         "get <key>",
+		Short:       "Print one setting",
+		Annotations: map[string]string{annotationSection: "settings"},
+		Args:        cobra.ExactArgs(1),
+		Example:     examples("agentx config get label", "one setting"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := inv.loadSettings()
 			if err != nil {
@@ -69,9 +79,14 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
-		Use:   "set <key> <value>",
-		Short: "Change label, accept_operations or ignore_system_files",
-		Args:  cobra.ExactArgs(2),
+		Use:         "set <key> <value>",
+		Short:       "Change label, accept_operations or ignore_system_files",
+		Annotations: map[string]string{annotationSection: "settings"},
+		Args:        cobra.ExactArgs(2),
+		Example: examples(
+			`agentx config set label "work laptop"`, "name this machine",
+			"agentx config set ignore_system_files true", "keep .DS_Store and swap files out of skill commits",
+		),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			apply, err := settingSetter(args[0], args[1])
 			if err != nil {
@@ -104,8 +119,8 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 			return nil
 		},
 	})
-	cmd.AddCommand(newEnableCommand(inv, "enable", "Select a configuration for placements by default"))
-	cmd.AddCommand(newEnableCommand(inv, "disable", "Leave a configuration out of placements by default"))
+	cmd.AddCommand(newEnableCommand(inv, "enable", "Select a client for placements by default"))
+	cmd.AddCommand(newEnableCommand(inv, "disable", "Leave a client out of placements by default"))
 	return cmd
 }
 
@@ -117,10 +132,19 @@ func newConfigCommand(inv *invocation) *cobra.Command {
 func newEnableCommand(inv *invocation, use, short string) *cobra.Command {
 	disable := use == "disable"
 	var placeAll bool
+	example := examples(
+		"agentx config enable cursor", "new installs also go to Cursor",
+		"agentx config enable cursor --place-all", "and place every skill the library holds in it now",
+	)
+	if disable {
+		example = examples("agentx config disable cursor", "new installs skip Cursor")
+	}
 	cmd := &cobra.Command{
-		Use:   use + " <configuration>",
-		Short: short,
-		Args:  cobra.ExactArgs(1),
+		Use:         use + " <configuration>",
+		Short:       short,
+		Annotations: map[string]string{annotationSection: "settings"},
+		Args:        cobra.ExactArgs(1),
+		Example:     example,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := inv.detectedConfiguration(args[0]); err != nil {
 				return err

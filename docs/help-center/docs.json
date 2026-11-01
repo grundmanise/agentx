@@ -39,7 +39,7 @@
       {
         "group": "This machine",
         "icon": "laptop",
-        "pages": ["cli/machine", "cli/config", "cli/export", "cli/doctor"]
+        "pages": ["cli/machine", "cli/config", "cli/export", "cli/doctor", "cli/update"]
       },
       {
         "group": "Reference",

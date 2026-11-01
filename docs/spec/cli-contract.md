@@ -4,7 +4,7 @@ Status: accepted, 2026-09-18. Implements the output contract in ADR 0001 and the
 
 ## Invocation
 
-`agentx [--json] [--verbose] [--color on|off] <command> [arguments]`. The three global flags are accepted before or after the command. `--json` switches stdout to newline-delimited JSON events. `--verbose` raises the log level on stderr to debug. `--color` decides whether text output carries ANSI colour, see [Streams](#streams); any other value is a usage error. `agentx help`, `--help`, `-h` and a bare `agentx` print usage and exit 0; the usage text goes to stdout, or to stderr in JSON mode. A bare `agentx --json` is a usage error instead: a script that omits the command has made a mistake.
+`agentx [--json] [--verbose] [--color on|off] <command> [arguments]`. The three global flags are accepted before or after the command. `--json` switches stdout to newline-delimited JSON events. `--verbose` raises the log level on stderr to debug. `--color` decides whether text output carries ANSI colour, see [Streams](#streams); any other value is a usage error. `agentx help`, `--help`, `-h` and a bare `agentx` print usage and exit 0; the usage text goes to stdout, or to stderr in JSON mode. The help lists the commands by section, each with its synopsis and a one-line description, followed by examples; `agentx <command> --help` adds the command's flags and its own examples. A bare `agentx --json` is a usage error instead: a script that omits the command has made a mistake.
 
 The CLI reads its environment once, at startup, from the variables below. Beyond them, `PATH` locates git and the command of a local MCP server, `TZ` is the time zone the dates of [fork commits](#git) are written in, the local one when it is unset, and the [handshake](#handshake) hands the environment on to the servers it starts.
 
@@ -20,6 +20,7 @@ The CLI reads its environment once, at startup, from the variables below. Beyond
 | `AGENTX_HOSTNAME` | the default machine label | the operating system's hostname |
 | `AGENTX_INSTANCE_ID` | the `instance_id` carried by inventories, so a script can fix it | a fresh random id per process |
 | `AGENTX_HANDSHAKE_TIMEOUT` | the budget of one MCP handshake, a duration such as `500ms` | `10s` |
+| `GITHUB_TOKEN` | the token [`agentx update`](#update) reads GitHub's release list with, which only `--nightly` needs; GitHub allows 60 anonymous requests an hour | unset |
 
 ## Streams
 
@@ -59,6 +60,16 @@ Every run emits exactly one `result` as its last stdout event, after any `error`
 | Field | Type | Meaning |
 |---|---|---|
 | `cli_version` | string | the CLI version, `dev` for an unreleased build |
+
+`update`, emitted by `agentx update` once it knows what the channel offers (see [Update](#update)):
+
+| Field | Type | Meaning |
+|---|---|---|
+| `state` | string | `current` when this agentx is the version the channel offers, `available` when another is and `--check` stopped there, `updated` when the file was replaced |
+| `channel` | string | `stable` or `nightly`, the channel of `version` |
+| `current_version` | string | the version of the agentx that ran the command |
+| `version` | string | the version the channel offers, or the one `--version` named |
+| `path` | string | the file that agentx runs from, which `updated` replaced |
 
 `settings`, emitted by every `agentx config` command and, as its first event, by `agentx import`:
 
@@ -305,9 +316,9 @@ An update another machine published to one of your own skills, see **Checking fo
 | 0 | `ok` | success |
 | 1 | `usage` | a usage error: unknown command, bad flag, missing argument, a required environment variable not set or an environment variable not valid |
 | 2 | `git` | git is missing or older than 2.40 |
-| 3 | `source` | a source or the account remote is unreachable or authentication failed, the account remote or a shared source did not let this machine push, or the account remote refused to delete a fork's branch |
+| 3 | `source` | a source or the account remote is unreachable or authentication failed, the account remote or a shared source did not let this machine push, the account remote refused to delete a fork's branch, or `agentx update` could not reach GitHub or read what it sent |
 | 4 | `pending_merge` | a pending merge blocks the action, or was left by it |
-| 5 | `not_found` | a skill, source or configuration was not found |
+| 5 | `not_found` | a skill, source or configuration was not found, or `agentx update` found no release of the version or channel it was asked for |
 | 6 | `refused` | a collision or an unmet precondition, a push the remote's host declined and a publish over a source that changed the skill among them |
 | 7 | `locked` | another agentx command holds the lock |
 | 8 | `account_repo` | the account repo is unusable: missing, corrupt, or a repository format this git cannot read |
@@ -719,6 +730,16 @@ In the serve child every git call runs unattended, so a prompt becomes an error 
 | `hint` | string | how to fix it; absent when there is nothing to suggest |
 
 Without `--json` the rows print in three titled sections, `System` (`git`, `fork_merges`, `commit_identity`, `home`), `App` (`lock`, `mutations`, `settings`, `account_repo`, `source_remotes`, `staged_imports`, `library`) and `Clients` (every `client:<slug>` row; the `clients` detail is shown after the section title rather than as a row), each row indented as `<glyph> <check>  <status>  <detail>`, the glyph being `✓` for `ok`, `!` for `warn`, `✗` for `fail` and `•` for `info`, with the columns aligned across sections. After the sections, a blank line and either `✓ No issues detected` or an `<n> issues` block (`1 issue`) listing every `warn` and `fail` row again as `<glyph> <check>  <detail>`, with its `hint` on the next line as `hint: <hint>` aligned under the detail. Exit code 2 when git is missing or too old; the run stops after the `git` row, since nothing else can be checked. Exit code 8 when the account repo is unusable, after every row. Otherwise 0, warnings included. The `result` event carries `ok: false` exactly when the exit code is non-zero.
+
+## Update
+
+`agentx update` replaces the agentx that runs it with a release from `https://github.com/grundmanise/agentx/releases`: the same archives the install script installs, `agentx_<os>_<arch>.tar.gz` for the operating system and architecture the running agentx was built for, checked against the release's `checksums.txt` the same way ([ADR 0007](../adr/0007-releases-nightly-promoted-by-tag-git-cliff-notes-script-and-homebrew-installs.md)). It touches neither agentx home nor the library, takes no lock and runs no git, so it runs where every other command but `version`, `doctor` and `help` is refused for a missing git.
+
+The version it is about is chosen before anything is downloaded. `--version <x>` names one, with or without the `v`. Otherwise it is the newest of a channel: a nightly build is on the nightly channel and any other release on the stable one, `--nightly` and `--stable` move between them, and the three flags cannot be combined, which is exit code 1. The newest release of the stable channel is the one GitHub redirects `releases/latest` to, which is never a prerelease, so no API request is spent on it; the newest nightly is the first release of GitHub's list, newest first, whose tag is `vX.Y.Z-nightly.YYYYMMDD`, read with `GITHUB_TOKEN` when the environment holds one. A channel with no release yet is exit code 5. The version is compared with this agentx's as a string, and nothing is ordered: `--version` installs an older release as readily as a newer one.
+
+The `update` event is emitted once that version is known, before anything changes, with `state` `current` when it is this agentx's version, which ends the run with exit code 0 and nothing downloaded. With `--check` the run ends there with `available` instead, and changes nothing; the text output names the command that would apply it, `agentx update` with the channel flag or `--version` the check was given. Without `--check` the archive and `checksums.txt` are downloaded, the archive is checked against the line that names it (exit code 6 when it does not match or the file lists no such line, 5 when the release has no such archive), the agentx file is written beside the running file with the running file's mode, run once as `<file> version --json` to check that it reports the version (exit code 6 when it does not run or reports another), and renamed over the running file, which replaces it in one step while agentx runs; a running `agentx serve` keeps the old version until it restarts. Whatever stops the replacement leaves the running file as it was and nothing beside it. The event then carries `updated`, and the text output confirms it on one line, `✓ updated agentx <from> to <to> at <path>`.
+
+Before any of that, a run refuses what it may not replace, exit code 6 with the fix as its hint: a build from source, whose version is `dev` and which no release can stand in for, with or without `--check`; without `--check`, an agentx under a `Cellar` directory, which Homebrew installed and `brew upgrade agentx-cli` updates, and one inside an application bundle, a `<name>.app/Contents` path, which is the CLI of the desktop app's own release and a newer app replaces. A file that cannot be written or renamed over is exit code 6 too, with a hint to run the command as the user who installed agentx or to install again with the script. A GitHub that cannot be reached, answers with a status the run cannot use (a rate-limited API among them, whose hint names `GITHUB_TOKEN`), cuts a download short or sends a release list that does not parse is exit code 3.
 
 ## Account repo
 

@@ -101,9 +101,14 @@ func nonNil(words []string) []string {
 func newServeCommand(inv *invocation) *cobra.Command {
 	var once bool
 	cmd := &cobra.Command{
-		Use:   "serve",
-		Short: "Watch for changes and stream an inventory on each one, until stdin closes",
-		Args:  cobra.NoArgs,
+		Use:         "serve",
+		Short:       "Stream an inventory on every change, for the desktop app",
+		Annotations: map[string]string{annotationSection: "diagnostics"},
+		Args:        cobra.NoArgs,
+		Example: examples(
+			"agentx serve --json", "the desktop app's mode: inventories until stdin closes",
+			"agentx serve --once", "scan once, emit the inventory and exit",
+		),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			lock, err := home.TakeServeLock(inv.dirs.Home)
 			if errors.Is(err, home.ErrServing) {

@@ -22,8 +22,9 @@ func newSkillPlaceCommand(inv *invocation) *cobra.Command {
 	var asCopy, force bool
 	var machine string
 	cmd := &cobra.Command{
-		Use:   "place <name>",
-		Short: "Place a skill the library already holds, or put its placements back",
+		Use:         "place <name>",
+		Short:       "Place a skill, or put its placements back",
+		Annotations: map[string]string{annotationSection: "skills"},
 		Long: "Place a skill the library already holds into every enabled agent configuration,\n" +
 			"or into those named with --to. This is the placement half of 'agentx skill add'\n" +
 			"on its own, and it puts back the placements 'agentx skill list' shows as missing\n" +
@@ -44,6 +45,12 @@ func newSkillPlaceCommand(inv *invocation) *cobra.Command {
 			"disk changes. Without --to, it is placed in every configuration this machine\n" +
 			"enables. With --copy, the snapshot's copy_mode records a copy in those\n" +
 			"configurations, so the cloud machine places a copy there. --force is refused.",
+		Example: examples(
+			"agentx skill place pdf", "put back its placements in every enabled client",
+			"agentx skill place pdf --to cursor", "place it in one client",
+			"agentx skill place pdf --force", "replace a directory that holds other content",
+			"agentx skill place pdf --machine cloud --to claude-code", "place it on the cloud machine",
+		),
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cmd.Flags().Changed("machine") {

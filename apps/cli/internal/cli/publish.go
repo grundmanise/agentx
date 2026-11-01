@@ -65,8 +65,9 @@ const phasePublish = "publish"
 func newSkillPublishCommand(inv *invocation) *cobra.Command {
 	var message string
 	cmd := &cobra.Command{
-		Use:   "publish [<name>]",
-		Short: "Publish the edits of a skill to its source, or of yours the account remote holds",
+		Use:         "publish [<name>]",
+		Short:       "Publish edits to the source or the account remote",
+		Annotations: map[string]string{annotationSection: "updates"},
 		Long: "Publish the skill called <name>, or with no name every skill of your own the\n" +
 			"account remote holds: record the edits its directory holds as one commit on its\n" +
 			"branch, then push the branch to the account remote. Edits stay on this machine\n" +
@@ -87,6 +88,12 @@ func newSkillPublishCommand(inv *invocation) *cobra.Command {
 			"there. No account remote is needed. When the source changed the skill since it\n" +
 			"was installed, nothing is pushed: run 'agentx skill update <name>' first, then\n" +
 			"publish again.",
+		Example: examples(
+			"agentx skill publish release-notes", "publish one of your own skills",
+			"agentx skill publish release-notes -m \"Cover reverted PRs\"", "with your own commit message",
+			"agentx skill publish", "every skill of your own the account remote holds",
+			"agentx skill publish pdf", "push edits of a shared source's skill to it",
+		),
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if cmd.Flags().Changed("message") && strings.TrimSpace(message) == "" {

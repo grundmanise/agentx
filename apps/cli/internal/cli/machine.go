@@ -17,9 +17,15 @@ type machineEvent struct {
 
 func newMachineCommand(inv *invocation) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "machine",
-		Short: "Print the machine id, label and how the id was derived",
-		Args:  cobra.NoArgs,
+		Use:         "machine",
+		Short:       "Print this machine's id and label",
+		Annotations: map[string]string{annotationSection: "machines"},
+		Args:        cobra.NoArgs,
+		Example: examples(
+			"agentx machine", "this machine's id and label",
+			`agentx machine rename "work laptop"`, "change the label",
+			"agentx machine reset-id", "give the machine a new id",
+		),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			m, err := inv.machine(cmd.Context())
 			if err != nil {
@@ -31,9 +37,10 @@ func newMachineCommand(inv *invocation) *cobra.Command {
 		},
 	}
 	cmd.AddCommand(&cobra.Command{
-		Use:   "rename <label>",
-		Short: "Change the machine label",
-		Args:  cobra.ExactArgs(1),
+		Use:     "rename <label>",
+		Short:   "Change this machine's label",
+		Args:    cobra.ExactArgs(1),
+		Example: examples(`agentx machine rename "work laptop"`, "change the label"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := validLabel(args[0]); err != nil {
 				return err
@@ -54,9 +61,10 @@ func newMachineCommand(inv *invocation) *cobra.Command {
 		},
 	})
 	cmd.AddCommand(&cobra.Command{
-		Use:   "reset-id",
-		Short: "Replace the machine id with a new random one",
-		Args:  cobra.NoArgs,
+		Use:     "reset-id",
+		Short:   "Replace this machine's id with a new random one",
+		Args:    cobra.NoArgs,
+		Example: examples("agentx machine reset-id", "replace the id with a new random one"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			m, err := inv.mutateMachine(cmd.Context(), func() error {
 				_, err := home.ResetMachineID(inv.dirs.Home)

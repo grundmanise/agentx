@@ -38,6 +38,8 @@ export type HandshakeReason =
   | "failed";
 export type FileStatus = "added" | "modified" | "deleted";
 export type DoctorStatus = "ok" | "warn" | "fail" | "info";
+export type UpdateState = "current" | "available" | "updated";
+export type UpdateChannel = "stable" | "nightly";
 export type LogLevel = "warn" | "debug" | (string & Record<never, never>);
 export type ErrorCode =
   | "usage"
@@ -298,6 +300,16 @@ export interface VersionEvent {
   type: "version";
   schema_version: number;
   cli_version: string;
+}
+
+export interface UpdateEvent {
+  type: "update";
+  schema_version: number;
+  state: UpdateState;
+  channel: UpdateChannel;
+  current_version: string;
+  version: string;
+  path: string;
 }
 
 export interface SettingsEvent {
@@ -583,6 +595,7 @@ export interface FleetEvent {
 // Every event type the app knows.
 export type CliEvent =
   | VersionEvent
+  | UpdateEvent
   | SettingsEvent
   | MachineEvent
   | SourceEvent

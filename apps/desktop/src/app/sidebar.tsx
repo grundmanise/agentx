@@ -16,7 +16,7 @@ const MachineLabel = () => {
 export const Sidebar = () => (
   <aside className="bg-shell-bg w-sidebar gap-nav pt-sidebar-top pr-sidebar-right pb-sidebar pl-sidebar flex flex-none flex-col">
     <div className="flex items-center gap-2.5 px-2.5 pt-1 pb-5.5">
-      <AgentxMark size={26} />
+      <AgentxMark size={30} />
       <div className="flex min-w-0 flex-col">
         <span className="type-brand">agentx</span>
         <MachineLabel />

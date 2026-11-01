@@ -16,19 +16,29 @@ description: "The inventory manager for your agents. See the skills, MCP servers
 
 ## Install
 
-Install with Homebrew on macOS or Linux:
+On macOS, install the app with its CLI with Homebrew:
 
 ```sh
 brew install grundmanise/tap/agentx
 ```
 
-Or install the latest release with the install script:
+Or install the CLI alone, on macOS or Linux, with Homebrew:
+
+```sh
+brew install grundmanise/tap/agentx-cli
+```
+
+or with the install script:
 
 ```sh
 curl -fsSL https://agentx.wtf/install | sh
 ```
 
 agentx also needs `git` 2.40 or later on your `PATH`. Run [`agentx doctor`](/cli/doctor) to check that this machine is ready. See [Install and update](/install) for nightly builds, updates and building from source.
+
+## Get help
+
+Run `agentx --help` to list every command by section, with a synopsis and a one-line description, and a few examples of common workflows. Add `--help` to any command, such as `agentx skill add --help`, for its flags and examples. Both print to stdout and exit 0.
 
 ## Key terms
 
@@ -117,6 +127,7 @@ agentx adds the source, installs the skill into the library and links it into ea
 - [`agentx config`](/cli/config): list, get and set this machine's settings, and enable or disable a configuration.
 - [`agentx export` and `agentx import`](/cli/export): save a snapshot of this machine, and apply it to another machine: its settings, its skills and where each one is placed.
 - [`agentx doctor`](/cli/doctor): check that this machine can run agentx.
+- [`agentx update`](/cli/update): update agentx to the latest release, or check whether one is out.
 
 ### Reference
 

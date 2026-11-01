@@ -143,9 +143,15 @@ func colorFromArgs(args []string) string {
 func newRoot(inv *invocation) *cobra.Command {
 	var colorFlag string // parsed by cobra; the pre-scanned value stands until then
 	root := &cobra.Command{
-		Use:           "agentx",
-		Short:         "Inventory agent clients, skills, MCP servers and plugins",
-		Annotations:   map[string]string{annotationGroup: "true"},
+		Use:         "agentx",
+		Short:       "Inventory agent clients, skills, MCP servers and plugins",
+		Annotations: map[string]string{annotationGroup: "true"},
+		Example: examples(
+			"agentx skill add anthropics/skills --name pdf", "install one skill into every enabled client",
+			"agentx skill new release-notes", "create a skill of your own",
+			"agentx skill check-updates", "see what changed upstream before you update",
+			"agentx export --machine cloud", "seed the cloud machine with this one's skills",
+		),
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
@@ -179,17 +185,19 @@ func newRoot(inv *invocation) *cobra.Command {
 	root.SetHelpFunc(inv.help)
 	root.SetUsageFunc(inv.usage)
 
-	root.AddCommand(newVersionCommand(inv))
-	root.AddCommand(newConfigCommand(inv))
-	root.AddCommand(newMachineCommand(inv))
-	root.AddCommand(newSourceCommand(inv))
+	// The order here is the order the help lists them in, section by section.
 	root.AddCommand(newSkillCommand(inv))
-	root.AddCommand(newAdoptCommand(inv))
-	root.AddCommand(newScanCommand(inv))
-	root.AddCommand(newDoctorCommand(inv))
-	root.AddCommand(newServeCommand(inv))
+	root.AddCommand(newSourceCommand(inv))
+	root.AddCommand(newMachineCommand(inv))
 	root.AddCommand(newExportCommand(inv))
 	root.AddCommand(newImportCommand(inv))
+	root.AddCommand(newConfigCommand(inv))
+	root.AddCommand(newScanCommand(inv))
+	root.AddCommand(newServeCommand(inv))
+	root.AddCommand(newDoctorCommand(inv))
+	root.AddCommand(newAdoptCommand(inv))
+	root.AddCommand(newVersionCommand(inv))
+	root.AddCommand(newUpdateCommand(inv))
 	return root
 }
 

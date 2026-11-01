@@ -17,8 +17,9 @@ func newSkillDiffCommand(inv *invocation) *cobra.Command {
 	var update bool
 	var commit string
 	cmd := &cobra.Command{
-		Use:   "diff <name>",
-		Short: "Show the edits of a skill not yet published, or what its update changes",
+		Use:         "diff <name>",
+		Short:       "Show unpublished edits, or what an update changes",
+		Annotations: map[string]string{annotationSection: "skills"},
 		Long: "Show how the library directory of a managed skill differs from its base version,\n" +
 			"the version it was installed at or last published, as one unified diff per file:\n" +
 			"its edits not yet published, which 'agentx skill publish <name>' pushes to its\n" +
@@ -31,6 +32,11 @@ func newSkillDiffCommand(inv *invocation) *cobra.Command {
 			"account remote holds as last fetched, or from the commit that created it when the\n" +
 			"account remote holds none, so edits an update or a fork recorded show until they\n" +
 			"are published; or, with --commit <id>, how it differs from that commit.",
+		Example: examples(
+			"agentx skill diff pdf", "edits not yet published",
+			"agentx skill diff pdf --update", "what the update the last check found changes",
+			"agentx skill diff release-notes --commit e07d5b2", "one of your own against a commit",
+		),
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			switch {

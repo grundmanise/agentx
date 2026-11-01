@@ -17,9 +17,11 @@ type versionEvent struct {
 
 func newVersionCommand(inv *invocation) *cobra.Command {
 	return &cobra.Command{
-		Use:   "version",
-		Short: "Print the CLI version and its output schema version",
-		Args:  cobra.NoArgs,
+		Use:         "version",
+		Short:       "Print the CLI version and its output schema version",
+		Annotations: map[string]string{annotationSection: "diagnostics"},
+		Args:        cobra.NoArgs,
+		Example:     examples("agentx version --json", "the version and schema version as an event"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			inv.out.emit(versionEvent{event: newEvent("version"), CLIVersion: cliVersion})
 			t := &table{}
