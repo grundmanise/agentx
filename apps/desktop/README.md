@@ -40,6 +40,27 @@ pnpm dev                                # the frontend alone, at http://localhos
 
 A release build runs only the `agentx` next to its executable: the CLI of its own release, built from the same commit. A debug build (`pnpm tauri dev`) also looks on the `PATH` your login shell sets, so put a CLI there, for example with `go build -o ~/go/bin/agentx .` in `apps/cli`.
 
+### How a release build gets its CLI
+
+The Release workflow ([`.github/workflows/release.yml`](../../.github/workflows/release.yml)) builds the app once per platform, in the `desktop` job for macOS and the `desktop-linux` job for Linux, after the `build` job has built the CLI. Each job downloads the CLI build of its platform, unpacks it as `dist/agentx-<target triple>` at the repository root, and runs `tauri build` with a `--config` that sets the release version and `bundle.externalBin` to that file. Tauri treats the file as a sidecar: it copies it next to the app's executable, as `agentx`, and on macOS signs it with the app.
+
+| Platform | The app's executable | The CLI next to it |
+| --- | --- | --- |
+| macOS | `agentx.app/Contents/MacOS/agentx-desktop` | `agentx.app/Contents/MacOS/agentx` |
+| Linux `.deb` | `/usr/bin/agentx-desktop` | `/usr/bin/agentx`, on `PATH` |
+| Linux AppImage | `usr/bin/agentx-desktop` inside the image | `usr/bin/agentx` inside the image |
+
+`tauri.conf.json` keeps version `0.0.0` and lists no `externalBin`, so `pnpm tauri dev` needs no sidecar and nothing in the repository changes per release. To build a release-like app yourself, put a CLI at `dist/agentx-<target triple>` and pass the same config:
+
+```sh
+# from the repository root; the target triple is `rustc -vV | sed -n 's/^host: //p'`
+go build -C apps/cli -o "../../dist/agentx-$(rustc -vV | sed -n 's/^host: //p')" .
+cd apps/desktop
+pnpm tauri build --config "{\"bundle\":{\"externalBin\":[\"$PWD/../../dist/agentx\"]}}"
+```
+
+The workflow checks, before it uploads, that the CLI inside each package reports the release version, and on macOS that the app passes `codesign --verify`, and `spctl` and `stapler validate` when it was notarized. [`RELEASING.md`](../../RELEASING.md) describes the release and its secrets.
+
 The serve child's stderr goes to `~/Library/Logs/agentx/serve.log` on macOS and `$XDG_STATE_HOME/agentx/logs/serve.log` (`~/.local/state/agentx/logs` by default) on Linux, in at most 5 files of 5 MB.
 
 Run these in `apps/desktop`:

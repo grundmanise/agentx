@@ -31,3 +31,4 @@ worktrees?
 organisation
 zsh
 Skillshare
+AppImage

@@ -105,7 +105,7 @@ func newUpdateCommand(inv *invocation) *cobra.Command {
 			"release follows the releases; --nightly and --stable move between the two, and\n" +
 			"--version installs one version. --check says what the channel offers and\n" +
 			"changes nothing.\n\n" +
-			"An agentx that Homebrew installed is updated with 'brew upgrade agentx', and\n" +
+			"An agentx that Homebrew installed is updated with 'brew upgrade agentx-cli', and\n" +
 			"the one inside the agentx desktop app is updated with the app: both are\n" +
 			"refused here. A build from source has no release to take: build it again.",
 		Annotations: map[string]string{annotationSection: "diagnostics"},
@@ -238,7 +238,7 @@ func managedElsewhere(path string) error {
 	for i, part := range parts {
 		switch {
 		case part == "Cellar":
-			return fail(exitRefused, "agentx at "+quotedPath(path)+" was installed by Homebrew", "run 'brew upgrade agentx'")
+			return fail(exitRefused, "agentx at "+quotedPath(path)+" was installed by Homebrew", "run 'brew upgrade agentx-cli'")
 		case strings.HasSuffix(part, ".app") && i+1 < len(parts) && parts[i+1] == "Contents":
 			return fail(exitRefused, "agentx at "+quotedPath(path)+" is the one inside the agentx app, which updates it",
 				"update the agentx app instead")

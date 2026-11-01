@@ -55,7 +55,7 @@ Listing the nightly builds counts against GitHub's limit of 60 requests an hour 
 
 `agentx update` replaces only an agentx it may replace. It refuses, and names the fix, when:
 
-- **Homebrew installed agentx.** Run `brew upgrade agentx` instead.
+- **Homebrew installed agentx.** Run `brew upgrade agentx-cli` instead.
 - **The agentx is the one inside the desktop app.** The app ships with its own `agentx`, which a new release of the app replaces. Download the newer app from the [releases](https://github.com/grundmanise/agentx/releases).
 - **You built agentx from source.** Its version is `dev`, and no release stands in for it. Build it again, or install a release with the [install script](/install#with-the-install-script).
 - **The file cannot be replaced.** Run the command as the user who installed agentx, or install again with the install script.
