@@ -89,6 +89,19 @@ func (w *forkWriter) commit(ctx context.Context, rootTree string, parents []stri
 	return w.git.CommitTreeAs(ctx, w.gitDir, w.ident, gitDate(time.Now(), w.env["TZ"]), rootTree, parents, message)
 }
 
+// commitOperation writes one commit of rootTree with parents on a
+// machine's branch, as commit writes one on a fork's: its message is
+// subject and the trailers of the operation it makes, op, with the
+// machine added, see lineage.OperationMessage.
+func (w *forkWriter) commitOperation(ctx context.Context, rootTree string, parents []string, subject string, op lineage.OperationTrailers) (string, error) {
+	op.Machine = w.machine
+	message, err := lineage.OperationMessage(subject, op)
+	if err != nil {
+		return "", err
+	}
+	return w.commitText(ctx, rootTree, parents, message)
+}
+
 // gitDate is t as git writes a date, "<epoch> <+hhmm>", with the offset of
 // the time zone tz names, or of the local one when it names none git or Go
 // can read.
