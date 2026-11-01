@@ -10,13 +10,43 @@ import (
 )
 
 // pluginManifest is what a plugin.json manifest gives every client that
-// reads one; Codex and Cursor also read its skills and mcpServers.
+// reads one; Codex and Cursor also read its skills and mcpServers. Hooks
+// is the hook files or inline hook configurations the manifest declares.
+// The icon is named differently by each client: icon by Claude Code, logo
+// by Cursor, and by Codex under interface, which a root manifest in the
+// Agent Plugins format keeps with its hooks under extensions."com.openai".
 type pluginManifest struct {
 	Schema     string          `json:"$schema"`
 	Name       string          `json:"name"`
 	Version    string          `json:"version"`
 	Skills     json.RawMessage `json:"skills"`
 	MCPServers json.RawMessage `json:"mcpServers"`
+	Hooks      json.RawMessage `json:"hooks"`
+	Icon       string          `json:"icon"`
+	Logo       string          `json:"logo"`
+	Interface  codexInterface  `json:"interface"`
+	Extensions struct {
+		OpenAI struct {
+			Hooks     json.RawMessage `json:"hooks"`
+			Interface codexInterface  `json:"interface"`
+		} `json:"com.openai"`
+	} `json:"extensions"`
+}
+
+// codexInterface is how a Codex plugin presents itself: of its fields, the
+// two that name an image inside the plugin.
+type codexInterface struct {
+	Logo         string `json:"logo"`
+	ComposerIcon string `json:"composerIcon"`
+}
+
+// icon is the image inside the plugin the interface names, the logo, else
+// the composer icon, with the field it came from for a warning.
+func (i codexInterface) icon() (rel, field string) {
+	if i.Logo != "" {
+		return i.Logo, "interface.logo"
+	}
+	return i.ComposerIcon, "interface.composerIcon"
 }
 
 // subdirs lists the directories directly under dir by name, skipping hidden
@@ -117,17 +147,27 @@ func manifestPaths(raw json.RawMessage, manifest, field string, bare bool, warn 
 	}
 	var paths []string
 	for _, rel := range list {
-		rule := "must start with ./ and stay inside the plugin"
-		ok := strings.HasPrefix(rel, "./")
-		if bare {
-			rule = "must be relative and stay inside the plugin"
-			ok = rel != "" && !strings.HasPrefix(rel, "/")
+		if manifestPath(rel, manifest, field, bare, warn) {
+			paths = append(paths, rel)
 		}
-		if !ok || slices.Contains(strings.Split(rel, "/"), "..") {
-			warn(manifest + ": " + field + " path " + strconv.Quote(rel) + " " + rule + ", skipped")
-			continue
-		}
-		paths = append(paths, rel)
 	}
 	return paths
+}
+
+// manifestPath reports whether rel, a path the manifest's field names, is
+// one the client reads: it starts with ./ and stays inside the bundle, or,
+// with bare, is any relative path that does. Another path is a warning
+// naming it.
+func manifestPath(rel, manifest, field string, bare bool, warn func(string)) bool {
+	rule := "must start with ./ and stay inside the plugin"
+	ok := strings.HasPrefix(rel, "./")
+	if bare {
+		rule = "must be relative and stay inside the plugin"
+		ok = rel != "" && !strings.HasPrefix(rel, "/")
+	}
+	if !ok || slices.Contains(strings.Split(rel, "/"), "..") {
+		warn(manifest + ": " + field + " path " + strconv.Quote(rel) + " " + rule + ", skipped")
+		return false
+	}
+	return true
 }

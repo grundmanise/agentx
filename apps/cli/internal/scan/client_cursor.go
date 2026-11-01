@@ -89,7 +89,9 @@ func (c cursor) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 // the directory names. Skills live in the manifest's skills paths, else
 // under skills; servers are the manifest's mcpServers object or the file
 // it names, else mcp.json, else .mcp.json, with ${CURSOR_PLUGIN_ROOT} and
-// ${CLAUDE_PLUGIN_ROOT} standing for dir.
+// ${CLAUDE_PLUGIN_ROOT} standing for dir. Hooks are what the manifest's
+// hooks declares, else hooks/hooks.json; the icon is the manifest's logo,
+// else, for a Claude Code manifest, its icon.
 func cursorPlugin(name, marketplace, version, dir string, warn func(string)) InstalledPlugin {
 	var m pluginManifest
 	manifest := firstFile(dir, ".cursor-plugin/plugin.json", ".claude-plugin/plugin.json", "plugin.json")
@@ -108,6 +110,15 @@ func cursorPlugin(name, marketplace, version, dir string, warn func(string)) Ins
 		},
 	}
 	p.Servers.Path, p.Servers.Data = manifestServers(m, manifest, dir, true, warn, "mcp.json", ".mcp.json")
+	if manifest == "" {
+		manifest = filepath.Join(dir, ".cursor-plugin", "plugin.json")
+	}
+	p.Hooks = manifestHooks(m.Hooks, manifest, dir, true, false, warn)
+	if m.Logo != "" {
+		p.Icon = pluginIcon(m.Logo, manifest, "logo", dir, true, warn)
+	} else {
+		p.Icon = pluginIcon(m.Icon, manifest, "icon", dir, true, warn)
+	}
 	if p.Name == "" {
 		p.Name = name
 	}

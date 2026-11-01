@@ -31,7 +31,9 @@ func (claudeCode) MCPConfigs(d home.Dirs) []MCPConfig {
 // `{"plugins": {"<name>@<marketplace>": [{"installPath", "version"}]}}`, or one
 // record instead of a list in the older layout. A record without an install
 // path is a warning. The version falls back to the plugin's manifest. A
-// plugin declares servers in .mcp.json at its root.
+// plugin declares servers in .mcp.json at its root, and its hooks in
+// hooks/hooks.json and in the hooks its manifest declares, both read; the
+// manifest's icon names its icon.
 func (c claudeCode) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 	path := filepath.Join(c.ConfigDir(d), "plugins", "installed_plugins.json")
 	var file struct {
@@ -76,11 +78,14 @@ func (c claudeCode) Plugins(d home.Dirs, warn func(string)) []InstalledPlugin {
 					Vars:   map[string]string{"CLAUDE_PLUGIN_ROOT": r.InstallPath},
 				},
 			}
+			var m pluginManifest
+			manifest := filepath.Join(r.InstallPath, ".claude-plugin", "plugin.json")
+			readJSON(manifest, &m, warn)
 			if p.Version == "" {
-				var m pluginManifest
-				readJSON(filepath.Join(r.InstallPath, ".claude-plugin", "plugin.json"), &m, warn)
 				p.Version = m.Version
 			}
+			p.Hooks = manifestHooks(m.Hooks, manifest, r.InstallPath, false, true, warn)
+			p.Icon = pluginIcon(m.Icon, manifest, "icon", r.InstallPath, false, warn)
 			plugins = append(plugins, p)
 		}
 	}
