@@ -1,0 +1,75 @@
+---
+title: "agentx update"
+description: "Update agentx to the latest release, check whether one is out, or move between releases and nightly builds."
+---
+
+Run `agentx update` to replace the agentx you run with the latest release:
+
+```sh
+agentx update
+```
+
+```text
+✓ updated agentx 0.2.0 to 0.3.0 at /home/me/.local/bin/agentx
+```
+
+The command downloads the release for your system from [GitHub](https://github.com/grundmanise/agentx/releases), checks it against the release's checksums, and replaces the `agentx` file in place. It needs no `sudo` when you installed without it. It changes nothing else: your settings, your skills and the account repo stay as they are.
+
+If you already run the latest release, the command says so and changes nothing:
+
+```text
+✓ agentx 0.3.0 is the latest release
+```
+
+A running [`agentx serve`](/cli/serve) keeps the old version until it restarts. Restart it, or the desktop app, to run the new version.
+
+## Check without installing
+
+Add `--check` to find out whether a newer version is out:
+
+```sh
+agentx update --check
+```
+
+```text
+• agentx 0.3.0 is available, you have 0.2.0: run 'agentx update' to install it
+```
+
+The check changes nothing, so a script or a shell prompt can run it to show a notice. With `--json`, the `update` event says what it found.
+
+## Nightly builds
+
+A nightly build updates to the newest nightly, and a release updates to the latest release. To move from one to the other, pass a flag:
+
+| Flag | Effect |
+| --- | --- |
+| `--nightly` | Move to the newest [nightly build](/install#try-a-nightly-build). |
+| `--stable` | Move back to the latest release. |
+| `--version 0.2.0` | Install version 0.2.0, newer or older than yours. |
+
+You can pass only one of them. `--check` works with each.
+
+Listing the nightly builds counts against GitHub's limit of 60 requests an hour for anonymous requests. If GitHub refuses, set `GITHUB_TOKEN` to a [personal access token](https://github.com/settings/tokens) and run the command again. Finding the latest release and downloading it need no token.
+
+## When it refuses
+
+`agentx update` replaces only an agentx it may replace. It refuses, and names the fix, when:
+
+- **Homebrew installed agentx.** Run `brew upgrade agentx-cli` instead.
+- **The agentx is the one inside the desktop app.** The app ships with its own `agentx`, which a new release of the app replaces. Download the newer app from the [releases](https://github.com/grundmanise/agentx/releases).
+- **You built agentx from source.** Its version is `dev`, and no release stands in for it. Build it again, or install a release with the [install script](/install#with-the-install-script).
+- **The file cannot be replaced.** Run the command as the user who installed agentx, or install again with the install script.
+
+A download that does not match its checksum, or that does not run, leaves your agentx as it was. Run the command again.
+
+## Exit codes
+
+| Exit code | Meaning |
+|---|---|
+| 0 | agentx was updated, is already the version asked for, or `--check` reported what it found. |
+| 1 | `--nightly`, `--stable` and `--version` were combined. |
+| 3 | GitHub cannot be reached, or refused the request. |
+| 5 | There is no release of the version or channel asked for. |
+| 6 | agentx refused: see [When it refuses](#when-it-refuses), or the download did not check out. |
+
+With `--json`, the command emits one `update` event, with `state` (`current`, `available` or `updated`), `channel` (`stable` or `nightly`), `current_version`, `version` and `path`. See [JSON output](/cli/output#json-output).

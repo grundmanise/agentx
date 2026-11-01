@@ -54,6 +54,7 @@ INVENTORY AND DIAGNOSTICS
   doctor                          Check that agentx can run: git, home and the account repo
   adopt                           Adopt skills the Vercel skills CLI or Skillshare installed
   version                         Print the CLI version and its output schema version
+  update                          Update agentx to the latest release, or check for one
 
 Examples:
   agentx skill add anthropics/skills --name pdf  install one skill into every enabled client

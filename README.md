@@ -61,8 +61,9 @@ curl -fsSL https://agentx.wtf/install | sh
 
 The Linux app is a `.deb` or an AppImage on the [releases](https://github.com/grundmanise/agentx/releases/latest) page.
 
-For the newest nightly build, end the command with `sh -s -- --nightly`. See
-[Install and update](https://docs.agentx.wtf/install) for updates, options and uninstalling.
+For the newest nightly build, end the command with `sh -s -- --nightly`. Later, `agentx update` gets
+the newest release. See [Install and update](https://docs.agentx.wtf/install) for options and
+uninstalling.
 
 To build from source instead, use Go `1.27` or later:
 
