@@ -270,12 +270,13 @@ export const inventory = {
 /** What `adopt` would take over: the unmanaged library skill the skills CLI installed. */
 export const adoption: AdoptionEvent[] = [
   {
-    lock: "/home/me/.agents/.skill-lock.json",
+    file: "/home/me/.agents/.skill-lock.json",
     name: "scratch",
     schema_version: 2,
     source: "https://github.com/vercel/skills",
     state: "candidate",
     subpath: "scratch",
+    tool: "vercel",
     type: "adoption",
   },
 ];

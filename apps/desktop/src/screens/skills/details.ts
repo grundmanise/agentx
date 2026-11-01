@@ -1,7 +1,7 @@
 // The DETAILS of a skill, per kind: key and value pairs read from its library entry, its node and
 // the plugin that provides it, as the CLI reported them.
 import type { Configuration, LibraryEntry } from "#/cli/events.gen.ts";
-import { shortId } from "#/screens/skills/projection.ts";
+import { shortId, toolName } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 
 export interface Detail {
@@ -104,8 +104,8 @@ const diskDetails = (row: SkillRow): Detail[] => {
       key: "Installed by",
       value:
         row.adoption.source === undefined
-          ? "skills CLI"
-          : `skills CLI · ${row.adoption.source}`,
+          ? toolName(row.adoption)
+          : `${toolName(row.adoption)} · ${row.adoption.source}`,
     });
   }
   return details;

@@ -54,7 +54,7 @@ export interface SkillRow {
   hasUpdate: boolean;
   /** The plugin that provides it, for a plugin's skill. */
   plugin?: Plugin;
-  /** The one adoption entry that names it, for an unmanaged skill the skills CLI installed. */
+  /** The one adoption entry that names it, for an unmanaged skill another tool installed. */
   adoption?: AdoptionEvent;
   /** The name of the skill this one was forked from, when that skill is in the library too. */
   forkedFrom?: string;
@@ -108,6 +108,21 @@ export const shortSource = (url: string): string => {
 
 /** The first seven characters of a commit or fork id. */
 export const shortId = (id: string) => id.slice(0, 7);
+
+/** The tool an adoption record names, as the product calls it. */
+export const toolName = (adoption: AdoptionEvent): string => {
+  switch (adoption.tool) {
+    case "vercel": {
+      return "skills CLI";
+    }
+    case "skillshare": {
+      return "Skillshare";
+    }
+    default: {
+      return adoption.tool;
+    }
+  }
+};
 
 export const GROUP_YOURS = "yours";
 export const GROUP_PLUGINS = "plugins";
@@ -452,7 +467,9 @@ export const originOf = (row: SkillRow): string => {
       return `${row.plugin?.name ?? row.occurrences[0]?.plugin ?? ""} plugin`;
     }
     case "disk": {
-      return row.adoption === undefined ? "found on disk" : "skills CLI";
+      return row.adoption === undefined
+        ? "found on disk"
+        : toolName(row.adoption);
     }
     default: {
       return "";
