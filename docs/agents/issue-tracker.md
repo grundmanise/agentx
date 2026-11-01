@@ -13,6 +13,18 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
+## Keep the triage label current
+
+An issue's triage label (see `docs/agents/triage-labels.md`) says what the issue waits on. When you work on an issue, change the label as the work moves:
+
+- **You start work on it**: remove `needs-triage`.
+- **You stop, and an agent can go on**: add `ready-for-agent`.
+- **It waits on a person**, such as a live check, a decision or access only they have: add `ready-for-human`, and comment with what is left.
+- **It waits on the reporter**: add `needs-info`.
+- **It is done**: remove its triage label and close it as completed. A PR that says `Closes #<number>` closes the issue but does not change its labels, so remove the label yourself.
+
+An issue has at most one triage label. Keep the labels that say what kind of issue it is, such as `enhancement`.
+
 ## Pull requests as a triage surface
 
 **PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature requests; `/triage` reads this flag.)_
