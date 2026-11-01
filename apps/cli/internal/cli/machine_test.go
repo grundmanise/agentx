@@ -59,9 +59,107 @@ func TestMachineFromPlatformID(t *testing.T) {
 
 	out := h.run("machine")
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "Machine id  "+other["id"].(string))
-	contains(t, "stdout", out.stdout, "Label       test-host")
-	contains(t, "stdout", out.stdout, "Derivation  platform")
+	contains(t, "stdout", out.stdout, "Machine id    "+other["id"].(string))
+	contains(t, "stdout", out.stdout, "Label         test-host")
+	contains(t, "stdout", out.stdout, "Derivation    platform")
+}
+
+// The machine event says where agentx keeps its files, as AGENTX_HOME and
+// AGENTX_LIBRARY resolve them, and names the account repo with its size once
+// it exists.
+func TestMachinePaths(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	before := showMachine(t, h)
+	equal(t, "home", before["home"], h.agentx)
+	equal(t, "settings_file", before["settings_file"], filepath.Join(h.agentx, "settings.json"))
+	equal(t, "library", before["library"], h.library)
+	for _, key := range []string{"account_repo", "account_repo_bytes"} {
+		if v, ok := before[key]; ok {
+			t.Errorf("%s = %v before the account repo exists", key, v)
+		}
+	}
+	out := h.run("machine")
+	contains(t, "stdout", out.stdout, "Home          "+h.agentx+"\n")
+	contains(t, "stdout", out.stdout, "Account repo  not created yet\n")
+
+	h.mustRun("skill", "new", "notes") // the first command that needs the account repo creates it
+	repo := filepath.Join(h.agentx, "account.git")
+	size, err := dirSize(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if size == 0 {
+		t.Fatal("the account repo is empty")
+	}
+	after := showMachine(t, h)
+	equal(t, "account_repo", after["account_repo"], repo)
+	equal(t, "account_repo_bytes", after["account_repo_bytes"], float64(size))
+
+	out = h.run("machine")
+	contains(t, "stdout", out.stdout, "Account repo  "+repo+" ("+formatBytes(size)+")\n")
+}
+
+func TestDirSize(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	write := func(name string, n int) {
+		path := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, make([]byte, n), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(root, "empty"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write("outside/big", 4096)
+	write("repo/HEAD", 23)
+	write("repo/objects/ab/cdef", 100)
+	write("repo/worktrees/notes/index", 7)
+	// A symlink is never followed: what lies outside the tree is not its size.
+	if err := os.Symlink(filepath.Join(root, "outside"), filepath.Join(root, "repo", "link")); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		dir  string
+		want int64
+	}{
+		{"empty", 0},
+		{"repo", 130},
+		{"outside", 4096},
+	} {
+		got, err := dirSize(filepath.Join(root, tc.dir))
+		if err != nil {
+			t.Errorf("dirSize(%s): %v", tc.dir, err)
+		}
+		equal(t, "dirSize("+tc.dir+")", got, tc.want)
+	}
+	if _, err := dirSize(filepath.Join(root, "missing")); !os.IsNotExist(err) {
+		t.Errorf("dirSize(missing) = %v, want a not-exist error", err)
+	}
+}
+
+func TestFormatBytes(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		n    int64
+		want string
+	}{
+		{0, "0 B"},
+		{1023, "1023 B"},
+		{1024, "1.0 KiB"},
+		{1536, "1.5 KiB"},
+		{10 * 1024 * 1024, "10.0 MiB"},
+		{3 * 1024 * 1024 * 1024, "3.0 GiB"},
+		{2 * 1024 * 1024 * 1024 * 1024, "2.0 TiB"},
+	} {
+		equal(t, fmt.Sprintf("formatBytes(%d)", tc.n), formatBytes(tc.n), tc.want)
+	}
 }
 
 func TestMachineRandomFallback(t *testing.T) {
