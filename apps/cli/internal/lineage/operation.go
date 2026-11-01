@@ -23,8 +23,12 @@ const (
 	TrailerOperation = "Agentx-Operation"
 	// TrailerSkill is the skill a place or remove is about.
 	TrailerSkill = "Agentx-Skill"
-	// TrailerConfigurations are the configuration ids a place added to the
-	// skill's placements, or a remove took out, "<id>, <id>", sorted.
+	// TrailerConfigurations are the configuration ids the operation was
+	// asked for, "<id>, <id>", sorted and each once: the ones a place was
+	// to place the skill in, --to or every enabled one, or a remove was to
+	// take it out of. They are the operation's arguments, which a replay
+	// of it needs, not the entries it changed: a configuration that held
+	// the skill already is still named.
 	TrailerConfigurations = "Agentx-Configurations"
 	// TrailerCopy is "true" on a place that recorded a copy in copy_mode.
 	TrailerCopy = "Agentx-Copy"
@@ -44,7 +48,7 @@ type OperationTrailers struct {
 	ID             string   // the operation's id, a ULID
 	Operation      string   // export, place or remove
 	Skill          string   // the skill, for place and remove
-	Configurations []string // the configurations added or taken out; none for export and for a remove of the whole skill
+	Configurations []string // the configurations the operation was asked for; none for export and for a remove of the whole skill
 	Copy           bool     // a place that recorded a copy
 	Machine        string   // the machine that wrote the commit
 }

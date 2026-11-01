@@ -146,7 +146,8 @@ func (inv *invocation) importMachine(ctx context.Context, id string) (snapshot, 
 // written nowhere: commit is the tip then and pushed false. subject is the
 // commit's subject and op the operation its trailers record, given an id
 // of its own here, so that the branch's history names every change by
-// kind, skill and configurations and each has an id the account service's
+// kind, skill and the configurations it was asked for, as the command
+// with its arguments, and each has an id the account service's
 // operations share the shape of; the writer's identity and machine are
 // those of every commit agentx writes, see forkWriter. again is the
 // command the hints of a refused push name.
