@@ -164,7 +164,7 @@ What ties a managed skill to its source or, for a forked one, its upstream, mean
 _Avoid_: metadata
 
 **Lineage trailers**:
-The `Agentx-` commit trailers in the account repo: source, path, upstream commit and content hash on every imported upstream version, the id of the current base on every merge agentx makes, the fork id on the commit that creates a fork, and the machine on every commit agentx writes on a fork's branch. How a fork's provenance reaches every clone by fetch, with no file in the branch tree.
+The `Agentx-` commit trailers in the account repo: source, path, upstream commit and content hash on every imported upstream version, the id of the current base on every merge agentx makes, the fork id on the commit that creates a fork, and the machine on every commit agentx writes on a fork's branch. On a machine's branch, the operation each commit made: its id, its kind, the skill and the configurations. How a fork's provenance reaches every clone by fetch, with no file in the branch tree.
 _Avoid_: manifest, metadata file, provenance file
 
 **Foreign commit**:

@@ -144,16 +144,20 @@ func (inv *invocation) importMachine(ctx context.Context, id string) (snapshot, 
 // pushes it to b's branch, leased on that tip, "" for a branch that must
 // not exist yet, and never forced. A snapshot the tip holds already is
 // written nowhere: commit is the tip then and pushed false. subject is the
-// commit's subject; the writer's identity and machine are those of every
-// commit agentx writes, see forkWriter. again is the command the hints of
-// a refused push name.
+// commit's subject and op the operation its trailers record, given an id
+// of its own here, so that the branch's history names every change by
+// kind, skill and the configurations it was asked for, as the command
+// with its arguments, and each has an id the account service's
+// operations share the shape of; the writer's identity and machine are
+// those of every commit agentx writes, see forkWriter. again is the
+// command the hints of a refused push name.
 //
 // A branch another writer moved since it was read is exit code 6, the hint
 // saying to run the command again, which reads it again; a push the host
 // declined is exit code 6; one this machine may not make is exit code 3,
 // which a read-only credential is, and so is a push git could not make or
 // whose answer is not known.
-func (inv *invocation) pushSnapshot(ctx context.Context, b machineBranch, snap snapshot, subject, again string) (commit string, pushed bool, err error) {
+func (inv *invocation) pushSnapshot(ctx context.Context, b machineBranch, snap snapshot, subject string, op lineage.OperationTrailers, again string) (commit string, pushed bool, err error) {
 	snap.SchemaVersion = snapshotSchemaVersion
 	data, err := json.MarshalIndent(snap, "", "  ")
 	if err != nil {
@@ -178,7 +182,8 @@ func (inv *invocation) pushSnapshot(ctx context.Context, b machineBranch, snap s
 	if err != nil {
 		return "", false, err
 	}
-	commit, err = w.commit(ctx, tree, parents, forkMessage{subject: subject})
+	op.ID = lineage.NewOperationID()
+	commit, err = w.commitOperation(ctx, tree, parents, subject, op)
 	if err != nil {
 		return "", false, accountRepoFailure(err)
 	}
@@ -231,7 +236,7 @@ func (inv *invocation) exportToMachine(ctx context.Context, id string) error {
 	if snap.Machine != nil {
 		label = snap.Machine.Label
 	}
-	commit, pushed, err := inv.pushSnapshot(ctx, b, snap, "Export "+sanitised(label), "agentx export --machine "+id)
+	commit, pushed, err := inv.pushSnapshot(ctx, b, snap, "Export "+sanitised(label), lineage.OperationTrailers{Operation: lineage.OperationExport}, "agentx export --machine "+id)
 	if err != nil {
 		return err
 	}
@@ -342,7 +347,8 @@ func (inv *invocation) placeOnMachine(ctx context.Context, id, name string, to [
 	}
 	placed := snapshotEntry(snap, name)
 	command := skillCommand("place", name, append(placeFlags(to, asCopy), "--machine", id)...)
-	commit, pushed, err := inv.pushSnapshot(ctx, b, snap, "Place "+name+" in "+strings.Join(placed.Placements, ", "), command)
+	op := lineage.OperationTrailers{Operation: lineage.OperationPlace, Skill: name, Configurations: slices.Compact(slices.Sorted(slices.Values(ids))), Copy: asCopy}
+	commit, pushed, err := inv.pushSnapshot(ctx, b, snap, "Place "+name+" in "+strings.Join(placed.Placements, ", "), op, command)
 	if err != nil {
 		return err
 	}
@@ -398,13 +404,15 @@ func (inv *invocation) removeFromMachine(ctx context.Context, id, name string, f
 	}
 	subject, done := "Remove "+name, "took "+name+" off the "+id+" machine"
 	placements := []string{}
+	op := lineage.OperationTrailers{Operation: lineage.OperationRemove, Skill: name}
 	if !whole {
 		named := strings.Join(namedConfigurations(from), ", ")
 		subject, done = "Remove "+name+" from "+named, "removed "+name+" from "+named+" on the "+id+" machine"
 		placements = snapshotEntry(snap, name).Placements
+		op.Configurations = slices.Compact(slices.Sorted(slices.Values(namedConfigurations(from))))
 	}
 	command := skillCommand("remove", name, append(fromFlags(from), "--machine", id)...)
-	commit, pushed, err := inv.pushSnapshot(ctx, b, snap, subject, command)
+	commit, pushed, err := inv.pushSnapshot(ctx, b, snap, subject, op, command)
 	if err != nil {
 		return err
 	}

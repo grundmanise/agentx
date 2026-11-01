@@ -32,6 +32,26 @@ func machineSnapshot(t *testing.T, h *harness, remote, id string) (tip string, d
 	return tip, doc, raw
 }
 
+// machineOperation is the operation the commit tip on the bare repository
+// remote records in its trailers, read back with the reader agentx writes
+// them against. Its id, a ULID, and its machine, h's, are checked and left
+// out, so that a test compares the rest.
+func machineOperation(t *testing.T, h *harness, remote, tip string) lineage.OperationTrailers {
+	t.Helper()
+	op, err := lineage.ParseOperation(remoteGit(t, h, remote, "log", "-1", "--format=%B", tip))
+	if err != nil {
+		t.Fatalf("the trailers of %s: %v", short(tip), err)
+	}
+	if !lineage.IsOperationID(op.ID) {
+		t.Errorf("the operation id of %s is %q, not a ULID", short(tip), op.ID)
+	}
+	if machine, _, err := home.MachineID(h.agentx, h.env, nil); err != nil || op.Machine != machine {
+		t.Errorf("the machine of %s is %q, want %q (%v)", short(tip), op.Machine, machine, err)
+	}
+	op.ID, op.Machine = "", ""
+	return op
+}
+
 // TestExportToAMachineAndImportFromIt is a snapshot's round trip through
 // the account remote: an export to a file pushes nothing; an export naming
 // the cloud machine writes the same bytes as the one file of a commit on
@@ -74,6 +94,7 @@ func TestExportToAMachineAndImportFromIt(t *testing.T) {
 	}
 	equal(t, "the branch's snapshot is the file's", raw, readText(t, file))
 	equal(t, "the commit's subject", remoteGit(t, a, remote, "log", "-1", "--format=%s", tip), "Export first-laptop")
+	equal(t, "the commit's trailers", fmt.Sprintf("%+v", machineOperation(t, a, remote, tip)), fmt.Sprintf("%+v", lineage.OperationTrailers{Operation: "export"}))
 	equal(t, "alpha's placements", fmt.Sprint(doc["skills"].([]any)[0].(map[string]any)["placements"]), "[claude-code codex cursor gemini-cli]")
 
 	again := a.run("export", "--machine", "cloud")
@@ -211,6 +232,8 @@ func TestSkillPlaceAndRemoveOnTheCloudMachine(t *testing.T) {
 	equal(t, "the entry's fields", keysOf(entry), "kind,name,placements,source,subpath")
 	equal(t, "the entry's source", entry["source"], s.url)
 	equal(t, "the commit's subject", remoteGit(t, h, remote, "log", "-1", "--format=%s", tip), "Place alpha in claude-code, codex, cursor, gemini-cli")
+	equal(t, "the commit's trailers", fmt.Sprintf("%+v", machineOperation(t, h, remote, tip)),
+		fmt.Sprintf("%+v", lineage.OperationTrailers{Operation: "place", Skill: "alpha", Configurations: []string{"claude-code", "codex", "cursor", "gemini-cli"}}))
 	here, err := home.LoadSettings(h.agentx)
 	if err != nil {
 		t.Fatal(err)
@@ -228,6 +251,8 @@ func TestSkillPlaceAndRemoveOnTheCloudMachine(t *testing.T) {
 	tip, doc, _ = machineSnapshot(t, h, remote, "cloud")
 	contains(t, "remove --from", text.stdout, "removed alpha from cursor on the cloud machine: pushed "+short(tip)+" to machines/cloud")
 	equal(t, "the placements left", fmt.Sprint(doc["skills"].([]any)[0].(map[string]any)["placements"]), "[claude-code codex gemini-cli]")
+	equal(t, "the remove's trailers", fmt.Sprintf("%+v", machineOperation(t, h, remote, tip)),
+		fmt.Sprintf("%+v", lineage.OperationTrailers{Operation: "remove", Skill: "alpha", Configurations: []string{"cursor"}}))
 
 	refused := h.run("skill", "remove", "alpha", "--machine", "cloud", "--from", "codex")
 	equal(t, "remove --from a universal client: exit", refused.exit, 6)
