@@ -248,9 +248,9 @@ func TestUpdateRefusals(t *testing.T) {
 			message: "this agentx is a build from source, which no release can replace"},
 		{name: "Homebrew's agentx", exit: 6,
 			setup: func(t *testing.T, path string) {
-				swapUpdate(t, "0.3.0", "/opt/homebrew/Cellar/agentx/0.3.0/bin/agentx")
+				swapUpdate(t, "0.3.0", "/opt/homebrew/Cellar/agentx-cli/0.3.0/bin/agentx")
 			},
-			message: "agentx at /opt/homebrew/Cellar/agentx/0.3.0/bin/agentx was installed by Homebrew"},
+			message: "agentx at /opt/homebrew/Cellar/agentx-cli/0.3.0/bin/agentx was installed by Homebrew"},
 		{name: "the app's agentx", exit: 6,
 			setup: func(t *testing.T, path string) {
 				swapUpdate(t, "0.3.0", "/Applications/agentx.app/Contents/MacOS/agentx")

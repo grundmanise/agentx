@@ -41,17 +41,25 @@ Cursor (cursor)  /home/me/.cursor  enabled  2 skills, 2 servers, 1 plugin
 
 ## Install
 
-With [Homebrew](https://brew.sh), on macOS or Linux:
+On macOS, the app with its CLI, with [Homebrew](https://brew.sh):
 
 ```sh
 brew install grundmanise/tap/agentx
 ```
 
-Or with the install script, which puts the latest release in `~/.local/bin`:
+The CLI alone, on macOS or Linux:
+
+```sh
+brew install grundmanise/tap/agentx-cli
+```
+
+Or with the install script, which puts the latest release of the CLI in `~/.local/bin`:
 
 ```sh
 curl -fsSL https://agentx.wtf/install | sh
 ```
+
+The Linux app is a `.deb` or an AppImage on the [releases](https://github.com/grundmanise/agentx/releases/latest) page.
 
 For the newest nightly build, end the command with `sh -s -- --nightly`. Later, `agentx update` gets
 the newest release. See [Install and update](https://docs.agentx.wtf/install) for options and
