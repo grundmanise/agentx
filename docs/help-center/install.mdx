@@ -27,7 +27,7 @@ To install the CLI alone, on macOS or Linux:
 brew install grundmanise/tap/agentx-cli
 ```
 
-Homebrew builds the CLI from source, so each install and upgrade of `agentx-cli` takes about a minute. Install one or the other: both provide the `agentx` command, and only one can own it. If you install both, the first keeps the command and Homebrew skips the second's link with a warning. To switch, uninstall the first, then run `brew link agentx-cli` or install the cask again.
+Homebrew builds the CLI from source, so each install and upgrade of `agentx-cli` takes about a minute. Install one or the other: both provide the `agentx` command.
 
 ### Install the app
 
@@ -41,7 +41,7 @@ Download the app from the latest [release](https://github.com/grundmanise/agentx
 | Linux, other distributions, x86-64 | [`agentx_desktop_linux_amd64.AppImage`](https://github.com/grundmanise/agentx/releases/latest/download/agentx_desktop_linux_amd64.AppImage) | `chmod +x agentx_desktop_linux_amd64.AppImage`, then run it |
 | Linux, other distributions, ARM64 | [`agentx_desktop_linux_arm64.AppImage`](https://github.com/grundmanise/agentx/releases/latest/download/agentx_desktop_linux_arm64.AppImage) | `chmod +x agentx_desktop_linux_arm64.AppImage`, then run it |
 
-Each package carries the CLI of the same version, and the app runs only that one. The `.deb` also puts the `agentx` command on your `PATH`, and requires `git` 2.40 or later. The disk image and the AppImage do not: to use the CLI from a terminal as well, install it with the install script or with the `agentx-cli` formula.
+Each package carries the CLI of the same version, and the app runs only that one. The `.deb` also puts the `agentx` command on your `PATH`, and requires `git` 2.40 or later. The disk image and the AppImage do not put `agentx` on your `PATH`; the install script does.
 
 The Linux packages run on glibc distributions from 2022 on, such as Ubuntu 22.04 and Debian 12. Those two ship a `git` older than 2.40, so `apt` refuses the `.deb` until you install a newer one. On Ubuntu, add the [git-core PPA](https://launchpad.net/~git-core/+archive/ubuntu/ppa). Debian 12 has no newer package, so upgrade to Debian 13, which ships git 2.47, or [build git from source](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git#_installing_from_source). The AppImage starts with any `git`, and then reports one older than 2.40 in its startup check. An AppImage needs FUSE 2: if it does not start, install your distribution's `libfuse2` package, or run it with `--appimage-extract-and-run`.
 
