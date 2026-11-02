@@ -697,7 +697,7 @@ Track `segmented.track-bg`, `segmented.track-border`, `segmented.radius`, `segme
 
 ### Agent client logo chip
 
-Round, `logo.bg`, `padding:3–4px`, `background-size:contain`, logo from an image bundled with the app (never fetched from the network). Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (agent client toggle chips), 44 (agent client cards). Overlap with `logo.overlap` and a `logo.ring`-wide ring (`box-shadow: 0 0 0 2px <parent bg>`). Every logo carries `title="<agent client name>"`.
+Round, `logo.bg`, `padding:3–4px`, `background-size:contain`, logo from an image bundled with the app (never fetched from the network). Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (agent client toggle chips), 44 (agent client cards). Overlap with `logo.overlap` and a `logo.ring`-wide ring (`box-shadow: 0 0 0 2px <parent bg>`). Every logo carries `title="<agent client name>"`. The bundled logos (`src/assets/logos`, listed in its README) are the clients' official marks as the vendors publish them, never marks drawn for the app; a client without a bundled mark gets the monogram below.
 
 ### Skill glyph (16px, leading the row)
 
