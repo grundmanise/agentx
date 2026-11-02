@@ -98,6 +98,13 @@ func TestAdoptJudgesEveryUntrustedEntry(t *testing.T) {
 	for _, want := range []string{"../escape", "sourceless"} {
 		contains(t, "stderr", out.stderr, want)
 	}
+
+	// Without --json the skills are grouped by what adopting would do.
+	human := h.run("adopt")
+	equal(t, "exit", human.exit, 0)
+	for _, want := range []string{"Found 6 skills installed by the Vercel skills CLI.", "Ready to adopt (3)", "Cannot adopt (3)", "agentx adopt --all      adopt all 3"} {
+		contains(t, "stdout", human.stdout, want)
+	}
 }
 
 // TestAdoptRefusesAnEscapingSubpathBeforeItReadsAnything is the same

@@ -211,6 +211,10 @@ func TestAdoptInstallsTheVersionTheSourceHoldsNow(t *testing.T) {
 	preview := h.run("--json", "adopt")
 	equal(t, "exit", preview.exit, 0)
 	equal(t, "state afterwards", h.one(preview.stdout, "adoption")["state"], adoptManaged)
+	human := h.run("adopt")
+	equal(t, "preview", human.stdout, "Found 1 skill installed by the Vercel skills CLI.\n\n"+
+		"Already managed by agentx (1)\n  alpha\n\n"+
+		"Nothing to adopt: agentx already manages every one.\n")
 	again := h.run("adopt", "--all")
 	equal(t, "exit", again.exit, 0)
 	contains(t, "stdout", again.stdout, "Already adopted.")
@@ -308,7 +312,7 @@ func progressPhases(events []jsonEvent) []string {
 	return phases
 }
 
-// TestAdoptRefusesAName tells the two ways a --skill can miss apart: a name
+// TestAdoptRefusesAName tells the two ways a name can miss apart: a name
 // no record holds at all, and one a record holds for a directory this
 // machine no longer has.
 func TestAdoptRefusesAName(t *testing.T) {
@@ -322,7 +326,7 @@ func TestAdoptRefusesAName(t *testing.T) {
 		{"nowhere", "no skill called \"nowhere\""},
 		{"gone", "this machine no longer holds it"},
 	} {
-		out := h.run("--json", "adopt", "--skill", c.name)
+		out := h.run("--json", "adopt", c.name)
 		equal(t, "exit", out.exit, exitNotFound.exit)
 		contains(t, "the error", lastError(t, h.events(out.stdout))["message"].(string), c.want)
 	}
@@ -340,7 +344,7 @@ func TestAdoptSelectionCheck(t *testing.T) {
 		{"a preview", adoptSelection{}, ""},
 		{"every skill", adoptSelection{all: true}, ""},
 		{"two skills", adoptSelection{names: []string{"alpha", "beta"}}, ""},
-		{"every skill and one", adoptSelection{all: true, names: []string{"alpha"}}, "--all and --skill"},
+		{"every skill and one", adoptSelection{all: true, names: []string{"alpha"}}, "--all and skill names"},
 	} {
 		err := tc.sel.check()
 		if tc.says == "" {

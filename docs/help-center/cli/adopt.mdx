@@ -14,24 +14,37 @@ agentx adopt
 ```
 
 ```text
-3 skills installed by another tool
-  pdf      vercel      candidate  https://github.com/anthropics/skills/skills/pdf   its source is not added yet; adopting adds and fetches it
-  xlsx     skillshare  managed    https://github.com/anthropics/skills/skills/xlsx  agentx already manages it
-  scraper  vercel      refused    (none)                                            scraper names no source agentx can read
-Adopt them with agentx adopt --all.
+Found 3 skills installed by the Vercel skills CLI and Skillshare.
+
+Ready to adopt (1)
+  pdf      vercel  https://github.com/anthropics/skills/skills/pdf  its source is not added yet; adopting adds and fetches it
+
+Cannot adopt (1)
+  scraper  vercel  scraper names no source agentx can read
+
+Already managed by agentx (1)
+  xlsx
+
+This was a preview; nothing changed. To adopt:
+  agentx adopt --all      adopt it
+  agentx adopt <name>...  adopt the skills you name
 ```
 
-With no flags, the command only shows what it found. It writes nothing and makes no network calls.
+With no arguments, the command only shows what it found. It writes nothing and makes no network calls.
 
-| State | What it means |
+The skills are grouped by what adopting would do with them:
+
+| Group | What it means |
 |---|---|
-| `candidate` | agentx can adopt it |
-| `managed` | agentx already manages it |
-| `refused` | agentx cannot adopt it, and the row says why. See [Refused skills](#refused-skills) |
+| Ready to adopt | agentx can adopt it. The row shows the source it comes from |
+| Cannot adopt | agentx cannot adopt it, and the row says why. See [Refused skills](#refused-skills) |
+| Already managed by agentx | agentx already manages it. There is nothing to do |
+
+The tool column shows only when both tools installed skills on this machine. When agentx already manages every skill, the preview ends with `Nothing to adopt: agentx already manages every one.`
 
 ## Adopt skills
 
-Adopt every candidate:
+Adopt every skill that is ready:
 
 ```sh
 agentx adopt --all
@@ -44,11 +57,13 @@ agentx adopt --all
   cursor       symlink  /home/me/.cursor/skills/pdf -> /home/me/.agents/skills/pdf
 ```
 
-Or name skills with `--skill`, once for each:
+Or name the skills to adopt:
 
 ```sh
-agentx adopt --skill pdf --skill xlsx
+agentx adopt pdf xlsx
 ```
+
+`--skill <name>`, once for each skill, does the same.
 
 For each skill, agentx:
 
@@ -76,7 +91,7 @@ To keep an edit, fork the skill first. A fork keeps your files and their history
 
 ```sh
 agentx skill fork pdf --name my-pdf
-agentx adopt --skill pdf
+agentx adopt pdf
 ```
 
 Skillshare keeps its own copy of each skill in its folder, `~/.config/skillshare/skills` by default. agentx never touches that folder, so your edits there stay.

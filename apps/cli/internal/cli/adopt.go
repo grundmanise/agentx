@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -65,26 +66,29 @@ type adoptSelection struct {
 func newAdoptCommand(inv *invocation) *cobra.Command {
 	var sel adoptSelection
 	cmd := &cobra.Command{
-		Use:         "adopt",
+		Use:         "adopt [<name>...]",
 		Short:       "Adopt skills the Vercel skills CLI or Skillshare installed",
 		Annotations: map[string]string{annotationSection: "diagnostics"},
 		Example: examples(
 			"agentx adopt", "preview what would be adopted; nothing is written",
 			"agentx adopt --all", "adopt every skill another tool installed",
-			"agentx adopt --skill pdf --skill xlsx", "adopt two skills by name",
+			"agentx adopt pdf xlsx", "adopt two skills by name",
 		),
 		Long: "Take over the skills the Vercel skills CLI or Skillshare installed, so that agentx\n" +
-			"knows where each one came from and can update it. Run it with no flags to see\n" +
+			"knows where each one came from and can update it. Run it with no arguments to see\n" +
 			"what it would adopt; nothing is written and the other tool's files are never\n" +
 			"touched.\n\n" +
 			"Adopting a skill installs it from its source, as 'agentx skill add' does, at the\n" +
 			"version the source holds now, and places it in every enabled configuration.\n" +
 			"Whatever the library holds under the skill's name gives way to that version, an\n" +
 			"edit made to it included: fork the skill first to keep one.",
-		Args: cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, args []string) error { return inv.adopt(cmd.Context(), sel) },
+		Args: cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			sel.names = append(args, sel.names...)
+			return inv.adopt(cmd.Context(), sel)
+		},
 	}
-	cmd.Flags().StringArrayVar(&sel.names, "skill", nil, "the skill to adopt, by its name in the library; give it again for each")
+	cmd.Flags().StringArrayVar(&sel.names, "skill", nil, "the skill to adopt, by its name in the library; the same as naming it as an argument")
 	cmd.Flags().BoolVar(&sel.all, "all", false, "adopt every recorded skill that can be adopted")
 	return cmd
 }
@@ -95,7 +99,7 @@ func (s adoptSelection) adopting() bool { return s.all || len(s.names) > 0 }
 // check refuses a combination of flags that asks for two things at once.
 func (s adoptSelection) check() error {
 	if s.all && len(s.names) > 0 {
-		return fail(exitUsage, "--all and --skill cannot both be given",
+		return fail(exitUsage, "--all and skill names cannot both be given",
 			"--all adopts every recorded skill; drop it to adopt the ones you name")
 	}
 	return nil
@@ -747,6 +751,10 @@ func (c *candidate) eventOf() adoptionEvent {
 }
 
 // previewAdoption reports what an adoption would do and changes nothing.
+// The skills are grouped by what an adoption would do with them: the ones
+// it would adopt first, with the source each comes from; then the ones it
+// cannot, with the reason; then the ones agentx manages already, as a list
+// of names, since there is nothing to do about them.
 func (inv *invocation) previewAdoption(cands []*candidate, records int) {
 	out := inv.out
 	if len(cands) == 0 {
@@ -755,39 +763,98 @@ func (inv *invocation) previewAdoption(cands []*candidate, records int) {
 		return
 	}
 	counts := map[string]int{}
-	out.print(out.paint(heading, plural(len(cands), "skill")), " installed by another tool")
-	t := &table{}
+	groups := map[string][]*candidate{}
+	tools := map[string]bool{}
 	for _, c := range cands {
 		out.emit(c.eventOf())
 		counts[c.state]++
-		t.add(c.rowOf()...)
-	}
-	out.render(t, "")
-	if counts[adoptCandidate] > 0 {
-		out.print("Adopt them with ", out.paint(label, "agentx adopt --all"), ".")
+		groups[c.state] = append(groups[c.state], c)
+		tools[c.rec.tool] = true
 	}
 	inv.summary = previewSummary(counts, records)
+
+	out.print("Found ", out.paint(heading, plural(len(cands), "skill")), " installed by ", toolNames(tools), ".")
+	mixed := len(tools) > 1
+	if ready := groups[adoptCandidate]; len(ready) > 0 {
+		out.print()
+		out.print(out.paint(heading, fmt.Sprintf("Ready to adopt (%d)", len(ready))))
+		t := &table{wrap: out.columns(out.stdout)}
+		for _, c := range ready {
+			t.add(c.rowOf(mixed)...)
+		}
+		out.render(t, "  ")
+	}
+	if refused := groups[adoptRefused]; len(refused) > 0 {
+		out.print()
+		out.print(out.paint(heading, fmt.Sprintf("Cannot adopt (%d)", len(refused))))
+		t := &table{wrap: out.columns(out.stdout)}
+		for _, c := range refused {
+			t.add(c.rowOf(mixed)...)
+		}
+		out.render(t, "  ")
+	}
+	if managed := groups[adoptManaged]; len(managed) > 0 {
+		out.print()
+		out.print(out.paint(heading, fmt.Sprintf("Already managed by agentx (%d)", len(managed))))
+		names := make([]string, len(managed))
+		for i, c := range managed {
+			names[i] = sanitised(c.rec.name)
+		}
+		for _, line := range wrapWords(strings.Join(names, ", "), out.columns(out.stdout)-2) {
+			out.print("  ", out.paint(muted, line))
+		}
+	}
+
+	out.print()
+	switch n := counts[adoptCandidate]; {
+	case n == 0 && counts[adoptRefused] == 0:
+		out.print("Nothing to adopt: agentx already manages every one.")
+	case n == 0:
+		out.print("Nothing to adopt.")
+	default:
+		all := "adopt all " + strconv.Itoa(n)
+		if n == 1 {
+			all = "adopt it"
+		}
+		out.print("This was a preview; nothing changed. To adopt:")
+		t := &table{}
+		t.add(cell{text: "agentx adopt --all", style: label}, cell{text: all, style: muted})
+		t.add(cell{text: "agentx adopt <name>...", style: label}, cell{text: "adopt the skills you name", style: muted})
+		out.render(t, "  ")
+	}
 }
 
-// rowOf is one row of the preview listing. Every field the record supplied
-// is sanitised: it is text agentx did not write.
-func (c *candidate) rowOf() []cell {
-	state := cell{text: c.state, style: muted}
-	switch c.state {
-	case adoptCandidate:
-		state.style = okStyle
-	case adoptRefused:
-		state.style = warnStyle
+// toolNames names the tools that installed the skills, for the line that
+// opens a preview.
+func toolNames(tools map[string]bool) string {
+	var names []string
+	if tools[toolVercel] {
+		names = append(names, "the Vercel skills CLI")
 	}
-	where := cell{text: "(none)", style: muted}
-	if c.src.URL != "" {
+	if tools[toolSkillshare] {
+		names = append(names, "Skillshare")
+	}
+	return strings.Join(names, " and ")
+}
+
+// rowOf is one row of the preview listing: the name, then for a skill that
+// can be adopted where it comes from, and what adopting it would still have
+// to do or why it cannot be adopted. The tool that installed it is shown
+// only when the records of both tools are listed. Every field the record
+// supplied is sanitised: it is text agentx did not write.
+func (c *candidate) rowOf(mixed bool) []cell {
+	row := []cell{{text: sanitised(c.rec.name), style: heading}}
+	if mixed {
+		row = append(row, cell{text: c.rec.tool, style: muted})
+	}
+	if c.state == adoptCandidate {
 		text := c.src.URL
 		if c.rec.subpath != "" {
 			text += "/" + c.rec.subpath
 		}
-		where = cell{text: sanitised(text), style: plain}
+		row = append(row, cell{text: sanitised(text), style: plain})
 	}
-	return []cell{{text: "  " + sanitised(c.rec.name), style: heading}, {text: c.rec.tool, style: muted}, state, where, {text: sanitised(c.reason), style: muted}}
+	return append(row, cell{text: sanitised(c.reason), style: muted})
 }
 
 // previewSummary is what the result event says a preview found.
