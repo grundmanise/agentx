@@ -133,7 +133,7 @@ latest_release() {
 		die "cannot reach github.com"
 	case $url in
 	*/releases/tag/*) echo "${url##*/}" ;;
-	*) die "agentx has no release yet, try --nightly" ;;
+	*) die "agentx has no release yet, install the newest nightly with: curl -fsSL https://agentx.wtf/install | sh -s -- --nightly" ;;
 	esac
 }
 
