@@ -16,6 +16,8 @@ Single-context: `GLOSSARY.md` at the root, ADRs in `docs/adr/`, specs in `docs/s
 
 Before writing UI in `apps/desktop`, read `apps/desktop/DESIGN.md` and the "Rules for components" in `apps/desktop/README.md`. Style only with the tokens in `apps/desktop/src/styles/tokens.css`, which `DESIGN.md` documents; when a design needs a value no token holds, add the token to `tokens.css` and document it in `DESIGN.md`. Our components take no `className` or `style`: give them a closed, typed prop or variant instead. `pnpm check` rejects type errors, arbitrary values, a class that reads a CSS variable (`w-(--x)`), raw colours, unknown classes, inline styles and a `className` or `style` on our components; fix the code, never the guard. It misses alpha modifiers, `rounded-full` and `leading-none`, so avoid those yourself (see "What the checks catch" in the README). Ultracite (oxlint and oxfmt) lints and formats the frontend: run `pnpm fix` in `apps/desktop` before you commit.
 
+UI primitives come from shadcn/ui: add one with `pnpm dlx shadcn@latest add <name>` into `apps/desktop/src/components/ui/` and adapt it as the README's "Rules for components" say (tokens, no `className`, `cva()` variants, our icons); write a component in `src/components/` only when shadcn has no equivalent.
+
 ## Help center
 
 Keep the Help Center up to date. Whenever there's a new feature or a change in functionality, update the relevant user-facing documentation in `docs/help-center`. Keep the language clear, structured, and concise. Use an imperative tone.
