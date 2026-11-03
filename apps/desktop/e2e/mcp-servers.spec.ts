@@ -182,8 +182,10 @@ test.describe("Check tools", () => {
     expect(later(cli)).toEqual([["scan", "--handshake", "--json"]]);
     expect(cli.deadlines.at(-1)).toBe(120_000);
 
-    // The failure words, whose hover shows the CLI's hint.
+    // The failure words, whose hover shows the CLI's hint. Both of github's declarations failed
+    // the same way: the toast counts the server once, and the row shows the word once.
     const signIn = row(page, "github").getByText("needs sign-in");
+    await expect(signIn).toHaveCount(1);
     await expect(signIn).toBeVisible();
     await signIn.hover();
     await expect(signIn).toHaveAttribute("title", GITHUB_HINT);

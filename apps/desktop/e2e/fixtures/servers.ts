@@ -218,8 +218,9 @@ export const GITHUB_HINT =
 export const LINEAR_HINT = "Check that https://mcp.linear.app/sse answers";
 
 /**
- * The inventory `scan --handshake` emits: github answered 401 to Claude Code and exposed more tools
- * to Cursor, linear is unreachable from Gemini CLI, and every other server answered as before.
+ * The inventory `scan --handshake` emits: github answered 401 to both agents that declare it,
+ * linear is unreachable from Gemini CLI, and every other server answered as before, github with
+ * more tools than serve knows.
  */
 export const handshakeInventory = {
   configurations,
@@ -227,18 +228,14 @@ export const handshakeInventory = {
     if (node.logical_id === "server:github") {
       return {
         ...node,
-        occurrences: node.occurrences.map((o) =>
-          o.configuration === "claude-code"
-            ? {
-                ...o,
-                handshake_error: {
-                  hint: GITHUB_HINT,
-                  message: "the server answered HTTP 401",
-                  reason: "unauthorized",
-                },
-              }
-            : { ...o, handshake: true }
-        ),
+        occurrences: node.occurrences.map((o) => ({
+          ...o,
+          handshake_error: {
+            hint: GITHUB_HINT,
+            message: "the server answered HTTP 401",
+            reason: "unauthorized",
+          },
+        })),
         physical_id: "server:github:v2",
         signature: "sig-github-2",
         signature_at: "2026-10-22T09:00:00Z",

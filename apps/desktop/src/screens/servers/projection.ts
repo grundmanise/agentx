@@ -215,14 +215,19 @@ const summaryParts: [HandshakeReason, string][] = [
 
 /**
  * What the toast of a check says: "Checked {n} servers · {k} need sign-in, {m} unreachable",
- * leaving out the parts that are zero, or "Checked {n} servers" when no handshake failed.
+ * leaving out the parts that are zero, or "Checked {n} servers" when no handshake failed. Every
+ * count is of servers: a server whose declarations all fail the same way counts once.
  */
 export const checkSummary = (servers: McpServer[]): string => {
   const failures = failuresIn(servers);
   const checked = `Checked ${plural(distinct(servers.map((n) => n.logical_id)).length, "server", "servers")}`;
   const parts = summaryParts
     .map(([reason, words]) => ({
-      count: failures.filter((f) => f.error.reason === reason).length,
+      count: distinct(
+        failures
+          .filter((f) => f.error.reason === reason)
+          .map((f) => f.logicalId)
+      ).length,
       words,
     }))
     .filter((p) => p.count > 0)
