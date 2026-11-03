@@ -35,13 +35,18 @@ const monogram = (name: string) => {
 };
 
 /** The sizes of DESIGN.md §6 "Agent client logo chip" this app uses so far, in pixels. */
-export type LogoSize = 16 | 20 | 28;
+export type LogoSize = 16 | 20 | 24 | 28;
 
 // A round white tile; the ring (`logo.ring`) is the parent's background, between stacked logos.
+// A logo for a declaration the client turned off is at 45%, with a title that says so.
 const tileVariants = cva(
   "rounded-logo bg-logo-bg block flex-none object-contain",
   {
     variants: {
+      off: {
+        false: "",
+        true: "opacity-45",
+      },
       ring: {
         false: "",
         true: "ring-row-chip-ring ring-2",
@@ -49,15 +54,24 @@ const tileVariants = cva(
       size: {
         16: "p-logo-sm size-4",
         20: "p-logo-sm size-5",
+        24: "size-6 p-1",
         28: "p-logo-lg size-7",
       },
     },
   }
 );
 
+/** The configuration a logo stands for, and what the logo says about it. */
+export interface LogoClient extends Pick<Configuration, "client" | "name"> {
+  /** The client turned this off: the logo is at 45% and `title` says so. */
+  off?: boolean;
+  /** The tooltip, in place of the client's name. */
+  title?: string;
+}
+
 export interface AgentLogoProps {
   /** The configuration's `client` slug, which picks the logo, and its `name`, for the title. */
-  client: Pick<Configuration, "client" | "name">;
+  client: LogoClient;
   size: LogoSize;
   /** Draws the ring behind the logo, for logos that overlap. */
   ring?: boolean;
@@ -80,11 +94,11 @@ export const AgentLogo = ({
     src={logos[client.client] ?? monogram(client.name)}
     alt={decorative ? "" : client.name}
     aria-hidden={decorative ? true : undefined}
-    title={client.name}
+    title={client.title ?? client.name}
     width={size}
     height={size}
     draggable={false}
-    className={tileVariants({ ring, size })}
+    className={tileVariants({ off: client.off === true, ring, size })}
   />
 );
 
@@ -93,6 +107,7 @@ const stackVariants = cva("flex items-center", {
     size: {
       16: "[&>*+*]:-ml-1.5",
       20: "[&>*+*]:-ml-1.5",
+      24: "[&>*+*]:-ml-2",
       28: "[&>*+*]:-ml-2",
     },
   },
@@ -108,7 +123,7 @@ export const LogoStack = ({
   extra = 0,
   decorative = false,
 }: {
-  clients: Pick<Configuration, "client" | "name">[];
+  clients: LogoClient[];
   size: LogoSize;
   extra?: number;
   decorative?: boolean;
@@ -116,7 +131,7 @@ export const LogoStack = ({
   <span className={stackVariants({ size })}>
     {clients.map((c) => (
       <AgentLogo
-        key={c.client}
+        key={`${c.client} ${c.name}`}
         client={c}
         size={size}
         ring
