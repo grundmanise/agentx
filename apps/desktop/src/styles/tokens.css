@@ -275,6 +275,7 @@
   --color-file-row-hover: var(--gray-920);
   --color-file-row-divider: var(--gray-890);
   --color-file-row-path: var(--gray-200);
+  --color-file-row-path-open: var(--gray-50);
   --color-file-row-meta: var(--gray-500);
   --color-file-row-edited-label: var(--color-accent-attention);
   --color-diff-added-bg: rgb(255 193 94 / 0.08);
@@ -567,6 +568,9 @@
   --padding-code: 14px;
   --grid-template-columns-code: 48px 12px 1fr;
   --padding-file-row: 16px;
+  --height-file-row: 44px;
+  --max-height-code: 340px;
+  --gap-code: 12px;
   --gap-hunk: 12px;
   --padding-hunk-header: 8px;
   --padding-hunk-header-left: 16px;

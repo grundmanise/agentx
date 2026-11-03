@@ -308,7 +308,8 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `code.context` | `gray-500` | Context lines around a change |
 | `file-row.hover` | `gray-920` | File tree row hover |
 | `file-row.divider` | `gray-890` |  |
-| `file-row.path` | `gray-200` | Path; `gray-50` when the file is open |
+| `file-row.path` | `gray-200` | Path |
+| `file-row.path-open` | `gray-50` | Path of the file whose pane is open |
 | `file-row.meta` | `gray-500` | "{n} lines" |
 | `file-row.edited-label` | `accent.attention` | "edited by you" / "added by you" |
 | `diff.added-bg` | `amber-400/8` | Added line tint (marker "+" `accent.attention`) |
@@ -589,9 +590,9 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | --- | --- | --- | --- |
 | `code.padding-y` | 14 | `py-code` | Pane top/bottom |
 | `code.gutter` | 48 12 | `grid-cols-code` (with the text column) | Line-number and marker columns |
-| `code.gap` | 10–14 |  | Between gutter and text |
-| `code.max-height` | 340–380 |  |  |
-| `file-row.height` | 44–46 |  | File tree row |
+| `code.gap` | 12 | `gap-x-code` | Between gutter and text |
+| `code.max-height` | 340 | `max-h-code` | The pane scrolls past it |
+| `file-row.height` | 44 | `h-file-row` | File tree row |
 | `file-row.padding-x` | 16 | `px-file-row` |  |
 | `hunk.gap` | 12 | `gap-hunk` | Between hunk blocks |
 | `hunk.header-padding` | 8 8 8 16 | `py-hunk-header pr-hunk-header pl-hunk-header-left` |  |
