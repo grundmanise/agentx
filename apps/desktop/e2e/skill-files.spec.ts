@@ -268,14 +268,18 @@ test("files that cannot be read say so, and are read again on the next selection
   await page.getByRole("button", { name: "Dismiss" }).click();
   await row(page, "pdf").click();
   await row(page, "gone").click();
+  // The failed read stays shown while the files are read again, as a failed history does, so the
+  // text alone does not say the read ran: wait for the command line itself.
+  await expect
+    .poll(() => later(cli))
+    .toEqual([
+      ["skill", "files", "pdf", "--json"],
+      ["skill", "files", "gone", "--json"],
+      ["skill", "files", "gone", "--json"],
+    ]);
   await expect(files(page, "gone")).toContainText(
     "The files could not be read"
   );
-  expect(later(cli)).toEqual([
-    ["skill", "files", "pdf", "--json"],
-    ["skill", "files", "gone", "--json"],
-    ["skill", "files", "gone", "--json"],
-  ]);
 });
 
 test("each file on disk can be shown in Finder from its row", async ({
