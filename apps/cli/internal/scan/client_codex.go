@@ -117,7 +117,10 @@ func pluginKey(key string) (name, marketplace string, ok bool) {
 // .codex-plugin, .claude-plugin and .cursor-plugin manifests. The version
 // falls back to the directory name. Skills live in the manifest's skills
 // paths, else under skills; servers are the manifest's mcpServers object or
-// the file it names, else .mcp.json, else mcp.json.
+// the file it names, else .mcp.json, else mcp.json. Hooks are what the
+// manifest's hooks declares, else hooks/hooks.json; the icon is the
+// interface's logo, else its composer icon. An agent-plugins manifest
+// keeps both under extensions."com.openai" when it has that object.
 func codexPlugin(name, marketplace, dir string, warn func(string)) InstalledPlugin {
 	p := InstalledPlugin{Name: name, Marketplace: marketplace, Version: filepath.Base(dir), Path: dir}
 	var m pluginManifest
@@ -133,13 +136,23 @@ func codexPlugin(name, marketplace, dir string, warn func(string)) InstalledPlug
 	}
 	p.Skills = manifestSkills(m, manifest, dir, false, warn)
 	p.Servers = MCPConfig{Format: mcp.CodexJSON}
+	hooks, iface := m.Hooks, m.Interface
 	if strings.HasPrefix(m.Schema, "https://agent-plugins.org/schemas/") {
 		// An Agent Plugins bundle: ${PLUGIN_ROOT} stands for dir, and a
 		// server that names no cwd runs there.
 		p.Servers.Vars = map[string]string{"PLUGIN_ROOT": dir}
 		p.Servers.RunInRoot = true
+		if openai := m.Extensions.OpenAI; len(openai.Hooks) > 0 || openai.Interface != (codexInterface{}) {
+			hooks, iface = openai.Hooks, openai.Interface
+		}
 	}
 	p.Servers.Path, p.Servers.Data = manifestServers(m, manifest, dir, false, warn, ".mcp.json", "mcp.json")
+	if manifest == "" {
+		manifest = filepath.Join(dir, ".codex-plugin", "plugin.json")
+	}
+	p.Hooks = manifestHooks(hooks, manifest, dir, false, false, warn)
+	icon, field := iface.icon()
+	p.Icon = pluginIcon(icon, manifest, field, dir, false, warn)
 	return p
 }
 

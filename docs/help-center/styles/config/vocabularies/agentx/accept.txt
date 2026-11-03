@@ -36,3 +36,6 @@ KiB
 MiB
 GiB
 TiB
+JPEG
+PNG
+SVG
