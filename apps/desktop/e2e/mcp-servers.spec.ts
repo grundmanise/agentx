@@ -4,8 +4,11 @@ import {
   DB_COMMAND,
   emptyInventory,
   FILESYSTEM_COMMAND,
+  GITHUB_HINT,
   GITHUB_URL,
+  handshakeInventory,
   inventory,
+  LINEAR_HINT,
   LINEAR_URL,
   NOTES_COMMAND,
   SECRET_NAMES,
@@ -21,6 +24,10 @@ const launchLines = [
 const table = (page: Page) => page.getByRole("table", { name: "MCP servers" });
 const row = (page: Page, name: string) =>
   table(page).getByRole("row", { exact: true, name });
+const toasts = (page: Page) =>
+  page.getByRole("region", { name: /^Notifications/u });
+const checkTools = (page: Page) =>
+  page.getByRole("button", { name: "Check tools" });
 
 /** The accessible names of `where`'s elements: an aria-label or an image's alt. */
 const names = async (where: Locator) =>
@@ -153,6 +160,94 @@ test.describe("rows", () => {
       page.getByText("No MCP servers found in your agents.")
     ).toBeVisible();
     await expect(table(page)).toHaveCount(0);
+    await expect(checkTools(page)).toBeVisible();
     expect(later(cli)).toEqual([]);
+  });
+});
+
+test.describe("Check tools", () => {
+  test("runs a scan with a handshake, shows its failures in the Tools column and toasts the counts", async ({
+    cli,
+    page,
+  }) => {
+    await openServers(cli, page);
+    cli.register(["scan", "--handshake"], { events: [handshakeInventory] });
+
+    await checkTools(page).click();
+    await expect(
+      toasts(page).getByText(
+        "Checked 5 servers · 1 need sign-in, 1 unreachable"
+      )
+    ).toBeVisible();
+    expect(later(cli)).toEqual([["scan", "--handshake", "--json"]]);
+    expect(cli.deadlines.at(-1)).toBe(120_000);
+
+    // The failure words, whose hover shows the CLI's hint.
+    const signIn = row(page, "github").getByText("needs sign-in");
+    await expect(signIn).toBeVisible();
+    await signIn.hover();
+    await expect(signIn).toHaveAttribute("title", GITHUB_HINT);
+    const unreachable = row(page, "linear").getByText("unreachable");
+    await expect(unreachable).toBeVisible();
+    await expect(unreachable).toHaveAttribute("title", LINEAR_HINT);
+
+    // The one-shot's inventory is not applied: the rows keep serve's tool counts.
+    await expect(
+      row(page, "github").getByText("12 tools", { exact: true })
+    ).toBeVisible();
+    await expect(page.getByText("20 tools")).toHaveCount(0);
+    await expect(
+      row(page, "filesystem").getByText("4 tools", { exact: true })
+    ).toBeVisible();
+    await expect(
+      row(page, "local-notes").getByText("Not checked")
+    ).toBeVisible();
+
+    // Serve is asked to scan again, which brings the stored signatures in.
+    await expect.poll(() => cli.serveRequests.length).toBe(1);
+    const [line = ""] = cli.serveRequests;
+    expect(JSON.parse(line)).toEqual({
+      request_id: expect.any(String),
+      type: "refresh",
+    });
+    await noSecrets(page);
+  });
+
+  test("Cancel in the toast stops the check", async ({ cli, page }) => {
+    await openServers(cli, page);
+    const scan = cli.register(["scan", "--handshake"], {
+      events: [handshakeInventory],
+      holdAfter: 0,
+    });
+
+    await checkTools(page).click();
+    await scan.started;
+    await expect(checkTools(page)).toHaveAttribute("aria-busy", "true");
+    await expect(toasts(page).getByText("Checking tools")).toBeVisible();
+    await toasts(page).getByRole("button", { name: "Cancel" }).click();
+    await expect(
+      toasts(page).getByText("Stopped", { exact: true })
+    ).toBeVisible();
+    expect(cli.cancels).toHaveLength(1);
+    await expect(checkTools(page)).toHaveAttribute("aria-busy", "false");
+    // A stopped check keeps the column as it was.
+    await expect(page.getByText("needs sign-in")).toHaveCount(0);
+    expect(later(cli)).toEqual([["scan", "--handshake", "--json"]]);
+  });
+
+  test("after a restart, the failure words are gone", async ({ cli, page }) => {
+    await openServers(cli, page);
+    cli.register(["scan", "--handshake"], { events: [handshakeInventory] });
+    await checkTools(page).click();
+    await expect(row(page, "github").getByText("needs sign-in")).toBeVisible();
+
+    cli.restart();
+    await page.reload();
+    await expect(row(page, "github")).toBeVisible();
+    await expect(page.getByText("needs sign-in")).toHaveCount(0);
+    await expect(page.getByText("unreachable")).toHaveCount(0);
+    await expect(
+      row(page, "github").getByText("12 tools", { exact: true })
+    ).toBeVisible();
   });
 });

@@ -447,6 +447,14 @@ export class MockCli {
     this.serving = true;
   }
 
+  /**
+   * Forgets the serve child, as closing the app does: after a page reload, the next serve start
+   * is a first start, which writes its first inventory again.
+   */
+  restart() {
+    this.serving = false;
+  }
+
   private async emit(event: string, payloads: unknown[]) {
     await this.page.evaluate(
       ([name, all]) => {

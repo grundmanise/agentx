@@ -1,6 +1,9 @@
 import { useMemo } from "react";
 
+import { RefreshIcon } from "#/components/icons/refresh.tsx";
+import { Button } from "#/components/ui/button.tsx";
 import { formatDate } from "#/lib/dates.ts";
+import { checkTools, useChecking } from "#/screens/servers/check-tools.ts";
 import { latestCheck, projectServers } from "#/screens/servers/projection.ts";
 import type { ServerRow } from "#/screens/servers/projection.ts";
 import { ServerRowItem } from "#/screens/servers/server-row.tsx";
@@ -9,6 +12,26 @@ import { useAppStore } from "#/store/store.ts";
 const none: ServerRow[] = [];
 
 const columns = ["SERVER", "TRANSPORT", "TOOLS", "AGENTS"];
+
+/** The ghost Check tools: its icon turns once while the check runs (DESIGN.md §8). */
+const CheckTools = () => {
+  const checking = useChecking();
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      aria-busy={checking}
+      onClick={() => {
+        void checkTools();
+      }}
+    >
+      <span className={checking ? "animate-turn-once flex" : "flex"}>
+        <RefreshIcon size="sm" />
+      </span>
+      Check tools
+    </Button>
+  );
+};
 
 /** What the footnote says: when the tool counts were taken, and what the screen never does. */
 const footnote = (rows: ServerRow[]) => {
@@ -23,8 +46,8 @@ const footnote = (rows: ServerRow[]) => {
 /**
  * The MCP servers screen: every server the agent configurations declare, once per server however
  * many declare it, with its transport, how many tools it exposed the last time agentx checked, and
- * the agents that declare it. Read-only: nothing here edits, starts or stops a server. No
- * environment or header value is ever shown.
+ * the agents that declare it. Read-only: Check tools runs a scan with a handshake and nothing here
+ * edits, starts or stops a server. No environment or header value is ever shown.
  */
 export const ServersScreen = () => {
   const inventory = useAppStore((s) => s.inventory);
@@ -44,7 +67,7 @@ export const ServersScreen = () => {
           <h1 className="type-page-title text-text-primary m-0">MCP servers</h1>
           <span className="type-caption text-text-caption">Read-only</span>
         </div>
-        {/* Check tools comes with the change that builds it. */}
+        <CheckTools />
       </header>
       {rows.length === 0 ? (
         <p className="type-secondary text-text-hint m-0">
