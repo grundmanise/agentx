@@ -28,7 +28,8 @@ pub type Emit = Arc<dyn Fn(&'static str, Value) + Send + Sync>;
 pub const RUN_LINE: &str = "cli-run";
 /// The end of a one-shot run.
 pub const RUN_END: &str = "cli-run-end";
-/// A line of the serve child's stdout, with its `child_id`.
+/// A line of the serve child's output, an event on stdout or a log event on stderr, with its
+/// `child_id`.
 pub const SERVE_LINE: &str = "serve-event";
 /// The serve child ended.
 pub const SERVE_EXIT: &str = "serve-exit";
@@ -510,8 +511,9 @@ impl Supervisor {
         self.serve_running.send_replace(false);
     }
 
-    /// Emits the serve child's stdout, writes its stderr to the log, and returns its exit code and
-    /// last stderr lines once it exits.
+    /// Emits the serve child's lines as a one-shot's are, and returns its exit code and last
+    /// stderr lines once it exits. Its stderr also goes to the log, whole, so that the warnings
+    /// the app shows and the debug lines it does not can be read back after the fact.
     async fn watch_serve(&self, child_id: u64, child: &mut Child) -> (Option<i32>, Vec<String>) {
         let mut tail = VecDeque::with_capacity(STDERR_TAIL);
         let mut lines = read_lines(child);
@@ -521,8 +523,7 @@ impl Supervisor {
                 if tail.len() == STDERR_TAIL {
                     tail.pop_front();
                 }
-                tail.push_back(text);
-                return;
+                tail.push_back(text.clone());
             }
             if let Some(line) = classify(stream, text) {
                 (self.emit)(SERVE_LINE, with_id("child_id", child_id, &line));

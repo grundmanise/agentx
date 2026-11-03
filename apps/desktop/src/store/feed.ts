@@ -2,11 +2,13 @@
 // (docs/spec/inventory-ordering.md). Only the active child counts: a later child replaces it, and
 // the events of a child that ended or was replaced are dropped. Within one serve instance an
 // inventory applies only when its scan counter goes up; a new instance applies whatever it sends
-// first, since counters are never compared across instances.
+// first, since counters are never compared across instances. What serve notices goes to the
+// activity list: its drift, reconcile and update events, and the warnings it logs on stderr.
 import type {
   CliEvent,
   DriftEvent,
   InventoryEvent,
+  LogEvent,
   RefreshCompleteEvent,
 } from "#/cli/events.gen.ts";
 import { serve } from "#/cli/transport.ts";
@@ -148,6 +150,17 @@ const apply = (childId: number, event: CliEvent) => {
   }
 };
 
+/**
+ * A warning serve logged is something the user should know about, such as a source the update
+ * check could not fetch or a fork it could not repair. Debug lines, and whatever level a later
+ * CLI adds, stay in the serve log.
+ */
+const applyLog = (event: LogEvent) => {
+  if (event.level === "warn") {
+    addActivity("attention", event.message);
+  }
+};
+
 const onLine = (line: ServeLine) => {
   if (line.childId < active || line.childId <= ended) {
     return;
@@ -155,6 +168,8 @@ const onLine = (line: ServeLine) => {
   activate(line.childId);
   if (line.kind === "event") {
     apply(line.childId, line.event);
+  } else if (line.kind === "log") {
+    applyLog(line.event);
   }
 };
 
