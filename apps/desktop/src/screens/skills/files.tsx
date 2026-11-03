@@ -4,13 +4,20 @@ import type { ReactNode } from "react";
 
 import type { DiffEvent, SkillFileEvent } from "#/cli/events.gen.ts";
 import { CodePane } from "#/components/code-pane.tsx";
+import { FolderIcon } from "#/components/icons/folder.tsx";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "#/components/ui/accordion.tsx";
-import { filesRequestOf, filesVersionOf } from "#/screens/skills/projection.ts";
+import { Button } from "#/components/ui/button.tsx";
+import { revealInFinder } from "#/lib/reveal.ts";
+import {
+  filesRequestOf,
+  filesVersionOf,
+  skillDirectoryOf,
+} from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { loadFiles } from "#/store/loaders.ts";
 import { useAppStore } from "#/store/store.ts";
@@ -178,6 +185,7 @@ export const FilesSection = ({
 }) => {
   const request = filesRequestOf(row);
   const version = filesVersionOf(row);
+  const directory = skillDirectoryOf(row);
   const read = useAppStore((s) => s.files[row.key]);
   const [open, setOpen] = useState<string[]>([SKILL_MD]);
 
@@ -213,7 +221,26 @@ export const FilesSection = ({
             const isOpen = open.includes(file.path);
             return (
               <AccordionItem key={file.path} value={file.path}>
-                <AccordionTrigger label={file.path} open={isOpen}>
+                <AccordionTrigger
+                  label={file.path}
+                  open={isOpen}
+                  action={
+                    // A file on disk can be shown where it is; a deleted file has no place.
+                    file.file !== undefined && directory !== undefined ? (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Show ${file.path} in Finder`}
+                        title="Show in Finder"
+                        onClick={() => {
+                          void revealInFinder(`${directory}/${file.path}`);
+                        }}
+                      >
+                        <FolderIcon />
+                      </Button>
+                    ) : undefined
+                  }
+                >
                   <span className={pathVariants({ open: isOpen })}>
                     {file.path}
                   </span>

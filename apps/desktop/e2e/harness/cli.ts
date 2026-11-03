@@ -278,6 +278,8 @@ export class MockCli {
   readonly deadlines: (number | null)[] = [];
   /** Every line written to serve's stdin. */
   readonly serveRequests: string[] = [];
+  /** The paths of every call to the opener plugin's reveal, in order: what the app showed in Finder. */
+  readonly reveals: string[][] = [];
   /** The request id of every line written to serve's stdin, in order. */
   get requestIds(): string[] {
     return this.serveRequests.map((written) => {
@@ -520,6 +522,13 @@ export class MockCli {
           throw new Error("serve is not running");
         }
         this.serveRequests.push(String(field(args, "line")));
+        return null;
+      }
+      case "plugin:opener|reveal_item_in_dir": {
+        const paths = field(args, "paths");
+        this.reveals.push(
+          Array.isArray(paths) ? paths.map(String) : [String(paths)]
+        );
         return null;
       }
       default: {

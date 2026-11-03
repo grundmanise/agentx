@@ -758,6 +758,10 @@ A client with no bundled logo shows the first letter of its name in `type.pill`,
 
 `code.bg`, mono 12.5, `line-height:1.75`, grid `code.gutter 1fr` (line no. `code.line-number` right-aligned · marker · text). Front-matter and keys `code.frontmatter`, headings `code.heading`, list items `code.list`, prose `code.prose`. Diff tints: added line `+` on `diff.added-bg`, removed line `−` on `diff.removed-bg` with no number.
 
+### File list (detail pane FILES)
+
+A `card.bg` card, `file-card.radius`, 1px `card.border`, holding one row per file, `file-row.height` high with `file-row.padding-x`, a 1px `file-row.divider` hairline between rows and `file-row.hover` on hover or focus: a chevron (`rotate(90deg)` in .15s when the row is open), the path in `type.technical` (`file-row.path`, `file-row.path-open` while open), a `file-row.edited-label` label for a file the user changed, and "{n} lines", "binary" or "Too large to show ({size})" in `file-row.meta` at the right. SKILL.md comes first and open; the rest follow by path, a file the user removed among them. An open row shows the file in the Code pane below it. A row of a file on disk also has a ghost icon button "Show in Finder" at its right end, beside the trigger and never inside it, visible while the row is hovered or holds the focus and in the tab order throughout.
+
 ### Key hint
 
 `esc` in the palette and `⌘K` / `Ctrl K` in the command field (`src/components/key-hint.tsx`): `key-hint.padding`, `key-hint.radius`, `button.secondary-bg` fill, `type.key-hint` in `text.muted`.

@@ -1,5 +1,8 @@
 import type { Locator, Page } from "@playwright/test";
 
+import type { InventoryEvent } from "#/cli/events.gen.ts";
+import { projectRows, skillDirectoryOf } from "#/screens/skills/projection.ts";
+
 import {
   adoption,
   fileReads,
@@ -47,10 +50,23 @@ const fileRow = (where: Locator, path: string) =>
 /** The open pane of one file. */
 const content = (where: Locator, path: string) =>
   where.getByRole("region", { exact: true, name: path });
+/** The "Show in Finder" button of one file's row. */
+const reveal = (where: Locator, path: string) =>
+  where.getByRole("button", { exact: true, name: `Show ${path} in Finder` });
+/** How the button shows: its wrapper fades it in while the row is hovered or holds the focus. */
+const opacity = async (locator: Locator) =>
+  await locator.evaluate((el) =>
+    el.parentElement === null ? "" : getComputedStyle(el.parentElement).opacity
+  );
+/** The paths of the file rows, in order: the buttons that open a row. */
 const rowNames = async (where: Locator) =>
   await where
     .getByRole("button")
-    .evaluateAll((buttons) => buttons.map((b) => b.getAttribute("aria-label")));
+    .evaluateAll((buttons) =>
+      buttons
+        .filter((b) => b.hasAttribute("aria-expanded"))
+        .map((b) => b.getAttribute("aria-label"))
+    );
 
 /** Opens the Skills screen on the fixture machine at `path`, with every read registered. */
 const openSkills = async (cli: MockCli, page: Page, path: string) => {
@@ -260,4 +276,120 @@ test("files that cannot be read say so, and are read again on the next selection
     ["skill", "files", "gone", "--json"],
     ["skill", "files", "gone", "--json"],
   ]);
+});
+
+test("each file on disk can be shown in Finder from its row", async ({
+  cli,
+  page,
+}) => {
+  await openSkills(cli, page, "/#/skills/pdf");
+  const section = files(page, "pdf");
+  // The button is there, in the tab order, and shows while the row is hovered or holds the focus.
+  const button = reveal(section, "SKILL.md");
+  await expect(button).toHaveAttribute("title", "Show in Finder");
+  expect(await opacity(button)).toBe("0");
+  await fileRow(section, "SKILL.md").hover();
+  await expect.poll(async () => await opacity(button)).toBe("1");
+  await page.mouse.move(0, 0);
+  await expect.poll(async () => await opacity(button)).toBe("0");
+  await button.focus();
+  await expect.poll(async () => await opacity(button)).toBe("1");
+
+  // A click shows the file at the library entry's path, and leaves the row as it was.
+  await expect(fileRow(section, "SKILL.md")).toHaveAttribute(
+    "aria-expanded",
+    "true"
+  );
+  await button.click();
+  expect(cli.reveals).toEqual([["/home/me/.agents/skills/pdf/SKILL.md"]]);
+  await expect(fileRow(section, "SKILL.md")).toHaveAttribute(
+    "aria-expanded",
+    "true"
+  );
+  await reveal(section, "assets/logo.png").click();
+  expect(cli.reveals).toEqual([
+    ["/home/me/.agents/skills/pdf/SKILL.md"],
+    ["/home/me/.agents/skills/pdf/assets/logo.png"],
+  ]);
+  await expect(fileRow(section, "assets/logo.png")).toHaveAttribute(
+    "aria-expanded",
+    "false"
+  );
+
+  // A plugin's skill is shown where its occurrence resolves.
+  await row(page, "commit-helper").click();
+  await reveal(files(page, "commit-helper"), "reference/forms.md").click();
+  expect(cli.reveals.at(-1)).toEqual([
+    "/home/me/.claude/plugins/acme-tools/skills/commit-helper/reference/forms.md",
+  ]);
+
+  // A file the edits removed is not on disk: its row has no button.
+  await row(page, "review").click();
+  const review = files(page, "review");
+  await expect(reveal(review, "notes.md")).toBeAttached();
+  await expect(fileRow(review, "old.md")).toBeVisible();
+  await expect(reveal(review, "old.md")).toHaveCount(0);
+  // One of your own skills is shown in its fork's worktree.
+  await row(page, "pdf-letters").click();
+  await reveal(files(page, "pdf-letters"), "SKILL.md").click();
+  expect(cli.reveals.at(-1)).toEqual([
+    "/home/me/.agentx/worktrees/pdf-letters/pdf-letters/SKILL.md",
+  ]);
+});
+
+test("the directory of a skill's files comes from the inventory", () => {
+  // The fixture inventory with the fields serve adds to it.
+  const whole: InventoryEvent = {
+    edges: [],
+    instance_id: "instance-1",
+    machine: { id: "machine-1", label: "studio-mac" },
+    mcp_servers: [],
+    schema_version: 2,
+    warnings: [],
+    ...inventory,
+  };
+  const rows = projectRows({ adoption, inventory: whole, updates: {} });
+  const directory = (name: string) =>
+    skillDirectoryOf(rows.find((r) => r.name === name) ?? rows[0]);
+  // A library skill: the library entry; one of your own: the worktree the entry leads to.
+  expect(directory("pdf")).toBe("/home/me/.agents/skills/pdf");
+  expect(directory("pdf-letters")).toBe(
+    "/home/me/.agentx/worktrees/pdf-letters/pdf-letters"
+  );
+  // A plugin's skill and a skill a client holds on its own: where the occurrence resolves.
+  expect(directory("commit-helper")).toBe(
+    "/home/me/.claude/plugins/acme-tools/skills/commit-helper"
+  );
+  expect(directory("notes")).toBe("/home/me/.cursor/skills/notes");
+  // A library skill on a machine with no universal client: through a placement's occurrence.
+  const noUniversal = projectRows({
+    adoption,
+    inventory: {
+      ...whole,
+      configurations: inventory.configurations.filter((c) => !c.reads_library),
+      library: inventory.library.map((e) => ({
+        ...e,
+        placements: e.placements.filter((p) => p.mode !== "library"),
+        universal: [],
+      })),
+      skills: inventory.skills.map((n) => ({
+        ...n,
+        occurrences: n.occurrences.filter(
+          (o) => !["codex", "gemini-cli"].includes(o.configuration)
+        ),
+      })),
+    },
+    updates: {},
+  });
+  expect(
+    skillDirectoryOf(
+      noUniversal.find((r) => r.name === "pdf") ?? noUniversal[0]
+    )
+  ).toBe("/home/me/.agents/skills/pdf");
+  // A skill nothing places: no directory, so no button.
+  expect(
+    skillDirectoryOf(
+      noUniversal.find((r) => r.name === "draft") ?? noUniversal[0]
+    )
+  ).toBeUndefined();
 });

@@ -73,29 +73,41 @@ export const AccordionItem = ({
   </AccordionPrimitive.Item>
 );
 
-/** The row that opens an item: a chevron, then `children`. Named by `label` alone. */
+/**
+ * The row that opens an item: a chevron, then `children`. Named by `label` alone. `action` is a
+ * control of the row's own, beside the trigger rather than inside it, shown while the row is
+ * hovered or holds the focus; it is in the tab order throughout.
+ */
 export const AccordionTrigger = ({
   label,
   open,
+  action,
   children,
 }: {
   /** The row's accessible name: what the item is about. */
   label: string;
   /** Whether the item is open, which turns the chevron down. */
   open: boolean;
+  /** A button at the row's right end, such as an icon button. */
+  action?: ReactNode;
   children: ReactNode;
 }) => (
-  <AccordionPrimitive.Header className="m-0 flex">
+  <AccordionPrimitive.Header className="group hover:bg-file-row-hover focus-within:bg-file-row-hover m-0 flex items-center">
     <AccordionPrimitive.Trigger
       aria-label={label}
       data-slot="accordion-trigger"
-      className="h-file-row px-file-row hover:bg-file-row-hover focus-visible:bg-file-row-hover flex min-w-0 flex-1 items-center gap-3 text-left outline-none"
+      className="h-file-row px-file-row flex min-w-0 flex-1 items-center gap-3 text-left outline-none"
     >
       <span className={chevronVariants({ open })}>
         <ChevronIcon size="xs" />
       </span>
       {children}
     </AccordionPrimitive.Trigger>
+    {action !== undefined && (
+      <span className="flex flex-none items-center pr-2 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
+        {action}
+      </span>
+    )}
   </AccordionPrimitive.Header>
 );
 

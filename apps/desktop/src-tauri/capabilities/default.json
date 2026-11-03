@@ -1,7 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "What the main window may do: drag itself by the title bar.",
+  "description": "What the main window may do: drag itself by the title bar, and show a path selected in Finder (the file manager elsewhere) through the opener plugin, its one call to the operating system; it may not open URLs or files.",
   "windows": ["main"],
-  "permissions": ["core:default", "core:window:allow-start-dragging"]
+  "permissions": [
+    "core:default",
+    "core:window:allow-start-dragging",
+    "opener:allow-reveal-item-in-dir"
+  ]
 }

@@ -535,6 +535,26 @@ export const filesRequestOf = (row: SkillRow): FilesRequest | undefined => {
     : { args: [row.name] };
 };
 
+/**
+ * The directory a skill's files are in on this machine, from the inventory alone: for a library
+ * skill the library entry, or the directory it leads to as the occurrence through it resolves
+ * (a fork's worktree); for a plugin's skill or one a client holds on its own, where its directory
+ * occurrence resolves, else its first occurrence. Undefined when the inventory does not say.
+ */
+export const skillDirectoryOf = (row: SkillRow): string | undefined => {
+  const library = row.entry?.placements.find((p) => p.kind === "library");
+  if (library !== undefined) {
+    const through = row.occurrences.find(
+      (o) =>
+        o.configuration === library.configuration && o.path === library.path
+    );
+    return through?.resolved_path ?? library.path;
+  }
+  const occurrence =
+    row.occurrences.find((o) => o.kind === "directory") ?? row.occurrences[0];
+  return occurrence?.resolved_path;
+};
+
 /** The version a skill's files are read for: a new read when its content or its state changed. */
 export const filesVersionOf = (row: SkillRow) =>
   [
