@@ -55,8 +55,8 @@ func ManagedRef(name string) string { return ManagedPrefix + name }
 func ForkRef(name string) string { return ForkPrefix + name }
 
 // Record is what the account repo holds for one skill name: the branch, the
-// commit it points at, that commit's tree and, when that commit carries
-// them, the four lineage trailers. A managed skill's tip is its import
+// commit it points at, that commit's tree and committer time and, when that
+// commit carries them, the four lineage trailers. A managed skill's tip is its import
 // commit. A fork's tip is a commit of its own history, whose lineage
 // ReadForks reads into Fork; Import and HasImport then describe the tip
 // alone and say nothing of the fork's base. What the last update check
@@ -68,6 +68,7 @@ type Record struct {
 	Ref             string
 	Commit          string
 	Tree            string // the root tree of that commit: for an import commit, the upstream directory as its one entry
+	Time            string // that commit's committer time, RFC 3339 in UTC: for an import commit, the upstream commit's; "" when git printed none
 	Import          Import
 	HasImport       bool
 	Parentless      bool         // the commit has no parent, as an import commit never has
@@ -77,11 +78,12 @@ type Record struct {
 }
 
 // Candidate is an update candidate: the import commit of a newer upstream
-// version, the tree it holds and, when its message is an import commit's,
-// the lineage its trailers carry.
+// version, the tree it holds, its committer time and, when its message is
+// an import commit's, the lineage its trailers carry.
 type Candidate struct {
 	Commit    string
 	Tree      string // the root tree, the upstream directory as its one entry, as a branch's is
+	Time      string // its committer time, RFC 3339 in UTC: the upstream commit's, as every import commit is dated
 	Import    Import
 	HasImport bool
 }
@@ -105,7 +107,7 @@ func (rec Record) AtCandidate() (Record, bool) {
 	if c == nil || !c.HasImport || c.Commit == rec.Commit {
 		return Record{}, false
 	}
-	return Record{Name: rec.Name, Kind: rec.Kind, Ref: rec.Ref, Commit: c.Commit, Tree: c.Tree, Import: c.Import, HasImport: true}, true
+	return Record{Name: rec.Name, Kind: rec.Kind, Ref: rec.Ref, Commit: c.Commit, Tree: c.Tree, Time: c.Time, Import: c.Import, HasImport: true}, true
 }
 
 // ForkBase is the record of a fork's base version, the import commit its
@@ -121,7 +123,7 @@ func (rec Record) ForkBase() (Record, bool) {
 	if rec.Kind != KindFork || l == nil || l.Base == "" || l.Problem != "" {
 		return Record{}, false
 	}
-	return Record{Name: rec.Name, Kind: rec.Kind, Ref: rec.Ref, Commit: l.Base, Tree: l.BaseTree, Import: l.Import, HasImport: true,
+	return Record{Name: rec.Name, Kind: rec.Kind, Ref: rec.Ref, Commit: l.Base, Tree: l.BaseTree, Time: l.BaseTime, Import: l.Import, HasImport: true,
 		Parentless: true, Candidate: rec.Candidate}, true
 }
 
@@ -148,8 +150,10 @@ func (rec Record) CandidateCommit() string {
 }
 
 // List reads every lineage branch of the account repo in one for-each-ref
-// over both namespaces, trees and trailers and all, and returns them by
-// skill name. The tree is what the fast path tells a managed skill's
+// over both namespaces, trees, committer times and trailers and all, and
+// returns them by skill name. The committer time dates the version a commit
+// holds: an import commit is dated with the upstream commit's, see WriteAll,
+// so no other read says when a version was made. The tree is what the fast path tells a managed skill's
 // library directory from its base version by, with no git process of its
 // own: see Record.HoldsID.
 // A managed branch wins over a fork of the same name, which cannot happen
@@ -172,7 +176,7 @@ func List(ctx context.Context, r *gitx.Runner, gitDir string) (map[string]Record
 	const recordEnd = "\x01"
 	markers := strings.TrimSuffix(UpstreamRemovedPrefix, "/")
 	out, err := r.Isolated(ctx, gitDir,
-		"for-each-ref", "--format=%(refname)%00%(objectname)%00%(tree)%00%(parent)%00"+
+		"for-each-ref", "--format=%(refname)%00%(objectname)%00%(tree)%00%(parent)%00%(committerdate:unix)%00"+
 			"%(if:notequals="+markers+")%(refname:rstrip=1)%(then)%(contents)%(end)"+recordEnd,
 		ManagedPrefix, ForkPrefix, CandidatePrefix, UpstreamRemovedPrefix)
 	if err != nil {
@@ -186,19 +190,19 @@ func List(ctx context.Context, r *gitx.Runner, gitDir string) (map[string]Record
 		if strings.TrimSpace(entry) == "" {
 			continue
 		}
-		fields := strings.SplitN(entry, "\x00", 5)
-		if len(fields) != 5 {
+		fields := strings.SplitN(entry, "\x00", 6)
+		if len(fields) != 6 {
 			continue
 		}
-		rec := Record{Ref: fields[0], Commit: fields[1], Tree: fields[2], Parentless: fields[3] == ""}
+		rec := Record{Ref: fields[0], Commit: fields[1], Tree: fields[2], Parentless: fields[3] == "", Time: UpstreamTime(fields[4])}
 		switch {
 		case strings.HasPrefix(rec.Ref, ManagedPrefix):
 			rec.Name, rec.Kind = strings.TrimPrefix(rec.Ref, ManagedPrefix), KindManaged
 		case strings.HasPrefix(rec.Ref, ForkPrefix):
 			rec.Name, rec.Kind = strings.TrimPrefix(rec.Ref, ForkPrefix), KindFork
 		case strings.HasPrefix(rec.Ref, CandidatePrefix):
-			c := Candidate{Commit: rec.Commit, Tree: rec.Tree}
-			if imported, err := Parse(fields[4]); err == nil {
+			c := Candidate{Commit: rec.Commit, Tree: rec.Tree, Time: rec.Time}
+			if imported, err := Parse(fields[5]); err == nil {
 				c.Import, c.HasImport = imported, true
 			}
 			candidates[strings.TrimPrefix(rec.Ref, CandidatePrefix)] = c
@@ -209,7 +213,7 @@ func List(ctx context.Context, r *gitx.Runner, gitDir string) (map[string]Record
 		default:
 			continue
 		}
-		if imported, err := Parse(fields[4]); err == nil {
+		if imported, err := Parse(fields[5]); err == nil {
 			rec.Import, rec.HasImport = imported, true
 		}
 		if have, ok := records[rec.Name]; !ok || have.Kind == KindFork && rec.Kind == KindManaged {
