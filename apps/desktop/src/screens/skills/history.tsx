@@ -4,8 +4,14 @@ import type { ReactNode } from "react";
 
 import type { HistoryEvent } from "#/cli/events.gen.ts";
 import { ChevronIcon } from "#/components/icons/chevron.tsx";
-import { Sheet } from "#/components/sheet.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "#/components/ui/sheet.tsx";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { loadHistory } from "#/store/loaders.ts";
 import { useAppStore } from "#/store/store.ts";
@@ -179,22 +185,29 @@ const HistorySheet = ({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) => (
-  <Sheet
-    open={open}
-    onOpenChange={onOpenChange}
-    title="History"
-    subtitle={name}
-  >
-    <ol aria-label="All history" className="m-0 flex list-none flex-col p-0">
-      {entries.map((e, i) => (
-        <Entry
-          key={e.commit}
-          entry={e}
-          last={i === entries.length - 1}
-          expandable
-        />
-      ))}
-    </ol>
+  <Sheet open={open} onOpenChange={onOpenChange}>
+    <SheetContent>
+      <SheetHeader>
+        <SheetTitle>History</SheetTitle>
+        <SheetDescription>{name}</SheetDescription>
+      </SheetHeader>
+      {/* The entries scroll down only; a long subject wraps. */}
+      <div className="min-h-0 flex-1 overflow-auto">
+        <ol
+          aria-label="All history"
+          className="m-0 flex list-none flex-col p-0"
+        >
+          {entries.map((e, i) => (
+            <Entry
+              key={e.commit}
+              entry={e}
+              last={i === entries.length - 1}
+              expandable
+            />
+          ))}
+        </ol>
+      </div>
+    </SheetContent>
   </Sheet>
 );
 
