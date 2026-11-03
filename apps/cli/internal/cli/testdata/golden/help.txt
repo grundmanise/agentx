@@ -36,7 +36,7 @@ SOURCES
   source remove <url|id>          Remove a source and what was fetched from it
 
 MACHINES
-  machine                         Print this machine's id and label
+  machine                         Print this machine's id, label and agentx's paths
   machine rename <label>          Change this machine's label
   machine reset-id                Replace this machine's id with a new random one
   export [<name>]|--machine <id>  Write a snapshot to the library or the account remote
