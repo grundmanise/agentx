@@ -5,7 +5,7 @@ import type { CliEvent } from "#/cli/events.gen.ts";
 import { onFinished, runCommand } from "#/store/runner.ts";
 import type { Finished } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
-import type { AppState } from "#/store/store.ts";
+import type { AppState, FilesRead } from "#/store/store.ts";
 
 // Each read's latest run: a slower earlier run of the same read does not overwrite a later one.
 const latest = new Map<string, number>();
@@ -90,6 +90,69 @@ export const loadHistory = async (name: string, version: string) => {
     }));
     historyVersions.delete(name);
   }
+};
+
+// The version of each skill whose files were read, or are being read: row key → version.
+const fileVersions = new Map<string, string>();
+
+/** The reads that show a skill's files: `skill files` and, for a modified skill, `skill diff`. */
+export interface FilesRequest {
+  /** The arguments after `skill files`: the skill's name, as the CLI looks it up, and its flags. */
+  args: string[];
+  /** The skill whose unpublished edits `skill diff` reads; absent when the skill is not modified. */
+  diff?: string;
+}
+
+/**
+ * Loads the files of the skill `key` names: `skill files`, and `skill diff <name>` for a modified
+ * skill, both reads, run at once. `version` names what the files are of, as for `loadHistory`:
+ * the same version is read once, however often the skill is selected, and a change reads again.
+ */
+export const loadFiles = async (
+  key: string,
+  request: FilesRequest,
+  version: string
+) => {
+  if (fileVersions.get(key) === version) {
+    return;
+  }
+  fileVersions.set(key, version);
+  useAppStore.setState((s) => {
+    const { [key]: previous, ...rest } = s.files;
+    return previous === undefined || previous.version === version
+      ? s
+      : { files: rest };
+  });
+  const [files, diff] = await Promise.all([
+    runCommand(["skill", "files", ...request.args], { label: `files ${key}` }),
+    request.diff === undefined
+      ? undefined
+      : runCommand(["skill", "diff", request.diff], {
+          label: `diff ${request.diff}`,
+        }),
+  ]);
+  if (fileVersions.get(key) !== version) {
+    return;
+  }
+  if (files.exitCode !== 0) {
+    useAppStore.setState((s) => ({
+      files: { ...s.files, [key]: { failed: true, version } },
+    }));
+    fileVersions.delete(key);
+    return;
+  }
+  const read: FilesRead = {
+    files: files.events.filter((e) => e.type === "skill_file"),
+    version,
+  };
+  if (diff !== undefined) {
+    if (diff.exitCode === 0) {
+      read.diffs = diff.events.filter((e) => e.type === "diff");
+    } else {
+      read.diffFailed = true;
+    }
+  }
+  useAppStore.setState((s) => ({ files: { ...s.files, [key]: read } }));
 };
 
 /** What to load again after a command that may have changed something. */

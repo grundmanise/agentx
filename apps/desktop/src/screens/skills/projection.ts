@@ -504,3 +504,40 @@ export const glyphOf = (row: SkillRow): Glyph => {
 /** Whether the glyph is lit: enabled, and for one of your own skills also published. */
 export const glyphLit = (row: SkillRow) =>
   row.kind === "yours" ? row.enabled && row.published : row.enabled;
+
+/** The reads that show a skill's files; see FilesRequest in src/store/loaders.ts. */
+export interface FilesRequest {
+  args: string[];
+  diff?: string;
+}
+
+/**
+ * How `skill files` names a skill, and whether `skill diff` is read for it: a library skill by its
+ * name, a plugin's as `<plugin>:<name>`, and a skill a client holds in its own skills directory,
+ * which is neither, with `--configuration`. Only a modified skill of a source or one of your own
+ * with edits not published has a diff. Undefined when the CLI has no way to name it.
+ */
+export const filesRequestOf = (row: SkillRow): FilesRequest | undefined => {
+  if (row.kind === "plugin") {
+    const plugin = row.plugin?.name ?? row.occurrences[0]?.plugin;
+    return plugin === undefined
+      ? undefined
+      : { args: [`${plugin}:${row.name}`] };
+  }
+  if (row.entry === undefined) {
+    const [first] = row.occurrences;
+    return first === undefined
+      ? undefined
+      : { args: [row.name, "--configuration", first.configuration] };
+  }
+  return row.modified && row.kind !== "disk"
+    ? { args: [row.name], diff: row.name }
+    : { args: [row.name] };
+};
+
+/** The version a skill's files are read for: a new read when its content or its state changed. */
+export const filesVersionOf = (row: SkillRow) =>
+  [
+    row.entry?.content_hash ?? row.node?.content_hash ?? "",
+    row.entry?.state ?? "",
+  ].join(":");
