@@ -34,10 +34,10 @@ The last four rows say where agentx keeps its files on this machine:
 
 | Row | What it is |
 |---|---|
-| `Home` | [agentx home](/#key-terms), `~/.agentx` unless `AGENTX_HOME` says otherwise. Everything agentx keeps on this machine lives here. |
+| `Home` | [agentx home](https://github.com/grundmanise/agentx/blob/main/GLOSSARY.md), `~/.agentx` unless `AGENTX_HOME` says otherwise. Everything agentx keeps on this machine lives here. |
 | `Settings` | the [machine settings](/cli/config) file, `settings.json` in agentx home. |
-| `Library` | the [library](/#key-terms), `~/.agents/skills` unless `AGENTX_LIBRARY` says otherwise, where agentx installs skills. |
-| `Account repo` | the [account repo](/#key-terms), `account.git` in agentx home, and its size on disk. It shows `not created yet` until the first command that needs it, such as `agentx source add` or `agentx skill new`, creates it. |
+| `Library` | the [library](https://github.com/grundmanise/agentx/blob/main/GLOSSARY.md), `~/.agents/skills` unless `AGENTX_LIBRARY` says otherwise, where agentx installs skills. |
+| `Account repo` | the [account repo](https://github.com/grundmanise/agentx/blob/main/GLOSSARY.md), `account.git` in agentx home, and its size on disk. It shows `not created yet` until the first command that needs it, such as `agentx source add` or `agentx skill new`, creates it. |
 
 The size counts the files in `account.git` alone. The worktrees of your own skills, under `worktrees` in agentx home, are not part of it. There is no cache to clear: what agentx fetched from your sources lives in the account repo.
 
