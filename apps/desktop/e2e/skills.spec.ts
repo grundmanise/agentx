@@ -338,7 +338,10 @@ test.describe("filters", () => {
     page,
   }) => {
     await openSkills(cli, page);
-    await page.getByRole("button", { name: "Sort Z to A" }).click();
+    const toggle = page.getByRole("button", { name: "Sort Z to A" });
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "true");
     expect(await rowNames(group(page, "YOUR SKILLS (3)"))).toEqual([
       "release-notes",
       "pdf-letters",
@@ -352,7 +355,8 @@ test.describe("filters", () => {
     await expect(list(page).getByRole("region").first()).toHaveAccessibleName(
       "YOUR SKILLS (3)"
     );
-    await page.getByRole("button", { name: "Sort A to Z" }).click();
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
     expect(await rowNames(group(page, "YOUR SKILLS (3)"))).toEqual([
       "draft",
       "pdf-letters",

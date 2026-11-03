@@ -99,7 +99,7 @@ export const SortToggle = ({
 }) => (
   <button
     type="button"
-    aria-label={descending ? "Sort A to Z" : "Sort Z to A"}
+    aria-label="Sort Z to A"
     aria-pressed={descending}
     onClick={onToggle}
     className={sortVariants({ descending })}
