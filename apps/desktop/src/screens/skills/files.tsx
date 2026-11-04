@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import type { DiffEvent, SkillFileEvent } from "#/cli/events.gen.ts";
-import { CodePane } from "#/components/code-pane.tsx";
+import { CodePane, codeLines } from "#/components/code-pane.tsx";
 import { FolderIcon } from "#/components/icons/folder.tsx";
 import {
   Accordion,
@@ -55,11 +55,10 @@ const labels: Record<DiffEvent["status"], string> = {
 const metaOf = (row: FileRow) => {
   const { file } = row;
   if (file === undefined) {
-    // A deleted file: the lines of its old content, from the patch.
-    const removed = (row.diff?.patch ?? "")
-      .split("\n")
-      .filter((l) => l.startsWith("-") && !l.startsWith("---")).length;
-    return lines(removed);
+    // A deleted file: the lines of its old content, the ones the pane shows from the patch.
+    return lines(
+      codeLines({ patch: row.diff?.patch ?? "", tint: "removed" }).length
+    );
   }
   if (file.truncated === true) {
     return `Too large to show (${formatSize(file.size)})`;

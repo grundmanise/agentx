@@ -529,3 +529,28 @@ export const fileReads: FilesRead[] = [
     events: filesOf("notes"),
   },
 ];
+
+/**
+ * A deleted Markdown file with front matter: its `---` lines read `----` in the patch, which a
+ * count of the lines that start with `-` but not `---` would miss.
+ */
+export const deletedWithFrontMatter: DiffEvent = diffEvent(
+  "review",
+  "archive/OLD.md",
+  "deleted",
+  [
+    "diff --git a/archive/OLD.md b/archive/OLD.md",
+    "deleted file mode 100644",
+    "index 7c1d2e3..0000000",
+    "--- a/archive/OLD.md",
+    "+++ /dev/null",
+    "@@ -1,6 +0,0 @@",
+    "----",
+    "-name: old",
+    "----",
+    "-",
+    "-# Old",
+    "-Gone.",
+    "",
+  ].join("\n")
+);

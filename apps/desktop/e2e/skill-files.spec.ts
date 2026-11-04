@@ -5,6 +5,7 @@ import { projectRows, skillDirectoryOf } from "#/screens/skills/projection.ts";
 
 import {
   adoption,
+  deletedWithFrontMatter,
   fileReads,
   history,
   inventory,
@@ -396,4 +397,24 @@ test("the directory of a skill's files comes from the inventory", () => {
       noUniversal.find((r) => r.name === "draft") ?? noUniversal[0]
     )
   ).toBeUndefined();
+});
+
+test("a removed file's line count is the count of the lines its pane shows", async ({
+  cli,
+  page,
+}) => {
+  await openSkills(cli, page, "/#/skills/pdf");
+  cli.register(["skill", "diff", "review"], {
+    events: [...reviewDiffs, deletedWithFrontMatter],
+  });
+  await row(page, "review").click();
+  const section = files(page, "review");
+  const removed = fileRow(section, "archive/OLD.md");
+  await expect(removed).toContainText("removed by you");
+  await expect(removed).toContainText("6 lines");
+  await removed.click();
+  const deletions = content(section, "archive/OLD.md").getByRole("deletion");
+  await expect(deletions).toHaveCount(6);
+  await expect(deletions.first()).toHaveText("---");
+  await expect(deletions.last()).toHaveText("Gone.");
 });
