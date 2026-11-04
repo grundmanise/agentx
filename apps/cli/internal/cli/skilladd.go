@@ -1418,7 +1418,7 @@ func (inv *invocation) reportInstalled(ctx context.Context, b *batch, dones []*i
 			return fail(exitInternal, "the library holds no "+done.v.name+" after installing it", "run 'agentx doctor' and check the library it names")
 		}
 		sc.records[done.v.name] = lineage.Record{Name: done.v.name, Kind: lineage.KindManaged, Ref: lineage.ManagedRef(done.v.name),
-			Commit: done.v.commit, Tree: done.v.tree, Import: done.v.imp, HasImport: true}
+			Commit: done.v.commit, Tree: done.v.tree, Time: lineage.UpstreamTime(done.v.when), Import: done.v.imp, HasImport: true}
 		ev := sc.librarySkillEventFor(ctx, inv, inventory, lib, targetIDs(done.placed))
 		inv.out.emit(ev)
 		inv.printInstalled(done, ev)
@@ -1469,16 +1469,7 @@ func installSummary(dones []*installed, skippedSkills int) string {
 			summary += fmt.Sprintf(", %s %s", plural(what.n, "placement"), what.text)
 		}
 	}
-	return summary + fetchedAt(first)
-}
-
-// fetchedAt says when the source the version was read from was last
-// fetched, so that an install from an old fetch says so.
-func fetchedAt(v *imported) string {
-	if v.fetched == "" {
-		return ""
-	}
-	return ", source fetched " + v.fetched
+	return summary
 }
 
 // librarySkills reads the library once, by name. One read covers a whole
@@ -1519,7 +1510,7 @@ func (inv *invocation) printInstalled(done *installed, ev librarySkillEvent) {
 		what = "adopted"
 	}
 	line := what + " " + out.paint(heading, sanitised(v.name)) + " from " + out.paint(heading, v.imp.Source) + underShown(v.imp.Path) +
-		" at " + short(v.imp.Commit) + out.paint(muted, fetchedAt(v)) + ": " + out.paint(noteStyle, plural(len(rows), "placement"))
+		": " + out.paint(noteStyle, plural(len(rows), "placement"))
 	if n := len(done.skipped); n > 0 {
 		line += ", " + out.paint(warnStyle, plural(n, "placement")+" skipped")
 	}

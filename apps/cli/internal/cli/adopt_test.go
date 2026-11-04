@@ -211,6 +211,10 @@ func TestAdoptInstallsTheVersionTheSourceHoldsNow(t *testing.T) {
 	preview := h.run("--json", "adopt")
 	equal(t, "exit", preview.exit, 0)
 	equal(t, "state afterwards", h.one(preview.stdout, "adoption")["state"], adoptManaged)
+	human := h.run("adopt")
+	equal(t, "preview", human.stdout, "Found 1 skill installed by the Vercel skills CLI.\n\n"+
+		"Already managed by agentx (1)\n  alpha\n\n"+
+		"Nothing to adopt: agentx already manages every one.\n")
 	again := h.run("adopt", "--all")
 	equal(t, "exit", again.exit, 0)
 	contains(t, "stdout", again.stdout, "Already adopted.")
@@ -268,6 +272,23 @@ func names(t *testing.T, dir string) string {
 		found = append(found, e.Name())
 	}
 	return strings.Join(found, " ")
+}
+
+// TestAdoptPrintsWhatItAdopted pins the lines a run prints: the source it
+// added and the skill it adopted, without the commit, the fetch time or the
+// write access that source add and skill add print.
+func TestAdoptPrintsWhatItAdopted(t *testing.T) {
+	t.Parallel()
+	h, s, _, _ := adoptHarness(t)
+	h.writeLock(h.lockPath(), map[string]lockEntry{
+		"alpha": {Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/alpha"},
+	})
+
+	out := h.run("adopt", "--skill", "alpha")
+	equal(t, "exit", out.exit, 0)
+	lines := strings.SplitN(out.stdout, "\n", 3)
+	equal(t, "the source line", lines[0], "✓ added source "+s.url+": 1 skill")
+	equal(t, "the skill line", lines[1], "✓ adopted alpha from "+s.url+" under skills/alpha: 1 placement")
 }
 
 // TestAdoptAddsTheSourceItNeeds: the source the lock file names has never
@@ -366,4 +387,9 @@ func TestAdoptFlagsThatAskForTwoThings(t *testing.T) {
 	out := h.run("--json", "adopt", "--all", "--skill", "alpha")
 	equal(t, "exit", out.exit, exitUsage.exit)
 	equal(t, "error.code", lastError(t, h.events(out.stdout))["code"], "usage")
+
+	// The argument names a tool; a skill name there is pointed at --skill.
+	out = h.run("--json", "adopt", "zoom;out")
+	equal(t, "exit", out.exit, exitUsage.exit)
+	contains(t, "the hint", lastError(t, h.events(out.stdout))["hint"].(string), "agentx adopt --skill "+shellWord("zoom;out"))
 }

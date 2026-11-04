@@ -102,6 +102,7 @@ type LibraryEntry struct {
 	Upstream        string             `json:"upstream,omitempty"`         // the canonical URL a forked skill came from
 	UpstreamSubpath *string            `json:"upstream_subpath,omitempty"` // the directory in the upstream, "" for its root
 	UpstreamCommit  string             `json:"upstream_commit,omitempty"`
+	UpstreamTime    string             `json:"upstream_time,omitempty"` // when that upstream commit was made, RFC 3339 in UTC; the base version's date
 	BaseHash        string             `json:"base_hash,omitempty"`     // the content hash of the base version
 	ContentHash     string             `json:"content_hash"`            // what the library holds now
 	State           string             `json:"state,omitempty"`         // current or modified, for a managed skill whose directory is its checkout
@@ -115,9 +116,11 @@ type LibraryEntry struct {
 // LibraryCandidate is the update the last update check found for a managed
 // skill or a fork: the newer upstream version its candidate ref pins, by
 // the upstream commit and the content hash that version's import commit
-// records.
+// records, and the date of that commit, which the import commit is dated
+// with.
 type LibraryCandidate struct {
 	UpstreamCommit string `json:"upstream_commit"`
+	UpstreamTime   string `json:"upstream_time,omitempty"` // when the upstream commit was made, RFC 3339 in UTC
 	ContentHash    string `json:"content_hash"`
 }
 
@@ -177,6 +180,8 @@ type Plugin struct {
 	Configuration string `json:"configuration"`
 	Path          string `json:"path"`
 	Enabled       *bool  `json:"enabled,omitempty"` // only for a client that records it
+	Hooks         []Hook `json:"hooks"`             // the hooks it declares, sorted by event then name
+	Icon          string `json:"icon,omitempty"`    // its own icon as a data URL, when its manifest names one inside the plugin
 }
 
 type Edge struct {

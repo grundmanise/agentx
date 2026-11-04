@@ -32,3 +32,10 @@ organisation
 zsh
 Skillshare
 AppImage
+KiB
+MiB
+GiB
+TiB
+JPEG
+PNG
+SVG

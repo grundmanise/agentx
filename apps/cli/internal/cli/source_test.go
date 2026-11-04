@@ -136,7 +136,7 @@ func TestSourceAddFetchesBloblessAndSkillFilesInOneBatch(t *testing.T) {
 
 	out := h.run("--verbose", "source", "add", s.url)
 	equal(t, "exit", out.exit, 0)
-	equal(t, "stdout", out.stdout, "✓ added "+s.url+" at "+head[:7]+": 2 skills; you can write to it\n")
+	equal(t, "stdout", out.stdout, "✓ added source "+s.url+": 2 skills\n")
 	equal(t, "fetches", fetches(out.stderr), 2)
 
 	// The remote: promisor, blob:none, no tags, and one refspec recording
@@ -253,7 +253,7 @@ func TestSourceAddRefetchesWhenTheServerRefusesSingleObjects(t *testing.T) {
 
 	out := h.run("--verbose", "source", "add", s.url+"/skills")
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "✓ added "+s.url+" at "+head[:7]+": 2 skills under skills")
+	contains(t, "stdout", out.stdout, "✓ added source "+s.url+": 2 skills under skills")
 	// Three fetches: the filtered one, the refused batch, the full re-fetch.
 	equal(t, "fetches", fetches(out.stderr), 3)
 	// The full re-fetch lands on the staging ref like the blobless one: the
@@ -705,7 +705,6 @@ func TestSourceAccessFollowsWhatTheSourceAnswers(t *testing.T) {
 	receivePack(sso)
 	out = h.run("source", "fetch", s.url)
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, ": 2 skills; write access unknown\n")
 	contains(t, "stderr", out.stderr, "warning: "+s.url+": remote: The 'acme' organization has enabled or enforced SAML SSO.")
 	contains(t, "stderr", out.stderr, "authorise your token or key for the organisation, then run 'agentx source fetch "+s.url+"'")
 	entry := settingsEntry()
@@ -719,7 +718,6 @@ func TestSourceAccessFollowsWhatTheSourceAnswers(t *testing.T) {
 	}
 	out = h.run("source", "fetch", s.url)
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, ": 2 skills; you can write to it\n")
 	equal(t, "settings access at last", settingsEntry()["access"], "writable")
 	contains(t, "source list", h.run("source", "list").stdout, "  writable  main  ")
 }

@@ -151,7 +151,7 @@ func TestSourceFetchByURLByIDAndAll(t *testing.T) {
 	before = readVersion(t, h)
 	out = h.run("source", "fetch", source.ID(two.url))
 	equal(t, "exit", out.exit, 0)
-	equal(t, "stdout", out.stdout, "✓ re-fetched "+two.url+", already at "+twoHead[:7]+": 1 skill; you can write to it\n")
+	equal(t, "stdout", out.stdout, "✓ re-fetched "+two.url+", already at "+twoHead[:7]+": 1 skill\n")
 	refetched(t, h, two.url)
 	equal(t, "last_fetched of one", lastFetched(t, h, one.url), backdated)
 	equal(t, "version", readVersion(t, h), before+1)

@@ -24,7 +24,12 @@ import { test as base } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
 import { SCHEMA_VERSION } from "#/cli/events.gen.ts";
-import type { CliEventType, EventOf, LogEvent } from "#/cli/events.gen.ts";
+import type {
+  CliEventType,
+  Configuration,
+  EventOf,
+  LogEvent,
+} from "#/cli/events.gen.ts";
 
 import { refusal } from "./command-line.ts";
 
@@ -55,8 +60,11 @@ export interface ServeStart {
   exit?: { code: number; stderr?: string[] };
 }
 
-/** A configuration as an inventory lists it. */
-export const configuration = (id: string) => ({
+/** A configuration as an inventory lists it, with `overrides` in place of the defaults. */
+export const configuration = (
+  id: string,
+  overrides: Partial<Configuration> = {}
+): Configuration => ({
   client: id,
   enabled: true,
   id,
@@ -65,6 +73,7 @@ export const configuration = (id: string) => ({
   path: `/home/me/.${id}`,
   physical_id: id,
   reads_library: false,
+  ...overrides,
 });
 
 /** The label of the machine a passing launch reports. */
@@ -76,7 +85,7 @@ export const machineLabel = "studio-mac";
  */
 export const firstInventory = (configurations = ["claude-code", "codex"]) =>
   ({
-    configurations: configurations.map(configuration),
+    configurations: configurations.map((id) => configuration(id)),
     library: [],
     scan_counter: 1,
     type: "inventory",
@@ -384,6 +393,24 @@ export class MockCli {
             : event
         ),
         kind: "event",
+      }))
+    );
+  }
+
+  /**
+   * Emits serve stderr log events under the current child id, or `childId` for a child that
+   * ended, as the supervisor reports them: each a `log` line.
+   */
+  async serveLog(
+    logs: Partial<Omit<LogEvent, "type">>[],
+    childId = this.childId
+  ) {
+    await this.emit(
+      "serve-event",
+      logs.map((log) => ({
+        child_id: childId,
+        event: full({ type: "log", ...log }),
+        kind: "log",
       }))
     );
   }

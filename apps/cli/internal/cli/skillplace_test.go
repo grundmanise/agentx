@@ -276,8 +276,6 @@ func TestSkillAddAddsASourceThatIsNotAdded(t *testing.T) {
 	}
 	ev := h.one(out.stdout, "source")
 	equal(t, "the source commit", ev["commit"], head)
-	fetched, _ := ev["last_fetched"].(string)
-	contains(t, "summary", h.one(out.stdout, "result")["summary"].(string), ", source fetched "+fetched)
 	list := h.run("--json", "source", "list")
 	equal(t, "the source entry", h.one(list.stdout, "source")["url"], s.url)
 	if _, err := os.Stat(filepath.Join(h.library, "alpha", "SKILL.md")); err != nil {
@@ -289,7 +287,7 @@ func TestSkillAddAddsASourceThatIsNotAdded(t *testing.T) {
 	third.build(t, fixture{dirs: []string{".claude"}})
 	none := third.run("skill", "add", s.url, "--name", "gamma")
 	equal(t, "exit", none.exit, 5)
-	contains(t, "stdout", none.stdout, "added "+s.url)
+	contains(t, "stdout", none.stdout, "added source "+s.url)
 	equal(t, "the source kept", third.one(third.run("--json", "source", "list").stdout, "source")["url"], s.url)
 }
 
@@ -339,7 +337,6 @@ func TestSkillAddFetchesOnlyWhenAsked(t *testing.T) {
 	text := h.run("skill", "add", s.url, "--name", "alpha", "--fetch")
 	equal(t, "exit", text.exit, 0)
 	contains(t, "stdout", text.stdout, "re-fetched "+s.url+", already at "+moved[:7])
-	contains(t, "stdout", text.stdout, ", source fetched ")
 }
 
 // placementsOf renders the placements of a skill event as

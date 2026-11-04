@@ -96,6 +96,29 @@ func TestMessageRoundTrips(t *testing.T) {
 	}
 }
 
+// TestUpstreamTimeIsTheInstantInUTC holds UpstreamTime to the time an event
+// reports: a committer time git printed, with or without the offset the
+// commit was written with, as the instant in UTC, and "" for anything else.
+func TestUpstreamTimeIsTheInstantInUTC(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct{ when, want string }{
+		{"1710000000", "2024-03-09T16:00:00Z"},
+		{"1710000000 +0545", "2024-03-09T16:00:00Z"},
+		{"1710000000 -0800\n", "2024-03-09T16:00:00Z"},
+		{"946684800 +0000", "2000-01-01T00:00:00Z"},
+		{"0", "1970-01-01T00:00:00Z"},
+		{"", ""},
+		{"  ", ""},
+		{"2024-03-09T16:00:00Z", ""},
+		{"-1", ""},
+		{"9223372036854775808", ""},
+	} {
+		if got := UpstreamTime(c.when); got != c.want {
+			t.Errorf("UpstreamTime(%q) = %q, want %q", c.when, got, c.want)
+		}
+	}
+}
+
 func TestUpstreamDateIsEpochWithoutAnOffset(t *testing.T) {
 	t.Parallel()
 	when, err := UpstreamDate("1700000000")

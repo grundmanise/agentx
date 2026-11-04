@@ -14,32 +14,52 @@ agentx adopt
 ```
 
 ```text
-3 skills installed by another tool
-  pdf      vercel      candidate  https://github.com/anthropics/skills/skills/pdf   its source is not added yet; adopting adds and fetches it
-  xlsx     skillshare  managed    https://github.com/anthropics/skills/skills/xlsx  agentx already manages it
-  scraper  vercel      refused    (none)                                            scraper names no source agentx can read
-Adopt them with agentx adopt --all.
+Found 3 skills installed by the Vercel skills CLI and Skillshare.
+
+Ready to adopt (1)
+  pdf      vercel  https://github.com/anthropics/skills/skills/pdf
+
+Cannot adopt (1)
+  scraper  vercel  scraper names no source agentx can read
+
+Already managed by agentx (1)
+  xlsx
+
+To adopt:
+  agentx adopt --all           adopt it
+  agentx adopt --skill <name>  adopt one; give --skill again for each
 ```
 
 With no flags, the command only shows what it found. It writes nothing and makes no network calls.
 
-| State | What it means |
+The skills are grouped by what adopting would do with them:
+
+| Group | What it means |
 |---|---|
-| `candidate` | agentx can adopt it |
-| `managed` | agentx already manages it |
-| `refused` | agentx cannot adopt it, and the row says why. See [Refused skills](#refused-skills) |
+| Ready to adopt | agentx can adopt it. The row shows the source it comes from |
+| Cannot adopt | agentx cannot adopt it, and the row says why. See [Refused skills](#refused-skills) |
+| Already managed by agentx | agentx already manages it. There is nothing to do |
+
+The tool column shows only when both tools installed skills on this machine. When agentx already manages every skill, the preview ends with `Nothing to adopt: agentx already manages every one.`
+
+To look at the skills of one tool only, name it: `skills-cli` for the Vercel skills CLI, or `skillshare`. This works with `--all` and `--skill` too:
+
+```sh
+agentx adopt skillshare
+agentx adopt skillshare --all
+```
 
 ## Adopt skills
 
-Adopt every candidate:
+Adopt every skill that is ready:
 
 ```sh
 agentx adopt --all
 ```
 
 ```text
-✓ added https://github.com/anthropics/skills at 3f2a9c1: 12 skills; write access unknown
-✓ adopted pdf from https://github.com/anthropics/skills under skills/pdf at 9c1d0ab: 2 placements
+✓ added source https://github.com/anthropics/skills: 12 skills
+✓ adopted pdf from https://github.com/anthropics/skills under skills/pdf: 2 placements
   claude-code  symlink  /home/me/.claude/skills/pdf -> /home/me/.agents/skills/pdf
   cursor       symlink  /home/me/.cursor/skills/pdf -> /home/me/.agents/skills/pdf
 ```

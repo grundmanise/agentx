@@ -125,6 +125,7 @@ export interface LibraryEntry {
   upstream?: string;
   upstream_subpath?: string;
   upstream_commit?: string;
+  upstream_time?: string;
   base_hash?: string;
   content_hash: string;
   state?: SkillState;
@@ -195,6 +196,7 @@ export interface SettingsSource {
 
 export interface LibraryCandidate {
   upstream_commit: string;
+  upstream_time?: string;
   content_hash: string;
 }
 
@@ -249,6 +251,8 @@ export interface Plugin {
   configuration: string;
   path: string;
   enabled?: boolean;
+  hooks: Hook[];
+  icon?: string;
 }
 
 export interface Edge {
@@ -289,6 +293,11 @@ export interface ServerOccurrence {
   enabled?: boolean;
 }
 
+export interface Hook {
+  event: string;
+  name: string;
+}
+
 export interface HandshakeError {
   reason: HandshakeReason;
   message: string;
@@ -324,6 +333,11 @@ export interface MachineEvent {
   id: string;
   label: string;
   derivation: MachineDerivation;
+  home: string;
+  settings_file: string;
+  library: string;
+  account_repo?: string;
+  account_repo_bytes?: number;
 }
 
 export interface SourceEvent {
@@ -378,6 +392,19 @@ export interface DiffEvent {
   patch: string;
 }
 
+export interface SkillFileEvent {
+  type: "skill_file";
+  schema_version: number;
+  name: string;
+  path: string;
+  size: number;
+  binary: boolean;
+  lines?: number;
+  content?: string;
+  truncated?: boolean;
+  ignored?: boolean;
+}
+
 export interface HistoryEvent {
   type: "history";
   schema_version: number;
@@ -415,9 +442,11 @@ export interface UpdateAvailableEvent {
   upstream_subpath?: string;
   base_hash: string;
   upstream_commit: string;
+  upstream_time?: string;
   candidate: string;
   candidate_hash: string;
   candidate_upstream_commit: string;
+  candidate_upstream_time?: string;
   files: ChangedFile[];
   upstream_name?: string;
 }
@@ -603,6 +632,7 @@ export type CliEvent =
   | ProgressEvent
   | LibrarySkillEvent
   | DiffEvent
+  | SkillFileEvent
   | HistoryEvent
   | ForkNoteEvent
   | UpdateAvailableEvent
