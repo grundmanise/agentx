@@ -308,13 +308,13 @@ func (inv *invocation) reportFetched(ctx context.Context, gitDir string, targets
 			}
 			ev.Skills = &n
 			inv.out.emit(ev)
-			inv.out.done("re-fetched " + inv.out.paint(heading, entry.URL) + ": " + inv.out.paint(noteStyle, plural(n, "skill")) + accessPhrase(inv.out, entry.AccessName()))
+			inv.out.done("re-fetched " + inv.out.paint(heading, entry.URL) + ": " + inv.out.paint(noteStyle, plural(n, "skill")))
 			continue
 		}
 		n := len(listing.Skills)
 		ev.Commit, ev.Previous, ev.Skills = listing.Commit, movedFrom(listing), &n
 		inv.out.emit(ev)
-		inv.out.done(inv.addLine(false, res.Source, listing) + ": " + inv.out.paint(noteStyle, plural(n, "skill")) + accessPhrase(inv.out, entry.AccessName()))
+		inv.out.done(inv.addLine(false, res.Source, listing) + ": " + inv.out.paint(noteStyle, plural(n, "skill")))
 	}
 	if len(failed) == 0 {
 		return nil

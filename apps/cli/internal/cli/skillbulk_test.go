@@ -85,8 +85,7 @@ func TestSkillAddAllSelectsEverySkill(t *testing.T) {
 	}
 	result := h.one(out.stdout, "result")
 	equal(t, "ok", result["ok"], true)
-	fetched, _ := h.one(out.stdout, "source")["last_fetched"].(string)
-	equal(t, "summary", result["summary"], "installed alpha, beta, gamma from "+s.url+" in 4 configurations, source fetched "+fetched+
+	equal(t, "summary", result["summary"], "installed alpha, beta, gamma from "+s.url+" in 4 configurations"+
 		"; always available to universal clients: codex, gemini-cli")
 
 	var got []string
