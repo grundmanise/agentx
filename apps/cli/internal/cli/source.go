@@ -375,8 +375,7 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 	ev := entryEvent(entry)
 	ev.Subpath, ev.Commit, ev.Previous, ev.Skills, ev.AccessReason = src.Subpath, listing.Commit, movedFrom(listing), &n, check.reason()
 	inv.out.emit(ev)
-	inv.out.done(inv.addLine(added, src, listing) + ": " + inv.out.paint(noteStyle, plural(n, "skill")) + under(inv.out, src.Subpath) +
-		accessPhrase(inv.out, entry.AccessName()))
+	inv.out.done(inv.addLine(added, src, listing) + ": " + inv.out.paint(noteStyle, plural(n, "skill")) + under(inv.out, src.Subpath))
 	return listing, entry, nil
 }
 
@@ -392,13 +391,14 @@ func movedFrom(listing source.Listing) string {
 }
 
 // addLine is the confirmation of source add, and of every source of a
-// source fetch, which is a repeat by definition. A first add says what was
-// added; a repeat says what moved, since that is the only thing the command
-// can tell the reader that they did not already know.
+// source fetch, which is a repeat by definition. A first add says which
+// source was added, and nothing of its commit, which the source event
+// carries; a repeat says what moved, since that is the only thing the
+// command can tell the reader that they did not already know.
 func (inv *invocation) addLine(added bool, src source.Source, listing source.Listing) string {
 	name := inv.out.paint(heading, src.URL) + pinned(inv.out, src.Ref)
 	if added {
-		return "added " + name + " at " + short(listing.Commit)
+		return "added source " + name
 	}
 	if listing.Previous == listing.Commit {
 		return "re-fetched " + name + ", already at " + short(listing.Commit)

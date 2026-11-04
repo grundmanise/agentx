@@ -1469,16 +1469,7 @@ func installSummary(dones []*installed, skippedSkills int) string {
 			summary += fmt.Sprintf(", %s %s", plural(what.n, "placement"), what.text)
 		}
 	}
-	return summary + fetchedAt(first)
-}
-
-// fetchedAt says when the source the version was read from was last
-// fetched, so that an install from an old fetch says so.
-func fetchedAt(v *imported) string {
-	if v.fetched == "" {
-		return ""
-	}
-	return ", source fetched " + v.fetched
+	return summary
 }
 
 // librarySkills reads the library once, by name. One read covers a whole
@@ -1519,7 +1510,7 @@ func (inv *invocation) printInstalled(done *installed, ev librarySkillEvent) {
 		what = "adopted"
 	}
 	line := what + " " + out.paint(heading, sanitised(v.name)) + " from " + out.paint(heading, v.imp.Source) + underShown(v.imp.Path) +
-		" at " + short(v.imp.Commit) + out.paint(muted, fetchedAt(v)) + ": " + out.paint(noteStyle, plural(len(rows), "placement"))
+		": " + out.paint(noteStyle, plural(len(rows), "placement"))
 	if n := len(done.skipped); n > 0 {
 		line += ", " + out.paint(warnStyle, plural(n, "placement")+" skipped")
 	}
