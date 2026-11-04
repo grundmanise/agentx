@@ -44,6 +44,20 @@ const durationOf = (withAction: boolean, lasting: boolean) => {
   return withAction ? 5000 : 2600;
 };
 
+/** Takes the toast showing away, for a control that answers a command's outcome itself. */
+export const dismissToast = () => {
+  if (shown !== undefined) {
+    toast.dismiss(shown);
+    shown = undefined;
+  }
+};
+
+/** An action inside a toast, such as Undo. */
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 /**
  * One toast at a time (DESIGN.md §6 "Toast"). A toast with an action stays 5s, one without 2.6s,
  * and a `lasting` one, for a command that runs with its Cancel, until the next toast replaces it.
@@ -51,7 +65,7 @@ const durationOf = (withAction: boolean, lasting: boolean) => {
  */
 export const notify = (
   message: string,
-  action?: { label: string; onClick: () => void },
+  action?: ToastAction,
   { lasting = false }: { lasting?: boolean } = {}
 ) =>
   replace(() =>
@@ -62,26 +76,34 @@ export const notify = (
     })
   );
 
-export interface ErrorToast {
+interface DetailToast {
   message: string;
-  /** The CLI's fix: the toast then stays until dismissed. */
+  /** Under the message, in `text.muted`. */
   hint?: string;
-  /** The command's warnings, under the error. */
+  /** Under the message and the hint, in `tone.attention.fg`. */
   warnings?: string[];
+  action?: ToastAction;
+  duration: number;
 }
 
 /**
- * A command's error (DESIGN.md §6 "Error toast"): the CLI's message, its hint under it, then the
- * command's warnings. It stays until dismissed when it has a hint, and 5s when it has none.
+ * The wide toast with lines under its message (DESIGN.md §6 "Attention toast" and "Error
+ * toast"), its action when it has one, then a ghost Dismiss.
  */
-export const notifyError = ({ message, hint, warnings = [] }: ErrorToast) =>
+const notifyDetail = ({
+  message,
+  hint,
+  warnings = [],
+  action,
+  duration,
+}: DetailToast) =>
   replace(() => {
     const options: ExternalToast = {
       classNames: {
         content: classNames.detailContent,
         toast: classNames.detail,
       },
-      duration: hint === undefined ? 5000 : Number.POSITIVE_INFINITY,
+      duration,
     };
     return toast.custom(
       (id) => (
@@ -101,6 +123,18 @@ export const notifyError = ({ message, hint, warnings = [] }: ErrorToast) =>
               </p>
             ))}
           </div>
+          {action !== undefined && (
+            <button
+              type="button"
+              className={classNames.actionButton}
+              onClick={() => {
+                toast.dismiss(id);
+                action.onClick();
+              }}
+            >
+              {action.label}
+            </button>
+          )}
           <button
             type="button"
             className={classNames.actionButton}
@@ -114,6 +148,44 @@ export const notifyError = ({ message, hint, warnings = [] }: ErrorToast) =>
       ),
       options
     );
+  });
+
+export interface AttentionToast {
+  message: string;
+  /** The command's warnings, under the text. */
+  warnings: string[];
+  action?: ToastAction;
+}
+
+/**
+ * A command that succeeded with warnings (DESIGN.md §6 "Attention toast"): its success text,
+ * then each warning the CLI logged, and its action when it has one. It goes after 5s.
+ */
+export const notifyAttention = ({
+  message,
+  warnings,
+  action,
+}: AttentionToast) =>
+  notifyDetail({ action, duration: 5000, message, warnings });
+
+export interface ErrorToast {
+  message: string;
+  /** The CLI's fix: the toast then stays until dismissed. */
+  hint?: string;
+  /** The command's warnings, under the error. */
+  warnings?: string[];
+}
+
+/**
+ * A command's error (DESIGN.md §6 "Error toast"): the CLI's message, its hint under it, then the
+ * command's warnings. It stays until dismissed when it has a hint, and 5s when it has none.
+ */
+export const notifyError = ({ message, hint, warnings = [] }: ErrorToast) =>
+  notifyDetail({
+    duration: hint === undefined ? 5000 : Number.POSITIVE_INFINITY,
+    hint,
+    message,
+    warnings,
   });
 
 export const Toaster = () => (
