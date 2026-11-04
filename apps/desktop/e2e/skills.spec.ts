@@ -650,6 +650,10 @@ test.describe("the detail pane", () => {
     });
     await expect(cursor).toBeChecked();
     await expect(cursor).toContainText("displaced");
-    await expect(pane(page, "release-notes").getByRole("note")).toHaveCount(0);
+    await expect(
+      pane(page, "release-notes").getByRole("note", {
+        name: "Cursor has its own folder for this skill",
+      })
+    ).toBeVisible();
   });
 });
