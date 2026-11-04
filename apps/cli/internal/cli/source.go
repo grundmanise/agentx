@@ -375,8 +375,11 @@ func (inv *invocation) addSource(ctx context.Context, src source.Source) (listin
 	ev := entryEvent(entry)
 	ev.Subpath, ev.Commit, ev.Previous, ev.Skills, ev.AccessReason = src.Subpath, listing.Commit, movedFrom(listing), &n, check.reason()
 	inv.out.emit(ev)
-	inv.out.done(inv.addLine(added, src, listing) + ": " + inv.out.paint(noteStyle, plural(n, "skill")) + under(inv.out, src.Subpath) +
-		accessPhrase(inv.out, entry.AccessName()))
+	access := accessPhrase(inv.out, entry.AccessName())
+	if inv.adopting {
+		access = "" // adopting a skill needs no word on pushing to its source
+	}
+	inv.out.done(inv.addLine(added, src, listing) + ": " + inv.out.paint(noteStyle, plural(n, "skill")) + under(inv.out, src.Subpath) + access)
 	return listing, entry, nil
 }
 
@@ -397,7 +400,10 @@ func movedFrom(listing source.Listing) string {
 // can tell the reader that they did not already know.
 func (inv *invocation) addLine(added bool, src source.Source, listing source.Listing) string {
 	name := inv.out.paint(heading, src.URL) + pinned(inv.out, src.Ref)
-	if added {
+	switch {
+	case added && inv.adopting:
+		return "added " + name
+	case added:
 		return "added " + name + " at " + short(listing.Commit)
 	}
 	if listing.Previous == listing.Commit {

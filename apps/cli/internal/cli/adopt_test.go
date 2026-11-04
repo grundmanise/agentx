@@ -274,6 +274,23 @@ func names(t *testing.T, dir string) string {
 	return strings.Join(found, " ")
 }
 
+// TestAdoptPrintsWhatItAdopted pins the lines a run prints: the source it
+// added and the skill it adopted, without the commit, the fetch time or the
+// write access that source add and skill add print.
+func TestAdoptPrintsWhatItAdopted(t *testing.T) {
+	t.Parallel()
+	h, s, _, _ := adoptHarness(t)
+	h.writeLock(h.lockPath(), map[string]lockEntry{
+		"alpha": {Source: "owner/repo", SourceType: "github", SourceURL: s.url, SkillPath: "skills/alpha"},
+	})
+
+	out := h.run("adopt", "--skill", "alpha")
+	equal(t, "exit", out.exit, 0)
+	lines := strings.SplitN(out.stdout, "\n", 3)
+	equal(t, "the source line", lines[0], "✓ added "+s.url+": 1 skill")
+	equal(t, "the skill line", lines[1], "✓ adopted alpha from "+s.url+" under skills/alpha: 1 placement")
+}
+
 // TestAdoptAddsTheSourceItNeeds: the source the lock file names has never
 // been added on this machine, and adopting adds it the way the user would,
 // settings entry, remote and all, pinned to the ref the lock file recorded.

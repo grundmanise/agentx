@@ -1518,8 +1518,11 @@ func (inv *invocation) printInstalled(done *installed, ev librarySkillEvent) {
 	if done.adopted || v.replace {
 		what = "adopted"
 	}
-	line := what + " " + out.paint(heading, sanitised(v.name)) + " from " + out.paint(heading, v.imp.Source) + underShown(v.imp.Path) +
-		" at " + short(v.imp.Commit) + out.paint(muted, fetchedAt(v)) + ": " + out.paint(noteStyle, plural(len(rows), "placement"))
+	line := what + " " + out.paint(heading, sanitised(v.name)) + " from " + out.paint(heading, v.imp.Source) + underShown(v.imp.Path)
+	if !inv.adopting {
+		line += " at " + short(v.imp.Commit) + out.paint(muted, fetchedAt(v))
+	}
+	line += ": " + out.paint(noteStyle, plural(len(rows), "placement"))
 	if n := len(done.skipped); n > 0 {
 		line += ", " + out.paint(warnStyle, plural(n, "placement")+" skipped")
 	}

@@ -168,6 +168,7 @@ func (inv *invocation) adopt(ctx context.Context, sel adoptSelection) error {
 	if err != nil {
 		return err
 	}
+	inv.adopting = true
 	return inv.adoptChosen(ctx, chosen)
 }
 
@@ -408,7 +409,7 @@ func (inv *invocation) judge(c *candidate, records map[string]lineage.Record, s 
 	if i := s.FindSource(src.URL); i >= 0 {
 		c.added, c.entry = true, s.Sources[i]
 	} else {
-		c.reason = "its source is not added yet; adopting adds and fetches it"
+		c.reason = reasonNotAdded
 	}
 	if _, known := records[c.rec.name]; known {
 		// Managed, but the library no longer holds it as a directory: the
@@ -417,6 +418,11 @@ func (inv *invocation) judge(c *candidate, records map[string]lineage.Record, s 
 		c.reason = "agentx manages it but the library no longer holds it; adopting installs it again"
 	}
 }
+
+// reasonNotAdded is the reason of a candidate whose source the settings do
+// not hold. The adoption event carries it; the preview leaves it out, since
+// adding the source is part of every adoption.
+const reasonNotAdded = "its source is not added yet; adopting adds and fetches it"
 
 // isRealDirectory reports whether path is a real directory: what the library
 // holds for a managed skill, as against nothing or another tool's link.
@@ -855,7 +861,7 @@ func (inv *invocation) previewAdoption(cands []*candidate, records int, tool str
 		if n == 1 {
 			all = "adopt it"
 		}
-		out.print("This was a preview; nothing changed. To adopt:")
+		out.print("To adopt:")
 		command := "agentx adopt "
 		if tool != "" {
 			command += toolArg(tool) + " "
@@ -904,7 +910,11 @@ func (c *candidate) rowOf(mixed bool) []cell {
 		}
 		row = append(row, cell{text: sanitised(text), style: plain})
 	}
-	return append(row, cell{text: sanitised(c.reason), style: muted})
+	reason := c.reason
+	if reason == reasonNotAdded {
+		reason = ""
+	}
+	return append(row, cell{text: sanitised(reason), style: muted})
 }
 
 // previewSummary is what the result event says a preview found.
