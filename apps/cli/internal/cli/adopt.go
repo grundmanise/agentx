@@ -57,38 +57,71 @@ type adoptionEvent struct {
 const phaseFetch = "fetch"
 
 // adoptSelection is what one run of agentx adopt was asked to do: nothing
-// but look, adopt the skills named, or adopt every one recorded.
+// but look, adopt the skills named, or adopt every one recorded, of one tool
+// or of both.
 type adoptSelection struct {
+	tool  string // the tool whose records are read: vercel, skillshare, or "" for both
 	names []string
 	all   bool
+}
+
+// adoptTools maps the argument that names a tool to that tool.
+var adoptTools = map[string]string{"skills-cli": toolVercel, "skillshare": toolSkillshare}
+
+// adoptTool is the tool the argument names. Anything else is a usage
+// error, and one that looks like a skill name is pointed at --skill.
+func adoptTool(arg string) (string, error) {
+	if tool, ok := adoptTools[arg]; ok {
+		return tool, nil
+	}
+	return "", fail(exitUsage, fmt.Sprintf("%q is not a tool agentx adopts from", sanitised(arg)),
+		fmt.Sprintf("name skills-cli or skillshare; to adopt a skill by name, run 'agentx adopt --skill %s'", sanitised(arg)))
+}
+
+// toolArg is the argument that names tool, for the commands a preview
+// suggests.
+func toolArg(tool string) string {
+	for arg, t := range adoptTools {
+		if t == tool {
+			return arg
+		}
+	}
+	return ""
 }
 
 func newAdoptCommand(inv *invocation) *cobra.Command {
 	var sel adoptSelection
 	cmd := &cobra.Command{
-		Use:         "adopt [<name>...]",
+		Use:         "adopt [skills-cli|skillshare]",
 		Short:       "Adopt skills the Vercel skills CLI or Skillshare installed",
 		Annotations: map[string]string{annotationSection: "diagnostics"},
 		Example: examples(
 			"agentx adopt", "preview what would be adopted; nothing is written",
 			"agentx adopt --all", "adopt every skill another tool installed",
-			"agentx adopt pdf xlsx", "adopt two skills by name",
+			"agentx adopt skillshare --all", "adopt every skill Skillshare installed",
+			"agentx adopt --skill pdf --skill xlsx", "adopt two skills by name",
 		),
 		Long: "Take over the skills the Vercel skills CLI or Skillshare installed, so that agentx\n" +
-			"knows where each one came from and can update it. Run it with no arguments to see\n" +
+			"knows where each one came from and can update it. Run it with no flags to see\n" +
 			"what it would adopt; nothing is written and the other tool's files are never\n" +
-			"touched.\n\n" +
+			"touched. Name skills-cli or skillshare to look at the skills of that tool alone.\n\n" +
 			"Adopting a skill installs it from its source, as 'agentx skill add' does, at the\n" +
 			"version the source holds now, and places it in every enabled configuration.\n" +
 			"Whatever the library holds under the skill's name gives way to that version, an\n" +
 			"edit made to it included: fork the skill first to keep one.",
-		Args: cobra.ArbitraryArgs,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			sel.names = append(args, sel.names...)
+			if len(args) == 1 {
+				tool, err := adoptTool(args[0])
+				if err != nil {
+					return err
+				}
+				sel.tool = tool
+			}
 			return inv.adopt(cmd.Context(), sel)
 		},
 	}
-	cmd.Flags().StringArrayVar(&sel.names, "skill", nil, "the skill to adopt, by its name in the library; the same as naming it as an argument")
+	cmd.Flags().StringArrayVar(&sel.names, "skill", nil, "the skill to adopt, by its name in the library; give it again for each")
 	cmd.Flags().BoolVar(&sel.all, "all", false, "adopt every recorded skill that can be adopted")
 	return cmd
 }
@@ -99,7 +132,7 @@ func (s adoptSelection) adopting() bool { return s.all || len(s.names) > 0 }
 // check refuses a combination of flags that asks for two things at once.
 func (s adoptSelection) check() error {
 	if s.all && len(s.names) > 0 {
-		return fail(exitUsage, "--all and skill names cannot both be given",
+		return fail(exitUsage, "--all and --skill cannot both be given",
 			"--all adopts every recorded skill; drop it to adopt the ones you name")
 	}
 	return nil
@@ -115,7 +148,7 @@ func (inv *invocation) adopt(ctx context.Context, sel adoptSelection) error {
 	if err := sel.check(); err != nil {
 		return err
 	}
-	records, err := inv.readRecords()
+	records, err := inv.readRecords(sel.tool)
 	if err != nil {
 		return err
 	}
@@ -128,7 +161,7 @@ func (inv *invocation) adopt(ctx context.Context, sel adoptSelection) error {
 		return err
 	}
 	if !sel.adopting() {
-		inv.previewAdoption(cands, len(records))
+		inv.previewAdoption(cands, len(records), sel.tool)
 		return nil
 	}
 	chosen, err := inv.chooseAdoptions(cands, records, sel)
@@ -152,20 +185,26 @@ type record struct {
 	refusal *failure // what the record itself rules out, before any source is looked at
 }
 
-// readRecords reads the install records of every tool, in name order. A
-// name both tools record is one warning, and the Vercel skills CLI's record
-// is the one used: its directory is the library entry itself.
-func (inv *invocation) readRecords() ([]record, error) {
-	entries, warnings, err := vercel.Read(vercel.LockPaths(inv.env, inv.dirs.User))
-	for _, w := range warnings {
-		inv.out.warn(w)
-	}
-	if err != nil {
-		return nil, recordFailure(err)
-	}
+// readRecords reads the install records of tool, or of every tool when it
+// is "", in name order. A name both tools record is one warning, and the
+// Vercel skills CLI's record is the one used: its directory is the library
+// entry itself.
+func (inv *invocation) readRecords(tool string) ([]record, error) {
 	var records []record
-	for _, e := range entries {
-		records = append(records, vercelRecord(e))
+	if tool != toolSkillshare {
+		entries, warnings, err := vercel.Read(vercel.LockPaths(inv.env, inv.dirs.User))
+		for _, w := range warnings {
+			inv.out.warn(w)
+		}
+		if err != nil {
+			return nil, recordFailure(err)
+		}
+		for _, e := range entries {
+			records = append(records, vercelRecord(e))
+		}
+	}
+	if tool == toolVercel {
+		return records, nil
 	}
 	cfg, err := inv.skillshareConfig()
 	if err != nil {
@@ -445,7 +484,7 @@ func (inv *invocation) chooseAdoptions(cands []*candidate, records []record, sel
 		seen[name] = true
 		c, ok := byName[name]
 		if !ok {
-			return nil, noAdoptionNamed(name, cands, records)
+			return nil, noAdoptionNamed(name, cands, records, sel.tool)
 		}
 		chosen = append(chosen, c)
 	}
@@ -456,7 +495,7 @@ func (inv *invocation) chooseAdoptions(cands []*candidate, records []record, sel
 // noAdoptionNamed answers a --skill the run cannot place: no record may
 // name it, or one may name it for a directory that is gone, which are
 // different things to fix.
-func noAdoptionNamed(name string, cands []*candidate, records []record) error {
+func noAdoptionNamed(name string, cands []*candidate, records []record, tool string) error {
 	for _, r := range records {
 		if r.name == name {
 			return fail(exitNotFound, fmt.Sprintf("%s says %q was installed, and this machine no longer holds it", r.file, name),
@@ -474,7 +513,7 @@ func noAdoptionNamed(name string, cands []*candidate, records []record) error {
 		}
 		hint = "the records name: " + strings.Join(names, ", ")
 	}
-	return fail(exitNotFound, fmt.Sprintf("no skill called %q was installed by the Vercel skills CLI or Skillshare", sanitised(name)), hint)
+	return fail(exitNotFound, fmt.Sprintf("no skill called %q was installed by %s", sanitised(name), toolNames(toolSet(tool), "or")), hint)
 }
 
 // adoptChosen installs every chosen skill from its source, as skill add
@@ -755,10 +794,10 @@ func (c *candidate) eventOf() adoptionEvent {
 // it would adopt first, with the source each comes from; then the ones it
 // cannot, with the reason; then the ones agentx manages already, as a list
 // of names, since there is nothing to do about them.
-func (inv *invocation) previewAdoption(cands []*candidate, records int) {
+func (inv *invocation) previewAdoption(cands []*candidate, records int, tool string) {
 	out := inv.out
 	if len(cands) == 0 {
-		out.print("Nothing to adopt: no skill installed by the Vercel skills CLI or Skillshare is on this machine.")
+		out.print("Nothing to adopt: no skill installed by ", toolNames(toolSet(tool), "or"), " is on this machine.")
 		inv.summary = "nothing to adopt"
 		return
 	}
@@ -773,7 +812,7 @@ func (inv *invocation) previewAdoption(cands []*candidate, records int) {
 	}
 	inv.summary = previewSummary(counts, records)
 
-	out.print("Found ", out.paint(heading, plural(len(cands), "skill")), " installed by ", toolNames(tools), ".")
+	out.print("Found ", out.paint(heading, plural(len(cands), "skill")), " installed by ", toolNames(tools, "and"), ".")
 	mixed := len(tools) > 1
 	if ready := groups[adoptCandidate]; len(ready) > 0 {
 		out.print()
@@ -817,16 +856,27 @@ func (inv *invocation) previewAdoption(cands []*candidate, records int) {
 			all = "adopt it"
 		}
 		out.print("This was a preview; nothing changed. To adopt:")
+		command := "agentx adopt "
+		if tool != "" {
+			command += toolArg(tool) + " "
+		}
 		t := &table{}
-		t.add(cell{text: "agentx adopt --all", style: label}, cell{text: all, style: muted})
-		t.add(cell{text: "agentx adopt <name>...", style: label}, cell{text: "adopt the skills you name", style: muted})
+		t.add(cell{text: command + "--all", style: label}, cell{text: all, style: muted})
+		t.add(cell{text: command + "--skill <name>", style: label}, cell{text: "adopt one; give --skill again for each", style: muted})
 		out.render(t, "  ")
 	}
 }
 
-// toolNames names the tools that installed the skills, for the line that
-// opens a preview.
-func toolNames(tools map[string]bool) string {
+// toolSet is the tools a run reads: the one named, or both.
+func toolSet(tool string) map[string]bool {
+	if tool != "" {
+		return map[string]bool{tool: true}
+	}
+	return map[string]bool{toolVercel: true, toolSkillshare: true}
+}
+
+// toolNames names tools for a message, joined by conj.
+func toolNames(tools map[string]bool, conj string) string {
 	var names []string
 	if tools[toolVercel] {
 		names = append(names, "the Vercel skills CLI")
@@ -834,7 +884,7 @@ func toolNames(tools map[string]bool) string {
 	if tools[toolSkillshare] {
 		names = append(names, "Skillshare")
 	}
-	return strings.Join(names, " and ")
+	return strings.Join(names, " "+conj+" ")
 }
 
 // rowOf is one row of the preview listing: the name, then for a skill that

@@ -26,11 +26,11 @@ Already managed by agentx (1)
   xlsx
 
 This was a preview; nothing changed. To adopt:
-  agentx adopt --all      adopt it
-  agentx adopt <name>...  adopt the skills you name
+  agentx adopt --all           adopt it
+  agentx adopt --skill <name>  adopt one; give --skill again for each
 ```
 
-With no arguments, the command only shows what it found. It writes nothing and makes no network calls.
+With no flags, the command only shows what it found. It writes nothing and makes no network calls.
 
 The skills are grouped by what adopting would do with them:
 
@@ -41,6 +41,13 @@ The skills are grouped by what adopting would do with them:
 | Already managed by agentx | agentx already manages it. There is nothing to do |
 
 The tool column shows only when both tools installed skills on this machine. When agentx already manages every skill, the preview ends with `Nothing to adopt: agentx already manages every one.`
+
+To look at the skills of one tool only, name it: `skills-cli` for the Vercel skills CLI, or `skillshare`. This works with `--all` and `--skill` too:
+
+```sh
+agentx adopt skillshare
+agentx adopt skillshare --all
+```
 
 ## Adopt skills
 
@@ -57,13 +64,11 @@ agentx adopt --all
   cursor       symlink  /home/me/.cursor/skills/pdf -> /home/me/.agents/skills/pdf
 ```
 
-Or name the skills to adopt:
+Or name skills with `--skill`, once for each:
 
 ```sh
-agentx adopt pdf xlsx
+agentx adopt --skill pdf --skill xlsx
 ```
-
-`--skill <name>`, once for each skill, does the same.
 
 For each skill, agentx:
 
@@ -91,7 +96,7 @@ To keep an edit, fork the skill first. A fork keeps your files and their history
 
 ```sh
 agentx skill fork pdf --name my-pdf
-agentx adopt pdf
+agentx adopt --skill pdf
 ```
 
 Skillshare keeps its own copy of each skill in its folder, `~/.config/skillshare/skills` by default. agentx never touches that folder, so your edits there stay.

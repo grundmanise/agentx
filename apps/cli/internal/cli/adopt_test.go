@@ -312,7 +312,7 @@ func progressPhases(events []jsonEvent) []string {
 	return phases
 }
 
-// TestAdoptRefusesAName tells the two ways a name can miss apart: a name
+// TestAdoptRefusesAName tells the two ways a --skill can miss apart: a name
 // no record holds at all, and one a record holds for a directory this
 // machine no longer has.
 func TestAdoptRefusesAName(t *testing.T) {
@@ -326,7 +326,7 @@ func TestAdoptRefusesAName(t *testing.T) {
 		{"nowhere", "no skill called \"nowhere\""},
 		{"gone", "this machine no longer holds it"},
 	} {
-		out := h.run("--json", "adopt", c.name)
+		out := h.run("--json", "adopt", "--skill", c.name)
 		equal(t, "exit", out.exit, exitNotFound.exit)
 		contains(t, "the error", lastError(t, h.events(out.stdout))["message"].(string), c.want)
 	}
@@ -344,7 +344,7 @@ func TestAdoptSelectionCheck(t *testing.T) {
 		{"a preview", adoptSelection{}, ""},
 		{"every skill", adoptSelection{all: true}, ""},
 		{"two skills", adoptSelection{names: []string{"alpha", "beta"}}, ""},
-		{"every skill and one", adoptSelection{all: true, names: []string{"alpha"}}, "--all and skill names"},
+		{"every skill and one", adoptSelection{all: true, names: []string{"alpha"}}, "--all and --skill"},
 	} {
 		err := tc.sel.check()
 		if tc.says == "" {
@@ -370,4 +370,9 @@ func TestAdoptFlagsThatAskForTwoThings(t *testing.T) {
 	out := h.run("--json", "adopt", "--all", "--skill", "alpha")
 	equal(t, "exit", out.exit, exitUsage.exit)
 	equal(t, "error.code", lastError(t, h.events(out.stdout))["code"], "usage")
+
+	// The argument names a tool; a skill name there is pointed at --skill.
+	out = h.run("--json", "adopt", "zoom-out")
+	equal(t, "exit", out.exit, exitUsage.exit)
+	contains(t, "the hint", lastError(t, h.events(out.stdout))["hint"].(string), "agentx adopt --skill zoom-out")
 }

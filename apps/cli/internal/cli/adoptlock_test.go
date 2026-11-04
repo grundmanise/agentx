@@ -102,9 +102,13 @@ func TestAdoptJudgesEveryUntrustedEntry(t *testing.T) {
 	// Without --json the skills are grouped by what adopting would do.
 	human := h.run("adopt")
 	equal(t, "exit", human.exit, 0)
-	for _, want := range []string{"Found 6 skills installed by the Vercel skills CLI.", "Ready to adopt (3)", "Cannot adopt (3)", "agentx adopt --all      adopt all 3"} {
+	for _, want := range []string{"Found 6 skills installed by the Vercel skills CLI.", "Ready to adopt (3)", "Cannot adopt (3)", "agentx adopt --all", "adopt all 3"} {
 		contains(t, "stdout", human.stdout, want)
 	}
+	// Naming the other tool reads its records alone, and it recorded none.
+	other := h.run("adopt", "skillshare")
+	equal(t, "exit", other.exit, 0)
+	contains(t, "stdout", other.stdout, "Nothing to adopt: no skill installed by Skillshare is on this machine.")
 }
 
 // TestAdoptRefusesAnEscapingSubpathBeforeItReadsAnything is the same
