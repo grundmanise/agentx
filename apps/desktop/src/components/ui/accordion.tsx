@@ -1,13 +1,15 @@
+// shadcn/ui Accordion (`pnpm dlx shadcn@latest add accordion`), on our tokens: DESIGN.md §6
+// "File list". It keeps shadcn's parts and `data-slot` attributes and takes no `className`: the
+// card, rows of `file-row.height` with a hairline between them, and a chevron that turns down
+// when a row is open, come from the variants. Several rows can be open at once, so the root is
+// always `type="multiple"`; its animation classes are dropped (DESIGN.md §8).
 import { cva } from "class-variance-authority";
+import type { VariantProps } from "class-variance-authority";
 import { Accordion as AccordionPrimitive } from "radix-ui";
 import type { ReactNode } from "react";
 
 import { ChevronIcon } from "#/components/icons/chevron.tsx";
-
-// shadcn/ui's Accordion on Radix, mapped to the tokens of the file list (DESIGN.md §4 "Code,
-// diff, timeline, startup" and §6 "Code pane"): the card, rows of `file-row.height` with a
-// hairline between them, and a chevron that turns down when a row is open. Several rows can be
-// open at once. No `className` or `style`: the look is the one the variants hold.
+import type { OwnProps } from "#/lib/utils.ts";
 
 const accordionVariants = cva("flex flex-col overflow-hidden", {
   defaultVariants: { variant: "card" },
@@ -30,19 +32,18 @@ const chevronVariants = cva(
   }
 );
 
-export const Accordion = ({
+const Accordion = ({
   label,
   value,
   onValueChange,
   variant,
   children,
-}: {
+}: VariantProps<typeof accordionVariants> & {
   /** The accessible name of the list. */
   label: string;
   /** The values of the open items. */
   value: string[];
   onValueChange: (value: string[]) => void;
-  variant?: "card";
   children: ReactNode;
 }) => (
   <AccordionPrimitive.Root
@@ -57,20 +58,14 @@ export const Accordion = ({
   </AccordionPrimitive.Root>
 );
 
-export const AccordionItem = ({
-  value,
-  children,
-}: {
-  value: string;
-  children: ReactNode;
-}) => (
+const AccordionItem = ({
+  ...props
+}: OwnProps<typeof AccordionPrimitive.Item>) => (
   <AccordionPrimitive.Item
-    value={value}
     data-slot="accordion-item"
     className="border-file-row-divider border-b last:border-b-0"
-  >
-    {children}
-  </AccordionPrimitive.Item>
+    {...props}
+  />
 );
 
 /**
@@ -78,7 +73,7 @@ export const AccordionItem = ({
  * control of the row's own, beside the trigger rather than inside it, shown while the row is
  * hovered or holds the focus; it is in the tab order throughout.
  */
-export const AccordionTrigger = ({
+const AccordionTrigger = ({
   label,
   open,
   action,
@@ -92,7 +87,10 @@ export const AccordionTrigger = ({
   action?: ReactNode;
   children: ReactNode;
 }) => (
-  <AccordionPrimitive.Header className="group hover:bg-file-row-hover focus-within:bg-file-row-hover m-0 flex items-center">
+  <AccordionPrimitive.Header
+    data-slot="accordion-header"
+    className="group hover:bg-file-row-hover focus-within:bg-file-row-hover m-0 flex items-center"
+  >
     <AccordionPrimitive.Trigger
       aria-label={label}
       data-slot="accordion-trigger"
@@ -111,11 +109,14 @@ export const AccordionTrigger = ({
   </AccordionPrimitive.Header>
 );
 
-export const AccordionContent = ({ children }: { children: ReactNode }) => (
+const AccordionContent = ({
+  ...props
+}: OwnProps<typeof AccordionPrimitive.Content>) => (
   <AccordionPrimitive.Content
     data-slot="accordion-content"
     className="overflow-hidden"
-  >
-    {children}
-  </AccordionPrimitive.Content>
+    {...props}
+  />
 );
+
+export { Accordion, AccordionItem, AccordionTrigger, AccordionContent };
