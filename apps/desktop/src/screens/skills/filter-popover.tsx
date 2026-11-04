@@ -9,8 +9,12 @@ import {
   FilterButton,
   Segmented,
 } from "#/components/filter-controls.tsx";
-import { Popover } from "#/components/popover.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "#/components/ui/popover.tsx";
 import {
   filterCount,
   noFilters,
@@ -74,88 +78,88 @@ export const FilterPopover = ({
   };
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={setOpen}
-      label="Filters"
-      trigger={<FilterButton count={count} />}
-    >
-      <ChoiceGroup caption="Show">
-        <div className="flex flex-wrap gap-1">
-          {shows.map((s) => (
-            <ChoicePill
-              key={s.value}
-              group={`${id}-show`}
-              active={filters.show === s.value}
-              count={counts[s.value]}
-              onSelect={() => {
-                onChange({ ...filters, show: s.value });
-              }}
-            >
-              {s.label}
-            </ChoicePill>
-          ))}
-        </div>
-      </ChoiceGroup>
-      <ChoiceGroup caption="State">
-        <Segmented
-          group={`${id}-state`}
-          options={states}
-          value={filters.state}
-          onChange={(state) => {
-            onChange({ ...filters, state });
-          }}
-        />
-      </ChoiceGroup>
-      <ChoiceGroup caption="Agents">
-        <div className="flex flex-col">
-          {direct.map((c) => (
-            <CheckOption
-              key={c.id}
-              checked={filters.agents.includes(c.id)}
-              onChange={(checked) => {
-                toggleAgent(c.id, checked);
-              }}
-            >
-              <AgentLogo client={c} size={20} decorative />
-              <span className="type-secondary text-text-primary truncate">
-                {c.name}
-              </span>
-            </CheckOption>
-          ))}
-          {universal.length > 0 && (
-            <CheckOption
-              checked={filters.agents.includes(UNIVERSAL)}
-              onChange={(checked) => {
-                toggleAgent(UNIVERSAL, checked);
-              }}
-            >
-              <LogoStack clients={universal} size={20} decorative />
-              <span className="flex min-w-0 flex-col">
-                <span className="type-secondary text-text-primary">
-                  Universal
-                </span>
-                <span className="type-row-desc text-text-hint truncate">
-                  {universalNames(universal)}
-                </span>
-              </span>
-            </CheckOption>
-          )}
-        </div>
-      </ChoiceGroup>
-      {count > 0 && (
-        <div className="flex">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              onChange({ ...noFilters, name: filters.name });
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <FilterButton count={count} />
+      </PopoverTrigger>
+      <PopoverContent aria-label="Filters">
+        <ChoiceGroup caption="Show">
+          <div className="flex flex-wrap gap-1">
+            {shows.map((s) => (
+              <ChoicePill
+                key={s.value}
+                group={`${id}-show`}
+                active={filters.show === s.value}
+                count={counts[s.value]}
+                onSelect={() => {
+                  onChange({ ...filters, show: s.value });
+                }}
+              >
+                {s.label}
+              </ChoicePill>
+            ))}
+          </div>
+        </ChoiceGroup>
+        <ChoiceGroup caption="State">
+          <Segmented
+            group={`${id}-state`}
+            options={states}
+            value={filters.state}
+            onChange={(state) => {
+              onChange({ ...filters, state });
             }}
-          >
-            Reset filters
-          </Button>
-        </div>
-      )}
+          />
+        </ChoiceGroup>
+        <ChoiceGroup caption="Agents">
+          <div className="flex flex-col">
+            {direct.map((c) => (
+              <CheckOption
+                key={c.id}
+                checked={filters.agents.includes(c.id)}
+                onChange={(checked) => {
+                  toggleAgent(c.id, checked);
+                }}
+              >
+                <AgentLogo client={c} size={20} decorative />
+                <span className="type-secondary text-text-primary truncate">
+                  {c.name}
+                </span>
+              </CheckOption>
+            ))}
+            {universal.length > 0 && (
+              <CheckOption
+                checked={filters.agents.includes(UNIVERSAL)}
+                onChange={(checked) => {
+                  toggleAgent(UNIVERSAL, checked);
+                }}
+              >
+                <LogoStack clients={universal} size={20} decorative />
+                <span className="flex min-w-0 flex-col">
+                  <span className="type-secondary text-text-primary">
+                    Universal
+                  </span>
+                  <span className="type-row-desc text-text-hint truncate">
+                    {universalNames(universal)}
+                  </span>
+                </span>
+              </CheckOption>
+            )}
+          </div>
+        </ChoiceGroup>
+        {count > 0 && (
+          <div className="flex">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                onChange({ ...noFilters, name: filters.name });
+              }}
+            >
+              Reset filters
+            </Button>
+          </div>
+        )}
+      </PopoverContent>
     </Popover>
   );
 };

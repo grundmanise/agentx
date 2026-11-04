@@ -1,10 +1,14 @@
+// shadcn/ui Button (`pnpm dlx shadcn@latest add button`), on our tokens: DESIGN.md §6 "Buttons".
+// It keeps shadcn's shape (`asChild` renders the child element with the button's look, through
+// Slot; `data-slot="button"`) with our variants and sizes. Disabled is 30% opacity and inert,
+// never a grey fill. A button is one line, except `sm-wrap`: a small button whose label wraps, as
+// tall as its lines, for a label that is a sentence (a commit's subject in the History sheet).
 import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
-import type { ComponentProps } from "react";
+import { Slot } from "radix-ui";
 
-// DESIGN.md §6 "Buttons". Disabled is 30% opacity and inert, never a grey fill. A button is one
-// line, except `sm-wrap`: a small button whose label wraps, as tall as its lines, for a label that
-// is a sentence (a commit's subject in the History sheet).
+import type { OwnProps } from "#/lib/utils.ts";
+
 const buttonVariants = cva(
   "rounded-button inline-flex shrink-0 gap-2 transition-opacity duration-200 disabled:pointer-events-none disabled:opacity-30",
   {
@@ -33,21 +37,33 @@ const buttonVariants = cva(
 );
 
 /** Style comes only from `variant` and `size`: Button takes no `className` or `style`. */
-export type ButtonProps = Omit<
-  ComponentProps<"button">,
-  "className" | "style" | "type"
-> &
-  VariantProps<typeof buttonVariants> & { type?: "button" | "submit" };
+export type ButtonProps = Omit<OwnProps<"button">, "type"> &
+  VariantProps<typeof buttonVariants> & {
+    type?: "button" | "submit";
+    /** Renders the child element (a link, a trigger's child) with the button's look instead of a `<button>`. */
+    asChild?: boolean;
+  };
 
-export const Button = ({
+const Button = ({
   variant,
   size,
   type = "button",
+  asChild = false,
   ...props
-}: ButtonProps) => (
-  <button
-    type={type === "submit" ? "submit" : "button"}
-    className={buttonVariants({ size, variant })}
-    {...props}
-  />
-);
+}: ButtonProps) =>
+  asChild ? (
+    <Slot.Root
+      data-slot="button"
+      className={buttonVariants({ size, variant })}
+      {...props}
+    />
+  ) : (
+    <button
+      data-slot="button"
+      type={type === "submit" ? "submit" : "button"}
+      className={buttonVariants({ size, variant })}
+      {...props}
+    />
+  );
+
+export { Button, buttonVariants };
