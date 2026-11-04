@@ -4,7 +4,7 @@
 
 **Control panel for your agent inventory**
 
-A desktop app that shows the skills of every agent on your machine. It comes with the `agentx` CLI, which also lists MCP servers and plugins, and installs, updates and syncs skills across machines.
+`agentx` discovers skills, MCPs, and plugins from installed agents, allowing you to view, manage, distribute, and sync them across machines.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/grundmanise/agentx/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/grundmanise/agentx/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/github/go-mod/go-version/grundmanise/agentx?filename=apps%2Fcli%2Fgo.mod&style=flat-square)](apps/cli/go.mod)
