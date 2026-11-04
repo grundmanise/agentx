@@ -207,7 +207,11 @@ func TestImportCommitTakesTheUpstreamCommitterDate(t *testing.T) {
 	const upstream = "1710000000"
 	s.commitAt("a version committed elsewhere", upstream+" +0545")
 	equal(t, "exit", h.run("source", "add", s.url).exit, 0)
-	equal(t, "exit", h.run("skill", "add", s.url, "--name", "dated").exit, 0)
+	out := h.run("--json", "skill", "add", s.url, "--name", "dated")
+	equal(t, "exit", out.exit, 0)
+	// The install dates the version with that time too, as the instant in
+	// UTC, so that the same version has the same date on every machine.
+	equal(t, "upstream_time", h.librarySkill(out.stdout, "dated")["upstream_time"], secondTime)
 
 	equal(t, "the upstream committer time", s.bare("show", "-s", "--format=%ct", "HEAD"), upstream)
 	body := h.accountGit("cat-file", "commit", "refs/heads/managed/dated")

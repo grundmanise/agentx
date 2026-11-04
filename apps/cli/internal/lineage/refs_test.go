@@ -24,7 +24,7 @@ func TestAtCandidateIsAnUpdateOnlyWhenItCanBeRead(t *testing.T) {
 		{name: "no candidate"},
 		{name: "a candidate whose lineage agentx cannot read", candidate: &Candidate{Commit: "cand", Tree: "next-tree"}},
 		{name: "a candidate the branch already holds", candidate: &Candidate{Commit: "c0ffee", Tree: "base-tree", Import: base, HasImport: true}},
-		{name: "a candidate", candidate: &Candidate{Commit: "cand", Tree: "next-tree", Import: next, HasImport: true}, update: true},
+		{name: "a candidate", candidate: &Candidate{Commit: "cand", Tree: "next-tree", Time: "2024-03-09T16:00:00Z", Import: next, HasImport: true}, update: true},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
@@ -34,7 +34,7 @@ func TestAtCandidateIsAnUpdateOnlyWhenItCanBeRead(t *testing.T) {
 			}
 			want := Record{}
 			if c.update {
-				want = Record{Name: "pdf", Kind: KindManaged, Ref: ManagedRef("pdf"), Commit: "cand", Tree: "next-tree", Import: next, HasImport: true}
+				want = Record{Name: "pdf", Kind: KindManaged, Ref: ManagedRef("pdf"), Commit: "cand", Tree: "next-tree", Time: "2024-03-09T16:00:00Z", Import: next, HasImport: true}
 			}
 			if got != want {
 				t.Errorf("AtCandidate() = %+v, want %+v", got, want)

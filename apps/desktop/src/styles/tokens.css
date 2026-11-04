@@ -366,6 +366,8 @@
   --radius-sheet: 20px;
   --radius-palette: 20px;
   --radius-palette-row: 12px;
+  --radius-popover: 16px;
+  --radius-popover-row: 10px;
   --radius-key-hint: 9999px;
   --radius-toast: 9999px;
   --radius-toast-detail: 18px;
@@ -500,6 +502,8 @@
   --gap-agent-chip: 10px;
   --gap-agent-chip-wrap: 8px;
   --ring-width-logo: 2px;
+  --padding-logo-sm: 3px;
+  --padding-logo-lg: 5px;
 
   /* Inputs */
   --height-input: 42px;
@@ -532,6 +536,7 @@
   --padding-dialog: 32px;
   --gap-dialog: 22px;
   --gap-popover: 16px;
+  --width-popover: 300px;
   --width-sheet: 420px;
   --inset-sheet: 10px;
   --padding-sheet: 32px;
@@ -565,6 +570,8 @@
   --gap-diff-segment: 4px;
   --grid-template-columns-timeline: 12px 1fr;
   --size-timeline-dot: 7px;
+  --height-timeline-line: 20px;
+  --height-timeline-button-line: 32px;
   --width-check-column: 480px;
   --gap-check-block: 36px;
   --gap-check-row: 22px;
@@ -718,4 +725,51 @@
   font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 600;
+}
+@utility type-technical {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 400;
+}
+@utility type-technical-sm {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 400;
+}
+@utility type-pill {
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+@utility type-segment {
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+@utility type-detail-desc {
+  font-family: var(--font-sans);
+  font-size: 14.5px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+@utility type-banner-title {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+}
+@utility type-agent-chip {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+}
+@utility type-timeline-entry {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 400;
+  line-height: 20px;
+}
+@utility type-timeline-meta {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 400;
 }

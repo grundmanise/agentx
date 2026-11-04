@@ -141,6 +141,33 @@ test("ignores an old child's events after a restart", async ({ cli, page }) => {
   await expect(value(page, "Freshness")).toHaveText("fresh");
 });
 
+test("shows serve's warnings in the activity list, not its debug lines or an old child's", async ({
+  cli,
+  page,
+}) => {
+  await launch(cli, page);
+  const warning =
+    "update check: https://github.com/me/skills: git fetch: could not resolve host; not checked: pdf";
+  const activity = page
+    .getByRole("list", { name: "Activity" })
+    .getByRole("listitem");
+
+  await cli.serveLog([
+    { level: "debug", message: "update check: 1 source" },
+    { level: "warn", message: warning },
+  ]);
+  await expect(activity).toHaveText([warning]);
+  await expect(activity).toHaveAttribute("data-tone", "attention");
+
+  await cli.serveExit(null);
+  cli.serveRestart(2);
+  await cli.serveEmit([firstInventory(["codex"])]);
+  await expect(value(page, "Instance")).toHaveText("instance-2");
+  await cli.serveLog([{ level: "warn", message: "reconcile: pdf" }], 1);
+  // The old child's warning was handled before serveLog returned: it added nothing.
+  await expect(activity).toHaveText([warning]);
+});
+
 test("ignores the inventory a one-shot writes, and keeps its outcome", async ({
   cli,
   page,

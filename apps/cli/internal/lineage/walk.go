@@ -13,6 +13,7 @@ import (
 type Commit struct {
 	ID      string
 	Tree    string
+	Time    string // its committer time, RFC 3339 in UTC; an import commit's is the upstream commit's
 	Parents []string
 	Message string
 }
@@ -31,6 +32,7 @@ type ForkLineage struct {
 	Renamed    []string
 	Base       string // the base import commit; "" for a skill made by skill new, and when Problem says why it cannot be read
 	BaseTree   string // the base's root tree, the upstream directory as its one entry
+	BaseTime   string // the base's committer time, the upstream commit's, RFC 3339 in UTC, when Base is not ""
 	Import     Import // the base's coordinates, when Base is not ""
 	NoUpstream bool   // the walk reached a root that is neither an import commit nor names one, as for a skill made by skill new
 	Problem    string // why the base cannot be read; "" when it can
@@ -82,7 +84,7 @@ func Resolve(tip string, commits map[string]Commit) ForkLineage {
 	}
 	if l.Base != "" {
 		b := commits[l.Base]
-		l.BaseTree = b.Tree
+		l.BaseTree, l.BaseTime = b.Tree, b.Time
 		l.Import, _ = Parse(b.Message)
 	}
 	for id := tip; ; {
@@ -126,8 +128,8 @@ func ancestor(a, tip string, commits map[string]Commit) bool {
 
 // Walk reads the lineage of every tip in one git process of the isolated
 // environment: one git log over the whole history of all of them, every
-// commit with its tree, its parents and its message, which Resolve then
-// follows along first parents. The whole history is read rather than the
+// commit with its tree, its committer time, its parents and its message,
+// which Resolve then follows along first parents. The whole history is read rather than the
 // first-parent chain because a base an Agentx-Base trailer names is a merge's
 // second parent, whose trailers the first-parent chain does not hold. A
 // fork's branch holds its own commits and the parentless import commits
@@ -139,18 +141,18 @@ func Walk(ctx context.Context, r *gitx.Runner, gitDir string, tips []string) (ma
 	}
 	const recordEnd = "\x01"
 	out, err := r.IsolatedInput(ctx, gitDir, strings.NewReader(strings.Join(tips, "\n")+"\n"),
-		"log", "--stdin", "--format=%H%x00%T%x00%P%x00%B"+recordEnd)
+		"log", "--stdin", "--format=%H%x00%T%x00%ct%x00%P%x00%B"+recordEnd)
 	if err != nil {
 		return nil, err
 	}
 	commits := map[string]Commit{}
 	for _, record := range strings.Split(out, recordEnd) {
 		record = strings.TrimPrefix(record, "\n")
-		fields := strings.SplitN(record, "\x00", 4)
-		if len(fields) != 4 {
+		fields := strings.SplitN(record, "\x00", 5)
+		if len(fields) != 5 {
 			continue
 		}
-		commits[fields[0]] = Commit{ID: fields[0], Tree: fields[1], Parents: strings.Fields(fields[2]), Message: fields[3]}
+		commits[fields[0]] = Commit{ID: fields[0], Tree: fields[1], Time: UpstreamTime(fields[2]), Parents: strings.Fields(fields[3]), Message: fields[4]}
 	}
 	lineages := make(map[string]ForkLineage, len(tips))
 	for _, tip := range tips {
@@ -175,7 +177,7 @@ func ReadForks(ctx context.Context, r *gitx.Runner, gitDir string, recs map[stri
 		switch {
 		case rec.Kind != KindFork:
 		case rec.HasImport && rec.Parentless:
-			known[rec.Commit] = ForkLineage{Base: rec.Commit, BaseTree: rec.Tree, Import: rec.Import}
+			known[rec.Commit] = ForkLineage{Base: rec.Commit, BaseTree: rec.Tree, BaseTime: rec.Time, Import: rec.Import}
 		default:
 			if l, ok := cache.get(rec.Commit); ok {
 				known[rec.Commit] = l
