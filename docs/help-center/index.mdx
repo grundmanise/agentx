@@ -4,9 +4,9 @@ sidebarTitle: "Introduction"
 description: "The inventory manager for your agents. See the skills, MCP servers and plugins of every agent client, and install, update and sync skills across machines."
 ---
 
-agentx is a desktop app for the AI agents on your machine. It finds every agent client, such as Claude Code or Cursor, and shows the skills, MCP servers and plugins each one sees. It also installs and updates skills in all of them at once.
+agentx is a desktop app for the AI agents on your machine. It finds every agent client, such as Claude Code or Cursor, and shows the skills each one sees.
 
-It comes with a feature-paired CLI, `agentx`, for terminal use. The app runs the CLI for every action, so these pages describe each CLI command.
+The app comes with the `agentx` CLI for terminal use. The CLI also lists MCP servers and plugins, and installs, updates and syncs skills in every client at once. These pages describe each CLI command.
 
 ## Highlights
 
@@ -20,13 +20,13 @@ It comes with a feature-paired CLI, `agentx`, for terminal use. The app runs the
 
 ### The app (recommended)
 
-On macOS, install the app with Homebrew. This also puts the `agentx` CLI on your `PATH`:
+On a Mac with Apple silicon, install the app with Homebrew. This also puts the `agentx` CLI on your `PATH`:
 
 ```sh
 brew install grundmanise/tap/agentx
 ```
 
-On Linux, download the `.deb` or the AppImage in [Install the app](/install#install-the-app).
+On Linux, download the `.deb` or the AppImage in [Install the app](/install#install-the-app). With the AppImage, also install the CLI to run the commands on this page.
 
 ### Alternatively, CLI only
 
@@ -36,7 +36,7 @@ For a machine with no desktop, such as a server, install only the CLI, on macOS 
 brew install grundmanise/tap/agentx-cli
 ```
 
-or the install script, which installs the CLI to `~/.local/bin`:
+or, on Linux or a Mac with Apple silicon, the install script, which installs the CLI to `~/.local/bin`:
 
 ```sh
 curl -fsSL https://agentx.wtf/install | sh

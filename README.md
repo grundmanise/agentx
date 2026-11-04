@@ -4,7 +4,7 @@
 
 **Control panel for your agent inventory**
 
-A desktop app that discovers skills, MCPs, and plugins from installed agents, allowing you to view, manage, distribute, and sync them across machines. It comes with a feature-paired CLI, `agentx`, for terminal use.
+A desktop app that shows the skills of every agent on your machine. It comes with the `agentx` CLI, which also lists MCP servers and plugins, and installs, updates and syncs skills across machines.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/grundmanise/agentx/ci.yml?branch=main&label=CI&style=flat-square)](https://github.com/grundmanise/agentx/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/github/go-mod/go-version/grundmanise/agentx?filename=apps%2Fcli%2Fgo.mod&style=flat-square)](apps/cli/go.mod)
@@ -24,7 +24,7 @@ A desktop app that discovers skills, MCPs, and plugins from installed agents, al
 
 ### The app (recommended)
 
-On macOS, with [Homebrew](https://brew.sh). This also puts the `agentx` CLI on your `PATH`:
+On a Mac with Apple silicon, with [Homebrew](https://brew.sh). This also puts the `agentx` CLI on your `PATH`:
 
 ```sh
 brew install grundmanise/tap/agentx
@@ -41,7 +41,7 @@ For a machine with no desktop, on macOS or Linux, with Homebrew:
 brew install grundmanise/tap/agentx-cli
 ```
 
-Or with the install script, which installs only the CLI, to `~/.local/bin`:
+Or, on Linux or a Mac with Apple silicon, with the install script, which installs only the CLI, to `~/.local/bin`:
 
 ```sh
 curl -fsSL https://agentx.wtf/install | sh
