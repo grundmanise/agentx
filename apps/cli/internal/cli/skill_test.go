@@ -100,7 +100,7 @@ func TestSkillAddPlacesTheSkillEverywhere(t *testing.T) {
 	if fetched == "" {
 		t.Error("the source event does not say when the source was fetched")
 	}
-	equal(t, "summary", result["summary"], "installed alpha from "+s.url+" under skills/alpha in 4 configurations, source fetched "+fetched+
+	equal(t, "summary", result["summary"], "installed alpha from "+s.url+" under skills/alpha in 4 configurations"+
 		"; always available to universal clients: codex, gemini-cli")
 
 	ev := h.one(out.stdout, "library_skill")
@@ -191,7 +191,7 @@ func TestSkillAddSanitisesTheDirectoryItNames(t *testing.T) {
 
 	out := h.run("skill", "add", s.url, "--name", name)
 	equal(t, "exit", out.exit, 0)
-	contains(t, "stdout", out.stdout, "✓ installed pl ain from "+s.url+" under na 31msty at ")
+	contains(t, "stdout", out.stdout, "✓ installed pl ain from "+s.url+" under na 31msty: ")
 	for _, r := range out.stdout {
 		if unicode.IsControl(r) && r != '\n' {
 			t.Fatalf("a control character reached the output: %q in\n%q", r, out.stdout)

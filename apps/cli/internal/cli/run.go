@@ -27,7 +27,6 @@ type invocation struct {
 	instance string // the instance_id inventories carry, fixed once per run
 	parsed   bool   // set once cobra has parsed the command line; errors after that are agentx's own
 	summary  string // what the result event says about a run that succeeded
-	adopting bool   // a run of agentx adopt that installs, whose lines leave out the commits, the fetch time and the write access
 
 	excludes     sync.Once // reads excludesPath, the user's core.excludesFile; see excludesFile
 	excludesPath string

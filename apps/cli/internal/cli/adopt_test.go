@@ -287,7 +287,7 @@ func TestAdoptPrintsWhatItAdopted(t *testing.T) {
 	out := h.run("adopt", "--skill", "alpha")
 	equal(t, "exit", out.exit, 0)
 	lines := strings.SplitN(out.stdout, "\n", 3)
-	equal(t, "the source line", lines[0], "✓ added "+s.url+": 1 skill")
+	equal(t, "the source line", lines[0], "✓ added source "+s.url+": 1 skill")
 	equal(t, "the skill line", lines[1], "✓ adopted alpha from "+s.url+" under skills/alpha: 1 placement")
 }
 

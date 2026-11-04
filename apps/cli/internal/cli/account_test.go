@@ -131,7 +131,7 @@ func TestTheAccountRemoteIsSetReplacedAndDetached(t *testing.T) {
 	equal(t, "added again: skills", ev["skills"], float64(1))
 	equal(t, "the entry's account flag", sourceEntryOf(t, h, url)["account"], true)
 	contains(t, "source list", h.mustRun("source", "list").stdout, "  "+url+" (account)  writable  skills/*  1 skill  ")
-	contains(t, "source fetch", h.mustRun("source", "fetch", "--all").stdout, "re-fetched "+url+": 1 skill; you can write to it")
+	contains(t, "source fetch", h.mustRun("source", "fetch", "--all").stdout, "re-fetched "+url+": 1 skill\n")
 
 	h.accountGit("config", "branch.skills/notes.remote", name)
 	other := newAccountRemote(t, h)

@@ -168,7 +168,6 @@ func (inv *invocation) adopt(ctx context.Context, sel adoptSelection) error {
 	if err != nil {
 		return err
 	}
-	inv.adopting = true
 	return inv.adoptChosen(ctx, chosen)
 }
 
