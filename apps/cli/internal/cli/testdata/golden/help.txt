@@ -53,7 +53,7 @@ INVENTORY AND DIAGNOSTICS
   scan                            Inventory the clients, their skills, MCP servers and plugins
   serve                           Stream an inventory on every change, for the desktop app
   doctor                          Check that agentx can run: git, home and the account repo
-  adopt                           Adopt skills the Vercel skills CLI or Skillshare installed
+  adopt [skills-cli|skillshare]   Adopt skills the Vercel skills CLI or Skillshare installed
   version                         Print the CLI version and its output schema version
   update                          Update agentx to the latest release, or check for one
 
