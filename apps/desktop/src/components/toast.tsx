@@ -56,6 +56,8 @@ export interface ErrorToast {
   message: string;
   /** The CLI's fix: the toast then stays until dismissed. */
   hint?: string;
+  /** More lines about what happened, under the hint, in the hint's type. */
+  details?: string[];
   /** The command's warnings, under the error. */
   warnings?: string[];
 }
@@ -64,7 +66,12 @@ export interface ErrorToast {
  * A command's error (DESIGN.md §6 "Error toast"): the CLI's message, its hint under it, then the
  * command's warnings. It stays until dismissed when it has a hint, and 5s when it has none.
  */
-export const notifyError = ({ message, hint, warnings = [] }: ErrorToast) =>
+export const notifyError = ({
+  message,
+  hint,
+  details = [],
+  warnings = [],
+}: ErrorToast) =>
   replace(() => {
     const options: ExternalToast = {
       classNames: {
@@ -82,6 +89,11 @@ export const notifyError = ({ message, hint, warnings = [] }: ErrorToast) =>
             {hint !== undefined && (
               <p className="type-notice text-text-muted m-0">{hint}</p>
             )}
+            {details.map((detail) => (
+              <p key={detail} className="type-notice text-text-muted m-0">
+                {detail}
+              </p>
+            ))}
             {warnings.map((warning) => (
               <p
                 key={warning}

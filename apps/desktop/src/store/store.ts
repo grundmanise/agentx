@@ -7,10 +7,12 @@ import { create } from "zustand";
 import type {
   AdoptionEvent,
   HistoryEvent,
+  InstallableSkillEvent,
   InventoryEvent,
   ReconcileEvent,
   Settings,
   SourceEvent,
+  SourceSkillEvent,
   UpdateAvailableEvent,
 } from "#/cli/events.gen.ts";
 
@@ -82,6 +84,13 @@ export interface AppState {
   activity: ActivityEntry[];
   /** The history of each of your own skills read so far, by name. */
   histories: Record<string, HistoryRead>;
+  /** The skills of each source listed so far, by source id, from `source skills <id>`. */
+  listings: Record<string, SourceSkillEvent[]>;
+  /**
+   * Your skills on the account remote that this machine has not installed, from
+   * `skill list --remote`; undefined until read.
+   */
+  installable: InstallableSkillEvent[] | undefined;
 }
 
 /**
@@ -98,7 +107,9 @@ export const useAppStore = create<AppState>()(() => ({
   applied: undefined,
   freshness: { kind: "stale" },
   histories: {},
+  installable: undefined,
   inventory: undefined,
+  listings: {},
   pending: {},
   reconciles: [],
   refreshes: {},
