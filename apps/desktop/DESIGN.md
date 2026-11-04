@@ -269,6 +269,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `add-card.status-disk` | `accent.attention` | "On disk" label |
 | `banner.title` | `gray-50` | Banner title (bg/border/tile from `tone.*`) |
 | `banner.text` | `gray-300` |  |
+| `card.chip-ring` | `card.bg` | 2px ring behind overlapping agent client logos on a card (the Universal card) |
 | `plugin.skills-dot` | `accent.yours` | SKILLS group (tint `violet-400/10`) |
 | `plugin.servers-dot` | `accent.theirs` | SERVERS group (tint `blue-400/10`) |
 | `plugin.hooks-dot` | `accent.attention` | HOOKS group (tint `amber-400/10`) |
@@ -415,6 +416,7 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.detail-desc` | sans | 14.5 | 400 | 1.5 |  |  | Detail pane description (`text.muted`, `text-wrap:pretty`) |
 | `type.banner-title` | sans | 14 | 500 |  |  |  | Banner title (`banner.title`); its text is `type.secondary` in `banner.text` |
 | `type.agent-chip` | sans | 13 | 500 |  |  |  | Agent client name in a toggle chip |
+| `type.agent-card-name` | sans | 16 | 600 |  |  |  | Agent client name on an Agents page card, and "Universal" on the Universal card |
 | `type.timeline-entry` | sans | 13.5 | 400 | 20px |  |  | Timeline entry subject (`text.primary`); its line height is `timeline.line`, so the dot beside it sits on the first line |
 | `type.timeline-meta` | sans | 12 | 400 |  |  |  | Timeline entry meta (`text.caption`) |
 | `type.notice` | sans | 13 | 400 | 1.5 |  |  | Stale bar text; hint and warnings in an error toast |
@@ -526,6 +528,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `logo.padding` | 3–5 |  | Inner padding by size (3 at 20px, 4 at 24–26, 5 at 28) |
 | `logo.padding-sm` | 3 | `p-logo-sm` | 16 and 20px logos |
 | `logo.padding-lg` | 5 | `p-logo-lg` | 28px logos; a 24px logo takes the `1` spacing step (4px) |
+| `logo.padding-xl` | 8 | `p-logo-xl` | 44px logos |
 
 ### Inputs
 
@@ -554,6 +557,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `agent-card.padding` | 22 | `p-agent-card` | Agents page cards |
 | `agent-card.gap` | 12 | `gap-agent-card` | Grid gap |
 | `agent-card.logo` | 44 | `size-agent-card-logo` |  |
+| `universal-card.lead-width` | 260 | `w-universal-lead` | Left column of the Universal card: logos, "Universal", the library path |
 | `plugin-card.padding` | 22 | `p-plugin-card` |  |
 | `plugin-card.row-height` | 36 | `h-plugin-card-row` | Tree rows |
 | `add-card.gap` | 12 | `gap-add-card` | Grid gap |
@@ -693,15 +697,15 @@ Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, 11–12 / 600.
 
 ### Switch
 
-`switch.size`, `switch.padding`, `switch.radius`; knob `switch.knob` round. On: track `switch.on-track`, knob `switch.on-knob`, `justify-content:flex-end`. Off: track `switch.off-track`, knob `switch.off-knob`. `transition: background .18s`. The whole row is the hit target. Compact variant `switch.compact-size` (knob `switch.compact-knob`) inside agent toggle chips.
+`switch.size`, `switch.padding`, `switch.radius`; knob `switch.knob` round. On: track `switch.on-track`, knob `switch.on-knob`, `justify-content:flex-end`. Off: track `switch.off-track`, knob `switch.off-knob`. `transition: background .18s`. The whole row is the hit target. Compact variant `switch.compact-size` (knob `switch.compact-knob`) inside agent toggle chips. A switch always shows the state the last inventory reported: while its command runs, and until the inventory that follows it arrives, it is pending (`aria-busy`, disabled at 50% opacity, a `Spinner` beside it) and keeps that state; it never shows the outcome ahead of the CLI. Its `title` says what the state means ("Enabled · new skills go here by default" / "Disabled · skipped by default").
 
 ### Agent client toggle chip (detail pane AGENTS)
 
-Pill button `agent-chip.height`, `agent-chip.padding`, `agent-chip.gap`, `agent-chip.radius`: 28px logo(s) · name 13 / 500 · compact switch. Off: `agent-chip.off-bg` with 1px `agent-chip.off-border`. On: `agent-chip.on-bg` with `agent-chip.on-border`. Hover border `agent-chip.hover-border`. Locked: 45% opacity, `cursor:not-allowed`, `title` holds the reason; a click toasts it. Chips wrap in a row with `agent-chip.wrap-gap`.
+Pill button `agent-chip.height`, `agent-chip.padding`, `agent-chip.gap`, `agent-chip.radius`: 28px logo(s) · name 13 / 500 · compact switch. Off: `agent-chip.off-bg` with 1px `agent-chip.off-border`. On: `agent-chip.on-bg` with `agent-chip.on-border`. Hover border `agent-chip.hover-border`. Locked: 45% opacity, `cursor:not-allowed`, `title` holds the reason; a click toasts it. Chips wrap in a row with `agent-chip.wrap-gap`. A click on a direct agent's chip runs one command, and the chip is pending (`aria-busy`, `cursor:wait`, a `Spinner` in place of the compact switch) until the command ends and the next inventory arrives; its `title` reads "Add to {Agent}" / "Remove from {Agent}". A displaced chip shows "displaced" in `tone.attention.fg` under the name and runs nothing: a click toasts "Put it back first, then manage it from your library". The Universal chip, on, opens the Remove dialog: a universal client reads the library, so a skill leaves it only by leaving the machine.
 
 ### Checkbox (popover)
 
-16×16 round, inset ring 1.5px `checkbox.ring`; checked: `checkbox.checked-bg` fill, `checkbox.check` check.
+16×16 round, inset ring 1.5px `checkbox.ring`; checked: `checkbox.checked-bg` fill, `checkbox.check` check. The same mark inside a dialog (the Remove dialog's "Also delete it from your account remote"), beside its label in `type.body` `text.primary`, with a line of `type.secondary` `text.muted` under it when the choice needs a word of explanation.
 
 ### Segmented control
 
@@ -726,6 +730,18 @@ Mono caption 10.5–11 / `.16em` uppercase `group.label` plus a count in `group.
 
 `banner.radius`, `banner.padding`, `tone.*.bg` + 1px `tone.*.border`; `banner.tile` icon tile in `tone.*.fg`; title 14 / 500 `banner.title`; text 13 `banner.text`; actions on the right.
 
+### Agent client card (Agents page)
+
+One card per agent configuration whose client does not read the library, in a 4-column grid with `agent-card.gap`: `card.bg`, 1px `card.border`, `agent-card.radius`, `agent-card.padding`. Top row: the `agent-card.logo` logo at the left and the Enabled switch (§6 "Switch") at the right. Then the client's name in `type.agent-card-name` `card.title`, its configuration path in `type.technical` `text.caption` on one line with an ellipsis, and "{n} skills · {n} servers · {n} plugins" in `type.secondary` `card.text` with the numbers in `text.primary`, 500. Enabled decides only where later installs and creations go when no agent is named; it never changes a placement, so the counts do not move when the switch does.
+
+### Universal card (Agents page)
+
+One full-width card below the grid, the same surface, for every configuration whose client reads the library. Its left column is `universal-card.lead-width` wide: the clients' logos stacked (`agent-card.logo`, ringed in `card.chip-ring`), "Universal" in `type.agent-card-name`, "Read your shared library" in `type.secondary` `card.text`, and the library path in `type.technical` `text.caption`. Then one column per client behind a 1px `shell.divider` hairline on its left: name, path and "{n} skills · {n} servers", the skill count being the library's. No switch: a universal client sees every library skill whatever its setting.
+
+### Banner actions and dialogs (detail pane)
+
+A banner's action is a small ghost button on its right, one command each: "Add to agents" on the gray "Not in any agent" banner (`tone.neutral`), "Put back" on the amber "{Agent} has its own folder for this skill" banner. A command that is refused because the folder holds another version opens a confirm dialog, "Replace {Agent}'s folder?", with the path in `type.technical` `text.caption` and Cancel · Replace (danger). Remove, in the action row, is a danger ghost button that opens the Remove dialog: "Remove {skill}?", the agents the skill leaves as a list in `type.body` `text.secondary`, and Cancel · Remove (danger). Every button that runs a command is pending until the command ends and the next inventory arrives.
+
 ### Card (Inbox)
 
 `card.bg`, `card.radius`, `card.border`, `card.padding`. Header grid: `card.tile` icon tile (`tone.*`) · title/tag/text · actions. Resolve animation: `opacity 0; transform: translateX(24px) scale(.985)` over 280ms, then removed.
@@ -733,6 +749,10 @@ Mono caption 10.5–11 / `.16em` uppercase `group.label` plus a count in `group.
 ### Toast
 
 `toast.offset` from the bottom, centred; `overlay.bg`, `overlay.border`, `toast.radius`, `toast.height`, `toast.padding`; text 13.5 `toast.text`; optional action button ghost in `button.toast-action-text`. Auto-dismiss 2.6s, or 5s when it has an action. One toast at a time. A toast for a command that runs (Check tools: "Checking tools" with a Cancel) stays until the command ends, when the toast of its outcome replaces it.
+
+### Attention toast
+
+A command that exited 0 and logged warnings (a placement skipped, a copy that differed): the same shape as the error toast below, with the success text in `type.toast` `toast.text` and each warning in `type.notice` `tone.attention.fg`, the toast's action (Undo) when it has one, and a ghost Dismiss. It goes after 5s. The activity entry it logs is `attention`, not `success`.
 
 ### Error toast
 

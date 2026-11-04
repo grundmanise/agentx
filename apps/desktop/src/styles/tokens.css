@@ -243,6 +243,7 @@
   --color-add-card-status-disk: var(--color-accent-attention);
   --color-banner-title: var(--gray-50);
   --color-banner-text: var(--gray-300);
+  --color-card-chip-ring: var(--color-card-bg);
   --color-plugin-skills-dot: var(--color-accent-yours);
   --color-plugin-servers-dot: var(--color-accent-theirs);
   --color-plugin-hooks-dot: var(--color-accent-attention);
@@ -517,6 +518,7 @@
   --ring-width-logo: 2px;
   --padding-logo-sm: 3px;
   --padding-logo-lg: 5px;
+  --padding-logo-xl: 8px;
 
   /* Inputs */
   --height-input: 42px;
@@ -539,6 +541,7 @@
   --padding-agent-card: 22px;
   --gap-agent-card: 12px;
   --size-agent-card-logo: 44px;
+  --width-universal-lead: 260px;
   --padding-plugin-card: 22px;
   --height-plugin-card-row: 36px;
   --gap-add-card: 12px;
@@ -770,6 +773,11 @@
   font-size: 14.5px;
   font-weight: 400;
   line-height: 1.5;
+}
+@utility type-agent-card-name {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
 }
 @utility type-banner-title {
   font-family: var(--font-sans);
