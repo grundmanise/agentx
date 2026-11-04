@@ -75,7 +75,7 @@ func adoptTool(arg string) (string, error) {
 		return tool, nil
 	}
 	return "", fail(exitUsage, fmt.Sprintf("%q is not a tool agentx adopts from", sanitised(arg)),
-		fmt.Sprintf("name skills-cli or skillshare; to adopt a skill by name, run 'agentx adopt --skill %s'", sanitised(arg)))
+		"name skills-cli or skillshare; to adopt a skill by name, run 'agentx adopt --skill "+shellWord(sanitised(arg))+"'")
 }
 
 // toolArg is the argument that names tool, for the commands a preview
