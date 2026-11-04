@@ -18,54 +18,44 @@
 
 ## Quick look
 
-```console
-$ agentx scan
-3 configurations, 4 skills, 2 servers, 4 plugins detected
-
-Claude Code (claude-code)  /home/me/.claude  enabled  3 skills, 1 plugin
-  skills:
-    commit  symlink    user  /home/me/.claude/skills/commit -> /home/me/.agents/skills/commit
-    format  directory  user  /home/me/.claude/plugins/cache/acme-tools/formatter/1.2.0/skills/format  (plugin formatter)
-    review  directory  user  /home/me/.claude/skills/review
-  plugins:
-    formatter  1.2.0  1 skill
-
-Cursor (cursor)  /home/me/.cursor  enabled  2 skills, 2 servers, 1 plugin
-  skills:
-    commit  symlink    user  /home/me/.claude/skills/commit -> /home/me/.agents/skills/commit
-    review  directory  user  /home/me/.claude/skills/review
-  servers:
-    context7  stdio            npx -y @upstash/context7-mcp
-    stripe    streamable-http  https://mcp.stripe.com
-```
+![The Skills page of the agentx app: skills grouped by source, with one selected and its agents, details and history](docs/help-center/images/skills-list.png)
 
 ## Install
 
-On macOS, the app with its CLI, with [Homebrew](https://brew.sh):
+### The app (recommended)
+
+On a Mac with Apple silicon, with [Homebrew](https://brew.sh). This also puts the `agentx` CLI on your `PATH`:
 
 ```sh
 brew install grundmanise/tap/agentx
 ```
 
-The CLI alone, on macOS or Linux:
+On Linux, download the `.deb` or the AppImage from the [latest release](https://github.com/grundmanise/agentx/releases/latest). Both carry the CLI; the `.deb` also puts
+`agentx` on your `PATH`.
+
+### Alternatively, CLI only
+
+For a machine with no desktop, on macOS or Linux, with Homebrew:
 
 ```sh
 brew install grundmanise/tap/agentx-cli
 ```
 
-Or with the install script, which puts the latest release of the CLI in `~/.local/bin`:
+Or, on Linux or a Mac with Apple silicon, with the install script, which installs only the CLI, to `~/.local/bin`:
 
 ```sh
 curl -fsSL https://agentx.wtf/install | sh
 ```
 
-The Linux app is a `.deb` or an AppImage on the [releases](https://github.com/grundmanise/agentx/releases/latest) page.
+For the newest nightly build, end the install script command with `sh -s -- --nightly`. To update a CLI
+that the install script installed, run `agentx update`. See [Install and update](https://docs.agentx.wtf/install)
+for options, updates and uninstalling.
 
-For the newest nightly build, end the command with `sh -s -- --nightly`. Later, `agentx update` gets
-the newest release. See [Install and update](https://docs.agentx.wtf/install) for options and
-uninstalling.
+agentx needs `git` 2.40 or later on your `PATH`.
 
-To build from source instead, use Go `1.27` or later:
+### Build from source
+
+To build the CLI, use Go `1.27.1` or later:
 
 ```sh
 git clone https://github.com/grundmanise/agentx.git
@@ -76,19 +66,21 @@ On Linux, `CGO_ENABLED=0 go build` produces a static binary. On macOS, build wit
 default – so `agentx serve` watches through `FSEvents`; a macOS binary built without `cgo` falls back to
 `kqueue`, which costs one file descriptor per watched file.
 
-agentx runs your own `git`, 2.40 or later, found on your `PATH`.
+To build the app, see [`apps/desktop/README.md`](apps/desktop/README.md).
 
 ## Documentation
 
-Read the [documentation](https://docs.agentx.wtf) for every command, its flags and its output.
+[docs.agentx.wtf](https://docs.agentx.wtf)
 
 ## Status
 
-Supports 75 agents. 6 are read in full – skills, MCP servers and plugins:
+Supports 75 agents:
 
-**Claude Code** · **Codex** · **Cursor** · **Gemini CLI** · **Windsurf** · **GitHub Copilot**
-
-Other agents support skills management only at this time.
+| Agent | Skills | MCP servers | Plugins |
+| --- | :---: | :---: | :---: |
+| Claude Code, Codex, Cursor, Gemini CLI | ✓ | ✓ | ✓ |
+| Windsurf, GitHub Copilot | ✓ | ✓ | |
+| All others | ✓ | | |
 
 > Under active development. The command-line tool already:
 >

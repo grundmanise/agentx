@@ -3,7 +3,7 @@ title: "agentx skill"
 description: "Install, place, update, publish and remove skills, and see what is in your library."
 ---
 
-Your library is one directory, `~/.agents/skills`, that holds every skill agentx manages. agentx installs a skill there once and links it into each agent client. Every client sees the same files, and one update reaches all of them. This page uses the terms placement, universal client, configuration, managed skill and base version; see [Key terms](/#key-terms).
+Your library is one directory, `~/.agents/skills`, that holds every skill agentx manages. agentx installs a skill there once and links it into each agent client. Every client sees the same files, and one update reaches all of them. This page uses the terms placement, universal client, configuration, managed skill and base version; see the [glossary](https://github.com/grundmanise/agentx/blob/main/GLOSSARY.md).
 
 ## Install a skill
 
@@ -879,7 +879,7 @@ Removing one of your own skills from the machine also deletes its local history.
 
 ## Turn skills on for your cloud agents
 
-Every agent you run in the cloud, such as Claude Code on the web, is one [cloud machine](/#key-terms). It has no disk that lasts, so its skills live in its snapshot on your [account remote](/account-remote), on the branch `machines/cloud`. Each cloud session reads that snapshot when it starts. To apply it yourself, for example in a cloud environment's setup script, run `agentx import --machine cloud --yes`, see [Restore from the account remote](/cli/export#restore-from-the-account-remote). Turn a skill on and off there with the same commands you use on this machine, adding `--machine cloud`. Nothing on this machine changes.
+Every agent you run in the cloud, such as Claude Code on the web, is one [cloud machine](https://github.com/grundmanise/agentx/blob/main/GLOSSARY.md). It has no disk that lasts, so its skills live in its snapshot on your [account remote](/account-remote), on the branch `machines/cloud`. Each cloud session reads that snapshot when it starts. To apply it yourself, for example in a cloud environment's setup script, run `agentx import --machine cloud --yes`, see [Restore from the account remote](/cli/export#restore-from-the-account-remote). Turn a skill on and off there with the same commands you use on this machine, adding `--machine cloud`. Nothing on this machine changes.
 
 Place a skill on the cloud machine:
 
