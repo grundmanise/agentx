@@ -273,9 +273,6 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `plugin.servers-dot` | `accent.theirs` | SERVERS group (tint `blue-400/10`) |
 | `plugin.hooks-dot` | `accent.attention` | HOOKS group (tint `amber-400/10`) |
 | `plugin.connector` | `gray-870` | Nested-content connector lines |
-| `plugin.skills-chip-bg` | `violet-400/10` | "{n} skills" summary chip on a plugin card |
-| `plugin.servers-chip-bg` | `blue-400/10` | "{n} servers" summary chip |
-| `plugin.hooks-chip-bg` | `amber-400/10` | "{n} hooks" summary chip |
 | `plugin.row-hover` | `gray-930` | Hover on a plugin card's skill and server rows |
 
 #### Overlays (dialog, popover, palette, sheet, toast, floating bar)
@@ -738,7 +735,7 @@ Mono caption 10.5–11 / `.16em` uppercase `group.label` plus a count in `group.
 
 ### Plugin card (Plugins)
 
-`card.bg`, `plugin-card.radius`, 1px `card.border`, in 3 CSS columns with `plugin-card.gap`; a card never breaks across columns. Top, `plugin-card.padding`: a `plugin-card.tile` tile on the left, the plugin's own icon from the inventory's data URL as an `<img>` with the name as its alt, or the name's first letter on `button.secondary-bg` when the inventory carries none; the tile is never dimmed, a disabled plugin says so with its pill. On the right the version pill (`pill.version-bg` / `pill.version-text`, `type.version-pill`), "no version" when empty, after a Disabled pill (`pill.disabled-bg` / `pill.disabled-text`) when the agent client turned the plugin off. Then the name in `type.plugin-name`, "{Agent} · {marketplace}" in `text.muted` ("local" when the marketplace is empty), and the summary chips: "{n} skills", "{n} servers", "{n} hooks" in `type.plugin-chip`, each on its `plugin.*-chip-bg` with a 6px dot in `plugin.*-dot`, a zero count left out. Contents under a `card.border` hairline: the groups SKILLS, SERVERS, HOOKS, each a caption and `plugin-card.row-height` tree rows with a `plugin.connector` line (the last row's stops at the middle), the group's dot, the name, mono meta (`type.technical-sm`, `text.caption`: a server's transport, a hook's event) and, on a skill or server row, a chevron; those rows open the skill in Skills or the server in MCP servers and hover `plugin.row-hover`. A hook row opens nothing.
+`card.bg`, `plugin-card.radius`, 1px `card.border`, in 3 CSS columns with `plugin-card.gap`; a card never breaks across columns. Top, `plugin-card.padding`: a `plugin-card.tile` tile on the left, the plugin's own icon from the inventory's data URL as an `<img>` with the name as its alt, or the name's first letter on `button.secondary-bg` when the inventory carries none; the tile is never dimmed, a disabled plugin says so with its pill. On the right the version pill (`pill.version-bg` / `pill.version-text`, `type.version-pill`), "no version" when empty, after a Disabled pill (`pill.disabled-bg` / `pill.disabled-text`) when the agent client turned the plugin off. Then the name in `type.plugin-name` and "{Agent} · {marketplace}" in `text.muted` ("local" when the marketplace is empty). Contents under a `card.border` hairline: the groups SKILLS, SERVERS, HOOKS, each a caption and `plugin-card.row-height` tree rows with a `plugin.connector` line (the last row's stops at the middle), the group's dot, the name, mono meta (`type.technical-sm`, `text.caption`: a server's transport, a hook's event) and, on a skill or server row, a chevron; those rows open the skill in Skills or the server in MCP servers and hover `plugin.row-hover`. A hook row opens nothing.
 
 ### Toast
 

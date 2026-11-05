@@ -247,9 +247,6 @@
   --color-plugin-servers-dot: var(--color-accent-theirs);
   --color-plugin-hooks-dot: var(--color-accent-attention);
   --color-plugin-connector: var(--gray-870);
-  --color-plugin-skills-chip-bg: rgb(182 156 255 / 0.1);
-  --color-plugin-servers-chip-bg: rgb(124 183 255 / 0.1);
-  --color-plugin-hooks-chip-bg: rgb(255 193 94 / 0.1);
   --color-plugin-row-hover: var(--gray-930);
 
   /* Overlays */
@@ -813,11 +810,6 @@
   font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.01em;
-}
-@utility type-plugin-chip {
-  font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 500;
 }
 @utility type-version-pill {
   font-family: var(--font-mono);

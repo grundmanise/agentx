@@ -132,7 +132,3 @@ export const projectPlugins = (inventory: InventoryEvent): PluginCard[] =>
       a.version.localeCompare(b.version) ||
       a.key.localeCompare(b.key)
   );
-
-/** "{n} skills", "1 skill": the words of a summary chip. */
-export const countWords = (n: number, one: string, many: string) =>
-  `${n} ${n === 1 ? one : many}`;

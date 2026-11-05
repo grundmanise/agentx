@@ -55,7 +55,7 @@ test.afterEach(({ cli }) => {
 });
 
 test.describe("cards", () => {
-  test("one card per plugin, with its version, Disabled pill, agent and marketplace, chips and groups", async ({
+  test("one card per plugin, with its version, Disabled pill, agent and marketplace, and groups", async ({
     cli,
     page,
   }) => {
@@ -66,7 +66,7 @@ test.describe("cards", () => {
       "notes-local",
     ]);
 
-    // Claude Code's plugin: its own icon, every chip, and the groups SKILLS, SERVERS, HOOKS.
+    // Claude Code's plugin: its own icon and the groups SKILLS, SERVERS, HOOKS, in that order.
     const acme = card(page, "acme-tools");
     await expect(acme.getByRole("img", { name: "acme-tools" })).toHaveAttribute(
       "src",
@@ -77,7 +77,7 @@ test.describe("cards", () => {
         - img "acme-tools"
         - text: 1.4.0
         - heading "acme-tools" [level=2]
-        - text: Claude Code · acme-marketplace 2 skills 1 server 2 hooks
+        - text: Claude Code · acme-marketplace
         - region "SKILLS":
           - heading "SKILLS" [level=3]
           - list:
@@ -103,14 +103,13 @@ test.describe("cards", () => {
       group(acme, "HOOKS").getByRole("button", { name: "format-on-save" })
     ).toHaveCount(0);
 
-    // Codex's plugin, turned off: Disabled before the version, a monogram, one skill and no
-    // chip for what it has none of.
+    // Codex's plugin, turned off: Disabled before the version, a monogram, and one skill.
     const codex = card(page, "codex-review");
     await expect(codex).toMatchAriaSnapshot(`
       - article "codex-review":
         - text: Disabled 0.3.1
         - heading "codex-review" [level=2]
-        - text: Codex · openai-plugins 1 skill
+        - text: Codex · openai-plugins
         - region "SKILLS":
           - heading "SKILLS" [level=3]
           - list:
@@ -119,8 +118,7 @@ test.describe("cards", () => {
     `);
     await expect(codex.getByRole("img")).toHaveCount(0);
     await expect(codex.getByText("C", { exact: true })).toBeVisible();
-    await expect(codex.getByText(/servers?$/u)).toHaveCount(0);
-    await expect(codex.getByText(/hooks?$/u)).toHaveCount(0);
+    await expect(codex.getByRole("region")).toHaveCount(1);
 
     // Cursor's local plugin: no version, no marketplace, nothing it provides.
     const notes = card(page, "notes-local");

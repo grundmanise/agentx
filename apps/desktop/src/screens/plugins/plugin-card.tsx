@@ -1,45 +1,12 @@
-import { cva } from "class-variance-authority";
 import { useId } from "react";
 
 import { Pill } from "#/components/pill.tsx";
 import { TreeRow } from "#/components/tree-row.tsx";
 import type { TreeTone } from "#/components/tree-row.tsx";
 import { PluginTile } from "#/screens/plugins/plugin-tile.tsx";
-import { countWords } from "#/screens/plugins/projection.ts";
 import type { PluginCard, PluginItem } from "#/screens/plugins/projection.ts";
 import { openServer } from "#/screens/servers/open.ts";
 import { openSkill } from "#/screens/skills/open.ts";
-
-const chipVariants = cva(
-  "rounded-pill type-plugin-chip text-text-secondary inline-flex h-6 flex-none items-center gap-1.5 px-2.5 whitespace-nowrap",
-  {
-    variants: {
-      tone: {
-        hooks: "bg-plugin-hooks-chip-bg",
-        servers: "bg-plugin-servers-chip-bg",
-        skills: "bg-plugin-skills-chip-bg",
-      },
-    },
-  }
-);
-
-const chipDotVariants = cva("rounded-pill size-1.5 flex-none", {
-  variants: {
-    tone: {
-      hooks: "bg-plugin-hooks-dot",
-      servers: "bg-plugin-servers-dot",
-      skills: "bg-plugin-skills-dot",
-    },
-  },
-});
-
-/** A summary chip: "{n} skills" on the group's 10% tint, with its dot. */
-const Chip = ({ tone, children }: { tone: TreeTone; children: string }) => (
-  <span className={chipVariants({ tone })}>
-    <span aria-hidden className={chipDotVariants({ tone })} />
-    {children}
-  </span>
-);
 
 /** The captions of the three groups, in the order they come. */
 const captions: Record<TreeTone, string> = {
@@ -96,8 +63,8 @@ const Group = ({
 
 /**
  * One plugin in one agent configuration (DESIGN.md §6 "Plugin card"): its tile, the Disabled and
- * version pills, its name, the agent and marketplace it came from, the summary chips, then the
- * skills, servers and hooks it brings. Clicking a skill opens it in Skills, a server in MCP
+ * version pills, its name, the agent and marketplace it came from, then the skills, servers and
+ * hooks it brings. Clicking a skill opens it in Skills, a server in MCP
  * servers; nothing here installs, removes, enables or disables anything.
  */
 export const PluginCardView = ({ card }: { card: PluginCard }) => {
@@ -126,25 +93,6 @@ export const PluginCardView = ({ card }: { card: PluginCard }) => {
             {`${card.agent} · ${card.marketplace === "" ? "local" : card.marketplace}`}
           </span>
         </div>
-        {hasContents && (
-          <div className="flex flex-wrap gap-1.5">
-            {card.skills.length > 0 && (
-              <Chip tone="skills">
-                {countWords(card.skills.length, "skill", "skills")}
-              </Chip>
-            )}
-            {card.servers.length > 0 && (
-              <Chip tone="servers">
-                {countWords(card.servers.length, "server", "servers")}
-              </Chip>
-            )}
-            {card.hooks.length > 0 && (
-              <Chip tone="hooks">
-                {countWords(card.hooks.length, "hook", "hooks")}
-              </Chip>
-            )}
-          </div>
-        )}
       </div>
       {hasContents && (
         <div className="border-card-border flex flex-col border-t px-3 pt-1 pb-3">
