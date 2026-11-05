@@ -13,13 +13,6 @@ import type {
 } from "#/cli/events.gen.ts";
 import type { HandshakeFailure } from "#/store/store.ts";
 
-/** An agent configuration that declares a server, and whether it turned the declaration off. */
-export interface ServerAgent {
-  configuration: string;
-  /** Every declaration of the server in this configuration has `enabled` false. */
-  off: boolean;
-}
-
 /** Why a declaration's handshake failed, as the Tools column says it. */
 export interface Failure {
   reason: HandshakeReason;
@@ -43,8 +36,10 @@ export interface ServerRow {
   tools: number | undefined;
   /** When the latest version's signature was taken. */
   signatureAt: string | undefined;
-  /** The configurations that declare it, in inventory order. */
-  agents: ServerAgent[];
+  /** The configurations that declare it and have it on, in inventory order. */
+  agents: string[];
+  /** Every declaration of the server is one its client turned off: no agent has it on. */
+  turnedOff: boolean;
   /** The plugins that declare it, distinct. */
   plugins: string[];
   /** The failures of the last check in this session, one per distinct reason. */
@@ -103,18 +98,14 @@ const toolCount = (node: McpServer | undefined): number | undefined =>
     ? undefined
     : (node.tools ?? []).filter((t) => t.kind === "tool").length;
 
-const agentsOf = (
-  occurrences: ServerOccurrence[],
-  order: string[]
-): ServerAgent[] =>
-  order
-    .filter((id) => occurrences.some((o) => o.configuration === id))
-    .map((id) => ({
-      configuration: id,
-      off: occurrences
-        .filter((o) => o.configuration === id)
-        .every((o) => o.enabled === false),
-    }));
+/** Whether a declaration is on: its client records it as turned off only with `enabled` false. */
+const isOn = (o: ServerOccurrence) => o.enabled !== false;
+
+/** The configurations with at least one declaration of the server on, in inventory order. */
+const agentsOf = (occurrences: ServerOccurrence[], order: string[]) =>
+  order.filter((id) =>
+    occurrences.some((o) => o.configuration === id && isOn(o))
+  );
 
 /** The failures of the declarations of one server, one per distinct reason, first hint kept. */
 const failuresOf = (
@@ -154,6 +145,7 @@ const rowOf = (
     signatureAt: latest?.signature_at,
     tools: toolCount(latest),
     transports: distinct(occurrences.map((o) => o.transport)),
+    turnedOff: occurrences.length > 0 && !occurrences.some(isOn),
     versions: nodes.length,
   };
 };

@@ -58,6 +58,7 @@ const tools = (prefix: string, n: number, extra: McpTool[] = []): McpTool[] => [
 
 export const GITHUB_URL = "https://api.githubcopilot.com/mcp/";
 export const LINEAR_URL = "https://mcp.linear.app/sse";
+export const SLACK_URL = "https://mcp.slack.com/mcp";
 export const FILESYSTEM_COMMAND =
   "npx -y @modelcontextprotocol/server-filesystem /home/me";
 export const DB_COMMAND = "node /home/me/.claude/plugins/acme-tools/server.js";
@@ -189,12 +190,35 @@ const localNotes: McpServer = {
   signature: "none",
 };
 
+/** A remote server that every client that declares it turned off. */
+const slack: McpServer = {
+  logical_id: "server:slack",
+  name: "slack",
+  occurrences: [
+    declaration("codex", "slack", {
+      enabled: false,
+      transport: "streamable-http",
+      url: SLACK_URL,
+    }),
+    declaration("gemini-cli", "slack", {
+      enabled: false,
+      transport: "streamable-http",
+      url: SLACK_URL,
+    }),
+  ],
+  physical_id: "server:slack:v1",
+  signature: "sig-slack",
+  signature_at: "2026-10-16T09:00:00Z",
+  tools: tools("slack", 3),
+};
+
 export const servers: McpServer[] = [
   acmeDb,
   ...filesystemVersions,
   github,
   linear,
   localNotes,
+  slack,
 ];
 
 /** The serve child's first inventory on this machine. */

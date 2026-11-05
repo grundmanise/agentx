@@ -12,6 +12,7 @@ import {
   LINEAR_URL,
   NOTES_COMMAND,
   SECRET_NAMES,
+  SLACK_URL,
 } from "./fixtures/servers.ts";
 import { expect, loadLines, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
@@ -78,6 +79,7 @@ test.describe("rows", () => {
       "github",
       "linear",
       "local-notes",
+      "slack",
     ]);
     await expect(table(page).getByRole("columnheader")).toHaveText([
       "SERVER",
@@ -119,24 +121,19 @@ test.describe("rows", () => {
     await expect(acmeDb).toContainText(DB_COMMAND);
     await expect(acmeDb.getByText("2 tools", { exact: true })).toBeVisible();
 
-    // A declaration the agent turned off: its logo says so.
+    // A client that turned the server off shows no logo: only Gemini CLI has linear on.
     const linear = row(page, "linear");
     await expect(linear).toContainText(LINEAR_URL);
     await expect(linear.getByText("sse", { exact: true })).toBeVisible();
-    const off = linear.getByTitle("Codex turned this server off");
-    await expect(off).toBeVisible();
-    await expect(off).toHaveAttribute("data-off", "true");
-    await expect(
-      linear.getByTitle("Gemini CLI", { exact: true })
-    ).not.toHaveAttribute("data-off");
-    await expect(
-      linear.getByTitle("Gemini CLI", { exact: true })
-    ).toBeVisible();
-    // A screen reader learns the state from the text alternative.
-    expect(await names(linear.getByRole("img"))).toEqual([
-      "Codex (turned this server off)",
-      "Gemini CLI",
-    ]);
+    expect(await names(linear.getByRole("img"))).toEqual(["Gemini CLI"]);
+    await expect(linear.getByText("Turned off")).toHaveCount(0);
+
+    // A server every client turned off stays, with its tools, and its agents cell says so.
+    const slack = row(page, "slack");
+    await expect(slack).toContainText(SLACK_URL);
+    await expect(slack.getByText("3 tools", { exact: true })).toBeVisible();
+    await expect(slack.getByText("Turned off")).toBeVisible();
+    await expect(slack.getByRole("img")).toHaveCount(0);
 
     // A server never checked.
     const notes = row(page, "local-notes");
@@ -180,7 +177,7 @@ test.describe("Check tools", () => {
     await checkTools(page).click();
     await expect(
       toasts(page).getByText(
-        "Checked 5 servers · 1 need sign-in, 1 unreachable"
+        "Checked 6 servers · 1 need sign-in, 1 unreachable"
       )
     ).toBeVisible();
     expect(later(cli)).toEqual([["scan", "--handshake", "--json"]]);

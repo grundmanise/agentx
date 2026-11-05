@@ -2,7 +2,6 @@ import { cva } from "class-variance-authority";
 
 import type { Configuration } from "#/cli/events.gen.ts";
 import { LogoStack } from "#/components/agent-logo.tsx";
-import type { LogoClient } from "#/components/agent-logo.tsx";
 import type { Failure, ServerRow } from "#/screens/servers/projection.ts";
 
 const failureVariants = cva("type-secondary whitespace-nowrap", {
@@ -40,32 +39,36 @@ const Tools = ({ row }: { row: ServerRow }) => (
   </td>
 );
 
-/** The logos of the agents that declare the server; one that turned it off says so in its title and its text alternative. */
-const logoClients = (
-  row: ServerRow,
-  configurations: Configuration[]
-): LogoClient[] =>
-  row.agents.flatMap((agent) => {
-    const c = configurations.find((cfg) => cfg.id === agent.configuration);
-    if (c === undefined) {
-      return [];
-    }
-    return [
-      agent.off
-        ? {
-            client: c.client,
-            name: c.name,
-            off: true,
-            state: "turned this server off",
-          }
-        : { client: c.client, name: c.name },
-    ];
-  });
+/** The configurations that have the server on, for their logos. */
+const onClients = (row: ServerRow, configurations: Configuration[]) =>
+  row.agents
+    .map((id) => configurations.find((c) => c.id === id))
+    .filter((c) => c !== undefined);
+
+/**
+ * The AGENTS cell: the logos of the agents that have the server on. A client that turned it off
+ * shows no logo; when every client did, the cell says "Turned off".
+ */
+const Agents = ({
+  row,
+  configurations,
+}: {
+  row: ServerRow;
+  configurations: Configuration[];
+}) => (
+  <td className="flex items-center p-0">
+    {row.turnedOff ? (
+      <span className="type-secondary text-text-muted">Turned off</span>
+    ) : (
+      <LogoStack clients={onClients(row, configurations)} size={24} />
+    )}
+  </td>
+);
 
 /**
  * One server in the list (DESIGN.md §4 "Lists and rows", the table tokens): name and plugin tag
  * over the URL or command, the transport pills and the versions count, the tools, and the 24px
- * logos of the agents that declare it. Display only: nothing on a row runs a command.
+ * logos of the agents that have it on. Display only: nothing on a row runs a command.
  */
 export const ServerRowItem = ({
   row,
@@ -112,8 +115,6 @@ export const ServerRowItem = ({
       )}
     </td>
     <Tools row={row} />
-    <td className="flex items-center p-0">
-      <LogoStack clients={logoClients(row, configurations)} size={24} />
-    </td>
+    <Agents row={row} configurations={configurations} />
   </tr>
 );

@@ -34,45 +34,32 @@ const monogram = (name: string) => {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 };
 
-/** The text alternative of a logo: the client's name, with its state in brackets when it has one. */
-const alternative = (name: string, state: string | undefined) =>
-  state === undefined ? name : `${name} (${state})`;
-
 /** The sizes of DESIGN.md §6 "Agent client logo chip" this app uses so far, in pixels. */
 export type LogoSize = 16 | 20 | 24 | 28;
 
-// A round white tile, opaque; the ring (`logo.ring`) is the parent's background, between stacked
-// logos. A logo is never dimmed or greyed: one the client turned off looks like every other, and
-// its title and text alternative say so.
-const tileVariants = cva("rounded-logo bg-logo-bg inline-flex flex-none", {
-  variants: {
-    ring: {
-      false: "",
-      true: "ring-row-chip-ring ring-2",
+// A round white tile; the ring (`logo.ring`) is the parent's background, between stacked logos.
+// A logo is never dimmed or greyed.
+const tileVariants = cva(
+  "rounded-logo bg-logo-bg block flex-none object-contain",
+  {
+    variants: {
+      ring: {
+        false: "",
+        true: "ring-row-chip-ring ring-2",
+      },
+      size: {
+        16: "p-logo-sm size-4",
+        20: "p-logo-sm size-5",
+        24: "size-6 p-1",
+        28: "p-logo-lg size-7",
+      },
     },
-    size: {
-      16: "p-logo-sm size-4",
-      20: "p-logo-sm size-5",
-      24: "size-6 p-1",
-      28: "p-logo-lg size-7",
-    },
-  },
-});
-
-/** The configuration a logo stands for, and what the logo says about it. */
-export interface LogoClient extends Pick<Configuration, "client" | "name"> {
-  /** The client turned this off: the image carries `data-off`, and `state` says so. */
-  off?: boolean;
-  /**
-   * What the client did, after its name: "turned this server off". The title reads "{name}
-   * {state}", and the text alternative "{name} ({state})", so a screen reader learns it too.
-   */
-  state?: string;
-}
+  }
+);
 
 export interface AgentLogoProps {
   /** The configuration's `client` slug, which picks the logo, and its `name`, for the title. */
-  client: LogoClient;
+  client: Pick<Configuration, "client" | "name">;
   size: LogoSize;
   /** Draws the ring behind the logo, for logos that overlap. */
   ring?: boolean;
@@ -83,33 +70,25 @@ export interface AgentLogoProps {
 /**
  * A round agent client logo (DESIGN.md §6 "Agent client logo chip"): the bundled image, or a
  * monogram of the client's name when none is bundled. Every logo is an image named after the
- * client, with the name as its title; one with a `state` says it in its title and its text
- * alternative, and one the client turned off carries `data-off`.
+ * client, with the name as its title.
  */
 export const AgentLogo = ({
   client,
   size,
   ring = false,
   decorative = false,
-}: AgentLogoProps) => {
-  const off = client.off === true;
-  const { name, state } = client;
-  return (
-    <span className={tileVariants({ ring, size })}>
-      <img
-        src={logos[client.client] ?? monogram(name)}
-        alt={decorative ? "" : alternative(name, state)}
-        aria-hidden={decorative ? true : undefined}
-        title={state === undefined ? name : `${name} ${state}`}
-        data-off={off ? "true" : undefined}
-        width={size}
-        height={size}
-        draggable={false}
-        className="block size-full object-contain"
-      />
-    </span>
-  );
-};
+}: AgentLogoProps) => (
+  <img
+    src={logos[client.client] ?? monogram(client.name)}
+    alt={decorative ? "" : client.name}
+    aria-hidden={decorative ? true : undefined}
+    title={client.name}
+    width={size}
+    height={size}
+    draggable={false}
+    className={tileVariants({ ring, size })}
+  />
+);
 
 const stackVariants = cva("flex items-center", {
   variants: {
@@ -132,7 +111,7 @@ export const LogoStack = ({
   extra = 0,
   decorative = false,
 }: {
-  clients: LogoClient[];
+  clients: Pick<Configuration, "client" | "name">[];
   size: LogoSize;
   extra?: number;
   decorative?: boolean;
