@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { formatDate } from "#/lib/dates.ts";
+import { useRouteKey } from "#/lib/route-key.ts";
 import { checkTools, useChecking } from "#/screens/servers/check-tools.ts";
 import { latestCheck, projectServers } from "#/screens/servers/projection.ts";
 import type { ServerRow } from "#/screens/servers/projection.ts";
@@ -45,9 +46,11 @@ const CheckTools = ({ rows }: { rows: ServerRow[] }) => {
  * many declare it, with its transport, how many tools it exposed the last time agentx checked, and
  * the agents that declare it. Read-only: Check tools runs a scan with a handshake, and is there
  * only while a server is declared; nothing here edits, starts or stops a server. No environment
- * or header value is ever shown.
+ * or header value is ever shown. The route may name a server (`/servers/<logical id>`), as a
+ * plugin card does when its server row is clicked: that row scrolls into view.
  */
 export const ServersScreen = () => {
+  const routeKey = useRouteKey();
   const inventory = useAppStore((s) => s.inventory);
   const handshakeFailures = useAppStore((s) => s.handshakeFailures);
   const rows = useMemo(
@@ -95,6 +98,7 @@ export const ServersScreen = () => {
                 key={row.key}
                 row={row}
                 configurations={configurations}
+                inView={row.key === routeKey}
               />
             ))}
           </tbody>
