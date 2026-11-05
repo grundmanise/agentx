@@ -12,6 +12,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "#/components/ui/sheet.tsx";
+import { formatDate } from "#/lib/dates.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { loadHistory } from "#/store/loaders.ts";
 import { useAppStore } from "#/store/store.ts";
@@ -67,20 +68,6 @@ const DotColumn = ({
     {!last && <span className="bg-timeline-connector w-px flex-1" />}
   </span>
 );
-
-/** The author date of a commit: "Oct 2", with the year when it is not this year's. */
-export const formatDate = (time: string) => {
-  const date = new Date(time);
-  if (Number.isNaN(date.getTime())) {
-    return time;
-  }
-  const thisYear = date.getFullYear() === new Date().getFullYear();
-  return date.toLocaleDateString(undefined, {
-    day: "numeric",
-    month: "short",
-    ...(thisYear ? {} : { year: "numeric" }),
-  });
-};
 
 /** What the meta line of an entry says: the date, the files, and how the commit came about. */
 export const metaOf = (e: HistoryEvent) => {

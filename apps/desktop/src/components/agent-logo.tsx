@@ -35,9 +35,10 @@ const monogram = (name: string) => {
 };
 
 /** The sizes of DESIGN.md §6 "Agent client logo chip" this app uses so far, in pixels. */
-export type LogoSize = 16 | 20 | 28;
+export type LogoSize = 16 | 20 | 24 | 28;
 
 // A round white tile; the ring (`logo.ring`) is the parent's background, between stacked logos.
+// A logo is never dimmed or greyed.
 const tileVariants = cva(
   "rounded-logo bg-logo-bg block flex-none object-contain",
   {
@@ -49,6 +50,7 @@ const tileVariants = cva(
       size: {
         16: "p-logo-sm size-4",
         20: "p-logo-sm size-5",
+        24: "size-6 p-1",
         28: "p-logo-lg size-7",
       },
     },
@@ -93,6 +95,7 @@ const stackVariants = cva("flex items-center", {
     size: {
       16: "[&>*+*]:-ml-1.5",
       20: "[&>*+*]:-ml-1.5",
+      24: "[&>*+*]:-ml-2",
       28: "[&>*+*]:-ml-2",
     },
   },
@@ -116,7 +119,7 @@ export const LogoStack = ({
   <span className={stackVariants({ size })}>
     {clients.map((c) => (
       <AgentLogo
-        key={c.client}
+        key={`${c.client} ${c.name}`}
         client={c}
         size={size}
         ring

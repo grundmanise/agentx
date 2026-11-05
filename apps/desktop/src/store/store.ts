@@ -6,6 +6,7 @@ import { create } from "zustand";
 
 import type {
   AdoptionEvent,
+  HandshakeError,
   HistoryEvent,
   InventoryEvent,
   ReconcileEvent,
@@ -82,6 +83,19 @@ export interface AppState {
   activity: ActivityEntry[];
   /** The history of each of your own skills read so far, by name. */
   histories: Record<string, HistoryRead>;
+  /**
+   * The declarations whose handshake failed in the last Check tools of this session, from that
+   * one-shot's inventory, which is not applied. Replaced by the next check; gone on a restart.
+   */
+  handshakeFailures: HandshakeFailure[];
+}
+
+/** One declaration of a server whose handshake failed: the server, where it is declared, and why. */
+export interface HandshakeFailure {
+  logicalId: string;
+  configuration: string;
+  plugin?: string;
+  error: HandshakeError;
 }
 
 /**
@@ -97,6 +111,7 @@ export const useAppStore = create<AppState>()(() => ({
   adoption: [],
   applied: undefined,
   freshness: { kind: "stale" },
+  handshakeFailures: [],
   histories: {},
   inventory: undefined,
   pending: {},

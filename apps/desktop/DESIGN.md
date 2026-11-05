@@ -414,6 +414,8 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.timeline-entry` | sans | 13.5 | 400 | 20px |  |  | Timeline entry subject (`text.primary`); its line height is `timeline.line`, so the dot beside it sits on the first line |
 | `type.timeline-meta` | sans | 12 | 400 |  |  |  | Timeline entry meta (`text.caption`) |
 | `type.notice` | sans | 13 | 400 | 1.5 |  |  | Stale bar text; hint and warnings in an error toast |
+| `type.server-name` | sans | 14.5 | 500 |  |  |  | Server name in a server row (`text.primary`) |
+| `type.transport-pill` | mono | 11.5 | 500 |  |  |  | Transport pill (`server.transport-text` on `server.transport-bg`) |
 
 Text wrapping: `text-wrap:pretty` on multi-line copy. Single-line cells use `white-space:nowrap; overflow:hidden; text-overflow:ellipsis`.
 
@@ -482,6 +484,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `table.header-height` | 40 | `h-table-header` | Sticky header (servers) |
 | `table.row-padding` | 16 | `p-table-row` | Server rows |
 | `table.col-gap` | 24 | `gap-x-table-col` |  |
+| `server.columns` | 1fr 170 130 120 | `grid-cols-server` | The columns of the server header row and rows: SERVER · TRANSPORT · TOOLS · AGENTS |
 
 ### Buttons, pills, controls
 
@@ -518,7 +521,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `logo.ring` | 2 | `ring-logo` | Ring width |
 | `logo.padding` | 3–5 |  | Inner padding by size (3 at 20px, 4 at 24–26, 5 at 28) |
 | `logo.padding-sm` | 3 | `p-logo-sm` | 16 and 20px logos |
-| `logo.padding-lg` | 5 | `p-logo-lg` | 28px logos |
+| `logo.padding-lg` | 5 | `p-logo-lg` | 28px logos; a 24px logo takes the `1` spacing step (4px) |
 
 ### Inputs
 
@@ -697,7 +700,7 @@ Track `segmented.track-bg`, `segmented.track-border`, `segmented.radius`, `segme
 
 ### Agent client logo chip
 
-Round, `logo.bg`, `padding:3–4px`, `background-size:contain`, logo from an image bundled with the app (never fetched from the network). Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (agent client toggle chips), 44 (agent client cards). Overlap with `logo.overlap` and a `logo.ring`-wide ring (`box-shadow: 0 0 0 2px <parent bg>`). Every logo carries `title="<agent client name>"`. The bundled logos (`src/assets/logos`, listed in its README) are the clients' official marks as the vendors publish them, never marks drawn for the app; a client without a bundled mark gets the monogram below.
+Round, `logo.bg`, `padding:3–4px`, `background-size:contain`, logo from an image bundled with the app (never fetched from the network). Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (agent client toggle chips), 44 (agent client cards). Overlap with `logo.overlap` and a `logo.ring`-wide ring (`box-shadow: 0 0 0 2px <parent bg>`). Every logo carries `title="<agent client name>"`. A logo is never dimmed or greyed: a server row shows only the agents that have the server on, and reads "Turned off" (`type.secondary`, `text.muted`) when every agent turned it off. The bundled logos (`src/assets/logos`, listed in its README) are the clients' official marks as the vendors publish them, never marks drawn for the app; a client without a bundled mark gets the monogram below.
 
 ### Skill glyph (16px, leading the row)
 
@@ -720,7 +723,7 @@ Mono caption 10.5–11 / `.16em` uppercase `group.label` plus a count in `group.
 
 ### Toast
 
-`toast.offset` from the bottom, centred; `overlay.bg`, `overlay.border`, `toast.radius`, `toast.height`, `toast.padding`; text 13.5 `toast.text`; optional action button ghost in `button.toast-action-text`. Auto-dismiss 2.6s, or 5s when it has an action. One toast at a time.
+`toast.offset` from the bottom, centred; `overlay.bg`, `overlay.border`, `toast.radius`, `toast.height`, `toast.padding`; text 13.5 `toast.text`; optional action button ghost in `button.toast-action-text`. Auto-dismiss 2.6s, or 5s when it has an action. One toast at a time. A toast for a command that runs (Check tools: "Checking tools" with a Cancel) stays until the command ends, when the toast of its outcome replaces it.
 
 ### Error toast
 
@@ -779,7 +782,7 @@ The product mark is `shell.logo-mark` on `shell.logo-bg`, 30px `shell.logo-radiu
 - Chevrons: `rotate(90deg)` with `.15s`.
 - Floating bar: `translateY(24px) → 0`, opacity 0 → 1, `.22s ease`.
 - Card resolve: 280ms, see §6.
-- Spinner-style icons (Check updates, Check tools): one full rotation `.9–1s ease`, then a toast.
+- Spinner-style icons (Check updates, Check tools): one full rotation `.9–1s ease` (`animate-turn-once`: 1s ease, once, while the command runs), then a toast.
 - Startup check running (`animate-check-spin`): the status ring turns once a second, linear, while its check runs, and stops when the check settles.
 - Screens fade in (`animate-fade-in`): opacity 0 → 1 over `.2s ease-out` when they mount, once the startup checks pass. Nothing waits on purpose: a passing launch shows no startup layer. A launch whose checks run for over 2s shows a `Spinner` and what the checks do (`type.secondary`, `text.muted`) in the middle of the empty panel, faded in the same way, until the checks settle: "Checking this machine" while `version` and `doctor` run, then "Looking for skills", "Looking for MCP servers" and "Looking for plugins" in turn, each for 1.5s and faded in, while serve scans. From 5s into a check, a line below (`type.row-desc`, `text.hint`) counts down to its deadline: "Taking longer than usual · trying for 25s more".
 - Diff pane choice: `opacity .2s, box-shadow .2s`.

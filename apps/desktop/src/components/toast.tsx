@@ -36,19 +36,29 @@ const replace = (show: () => string | number) => {
   return shown;
 };
 
+/** How long a toast stays, in ms: 5s with an action, 2.6s without, and for good when it lasts. */
+const durationOf = (withAction: boolean, lasting: boolean) => {
+  if (lasting) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return withAction ? 5000 : 2600;
+};
+
 /**
- * One toast at a time (DESIGN.md §6 "Toast"). A toast with an action stays 5s,
- * one without 2.6s. A new toast replaces the one showing.
+ * One toast at a time (DESIGN.md §6 "Toast"). A toast with an action stays 5s, one without 2.6s,
+ * and a `lasting` one, for a command that runs with its Cancel, until the next toast replaces it.
+ * A new toast replaces the one showing.
  */
 export const notify = (
   message: string,
-  action?: { label: string; onClick: () => void }
+  action?: { label: string; onClick: () => void },
+  { lasting = false }: { lasting?: boolean } = {}
 ) =>
   replace(() =>
     toast(message, {
       action: action && { label: action.label, onClick: action.onClick },
       classNames: { title: classNames.title, toast: classNames.toast },
-      duration: action ? 5000 : 2600,
+      duration: durationOf(action !== undefined, lasting),
     })
   );
 
