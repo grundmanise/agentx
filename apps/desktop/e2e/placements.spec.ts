@@ -415,6 +415,36 @@ test.describe("Remove", () => {
     ]);
   });
 
+  test("the --remote choice lasts one confirmation: a dismissed dialog opens unticked", async ({
+    cli,
+    page,
+  }) => {
+    await openSkill(cli, page, "pdf-letters");
+    const article = pane(page, "pdf-letters");
+    const dialog = page.getByRole("dialog", { name: "Remove pdf-letters?" });
+    const remote = dialog.getByRole("checkbox", {
+      name: /^Also delete it from your account remote/u,
+    });
+    cli.register(["skill", "remove", "pdf-letters"]);
+
+    await article.getByRole("button", { name: "Remove" }).click();
+    await remote.click();
+    await expect(remote).toBeChecked();
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toBeHidden();
+    await article.getByRole("button", { name: "Remove" }).click();
+    await expect(remote).not.toBeChecked();
+    // Escape and a click outside dismiss it the same way.
+    await remote.click();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
+    await article.getByRole("button", { name: "Remove" }).click();
+    await expect(remote).not.toBeChecked();
+    await dialog.getByRole("button", { name: "Remove" }).click();
+    await expect(toasts(page).getByText("Removed pdf-letters")).toBeVisible();
+    expect(later(cli)).toEqual([["skill", "remove", "pdf-letters", "--json"]]);
+  });
+
   test("one of your own skills not yet published: no --remote choice", async ({
     cli,
     page,

@@ -65,6 +65,12 @@ export const RemoveDialog = ({
   // Your own published skill, when an account remote is set, can leave that too.
   const offersRemote =
     row.kind === "yours" && row.published && hasAccountRemote;
+  // The choice lasts one confirmation: a dialog dismissed and opened again starts unticked, so
+  // the account remote's branch goes only when the box is ticked in the confirmation that removes.
+  const close = () => {
+    setRemote(false);
+    onOpenChange(false);
+  };
   const remove = () => {
     const args = ["skill", "remove", row.name];
     void runUntilSettled(
@@ -74,10 +80,19 @@ export const RemoveDialog = ({
         success: `Removed ${row.name}`,
       }
     );
-    onOpenChange(false);
+    close();
   };
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (next) {
+          onOpenChange(true);
+        } else {
+          close();
+        }
+      }}
+    >
       <DialogContent>
         <DialogHeader showCloseButton={false}>
           <DialogTitle>{`Remove ${row.name}?`}</DialogTitle>
