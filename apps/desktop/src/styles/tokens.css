@@ -265,7 +265,7 @@
   /* Code, file tree and diffs */
   --color-code-bg: var(--gray-980);
   --color-code-border: var(--gray-890);
-  --color-code-line-number: var(--gray-700);
+  --color-code-line-number: var(--gray-400);
   --color-code-frontmatter: var(--gray-400);
   --color-code-heading: var(--gray-50);
   --color-code-list: var(--gray-150);

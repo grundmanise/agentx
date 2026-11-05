@@ -166,10 +166,25 @@ const markerVariants = cva("text-center", {
   },
 });
 
+// On a tinted line, front matter takes `code.prose`: `code.frontmatter` on the added tint falls
+// under the 4.5:1 contrast text needs (DESIGN.md §6 "Code pane").
 const textVariants = cva("break-all whitespace-pre-wrap no-underline", {
+  compoundVariants: [
+    { className: "text-code-frontmatter", kind: "plain", tone: "frontmatter" },
+    {
+      className: "text-code-prose",
+      kind: ["added", "removed"],
+      tone: "frontmatter",
+    },
+  ],
   variants: {
+    kind: {
+      added: "",
+      plain: "",
+      removed: "",
+    },
     tone: {
-      frontmatter: "text-code-frontmatter",
+      frontmatter: "",
       heading: "text-code-heading",
       list: "text-code-list",
       prose: "text-code-prose",
@@ -194,13 +209,13 @@ const Line = ({ line, tone }: { line: CodeLine; tone: Tone }) => {
         {markers[line.kind]}
       </span>
       {line.kind === "added" && (
-        <ins className={textVariants({ tone })}>{text}</ins>
+        <ins className={textVariants({ kind: "added", tone })}>{text}</ins>
       )}
       {line.kind === "removed" && (
-        <del className={textVariants({ tone })}>{text}</del>
+        <del className={textVariants({ kind: "removed", tone })}>{text}</del>
       )}
       {line.kind === "plain" && (
-        <span className={textVariants({ tone })}>{text}</span>
+        <span className={textVariants({ kind: "plain", tone })}>{text}</span>
       )}
     </div>
   );

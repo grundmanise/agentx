@@ -299,7 +299,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | --- | --- | --- |
 | `code.bg` | `gray-980` | Code pane, hunk block |
 | `code.border` | `gray-890` | Hunk block border |
-| `code.line-number` | `gray-700` |  |
+| `code.line-number` | `gray-400` | Line numbers: 5.3:1 on `code.bg`, 4:1 on the added tint, where the marker carries the meaning |
 | `code.frontmatter` | `gray-400` | Front-matter and keys |
 | `code.heading` | `gray-50` | Markdown headings |
 | `code.list` | `gray-150` | List items |
@@ -756,7 +756,7 @@ A client with no bundled logo shows the first letter of its name in `type.pill`,
 
 ### Code pane
 
-`code.bg`, mono 12.5, `line-height:1.75`, grid `code.gutter 1fr` (line no. `code.line-number` right-aligned · marker · text). Front-matter and keys `code.frontmatter`, headings `code.heading`, list items `code.list`, prose `code.prose`. Diff tints: added line `+` on `diff.added-bg`, removed line `−` on `diff.removed-bg` with no number.
+`code.bg`, mono 12.5, `line-height:1.75`, grid `code.gutter 1fr` (line no. `code.line-number` right-aligned · marker · text). Front-matter and keys `code.frontmatter`, headings `code.heading`, list items `code.list`, prose `code.prose`. Diff tints: added line `+` on `diff.added-bg`, removed line `−` on `diff.removed-bg` with no number. On a tinted line, front matter takes `code.prose` so it keeps 4.5:1.
 
 ### File list (detail pane FILES)
 
