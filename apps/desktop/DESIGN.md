@@ -273,6 +273,10 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `plugin.servers-dot` | `accent.theirs` | SERVERS group (tint `blue-400/10`) |
 | `plugin.hooks-dot` | `accent.attention` | HOOKS group (tint `amber-400/10`) |
 | `plugin.connector` | `gray-870` | Nested-content connector lines |
+| `plugin.skills-chip-bg` | `violet-400/10` | "{n} skills" summary chip on a plugin card |
+| `plugin.servers-chip-bg` | `blue-400/10` | "{n} servers" summary chip |
+| `plugin.hooks-chip-bg` | `amber-400/10` | "{n} hooks" summary chip |
+| `plugin.row-hover` | `gray-930` | Hover on a plugin card's skill and server rows |
 
 #### Overlays (dialog, popover, palette, sheet, toast, floating bar)
 
@@ -556,6 +560,8 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `agent-card.logo` | 44 | `size-agent-card-logo` |  |
 | `plugin-card.padding` | 22 | `p-plugin-card` |  |
 | `plugin-card.row-height` | 36 | `h-plugin-card-row` | Tree rows |
+| `plugin-card.gap` | 12 | `gap-plugin-card` | Between the masonry columns; each card's wrapper adds 12 below |
+| `plugin-card.tile` | 40 | `size-plugin-card-tile` | Plugin icon or monogram tile |
 | `add-card.gap` | 12 | `gap-add-card` | Grid gap |
 | `add-card.min-height` | 120 | `min-h-add-card` |  |
 
@@ -729,6 +735,10 @@ Mono caption 10.5–11 / `.16em` uppercase `group.label` plus a count in `group.
 ### Card (Inbox)
 
 `card.bg`, `card.radius`, `card.border`, `card.padding`. Header grid: `card.tile` icon tile (`tone.*`) · title/tag/text · actions. Resolve animation: `opacity 0; transform: translateX(24px) scale(.985)` over 280ms, then removed.
+
+### Plugin card (Plugins)
+
+`card.bg`, `plugin-card.radius`, 1px `card.border`, in 3 CSS columns with `plugin-card.gap`; a card never breaks across columns. Top, `plugin-card.padding`: a `plugin-card.tile` tile on the left, the plugin's own icon from the inventory's data URL as an `<img>` with the name as its alt, or the name's first letter on `button.secondary-bg` when the inventory carries none; the tile is never dimmed, a disabled plugin says so with its pill. On the right the version pill (`pill.version-bg` / `pill.version-text`, `type.version-pill`), "no version" when empty, after a Disabled pill (`pill.disabled-bg` / `pill.disabled-text`) when the agent client turned the plugin off. Then the name in `type.plugin-name`, "{Agent} · {marketplace}" in `text.muted` ("local" when the marketplace is empty), and the summary chips: "{n} skills", "{n} servers", "{n} hooks" in `type.plugin-chip`, each on its `plugin.*-chip-bg` with a 6px dot in `plugin.*-dot`, a zero count left out. Contents under a `card.border` hairline: the groups SKILLS, SERVERS, HOOKS, each a caption and `plugin-card.row-height` tree rows with a `plugin.connector` line (the last row's stops at the middle), the group's dot, the name, mono meta (`type.technical-sm`, `text.caption`: a server's transport, a hook's event) and, on a skill or server row, a chevron; those rows open the skill in Skills or the server in MCP servers and hover `plugin.row-hover`. A hook row opens nothing.
 
 ### Toast
 
