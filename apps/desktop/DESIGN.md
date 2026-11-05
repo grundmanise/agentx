@@ -239,6 +239,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | Token | Primitive | Element |
 | --- | --- | --- |
 | `logo.bg` | `white` | Round agent client logo |
+| `logo.off-bg` | `gray-800` | The disc of a logo for a declaration the agent client turned off; its mark is at 50% and greyscale |
 | `logo.ring` | = parent bg | 2px ring between overlapping logos (`shell.content-bg`, `overlay.bg`, `card.bg`…) |
 | `agent-chip.off-bg` | `gray-950` | Toggle chip, off |
 | `agent-chip.off-border` | `gray-870` |  |
@@ -700,7 +701,7 @@ Track `segmented.track-bg`, `segmented.track-border`, `segmented.radius`, `segme
 
 ### Agent client logo chip
 
-Round, `logo.bg`, `padding:3–4px`, `background-size:contain`, logo from an image bundled with the app (never fetched from the network). Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (agent client toggle chips), 44 (agent client cards). Overlap with `logo.overlap` and a `logo.ring`-wide ring (`box-shadow: 0 0 0 2px <parent bg>`). Every logo carries `title="<agent client name>"`. A logo for a declaration the agent client turned off (a server row's agent with `enabled` false) is at 45% opacity, and its title says so: "{Agent} turned this server off". The bundled logos (`src/assets/logos`, listed in its README) are the clients' official marks as the vendors publish them, never marks drawn for the app; a client without a bundled mark gets the monogram below.
+Round, `logo.bg`, `padding:3–4px`, `background-size:contain`, logo from an image bundled with the app (never fetched from the network). Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (agent client toggle chips), 44 (agent client cards). Overlap with `logo.overlap` and a `logo.ring`-wide ring (`box-shadow: 0 0 0 2px <parent bg>`). Every logo carries `title="<agent client name>"`. A logo for a declaration the agent client turned off (a server row's agent with `enabled` false) keeps an opaque disc in `logo.off-bg`, with the mark at 50% opacity and greyscale (a monogram's letter in `logo.bg`), so a neighbour's ring never shows through it; its title says so: "{Agent} turned this server off". The bundled logos (`src/assets/logos`, listed in its README) are the clients' official marks as the vendors publish them, never marks drawn for the app; a client without a bundled mark gets the monogram below.
 
 ### Skill glyph (16px, leading the row)
 

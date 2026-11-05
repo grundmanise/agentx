@@ -123,9 +123,12 @@ test.describe("rows", () => {
     const linear = row(page, "linear");
     await expect(linear).toContainText(LINEAR_URL);
     await expect(linear.getByText("sse", { exact: true })).toBeVisible();
+    const off = linear.getByTitle("Codex turned this server off");
+    await expect(off).toBeVisible();
+    await expect(off).toHaveAttribute("data-off", "true");
     await expect(
-      linear.getByTitle("Codex turned this server off")
-    ).toBeVisible();
+      linear.getByTitle("Gemini CLI", { exact: true })
+    ).not.toHaveAttribute("data-off");
     await expect(
       linear.getByTitle("Gemini CLI", { exact: true })
     ).toBeVisible();
