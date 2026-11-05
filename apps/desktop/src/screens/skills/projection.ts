@@ -511,6 +511,11 @@ export interface FilesRequest {
   diff?: string;
 }
 
+/** The last segment of an occurrence's path: the skill directory's own name. */
+const LAST_SEGMENT = /(?<name>[^/]+)\/*$/u;
+const directoryName = (path: string) =>
+  LAST_SEGMENT.exec(path)?.groups?.name ?? "";
+
 /**
  * The one occurrence a plugin's skill or a skill a client holds on its own is read and shown
  * from, so that `skill files` and Show in Finder meet the same copy: among the user-scope
@@ -532,10 +537,11 @@ export const occurrenceOf = (row: SkillRow): Occurrence | undefined => {
 
 /**
  * How `skill files` names a skill, and whether `skill diff` is read for it: a library skill by its
- * name, a plugin's as `<plugin>:<name>`, and a skill a client holds in its own skills directory,
- * which is neither, with `--configuration`, the one `occurrenceOf` chooses. Only a modified skill
- * of a source or one of your own with edits not published has a diff. Undefined when the CLI has
- * no way to name it.
+ * name, a plugin's as `<plugin>:<directory>`, and a skill a client holds in its own skills
+ * directory, which is neither, by its directory with `--configuration`. The CLI finds a plugin's
+ * or a configuration's skill by its directory's name, not the name its frontmatter gives, so the
+ * occurrence `occurrenceOf` chooses names it. Only a modified skill of a source or one of your
+ * own with edits not published has a diff. Undefined when the CLI has no way to name it.
  */
 export const filesRequestOf = (row: SkillRow): FilesRequest | undefined => {
   if (row.entry !== undefined && row.kind !== "plugin") {
@@ -547,10 +553,11 @@ export const filesRequestOf = (row: SkillRow): FilesRequest | undefined => {
   if (occurrence === undefined) {
     return undefined;
   }
+  const directory = directoryName(occurrence.path);
   if (row.kind === "plugin") {
-    return { args: [`${occurrence.plugin ?? ""}:${row.name}`] };
+    return { args: [`${occurrence.plugin ?? ""}:${directory}`] };
   }
-  return { args: [row.name, "--configuration", occurrence.configuration] };
+  return { args: [directory, "--configuration", occurrence.configuration] };
 };
 
 /**

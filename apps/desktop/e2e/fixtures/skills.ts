@@ -554,3 +554,30 @@ export const deletedWithFrontMatter: DiffEvent = diffEvent(
     "",
   ].join("\n")
 );
+
+/**
+ * A skill two clients each hold as a directory of their own, with the same content, whose
+ * frontmatter name is not its directory's name: the CLI reads and the app shows the copy that
+ * comes first by configuration, named by its directory.
+ */
+export const meetingNotes: SkillNode = {
+  content_hash: "h-meeting",
+  description: "Notes of every meeting, kept by two clients",
+  logical_id: "skill:h-meeting",
+  name: "Meeting Notes",
+  occurrences: [
+    occurrence(
+      "cursor",
+      "meeting-notes",
+      "directory",
+      "/home/me/.cursor/skills/meeting-notes"
+    ),
+    occurrence(
+      "claude-code",
+      "meeting-notes",
+      "directory",
+      "/home/me/.claude-code/skills/meeting-notes"
+    ),
+  ],
+  physical_id: "skill:h-meeting",
+};

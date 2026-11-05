@@ -7,8 +7,10 @@ import {
   adoption,
   deletedWithFrontMatter,
   fileReads,
+  filesOf,
   history,
   inventory,
+  meetingNotes,
   releaseNotesDiffs,
   reviewDiffs,
 } from "./fixtures/skills.ts";
@@ -453,4 +455,35 @@ test("a failed read of the edits is read again on the next selection", async ({
       "skill files review --json",
       "skill files review --json",
     ]);
+});
+
+test("a skill two clients hold is read and shown from the same copy, by its directory", async ({
+  cli,
+  page,
+}) => {
+  cli.register(
+    ["skill", "files", "meeting-notes", "--configuration", "claude-code"],
+    { events: filesOf("meeting-notes") }
+  );
+  await openSkills(cli, page, "/#/skills/skill%3Ah-meeting", {
+    ...inventory,
+    skills: [...inventory.skills, meetingNotes],
+  });
+  const section = files(page, "Meeting Notes");
+  await expect(fileRow(section, "SKILL.md")).toBeVisible();
+  // The copy that comes first by configuration, named by its directory, not its frontmatter name.
+  expect(later(cli)).toEqual([
+    [
+      "skill",
+      "files",
+      "meeting-notes",
+      "--configuration",
+      "claude-code",
+      "--json",
+    ],
+  ]);
+  await reveal(section, "SKILL.md").click();
+  expect(cli.reveals).toEqual([
+    ["/home/me/.claude-code/skills/meeting-notes/SKILL.md"],
+  ]);
 });
