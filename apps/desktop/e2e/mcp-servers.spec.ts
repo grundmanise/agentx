@@ -162,7 +162,8 @@ test.describe("rows", () => {
       page.getByText("No MCP servers found in your agents.")
     ).toBeVisible();
     await expect(table(page)).toHaveCount(0);
-    await expect(checkTools(page)).toHaveAttribute("title", "No check yet");
+    // Nothing to check: the button is not there.
+    await expect(checkTools(page)).toHaveCount(0);
     expect(later(cli)).toEqual([]);
   });
 });

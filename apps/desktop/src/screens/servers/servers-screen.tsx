@@ -43,8 +43,9 @@ const CheckTools = ({ rows }: { rows: ServerRow[] }) => {
 /**
  * The MCP servers screen: every server the agent configurations declare, once per server however
  * many declare it, with its transport, how many tools it exposed the last time agentx checked, and
- * the agents that declare it. Read-only: Check tools runs a scan with a handshake and nothing here
- * edits, starts or stops a server. No environment or header value is ever shown.
+ * the agents that declare it. Read-only: Check tools runs a scan with a handshake, and is there
+ * only while a server is declared; nothing here edits, starts or stops a server. No environment
+ * or header value is ever shown.
  */
 export const ServersScreen = () => {
   const inventory = useAppStore((s) => s.inventory);
@@ -64,7 +65,7 @@ export const ServersScreen = () => {
           <h1 className="type-page-title text-text-primary m-0">MCP servers</h1>
           <span className="type-caption text-text-caption">Read-only</span>
         </div>
-        <CheckTools rows={rows} />
+        {rows.length > 0 && <CheckTools rows={rows} />}
       </header>
       {rows.length === 0 ? (
         <p className="type-secondary text-text-hint m-0">
