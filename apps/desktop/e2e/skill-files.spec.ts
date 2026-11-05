@@ -70,8 +70,13 @@ const rowNames = async (where: Locator) =>
     );
 
 /** Opens the Skills screen on the fixture machine at `path`, with every read registered. */
-const openSkills = async (cli: MockCli, page: Page, path: string) => {
-  cli.onServeStart({ events: [inventory] });
+const openSkills = async (
+  cli: MockCli,
+  page: Page,
+  path: string,
+  machine: typeof inventory = inventory
+) => {
+  cli.onServeStart({ events: [machine] });
   cli.register(["adopt"], { events: adoption });
   cli.register(["skill", "history", "pdf-letters"], { events: history });
   cli.register(["skill", "history", "release-notes"], { events: [] });
@@ -417,4 +422,35 @@ test("a removed file's line count is the count of the lines its pane shows", asy
   await expect(deletions).toHaveCount(6);
   await expect(deletions.first()).toHaveText("---");
   await expect(deletions.last()).toHaveText("Gone.");
+});
+
+test("a failed read of the edits is read again on the next selection", async ({
+  cli,
+  page,
+}) => {
+  await openSkills(cli, page, "/#/skills/pdf");
+  cli.register(["skill", "diff", "review"], {
+    events: [
+      { code: "refused", message: "review cannot be compared", type: "error" },
+    ],
+    exitCode: 6,
+  });
+  await row(page, "review").click();
+  const section = files(page, "review");
+  // The files show without their edits, and the caption says so.
+  await expect(section).toContainText("The edits could not be read");
+  await expect(fileRow(section, "SKILL.md")).toContainText("7 lines");
+  await expect(fileRow(section, "SKILL.md")).not.toContainText("by you");
+  await page.getByRole("button", { name: "Dismiss" }).click();
+  await row(page, "pdf").click();
+  await row(page, "review").click();
+  await expect
+    .poll(() => sortedLater(cli))
+    .toEqual([
+      "skill diff review --json",
+      "skill diff review --json",
+      "skill files pdf --json",
+      "skill files review --json",
+      "skill files review --json",
+    ]);
 });

@@ -149,7 +149,9 @@ export const loadFiles = async (
     if (diff.exitCode === 0) {
       read.diffs = diff.events.filter((e) => e.type === "diff");
     } else {
+      // The files are shown without their edits, and both are read again on the next selection.
       read.diffFailed = true;
+      fileVersions.delete(key);
     }
   }
   useAppStore.setState((s) => ({ files: { ...s.files, [key]: read } }));
