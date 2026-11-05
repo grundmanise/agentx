@@ -278,7 +278,7 @@
   --color-file-row-path-open: var(--gray-50);
   --color-file-row-meta: var(--gray-500);
   --color-file-row-edited-label: var(--color-accent-attention);
-  --color-diff-added-bg: rgb(255 193 94 / 0.08);
+  --color-diff-added-bg: rgb(212 255 79 / 0.12);
   --color-diff-removed-bg: rgb(255 123 114 / 0.08);
   --color-diff-yours-label: var(--color-accent-yours);
   --color-diff-yours-bg: rgb(182 156 255 / 0.06);

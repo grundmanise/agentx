@@ -312,7 +312,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `file-row.path-open` | `gray-50` | Path of the file whose pane is open |
 | `file-row.meta` | `gray-500` | "{n} lines" |
 | `file-row.edited-label` | `accent.attention` | "edited by you" / "added by you" |
-| `diff.added-bg` | `amber-400/8` | Added line tint (marker "+" `accent.attention`) |
+| `diff.added-bg` | `lime-400/12` | Added line tint (marker "+" `accent.primary`) |
 | `diff.removed-bg` | `red-400/8` | Removed line tint (marker "−" `accent.danger`) |
 | `diff.yours-label` | `accent.yours` | "Yours" label, dot and chosen-pane ring |
 | `diff.yours-bg` | `violet-400/6` | "Yours" pane ground |

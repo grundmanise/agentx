@@ -2,7 +2,8 @@ import { cva } from "class-variance-authority";
 
 // The Code pane (DESIGN.md §6 "Code pane"): a file's lines in a grid of line number, marker and
 // text, in `code.bg`, `type.code`, at most `code.max-height` high and scrolling past it. The tints
-// of a change: an added line with "+" on `diff.added-bg`, a removed line with "−" on
+// of a change: an added line with "+" in `accent.primary` on `diff.added-bg`, the palette's green,
+// a removed line with "−" in `accent.danger` on
 // `diff.removed-bg` and no number. The whole rendering of a file and of a diff is here, from the
 // file's content and the unified diff git wrote, so that another renderer could take its place
 // without touching a screen.
@@ -158,7 +159,7 @@ const lineVariants = cva("grid-cols-code gap-x-code grid", {
 const markerVariants = cva("text-center", {
   variants: {
     kind: {
-      added: "text-accent-attention",
+      added: "text-accent-primary",
       plain: "",
       removed: "text-accent-danger",
     },
