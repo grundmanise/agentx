@@ -10,6 +10,7 @@ import { SkillGlyph } from "#/components/skill-glyph.tsx";
 import { bannerFor } from "#/screens/skills/banners.ts";
 import type { Banner } from "#/screens/skills/banners.ts";
 import { detailsOf } from "#/screens/skills/details.ts";
+import { FilesSection } from "#/screens/skills/files.tsx";
 import { HistorySection } from "#/screens/skills/history.tsx";
 import { openSkill } from "#/screens/skills/open.ts";
 import {
@@ -196,10 +197,11 @@ export const SkillDetail = ({
         <Caption>Agents</Caption>
         <Agents row={row} configurations={configurations} />
       </section>
-      <section aria-label="Files" className="flex flex-col gap-3">
-        <Caption>Files</Caption>
-        {/* The file tree and the code pane come in a later change. */}
-      </section>
+      <FilesSection
+        row={row}
+        configurations={configurations}
+        heading={<Caption>Files</Caption>}
+      />
       <div className="gap-detail-columns grid grid-cols-2">
         <section aria-label="Details" className="flex flex-col gap-3">
           <Caption>Details</Caption>

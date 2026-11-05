@@ -149,6 +149,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `source-pill.active-bg` | `gray-50` | Source pill in Add, active |
 | `source-pill.active-text` | `on-accent` |  |
 | `button.toast-action-text` | `accent.primary` | Action inside a toast |
+| `button.split-divider` | `gray-800` | The 1px line between the two halves of a split button |
 
 #### Status pills
 
@@ -283,6 +284,8 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `popover.shadow` | `0 24px 60px -12px black/70` |  |
 | `popover.row-hover` | `gray-880` |  |
 | `popover.caption` | `gray-500` | SHOW / STATE / AGENTS |
+| `menu.row-hover` | `gray-880` | Menu row pointed at or focused |
+| `menu.shadow` | `0 24px 60px -12px black/70` | Menu |
 | `palette.row-text` | `gray-150` |  |
 | `palette.row-active` | `gray-870` |  |
 | `palette.icon` | `gray-400` | Search icon and row icons |
@@ -299,7 +302,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | --- | --- | --- |
 | `code.bg` | `gray-980` | Code pane, hunk block |
 | `code.border` | `gray-890` | Hunk block border |
-| `code.line-number` | `gray-700` |  |
+| `code.line-number` | `gray-400` | Line numbers: 5.3:1 on `code.bg`, 4:1 on the added tint, where the marker carries the meaning |
 | `code.frontmatter` | `gray-400` | Front-matter and keys |
 | `code.heading` | `gray-50` | Markdown headings |
 | `code.list` | `gray-150` | List items |
@@ -308,10 +311,11 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `code.context` | `gray-500` | Context lines around a change |
 | `file-row.hover` | `gray-920` | File tree row hover |
 | `file-row.divider` | `gray-890` |  |
-| `file-row.path` | `gray-200` | Path; `gray-50` when the file is open |
+| `file-row.path` | `gray-200` | Path |
+| `file-row.path-open` | `gray-50` | Path of the file whose pane is open |
 | `file-row.meta` | `gray-500` | "{n} lines" |
 | `file-row.edited-label` | `accent.attention` | "edited by you" / "added by you" |
-| `diff.added-bg` | `amber-400/8` | Added line tint (marker "+" `accent.attention`) |
+| `diff.added-bg` | `lime-400/12` | Added line tint (marker "+" `accent.primary`) |
 | `diff.removed-bg` | `red-400/8` | Removed line tint (marker "−" `accent.danger`) |
 | `diff.yours-label` | `accent.yours` | "Yours" label, dot and chosen-pane ring |
 | `diff.yours-bg` | `violet-400/6` | "Yours" pane ground |
@@ -567,6 +571,9 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `popover.gap` | 16 | `gap-popover` | Between groups |
 | `popover.row-height` | 32–34 |  |  |
 | `popover.offset` | 8 | none: a number passed to the popover's `sideOffset` | Gap from its anchor |
+| `menu.min-width` | 240 | `min-w-menu` | Menu |
+| `menu.padding` | 6 | `p-menu` | Around the menu's rows |
+| `menu.offset` | 4 | none: a number passed to the menu's `sideOffset` | Gap from its trigger |
 | `sheet.width` | 420 | `w-sheet` | History sheet |
 | `sheet.inset` | 10 | `top-sheet right-sheet bottom-sheet` | From top/right/bottom |
 | `sheet.padding` | 28 32 | `py-sheet-y px-sheet` |  |
@@ -589,10 +596,10 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | --- | --- | --- | --- |
 | `code.padding-y` | 14 | `py-code` | Pane top/bottom |
 | `code.gutter` | 48 12 | `grid-cols-code` (with the text column) | Line-number and marker columns |
-| `code.gap` | 10–14 |  | Between gutter and text |
-| `code.max-height` | 340–380 |  |  |
-| `file-row.height` | 44–46 |  | File tree row |
-| `file-row.padding-x` | 16 | `px-file-row` |  |
+| `code.gap` | 12 | `gap-x-code` | Between gutter and text |
+| `code.max-height` | 340 | `max-h-code` | The pane scrolls past it |
+| `file-row.height` | 44 | `h-file-row` | File tree row |
+| `file-row.padding-x` | 16 | `px-file-row`, `right-file-row` for the control at the row's end |  |
 | `hunk.gap` | 12 | `gap-hunk` | Between hunk blocks |
 | `hunk.header-padding` | 8 8 8 16 | `py-hunk-header pr-hunk-header pl-hunk-header-left` |  |
 | `hunk.pane-margin` | 4 8 | `my-hunk-pane-y mx-hunk-pane` | Around the two panes |
@@ -634,6 +641,8 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `row.radius` | 12 | Split list rows |
 | `table.row-radius` | 14 | Server rows |
 | `popover.row-radius` | 10 | Popover rows, Reset button |
+| `menu.radius` | 12 | Menu |
+| `menu.row-radius` | 8 | Menu rows |
 | `card.radius` | 18 | Inbox cards, review file cards |
 | `card.tile-radius` | 10 | Icon tile |
 | `file-card.radius` | 16 | File tree card |
@@ -741,6 +750,14 @@ The machine's label from the inventory, under the product name in the sidebar: `
 
 Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot` round (`timeline.dot-install` for an upstream import, `timeline.dot-update` for a commit made with Git, `timeline.dot-yours` for one agentx wrote), centred in a box as high as the entry's first line (`timeline.line` beside the subject text, `timeline.button-line` beside a small button), a 1px `timeline.connector` from the bottom of that box to the next entry. Entry: subject `type.timeline-entry` in `text.primary`, meta `type.timeline-meta` in `timeline.meta` ("{date} · {n} files", then "made with Git" or "from the original"). Final item when truncated: hollow dot (inset ring 1.5px `timeline.more-ring`) and a ghost button "Show all {n}", which opens the History sheet.
 
+### Menu
+
+A list of actions under a button (`src/components/ui/dropdown-menu.tsx`): `menu.min-width`, `menu.radius`, `overlay.bg` with 1px `overlay.border` and `menu.shadow`, `menu.padding` around the rows, `menu.offset` below its trigger and aligned to its end. A row is `menu.row-radius` with `menu.row-hover` when pointed at or focused; its lines stack: a `type.body` line in `text.primary`, then a `type.technical-sm` line in `text.caption` such as a path. Escape or a click outside closes it. No animation.
+
+### Split button
+
+Two ghost icon buttons that meet with no gap and share one outline, told apart by a 1px `button.split-divider` on the chevron's left edge: the action (`button.icon-size` square, rounded at its left end only) and a narrower chevron pointing down that opens the action's menu (rounded at its right end only). Only the action shows when there is nothing to choose. Show in Finder on a file row is one.
+
 ### Popover (Filter)
 
 `popover.width`, `popover.radius`, `overlay.bg` with 1px `overlay.border` and `popover.shadow`, 14px padding, `popover.gap` between its groups, `popover.offset` below its anchor. Each group opens with a caption in `popover.caption`. SHOW is a row of pills (`type.secondary`, count in `type.technical-sm` `text.caption`; the chosen one `button.secondary-bg` and `text.primary`), STATE a segmented control, AGENTS rows of `popover.row-radius` with the round checkbox, a 20px logo and the name. Reset filters is a ghost button, shown while a filter is applied. A click outside or Escape closes it.
@@ -755,7 +772,11 @@ A client with no bundled logo shows the first letter of its name in `type.pill`,
 
 ### Code pane
 
-`code.bg`, mono 12.5, `line-height:1.75`, grid `code.gutter 1fr` (line no. `code.line-number` right-aligned · marker · text). Front-matter and keys `code.frontmatter`, headings `code.heading`, list items `code.list`, prose `code.prose`. Diff tints: added line `+` on `diff.added-bg`, removed line `−` on `diff.removed-bg` with no number.
+`code.bg`, mono 12.5, `line-height:1.75`, grid `code.gutter 1fr` (line no. `code.line-number` right-aligned · marker · text). Front-matter and keys `code.frontmatter`, headings `code.heading`, list items `code.list`, prose `code.prose`. Diff tints: added line `+` on `diff.added-bg`, removed line `−` on `diff.removed-bg` with no number. On a tinted line, front matter takes `code.prose` so it keeps 4.5:1.
+
+### File list (detail pane FILES)
+
+A `card.bg` card, `file-card.radius`, 1px `card.border`, holding one row per file, `file-row.height` high with `file-row.padding-x`, a 1px `file-row.divider` hairline between rows and `file-row.hover` on hover or focus: a chevron (`rotate(90deg)` in .15s when the row is open), the path in `type.technical` (`file-row.path`, `file-row.path-open` while open), a `file-row.edited-label` label for a file the user changed, and "{n} lines", "binary" or "Too large to show ({size})" in `file-row.meta` at the right. SKILL.md comes first and open; the rest follow by path, a file the user removed among them. An open row shows the file in the Code pane below it. A row of a file on disk also has a "Show in Finder" split button, beside the trigger and never inside it, over the meta text at the row's end: while the row is hovered, holds the focus or has its menu open, the meta fades out and the button fades in at that spot, both in .15s, and the row's layout never changes (the meta stays laid out, only its opacity moves); it is in the tab order throughout. A row the edits removed has no button and keeps its meta. The button opens the file at the skill's first place, the library for a skill the library holds, else its first placement in the order the row lists its agents; the chevron's menu lists every other place, one row per placement, "{Agent name}", "{Agent name} ({plugin} plugin)" for a plugin's copy, with the path as the inventory carries it, and opens the file there. A skill with one place has no chevron.
 
 ### Key hint
 
@@ -780,6 +801,7 @@ The product mark is `shell.logo-mark` on `shell.logo-bg`, 30px `shell.logo-radiu
 - Hover/background changes: no transition or ≤ .18s.
 - Switches: `.18s` background.
 - Chevrons: `rotate(90deg)` with `.15s`.
+- File row control: the meta text and the Show in Finder button swap by opacity in `.15s` on hover.
 - Floating bar: `translateY(24px) → 0`, opacity 0 → 1, `.22s ease`.
 - Card resolve: 280ms, see §6.
 - Spinner-style icons (Check updates, Check tools): one full rotation `.9–1s ease` (`animate-turn-once`: 1s ease, once, while the command runs), then a toast.

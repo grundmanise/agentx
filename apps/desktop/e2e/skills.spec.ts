@@ -3,8 +3,12 @@ import type { Locator, Page } from "@playwright/test";
 import {
   adoption,
   configurations,
+  fileReads,
+  filesOf,
   history,
   inventory,
+  releaseNotesDiffs,
+  reviewDiffs,
 } from "./fixtures/skills.ts";
 import {
   configuration,
@@ -62,15 +66,30 @@ const openSkills = async (cli: MockCli, page: Page, path = "/#/skills") => {
   cli.register(["skill", "history", "pdf-letters"], { events: history });
   cli.register(["skill", "history", "release-notes"], { events: [] });
   cli.register(["skill", "history", "draft"], { events: [] });
+  for (const read of fileReads) {
+    cli.register(["skill", "files", ...read.args], { events: read.events });
+  }
+  cli.register(["skill", "diff", "review"], { events: reviewDiffs });
+  cli.register(["skill", "diff", "release-notes"], {
+    events: releaseNotesDiffs,
+  });
+  cli.register(["skill", "diff", "pdf-letters"], { events: [] });
   await page.goto(path);
   await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
   await expect(row(page, "pdf")).toBeVisible();
 };
 
+/** The command lines the screen itself ran, but the reads of a skill's files and edits. */
+const notFiles = (cli: MockCli) =>
+  later(cli).filter((l) => !["files", "diff"].includes(l[1] ?? ""));
+
 test.afterEach(({ cli }) => {
-  // Read-only: nothing on this screen runs a command but the read of a skill's history.
+  // Read-only: nothing on this screen runs a command but the reads of a skill's history, files
+  // and edits (e2e/skill-files.spec.ts covers the last two).
   for (const line of later(cli)) {
-    expect(line.slice(0, 2)).toEqual(["skill", "history"]);
+    expect(["skill files", "skill diff", "skill history"]).toContain(
+      line.slice(0, 2).join(" ")
+    );
   }
 });
 
@@ -196,6 +215,7 @@ test.describe("the list", () => {
         },
       ],
     });
+    cli.register(["skill", "files", "scratch"], { events: filesOf("scratch") });
     await page.goto("/#/skills");
     await expect(row(page, "scratch")).toBeVisible();
     const logos = row(page, "scratch").getByRole("img");
@@ -437,7 +457,7 @@ test.describe("the detail pane", () => {
           - heading "History" [level=2]
           - paragraph: History is kept for your own skills
     `);
-    expect(later(cli)).toEqual([]);
+    expect(notFiles(cli)).toEqual([]);
     // The fork pill opens the fork.
     await article
       .getByRole("button", { name: "Forked as pdf-letters" })
@@ -454,7 +474,9 @@ test.describe("the detail pane", () => {
     await openSkills(cli, page, "/#/skills/pdf-letters");
     const article = pane(page, "pdf-letters");
     await expect(article.getByRole("list", { name: "History" })).toBeVisible();
-    expect(later(cli)).toEqual([["skill", "history", "pdf-letters", "--json"]]);
+    expect(notFiles(cli)).toEqual([
+      ["skill", "history", "pdf-letters", "--json"],
+    ]);
     await expect(article).toMatchAriaSnapshot(`
       - article "pdf-letters":
         - text: Your skill · Enabled
@@ -529,7 +551,9 @@ test.describe("the detail pane", () => {
     await row(page, "pdf").click();
     await row(page, "pdf-letters").click();
     await expect(article.getByRole("list", { name: "History" })).toBeVisible();
-    expect(later(cli)).toEqual([["skill", "history", "pdf-letters", "--json"]]);
+    expect(notFiles(cli)).toEqual([
+      ["skill", "history", "pdf-letters", "--json"],
+    ]);
 
     // The skill changes and its history cannot be read: the entries of the version before
     // are not shown as if they were this version's.
@@ -547,7 +571,7 @@ test.describe("the detail pane", () => {
       article.getByText("The history could not be read")
     ).toBeVisible();
     await expect(article.getByRole("list", { name: "History" })).toHaveCount(0);
-    expect(later(cli)).toEqual([
+    expect(notFiles(cli)).toEqual([
       ["skill", "history", "pdf-letters", "--json"],
       ["skill", "history", "pdf-letters", "--json"],
     ]);
@@ -605,7 +629,7 @@ test.describe("the detail pane", () => {
           - heading "History" [level=2]
           - paragraph: History is kept for your own skills
     `);
-    expect(later(cli)).toEqual([]);
+    expect(notFiles(cli)).toEqual([]);
   });
 
   test("an upstream-removed skill shows the banner, and a displaced placement its chip", async ({

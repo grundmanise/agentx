@@ -6,11 +6,14 @@ import { create } from "zustand";
 
 import type {
   AdoptionEvent,
+  DiffEvent,
   HandshakeError,
   HistoryEvent,
   InventoryEvent,
+  MachineEvent,
   ReconcileEvent,
   Settings,
+  SkillFileEvent,
   SourceEvent,
   UpdateAvailableEvent,
 } from "#/cli/events.gen.ts";
@@ -74,6 +77,8 @@ export interface AppState {
   /** The update candidates, by skill name, from the last update check. */
   updates: Record<string, UpdateAvailableEvent>;
   settings: Settings | undefined;
+  /** This machine and where agentx keeps its files, from `machine`. */
+  machine: MachineEvent | undefined;
   sources: SourceEvent[];
   /** What `adopt` would take over, from its preview. */
   adoption: AdoptionEvent[];
@@ -83,6 +88,8 @@ export interface AppState {
   activity: ActivityEntry[];
   /** The history of each of your own skills read so far, by name. */
   histories: Record<string, HistoryRead>;
+  /** The files of each skill read so far, by the row's key. */
+  files: Record<string, FilesRead>;
   /**
    * The declarations whose handshake failed in the last Check tools of this session, from that
    * one-shot's inventory, which is not applied. Replaced by the next check; gone on a restart.
@@ -106,14 +113,32 @@ export type HistoryRead =
   | { version: string; entries: HistoryEvent[]; failed?: undefined }
   | { version: string; entries?: undefined; failed: true };
 
+/**
+ * One read of `skill files` for a skill, kept with the version of the skill it was read for, as a
+ * HistoryRead is. For a modified skill it also holds the `diff` events of `skill diff <name>`,
+ * the files edited since the version the skill is compared with; `diffFailed` when that read
+ * failed while the files were read.
+ */
+export type FilesRead =
+  | {
+      version: string;
+      files: SkillFileEvent[];
+      diffs?: DiffEvent[];
+      diffFailed?: boolean;
+      failed?: undefined;
+    }
+  | { version: string; files?: undefined; failed: true };
+
 export const useAppStore = create<AppState>()(() => ({
   activity: [],
   adoption: [],
   applied: undefined,
+  files: {},
   freshness: { kind: "stale" },
   handshakeFailures: [],
   histories: {},
   inventory: undefined,
+  machine: undefined,
   pending: {},
   reconciles: [],
   refreshes: {},

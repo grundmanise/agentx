@@ -1,7 +1,8 @@
 // The Rust side hosts the window and supervises the CLI: it finds the CLI, reads the login shell's
 // environment, runs one-shot commands and keeps the serve child open. It has no file, git or
 // network code of its own beyond writing serve's log, and starts no program but the login shell
-// and agentx (ADR 0001).
+// and agentx (ADR 0001). Its one call to the operating system beside that is the opener plugin,
+// which shows a path selected in Finder (the file manager elsewhere) when the user asks.
 
 mod logfile;
 mod shell;
@@ -72,6 +73,7 @@ fn log_dir(env: &HashMap<String, String>) -> PathBuf {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let base_env: HashMap<String, String> = std::env::vars_os()
                 .map(|(k, v)| {

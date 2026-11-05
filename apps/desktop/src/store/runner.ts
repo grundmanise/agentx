@@ -25,6 +25,7 @@ const READS = new Set([
   "source skills",
   "skill list",
   "skill diff",
+  "skill files",
   "skill history",
 ]);
 

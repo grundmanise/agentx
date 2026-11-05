@@ -199,7 +199,7 @@ test("the mock refuses a command line the CLI would refuse", async ({
     window.transport.run(["skill", "add", u, "--tooo", "x"]);
     window.transport.run(["skill", "addd", u]);
     window.transport.run(["skill", "list", "--remote=yes"]);
-    window.transport.run(["machine"]);
+    window.transport.run(["skill", "list"]);
   }, url);
 
   await expect(received(page)).toHaveCount(4);
@@ -208,7 +208,7 @@ test("the mock refuses a command line the CLI would refuse", async ({
     `"skill add ${url} --tooo x": agentx skill add has no flag --tooo`,
     `"skill addd ${url}": agentx skill has no command "addd"`,
     `"skill list --remote=yes": --remote is a boolean flag and takes no value, but was given "yes"`,
-    `"machine": the test registered no reply`,
+    `"skill list": the test registered no reply`,
   ]);
   const errors = await items(page);
   expect(errors.map((item) => item.what)).toEqual([
@@ -221,6 +221,6 @@ test("the mock refuses a command line the CLI would refuse", async ({
     ["skill", "add", url, "--tooo", "x", "--json"],
     ["skill", "addd", url, "--json"],
     ["skill", "list", "--remote=yes", "--json"],
-    ["machine", "--json"],
+    ["skill", "list", "--json"],
   ]);
 });
