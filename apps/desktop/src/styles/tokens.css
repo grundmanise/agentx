@@ -217,7 +217,6 @@
 
   /* Agent logos and toggle chips */
   --color-logo-bg: var(--white);
-  --color-logo-off-bg: var(--gray-800);
   --color-agent-chip-off-bg: var(--gray-950);
   --color-agent-chip-off-border: var(--gray-870);
   --color-agent-chip-on-bg: rgb(212 255 79 / 0.06);

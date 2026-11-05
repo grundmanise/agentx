@@ -21,34 +21,27 @@ const logos: Record<string, string> = {
   windsurf,
 };
 
-/**
- * The colour of the monogram's letter, read from the tokens as the page has them: `on-accent` on
- * the white disc, `logo.bg` (white) on the muted disc of a logo that is off.
- */
-const letterColour = (off: boolean) =>
+/** The colour of the monogram's letter: `on-accent`, read from the tokens as the page has them. */
+const letterColour = () =>
   getComputedStyle(document.documentElement)
-    .getPropertyValue(off ? "--color-logo-bg" : "--color-on-accent")
+    .getPropertyValue("--color-on-accent")
     .trim();
 
 /** A monogram as an image: the first letter of the client's name, drawn in place. */
-const monogram = (name: string, off: boolean) => {
+const monogram = (name: string) => {
   const letter = name.slice(0, 1).toUpperCase();
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><text x="12" y="17.5" text-anchor="middle" font-family="system-ui, sans-serif" font-size="15" font-weight="600" fill="${letterColour(off)}">${letter}</text></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><text x="12" y="17.5" text-anchor="middle" font-family="system-ui, sans-serif" font-size="15" font-weight="600" fill="${letterColour()}">${letter}</text></svg>`;
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 };
 
 /** The sizes of DESIGN.md §6 "Agent client logo chip" this app uses so far, in pixels. */
 export type LogoSize = 16 | 20 | 24 | 28;
 
-// A round tile, white, or `logo.off-bg` for a declaration the client turned off; the ring
-// (`logo.ring`) is the parent's background, between stacked logos. The tile is always opaque, so a
-// neighbour's ring never shows through it.
-const tileVariants = cva("rounded-logo inline-flex flex-none", {
+// A round white tile, opaque whether or not the client turned the declaration off, so a
+// neighbour's ring never shows through it; the ring (`logo.ring`) is the parent's background,
+// between stacked logos.
+const tileVariants = cva("rounded-logo bg-logo-bg inline-flex flex-none", {
   variants: {
-    off: {
-      false: "bg-logo-bg",
-      true: "bg-logo-off-bg",
-    },
     ring: {
       false: "",
       true: "ring-row-chip-ring ring-2",
@@ -74,7 +67,7 @@ const markVariants = cva("block size-full object-contain", {
 
 /** The configuration a logo stands for, and what the logo says about it. */
 export interface LogoClient extends Pick<Configuration, "client" | "name"> {
-  /** The client turned this off: the disc is muted, the mark dimmed, and `title` says so. */
+  /** The client turned this off: the mark is dimmed on the white disc, and `title` says so. */
   off?: boolean;
   /** The tooltip, in place of the client's name. */
   title?: string;
@@ -104,9 +97,9 @@ export const AgentLogo = ({
 }: AgentLogoProps) => {
   const off = client.off === true;
   return (
-    <span className={tileVariants({ off, ring, size })}>
+    <span className={tileVariants({ ring, size })}>
       <img
-        src={logos[client.client] ?? monogram(client.name, off)}
+        src={logos[client.client] ?? monogram(client.name)}
         alt={decorative ? "" : client.name}
         aria-hidden={decorative ? true : undefined}
         title={client.title ?? client.name}
