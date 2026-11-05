@@ -139,11 +139,10 @@ test.describe("rows", () => {
     await expect(notes).toContainText(NOTES_COMMAND);
     await expect(notes.getByText("Not checked")).toBeVisible();
 
-    // The footnote names the latest signature_at.
-    await expect(
-      page.getByText(/^Tool counts come from the last check, Oct 21/u)
-    ).toContainText(
-      "Servers you turned off in an agent are never started, and header or environment values are never shown."
+    // Check tools says when the last check was: the latest signature_at.
+    await expect(checkTools(page)).toHaveAttribute(
+      "title",
+      /^Last check: Oct 21/u
     );
 
     await noSecrets(page);
@@ -160,7 +159,7 @@ test.describe("rows", () => {
       page.getByText("No MCP servers found in your agents.")
     ).toBeVisible();
     await expect(table(page)).toHaveCount(0);
-    await expect(checkTools(page)).toBeVisible();
+    await expect(checkTools(page)).toHaveAttribute("title", "No check yet");
     expect(later(cli)).toEqual([]);
   });
 });

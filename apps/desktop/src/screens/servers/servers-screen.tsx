@@ -13,14 +13,21 @@ const none: ServerRow[] = [];
 
 const columns = ["SERVER", "TRANSPORT", "TOOLS", "AGENTS"];
 
-/** The ghost Check tools: its icon turns once while the check runs (DESIGN.md §8). */
-const CheckTools = () => {
+/**
+ * The ghost Check tools: its icon turns once while the check runs (DESIGN.md §8). Its title says
+ * when the last check was, the latest `signature_at` over every server, or that none ran yet.
+ */
+const CheckTools = ({ rows }: { rows: ServerRow[] }) => {
   const checking = useChecking();
+  const when = latestCheck(rows);
   return (
     <Button
       variant="ghost"
       size="sm"
       aria-busy={checking}
+      title={
+        when === undefined ? "No check yet" : `Last check: ${formatDate(when)}`
+      }
       onClick={() => {
         void checkTools();
       }}
@@ -31,16 +38,6 @@ const CheckTools = () => {
       Check tools
     </Button>
   );
-};
-
-/** What the footnote says: when the tool counts were taken, and what the screen never does. */
-const footnote = (rows: ServerRow[]) => {
-  const when = latestCheck(rows);
-  const counts =
-    when === undefined
-      ? "No server has been checked yet."
-      : `Tool counts come from the last check, ${formatDate(when)}.`;
-  return `${counts} Servers you turned off in an agent are never started, and header or environment values are never shown.`;
 };
 
 /**
@@ -67,45 +64,40 @@ export const ServersScreen = () => {
           <h1 className="type-page-title text-text-primary m-0">MCP servers</h1>
           <span className="type-caption text-text-caption">Read-only</span>
         </div>
-        <CheckTools />
+        <CheckTools rows={rows} />
       </header>
       {rows.length === 0 ? (
         <p className="type-secondary text-text-hint m-0">
           No MCP servers found in your agents.
         </p>
       ) : (
-        <div className="flex flex-col gap-4">
-          <table
-            aria-label="MCP servers"
-            className="flex w-full border-separate border-spacing-0 flex-col"
-          >
-            <thead className="bg-shell-content-bg sticky top-0 flex flex-col">
-              <tr className="grid-cols-server gap-x-table-col h-table-header px-table-row border-shell-divider grid items-center border-b">
-                {columns.map((column) => (
-                  <th
-                    key={column}
-                    scope="col"
-                    className="type-caption text-table-header-text p-0 text-left font-normal"
-                  >
-                    {column}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="flex flex-col pt-1">
-              {rows.map((row) => (
-                <ServerRowItem
-                  key={row.key}
-                  row={row}
-                  configurations={configurations}
-                />
+        <table
+          aria-label="MCP servers"
+          className="flex w-full border-separate border-spacing-0 flex-col"
+        >
+          <thead className="bg-shell-content-bg sticky top-0 flex flex-col">
+            <tr className="grid-cols-server gap-x-table-col h-table-header px-table-row border-shell-divider grid items-center border-b">
+              {columns.map((column) => (
+                <th
+                  key={column}
+                  scope="col"
+                  className="type-caption text-table-header-text p-0 text-left font-normal"
+                >
+                  {column}
+                </th>
               ))}
-            </tbody>
-          </table>
-          <p className="type-footnote text-text-hint max-w-detail m-0 text-pretty">
-            {footnote(rows)}
-          </p>
-        </div>
+            </tr>
+          </thead>
+          <tbody className="flex flex-col pt-1">
+            {rows.map((row) => (
+              <ServerRowItem
+                key={row.key}
+                row={row}
+                configurations={configurations}
+              />
+            ))}
+          </tbody>
+        </table>
       )}
     </div>
   );
