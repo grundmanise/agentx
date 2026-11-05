@@ -149,6 +149,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `source-pill.active-bg` | `gray-50` | Source pill in Add, active |
 | `source-pill.active-text` | `on-accent` |  |
 | `button.toast-action-text` | `accent.primary` | Action inside a toast |
+| `button.split-divider` | `gray-800` | The 1px line between the two halves of a split button |
 
 #### Status pills
 
@@ -598,7 +599,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `code.gap` | 12 | `gap-x-code` | Between gutter and text |
 | `code.max-height` | 340 | `max-h-code` | The pane scrolls past it |
 | `file-row.height` | 44 | `h-file-row` | File tree row |
-| `file-row.padding-x` | 16 | `px-file-row` |  |
+| `file-row.padding-x` | 16 | `px-file-row`, `right-file-row` for the control at the row's end |  |
 | `hunk.gap` | 12 | `gap-hunk` | Between hunk blocks |
 | `hunk.header-padding` | 8 8 8 16 | `py-hunk-header pr-hunk-header pl-hunk-header-left` |  |
 | `hunk.pane-margin` | 4 8 | `my-hunk-pane-y mx-hunk-pane` | Around the two panes |
@@ -755,7 +756,7 @@ A list of actions under a button (`src/components/ui/dropdown-menu.tsx`): `menu.
 
 ### Split button
 
-Two ghost icon buttons that meet with no gap and share one outline: the action (`button.icon-size` square, rounded at its left end only) and a narrower chevron pointing down that opens the action's menu (rounded at its right end only). Only the action shows when there is nothing to choose. Show in Finder on a file row is one.
+Two ghost icon buttons that meet with no gap and share one outline, told apart by a 1px `button.split-divider` on the chevron's left edge: the action (`button.icon-size` square, rounded at its left end only) and a narrower chevron pointing down that opens the action's menu (rounded at its right end only). Only the action shows when there is nothing to choose. Show in Finder on a file row is one.
 
 ### Popover (Filter)
 
@@ -775,7 +776,7 @@ A client with no bundled logo shows the first letter of its name in `type.pill`,
 
 ### File list (detail pane FILES)
 
-A `card.bg` card, `file-card.radius`, 1px `card.border`, holding one row per file, `file-row.height` high with `file-row.padding-x`, a 1px `file-row.divider` hairline between rows and `file-row.hover` on hover or focus: a chevron (`rotate(90deg)` in .15s when the row is open), the path in `type.technical` (`file-row.path`, `file-row.path-open` while open), a `file-row.edited-label` label for a file the user changed, and "{n} lines", "binary" or "Too large to show ({size})" in `file-row.meta` at the right. SKILL.md comes first and open; the rest follow by path, a file the user removed among them. An open row shows the file in the Code pane below it. A row of a file on disk also has a "Show in Finder" split button at its right end, beside the trigger and never inside it, visible while the row is hovered, holds the focus or has its menu open, and in the tab order throughout: the button opens the file at the skill's first place, the library for a skill the library holds, else its first placement in the order the row lists its agents; the chevron's menu lists every other place, one row per placement, "{Agent name}", "{Agent name} ({plugin} plugin)" for a plugin's copy, with the path as the inventory carries it, and opens the file there. A skill with one place has no chevron.
+A `card.bg` card, `file-card.radius`, 1px `card.border`, holding one row per file, `file-row.height` high with `file-row.padding-x`, a 1px `file-row.divider` hairline between rows and `file-row.hover` on hover or focus: a chevron (`rotate(90deg)` in .15s when the row is open), the path in `type.technical` (`file-row.path`, `file-row.path-open` while open), a `file-row.edited-label` label for a file the user changed, and "{n} lines", "binary" or "Too large to show ({size})" in `file-row.meta` at the right. SKILL.md comes first and open; the rest follow by path, a file the user removed among them. An open row shows the file in the Code pane below it. A row of a file on disk also has a "Show in Finder" split button, beside the trigger and never inside it, over the meta text at the row's end: while the row is hovered, holds the focus or has its menu open, the meta fades out and the button fades in at that spot, both in .15s, and the row's layout never changes (the meta stays laid out, only its opacity moves); it is in the tab order throughout. A row the edits removed has no button and keeps its meta. The button opens the file at the skill's first place, the library for a skill the library holds, else its first placement in the order the row lists its agents; the chevron's menu lists every other place, one row per placement, "{Agent name}", "{Agent name} ({plugin} plugin)" for a plugin's copy, with the path as the inventory carries it, and opens the file there. A skill with one place has no chevron.
 
 ### Key hint
 
@@ -800,6 +801,7 @@ The product mark is `shell.logo-mark` on `shell.logo-bg`, 30px `shell.logo-radiu
 - Hover/background changes: no transition or ≤ .18s.
 - Switches: `.18s` background.
 - Chevrons: `rotate(90deg)` with `.15s`.
+- File row control: the meta text and the Show in Finder button swap by opacity in `.15s` on hover.
 - Floating bar: `translateY(24px) → 0`, opacity 0 → 1, `.22s ease`.
 - Card resolve: 280ms, see §6.
 - Spinner-style icons (Check updates, Check tools): one full rotation `.9–1s ease` (`animate-turn-once`: 1s ease, once, while the command runs), then a toast.

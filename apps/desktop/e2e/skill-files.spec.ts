@@ -307,12 +307,22 @@ test("each file on disk can be shown in Finder from its row", async ({
   const button = reveal(section, "SKILL.md");
   await expect(button).toHaveAttribute("title", "Show in Finder");
   expect(await opacity(button)).toBe("0");
+  // The button takes the meta text's place: the meta fades out as the button fades in, and
+  // nothing moves.
+  const meta = fileRow(section, "SKILL.md").getByText("6 lines");
+  // The screen fades in when it mounts: wait for it.
+  await expect.poll(async () => await opacity(meta)).toBe("1");
+  const before = await meta.boundingBox();
   await fileRow(section, "SKILL.md").hover();
   await expect.poll(async () => await opacity(button)).toBe("1");
+  await expect.poll(async () => await opacity(meta)).toBe("0");
+  expect(await meta.boundingBox()).toEqual(before);
   await page.mouse.move(0, 0);
   await expect.poll(async () => await opacity(button)).toBe("0");
+  await expect.poll(async () => await opacity(meta)).toBe("1");
   await button.focus();
   await expect.poll(async () => await opacity(button)).toBe("1");
+  await expect.poll(async () => await opacity(meta)).toBe("0");
 
   // A click shows the file at the library entry, and leaves the row as it was.
   await expect(fileRow(section, "SKILL.md")).toHaveAttribute(
@@ -348,6 +358,12 @@ test("each file on disk can be shown in Finder from its row", async ({
   await expect(reveal(review, "notes.md")).toBeAttached();
   await expect(fileRow(review, "old.md")).toBeVisible();
   await expect(reveal(review, "old.md")).toHaveCount(0);
+  await fileRow(review, "old.md").hover();
+  await expect
+    .poll(
+      async () => await opacity(fileRow(review, "old.md").getByText("2 lines"))
+    )
+    .toBe("1");
   // One of your own skills is shown at its library entry too, which leads into its worktree.
   await row(page, "pdf-letters").click();
   await reveal(files(page, "pdf-letters"), "SKILL.md").click();

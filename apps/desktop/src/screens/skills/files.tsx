@@ -310,6 +310,11 @@ export const FilesSection = ({
                 <AccordionTrigger
                   label={file.path}
                   open={isOpen}
+                  meta={
+                    <span className="type-technical-sm text-file-row-meta flex-none">
+                      {metaOf(file)}
+                    </span>
+                  }
                   actionShown={menuOf === file.path}
                   action={
                     // A file on disk can be shown where it is; a deleted file has no place.
@@ -332,9 +337,6 @@ export const FilesSection = ({
                       {labels[file.diff.status]}
                     </span>
                   )}
-                  <span className="type-technical-sm text-file-row-meta ml-auto flex-none">
-                    {metaOf(file)}
-                  </span>
                 </AccordionTrigger>
                 <AccordionContent>
                   <Pane row={file} />

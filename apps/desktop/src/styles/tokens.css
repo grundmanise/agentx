@@ -148,6 +148,7 @@
   --color-source-pill-active-bg: var(--gray-50);
   --color-source-pill-active-text: var(--color-on-accent);
   --color-button-toast-action-text: var(--color-accent-primary);
+  --color-button-split-divider: var(--gray-800);
 
   /* Status pills */
   --color-pill-update-bg: var(--color-accent-primary);
@@ -574,6 +575,7 @@
   --padding-code: 14px;
   --grid-template-columns-code: 48px 12px 1fr;
   --padding-file-row: 16px;
+  --inset-file-row: 16px;
   --height-file-row: 44px;
   --max-height-code: 340px;
   --gap-code: 12px;
