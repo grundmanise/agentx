@@ -10,6 +10,7 @@ import type {
   HandshakeError,
   HistoryEvent,
   InventoryEvent,
+  MachineEvent,
   ReconcileEvent,
   Settings,
   SkillFileEvent,
@@ -76,6 +77,8 @@ export interface AppState {
   /** The update candidates, by skill name, from the last update check. */
   updates: Record<string, UpdateAvailableEvent>;
   settings: Settings | undefined;
+  /** This machine and where agentx keeps its files, from `machine`. */
+  machine: MachineEvent | undefined;
   sources: SourceEvent[];
   /** What `adopt` would take over, from its preview. */
   adoption: AdoptionEvent[];
@@ -135,6 +138,7 @@ export const useAppStore = create<AppState>()(() => ({
   handshakeFailures: [],
   histories: {},
   inventory: undefined,
+  machine: undefined,
   pending: {},
   reconciles: [],
   refreshes: {},

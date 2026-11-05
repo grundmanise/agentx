@@ -252,6 +252,7 @@
   --color-overlay-border: var(--gray-800);
   --color-popover-row-hover: var(--gray-880);
   --color-popover-caption: var(--gray-500);
+  --color-menu-row-hover: var(--gray-880);
   --color-palette-row-text: var(--gray-150);
   --color-palette-row-active: var(--gray-870);
   --color-palette-icon: var(--gray-400);
@@ -341,6 +342,7 @@
   /* Shadows (DESIGN.md §2.2, overlays): `shadow-overlay`. */
   --shadow-overlay: 0 40px 100px -20px rgb(0 0 0 / 0.8);
   --shadow-popover: 0 24px 60px -12px rgb(0 0 0 / 0.7);
+  --shadow-menu: 0 24px 60px -12px rgb(0 0 0 / 0.7);
 
   /* Radii (DESIGN.md §5): `rounded-card`. */
   --radius-button: 9999px;
@@ -375,6 +377,8 @@
   --radius-palette-row: 12px;
   --radius-popover: 16px;
   --radius-popover-row: 10px;
+  --radius-menu: 12px;
+  --radius-menu-row: 8px;
   --radius-key-hint: 9999px;
   --radius-toast: 9999px;
   --radius-toast-detail: 18px;
@@ -545,6 +549,8 @@
   --gap-dialog: 22px;
   --gap-popover: 16px;
   --width-popover: 300px;
+  --min-width-menu: 240px;
+  --padding-menu: 6px;
   --width-sheet: 420px;
   --inset-sheet: 10px;
   --padding-sheet: 32px;

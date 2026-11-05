@@ -2,8 +2,13 @@ import { cva } from "class-variance-authority";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
-import type { DiffEvent, SkillFileEvent } from "#/cli/events.gen.ts";
+import type {
+  Configuration,
+  DiffEvent,
+  SkillFileEvent,
+} from "#/cli/events.gen.ts";
 import { CodePane, codeLines } from "#/components/code-pane.tsx";
+import { ChevronIcon } from "#/components/icons/chevron.tsx";
 import { FolderIcon } from "#/components/icons/folder.tsx";
 import {
   Accordion,
@@ -12,13 +17,19 @@ import {
   AccordionTrigger,
 } from "#/components/ui/accordion.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "#/components/ui/dropdown-menu.tsx";
 import { revealInFinder } from "#/lib/reveal.ts";
 import {
   filesRequestOf,
   filesVersionOf,
-  skillDirectoryOf,
+  locationsOf,
 } from "#/screens/skills/projection.ts";
-import type { SkillRow } from "#/screens/skills/projection.ts";
+import type { SkillLocation, SkillRow } from "#/screens/skills/projection.ts";
 import { loadFiles } from "#/store/loaders.ts";
 import { useAppStore } from "#/store/store.ts";
 import type { FilesRead } from "#/store/store.ts";
@@ -159,6 +170,76 @@ const Pane = ({ row }: { row: FileRow }) => {
   );
 };
 
+/**
+ * Show in Finder for one file: the button opens the file at the skill's first place, the library
+ * for a skill the library holds; when the skill is elsewhere too, a chevron beside it opens a
+ * menu of those places, each named by its agent client with its path, which opens the file there.
+ */
+const Reveal = ({
+  path,
+  locations,
+  onOpenChange,
+}: {
+  path: string;
+  /** The first is where the button opens the file. */
+  locations: SkillLocation[];
+  /** Whether the menu is open, so that the row keeps the control shown. */
+  onOpenChange: (open: boolean) => void;
+}) => {
+  const [first, ...others] = locations;
+  if (first === undefined) {
+    return null;
+  }
+  return (
+    <span className="inline-flex">
+      <Button
+        variant="ghost"
+        size={others.length === 0 ? "icon" : "icon-split-main"}
+        aria-label={`Show ${path} in Finder`}
+        title="Show in Finder"
+        onClick={() => {
+          void revealInFinder(`${first.directory}/${path}`);
+        }}
+      >
+        <FolderIcon />
+      </Button>
+      {others.length > 0 && (
+        <DropdownMenu onOpenChange={onOpenChange}>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-split-menu"
+              aria-label={`Show ${path} in Finder elsewhere`}
+              title="Show in Finder elsewhere"
+            >
+              <span className="flex rotate-90">
+                <ChevronIcon size="xs" />
+              </span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            {others.map((location) => (
+              <DropdownMenuItem
+                key={location.key}
+                onSelect={() => {
+                  void revealInFinder(`${location.directory}/${path}`);
+                }}
+              >
+                <span className="type-body text-text-primary">
+                  {location.label}
+                </span>
+                <span className="type-technical-sm text-text-caption break-all">
+                  {location.path}
+                </span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </span>
+  );
+};
+
 const Hint = ({ children }: { children: string }) => (
   <p className="type-secondary text-text-hint m-0">{children}</p>
 );
@@ -177,16 +258,22 @@ const comparedWith = (row: SkillRow) =>
  */
 export const FilesSection = ({
   row,
+  configurations,
   heading,
 }: {
   row: SkillRow;
+  /** The configurations, which name the places a skill is in. */
+  configurations: Configuration[];
   heading: ReactNode;
 }) => {
   const request = filesRequestOf(row);
   const version = filesVersionOf(row);
-  const directory = skillDirectoryOf(row);
+  const library = useAppStore((s) => s.machine?.library);
+  const locations = locationsOf(row, configurations, library);
   const read = useAppStore((s) => s.files[row.key]);
   const [open, setOpen] = useState<string[]>([SKILL_MD]);
+  // The file whose places menu is open, whose row keeps its control shown.
+  const [menuOf, setMenuOf] = useState<string | undefined>();
 
   useEffect(() => {
     const wanted = filesRequestOf(row);
@@ -223,20 +310,17 @@ export const FilesSection = ({
                 <AccordionTrigger
                   label={file.path}
                   open={isOpen}
+                  actionShown={menuOf === file.path}
                   action={
                     // A file on disk can be shown where it is; a deleted file has no place.
-                    file.file !== undefined && directory !== undefined ? (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label={`Show ${file.path} in Finder`}
-                        title="Show in Finder"
-                        onClick={() => {
-                          void revealInFinder(`${directory}/${file.path}`);
+                    file.file !== undefined && locations.length > 0 ? (
+                      <Reveal
+                        path={file.path}
+                        locations={locations}
+                        onOpenChange={(isMenuOpen) => {
+                          setMenuOf(isMenuOpen ? file.path : undefined);
                         }}
-                      >
-                        <FolderIcon />
-                      </Button>
+                      />
                     ) : undefined
                   }
                 >

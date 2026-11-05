@@ -33,6 +33,14 @@ export const loadSettings = async () => {
   });
 };
 
+/** Loads this machine and where agentx keeps its files: `machine`. */
+export const loadMachine = async () => {
+  await load(["machine"], (events) => {
+    const event = events.find((e) => e.type === "machine");
+    return event === undefined ? {} : { machine: event };
+  });
+};
+
 /** Loads the added sources: `source list`. The Add screen calls it when it opens. */
 export const loadSources = async () => {
   await load(["source", "list"], (events) => ({
@@ -165,6 +173,9 @@ const afterCommand = ({ args, command, events, exitCode, read }: Finished) => {
   if (command.startsWith("config ") || command === "import") {
     void loadSettings();
   }
+  if (command.startsWith("machine ")) {
+    void loadMachine();
+  }
   if (
     command.startsWith("source ") ||
     command === "skill add" ||
@@ -208,4 +219,5 @@ export const startLoaders = () => {
   void loadSettings();
   void loadSources();
   void loadAdoption();
+  void loadMachine();
 };

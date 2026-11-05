@@ -20,6 +20,18 @@ const accordionVariants = cva("flex flex-col overflow-hidden", {
   },
 });
 
+const actionVariants = cva(
+  "flex flex-none items-center pr-2 group-focus-within:opacity-100 group-hover:opacity-100",
+  {
+    variants: {
+      shown: {
+        false: "opacity-0",
+        true: "opacity-100",
+      },
+    },
+  }
+);
+
 const chevronVariants = cva(
   "text-file-row-meta flex flex-none transition-transform duration-150",
   {
@@ -77,6 +89,7 @@ const AccordionTrigger = ({
   label,
   open,
   action,
+  actionShown = false,
   children,
 }: {
   /** The row's accessible name: what the item is about. */
@@ -85,6 +98,8 @@ const AccordionTrigger = ({
   open: boolean;
   /** A button at the row's right end, such as an icon button. */
   action?: ReactNode;
+  /** Keeps the action shown while something of its own is open, such as its menu. */
+  actionShown?: boolean;
   children: ReactNode;
 }) => (
   <AccordionPrimitive.Header
@@ -102,9 +117,7 @@ const AccordionTrigger = ({
       {children}
     </AccordionPrimitive.Trigger>
     {action !== undefined && (
-      <span className="flex flex-none items-center pr-2 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
-        {action}
-      </span>
+      <span className={actionVariants({ shown: actionShown })}>{action}</span>
     )}
   </AccordionPrimitive.Header>
 );

@@ -1,11 +1,7 @@
 // The DETAILS of a skill, per kind: key and value pairs read from its library entry, its node and
 // the plugin that provides it, as the CLI reported them.
 import type { Configuration, LibraryEntry } from "#/cli/events.gen.ts";
-import {
-  shortId,
-  skillDirectoryOf,
-  toolName,
-} from "#/screens/skills/projection.ts";
+import { shortId, toolName } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 
 export interface Detail {
@@ -15,6 +11,19 @@ export interface Detail {
 
 const at = (source: string, subpath: string | undefined) =>
   subpath === undefined || subpath === "" ? source : `${source}/${subpath}`;
+
+/** The directory one of your own skills is checked out in, as the library occurrence resolves. */
+const worktreeOf = (row: SkillRow): string | undefined => {
+  const library = row.entry?.placements.find((p) => p.mode === "library");
+  const occurrence =
+    row.occurrences.find(
+      (o) =>
+        library !== undefined &&
+        o.configuration === library.configuration &&
+        o.path === library.path
+    ) ?? row.occurrences[0];
+  return occurrence?.resolved_path;
+};
 
 const sourceDetails = (entry: LibraryEntry): Detail[] => {
   const details: Detail[] = [
@@ -50,8 +59,7 @@ const yoursDetails = (row: SkillRow, entry: LibraryEntry): Detail[] => {
     key: "Published to",
     value: entry.source ?? "No account remote",
   });
-  // The directory one of your own skills is checked out in: its fork's worktree.
-  const files = skillDirectoryOf(row);
+  const files = worktreeOf(row);
   if (files !== undefined) {
     details.push({ key: "Files", value: files });
   }

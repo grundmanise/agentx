@@ -283,6 +283,8 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `popover.shadow` | `0 24px 60px -12px black/70` |  |
 | `popover.row-hover` | `gray-880` |  |
 | `popover.caption` | `gray-500` | SHOW / STATE / AGENTS |
+| `menu.row-hover` | `gray-880` | Menu row pointed at or focused |
+| `menu.shadow` | `0 24px 60px -12px black/70` | Menu |
 | `palette.row-text` | `gray-150` |  |
 | `palette.row-active` | `gray-870` |  |
 | `palette.icon` | `gray-400` | Search icon and row icons |
@@ -568,6 +570,9 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `popover.gap` | 16 | `gap-popover` | Between groups |
 | `popover.row-height` | 32–34 |  |  |
 | `popover.offset` | 8 | none: a number passed to the popover's `sideOffset` | Gap from its anchor |
+| `menu.min-width` | 240 | `min-w-menu` | Menu |
+| `menu.padding` | 6 | `p-menu` | Around the menu's rows |
+| `menu.offset` | 4 | none: a number passed to the menu's `sideOffset` | Gap from its trigger |
 | `sheet.width` | 420 | `w-sheet` | History sheet |
 | `sheet.inset` | 10 | `top-sheet right-sheet bottom-sheet` | From top/right/bottom |
 | `sheet.padding` | 28 32 | `py-sheet-y px-sheet` |  |
@@ -635,6 +640,8 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `row.radius` | 12 | Split list rows |
 | `table.row-radius` | 14 | Server rows |
 | `popover.row-radius` | 10 | Popover rows, Reset button |
+| `menu.radius` | 12 | Menu |
+| `menu.row-radius` | 8 | Menu rows |
 | `card.radius` | 18 | Inbox cards, review file cards |
 | `card.tile-radius` | 10 | Icon tile |
 | `file-card.radius` | 16 | File tree card |
@@ -742,6 +749,14 @@ The machine's label from the inventory, under the product name in the sidebar: `
 
 Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot` round (`timeline.dot-install` for an upstream import, `timeline.dot-update` for a commit made with Git, `timeline.dot-yours` for one agentx wrote), centred in a box as high as the entry's first line (`timeline.line` beside the subject text, `timeline.button-line` beside a small button), a 1px `timeline.connector` from the bottom of that box to the next entry. Entry: subject `type.timeline-entry` in `text.primary`, meta `type.timeline-meta` in `timeline.meta` ("{date} · {n} files", then "made with Git" or "from the original"). Final item when truncated: hollow dot (inset ring 1.5px `timeline.more-ring`) and a ghost button "Show all {n}", which opens the History sheet.
 
+### Menu
+
+A list of actions under a button (`src/components/ui/dropdown-menu.tsx`): `menu.min-width`, `menu.radius`, `overlay.bg` with 1px `overlay.border` and `menu.shadow`, `menu.padding` around the rows, `menu.offset` below its trigger and aligned to its end. A row is `menu.row-radius` with `menu.row-hover` when pointed at or focused; its lines stack: a `type.body` line in `text.primary`, then a `type.technical-sm` line in `text.caption` such as a path. Escape or a click outside closes it. No animation.
+
+### Split button
+
+Two ghost icon buttons that meet with no gap and share one outline: the action (`button.icon-size` square, rounded at its left end only) and a narrower chevron pointing down that opens the action's menu (rounded at its right end only). Only the action shows when there is nothing to choose. Show in Finder on a file row is one.
+
 ### Popover (Filter)
 
 `popover.width`, `popover.radius`, `overlay.bg` with 1px `overlay.border` and `popover.shadow`, 14px padding, `popover.gap` between its groups, `popover.offset` below its anchor. Each group opens with a caption in `popover.caption`. SHOW is a row of pills (`type.secondary`, count in `type.technical-sm` `text.caption`; the chosen one `button.secondary-bg` and `text.primary`), STATE a segmented control, AGENTS rows of `popover.row-radius` with the round checkbox, a 20px logo and the name. Reset filters is a ghost button, shown while a filter is applied. A click outside or Escape closes it.
@@ -760,7 +775,7 @@ A client with no bundled logo shows the first letter of its name in `type.pill`,
 
 ### File list (detail pane FILES)
 
-A `card.bg` card, `file-card.radius`, 1px `card.border`, holding one row per file, `file-row.height` high with `file-row.padding-x`, a 1px `file-row.divider` hairline between rows and `file-row.hover` on hover or focus: a chevron (`rotate(90deg)` in .15s when the row is open), the path in `type.technical` (`file-row.path`, `file-row.path-open` while open), a `file-row.edited-label` label for a file the user changed, and "{n} lines", "binary" or "Too large to show ({size})" in `file-row.meta` at the right. SKILL.md comes first and open; the rest follow by path, a file the user removed among them. An open row shows the file in the Code pane below it. A row of a file on disk also has a ghost icon button "Show in Finder" at its right end, beside the trigger and never inside it, visible while the row is hovered or holds the focus and in the tab order throughout.
+A `card.bg` card, `file-card.radius`, 1px `card.border`, holding one row per file, `file-row.height` high with `file-row.padding-x`, a 1px `file-row.divider` hairline between rows and `file-row.hover` on hover or focus: a chevron (`rotate(90deg)` in .15s when the row is open), the path in `type.technical` (`file-row.path`, `file-row.path-open` while open), a `file-row.edited-label` label for a file the user changed, and "{n} lines", "binary" or "Too large to show ({size})" in `file-row.meta` at the right. SKILL.md comes first and open; the rest follow by path, a file the user removed among them. An open row shows the file in the Code pane below it. A row of a file on disk also has a "Show in Finder" split button at its right end, beside the trigger and never inside it, visible while the row is hovered, holds the focus or has its menu open, and in the tab order throughout: the button opens the file at the skill's first place, the library for a skill the library holds, else its first placement in the order the row lists its agents; the chevron's menu lists every other place, one row per placement, "{Agent name}", "{Agent name} ({plugin} plugin)" for a plugin's copy, with the path as the inventory carries it, and opens the file there. A skill with one place has no chevron.
 
 ### Key hint
 

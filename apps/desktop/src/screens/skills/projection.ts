@@ -5,6 +5,7 @@
 // inventory does.
 import type {
   AdoptionEvent,
+  Configuration,
   InventoryEvent,
   LibraryEntry,
   Occurrence,
@@ -560,22 +561,82 @@ export const filesRequestOf = (row: SkillRow): FilesRequest | undefined => {
   return { args: [directory, "--configuration", occurrence.configuration] };
 };
 
+/** One place a skill is on disk, which Finder can open. */
+export interface SkillLocation {
+  key: string;
+  /** "Library", or the agent client's name, with the plugin for a plugin's copy. */
+  label: string;
+  /** The path as the inventory carries it, shown as written. */
+  path: string;
+  /** The directory Finder opens: where the place resolves. */
+  directory: string;
+}
+
 /**
- * The directory a skill's files are in on this machine, from the inventory alone: for a library
- * skill the library entry, or the directory it leads to as the occurrence through it resolves
- * (a fork's worktree); for a plugin's skill or one a client holds on its own, where the
- * occurrence `skill files` reads resolves. Undefined when the inventory does not say.
+ * Every place a skill is on disk, the one Show in Finder opens first: for a skill the library
+ * holds, the library entry, `<library>/<name>`, then each placement in a client's own skills
+ * directory; for a skill a client holds on its own, or a plugin's, each occurrence. Placements
+ * and occurrences come in the order the row lists its agents, then by path. `library` is where
+ * agentx keeps the library, from `machine`; without it a library skill's placements are all.
  */
-export const skillDirectoryOf = (row: SkillRow): string | undefined => {
-  const library = row.entry?.placements.find((p) => p.kind === "library");
-  if (library !== undefined) {
-    const through = row.occurrences.find(
-      (o) =>
-        o.configuration === library.configuration && o.path === library.path
-    );
-    return through?.resolved_path ?? library.path;
+export const locationsOf = (
+  row: SkillRow,
+  configurations: Configuration[],
+  library: string | undefined
+): SkillLocation[] => {
+  const name = (id: string) =>
+    configurations.find((c) => c.id === id)?.name ?? id;
+  const rank = (id: string) => {
+    const at = row.agents.indexOf(id);
+    return at === -1 ? row.agents.length : at;
+  };
+  const locations: SkillLocation[] = [];
+  if (row.entry !== undefined && library !== undefined) {
+    locations.push({
+      directory: `${library}/${row.name}`,
+      key: "library",
+      label: "Library",
+      path: `${library}/${row.name}`,
+    });
   }
-  return occurrenceOf(row)?.resolved_path;
+  if (row.entry === undefined) {
+    const occurrences = [...row.occurrences];
+    occurrences.sort(
+      (a, b) =>
+        rank(a.configuration) - rank(b.configuration) ||
+        a.path.localeCompare(b.path)
+    );
+    for (const o of occurrences) {
+      locations.push({
+        directory: o.resolved_path,
+        key: o.id,
+        label:
+          o.plugin === undefined
+            ? name(o.configuration)
+            : `${name(o.configuration)} (${o.plugin} plugin)`,
+        path: o.path,
+      });
+    }
+    return locations;
+  }
+  const placements = row.entry.placements.filter((p) => p.mode !== "library");
+  placements.sort(
+    (a, b) =>
+      rank(a.configuration) - rank(b.configuration) ||
+      a.path.localeCompare(b.path)
+  );
+  for (const p of placements) {
+    const through = row.occurrences.find(
+      (o) => o.configuration === p.configuration && o.path === p.path
+    );
+    locations.push({
+      directory: through?.resolved_path ?? p.path,
+      key: `${p.configuration}:${p.path}`,
+      label: name(p.configuration),
+      path: p.path,
+    });
+  }
+  return locations;
 };
 
 /** The version a skill's files are read for: a new read when its content or its state changed. */

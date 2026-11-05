@@ -197,7 +197,11 @@ export const SkillDetail = ({
         <Caption>Agents</Caption>
         <Agents row={row} configurations={configurations} />
       </section>
-      <FilesSection row={row} heading={<Caption>Files</Caption>} />
+      <FilesSection
+        row={row}
+        configurations={configurations}
+        heading={<Caption>Files</Caption>}
+      />
       <div className="gap-detail-columns grid grid-cols-2">
         <section aria-label="Details" className="flex flex-col gap-3">
           <Caption>Details</Caption>

@@ -1,7 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 
 import type { InventoryEvent } from "#/cli/events.gen.ts";
-import { projectRows, skillDirectoryOf } from "#/screens/skills/projection.ts";
+import { locationsOf, projectRows } from "#/screens/skills/projection.ts";
 
 import {
   adoption,
@@ -14,7 +14,7 @@ import {
   releaseNotesDiffs,
   reviewDiffs,
 } from "./fixtures/skills.ts";
-import { expect, loadLines, test } from "./harness/cli.ts";
+import { expect, libraryPath, loadLines, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
 
 const launchLines = [
@@ -58,16 +58,23 @@ const reveal = (where: Locator, path: string) =>
   where.getByRole("button", { exact: true, name: `Show ${path} in Finder` });
 /** How the button shows: its wrapper fades it in while the row is hovered or holds the focus. */
 const opacity = async (locator: Locator) =>
-  await locator.evaluate((el) =>
-    el.parentElement === null ? "" : getComputedStyle(el.parentElement).opacity
-  );
+  await locator.evaluate((el) => {
+    let node: Element | null = el;
+    while (node !== null && getComputedStyle(node).opacity === "1") {
+      node = node.parentElement;
+    }
+    return node === null ? "1" : getComputedStyle(node).opacity;
+  });
 /** The paths of the file rows, in order: the buttons that open a row. */
 const rowNames = async (where: Locator) =>
   await where
     .getByRole("button")
     .evaluateAll((buttons) =>
       buttons
-        .filter((b) => b.hasAttribute("aria-expanded"))
+        .filter(
+          (b) =>
+            b.hasAttribute("aria-expanded") && !b.hasAttribute("aria-haspopup")
+        )
         .map((b) => b.getAttribute("aria-label"))
     );
 
@@ -307,7 +314,7 @@ test("each file on disk can be shown in Finder from its row", async ({
   await button.focus();
   await expect.poll(async () => await opacity(button)).toBe("1");
 
-  // A click shows the file at the library entry's path, and leaves the row as it was.
+  // A click shows the file at the library entry, and leaves the row as it was.
   await expect(fileRow(section, "SKILL.md")).toHaveAttribute(
     "aria-expanded",
     "true"
@@ -341,15 +348,13 @@ test("each file on disk can be shown in Finder from its row", async ({
   await expect(reveal(review, "notes.md")).toBeAttached();
   await expect(fileRow(review, "old.md")).toBeVisible();
   await expect(reveal(review, "old.md")).toHaveCount(0);
-  // One of your own skills is shown in its fork's worktree.
+  // One of your own skills is shown at its library entry too, which leads into its worktree.
   await row(page, "pdf-letters").click();
   await reveal(files(page, "pdf-letters"), "SKILL.md").click();
-  expect(cli.reveals.at(-1)).toEqual([
-    "/home/me/.agentx/worktrees/pdf-letters/pdf-letters/SKILL.md",
-  ]);
+  expect(cli.reveals.at(-1)).toEqual([`${libraryPath}/pdf-letters/SKILL.md`]);
 });
 
-test("the directory of a skill's files comes from the inventory", () => {
+test("the places of a skill come from the inventory, the library first", () => {
   // The fixture inventory with the fields serve adds to it.
   const whole: InventoryEvent = {
     edges: [],
@@ -361,49 +366,47 @@ test("the directory of a skill's files comes from the inventory", () => {
     ...inventory,
   };
   const rows = projectRows({ adoption, inventory: whole, updates: {} });
-  const directory = (name: string) =>
-    skillDirectoryOf(rows.find((r) => r.name === name) ?? rows[0]);
-  // A library skill: the library entry; one of your own: the worktree the entry leads to.
-  expect(directory("pdf")).toBe("/home/me/.agents/skills/pdf");
-  expect(directory("pdf-letters")).toBe(
-    "/home/me/.agentx/worktrees/pdf-letters/pdf-letters"
-  );
-  // A plugin's skill and a skill a client holds on its own: where the occurrence resolves.
-  expect(directory("commit-helper")).toBe(
-    "/home/me/.claude/plugins/acme-tools/skills/commit-helper"
-  );
-  expect(directory("notes")).toBe("/home/me/.cursor/skills/notes");
-  // A library skill on a machine with no universal client: through a placement's occurrence.
-  const noUniversal = projectRows({
-    adoption,
-    inventory: {
-      ...whole,
-      configurations: inventory.configurations.filter((c) => !c.reads_library),
-      library: inventory.library.map((e) => ({
-        ...e,
-        placements: e.placements.filter((p) => p.mode !== "library"),
-        universal: [],
-      })),
-      skills: inventory.skills.map((n) => ({
-        ...n,
-        occurrences: n.occurrences.filter(
-          (o) => !["codex", "gemini-cli"].includes(o.configuration)
-        ),
-      })),
-    },
-    updates: {},
-  });
-  expect(
-    skillDirectoryOf(
-      noUniversal.find((r) => r.name === "pdf") ?? noUniversal[0]
-    )
-  ).toBe("/home/me/.agents/skills/pdf");
-  // A skill nothing places: no directory, so no button.
-  expect(
-    skillDirectoryOf(
-      noUniversal.find((r) => r.name === "draft") ?? noUniversal[0]
-    )
-  ).toBeUndefined();
+  // `library` is where agentx keeps the library, or null while that is not known.
+  const places = (name: string, library: string | null) =>
+    locationsOf(
+      rows.find((r) => r.name === name) ?? rows[0],
+      inventory.configurations,
+      library ?? undefined
+    ).map((l) => [l.label, l.path, l.directory]);
+  // A library skill: the library entry, then each placement in a client's own directory, which
+  // opens where it resolves; one of your own resolves into its worktree.
+  expect(places("pdf", libraryPath)).toEqual([
+    ["Library", `${libraryPath}/pdf`, `${libraryPath}/pdf`],
+    ["Claude Code", "/home/me/.claude-code/skills/pdf", `${libraryPath}/pdf`],
+  ]);
+  expect(places("pdf-letters", libraryPath)).toEqual([
+    ["Library", `${libraryPath}/pdf-letters`, `${libraryPath}/pdf-letters`],
+    [
+      "Claude Code",
+      "/home/me/.claude-code/skills/pdf-letters",
+      "/home/me/.agentx/worktrees/pdf-letters/pdf-letters",
+    ],
+  ]);
+  // A plugin's skill and a skill a client holds on its own: each occurrence, named by its agent.
+  expect(places("commit-helper", libraryPath)).toEqual([
+    [
+      "Claude Code (acme-tools plugin)",
+      "/home/me/.claude-code/plugins/acme-tools/skills/commit-helper",
+      "/home/me/.claude/plugins/acme-tools/skills/commit-helper",
+    ],
+  ]);
+  expect(places("notes", libraryPath)).toEqual([
+    [
+      "Cursor",
+      "/home/me/.cursor/skills/notes",
+      "/home/me/.cursor/skills/notes",
+    ],
+  ]);
+  // While the library's path is unknown, a library skill's placements are all it has.
+  expect(places("pdf", null)).toEqual([
+    ["Claude Code", "/home/me/.claude-code/skills/pdf", `${libraryPath}/pdf`],
+  ]);
+  expect(places("draft", null)).toEqual([]);
 });
 
 test("a removed file's line count is the count of the lines its pane shows", async ({
@@ -486,4 +489,52 @@ test("a skill two clients hold is read and shown from the same copy, by its dire
   expect(cli.reveals).toEqual([
     ["/home/me/.claude-code/skills/meeting-notes/SKILL.md"],
   ]);
+  // The other copy is in the menu, with its path, and opens there.
+  await section
+    .getByRole("button", { name: "Show SKILL.md in Finder elsewhere" })
+    .click();
+  // The menu is named by its trigger.
+  const menu = page.getByRole("menu", {
+    name: "Show SKILL.md in Finder elsewhere",
+  });
+  await expect(menu.getByRole("menuitem")).toHaveText([
+    "Cursor/home/me/.cursor/skills/meeting-notes",
+  ]);
+  await menu.getByRole("menuitem", { name: /^Cursor/u }).click();
+  await expect(menu).toBeHidden();
+  expect(cli.reveals.at(-1)).toEqual([
+    "/home/me/.cursor/skills/meeting-notes/SKILL.md",
+  ]);
+});
+
+test("the menu beside Show in Finder lists a skill's other places; one place has no menu", async ({
+  cli,
+  page,
+}) => {
+  await openSkills(cli, page, "/#/skills/pdf");
+  const section = files(page, "pdf");
+  await section
+    .getByRole("button", { name: "Show SKILL.md in Finder elsewhere" })
+    .click();
+  const menu = page.getByRole("menu", {
+    name: "Show SKILL.md in Finder elsewhere",
+  });
+  await expect(menu.getByRole("menuitem")).toHaveText([
+    "Claude Code/home/me/.claude-code/skills/pdf",
+  ]);
+  // The placement is a symlink: the file opens where it resolves, and the row stays as it was.
+  await menu.getByRole("menuitem", { name: /^Claude Code/u }).click();
+  await expect(menu).toBeHidden();
+  expect(cli.reveals).toEqual([[`${libraryPath}/pdf/SKILL.md`]]);
+  await expect(fileRow(section, "SKILL.md")).toHaveAttribute(
+    "aria-expanded",
+    "true"
+  );
+  // A skill in one place has the button alone.
+  await row(page, "notes").click();
+  const notes = files(page, "notes");
+  await expect(reveal(notes, "SKILL.md")).toBeAttached();
+  await expect(
+    notes.getByRole("button", { name: "Show SKILL.md in Finder elsewhere" })
+  ).toHaveCount(0);
 });
