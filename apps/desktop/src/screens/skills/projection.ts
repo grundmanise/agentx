@@ -512,34 +512,52 @@ export interface FilesRequest {
 }
 
 /**
+ * The one occurrence a plugin's skill or a skill a client holds on its own is read and shown
+ * from, so that `skill files` and Show in Finder meet the same copy: among the user-scope
+ * occurrences, a plugin's for a plugin's skill, in the CLI's order (configuration, then path),
+ * a real directory first. Undefined when there is none.
+ */
+export const occurrenceOf = (row: SkillRow): Occurrence | undefined => {
+  const candidates = row.occurrences.filter(
+    (o) =>
+      o.scope === "user" && (row.kind === "plugin") === (o.plugin !== undefined)
+  );
+  candidates.sort(
+    (a, b) =>
+      a.configuration.localeCompare(b.configuration) ||
+      a.path.localeCompare(b.path)
+  );
+  return candidates.find((o) => o.kind === "directory") ?? candidates[0];
+};
+
+/**
  * How `skill files` names a skill, and whether `skill diff` is read for it: a library skill by its
  * name, a plugin's as `<plugin>:<name>`, and a skill a client holds in its own skills directory,
- * which is neither, with `--configuration`. Only a modified skill of a source or one of your own
- * with edits not published has a diff. Undefined when the CLI has no way to name it.
+ * which is neither, with `--configuration`, the one `occurrenceOf` chooses. Only a modified skill
+ * of a source or one of your own with edits not published has a diff. Undefined when the CLI has
+ * no way to name it.
  */
 export const filesRequestOf = (row: SkillRow): FilesRequest | undefined => {
+  if (row.entry !== undefined && row.kind !== "plugin") {
+    return row.modified && row.kind !== "disk"
+      ? { args: [row.name], diff: row.name }
+      : { args: [row.name] };
+  }
+  const occurrence = occurrenceOf(row);
+  if (occurrence === undefined) {
+    return undefined;
+  }
   if (row.kind === "plugin") {
-    const plugin = row.plugin?.name ?? row.occurrences[0]?.plugin;
-    return plugin === undefined
-      ? undefined
-      : { args: [`${plugin}:${row.name}`] };
+    return { args: [`${occurrence.plugin ?? ""}:${row.name}`] };
   }
-  if (row.entry === undefined) {
-    const [first] = row.occurrences;
-    return first === undefined
-      ? undefined
-      : { args: [row.name, "--configuration", first.configuration] };
-  }
-  return row.modified && row.kind !== "disk"
-    ? { args: [row.name], diff: row.name }
-    : { args: [row.name] };
+  return { args: [row.name, "--configuration", occurrence.configuration] };
 };
 
 /**
  * The directory a skill's files are in on this machine, from the inventory alone: for a library
  * skill the library entry, or the directory it leads to as the occurrence through it resolves
- * (a fork's worktree); for a plugin's skill or one a client holds on its own, where its directory
- * occurrence resolves, else its first occurrence. Undefined when the inventory does not say.
+ * (a fork's worktree); for a plugin's skill or one a client holds on its own, where the
+ * occurrence `skill files` reads resolves. Undefined when the inventory does not say.
  */
 export const skillDirectoryOf = (row: SkillRow): string | undefined => {
   const library = row.entry?.placements.find((p) => p.kind === "library");
@@ -550,9 +568,7 @@ export const skillDirectoryOf = (row: SkillRow): string | undefined => {
     );
     return through?.resolved_path ?? library.path;
   }
-  const occurrence =
-    row.occurrences.find((o) => o.kind === "directory") ?? row.occurrences[0];
-  return occurrence?.resolved_path;
+  return occurrenceOf(row)?.resolved_path;
 };
 
 /** The version a skill's files are read for: a new read when its content or its state changed. */
