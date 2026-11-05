@@ -34,6 +34,10 @@ const monogram = (name: string) => {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 };
 
+/** The text alternative of a logo: the client's name, with its state in brackets when it has one. */
+const alternative = (name: string, state: string | undefined) =>
+  state === undefined ? name : `${name} (${state})`;
+
 /** The sizes of DESIGN.md §6 "Agent client logo chip" this app uses so far, in pixels. */
 export type LogoSize = 16 | 20 | 24 | 28;
 
@@ -67,10 +71,13 @@ const markVariants = cva("block size-full object-contain", {
 
 /** The configuration a logo stands for, and what the logo says about it. */
 export interface LogoClient extends Pick<Configuration, "client" | "name"> {
-  /** The client turned this off: the mark is dimmed on the white disc, and `title` says so. */
+  /** The client turned this off: the mark is dimmed on the white disc, and `state` says so. */
   off?: boolean;
-  /** The tooltip, in place of the client's name. */
-  title?: string;
+  /**
+   * What the client did, after its name: "turned this server off". The title reads "{name}
+   * {state}", and the text alternative "{name} ({state})", so a screen reader learns it too.
+   */
+  state?: string;
 }
 
 export interface AgentLogoProps {
@@ -86,8 +93,8 @@ export interface AgentLogoProps {
 /**
  * A round agent client logo (DESIGN.md §6 "Agent client logo chip"): the bundled image, or a
  * monogram of the client's name when none is bundled. Every logo is an image named after the
- * client, with the name as its title; one the client turned off says so in its title and carries
- * `data-off`.
+ * client, with the name as its title; one with a `state` says it in its title and its text
+ * alternative, and one the client turned off carries `data-off`.
  */
 export const AgentLogo = ({
   client,
@@ -96,13 +103,14 @@ export const AgentLogo = ({
   decorative = false,
 }: AgentLogoProps) => {
   const off = client.off === true;
+  const { name, state } = client;
   return (
     <span className={tileVariants({ ring, size })}>
       <img
-        src={logos[client.client] ?? monogram(client.name)}
-        alt={decorative ? "" : client.name}
+        src={logos[client.client] ?? monogram(name)}
+        alt={decorative ? "" : alternative(name, state)}
         aria-hidden={decorative ? true : undefined}
-        title={client.title ?? client.name}
+        title={state === undefined ? name : `${name} ${state}`}
         data-off={off ? "true" : undefined}
         width={size}
         height={size}

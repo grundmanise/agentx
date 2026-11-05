@@ -132,8 +132,9 @@ test.describe("rows", () => {
     await expect(
       linear.getByTitle("Gemini CLI", { exact: true })
     ).toBeVisible();
+    // A screen reader learns the state from the text alternative.
     expect(await names(linear.getByRole("img"))).toEqual([
-      "Codex",
+      "Codex (turned this server off)",
       "Gemini CLI",
     ]);
 

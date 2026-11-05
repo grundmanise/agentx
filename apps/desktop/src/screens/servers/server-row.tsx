@@ -40,7 +40,7 @@ const Tools = ({ row }: { row: ServerRow }) => (
   </td>
 );
 
-/** The logos of the agents that declare the server; one that turned it off is dimmed and says so. */
+/** The logos of the agents that declare the server; one that turned it off is dimmed and says so, in its title and its text alternative. */
 const logoClients = (
   row: ServerRow,
   configurations: Configuration[]
@@ -56,7 +56,7 @@ const logoClients = (
             client: c.client,
             name: c.name,
             off: true,
-            title: `${c.name} turned this server off`,
+            state: "turned this server off",
           }
         : { client: c.client, name: c.name },
     ];
