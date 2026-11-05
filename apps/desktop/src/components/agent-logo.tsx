@@ -41,9 +41,9 @@ const alternative = (name: string, state: string | undefined) =>
 /** The sizes of DESIGN.md §6 "Agent client logo chip" this app uses so far, in pixels. */
 export type LogoSize = 16 | 20 | 24 | 28;
 
-// A round white tile, opaque whether or not the client turned the declaration off, so a
-// neighbour's ring never shows through it; the ring (`logo.ring`) is the parent's background,
-// between stacked logos.
+// A round white tile, opaque; the ring (`logo.ring`) is the parent's background, between stacked
+// logos. A logo is never dimmed or greyed: one the client turned off looks like every other, and
+// its title and text alternative say so.
 const tileVariants = cva("rounded-logo bg-logo-bg inline-flex flex-none", {
   variants: {
     ring: {
@@ -59,19 +59,9 @@ const tileVariants = cva("rounded-logo bg-logo-bg inline-flex flex-none", {
   },
 });
 
-// The mark inside the tile: dimmed to half and drained of colour when the client turned it off.
-const markVariants = cva("block size-full object-contain", {
-  variants: {
-    off: {
-      false: "",
-      true: "opacity-50 grayscale",
-    },
-  },
-});
-
 /** The configuration a logo stands for, and what the logo says about it. */
 export interface LogoClient extends Pick<Configuration, "client" | "name"> {
-  /** The client turned this off: the mark is dimmed on the white disc, and `state` says so. */
+  /** The client turned this off: the image carries `data-off`, and `state` says so. */
   off?: boolean;
   /**
    * What the client did, after its name: "turned this server off". The title reads "{name}
@@ -115,7 +105,7 @@ export const AgentLogo = ({
         width={size}
         height={size}
         draggable={false}
-        className={markVariants({ off })}
+        className="block size-full object-contain"
       />
     </span>
   );

@@ -40,7 +40,7 @@ const Tools = ({ row }: { row: ServerRow }) => (
   </td>
 );
 
-/** The logos of the agents that declare the server; one that turned it off is dimmed and says so, in its title and its text alternative. */
+/** The logos of the agents that declare the server; one that turned it off says so in its title and its text alternative. */
 const logoClients = (
   row: ServerRow,
   configurations: Configuration[]
