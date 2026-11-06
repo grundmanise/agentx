@@ -13,7 +13,7 @@ const at = (source: string, subpath: string | undefined) =>
   subpath === undefined || subpath === "" ? source : `${source}/${subpath}`;
 
 /** The directory one of your own skills is checked out in, as the library occurrence resolves. */
-const filesOf = (row: SkillRow): string | undefined => {
+const worktreeOf = (row: SkillRow): string | undefined => {
   const library = row.entry?.placements.find((p) => p.mode === "library");
   const occurrence =
     row.occurrences.find(
@@ -59,7 +59,7 @@ const yoursDetails = (row: SkillRow, entry: LibraryEntry): Detail[] => {
     key: "Published to",
     value: entry.source ?? "No account remote",
   });
-  const files = filesOf(row);
+  const files = worktreeOf(row);
   if (files !== undefined) {
     details.push({ key: "Files", value: files });
   }

@@ -5,6 +5,7 @@
 // inventory does.
 import type {
   AdoptionEvent,
+  Configuration,
   InventoryEvent,
   LibraryEntry,
   Occurrence,
@@ -504,3 +505,143 @@ export const glyphOf = (row: SkillRow): Glyph => {
 /** Whether the glyph is lit: enabled, and for one of your own skills also published. */
 export const glyphLit = (row: SkillRow) =>
   row.kind === "yours" ? row.enabled && row.published : row.enabled;
+
+/** The reads that show a skill's files; see FilesRequest in src/store/loaders.ts. */
+export interface FilesRequest {
+  args: string[];
+  diff?: string;
+}
+
+/** The last segment of an occurrence's path: the skill directory's own name. */
+const LAST_SEGMENT = /(?<name>[^/]+)\/*$/u;
+const directoryName = (path: string) =>
+  LAST_SEGMENT.exec(path)?.groups?.name ?? "";
+
+/**
+ * The one occurrence a plugin's skill or a skill a client holds on its own is read and shown
+ * from, so that `skill files` and Show in Finder meet the same copy: among the user-scope
+ * occurrences, a plugin's for a plugin's skill, in the CLI's order (configuration, then path),
+ * a real directory first. Undefined when there is none.
+ */
+export const occurrenceOf = (row: SkillRow): Occurrence | undefined => {
+  const candidates = row.occurrences.filter(
+    (o) =>
+      o.scope === "user" && (row.kind === "plugin") === (o.plugin !== undefined)
+  );
+  candidates.sort(
+    (a, b) =>
+      a.configuration.localeCompare(b.configuration) ||
+      a.path.localeCompare(b.path)
+  );
+  return candidates.find((o) => o.kind === "directory") ?? candidates[0];
+};
+
+/**
+ * How `skill files` names a skill, and whether `skill diff` is read for it: a library skill by its
+ * name, a plugin's as `<plugin>:<directory>`, and a skill a client holds in its own skills
+ * directory, which is neither, by its directory with `--configuration`. The CLI finds a plugin's
+ * or a configuration's skill by its directory's name, not the name its frontmatter gives, so the
+ * occurrence `occurrenceOf` chooses names it. Only a modified skill of a source or one of your
+ * own with edits not published has a diff. Undefined when the CLI has no way to name it.
+ */
+export const filesRequestOf = (row: SkillRow): FilesRequest | undefined => {
+  if (row.entry !== undefined && row.kind !== "plugin") {
+    return row.modified && row.kind !== "disk"
+      ? { args: [row.name], diff: row.name }
+      : { args: [row.name] };
+  }
+  const occurrence = occurrenceOf(row);
+  if (occurrence === undefined) {
+    return undefined;
+  }
+  const directory = directoryName(occurrence.path);
+  if (row.kind === "plugin") {
+    return { args: [`${occurrence.plugin ?? ""}:${directory}`] };
+  }
+  return { args: [directory, "--configuration", occurrence.configuration] };
+};
+
+/** One place a skill is on disk, which Finder can open. */
+export interface SkillLocation {
+  key: string;
+  /** "Library", or the agent client's name, with the plugin for a plugin's copy. */
+  label: string;
+  /** The path as the inventory carries it, shown as written. */
+  path: string;
+  /** The directory Finder opens: where the place resolves. */
+  directory: string;
+}
+
+/**
+ * Every place a skill is on disk, the one Show in Finder opens first: for a skill the library
+ * holds, the library entry, `<library>/<name>`, then each placement in a client's own skills
+ * directory; for a skill a client holds on its own, or a plugin's, each occurrence. Placements
+ * and occurrences come in the order the row lists its agents, then by path. `library` is where
+ * agentx keeps the library, from `machine`; without it a library skill's placements are all.
+ */
+export const locationsOf = (
+  row: SkillRow,
+  configurations: Configuration[],
+  library: string | undefined
+): SkillLocation[] => {
+  const name = (id: string) =>
+    configurations.find((c) => c.id === id)?.name ?? id;
+  const rank = (id: string) => {
+    const at = row.agents.indexOf(id);
+    return at === -1 ? row.agents.length : at;
+  };
+  const locations: SkillLocation[] = [];
+  if (row.entry !== undefined && library !== undefined) {
+    locations.push({
+      directory: `${library}/${row.name}`,
+      key: "library",
+      label: "Library",
+      path: `${library}/${row.name}`,
+    });
+  }
+  if (row.entry === undefined) {
+    const occurrences = [...row.occurrences];
+    occurrences.sort(
+      (a, b) =>
+        rank(a.configuration) - rank(b.configuration) ||
+        a.path.localeCompare(b.path)
+    );
+    for (const o of occurrences) {
+      locations.push({
+        directory: o.resolved_path,
+        key: o.id,
+        label:
+          o.plugin === undefined
+            ? name(o.configuration)
+            : `${name(o.configuration)} (${o.plugin} plugin)`,
+        path: o.path,
+      });
+    }
+    return locations;
+  }
+  const placements = row.entry.placements.filter((p) => p.mode !== "library");
+  placements.sort(
+    (a, b) =>
+      rank(a.configuration) - rank(b.configuration) ||
+      a.path.localeCompare(b.path)
+  );
+  for (const p of placements) {
+    const through = row.occurrences.find(
+      (o) => o.configuration === p.configuration && o.path === p.path
+    );
+    locations.push({
+      directory: through?.resolved_path ?? p.path,
+      key: `${p.configuration}:${p.path}`,
+      label: name(p.configuration),
+      path: p.path,
+    });
+  }
+  return locations;
+};
+
+/** The version a skill's files are read for: a new read when its content or its state changed. */
+export const filesVersionOf = (row: SkillRow) =>
+  [
+    row.entry?.content_hash ?? row.node?.content_hash ?? "",
+    row.entry?.state ?? "",
+  ].join(":");

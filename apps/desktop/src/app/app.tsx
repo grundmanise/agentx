@@ -12,7 +12,9 @@ import { TopBar } from "#/app/top-bar.tsx";
 import { Toaster } from "#/components/toast.tsx";
 import { setNavigate } from "#/lib/navigate.ts";
 import { AddScreen } from "#/screens/add/add-screen.tsx";
+import { AgentsScreen } from "#/screens/agents/agents-screen.tsx";
 import { PlaceholderScreen } from "#/screens/placeholder.tsx";
+import { ServersScreen } from "#/screens/servers/servers-screen.tsx";
 import { SkillsScreen } from "#/screens/skills/skills-screen.tsx";
 import { launch, useStartup } from "#/startup/startup.ts";
 import { startLoaders } from "#/store/loaders.ts";
@@ -20,6 +22,8 @@ import { startLoaders } from "#/store/loaders.ts";
 /** The screens built so far, by route; the others show their placeholder. */
 const built: Record<string, ReactElement> = {
   "/add": <AddScreen />,
+  "/agents": <AgentsScreen />,
+  "/servers": <ServersScreen />,
   "/skills": <SkillsScreen />,
 };
 

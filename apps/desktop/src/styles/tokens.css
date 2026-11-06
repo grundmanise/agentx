@@ -148,6 +148,7 @@
   --color-source-pill-active-bg: var(--gray-50);
   --color-source-pill-active-text: var(--color-on-accent);
   --color-button-toast-action-text: var(--color-accent-primary);
+  --color-button-split-divider: var(--gray-800);
 
   /* Status pills */
   --color-pill-update-bg: var(--color-accent-primary);
@@ -244,6 +245,7 @@
   --color-add-card-check-ring: var(--gray-700);
   --color-banner-title: var(--gray-50);
   --color-banner-text: var(--gray-300);
+  --color-card-chip-ring: var(--color-card-bg);
   --color-plugin-skills-dot: var(--color-accent-yours);
   --color-plugin-servers-dot: var(--color-accent-theirs);
   --color-plugin-hooks-dot: var(--color-accent-attention);
@@ -254,6 +256,7 @@
   --color-overlay-border: var(--gray-800);
   --color-popover-row-hover: var(--gray-880);
   --color-popover-caption: var(--gray-500);
+  --color-menu-row-hover: var(--gray-880);
   --color-palette-row-text: var(--gray-150);
   --color-palette-row-active: var(--gray-870);
   --color-palette-icon: var(--gray-400);
@@ -267,7 +270,7 @@
   /* Code, file tree and diffs */
   --color-code-bg: var(--gray-980);
   --color-code-border: var(--gray-890);
-  --color-code-line-number: var(--gray-700);
+  --color-code-line-number: var(--gray-400);
   --color-code-frontmatter: var(--gray-400);
   --color-code-heading: var(--gray-50);
   --color-code-list: var(--gray-150);
@@ -277,9 +280,10 @@
   --color-file-row-hover: var(--gray-920);
   --color-file-row-divider: var(--gray-890);
   --color-file-row-path: var(--gray-200);
+  --color-file-row-path-open: var(--gray-50);
   --color-file-row-meta: var(--gray-500);
   --color-file-row-edited-label: var(--color-accent-attention);
-  --color-diff-added-bg: rgb(255 193 94 / 0.08);
+  --color-diff-added-bg: rgb(212 255 79 / 0.12);
   --color-diff-removed-bg: rgb(255 123 114 / 0.08);
   --color-diff-yours-label: var(--color-accent-yours);
   --color-diff-yours-bg: rgb(182 156 255 / 0.06);
@@ -339,10 +343,17 @@
       transform: translateY(24px);
     }
   }
+  --animate-turn-once: turn-once 1s ease;
+  @keyframes turn-once {
+    to {
+      transform: rotate(360deg);
+    }
+  }
 
   /* Shadows (DESIGN.md §2.2, overlays): `shadow-overlay`. */
   --shadow-overlay: 0 40px 100px -20px rgb(0 0 0 / 0.8);
   --shadow-popover: 0 24px 60px -12px rgb(0 0 0 / 0.7);
+  --shadow-menu: 0 24px 60px -12px rgb(0 0 0 / 0.7);
 
   /* Radii (DESIGN.md §5): `rounded-card`. */
   --radius-button: 9999px;
@@ -377,6 +388,8 @@
   --radius-palette-row: 12px;
   --radius-popover: 16px;
   --radius-popover-row: 10px;
+  --radius-menu: 12px;
+  --radius-menu-row: 8px;
   --radius-key-hint: 9999px;
   --radius-toast: 9999px;
   --radius-toast-detail: 18px;
@@ -490,6 +503,7 @@
   --height-table-header: 40px;
   --padding-table-row: 16px;
   --gap-table-col: 24px;
+  --grid-template-columns-server: 1fr 170px 130px 120px;
 
   /* Buttons, pills, controls */
   --padding-button-primary: 20px;
@@ -513,6 +527,7 @@
   --ring-width-logo: 2px;
   --padding-logo-sm: 3px;
   --padding-logo-lg: 5px;
+  --padding-logo-xl: 8px;
 
   /* Inputs */
   --height-input: 42px;
@@ -536,6 +551,7 @@
   --padding-agent-card: 22px;
   --gap-agent-card: 12px;
   --size-agent-card-logo: 44px;
+  --width-universal-lead: 260px;
   --padding-plugin-card: 22px;
   --height-plugin-card-row: 36px;
   --gap-add-card: 12px;
@@ -547,6 +563,8 @@
   --gap-dialog: 22px;
   --gap-popover: 16px;
   --width-popover: 300px;
+  --min-width-menu: 240px;
+  --padding-menu: 6px;
   --width-sheet: 420px;
   --inset-sheet: 10px;
   --padding-sheet: 32px;
@@ -570,6 +588,10 @@
   --padding-code: 14px;
   --grid-template-columns-code: 48px 12px 1fr;
   --padding-file-row: 16px;
+  --inset-file-row: 16px;
+  --height-file-row: 44px;
+  --max-height-code: 340px;
+  --gap-code: 12px;
   --gap-hunk: 12px;
   --padding-hunk-header: 8px;
   --padding-hunk-header-left: 16px;
@@ -783,6 +805,11 @@
   font-weight: 400;
   line-height: 1.5;
 }
+@utility type-agent-card-name {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
+}
 @utility type-banner-title {
   font-family: var(--font-sans);
   font-size: 14px;
@@ -803,4 +830,14 @@
   font-family: var(--font-sans);
   font-size: 12px;
   font-weight: 400;
+}
+@utility type-server-name {
+  font-family: var(--font-sans);
+  font-size: 14.5px;
+  font-weight: 500;
+}
+@utility type-transport-pill {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 500;
 }

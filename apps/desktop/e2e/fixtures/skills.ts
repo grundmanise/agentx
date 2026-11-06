@@ -4,11 +4,13 @@
 import type {
   AdoptionEvent,
   Configuration,
+  DiffEvent,
   HistoryEvent,
   LibraryEntry,
   LibraryPlacement,
   Occurrence,
   Plugin,
+  SkillFileEvent,
   SkillNode,
 } from "#/cli/events.gen.ts";
 
@@ -348,3 +350,234 @@ export const history: HistoryEvent[] = [
     { import: true }
   ),
 ];
+
+// The files of each skill, as `skill files` reads them, and the edits of the modified skills, as
+// `skill diff` reports them. Every skill has a SKILL.md, a nested file, a binary file and a file
+// over the size limit; the modified skill of a source also has a file it added.
+
+const skillFile = (
+  name: string,
+  path: string,
+  fields: Partial<Omit<SkillFileEvent, "type" | "name" | "path">>
+): SkillFileEvent => ({
+  binary: false,
+  name,
+  path,
+  schema_version: 2,
+  size: 0,
+  type: "skill_file",
+  ...fields,
+});
+
+/** A text file's event, with the size and line count the CLI would report for `content`. */
+const textFile = (name: string, path: string, content: string) =>
+  skillFile(name, path, {
+    content,
+    lines: content
+      .split("\n")
+      .filter((l, i, all) => i < all.length - 1 || l !== "").length,
+    size: new TextEncoder().encode(content).length,
+  });
+
+/** The SKILL.md of a fixture skill: front matter, a heading and a line of prose. */
+const skillMd = (name: string, prose: string) =>
+  `---\nname: ${name}\n---\n\n# ${name}\n${prose}\n`;
+
+/**
+ * The files of `name`, in a different order from the CLI's so that the app's own order shows:
+ * SKILL.md first, then by path, where `reference.pdf` sorts before `reference/forms.md`.
+ */
+export const filesOf = (
+  name: string,
+  prose = `Use this skill to ${name}.`,
+  extra: SkillFileEvent[] = []
+): SkillFileEvent[] => [
+  textFile(
+    name,
+    "reference/forms.md",
+    "# Forms\n\n- Fill in every field.\n- Keep the original.\n"
+  ),
+  skillFile(name, "reference.pdf", { size: 310_400, truncated: true }),
+  textFile(name, "SKILL.md", skillMd(name, prose)),
+  skillFile(name, "assets/logo.png", { binary: true, size: 8192 }),
+  ...extra,
+];
+
+const diffEvent = (
+  name: string,
+  path: string,
+  status: DiffEvent["status"],
+  patch: string
+): DiffEvent => ({
+  name,
+  patch,
+  path,
+  schema_version: 2,
+  status,
+  type: "diff",
+});
+
+/** The prose of review's SKILL.md after its edit; the patch below adds the second line. */
+export const reviewProse =
+  "Use this skill to review a change before merging.\nAlways run the tests first.";
+
+/** The edits of `review`, a modified skill of a source: one file edited, one added, one deleted. */
+export const reviewDiffs: DiffEvent[] = [
+  diffEvent(
+    "review",
+    "SKILL.md",
+    "modified",
+    [
+      "diff --git a/SKILL.md b/SKILL.md",
+      "index 5d1e2c4..8f0a3b1 100644",
+      "--- a/SKILL.md",
+      "+++ b/SKILL.md",
+      "@@ -4,3 +4,4 @@ name: review",
+      " ",
+      " # review",
+      "-Use this skill to review a change.",
+      "+Use this skill to review a change before merging.",
+      "+Always run the tests first.",
+      "",
+    ].join("\n")
+  ),
+  diffEvent(
+    "review",
+    "notes.md",
+    "added",
+    [
+      "diff --git a/notes.md b/notes.md",
+      "new file mode 100644",
+      "index 0000000..2f1c9e0",
+      "--- /dev/null",
+      "+++ b/notes.md",
+      "@@ -0,0 +1 @@",
+      "+My own notes.",
+      "",
+    ].join("\n")
+  ),
+  diffEvent(
+    "review",
+    "old.md",
+    "deleted",
+    [
+      "diff --git a/old.md b/old.md",
+      "deleted file mode 100644",
+      "index 9ab3f2e..0000000",
+      "--- a/old.md",
+      "+++ /dev/null",
+      "@@ -1,2 +0,0 @@",
+      "-An old note.",
+      "-Nobody reads it.",
+      "",
+    ].join("\n")
+  ),
+];
+
+/** The edits of `release-notes`, one of your own skills: SKILL.md edited since the last publish. */
+export const releaseNotesDiffs: DiffEvent[] = [
+  diffEvent(
+    "release-notes",
+    "SKILL.md",
+    "modified",
+    [
+      "diff --git a/SKILL.md b/SKILL.md",
+      "index 1111111..2222222 100644",
+      "--- a/SKILL.md",
+      "+++ b/SKILL.md",
+      "@@ -5,2 +5,2 @@",
+      " # release-notes",
+      "-Use this skill to write release notes.",
+      "+Use this skill to write release notes from merged changes.",
+      "",
+    ].join("\n")
+  ),
+];
+
+/** One `skill files` read: the arguments after `skill files`, and the events it answers with. */
+export interface FilesRead {
+  args: string[];
+  events: SkillFileEvent[];
+}
+
+/** The `skill files` read of every skill of the inventory, as the app names each one. */
+export const fileReads: FilesRead[] = [
+  { args: ["draft"], events: filesOf("draft") },
+  { args: ["gone"], events: filesOf("gone") },
+  { args: ["pdf"], events: filesOf("pdf") },
+  { args: ["pdf-letters"], events: filesOf("pdf-letters") },
+  {
+    args: ["release-notes"],
+    events: filesOf(
+      "release-notes",
+      "Use this skill to write release notes from merged changes."
+    ),
+  },
+  {
+    args: ["review"],
+    events: filesOf("review", reviewProse, [
+      textFile("review", "notes.md", "My own notes.\n"),
+    ]),
+  },
+  { args: ["scratch"], events: filesOf("scratch") },
+  {
+    args: ["acme-tools:commit-helper"],
+    events: filesOf("commit-helper"),
+  },
+  {
+    args: ["notes", "--configuration", "cursor"],
+    events: filesOf("notes"),
+  },
+];
+
+/**
+ * A deleted Markdown file with front matter: its `---` lines read `----` in the patch, which a
+ * count of the lines that start with `-` but not `---` would miss.
+ */
+export const deletedWithFrontMatter: DiffEvent = diffEvent(
+  "review",
+  "archive/OLD.md",
+  "deleted",
+  [
+    "diff --git a/archive/OLD.md b/archive/OLD.md",
+    "deleted file mode 100644",
+    "index 7c1d2e3..0000000",
+    "--- a/archive/OLD.md",
+    "+++ /dev/null",
+    "@@ -1,6 +0,0 @@",
+    "----",
+    "-name: old",
+    "----",
+    "-",
+    "-# Old",
+    "-Gone.",
+    "",
+  ].join("\n")
+);
+
+/**
+ * A skill two clients each hold as a directory of their own, with the same content, whose
+ * frontmatter name is not its directory's name: the CLI reads and the app shows the copy that
+ * comes first by configuration, named by its directory.
+ */
+export const meetingNotes: SkillNode = {
+  content_hash: "h-meeting",
+  description: "Notes of every meeting, kept by two clients",
+  logical_id: "skill:h-meeting",
+  name: "Meeting Notes",
+  occurrences: [
+    occurrence(
+      "cursor",
+      "meeting-notes",
+      "directory",
+      "/home/me/.cursor/skills/meeting-notes"
+    ),
+    occurrence(
+      "claude-code",
+      "meeting-notes",
+      "directory",
+      "/home/me/.claude-code/skills/meeting-notes"
+    ),
+  ],
+  physical_id: "skill:h-meeting",
+};

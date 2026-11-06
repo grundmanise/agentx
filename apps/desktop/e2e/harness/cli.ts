@@ -16,7 +16,7 @@
 // The app checks the machine on launch (src/startup/startup.ts), so the mock starts out with a
 // passing launch: `version` and `doctor` replies, and a serve child that writes its first inventory
 // when it starts. Once the checks pass the store loads its slices (src/store/loaders.ts), so the
-// mock answers `config list`, `source list` and `adopt` too. A test replaces any of them with
+// mock answers `config list`, `source list`, `adopt` and `machine` too. A test replaces any of them with
 // register() and onServeStart().
 import { once } from "node:events";
 
@@ -145,7 +145,11 @@ export const loadLines = [
   ["config", "list", "--json"],
   ["source", "list", "--json"],
   ["adopt", "--json"],
+  ["machine", "--json"],
 ];
+
+/** The library on the machine a passing launch reports. */
+export const libraryPath = "/home/me/.agents/skills";
 
 /** The CLI version a passing launch reports. */
 export const cliVersion = "1.2.0";
@@ -278,6 +282,8 @@ export class MockCli {
   readonly deadlines: (number | null)[] = [];
   /** Every line written to serve's stdin. */
   readonly serveRequests: string[] = [];
+  /** The paths of every call to the opener plugin's reveal, in order: what the app showed in Finder. */
+  readonly reveals: string[][] = [];
   /** The request id of every line written to serve's stdin, in order. */
   get requestIds(): string[] {
     return this.serveRequests.map((written) => {
@@ -314,6 +320,18 @@ export class MockCli {
     this.register(["config", "list"], { events: [{ type: "settings" }] });
     this.register(["source", "list"]);
     this.register(["adopt"]);
+    this.register(["machine"], {
+      events: [
+        {
+          home: "/home/me/.agentx",
+          id: "machine-1",
+          label: machineLabel,
+          library: libraryPath,
+          settings_file: "/home/me/.agentx/settings.json",
+          type: "machine",
+        },
+      ],
+    });
   }
 
   async install() {
@@ -447,6 +465,14 @@ export class MockCli {
     this.serving = true;
   }
 
+  /**
+   * Forgets the serve child, as closing the app does: after a page reload, the next serve start
+   * is a first start, which writes its first inventory again.
+   */
+  restart() {
+    this.serving = false;
+  }
+
   private async emit(event: string, payloads: unknown[]) {
     await this.page.evaluate(
       ([name, all]) => {
@@ -512,6 +538,13 @@ export class MockCli {
           throw new Error("serve is not running");
         }
         this.serveRequests.push(String(field(args, "line")));
+        return null;
+      }
+      case "plugin:opener|reveal_item_in_dir": {
+        const paths = field(args, "paths");
+        this.reveals.push(
+          Array.isArray(paths) ? paths.map(String) : [String(paths)]
+        );
         return null;
       }
       default: {

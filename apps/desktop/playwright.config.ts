@@ -21,7 +21,13 @@ export default defineConfig({
   reporter: ci ? [["list"], ["github"]] : [["list"]],
   retries: 0,
   testDir: "e2e",
-  use: { baseURL: `http://localhost:${port}`, trace: "on-first-retry" },
+  // One locale and time zone on every machine, so a date the app formats reads the same in a test.
+  use: {
+    baseURL: `http://localhost:${port}`,
+    locale: "en-US",
+    timezoneId: "UTC",
+    trace: "on-first-retry",
+  },
   webServer: {
     command: "pnpm dev",
     reuseExistingServer: !ci,

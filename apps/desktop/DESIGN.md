@@ -149,6 +149,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `source-pill.active-bg` | `gray-50` | Source pill in Add, active |
 | `source-pill.active-text` | `on-accent` |  |
 | `button.toast-action-text` | `accent.primary` | Action inside a toast |
+| `button.split-divider` | `gray-800` | The 1px line between the two halves of a split button |
 
 #### Status pills
 
@@ -156,7 +157,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | --- | --- | --- |
 | `pill.update-bg` | `accent.primary` | "Update" |
 | `pill.update-text` | `on-accent` |  |
-| `pill.neutral-bg` | `gray-860` | "Not published", "Adopt", "Put back" |
+| `pill.neutral-bg` | `gray-860` | "Not published", "Adopt", "Reconnect" |
 | `pill.neutral-hover` | `gray-800` |  |
 | `pill.neutral-text` | `gray-200` |  |
 | `pill.removed-bg` | `red-400/12` | "Removed from source" |
@@ -270,6 +271,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `add-card.check-ring` | `gray-700` | Ring of the round check on a card that is not selected |
 | `banner.title` | `gray-50` | Banner title (bg/border/tile from `tone.*`) |
 | `banner.text` | `gray-300` |  |
+| `card.chip-ring` | `card.bg` | 2px ring behind overlapping agent client logos on a card (the Universal card) |
 | `plugin.skills-dot` | `accent.yours` | SKILLS group (tint `violet-400/10`) |
 | `plugin.servers-dot` | `accent.theirs` | SERVERS group (tint `blue-400/10`) |
 | `plugin.hooks-dot` | `accent.attention` | HOOKS group (tint `amber-400/10`) |
@@ -285,6 +287,8 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `popover.shadow` | `0 24px 60px -12px black/70` |  |
 | `popover.row-hover` | `gray-880` |  |
 | `popover.caption` | `gray-500` | SHOW / STATE / AGENTS |
+| `menu.row-hover` | `gray-880` | Menu row pointed at or focused |
+| `menu.shadow` | `0 24px 60px -12px black/70` | Menu |
 | `palette.row-text` | `gray-150` |  |
 | `palette.row-active` | `gray-870` |  |
 | `palette.icon` | `gray-400` | Search icon and row icons |
@@ -301,7 +305,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | --- | --- | --- |
 | `code.bg` | `gray-980` | Code pane, hunk block |
 | `code.border` | `gray-890` | Hunk block border |
-| `code.line-number` | `gray-700` |  |
+| `code.line-number` | `gray-400` | Line numbers: 5.3:1 on `code.bg`, 4:1 on the added tint, where the marker carries the meaning |
 | `code.frontmatter` | `gray-400` | Front-matter and keys |
 | `code.heading` | `gray-50` | Markdown headings |
 | `code.list` | `gray-150` | List items |
@@ -310,10 +314,11 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `code.context` | `gray-500` | Context lines around a change |
 | `file-row.hover` | `gray-920` | File tree row hover |
 | `file-row.divider` | `gray-890` |  |
-| `file-row.path` | `gray-200` | Path; `gray-50` when the file is open |
+| `file-row.path` | `gray-200` | Path |
+| `file-row.path-open` | `gray-50` | Path of the file whose pane is open |
 | `file-row.meta` | `gray-500` | "{n} lines" |
 | `file-row.edited-label` | `accent.attention` | "edited by you" / "added by you" |
-| `diff.added-bg` | `amber-400/8` | Added line tint (marker "+" `accent.attention`) |
+| `diff.added-bg` | `lime-400/12` | Added line tint (marker "+" `accent.primary`) |
 | `diff.removed-bg` | `red-400/8` | Removed line tint (marker "−" `accent.danger`) |
 | `diff.yours-label` | `accent.yours` | "Yours" label, dot and chosen-pane ring |
 | `diff.yours-bg` | `violet-400/6` | "Yours" pane ground |
@@ -417,9 +422,12 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.detail-desc` | sans | 14.5 | 400 | 1.5 |  |  | Detail pane description (`text.muted`, `text-wrap:pretty`) |
 | `type.banner-title` | sans | 14 | 500 |  |  |  | Banner title (`banner.title`); its text is `type.secondary` in `banner.text` |
 | `type.agent-chip` | sans | 13 | 500 |  |  |  | Agent client name in a toggle chip |
+| `type.agent-card-name` | sans | 16 | 600 |  |  |  | Agent client name on an Agents page card, and "Universal" on the Universal card |
 | `type.timeline-entry` | sans | 13.5 | 400 | 20px |  |  | Timeline entry subject (`text.primary`); its line height is `timeline.line`, so the dot beside it sits on the first line |
 | `type.timeline-meta` | sans | 12 | 400 |  |  |  | Timeline entry meta (`text.caption`) |
 | `type.notice` | sans | 13 | 400 | 1.5 |  |  | Stale bar text; hint and warnings in an error toast |
+| `type.server-name` | sans | 14.5 | 500 |  |  |  | Server name in a server row (`text.primary`) |
+| `type.transport-pill` | mono | 11.5 | 500 |  |  |  | Transport pill (`server.transport-text` on `server.transport-bg`) |
 
 Text wrapping: `text-wrap:pretty` on multi-line copy. Single-line cells use `white-space:nowrap; overflow:hidden; text-overflow:ellipsis`.
 
@@ -488,6 +496,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `table.header-height` | 40 | `h-table-header` | Sticky header (servers) |
 | `table.row-padding` | 16 | `p-table-row` | Server rows |
 | `table.col-gap` | 24 | `gap-x-table-col` |  |
+| `server.columns` | 1fr 170 130 120 | `grid-cols-server` | The columns of the server header row and rows: SERVER · TRANSPORT · TOOLS · AGENTS |
 
 ### Buttons, pills, controls
 
@@ -524,7 +533,8 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `logo.ring` | 2 | `ring-logo` | Ring width |
 | `logo.padding` | 3–5 |  | Inner padding by size (3 at 20px, 4 at 24–26, 5 at 28) |
 | `logo.padding-sm` | 3 | `p-logo-sm` | 16 and 20px logos |
-| `logo.padding-lg` | 5 | `p-logo-lg` | 28px logos |
+| `logo.padding-lg` | 5 | `p-logo-lg` | 28px logos; a 24px logo takes the `1` spacing step (4px) |
+| `logo.padding-xl` | 8 | `p-logo-xl` | 44px logos |
 
 ### Inputs
 
@@ -554,6 +564,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `agent-card.padding` | 22 | `p-agent-card` | Agents page cards |
 | `agent-card.gap` | 12 | `gap-agent-card` | Grid gap |
 | `agent-card.logo` | 44 | `size-agent-card-logo` |  |
+| `universal-card.lead-width` | 260 | `w-universal-lead` | Left column of the Universal card: logos, "Universal", the library path |
 | `plugin-card.padding` | 22 | `p-plugin-card` |  |
 | `plugin-card.row-height` | 36 | `h-plugin-card-row` | Tree rows |
 | `add-card.gap` | 12 | `gap-add-card` | Grid gap |
@@ -571,6 +582,9 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `popover.gap` | 16 | `gap-popover` | Between groups |
 | `popover.row-height` | 32–34 |  |  |
 | `popover.offset` | 8 | none: a number passed to the popover's `sideOffset` | Gap from its anchor |
+| `menu.min-width` | 240 | `min-w-menu` | Menu |
+| `menu.padding` | 6 | `p-menu` | Around the menu's rows |
+| `menu.offset` | 4 | none: a number passed to the menu's `sideOffset` | Gap from its trigger |
 | `sheet.width` | 420 | `w-sheet` | History sheet |
 | `sheet.inset` | 10 | `top-sheet right-sheet bottom-sheet` | From top/right/bottom |
 | `sheet.padding` | 28 32 | `py-sheet-y px-sheet` |  |
@@ -593,10 +607,10 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | --- | --- | --- | --- |
 | `code.padding-y` | 14 | `py-code` | Pane top/bottom |
 | `code.gutter` | 48 12 | `grid-cols-code` (with the text column) | Line-number and marker columns |
-| `code.gap` | 10–14 |  | Between gutter and text |
-| `code.max-height` | 340–380 |  |  |
-| `file-row.height` | 44–46 |  | File tree row |
-| `file-row.padding-x` | 16 | `px-file-row` |  |
+| `code.gap` | 12 | `gap-x-code` | Between gutter and text |
+| `code.max-height` | 340 | `max-h-code` | The pane scrolls past it |
+| `file-row.height` | 44 | `h-file-row` | File tree row |
+| `file-row.padding-x` | 16 | `px-file-row`, `right-file-row` for the control at the row's end |  |
 | `hunk.gap` | 12 | `gap-hunk` | Between hunk blocks |
 | `hunk.header-padding` | 8 8 8 16 | `py-hunk-header pr-hunk-header pl-hunk-header-left` |  |
 | `hunk.pane-margin` | 4 8 | `my-hunk-pane-y mx-hunk-pane` | Around the two panes |
@@ -638,6 +652,8 @@ Radii are scoped the same way. Same-named steps across elements are independent.
 | `row.radius` | 12 | Split list rows |
 | `table.row-radius` | 14 | Server rows |
 | `popover.row-radius` | 10 | Popover rows, Reset button |
+| `menu.radius` | 12 | Menu |
+| `menu.row-radius` | 8 | Menu rows |
 | `card.radius` | 18 | Inbox cards, review file cards |
 | `card.tile-radius` | 10 | Icon tile |
 | `file-card.radius` | 16 | File tree card |
@@ -688,15 +704,15 @@ Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, 11–12 / 600.
 
 ### Switch
 
-`switch.size`, `switch.padding`, `switch.radius`; knob `switch.knob` round. On: track `switch.on-track`, knob `switch.on-knob`, `justify-content:flex-end`. Off: track `switch.off-track`, knob `switch.off-knob`. `transition: background .18s`. The whole row is the hit target. Compact variant `switch.compact-size` (knob `switch.compact-knob`) inside agent toggle chips.
+`switch.size`, `switch.padding`, `switch.radius`; knob `switch.knob` round. On: track `switch.on-track`, knob `switch.on-knob`, `justify-content:flex-end`. Off: track `switch.off-track`, knob `switch.off-knob`. `transition: background .18s`. The whole row is the hit target. Compact variant `switch.compact-size` (knob `switch.compact-knob`) inside agent toggle chips. A switch always shows the state the last inventory reported: while its command runs, and until the inventory that follows it arrives, it is pending (`aria-busy`, disabled at 50% opacity, a `Spinner` beside it) and keeps that state; it never shows the outcome ahead of the CLI. Its `title` says what the state means ("Enabled · new skills go here by default" / "Disabled · skipped by default").
 
 ### Agent client toggle chip (detail pane AGENTS)
 
-Pill button `agent-chip.height`, `agent-chip.padding`, `agent-chip.gap`, `agent-chip.radius`: 28px logo(s) · name 13 / 500 · compact switch. Off: `agent-chip.off-bg` with 1px `agent-chip.off-border`. On: `agent-chip.on-bg` with `agent-chip.on-border`. Hover border `agent-chip.hover-border`. Locked: 45% opacity, `cursor:not-allowed`, `title` holds the reason; a click toasts it. Chips wrap in a row with `agent-chip.wrap-gap`.
+Pill button `agent-chip.height`, `agent-chip.padding`, `agent-chip.gap`, `agent-chip.radius`: 28px logo(s) · name 13 / 500 · compact switch. Off: `agent-chip.off-bg` with 1px `agent-chip.off-border`. On: `agent-chip.on-bg` with `agent-chip.on-border`. Hover border `agent-chip.hover-border`. Locked: 45% opacity, `cursor:not-allowed`, `title` holds the reason; a click toasts it. Chips wrap in a row with `agent-chip.wrap-gap`. A click on a direct agent's chip runs one command, and the chip is pending (`aria-busy`, `cursor:wait`, a `Spinner` in place of the compact switch) until the command ends and the next inventory arrives; its `title` reads "Add to {Agent}" / "Remove from {Agent}". A displaced chip shows "displaced" in `tone.attention.fg` under the name and runs nothing: a click toasts "Reconnect it first, then manage it from your library". The Universal chip, on, opens the Remove dialog: a universal client reads the library, so a skill leaves it only by leaving the machine.
 
 ### Checkbox (popover)
 
-16×16 round, inset ring 1.5px `checkbox.ring`; checked: `checkbox.checked-bg` fill, `checkbox.check` check.
+16×16 round, inset ring 1.5px `checkbox.ring`; checked: `checkbox.checked-bg` fill, `checkbox.check` check. The same mark inside a dialog (the Remove dialog's "Also delete it from your account remote"), beside its label in `type.body` `text.primary`, with a line of `type.secondary` `text.muted` under it when the choice needs a word of explanation.
 
 ### Segmented control
 
@@ -704,7 +720,7 @@ Track `segmented.track-bg`, `segmented.track-border`, `segmented.radius`, `segme
 
 ### Agent client logo chip
 
-Round, `logo.bg`, `padding:3–4px`, `background-size:contain`, logo from an image bundled with the app (never fetched from the network). Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (agent client toggle chips), 44 (agent client cards). Overlap with `logo.overlap` and a `logo.ring`-wide ring (`box-shadow: 0 0 0 2px <parent bg>`). Every logo carries `title="<agent client name>"`. The bundled logos (`src/assets/logos`, listed in its README) are the clients' official marks as the vendors publish them, never marks drawn for the app; a client without a bundled mark gets the monogram below.
+Round, `logo.bg`, `padding:3–4px`, `background-size:contain`, logo from an image bundled with the app (never fetched from the network). Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (agent client toggle chips), 44 (agent client cards). Overlap with `logo.overlap` and a `logo.ring`-wide ring (`box-shadow: 0 0 0 2px <parent bg>`). Every logo carries `title="<agent client name>"`. A logo is never dimmed or greyed: a server row shows only the agents that have the server on, and reads "Turned off" (`type.secondary`, `text.muted`) when every agent turned it off. The bundled logos (`src/assets/logos`, listed in its README) are the clients' official marks as the vendors publish them, never marks drawn for the app; a client without a bundled mark gets the monogram below.
 
 ### Skill glyph (16px, leading the row)
 
@@ -721,13 +737,29 @@ Mono caption 10.5–11 / `.16em` uppercase `group.label` plus a count in `group.
 
 `banner.radius`, `banner.padding`, `tone.*.bg` + 1px `tone.*.border`; `banner.tile` icon tile in `tone.*.fg`; title 14 / 500 `banner.title`; text 13 `banner.text`; actions on the right.
 
+### Agent client card (Agents page)
+
+One card per agent configuration whose client does not read the library, in a 4-column grid with `agent-card.gap`: `card.bg`, 1px `card.border`, `agent-card.radius`, `agent-card.padding`. Top row: the `agent-card.logo` logo at the left and the Enabled switch (§6 "Switch") at the right. Then the client's name in `type.agent-card-name` `card.title`, its configuration path in `type.technical` `text.caption` on one line with an ellipsis, and "{n} skills · {n} servers · {n} plugins" in `type.secondary` `card.text` with the numbers in `text.primary`, 500. Enabled decides only where later installs and creations go when no agent is named; it never changes a placement, so the counts do not move when the switch does.
+
+### Universal card (Agents page)
+
+One full-width card below the grid, the same surface, for every configuration whose client reads the library. Its left column is `universal-card.lead-width` wide: the clients' logos stacked (`agent-card.logo`, ringed in `card.chip-ring`), "Universal" in `type.agent-card-name`, "Read your shared library" in `type.secondary` `card.text`, and the library path in `type.technical` `text.caption`. Then one column per client behind a 1px `shell.divider` hairline on its left: name, path and "{n} skills · {n} servers", the skill count being the library's. No switch: a universal client sees every library skill whatever its setting.
+
+### Banner actions and dialogs (detail pane)
+
+A banner's action is a small ghost button on its right, one command each: "Add to agents" on the gray "Not in any agent" banner (`tone.neutral`), "Reconnect" on the amber "{Agent} is using its own copy of this skill" banner. A command that is refused because the folder holds another version opens a confirm dialog, "Replace {Agent}'s copy?", with the path in `type.technical` `text.caption` and Cancel · Replace (danger). Remove, in the action row, is a danger ghost button that opens the Remove dialog: "Remove {skill}?", the agents it will be deleted from as a list in `type.body` `text.secondary`, and Cancel · Remove (danger). Every button that runs a command is pending until the command ends and the next inventory arrives.
+
 ### Card (Inbox)
 
 `card.bg`, `card.radius`, `card.border`, `card.padding`. Header grid: `card.tile` icon tile (`tone.*`) · title/tag/text · actions. Resolve animation: `opacity 0; transform: translateX(24px) scale(.985)` over 280ms, then removed.
 
 ### Toast
 
-`toast.offset` from the bottom, centred; `overlay.bg`, `overlay.border`, `toast.radius`, `toast.height`, `toast.padding`; text 13.5 `toast.text`; optional action button ghost in `button.toast-action-text`. Auto-dismiss 2.6s, or 5s when it has an action. One toast at a time.
+`toast.offset` from the bottom, centred; `overlay.bg`, `overlay.border`, `toast.radius`, `toast.height`, `toast.padding`; text 13.5 `toast.text`; optional action button ghost in `button.toast-action-text`. Auto-dismiss 2.6s, or 5s when it has an action. One toast at a time. A toast for a command that runs (Check tools: "Checking tools" with a Cancel) stays until the command ends, when the toast of its outcome replaces it.
+
+### Attention toast
+
+A command that exited 0 and logged warnings (a placement skipped, a copy that differed): the same shape as the error toast below, with the success text in `type.toast` `toast.text` and each warning in `type.notice` `tone.attention.fg`, the toast's action (Undo) when it has one, and a ghost Dismiss. It goes after 5s. The activity entry it logs is `attention`, not `success`.
 
 ### Error toast
 
@@ -745,6 +777,14 @@ The machine's label from the inventory, under the product name in the sidebar: `
 
 Grid `timeline.col 1fr`, `timeline.gap`. Dot `timeline.dot` round (`timeline.dot-install` for an upstream import, `timeline.dot-update` for a commit made with Git, `timeline.dot-yours` for one agentx wrote), centred in a box as high as the entry's first line (`timeline.line` beside the subject text, `timeline.button-line` beside a small button), a 1px `timeline.connector` from the bottom of that box to the next entry. Entry: subject `type.timeline-entry` in `text.primary`, meta `type.timeline-meta` in `timeline.meta` ("{date} · {n} files", then "made with Git" or "from the original"). Final item when truncated: hollow dot (inset ring 1.5px `timeline.more-ring`) and a ghost button "Show all {n}", which opens the History sheet.
 
+### Menu
+
+A list of actions under a button (`src/components/ui/dropdown-menu.tsx`): `menu.min-width`, `menu.radius`, `overlay.bg` with 1px `overlay.border` and `menu.shadow`, `menu.padding` around the rows, `menu.offset` below its trigger and aligned to its end. A row is `menu.row-radius` with `menu.row-hover` when pointed at or focused; its lines stack: a `type.body` line in `text.primary`, then a `type.technical-sm` line in `text.caption` such as a path. Escape or a click outside closes it. No animation.
+
+### Split button
+
+Two ghost icon buttons that meet with no gap and share one outline, told apart by a 1px `button.split-divider` on the chevron's left edge: the action (`button.icon-size` square, rounded at its left end only) and a narrower chevron pointing down that opens the action's menu (rounded at its right end only). Only the action shows when there is nothing to choose. Show in Finder on a file row is one.
+
 ### Popover (Filter)
 
 `popover.width`, `popover.radius`, `overlay.bg` with 1px `overlay.border` and `popover.shadow`, 14px padding, `popover.gap` between its groups, `popover.offset` below its anchor. Each group opens with a caption in `popover.caption`. SHOW is a row of pills (`type.secondary`, count in `type.technical-sm` `text.caption`; the chosen one `button.secondary-bg` and `text.primary`), STATE a segmented control, AGENTS rows of `popover.row-radius` with the round checkbox, a 20px logo and the name. Reset filters is a ghost button, shown while a filter is applied. A click outside or Escape closes it.
@@ -759,7 +799,11 @@ A client with no bundled logo shows the first letter of its name in `type.pill`,
 
 ### Code pane
 
-`code.bg`, mono 12.5, `line-height:1.75`, grid `code.gutter 1fr` (line no. `code.line-number` right-aligned · marker · text). Front-matter and keys `code.frontmatter`, headings `code.heading`, list items `code.list`, prose `code.prose`. Diff tints: added line `+` on `diff.added-bg`, removed line `−` on `diff.removed-bg` with no number.
+`code.bg`, mono 12.5, `line-height:1.75`, grid `code.gutter 1fr` (line no. `code.line-number` right-aligned · marker · text). Front-matter and keys `code.frontmatter`, headings `code.heading`, list items `code.list`, prose `code.prose`. Diff tints: added line `+` on `diff.added-bg`, removed line `−` on `diff.removed-bg` with no number. On a tinted line, front matter takes `code.prose` so it keeps 4.5:1.
+
+### File list (detail pane FILES)
+
+A `card.bg` card, `file-card.radius`, 1px `card.border`, holding one row per file, `file-row.height` high with `file-row.padding-x`, a 1px `file-row.divider` hairline between rows and `file-row.hover` on hover or focus: a chevron (`rotate(90deg)` in .15s when the row is open), the path in `type.technical` (`file-row.path`, `file-row.path-open` while open), a `file-row.edited-label` label for a file the user changed, and "{n} lines", "binary" or "Too large to show ({size})" in `file-row.meta` at the right. SKILL.md comes first and open; the rest follow by path, a file the user removed among them. An open row shows the file in the Code pane below it. A row of a file on disk also has a "Show in Finder" split button, beside the trigger and never inside it, over the meta text at the row's end: while the row is hovered, holds the focus or has its menu open, the meta fades out and the button fades in at that spot, both in .15s, and the row's layout never changes (the meta stays laid out, only its opacity moves); it is in the tab order throughout. A row the edits removed has no button and keeps its meta. The button opens the file at the skill's first place, the library for a skill the library holds, else its first placement in the order the row lists its agents; the chevron's menu lists every other place, one row per placement, "{Agent name}", "{Agent name} ({plugin} plugin)" for a plugin's copy, with the path as the inventory carries it, and opens the file there. A skill with one place has no chevron.
 
 ### Key hint
 
@@ -784,9 +828,10 @@ The product mark is `shell.logo-mark` on `shell.logo-bg`, 30px `shell.logo-radiu
 - Hover/background changes: no transition or ≤ .18s.
 - Switches: `.18s` background.
 - Chevrons: `rotate(90deg)` with `.15s`.
+- File row control: the meta text and the Show in Finder button swap by opacity in `.15s` on hover.
 - Floating bar (`animate-floating-bar`): `translateY(24px) → 0`, opacity 0 → 1, `.22s ease`, when it appears.
 - Card resolve: 280ms, see §6.
-- Spinner-style icons (Check updates, Check tools): one full rotation `.9–1s ease`, then a toast.
+- Spinner-style icons (Check updates, Check tools): one full rotation `.9–1s ease` (`animate-turn-once`: 1s ease, once, while the command runs), then a toast.
 - Startup check running (`animate-check-spin`): the status ring turns once a second, linear, while its check runs, and stops when the check settles.
 - Screens fade in (`animate-fade-in`): opacity 0 → 1 over `.2s ease-out` when they mount, once the startup checks pass. Nothing waits on purpose: a passing launch shows no startup layer. A launch whose checks run for over 2s shows a `Spinner` and what the checks do (`type.secondary`, `text.muted`) in the middle of the empty panel, faded in the same way, until the checks settle: "Checking this machine" while `version` and `doctor` run, then "Looking for skills", "Looking for MCP servers" and "Looking for plugins" in turn, each for 1.5s and faded in, while serve scans. From 5s into a check, a line below (`type.row-desc`, `text.hint`) counts down to its deadline: "Taking longer than usual · trying for 25s more".
 - Diff pane choice: `opacity .2s, box-shadow .2s`.
@@ -794,7 +839,7 @@ The product mark is `shell.logo-mark` on `shell.logo-bg`, 30px `shell.logo-radiu
 
 ## 9. Copy rules
 
-- Plain verbs: Add, Remove, Update, Fork, Publish, Review update, Put back, Adopt, Check updates.
+- Plain verbs: Add, Remove, Update, Fork, Publish, Review update, Reconnect, Adopt, Check updates.
 - Copy uses the terms in [`GLOSSARY.md`](../../GLOSSARY.md) and never a word the glossary lists under _Avoid_. Where a glossary term names the thing, use that term, such as "account remote", "account repo", "upstream" or "base version". Where this file and the glossary differ, the glossary wins.
 - Named exception: the "Agents" screen name, its nav label and the "AGENTS" captions stay as they are, although the glossary avoids "agent" for an agent client.
 - For a git word the glossary has no term for, use a plain word: "change", not "hunk".

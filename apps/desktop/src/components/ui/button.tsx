@@ -18,6 +18,13 @@ const buttonVariants = cva(
         default:
           "type-button h-9.5 items-center justify-center px-4 whitespace-nowrap",
         icon: "type-button size-8 items-center justify-center p-0 whitespace-nowrap",
+        // The two halves of a split button (DESIGN.md §6 "Split button"): the action, and the
+        // narrower chevron that opens its menu, which meet with no gap, share one outline and are
+        // told apart by a 1px `button.split-divider` on the chevron's left edge.
+        "icon-split-main":
+          "type-button h-8 w-8 items-center justify-center rounded-r-none p-0 whitespace-nowrap",
+        "icon-split-menu":
+          "type-button border-button-split-divider h-8 w-5 items-center justify-center rounded-l-none border-l p-0 whitespace-nowrap",
         sm: "type-button-sm h-8.5 items-center justify-center px-3.5 whitespace-nowrap",
         "sm-wrap":
           "type-button-sm min-h-8.5 items-start justify-start px-3.5 py-1.5 text-left whitespace-normal",
