@@ -122,7 +122,7 @@ export const statusLabels: Record<CardStatus, string> = {
   added: "Added",
   forked: "Forked",
   "name-in-use": "Name in use",
-  "on-disk": "On disk",
+  "on-disk": "Already in library",
 };
 
 export interface SkillCard {
@@ -157,6 +157,9 @@ const card = (
     c.status = status;
     if (status === "name-in-use") {
       c.title = `Remove or rename ${name} first`;
+    }
+    if (status === "on-disk") {
+      c.title = `A folder named ${name} is already in your library, added outside agentx. Adopt it in Skills to manage it, or remove it to add this one.`;
     }
   }
   return c;

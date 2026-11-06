@@ -97,7 +97,7 @@ const universal = ["codex", "gemini-cli"];
 
 /**
  * The library: pdf installed from acme (Added), my-letters forked from acme's letters (Forked), an
- * unmanaged scratch (On disk), and an xlsx from zeta (Name in use for acme's xlsx).
+ * unmanaged scratch (Already in library), and an xlsx from zeta (Name in use for acme's xlsx).
  */
 export const library: LibraryEntry[] = [
   {

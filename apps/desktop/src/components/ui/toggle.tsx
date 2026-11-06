@@ -17,9 +17,11 @@ const toggleVariants = cva("inline-flex shrink-0 outline-none", {
       // selected `add-card.selected-bg` and `add-card.selected-border`. A card that cannot be
       // selected sits at 60%.
       card: "rounded-add-card border-add-card-border bg-add-card-bg hover:border-add-card-hover-border aria-pressed:border-add-card-selected-border aria-pressed:bg-add-card-selected-bg min-h-add-card disabled:hover:border-add-card-border w-full items-start gap-3 border p-4 text-left disabled:cursor-default disabled:opacity-60",
-      // A round agent client logo as an install target: a 28px logo, at 55% when off, with an
-      // `accent.primary` ring when on.
-      logo: "rounded-logo ring-offset-overlay-bg aria-pressed:ring-accent-primary items-center justify-center opacity-55 ring-offset-2 aria-pressed:opacity-100 aria-pressed:ring-2",
+      // An agent client logo as an install target: a 28px logo, or the Universal stack of them, at
+      // 55% when off, with an `accent.primary` ring when on. The ring takes `pill.radius`, not
+      // `logo.radius`: a 50% radius on the stack's 48x28 box is an ellipse that cuts into the
+      // logos, while the pill is a circle around one logo and a stadium clear of the stack.
+      logo: "rounded-pill ring-offset-overlay-bg aria-pressed:ring-accent-primary items-center justify-center opacity-55 ring-offset-2 aria-pressed:opacity-100 aria-pressed:ring-2",
       // A source pill (DESIGN.md §2.2 "Buttons", `source-pill.*`): `source-pill.bg` with its label
       // in `text.secondary`; the active one `source-pill.active-bg` and `source-pill.active-text`.
       "source-pill":

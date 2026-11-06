@@ -133,7 +133,7 @@ test("a source listing: selectable cards first, then each state with its label",
   const states: [string, string][] = [
     ["letters", "Forked"],
     ["pdf", "Added"],
-    ["scratch", "On disk"],
+    ["scratch", "Already in library"],
     ["xlsx", "Name in use"],
   ];
   await Promise.all(
@@ -148,6 +148,10 @@ test("a source listing: selectable cards first, then each state with its label",
   await expect(card(page, "xlsx")).toHaveAttribute(
     "title",
     "Remove or rename xlsx first"
+  );
+  await expect(card(page, "scratch")).toHaveAttribute(
+    "title",
+    "A folder named scratch is already in your library, added outside agentx. Adopt it in Skills to manage it, or remove it to add this one."
   );
 
   // Opening another pill reads that source's listing.

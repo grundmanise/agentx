@@ -265,7 +265,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `add-card.check-bg` | `accent.primary` | Check tile on a selected card (check `on-accent`) |
 | `add-card.status-added` | `gray-400` | "Added" label |
 | `add-card.status-forked` | `accent.yours` | "Forked" label |
-| `add-card.status-disk` | `accent.attention` | "On disk" label |
+| `add-card.status-disk` | `accent.attention` | "Already in library" label |
 | `add-card.status-in-use` | `gray-400` | "Name in use" label |
 | `add-card.check-ring` | `gray-700` | Ring of the round check on a card that is not selected |
 | `banner.title` | `gray-50` | Banner title (bg/border/tile from `tone.*`) |
