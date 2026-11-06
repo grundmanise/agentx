@@ -74,6 +74,37 @@ test("a command that exits 0 shows its toast, logs it and asks serve to scan aga
   expect(later(cli)).toEqual([["skill", "remove", "pdf", "--json"]]);
 });
 
+test("exit 0 with warnings shows an attention toast with the success text and the warnings", async ({
+  cli,
+  page,
+}) => {
+  await launch(cli, page);
+  const warning =
+    "cursor: /home/me/.cursor/skills/pdf is a directory of yours and was left as it is";
+  cli.register(["skill", "place", "pdf"], {
+    events: [
+      {
+        ok: true,
+        summary: "placed pdf in 1 configuration, 1 placement skipped",
+        type: "result",
+      },
+    ],
+    logs: [{ level: "warn", message: warning }],
+  });
+
+  await run(page, ["skill", "place", "pdf"], "Added pdf to 1 agent");
+  const toast = toasts(page)
+    .getByRole("listitem")
+    .filter({ hasText: "Added pdf to 1 agent" });
+  await expect(toast).toContainText(warning);
+  // The command succeeded, with something to look at: attention, not success.
+  await expect(activity(page)).toHaveText(["Added pdf to 1 agent"]);
+  await expect(activity(page)).toHaveAttribute("data-tone", "attention");
+  await toast.getByRole("button", { name: "Dismiss" }).click();
+  await expect(toast).toHaveCount(0);
+  await expect.poll(() => cli.serveRequests.length).toBe(1);
+});
+
 test("a read asks for no refresh and logs nothing", async ({ cli, page }) => {
   await launch(cli, page);
   const list = cli.register(["skill", "list"], { exitCode: 0 });

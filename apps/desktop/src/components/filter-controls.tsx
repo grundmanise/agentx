@@ -6,6 +6,7 @@
 import { cva } from "class-variance-authority";
 import type { ReactNode } from "react";
 
+import { CheckMark } from "#/components/check-mark.tsx";
 import { ArrowDownIcon } from "#/components/icons/arrow-down.tsx";
 import { CloseIcon } from "#/components/icons/close.tsx";
 import { FilterIcon } from "#/components/icons/filter.tsx";
@@ -218,39 +219,6 @@ export const Segmented = <T extends string>({
       </label>
     ))}
   </div>
-);
-
-/** The round popover checkbox, drawn (DESIGN.md §6 "Checkbox (popover)"). */
-const CheckMark = ({ checked }: { checked: boolean }) => (
-  <svg
-    viewBox="0 0 16 16"
-    aria-hidden
-    focusable="false"
-    className="size-checkbox block flex-none"
-  >
-    {checked ? (
-      <>
-        <circle cx="8" cy="8" r="8" className="fill-checkbox-checked-bg" />
-        <path
-          d="M4.75 8.25l2.25 2.25 4.25-4.75"
-          fill="none"
-          strokeWidth="1.75"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="stroke-checkbox-check"
-        />
-      </>
-    ) : (
-      <circle
-        cx="8"
-        cy="8"
-        r="7.25"
-        fill="none"
-        strokeWidth="1.5"
-        className="stroke-checkbox-ring"
-      />
-    )}
-  </svg>
 );
 
 /** A row of a many-of group in the popover (AGENTS): checkbox, what the caller shows, a label. */
