@@ -699,7 +699,7 @@ Two buttons side by side: `button.gap`, primary on the right.
 
 Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, 11–12 / 600.
 
-- Update: `pill.update-bg` / `pill.update-text` (clickable).
+- Update (beside the row of a skill with an update, §6 "Skill row (Skills list)"): `pill.update-bg` / `pill.update-text`, the text "Update", accessible name "Update {skill}", `title` "Update · {base} → {newer}", each version by its date when the CLI dates it and by its short id otherwise, the newer one alone for changes from your other machines. A click runs `skill update <name>` and selects nothing; the pill is pending (`aria-busy`, `cursor:wait`, 50% opacity, a `Spinner` before the text) until the command ends and the next inventory arrives. A skill with a pending merge has no Update pill: its "Update waiting" pill says what comes first.
 - Not published / Adopt: `pill.neutral-bg` / `pill.neutral-text`.
 - Removed from source: `pill.removed-bg` / `pill.removed-text`.
 - Disabled (plugin): `pill.disabled-bg` / `pill.disabled-text`.
@@ -737,6 +737,10 @@ Round, `logo.bg`, `padding:3–4px`, `background-size:contain`, logo from an ima
 
 Mono caption 10.5–11 / `.16em` uppercase `group.label` plus a count in `group.count`. `group.padding-first` for the first group, `group.padding` for the rest.
 
+### Skill row (Skills list)
+
+The list item is the row's box: `row.padding`, `row.radius`, `row.hover` on hover, and when selected `row.selected-bg` with the 2px `row.selected-bar` at its left edge; the focus ring (`shell.focus-ring`) is drawn on the box while the row button has the keyboard focus. Inside the box are two siblings, never a button inside a button: the row button, which takes the remaining width and holds the glyph, the name, the pills, the fork markers, the logos and the description line; and, for a skill with an update, the Update pill (§6 "Pills") at the box's right end, `row.inline-gap` after the row button, centred on the name line. The tab order is the row button, then the pill. A click anywhere in the box but on the pill selects the row: the row button's `::after` covers the box beneath its content, in a stacking context the box isolates. Enter on the row button selects it too. A row without a pill lays out exactly as the row button alone did.
+
 ### Banner (detail pane)
 
 `banner.radius`, `banner.padding`, `tone.*.bg` + 1px `tone.*.border`; `banner.tile` icon tile in `tone.*.fg`; title 14 / 500 `banner.title`; text 13 `banner.text`; actions on the right.
@@ -751,7 +755,7 @@ One full-width card below the grid, the same surface, for every configuration wh
 
 ### Banner actions and dialogs (detail pane)
 
-A banner's action is a small ghost button on its right, one command each: "Add to agents" on the gray "Not in any agent" banner (`tone.neutral`), "Reconnect" on the amber "{Agent} is using its own copy of this skill" banner. A command that is refused because the folder holds another version opens a confirm dialog, "Replace {Agent}'s copy?", with the path in `type.technical` `text.caption` and Cancel · Replace (danger). Remove, in the action row, is a danger ghost button that opens the Remove dialog: "Remove {skill}?", the agents it will be deleted from as a list in `type.body` `text.secondary`, and Cancel · Remove (danger). Every button that runs a command is pending until the command ends and the next inventory arrives.
+A banner's action is a small ghost button on its right, one command each: "Add to agents" on the gray "Not in any agent" banner (`tone.neutral`), "Reconnect" on the amber "{Agent} is using its own copy of this skill" banner. The banners of an update come first, `tone.primary` with the `RefreshIcon` in the tile and a small primary Update (`skill update <name>`) as their action: "A newer version from {owner/repo}" for a skill of a shared source, "The original has a new version" for one of your own whose upstream has a newer version, and "Changes from your other machines" for what another of your machines published. Their text is the paths of the files the update changes, joined by " · ", then " · your edits are kept" (a skill of a shared source) or " · edits you have not published are kept" (one of your own) when the skill holds edits; changes from your other machines list the paths alone. A skill with a pending merge shows none of them. A command that is refused because the folder holds another version opens a confirm dialog, "Replace {Agent}'s copy?", with the path in `type.technical` `text.caption` and Cancel · Replace (danger). Remove, in the action row, is a danger ghost button that opens the Remove dialog: "Remove {skill}?", the agents it will be deleted from as a list in `type.body` `text.secondary`, and Cancel · Remove (danger). Every button that runs a command is pending until the command ends and the next inventory arrives.
 
 ### Card (Inbox)
 
@@ -763,7 +767,7 @@ A banner's action is a small ghost button on its right, one command each: "Add t
 
 ### Toast
 
-`toast.offset` from the bottom, centred; `overlay.bg`, `overlay.border`, `toast.radius`, `toast.height`, `toast.padding`; text 13.5 `toast.text`; optional action button ghost in `button.toast-action-text`. Auto-dismiss 2.6s, or 5s when it has an action. One toast at a time. A toast for a command that runs (Check tools: "Checking tools" with a Cancel) stays until the command ends, when the toast of its outcome replaces it.
+`toast.offset` from the bottom, centred; `overlay.bg`, `overlay.border`, `toast.radius`, `toast.height`, `toast.padding`; text 13.5 `toast.text`; optional action button ghost in `button.toast-action-text`. Auto-dismiss 2.6s, or 5s when it has an action. One toast at a time. A toast for a command that runs (Check tools: "Checking tools" with a Cancel) stays until the command ends, when the toast of its outcome replaces it. Check updates is one too: "Checking for updates" with a Cancel, then "Checking for updates · {n} of {total} sources" as each source is fetched, the text changing in place; then "{n} skills have updates" (with Update all, `skill update --all`, when there are more than one), "1 skill has an update" or "Everything is up to date"; a source it could not reach is an error toast, "Checked. Couldn't reach {owner/repo}" with the CLI's hint.
 
 ### Attention toast
 

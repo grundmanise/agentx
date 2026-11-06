@@ -1,5 +1,6 @@
 // The one banner of the detail pane (DESIGN.md §6 "Banner" and "Banner actions and dialogs"),
-// with its button: Add to agents on the gray banner, Reconnect on the amber one. A Reconnect the
+// with its button: Update on the lime banners of an update, Add to agents on the gray banner,
+// Reconnect on the amber one. A Reconnect the
 // CLI refuses because the directory holds another version opens a confirm dialog, whose Replace
 // runs the same command with --force.
 import { cva } from "class-variance-authority";
@@ -8,6 +9,7 @@ import { useState } from "react";
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { LibraryPlacement } from "#/cli/events.gen.ts";
 import { AlertIcon } from "#/components/icons/alert.tsx";
+import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { dismissToast } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
@@ -27,6 +29,7 @@ import {
   placedCount,
 } from "#/screens/skills/placements.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
+import { updateLabel, updateSkill } from "#/screens/skills/updates.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 
 const bannerVariants = cva(
@@ -80,6 +83,25 @@ const ActionButton = ({
     {label}
   </Button>
 );
+
+/** Update: `skill update <name>`, the primary action of an update's banner. */
+const UpdateButton = ({ row }: { row: SkillRow }) => {
+  const pending = useSettling(updateLabel(row.name));
+  return (
+    <Button
+      variant="primary"
+      size="sm"
+      disabled={pending}
+      aria-busy={pending ? true : undefined}
+      onClick={() => {
+        void updateSkill(row);
+      }}
+    >
+      {pending && <Spinner />}
+      Update
+    </Button>
+  );
+};
 
 /** Add to agents: `skill place <name>`, into every enabled agent. */
 const AddToAgents = ({ row }: { row: SkillRow }) => {
@@ -174,6 +196,9 @@ const PutBack = ({
 
 const BannerActions = ({ row, banner }: { row: SkillRow; banner: Banner }) => {
   switch (banner.action?.kind) {
+    case "update": {
+      return <UpdateButton row={row} />;
+    }
     case "add-to-agents": {
       return <AddToAgents row={row} />;
     }
@@ -208,14 +233,20 @@ export const BannerView = ({
     className={bannerVariants({ tone: banner.tone })}
   >
     <span className={tileVariants({ tone: banner.tone })}>
-      <AlertIcon size="lg" />
+      {banner.icon === "update" ? (
+        <RefreshIcon size="lg" />
+      ) : (
+        <AlertIcon size="lg" />
+      )}
     </span>
     <div className="gap-banner-text flex min-w-0 flex-1 flex-col">
       <span className="type-banner-title text-banner-title">
         {banner.title}
       </span>
       {banner.text !== undefined && (
-        <span className="type-secondary text-banner-text">{banner.text}</span>
+        <span className="type-secondary text-banner-text text-pretty">
+          {banner.text}
+        </span>
       )}
     </div>
     <div className="flex items-center gap-1.5">

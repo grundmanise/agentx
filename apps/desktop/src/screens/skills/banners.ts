@@ -2,6 +2,10 @@
 // matches. Later changes add rows, in the order they should win.
 import type { Configuration, LibraryPlacement } from "#/cli/events.gen.ts";
 import { displacedPlacement } from "#/screens/skills/placements.ts";
+import {
+  fromAnotherMachine,
+  shortSource,
+} from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 
 export type BannerTone =
@@ -13,6 +17,8 @@ export type BannerTone =
 
 /** What the banner's button does, one command each (src/screens/skills/banner-view.tsx). */
 export type BannerAction =
+  /** `skill update <name>`: takes in the update the last check found. */
+  | { kind: "update" }
   /** `skill place <name>`: every enabled agent, and puts back what is missing. */
   | { kind: "add-to-agents" }
   /** `skill place <name> --to <configuration>` for the displaced placement. */
@@ -20,6 +26,8 @@ export type BannerAction =
 
 export interface Banner {
   tone: BannerTone;
+  /** The tile's icon: an arrow for an update, the alert for everything else. */
+  icon?: "update";
   title: string;
   text?: string;
   action?: BannerAction;
@@ -33,7 +41,44 @@ interface BannerRule {
 const agentName = (configurations: Configuration[], id: string) =>
   configurations.find((c) => c.id === id)?.name ?? id;
 
+/** The files an update changes, by path, joined as one line, then `kept` when the skill has edits. */
+const changedFiles = (row: SkillRow, kept: string) =>
+  [
+    ...(row.update?.files ?? []).map((f) => f.path),
+    ...(row.modified ? [kept] : []),
+  ].join(" · ");
+
 const table: BannerRule[] = [
+  {
+    banner: (row) => ({
+      action: { kind: "update" },
+      icon: "update",
+      text: (row.update?.files ?? []).map((f) => f.path).join(" · "),
+      title: "Changes from your other machines",
+      tone: "primary",
+    }),
+    when: (row) => row.update !== undefined && fromAnotherMachine(row.update),
+  },
+  {
+    banner: (row) => ({
+      action: { kind: "update" },
+      icon: "update",
+      text: changedFiles(row, "edits you have not published are kept"),
+      title: "The original has a new version",
+      tone: "primary",
+    }),
+    when: (row) => row.update !== undefined && row.kind === "yours",
+  },
+  {
+    banner: (row) => ({
+      action: { kind: "update" },
+      icon: "update",
+      text: changedFiles(row, "your edits are kept"),
+      title: `A newer version from ${shortSource(row.update?.source ?? row.entry?.source ?? "")}`,
+      tone: "primary",
+    }),
+    when: (row) => row.update !== undefined,
+  },
   {
     banner: (row, configurations) => {
       const placement = displacedPlacement(row);
