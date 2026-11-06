@@ -348,7 +348,7 @@ test.describe("banners", () => {
     await dialog.getByRole("button", { name: "Replace" }).click();
     await expect(dialog).toBeHidden();
     await expect(
-      toasts(page).getByText("Put release-notes back in Cursor")
+      toasts(page).getByText("Reconnected release-notes to Cursor")
     ).toBeVisible();
     expect(later(cli)).toEqual([
       ["skill", "place", "release-notes", "--to", "cursor", "--json"],

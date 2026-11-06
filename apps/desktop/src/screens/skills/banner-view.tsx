@@ -120,7 +120,7 @@ const PutBack = ({
     const args = ["skill", "place", row.name, "--to", placement.configuration];
     const outcome = await runUntilSettled(force ? [...args, "--force"] : args, {
       label,
-      success: `Put ${row.name} back in ${agent}`,
+      success: `Reconnected ${row.name} to ${agent}`,
     });
     if (
       !force &&
