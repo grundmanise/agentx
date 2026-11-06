@@ -1,5 +1,5 @@
 // Updates on the Skills screen: Check updates (`skill check-updates`), the Update of one skill
-// (`skill update <name>`, from its row's pill or its banner) and Update all (`skill update --all`,
+// (`skill update <name>`, from its banner) and Update all (`skill update --all`,
 // from the toast of a check that found more than one). Each runs one command through the runner
 // and says what happened by what the CLI emitted; the list redraws from the inventory and the
 // update check that follow, never from a result predicted here.
@@ -16,7 +16,7 @@ import { useAppStore } from "#/store/store.ts";
 /** The label of Check updates, which the runner shows as pending while the check runs. */
 export const CHECK_UPDATES = "Check updates";
 
-/** The label of the Update of `name`, shared by its row's pill and its banner. */
+/** The label of the Update of `name`, which its banner's Update shows as pending. */
 export const updateLabel = (name: string) => `update ${name}`;
 
 const UPDATE_ALL = "update all";
@@ -35,13 +35,13 @@ const conflictsIn = (events: CliEvent[]) =>
 /** Whether the check runs. */
 export const useCheckingUpdates = () => usePending(CHECK_UPDATES);
 
-/** Add source again: `source add <url>`, so that the skill can be updated from it again. */
-const addSourceAgain = (source: string): ToastAction => ({
-  label: "Add source again",
+/** Add source: `source add <url>`, so that the skill can be updated from it again. */
+const addSource = (source: string): ToastAction => ({
+  label: "Add source",
   onClick: () => {
     void runUntilSettled(["source", "add", source], {
       label: `add source ${source}`,
-      success: `Added ${shortSource(source)} again`,
+      success: `Added ${shortSource(source)} source`,
     });
   },
 });
@@ -63,7 +63,7 @@ const updatedText = (row: SkillRow, events: CliEvent[]) => {
 /**
  * Update: `skill update <name>`. Exit 4 left a merge for the user to finish, which the runner
  * opens the skill for; exit 5 is a skill whose source was removed from this machine, which
- * Add source again brings back. Any other failure is the runner's error toast.
+ * Add source brings back. Any other failure is the runner's error toast.
  */
 export const updateSkill = async (row: SkillRow) => {
   const source = row.entry?.source ?? row.update?.source;
@@ -74,7 +74,7 @@ export const updateSkill = async (row: SkillRow) => {
       return exitCode === EXIT_CODES.not_found &&
         error !== undefined &&
         source !== undefined
-        ? { action: addSourceAgain(source), message: error.message }
+        ? { action: addSource(source), message: error.message }
         : undefined;
     },
     label: updateLabel(row.name),
