@@ -1,5 +1,4 @@
-// The buttons of the Skills detail pane's banners, and the adopt command the list's Adopt pill
-// shares with its banner. Each runs exactly one command line and redraws from the inventory that
+// The buttons of the Skills detail pane's banners. Each runs exactly one command line and redraws from the inventory that
 // follows; a Reconnect the CLI refuses because the folder holds another version opens a confirm
 // dialog, whose Replace runs the same command with --force.
 import { useState } from "react";
@@ -29,8 +28,8 @@ import { UpdateSheet } from "#/screens/skills/update-sheet.tsx";
 import { updateLabel, updateSkill } from "#/screens/skills/updates.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 
-/** The label of the Adopt control for `name`: the runner's name for it, shared by pill and banner. */
-export const adoptLabel = (name: string) => `adopt ${name}`;
+/** The label of the Adopt control for `name`: the runner's name for it. */
+const adoptLabel = (name: string) => `adopt ${name}`;
 
 /** The label of the Reconnect control for a placement of `row`. */
 const reconnectLabel = (row: SkillRow, placement: LibraryPlacement) =>
@@ -40,7 +39,7 @@ const addSourceLabel = (source: string) => `add source ${source}`;
 const forkLabel = (name: string) => `fork ${name}`;
 
 /** Adopt: `adopt --skill <name>`. The skill is then managed, and agentx can update it. */
-export const adopt = async (name: string) =>
+const adopt = async (name: string) =>
   await runUntilSettled(["adopt", "--skill", name], {
     label: adoptLabel(name),
     success: `Adopted ${name}`,
@@ -173,17 +172,17 @@ export const Reconnect = ({
   );
 };
 
-/** Add source again: `source add <url>`, which ends the skill's "source removed" state. */
-export const AddSourceAgain = ({ source }: { source: string }) => {
+/** Add source: `source add <url>`, which ends the skill's "source removed" state. */
+export const AddSource = ({ source }: { source: string }) => {
   const pending = useSettling(addSourceLabel(source));
   return (
     <ActionButton
-      label="Add source again"
+      label="Add source"
       pending={pending}
       onClick={() => {
         void runUntilSettled(["source", "add", source], {
           label: addSourceLabel(source),
-          success: `Added ${shortSource(source)} again`,
+          success: `Added ${shortSource(source)} source`,
         });
       }}
     />
@@ -200,7 +199,7 @@ export const Fork = ({ name }: { name: string }) => {
       onClick={() => {
         void runUntilSettled(["skill", "fork", name], {
           label: forkLabel(name),
-          success: `Forked ${name}. It's one of your skills now`,
+          success: `Forked ${name}`,
         });
       }}
     />
@@ -228,8 +227,8 @@ export const UpdateButton = ({ row }: { row: SkillRow }) => {
 
 /**
  * See changes: opens the What's new sheet of the skill's update, beside Update on an update's
- * banner. The sheet reads what the update changes; its versions are named as the Update pill
- * names them.
+ * banner. The sheet reads what the update changes and names its two versions, by date where the
+ * CLI dates them.
  */
 export const SeeChanges = ({ row }: { row: SkillRow }) => {
   const [open, setOpen] = useState(false);

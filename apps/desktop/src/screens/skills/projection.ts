@@ -55,7 +55,7 @@ export interface SkillRow {
   /** An update candidate is known for it. */
   hasUpdate: boolean;
   /**
-   * The update the last update check offers for it, which its Update pill and banner apply.
+   * The update the last update check offers for it, which its banner's Update applies.
    * Absent for a skill with a pending merge: finishing that merge comes first.
    */
   update?: UpdateAvailableEvent;

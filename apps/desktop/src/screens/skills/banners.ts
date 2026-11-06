@@ -111,11 +111,10 @@ const table: BannerRule[] = [
   {
     banner: (row) => {
       const tool = row.adoption === undefined ? "" : toolName(row.adoption);
-      const source = shortSource(row.adoption?.source ?? "");
       return {
         action: { kind: "adopt" },
-        text: `Adopt it and agentx can update it from ${source}. It installs the skill from there again, so any edits to this copy are replaced.`,
-        title: `Installed by the ${tool}`,
+        text: "Adopt to manage from agentx",
+        title: `From ${tool}`,
         tone: "neutral",
       };
     },
@@ -126,7 +125,7 @@ const table: BannerRule[] = [
       const source = row.entry?.source ?? "";
       return {
         action: { kind: "add-source", source },
-        text: `Add ${shortSource(source)} again to check for updates.`,
+        text: `Add ${shortSource(source)} source to check for updates.`,
         title: "Source removed",
         tone: "danger",
       };
@@ -136,8 +135,8 @@ const table: BannerRule[] = [
   {
     banner: () => ({
       action: { kind: "fork" },
-      text: "It still works but won't get updates.",
-      title: "Removed from its source",
+      text: "No updates are possible for this skill unless it is added again in the source.",
+      title: "Removed from source",
       tone: "danger",
     }),
     when: (row) => row.entry?.drift?.includes("upstream removed") ?? false,
