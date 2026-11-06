@@ -4,7 +4,7 @@ import { cva } from "class-variance-authority";
 // text, in `code.bg`, `type.code`, at most `code.max-height` high and scrolling past it. The tints
 // of a change: an added line with "+" in `accent.primary` on `diff.added-bg`, the palette's green,
 // a removed line with "−" in `accent.danger` on
-// `diff.removed-bg` and no number. The whole rendering of a file and of a diff is here, from the
+// `diff.removed-bg` and no number. A patch with no file content shows its hunks alone. The whole rendering of a file and of a diff is here, from the
 // file's content and the unified diff git wrote, so that another renderer could take its place
 // without touching a screen.
 
@@ -76,6 +76,27 @@ const removedLines = (patch: string): CodeLine[] =>
     .flatMap((hunk) => hunk.lines)
     .filter((line) => line.kind === "removed")
     .map((line) => ({ kind: "removed", text: line.text }));
+
+/**
+ * A patch on its own, with no file to lay it on: the lines of each hunk in order, those it added
+ * and kept numbered as in the new file, those it removed tinted and unnumbered.
+ */
+const hunkLines = (patch: string): CodeLine[] =>
+  parsePatch(patch).flatMap((hunk) => {
+    let next = hunk.newStart;
+    return hunk.lines.map((line): CodeLine => {
+      if (line.kind === "removed") {
+        return { kind: "removed", text: line.text };
+      }
+      const number = next;
+      next += 1;
+      return {
+        kind: line.kind === "added" ? "added" : "plain",
+        number,
+        text: line.text,
+      };
+    });
+  });
 
 /**
  * The file as it is, `content`, with the lines its patch removed put back where they were, each
@@ -226,7 +247,11 @@ export interface CodePaneProps {
   path: string;
   /** The pane's accessible name. */
   label: string;
-  /** The file's content as it is; absent for a deleted file. */
+  /**
+   * The file's content as it is; absent for a deleted file, and for a patch shown on its own,
+   * such as what an update changes or a comparison with an earlier version, whose hunks are then
+   * all the pane shows.
+   */
   content?: string;
   /** The unified diff git wrote for the file, whose tints the pane shows. */
   patch?: string;
@@ -247,7 +272,7 @@ export const codeLines = ({
     return patch === undefined ? [] : removedLines(patch);
   }
   if (content === undefined) {
-    return [];
+    return patch === undefined || tint !== undefined ? [] : hunkLines(patch);
   }
   if (tint === "added") {
     return numbered(content, "added");
