@@ -44,12 +44,6 @@ export const forkArgs = (target: string, newName?: string): string[] =>
     ? ["skill", "fork", target]
     : ["skill", "fork", target, "--name", newName];
 
-const SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
-
-/** Whether `name` is one a skill can take: 1 to 64 lowercase letters, digits and single hyphens. */
-export const isSkillName = (name: string) =>
-  name.length <= 64 && SKILL_NAME.test(name);
-
 /** What the Fork dialog says forking `row` does, by its kind. */
 export const forkText = (row: SkillRow): string => {
   switch (row.kind) {

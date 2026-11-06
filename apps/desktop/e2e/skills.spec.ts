@@ -824,7 +824,12 @@ test.describe("settling a skill", { tag: RUNS_COMMANDS }, () => {
     await expect(forkBanner).toContainText(
       "It still works but won't get updates."
     );
+    // Fork opens the Fork dialog, whose Fork runs the command.
     await forkBanner.getByRole("button", { name: "Fork" }).click();
+    await page
+      .getByRole("dialog", { name: "Fork gone" })
+      .getByRole("button", { name: "Fork" })
+      .click();
     await expect(
       toasts(page).getByText("Forked gone. It's one of your skills now")
     ).toBeVisible();

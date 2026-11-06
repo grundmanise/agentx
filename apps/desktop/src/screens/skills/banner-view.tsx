@@ -2,7 +2,8 @@
 // with its button: See changes and Update on the lime banners of an update (See changes opens the
 // What's new sheet), Add to agents on the gray "Not in any
 // agent" banner, Reconnect on the amber one, Adopt, Add source again or Fork on the others. The buttons are in src/screens/skills/actions.tsx,
-// where Adopt shares its command with the list's Adopt pill.
+// where Adopt shares its command with the list's Adopt pill, but Fork, which opens the Fork dialog
+// (src/screens/skills/fork-dialog.tsx).
 import { cva } from "class-variance-authority";
 
 import { AlertIcon } from "#/components/icons/alert.tsx";
@@ -11,12 +12,12 @@ import {
   AddSourceAgain,
   AddToAgents,
   Adopt,
-  Fork,
   Reconnect,
   SeeChanges,
   UpdateButton,
 } from "#/screens/skills/actions.tsx";
 import type { Banner } from "#/screens/skills/banners.ts";
+import { ForkButton } from "#/screens/skills/fork-dialog.tsx";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 
 const bannerVariants = cva(
@@ -78,7 +79,7 @@ const BannerActions = ({ row, banner }: { row: SkillRow; banner: Banner }) => {
       return <AddSourceAgain source={banner.action.source} />;
     }
     case "fork": {
-      return <Fork name={row.name} />;
+      return <ForkButton row={row} place="banner" />;
     }
     case undefined: {
       return null;

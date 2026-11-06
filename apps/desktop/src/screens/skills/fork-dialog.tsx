@@ -26,11 +26,11 @@ import {
 import { Input } from "#/components/ui/input.tsx";
 import { Switch } from "#/components/ui/switch.tsx";
 import {
-  forkArgs,
-  forkTarget,
-  forkText,
+  breaksSkillNameRule,
   isSkillName,
-} from "#/screens/skills/fork.ts";
+  SKILL_NAME_RULE,
+} from "#/lib/skill-name.ts";
+import { forkArgs, forkTarget, forkText } from "#/screens/skills/fork.ts";
 import { openSkill } from "#/screens/skills/open.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { usePending } from "#/store/runner.ts";
@@ -185,16 +185,16 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
               kind="mono"
               aria-label="Name"
               placeholder={`my-${row.name}`}
-              aria-invalid={name !== "" && !nameValid ? true : undefined}
+              aria-invalid={breaksSkillNameRule(name) ? true : undefined}
               value={name}
               disabled={pending}
               onChange={(e) => {
                 setName(e.target.value);
               }}
             />
-            {name !== "" && !nameValid && (
+            {breaksSkillNameRule(name) && (
               <p className="type-secondary text-text-hint m-0">
-                Use 1 to 64 lowercase letters, digits and single hyphens
+                {`Use ${SKILL_NAME_RULE}`}
               </p>
             )}
           </>

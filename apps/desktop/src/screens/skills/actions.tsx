@@ -37,7 +37,6 @@ const reconnectLabel = (row: SkillRow, placement: LibraryPlacement) =>
   `put back ${row.key} ${placement.configuration}`;
 
 const addSourceLabel = (source: string) => `add source ${source}`;
-const forkLabel = (name: string) => `fork ${name}`;
 
 /** Adopt: `adopt --skill <name>`. The skill is then managed, and agentx can update it. */
 export const adopt = async (name: string) =>
@@ -184,23 +183,6 @@ export const AddSourceAgain = ({ source }: { source: string }) => {
         void runUntilSettled(["source", "add", source], {
           label: addSourceLabel(source),
           success: `Added ${shortSource(source)} again`,
-        });
-      }}
-    />
-  );
-};
-
-/** Fork: `skill fork <name>` makes the skill one of your own, which keeps working without its source. */
-export const Fork = ({ name }: { name: string }) => {
-  const pending = useSettling(forkLabel(name));
-  return (
-    <ActionButton
-      label="Fork"
-      pending={pending}
-      onClick={() => {
-        void runUntilSettled(["skill", "fork", name], {
-          label: forkLabel(name),
-          success: `Forked ${name}. It's one of your skills now`,
         });
       }}
     />
