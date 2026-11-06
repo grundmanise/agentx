@@ -845,5 +845,5 @@ The product mark is `shell.logo-mark` on `shell.logo-bg`, 30px `shell.logo-radiu
 - For a git word the glossary has no term for, use a plain word: "change", not "hunk".
 - "Your skills" for the user's own skills (forked or created); "its upstream" for where a forked skill came from; "the update" for an update candidate, a newer version from a skill's source. Fork is an action, not a kind of skill.
 - Dates over ids in rows ("Sep 14 → Sep 28"); ids with dates in Details ("3f2a9c1 · Sep 14").
-- Toasts state what happened in past tense ("Commit updated", "Put pdf back in Cursor"), and name the undo when one exists.
+- Toasts state what happened in past tense ("Commit updated", "Reconnected pdf to Cursor"), and name the undo when one exists.
 - Captions are uppercase mono; everything else sentence case. No trailing periods in titles, pills or buttons.
