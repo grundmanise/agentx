@@ -266,7 +266,9 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `add-card.check-bg` | `accent.primary` | Check tile on a selected card (check `on-accent`) |
 | `add-card.status-added` | `gray-400` | "Added" label |
 | `add-card.status-forked` | `accent.yours` | "Forked" label |
-| `add-card.status-disk` | `accent.attention` | "On disk" label |
+| `add-card.status-disk` | `accent.attention` | "Already in library" label |
+| `add-card.status-in-use` | `gray-400` | "Name in use" label |
+| `add-card.check-ring` | `gray-700` | Ring of the round check on a card that is not selected |
 | `banner.title` | `gray-50` | Banner title (bg/border/tile from `tone.*`) |
 | `banner.text` | `gray-300` |  |
 | `card.chip-ring` | `card.bg` | 2px ring behind overlapping agent client logos on a card (the Universal card) |
@@ -393,6 +395,10 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.check-hint` | sans | 13 | 400 | 1.5 |  |  | Startup check hint callout (`text.secondary`) |
 | `type.skill-name` | sans | 30 | 600 |  | -0.035em |  | Detail pane skill name |
 | `type.body` | sans | 14 | 400 |  |  |  | Body, palette rows |
+| `type.input` | sans | 14 | 400 |  |  |  | Text inputs and search fields |
+| `type.input-mono` | mono | 14 | 400 |  |  |  | Inputs that take a URL or a command |
+| `type.add-card-name` | sans | 15 | 500 |  |  |  | Skill name on an Add skills card |
+| `type.add-card-desc` | sans | 13.5 | 400 | 1.5 |  |  | Description on an Add skills card (`add-card.text`: `text.muted`) |
 | `type.row-name` | sans | 14 | 500 |  |  |  | Row name |
 | `type.row-desc` | sans | 12.5 | 400 |  |  |  | Row description (`text.muted`, single line, ellipsis) |
 | `type.secondary` | sans | 13 | 400 |  |  |  | Secondary line (`text.hint`) |
@@ -541,6 +547,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `input.search-padding` | 0 14 0 34 | `py-0 pr-input-search-right pl-input-search-left` | Room for the icon |
 | `input.label-gap` | 8 | `gap-input-label` | Label → field |
 | `input.textarea-height` | 88 | `h-textarea` | Create dialog description |
+| `add-search.height` | 40 | `h-add-search` | Search field of the Add skills screen, a pill across the page |
 
 ### Cards, banners, tiles
 
@@ -829,7 +836,7 @@ The product mark is `shell.logo-mark` on `shell.logo-bg`, 30px `shell.logo-radiu
 - Switches: `.18s` background.
 - Chevrons: `rotate(90deg)` with `.15s`.
 - File row control: the meta text and the Show in Finder button swap by opacity in `.15s` on hover.
-- Floating bar: `translateY(24px) → 0`, opacity 0 → 1, `.22s ease`.
+- Floating bar (`animate-floating-bar`): `translateY(24px) → 0`, opacity 0 → 1, `.22s ease`, when it appears.
 - Card resolve: 280ms, see §6.
 - Spinner-style icons (Check updates, Check tools): one full rotation `.9–1s ease` (`animate-turn-once`: 1s ease, once, while the command runs), then a toast.
 - Startup check running (`animate-check-spin`): the status ring turns once a second, linear, while its check runs, and stops when the check settles.
@@ -845,5 +852,5 @@ The product mark is `shell.logo-mark` on `shell.logo-bg`, 30px `shell.logo-radiu
 - For a git word the glossary has no term for, use a plain word: "change", not "hunk".
 - "Your skills" for the user's own skills (forked or created); "its upstream" for where a forked skill came from; "the update" for an update candidate, a newer version from a skill's source. Fork is an action, not a kind of skill.
 - Dates over ids in rows ("Sep 14 → Sep 28"); ids with dates in Details ("3f2a9c1 · Sep 14").
-- Toasts state what happened in past tense ("Commit updated", "Put pdf back in Cursor"), and name the undo when one exists.
+- Toasts state what happened in past tense ("Commit updated", "Reconnected pdf to Cursor"), and name the undo when one exists.
 - Captions are uppercase mono; everything else sentence case. No trailing periods in titles, pills or buttons.

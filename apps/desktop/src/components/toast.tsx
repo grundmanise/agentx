@@ -80,7 +80,9 @@ interface DetailToast {
   message: string;
   /** Under the message, in `text.muted`. */
   hint?: string;
-  /** Under the message and the hint, in `tone.attention.fg`. */
+  /** More lines about what happened, under the hint, in the hint's type. */
+  details?: string[];
+  /** Under the message, the hint and the details, in `tone.attention.fg`. */
   warnings?: string[];
   action?: ToastAction;
   duration: number;
@@ -93,6 +95,7 @@ interface DetailToast {
 const notifyDetail = ({
   message,
   hint,
+  details = [],
   warnings = [],
   action,
   duration,
@@ -114,6 +117,11 @@ const notifyDetail = ({
             {hint !== undefined && (
               <p className="type-notice text-text-muted m-0">{hint}</p>
             )}
+            {details.map((detail) => (
+              <p key={detail} className="type-notice text-text-muted m-0">
+                {detail}
+              </p>
+            ))}
             {warnings.map((warning) => (
               <p
                 key={warning}
@@ -172,16 +180,25 @@ export interface ErrorToast {
   message: string;
   /** The CLI's fix: the toast then stays until dismissed. */
   hint?: string;
+  /** More lines about what happened, under the hint, in the hint's type. */
+  details?: string[];
   /** The command's warnings, under the error. */
   warnings?: string[];
 }
 
 /**
- * A command's error (DESIGN.md §6 "Error toast"): the CLI's message, its hint under it, then the
- * command's warnings. It stays until dismissed when it has a hint, and 5s when it has none.
+ * A command's error (DESIGN.md §6 "Error toast"): the CLI's message, its hint under it, its
+ * details, then the command's warnings. It stays until dismissed when it has a hint, and 5s when
+ * it has none.
  */
-export const notifyError = ({ message, hint, warnings = [] }: ErrorToast) =>
+export const notifyError = ({
+  message,
+  hint,
+  details = [],
+  warnings = [],
+}: ErrorToast) =>
   notifyDetail({
+    details,
     duration: hint === undefined ? 5000 : Number.POSITIVE_INFINITY,
     hint,
     message,
