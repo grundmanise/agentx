@@ -169,3 +169,19 @@ export const addActivity = (tone: Tone, message: string) => {
     activity: [entry, ...s.activity].slice(0, ACTIVITY_LIMIT),
   }));
 };
+
+/**
+ * Takes a reconcile outcome out of the slice once the command that answers it exited 0: serve
+ * reports an outcome at its start only, so no later event would clear it (docs/spec/cli-contract.md,
+ * Serve, `reconcile`).
+ */
+export const dropReconcile = (
+  name: string,
+  outcome: ReconcileEvent["outcome"]
+) => {
+  useAppStore.setState((s) => ({
+    reconciles: s.reconciles.filter(
+      (r) => !(r.name === name && r.outcome === outcome)
+    ),
+  }));
+};

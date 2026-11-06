@@ -1,6 +1,8 @@
 import { cva } from "class-variance-authority";
 import type { ReactNode } from "react";
 
+import { Spinner } from "#/components/spinner.tsx";
+
 // DESIGN.md §6 "Pills (status)": 20px high in list rows, 22 in the detail header.
 const pillVariants = cva(
   "rounded-pill type-pill inline-flex flex-none items-center gap-1 px-2 whitespace-nowrap",
@@ -16,7 +18,7 @@ const pillVariants = cva(
     variants: {
       clickable: {
         false: "",
-        true: "",
+        true: "aria-busy:cursor-wait aria-busy:opacity-50",
       },
       size: {
         detail: "h-5.5",
@@ -50,8 +52,10 @@ export const Pill = ({ tone, size, icon, children }: PillProps) => (
 );
 
 /**
- * A pill that opens something: the fork pill on the original of a fork made under a new name.
- * `label` is its accessible name and `title` its tooltip; the text is what shows.
+ * A pill that opens something or runs a command: the fork pill on the original of a fork made
+ * under a new name, or Adopt beside the row of a skill another tool installed. `label` is its
+ * accessible name and `title` its tooltip; the text is what shows. `pending` shows a Spinner in
+ * place of the icon and makes it inert while its command runs.
  */
 export const PillButton = ({
   tone,
@@ -60,16 +64,24 @@ export const PillButton = ({
   label,
   title,
   onClick,
+  pending = false,
   children,
-}: PillProps & { label: string; title: string; onClick: () => void }) => (
+}: PillProps & {
+  label: string;
+  title: string;
+  onClick: () => void;
+  pending?: boolean;
+}) => (
   <button
     type="button"
     aria-label={label}
+    aria-busy={pending ? true : undefined}
     title={title}
+    disabled={pending}
     onClick={onClick}
     className={pillVariants({ clickable: true, size, tone })}
   >
-    {icon}
+    {pending ? <Spinner /> : icon}
     {children}
   </button>
 );
