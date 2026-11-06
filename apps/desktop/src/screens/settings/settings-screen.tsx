@@ -10,8 +10,10 @@
 // the skills CLI, Command line. Insert the new entry under its slot's comment and keep the comment.
 import type { ComponentType } from "react";
 
+import { AnotherMachineSection } from "#/screens/settings/another-machine.tsx";
 import { CommandLineSection } from "#/screens/settings/command-line.tsx";
 import { ComparingEditsSection } from "#/screens/settings/comparing-edits.tsx";
+import { SkillsCliSection } from "#/screens/settings/skills-cli.tsx";
 import { StorageSection } from "#/screens/settings/storage.tsx";
 import { ThisMachineSection } from "#/screens/settings/this-machine.tsx";
 
@@ -29,7 +31,9 @@ const sections: Section[] = [
   { Section: ComparingEditsSection, id: "comparing-edits" },
   { Section: StorageSection, id: "storage" },
   // Slot: Another machine.
+  { Section: AnotherMachineSection, id: "another-machine" },
   // Slot: Skills from the skills CLI.
+  { Section: SkillsCliSection, id: "skills-cli" },
   { Section: CommandLineSection, id: "command-line" },
 ];
 

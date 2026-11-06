@@ -27,6 +27,8 @@ The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it
 | `e2e/fixtures` | Inline inventories and events shared by several tests, typed by the generated event types |
 | `oxlint.config.ts`, `oxfmt.config.ts` | The lint and the formatter: [Ultracite](https://www.ultracite.ai)'s presets for oxlint and oxfmt, plus the design-system lint built on [`@shadcn/lint`](https://github.com/shadcn-ui/lint) and one rule of [`eslint-plugin-better-tailwindcss`](https://github.com/schoero/eslint-plugin-better-tailwindcss) |
 | `src-tauri` | The Rust side: the window and the CLI supervisor, which reads the login shell's environment, finds the CLI, runs one-shot commands and keeps the serve child open |
+| `src/screens/settings/another-machine.tsx`, `src/screens/settings/skills-cli.tsx` | The Another machine and Skills from the skills CLI sections of Settings. Export runs `export <name>`, which writes `<name>.json` to the library, and `--force` after the overwrite confirm; Import confirms the file picked in the open dialog, runs `import <file> --yes`, lists its `import_skill` events and adds the sources `source list` reports as not fetched, one `source add` after another (`transfer.ts`). Adopt all runs `adopt --all` while the adoption preview has candidates |
+| `src/lib/file-dialog.ts` | The one native dialog: the open dialog in which the user picks a snapshot to import, through Tauri's dialog plugin. It returns the path, which the app passes to the CLI; the app reads and writes no file. The mocked CLI answers it with the path a test gives `answerOpenDialog()` |
 
 ## Develop
 

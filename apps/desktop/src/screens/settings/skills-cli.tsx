@@ -9,6 +9,7 @@ import type { ProgressEvent } from "#/cli/events.gen.ts";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { plural } from "#/lib/plural.ts";
+import { SettingsSection } from "#/screens/settings/section.tsx";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import {
   adoptionCandidates,
@@ -16,18 +17,7 @@ import {
   useAppStore,
 } from "#/store/store.ts";
 
-/** The section's label and the lines under it. */
-export const skillsCli = {
-  description:
-    "Skills the Vercel skills CLI installed that agentx can take over. Adopting installs each one again from its source and replaces the copy the skills CLI left.",
-  label: "Skills from the skills CLI",
-};
-
 const ADOPT_ALL_LABEL = "adopt all";
-
-/** Whether the section shows: the adoption preview has a candidate. */
-export const useHasAdoptionCandidates = () =>
-  useAppStore((s) => adoptionCandidates(s.adoption).length > 0);
 
 /** "Adopting 2 of 7" from the run's last progress event, or "Adopting…" before the first. */
 const progressText = (progress: ProgressEvent | undefined) => {
@@ -39,8 +29,11 @@ const progressText = (progress: ProgressEvent | undefined) => {
     : `Adopting ${progress.current} of ${progress.total}`;
 };
 
-/** The section's content: the count, Adopt all, and the refused records with their reason. */
-export const SkillsFromSkillsCli = () => {
+/**
+ * Skills from the skills CLI: the count, Adopt all, and the refused records with their reason;
+ * nothing while the preview has no candidate.
+ */
+export const SkillsCliSection = () => {
   const adoption = useAppStore((s) => s.adoption);
   const candidates = adoptionCandidates(adoption);
   const refused = adoptionRefusals(adoption);
@@ -64,7 +57,10 @@ export const SkillsFromSkillsCli = () => {
     setProgress(undefined);
   };
   return (
-    <div className="flex min-w-0 flex-col gap-4">
+    <SettingsSection
+      title="Skills from the skills CLI"
+      description="Skills the Vercel skills CLI installed that agentx can take over. Adopting installs each one again from its source and replaces the copy the skills CLI left."
+    >
       <div className="flex items-center justify-between gap-3">
         <p className="type-body text-text-primary m-0">
           {`${candidates.length} can be adopted`}
@@ -106,6 +102,6 @@ export const SkillsFromSkillsCli = () => {
           </ul>
         </div>
       )}
-    </div>
+    </SettingsSection>
   );
 };

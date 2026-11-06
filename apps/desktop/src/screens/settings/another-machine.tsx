@@ -29,6 +29,7 @@ import {
 import { Input } from "#/components/ui/input.tsx";
 import { pickSnapshot } from "#/lib/file-dialog.ts";
 import { plural } from "#/lib/plural.ts";
+import { FieldProblem, SettingsSection } from "#/screens/settings/section.tsx";
 import {
   DEFAULT_SNAPSHOT_NAME,
   fileName,
@@ -42,26 +43,9 @@ import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
 
-/** The section's label and the line under it. */
-export const anotherMachine = {
-  description:
-    "Your settings and the list of your skills, so another machine can bring them back. No skill content.",
-  label: "Another machine",
-};
-
 const EXPORT_LABEL = "export settings";
 const IMPORT_LABEL = "import settings";
 const ADD_SOURCES_LABEL = "add imported sources";
-
-/** The CLI's message and hint, under the field it is about. */
-const ProblemLines = ({ problem }: { problem: Problem }) => (
-  <div role="alert" className="flex flex-col gap-1">
-    <p className="type-notice text-tone-danger-fg m-0">{problem.message}</p>
-    {problem.hint !== undefined && (
-      <p className="type-notice text-text-muted m-0">{problem.hint}</p>
-    )}
-  </div>
-);
 
 /** A confirm dialog with Cancel and one button that runs the command. */
 const Confirm = ({
@@ -178,7 +162,7 @@ const ExportRow = () => {
           ? `Written to your library as ${name}.json`
           : "Give a file name without an extension or a slash"}
       </p>
-      {problem !== undefined && <ProblemLines problem={problem} />}
+      {problem !== undefined && <FieldProblem {...problem} />}
       <Confirm
         open={overwrite}
         onOpenChange={setOverwrite}
@@ -395,10 +379,13 @@ const ImportRow = () => {
   );
 };
 
-/** The Another machine section's content: Export, then Import. */
-export const AnotherMachine = () => (
-  <div className="flex min-w-0 flex-col gap-5">
+/** Another machine: Export, then Import. */
+export const AnotherMachineSection = () => (
+  <SettingsSection
+    title="Another machine"
+    description="Your settings and the list of your skills, so another machine can bring them back. No skill content."
+  >
     <ExportRow />
     <ImportRow />
-  </div>
+  </SettingsSection>
 );
