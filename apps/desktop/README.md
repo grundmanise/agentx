@@ -26,6 +26,7 @@ The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it
 | `src/assets/logos` | The agent client logos, one SVG per client slug, shown by `src/components/agent-logo.tsx`; a client with none gets a monogram. The app never loads a logo from the network |
 | `e2e/fixtures` | Inline inventories and events shared by several tests, typed by the generated event types |
 | `oxlint.config.ts`, `oxfmt.config.ts` | The lint and the formatter: [Ultracite](https://www.ultracite.ai)'s presets for oxlint and oxfmt, plus the design-system lint built on [`@shadcn/lint`](https://github.com/shadcn-ui/lint) and one rule of [`eslint-plugin-better-tailwindcss`](https://github.com/schoero/eslint-plugin-better-tailwindcss) |
+| `src/screens/skills/fork.ts`, `src/screens/skills/fork-dialog.tsx` | Fork on the Skills screen. `fork.ts` says which skills offer Fork, how `skill fork` names one and what the dialog says per kind; `fork-dialog.tsx` is the Fork button (`ForkButton`, for the action row or a banner), `openFork(row)`, the Fork dialog and the "What each agent sees" dialog, which `ForkDialogs` in `skills-screen.tsx` shows so that they outlive the pane of the skill forked |
 | `src-tauri` | The Rust side: the window and the CLI supervisor, which reads the login shell's environment, finds the CLI, runs one-shot commands and keeps the serve child open |
 
 ## Develop
