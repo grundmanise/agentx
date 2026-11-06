@@ -8,7 +8,8 @@ import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { CliEvent, LogEvent, ProgressEvent } from "#/cli/events.gen.ts";
 import { cancel, run } from "#/cli/transport.ts";
 import type { RunLine } from "#/cli/transport.ts";
-import { notify, notifyError } from "#/components/toast.tsx";
+import { notify, notifyAttention, notifyError } from "#/components/toast.tsx";
+import type { ToastAction } from "#/components/toast.tsx";
 import { navigateTo } from "#/lib/navigate.ts";
 import { refresh } from "#/store/feed.ts";
 import { addActivity, useAppStore } from "#/store/store.ts";
@@ -50,6 +51,8 @@ export interface CommandOptions {
   label: string;
   /** The toast and activity entry when the command exits 0. */
   success?: string | ((events: CliEvent[]) => string);
+  /** An action on the success toast, such as Undo. */
+  action?: ToastAction;
   onProgress?: (event: ProgressEvent) => void;
   /** Stops the command when it passes. */
   deadlineMs?: number;
@@ -153,9 +156,19 @@ const report = (
         ? options.success(events)
         : options.success;
     if (text !== undefined) {
-      notify(text);
+      // A placement skipped, a copy that differed: the command succeeded, with something the
+      // user should see. The toast carries the success text and the warnings, and the activity
+      // entry asks for attention rather than reporting plain success.
+      const warnings = outcome.logs
+        .filter((l) => l.level === "warn")
+        .map((l) => l.message);
+      if (warnings.length > 0) {
+        notifyAttention({ action: options.action, message: text, warnings });
+      } else {
+        notify(text, options.action);
+      }
       if (log) {
-        addActivity("success", text);
+        addActivity(warnings.length > 0 ? "attention" : "success", text);
       }
     }
     return;

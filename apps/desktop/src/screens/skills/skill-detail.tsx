@@ -1,14 +1,13 @@
-import { cva } from "class-variance-authority";
+import { useState } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
-import { AgentChip } from "#/components/agent-chip.tsx";
-import type { AgentChipState } from "#/components/agent-chip.tsx";
-import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
-import { AlertIcon } from "#/components/icons/alert.tsx";
 import { Pill, PillButton } from "#/components/pill.tsx";
 import { SkillGlyph } from "#/components/skill-glyph.tsx";
+import { Spinner } from "#/components/spinner.tsx";
+import { Button } from "#/components/ui/button.tsx";
+import { AgentsSection } from "#/screens/skills/agents-section.tsx";
+import { BannerView } from "#/screens/skills/banner-view.tsx";
 import { bannerFor } from "#/screens/skills/banners.ts";
-import type { Banner } from "#/screens/skills/banners.ts";
 import { detailsOf } from "#/screens/skills/details.ts";
 import { FilesSection } from "#/screens/skills/files.tsx";
 import { HistorySection } from "#/screens/skills/history.tsx";
@@ -20,105 +19,43 @@ import {
   originOf,
 } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
+import { RemoveDialog, removeLabel } from "#/screens/skills/remove-dialog.tsx";
 import { pillTones } from "#/screens/skills/skill-row.tsx";
+import { useSettling } from "#/store/settle.ts";
 
 const Caption = ({ children }: { children: string }) => (
   <h2 className="type-caption text-text-caption m-0">{children}</h2>
 );
 
-const bannerVariants = cva(
-  "rounded-banner py-banner pr-banner-right pl-banner gap-banner flex items-center border",
-  {
-    variants: {
-      tone: {
-        attention: "border-tone-attention-border bg-tone-attention-bg",
-        danger: "border-tone-danger-border bg-tone-danger-bg",
-        primary: "border-tone-primary-border bg-tone-primary-bg",
-        yours: "border-tone-yours-border bg-tone-yours-bg",
-      },
-    },
-  }
-);
-
-const tileVariants = cva(
-  "rounded-card-tile flex size-8 flex-none items-center justify-center",
-  {
-    variants: {
-      tone: {
-        attention: "text-tone-attention-fg",
-        danger: "text-tone-danger-fg",
-        primary: "text-tone-primary-fg",
-        yours: "text-tone-yours-fg",
-      },
-    },
-  }
-);
-
-/** The one banner of the detail pane (DESIGN.md §6 "Banner"); its actions come in later changes. */
-const BannerView = ({ banner }: { banner: Banner }) => (
-  <div
-    role="note"
-    aria-label={banner.title}
-    className={bannerVariants({ tone: banner.tone })}
-  >
-    <span className={tileVariants({ tone: banner.tone })}>
-      <AlertIcon size="lg" />
-    </span>
-    <div className="gap-banner-text flex min-w-0 flex-1 flex-col">
-      <span className="type-banner-title text-banner-title">
-        {banner.title}
-      </span>
-      <span className="type-secondary text-banner-text">{banner.text}</span>
-    </div>
-    {/* The banner's actions go here. */}
-    <div className="flex items-center gap-1.5" />
-  </div>
-);
-
-/** Whether a configuration sees the skill: through a placement, displaced or not, or an occurrence. */
-const chipState = (row: SkillRow, c: Configuration): AgentChipState => {
-  const placement = row.entry?.placements.find((p) => p.configuration === c.id);
-  if (placement !== undefined) {
-    return placement.kind === placement.mode ? "on" : "displaced";
-  }
-  return row.occurrences.some((o) => o.configuration === c.id) ? "on" : "off";
-};
-
-/** AGENTS: one chip per configuration that does not read the library, then Universal. */
-const Agents = ({
+/** Remove, a danger ghost for every library skill; pending until the skill has left the inventory. */
+const RemoveButton = ({
   row,
-  configurations,
+  onClick,
 }: {
   row: SkillRow;
-  configurations: Configuration[];
+  onClick: () => void;
 }) => {
-  const direct = configurations.filter((c) => !c.reads_library);
-  const universal = configurations.filter((c) => c.reads_library);
+  const pending = useSettling(removeLabel(row));
   return (
-    <div className="gap-agent-chip-wrap flex flex-wrap">
-      {direct.map((c) => (
-        <AgentChip
-          key={c.id}
-          logo={<AgentLogo client={c} size={28} />}
-          name={c.name}
-          state={chipState(row, c)}
-        />
-      ))}
-      {universal.length > 0 && (
-        <AgentChip
-          logo={<LogoStack clients={universal} size={28} />}
-          name="Universal"
-          state={row.universal ? "on" : "off"}
-        />
-      )}
-    </div>
+    <Button
+      variant="danger"
+      size="sm"
+      disabled={pending}
+      aria-busy={pending ? true : undefined}
+      onClick={onClick}
+    >
+      {pending && <Spinner />}
+      Remove
+    </Button>
   );
 };
 
 /**
  * The right pane: what the CLI reports about one skill. Header, origin, pills and a pill per fork
- * made from it under a new name, which opens that fork; description; the action row (empty until
- * the changes that add actions); one banner; AGENTS; FILES; then DETAILS and HISTORY side by side.
+ * made from it under a new name, which opens that fork; description; the action row (Remove for a
+ * library skill; the other actions come with the changes that add them); one banner, with its
+ * button; AGENTS, whose chips add and remove placements; FILES; then DETAILS and HISTORY side by
+ * side. Every control runs one command and redraws from the inventory that follows.
  */
 export const SkillDetail = ({
   row,
@@ -130,7 +67,8 @@ export const SkillDetail = ({
   forks: SkillRow[];
   configurations: Configuration[];
 }) => {
-  const banner = bannerFor(row);
+  const [removing, setRemoving] = useState(false);
+  const banner = bannerFor(row, configurations);
   const details = detailsOf(row, configurations);
   return (
     <article
@@ -190,13 +128,36 @@ export const SkillDetail = ({
         <div
           aria-label="Actions"
           className="flex items-center gap-1.5 empty:hidden"
-        />
+        >
+          {row.entry !== undefined && (
+            <RemoveButton
+              row={row}
+              onClick={() => {
+                setRemoving(true);
+              }}
+            />
+          )}
+        </div>
       </header>
-      {banner !== undefined && <BannerView banner={banner} />}
+      {banner !== undefined && <BannerView row={row} banner={banner} />}
       <section aria-label="Agents" className="flex flex-col gap-3">
         <Caption>Agents</Caption>
-        <Agents row={row} configurations={configurations} />
+        <AgentsSection
+          row={row}
+          configurations={configurations}
+          onRemove={() => {
+            setRemoving(true);
+          }}
+        />
       </section>
+      {row.entry !== undefined && (
+        <RemoveDialog
+          row={row}
+          configurations={configurations}
+          open={removing}
+          onOpenChange={setRemoving}
+        />
+      )}
       <FilesSection
         row={row}
         configurations={configurations}
