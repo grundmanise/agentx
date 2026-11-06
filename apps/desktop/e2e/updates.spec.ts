@@ -1,5 +1,5 @@
-// Updates on the Skills screen: Check updates, the Update pill of a row, the banners of an update
-// and their Update button, and Update all on the toast of a check. Each button runs exactly one
+// Updates on the Skills screen: Check updates, the banners of an update and their Update button,
+// and Update all on the toast of a check. No row carries an Update button. Each button runs exactly one
 // command line, which the mocked CLI records, and its outcome is the toast of the results table.
 import type { Page } from "@playwright/test";
 
@@ -43,22 +43,20 @@ const later = (cli: MockCli) =>
 const list = (page: Page) => page.getByRole("navigation", { name: "Skills" });
 const row = (page: Page, name: string) =>
   list(page).getByRole("button", { exact: true, name });
-const pill = (page: Page, name: string) =>
-  list(page).getByRole("button", { exact: true, name: `Update ${name}` });
 const pane = (page: Page, name: string) =>
   page
     .getByRole("region", { name: "Skill details" })
     .getByRole("article", { name });
+/** The Update of `name`'s banner, in the detail pane while `name` is selected. */
+const update = (page: Page, name: string) =>
+  pane(page, name).getByRole("button", { exact: true, name: "Update" });
 const toasts = (page: Page) =>
   page.getByRole("region", { name: /^Notifications/u });
-/** The skills the fixture offers an update: every one with an update but draft. */
-const offered = ["pdf", "pdf-letters", "release-notes", "review"];
-const expectPills = async (page: Page, names: string[]) => {
-  await Promise.all(
-    names.map(async (name) => {
-      await expect(pill(page, name)).toBeVisible();
-    })
-  );
+/** Selects `name` and expects its banner to offer Update, or not. */
+const expectOffered = async (page: Page, name: string, offers: boolean) => {
+  await row(page, name).click();
+  await expect(pane(page, name)).toBeVisible();
+  await expect(update(page, name)).toHaveCount(offers ? 1 : 0);
 };
 const checkButton = (page: Page) =>
   page.getByRole("button", { exact: true, name: "Check updates" });
@@ -95,51 +93,34 @@ const open = async (
   await expect(pane(page, name)).toBeVisible();
 };
 
-test.describe("the Update pill", () => {
-  test("shows for every skill with an update but the one with a pending merge", async ({
+test.describe("the rows", () => {
+  test("carry no Update button: Update is on the banner", async ({
     cli,
     page,
   }) => {
     await open(cli, page, "pdf");
-    await expectPills(page, offered);
-    // draft has a pending merge, which its Update waiting pill says; it is offered no update.
-    await expect(row(page, "draft")).toBeVisible();
-    await expect(pill(page, "draft")).toHaveCount(0);
-    await expect(pill(page, "gone")).toHaveCount(0);
-    // The versions, by date where the CLI dates them, else by short id.
-    await expect(pill(page, "pdf")).toHaveAttribute(
-      "title",
-      "Update · Sep 14 → Sep 28"
-    );
-    await expect(pill(page, "review")).toHaveAttribute(
-      "title",
-      "Update · 1a2b3c4 → 9b8c7d6"
-    );
-    await expect(pill(page, "release-notes")).toHaveAttribute(
-      "title",
-      "Update · Oct 1"
-    );
+    await expect(row(page, "pdf")).toBeVisible();
+    await expect(
+      list(page).getByRole("button", { name: /^Update /u })
+    ).toHaveCount(0);
+    await expect(update(page, "pdf")).toBeVisible();
   });
 
-  test("records skill update <name>, does not select the row, and leaves once it updated", async ({
+  test("the banner's Update records skill update <name>, is pending, and leaves once it updated", async ({
     cli,
     page,
   }) => {
-    await open(cli, page, "review");
+    await open(cli, page, "pdf");
     const run = cli.register(["skill", "update", "pdf"], {
       events: [updated("pdf", "current")],
       holdAfter: 0,
     });
-    await pill(page, "pdf").click();
+    await update(page, "pdf").click();
     await run.started;
-    await expect(pill(page, "pdf")).toHaveAttribute("aria-busy", "true");
-    // The pill is a control of its own: the row it sits beside stays unselected.
-    await expect(row(page, "review")).toHaveAttribute("aria-current", "true");
-    await expect(row(page, "pdf")).not.toHaveAttribute("aria-current");
-    await expect(pane(page, "review")).toBeVisible();
+    await expect(update(page, "pdf")).toHaveAttribute("aria-busy", "true");
     run.release();
     await expect(toasts(page).getByText("Updated pdf")).toBeVisible();
-    await expect(pill(page, "pdf")).toHaveCount(0);
+    await expect(update(page, "pdf")).toHaveCount(0);
     expect(later(cli)).toEqual([["skill", "update", "pdf", "--json"]]);
   });
 });
@@ -195,7 +176,7 @@ test.describe("Update", () => {
     cli,
     page,
   }) => {
-    await open(cli, page, "pdf");
+    await open(cli, page, "review");
     cli.register(["skill", "update", "review"], {
       events: [
         {
@@ -212,7 +193,7 @@ test.describe("Update", () => {
       ],
       exitCode: 4,
     });
-    await pill(page, "review").click();
+    await update(page, "review").click();
     await expect(
       toasts(page).getByText("Updated review. It needs your choices")
     ).toBeVisible();
@@ -221,7 +202,7 @@ test.describe("Update", () => {
     expect(later(cli)).toEqual([["skill", "update", "review", "--json"]]);
   });
 
-  test("exit 5: the CLI's message, and Add source again records source add <source>", async ({
+  test("exit 5: the CLI's message, and Add source records source add <source>", async ({
     cli,
     page,
   }) => {
@@ -238,14 +219,14 @@ test.describe("Update", () => {
       ],
       exitCode: 5,
     });
-    await pill(page, "pdf").click();
+    await update(page, "pdf").click();
     await expect(toasts(page).getByText(message)).toBeVisible();
     cli.register(["source", "add", ACME]);
     await toasts(page)
-      .getByRole("button", { exact: true, name: "Add source again" })
+      .getByRole("button", { exact: true, name: "Add source" })
       .click();
     await expect(
-      toasts(page).getByText("Added acme/skills again")
+      toasts(page).getByText("Added acme/skills source")
     ).toBeVisible();
     expect(later(cli)).toEqual([
       ["skill", "update", "pdf", "--json"],
@@ -266,7 +247,7 @@ test.describe("Update", () => {
       ],
       exitCode: 6,
     });
-    await pill(page, "pdf").click();
+    await update(page, "pdf").click();
     await expect(
       toasts(page).getByText("pdf holds .venv, which git cannot record")
     ).toBeVisible();
@@ -323,7 +304,7 @@ test.describe("banners", () => {
     ).toHaveCount(0);
     await page.goto("/#/skills/gone");
     await expect(
-      pane(page, "gone").getByRole("note", { name: "Removed from its source" })
+      pane(page, "gone").getByRole("note", { name: "Removed from source" })
     ).toBeVisible();
   });
 });
@@ -334,7 +315,7 @@ test.describe("Check updates", () => {
     page,
   }) => {
     await open(cli, page, "pdf", []);
-    await expect(pill(page, "pdf")).toHaveCount(0);
+    await expect(update(page, "pdf")).toHaveCount(0);
     const run = cli.register(["skill", "check-updates"], {
       events: [
         {
@@ -365,7 +346,12 @@ test.describe("Check updates", () => {
     // draft's pending merge comes first: four skills are offered an update.
     await expect(toasts(page).getByText("4 skills have updates")).toBeVisible();
     await expect(checkButton(page)).toHaveAttribute("aria-busy", "false");
-    await expectPills(page, offered);
+    // One after the other: each selects its row.
+    await expectOffered(page, "pdf", true);
+    await expectOffered(page, "pdf-letters", true);
+    await expectOffered(page, "release-notes", true);
+    await expectOffered(page, "review", true);
+    await expectOffered(page, "draft", false);
     expect(later(cli)).toEqual([["skill", "check-updates", "--json"]]);
 
     cli.register(["skill", "update", "--all"], {
@@ -401,13 +387,13 @@ test.describe("Check updates", () => {
     page,
   }) => {
     await open(cli, page, "pdf");
-    await expect(pill(page, "pdf")).toBeVisible();
+    await expect(update(page, "pdf")).toBeVisible();
     cli.register(["skill", "check-updates"]);
     await checkButton(page).click();
     await expect(
       toasts(page).getByText("Everything is up to date")
     ).toBeVisible();
-    await expect(pill(page, "pdf")).toHaveCount(0);
+    await expect(update(page, "pdf")).toHaveCount(0);
   });
 
   test("exit 3: names the source it could not reach, with the hint, and lists the updates found", async ({
@@ -455,9 +441,9 @@ test.describe("Check updates", () => {
       toasts(page).getByText("Checked. Couldn't reach zeta/tools")
     ).toBeVisible();
     await expect(toasts(page).getByText(hint)).toBeVisible();
-    await expect(pill(page, "pdf")).toBeVisible();
-    await expect(pill(page, "review")).toBeVisible();
-    await expect(pill(page, "pdf-letters")).toHaveCount(0);
+    await expectOffered(page, "pdf", true);
+    await expectOffered(page, "review", true);
+    await expectOffered(page, "pdf-letters", false);
   });
 });
 

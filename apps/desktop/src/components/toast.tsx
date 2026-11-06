@@ -196,7 +196,7 @@ export interface ErrorToast {
   details?: string[];
   /** The command's warnings, under the error. */
   warnings?: string[];
-  /** A way out, such as Add source again, before Dismiss. */
+  /** A way out, such as Add source, before Dismiss. */
   action?: ToastAction;
 }
 

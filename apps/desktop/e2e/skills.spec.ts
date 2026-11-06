@@ -34,13 +34,10 @@ const group = (page: Page, name: string) =>
   list(page).getByRole("region", { name });
 const row = (page: Page, name: string) =>
   list(page).getByRole("button", { exact: true, name });
-/** The names of the rows in `where`: the first button of each list item, which is the row itself. */
 const rowNames = async (where: Locator) =>
   await where
-    .getByRole("listitem")
-    .evaluateAll((items) =>
-      items.map((li) => li.querySelector("button")?.getAttribute("aria-label"))
-    );
+    .getByRole("button")
+    .evaluateAll((buttons) => buttons.map((b) => b.getAttribute("aria-label")));
 /** The accessible names of `where`'s elements: an aria-label, an image's alt, or a label's text. */
 const names = async (where: Locator) =>
   await where.evaluateAll((elements) =>
@@ -647,16 +644,50 @@ test.describe("the detail pane", () => {
     expect(notFiles(cli)).toEqual([]);
   });
 
+  test("the action row sits on the title row, at its right end", async ({
+    cli,
+    page,
+  }) => {
+    await openSkills(cli, page, "/#/skills/gone");
+    const article = pane(page, "gone");
+    const [name, actions, remove, banner] = await Promise.all([
+      article.getByRole("heading", { level: 1, name: "gone" }).boundingBox(),
+      article.getByLabel("Actions").boundingBox(),
+      article.getByRole("button", { name: "Remove" }).boundingBox(),
+      article.getByRole("note").boundingBox(),
+    ]);
+    expect([name, actions, remove, banner]).not.toContain(null);
+    if (
+      name !== null &&
+      actions !== null &&
+      remove !== null &&
+      banner !== null
+    ) {
+      // On the name's line, to its right.
+      expect(remove.x).toBeGreaterThan(name.x + name.width);
+      expect(remove.y).toBeLessThan(name.y + name.height);
+      expect(remove.y + remove.height).toBeGreaterThan(name.y);
+      // Pushed to the right end: it ends where the pane's content (the full-width banner) ends.
+      expect(
+        Math.abs(actions.x + actions.width - (banner.x + banner.width))
+      ).toBeLessThan(2);
+    }
+  });
+
   test("an upstream-removed skill shows the banner, and a displaced placement its chip", async ({
     cli,
     page,
   }) => {
     await openSkills(cli, page, "/#/skills/gone");
     const article = pane(page, "gone");
+    const banner = article.getByRole("note", { name: "Removed from source" });
+    await expect(banner).toContainText(
+      "No updates are possible for this skill unless it is added again in the source."
+    );
+    // The pill in the title row reads the same as the banner's title.
     await expect(
-      article.getByRole("note", { name: "Removed from its source" })
-    ).toContainText("It still works but won't get updates.");
-    await expect(article.getByText("Removed from source")).toBeVisible();
+      article.getByText("Removed from source", { exact: true })
+    ).toHaveCount(2);
 
     await row(page, "release-notes").click();
     const cursor = pane(page, "release-notes").getByRole("switch", {
@@ -697,107 +728,21 @@ const openStates = async (cli: MockCli, page: Page, key: string) => {
   await expect(pane(page, key)).toBeVisible();
 };
 
-/** Answers the last refresh request, as serve does after the scan that follows a command. */
-const answerRefresh = async (cli: MockCli) => {
-  const requestId = cli.requestIds.at(-1) ?? "";
-  await cli.serveEmit([
-    {
-      ok: true,
-      request_id: requestId,
-      scan_counter: 2,
-      type: "refresh_complete",
-    },
-  ]);
-};
-
 test.describe("settling a skill", { tag: RUNS_COMMANDS }, () => {
-  test("the Adopt pill sits in its row's box, after the row in the tab order, and selects nothing", async ({
-    cli,
-    page,
-  }) => {
-    await openStates(cli, page, "gone");
-    const item = list(page)
-      .getByRole("listitem")
-      .filter({
-        has: page.getByRole("button", { exact: true, name: "scratch" }),
-      });
-    const pill = item.getByRole("button", { name: "Adopt scratch" });
-    await expect(pill).toHaveText("Adopt");
-    await expect(pill).toHaveAttribute(
-      "title",
-      "Adopt it and agentx can update it"
-    );
-    // Two siblings in the box, the row first; a row without the pill holds the row alone.
-    expect(
-      await item
-        .getByRole("button")
-        .evaluateAll((buttons) =>
-          buttons.map((b) => b.getAttribute("aria-label"))
-        )
-    ).toEqual(["scratch", "Adopt scratch"]);
-    const notes = list(page)
-      .getByRole("listitem")
-      .filter({
-        has: page.getByRole("button", { exact: true, name: "notes" }),
-      });
-    await expect(notes.getByRole("button")).toHaveCount(1);
-    const box = await item.boundingBox();
-    const pillBox = await pill.boundingBox();
-    expect(box).not.toBeNull();
-    expect(pillBox).not.toBeNull();
-    if (box !== null && pillBox !== null) {
-      expect(pillBox.x).toBeGreaterThan(box.x);
-      expect(pillBox.y).toBeGreaterThan(box.y);
-      expect(pillBox.x + pillBox.width).toBeLessThan(box.x + box.width);
-      expect(pillBox.y + pillBox.height).toBeLessThan(box.y + box.height);
-    }
-    await row(page, "scratch").focus();
-    await page.keyboard.press("Tab");
-    await expect(pill).toBeFocused();
-
-    const adopt = cli.register(["adopt", "--skill", "scratch"], {
-      holdAfter: 0,
-    });
-    await pill.click();
-    await adopt.started;
-    await expect(pill).toHaveAttribute("aria-busy", "true");
-    adopt.release();
-    await expect(toasts(page).getByText("Adopted scratch")).toBeVisible();
-    await expect.poll(() => cli.serveRequests.length).toBe(1);
-    // The command ended; the inventory that follows has not come: still pending.
-    await expect(pill).toHaveAttribute("aria-busy", "true");
-    await answerRefresh(cli);
-    await expect(pill).not.toHaveAttribute("aria-busy");
-    await expect(row(page, "scratch")).not.toHaveAttribute(
-      "aria-current",
-      "true"
-    );
-    await expect(pane(page, "gone")).toBeVisible();
-    // The refused entry gets no pill.
-    await expect(
-      list(page).getByRole("button", { name: "Adopt legacy" })
-    ).toHaveCount(0);
-    expect(ran(cli)).toEqual([["adopt", "--skill", "scratch", "--json"]]);
-
-    // A click anywhere else in the box selects the row: here, its top left padding.
-    await item.click({ position: { x: 4, y: 4 } });
-    await expect(row(page, "scratch")).toHaveAttribute("aria-current", "true");
-    await expect(pane(page, "scratch")).toBeVisible();
-    expect(ran(cli)).toEqual([["adopt", "--skill", "scratch", "--json"]]);
-  });
-
   test("the three banners after the displaced one each run their command", async ({
     cli,
     page,
   }) => {
     await openStates(cli, page, "scratch");
+    // Adopt is the banner's button only: no row carries a control of its own.
+    await expect(
+      list(page).getByRole("button", { name: /^Adopt/u })
+    ).toHaveCount(0);
     cli.register(["adopt", "--skill", "scratch"]);
     const adoptBanner = pane(page, "scratch").getByRole("note", {
-      name: "Installed by the skills CLI",
+      name: "From skills CLI",
     });
-    await expect(adoptBanner).toContainText(
-      "Adopt it and agentx can update it from vercel/skills. It installs the skill from there again, so any edits to this copy are replaced."
-    );
+    await expect(adoptBanner).toContainText("Adopt to manage from agentx");
     await adoptBanner.getByRole("button", { name: "Adopt" }).click();
     await expect(toasts(page).getByText("Adopted scratch")).toBeVisible();
 
@@ -807,26 +752,24 @@ test.describe("settling a skill", { tag: RUNS_COMMANDS }, () => {
       name: "Source removed",
     });
     await expect(sourceBanner).toContainText(
-      "Add old/skills again to check for updates."
+      "Add old/skills source to check for updates."
     );
-    await sourceBanner
-      .getByRole("button", { name: "Add source again" })
-      .click();
+    await sourceBanner.getByRole("button", { name: "Add source" }).click();
     await expect(
-      toasts(page).getByText("Added old/skills again")
+      toasts(page).getByText("Added old/skills source")
     ).toBeVisible();
 
     await row(page, "gone").click();
     cli.register(["skill", "fork", "gone"]);
     const forkBanner = pane(page, "gone").getByRole("note", {
-      name: "Removed from its source",
+      name: "Removed from source",
     });
     await expect(forkBanner).toContainText(
-      "It still works but won't get updates."
+      "No updates are possible for this skill unless it is added again in the source."
     );
     await forkBanner.getByRole("button", { name: "Fork" }).click();
     await expect(
-      toasts(page).getByText("Forked gone. It's one of your skills now")
+      toasts(page).getByText("Forked gone", { exact: true })
     ).toBeVisible();
     expect(ran(cli)).toEqual([
       ["adopt", "--skill", "scratch", "--json"],
@@ -835,16 +778,13 @@ test.describe("settling a skill", { tag: RUNS_COMMANDS }, () => {
     ]);
   });
 
-  test("a refused entry has no pill and no banner, and Details says why", async ({
+  test("a refused entry has no banner, and Details says why", async ({
     cli,
     page,
   }) => {
     await openStates(cli, page, "legacy");
     const article = pane(page, "legacy");
     await expect(article.getByRole("note")).toHaveCount(0);
-    await expect(
-      list(page).getByRole("button", { name: "Adopt legacy" })
-    ).toHaveCount(0);
     const details = article.getByRole("region", { name: "Details" });
     await expect(details.getByRole("term")).toHaveText([
       "Found at",
