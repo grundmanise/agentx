@@ -1,7 +1,7 @@
 import { iconSizes } from "#/components/icons/icon-props.ts";
 import type { IconProps } from "#/components/icons/icon-props.ts";
 
-/** A circular arrow, for Check tools and Check updates. Stroke icon on a 24 grid in the parent's text colour (DESIGN.md §7). */
+/** A circular arrow, for Check tools, Check updates and the tile of an update's banner. Stroke icon on a 24 grid in the parent's text colour (DESIGN.md §7). */
 export const RefreshIcon = ({ size = "md" }: IconProps) => (
   <svg
     width={iconSizes[size]}
