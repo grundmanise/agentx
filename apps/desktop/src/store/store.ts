@@ -169,3 +169,11 @@ export const addActivity = (tone: Tone, message: string) => {
     activity: [entry, ...s.activity].slice(0, ACTIVITY_LIMIT),
   }));
 };
+
+/** The records of the adoption preview that `adopt --all` takes over. */
+export const adoptionCandidates = (adoption: readonly AdoptionEvent[]) =>
+  adoption.filter((record) => record.state === "candidate");
+
+/** The records of the adoption preview the CLI refuses to adopt, each with its reason. */
+export const adoptionRefusals = (adoption: readonly AdoptionEvent[]) =>
+  adoption.filter((record) => record.state === "refused");
