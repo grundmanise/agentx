@@ -104,6 +104,11 @@ export interface AppState {
    * one-shot's inventory, which is not applied. Replaced by the next check; gone on a restart.
    */
   handshakeFailures: HandshakeFailure[];
+  /**
+   * What each update changes, read so far, by skill name, from `skill diff <name> --update`:
+   * the What's new sheet reads it when it opens.
+   */
+  updateDiffs: Record<string, UpdateDiffRead>;
 }
 
 /** One declaration of a server whose handshake failed: the server, where it is declared, and why. */
@@ -138,6 +143,14 @@ export type FilesRead =
     }
   | { version: string; files?: undefined; failed: true };
 
+/**
+ * One read of `skill diff <name> --update`, kept with the update candidate it was read for, so
+ * that a newer update never shows the changes of the one before it.
+ */
+export type UpdateDiffRead =
+  | { candidate: string; diffs: DiffEvent[]; failed?: undefined }
+  | { candidate: string; diffs?: undefined; failed: true; problem: Problem };
+
 export const useAppStore = create<AppState>()(() => ({
   activity: [],
   adoption: [],
@@ -156,6 +169,7 @@ export const useAppStore = create<AppState>()(() => ({
   serveEnd: undefined,
   settings: undefined,
   sources: [],
+  updateDiffs: {},
   updates: {},
 }));
 

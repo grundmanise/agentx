@@ -192,6 +192,65 @@ export const loadFiles = async (
   useAppStore.setState((s) => ({ files: { ...s.files, [key]: read } }));
 };
 
+// The candidate of each update whose changes were read, or are being read: name → candidate.
+const updateDiffCandidates = new Map<string, string>();
+
+/** The label of the read of what the update of `name` changes, for `usePending`. */
+export const updateDiffLabel = (name: string) => `update diff ${name}`;
+
+/**
+ * Loads what the update of `name` changes: `skill diff <name> --update`, a read of the two
+ * versions the last update check pinned. `candidate` names the update: the same one is read once,
+ * however often its changes are opened, and a newer one reads again. A failed read is kept with
+ * the CLI's message, and tried again the next time the changes are opened.
+ */
+export const loadUpdateDiff = async (name: string, candidate: string) => {
+  if (updateDiffCandidates.get(name) === candidate) {
+    return;
+  }
+  updateDiffCandidates.set(name, candidate);
+  useAppStore.setState((s) => {
+    const { [name]: previous, ...rest } = s.updateDiffs;
+    return previous === undefined || previous.candidate === candidate
+      ? s
+      : { updateDiffs: rest };
+  });
+  const outcome = await runCommand(["skill", "diff", name, "--update"], {
+    label: updateDiffLabel(name),
+    ownFailure: true,
+  });
+  if (updateDiffCandidates.get(name) !== candidate) {
+    return;
+  }
+  if (outcome.exitCode === 0) {
+    useAppStore.setState((s) => ({
+      updateDiffs: {
+        ...s.updateDiffs,
+        [name]: {
+          candidate,
+          diffs: outcome.events.filter((e) => e.type === "diff"),
+        },
+      },
+    }));
+    return;
+  }
+  const error = outcome.events.find((e) => e.type === "error");
+  const problem =
+    error === undefined
+      ? { message: "agentx could not read the changes" }
+      : {
+          message: error.message,
+          ...(error.hint === undefined ? {} : { hint: error.hint }),
+        };
+  useAppStore.setState((s) => ({
+    updateDiffs: {
+      ...s.updateDiffs,
+      [name]: { candidate, failed: true, problem },
+    },
+  }));
+  updateDiffCandidates.delete(name);
+};
+
 /** What to load again after a command that may have changed something. */
 const afterCommand = ({ args, command, events, exitCode, read }: Finished) => {
   if (read) {
