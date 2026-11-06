@@ -20,11 +20,12 @@ import {
 } from "#/components/ui/dialog.tsx";
 import { Input } from "#/components/ui/input.tsx";
 import { useNow } from "#/screens/settings/clock.ts";
+import { FieldProblem, SettingsSection } from "#/screens/settings/section.tsx";
 import {
   accessLine,
   accountLine,
   accountRemote,
-} from "#/screens/settings/sources.ts";
+} from "#/screens/settings/source-rows.ts";
 import { runCommand, usePending } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
@@ -184,14 +185,7 @@ const RemoteForm = ({
           </Button>
         </div>
         {problem !== undefined && (
-          <div role="alert" className="flex flex-col gap-1">
-            <p className="type-notice text-tone-danger-fg m-0">
-              {problem.message}
-            </p>
-            {problem.hint !== undefined && (
-              <p className="type-notice text-text-muted m-0">{problem.hint}</p>
-            )}
-          </div>
+          <FieldProblem message={problem.message} hint={problem.hint} />
         )}
       </form>
       <Confirm
@@ -281,20 +275,26 @@ const AccountRemoteRow = ({
   );
 };
 
-/** The content of the Account remote section, from the Sources slice. */
+/** The Account remote section, from the Sources slice. */
 export const AccountRemoteSection = () => {
   const account = useAppStore((s) => accountRemote(s.sources));
   const now = useNow();
-  if (account === undefined) {
-    return <RemoteForm />;
-  }
   return (
-    <AccountRemoteRow
-      // A new account remote starts with its field closed.
-      key={account.url}
-      url={account.url}
-      line={accountLine(account, now)}
-      access={accessLine(account.access)}
-    />
+    <SettingsSection
+      title="Account remote"
+      description="The Git repository your own skills publish to."
+    >
+      {account === undefined ? (
+        <RemoteForm />
+      ) : (
+        <AccountRemoteRow
+          // A new account remote starts with its field closed.
+          key={account.url}
+          url={account.url}
+          line={accountLine(account, now)}
+          access={accessLine(account.access)}
+        />
+      )}
+    </SettingsSection>
   );
 };

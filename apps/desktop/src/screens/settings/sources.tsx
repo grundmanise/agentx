@@ -13,14 +13,15 @@ import { Button } from "#/components/ui/button.tsx";
 import { plural } from "#/lib/plural.ts";
 import { AddSourceDialog } from "#/screens/add/add-source-dialog.tsx";
 import { useNow } from "#/screens/settings/clock.ts";
+import { SettingsSection } from "#/screens/settings/section.tsx";
 import {
   accessLine,
   addAgainArgument,
   fetchedLine,
   sharedSources,
-} from "#/screens/settings/sources.ts";
+} from "#/screens/settings/source-rows.ts";
 import { shortSource } from "#/screens/skills/projection.ts";
-import { loadListing, loadSources } from "#/store/loaders.ts";
+import { loadLabel, loadListing, loadSources } from "#/store/loaders.ts";
 import { runCommand, usePending } from "#/store/runner.ts";
 import { useAppStore } from "#/store/store.ts";
 
@@ -100,9 +101,9 @@ const SourceItem = ({
 };
 
 /**
- * The content of the Sources section. When it opens it reads the sources again, as the Add skills
- * screen does, and the listing of each fetched source, for its skill count: `source list` reports
- * no count for a shared source.
+ * The Sources section. When it opens it reads the sources again, as the Add skills screen does,
+ * unless a read is on its way, and the listing of each fetched source, for its skill count:
+ * `source list` reports no count for a shared source.
  */
 export const SourcesSection = () => {
   const all = useAppStore((s) => s.sources);
@@ -113,8 +114,11 @@ export const SourcesSection = () => {
   // The fetch each listing was read for: source id → last_fetched.
   const read = useRef(new Map<string, string>());
 
+  // A read already on its way, such as the store's own at launch, answers for this one.
   useEffect(() => {
-    void loadSources();
+    if (!(loadLabel(["source", "list"]) in useAppStore.getState().pending)) {
+      void loadSources();
+    }
   }, []);
 
   useEffect(() => {
@@ -128,7 +132,10 @@ export const SourcesSection = () => {
   }, [sources]);
 
   return (
-    <div className="flex flex-col gap-3">
+    <SettingsSection
+      title="Sources"
+      description="Git repositories you add skills from. agentx checks them when it opens and when you check for updates."
+    >
       {sources.length > 0 && (
         <ul aria-label="Sources" className="gap-rows m-0 flex flex-col p-0">
           {sources.map((source) => (
@@ -155,6 +162,6 @@ export const SourcesSection = () => {
       </div>
       {/* The new source shows once `source list` lists it, which the store reads after the add. */}
       <AddSourceDialog open={dialogOpen} onOpenChange={setDialogOpen} />
-    </div>
+    </SettingsSection>
   );
 };
