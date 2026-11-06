@@ -117,7 +117,7 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
       {
         label: forkLabel(row),
         ownFailure: true,
-        success: `Forked ${row.name}. It's one of your skills now`,
+        success: `Forked ${row.name}`,
       }
     );
     if (outcome.exitCode === EXIT_CODES.ok) {
