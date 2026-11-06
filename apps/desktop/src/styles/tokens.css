@@ -612,6 +612,10 @@
   --gap-check-row: 22px;
   --size-check-mark: 20px;
   --gap-check-mark: 14px;
+  --grid-template-columns-settings: 240px minmax(0, 560px);
+  --gap-settings-columns: 24px;
+  --padding-settings-section: 28px;
+  --gap-settings-section: 16px;
 }
 
 /* 5. Type roles (DESIGN.md §3): the only way to set a face, size, weight, line height and
@@ -853,5 +857,10 @@
 @utility type-version-pill {
   font-family: var(--font-mono);
   font-size: 12px;
+  font-weight: 500;
+}
+@utility type-settings-label {
+  font-family: var(--font-sans);
+  font-size: 14px;
   font-weight: 500;
 }
