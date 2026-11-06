@@ -177,7 +177,7 @@ test.describe("banners", () => {
     });
     await fork.getByRole("button", { exact: true, name: "Fork" }).click();
     await expect(
-      toasts(page).getByText("Forked review. It's one of your skills now")
+      toasts(page).getByText("Forked review", { exact: true })
     ).toBeVisible();
     expect(later(cli).at(-1)).toEqual(["skill", "fork", "review", "--json"]);
   });
