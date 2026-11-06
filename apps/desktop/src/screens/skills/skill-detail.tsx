@@ -10,6 +10,8 @@ import { BannerView } from "#/screens/skills/banner-view.tsx";
 import { bannerFor } from "#/screens/skills/banners.ts";
 import { detailsOf } from "#/screens/skills/details.ts";
 import { FilesSection } from "#/screens/skills/files.tsx";
+import { ForkButton } from "#/screens/skills/fork-dialog.tsx";
+import { canFork } from "#/screens/skills/fork.ts";
 import { HistorySection } from "#/screens/skills/history.tsx";
 import { openSkill } from "#/screens/skills/open.ts";
 import {
@@ -52,10 +54,10 @@ const RemoveButton = ({
 
 /**
  * The right pane: what the CLI reports about one skill. Header, origin, pills and a pill per fork
- * made from it under a new name, which opens that fork; description; the action row (Remove for a
- * library skill; the other actions come with the changes that add them); one banner, with its
- * button; AGENTS, whose chips add and remove placements; FILES; then DETAILS and HISTORY side by
- * side. Every control runs one command and redraws from the inventory that follows.
+ * made from it under a new name, which opens that fork; description; the action row (Fork for a
+ * skill that is not yet yours, Remove for a library skill; the other actions come with the changes
+ * that add them); one banner, with its button; AGENTS, whose chips add and remove placements;
+ * FILES; then DETAILS and HISTORY side by side. Every control runs one command and redraws from the inventory that follows.
  */
 export const SkillDetail = ({
   row,
@@ -124,11 +126,12 @@ export const SkillDetail = ({
             {row.description}
           </p>
         )}
-        {/* The action row: Fork, Publish and the rest come with the changes that add them. */}
+        {/* The action row: Publish and the rest come with the changes that add them. */}
         <div
           aria-label="Actions"
           className="flex items-center gap-1.5 empty:hidden"
         >
+          {canFork(row) && <ForkButton row={row} />}
           {row.entry !== undefined && (
             <RemoveButton
               row={row}
