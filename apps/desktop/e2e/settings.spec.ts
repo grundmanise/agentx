@@ -65,6 +65,8 @@ test("each section shows what the store holds, and nothing runs on its own", asy
   const sections = page.getByRole("main").getByRole("region");
   await expect(sections).toHaveText([
     /^This machine/u,
+    /^Account remote/u,
+    /^Sources/u,
     /^Comparing edits/u,
     /^Storage/u,
     /^Command line/u,
