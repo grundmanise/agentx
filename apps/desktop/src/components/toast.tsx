@@ -47,8 +47,13 @@ const durationOf = (withAction: boolean, lasting: boolean) => {
 /** Takes the toast showing away, for a control that answers a command's outcome itself. */
 export const dismissToast = () => {
   if (shown !== undefined) {
-    toast.dismiss(shown);
+    const id = shown;
     shown = undefined;
+    // As in replace(): Sonner adds a toast on a timer, so a dismiss sent at once could come first
+    // and leave the toast showing.
+    setTimeout(() => {
+      toast.dismiss(id);
+    }, 0);
   }
 };
 

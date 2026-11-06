@@ -4,6 +4,7 @@ import { ListRow } from "#/components/list-row.tsx";
 import { Pill, PillButton } from "#/components/pill.tsx";
 import type { PillTone } from "#/components/pill.tsx";
 import { SkillGlyph } from "#/components/skill-glyph.tsx";
+import { adopt, adoptLabel } from "#/screens/skills/actions.tsx";
 import {
   glyphLit,
   glyphOf,
@@ -22,6 +23,27 @@ export const pillTones: Record<PillKind, PillTone> = {
   "removed-from-source": "removed",
   "source-removed": "removed",
   "update-waiting": "update",
+};
+
+/**
+ * The Adopt pill in the row box of a skill another tool installed: it runs `adopt --skill <name>`
+ * and selects nothing. It sits beside the row button, inside the box, as a button of its own.
+ */
+const AdoptPill = ({ row }: { row: SkillRow }) => {
+  const pending = useSettling(adoptLabel(row.name));
+  return (
+    <PillButton
+      tone="neutral"
+      pending={pending}
+      label={`Adopt ${row.name}`}
+      title="Adopt it and agentx can update it"
+      onClick={() => {
+        void adopt(row.name);
+      }}
+    >
+      Adopt
+    </PillButton>
+  );
 };
 
 /**
@@ -51,9 +73,20 @@ const UpdatePill = ({ row }: { row: SkillRow }) => {
 };
 
 /**
+ * The one pill beside a row, if any: Adopt for a skill another tool installed that the CLI would
+ * adopt, else Update for a skill with an update. Adopt wins when both apply.
+ */
+const rowPill = (row: SkillRow) => {
+  if (row.adoption?.state === "candidate") {
+    return <AdoptPill row={row} />;
+  }
+  return row.update === undefined ? undefined : <UpdatePill row={row} />;
+};
+
+/**
  * One skill in the list: glyph, name, pills, a small fork marker for each fork made from it under
  * a new name, and the logos of the agent clients that see it, then its description, with the
- * Update pill beside it for a skill with an update. Selecting it shows the skill in the detail
+ * Adopt or Update pill beside it. Selecting it shows the skill in the detail
  * pane.
  */
 export const SkillRowItem = ({
@@ -89,7 +122,7 @@ export const SkillRowItem = ({
       description={description}
       selected={selected}
       onSelect={onSelect}
-      aside={row.update === undefined ? undefined : <UpdatePill row={row} />}
+      aside={rowPill(row)}
     >
       <span className="w-row-glyph flex h-5 flex-none items-center justify-center">
         <SkillGlyph

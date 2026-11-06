@@ -1,6 +1,11 @@
 import type { Locator, Page } from "@playwright/test";
 
 import {
+  adoption as statesAdoption,
+  inventory as statesInventory,
+  OLD,
+} from "./fixtures/adoption.ts";
+import {
   adoption,
   configurations,
   fileReads,
@@ -29,10 +34,13 @@ const group = (page: Page, name: string) =>
   list(page).getByRole("region", { name });
 const row = (page: Page, name: string) =>
   list(page).getByRole("button", { exact: true, name });
+/** The names of the rows in `where`: the first button of each list item, which is the row itself. */
 const rowNames = async (where: Locator) =>
   await where
-    .getByRole("button")
-    .evaluateAll((buttons) => buttons.map((b) => b.getAttribute("aria-label")));
+    .getByRole("listitem")
+    .evaluateAll((items) =>
+      items.map((li) => li.querySelector("button")?.getAttribute("aria-label"))
+    );
 /** The accessible names of `where`'s elements: an aria-label, an image's alt, or a label's text. */
 const names = async (where: Locator) =>
   await where.evaluateAll((elements) =>
@@ -83,9 +91,16 @@ const openSkills = async (cli: MockCli, page: Page, path = "/#/skills") => {
 const notFiles = (cli: MockCli) =>
   later(cli).filter((l) => !["files", "diff"].includes(l[1] ?? ""));
 
-test.afterEach(({ cli }) => {
+/** Tags a test whose controls run commands, which it pins itself. */
+const RUNS_COMMANDS = "@runs-commands";
+
+test.afterEach(({ cli }, testInfo) => {
+  if (testInfo.tags.includes(RUNS_COMMANDS)) {
+    return;
+  }
   // Read-only: nothing on this screen runs a command but the reads of a skill's history, files
-  // and edits (e2e/skill-files.spec.ts covers the last two).
+  // and edits (e2e/skill-files.spec.ts covers the last two), and the controls that settle a skill
+  // the tests tagged RUNS_COMMANDS cover.
   for (const line of later(cli)) {
     expect(["skill files", "skill diff", "skill history"]).toContain(
       line.slice(0, 2).join(" ")
@@ -655,5 +670,190 @@ test.describe("the detail pane", () => {
         name: "Cursor is using its own copy of this skill",
       })
     ).toBeVisible();
+  });
+});
+
+const toasts = (page: Page) =>
+  page.getByRole("region", { name: /^Notifications/u });
+
+/** The command lines the controls ran: everything but the launch, the store's and the pane's reads. */
+const ran = (cli: MockCli) =>
+  later(cli).filter(
+    (l) =>
+      !["skill files", "skill diff", "skill history"].includes(
+        l.slice(0, 2).join(" ")
+      )
+  );
+
+/** Opens the Skills screen with `key` selected, on the machine with a skill to adopt, one whose source was removed and one the CLI refuses to adopt. */
+const openStates = async (cli: MockCli, page: Page, key: string) => {
+  cli.onServeStart({ events: [statesInventory] });
+  cli.register(["adopt"], { events: statesAdoption });
+  for (const name of ["scratch", "legacy", "lint", "gone", "notes"]) {
+    cli.register(["skill", "files", name], { events: filesOf(name) });
+  }
+  await page.goto(`/#/skills/${key}`);
+  await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
+  await expect(pane(page, key)).toBeVisible();
+};
+
+/** Answers the last refresh request, as serve does after the scan that follows a command. */
+const answerRefresh = async (cli: MockCli) => {
+  const requestId = cli.requestIds.at(-1) ?? "";
+  await cli.serveEmit([
+    {
+      ok: true,
+      request_id: requestId,
+      scan_counter: 2,
+      type: "refresh_complete",
+    },
+  ]);
+};
+
+test.describe("settling a skill", { tag: RUNS_COMMANDS }, () => {
+  test("the Adopt pill sits in its row's box, after the row in the tab order, and selects nothing", async ({
+    cli,
+    page,
+  }) => {
+    await openStates(cli, page, "gone");
+    const item = list(page)
+      .getByRole("listitem")
+      .filter({
+        has: page.getByRole("button", { exact: true, name: "scratch" }),
+      });
+    const pill = item.getByRole("button", { name: "Adopt scratch" });
+    await expect(pill).toHaveText("Adopt");
+    await expect(pill).toHaveAttribute(
+      "title",
+      "Adopt it and agentx can update it"
+    );
+    // Two siblings in the box, the row first; a row without the pill holds the row alone.
+    expect(
+      await item
+        .getByRole("button")
+        .evaluateAll((buttons) =>
+          buttons.map((b) => b.getAttribute("aria-label"))
+        )
+    ).toEqual(["scratch", "Adopt scratch"]);
+    const notes = list(page)
+      .getByRole("listitem")
+      .filter({
+        has: page.getByRole("button", { exact: true, name: "notes" }),
+      });
+    await expect(notes.getByRole("button")).toHaveCount(1);
+    const box = await item.boundingBox();
+    const pillBox = await pill.boundingBox();
+    expect(box).not.toBeNull();
+    expect(pillBox).not.toBeNull();
+    if (box !== null && pillBox !== null) {
+      expect(pillBox.x).toBeGreaterThan(box.x);
+      expect(pillBox.y).toBeGreaterThan(box.y);
+      expect(pillBox.x + pillBox.width).toBeLessThan(box.x + box.width);
+      expect(pillBox.y + pillBox.height).toBeLessThan(box.y + box.height);
+    }
+    await row(page, "scratch").focus();
+    await page.keyboard.press("Tab");
+    await expect(pill).toBeFocused();
+
+    const adopt = cli.register(["adopt", "--skill", "scratch"], {
+      holdAfter: 0,
+    });
+    await pill.click();
+    await adopt.started;
+    await expect(pill).toHaveAttribute("aria-busy", "true");
+    adopt.release();
+    await expect(toasts(page).getByText("Adopted scratch")).toBeVisible();
+    await expect.poll(() => cli.serveRequests.length).toBe(1);
+    // The command ended; the inventory that follows has not come: still pending.
+    await expect(pill).toHaveAttribute("aria-busy", "true");
+    await answerRefresh(cli);
+    await expect(pill).not.toHaveAttribute("aria-busy");
+    await expect(row(page, "scratch")).not.toHaveAttribute(
+      "aria-current",
+      "true"
+    );
+    await expect(pane(page, "gone")).toBeVisible();
+    // The refused entry gets no pill.
+    await expect(
+      list(page).getByRole("button", { name: "Adopt legacy" })
+    ).toHaveCount(0);
+    expect(ran(cli)).toEqual([["adopt", "--skill", "scratch", "--json"]]);
+
+    // A click anywhere else in the box selects the row: here, its top left padding.
+    await item.click({ position: { x: 4, y: 4 } });
+    await expect(row(page, "scratch")).toHaveAttribute("aria-current", "true");
+    await expect(pane(page, "scratch")).toBeVisible();
+    expect(ran(cli)).toEqual([["adopt", "--skill", "scratch", "--json"]]);
+  });
+
+  test("the three banners after the displaced one each run their command", async ({
+    cli,
+    page,
+  }) => {
+    await openStates(cli, page, "scratch");
+    cli.register(["adopt", "--skill", "scratch"]);
+    const adoptBanner = pane(page, "scratch").getByRole("note", {
+      name: "Installed by the skills CLI",
+    });
+    await expect(adoptBanner).toContainText(
+      "Adopt it and agentx can update it from vercel/skills. It installs the skill from there again, so any edits to this copy are replaced."
+    );
+    await adoptBanner.getByRole("button", { name: "Adopt" }).click();
+    await expect(toasts(page).getByText("Adopted scratch")).toBeVisible();
+
+    await row(page, "lint").click();
+    cli.register(["source", "add", OLD]);
+    const sourceBanner = pane(page, "lint").getByRole("note", {
+      name: "Source removed",
+    });
+    await expect(sourceBanner).toContainText(
+      "Add old/skills again to check for updates."
+    );
+    await sourceBanner
+      .getByRole("button", { name: "Add source again" })
+      .click();
+    await expect(
+      toasts(page).getByText("Added old/skills again")
+    ).toBeVisible();
+
+    await row(page, "gone").click();
+    cli.register(["skill", "fork", "gone"]);
+    const forkBanner = pane(page, "gone").getByRole("note", {
+      name: "Removed from its source",
+    });
+    await expect(forkBanner).toContainText(
+      "It still works but won't get updates."
+    );
+    await forkBanner.getByRole("button", { name: "Fork" }).click();
+    await expect(
+      toasts(page).getByText("Forked gone. It's one of your skills now")
+    ).toBeVisible();
+    expect(ran(cli)).toEqual([
+      ["adopt", "--skill", "scratch", "--json"],
+      ["source", "add", OLD, "--json"],
+      ["skill", "fork", "gone", "--json"],
+    ]);
+  });
+
+  test("a refused entry has no pill and no banner, and Details says why", async ({
+    cli,
+    page,
+  }) => {
+    await openStates(cli, page, "legacy");
+    const article = pane(page, "legacy");
+    await expect(article.getByRole("note")).toHaveCount(0);
+    await expect(
+      list(page).getByRole("button", { name: "Adopt legacy" })
+    ).toHaveCount(0);
+    const details = article.getByRole("region", { name: "Details" });
+    await expect(details.getByRole("term")).toHaveText([
+      "Found at",
+      "Installed by",
+      "Adopt",
+    ]);
+    await expect(details.getByRole("definition").last()).toHaveText(
+      "Can't adopt: legacy is a symlink, not a directory"
+    );
+    expect(ran(cli)).toEqual([]);
   });
 });
