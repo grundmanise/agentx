@@ -51,9 +51,10 @@ const RemoveButton = ({
 };
 
 /**
- * The right pane: what the CLI reports about one skill. Header, origin, pills and a pill per fork
- * made from it under a new name, which opens that fork; description; the action row (Remove for a
- * library skill; the other actions come with the changes that add them); one banner, with its
+ * The right pane: what the CLI reports about one skill. Header: the title row with the name,
+ * origin, pills, a pill per fork made from it under a new name, which opens that fork, and at its
+ * right end the action row (Remove for a library skill; the other actions come with the changes
+ * that add them); then the description. One banner, with its
  * button; AGENTS, whose chips add and remove placements; FILES; then DETAILS and HISTORY side by
  * side. Every control runs one command and redraws from the inventory that follows.
  */
@@ -118,26 +119,27 @@ export const SkillDetail = ({
               {fork.name}
             </PillButton>
           ))}
+          {/* The action row, at the title row's right end: Fork, Publish and the rest come with
+              the changes that add them. */}
+          <div
+            aria-label="Actions"
+            className="ml-auto flex flex-wrap items-center gap-1.5 empty:hidden"
+          >
+            {row.entry !== undefined && (
+              <RemoveButton
+                row={row}
+                onClick={() => {
+                  setRemoving(true);
+                }}
+              />
+            )}
+          </div>
         </div>
         {row.description !== "" && (
           <p className="type-detail-desc text-text-muted m-0 text-pretty">
             {row.description}
           </p>
         )}
-        {/* The action row: Fork, Publish and the rest come with the changes that add them. */}
-        <div
-          aria-label="Actions"
-          className="flex items-center gap-1.5 empty:hidden"
-        >
-          {row.entry !== undefined && (
-            <RemoveButton
-              row={row}
-              onClick={() => {
-                setRemoving(true);
-              }}
-            />
-          )}
-        </div>
       </header>
       {banner !== undefined && <BannerView row={row} banner={banner} />}
       <section aria-label="Agents" className="flex flex-col gap-3">
