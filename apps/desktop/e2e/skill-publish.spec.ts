@@ -156,12 +156,33 @@ test.describe("banners", () => {
       "3 files changed. Updates merge your edits in."
     );
     await expect(note.getByRole("button")).toHaveText([
+      "Fork",
       "Publish to acme/skills",
     ]);
     expect(diffReads(cli, "review")).toBe(1);
   });
 
-  test("an edited skill of a read-only source: no Publish to its source", async ({
+  test("Fork on the edited skill's banner opens the Fork dialog, whose Fork runs skill fork <name>", async ({
+    cli,
+    page,
+  }) => {
+    await openSkill(cli, page, "review");
+    await banner(pane(page, "review"))
+      .getByRole("button", { name: "Fork" })
+      .click();
+    const fork = page.getByRole("dialog", { name: "Fork review" });
+    await expect(fork).toBeVisible();
+    cli.register(["skill", "fork", "review"], {
+      events: [{ name: "review", type: "library_skill" }],
+    });
+    await fork.getByRole("button", { exact: true, name: "Fork" }).click();
+    await expect(
+      toasts(page).getByText("Forked review. It's one of your skills now")
+    ).toBeVisible();
+    expect(later(cli).at(-1)).toEqual(["skill", "fork", "review", "--json"]);
+  });
+
+  test("an edited skill of a read-only source: Fork, and no Publish to its source", async ({
     cli,
     page,
   }) => {
@@ -171,7 +192,7 @@ test.describe("banners", () => {
     await expect(note).toContainText(
       "1 file changed. Updates merge your edits in."
     );
-    await expect(note.getByRole("button")).toHaveCount(0);
+    await expect(note.getByRole("button")).toHaveText(["Fork"]);
   });
 
   test("a skill of a source as it was installed has none of these banners", async ({

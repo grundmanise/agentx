@@ -27,8 +27,9 @@ export type BannerAction =
   /** Goes to Settings, where an account remote is set. */
   | { kind: "open-settings" }
   /**
-   * The buttons of an edited skill of a source: Publish to {source}, which opens the Publish
-   * dialog, when `publishTo` names a source this machine can write to.
+   * The buttons of an edited skill of a source: Fork, which opens the Fork dialog, and Publish to
+   * {source}, which opens the Publish dialog, when `publishTo` names a source this machine can
+   * write to.
    */
   | { kind: "edited"; publishTo?: string };
 

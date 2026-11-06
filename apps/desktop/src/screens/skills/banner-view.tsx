@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
 import type { Banner } from "#/screens/skills/banners.ts";
+import { ForkButton } from "#/screens/skills/fork-dialog.tsx";
 import {
   agentsWord,
   holdsOtherContent,
@@ -197,11 +198,16 @@ const BannerActions = ({ row, banner }: { row: SkillRow; banner: Banner }) => {
       return <OpenSettingsButton />;
     }
     case "edited": {
-      return banner.action.publishTo === undefined ? null : (
-        <PublishButton
-          row={row}
-          label={`Publish to ${banner.action.publishTo}`}
-        />
+      return (
+        <>
+          <ForkButton row={row} place="banner" />
+          {banner.action.publishTo !== undefined && (
+            <PublishButton
+              row={row}
+              label={`Publish to ${banner.action.publishTo}`}
+            />
+          )}
+        </>
       );
     }
     case undefined: {
