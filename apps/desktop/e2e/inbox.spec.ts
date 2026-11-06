@@ -473,9 +473,10 @@ test("Recent lists what just happened, newest first, at most nine", async ({
 }) => {
   await openInbox(cli, page);
   // The two repairs serve left as they are at its start are cards, not entries.
-  await expect(page.getByRole("region", { name: "Recent" })).toContainText(
-    "Nothing yet"
-  );
+  const region = page.getByRole("region", { name: "Recent" });
+  await expect(region).toContainText("Nothing yet");
+  await expect(region).not.toContainText("worktree missing");
+  await expect(region).not.toContainText("adopt candidate");
   await cli.serveEmit([
     {
       kind: "managed",
@@ -514,6 +515,8 @@ test("Recent lists what just happened, newest first, at most nine", async ({
   await cli.serveEmit(drifts);
   await expect(recent(page)).toHaveCount(9);
   await expect(recent(page).first()).toHaveText(/skill-9 is now missing$/u);
+  await expect(region).not.toContainText("worktree missing");
+  await expect(region).not.toContainText("adopt candidate");
 
   // An action's outcome is prepended as it happens.
   cli.register(["skill", "fork", "gone"]);
