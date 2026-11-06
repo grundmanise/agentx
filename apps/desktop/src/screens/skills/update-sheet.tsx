@@ -21,6 +21,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "#/components/ui/sheet.tsx";
+import { fromAnotherMachine } from "#/screens/skills/projection.ts";
 import { loadUpdateDiff } from "#/store/loaders.ts";
 import { useAppStore } from "#/store/store.ts";
 
@@ -165,8 +166,7 @@ export const UpdateSheet = ({
       </SheetHeader>
       {/* The blocks scroll down only; the Code pane wraps a long line. */}
       <div className="min-h-0 flex-1 overflow-auto">
-        {/* The CLI leaves the base version of an update from another machine empty. */}
-        {update.base_hash === "" ? (
+        {fromAnotherMachine(update) ? (
           <FilesOnly update={update} />
         ) : (
           <Changes update={update} />

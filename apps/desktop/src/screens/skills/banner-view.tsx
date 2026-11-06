@@ -1,6 +1,6 @@
 // The one banner of the detail pane (DESIGN.md §6 "Banner" and "Banner actions and dialogs"),
-// with its button: Update on the lime banners of an update, Add to agents on the gray banner,
-// Reconnect on the amber one. A Reconnect the
+// with its button: See changes and Update on the lime banners of an update, Add to agents on the
+// gray banner, Reconnect on the amber one. See changes opens the What's new sheet. A Reconnect the
 // CLI refuses because the directory holds another version opens a confirm dialog, whose Replace
 // runs the same command with --force.
 import { cva } from "class-variance-authority";
@@ -28,7 +28,9 @@ import {
   holdsOtherContent,
   placedCount,
 } from "#/screens/skills/placements.ts";
+import { updateVersions } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
+import { UpdateSheet } from "#/screens/skills/update-sheet.tsx";
 import { updateLabel, updateSkill } from "#/screens/skills/updates.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 
@@ -100,6 +102,37 @@ const UpdateButton = ({ row }: { row: SkillRow }) => {
       {pending && <Spinner />}
       Update
     </Button>
+  );
+};
+
+/**
+ * See changes: opens the What's new sheet of the skill's update, which reads what it changes. Its
+ * versions are named as the Update pill names them.
+ */
+const SeeChanges = ({ row }: { row: SkillRow }) => {
+  const [open, setOpen] = useState(false);
+  const { update } = row;
+  if (update === undefined) {
+    return null;
+  }
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => {
+          setOpen(true);
+        }}
+      >
+        See changes
+      </Button>
+      <UpdateSheet
+        update={update}
+        versions={updateVersions(update)}
+        open={open}
+        onOpenChange={setOpen}
+      />
+    </>
   );
 };
 
@@ -197,7 +230,12 @@ const PutBack = ({
 const BannerActions = ({ row, banner }: { row: SkillRow; banner: Banner }) => {
   switch (banner.action?.kind) {
     case "update": {
-      return <UpdateButton row={row} />;
+      return (
+        <>
+          <SeeChanges row={row} />
+          <UpdateButton row={row} />
+        </>
+      );
     }
     case "add-to-agents": {
       return <AddToAgents row={row} />;
