@@ -69,7 +69,7 @@ test.describe("the What's new sheet", () => {
     await read.started;
     await expect(sheet(page)).toBeVisible();
     await expect(sheet(page)).toContainText("pdf");
-    // The versions as the Update pill names them: by date where the CLI dates them.
+    // The two versions, by date where the CLI dates them.
     await expect(sheet(page)).toContainText("Sep 14 → Sep 28");
     await expect(sheet(page)).toContainText("Reading the changes…");
     read.release();

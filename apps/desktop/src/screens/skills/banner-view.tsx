@@ -1,15 +1,14 @@
 // The one banner of the detail pane (DESIGN.md §6 "Banner" and "Banner actions and dialogs"),
 // with its button: See changes and Update on the lime banners of an update (See changes opens the
-// What's new sheet), Add to agents on the gray "Not in any
-// agent" banner, Reconnect on the amber one, Adopt, Add source again or Fork on the others. The buttons are in src/screens/skills/actions.tsx,
-// where Adopt shares its command with the list's Adopt pill, but Fork, which opens the Fork dialog
-// (src/screens/skills/fork-dialog.tsx).
+// What's new sheet), Add to agents on the gray "Not in any agent" banner, Reconnect on the amber
+// one, Adopt, Add source or Fork on the others. The buttons are in src/screens/skills/actions.tsx,
+// but Fork, which opens the Fork dialog (src/screens/skills/fork-dialog.tsx).
 import { cva } from "class-variance-authority";
 
 import { AlertIcon } from "#/components/icons/alert.tsx";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import {
-  AddSourceAgain,
+  AddSource,
   AddToAgents,
   Adopt,
   Reconnect,
@@ -76,7 +75,7 @@ const BannerActions = ({ row, banner }: { row: SkillRow; banner: Banner }) => {
       return <Adopt name={row.name} />;
     }
     case "add-source": {
-      return <AddSourceAgain source={banner.action.source} />;
+      return <AddSource source={banner.action.source} />;
     }
     case "fork": {
       return <ForkButton row={row} place="banner" />;
