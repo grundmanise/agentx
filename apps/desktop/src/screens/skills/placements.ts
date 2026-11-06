@@ -11,9 +11,9 @@ import type { AgentChipState } from "#/components/agent-chip.tsx";
 import { plural } from "#/lib/plural.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 
-/** What a click on a displaced chip toasts: the placement is put back from its banner. */
+/** What a click on a displaced chip toasts: the placement is reconnected from its banner. */
 export const DISPLACED_REASON =
-  "Put it back first, then manage it from your library";
+  "Reconnect it first, then manage it from your library";
 
 /**
  * Whether a configuration sees the skill: through its placement, displaced when the placement's
@@ -146,7 +146,7 @@ export const placedAllText = (events: CliEvent[], agent: string): string => {
   return skipped > 0 ? `${text}, ${skipped} skipped` : text;
 };
 
-/** The error that refuses a Put back because the directory holds another version (exit code 6). */
+/** The error that refuses a Reconnect because the directory holds another version (exit code 6). */
 export const holdsOtherContent = (events: CliEvent[]) =>
   events.some(
     (e) =>

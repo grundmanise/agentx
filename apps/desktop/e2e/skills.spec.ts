@@ -652,7 +652,7 @@ test.describe("the detail pane", () => {
     await expect(cursor).toContainText("displaced");
     await expect(
       pane(page, "release-notes").getByRole("note", {
-        name: "Cursor has its own folder for this skill",
+        name: "Cursor is using its own copy of this skill",
       })
     ).toBeVisible();
   });

@@ -226,7 +226,7 @@ test.describe("chips", () => {
     expect(later(cli)).toEqual([]);
   });
 
-  test("a displaced chip runs nothing and says to put it back first", async ({
+  test("a displaced chip runs nothing and says to reconnect it first", async ({
     cli,
     page,
   }) => {
@@ -236,7 +236,7 @@ test.describe("chips", () => {
     await cursor.click();
     await expect(
       toasts(page).getByText(
-        "Put it back first, then manage it from your library"
+        "Reconnect it first, then manage it from your library"
       )
     ).toBeVisible();
     expect(later(cli)).toEqual([]);
@@ -284,17 +284,17 @@ test.describe("banners", () => {
     expect(later(cli)).toEqual([["skill", "place", "draft", "--json"]]);
   });
 
-  test("Put back: a refused run opens the confirm dialog, whose Replace adds --force", async ({
+  test("Reconnect: a refused run opens the confirm dialog, whose Replace adds --force", async ({
     cli,
     page,
   }) => {
     await openSkill(cli, page, "release-notes");
     const article = pane(page, "release-notes");
     const banner = article.getByRole("note", {
-      name: "Cursor has its own folder for this skill",
+      name: "Cursor is using its own copy of this skill",
     });
     await expect(banner).toContainText(
-      "It replaced the link to your library, so it stays as it is until you put it back."
+      "Changes you make in your library won't reach Cursor until you reconnect it."
     );
     const path = "/home/me/.cursor/skills/release-notes";
     cli.register(["skill", "place", "release-notes", "--to", "cursor"], {
@@ -309,12 +309,12 @@ test.describe("banners", () => {
       exitCode: 6,
     });
 
-    await banner.getByRole("button", { name: "Put back" }).click();
+    await banner.getByRole("button", { name: "Reconnect" }).click();
     const dialog = page.getByRole("dialog", {
-      name: "Replace Cursor's folder?",
+      name: "Replace Cursor's copy?",
     });
     await expect(dialog).toContainText(
-      "It holds a different version of release-notes. Putting the link back deletes what it holds."
+      "Cursor's copy of release-notes is different from the one in your library. Replacing it deletes Cursor's changes."
     );
     await expect(dialog).toContainText(path);
     // The dialog answers the refusal: no error toast repeats it.
@@ -326,10 +326,10 @@ test.describe("banners", () => {
     ]);
     // A refused command may still have changed something: the refresh that follows it is
     // answered before the button is ready again.
-    const putBack = banner.getByRole("button", { name: "Put back" });
-    await expect(putBack).toBeDisabled();
+    const reconnect = banner.getByRole("button", { name: "Reconnect" });
+    await expect(reconnect).toBeDisabled();
     await answerRefresh(cli);
-    await expect(putBack).toBeEnabled();
+    await expect(reconnect).toBeEnabled();
 
     cli.register(
       ["skill", "place", "release-notes", "--to", "cursor", "--force"],
@@ -344,7 +344,7 @@ test.describe("banners", () => {
         ],
       }
     );
-    await banner.getByRole("button", { name: "Put back" }).click();
+    await banner.getByRole("button", { name: "Reconnect" }).click();
     await dialog.getByRole("button", { name: "Replace" }).click();
     await expect(dialog).toBeHidden();
     await expect(
@@ -379,7 +379,7 @@ test.describe("Remove", () => {
     // only with the library.
     await chip(article, "Universal").click();
     await expect(dialog).toContainText(
-      "It leaves every agent on this machine:"
+      "It will be deleted from every agent on this machine:"
     );
     await expect(
       dialog

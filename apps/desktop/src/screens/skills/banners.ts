@@ -46,8 +46,8 @@ const table: BannerRule[] = [
           placement === undefined
             ? undefined
             : { agent, kind: "put-back", placement },
-        text: "It replaced the link to your library, so it stays as it is until you put it back.",
-        title: `${agent} has its own folder for this skill`,
+        text: `Changes you make in your library won't reach ${agent} until you reconnect it.`,
+        title: `${agent} is using its own copy of this skill`,
         tone: "attention",
       };
     },

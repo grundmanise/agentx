@@ -1,5 +1,5 @@
 // The one banner of the detail pane (DESIGN.md §6 "Banner" and "Banner actions and dialogs"),
-// with its button: Add to agents on the gray banner, Put back on the amber one. A Put back the
+// with its button: Add to agents on the gray banner, Reconnect on the amber one. A Reconnect the
 // CLI refuses because the directory holds another version opens a confirm dialog, whose Replace
 // runs the same command with --force.
 import { cva } from "class-variance-authority";
@@ -101,7 +101,7 @@ const AddToAgents = ({ row }: { row: SkillRow }) => {
 };
 
 /**
- * Put back: `skill place <name> --to <configuration>`. When the CLI refuses because the directory
+ * Reconnect: `skill place <name> --to <configuration>`. When the CLI refuses because the directory
  * holds another version, the dialog asks before running it again with --force.
  */
 const PutBack = ({
@@ -135,7 +135,7 @@ const PutBack = ({
   return (
     <>
       <ActionButton
-        label="Put back"
+        label="Reconnect"
         pending={pending}
         onClick={() => {
           void putBack(false);
@@ -144,9 +144,9 @@ const PutBack = ({
       <Dialog open={confirm} onOpenChange={setConfirm}>
         <DialogContent>
           <DialogHeader showCloseButton={false}>
-            <DialogTitle>{`Replace ${agent}'s folder?`}</DialogTitle>
+            <DialogTitle>{`Replace ${agent}'s copy?`}</DialogTitle>
             <DialogDescription>
-              {`It holds a different version of ${row.name}. Putting the link back deletes what it holds.`}
+              {`${agent}'s copy of ${row.name} is different from the one in your library. Replacing it deletes ${agent}'s changes.`}
             </DialogDescription>
           </DialogHeader>
           <p className="type-technical text-text-caption m-0 break-all">

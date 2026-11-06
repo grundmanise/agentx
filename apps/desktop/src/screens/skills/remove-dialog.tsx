@@ -97,7 +97,7 @@ export const RemoveDialog = ({
         <DialogHeader showCloseButton={false}>
           <DialogTitle>{`Remove ${row.name}?`}</DialogTitle>
           <DialogDescription>
-            It leaves every agent on this machine:
+            It will be deleted from every agent on this machine:
           </DialogDescription>
         </DialogHeader>
         <ul

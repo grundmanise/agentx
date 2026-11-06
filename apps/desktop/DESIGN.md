@@ -157,7 +157,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | --- | --- | --- |
 | `pill.update-bg` | `accent.primary` | "Update" |
 | `pill.update-text` | `on-accent` |  |
-| `pill.neutral-bg` | `gray-860` | "Not published", "Adopt", "Put back" |
+| `pill.neutral-bg` | `gray-860` | "Not published", "Adopt", "Reconnect" |
 | `pill.neutral-hover` | `gray-800` |  |
 | `pill.neutral-text` | `gray-200` |  |
 | `pill.removed-bg` | `red-400/12` | "Removed from source" |
@@ -701,7 +701,7 @@ Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, 11–12 / 600.
 
 ### Agent client toggle chip (detail pane AGENTS)
 
-Pill button `agent-chip.height`, `agent-chip.padding`, `agent-chip.gap`, `agent-chip.radius`: 28px logo(s) · name 13 / 500 · compact switch. Off: `agent-chip.off-bg` with 1px `agent-chip.off-border`. On: `agent-chip.on-bg` with `agent-chip.on-border`. Hover border `agent-chip.hover-border`. Locked: 45% opacity, `cursor:not-allowed`, `title` holds the reason; a click toasts it. Chips wrap in a row with `agent-chip.wrap-gap`. A click on a direct agent's chip runs one command, and the chip is pending (`aria-busy`, `cursor:wait`, a `Spinner` in place of the compact switch) until the command ends and the next inventory arrives; its `title` reads "Add to {Agent}" / "Remove from {Agent}". A displaced chip shows "displaced" in `tone.attention.fg` under the name and runs nothing: a click toasts "Put it back first, then manage it from your library". The Universal chip, on, opens the Remove dialog: a universal client reads the library, so a skill leaves it only by leaving the machine.
+Pill button `agent-chip.height`, `agent-chip.padding`, `agent-chip.gap`, `agent-chip.radius`: 28px logo(s) · name 13 / 500 · compact switch. Off: `agent-chip.off-bg` with 1px `agent-chip.off-border`. On: `agent-chip.on-bg` with `agent-chip.on-border`. Hover border `agent-chip.hover-border`. Locked: 45% opacity, `cursor:not-allowed`, `title` holds the reason; a click toasts it. Chips wrap in a row with `agent-chip.wrap-gap`. A click on a direct agent's chip runs one command, and the chip is pending (`aria-busy`, `cursor:wait`, a `Spinner` in place of the compact switch) until the command ends and the next inventory arrives; its `title` reads "Add to {Agent}" / "Remove from {Agent}". A displaced chip shows "displaced" in `tone.attention.fg` under the name and runs nothing: a click toasts "Reconnect it first, then manage it from your library". The Universal chip, on, opens the Remove dialog: a universal client reads the library, so a skill leaves it only by leaving the machine.
 
 ### Checkbox (popover)
 
@@ -740,7 +740,7 @@ One full-width card below the grid, the same surface, for every configuration wh
 
 ### Banner actions and dialogs (detail pane)
 
-A banner's action is a small ghost button on its right, one command each: "Add to agents" on the gray "Not in any agent" banner (`tone.neutral`), "Put back" on the amber "{Agent} has its own folder for this skill" banner. A command that is refused because the folder holds another version opens a confirm dialog, "Replace {Agent}'s folder?", with the path in `type.technical` `text.caption` and Cancel · Replace (danger). Remove, in the action row, is a danger ghost button that opens the Remove dialog: "Remove {skill}?", the agents the skill leaves as a list in `type.body` `text.secondary`, and Cancel · Remove (danger). Every button that runs a command is pending until the command ends and the next inventory arrives.
+A banner's action is a small ghost button on its right, one command each: "Add to agents" on the gray "Not in any agent" banner (`tone.neutral`), "Reconnect" on the amber "{Agent} is using its own copy of this skill" banner. A command that is refused because the folder holds another version opens a confirm dialog, "Replace {Agent}'s copy?", with the path in `type.technical` `text.caption` and Cancel · Replace (danger). Remove, in the action row, is a danger ghost button that opens the Remove dialog: "Remove {skill}?", the agents it will be deleted from as a list in `type.body` `text.secondary`, and Cancel · Remove (danger). Every button that runs a command is pending until the command ends and the next inventory arrives.
 
 ### Card (Inbox)
 
@@ -832,7 +832,7 @@ The product mark is `shell.logo-mark` on `shell.logo-bg`, 30px `shell.logo-radiu
 
 ## 9. Copy rules
 
-- Plain verbs: Add, Remove, Update, Fork, Publish, Review update, Put back, Adopt, Check updates.
+- Plain verbs: Add, Remove, Update, Fork, Publish, Review update, Reconnect, Adopt, Check updates.
 - Copy uses the terms in [`GLOSSARY.md`](../../GLOSSARY.md) and never a word the glossary lists under _Avoid_. Where a glossary term names the thing, use that term, such as "account remote", "account repo", "upstream" or "base version". Where this file and the glossary differ, the glossary wins.
 - Named exception: the "Agents" screen name, its nav label and the "AGENTS" captions stay as they are, although the glossary avoids "agent" for an agent client.
 - For a git word the glossary has no term for, use a plain word: "change", not "hunk".
