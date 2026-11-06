@@ -7,7 +7,7 @@ import { expect, test } from "./harness/cli.ts";
 // "<what> <JSON>".
 test.beforeEach(async ({ cli, page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
   // The launch checks ran version and doctor; each test reads only its own command lines.
   cli.commands.splice(0);
   await page.addScriptTag({ type: "module", url: "/e2e/harness/transport.ts" });
