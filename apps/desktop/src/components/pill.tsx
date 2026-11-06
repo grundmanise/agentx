@@ -70,7 +70,8 @@ export const Pill = ({ tone, size, face, icon, children }: PillProps) => (
 
 /**
  * A pill that opens something or runs a command: the fork pill on the original of a fork made
- * under a new name, or Update beside the row of a skill with an update. `label` is its
+ * under a new name, Adopt in the row of a skill another tool installed, or Update beside the
+ * row of a skill with an update. `label` is its
  * accessible name and `title` its tooltip; the text is what shows. `pending` shows a Spinner in
  * place of the icon and makes it inert while its command runs.
  */
