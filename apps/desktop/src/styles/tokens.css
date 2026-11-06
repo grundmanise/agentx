@@ -350,6 +350,13 @@
       transform: rotate(360deg);
     }
   }
+  --animate-card-resolve: card-resolve 0.28s ease forwards;
+  @keyframes card-resolve {
+    to {
+      opacity: 0;
+      transform: translateX(24px) scale(0.985);
+    }
+  }
 
   /* Shadows (DESIGN.md §2.2, overlays): `shadow-overlay`. */
   --shadow-overlay: 0 40px 100px -20px rgb(0 0 0 / 0.8);
@@ -459,12 +466,18 @@
   --margin-panel: 10px;
   --outline-width-focus: 2px;
   --outline-offset-focus: 2px;
+  --height-nav-badge: 18px;
+  --min-width-nav-badge: 18px;
 
   /* Pages */
   --padding-page: 48px;
   --padding-page-top: 40px;
   --gap-page-title: 28px;
   --max-width-page: 1200px;
+  --width-inbox-recent: 280px;
+  --gap-inbox-columns: 64px;
+  --width-recent-time: 40px;
+  --size-recent-dot: 7px;
   --width-split-list: 408px;
   --padding-split-header-top: 30px;
   --padding-split-header-right: 20px;
@@ -854,4 +867,14 @@
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 500;
+}
+@utility type-card-title {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 500;
+}
+@utility type-nav-badge {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
 }

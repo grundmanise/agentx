@@ -13,7 +13,7 @@ import type {
   SkillRow,
   SortOrder,
 } from "#/screens/skills/projection.ts";
-import { SkillRowItem } from "#/screens/skills/skill-row.tsx";
+import { AdoptPill, SkillRowItem } from "#/screens/skills/skill-row.tsx";
 
 /** What the agent chip says: the one agent chosen, or how many. */
 const agentChipLabel = (agents: string[], chosen: Configuration[]): string => {
@@ -190,16 +190,24 @@ export const SkillList = ({
               />
               <ul className="gap-rows m-0 flex list-none flex-col p-0">
                 {group.rows.map((row) => (
-                  <li key={row.key} className="flex">
-                    <SkillRowItem
-                      row={row}
-                      forks={forksOf(row, rows)}
-                      configurations={configurations}
-                      selected={row.key === selectedKey}
-                      onSelect={() => {
-                        onSelect(row);
-                      }}
-                    />
+                  <li key={row.key} className="flex items-start">
+                    <span className="flex min-w-0 flex-1">
+                      <SkillRowItem
+                        row={row}
+                        forks={forksOf(row, rows)}
+                        configurations={configurations}
+                        selected={row.key === selectedKey}
+                        onSelect={() => {
+                          onSelect(row);
+                        }}
+                      />
+                    </span>
+                    {/* Adopt, beside the row of a skill another tool installed: a button of its own, so the row stays one. */}
+                    {row.adoption?.state === "candidate" && (
+                      <span className="py-row pr-row-right flex flex-none">
+                        <AdoptPill row={row} />
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>

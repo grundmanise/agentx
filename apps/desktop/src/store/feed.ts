@@ -155,9 +155,10 @@ export const retryRefresh = async () => {
   await refresh();
 };
 
+/** What a drift change reads in the activity list: "{skill} is now {state}". */
 const driftText = (e: DriftEvent) => {
   const now = e.drift.length > 0 ? e.drift.join(", ") : e.state;
-  return now === undefined ? `${e.name} changed` : `${e.name}: ${now}`;
+  return now === undefined ? `${e.name} changed` : `${e.name} is now ${now}`;
 };
 
 /** Applies an inventory, unless the same instance already applied one with a counter as high. */
@@ -205,15 +206,20 @@ const apply = (childId: number, event: CliEvent) => {
     answerSearch(event);
   } else if (event.type === "reconcile") {
     set((s) => ({ reconciles: [...s.reconciles, event] }));
-    if (event.outcome !== "restored") {
-      addActivity(
-        event.outcome === "repaired" ? "success" : "attention",
-        `${event.name}: ${event.outcome}`
-      );
+    // A folder put back is something agentx did; a folder missing or in the way is a card in the
+    // Inbox, which says it in its own words; the other outcomes are noted as the CLI names them.
+    if (event.outcome === "repaired") {
+      addActivity("success", `Put ${event.name} back`);
+    } else if (
+      !["restored", "worktree missing", "adopt candidate"].includes(
+        event.outcome
+      )
+    ) {
+      addActivity("attention", `${event.name}: ${event.outcome}`);
     }
   } else if (event.type === "update_available") {
     set((s) => ({ updates: { ...s.updates, [event.name]: event } }));
-    addActivity("success", `Update available for ${event.name}`);
+    addActivity("success", `${event.name} has an update`);
   } else if (event.type === "drift") {
     addActivity("attention", driftText(event));
   } else if (event.type === "error") {

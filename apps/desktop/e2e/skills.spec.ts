@@ -29,10 +29,13 @@ const group = (page: Page, name: string) =>
   list(page).getByRole("region", { name });
 const row = (page: Page, name: string) =>
   list(page).getByRole("button", { exact: true, name });
+/** The names of the rows in `where`: the first button of each list item, which is the row itself. */
 const rowNames = async (where: Locator) =>
   await where
-    .getByRole("button")
-    .evaluateAll((buttons) => buttons.map((b) => b.getAttribute("aria-label")));
+    .getByRole("listitem")
+    .evaluateAll((items) =>
+      items.map((li) => li.querySelector("button")?.getAttribute("aria-label"))
+    );
 /** The accessible names of `where`'s elements: an aria-label, an image's alt, or a label's text. */
 const names = async (where: Locator) =>
   await where.evaluateAll((elements) =>
