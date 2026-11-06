@@ -56,6 +56,12 @@ export interface CommandOptions {
   onProgress?: (event: ProgressEvent) => void;
   /** Stops the command when it passes. */
   deadlineMs?: number;
+  /**
+   * The control shows a failure itself, where it happened: the runner then shows no error toast
+   * and no "Stopped", and still logs the activity entry. "Another agentx command is running" and
+   * its Retry still show, since the control cannot run the command again.
+   */
+  ownFailure?: boolean;
 }
 
 export interface Outcome {
@@ -185,7 +191,9 @@ const report = (
     return;
   }
   if (exitCode === EXIT_CODES.interrupted && outcome.cancelled) {
-    notify("Stopped");
+    if (options.ownFailure !== true) {
+      notify("Stopped");
+    }
     if (log) {
       addActivity("attention", "Stopped");
     }
@@ -203,6 +211,9 @@ const report = (
   const conflict = events.find((e) => e.type === "conflict");
   if (exitCode === EXIT_CODES.pending_merge && conflict !== undefined) {
     navigateTo(`/skills/${encodeURIComponent(conflict.name)}`);
+    return;
+  }
+  if (options.ownFailure === true) {
     return;
   }
   notifyError({

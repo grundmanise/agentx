@@ -10,6 +10,8 @@ import type {
   InventoryEvent,
   LogEvent,
   RefreshCompleteEvent,
+  SearchEvent,
+  SearchResult,
 } from "#/cli/events.gen.ts";
 import { serve } from "#/cli/transport.ts";
 import type { ServeExit, ServeLine } from "#/cli/transport.ts";
@@ -40,6 +42,76 @@ export const refresh = async () => {
   await send(crypto.randomUUID());
 };
 
+/** What a search resolves with: the results, or undefined when it was not answered. */
+type Answer = SearchResult[] | undefined;
+
+/**
+ * One answer handed from an event to whoever waits for it, as the transport hands a run its end:
+ * a stream of one chunk, read once.
+ */
+const slot = () => {
+  let controller: ReadableStreamDefaultController<Answer> | undefined;
+  const stream = new ReadableStream<Answer>({
+    start: (c) => {
+      controller = c;
+    },
+  });
+  return {
+    put: (value?: SearchResult[]) => {
+      controller?.enqueue(value);
+      controller?.close();
+      controller = undefined;
+    },
+    take: async (): Promise<Answer> => {
+      const read = await stream.getReader().read();
+      return read.value;
+    },
+  };
+};
+
+/** The search request last sent and not answered yet: the one whose answer counts. */
+let latestSearch:
+  | { requestId: string; answer: ReturnType<typeof slot> }
+  | undefined;
+
+/** Gives up on the search request waiting, if any: its answer, should it come, is dropped. */
+const dropSearch = () => {
+  latestSearch?.answer.put();
+  latestSearch = undefined;
+};
+
+/**
+ * Asks the serve child to search every source for `query` (docs/spec/cli-contract.md, Serve), and
+ * resolves with the matching `search` event's results. Only the latest request counts: sending
+ * another resolves the one before with undefined, and an answer to an older request id is dropped.
+ * A serve child that is not running answers nothing, so the search resolves with undefined.
+ */
+export const search = async (query: string): Promise<Answer> => {
+  dropSearch();
+  const requestId = crypto.randomUUID();
+  const answer = slot();
+  latestSearch = { answer, requestId };
+  try {
+    await serve.request({ query, request_id: requestId, type: "search" });
+  } catch {
+    if (latestSearch.requestId === requestId) {
+      dropSearch();
+    }
+  }
+  return await answer.take();
+};
+
+/** Answers the search request waiting, when the event is its; an older request's answer is dropped. */
+const answerSearch = (event: SearchEvent) => {
+  if (
+    latestSearch !== undefined &&
+    latestSearch.requestId === event.request_id
+  ) {
+    latestSearch.answer.put(event.results);
+    latestSearch = undefined;
+  }
+};
+
 /**
  * Makes `childId` the active child, unless a later one already is. The inventory shown stays until
  * the new child sends its own, and the requests sent to earlier children go to it with new ids.
@@ -49,6 +121,8 @@ const activate = (childId: number) => {
     return;
   }
   active = childId;
+  // A search the child before did not answer is never answered: the new child's index is asked anew.
+  dropSearch();
   const { refreshes } = useAppStore.getState();
   const unanswered = Object.keys(refreshes).filter(
     (id) => (refreshes[id] ?? 0) < childId
@@ -127,6 +201,8 @@ const apply = (childId: number, event: CliEvent) => {
     applyInventory(childId, event);
   } else if (event.type === "refresh_complete") {
     acknowledge(event);
+  } else if (event.type === "search") {
+    answerSearch(event);
   } else if (event.type === "reconcile") {
     set((s) => ({ reconciles: [...s.reconciles, event] }));
     if (event.outcome !== "restored") {

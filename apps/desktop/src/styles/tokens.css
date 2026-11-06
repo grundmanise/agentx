@@ -241,6 +241,8 @@
   --color-add-card-status-added: var(--gray-400);
   --color-add-card-status-forked: var(--color-accent-yours);
   --color-add-card-status-disk: var(--color-accent-attention);
+  --color-add-card-status-in-use: var(--gray-400);
+  --color-add-card-check-ring: var(--gray-700);
   --color-banner-title: var(--gray-50);
   --color-banner-text: var(--gray-300);
   --color-card-chip-ring: var(--color-card-bg);
@@ -332,6 +334,13 @@
   @keyframes fade-in {
     from {
       opacity: 0;
+    }
+  }
+  --animate-floating-bar: floating-bar 0.22s ease;
+  @keyframes floating-bar {
+    from {
+      opacity: 0;
+      transform: translateY(24px);
     }
   }
   --animate-turn-once: turn-once 1s ease;
@@ -528,6 +537,7 @@
   --padding-input-search-left: 34px;
   --gap-input-label: 8px;
   --height-textarea: 88px;
+  --height-add-search: 40px;
 
   /* Cards, banners, tiles */
   --gap-card: 12px;
@@ -654,6 +664,27 @@
   font-family: var(--font-sans);
   font-size: 14px;
   font-weight: 400;
+}
+@utility type-input {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 400;
+}
+@utility type-input-mono {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 400;
+}
+@utility type-add-card-name {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 500;
+}
+@utility type-add-card-desc {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 400;
+  line-height: 1.5;
 }
 @utility type-row-name {
   font-family: var(--font-sans);

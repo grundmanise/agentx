@@ -13,7 +13,7 @@ let runs = 0;
 
 const load = async (
   args: string[],
-  read: (events: CliEvent[]) => Partial<AppState>
+  read: (events: CliEvent[], state: AppState) => Partial<AppState>
 ) => {
   const key = args.join(" ");
   runs += 1;
@@ -21,9 +21,12 @@ const load = async (
   latest.set(key, mine);
   const outcome = await runCommand(args, { label: `load ${key}` });
   if (outcome.exitCode === 0 && latest.get(key) === mine) {
-    useAppStore.setState(read(outcome.events));
+    useAppStore.setState((state) => read(outcome.events, state));
   }
 };
+
+/** The label of the control that loads `args`, for `usePending`. */
+export const loadLabel = (args: string[]) => `load ${args.join(" ")}`;
 
 /** Loads the machine settings: `config list`. */
 export const loadSettings = async () => {
@@ -45,6 +48,30 @@ export const loadMachine = async () => {
 export const loadSources = async () => {
   await load(["source", "list"], (events) => ({
     sources: events.filter((e) => e.type === "source"),
+  }));
+};
+
+/**
+ * Loads the skills of a source: `source skills <id>`, a read of the last fetch. The Add screen
+ * calls it when a source's pill opens, and again after it fetches the source.
+ */
+export const loadListing = async (id: string) => {
+  await load(["source", "skills", id], (events, state) => ({
+    listings: {
+      ...state.listings,
+      [id]: events.filter((e) => e.type === "source_skill"),
+    },
+  }));
+};
+
+/**
+ * Loads your skills the account remote holds that this machine has not installed:
+ * `skill list --remote`, which fetches the account remote. The Add screen calls it when the Your
+ * skills pill opens.
+ */
+export const loadInstallable = async () => {
+  await load(["skill", "list", "--remote"], (events) => ({
+    installable: events.filter((e) => e.type === "installable_skill"),
   }));
 };
 
