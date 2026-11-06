@@ -1,11 +1,18 @@
 import type { Configuration } from "#/cli/events.gen.ts";
 import { LogoStack } from "#/components/agent-logo.tsx";
 import { ListRow } from "#/components/list-row.tsx";
-import { Pill } from "#/components/pill.tsx";
+import { Pill, PillButton } from "#/components/pill.tsx";
 import type { PillTone } from "#/components/pill.tsx";
 import { SkillGlyph } from "#/components/skill-glyph.tsx";
-import { glyphLit, glyphOf, glyphTitle } from "#/screens/skills/projection.ts";
+import {
+  glyphLit,
+  glyphOf,
+  glyphTitle,
+  updateVersions,
+} from "#/screens/skills/projection.ts";
 import type { PillKind, SkillRow } from "#/screens/skills/projection.ts";
+import { updateLabel, updateSkill } from "#/screens/skills/updates.ts";
+import { useSettling } from "#/store/settle.ts";
 
 /** How many agent client logos a row shows before "+n". */
 const MAX_LOGOS = 4;
@@ -18,9 +25,36 @@ export const pillTones: Record<PillKind, PillTone> = {
 };
 
 /**
+ * The Update pill beside the row of a skill with an update: it runs `skill update <name>` and
+ * selects nothing. It sits next to the row button, not inside it, so it is a button of its own.
+ * Its title names the two versions, by date where the CLI dates them.
+ */
+const UpdatePill = ({ row }: { row: SkillRow }) => {
+  const pending = useSettling(updateLabel(row.name));
+  return (
+    <PillButton
+      tone="update"
+      pending={pending}
+      label={`Update ${row.name}`}
+      title={
+        row.update === undefined
+          ? "Update"
+          : `Update · ${updateVersions(row.update)}`
+      }
+      onClick={() => {
+        void updateSkill(row);
+      }}
+    >
+      Update
+    </PillButton>
+  );
+};
+
+/**
  * One skill in the list: glyph, name, pills, a small fork marker for each fork made from it under
- * a new name, and the logos of the agent clients that see it, then its description. Selecting it
- * shows the skill in the detail pane.
+ * a new name, and the logos of the agent clients that see it, then its description, with the
+ * Update pill beside it for a skill with an update. Selecting it shows the skill in the detail
+ * pane.
  */
 export const SkillRowItem = ({
   row,
@@ -43,6 +77,7 @@ export const SkillRowItem = ({
   const description = [
     glyphTitle(row),
     ...row.pills.map((pill) => pill.label),
+    ...(row.update === undefined ? [] : ["Update available"]),
     ...forks.map((fork) => `Forked as ${fork.name}`),
     row.description,
   ]
@@ -54,6 +89,7 @@ export const SkillRowItem = ({
       description={description}
       selected={selected}
       onSelect={onSelect}
+      aside={row.update === undefined ? undefined : <UpdatePill row={row} />}
     >
       <span className="w-row-glyph flex h-5 flex-none items-center justify-center">
         <SkillGlyph
