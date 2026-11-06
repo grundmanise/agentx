@@ -135,6 +135,10 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
       closeFork();
       return;
     }
+    // Another command holds the lock: the runner's toast says so, with Retry.
+    if (outcome.exitCode === EXIT_CODES.locked) {
+      return;
+    }
     const error = outcome.events.find((e) => e.type === "error");
     const message =
       error?.message ??
