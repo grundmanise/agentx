@@ -68,3 +68,20 @@ export const useSettling = (label: string) => {
   const waiting = useSettlingStore((s) => Object.hasOwn(s.labels, label));
   return running || waiting;
 };
+
+/**
+ * Calls `then` once the serve child has answered every refresh request sent so far, or the last
+ * scan failed and none will be: when the inventory that follows a command has arrived.
+ */
+export const afterSettled = (then: () => void) => {
+  if (settledIn(useAppStore.getState())) {
+    then();
+    return;
+  }
+  const unsubscribe = useAppStore.subscribe((s) => {
+    if (settledIn(s)) {
+      unsubscribe();
+      then();
+    }
+  });
+};

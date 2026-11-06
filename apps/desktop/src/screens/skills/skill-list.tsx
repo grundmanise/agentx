@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate } from "react-router";
 
 import type { Configuration } from "#/cli/events.gen.ts";
@@ -5,6 +6,7 @@ import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { FilterChip, SortToggle } from "#/components/filter-controls.tsx";
 import { SearchField } from "#/components/search-field.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import { CreateSkillDialog } from "#/screens/skills/create-dialog.tsx";
 import { FilterPopover } from "#/screens/skills/filter-popover.tsx";
 import { forksOf, UNIVERSAL } from "#/screens/skills/projection.ts";
 import type {
@@ -107,6 +109,7 @@ export const SkillList = ({
   onSelect: (row: SkillRow) => void;
 }) => {
   const navigate = useNavigate();
+  const [creating, setCreating] = useState(false);
   return (
     <section
       aria-label="Skills list"
@@ -132,6 +135,15 @@ export const SkillList = ({
             }}
           >
             Add
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setCreating(true);
+            }}
+          >
+            Create
           </Button>
         </div>
       </div>
@@ -207,6 +219,7 @@ export const SkillList = ({
           ))
         )}
       </nav>
+      <CreateSkillDialog open={creating} onOpenChange={setCreating} />
     </section>
   );
 };
