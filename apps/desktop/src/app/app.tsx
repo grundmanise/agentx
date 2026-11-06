@@ -14,6 +14,7 @@ import { setNavigate } from "#/lib/navigate.ts";
 import { AddScreen } from "#/screens/add/add-screen.tsx";
 import { AgentsScreen } from "#/screens/agents/agents-screen.tsx";
 import { PlaceholderScreen } from "#/screens/placeholder.tsx";
+import { PluginsScreen } from "#/screens/plugins/plugins-screen.tsx";
 import { ServersScreen } from "#/screens/servers/servers-screen.tsx";
 import { SkillsScreen } from "#/screens/skills/skills-screen.tsx";
 import { launch, useStartup } from "#/startup/startup.ts";
@@ -23,6 +24,7 @@ import { startLoaders } from "#/store/loaders.ts";
 const built: Record<string, ReactElement> = {
   "/add": <AddScreen />,
   "/agents": <AgentsScreen />,
+  "/plugins": <PluginsScreen />,
   "/servers": <ServersScreen />,
   "/skills": <SkillsScreen />,
 };
