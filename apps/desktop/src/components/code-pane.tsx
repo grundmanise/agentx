@@ -4,7 +4,7 @@ import { cva } from "class-variance-authority";
 // text, in `code.bg`, `type.code`, at most `code.max-height` high and scrolling past it. The tints
 // of a change: an added line with "+" in `accent.primary` on `diff.added-bg`, the palette's green,
 // a removed line with "−" in `accent.danger` on
-// `diff.removed-bg` and no number. The whole rendering of a file and of a diff is here, from the
+// `diff.removed-bg` and no number. A patch with no file content shows its hunks alone. The whole rendering of a file and of a diff is here, from the
 // file's content and the unified diff git wrote, so that another renderer could take its place
 // without touching a screen.
 
@@ -78,6 +78,27 @@ const removedLines = (patch: string): CodeLine[] =>
     .map((line) => ({ kind: "removed", text: line.text }));
 
 /**
+ * A patch on its own, with no file to lay it on: the lines of each hunk in order, those it added
+ * and kept numbered as in the new file, those it removed tinted and unnumbered.
+ */
+const hunkLines = (patch: string): CodeLine[] =>
+  parsePatch(patch).flatMap((hunk) => {
+    let next = hunk.newStart;
+    return hunk.lines.map((line): CodeLine => {
+      if (line.kind === "removed") {
+        return { kind: "removed", text: line.text };
+      }
+      const number = next;
+      next += 1;
+      return {
+        kind: line.kind === "added" ? "added" : "plain",
+        number,
+        text: line.text,
+      };
+    });
+  });
+
+/**
  * The file as it is, `content`, with the lines its patch removed put back where they were, each
  * tinted as removed, and the lines it added tinted as added. A patch with no hunk shows the file
  * as it is.
@@ -111,28 +132,6 @@ const editedLines = (content: string, patch: string): CodeLine[] => {
   }
   return out;
 };
-
-/**
- * The lines of a patch alone, for a file shown by how it changed and not by its content: the
- * lines of each hunk in turn, a kept or added line numbered in the new file and a removed line
- * with no number, so the numbers jump where the patch leaves lines out.
- */
-const patchLines = (patch: string): CodeLine[] =>
-  parsePatch(patch).flatMap((hunk) => {
-    let next = hunk.newStart;
-    return hunk.lines.map((line): CodeLine => {
-      if (line.kind === "removed") {
-        return { kind: "removed", text: line.text };
-      }
-      const numberedLine: CodeLine = {
-        kind: line.kind === "added" ? "added" : "plain",
-        number: next,
-        text: line.text,
-      };
-      next += 1;
-      return numberedLine;
-    });
-  });
 
 /** What a line of a Markdown file is, which sets its colour. */
 type Tone = "frontmatter" | "heading" | "list" | "prose";
@@ -249,8 +248,9 @@ export interface CodePaneProps {
   /** The pane's accessible name. */
   label: string;
   /**
-   * The file's content as it is; absent for a deleted file, and for a file shown by its patch
-   * alone, whose lines are then the patch's.
+   * The file's content as it is; absent for a deleted file, and for a patch shown on its own,
+   * such as what an update changes or a comparison with an earlier version, whose hunks are then
+   * all the pane shows.
    */
   content?: string;
   /** The unified diff git wrote for the file, whose tints the pane shows. */
@@ -272,7 +272,7 @@ export const codeLines = ({
     return patch === undefined ? [] : removedLines(patch);
   }
   if (content === undefined) {
-    return patch === undefined ? [] : patchLines(patch);
+    return patch === undefined || tint !== undefined ? [] : hunkLines(patch);
   }
   if (tint === "added") {
     return numbered(content, "added");

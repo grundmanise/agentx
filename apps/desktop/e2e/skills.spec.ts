@@ -1,6 +1,11 @@
 import type { Locator, Page } from "@playwright/test";
 
 import {
+  adoption as statesAdoption,
+  inventory as statesInventory,
+  OLD,
+} from "./fixtures/adoption.ts";
+import {
   adoption,
   configurations,
   fileReads,
@@ -83,9 +88,16 @@ const openSkills = async (cli: MockCli, page: Page, path = "/#/skills") => {
 const notFiles = (cli: MockCli) =>
   later(cli).filter((l) => !["files", "diff"].includes(l[1] ?? ""));
 
-test.afterEach(({ cli }) => {
+/** Tags a test whose controls run commands, which it pins itself. */
+const RUNS_COMMANDS = "@runs-commands";
+
+test.afterEach(({ cli }, testInfo) => {
+  if (testInfo.tags.includes(RUNS_COMMANDS)) {
+    return;
+  }
   // Read-only: nothing on this screen runs a command but the reads of a skill's history, files
-  // and edits (e2e/skill-files.spec.ts covers the last two).
+  // and edits (e2e/skill-files.spec.ts covers the last two), and the controls that settle a skill
+  // the tests tagged RUNS_COMMANDS cover.
   for (const line of later(cli)) {
     expect(["skill files", "skill diff", "skill history"]).toContain(
       line.slice(0, 2).join(" ")
@@ -632,16 +644,50 @@ test.describe("the detail pane", () => {
     expect(notFiles(cli)).toEqual([]);
   });
 
+  test("the action row sits on the title row, at its right end", async ({
+    cli,
+    page,
+  }) => {
+    await openSkills(cli, page, "/#/skills/gone");
+    const article = pane(page, "gone");
+    const [name, actions, remove, banner] = await Promise.all([
+      article.getByRole("heading", { level: 1, name: "gone" }).boundingBox(),
+      article.getByLabel("Actions").boundingBox(),
+      article.getByRole("button", { name: "Remove" }).boundingBox(),
+      article.getByRole("note").boundingBox(),
+    ]);
+    expect([name, actions, remove, banner]).not.toContain(null);
+    if (
+      name !== null &&
+      actions !== null &&
+      remove !== null &&
+      banner !== null
+    ) {
+      // On the name's line, to its right.
+      expect(remove.x).toBeGreaterThan(name.x + name.width);
+      expect(remove.y).toBeLessThan(name.y + name.height);
+      expect(remove.y + remove.height).toBeGreaterThan(name.y);
+      // Pushed to the right end: it ends where the pane's content (the full-width banner) ends.
+      expect(
+        Math.abs(actions.x + actions.width - (banner.x + banner.width))
+      ).toBeLessThan(2);
+    }
+  });
+
   test("an upstream-removed skill shows the banner, and a displaced placement its chip", async ({
     cli,
     page,
   }) => {
     await openSkills(cli, page, "/#/skills/gone");
     const article = pane(page, "gone");
+    const banner = article.getByRole("note", { name: "Removed from source" });
+    await expect(banner).toContainText(
+      "No updates are possible for this skill unless it is added again in the source."
+    );
+    // The pill in the title row reads the same as the banner's title.
     await expect(
-      article.getByRole("note", { name: "Removed from its source" })
-    ).toContainText("It still works but won't get updates.");
-    await expect(article.getByText("Removed from source")).toBeVisible();
+      article.getByText("Removed from source", { exact: true })
+    ).toHaveCount(2);
 
     await row(page, "release-notes").click();
     const cursor = pane(page, "release-notes").getByRole("switch", {
@@ -655,5 +701,104 @@ test.describe("the detail pane", () => {
         name: "Cursor is using its own copy of this skill",
       })
     ).toBeVisible();
+  });
+});
+
+const toasts = (page: Page) =>
+  page.getByRole("region", { name: /^Notifications/u });
+
+/** The command lines the controls ran: everything but the launch, the store's and the pane's reads. */
+const ran = (cli: MockCli) =>
+  later(cli).filter(
+    (l) =>
+      !["skill files", "skill diff", "skill history"].includes(
+        l.slice(0, 2).join(" ")
+      )
+  );
+
+/** Opens the Skills screen with `key` selected, on the machine with a skill to adopt, one whose source was removed and one the CLI refuses to adopt. */
+const openStates = async (cli: MockCli, page: Page, key: string) => {
+  cli.onServeStart({ events: [statesInventory] });
+  cli.register(["adopt"], { events: statesAdoption });
+  for (const name of ["scratch", "legacy", "lint", "gone", "notes"]) {
+    cli.register(["skill", "files", name], { events: filesOf(name) });
+  }
+  await page.goto(`/#/skills/${key}`);
+  await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
+  await expect(pane(page, key)).toBeVisible();
+};
+
+test.describe("settling a skill", { tag: RUNS_COMMANDS }, () => {
+  test("the three banners after the displaced one each run their command", async ({
+    cli,
+    page,
+  }) => {
+    await openStates(cli, page, "scratch");
+    // Adopt is the banner's button only: no row carries a control of its own.
+    await expect(
+      list(page).getByRole("button", { name: /^Adopt/u })
+    ).toHaveCount(0);
+    cli.register(["adopt", "--skill", "scratch"]);
+    const adoptBanner = pane(page, "scratch").getByRole("note", {
+      name: "From skills CLI",
+    });
+    await expect(adoptBanner).toContainText("Adopt to manage from agentx");
+    await adoptBanner.getByRole("button", { name: "Adopt" }).click();
+    await expect(toasts(page).getByText("Adopted scratch")).toBeVisible();
+
+    await row(page, "lint").click();
+    cli.register(["source", "add", OLD]);
+    const sourceBanner = pane(page, "lint").getByRole("note", {
+      name: "Source removed",
+    });
+    await expect(sourceBanner).toContainText(
+      "Add old/skills source to check for updates."
+    );
+    await sourceBanner.getByRole("button", { name: "Add source" }).click();
+    await expect(
+      toasts(page).getByText("Added old/skills source")
+    ).toBeVisible();
+
+    await row(page, "gone").click();
+    cli.register(["skill", "fork", "gone"]);
+    const forkBanner = pane(page, "gone").getByRole("note", {
+      name: "Removed from source",
+    });
+    await expect(forkBanner).toContainText(
+      "No updates are possible for this skill unless it is added again in the source."
+    );
+    // Fork opens the Fork dialog, whose Fork runs the command.
+    await forkBanner.getByRole("button", { name: "Fork" }).click();
+    await page
+      .getByRole("dialog", { name: "Fork gone" })
+      .getByRole("button", { name: "Fork" })
+      .click();
+    await expect(
+      toasts(page).getByText("Forked gone", { exact: true })
+    ).toBeVisible();
+    expect(ran(cli)).toEqual([
+      ["adopt", "--skill", "scratch", "--json"],
+      ["source", "add", OLD, "--json"],
+      ["skill", "fork", "gone", "--json"],
+    ]);
+  });
+
+  test("a refused entry has no banner, and Details says why", async ({
+    cli,
+    page,
+  }) => {
+    await openStates(cli, page, "legacy");
+    const article = pane(page, "legacy");
+    await expect(article.getByRole("note")).toHaveCount(0);
+    const details = article.getByRole("region", { name: "Details" });
+    await expect(details.getByRole("term")).toHaveText([
+      "Found at",
+      "Installed by",
+      "Adopt",
+    ]);
+    await expect(details.getByRole("definition").last()).toHaveText(
+      "Can't adopt: legacy is a symlink, not a directory"
+    );
+    expect(ran(cli)).toEqual([]);
   });
 });

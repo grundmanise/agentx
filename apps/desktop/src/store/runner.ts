@@ -9,7 +9,7 @@ import type { CliEvent, LogEvent, ProgressEvent } from "#/cli/events.gen.ts";
 import { cancel, run } from "#/cli/transport.ts";
 import type { RunLine } from "#/cli/transport.ts";
 import { notify, notifyAttention, notifyError } from "#/components/toast.tsx";
-import type { ToastAction } from "#/components/toast.tsx";
+import type { ErrorToast, ToastAction } from "#/components/toast.tsx";
 import { navigateTo } from "#/lib/navigate.ts";
 import { refresh } from "#/store/feed.ts";
 import { addActivity, useAppStore } from "#/store/store.ts";
@@ -51,8 +51,8 @@ export interface CommandOptions {
   label: string;
   /** The toast and activity entry when the command exits 0. */
   success?: string | ((events: CliEvent[]) => string);
-  /** An action on the success toast, such as Undo. */
-  action?: ToastAction;
+  /** An action on the success toast, such as Undo, or what the events say it is, if any. */
+  action?: ToastAction | ((events: CliEvent[]) => ToastAction | undefined);
   onProgress?: (event: ProgressEvent) => void;
   /** Stops the command when it passes. */
   deadlineMs?: number;
@@ -62,6 +62,11 @@ export interface CommandOptions {
    * its Retry still show, since the control cannot run the command again.
    */
   ownFailure?: boolean;
+  /**
+   * The error toast for a failure the control words itself, such as a check that could not reach
+   * a source, with an action that answers it; undefined leaves the runner's own.
+   */
+  failure?: (outcome: Outcome) => ErrorToast | undefined;
 }
 
 export interface Outcome {
@@ -151,6 +156,19 @@ export const problemOf = (
   };
 };
 
+/** The error toast of a failure: the control's own wording, or the CLI's problem and warnings. */
+const errorToastOf = (
+  options: CommandOptions,
+  problem: Problem,
+  outcome: Outcome
+): ErrorToast =>
+  options.failure?.(outcome) ?? {
+    ...problem,
+    warnings: outcome.logs
+      .filter((l) => l.level === "warn")
+      .map((l) => l.message),
+  };
+
 /** Shows the outcome, by exit code (docs/spec/cli-contract.md, Exit codes). */
 const report = (
   args: readonly string[],
@@ -165,6 +183,10 @@ const report = (
       typeof options.success === "function"
         ? options.success(events)
         : options.success;
+    const action =
+      typeof options.action === "function"
+        ? options.action(events)
+        : options.action;
     if (text !== undefined) {
       // A placement skipped, a copy that differed: the command succeeded, with something the
       // user should see. The toast carries the success text and the warnings, and the activity
@@ -173,9 +195,9 @@ const report = (
         .filter((l) => l.level === "warn")
         .map((l) => l.message);
       if (warnings.length > 0) {
-        notifyAttention({ action: options.action, message: text, warnings });
+        notifyAttention({ action, message: text, warnings });
       } else {
-        notify(text, options.action);
+        notify(text, action);
       }
       if (log) {
         addActivity(warnings.length > 0 ? "attention" : "success", text);
@@ -220,12 +242,7 @@ const report = (
   if (options.ownFailure === true) {
     return;
   }
-  notifyError({
-    ...problem,
-    warnings: outcome.logs
-      .filter((l) => l.level === "warn")
-      .map((l) => l.message),
-  });
+  notifyError(errorToastOf(options, problem, outcome));
 };
 
 /**

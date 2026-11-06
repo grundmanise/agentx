@@ -33,6 +33,7 @@ import type {
 } from "#/screens/add/projection.ts";
 import { SkillCards } from "#/screens/add/skill-cards.tsx";
 import { SourceRow } from "#/screens/add/source-row.tsx";
+import { CreateSkillDialog } from "#/screens/skills/create-dialog.tsx";
 import { search } from "#/store/feed.ts";
 import {
   loadInstallable,
@@ -124,6 +125,7 @@ export const AddScreen = () => {
   const [targets, setTargets] = useState<string[] | undefined>();
   const [progress, setProgress] = useState<ProgressEvent | undefined>();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   // The pill opened last, "" before any, for a load that finishes after the user moved on.
   const opened = useRef("");
@@ -409,14 +411,24 @@ export const AddScreen = () => {
       <div className="pt-page-top px-page pb-page gap-page-title flex min-h-0 flex-1 flex-col overflow-auto">
         <div className="flex items-start justify-between gap-4">
           <h1 className="type-page-title text-text-primary m-0">Add skills</h1>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              setDialogOpen(true);
-            }}
-          >
-            Add source
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setDialogOpen(true);
+              }}
+            >
+              Add source
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setCreating(true);
+              }}
+            >
+              Create skill
+            </Button>
+          </div>
         </div>
         <div className="text-input-placeholder relative flex items-center">
           <span className="pointer-events-none absolute left-3.5 flex">
@@ -484,6 +496,7 @@ export const AddScreen = () => {
           void onSourceAdded(source);
         }}
       />
+      <CreateSkillDialog open={creating} onOpenChange={setCreating} />
     </div>
   );
 };
