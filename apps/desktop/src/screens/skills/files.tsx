@@ -56,7 +56,8 @@ interface FileRow {
   diff?: DiffEvent;
 }
 
-const labels: Record<DiffEvent["status"], string> = {
+/** What a changed file's row says beside its path, by its status in `skill diff`. */
+export const fileStatusLabels: Record<DiffEvent["status"], string> = {
   added: "added by you",
   deleted: "removed by you",
   modified: "edited by you",
@@ -334,7 +335,7 @@ export const FilesSection = ({
                   </span>
                   {file.diff !== undefined && (
                     <span className="type-technical-sm text-file-row-edited-label flex-none">
-                      {labels[file.diff.status]}
+                      {fileStatusLabels[file.diff.status]}
                     </span>
                   )}
                 </AccordionTrigger>

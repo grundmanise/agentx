@@ -27,6 +27,10 @@ import {
   placedCount,
 } from "#/screens/skills/placements.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
+import {
+  OpenSettingsButton,
+  PublishButton,
+} from "#/screens/skills/publish-dialog.tsx";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 
 const bannerVariants = cva(
@@ -183,6 +187,20 @@ const BannerActions = ({ row, banner }: { row: SkillRow; banner: Banner }) => {
           row={row}
           placement={banner.action.placement}
           agent={banner.action.agent}
+        />
+      );
+    }
+    case "publish": {
+      return <PublishButton row={row} label="Publish" />;
+    }
+    case "open-settings": {
+      return <OpenSettingsButton />;
+    }
+    case "edited": {
+      return banner.action.publishTo === undefined ? null : (
+        <PublishButton
+          row={row}
+          label={`Publish to ${banner.action.publishTo}`}
         />
       );
     }
