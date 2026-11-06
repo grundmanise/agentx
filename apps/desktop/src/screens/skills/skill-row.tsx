@@ -1,11 +1,13 @@
 import type { Configuration } from "#/cli/events.gen.ts";
 import { LogoStack } from "#/components/agent-logo.tsx";
 import { ListRow } from "#/components/list-row.tsx";
-import { Pill } from "#/components/pill.tsx";
+import { Pill, PillButton } from "#/components/pill.tsx";
 import type { PillTone } from "#/components/pill.tsx";
 import { SkillGlyph } from "#/components/skill-glyph.tsx";
+import { adopt, adoptLabel } from "#/screens/skills/actions.tsx";
 import { glyphLit, glyphOf, glyphTitle } from "#/screens/skills/projection.ts";
 import type { PillKind, SkillRow } from "#/screens/skills/projection.ts";
+import { useSettling } from "#/store/settle.ts";
 
 /** How many agent client logos a row shows before "+n". */
 const MAX_LOGOS = 4;
@@ -15,6 +17,27 @@ export const pillTones: Record<PillKind, PillTone> = {
   "removed-from-source": "removed",
   "source-removed": "removed",
   "update-waiting": "update",
+};
+
+/**
+ * The Adopt pill in the row box of a skill another tool installed: it runs `adopt --skill <name>`
+ * and selects nothing. It sits beside the row button, inside the box, as a button of its own.
+ */
+const AdoptPill = ({ row }: { row: SkillRow }) => {
+  const pending = useSettling(adoptLabel(row.name));
+  return (
+    <PillButton
+      tone="neutral"
+      pending={pending}
+      label={`Adopt ${row.name}`}
+      title="Adopt it and agentx can update it"
+      onClick={() => {
+        void adopt(row.name);
+      }}
+    >
+      Adopt
+    </PillButton>
+  );
 };
 
 /**
@@ -54,6 +77,11 @@ export const SkillRowItem = ({
       description={description}
       selected={selected}
       onSelect={onSelect}
+      aside={
+        row.adoption?.state === "candidate" ? (
+          <AdoptPill row={row} />
+        ) : undefined
+      }
     >
       <span className="w-row-glyph flex h-5 flex-none items-center justify-center">
         <SkillGlyph

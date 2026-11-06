@@ -488,7 +488,7 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `row.padding` | 11 12 11 14 | `py-row pr-row-right pl-row-left` | Split list row |
 | `row.gap` | 12 | `gap-row` | Glyph → text |
 | `row.line-gap` | 3 | `gap-row-line` | Name row → description |
-| `row.inline-gap` | 8 | `gap-row-inline` | Name → pills → chips |
+| `row.inline-gap` | 8 | `gap-row-inline` | Name → pills → chips; row button → Adopt pill |
 | `row.spacing` | 2 | `gap-rows` | Between rows |
 | `row.glyph-col` | 18 | `w-row-glyph` | Glyph column |
 | `group.padding-first` | 4 14 8 | `pt-group-first-top px-group pb-group-bottom` | First group header |
@@ -700,6 +700,7 @@ Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, 11–12 / 600.
 
 - Update: `pill.update-bg` / `pill.update-text` (clickable).
 - Not published / Adopt: `pill.neutral-bg` / `pill.neutral-text`.
+- Adopt (in the row of a skill another tool installed, §6 "Skill row (Skills list)"): `pill.neutral-bg` / `pill.neutral-text`, the text "Adopt", hover `pill.neutral-hover`. `title` "Adopt it and agentx can update it", accessible name "Adopt {skill}". A click runs `adopt --skill <name>` and selects nothing; the pill is pending (`aria-busy`, `cursor:wait`, 50% opacity, a `Spinner` before the text) until the command ends and the next inventory arrives. Only an adoption the CLI would take has the pill; a skill the CLI refuses to adopt has none.
 - Removed from source: `pill.removed-bg` / `pill.removed-text`.
 - Disabled (plugin): `pill.disabled-bg` / `pill.disabled-text`.
 - Version (plugin): `pill.version-bg` / `pill.version-text`, mono 12.
@@ -724,6 +725,10 @@ Track `segmented.track-bg`, `segmented.track-border`, `segmented.radius`, `segme
 ### Agent client logo chip
 
 Round, `logo.bg`, `padding:3–4px`, `background-size:contain`, logo from an image bundled with the app (never fetched from the network). Sizes: 16 (filter chip), 20 (list rows, popover), 24 (server rows), 28 (agent client toggle chips), 44 (agent client cards). Overlap with `logo.overlap` and a `logo.ring`-wide ring (`box-shadow: 0 0 0 2px <parent bg>`). Every logo carries `title="<agent client name>"`. A logo is never dimmed or greyed: a server row shows only the agents that have the server on, and reads "Turned off" (`type.secondary`, `text.muted`) when every agent turned it off. The bundled logos (`src/assets/logos`, listed in its README) are the clients' official marks as the vendors publish them, never marks drawn for the app; a client without a bundled mark gets the monogram below.
+
+### Skill row (Skills list)
+
+The list item is the row's box: `row.padding`, `row.radius`, `row.hover` on hover, and when selected `row.selected-bg` with the 2px `row.selected-bar` at its left edge; the focus ring (`shell.focus-ring`) is drawn on the box while the row button has the keyboard focus. Inside the box are two siblings, never a button inside a button: the row button, which takes the remaining width and holds the glyph, the name, the pills, the fork markers, the logos and the description line; and, for a skill another tool installed that the CLI would adopt, the Adopt pill (§6 "Pills") at the box's right end, `row.inline-gap` after the row button, centred on the name line. The tab order is the row button, then the pill. A click anywhere in the box but on the pill selects the row: the row button's `::after` covers the box beneath its content, in a stacking context the box isolates. Enter on the row button selects it too. A row without a pill lays out exactly as the row button alone did.
 
 ### Skill glyph (16px, leading the row)
 
@@ -750,7 +755,7 @@ One full-width card below the grid, the same surface, for every configuration wh
 
 ### Banner actions and dialogs (detail pane)
 
-A banner's action is a small ghost button on its right, one command each: "Add to agents" on the gray "Not in any agent" banner (`tone.neutral`), "Reconnect" on the amber "{Agent} is using its own copy of this skill" banner. A command that is refused because the folder holds another version opens a confirm dialog, "Replace {Agent}'s copy?", with the path in `type.technical` `text.caption` and Cancel · Replace (danger). Remove, in the action row, is a danger ghost button that opens the Remove dialog: "Remove {skill}?", the agents it will be deleted from as a list in `type.body` `text.secondary`, and Cancel · Remove (danger). Every button that runs a command is pending until the command ends and the next inventory arrives.
+A banner's action is a small ghost button on its right, one command each: "Add to agents" on the gray "Not in any agent" banner (`tone.neutral`), "Reconnect" on the amber "{Agent} is using its own copy of this skill" banner. After the amber one, in this order: "Installed by the {tool}" (`tone.neutral`, the tool as the adoption reports it, "skills CLI" or "Skillshare"), "Adopt it and agentx can update it from {owner/repo}. It installs the skill from there again, so any edits to this copy are replaced.", with Adopt (`adopt --skill <name>`, toast "Adopted {skill}"); "Source removed" (`tone.danger`), "Add {owner/repo} again to check for updates.", with Add source again (`source add <url>`, toast "Added {owner/repo} again"); "Removed from its source" (`tone.danger`), "It still works but won't get updates.", with Fork (`skill fork <name>`, toast "Forked {skill}. It's one of your skills now"). A skill the CLI refuses to adopt has no banner: its DETAILS end with an "Adopt" row, "Can't adopt: {reason}" in the CLI's words. A command that is refused because the folder holds another version opens a confirm dialog, "Replace {Agent}'s copy?", with the path in `type.technical` `text.caption` and Cancel · Replace (danger). Remove, in the action row, is a danger ghost button that opens the Remove dialog: "Remove {skill}?", the agents it will be deleted from as a list in `type.body` `text.secondary`, and Cancel · Remove (danger). Every button that runs a command is pending until the command ends and the next inventory arrives.
 
 ### Card (Inbox)
 

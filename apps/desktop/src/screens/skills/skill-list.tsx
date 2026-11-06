@@ -190,17 +190,16 @@ export const SkillList = ({
               />
               <ul className="gap-rows m-0 flex list-none flex-col p-0">
                 {group.rows.map((row) => (
-                  <li key={row.key} className="flex">
-                    <SkillRowItem
-                      row={row}
-                      forks={forksOf(row, rows)}
-                      configurations={configurations}
-                      selected={row.key === selectedKey}
-                      onSelect={() => {
-                        onSelect(row);
-                      }}
-                    />
-                  </li>
+                  <SkillRowItem
+                    key={row.key}
+                    row={row}
+                    forks={forksOf(row, rows)}
+                    configurations={configurations}
+                    selected={row.key === selectedKey}
+                    onSelect={() => {
+                      onSelect(row);
+                    }}
+                  />
                 ))}
               </ul>
             </section>
