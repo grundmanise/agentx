@@ -35,23 +35,36 @@ const monogram = (name: string) => {
 };
 
 /** The sizes of DESIGN.md §6 "Agent client logo chip" this app uses so far, in pixels. */
-export type LogoSize = 16 | 20 | 24 | 28;
+export type LogoSize = 16 | 20 | 24 | 28 | 44;
+
+/** The surface stacked logos sit on, which colours the ring between them (`logo.ring`). */
+export type LogoSurface = "content" | "card";
 
 // A round white tile; the ring (`logo.ring`) is the parent's background, between stacked logos.
 // A logo is never dimmed or greyed.
 const tileVariants = cva(
   "rounded-logo bg-logo-bg block flex-none object-contain",
   {
+    compoundVariants: [
+      { className: "ring-row-chip-ring", ring: true, surface: "content" },
+      { className: "ring-card-chip-ring", ring: true, surface: "card" },
+    ],
+    defaultVariants: { surface: "content" },
     variants: {
       ring: {
         false: "",
-        true: "ring-row-chip-ring ring-2",
+        true: "ring-2",
       },
       size: {
         16: "p-logo-sm size-4",
         20: "p-logo-sm size-5",
         24: "size-6 p-1",
         28: "p-logo-lg size-7",
+        44: "p-logo-xl size-agent-card-logo",
+      },
+      surface: {
+        card: "",
+        content: "",
       },
     },
   }
@@ -63,6 +76,8 @@ export interface AgentLogoProps {
   size: LogoSize;
   /** Draws the ring behind the logo, for logos that overlap. */
   ring?: boolean;
+  /** What the ringed logo sits on: the ring takes that colour. */
+  surface?: LogoSurface;
   /** Inside a control that names the client itself: the image then adds nothing to its name. */
   decorative?: boolean;
 }
@@ -76,6 +91,7 @@ export const AgentLogo = ({
   client,
   size,
   ring = false,
+  surface,
   decorative = false,
 }: AgentLogoProps) => (
   <img
@@ -86,7 +102,7 @@ export const AgentLogo = ({
     width={size}
     height={size}
     draggable={false}
-    className={tileVariants({ ring, size })}
+    className={tileVariants({ ring, size, surface })}
   />
 );
 
@@ -97,6 +113,7 @@ const stackVariants = cva("flex items-center", {
       20: "[&>*+*]:-ml-1.5",
       24: "[&>*+*]:-ml-2",
       28: "[&>*+*]:-ml-2",
+      44: "[&>*+*]:-ml-2",
     },
   },
 });
@@ -109,11 +126,13 @@ export const LogoStack = ({
   clients,
   size,
   extra = 0,
+  surface,
   decorative = false,
 }: {
   clients: Pick<Configuration, "client" | "name">[];
   size: LogoSize;
   extra?: number;
+  surface?: LogoSurface;
   decorative?: boolean;
 }) => (
   <span className={stackVariants({ size })}>
@@ -123,6 +142,7 @@ export const LogoStack = ({
         client={c}
         size={size}
         ring
+        surface={surface}
         decorative={decorative}
       />
     ))}

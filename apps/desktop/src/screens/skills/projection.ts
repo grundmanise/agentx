@@ -131,7 +131,7 @@ export const GROUP_DISK = "disk";
 const SOURCE_PREFIX = "source:";
 
 const labels: Record<string, string> = {
-  [GROUP_DISK]: "ON DISK",
+  [GROUP_DISK]: "UNMANAGED",
   [GROUP_PLUGINS]: "PLUGINS",
   [GROUP_YOURS]: "YOUR SKILLS",
 };
@@ -328,7 +328,7 @@ const sorted = <T>(items: T[], compare: (a: T, b: T) => number): T[] => {
 };
 
 /**
- * The rows in groups: YOUR SKILLS, each source A to Z by its short form, PLUGINS, then ON DISK,
+ * The rows in groups: YOUR SKILLS, each source A to Z by its short form, PLUGINS, then UNMANAGED,
  * each sorted by name in `order`. A group with no row is left out.
  */
 export const groupRows = (rows: SkillRow[], order: SortOrder): Group[] => {

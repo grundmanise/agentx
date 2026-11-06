@@ -105,7 +105,7 @@ test.describe("the list", () => {
       "ACME/SKILLS (2)",
       "ZETA/TOOLS (1)",
       "PLUGINS (1)",
-      "ON DISK (2)",
+      "UNMANAGED (2)",
     ]);
     expect(await rowNames(group(page, "YOUR SKILLS (3)"))).toEqual([
       "draft",
@@ -131,7 +131,7 @@ test.describe("the list", () => {
       "aria-current",
       "true"
     );
-    expect(await rowNames(group(page, "ON DISK (2)"))).toEqual([
+    expect(await rowNames(group(page, "UNMANAGED (2)"))).toEqual([
       "notes",
       "scratch",
     ]);
@@ -650,6 +650,10 @@ test.describe("the detail pane", () => {
     });
     await expect(cursor).toBeChecked();
     await expect(cursor).toContainText("displaced");
-    await expect(pane(page, "release-notes").getByRole("note")).toHaveCount(0);
+    await expect(
+      pane(page, "release-notes").getByRole("note", {
+        name: "Cursor is using its own copy of this skill",
+      })
+    ).toBeVisible();
   });
 });

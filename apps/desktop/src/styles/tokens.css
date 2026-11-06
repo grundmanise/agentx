@@ -241,12 +241,16 @@
   --color-add-card-status-added: var(--gray-400);
   --color-add-card-status-forked: var(--color-accent-yours);
   --color-add-card-status-disk: var(--color-accent-attention);
+  --color-add-card-status-in-use: var(--gray-400);
+  --color-add-card-check-ring: var(--gray-700);
   --color-banner-title: var(--gray-50);
   --color-banner-text: var(--gray-300);
+  --color-card-chip-ring: var(--color-card-bg);
   --color-plugin-skills-dot: var(--color-accent-yours);
   --color-plugin-servers-dot: var(--color-accent-theirs);
   --color-plugin-hooks-dot: var(--color-accent-attention);
   --color-plugin-connector: var(--gray-870);
+  --color-plugin-row-hover: var(--gray-930);
 
   /* Overlays */
   --color-overlay-bg: var(--gray-940);
@@ -331,6 +335,13 @@
   @keyframes fade-in {
     from {
       opacity: 0;
+    }
+  }
+  --animate-floating-bar: floating-bar 0.22s ease;
+  @keyframes floating-bar {
+    from {
+      opacity: 0;
+      transform: translateY(24px);
     }
   }
   --animate-turn-once: turn-once 1s ease;
@@ -517,6 +528,7 @@
   --ring-width-logo: 2px;
   --padding-logo-sm: 3px;
   --padding-logo-lg: 5px;
+  --padding-logo-xl: 8px;
 
   /* Inputs */
   --height-input: 42px;
@@ -526,6 +538,7 @@
   --padding-input-search-left: 34px;
   --gap-input-label: 8px;
   --height-textarea: 88px;
+  --height-add-search: 40px;
 
   /* Cards, banners, tiles */
   --gap-card: 12px;
@@ -539,8 +552,11 @@
   --padding-agent-card: 22px;
   --gap-agent-card: 12px;
   --size-agent-card-logo: 44px;
+  --width-universal-lead: 260px;
   --padding-plugin-card: 22px;
   --height-plugin-card-row: 36px;
+  --gap-plugin-card: 12px;
+  --size-plugin-card-tile: 40px;
   --gap-add-card: 12px;
   --min-height-add-card: 120px;
 
@@ -651,6 +667,27 @@
   font-family: var(--font-sans);
   font-size: 14px;
   font-weight: 400;
+}
+@utility type-input {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 400;
+}
+@utility type-input-mono {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 400;
+}
+@utility type-add-card-name {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  font-weight: 500;
+}
+@utility type-add-card-desc {
+  font-family: var(--font-sans);
+  font-size: 13.5px;
+  font-weight: 400;
+  line-height: 1.5;
 }
 @utility type-row-name {
   font-family: var(--font-sans);
@@ -771,6 +808,11 @@
   font-weight: 400;
   line-height: 1.5;
 }
+@utility type-agent-card-name {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  font-weight: 600;
+}
 @utility type-banner-title {
   font-family: var(--font-sans);
   font-size: 14px;
@@ -800,5 +842,16 @@
 @utility type-transport-pill {
   font-family: var(--font-mono);
   font-size: 11.5px;
+  font-weight: 500;
+}
+@utility type-plugin-name {
+  font-family: var(--font-sans);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+@utility type-version-pill {
+  font-family: var(--font-mono);
+  font-size: 12px;
   font-weight: 500;
 }

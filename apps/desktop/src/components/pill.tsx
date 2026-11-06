@@ -1,9 +1,10 @@
 import { cva } from "class-variance-authority";
 import type { ReactNode } from "react";
 
-// DESIGN.md §6 "Pills (status)": 20px high in list rows, 22 in the detail header.
+// DESIGN.md §6 "Pills (status)": 20px high in list rows, 22 in the detail header. A plugin's
+// version pill is in mono (`type.version-pill`); every other pill is `type.pill`.
 const pillVariants = cva(
-  "rounded-pill type-pill inline-flex flex-none items-center gap-1 px-2 whitespace-nowrap",
+  "rounded-pill inline-flex flex-none items-center gap-1 px-2 whitespace-nowrap",
   {
     compoundVariants: [
       {
@@ -12,38 +13,54 @@ const pillVariants = cva(
         tone: "neutral",
       },
     ],
-    defaultVariants: { size: "row" },
+    defaultVariants: { face: "sans", size: "row" },
     variants: {
       clickable: {
         false: "",
         true: "",
+      },
+      face: {
+        mono: "type-version-pill",
+        sans: "type-pill",
       },
       size: {
         detail: "h-5.5",
         row: "h-5",
       },
       tone: {
+        disabled: "bg-pill-disabled-bg text-pill-disabled-text",
         neutral: "bg-pill-neutral-bg text-pill-neutral-text",
         removed: "bg-pill-removed-bg text-pill-removed-text",
         update: "bg-pill-update-bg text-pill-update-text",
+        version: "bg-pill-version-bg text-pill-version-text",
       },
     },
   }
 );
 
-export type PillTone = "neutral" | "removed" | "update";
+export type PillTone =
+  | "disabled"
+  | "neutral"
+  | "removed"
+  | "update"
+  | "version";
 
 export interface PillProps {
   tone: PillTone;
   size?: "row" | "detail";
+  /** The face: `mono` for a plugin's version, `sans` (the default) for every other pill. */
+  face?: "sans" | "mono";
   /** A 12px glyph before the text. */
   icon?: ReactNode;
   children: string;
 }
 
-/** A status pill, display only: "Not published", "Removed from source", "Update waiting". */
-export const Pill = ({ tone, size, icon, children }: PillProps) => (
-  <span className={pillVariants({ clickable: false, size, tone })}>
+/**
+ * A status pill, display only: "Not published", "Removed from source", "Update waiting", a
+ * plugin's "Disabled" or its version.
+ */
+export const Pill = ({ tone, size, face, icon, children }: PillProps) => (
+  <span className={pillVariants({ clickable: false, face, size, tone })}>
     {icon}
     {children}
   </span>
@@ -56,6 +73,7 @@ export const Pill = ({ tone, size, icon, children }: PillProps) => (
 export const PillButton = ({
   tone,
   size,
+  face,
   icon,
   label,
   title,
@@ -67,7 +85,7 @@ export const PillButton = ({
     aria-label={label}
     title={title}
     onClick={onClick}
-    className={pillVariants({ clickable: true, size, tone })}
+    className={pillVariants({ clickable: true, face, size, tone })}
   >
     {icon}
     {children}

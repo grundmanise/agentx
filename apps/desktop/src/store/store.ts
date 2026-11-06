@@ -9,12 +9,14 @@ import type {
   DiffEvent,
   HandshakeError,
   HistoryEvent,
+  InstallableSkillEvent,
   InventoryEvent,
   MachineEvent,
   ReconcileEvent,
   Settings,
   SkillFileEvent,
   SourceEvent,
+  SourceSkillEvent,
   UpdateAvailableEvent,
 } from "#/cli/events.gen.ts";
 
@@ -88,6 +90,13 @@ export interface AppState {
   activity: ActivityEntry[];
   /** The history of each of your own skills read so far, by name. */
   histories: Record<string, HistoryRead>;
+  /** The skills of each source listed so far, by source id, from `source skills <id>`. */
+  listings: Record<string, SourceSkillEvent[]>;
+  /**
+   * Your skills on the account remote that this machine has not installed, from
+   * `skill list --remote`; undefined until read.
+   */
+  installable: InstallableSkillEvent[] | undefined;
   /** The files of each skill read so far, by the row's key. */
   files: Record<string, FilesRead>;
   /**
@@ -137,7 +146,9 @@ export const useAppStore = create<AppState>()(() => ({
   freshness: { kind: "stale" },
   handshakeFailures: [],
   histories: {},
+  installable: undefined,
   inventory: undefined,
+  listings: {},
   machine: undefined,
   pending: {},
   reconciles: [],
