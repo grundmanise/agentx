@@ -1,11 +1,13 @@
 // The slices that one-shot reads fill: settings, sources and the adoption preview. Each loads
 // once the startup checks pass, and again after the commands that change it. The update check of
-// `skill check-updates` replaces the update candidates serve found.
+// `skill check-updates` replaces the update candidates serve found, and `skill update` takes away
+// those of the skills it updated.
+import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { CliEvent } from "#/cli/events.gen.ts";
-import { onFinished, runCommand } from "#/store/runner.ts";
+import { onFinished, problemOf, runCommand } from "#/store/runner.ts";
 import type { Finished } from "#/store/runner.ts";
-import { useAppStore } from "#/store/store.ts";
-import type { AppState, FilesRead } from "#/store/store.ts";
+import { comparisonKey, useAppStore } from "#/store/store.ts";
+import type { AppState, ComparisonRead, FilesRead } from "#/store/store.ts";
 
 // Each read's latest run: a slower earlier run of the same read does not overwrite a later one.
 const latest = new Map<string, number>();
@@ -192,6 +194,94 @@ export const loadFiles = async (
   useAppStore.setState((s) => ({ files: { ...s.files, [key]: read } }));
 };
 
+// The candidate of each update whose changes were read, or are being read: name → candidate.
+const updateDiffCandidates = new Map<string, string>();
+
+/** The label of the read of what the update of `name` changes, for `usePending`. */
+export const updateDiffLabel = (name: string) => `update diff ${name}`;
+
+/**
+ * Loads what the update of `name` changes: `skill diff <name> --update`, a read of the two
+ * versions the last update check pinned. `candidate` names the update: the same one is read once,
+ * however often its changes are opened, and a newer one reads again. A failed read is kept with
+ * the CLI's message, and tried again the next time the changes are opened.
+ */
+export const loadUpdateDiff = async (name: string, candidate: string) => {
+  if (updateDiffCandidates.get(name) === candidate) {
+    return;
+  }
+  updateDiffCandidates.set(name, candidate);
+  useAppStore.setState((s) => {
+    const { [name]: previous, ...rest } = s.updateDiffs;
+    return previous === undefined || previous.candidate === candidate
+      ? s
+      : { updateDiffs: rest };
+  });
+  const outcome = await runCommand(["skill", "diff", name, "--update"], {
+    label: updateDiffLabel(name),
+    ownFailure: true,
+  });
+  if (updateDiffCandidates.get(name) !== candidate) {
+    return;
+  }
+  if (outcome.exitCode === 0) {
+    useAppStore.setState((s) => ({
+      updateDiffs: {
+        ...s.updateDiffs,
+        [name]: {
+          candidate,
+          diffs: outcome.events.filter((e) => e.type === "diff"),
+        },
+      },
+    }));
+    return;
+  }
+  const error = outcome.events.find((e) => e.type === "error");
+  const problem =
+    error === undefined
+      ? { message: "agentx could not read the changes" }
+      : {
+          message: error.message,
+          ...(error.hint === undefined ? {} : { hint: error.hint }),
+        };
+  useAppStore.setState((s) => ({
+    updateDiffs: {
+      ...s.updateDiffs,
+      [name]: { candidate, failed: true, problem },
+    },
+  }));
+  updateDiffCandidates.delete(name);
+};
+
+/** The label of the Compare with now control of `commit` of the skill `name`, for `usePending`. */
+export const compareLabel = (name: string, commit: string) =>
+  `compare ${name} ${commit}`;
+
+/**
+ * Compares `commit` of one of your own skills with the skill as it is now:
+ * `skill diff <name> --commit <commit>`, a read, run each time it is asked for. `version` names
+ * the skill as it is now, as for `loadHistory`. A failure is kept with its problem, which the
+ * control shows itself.
+ */
+export const loadComparison = async (
+  name: string,
+  commit: string,
+  version: string
+) => {
+  const args = ["skill", "diff", name, "--commit", commit];
+  const outcome = await runCommand(args, {
+    label: compareLabel(name, commit),
+    ownFailure: true,
+  });
+  const read: ComparisonRead =
+    outcome.exitCode === 0
+      ? { diffs: outcome.events.filter((e) => e.type === "diff"), version }
+      : { failed: true, problem: problemOf(args, outcome), version };
+  useAppStore.setState((s) => ({
+    comparisons: { ...s.comparisons, [comparisonKey(name, commit)]: read },
+  }));
+};
+
 /** What to load again after a command that may have changed something. */
 const afterCommand = ({ args, command, events, exitCode, read }: Finished) => {
   if (read) {
@@ -214,7 +304,11 @@ const afterCommand = ({ args, command, events, exitCode, read }: Finished) => {
   ) {
     void loadSources();
   }
-  if (command === "skill check-updates" && exitCode === 0) {
+  // A check that could not reach a source (exit 3) still lists what it found elsewhere.
+  if (
+    command === "skill check-updates" &&
+    (exitCode === EXIT_CODES.ok || exitCode === EXIT_CODES.source)
+  ) {
     useAppStore.setState({
       updates: Object.fromEntries(
         events
@@ -222,6 +316,19 @@ const afterCommand = ({ args, command, events, exitCode, read }: Finished) => {
           .map((e) => [e.name, e])
       ),
     });
+  }
+  // The skills an update applied to, which its `library_skill` events name, have no update left.
+  if (command === "skill update") {
+    const updated = new Set(
+      events.filter((e) => e.type === "library_skill").map((e) => e.name)
+    );
+    if (updated.size > 0) {
+      useAppStore.setState((s) => ({
+        updates: Object.fromEntries(
+          Object.entries(s.updates).filter(([name]) => !updated.has(name))
+        ),
+      }));
+    }
   }
 };
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { useRouteKey } from "#/lib/route-key.ts";
+import { ForkDialogs } from "#/screens/skills/fork-dialog.tsx";
 import { skillPath } from "#/screens/skills/open.ts";
 import {
   filterRows,
@@ -138,6 +139,7 @@ export const SkillsScreen = () => {
           />
         )}
       </section>
+      <ForkDialogs />
     </div>
   );
 };
