@@ -113,7 +113,7 @@ export const App = () => {
                   />
                 ))}
               </Route>
-              <Route path="*" element={<Navigate to="/inbox" replace />} />
+              <Route path="*" element={<Navigate to="/skills" replace />} />
             </Routes>
           </main>
         </div>
