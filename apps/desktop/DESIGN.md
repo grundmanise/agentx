@@ -276,6 +276,7 @@ Tone triples `{ fg, bg, border }` for banners and Inbox icon tiles:
 | `plugin.servers-dot` | `accent.theirs` | SERVERS group (tint `blue-400/10`) |
 | `plugin.hooks-dot` | `accent.attention` | HOOKS group (tint `amber-400/10`) |
 | `plugin.connector` | `gray-870` | Nested-content connector lines |
+| `plugin.row-hover` | `gray-930` | Hover on a plugin card's skill and server rows |
 
 #### Overlays (dialog, popover, palette, sheet, toast, floating bar)
 
@@ -575,6 +576,8 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `universal-card.lead-width` | 260 | `w-universal-lead` | Left column of the Universal card: logos, "Universal", the library path |
 | `plugin-card.padding` | 22 | `p-plugin-card` |  |
 | `plugin-card.row-height` | 36 | `h-plugin-card-row` | Tree rows |
+| `plugin-card.gap` | 12 | `gap-plugin-card` | Between the masonry columns; each card's wrapper adds 12 below |
+| `plugin-card.tile` | 40 | `size-plugin-card-tile` | Plugin icon or monogram tile |
 | `add-card.gap` | 12 | `gap-add-card` | Grid gap |
 | `add-card.min-height` | 120 | `min-h-add-card` |  |
 
@@ -772,6 +775,10 @@ Caption "RECENT" in `type.caption` `text.caption`, then the last nine entries of
 ### Inbox badge (sidebar)
 
 The Inbox nav item carries the count of its cards when there are any: `shell.nav-badge-bg`, digits `type.nav-badge` `on-accent`, `shell.nav-badge-height`, `shell.nav-badge-min-width`, `pill.radius`, at the item's right end. The item's accessible name then reads "Inbox, {n} need you".
+
+### Plugin card (Plugins)
+
+`card.bg`, `plugin-card.radius`, 1px `card.border`, in 3 CSS columns with `plugin-card.gap`; a card never breaks across columns. Top, `plugin-card.padding`: a `plugin-card.tile` tile on the left, the plugin's own icon from the inventory's data URL as an `<img>` with the name as its alt, or the name's first letter on `button.secondary-bg` when the inventory carries none; the tile is never dimmed, a disabled plugin says so with its pill. On the right the version pill (`pill.version-bg` / `pill.version-text`, `type.version-pill`), "no version" when empty, after a Disabled pill (`pill.disabled-bg` / `pill.disabled-text`) when the agent client turned the plugin off. Then the name in `type.plugin-name` and "{Agent} · {marketplace}" in `text.muted` ("local" when the marketplace is empty). Contents under a `card.border` hairline: the groups SKILLS, SERVERS, HOOKS, each a caption and `plugin-card.row-height` tree rows with a `plugin.connector` line (the last row's stops at the middle), the group's dot, the name, mono meta (`type.technical-sm`, `text.caption`: a server's transport, a hook's event) and, on a skill or server row, a chevron; those rows open the skill in Skills or the server in MCP servers and hover `plugin.row-hover`. A hook row opens nothing.
 
 ### Toast
 

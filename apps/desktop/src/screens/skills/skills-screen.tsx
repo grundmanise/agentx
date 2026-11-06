@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useNavigate } from "react-router";
 
+import { useRouteKey } from "#/lib/route-key.ts";
 import { skillPath } from "#/screens/skills/open.ts";
 import {
   filterRows,
@@ -28,19 +29,6 @@ const steps: Record<string, number> = {
   k: -1,
 };
 
-/** The skill the route names: `/skills/<key>`; a deeper route is another screen's. */
-const useRouteKey = (): string | undefined => {
-  const splat = useParams()["*"] ?? "";
-  if (splat === "" || splat.includes("/")) {
-    return undefined;
-  }
-  try {
-    return decodeURIComponent(splat);
-  } catch {
-    return splat;
-  }
-};
-
 /** Whether a key press belongs to a field or an overlay, which the list then leaves alone. */
 const inField = (target: EventTarget | null) =>
   target instanceof HTMLElement &&
@@ -55,6 +43,7 @@ const inField = (target: EventTarget | null) =>
  */
 export const SkillsScreen = () => {
   const navigate = useNavigate();
+  // The skill the route names: `/skills/<key>`; a deeper route is another screen's.
   const routeKey = useRouteKey();
   const inventory = useAppStore((s) => s.inventory);
   const updates = useAppStore((s) => s.updates);

@@ -250,6 +250,7 @@
   --color-plugin-servers-dot: var(--color-accent-theirs);
   --color-plugin-hooks-dot: var(--color-accent-attention);
   --color-plugin-connector: var(--gray-870);
+  --color-plugin-row-hover: var(--gray-930);
 
   /* Overlays */
   --color-overlay-bg: var(--gray-940);
@@ -567,6 +568,8 @@
   --width-universal-lead: 260px;
   --padding-plugin-card: 22px;
   --height-plugin-card-row: 36px;
+  --gap-plugin-card: 12px;
+  --size-plugin-card-tile: 40px;
   --gap-add-card: 12px;
   --min-height-add-card: 120px;
 
@@ -852,6 +855,17 @@
 @utility type-transport-pill {
   font-family: var(--font-mono);
   font-size: 11.5px;
+  font-weight: 500;
+}
+@utility type-plugin-name {
+  font-family: var(--font-sans);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+@utility type-version-pill {
+  font-family: var(--font-mono);
+  font-size: 12px;
   font-weight: 500;
 }
 @utility type-card-title {
