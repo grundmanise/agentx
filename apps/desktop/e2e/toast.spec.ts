@@ -2,7 +2,7 @@ import { expect, test } from "./harness/cli.ts";
 
 test("shows one toast at a time, with its action", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
 
   // No UI raises a toast yet, so a harness module calls notify() twice.
   await page.addScriptTag({
@@ -21,7 +21,7 @@ test("shows one toast at a time, with its action", async ({ page }) => {
 
 test("replaces the toast even when timers run late", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
 
   // The harness module delays every timer set while it calls notify() twice.
   await page.addScriptTag({
