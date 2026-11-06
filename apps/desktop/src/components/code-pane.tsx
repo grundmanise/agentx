@@ -112,6 +112,28 @@ const editedLines = (content: string, patch: string): CodeLine[] => {
   return out;
 };
 
+/**
+ * The lines of a patch alone, for a file shown by how it changed and not by its content: the
+ * lines of each hunk in turn, a kept or added line numbered in the new file and a removed line
+ * with no number, so the numbers jump where the patch leaves lines out.
+ */
+const patchLines = (patch: string): CodeLine[] =>
+  parsePatch(patch).flatMap((hunk) => {
+    let next = hunk.newStart;
+    return hunk.lines.map((line): CodeLine => {
+      if (line.kind === "removed") {
+        return { kind: "removed", text: line.text };
+      }
+      const numberedLine: CodeLine = {
+        kind: line.kind === "added" ? "added" : "plain",
+        number: next,
+        text: line.text,
+      };
+      next += 1;
+      return numberedLine;
+    });
+  });
+
 /** What a line of a Markdown file is, which sets its colour. */
 type Tone = "frontmatter" | "heading" | "list" | "prose";
 
@@ -226,7 +248,10 @@ export interface CodePaneProps {
   path: string;
   /** The pane's accessible name. */
   label: string;
-  /** The file's content as it is; absent for a deleted file. */
+  /**
+   * The file's content as it is; absent for a deleted file, and for a file shown by its patch
+   * alone, whose lines are then the patch's.
+   */
   content?: string;
   /** The unified diff git wrote for the file, whose tints the pane shows. */
   patch?: string;
@@ -247,7 +272,7 @@ export const codeLines = ({
     return patch === undefined ? [] : removedLines(patch);
   }
   if (content === undefined) {
-    return [];
+    return patch === undefined ? [] : patchLines(patch);
   }
   if (tint === "added") {
     return numbered(content, "added");
