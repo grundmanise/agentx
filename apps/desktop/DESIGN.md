@@ -404,6 +404,8 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.button` | sans | 14 |  |  |  |  | Buttons; the variant sets the weight (600 primary, 500 others) |
 | `type.button-sm` | sans | 13.5 |  |  |  |  | Small buttons |
 | `type.pill` | sans | 11.5 | 600 |  |  |  | Pills, the letter of a monogram logo |
+| `type.card-title` | sans | 15 | 500 |  |  |  | Inbox card title (`card.title`) |
+| `type.nav-badge` | sans | 11 | 600 |  |  |  | Count on the Inbox nav item (`on-accent`) |
 | `type.segment` | sans | 12.5 | 500 |  |  |  | Segmented control labels |
 | `type.caption` | mono | 10.5 | 400 |  | 0.16em | upper | Captions (`text.caption`) |
 | `type.technical` | mono | 12.5 | 400 |  |  |  | Paths, ids, dates, commands; a skill's origin in the detail header (`text.caption`) |
@@ -457,6 +459,8 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `stale-bar.padding` | 0 16 | `px-stale-bar` |  |
 | `shell.focus-ring-width` | 2 | none: `index.css` sets it on every element | Keyboard focus outline |
 | `shell.focus-ring-offset` | 2 | none: as above |  |
+| `shell.nav-badge-height` | 18 | `h-nav-badge` | Inbox count badge on the nav item |
+| `shell.nav-badge-min-width` | 18 | `min-w-nav-badge` | Round for one digit, a pill for two |
 
 ### Pages
 
@@ -466,6 +470,10 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `page.title-gap` | 28 | `gap-page-title` | Title block → first section |
 | `page.section-gap` | 28–40 |  | Between sections |
 | `page.max-width` | 1200 | `max-w-page` | Inbox |
+| `inbox.recent-width` | 280 | `w-inbox-recent` | RECENT, the Inbox's right column |
+| `inbox.columns-gap` | 64 | `gap-inbox-columns` | Cards ↔ RECENT |
+| `recent.time-width` | 40 | `w-recent-time` | The HH:MM column of a RECENT entry |
+| `recent.dot` | 7 | `size-recent-dot` | The tone dot of a RECENT entry |
 | `split.list-width` | 408 | `w-split-list` | Skills left column |
 | `split.header-padding` | 30 20 0 28 | `pt-split-header-top pr-split-header-right pb-0 pl-split-header-left` | Skills list header |
 | `split.toolbar-padding` | 20 20 12 28 | `pt-split-toolbar pr-split-toolbar pb-split-toolbar-bottom pl-split-toolbar-left` | Search + filter row block |
@@ -751,7 +759,19 @@ A banner's action is a small ghost button on its right, one command each: "Add t
 
 ### Card (Inbox)
 
-`card.bg`, `card.radius`, `card.border`, `card.padding`. Header grid: `card.tile` icon tile (`tone.*`) · title/tag/text · actions. Resolve animation: `opacity 0; transform: translateX(24px) scale(.985)` over 280ms, then removed.
+`card.bg`, `card.radius`, 1px `card.border`, `card.padding` (18). Header grid with `card.header-gap`: `card.tile` icon tile (`tone.*` bg, border and fg: the alert mark, a folder for a repair, the skills mark for an adoptable skill) · the skill's name in `type.card-title` `card.title` with a mono tag in `type.technical-sm` `card.tag` ("{Agent}", "skills CLI", "{owner/repo}", "your skill") and one line of `type.secondary` `card.text` · the actions on the right with `button.gap`: a ghost Keep or Keep as is where the user may leave things as they are, then the small secondary button that settles the card (Adopt, Reconnect, Restore, Take it over, Add source again, Fork), or a danger Remove before Add source again. A button is pending (`aria-busy`, a `Spinner`) until its command ends and the next inventory arrives. Only a state that needs a decision is a card: an adoptable skill, a displaced placement, a folder serve found missing or in the way at its start, a skill whose source was removed, a skill its source no longer holds. A card leaves only once its state is gone from the store, never on a click: resolve animation `animate-card-resolve` (`opacity 0; transform: translateX(24px) scale(.985)` over 280ms, in place), then removed; Keep hides a card the same way until the app restarts. Cards stack with `card.gap`.
+
+### Inbox page
+
+`page.padding`, `page.max-width`, two columns with `inbox.columns-gap`: the decisions at the left, RECENT at the right, `inbox.recent-width` wide. The header is the local date in `type.caption` `text.caption` ("MONDAY, SEPTEMBER 28") and the headline in `type.inbox-headline` `text.primary`, "{Number word} things _need you._", the second clause italic `text.muted`, "One thing _needs you._" for one, the number spelled out up to nine. No subtitle while cards are open. With no card: "All clear." in the headline style, "Nothing needs you. We'll surface changes here." in `type.body` `text.muted`, then a secondary Browse skills (to Skills) and a ghost Add skills (to Add). The page title "Inbox" is read by a screen reader only.
+
+### Recent (Inbox)
+
+Caption "RECENT" in `type.caption` `text.caption`, then the last nine entries of the activity list, newest first, new ones coming in live: the time as HH:MM in `type.technical-sm` `text.caption`, `recent.time-width` wide; a `recent.dot` round dot in the tone of the outcome (`tone.primary.fg` for success, `tone.attention.fg` for attention, `tone.danger.fg` for a failure); the message in `type.secondary` `text.secondary`. "Nothing yet" in `text.hint` while the list is empty. Serve's entries read "{skill} has an update", "{skill} is now {state}", "Put {skill} back" for a folder serve restored, and a warning as the CLI wrote it.
+
+### Inbox badge (sidebar)
+
+The Inbox nav item carries the count of its cards when there are any: `shell.nav-badge-bg`, digits `type.nav-badge` `on-accent`, `shell.nav-badge-height`, `shell.nav-badge-min-width`, `pill.radius`, at the item's right end. The item's accessible name then reads "Inbox, {n} need you".
 
 ### Toast
 
@@ -830,7 +850,7 @@ The product mark is `shell.logo-mark` on `shell.logo-bg`, 30px `shell.logo-radiu
 - Chevrons: `rotate(90deg)` with `.15s`.
 - File row control: the meta text and the Show in Finder button swap by opacity in `.15s` on hover.
 - Floating bar (`animate-floating-bar`): `translateY(24px) → 0`, opacity 0 → 1, `.22s ease`, when it appears.
-- Card resolve: 280ms, see §6.
+- Card resolve (`animate-card-resolve`): 280ms, see §6.
 - Spinner-style icons (Check updates, Check tools): one full rotation `.9–1s ease` (`animate-turn-once`: 1s ease, once, while the command runs), then a toast.
 - Startup check running (`animate-check-spin`): the status ring turns once a second, linear, while its check runs, and stops when the check settles.
 - Screens fade in (`animate-fade-in`): opacity 0 → 1 over `.2s ease-out` when they mount, once the startup checks pass. Nothing waits on purpose: a passing launch shows no startup layer. A launch whose checks run for over 2s shows a `Spinner` and what the checks do (`type.secondary`, `text.muted`) in the middle of the empty panel, faded in the same way, until the checks settle: "Checking this machine" while `version` and `doctor` run, then "Looking for skills", "Looking for MCP servers" and "Looking for plugins" in turn, each for 1.5s and faded in, while serve scans. From 5s into a check, a line below (`type.row-desc`, `text.hint`) counts down to its deadline: "Taking longer than usual · trying for 25s more".
@@ -839,7 +859,8 @@ The product mark is `shell.logo-mark` on `shell.logo-bg`, 30px `shell.logo-radiu
 
 ## 9. Copy rules
 
-- Plain verbs: Add, Remove, Update, Fork, Publish, Review update, Reconnect, Adopt, Check updates.
+- Plain verbs: Add, Remove, Update, Fork, Publish, Review update, Reconnect, Restore, Take it over, Adopt, Check updates.
+- Plain, friendly words, never the mechanism: no "link", "symlink", "placement", "overwritten" or "broken" in a card, banner, dialog or toast. "{Agent} is using its own copy of this skill", "Its folder is missing", "A different folder is where {skill} should be".
 - Copy uses the terms in [`GLOSSARY.md`](../../GLOSSARY.md) and never a word the glossary lists under _Avoid_. Where a glossary term names the thing, use that term, such as "account remote", "account repo", "upstream" or "base version". Where this file and the glossary differ, the glossary wins.
 - Named exception: the "Agents" screen name, its nav label and the "AGENTS" captions stay as they are, although the glossary avoids "agent" for an agent client.
 - For a git word the glossary has no term for, use a plain word: "change", not "hunk".
