@@ -26,7 +26,7 @@ const AddSourceForm = ({
   onAdded,
   onClose,
 }: {
-  onAdded: (source: SourceEvent) => void;
+  onAdded?: (source: SourceEvent) => void;
   onClose: () => void;
 }) => {
   const [url, setUrl] = useState("");
@@ -50,7 +50,7 @@ const AddSourceForm = ({
     if (outcome.exitCode === EXIT_CODES.ok) {
       const source = outcome.events.find((e) => e.type === "source");
       if (source !== undefined) {
-        onAdded(source);
+        onAdded?.(source);
       }
       onClose();
       return;
@@ -127,7 +127,7 @@ export const AddSourceDialog = ({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** The source the CLI added, from its `source` event. */
-  onAdded: (source: SourceEvent) => void;
+  onAdded?: (source: SourceEvent) => void;
 }) => (
   <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent aria-describedby={undefined}>
