@@ -203,6 +203,10 @@ const afterCommand = ({ args, command, events, exitCode, read }: Finished) => {
   if (command.startsWith("machine ")) {
     void loadMachine();
   }
+  // The label is the machine's: Settings shows it from `machine`, which reads it again.
+  if (command === "config set" && args[2] === "label") {
+    void loadMachine();
+  }
   if (
     command.startsWith("source ") ||
     command === "skill add" ||
