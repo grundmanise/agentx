@@ -514,7 +514,7 @@ export interface FilesRequest {
 
 /** The last segment of an occurrence's path: the skill directory's own name. */
 const LAST_SEGMENT = /(?<name>[^/]+)\/*$/u;
-const directoryName = (path: string) =>
+export const directoryName = (path: string) =>
   LAST_SEGMENT.exec(path)?.groups?.name ?? "";
 
 /**
