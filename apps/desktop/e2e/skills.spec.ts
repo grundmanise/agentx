@@ -622,8 +622,8 @@ test.describe("the detail pane", () => {
       - article "scratch":
         - text: Unmanaged · Enabled
         - heading "scratch" [level=1]
-        - text: skills CLI
         - paragraph: Summarise a long thread into notes
+        - note "Added by Skills CLI"
         - region "Agents":
           - heading "Agents" [level=2]
           - switch "Claude Code"
@@ -636,7 +636,7 @@ test.describe("the detail pane", () => {
           - term: Found at
           - definition: /home/me/.agents/skills/scratch
           - term: Installed by
-          - definition: skills CLI · https://github.com/vercel/skills
+          - definition: Skills CLI · https://github.com/vercel/skills
         - region "History":
           - heading "History" [level=2]
           - paragraph: History is kept for your own skills
@@ -703,7 +703,7 @@ test.describe("the detail pane", () => {
     ).toBeVisible();
   });
 
-  test("a pill its banner covers stays on the row and leaves the title row; any other pill stays in both", async ({
+  test("a pill or origin its banner covers stays on the row and leaves the title row; any other stays in both", async ({
     cli,
     page,
   }) => {
@@ -720,7 +720,7 @@ test.describe("the detail pane", () => {
     });
     cli.register(["adopt"], { events: adoption });
     cli.register(["skill", "history", "draft"], { events: [] });
-    for (const name of ["gone", "draft"]) {
+    for (const name of ["gone", "draft", "scratch"]) {
       cli.register(["skill", "files", name], { events: filesOf(name) });
     }
     await page.goto("/#/skills/gone");
@@ -740,6 +740,21 @@ test.describe("the detail pane", () => {
     await expect(
       titleRow.getByText("Update waiting", { exact: true })
     ).toBeVisible();
+    // The origin of a skill of a source is not what its banner says: it stays beside the name.
+    await expect(
+      titleRow.getByText("zeta/tools", { exact: true })
+    ).toBeVisible();
+
+    // The adoption banner says where the skill came from: the title row leaves the origin out.
+    await row(page, "scratch").click();
+    await expect(
+      pane(page, "scratch").getByRole("note", { name: "Added by Skills CLI" })
+    ).toBeVisible();
+    await expect(
+      pane(page, "scratch")
+        .locator("header")
+        .getByText("Skills CLI", { exact: true })
+    ).toHaveCount(0);
 
     // draft's "Not published" banner covers its Not published pill: the row keeps it, the title
     // row leaves it out.
@@ -794,9 +809,9 @@ test.describe("settling a skill", { tag: RUNS_COMMANDS }, () => {
     ).toHaveCount(0);
     cli.register(["adopt", "--skill", "scratch"]);
     const adoptBanner = pane(page, "scratch").getByRole("note", {
-      name: "From skills CLI",
+      name: "Added by Skills CLI",
     });
-    await expect(adoptBanner).toContainText("Adopt to manage from agentx");
+    await expect(adoptBanner).toContainText("Adopt to manage it from agentx");
     await adoptBanner.getByRole("button", { name: "Adopt" }).click();
     await expect(toasts(page).getByText("Adopted scratch")).toBeVisible();
 
