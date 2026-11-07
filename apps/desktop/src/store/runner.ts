@@ -130,7 +130,11 @@ const followProgress = async (
   await followProgress(reader, onProgress);
 };
 
-const problemOf = (args: readonly string[], outcome: Outcome): Problem => {
+/** What went wrong in a command that did not succeed, as its error toast says it. */
+export const problemOf = (
+  args: readonly string[],
+  outcome: Outcome
+): Problem => {
   if (outcome.startError !== undefined) {
     return { message: `agentx could not start: ${outcome.startError}` };
   }

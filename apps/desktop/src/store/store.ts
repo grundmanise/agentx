@@ -109,6 +109,11 @@ export interface AppState {
    * the What's new sheet reads it when it opens.
    */
   updateDiffs: Record<string, UpdateDiffRead>;
+  /**
+   * Each comparison of a commit of one of your own skills with the skill as it is now, from
+   * `skill diff <name> --commit <commit>`, by comparisonKey.
+   */
+  comparisons: Record<string, ComparisonRead>;
 }
 
 /** One declaration of a server whose handshake failed: the server, where it is declared, and why. */
@@ -151,10 +156,24 @@ export type UpdateDiffRead =
   | { candidate: string; diffs: DiffEvent[]; failed?: undefined }
   | { candidate: string; diffs?: undefined; failed: true; problem: Problem };
 
+/**
+ * One run of `skill diff <name> --commit <commit>`, kept with the version of the skill it
+ * compared, as a HistoryRead is: a change to the skill makes it a comparison with what is no
+ * longer there. A failed run keeps the problem, which the entry shows where it was asked for.
+ */
+export type ComparisonRead =
+  | { version: string; diffs: DiffEvent[]; failed?: undefined }
+  | { version: string; diffs?: undefined; failed: true; problem: Problem };
+
+/** The key of the comparison of `commit` of the skill `name` in `comparisons`. */
+export const comparisonKey = (name: string, commit: string) =>
+  `${name}@${commit}`;
+
 export const useAppStore = create<AppState>()(() => ({
   activity: [],
   adoption: [],
   applied: undefined,
+  comparisons: {},
   files: {},
   freshness: { kind: "stale" },
   handshakeFailures: [],
