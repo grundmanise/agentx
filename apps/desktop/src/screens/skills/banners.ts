@@ -3,7 +3,7 @@
 import type { Configuration, LibraryPlacement } from "#/cli/events.gen.ts";
 import { displacedPlacement } from "#/screens/skills/placements.ts";
 import { shortSource, toolName } from "#/screens/skills/projection.ts";
-import type { SkillRow } from "#/screens/skills/projection.ts";
+import type { PillKind, SkillRow } from "#/screens/skills/projection.ts";
 
 export type BannerTone =
   | "danger"
@@ -30,6 +30,12 @@ export interface Banner {
   title: string;
   text?: string;
   action?: BannerAction;
+  /**
+   * The pills that say the same state as this banner. The detail pane's title row leaves them
+   * out while the banner shows, so a state is said once; the list rows, which have no banner,
+   * keep them.
+   */
+  covers?: PillKind[];
 }
 
 interface BannerRule {
@@ -77,6 +83,7 @@ const table: BannerRule[] = [
       const source = row.entry?.source ?? "";
       return {
         action: { kind: "add-source", source },
+        covers: ["source-removed"],
         text: `Add ${shortSource(source)} source to check for updates.`,
         title: "Source removed",
         tone: "danger",
@@ -87,6 +94,7 @@ const table: BannerRule[] = [
   {
     banner: () => ({
       action: { kind: "fork" },
+      covers: ["removed-from-source"],
       text: "No updates are possible for this skill unless it is added again in the source.",
       title: "Removed from source",
       tone: "danger",
