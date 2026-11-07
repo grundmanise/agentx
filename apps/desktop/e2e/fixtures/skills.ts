@@ -190,11 +190,13 @@ export const skills: SkillNode[] = [
   libraryNode(
     "draft",
     "h-draft",
-    "A skill you started and never published",
+    "Turn a design doc into a task list",
     [],
     `${WORKTREES}/draft/draft`
   ),
-  libraryNode("gone", "h-gone", "Its source no longer has it", ["claude-code"]),
+  libraryNode("gone", "h-gone", "Lint SQL migrations before they run", [
+    "claude-code",
+  ]),
   libraryNode("pdf", "h-pdf", "Read and convert PDF files", ["claude-code"]),
   libraryNode(
     "pdf-letters",
@@ -213,7 +215,7 @@ export const skills: SkillNode[] = [
   libraryNode("review", "h-review", "Review a change before merging", [
     "cursor",
   ]),
-  libraryNode("scratch", "h-scratch", "Notes the skills CLI installed", []),
+  libraryNode("scratch", "h-scratch", "Summarise a long thread into notes", []),
   {
     content_hash: "h-commit",
     description: "Write commit messages the way the team does",
@@ -232,7 +234,7 @@ export const skills: SkillNode[] = [
   },
   {
     content_hash: "h-notes",
-    description: "Meeting notes, kept in Cursor only",
+    description: "Take meeting notes and list the action items",
     logical_id: "skill:h-notes",
     name: "notes",
     occurrences: [
@@ -562,7 +564,7 @@ export const deletedWithFrontMatter: DiffEvent = diffEvent(
  */
 export const meetingNotes: SkillNode = {
   content_hash: "h-meeting",
-  description: "Notes of every meeting, kept by two clients",
+  description: "Write up a meeting and its decisions",
   logical_id: "skill:h-meeting",
   name: "Meeting Notes",
   occurrences: [
