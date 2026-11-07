@@ -206,6 +206,7 @@ const table: BannerRule[] = [
   {
     banner: () => ({
       action: { kind: "publish" },
+      covers: ["not-published"],
       text: "Only on this machine. Publish it to put it on your account remote.",
       title: "Not published",
       tone: "yours",
@@ -216,6 +217,7 @@ const table: BannerRule[] = [
   {
     banner: () => ({
       action: { kind: "open-settings" },
+      covers: ["not-published"],
       text: "Set an account remote to publish it.",
       title: "Not published",
       tone: "yours",

@@ -741,7 +741,7 @@ Mono caption 10.5–11 / `.16em` uppercase `group.label` plus a count in `group.
 
 `banner.radius`, `banner.padding`, `tone.*.bg` + 1px `tone.*.border`; `banner.tile` icon tile in `tone.*.fg`; title 14 / 500 `banner.title`; text 13 `banner.text`; actions on the right.
 
-A state the banner says is not said again in the title row: each banner lists the status pills it covers (`covers` in `src/screens/skills/banners.ts`), and the detail header leaves those pills out while that banner shows. Today "Source removed" covers the Source removed pill and "Removed from source" covers the Removed from source pill; the displaced, "Not in any agent" and "From {tool}" banners have no matching pill, and a pill the banner does not cover ("Update waiting" beside any banner) stays. The list rows have no banner and keep every pill. A new banner that says a pill's state adds that pill to its `covers`.
+A state the banner says is not said again in the title row: each banner lists the status pills it covers (`covers` in `src/screens/skills/banners.ts`), and the detail header leaves those pills out while that banner shows. Today "Source removed" covers the Source removed pill, "Removed from source" covers the Removed from source pill, and both "Not published" banners cover the Not published pill ("Edits not published" and "Edited outside agentx" cover nothing); the displaced, "Not in any agent" and "From {tool}" banners have no matching pill, and a pill the banner does not cover ("Update waiting" beside any banner) stays. The list rows have no banner and keep every pill. A new banner that says a pill's state adds that pill to its `covers`.
 
 ### Agent client card (Agents page)
 
