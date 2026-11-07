@@ -7,12 +7,14 @@
 // when it has nothing to show; the page draws the hairlines between them. To add a section, write
 // it in its own file in this folder and add it to `sections` at its slot below, in this order:
 // This machine, Account remote, Sources, Comparing edits, Storage, Another machine, Skills from
-// the skills CLI, Command line. Insert the new entry under its slot's comment and keep the comment.
+// the Skills CLI, Command line. Insert the new entry under its slot's comment and keep the comment.
 import type { ComponentType } from "react";
 
 import { AccountRemoteSection } from "#/screens/settings/account-remote.tsx";
+import { AnotherMachineSection } from "#/screens/settings/another-machine.tsx";
 import { CommandLineSection } from "#/screens/settings/command-line.tsx";
 import { ComparingEditsSection } from "#/screens/settings/comparing-edits.tsx";
+import { SkillsCliSection } from "#/screens/settings/skills-cli.tsx";
 import { SourcesSection } from "#/screens/settings/sources.tsx";
 import { StorageSection } from "#/screens/settings/storage.tsx";
 import { ThisMachineSection } from "#/screens/settings/this-machine.tsx";
@@ -33,7 +35,9 @@ const sections: Section[] = [
   { Section: ComparingEditsSection, id: "comparing-edits" },
   { Section: StorageSection, id: "storage" },
   // Slot: Another machine.
-  // Slot: Skills from the skills CLI.
+  { Section: AnotherMachineSection, id: "another-machine" },
+  // Slot: Skills from the Skills CLI.
+  { Section: SkillsCliSection, id: "skills-cli" },
   { Section: CommandLineSection, id: "command-line" },
 ];
 

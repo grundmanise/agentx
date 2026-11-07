@@ -69,6 +69,7 @@ test("each section shows what the store holds, and nothing runs on its own", asy
     /^Sources/u,
     /^Comparing edits/u,
     /^Storage/u,
+    /^Another machine/u,
     /^Command line/u,
   ]);
 
