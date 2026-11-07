@@ -1,33 +1,18 @@
 // The one banner of the detail pane (DESIGN.md §6 "Banner" and "Banner actions and dialogs"),
-// with its button: Add to agents on the gray banner, Reconnect on the amber one. A Reconnect the
-// CLI refuses because the directory holds another version opens a confirm dialog, whose Replace
-// runs the same command with --force.
+// with its button: Add to agents on the gray "Not in any agent" banner, Reconnect on the amber one,
+// Adopt, Add source or Fork on the others. The buttons are in src/screens/skills/actions.tsx.
 import { cva } from "class-variance-authority";
-import { useState } from "react";
 
-import { EXIT_CODES } from "#/cli/events.gen.ts";
-import type { LibraryPlacement } from "#/cli/events.gen.ts";
 import { AlertIcon } from "#/components/icons/alert.tsx";
-import { Spinner } from "#/components/spinner.tsx";
-import { dismissToast } from "#/components/toast.tsx";
-import { Button } from "#/components/ui/button.tsx";
 import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "#/components/ui/dialog.tsx";
+  AddSource,
+  AddToAgents,
+  Adopt,
+  Fork,
+  Reconnect,
+} from "#/screens/skills/actions.tsx";
 import type { Banner } from "#/screens/skills/banners.ts";
-import {
-  agentsWord,
-  holdsOtherContent,
-  placedCount,
-} from "#/screens/skills/placements.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
-import { runUntilSettled, useSettling } from "#/store/settle.ts";
 
 const bannerVariants = cva(
   "rounded-banner py-banner pr-banner-right pl-banner gap-banner flex items-center border",
@@ -59,119 +44,6 @@ const tileVariants = cva(
   }
 );
 
-/** A small ghost button that runs a command, pending while the command and its inventory come. */
-const ActionButton = ({
-  label,
-  pending,
-  onClick,
-}: {
-  label: string;
-  pending: boolean;
-  onClick: () => void;
-}) => (
-  <Button
-    variant="ghost"
-    size="sm"
-    disabled={pending}
-    aria-busy={pending ? true : undefined}
-    onClick={onClick}
-  >
-    {pending && <Spinner />}
-    {label}
-  </Button>
-);
-
-/** Add to agents: `skill place <name>`, into every enabled agent. */
-const AddToAgents = ({ row }: { row: SkillRow }) => {
-  const label = `place ${row.key}`;
-  const pending = useSettling(label);
-  return (
-    <ActionButton
-      label="Add to agents"
-      pending={pending}
-      onClick={() => {
-        void runUntilSettled(["skill", "place", row.name], {
-          label,
-          success: (events) =>
-            `Added ${row.name} to ${agentsWord(placedCount(events))}`,
-        });
-      }}
-    />
-  );
-};
-
-/**
- * Reconnect: `skill place <name> --to <configuration>`. When the CLI refuses because the directory
- * holds another version, the dialog asks before running it again with --force.
- */
-const PutBack = ({
-  row,
-  placement,
-  agent,
-}: {
-  row: SkillRow;
-  placement: LibraryPlacement;
-  agent: string;
-}) => {
-  const label = `put back ${row.key} ${placement.configuration}`;
-  const pending = useSettling(label);
-  const [confirm, setConfirm] = useState(false);
-  const putBack = async (force: boolean) => {
-    const args = ["skill", "place", row.name, "--to", placement.configuration];
-    const outcome = await runUntilSettled(force ? [...args, "--force"] : args, {
-      label,
-      success: `Reconnected ${row.name} to ${agent}`,
-    });
-    if (
-      !force &&
-      outcome.exitCode === EXIT_CODES.refused &&
-      holdsOtherContent(outcome.events)
-    ) {
-      // The dialog answers this refusal: the error toast would only repeat it.
-      dismissToast();
-      setConfirm(true);
-    }
-  };
-  return (
-    <>
-      <ActionButton
-        label="Reconnect"
-        pending={pending}
-        onClick={() => {
-          void putBack(false);
-        }}
-      />
-      <Dialog open={confirm} onOpenChange={setConfirm}>
-        <DialogContent>
-          <DialogHeader showCloseButton={false}>
-            <DialogTitle>{`Replace ${agent}'s copy?`}</DialogTitle>
-            <DialogDescription>
-              {`${agent}'s copy of ${row.name} is different from the one in your library. Replacing it deletes ${agent}'s changes.`}
-            </DialogDescription>
-          </DialogHeader>
-          <p className="type-technical text-text-caption m-0 break-all">
-            {placement.path}
-          </p>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="ghost">Cancel</Button>
-            </DialogClose>
-            <Button
-              variant="danger"
-              onClick={() => {
-                setConfirm(false);
-                void putBack(true);
-              }}
-            >
-              Replace
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-};
-
 const BannerActions = ({ row, banner }: { row: SkillRow; banner: Banner }) => {
   switch (banner.action?.kind) {
     case "add-to-agents": {
@@ -179,12 +51,21 @@ const BannerActions = ({ row, banner }: { row: SkillRow; banner: Banner }) => {
     }
     case "put-back": {
       return (
-        <PutBack
+        <Reconnect
           row={row}
           placement={banner.action.placement}
           agent={banner.action.agent}
         />
       );
+    }
+    case "adopt": {
+      return <Adopt name={row.name} />;
+    }
+    case "add-source": {
+      return <AddSource source={banner.action.source} />;
+    }
+    case "fork": {
+      return <Fork name={row.name} />;
     }
     case undefined: {
       return null;
