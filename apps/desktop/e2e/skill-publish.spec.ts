@@ -129,6 +129,10 @@ test.describe("banners", () => {
       "Only on this machine. Publish it to put it on your account remote."
     );
     await expect(note.getByRole("button")).toHaveText(["Publish"]);
+    // The banner says it: the title row has no Not published pill.
+    await expect(
+      pane(page, "draft").getByText("Not published", { exact: true })
+    ).toHaveCount(1);
   });
 
   test("your skill, never published, with no account remote: Open Settings", async ({
@@ -140,6 +144,9 @@ test.describe("banners", () => {
     await expect(note).toHaveAccessibleName("Not published");
     await expect(note).toContainText("Set an account remote to publish it.");
     await expect(note.getByRole("button")).toHaveText(["Open Settings"]);
+    await expect(
+      pane(page, "draft").getByText("Not published", { exact: true })
+    ).toHaveCount(1);
     await note.getByRole("button", { name: "Open Settings" }).click();
     await expect(page).toHaveURL(/#\/settings$/u);
     expect(later(cli)).toEqual([]);
