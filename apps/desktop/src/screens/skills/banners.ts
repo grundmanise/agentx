@@ -61,6 +61,11 @@ export interface Banner {
    * keep them.
    */
   covers?: PillKind[];
+  /**
+   * Whether this banner says where the skill came from. The detail pane's title row then leaves
+   * out the origin text beside the name.
+   */
+  coversOrigin?: boolean;
 }
 
 /** What the banners read besides the row: the store's sources and the skill's diff. */
@@ -155,8 +160,9 @@ const table: BannerRule[] = [
       const tool = row.adoption === undefined ? "" : toolName(row.adoption);
       return {
         action: { kind: "adopt" },
-        text: "Adopt to manage from agentx",
-        title: `From ${tool}`,
+        coversOrigin: true,
+        text: "Adopt to manage it from agentx",
+        title: `Added by ${tool}`,
         tone: "neutral",
       };
     },
