@@ -80,7 +80,7 @@ export const inventory = {
   skills: [
     ...skillsInventory.skills,
     node("lint", "h-lint", "Lint a change before it lands"),
-    node("legacy", "h-legacy", "An old copy the skills CLI left as a link"),
+    node("legacy", "h-legacy", "Format a changelog from release tags"),
   ],
 } satisfies InlineEvent;
 

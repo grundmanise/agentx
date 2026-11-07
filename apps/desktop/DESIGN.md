@@ -746,6 +746,8 @@ Mono caption 10.5–11 / `.16em` uppercase `group.label` plus a count in `group.
 
 `banner.radius`, `banner.padding`, `tone.*.bg` + 1px `tone.*.border`; `banner.tile` icon tile in `tone.*.fg`; title 14 / 500 `banner.title`; text 13 `banner.text`; actions on the right.
 
+A state the banner says is not said again in the title row: each banner lists the status pills it covers (`covers` in `src/screens/skills/banners.ts`), and the detail header leaves those pills out while that banner shows. Today "Source removed" covers the Source removed pill, "Removed from source" covers the Removed from source pill, and both "Not published" banners cover the Not published pill ("Edits not published" and "Edited outside agentx" cover nothing); the displaced, "Not in any agent" and "From {tool}" banners have no matching pill, and a pill the banner does not cover ("Update waiting" beside any banner) stays. The list rows have no banner and keep every pill. A new banner that says a pill's state adds that pill to its `covers`.
+
 ### Agent client card (Agents page)
 
 One card per agent configuration whose client does not read the library, in a 4-column grid with `agent-card.gap`: `card.bg`, 1px `card.border`, `agent-card.radius`, `agent-card.padding`. Top row: the `agent-card.logo` logo at the left and the Enabled switch (§6 "Switch") at the right. Then the client's name in `type.agent-card-name` `card.title`, its configuration path in `type.technical` `text.caption` on one line with an ellipsis, and "{n} skills · {n} servers · {n} plugins" in `type.secondary` `card.text` with the numbers in `text.primary`, 500. Enabled decides only where later installs and creations go when no agent is named; it never changes a placement, so the counts do not move when the switch does.
