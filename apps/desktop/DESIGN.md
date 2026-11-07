@@ -429,6 +429,7 @@ Each row is a type token: a role with its face, size, weight, line height, track
 | `type.notice` | sans | 13 | 400 | 1.5 |  |  | Stale bar text; hint and warnings in an error toast |
 | `type.server-name` | sans | 14.5 | 500 |  |  |  | Server name in a server row (`text.primary`) |
 | `type.transport-pill` | mono | 11.5 | 500 |  |  |  | Transport pill (`server.transport-text` on `server.transport-bg`) |
+| `type.settings-label` | sans | 14 | 500 |  |  |  | Settings section label (`text.primary`); the line under it is `type.secondary` in `text.muted` |
 
 Text wrapping: `text-wrap:pretty` on multi-line copy. Single-line cells use `white-space:nowrap; overflow:hidden; text-overflow:ellipsis`.
 
@@ -480,6 +481,10 @@ A size or gap inside a component that no token lists uses Tailwind's spacing ste
 | `detail.columns-gap` | 40 | `gap-detail-columns` | Details ↔ History |
 | `detail.kv-gap` | 12 12 | `gap-detail-kv` | Details key/value grid (row, column) |
 | `detail.kv-key-width` | 96 | `w-detail-key` |  |
+| `settings.columns` | 240 · up to 560 | `grid-cols-settings` | Settings section: the label column, then the content |
+| `settings.column-gap` | 24 | `gap-x-settings-columns` | Settings label column → content |
+| `settings.section-padding` | 28 | `py-settings-section` | Above and below each Settings section, between its hairlines |
+| `settings.section-gap` | 16 | `gap-settings-section` | Between the rows of a Settings section's content |
 
 ### Lists and rows
 
@@ -832,6 +837,10 @@ A `card.bg` card, `file-card.radius`, 1px `card.border`, holding one row per fil
 ### Inputs
 
 `input.height`, `input.bg`, `input.border`, `input.radius`, padding 0 `input.padding-x`, 14px; focus `input.border-focus`. Mono for URLs and commands. Search field in lists: `input.search-height`, `input.search-radius`, `input.search-padding`, icon at left, placeholder `input.placeholder`.
+
+### Settings
+
+The Settings page (`src/screens/settings`): the serif page title, then one section per area, a hairline (`shell.divider`) between two sections and none above the first. A section is a `settings.columns` grid with `settings.column-gap`, `settings.section-padding` above and below: the label column holds the section label in `type.settings-label` `text.primary` and, under it, one line in `type.secondary` `text.muted`; the content column holds the section's rows, `settings.section-gap` apart. Inputs are `input.height`; paths and ids are `type.technical`, ids in `text.hint`. A switch row is the setting's name in `type.body` `text.primary` and its line in `type.secondary` `text.muted`, with the switch (§6 "Switch") at the right; the whole row is the hit target. A failure under a field is the CLI's message in `type.notice` `tone.danger.fg`, its hint under it in `text.muted`.
 
 ## 7. Iconography
 
