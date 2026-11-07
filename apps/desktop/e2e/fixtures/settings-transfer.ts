@@ -1,4 +1,4 @@
-// What the Another machine and Skills from the skills CLI sections of Settings are tested against:
+// What the Another machine and Skills from the Skills CLI sections of Settings are tested against:
 // the sources before and after an import, the events of `export`, `import --yes` and
 // `adopt --all`, and an adoption preview with two candidates, a refused record and a managed one.
 import type { InlineEvent } from "../harness/cli.ts";

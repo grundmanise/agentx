@@ -1,4 +1,4 @@
-// The Skills from the skills CLI section of Settings: what the adoption preview (`adopt`, which
+// The Skills from the Skills CLI section of Settings: what the adoption preview (`adopt`, which
 // writes nothing) found that agentx can take over, and Adopt all, which runs `adopt --all` with
 // its progress. Adopting installs each skill again from its source and replaces the copy the other
 // tool left (ADR 0012). The section shows only while the preview has candidates; the records the
@@ -30,7 +30,7 @@ const progressText = (progress: ProgressEvent | undefined) => {
 };
 
 /**
- * Skills from the skills CLI: the count, Adopt all, and the refused records with their reason;
+ * Skills from the Skills CLI: the count, Adopt all, and the refused records with their reason;
  * nothing while the preview has no candidate.
  */
 export const SkillsCliSection = () => {
@@ -58,8 +58,8 @@ export const SkillsCliSection = () => {
   };
   return (
     <SettingsSection
-      title="Skills from the skills CLI"
-      description="Skills the Vercel skills CLI installed that agentx can take over. Adopting installs each one again from its source and replaces the copy the skills CLI left."
+      title="Skills from the Skills CLI"
+      description="Skills the Vercel Skills CLI installed that agentx can take over. Adopting installs each one again from its source and replaces the copy the Skills CLI left."
     >
       <div className="flex items-center justify-between gap-3">
         <p className="type-body text-text-primary m-0">
@@ -95,7 +95,7 @@ export const SkillsCliSection = () => {
                   {record.name}
                 </span>
                 <span className="type-secondary text-text-muted">
-                  {record.reason ?? "The skills CLI's record names no source"}
+                  {record.reason ?? "The Skills CLI's record names no source"}
                 </span>
               </li>
             ))}

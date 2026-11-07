@@ -1,4 +1,4 @@
-// The Another machine and Skills from the skills CLI sections of Settings: Export runs
+// The Another machine and Skills from the Skills CLI sections of Settings: Export runs
 // `export <name>` (with --force after the overwrite confirm), Import runs `import <file> --yes` on
 // the file the open dialog returns after its confirm, lists each `import_skill` and adds the
 // sources this machine has not fetched one after another, and Adopt all runs `adopt --all`.
@@ -44,7 +44,7 @@ const toasts = (page: Page) =>
 const anotherMachine = (page: Page) =>
   page.getByRole("region", { name: "Another machine" });
 const skillsCli = (page: Page) =>
-  page.getByRole("region", { name: "Skills from the skills CLI" });
+  page.getByRole("region", { name: "Skills from the Skills CLI" });
 
 const openSettings = async (cli: MockCli, page: Page) => {
   cli.register(["source", "list"], { events: sourcesBefore });
@@ -221,7 +221,7 @@ test("Adopt all runs adopt --all with its progress and lists the refused record"
   await openSettings(cli, page);
   const section = skillsCli(page);
   await expect(section).toContainText("2 can be adopted");
-  await expect(section).toContainText("replaces the copy the skills CLI left");
+  await expect(section).toContainText("replaces the copy the Skills CLI left");
   await expect(
     section.getByRole("list", { name: "Can't adopt" }).getByRole("listitem")
   ).toHaveText([
@@ -236,7 +236,7 @@ test("Adopt all runs adopt --all with its progress and lists the refused record"
   expect(later(cli)).toEqual([["adopt", "--all", "--json"]]);
 });
 
-test("the skills CLI section is hidden without candidates", async ({
+test("the Skills CLI section is hidden without candidates", async ({
   cli,
   page,
 }) => {
