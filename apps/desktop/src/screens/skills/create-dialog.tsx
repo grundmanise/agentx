@@ -141,6 +141,7 @@ const CreateSkillForm = ({
           kind="mono"
           placeholder="my-skill"
           aria-describedby={nameHintId}
+          aria-required
           aria-invalid={broken || nameRefused ? true : undefined}
           value={name}
           onChange={(e) => {
