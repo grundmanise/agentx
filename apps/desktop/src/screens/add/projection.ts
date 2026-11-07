@@ -11,6 +11,7 @@ import type {
   SourceEvent,
   SourceSkillEvent,
 } from "#/cli/events.gen.ts";
+import { formatAgo } from "#/lib/dates.ts";
 import { shortSource } from "#/screens/skills/projection.ts";
 
 /** The key of the Your skills pill and the source of its cards, beside the source ids and URLs. */
@@ -99,20 +100,9 @@ export const fetchedLabel = (
   lastFetched: string | undefined,
   now: number
 ): string => {
-  const age = lastFetched === undefined ? undefined : ageOf(lastFetched, now);
-  if (age === undefined) {
-    return "Not fetched yet";
-  }
-  if (age < MINUTE) {
-    return "Checked just now";
-  }
-  if (age < HOUR) {
-    return `Checked ${count(Math.floor(age / MINUTE), "minute")} ago`;
-  }
-  if (age < DAY) {
-    return `Checked ${count(Math.floor(age / HOUR), "hour")} ago`;
-  }
-  return `Checked ${count(Math.floor(age / DAY), "day")} ago`;
+  const ago =
+    lastFetched === undefined ? undefined : formatAgo(lastFetched, now);
+  return ago === undefined ? "Not fetched yet" : `Checked ${ago}`;
 };
 
 /** Why a card cannot be selected, from the inventory's library. */

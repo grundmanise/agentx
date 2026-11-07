@@ -10,8 +10,10 @@
 // the skills CLI, Command line. Insert the new entry under its slot's comment and keep the comment.
 import type { ComponentType } from "react";
 
+import { AccountRemoteSection } from "#/screens/settings/account-remote.tsx";
 import { CommandLineSection } from "#/screens/settings/command-line.tsx";
 import { ComparingEditsSection } from "#/screens/settings/comparing-edits.tsx";
+import { SourcesSection } from "#/screens/settings/sources.tsx";
 import { StorageSection } from "#/screens/settings/storage.tsx";
 import { ThisMachineSection } from "#/screens/settings/this-machine.tsx";
 
@@ -25,7 +27,9 @@ interface Section {
 const sections: Section[] = [
   { Section: ThisMachineSection, id: "this-machine" },
   // Slot: Account remote.
+  { Section: AccountRemoteSection, id: "account-remote" },
   // Slot: Sources.
+  { Section: SourcesSection, id: "sources" },
   { Section: ComparingEditsSection, id: "comparing-edits" },
   { Section: StorageSection, id: "storage" },
   // Slot: Another machine.
