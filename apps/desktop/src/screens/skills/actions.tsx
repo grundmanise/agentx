@@ -24,6 +24,7 @@ import {
 } from "#/screens/skills/placements.ts";
 import { shortSource } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
+import { updateLabel, updateSkill } from "#/screens/skills/updates.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 
 /** The label of the Adopt control for `name`: the runner's name for it. */
@@ -201,5 +202,24 @@ export const Fork = ({ name }: { name: string }) => {
         });
       }}
     />
+  );
+};
+
+/** Update: `skill update <name>`, the primary action of an update's banner. */
+export const UpdateButton = ({ row }: { row: SkillRow }) => {
+  const pending = useSettling(updateLabel(row.name));
+  return (
+    <Button
+      variant="primary"
+      size="sm"
+      disabled={pending}
+      aria-busy={pending ? true : undefined}
+      onClick={() => {
+        void updateSkill(row);
+      }}
+    >
+      {pending && <Spinner />}
+      Update
+    </Button>
   );
 };
