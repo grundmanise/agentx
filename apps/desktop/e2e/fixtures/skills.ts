@@ -272,7 +272,7 @@ export const inventory = {
   type: "inventory",
 } satisfies InlineEvent;
 
-/** What `adopt` would take over: the unmanaged library skill the skills CLI installed. */
+/** What `adopt` would take over: the unmanaged library skill the Skills CLI installed. */
 export const adoption: AdoptionEvent[] = [
   {
     file: "/home/me/.agents/.skill-lock.json",

@@ -126,7 +126,7 @@ export const fromAnotherMachine = (update: UpdateAvailableEvent) =>
 export const toolName = (adoption: AdoptionEvent): string => {
   switch (adoption.tool) {
     case "vercel": {
-      return "skills CLI";
+      return "Skills CLI";
     }
     case "skillshare": {
       return "Skillshare";
