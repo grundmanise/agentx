@@ -15,6 +15,7 @@ import { canFork } from "#/screens/skills/fork.ts";
 import { HistorySection } from "#/screens/skills/history.tsx";
 import { openSkill } from "#/screens/skills/open.ts";
 import {
+  filesVersionOf,
   glyphLit,
   glyphOf,
   glyphTitle,
@@ -24,6 +25,7 @@ import type { SkillRow } from "#/screens/skills/projection.ts";
 import { RemoveDialog, removeLabel } from "#/screens/skills/remove-dialog.tsx";
 import { pillTones } from "#/screens/skills/skill-row.tsx";
 import { useSettling } from "#/store/settle.ts";
+import { useAppStore } from "#/store/store.ts";
 
 const Caption = ({ children }: { children: string }) => (
   <h2 className="type-caption text-text-caption m-0">{children}</h2>
@@ -72,7 +74,15 @@ export const SkillDetail = ({
   configurations: Configuration[];
 }) => {
   const [removing, setRemoving] = useState(false);
-  const banner = bannerFor(row, configurations);
+  const sources = useAppStore((s) => s.sources);
+  // How many files `skill diff` found changed, from the FILES read of this version of the skill.
+  const changedFiles = useAppStore((s) => {
+    const read = s.files[row.key];
+    return read?.failed === undefined && read?.version === filesVersionOf(row)
+      ? read.diffs?.length
+      : undefined;
+  });
+  const banner = bannerFor(row, configurations, { changedFiles, sources });
   const details = detailsOf(row, configurations);
   // A state the banner says is not said again by a pill in the title row.
   const pills = row.pills.filter(
