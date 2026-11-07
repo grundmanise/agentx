@@ -168,7 +168,7 @@ test.describe("the list", () => {
       draft.getByText("Not published", { exact: true })
     ).toBeVisible();
     await expect(draft).toHaveAccessibleDescription(
-      "Your skill · Enabled. Not published. A skill you started and never published"
+      "Your skill · Enabled. Not published. Turn a design doc into a task list"
     );
     expect(await names(draft.getByRole("img"))).toEqual([
       "Codex",
@@ -623,7 +623,7 @@ test.describe("the detail pane", () => {
         - text: Unmanaged · Enabled
         - heading "scratch" [level=1]
         - text: skills CLI
-        - paragraph: Notes the skills CLI installed
+        - paragraph: Summarise a long thread into notes
         - region "Agents":
           - heading "Agents" [level=2]
           - switch "Claude Code"
@@ -684,10 +684,10 @@ test.describe("the detail pane", () => {
     await expect(banner).toContainText(
       "No updates are possible for this skill unless it is added again in the source."
     );
-    // The pill in the title row reads the same as the banner's title.
+    // The banner says it; the title row does not say it again.
     await expect(
       article.getByText("Removed from source", { exact: true })
-    ).toHaveCount(2);
+    ).toHaveCount(1);
 
     await row(page, "release-notes").click();
     const cursor = pane(page, "release-notes").getByRole("switch", {
@@ -701,6 +701,60 @@ test.describe("the detail pane", () => {
         name: "Cursor is using its own copy of this skill",
       })
     ).toBeVisible();
+  });
+
+  test("a pill its banner covers stays on the row and leaves the title row; any other pill stays in both", async ({
+    cli,
+    page,
+  }) => {
+    // gone also has an update waiting: a pill its "Removed from source" banner does not cover.
+    cli.onServeStart({
+      events: [
+        {
+          ...inventory,
+          library: inventory.library.map((entry) =>
+            entry.name === "gone" ? { ...entry, pending_merge: true } : entry
+          ),
+        },
+      ],
+    });
+    cli.register(["adopt"], { events: adoption });
+    cli.register(["skill", "history", "draft"], { events: [] });
+    for (const name of ["gone", "draft"]) {
+      cli.register(["skill", "files", name], { events: filesOf(name) });
+    }
+    await page.goto("/#/skills/gone");
+    const titleRow = pane(page, "gone").locator("header");
+    await expect(
+      pane(page, "gone").getByRole("note", { name: "Removed from source" })
+    ).toBeVisible();
+    await expect(
+      row(page, "gone").getByText("Removed from source", { exact: true })
+    ).toBeVisible();
+    await expect(
+      titleRow.getByText("Removed from source", { exact: true })
+    ).toHaveCount(0);
+    await expect(
+      row(page, "gone").getByText("Update waiting", { exact: true })
+    ).toBeVisible();
+    await expect(
+      titleRow.getByText("Update waiting", { exact: true })
+    ).toBeVisible();
+
+    // draft's "Not published" banner covers its Not published pill: the row keeps it, the title
+    // row leaves it out.
+    await row(page, "draft").click();
+    await expect(
+      pane(page, "draft").getByRole("note", { name: "Not published" })
+    ).toBeVisible();
+    await expect(
+      row(page, "draft").getByText("Not published", { exact: true })
+    ).toBeVisible();
+    await expect(
+      pane(page, "draft")
+        .locator("header")
+        .getByText("Not published", { exact: true })
+    ).toHaveCount(0);
   });
 });
 
