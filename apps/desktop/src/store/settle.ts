@@ -29,17 +29,27 @@ const clear = (label: string) => {
   });
 };
 
-/** Clears the control's mark once the serve child has answered every refresh request sent so far. */
-const clearWhenSettled = (label: string) => {
+/**
+ * Calls `then` once the serve child has answered every refresh request sent so far, or the last
+ * scan failed and none will be: when the inventory that follows a command has arrived.
+ */
+export const afterSettled = (then: () => void) => {
   if (settledIn(useAppStore.getState())) {
-    clear(label);
+    then();
     return;
   }
   const unsubscribe = useAppStore.subscribe((s) => {
     if (settledIn(s)) {
       unsubscribe();
-      clear(label);
+      then();
     }
+  });
+};
+
+/** Clears the control's mark once the serve child has answered every refresh request sent so far. */
+const clearWhenSettled = (label: string) => {
+  afterSettled(() => {
+    clear(label);
   });
 };
 
