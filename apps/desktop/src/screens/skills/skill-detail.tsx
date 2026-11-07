@@ -56,8 +56,9 @@ const RemoveButton = ({
 
 /**
  * The right pane: what the CLI reports about one skill. Header: the title row with the name,
- * origin, pills, a pill per fork made from it under a new name, which opens that fork, and at its
- * right end the action row (Fork for a skill that is not yet yours, Remove for a library skill; the other actions come with the changes
+ * origin, pills (less those the banner covers), a pill per fork made from it under a new name,
+ * which opens that fork, and at its right end the action row (Fork for a skill that is not yet
+ * yours, Remove for a library skill; the other actions come with the changes
  * that add them); then the description. One banner, with its
  * button; AGENTS, whose chips add and remove placements; FILES; then DETAILS and HISTORY side by
  * side. Every control runs one command and redraws from the inventory that follows.
@@ -83,6 +84,10 @@ export const SkillDetail = ({
   });
   const banner = bannerFor(row, configurations, { changedFiles, sources });
   const details = detailsOf(row, configurations);
+  // A state the banner says is not said again by a pill in the title row.
+  const pills = row.pills.filter(
+    (pill) => !(banner?.covers?.includes(pill.kind) ?? false)
+  );
   return (
     <article
       aria-label={row.name}
@@ -102,7 +107,7 @@ export const SkillDetail = ({
           <span className="type-technical text-text-caption">
             {originOf(row)}
           </span>
-          {row.pills.map((pill) => (
+          {pills.map((pill) => (
             <Pill key={pill.kind} tone={pillTones[pill.kind]} size="detail">
               {pill.label}
             </Pill>
