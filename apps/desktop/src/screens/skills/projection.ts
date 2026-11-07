@@ -13,6 +13,7 @@ import type {
   SkillNode,
   UpdateAvailableEvent,
 } from "#/cli/events.gen.ts";
+import { formatDate } from "#/lib/dates.ts";
 
 /** Where a skill comes from, which decides its group, glyph, origin and Details. */
 export type SkillKindName = "yours" | "source" | "plugin" | "disk";
@@ -121,6 +122,25 @@ export const shortId = (id: string) => id.slice(0, 7);
  */
 export const fromAnotherMachine = (update: UpdateAvailableEvent) =>
   update.base_hash === "";
+
+/**
+ * The two versions of an update, base then newer, each by its date when the CLI dates it, else by
+ * its short id. An update from another machine has no base version, so it names the newer alone.
+ */
+export const updateVersions = (update: UpdateAvailableEvent): string => {
+  const newer =
+    update.candidate_upstream_time === undefined
+      ? shortId(update.candidate_upstream_commit || update.candidate)
+      : formatDate(update.candidate_upstream_time);
+  if (fromAnotherMachine(update)) {
+    return newer;
+  }
+  const base =
+    update.upstream_time === undefined
+      ? shortId(update.upstream_commit)
+      : formatDate(update.upstream_time);
+  return `${base} → ${newer}`;
+};
 
 /** The tool an adoption record names, as the product calls it. */
 export const toolName = (adoption: AdoptionEvent): string => {

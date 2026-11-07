@@ -18,7 +18,10 @@ export type BannerTone =
 
 /** What the banner's button does, one command each (src/screens/skills/actions.tsx). */
 export type BannerAction =
-  /** `skill update <name>`: takes in the update the last check found. */
+  /**
+   * `skill update <name>`: takes in the update the last check found. See changes sits beside it
+   * and opens the What's new sheet (src/screens/skills/update-sheet.tsx).
+   */
   | { kind: "update" }
   /** `skill place <name>`: every enabled agent, and puts back what is missing. */
   | { kind: "add-to-agents" }

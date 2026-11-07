@@ -1,7 +1,7 @@
 // The one banner of the detail pane (DESIGN.md §6 "Banner" and "Banner actions and dialogs"),
-// with its button: Update on the lime banners of an update, Add to agents on the gray "Not in any
-// agent" banner, Reconnect on the amber one, Adopt, Add source or Fork on the others. The buttons
-// are in src/screens/skills/actions.tsx.
+// with its button: See changes and Update on the lime banners of an update (See changes opens the
+// What's new sheet), Add to agents on the gray "Not in any agent" banner, Reconnect on the amber
+// one, Adopt, Add source or Fork on the others. The buttons are in src/screens/skills/actions.tsx.
 import { cva } from "class-variance-authority";
 
 import { AlertIcon } from "#/components/icons/alert.tsx";
@@ -12,6 +12,7 @@ import {
   Adopt,
   Fork,
   Reconnect,
+  SeeChanges,
   UpdateButton,
 } from "#/screens/skills/actions.tsx";
 import type { Banner } from "#/screens/skills/banners.ts";
@@ -50,7 +51,12 @@ const tileVariants = cva(
 const BannerActions = ({ row, banner }: { row: SkillRow; banner: Banner }) => {
   switch (banner.action?.kind) {
     case "update": {
-      return <UpdateButton row={row} />;
+      return (
+        <>
+          <SeeChanges row={row} />
+          <UpdateButton row={row} />
+        </>
+      );
     }
     case "add-to-agents": {
       return <AddToAgents row={row} />;

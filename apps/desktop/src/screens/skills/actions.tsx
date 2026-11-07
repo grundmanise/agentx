@@ -22,8 +22,9 @@ import {
   holdsOtherContent,
   placedCount,
 } from "#/screens/skills/placements.ts";
-import { shortSource } from "#/screens/skills/projection.ts";
+import { shortSource, updateVersions } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
+import { UpdateSheet } from "#/screens/skills/update-sheet.tsx";
 import { updateLabel, updateSkill } from "#/screens/skills/updates.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 
@@ -221,5 +222,37 @@ export const UpdateButton = ({ row }: { row: SkillRow }) => {
       {pending && <Spinner />}
       Update
     </Button>
+  );
+};
+
+/**
+ * See changes: opens the What's new sheet of the skill's update, beside Update on an update's
+ * banner. The sheet reads what the update changes and names its two versions, by date where the
+ * CLI dates them.
+ */
+export const SeeChanges = ({ row }: { row: SkillRow }) => {
+  const [open, setOpen] = useState(false);
+  const { update } = row;
+  if (update === undefined) {
+    return null;
+  }
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => {
+          setOpen(true);
+        }}
+      >
+        See changes
+      </Button>
+      <UpdateSheet
+        update={update}
+        versions={updateVersions(update)}
+        open={open}
+        onOpenChange={setOpen}
+      />
+    </>
   );
 };
