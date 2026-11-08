@@ -1,18 +1,21 @@
 // The one banner of the detail pane (DESIGN.md §6 "Banner" and "Banner actions and dialogs"),
 // with its button: See changes and Update on the lime banners of an update (See changes opens the
-// What's new sheet), Add to agents on the gray "Not in any agent" banner, Reconnect on the amber
-// one, Adopt, Add source or Fork on the others. The buttons are in src/screens/skills/actions.tsx.
+// What's new sheet), Show folder, Abort and Update on the amber one of a pending merge, Add to
+// agents on the gray "Not in any agent" banner, Reconnect on the amber one of a displaced skill,
+// Adopt, Add source or Fork on the others. The buttons are in src/screens/skills/actions.tsx.
 import { cva } from "class-variance-authority";
 
 import { AlertIcon } from "#/components/icons/alert.tsx";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import {
+  AbortMerge,
   AddSource,
   AddToAgents,
   Adopt,
   Fork,
   Reconnect,
   SeeChanges,
+  ShowMergeFolder,
   UpdateButton,
 } from "#/screens/skills/actions.tsx";
 import type { Banner } from "#/screens/skills/banners.ts";
@@ -54,6 +57,15 @@ const BannerActions = ({ row, banner }: { row: SkillRow; banner: Banner }) => {
       return (
         <>
           <SeeChanges row={row} />
+          <UpdateButton row={row} />
+        </>
+      );
+    }
+    case "conflict": {
+      return (
+        <>
+          <ShowMergeFolder name={row.name} />
+          <AbortMerge name={row.name} />
           <UpdateButton row={row} />
         </>
       );

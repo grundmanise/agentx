@@ -1,26 +1,34 @@
 import type { Configuration } from "#/cli/events.gen.ts";
 import { LogoStack } from "#/components/agent-logo.tsx";
+import { AlertTriangleIcon } from "#/components/icons/alert-triangle.tsx";
 import { ListRow } from "#/components/list-row.tsx";
 import { Pill } from "#/components/pill.tsx";
 import type { PillTone } from "#/components/pill.tsx";
 import { SkillGlyph } from "#/components/skill-glyph.tsx";
+import { bannerFor } from "#/screens/skills/banners.ts";
 import { glyphLit, glyphOf, glyphTitle } from "#/screens/skills/projection.ts";
 import type { PillKind, SkillRow } from "#/screens/skills/projection.ts";
 
 /** How many agent client logos a row shows before "+n". */
 const MAX_LOGOS = 4;
 
-export const pillTones: Record<PillKind, PillTone> = {
+const pillTones: Record<PillKind, PillTone> = {
   "not-published": "neutral",
-  "removed-from-source": "removed",
-  "source-removed": "removed",
-  "update-waiting": "update",
+};
+
+/** The banner title a row's alert triangle carries: only a banner that warns (attention or danger). */
+const alertOf = (row: SkillRow, configurations: Configuration[]) => {
+  const banner = bannerFor(row, configurations);
+  return banner?.tone === "attention" || banner?.tone === "danger"
+    ? banner.title
+    : undefined;
 };
 
 /**
- * One skill in the list: glyph, name, pills, a small fork marker for each fork made from it under
- * a new name, and the logos of the agent clients that see it, then its description. Selecting it
- * shows the skill in the detail pane.
+ * One skill in the list: glyph, name, its one possible pill, an amber alert triangle when its
+ * banner warns, a small fork marker for each fork made from it under a new name, and the logos
+ * of the agent clients that see it, then its description. Selecting it shows the skill in the
+ * detail pane, where the banner says what the alert triangle stands for.
  */
 export const SkillRowItem = ({
   row,
@@ -40,9 +48,11 @@ export const SkillRowItem = ({
     .map((id) => configurations.find((c) => c.id === id))
     .filter((c) => c !== undefined);
   const shown = clients.slice(0, MAX_LOGOS);
+  const alert = alertOf(row, configurations);
   const description = [
     glyphTitle(row),
     ...row.pills.map((pill) => pill.label),
+    alert ?? "",
     ...forks.map((fork) => `Forked as ${fork.name}`),
     row.description,
   ]
@@ -78,6 +88,15 @@ export const SkillRowItem = ({
               {pill.label}
             </Pill>
           ))}
+          {alert !== undefined && (
+            <span
+              aria-label={alert}
+              title={alert}
+              className="text-tone-attention-fg flex flex-none"
+            >
+              <AlertTriangleIcon size="xs" />
+            </span>
+          )}
           {forks.map((fork) => (
             <SkillGlyph
               key={fork.key}

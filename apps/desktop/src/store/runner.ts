@@ -165,6 +165,31 @@ const errorToastOf = (
       .map((l) => l.message),
   };
 
+/**
+ * Keeps the `conflict` events of a command, by skill: the merge each left pending. A skill the
+ * command emitted with no conflict, such as an update that went through or `--abort`, has none.
+ */
+const keepConflicts = (events: CliEvent[]) => {
+  const conflicts = events.filter((e) => e.type === "conflict");
+  const settled = events
+    .filter((e) => e.type === "library_skill")
+    .filter((e) => !conflicts.some((c) => c.name === e.name));
+  if (conflicts.length === 0 && settled.length === 0) {
+    return;
+  }
+  useAppStore.setState((s) => {
+    const kept = Object.entries(s.conflicts).filter(
+      ([name]) => !settled.some((e) => e.name === name)
+    );
+    return {
+      conflicts: Object.fromEntries([
+        ...kept,
+        ...conflicts.map((c) => [c.name, c] as const),
+      ]),
+    };
+  });
+};
+
 /** Shows the outcome, by exit code (docs/spec/cli-contract.md, Exit codes). */
 const report = (
   args: readonly string[],
@@ -279,6 +304,7 @@ export const runCommand = async (
       setPending(options.label, undefined);
     }
   }
+  keepConflicts(outcome.events);
   const read = isRead(args);
   if (!read) {
     void refresh();
