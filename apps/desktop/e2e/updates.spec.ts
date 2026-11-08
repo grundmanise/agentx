@@ -324,7 +324,7 @@ test.describe("banners", () => {
     ).toBeVisible();
     await page.goto("/#/skills/gone");
     await expect(
-      pane(page, "gone").getByRole("note", { name: "Removed from source" })
+      pane(page, "gone").getByRole("note", { name: "No longer in zeta/tools" })
     ).toBeVisible();
   });
 });

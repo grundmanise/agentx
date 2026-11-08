@@ -17,10 +17,8 @@ import type {
 /** Where a skill comes from, which decides its group, glyph, origin and Details. */
 export type SkillKindName = "yours" | "source" | "plugin" | "disk";
 
-export type PillKind =
-  | "not-published"
-  | "removed-from-source"
-  | "source-removed";
+/** A row's one status pill: one of your own skills not yet published. */
+export type PillKind = "not-published";
 
 export interface Pill {
   kind: PillKind;
@@ -176,12 +174,6 @@ const pillsOf = (entry: LibraryEntry, kind: SkillKindName): Pill[] => {
   const pills: Pill[] = [];
   if (kind === "yours" && drift.includes("not published")) {
     pills.push({ kind: "not-published", label: "Not published" });
-  }
-  if (drift.includes("upstream removed")) {
-    pills.push({ kind: "removed-from-source", label: "Removed from source" });
-  }
-  if (drift.includes("source removed")) {
-    pills.push({ kind: "source-removed", label: "Source removed" });
   }
   return pills;
 };
