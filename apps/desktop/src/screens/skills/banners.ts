@@ -59,43 +59,45 @@ interface BannerRule {
 const agentName = (configurations: Configuration[], id: string) =>
   configurations.find((c) => c.id === id)?.name ?? id;
 
-/** The files an update changes, by path, joined as one line, then `kept` when the skill has edits. */
-const changedFiles = (row: SkillRow, kept: string) =>
+/** The files an update changes, by path, joined as one line, then the promise when the skill has edits. */
+const changedFiles = (row: SkillRow) =>
   [
     ...(row.update?.files ?? []).map((f) => f.path),
-    ...(row.modified ? [kept] : []),
+    ...(row.modified ? ["Your local edits are kept."] : []),
   ].join(" · ");
+
+/**
+ * Where an update comes from: its source, or for one of your own skills with an upstream, the
+ * upstream.
+ */
+const updateOrigin = (row: SkillRow) => {
+  const upstream =
+    row.kind === "yours"
+      ? (row.update?.upstream ?? row.entry?.upstream)
+      : undefined;
+  return shortSource(upstream ?? row.update?.source ?? row.entry?.source ?? "");
+};
 
 const table: BannerRule[] = [
   {
     banner: (row) => ({
       action: { kind: "update" },
       icon: "update",
+      text: changedFiles(row),
+      title: `New version from ${updateOrigin(row)}`,
+      tone: "primary",
+    }),
+    when: (row) => row.update !== undefined && !fromAnotherMachine(row.update),
+  },
+  {
+    banner: (row) => ({
+      action: { kind: "update" },
+      icon: "update",
       text: (row.update?.files ?? []).map((f) => f.path).join(" · "),
-      title: "Changes from your other machines",
+      title: "Published from another machine",
       tone: "primary",
     }),
     when: (row) => row.update !== undefined && fromAnotherMachine(row.update),
-  },
-  {
-    banner: (row) => ({
-      action: { kind: "update" },
-      icon: "update",
-      text: changedFiles(row, "edits you have not published are kept"),
-      title: "The original has a new version",
-      tone: "primary",
-    }),
-    when: (row) => row.update !== undefined && row.kind === "yours",
-  },
-  {
-    banner: (row) => ({
-      action: { kind: "update" },
-      icon: "update",
-      text: changedFiles(row, "your edits are kept"),
-      title: `A newer version from ${shortSource(row.update?.source ?? row.entry?.source ?? "")}`,
-      tone: "primary",
-    }),
-    when: (row) => row.update !== undefined,
   },
   {
     banner: (row, configurations) => {

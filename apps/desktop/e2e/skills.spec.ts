@@ -707,17 +707,7 @@ test.describe("the detail pane", () => {
     cli,
     page,
   }) => {
-    // gone also has an update waiting: a pill its "Removed from source" banner does not cover.
-    cli.onServeStart({
-      events: [
-        {
-          ...inventory,
-          library: inventory.library.map((entry) =>
-            entry.name === "gone" ? { ...entry, pending_merge: true } : entry
-          ),
-        },
-      ],
-    });
+    cli.onServeStart({ events: [inventory] });
     cli.register(["adopt"], { events: adoption });
     cli.register(["skill", "history", "draft"], { events: [] });
     for (const name of ["gone", "draft", "scratch"]) {
@@ -734,12 +724,6 @@ test.describe("the detail pane", () => {
     await expect(
       titleRow.getByText("Removed from source", { exact: true })
     ).toHaveCount(0);
-    await expect(
-      row(page, "gone").getByText("Update waiting", { exact: true })
-    ).toBeVisible();
-    await expect(
-      titleRow.getByText("Update waiting", { exact: true })
-    ).toBeVisible();
     // The origin of a skill of a source is not what its banner says: it stays beside the name.
     await expect(
       titleRow.getByText("zeta/tools", { exact: true })

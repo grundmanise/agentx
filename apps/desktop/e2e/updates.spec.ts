@@ -52,11 +52,24 @@ const update = (page: Page, name: string) =>
   pane(page, name).getByRole("button", { exact: true, name: "Update" });
 const toasts = (page: Page) =>
   page.getByRole("region", { name: /^Notifications/u });
-/** Selects `name` and expects its banner to offer Update, or not. */
+/** The banner of an update, whichever of the two it is. */
+const updateBanner = (page: Page, name: string) =>
+  pane(page, name).getByRole("note", {
+    name: /^(?:New version from |Published from another machine$)/u,
+  });
+/** Selects `name` and expects the banner of an update, with its Update, or none. */
 const expectOffered = async (page: Page, name: string, offers: boolean) => {
   await row(page, name).click();
   await expect(pane(page, name)).toBeVisible();
-  await expect(update(page, name)).toHaveCount(offers ? 1 : 0);
+  await expect(updateBanner(page, name)).toHaveCount(offers ? 1 : 0);
+  if (offers) {
+    await expect(
+      updateBanner(page, name).getByRole("button", {
+        exact: true,
+        name: "Update",
+      })
+    ).toBeVisible();
+  }
 };
 const checkButton = (page: Page) =>
   page.getByRole("button", { exact: true, name: "Check updates" });
@@ -139,7 +152,7 @@ test.describe("Update", () => {
     {
       events: [updated("review", "modified")],
       name: "review",
-      toast: "Updated review and kept your edits",
+      toast: "Updated review. Merged with your local edits",
     },
     {
       events: [updated("pdf-letters", "modified")],
@@ -172,7 +185,7 @@ test.describe("Update", () => {
     });
   }
 
-  test("exit 4: the merge waits for the user's choices", async ({
+  test("exit 4: the merge waits for the user to resolve its conflicts", async ({
     cli,
     page,
   }) => {
@@ -195,7 +208,10 @@ test.describe("Update", () => {
     });
     await update(page, "review").click();
     await expect(
-      toasts(page).getByText("Updated review. It needs your choices")
+      toasts(page).getByText(
+        "Conflicts in review. Resolve them to finish the update",
+        { exact: true }
+      )
     ).toBeVisible();
     // The runner opens the skill whose merge waits.
     await expect(pane(page, "review")).toBeVisible();
@@ -264,22 +280,23 @@ test.describe("banners", () => {
     {
       name: "pdf",
       text: "SKILL.md · scripts/convert.py",
-      title: "A newer version from acme/skills",
+      title: "New version from acme/skills",
     },
     {
       name: "review",
-      text: "SKILL.md · your edits are kept",
-      title: "A newer version from acme/skills",
+      text: "SKILL.md · Your local edits are kept.",
+      title: "New version from acme/skills",
     },
+    // One of your own skills: the update comes from the upstream it was forked from.
     {
       name: "pdf-letters",
-      text: "SKILL.md · examples.md · edits you have not published are kept",
-      title: "The original has a new version",
+      text: "SKILL.md · examples.md · Your local edits are kept.",
+      title: "New version from acme/skills",
     },
     {
       name: "release-notes",
       text: "template.md",
-      title: "Changes from your other machines",
+      title: "Published from another machine",
     },
   ];
   for (const c of cases) {
@@ -287,7 +304,7 @@ test.describe("banners", () => {
       await open(cli, page, c.name);
       const banner = pane(page, c.name).getByRole("note", { name: c.title });
       await expect(banner).toBeVisible();
-      await expect(banner).toContainText(c.text);
+      await expect(banner.getByText(c.text, { exact: true })).toBeVisible();
       await expect(
         banner.getByRole("button", { exact: true, name: "Update" })
       ).toBeVisible();
@@ -396,7 +413,7 @@ test.describe("Check updates", () => {
     await expect(update(page, "pdf")).toHaveCount(0);
   });
 
-  test("exit 3: names the source it could not reach, with the hint, and lists the updates found", async ({
+  test("exit 3: names the source it could not reach, with a line of the app's own, and lists the updates found", async ({
     cli,
     page,
   }) => {
@@ -438,9 +455,15 @@ test.describe("Check updates", () => {
     });
     await checkButton(page).click();
     await expect(
-      toasts(page).getByText("Checked. Couldn't reach zeta/tools")
+      toasts(page).getByText("Couldn't reach zeta/tools", { exact: true })
     ).toBeVisible();
-    await expect(toasts(page).getByText(hint)).toBeVisible();
+    // The app's own second line, in place of the CLI's hint.
+    await expect(
+      toasts(page).getByText("Verify that you can reach the source", {
+        exact: true,
+      })
+    ).toBeVisible();
+    await expect(toasts(page).getByText(hint)).toHaveCount(0);
     await expectOffered(page, "pdf", true);
     await expectOffered(page, "review", true);
     await expectOffered(page, "pdf-letters", false);
@@ -448,39 +471,50 @@ test.describe("Check updates", () => {
 });
 
 test.describe("Update all", () => {
-  test("exit 4: Updated {k} skills. {m} need your choices", async ({
-    cli,
-    page,
-  }) => {
-    await open(cli, page, "pdf", []);
-    cli.register(["skill", "check-updates"], {
-      events: [pdfUpdate, lettersUpdate, releaseNotesUpdate, reviewUpdate],
+  const cases = [
+    { conflicted: ["review"], toast: "Updated 3 skills. 1 has conflicts" },
+    {
+      conflicted: ["review", "pdf-letters"],
+      toast: "Updated 2 skills. 2 have conflicts",
+    },
+  ];
+  for (const c of cases) {
+    test(`exit 4: "${c.toast}"`, async ({ cli, page }) => {
+      await open(cli, page, "pdf", []);
+      cli.register(["skill", "check-updates"], {
+        events: [pdfUpdate, lettersUpdate, releaseNotesUpdate, reviewUpdate],
+      });
+      await checkButton(page).click();
+      const names = ["pdf", "pdf-letters", "release-notes", "review"];
+      cli.register(["skill", "update", "--all"], {
+        events: [
+          ...names
+            .filter((name) => !c.conflicted.includes(name))
+            .map((name) => updated(name, "current")),
+          ...c.conflicted.map((name): InlineEvent => ({
+            files: [],
+            kind: "managed",
+            name,
+            type: "conflict",
+          })),
+          {
+            code: "pending_merge",
+            message: `${c.conflicted.length} of 4 skills could not be updated: the update conflicts with their edits`,
+            type: "error",
+          },
+        ],
+        exitCode: 4,
+      });
+      await toasts(page)
+        .getByRole("button", { exact: true, name: "Update all" })
+        .click();
+      await expect(
+        toasts(page).getByText(c.toast, { exact: true })
+      ).toBeVisible();
+      expect(later(cli)).toEqual([
+        ["skill", "check-updates", "--json"],
+        ["skill", "update", "--all", "--json"],
+      ]);
     });
-    await checkButton(page).click();
-    cli.register(["skill", "update", "--all"], {
-      events: [
-        updated("pdf", "current"),
-        updated("pdf-letters", "modified"),
-        updated("release-notes", "current"),
-        { files: [], kind: "managed", name: "review", type: "conflict" },
-        {
-          code: "pending_merge",
-          message:
-            "1 of 4 skills could not be updated: review: the update conflicts with its edits",
-          type: "error",
-        },
-      ],
-      exitCode: 4,
-    });
-    await toasts(page)
-      .getByRole("button", { exact: true, name: "Update all" })
-      .click();
-    await expect(
-      toasts(page).getByText("Updated 3 skills. 1 needs your choices")
-    ).toBeVisible();
-    expect(later(cli)).toEqual([
-      ["skill", "check-updates", "--json"],
-      ["skill", "update", "--all", "--json"],
-    ]);
-  });
+  }
 });

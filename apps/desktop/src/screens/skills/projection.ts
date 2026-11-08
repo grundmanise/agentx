@@ -20,8 +20,7 @@ export type SkillKindName = "yours" | "source" | "plugin" | "disk";
 export type PillKind =
   | "not-published"
   | "removed-from-source"
-  | "source-removed"
-  | "update-waiting";
+  | "source-removed";
 
 export interface Pill {
   kind: PillKind;
@@ -183,9 +182,6 @@ const pillsOf = (entry: LibraryEntry, kind: SkillKindName): Pill[] => {
   }
   if (drift.includes("source removed")) {
     pills.push({ kind: "source-removed", label: "Source removed" });
-  }
-  if (entry.pending_merge === true) {
-    pills.push({ kind: "update-waiting", label: "Update waiting" });
   }
   return pills;
 };

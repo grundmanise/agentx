@@ -14,7 +14,6 @@ export const pillTones: Record<PillKind, PillTone> = {
   "not-published": "neutral",
   "removed-from-source": "removed",
   "source-removed": "removed",
-  "update-waiting": "update",
 };
 
 /**
