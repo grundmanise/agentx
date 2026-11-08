@@ -1,6 +1,6 @@
 import type { Configuration } from "#/cli/events.gen.ts";
 import { LogoStack } from "#/components/agent-logo.tsx";
-import { AlertIcon } from "#/components/icons/alert.tsx";
+import { AlertTriangleIcon } from "#/components/icons/alert-triangle.tsx";
 import { ListRow } from "#/components/list-row.tsx";
 import { Pill } from "#/components/pill.tsx";
 import type { PillTone } from "#/components/pill.tsx";
@@ -16,7 +16,7 @@ const pillTones: Record<PillKind, PillTone> = {
   "not-published": "neutral",
 };
 
-/** The banner title a row's alert mark carries: only a banner that warns (attention or danger). */
+/** The banner title a row's alert triangle carries: only a banner that warns (attention or danger). */
 const alertOf = (row: SkillRow, configurations: Configuration[]) => {
   const banner = bannerFor(row, configurations);
   return banner?.tone === "attention" || banner?.tone === "danger"
@@ -25,10 +25,10 @@ const alertOf = (row: SkillRow, configurations: Configuration[]) => {
 };
 
 /**
- * One skill in the list: glyph, name, its one possible pill, an amber alert mark when its banner
- * warns, a small fork marker for each fork made from it under a new name, and the logos of the
- * agent clients that see it, then its description. Selecting it shows the skill in the detail
- * pane, where the banner says what the alert mark stands for.
+ * One skill in the list: glyph, name, its one possible pill, an amber alert triangle when its
+ * banner warns, a small fork marker for each fork made from it under a new name, and the logos
+ * of the agent clients that see it, then its description. Selecting it shows the skill in the
+ * detail pane, where the banner says what the alert triangle stands for.
  */
 export const SkillRowItem = ({
   row,
@@ -94,7 +94,7 @@ export const SkillRowItem = ({
               title={alert}
               className="text-tone-attention-fg flex flex-none"
             >
-              <AlertIcon size="xs" />
+              <AlertTriangleIcon size="xs" />
             </span>
           )}
           {forks.map((fork) => (

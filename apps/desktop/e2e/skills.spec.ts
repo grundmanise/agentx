@@ -54,8 +54,8 @@ const detail = (page: Page) =>
 const pane = (page: Page, name: string) =>
   detail(page).getByRole("article", { name });
 const filters = (page: Page) => page.getByRole("dialog", { name: "Filters" });
-/** The alert marks in `where`: a row's mark carries its banner's title as its label and tooltip. */
-const alertMarks = (where: Locator) => where.locator("[aria-label][title]");
+/** The alert triangles in `where`: a row's triangle carries its banner's title as its label and tooltip. */
+const alertTriangles = (where: Locator) => where.locator("[aria-label][title]");
 
 /** Whether a command line is one the launch or the store's reads run, whichever order they come in. */
 const isLaunchOrLoad = (line: string[]) =>
@@ -151,7 +151,7 @@ test.describe("the list", () => {
     ]);
   });
 
-  test("each row shows its glyph, its one pill, an alert mark when its banner warns, agent clients and description", async ({
+  test("each row shows its glyph, its one pill, an alert triangle when its banner warns, agent clients and description", async ({
     cli,
     page,
   }) => {
@@ -159,8 +159,8 @@ test.describe("the list", () => {
     const pdf = row(page, "pdf");
     await expect(pdf).toContainText("Read and convert PDF files");
     await expect(pdf).toHaveAccessibleDescription(/^Skill · Enabled\./u);
-    // A plain row has no alert mark.
-    await expect(alertMarks(pdf)).toHaveCount(0);
+    // A plain row has no alert triangle.
+    await expect(alertTriangles(pdf)).toHaveCount(0);
     expect(await names(pdf.getByRole("img"))).toEqual([
       "Claude Code",
       "Codex",
@@ -179,10 +179,10 @@ test.describe("the list", () => {
       "Gemini CLI",
     ]);
 
-    // A skill whose banner warns has no status pill: an alert mark after its name carries the
+    // A skill whose banner warns has no status pill: an alert triangle after its name carries the
     // banner's title, and the row's description says it.
     const gone = row(page, "gone");
-    const goneAlert = alertMarks(gone);
+    const goneAlert = alertTriangles(gone);
     await expect(goneAlert).toBeVisible();
     await expect(goneAlert).toHaveAttribute(
       "aria-label",
@@ -199,7 +199,7 @@ test.describe("the list", () => {
       /^Edited · Enabled\./u
     );
     const releaseNotes = row(page, "release-notes");
-    await expect(alertMarks(releaseNotes)).toHaveAttribute(
+    await expect(alertTriangles(releaseNotes)).toHaveAttribute(
       "title",
       "Cursor is not managed by agentx"
     );
@@ -762,7 +762,7 @@ test.describe("the detail pane", () => {
     await expect(
       pane(page, "gone").getByRole("note", { name: "No longer in zeta/tools" })
     ).toBeVisible();
-    await expect(alertMarks(row(page, "gone"))).toHaveAttribute(
+    await expect(alertTriangles(row(page, "gone"))).toHaveAttribute(
       "title",
       "No longer in zeta/tools"
     );
@@ -831,12 +831,12 @@ test.describe("settling a skill", { tag: RUNS_COMMANDS }, () => {
     page,
   }) => {
     await openStates(cli, page, "scratch");
-    // A banner that warns marks its row; the neutral adoption banner does not.
-    await expect(alertMarks(row(page, "lint"))).toHaveAttribute(
+    // A banner that warns puts a triangle on its row; the neutral adoption banner does not.
+    await expect(alertTriangles(row(page, "lint"))).toHaveAttribute(
       "title",
       "old/skills was removed"
     );
-    await expect(alertMarks(row(page, "scratch"))).toHaveCount(0);
+    await expect(alertTriangles(row(page, "scratch"))).toHaveCount(0);
     // Adopt is the banner's button only: no row carries a control of its own.
     await expect(
       list(page).getByRole("button", { name: /^Adopt/u })
