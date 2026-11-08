@@ -56,7 +56,7 @@ const updatedText = (row: SkillRow, events: CliEvent[]) => {
     return `Updated ${row.name}. Publish when ready.`;
   }
   return updated.state === "modified"
-    ? `Updated ${row.name} and kept your edits`
+    ? `Updated ${row.name}. Merged with your local edits`
     : `Updated ${row.name}`;
 };
 
@@ -84,7 +84,7 @@ export const updateSkill = async (row: SkillRow) => {
     outcome.exitCode === EXIT_CODES.pending_merge &&
     conflictsIn(outcome.events) > 0
   ) {
-    notify(`Updated ${row.name}. It needs your choices`);
+    notify(`Conflicts in ${row.name}. Resolve them to finish the update`);
   }
 };
 
@@ -100,7 +100,7 @@ export const updateAll = async () => {
   if (exitCode === EXIT_CODES.pending_merge && waiting > 0) {
     const updated = plural(updatedIn(events).length, "skill", "skills");
     notify(
-      `Updated ${updated}. ${waiting === 1 ? "1 needs" : `${waiting} need`} your choices`
+      `Updated ${updated}. ${waiting === 1 ? "1 has" : `${waiting} have`} conflicts`
     );
   }
 };
@@ -128,15 +128,15 @@ const unreachable = (events: CliEvent[], message: string) => {
   return [...new Set(fetched)].map(shortSource);
 };
 
-/** Exit 3 of a check: the sources it could not reach, with the CLI's hint. */
+/** Exit 3 of a check: the sources it could not reach, with the app's own second line. */
 const unreachableToast = (events: CliEvent[], error: ErrorEvent) => {
   const sources = unreachable(events, error.message);
   return {
-    hint: error.hint,
+    hint: "Verify that you can reach the source",
     message:
       sources.length === 0
-        ? "Checked. Couldn't reach every source"
-        : `Checked. Couldn't reach ${sources.join(", ")}`,
+        ? "Couldn't reach every source"
+        : `Couldn't reach ${sources.join(", ")}`,
   };
 };
 
@@ -149,7 +149,7 @@ const checking = (current?: number, total?: number) =>
  * Check updates: `skill check-updates`, which fetches each source and lists every update it finds.
  * Its toast says how far it got, one source fetched at a time, then what it found: how many skills
  * have an update, with Update all when there is more than one. A source it could not reach
- * (exit 3) is named in the toast, with the CLI's hint, and the updates it found elsewhere are
+ * (exit 3) is named in the toast, with a line of the app's own, and the updates it found elsewhere are
  * listed all the same (src/store/loaders.ts).
  */
 export const checkUpdates = async () => {
