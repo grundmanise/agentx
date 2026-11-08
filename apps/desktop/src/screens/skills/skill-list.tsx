@@ -18,6 +18,7 @@ import type {
 } from "#/screens/skills/projection.ts";
 import { SkillRowItem } from "#/screens/skills/skill-row.tsx";
 import { checkUpdates, useCheckingUpdates } from "#/screens/skills/updates.ts";
+import { useAppStore } from "#/store/store.ts";
 
 /** What the agent chip says: the one agent chosen, or how many. */
 const agentChipLabel = (agents: string[], chosen: Configuration[]): string => {
@@ -132,6 +133,10 @@ export const SkillList = ({
 }) => {
   const navigate = useNavigate();
   const [creating, setCreating] = useState(false);
+  // What the rows' banners read besides the row, for their alert triangles.
+  const sources = useAppStore((s) => s.sources);
+  const conflicts = useAppStore((s) => s.conflicts);
+  const facts = { conflicts, sources };
   return (
     <section
       aria-label="Skills list"
@@ -229,6 +234,7 @@ export const SkillList = ({
                       row={row}
                       forks={forksOf(row, rows)}
                       configurations={configurations}
+                      facts={facts}
                       selected={row.key === selectedKey}
                       onSelect={() => {
                         onSelect(row);
