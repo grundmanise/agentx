@@ -54,6 +54,8 @@ const detail = (page: Page) =>
 const pane = (page: Page, name: string) =>
   detail(page).getByRole("article", { name });
 const filters = (page: Page) => page.getByRole("dialog", { name: "Filters" });
+/** The alert marks in `where`: a row's mark carries its banner's title as its label and tooltip. */
+const alertMarks = (where: Locator) => where.locator("[aria-label][title]");
 
 /** Whether a command line is one the launch or the store's reads run, whichever order they come in. */
 const isLaunchOrLoad = (line: string[]) =>
@@ -149,7 +151,7 @@ test.describe("the list", () => {
     ]);
   });
 
-  test("each row shows its glyph, pills, agent clients and description", async ({
+  test("each row shows its glyph, its one pill, an alert mark when its banner warns, agent clients and description", async ({
     cli,
     page,
   }) => {
@@ -157,6 +159,8 @@ test.describe("the list", () => {
     const pdf = row(page, "pdf");
     await expect(pdf).toContainText("Read and convert PDF files");
     await expect(pdf).toHaveAccessibleDescription(/^Skill · Enabled\./u);
+    // A plain row has no alert mark.
+    await expect(alertMarks(pdf)).toHaveCount(0);
     expect(await names(pdf.getByRole("img"))).toEqual([
       "Claude Code",
       "Codex",
@@ -175,13 +179,39 @@ test.describe("the list", () => {
       "Gemini CLI",
     ]);
 
+    // A skill whose banner warns has no status pill: an alert mark after its name carries the
+    // banner's title, and the row's description says it.
+    const gone = row(page, "gone");
+    const goneAlert = alertMarks(gone);
+    await expect(goneAlert).toBeVisible();
+    await expect(goneAlert).toHaveAttribute(
+      "aria-label",
+      "No longer in zeta/tools"
+    );
+    await expect(goneAlert).toHaveAttribute("title", "No longer in zeta/tools");
+    await expect(gone).toHaveAccessibleDescription(
+      "Skill · Enabled. No longer in zeta/tools. Lint SQL migrations before they run"
+    );
     await expect(
-      row(page, "gone").getByText("Removed from source", { exact: true })
-    ).toBeVisible();
+      gone.getByText("Removed from source", { exact: true })
+    ).toHaveCount(0);
     await expect(row(page, "review")).toHaveAccessibleDescription(
       /^Edited · Enabled\./u
     );
-    await expect(row(page, "release-notes").getByRole("img")).toHaveCount(4);
+    const releaseNotes = row(page, "release-notes");
+    await expect(alertMarks(releaseNotes)).toHaveAttribute(
+      "title",
+      "Cursor is not managed by agentx"
+    );
+    await expect(
+      releaseNotes.getByLabel("Cursor is not managed by agentx", {
+        exact: true,
+      })
+    ).toBeVisible();
+    await expect(releaseNotes.getByRole("img")).toHaveCount(4);
+    await expect(releaseNotes).toHaveAccessibleDescription(
+      /^Edited · Enabled\. Cursor is not managed by agentx\./u
+    );
     await expect(row(page, "commit-helper")).toHaveAccessibleDescription(
       /^Plugin skill · Enabled\./u
     );
@@ -680,13 +710,15 @@ test.describe("the detail pane", () => {
   }) => {
     await openSkills(cli, page, "/#/skills/gone");
     const article = pane(page, "gone");
-    const banner = article.getByRole("note", { name: "Removed from source" });
+    const banner = article.getByRole("note", {
+      name: "No longer in zeta/tools",
+    });
     await expect(banner).toContainText(
-      "No updates are possible for this skill unless it is added again in the source."
+      "It seems this skill was removed from the source."
     );
-    // The banner says it; the title row does not say it again.
+    // The banner is the status: the title row does not say it again.
     await expect(
-      article.getByText("Removed from source", { exact: true })
+      article.getByText("No longer in zeta/tools", { exact: true })
     ).toHaveCount(1);
 
     await row(page, "release-notes").click();
@@ -698,16 +730,18 @@ test.describe("the detail pane", () => {
     await expect(cursor).toContainText("displaced");
     await expect(
       pane(page, "release-notes").getByRole("note", {
-        name: "Cursor is using its own copy of this skill",
+        name: "Cursor is not managed by agentx",
       })
-    ).toBeVisible();
+    ).toContainText(
+      "It owns a copy of the skill, so your library changes don't reach it."
+    );
   });
 
-  test("a pill or origin its banner covers stays on the row and leaves the title row; any other stays in both", async ({
+  test("the title row shows no status pill, the banner is the status; an origin its banner says leaves the title row", async ({
     cli,
     page,
   }) => {
-    // gone also has an update waiting: a pill its "Removed from source" banner does not cover.
+    // gone also has an update waiting, which no row or title row says with a pill.
     cli.onServeStart({
       events: [
         {
@@ -726,24 +760,21 @@ test.describe("the detail pane", () => {
     await page.goto("/#/skills/gone");
     const titleRow = pane(page, "gone").locator("header");
     await expect(
-      pane(page, "gone").getByRole("note", { name: "Removed from source" })
+      pane(page, "gone").getByRole("note", { name: "No longer in zeta/tools" })
     ).toBeVisible();
+    await expect(alertMarks(row(page, "gone"))).toHaveAttribute(
+      "title",
+      "No longer in zeta/tools"
+    );
     await expect(
-      row(page, "gone").getByText("Removed from source", { exact: true })
-    ).toBeVisible();
-    await expect(
-      titleRow.getByText("Removed from source", { exact: true })
+      row(page, "gone")
+        .or(titleRow)
+        .getByText(/^(?:Removed from source|Source removed|Update waiting)$/u)
     ).toHaveCount(0);
-    await expect(
-      row(page, "gone").getByText("Update waiting", { exact: true })
-    ).toBeVisible();
-    await expect(
-      titleRow.getByText("Update waiting", { exact: true })
-    ).toBeVisible();
-    // The origin of a skill of a source is not what its banner says: it stays beside the name.
-    await expect(
-      titleRow.getByText("zeta/tools", { exact: true })
-    ).toBeVisible();
+    // The title row: name, origin, the action row and the description, and nothing else.
+    await expect(titleRow).toHaveText(
+      /^Skill · Enabledgonezeta\/toolsRemoveLint SQL migrations before they run$/u
+    );
 
     // The adoption banner says where the skill came from: the title row leaves the origin out.
     await row(page, "scratch").click();
@@ -756,7 +787,7 @@ test.describe("the detail pane", () => {
         .getByText("Skills CLI", { exact: true })
     ).toHaveCount(0);
 
-    // A pill with no banner at all is in both too.
+    // A skill not yet published has its pill on the row only, even with no banner to say it.
     await row(page, "draft").click();
     await expect(pane(page, "draft").getByRole("note")).toHaveCount(0);
     await expect(
@@ -766,7 +797,7 @@ test.describe("the detail pane", () => {
       pane(page, "draft")
         .locator("header")
         .getByText("Not published", { exact: true })
-    ).toBeVisible();
+    ).toHaveCount(0);
   });
 });
 
@@ -800,6 +831,12 @@ test.describe("settling a skill", { tag: RUNS_COMMANDS }, () => {
     page,
   }) => {
     await openStates(cli, page, "scratch");
+    // A banner that warns marks its row; the neutral adoption banner does not.
+    await expect(alertMarks(row(page, "lint"))).toHaveAttribute(
+      "title",
+      "old/skills was removed"
+    );
+    await expect(alertMarks(row(page, "scratch"))).toHaveCount(0);
     // Adopt is the banner's button only: no row carries a control of its own.
     await expect(
       list(page).getByRole("button", { name: /^Adopt/u })
@@ -815,7 +852,7 @@ test.describe("settling a skill", { tag: RUNS_COMMANDS }, () => {
     await row(page, "lint").click();
     cli.register(["source", "add", OLD]);
     const sourceBanner = pane(page, "lint").getByRole("note", {
-      name: "Source removed",
+      name: "old/skills was removed",
     });
     await expect(sourceBanner).toContainText(
       "Add old/skills source to check for updates."
@@ -828,10 +865,10 @@ test.describe("settling a skill", { tag: RUNS_COMMANDS }, () => {
     await row(page, "gone").click();
     cli.register(["skill", "fork", "gone"]);
     const forkBanner = pane(page, "gone").getByRole("note", {
-      name: "Removed from source",
+      name: "No longer in zeta/tools",
     });
     await expect(forkBanner).toContainText(
-      "No updates are possible for this skill unless it is added again in the source."
+      "It seems this skill was removed from the source."
     );
     await forkBanner.getByRole("button", { name: "Fork" }).click();
     await expect(

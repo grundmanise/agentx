@@ -56,8 +56,8 @@ export interface PillProps {
 }
 
 /**
- * A status pill, display only: "Not published", "Removed from source", "Update waiting", a
- * plugin's "Disabled" or its version.
+ * A status pill, display only: "Not published" on a skill row, a plugin's "Disabled" or its
+ * version.
  */
 export const Pill = ({ tone, size, face, icon, children }: PillProps) => (
   <span className={pillVariants({ clickable: false, face, size, tone })}>

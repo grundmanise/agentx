@@ -698,12 +698,12 @@ Two buttons side by side: `button.gap`, primary on the right.
 
 Height `pill.height`, padding 0 `pill.padding-x`, `pill.radius`, 11–12 / 600.
 
-- Update: `pill.update-bg` / `pill.update-text` (clickable).
-- Not published / Adopt: `pill.neutral-bg` / `pill.neutral-text`.
-- Removed from source: `pill.removed-bg` / `pill.removed-text`.
+- Not published (one of your own skills not yet published, on its list row only): `pill.neutral-bg` / `pill.neutral-text`. It is the only status pill a skill row carries.
 - Disabled (plugin): `pill.disabled-bg` / `pill.disabled-text`.
 - Version (plugin): `pill.version-bg` / `pill.version-text`, mono 12.
 - Fork (on the original of a fork made under a new name, in the detail header): `pill.neutral-bg` / `pill.neutral-text`, the 12px fork glyph in the text colour, then the fork's name; hover `pill.neutral-hover`. `title` "Forked as {fork name}"; a click opens the fork. One pill per fork.
+
+A skill row has no other status pill. When the skill's banner (§6 "Banner (detail pane)") has tone `attention` or `danger`, the row shows an alert mark right after the name and its pill: `AlertIcon` at 14px in `tone.attention.fg`, whatever the banner's tone, with `title` and `aria-label` the banner's title, which the row's accessible description also carries. A `primary`, `neutral` or `yours` banner puts no mark on the row.
 
 ### Switch
 
@@ -730,7 +730,7 @@ Round, `logo.bg`, `padding:3–4px`, `background-size:contain`, logo from an ima
 - dot (filled) – a skill of a shared source; `glyph.enabled` when enabled, `glyph.off` when not.
 - pencil – edited locally; `glyph.edited`.
 - fork – one of your own skills; `glyph.enabled` when enabled and published, `glyph.off` otherwise. `title` explains the state ("Your skill · Enabled", "Edited locally · Not in any agent client").
-- fork marker (12px, after the pills of a row) – the original of a fork made under a new name, in `text.caption`, one per fork; `title` "Forked as {fork name}". A marker, not a control: the fork is listed once, in YOUR SKILLS.
+- fork marker (12px, after the pill and the alert mark of a row) – the original of a fork made under a new name, in `text.caption`, one per fork; `title` "Forked as {fork name}". A marker, not a control: the fork is listed once, in YOUR SKILLS.
 
 ### Group header (lists)
 
@@ -740,7 +740,7 @@ Mono caption 10.5–11 / `.16em` uppercase `group.label` plus a count in `group.
 
 `banner.radius`, `banner.padding`, `tone.*.bg` + 1px `tone.*.border`; `banner.tile` icon tile in `tone.*.fg`; title 14 / 500 `banner.title`; text 13 `banner.text`; actions on the right.
 
-A state the banner says is not said again in the title row: each banner lists the status pills it covers (`covers` in `src/screens/skills/banners.ts`), and the detail header leaves those pills out while that banner shows. Today "Source removed" covers the Source removed pill and "Removed from source" covers the Removed from source pill; the displaced, "Not in any agent" and "Added by {tool}" banners have no matching pill, and a pill the banner does not cover ("Update waiting" beside any banner) stays. A banner can also cover the origin text beside the name (`coversOrigin`): the header leaves it out while that banner shows. Today only "Added by {tool}" covers it, since it says where the skill came from; the origin of a skill of a source ("acme/skills") is not what its banner says, so it stays. The list rows have no banner and keep every pill. A new banner that says a pill's state adds that pill to its `covers`, and one that says where the skill came from sets `coversOrigin`.
+The header shows no status pills; the banner is the status. A banner can cover the origin text beside the name (`coversOrigin` in `src/screens/skills/banners.ts`): the header leaves it out while that banner shows. Today only "Added by {tool}" covers it, since it says where the skill came from; the origin of a skill of a source ("acme/skills") is not what its banner says, so it stays. A new banner that says where the skill came from sets `coversOrigin`.
 
 ### Agent client card (Agents page)
 
@@ -752,7 +752,7 @@ One full-width card below the grid, the same surface, for every configuration wh
 
 ### Banner actions and dialogs (detail pane)
 
-A banner's action is a small ghost button on its right, one command each: "Add to agents" on the gray "Not in any agent" banner (`tone.neutral`), "Reconnect" on the amber "{Agent} is using its own copy of this skill" banner. After the amber one, in this order: "Added by {tool}" (`tone.neutral`, the tool's product name, "Skills CLI" or "Skillshare", as the origin text and the Installed by detail also name it), "Adopt to manage it from agentx", with Adopt (`adopt --skill <name>`, toast "Adopted {skill}"); "Source removed" (`tone.danger`), "Add {owner/repo} source to check for updates.", with Add source (`source add <url>`, toast "Added {owner/repo} source"); "Removed from source" (`tone.danger`, the same words as the row's pill), "No updates are possible for this skill unless it is added again in the source.", with Fork (`skill fork <name>`, toast "Forked {skill}"). Adopt is a banner button only: a skill row carries no call-to-action pill. A skill the CLI refuses to adopt has no banner: its DETAILS end with an "Adopt" row, "Can't adopt: {reason}" in the CLI's words. A command that is refused because the folder holds another version opens a confirm dialog, "Replace {Agent}'s copy?", with the path in `type.technical` `text.caption` and Cancel · Replace (danger). The action row (`aria-label` "Actions", `button.gap` 6 between its buttons) sits on the title row, pushed to its right end (`margin-left:auto`, centred on the row, wrapping when the row is full), after the name, origin and pills. Remove, in the action row, is a danger ghost button that opens the Remove dialog: "Remove {skill}?", the agents it will be deleted from as a list in `type.body` `text.secondary`, and Cancel · Remove (danger). Every button that runs a command is pending until the command ends and the next inventory arrives.
+A banner's action is a small ghost button on its right, one command each: "Add to agents" on the gray "Not in any agent" banner (`tone.neutral`), "Reconnect" on the amber "{Agent} is not managed by agentx" banner, "It owns a copy of the skill, so your library changes don't reach it." After the amber one, in this order: "Added by {tool}" (`tone.neutral`, the tool's product name, "Skills CLI" or "Skillshare", as the origin text and the Installed by detail also name it), "Adopt to manage it from agentx", with Adopt (`adopt --skill <name>`, toast "Adopted {skill}"); "{owner/repo} was removed" (`tone.danger`), "Add {owner/repo} source to check for updates.", with Add source (`source add <url>`, toast "Added {owner/repo} source"); "No longer in {owner/repo}" (`tone.danger`), "It seems this skill was removed from the source.", with Fork (`skill fork <name>`, toast "Forked {skill}"). Adopt is a banner button only: a skill row carries no call-to-action pill. A skill the CLI refuses to adopt has no banner: its DETAILS end with an "Adopt" row, "Can't adopt: {reason}" in the CLI's words. A command that is refused because the folder holds another version opens a confirm dialog, "Replace {Agent}'s copy?", with the path in `type.technical` `text.caption` and Cancel · Replace (danger). The action row (`aria-label` "Actions", `button.gap` 6 between its buttons) sits on the title row, pushed to its right end (`margin-left:auto`, centred on the row, wrapping when the row is full), after the name, origin and fork pills. Remove, in the action row, is a danger ghost button that opens the Remove dialog: "Remove {skill}?", the agents it will be deleted from as a list in `type.body` `text.secondary`, and Cancel · Remove (danger). Every button that runs a command is pending until the command ends and the next inventory arrives.
 
 ### Card (Inbox)
 

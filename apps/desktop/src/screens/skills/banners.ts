@@ -3,7 +3,7 @@
 import type { Configuration, LibraryPlacement } from "#/cli/events.gen.ts";
 import { displacedPlacement } from "#/screens/skills/placements.ts";
 import { shortSource, toolName } from "#/screens/skills/projection.ts";
-import type { PillKind, SkillRow } from "#/screens/skills/projection.ts";
+import type { SkillRow } from "#/screens/skills/projection.ts";
 
 export type BannerTone =
   | "danger"
@@ -30,12 +30,6 @@ export interface Banner {
   title: string;
   text?: string;
   action?: BannerAction;
-  /**
-   * The pills that say the same state as this banner. The detail pane's title row leaves them
-   * out while the banner shows, so a state is said once; the list rows, which have no banner,
-   * keep them.
-   */
-  covers?: PillKind[];
   /**
    * Whether this banner says where the skill came from. The detail pane's title row then leaves
    * out the origin text beside the name.
@@ -64,8 +58,8 @@ const table: BannerRule[] = [
           placement === undefined
             ? undefined
             : { agent, kind: "put-back", placement },
-        text: `Changes you make in your library won't reach ${agent} until you reconnect it.`,
-        title: `${agent} is using its own copy of this skill`,
+        text: "It owns a copy of the skill, so your library changes don't reach it.",
+        title: `${agent} is not managed by agentx`,
         tone: "attention",
       };
     },
@@ -89,20 +83,18 @@ const table: BannerRule[] = [
       const source = row.entry?.source ?? "";
       return {
         action: { kind: "add-source", source },
-        covers: ["source-removed"],
         text: `Add ${shortSource(source)} source to check for updates.`,
-        title: "Source removed",
+        title: `${shortSource(source)} was removed`,
         tone: "danger",
       };
     },
     when: (row) => row.entry?.drift?.includes("source removed") ?? false,
   },
   {
-    banner: () => ({
+    banner: (row) => ({
       action: { kind: "fork" },
-      covers: ["removed-from-source"],
-      text: "No updates are possible for this skill unless it is added again in the source.",
-      title: "Removed from source",
+      text: "It seems this skill was removed from the source.",
+      title: `No longer in ${shortSource(row.entry?.source ?? "")}`,
       tone: "danger",
     }),
     when: (row) => row.entry?.drift?.includes("upstream removed") ?? false,

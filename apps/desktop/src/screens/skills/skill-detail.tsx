@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import type { Configuration } from "#/cli/events.gen.ts";
-import { Pill, PillButton } from "#/components/pill.tsx";
+import { PillButton } from "#/components/pill.tsx";
 import { SkillGlyph } from "#/components/skill-glyph.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
@@ -20,7 +20,6 @@ import {
 } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { RemoveDialog, removeLabel } from "#/screens/skills/remove-dialog.tsx";
-import { pillTones } from "#/screens/skills/skill-row.tsx";
 import { useSettling } from "#/store/settle.ts";
 
 const Caption = ({ children }: { children: string }) => (
@@ -52,11 +51,12 @@ const RemoveButton = ({
 
 /**
  * The right pane: what the CLI reports about one skill. Header: the title row with the name,
- * origin (unless the banner covers it), pills (less those the banner covers), a pill per fork made from it under a new name, which opens that fork, and at its
- * right end the action row (Remove for a library skill; the other actions come with the changes
- * that add them); then the description. One banner, with its
- * button; AGENTS, whose chips add and remove placements; FILES; then DETAILS and HISTORY side by
- * side. Every control runs one command and redraws from the inventory that follows.
+ * origin (unless the banner says where the skill came from), a pill per fork made from it under a
+ * new name, which opens that fork, and at its right end the action row (Remove for a library
+ * skill; the other actions come with the changes that add them); then the description. No status
+ * pill: the banner is the status. One banner, with its button; AGENTS, whose chips add and remove
+ * placements; FILES; then DETAILS and HISTORY side by side. Every control runs one command and
+ * redraws from the inventory that follows.
  */
 export const SkillDetail = ({
   row,
@@ -71,10 +71,6 @@ export const SkillDetail = ({
   const [removing, setRemoving] = useState(false);
   const banner = bannerFor(row, configurations);
   const details = detailsOf(row, configurations);
-  // A state the banner says is not said again by a pill in the title row.
-  const pills = row.pills.filter(
-    (pill) => !(banner?.covers?.includes(pill.kind) ?? false)
-  );
   return (
     <article
       aria-label={row.name}
@@ -97,11 +93,6 @@ export const SkillDetail = ({
               {originOf(row)}
             </span>
           )}
-          {pills.map((pill) => (
-            <Pill key={pill.kind} tone={pillTones[pill.kind]} size="detail">
-              {pill.label}
-            </Pill>
-          ))}
           {forks.map((fork) => (
             <PillButton
               key={fork.key}
