@@ -55,7 +55,9 @@ const openSkill = async (
   cli: MockCli,
   page: Page,
   name: string,
-  listed: InlineEvent[] = sources
+  listed: InlineEvent[] = sources,
+  /** The skills whose `skill diff` holds its answer back. */
+  held: string[] = []
 ) => {
   cli.onServeStart({ events: [inventory] });
   cli.register(["source", "list"], { events: listed });
@@ -66,7 +68,10 @@ const openSkill = async (
     cli.register(["skill", "files", ...read.args], { events: read.events });
   }
   for (const [skill, events] of Object.entries(diffs)) {
-    cli.register(["skill", "diff", skill], { events });
+    cli.register(["skill", "diff", skill], {
+      events,
+      ...(held.includes(skill) ? { holdAfter: 0 } : {}),
+    });
   }
   await page.goto(`/#/skills/${name}`);
   await expect(pane(page, name)).toBeVisible();
@@ -112,9 +117,7 @@ test.describe("banners", () => {
     await openSkill(cli, page, "changelog");
     const note = banner(pane(page, "changelog"));
     await expect(note).toHaveAccessibleName("Edits not published");
-    await expect(note).toContainText(
-      "They are only on this machine until you publish them."
-    );
+    await expect(note).toContainText("Publish to share your latest version.");
     await expect(note.getByRole("button")).toHaveText(["Publish"]);
   });
 
@@ -126,13 +129,9 @@ test.describe("banners", () => {
     const note = banner(pane(page, "draft"));
     await expect(note).toHaveAccessibleName("Not published");
     await expect(note).toContainText(
-      "Only on this machine. Publish it to put it on your account remote."
+      "Only on this machine. Publish it to your account remote."
     );
     await expect(note.getByRole("button")).toHaveText(["Publish"]);
-    // The banner says it: the title row has no Not published pill.
-    await expect(
-      pane(page, "draft").getByText("Not published", { exact: true })
-    ).toHaveCount(1);
   });
 
   test("your skill, never published, with no account remote: Open Settings", async ({
@@ -144,9 +143,6 @@ test.describe("banners", () => {
     await expect(note).toHaveAccessibleName("Not published");
     await expect(note).toContainText("Set an account remote to publish it.");
     await expect(note.getByRole("button")).toHaveText(["Open Settings"]);
-    await expect(
-      pane(page, "draft").getByText("Not published", { exact: true })
-    ).toHaveCount(1);
     await note.getByRole("button", { name: "Open Settings" }).click();
     await expect(page).toHaveURL(/#\/settings$/u);
     expect(later(cli)).toEqual([]);
@@ -158,9 +154,9 @@ test.describe("banners", () => {
   }) => {
     await openSkill(cli, page, "review");
     const note = banner(pane(page, "review"));
-    await expect(note).toHaveAccessibleName("Edited outside agentx");
+    await expect(note).toHaveAccessibleName("Edited locally");
     await expect(note).toContainText(
-      "3 files changed. Updates merge your edits in."
+      "3 files differ from acme/skills. Updates won't overwrite them."
     );
     await expect(note.getByRole("button")).toHaveText([
       "Fork",
@@ -195,11 +191,26 @@ test.describe("banners", () => {
   }) => {
     await openSkill(cli, page, "lint");
     const note = banner(pane(page, "lint"));
-    await expect(note).toHaveAccessibleName("Edited outside agentx");
+    await expect(note).toHaveAccessibleName("Edited locally");
     await expect(note).toContainText(
-      "1 file changed. Updates merge your edits in."
+      "1 file differs from zeta/tools. Updates won't overwrite them."
     );
     await expect(note.getByRole("button")).toHaveText(["Fork"]);
+  });
+
+  test("an edited skill of a source, before skill diff answers: the banner without a count", async ({
+    cli,
+    page,
+  }) => {
+    await openSkill(cli, page, "review", sources, ["review"]);
+    const note = banner(pane(page, "review"));
+    await expect(note).toHaveAccessibleName("Edited locally");
+    await expect(note).toContainText("Updates won't overwrite your edits.");
+    await expect(note).not.toContainText("differ");
+    await expect(note.getByRole("button")).toHaveText([
+      "Fork",
+      "Publish to acme/skills",
+    ]);
   });
 
   test("a skill of a source as it was installed has none of these banners", async ({

@@ -756,8 +756,7 @@ test.describe("the detail pane", () => {
         .getByText("Skills CLI", { exact: true })
     ).toHaveCount(0);
 
-    // draft's "Not published" banner covers its Not published pill: the row keeps it, the title
-    // row leaves it out.
+    // draft's "Not published" banner covers nothing: the row and the title row both keep its pill.
     await row(page, "draft").click();
     await expect(
       pane(page, "draft").getByRole("note", { name: "Not published" })
@@ -769,7 +768,7 @@ test.describe("the detail pane", () => {
       pane(page, "draft")
         .locator("header")
         .getByText("Not published", { exact: true })
-    ).toHaveCount(0);
+    ).toBeVisible();
   });
 });
 

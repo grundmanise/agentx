@@ -203,7 +203,7 @@ const table: BannerRule[] = [
   {
     banner: () => ({
       action: { kind: "publish" },
-      text: "They are only on this machine until you publish them.",
+      text: "Publish to share your latest version.",
       title: "Edits not published",
       tone: "yours",
     }),
@@ -212,8 +212,7 @@ const table: BannerRule[] = [
   {
     banner: () => ({
       action: { kind: "publish" },
-      covers: ["not-published"],
-      text: "Only on this machine. Publish it to put it on your account remote.",
+      text: "Only on this machine. Publish it to your account remote.",
       title: "Not published",
       tone: "yours",
     }),
@@ -223,7 +222,6 @@ const table: BannerRule[] = [
   {
     banner: () => ({
       action: { kind: "open-settings" },
-      covers: ["not-published"],
       text: "Set an account remote to publish it.",
       title: "Not published",
       tone: "yours",
@@ -236,16 +234,16 @@ const table: BannerRule[] = [
       const source = row.entry?.source ?? "";
       const writable =
         facts.sources.find((s) => s.url === source)?.access === "writable";
-      const merge = "Updates merge your edits in.";
+      const n = facts.changedFiles;
       return {
         action: writable
           ? { kind: "edited", publishTo: shortSource(source) }
           : { kind: "edited" },
         text:
-          facts.changedFiles === undefined
-            ? merge
-            : `${filesWord(facts.changedFiles)} changed. ${merge}`,
-        title: "Edited outside agentx",
+          n === undefined
+            ? "Updates won't overwrite your edits."
+            : `${filesWord(n)} ${n === 1 ? "differs" : "differ"} from ${shortSource(source)}. Updates won't overwrite them.`,
+        title: "Edited locally",
         tone: "attention",
       };
     },
