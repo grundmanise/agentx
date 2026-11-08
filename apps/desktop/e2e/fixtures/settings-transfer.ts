@@ -1,6 +1,7 @@
 // What the Another machine and Skills from the Skills CLI sections of Settings are tested against:
 // the sources before and after an import, the events of `export`, `import --yes` and
-// `adopt --all`, and an adoption preview with two candidates, a refused record and a managed one.
+// `adopt skills-cli --all`, and an adoption preview with two candidates, a refused record and a
+// managed one of the Skills CLI's, and a candidate and a refused record of Skillshare's.
 import type { InlineEvent } from "../harness/cli.ts";
 
 export const LIBRARY = "/home/me/.agents/skills";
@@ -116,7 +117,11 @@ export const imported: InlineEvent[] = [
   },
 ];
 
-/** The adoption preview: two candidates, one refused record and one agentx manages already. */
+/**
+ * The adoption preview: of the Skills CLI's records two candidates, one refused and one agentx
+ * manages already; of Skillshare's one candidate and one refused, which the Settings section leaves
+ * out.
+ */
 export const adoptionPreview: InlineEvent[] = [
   {
     file: "/home/me/.agents/.skill-lock.json",
@@ -155,15 +160,38 @@ export const adoptionPreview: InlineEvent[] = [
     tool: "vercel",
     type: "adoption",
   },
+  {
+    file: "/home/me/.config/skillshare/skills/.metadata.json",
+    name: "shared-docs",
+    reason:
+      "it is a tracked repository, a whole checkout rather than one skill",
+    state: "refused",
+    tool: "skillshare",
+    type: "adoption",
+  },
+  {
+    file: "/home/me/.config/skillshare/skills/.metadata.json",
+    name: "ui",
+    source: "https://github.com/acme/ui-skills",
+    state: "candidate",
+    subpath: "ui",
+    tool: "skillshare",
+    type: "adoption",
+  },
 ];
 
-/** `adopt --all`: one progress step per source and per install step, then the records. */
+/**
+ * `adopt skills-cli --all`: one progress step per source and per install step, then the Skills
+ * CLI's records, the only ones the run covers.
+ */
 export const adoptedAll: InlineEvent[] = [
   { current: 1, phase: "fetch", total: 8, type: "progress" },
   { current: 2, phase: "blobs", total: 8, type: "progress" },
-  ...adoptionPreview.map((record) =>
-    record.type === "adoption" && record.state === "candidate"
-      ? { ...record, reason: undefined, state: "adopted" as const }
-      : record
-  ),
+  ...adoptionPreview
+    .filter((record) => record.type === "adoption" && record.tool === "vercel")
+    .map((record) =>
+      record.type === "adoption" && record.state === "candidate"
+        ? { ...record, reason: undefined, state: "adopted" as const }
+        : record
+    ),
 ];

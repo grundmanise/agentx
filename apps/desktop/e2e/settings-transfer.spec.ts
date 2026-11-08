@@ -1,7 +1,8 @@
 // The Another machine and Skills from the Skills CLI sections of Settings: Export runs
 // `export <name>` (with --force after the overwrite confirm), Import runs `import <file> --yes` on
 // the file the open dialog returns after its confirm, lists each `import_skill` and adds the
-// sources this machine has not fetched one after another, and Adopt all runs `adopt --all`.
+// sources this machine has not fetched one after another, and Adopt all runs
+// `adopt skills-cli --all` on the Skills CLI's records alone.
 import type { Page } from "@playwright/test";
 
 import {
@@ -209,17 +210,19 @@ test("a cancelled open dialog runs nothing", async ({ cli, page }) => {
   expect(later(cli)).toEqual([]);
 });
 
-test("Adopt all runs adopt --all with its progress and lists the refused record", async ({
+test("Adopt all runs adopt skills-cli --all with its progress and lists the refused record", async ({
   cli,
   page,
 }) => {
   cli.register(["adopt"], { events: adoptionPreview });
-  const run = cli.register(["adopt", "--all"], {
+  const run = cli.register(["adopt", "skills-cli", "--all"], {
     events: adoptedAll,
     holdAfter: 1,
   });
   await openSettings(cli, page);
   const section = skillsCli(page);
+  // Skillshare's candidate and refused record are another tool's, so the count and the list
+  // leave them out.
   await expect(section).toContainText("2 can be adopted");
   await expect(section).toContainText("replaces the copy the Skills CLI left");
   await expect(
@@ -233,16 +236,19 @@ test("Adopt all runs adopt --all with its progress and lists the refused record"
   ).toBeDisabled();
   run.release();
   await expect(toasts(page)).toContainText("Adopted 2 skills");
-  expect(later(cli)).toEqual([["adopt", "--all", "--json"]]);
+  expect(later(cli)).toEqual([["adopt", "skills-cli", "--all", "--json"]]);
 });
 
-test("the Skills CLI section is hidden without candidates", async ({
+test("the Skills CLI section is hidden without candidates of the Skills CLI", async ({
   cli,
   page,
 }) => {
+  // Skillshare's candidate stays: it does not make a section that adopts the Skills CLI's skills.
   cli.register(["adopt"], {
     events: adoptionPreview.filter(
-      (r) => r.type === "adoption" && r.state !== "candidate"
+      (r) =>
+        r.type === "adoption" &&
+        (r.state !== "candidate" || r.tool === "skillshare")
     ),
   });
   await openSettings(cli, page);

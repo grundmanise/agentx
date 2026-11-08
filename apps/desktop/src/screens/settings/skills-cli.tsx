@@ -1,8 +1,9 @@
 // The Skills from the Skills CLI section of Settings: what the adoption preview (`adopt`, which
-// writes nothing) found that agentx can take over, and Adopt all, which runs `adopt --all` with
-// its progress. Adopting installs each skill again from its source and replaces the copy the other
-// tool left (ADR 0012). The section shows only while the preview has candidates; the records the
-// CLI refuses are listed with its reason.
+// writes nothing) found of the Skills CLI's records that agentx can take over, and Adopt all, which
+// runs `adopt skills-cli --all` with its progress. Adopting installs each skill again from its
+// source and replaces the copy the other tool left (ADR 0012). The section covers the Skills CLI's
+// records alone, Skillshare's being another tool's, and shows only while they hold a candidate;
+// the records the CLI refuses are listed with its reason.
 import { useState } from "react";
 
 import type { ProgressEvent } from "#/cli/events.gen.ts";
@@ -35,8 +36,9 @@ const progressText = (progress: ProgressEvent | undefined) => {
  */
 export const SkillsCliSection = () => {
   const adoption = useAppStore((s) => s.adoption);
-  const candidates = adoptionCandidates(adoption);
-  const refused = adoptionRefusals(adoption);
+  const records = adoption.filter((record) => record.tool === "vercel");
+  const candidates = adoptionCandidates(records);
+  const refused = adoptionRefusals(records);
   const pending = useSettling(ADOPT_ALL_LABEL);
   const [progress, setProgress] = useState<ProgressEvent>();
   if (candidates.length === 0) {
@@ -44,7 +46,8 @@ export const SkillsCliSection = () => {
   }
   const adoptAll = async () => {
     setProgress(undefined);
-    await runUntilSettled(["adopt", "--all"], {
+    // The run never rejects, but a progress line must not outlive it whichever way it ends.
+    await runUntilSettled(["adopt", "skills-cli", "--all"], {
       label: ADOPT_ALL_LABEL,
       onProgress: setProgress,
       success: (events) =>
@@ -53,8 +56,9 @@ export const SkillsCliSection = () => {
             .length,
           "skill"
         )}`,
+    }).finally(() => {
+      setProgress(undefined);
     });
-    setProgress(undefined);
   };
   return (
     <SettingsSection
