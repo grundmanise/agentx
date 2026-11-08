@@ -1,6 +1,10 @@
 // The banner the detail pane shows for a skill: one at a time, the first row of this table that
 // matches. Later changes add rows, in the order they should win.
-import type { Configuration, LibraryPlacement } from "#/cli/events.gen.ts";
+import type {
+  ConflictEvent,
+  Configuration,
+  LibraryPlacement,
+} from "#/cli/events.gen.ts";
 import { displacedPlacement } from "#/screens/skills/placements.ts";
 import {
   fromAnotherMachine,
@@ -20,6 +24,11 @@ export type BannerTone =
 export type BannerAction =
   /** `skill update <name>`: takes in the update the last check found. */
   | { kind: "update" }
+  /**
+   * A pending merge: Show folder reveals it, Abort runs `skill update <name> --abort` after a
+   * confirm dialog, and Update runs `skill update <name>` again to apply what was resolved.
+   */
+  | { kind: "conflict" }
   /** `skill place <name>`: every enabled agent, and puts back what is missing. */
   | { kind: "add-to-agents" }
   /** `skill place <name> --to <configuration>` for the displaced placement. */
@@ -51,9 +60,16 @@ export interface Banner {
   coversOrigin?: boolean;
 }
 
+/** The last `conflict` event of each skill, by name, as the store keeps them. */
+type Conflicts = Record<string, ConflictEvent>;
+
 interface BannerRule {
   when: (row: SkillRow) => boolean;
-  banner: (row: SkillRow, configurations: Configuration[]) => Banner;
+  banner: (
+    row: SkillRow,
+    configurations: Configuration[],
+    conflicts: Conflicts
+  ) => Banner;
 }
 
 const agentName = (configurations: Configuration[], id: string) =>
@@ -78,7 +94,25 @@ const updateOrigin = (row: SkillRow) => {
   return shortSource(upstream ?? row.update?.source ?? row.entry?.source ?? "");
 };
 
+/** What a pending merge left to resolve, with the number of files when a `conflict` event said it. */
+const conflictText = (conflict: ConflictEvent | undefined) => {
+  if (conflict === undefined || conflict.files.length === 0) {
+    return "Your edits and the update changed the same lines. Resolve them in the merge folder, then update again.";
+  }
+  const n = conflict.files.length;
+  return `Your edits and the update changed the same lines in ${n === 1 ? "1 file" : `${n} files`}. Resolve them in the merge folder, then update again.`;
+};
+
 const table: BannerRule[] = [
+  {
+    banner: (row, _configurations, conflicts) => ({
+      action: { kind: "conflict" },
+      text: conflictText(conflicts[row.name]),
+      title: "Update has conflicts",
+      tone: "attention",
+    }),
+    when: (row) => row.entry?.pending_merge === true,
+  },
   {
     banner: (row) => ({
       action: { kind: "update" },
@@ -165,9 +199,10 @@ const table: BannerRule[] = [
   },
 ];
 
-/** The banner for `row`, or none. */
+/** The banner for `row`, or none. `conflicts` are the store's, for the files a pending merge left. */
 export const bannerFor = (
   row: SkillRow,
-  configurations: Configuration[]
+  configurations: Configuration[],
+  conflicts: Conflicts = {}
 ): Banner | undefined =>
-  table.find((rule) => rule.when(row))?.banner(row, configurations);
+  table.find((rule) => rule.when(row))?.banner(row, configurations, conflicts);

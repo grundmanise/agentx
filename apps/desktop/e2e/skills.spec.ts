@@ -752,6 +752,34 @@ test.describe("the detail pane", () => {
         .getByText("Not published", { exact: true })
     ).toBeVisible();
   });
+
+  test("a pending merge comes first: its banner in place of any other, and no pill says it", async ({
+    cli,
+    page,
+  }) => {
+    cli.onServeStart({
+      events: [
+        {
+          ...inventory,
+          library: inventory.library.map((entry) =>
+            entry.name === "gone" ? { ...entry, pending_merge: true } : entry
+          ),
+        },
+      ],
+    });
+    cli.register(["skill", "files", "gone"], { events: filesOf("gone") });
+    await page.goto("/#/skills/gone");
+    await expect(pane(page, "gone").getByRole("note")).toHaveCount(1);
+    await expect(
+      pane(page, "gone").getByRole("note", { name: "Update has conflicts" })
+    ).toBeVisible();
+    await expect(
+      row(page, "gone").getByText("Update waiting", { exact: true })
+    ).toHaveCount(0);
+    await expect(
+      pane(page, "gone").getByText("Update waiting", { exact: true })
+    ).toHaveCount(0);
+  });
 });
 
 const toasts = (page: Page) =>

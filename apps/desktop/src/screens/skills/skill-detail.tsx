@@ -22,6 +22,7 @@ import type { SkillRow } from "#/screens/skills/projection.ts";
 import { RemoveDialog, removeLabel } from "#/screens/skills/remove-dialog.tsx";
 import { pillTones } from "#/screens/skills/skill-row.tsx";
 import { useSettling } from "#/store/settle.ts";
+import { useAppStore } from "#/store/store.ts";
 
 const Caption = ({ children }: { children: string }) => (
   <h2 className="type-caption text-text-caption m-0">{children}</h2>
@@ -69,7 +70,8 @@ export const SkillDetail = ({
   configurations: Configuration[];
 }) => {
   const [removing, setRemoving] = useState(false);
-  const banner = bannerFor(row, configurations);
+  const conflicts = useAppStore((s) => s.conflicts);
+  const banner = bannerFor(row, configurations, conflicts);
   const details = detailsOf(row, configurations);
   // A state the banner says is not said again by a pill in the title row.
   const pills = row.pills.filter(
