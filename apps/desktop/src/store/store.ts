@@ -6,6 +6,7 @@ import { create } from "zustand";
 
 import type {
   AdoptionEvent,
+  ConflictEvent,
   DiffEvent,
   HandshakeError,
   HistoryEvent,
@@ -109,6 +110,12 @@ export interface AppState {
    * the What's new sheet reads it when it opens.
    */
   updateDiffs: Record<string, UpdateDiffRead>;
+  /**
+   * The last `conflict` event of each skill, by name, from the commands the runner ran this
+   * session: which files a pending merge left to resolve. Gone on a restart, when a skill with a
+   * pending merge has none.
+   */
+  conflicts: Record<string, ConflictEvent>;
 }
 
 /** One declaration of a server whose handshake failed: the server, where it is declared, and why. */
@@ -155,6 +162,7 @@ export const useAppStore = create<AppState>()(() => ({
   activity: [],
   adoption: [],
   applied: undefined,
+  conflicts: {},
   files: {},
   freshness: { kind: "stale" },
   handshakeFailures: [],
