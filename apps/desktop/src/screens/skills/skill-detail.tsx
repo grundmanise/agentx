@@ -5,10 +5,12 @@ import { PillButton } from "#/components/pill.tsx";
 import { SkillGlyph } from "#/components/skill-glyph.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import { openInEditor } from "#/lib/editor.ts";
 import { AgentsSection } from "#/screens/skills/agents-section.tsx";
 import { BannerView } from "#/screens/skills/banner-view.tsx";
 import { bannerFor } from "#/screens/skills/banners.ts";
 import { detailsOf } from "#/screens/skills/details.ts";
+import { canEdit, skillFile } from "#/screens/skills/edit.ts";
 import { FilesSection } from "#/screens/skills/files.tsx";
 import { ForkButton } from "#/screens/skills/fork-dialog.tsx";
 import { canFork } from "#/screens/skills/fork.ts";
@@ -54,11 +56,34 @@ const RemoveButton = ({
 };
 
 /**
+ * Edit, a secondary small button for a skill the user may write to (`canEdit`): it opens the
+ * skill's SKILL.md in the editor chosen in Settings and runs no command. Left out until `machine`
+ * says where the library is.
+ */
+const EditButton = ({ row }: { row: SkillRow }) => {
+  const library = useAppStore((s) => s.machine?.library);
+  if (library === undefined) {
+    return null;
+  }
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      onClick={() => {
+        void openInEditor(skillFile(library, row.name));
+      }}
+    >
+      Edit
+    </Button>
+  );
+};
+
+/**
  * The right pane: what the CLI reports about one skill. Header: the title row with the name,
  * origin (unless the banner says where the skill came from), a pill per fork made from it under a
- * new name, which opens that fork, and at its right end the action row (Fork for a skill that is
- * not yet yours, Remove for a library skill; the other actions come with the changes that add
- * them); then the description. No status pill: the banner is the status. One banner, with its
+ * new name, which opens that fork, and at its right end the action row (Edit for a skill the user
+ * may write to, Fork for a skill that is not yet yours, Remove for a library skill; the other
+ * actions come with the changes that add them); then the description. No status pill: the banner is the status. One banner, with its
  * button; AGENTS, whose chips add and remove placements; FILES; then DETAILS and HISTORY side by
  * side. Every control runs one command and redraws from the inventory that follows.
  */
@@ -140,6 +165,7 @@ export const SkillDetail = ({
             aria-label="Actions"
             className="ml-auto flex flex-wrap items-center gap-1.5 empty:hidden"
           >
+            {canEdit(row) && <EditButton row={row} />}
             {canFork(row) && <ForkButton row={row} />}
             {row.entry !== undefined && (
               <RemoveButton
