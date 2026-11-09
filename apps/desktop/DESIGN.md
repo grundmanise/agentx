@@ -815,7 +815,7 @@ Two ghost icon buttons that meet with no gap and share one outline, told apart b
 
 `sheet.width`, inset `sheet.inset` from the top, right and bottom, `sheet.bg` with 1px `sheet.border`, `sheet.radius`, `overlay.shadow`, `sheet.padding`, over `shell.scrim`. Title in `type.dialog-title`, the subject's name under it in `type.technical` `text.caption`, a ghost Close at the top right. Escape or Close closes it. Its content scrolls down only: a long line wraps, it never clips or scrolls sideways.
 
-Each entry is a small wrapping ghost button with a chevron that expands it, and collapses it again: under the meta line, the files its commit changed, one row each with the status (`type.technical-sm`, `text.caption`) and the path (`type.technical-sm`, `text.secondary`), then a small ghost **Compare with now**, which shows a `Spinner` while it runs. The comparison replaces the button: a caption in `type.technical-sm` `text.caption` ("{n} files changed since this version", or "Matches the skill as it is now"), then one block per file, `hunk.gap` apart, each its status and path as above over a Code pane of its patch alone, the kept and added lines numbered in the file as it is now and the diff tints as everywhere else; a file whose patch has no lines says "No lines to show" in `text.hint` on `code.bg`. A failed comparison shows the CLI's message in `type.notice` `tone.danger-fg` and its hint in `text.muted` above the button, which reads **Retry**.
+Each entry is a small wrapping ghost button with a chevron that expands it, and collapses it again: under the meta line, the files its commit changed, one row each with the status (`type.technical-sm`, `text.caption`) and the path (`type.technical-sm`, `text.secondary`).
 
 ### Sheet (What's new)
 

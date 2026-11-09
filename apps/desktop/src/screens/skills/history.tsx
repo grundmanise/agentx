@@ -2,10 +2,8 @@ import { cva } from "class-variance-authority";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
-import type { DiffEvent, HistoryEvent } from "#/cli/events.gen.ts";
-import { CodePane, parsePatch } from "#/components/code-pane.tsx";
+import type { HistoryEvent } from "#/cli/events.gen.ts";
 import { ChevronIcon } from "#/components/icons/chevron.tsx";
-import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
   Sheet,
@@ -16,9 +14,8 @@ import {
 } from "#/components/ui/sheet.tsx";
 import { formatDate } from "#/lib/dates.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
-import { compareLabel, loadComparison, loadHistory } from "#/store/loaders.ts";
-import { usePending } from "#/store/runner.ts";
-import { comparisonKey, useAppStore } from "#/store/store.ts";
+import { loadHistory } from "#/store/loaders.ts";
+import { useAppStore } from "#/store/store.ts";
 
 /** How many entries the timeline shows before "Show all". */
 const SHOWN = 3;
@@ -91,121 +88,15 @@ const versionOf = (row: SkillRow) =>
     ...(row.entry?.drift ?? []),
   ].join(":");
 
-/** One file of a comparison: its status and path, then its patch with the diff tints. */
-const ComparedFile = ({ diff }: { diff: DiffEvent }) => (
-  <li className="flex flex-col gap-1">
-    <span className="flex items-baseline gap-2">
-      <span className="type-technical-sm text-text-caption flex-none">
-        {diff.status}
-      </span>
-      <span className="type-technical-sm text-text-secondary break-all">
-        {diff.path}
-      </span>
-    </span>
-    {parsePatch(diff.patch).length === 0 ? (
-      // A binary file, or a change git writes no lines for, such as a file's mode.
-      <p className="bg-code-bg py-code px-file-row type-secondary text-text-hint m-0">
-        No lines to show
-      </p>
-    ) : (
-      <CodePane
-        path={diff.path}
-        label={`Changes to ${diff.path}`}
-        patch={diff.patch}
-      />
-    )}
-  </li>
-);
-
-/**
- * Compare with now under an expanded entry of the sheet: `skill diff <name> --commit <commit>`,
- * run when asked, then one block per file that differs between the commit and the skill as it is
- * now. A comparison of another version of the skill is not shown; a failed one says why and runs
- * again on Retry.
- */
-const Comparison = ({
-  name,
-  version,
-  entry,
-}: {
-  name: string;
-  /** The skill as it is now, as `versionOf` names it. */
-  version: string;
-  entry: HistoryEvent;
-}) => {
-  const comparing = usePending(compareLabel(name, entry.commit));
-  const read = useAppStore(
-    (s) => s.comparisons[comparisonKey(name, entry.commit)]
-  );
-  const current = read?.version === version ? read : undefined;
-  const compare = () => {
-    void loadComparison(name, entry.commit, version);
-  };
-
-  if (current !== undefined && current.failed === undefined) {
-    const { diffs } = current;
-    return (
-      <section
-        aria-label={`${entry.subject} compared with now`}
-        className="flex flex-col gap-2"
-      >
-        <span className="type-technical-sm text-text-caption">
-          {diffs.length === 0
-            ? "Matches the skill as it is now"
-            : `${files(diffs.length)} changed since this version`}
-        </span>
-        {diffs.length > 0 && (
-          <ul className="gap-hunk m-0 flex list-none flex-col p-0">
-            {diffs.map((d) => (
-              <ComparedFile key={d.path} diff={d} />
-            ))}
-          </ul>
-        )}
-      </section>
-    );
-  }
-  return (
-    <div className="flex flex-col items-start gap-2">
-      {current?.failed === true && (
-        <div role="alert" className="flex flex-col gap-1">
-          <p className="type-notice text-tone-danger-fg m-0">
-            {current.problem.message}
-          </p>
-          {current.problem.hint !== undefined && (
-            <p className="type-notice text-text-muted m-0">
-              {current.problem.hint}
-            </p>
-          )}
-        </div>
-      )}
-      {/* Aligned with the subject's text, as the entry's button is. */}
-      <div className="-ml-3.5">
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={comparing}
-          onClick={compare}
-        >
-          {comparing && <Spinner />}
-          {current?.failed === true ? "Retry" : "Compare with now"}
-        </Button>
-      </div>
-    </div>
-  );
-};
-
 const Entry = ({
   entry,
   last,
   expandable = false,
-  compare,
 }: {
   entry: HistoryEvent;
   last: boolean;
   /** Shows a chevron that opens the files the commit changed. */
   expandable?: boolean;
-  /** The skill the open entry compares with now, and its version: Compare with now under the files. */
-  compare?: { name: string; version: string };
 }) => {
   const [open, setOpen] = useState(false);
   return (
@@ -264,34 +155,19 @@ const Entry = ({
             ))}
           </ul>
         )}
-        {expandable && open && compare !== undefined && (
-          <div className="mt-3">
-            <Comparison
-              name={compare.name}
-              version={compare.version}
-              entry={entry}
-            />
-          </div>
-        )}
       </div>
     </li>
   );
 };
 
-/**
- * The History sheet: every commit of the skill, each expandable to the files it changed and a
- * comparison of the commit with the skill as it is now.
- */
+/** The History sheet: every commit of the skill, each expandable to the files it changed. */
 const HistorySheet = ({
   name,
-  version,
   entries,
   open,
   onOpenChange,
 }: {
   name: string;
-  /** The skill as it is now, which Compare with now compares a commit with. */
-  version: string;
   entries: HistoryEvent[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -314,7 +190,6 @@ const HistorySheet = ({
               entry={e}
               last={i === entries.length - 1}
               expandable
-              compare={{ name, version }}
             />
           ))}
         </ol>
@@ -411,7 +286,6 @@ export const HistorySection = ({ row }: { row: SkillRow }) => {
       </ol>
       <HistorySheet
         name={row.name}
-        version={version}
         entries={entries}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
