@@ -125,7 +125,9 @@ test("Create in the Skills header runs skill new with the description and select
 }) => {
   await openDialog(cli, page);
   await expect(
-    dialog(page).getByText("Only on this machine until you publish it.")
+    dialog(page).getByText(
+      "Creates a skill of your own in your library and adds it to your agents."
+    )
   ).toBeVisible();
   await expect(nameField(page)).toBeFocused();
   await expect(createButton(page)).toBeDisabled();
@@ -140,7 +142,9 @@ test("Create in the Skills header runs skill new with the description and select
   await create.started;
   await expect(createButton(page)).toHaveAttribute("aria-busy", "true");
   create.release();
-  await expect(toasts(page).getByText(`Created ${NEW_SKILL}`)).toBeVisible();
+  await expect(
+    toasts(page).getByText(`Created ${NEW_SKILL} skill`)
+  ).toBeVisible();
 
   // The command ended; the inventory that follows has not come: nothing is selected for it yet.
   await expect(dialog(page)).toBeVisible();
@@ -175,7 +179,9 @@ test("Create skill in the Add skills header runs skill new without --description
   cli.register(["skill", "new", NEW_SKILL], { events: createdEvents });
   // Enter in a field creates, as the button does.
   await nameField(page).press("Enter");
-  await expect(toasts(page).getByText(`Created ${NEW_SKILL}`)).toBeVisible();
+  await expect(
+    toasts(page).getByText(`Created ${NEW_SKILL} skill`)
+  ).toBeVisible();
 
   await answerRefresh(cli);
   await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
@@ -206,10 +212,10 @@ test("a name the CLI refuses (exit 6) shows its message under Name and keeps the
   await createButton(page).click();
 
   const alert = dialog(page).getByRole("alert");
-  await expect(alert).toContainText(
-    "the account repo already holds release-notes as one of your own skills"
+  // The message and the hint as one sentence-cased paragraph.
+  await expect(alert).toHaveText(
+    "The account repo already holds release-notes as one of your own skills. Choose another name."
   );
-  await expect(alert).toContainText("choose another name");
   await expect(nameField(page)).toHaveAttribute("aria-invalid", "true");
   // The message is in place of the rule, under Name.
   await expect(
@@ -220,7 +226,7 @@ test("a name the CLI refuses (exit 6) shows its message under Name and keeps the
   await expect(dialog(page)).toBeVisible();
   // The dialog shows the failure: no error toast.
   await expect(
-    toasts(page).getByText("the account repo already holds", { exact: false })
+    toasts(page).getByText("account repo already holds", { exact: false })
   ).toHaveCount(0);
 
   // Changing the name clears it.
@@ -232,7 +238,9 @@ test("a name the CLI refuses (exit 6) shows its message under Name and keeps the
     events: [{ name: "release-notes-2", type: "library_skill" }],
   });
   await createButton(page).click();
-  await expect(toasts(page).getByText("Created release-notes-2")).toBeVisible();
+  await expect(
+    toasts(page).getByText("Created release-notes-2 skill")
+  ).toBeVisible();
   expect(later(cli)).toEqual([
     ["skill", "new", "release-notes", "--json"],
     ["skill", "new", "release-notes-2", "--json"],
@@ -276,6 +284,44 @@ test("the name is checked as the CLI checks it before Create runs anything", asy
   });
 
   // Cancel closes the dialog without running anything.
+  await dialog(page)
+    .getByRole("button", { exact: true, name: "Cancel" })
+    .click();
+  await expect(dialog(page)).toBeHidden();
+  expect(later(cli)).toEqual([]);
+});
+
+test("the description hint turns red and Create is disabled past 1024 characters", async ({
+  cli,
+  page,
+}) => {
+  await openDialog(cli, page);
+  const hint = dialog(page).getByText(
+    "What it does and when to use it, in one or two sentences. Up to 1024 characters."
+  );
+  await expect(hint).toBeVisible();
+  await expect(hint).toHaveClass(/text-text-hint/u);
+  await expect(descriptionField(page)).toHaveAccessibleDescription(
+    "What it does and when to use it, in one or two sentences. Up to 1024 characters."
+  );
+
+  await nameField(page).fill(NEW_SKILL);
+  // Counted in characters, not bytes: 1024 two-byte letters still fit.
+  await descriptionField(page).fill("é".repeat(1024));
+  await expect(createButton(page)).toBeEnabled();
+  await expect(descriptionField(page)).not.toHaveAttribute("aria-invalid");
+
+  await descriptionField(page).fill("a".repeat(1025));
+  await expect(hint).toHaveClass(/text-tone-danger-fg/u);
+  await expect(descriptionField(page)).toHaveAttribute("aria-invalid", "true");
+  await expect(createButton(page)).toBeDisabled();
+  await descriptionField(page).press("Enter");
+
+  await descriptionField(page).press("Backspace");
+  await expect(hint).toHaveClass(/text-text-hint/u);
+  await expect(descriptionField(page)).not.toHaveAttribute("aria-invalid");
+  await expect(createButton(page)).toBeEnabled();
+
   await dialog(page)
     .getByRole("button", { exact: true, name: "Cancel" })
     .click();
