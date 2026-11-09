@@ -130,7 +130,7 @@ const CreateSkillForm = ({
       label: CREATE_SKILL_LABEL,
       ownFailure: true,
       success: (events) =>
-        `Created ${events.find((e) => e.type === "library_skill")?.name ?? name}`,
+        `Created ${events.find((e) => e.type === "library_skill")?.name ?? name} skill`,
     });
     if (outcome.exitCode !== EXIT_CODES.ok) {
       // Another command holding the lock is the runner's toast, with its Retry.

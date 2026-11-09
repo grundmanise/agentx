@@ -142,7 +142,9 @@ test("Create in the Skills header runs skill new with the description and select
   await create.started;
   await expect(createButton(page)).toHaveAttribute("aria-busy", "true");
   create.release();
-  await expect(toasts(page).getByText(`Created ${NEW_SKILL}`)).toBeVisible();
+  await expect(
+    toasts(page).getByText(`Created ${NEW_SKILL} skill`)
+  ).toBeVisible();
 
   // The command ended; the inventory that follows has not come: nothing is selected for it yet.
   await expect(dialog(page)).toBeVisible();
@@ -177,7 +179,9 @@ test("Create skill in the Add skills header runs skill new without --description
   cli.register(["skill", "new", NEW_SKILL], { events: createdEvents });
   // Enter in a field creates, as the button does.
   await nameField(page).press("Enter");
-  await expect(toasts(page).getByText(`Created ${NEW_SKILL}`)).toBeVisible();
+  await expect(
+    toasts(page).getByText(`Created ${NEW_SKILL} skill`)
+  ).toBeVisible();
 
   await answerRefresh(cli);
   await expect(page.getByRole("heading", { name: "Skills" })).toBeVisible();
@@ -234,7 +238,9 @@ test("a name the CLI refuses (exit 6) shows its message under Name and keeps the
     events: [{ name: "release-notes-2", type: "library_skill" }],
   });
   await createButton(page).click();
-  await expect(toasts(page).getByText("Created release-notes-2")).toBeVisible();
+  await expect(
+    toasts(page).getByText("Created release-notes-2 skill")
+  ).toBeVisible();
   expect(later(cli)).toEqual([
     ["skill", "new", "release-notes", "--json"],
     ["skill", "new", "release-notes-2", "--json"],
