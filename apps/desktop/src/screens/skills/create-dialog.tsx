@@ -6,6 +6,7 @@ import { useId, useRef, useState } from "react";
 import type { RefObject } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
+import { ProblemText } from "#/components/problem-text.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
@@ -81,16 +82,6 @@ const refusalOf = (outcome: Outcome): Refusal => {
       error?.hint === undefined ? { message } : { hint: error.hint, message },
   };
 };
-
-/** The CLI's message and hint, under the field they are about. */
-const ProblemText = ({ problem }: { problem: Problem }) => (
-  <div role="alert" className="flex flex-col gap-1">
-    <p className="type-notice text-tone-danger-fg m-0">{problem.message}</p>
-    {problem.hint !== undefined && (
-      <p className="type-notice text-text-muted m-0">{problem.hint}</p>
-    )}
-  </div>
-);
 
 /** The fields, what went wrong under them, and the buttons. Mounted while the dialog is open. */
 const CreateSkillForm = ({

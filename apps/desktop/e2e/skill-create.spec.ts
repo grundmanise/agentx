@@ -212,10 +212,10 @@ test("a name the CLI refuses (exit 6) shows its message under Name and keeps the
   await createButton(page).click();
 
   const alert = dialog(page).getByRole("alert");
-  await expect(alert).toContainText(
-    "the account repo already holds release-notes as one of your own skills"
+  // The message and the hint as one sentence-cased paragraph.
+  await expect(alert).toHaveText(
+    "The account repo already holds release-notes as one of your own skills. Choose another name."
   );
-  await expect(alert).toContainText("choose another name");
   await expect(nameField(page)).toHaveAttribute("aria-invalid", "true");
   // The message is in place of the rule, under Name.
   await expect(
@@ -226,7 +226,7 @@ test("a name the CLI refuses (exit 6) shows its message under Name and keeps the
   await expect(dialog(page)).toBeVisible();
   // The dialog shows the failure: no error toast.
   await expect(
-    toasts(page).getByText("the account repo already holds", { exact: false })
+    toasts(page).getByText("account repo already holds", { exact: false })
   ).toHaveCount(0);
 
   // Changing the name clears it.
