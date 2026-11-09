@@ -1,5 +1,5 @@
-// What the Another machine section of Settings reads from a name, a path and the Sources slice:
-// pure functions, so that the section shows only what the CLI reports.
+// What the Export settings and Import settings sections of Settings read from a name, a path and
+// the Sources slice: pure functions, so that the sections show only what the CLI reports.
 import type { SourceEvent } from "#/cli/events.gen.ts";
 
 /** The name Export starts with: the snapshot is written to the library as agentx-export.json. */

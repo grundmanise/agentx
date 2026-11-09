@@ -1,7 +1,6 @@
-// What the Another machine and Skills from the Skills CLI sections of Settings are tested against:
-// the sources before and after an import, the events of `export`, `import --yes` and
-// `adopt skills-cli --all`, and an adoption preview with two candidates, a refused record and a
-// managed one of the Skills CLI's, and a candidate and a refused record of Skillshare's.
+// What the Export settings and Import settings sections of Settings are tested against: the
+// sources before and after an import, and the events of `export`, `import --yes` and a
+// `source add` that cannot reach its source.
 import type { InlineEvent } from "../harness/cli.ts";
 
 export const LIBRARY = "/home/me/.agents/skills";
@@ -61,16 +60,6 @@ export const sourcesAfterImport: InlineEvent[] = [
   },
 ];
 
-/** Every source fetched: what `source list` reports once Add sources has added them. */
-export const sourcesAdded: InlineEvent[] = sourcesAfterImport.map((s) => {
-  if (s.type !== "source") {
-    return s;
-  }
-  return s.account === true
-    ? { ...s, skills: 2 }
-    : { ...s, commit: s.commit ?? "b2b2b2b2b2b2" };
-});
-
 export const exported: InlineEvent[] = [
   { path: `${LIBRARY}/agentx-export.json`, skills: 3, type: "export" },
 ];
@@ -84,7 +73,14 @@ export const alreadyThere: InlineEvent[] = [
   },
 ];
 
-/** What `import <file> --yes` reports: the settings it wrote, then one `import_skill` per entry. */
+/** The reason the CLI gives for a skipped unmanaged skill. */
+export const UNMANAGED_REASON =
+  "notes is unmanaged, so there is no source to install it from";
+
+/**
+ * What `import <file> --yes` reports: the settings it wrote, then one `import_skill` per entry,
+ * two installed, one updated, one kept, one placed and two skipped.
+ */
 export const imported: InlineEvent[] = [
   { type: "settings" },
   {
@@ -98,12 +94,42 @@ export const imported: InlineEvent[] = [
     type: "import_skill",
   },
   {
+    action: "installed",
+    kind: "managed",
+    name: "review-kit",
+    placements: ["claude-code"],
+    source: VENDOR,
+    state: "missing",
+    subpath: "skills/review-kit",
+    type: "import_skill",
+  },
+  {
+    action: "updated",
+    kind: "managed",
+    name: "docx",
+    placements: ["claude-code"],
+    source: VENDOR,
+    state: "different",
+    subpath: "skills/docx",
+    type: "import_skill",
+  },
+  {
     action: "kept",
     kind: "managed",
-    name: "review",
+    name: "brand",
     placements: [],
     source: NEW_ACCOUNT,
     state: "present",
+    type: "import_skill",
+  },
+  {
+    action: "placed",
+    kind: "managed",
+    name: "slides",
+    placements: ["cursor"],
+    source: VENDOR,
+    state: "present",
+    subpath: "skills/slides",
     type: "import_skill",
   },
   {
@@ -111,87 +137,36 @@ export const imported: InlineEvent[] = [
     kind: "unmanaged",
     name: "notes",
     placements: [],
-    reason: "notes is unmanaged, so there is no source to install it from",
+    reason: UNMANAGED_REASON,
+    state: "missing",
+    type: "import_skill",
+  },
+  {
+    action: "skipped",
+    kind: "managed",
+    name: "drafts",
+    placements: [],
+    reason: `${TEAM} is not fetched on this machine`,
+    source: TEAM,
     state: "missing",
     type: "import_skill",
   },
 ];
 
-/**
- * The adoption preview: of the Skills CLI's records two candidates, one refused and one agentx
- * manages already; of Skillshare's one candidate and one refused, which the Settings section leaves
- * out.
- */
-export const adoptionPreview: InlineEvent[] = [
-  {
-    file: "/home/me/.agents/.skill-lock.json",
-    name: "brand",
-    reason: "adopting adds and fetches https://github.com/acme/skills",
-    source: "https://github.com/acme/skills",
-    state: "candidate",
-    subpath: "brand",
-    tool: "vercel",
-    type: "adoption",
-  },
-  {
-    file: "/home/me/.agents/.skill-lock.json",
-    name: "frontend",
-    source: VENDOR,
-    state: "candidate",
-    subpath: "frontend",
-    tool: "vercel",
-    type: "adoption",
-  },
-  {
-    file: "/home/me/.agents/.skill-lock.json",
-    name: "local-notes",
-    reason:
-      "it was installed from a local folder, which is no source agentx can read",
-    state: "refused",
-    tool: "vercel",
-    type: "adoption",
-  },
-  {
-    file: "/home/me/.agents/.skill-lock.json",
-    name: "pdf",
-    source: VENDOR,
-    state: "managed",
-    subpath: "skills/pdf",
-    tool: "vercel",
-    type: "adoption",
-  },
-  {
-    file: "/home/me/.config/skillshare/skills/.metadata.json",
-    name: "shared-docs",
-    reason:
-      "it is a tracked repository, a whole checkout rather than one skill",
-    state: "refused",
-    tool: "skillshare",
-    type: "adoption",
-  },
-  {
-    file: "/home/me/.config/skillshare/skills/.metadata.json",
-    name: "ui",
-    source: "https://github.com/acme/ui-skills",
-    state: "candidate",
-    subpath: "ui",
-    tool: "skillshare",
-    type: "adoption",
-  },
-];
+/** An import that installed, updated and skipped nothing: one skill kept, one placed. */
+export const nothingNew: InlineEvent[] = imported.filter(
+  (e) =>
+    e.type === "settings" ||
+    (e.type === "import_skill" &&
+      (e.action === "kept" || e.action === "placed"))
+);
 
-/**
- * `adopt skills-cli --all`: one progress step per source and per install step, then the Skills
- * CLI's records, the only ones the run covers.
- */
-export const adoptedAll: InlineEvent[] = [
-  { current: 1, phase: "fetch", total: 8, type: "progress" },
-  { current: 2, phase: "blobs", total: 8, type: "progress" },
-  ...adoptionPreview
-    .filter((record) => record.type === "adoption" && record.tool === "vercel")
-    .map((record) =>
-      record.type === "adoption" && record.state === "candidate"
-        ? { ...record, reason: undefined, state: "adopted" as const }
-        : record
-    ),
+/** `source add` refusing a source git cannot reach. */
+export const unreachable: InlineEvent[] = [
+  {
+    code: "source",
+    hint: "check the URL and your network, then run the command again",
+    message: `could not reach ${TEAM}`,
+    type: "error",
+  },
 ];

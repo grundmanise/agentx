@@ -6,15 +6,15 @@
 // `SettingsSection` (`section.tsx`) with its label, the line under it and its content, or nothing
 // when it has nothing to show; the page draws the hairlines between them. To add a section, write
 // it in its own file in this folder and add it to `sections` at its slot below, in this order:
-// This machine, Account remote, Sources, Comparing edits, Storage, Another machine, Skills from
-// the Skills CLI, Command line. Insert the new entry under its slot's comment and keep the comment.
+// This machine, Account remote, Sources, Comparing edits, Storage, Command line, Export settings,
+// Import settings. Insert the new entry under its slot's comment and keep the comment.
 import type { ComponentType } from "react";
 
 import { AccountRemoteSection } from "#/screens/settings/account-remote.tsx";
-import { AnotherMachineSection } from "#/screens/settings/another-machine.tsx";
 import { CommandLineSection } from "#/screens/settings/command-line.tsx";
 import { ComparingEditsSection } from "#/screens/settings/comparing-edits.tsx";
-import { SkillsCliSection } from "#/screens/settings/skills-cli.tsx";
+import { ExportSettingsSection } from "#/screens/settings/export-settings.tsx";
+import { ImportSettingsSection } from "#/screens/settings/import-settings.tsx";
 import { SourcesSection } from "#/screens/settings/sources.tsx";
 import { StorageSection } from "#/screens/settings/storage.tsx";
 import { ThisMachineSection } from "#/screens/settings/this-machine.tsx";
@@ -34,11 +34,10 @@ const sections: Section[] = [
   { Section: SourcesSection, id: "sources" },
   { Section: ComparingEditsSection, id: "comparing-edits" },
   { Section: StorageSection, id: "storage" },
-  // Slot: Another machine.
-  { Section: AnotherMachineSection, id: "another-machine" },
-  // Slot: Skills from the Skills CLI.
-  { Section: SkillsCliSection, id: "skills-cli" },
   { Section: CommandLineSection, id: "command-line" },
+  // Slot: Export settings, Import settings.
+  { Section: ExportSettingsSection, id: "export-settings" },
+  { Section: ImportSettingsSection, id: "import-settings" },
 ];
 
 export const SettingsScreen = () => (

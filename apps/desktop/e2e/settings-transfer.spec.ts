@@ -1,24 +1,24 @@
-// The Another machine and Skills from the Skills CLI sections of Settings: Export runs
-// `export <name>` (with --force after the overwrite confirm), Import runs `import <file> --yes` on
-// the file the open dialog returns after its confirm, lists each `import_skill` and adds the
-// sources this machine has not fetched one after another, and Adopt all runs
-// `adopt skills-cli --all` on the Skills CLI's records alone.
+// The Export settings and Import settings sections of Settings, the last ones of the page: Export
+// settings runs `export <name>` (with --force after the overwrite confirm), and Import settings
+// runs `import <file> --yes` on the file the open dialog returns after its confirm, then
+// `source add` for each source of the imported settings this machine has not downloaded, one
+// after another and without asking, and shows what was installed, updated and skipped.
 import type { Page } from "@playwright/test";
 
 import {
   ACCOUNT,
-  adoptedAll,
-  adoptionPreview,
   alreadyThere,
   exported,
   imported,
   LIBRARY,
   NEW_ACCOUNT,
+  nothingNew,
   SNAPSHOT,
-  sourcesAdded,
   sourcesAfterImport,
   sourcesBefore,
   TEAM,
+  UNMANAGED_REASON,
+  unreachable,
 } from "./fixtures/settings-transfer.ts";
 import { expect, loadLines, test } from "./harness/cli.ts";
 import type { MockCli } from "./harness/cli.ts";
@@ -42,10 +42,10 @@ const later = (cli: MockCli) =>
 
 const toasts = (page: Page) =>
   page.getByRole("region", { name: /^Notifications/u });
-const anotherMachine = (page: Page) =>
-  page.getByRole("region", { name: "Another machine" });
-const skillsCli = (page: Page) =>
-  page.getByRole("region", { name: "Skills from the Skills CLI" });
+const exportSettings = (page: Page) =>
+  page.getByRole("region", { name: "Export settings" });
+const importSettings = (page: Page) =>
+  page.getByRole("region", { name: "Import settings" });
 
 const openSettings = async (cli: MockCli, page: Page) => {
   cli.register(["source", "list"], { events: sourcesBefore });
@@ -57,7 +57,8 @@ const openSettings = async (cli: MockCli, page: Page) => {
   await expect(
     page.getByRole("heading", { level: 1, name: "Settings" })
   ).toBeVisible();
-  await expect(anotherMachine(page)).toBeVisible();
+  await expect(exportSettings(page)).toBeVisible();
+  await expect(importSettings(page)).toBeVisible();
 };
 
 /** The Tauri calls the page made beside the CLI's: only the open dialog may be one. */
@@ -70,35 +71,38 @@ test("exports under the name given and toasts the path the CLI wrote", async ({
 }) => {
   cli.register(["export", "agentx-export"], { events: exported });
   await openSettings(cli, page);
-  const section = anotherMachine(page);
-  const name = section.getByRole("textbox", { name: "Snapshot name" });
+  const section = exportSettings(page);
+  await expect(section).toContainText(
+    "Saves your settings and the list of your skills to a file. Import it on another machine to transfer them."
+  );
+  const name = section.getByRole("textbox", { name: "File name" });
   await expect(name).toHaveValue("agentx-export");
   await expect(section).toContainText(
-    "Written to your library as agentx-export.json"
+    "Saved to your library as agentx-export.json"
   );
-  await section.getByRole("button", { name: "Export settings" }).click();
+  await section.getByRole("button", { exact: true, name: "Export" }).click();
   await expect(toasts(page)).toContainText(
-    `Exported to ${LIBRARY}/agentx-export.json`
+    `Exported settings to ${LIBRARY}/agentx-export.json`
   );
   expect(later(cli)).toEqual([["export", "agentx-export", "--json"]]);
 
   // A name export would refuse runs nothing.
   await name.fill("snapshot.json");
   await expect(section).toContainText(
-    "Give a file name without an extension or a slash"
+    "Enter a file name without an extension or a slash"
   );
   await expect(
-    section.getByRole("button", { name: "Export settings" })
+    section.getByRole("button", { exact: true, name: "Export" })
   ).toBeDisabled();
   await name.fill("work-laptop");
   await expect(section).toContainText(
-    "Written to your library as work-laptop.json"
+    "Saved to your library as work-laptop.json"
   );
   expect(later(cli)).toHaveLength(1);
   expect(pluginCalls(cli)).toEqual([]);
 });
 
-test("asks before it replaces a snapshot, then exports with --force", async ({
+test("asks before it replaces a file in the library, then exports with --force", async ({
   cli,
   page,
 }) => {
@@ -108,19 +112,22 @@ test("asks before it replaces a snapshot, then exports with --force", async ({
   });
   cli.register(["export", "agentx-export", "--force"], { events: exported });
   await openSettings(cli, page);
-  await anotherMachine(page)
-    .getByRole("button", { name: "Export settings" })
+  await exportSettings(page)
+    .getByRole("button", { exact: true, name: "Export" })
     .click();
   const confirm = page.getByRole("dialog", {
     name: "Replace agentx-export.json?",
   });
   await expect(confirm).toBeVisible();
+  await expect(confirm).toContainText(
+    "A file with this name is already in your library."
+  );
   // The refusal is the dialog's to answer, so no error toast shows.
   await expect(toasts(page)).not.toContainText("is already there");
   expect(later(cli)).toEqual([["export", "agentx-export", "--json"]]);
   await confirm.getByRole("button", { name: "Replace" }).click();
   await expect(toasts(page)).toContainText(
-    `Exported to ${LIBRARY}/agentx-export.json`
+    `Exported settings to ${LIBRARY}/agentx-export.json`
   );
   expect(later(cli)).toEqual([
     ["export", "agentx-export", "--json"],
@@ -128,69 +135,98 @@ test("asks before it replaces a snapshot, then exports with --force", async ({
   ]);
 });
 
-test("imports the picked file after its confirm, lists each skill and adds the sources not fetched here", async ({
+test("imports the picked file after its confirm, adds the sources it names without asking and shows what changed", async ({
   cli,
   page,
 }) => {
   cli.answerOpenDialog(SNAPSHOT);
   cli.register(["import", SNAPSHOT, "--yes"], { events: imported });
-  cli.register(["source", "add", NEW_ACCOUNT, "--account"], {
+  const accountAdd = cli.register(["source", "add", NEW_ACCOUNT, "--account"], {
     events: [
       { account: true, id: "s-new-account", type: "source", url: NEW_ACCOUNT },
     ],
+    holdAfter: 0,
   });
   cli.register(["source", "add", `${TEAM}#v2`], {
-    events: [{ id: "s-team", pin: "v2", type: "source", url: TEAM }],
+    events: unreachable,
+    exitCode: 3,
   });
   await openSettings(cli, page);
-  const section = anotherMachine(page);
-  await section.getByRole("button", { name: "Import…" }).click();
+  const section = importSettings(page);
+  await expect(section).toContainText(
+    "Replaces the settings on this machine with the ones from an exported file."
+  );
+  const importButton = section.getByRole("button", { name: "Import…" });
+  await importButton.click();
 
   const confirm = page.getByRole("dialog", {
-    name: "Replace this machine's settings with the ones in agentx-export.json?",
+    name: "Replace settings with agentx-export.json?",
   });
   await expect(confirm).toBeVisible();
-  await expect(confirm).toContainText(SNAPSHOT);
+  await expect(confirm.getByRole("paragraph")).toHaveText([
+    "Missing skills will be installed during import, and existing might get updated.",
+    SNAPSHOT,
+  ]);
   expect(cli.openDialogs).toEqual([
     expect.objectContaining({ defaultPath: LIBRARY, multiple: false }),
   ]);
   // Nothing runs before the user confirms.
   expect(later(cli)).toEqual([]);
 
-  // The imported settings name sources this machine has not fetched.
+  // The imported settings name sources this machine has not downloaded.
   cli.register(["source", "list"], { events: sourcesAfterImport });
   await confirm.getByRole("button", { name: "Import" }).click();
   await expect(toasts(page)).toContainText(
-    "Imported the settings in agentx-export.json"
+    "Imported settings from agentx-export.json"
   );
-  const result = section.getByRole("region", { name: "Import result" });
-  await expect(result).toContainText("3 skills in agentx-export.json");
-  await expect(
-    result.getByRole("list", { name: "Imported skills" }).getByRole("listitem")
-  ).toHaveText([
-    "pdfinstalledhttps://github.com/vendor/skills/skills/pdf · New to this machine",
-    "reviewkepthttps://github.com/me/work-account · Already here",
-    "notesskippedNo source · New to this machine" +
-      "notes is unmanaged, so there is no source to install it from",
-  ]);
-  await expect(
-    result.getByRole("list", { name: "Sources to add" }).getByRole("listitem")
-  ).toHaveText([`${NEW_ACCOUNT} (account remote)`, `${TEAM}#v2`]);
-  expect(later(cli)).toContainEqual(["import", SNAPSHOT, "--yes", "--json"]);
 
-  // Each source add reloads the sources; once all are fetched, nothing is left to add.
-  cli.register(["source", "list"], { events: sourcesAdded });
-  await result.getByRole("button", { name: "Add sources" }).click();
-  await expect(
-    result.getByRole("list", { name: "Sources to add" })
-  ).toBeHidden();
-  const adds = later(cli).filter((l) => l[0] === "source" && l[1] === "add");
-  expect(adds).toEqual([
+  // The sources are added one after another, with no click, and Import… waits for the last.
+  await expect
+    .poll(() => later(cli))
+    .toEqual([
+      ["import", SNAPSHOT, "--yes", "--json"],
+      ["source", "add", NEW_ACCOUNT, "--account", "--json"],
+    ]);
+  await expect(importButton).toBeDisabled();
+  await expect(importButton).toHaveAttribute("aria-busy", "true");
+  const result = section.getByRole("region", { name: "Import result" });
+  await expect(result).toHaveCount(0);
+  accountAdd.release();
+
+  await expect(result.getByRole("paragraph")).toHaveText([
+    "Installed: pdf, review-kit",
+    "Updated: docx",
+    "Skipped: notes, drafts",
+    `Couldn't reach ${TEAM}`,
+  ]);
+  // Import… waits for the inventory that follows the commands, then is free again.
+  await cli.serveEmit(
+    cli.requestIds.map((id) => ({
+      ok: true,
+      request_id: id,
+      type: "refresh_complete" as const,
+    }))
+  );
+  await expect(importButton).toBeEnabled();
+  expect(later(cli)).toEqual([
+    ["import", SNAPSHOT, "--yes", "--json"],
     ["source", "add", NEW_ACCOUNT, "--account", "--json"],
     ["source", "add", `${TEAM}#v2`, "--json"],
   ]);
+  // A kept or placed skill is not named, and a skipped one carries the CLI's reason as its
+  // tooltip and description, not as a line of its own.
+  await expect(result).not.toContainText("brand");
+  await expect(result).not.toContainText("slides");
+  const notes = result.getByText("notes", { exact: true });
+  await expect(notes).toHaveAttribute("title", UNMANAGED_REASON);
+  await expect(notes).toHaveAccessibleDescription(UNMANAGED_REASON);
+  await expect(result).not.toContainText(UNMANAGED_REASON);
+  // The source that could not be added is the result's line, not an error toast, and the one
+  // that was added toasts nothing either.
+  await expect(toasts(page)).not.toContainText("could not reach");
+  await expect(toasts(page)).not.toContainText("Added");
   // The account remote this machine had is not touched by name: the CLI replaced it.
-  expect(adds.flat()).not.toContain(ACCOUNT);
+  expect(later(cli).flat()).not.toContain(ACCOUNT);
 
   // The app wrote no file and read none: its only call beside the CLI is the open dialog, and
   // the only path it passed on is the one the dialog returned.
@@ -201,59 +237,31 @@ test("imports the picked file after its confirm, lists each skill and adds the s
   expect(paths).toEqual([SNAPSHOT]);
 });
 
+test("an import that installed, updated and skipped nothing says so, and adds no source", async ({
+  cli,
+  page,
+}) => {
+  cli.answerOpenDialog(SNAPSHOT);
+  cli.register(["import", SNAPSHOT, "--yes"], { events: nothingNew });
+  await openSettings(cli, page);
+  const section = importSettings(page);
+  await section.getByRole("button", { name: "Import…" }).click();
+  await page
+    .getByRole("dialog", { name: "Replace settings with agentx-export.json?" })
+    .getByRole("button", { name: "Import" })
+    .click();
+  const result = section.getByRole("region", { name: "Import result" });
+  await expect(result.getByRole("paragraph")).toHaveText([
+    "No skills were installed or updated.",
+  ]);
+  expect(later(cli)).toEqual([["import", SNAPSHOT, "--yes", "--json"]]);
+});
+
 test("a cancelled open dialog runs nothing", async ({ cli, page }) => {
   cli.answerOpenDialog(null);
   await openSettings(cli, page);
-  await anotherMachine(page).getByRole("button", { name: "Import…" }).click();
+  await importSettings(page).getByRole("button", { name: "Import…" }).click();
   await expect.poll(() => cli.openDialogs.length).toBe(1);
   await expect(page.getByRole("dialog")).toBeHidden();
   expect(later(cli)).toEqual([]);
-});
-
-test("Adopt all runs adopt skills-cli --all with its progress and lists the refused record", async ({
-  cli,
-  page,
-}) => {
-  cli.register(["adopt"], { events: adoptionPreview });
-  const run = cli.register(["adopt", "skills-cli", "--all"], {
-    events: adoptedAll,
-    holdAfter: 1,
-  });
-  await openSettings(cli, page);
-  const section = skillsCli(page);
-  // Skillshare's candidate and refused record are another tool's, so the count and the list
-  // leave them out.
-  await expect(section).toContainText("2 can be adopted");
-  await expect(section).toContainText("replaces the copy the Skills CLI left");
-  await expect(
-    section.getByRole("list", { name: "Can't adopt" }).getByRole("listitem")
-  ).toHaveText([
-    "local-notesit was installed from a local folder, which is no source agentx can read",
-  ]);
-  await section.getByRole("button", { name: "Adopt all" }).click();
-  await expect(
-    section.getByRole("button", { name: "Adopting 1 of 8" })
-  ).toBeDisabled();
-  run.release();
-  await expect(toasts(page)).toContainText("Adopted 2 skills");
-  expect(later(cli)).toEqual([["adopt", "skills-cli", "--all", "--json"]]);
-});
-
-test("the Skills CLI section is hidden without candidates of the Skills CLI", async ({
-  cli,
-  page,
-}) => {
-  // Skillshare's candidate stays: it does not make a section that adopts the Skills CLI's skills.
-  cli.register(["adopt"], {
-    events: adoptionPreview.filter(
-      (r) =>
-        r.type === "adoption" &&
-        (r.state !== "candidate" || r.tool === "skillshare")
-    ),
-  });
-  await openSettings(cli, page);
-  await expect(
-    page.getByRole("heading", { name: "Command line" })
-  ).toBeVisible();
-  await expect(skillsCli(page)).toHaveCount(0);
 });
