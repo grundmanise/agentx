@@ -249,7 +249,13 @@ test("another failure shows the CLI's message, hint and warnings until dismissed
   const toast = toasts(page)
     .getByRole("listitem")
     .filter({ hasText: error.message });
-  await expect(toast).toContainText(error.hint);
+  // The message and the hint as one sentence-cased paragraph.
+  await expect(
+    toast.getByText(
+      "github.com/acme/skills is unreachable. Check that the repository exists and that you can read it.",
+      { exact: true }
+    )
+  ).toBeVisible();
   await expect(toast).toContainText(warning);
   await expect(activity(page)).toHaveText([error.message]);
   await expect(activity(page)).toHaveAttribute("data-tone", "danger");

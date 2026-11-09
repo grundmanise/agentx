@@ -4,10 +4,10 @@
 // those of the skills it updated.
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { CliEvent } from "#/cli/events.gen.ts";
-import { onFinished, problemOf, runCommand } from "#/store/runner.ts";
+import { onFinished, runCommand } from "#/store/runner.ts";
 import type { Finished } from "#/store/runner.ts";
-import { comparisonKey, useAppStore } from "#/store/store.ts";
-import type { AppState, ComparisonRead, FilesRead } from "#/store/store.ts";
+import { useAppStore } from "#/store/store.ts";
+import type { AppState, FilesRead } from "#/store/store.ts";
 
 // Each read's latest run: a slower earlier run of the same read does not overwrite a later one.
 const latest = new Map<string, number>();
@@ -253,35 +253,6 @@ export const loadUpdateDiff = async (name: string, candidate: string) => {
   updateDiffCandidates.delete(name);
 };
 
-/** The label of the Compare with now control of `commit` of the skill `name`, for `usePending`. */
-export const compareLabel = (name: string, commit: string) =>
-  `compare ${name} ${commit}`;
-
-/**
- * Compares `commit` of one of your own skills with the skill as it is now:
- * `skill diff <name> --commit <commit>`, a read, run each time it is asked for. `version` names
- * the skill as it is now, as for `loadHistory`. A failure is kept with its problem, which the
- * control shows itself.
- */
-export const loadComparison = async (
-  name: string,
-  commit: string,
-  version: string
-) => {
-  const args = ["skill", "diff", name, "--commit", commit];
-  const outcome = await runCommand(args, {
-    label: compareLabel(name, commit),
-    ownFailure: true,
-  });
-  const read: ComparisonRead =
-    outcome.exitCode === 0
-      ? { diffs: outcome.events.filter((e) => e.type === "diff"), version }
-      : { failed: true, problem: problemOf(args, outcome), version };
-  useAppStore.setState((s) => ({
-    comparisons: { ...s.comparisons, [comparisonKey(name, commit)]: read },
-  }));
-};
-
 /** What to load again after a command that may have changed something. */
 const afterCommand = ({ args, command, events, exitCode, read }: Finished) => {
   if (read) {
@@ -318,7 +289,8 @@ const afterCommand = ({ args, command, events, exitCode, read }: Finished) => {
     });
   }
   // The skills an update applied to, which its `library_skill` events name, have no update left.
-  if (command === "skill update") {
+  // An aborted merge emits `library_skill` too, but its update is still offered.
+  if (command === "skill update" && !args.includes("--abort")) {
     const updated = new Set(
       events.filter((e) => e.type === "library_skill").map((e) => e.name)
     );

@@ -1,6 +1,7 @@
 import { toast, Toaster as Sonner } from "sonner";
 import type { ExternalToast } from "sonner";
 
+import { problemSentence } from "#/lib/problem-text.ts";
 import { cn } from "#/lib/utils.ts";
 
 // The toast last shown, which the next one replaces.
@@ -90,11 +91,9 @@ export const notify = (
 
 interface DetailToast {
   message: string;
-  /** Under the message, in `text.muted`. */
-  hint?: string;
-  /** More lines about what happened, under the hint, in the hint's type. */
+  /** More lines about what happened, under the message, in `type.notice` `text.muted`. */
   details?: string[];
-  /** Under the message, the hint and the details, in `tone.attention.fg`. */
+  /** Under the message and the details, in `tone.attention.fg`. */
   warnings?: string[];
   action?: ToastAction;
   duration: number;
@@ -106,7 +105,6 @@ interface DetailToast {
  */
 const notifyDetail = ({
   message,
-  hint,
   details = [],
   warnings = [],
   action,
@@ -126,9 +124,6 @@ const notifyDetail = ({
         <div className="flex items-start gap-3">
           <div className="flex min-w-0 flex-1 flex-col gap-1 wrap-break-word">
             <p className="type-toast text-toast-text m-0">{message}</p>
-            {hint !== undefined && (
-              <p className="type-notice text-text-muted m-0">{hint}</p>
-            )}
             {details.map((detail) => (
               <p key={detail} className="type-notice text-text-muted m-0">
                 {detail}
@@ -190,9 +185,9 @@ export const notifyAttention = ({
 
 export interface ErrorToast {
   message: string;
-  /** The CLI's fix: the toast then stays until dismissed. */
+  /** The CLI's fix, after the message: the toast then stays until dismissed. */
   hint?: string;
-  /** More lines about what happened, under the hint, in the hint's type. */
+  /** More lines about what happened, under the message, in `type.notice` `text.muted`. */
   details?: string[];
   /** The command's warnings, under the error. */
   warnings?: string[];
@@ -201,8 +196,8 @@ export interface ErrorToast {
 }
 
 /**
- * A command's error (DESIGN.md §6 "Error toast"): the CLI's message, its hint under it, its
- * details, then the command's warnings, and its action when it has one. It stays until dismissed
+ * A command's error (DESIGN.md §6 "Error toast"): the CLI's message and its hint as one
+ * sentence-cased paragraph, its details, then the command's warnings, and its action when it has one. It stays until dismissed
  * when it has a hint, and 5s when it has none.
  */
 export const notifyError = ({
@@ -216,8 +211,9 @@ export const notifyError = ({
     action,
     details,
     duration: hint === undefined ? 5000 : Number.POSITIVE_INFINITY,
-    hint,
-    message,
+    message: problemSentence(
+      hint === undefined ? { message } : { hint, message }
+    ),
     warnings,
   });
 

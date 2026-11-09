@@ -3,7 +3,8 @@
 // reads the changed files with `skill diff <name>` as it opens the dialog, and Publish runs `skill
 // publish <name>`, with `--message <text>` when What changed is filled, showing the run's progress
 // until it ends. The toast follows the `publish` event's outcome and the exit code; a failure the
-// toast does not name keeps the runner's error toast, the CLI's message and hint.
+// toast does not name keeps the runner's error toast, the CLI's message then its hint as one
+// sentence-cased paragraph.
 import { useId, useRef, useState } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";

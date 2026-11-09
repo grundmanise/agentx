@@ -3,10 +3,12 @@
 // many of your skills it holds and when it was fetched, whether you can write to it, and Change…
 // (a new URL, after the replace warning) and Detach (`source remove <url>`, after its warning).
 // What it shows is the Sources slice, which `source list` fills again after each command; a
-// failure of Save shows under the field, in the CLI's words (docs/help-center/cli/source.mdx).
+// failure of Save shows under the field, in the CLI's words as one sentence-cased paragraph
+// (docs/help-center/cli/source.mdx).
 import { useState } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
+import { ProblemText } from "#/components/problem-text.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
@@ -20,7 +22,7 @@ import {
 } from "#/components/ui/dialog.tsx";
 import { Input } from "#/components/ui/input.tsx";
 import { useNow } from "#/screens/settings/clock.ts";
-import { FieldProblem, SettingsSection } from "#/screens/settings/section.tsx";
+import { SettingsSection } from "#/screens/settings/section.tsx";
 import {
   accessLine,
   accountLine,
@@ -184,9 +186,7 @@ const RemoteForm = ({
             Save
           </Button>
         </div>
-        {problem !== undefined && (
-          <FieldProblem message={problem.message} hint={problem.hint} />
-        )}
+        {problem !== undefined && <ProblemText problem={problem} />}
       </form>
       <Confirm
         open={confirming}

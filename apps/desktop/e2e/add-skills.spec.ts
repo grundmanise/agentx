@@ -516,20 +516,17 @@ test("Add source shows a source git cannot reach, and the CLI's refusals, under 
   await urlField(page).fill("bad/repo");
   await dialog(page).getByRole("button", { name: "Add" }).click();
   const alert = dialog(page).getByRole("alert");
-  await expect(alert).toContainText("Couldn't reach bad/repo");
-  await expect(alert).toContainText(
-    "check that the repository exists and that you can read it"
+  // The message and the CLI's hint, as one sentence-cased paragraph.
+  await expect(alert).toHaveText(
+    "Couldn't reach bad/repo. Check that the repository exists and that you can read it."
   );
   // The runner's error toast stays away: the dialog says what happened.
   await expect(toasts(page).getByRole("listitem")).toHaveCount(0);
 
   await urlField(page).fill("me/account");
   await dialog(page).getByRole("button", { name: "Add" }).click();
-  await expect(alert).toContainText(
-    `https://github.com/me/account is the account remote ${ACCOUNT}`
-  );
-  await expect(alert).toContainText(
-    "list its skills with 'agentx skill list --remote'"
+  await expect(alert).toHaveText(
+    `https://github.com/me/account is the account remote ${ACCOUNT}. List its skills with 'agentx skill list --remote'.`
   );
   await expect(dialog(page)).toBeVisible();
   expect(commandLines(cli).slice(-2)).toEqual([

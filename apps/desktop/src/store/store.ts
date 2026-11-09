@@ -111,11 +111,6 @@ export interface AppState {
    */
   updateDiffs: Record<string, UpdateDiffRead>;
   /**
-   * Each comparison of a commit of one of your own skills with the skill as it is now, from
-   * `skill diff <name> --commit <commit>`, by comparisonKey.
-   */
-  comparisons: Record<string, ComparisonRead>;
-  /**
    * The last `conflict` event of each skill, by name, from the commands the runner ran this
    * session: which files a pending merge left to resolve. Gone on a restart, when a skill with a
    * pending merge has none.
@@ -163,24 +158,10 @@ export type UpdateDiffRead =
   | { candidate: string; diffs: DiffEvent[]; failed?: undefined }
   | { candidate: string; diffs?: undefined; failed: true; problem: Problem };
 
-/**
- * One run of `skill diff <name> --commit <commit>`, kept with the version of the skill it
- * compared, as a HistoryRead is: a change to the skill makes it a comparison with what is no
- * longer there. A failed run keeps the problem, which the entry shows where it was asked for.
- */
-export type ComparisonRead =
-  | { version: string; diffs: DiffEvent[]; failed?: undefined }
-  | { version: string; diffs?: undefined; failed: true; problem: Problem };
-
-/** The key of the comparison of `commit` of the skill `name` in `comparisons`. */
-export const comparisonKey = (name: string, commit: string) =>
-  `${name}@${commit}`;
-
 export const useAppStore = create<AppState>()(() => ({
   activity: [],
   adoption: [],
   applied: undefined,
-  comparisons: {},
   conflicts: {},
   files: {},
   freshness: { kind: "stale" },
