@@ -4,14 +4,16 @@
 // which the fork replaces in the selection. Fork runs `skill fork <name>`, or `--name <new>` with
 // Use a new name on, and the screen redraws from the inventory that follows: the fork is selected
 // by the name the CLI reports, and shows once that inventory holds it. A refusal (exit 6), such as
-// a library entry that is a symlink, keeps the dialog open with the CLI's words and turns Use a new
-// name on, since forking beside the skill is the way out the CLI names.
+// a library entry that is a symlink, keeps the dialog open with the CLI's words as one
+// sentence-cased paragraph (`ProblemText`) and turns Use a new name on, since forking beside the
+// skill is the way out the CLI names.
 import { useEffect, useId, useRef, useState } from "react";
 import { create } from "zustand";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { ForkNoteEvent } from "#/cli/events.gen.ts";
 import { AgentLogo } from "#/components/agent-logo.tsx";
+import { ProblemText } from "#/components/problem-text.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import {
@@ -199,16 +201,7 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
             )}
           </>
         )}
-        {problem !== undefined && (
-          <div role="alert" className="flex flex-col gap-1">
-            <p className="type-notice text-tone-danger-fg m-0">
-              {problem.message}
-            </p>
-            {problem.hint !== undefined && (
-              <p className="type-notice text-text-muted m-0">{problem.hint}</p>
-            )}
-          </div>
-        )}
+        {problem !== undefined && <ProblemText problem={problem} />}
       </div>
       <DialogFooter>
         <DialogClose asChild>

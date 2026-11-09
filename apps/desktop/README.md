@@ -29,6 +29,7 @@ The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it
 | `src/screens/skills/fork.ts`, `src/screens/skills/fork-dialog.tsx` | Fork on the Skills screen. `fork.ts` says which skills offer Fork, how `skill fork` names one and what the dialog says per kind; `fork-dialog.tsx` is the Fork button (`ForkButton`, for the action row or a banner), `openFork(row)`, the Fork dialog and the "What each agent sees" dialog, which `ForkDialogs` in `skills-screen.tsx` shows so that they outlive the pane of the skill forked |
 | `src-tauri` | The Rust side: the window and the CLI supervisor, which reads the login shell's environment, finds the CLI, runs one-shot commands and keeps the serve child open |
 | `src/screens/skills/create-dialog.tsx`, `src/lib/skill-name.ts` | The Create skill dialog, which the Skills and Add skills headers open: a name, checked against the CLI's name grammar in `skill-name.ts`, and a one-line description, which `skill new` turns into one of your skills. The new skill is selected once the inventory that follows lists it; a name the CLI refuses shows its message under Name |
+| `src/lib/problem-text.ts`, `src/components/problem-text.tsx` | A CLI refusal as the app says it: `problemSentence()` joins the message and the hint into one sentence-cased paragraph, and `ProblemText` shows it under a dialog's field; the error toast uses the same sentence |
 
 ## Develop
 
