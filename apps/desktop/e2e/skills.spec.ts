@@ -741,17 +741,7 @@ test.describe("the detail pane", () => {
     cli,
     page,
   }) => {
-    // gone also has an update waiting, which no row or title row says with a pill.
-    cli.onServeStart({
-      events: [
-        {
-          ...inventory,
-          library: inventory.library.map((entry) =>
-            entry.name === "gone" ? { ...entry, pending_merge: true } : entry
-          ),
-        },
-      ],
-    });
+    cli.onServeStart({ events: [inventory] });
     cli.register(["adopt"], { events: adoption });
     cli.register(["skill", "history", "draft"], { events: [] });
     for (const name of ["gone", "draft", "scratch"]) {
@@ -771,9 +761,9 @@ test.describe("the detail pane", () => {
         .or(titleRow)
         .getByText(/^(?:Removed from source|Source removed|Update waiting)$/u)
     ).toHaveCount(0);
-    // The title row: name, origin, the action row and the description, and nothing else.
+    // The title row: name, origin, the action row (Fork, Remove) and the description, and nothing else.
     await expect(titleRow).toHaveText(
-      /^Skill · Enabledgonezeta\/toolsRemoveLint SQL migrations before they run$/u
+      /^Skill · Enabledgonezeta\/toolsForkRemoveLint SQL migrations before they run$/u
     );
 
     // The adoption banner says where the skill came from: the title row leaves the origin out.
@@ -787,9 +777,11 @@ test.describe("the detail pane", () => {
         .getByText("Skills CLI", { exact: true })
     ).toHaveCount(0);
 
-    // A skill not yet published has its pill on the row only, even with no banner to say it.
+    // A skill not yet published: its pill on the row, its banner in the pane, no pill in the title row.
     await row(page, "draft").click();
-    await expect(pane(page, "draft").getByRole("note")).toHaveCount(0);
+    await expect(
+      pane(page, "draft").getByRole("note", { name: "Not published" })
+    ).toBeVisible();
     await expect(
       row(page, "draft").getByText("Not published", { exact: true })
     ).toBeVisible();
@@ -797,6 +789,38 @@ test.describe("the detail pane", () => {
       pane(page, "draft")
         .locator("header")
         .getByText("Not published", { exact: true })
+    ).toHaveCount(0);
+  });
+
+  test("a pending merge comes first: its banner in place of any other, and no pill says it", async ({
+    cli,
+    page,
+  }) => {
+    cli.onServeStart({
+      events: [
+        {
+          ...inventory,
+          library: inventory.library.map((entry) =>
+            entry.name === "gone" ? { ...entry, pending_merge: true } : entry
+          ),
+        },
+      ],
+    });
+    cli.register(["skill", "files", "gone"], { events: filesOf("gone") });
+    await page.goto("/#/skills/gone");
+    await expect(pane(page, "gone").getByRole("note")).toHaveCount(1);
+    await expect(
+      pane(page, "gone").getByRole("note", { name: "Update has conflicts" })
+    ).toBeVisible();
+    await expect(alertTriangles(row(page, "gone"))).toHaveAttribute(
+      "title",
+      "Update has conflicts"
+    );
+    await expect(
+      row(page, "gone").getByText("Update waiting", { exact: true })
+    ).toHaveCount(0);
+    await expect(
+      pane(page, "gone").getByText("Update waiting", { exact: true })
     ).toHaveCount(0);
   });
 });
@@ -870,7 +894,12 @@ test.describe("settling a skill", { tag: RUNS_COMMANDS }, () => {
     await expect(forkBanner).toContainText(
       "It seems this skill was removed from the source."
     );
+    // Fork opens the Fork dialog, whose Fork runs the command.
     await forkBanner.getByRole("button", { name: "Fork" }).click();
+    await page
+      .getByRole("dialog", { name: "Fork gone" })
+      .getByRole("button", { name: "Fork" })
+      .click();
     await expect(
       toasts(page).getByText("Forked gone", { exact: true })
     ).toBeVisible();

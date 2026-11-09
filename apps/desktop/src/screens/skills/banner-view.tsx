@@ -1,18 +1,32 @@
 // The one banner of the detail pane (DESIGN.md §6 "Banner" and "Banner actions and dialogs"),
-// with its button: Add to agents on the gray "Not in any agent" banner, Reconnect on the amber one,
-// Adopt, Add source or Fork on the others. The buttons are in src/screens/skills/actions.tsx.
+// with its button: See changes and Update on the lime banners of an update (See changes opens the
+// What's new sheet), Show folder, Abort and Update on the amber one of a pending merge, Add to
+// agents on the gray "Not in any agent" banner, Reconnect on the amber one of a displaced skill,
+// Adopt, Add source or Fork on the others, Publish or Settings on your own skills' banners, and
+// Fork with Publish to on an edited skill of a source. The buttons are in
+// src/screens/skills/actions.tsx, but Fork, which opens the Fork dialog
+// (src/screens/skills/fork-dialog.tsx), and Publish and Settings (src/screens/skills/publish-dialog.tsx).
 import { cva } from "class-variance-authority";
 
 import { AlertIcon } from "#/components/icons/alert.tsx";
+import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import {
+  AbortMerge,
   AddSource,
   AddToAgents,
   Adopt,
-  Fork,
   Reconnect,
+  SeeChanges,
+  ShowMergeFolder,
+  UpdateButton,
 } from "#/screens/skills/actions.tsx";
 import type { Banner } from "#/screens/skills/banners.ts";
+import { ForkButton } from "#/screens/skills/fork-dialog.tsx";
 import type { SkillRow } from "#/screens/skills/projection.ts";
+import {
+  OpenSettingsButton,
+  PublishButton,
+} from "#/screens/skills/publish-dialog.tsx";
 
 const bannerVariants = cva(
   "rounded-banner py-banner pr-banner-right pl-banner gap-banner flex items-center border",
@@ -46,6 +60,23 @@ const tileVariants = cva(
 
 const BannerActions = ({ row, banner }: { row: SkillRow; banner: Banner }) => {
   switch (banner.action?.kind) {
+    case "update": {
+      return (
+        <>
+          <SeeChanges row={row} />
+          <UpdateButton row={row} />
+        </>
+      );
+    }
+    case "conflict": {
+      return (
+        <>
+          <ShowMergeFolder name={row.name} />
+          <AbortMerge name={row.name} />
+          <UpdateButton row={row} />
+        </>
+      );
+    }
     case "add-to-agents": {
       return <AddToAgents row={row} />;
     }
@@ -65,7 +96,26 @@ const BannerActions = ({ row, banner }: { row: SkillRow; banner: Banner }) => {
       return <AddSource source={banner.action.source} />;
     }
     case "fork": {
-      return <Fork name={row.name} />;
+      return <ForkButton row={row} place="banner" />;
+    }
+    case "publish": {
+      return <PublishButton row={row} label="Publish" />;
+    }
+    case "open-settings": {
+      return <OpenSettingsButton />;
+    }
+    case "edited": {
+      return (
+        <>
+          <ForkButton row={row} place="banner" />
+          {banner.action.publishTo !== undefined && (
+            <PublishButton
+              row={row}
+              label={`Publish to ${banner.action.publishTo}`}
+            />
+          )}
+        </>
+      );
     }
     case undefined: {
       return null;
@@ -89,14 +139,20 @@ export const BannerView = ({
     className={bannerVariants({ tone: banner.tone })}
   >
     <span className={tileVariants({ tone: banner.tone })}>
-      <AlertIcon size="lg" />
+      {banner.icon === "update" ? (
+        <RefreshIcon size="lg" />
+      ) : (
+        <AlertIcon size="lg" />
+      )}
     </span>
     <div className="gap-banner-text flex min-w-0 flex-1 flex-col">
       <span className="type-banner-title text-banner-title">
         {banner.title}
       </span>
       {banner.text !== undefined && (
-        <span className="type-secondary text-banner-text">{banner.text}</span>
+        <span className="type-secondary text-banner-text text-pretty">
+          {banner.text}
+        </span>
       )}
     </div>
     <div className="flex items-center gap-1.5">

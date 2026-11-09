@@ -13,6 +13,7 @@ import type {
   SkillNode,
   UpdateAvailableEvent,
 } from "#/cli/events.gen.ts";
+import { formatDate } from "#/lib/dates.ts";
 
 /** Where a skill comes from, which decides its group, glyph, origin and Details. */
 export type SkillKindName = "yours" | "source" | "plugin" | "disk";
@@ -50,6 +51,11 @@ export interface SkillRow {
   universal: boolean;
   /** An update candidate is known for it. */
   hasUpdate: boolean;
+  /**
+   * The update the last update check offers for it, which its banner's Update applies.
+   * Absent for a skill with a pending merge: finishing that merge comes first.
+   */
+  update?: UpdateAvailableEvent;
   /** The plugin that provides it, for a plugin's skill. */
   plugin?: Plugin;
   /** The one adoption entry that names it, for an unmanaged skill another tool installed. */
@@ -106,6 +112,32 @@ export const shortSource = (url: string): string => {
 
 /** The first seven characters of a commit or fork id. */
 export const shortId = (id: string) => id.slice(0, 7);
+
+/**
+ * Whether an update is what another of your machines published to one of your own skills: the
+ * CLI leaves its base version empty (docs/spec/cli-contract.md, `update_available`).
+ */
+export const fromAnotherMachine = (update: UpdateAvailableEvent) =>
+  update.base_hash === "";
+
+/**
+ * The two versions of an update, base then newer, each by its date when the CLI dates it, else by
+ * its short id. An update from another machine has no base version, so it names the newer alone.
+ */
+export const updateVersions = (update: UpdateAvailableEvent): string => {
+  const newer =
+    update.candidate_upstream_time === undefined
+      ? shortId(update.candidate_upstream_commit || update.candidate)
+      : formatDate(update.candidate_upstream_time);
+  if (fromAnotherMachine(update)) {
+    return newer;
+  }
+  const base =
+    update.upstream_time === undefined
+      ? shortId(update.upstream_commit)
+      : formatDate(update.upstream_time);
+  return `${base} → ${newer}`;
+};
 
 /** The tool an adoption record names, as the product calls it. */
 export const toolName = (adoption: AdoptionEvent): string => {
@@ -228,6 +260,14 @@ const entryRow = (entry: LibraryEntry, c: Context): SkillRow => {
   };
   if (node !== undefined) {
     row.node = node;
+  }
+  const update = c.updates[entry.name];
+  if (
+    update !== undefined &&
+    entry.kind === "managed" &&
+    entry.pending_merge !== true
+  ) {
+    row.update = update;
   }
   const adopted = c.adoption.find((a) => a.name === entry.name);
   if (kind === "disk" && adopted !== undefined) {
@@ -502,7 +542,7 @@ export interface FilesRequest {
 
 /** The last segment of an occurrence's path: the skill directory's own name. */
 const LAST_SEGMENT = /(?<name>[^/]+)\/*$/u;
-const directoryName = (path: string) =>
+export const directoryName = (path: string) =>
   LAST_SEGMENT.exec(path)?.groups?.name ?? "";
 
 /**

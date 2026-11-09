@@ -406,13 +406,19 @@ test("manual mode shows every check and waits for Open agentx, which goes to Set
   await expect(layer(page)).toBeVisible();
 
   await page.getByRole("button", { name: "Open agentx" }).click();
-  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
-  // The serve child already running answered check 5; none was started again.
-  expect(launchCommands(cli)).toEqual([
-    ...launchLines,
-    ...loadLines,
-    ...launchLines,
-  ]);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Settings" })
+  ).toBeVisible();
+  // The serve child already running answered check 5; none was started again. Settings reads
+  // the sources when it opens.
+  await expect
+    .poll(() => launchCommands(cli))
+    .toEqual([
+      ...launchLines,
+      ...loadLines,
+      ...launchLines,
+      ["source", "list", "--json"],
+    ]);
   expect(cli.serveStarts).toBe(1);
 });
 

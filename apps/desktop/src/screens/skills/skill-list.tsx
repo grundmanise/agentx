@@ -1,10 +1,13 @@
+import { useState } from "react";
 import { useNavigate } from "react-router";
 
 import type { Configuration } from "#/cli/events.gen.ts";
 import { AgentLogo, LogoStack } from "#/components/agent-logo.tsx";
 import { FilterChip, SortToggle } from "#/components/filter-controls.tsx";
+import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { SearchField } from "#/components/search-field.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import { CreateSkillDialog } from "#/screens/skills/create-dialog.tsx";
 import { FilterPopover } from "#/screens/skills/filter-popover.tsx";
 import { forksOf, UNIVERSAL } from "#/screens/skills/projection.ts";
 import type {
@@ -14,6 +17,8 @@ import type {
   SortOrder,
 } from "#/screens/skills/projection.ts";
 import { SkillRowItem } from "#/screens/skills/skill-row.tsx";
+import { checkUpdates, useCheckingUpdates } from "#/screens/skills/updates.ts";
+import { useAppStore } from "#/store/store.ts";
 
 /** What the agent chip says: the one agent chosen, or how many. */
 const agentChipLabel = (agents: string[], chosen: Configuration[]): string => {
@@ -57,6 +62,26 @@ const AgentFilterChip = ({
   );
 };
 
+/** The ghost Check updates: its icon turns once while the check runs (DESIGN.md §8). */
+const CheckUpdates = () => {
+  const running = useCheckingUpdates();
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      aria-busy={running}
+      onClick={() => {
+        void checkUpdates();
+      }}
+    >
+      <span className={running ? "animate-turn-once flex" : "flex"}>
+        <RefreshIcon size="sm" />
+      </span>
+      Check updates
+    </Button>
+  );
+};
+
 const GroupHeader = ({
   label,
   count,
@@ -79,7 +104,7 @@ const GroupHeader = ({
 );
 
 /**
- * The left column of the Skills screen: title and count, the Add button, the search field, the
+ * The left column of the Skills screen: title and count, Check updates, Add and Create, the search field, the
  * filter row, and the rows in their groups. A fork made under a new name is one row, in YOUR
  * SKILLS; its original carries a marker for it.
  */
@@ -107,6 +132,11 @@ export const SkillList = ({
   onSelect: (row: SkillRow) => void;
 }) => {
   const navigate = useNavigate();
+  const [creating, setCreating] = useState(false);
+  // What the rows' banners read besides the row, for their alert triangles.
+  const sources = useAppStore((s) => s.sources);
+  const conflicts = useAppStore((s) => s.conflicts);
+  const facts = { conflicts, sources };
   return (
     <section
       aria-label="Skills list"
@@ -122,8 +152,8 @@ export const SkillList = ({
             {rows.length}
           </span>
         </div>
-        {/* Check updates and Create come with the changes that build them. */}
         <div className="flex items-center gap-1">
+          <CheckUpdates />
           <Button
             variant="ghost"
             size="sm"
@@ -132,6 +162,15 @@ export const SkillList = ({
             }}
           >
             Add
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setCreating(true);
+            }}
+          >
+            Create
           </Button>
         </div>
       </div>
@@ -195,6 +234,7 @@ export const SkillList = ({
                       row={row}
                       forks={forksOf(row, rows)}
                       configurations={configurations}
+                      facts={facts}
                       selected={row.key === selectedKey}
                       onSelect={() => {
                         onSelect(row);
@@ -207,6 +247,7 @@ export const SkillList = ({
           ))
         )}
       </nav>
+      <CreateSkillDialog open={creating} onOpenChange={setCreating} />
     </section>
   );
 };
