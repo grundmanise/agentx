@@ -1,6 +1,8 @@
 // The slices that one-shot reads fill: settings, sources and the adoption preview. Each loads
 // once the startup checks pass, and again after the commands that change it. The update check of
-// `skill check-updates` replaces the update candidates serve found.
+// `skill check-updates` replaces the update candidates serve found, and `skill update` takes away
+// those of the skills it updated.
+import { EXIT_CODES } from "#/cli/events.gen.ts";
 import type { CliEvent } from "#/cli/events.gen.ts";
 import { onFinished, runCommand } from "#/store/runner.ts";
 import type { Finished } from "#/store/runner.ts";
@@ -210,7 +212,11 @@ const afterCommand = ({ args, command, events, exitCode, read }: Finished) => {
   ) {
     void loadSources();
   }
-  if (command === "skill check-updates" && exitCode === 0) {
+  // A check that could not reach a source (exit 3) still lists what it found elsewhere.
+  if (
+    command === "skill check-updates" &&
+    (exitCode === EXIT_CODES.ok || exitCode === EXIT_CODES.source)
+  ) {
     useAppStore.setState({
       updates: Object.fromEntries(
         events
@@ -218,6 +224,20 @@ const afterCommand = ({ args, command, events, exitCode, read }: Finished) => {
           .map((e) => [e.name, e])
       ),
     });
+  }
+  // The skills an update applied to, which its `library_skill` events name, have no update left.
+  // An aborted merge emits `library_skill` too, but its update is still offered.
+  if (command === "skill update" && !args.includes("--abort")) {
+    const updated = new Set(
+      events.filter((e) => e.type === "library_skill").map((e) => e.name)
+    );
+    if (updated.size > 0) {
+      useAppStore.setState((s) => ({
+        updates: Object.fromEntries(
+          Object.entries(s.updates).filter(([name]) => !updated.has(name))
+        ),
+      }));
+    }
   }
 };
 

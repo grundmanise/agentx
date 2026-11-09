@@ -1,15 +1,21 @@
 // The one banner of the detail pane (DESIGN.md §6 "Banner" and "Banner actions and dialogs"),
-// with its button: Add to agents on the gray "Not in any agent" banner, Reconnect on the amber one,
-// Adopt, Add source or Fork on the others. The buttons are in src/screens/skills/actions.tsx.
+// with its button: Update on the lime banners of an update, Show folder, Abort and Update on the
+// amber one of a pending merge, Add to agents on the gray "Not in any agent" banner, Reconnect on
+// the amber one of a displaced skill, Adopt, Add source or Fork on the others. The buttons are in
+// src/screens/skills/actions.tsx.
 import { cva } from "class-variance-authority";
 
 import { AlertIcon } from "#/components/icons/alert.tsx";
+import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import {
+  AbortMerge,
   AddSource,
   AddToAgents,
   Adopt,
   Fork,
   Reconnect,
+  ShowMergeFolder,
+  UpdateButton,
 } from "#/screens/skills/actions.tsx";
 import type { Banner } from "#/screens/skills/banners.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
@@ -46,6 +52,18 @@ const tileVariants = cva(
 
 const BannerActions = ({ row, banner }: { row: SkillRow; banner: Banner }) => {
   switch (banner.action?.kind) {
+    case "update": {
+      return <UpdateButton row={row} />;
+    }
+    case "conflict": {
+      return (
+        <>
+          <ShowMergeFolder name={row.name} />
+          <AbortMerge name={row.name} />
+          <UpdateButton row={row} />
+        </>
+      );
+    }
     case "add-to-agents": {
       return <AddToAgents row={row} />;
     }
@@ -89,14 +107,20 @@ export const BannerView = ({
     className={bannerVariants({ tone: banner.tone })}
   >
     <span className={tileVariants({ tone: banner.tone })}>
-      <AlertIcon size="lg" />
+      {banner.icon === "update" ? (
+        <RefreshIcon size="lg" />
+      ) : (
+        <AlertIcon size="lg" />
+      )}
     </span>
     <div className="gap-banner-text flex min-w-0 flex-1 flex-col">
       <span className="type-banner-title text-banner-title">
         {banner.title}
       </span>
       {banner.text !== undefined && (
-        <span className="type-secondary text-banner-text">{banner.text}</span>
+        <span className="type-secondary text-banner-text text-pretty">
+          {banner.text}
+        </span>
       )}
     </div>
     <div className="flex items-center gap-1.5">

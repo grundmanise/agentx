@@ -1,6 +1,7 @@
 // The buttons of the Skills detail pane's banners. Each runs exactly one command line and redraws from the inventory that
 // follows; a Reconnect the CLI refuses because the folder holds another version opens a confirm
-// dialog, whose Replace runs the same command with --force.
+// dialog, whose Replace runs the same command with --force. Abort, on a pending merge, asks first
+// too. Show folder runs no command: it shows the merge folder in Finder.
 import { useState } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
@@ -17,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "#/components/ui/dialog.tsx";
+import { revealInFinder } from "#/lib/reveal.ts";
 import {
   agentsWord,
   holdsOtherContent,
@@ -24,7 +26,9 @@ import {
 } from "#/screens/skills/placements.ts";
 import { shortSource } from "#/screens/skills/projection.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
+import { updateLabel, updateSkill } from "#/screens/skills/updates.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
+import { useAppStore } from "#/store/store.ts";
 
 /** The label of the Adopt control for `name`: the runner's name for it. */
 const adoptLabel = (name: string) => `adopt ${name}`;
@@ -35,6 +39,7 @@ const reconnectLabel = (row: SkillRow, placement: LibraryPlacement) =>
 
 const addSourceLabel = (source: string) => `add source ${source}`;
 const forkLabel = (name: string) => `fork ${name}`;
+const abortLabel = (name: string) => `abort update ${name}`;
 
 /** Adopt: `adopt --skill <name>`. The skill is then managed, and agentx can update it. */
 const adopt = async (name: string) =>
@@ -201,5 +206,101 @@ export const Fork = ({ name }: { name: string }) => {
         });
       }}
     />
+  );
+};
+
+/** Update: `skill update <name>`, the primary action of an update's banner. */
+export const UpdateButton = ({ row }: { row: SkillRow }) => {
+  const pending = useSettling(updateLabel(row.name));
+  return (
+    <Button
+      variant="primary"
+      size="sm"
+      disabled={pending}
+      aria-busy={pending ? true : undefined}
+      onClick={() => {
+        void updateSkill(row);
+      }}
+    >
+      {pending && <Spinner />}
+      Update
+    </Button>
+  );
+};
+
+/**
+ * Show folder: the folder of a pending merge, `<agentx home>/merges/<name>/<name>`, where the
+ * conflicts are resolved, shown in Finder. agentx home is the machine's, from `machine`; the
+ * button waits for it.
+ */
+export const ShowMergeFolder = ({ name }: { name: string }) => {
+  const home = useAppStore((s) => s.machine?.home);
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      disabled={home === undefined}
+      onClick={() => {
+        if (home !== undefined) {
+          void revealInFinder(`${home}/merges/${name}/${name}`);
+        }
+      }}
+    >
+      Show folder
+    </Button>
+  );
+};
+
+/**
+ * Abort: `skill update <name> --abort` gives up a pending merge, after a confirm dialog. The
+ * skill and the update stay as they were; what was resolved in the merge folder is discarded.
+ */
+export const AbortMerge = ({ name }: { name: string }) => {
+  const label = abortLabel(name);
+  const pending = useSettling(label);
+  const [confirm, setConfirm] = useState(false);
+  return (
+    <>
+      <Button
+        variant="danger"
+        size="sm"
+        disabled={pending}
+        aria-busy={pending ? true : undefined}
+        onClick={() => {
+          setConfirm(true);
+        }}
+      >
+        {pending && <Spinner />}
+        Abort
+      </Button>
+      <Dialog open={confirm} onOpenChange={setConfirm}>
+        <DialogContent>
+          <DialogHeader showCloseButton={false}>
+            <DialogTitle>{`Abort the update of ${name}?`}</DialogTitle>
+            <DialogDescription>
+              Your resolved files in the merge folder are discarded. The skill
+              and the update stay as they were.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="ghost">Cancel</Button>
+            </DialogClose>
+            <Button
+              variant="danger"
+              onClick={() => {
+                setConfirm(false);
+                void runUntilSettled(["skill", "update", name, "--abort"], {
+                  label,
+                  success: `Aborted the update of ${name}`,
+                });
+              }}
+            >
+              Abort
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
