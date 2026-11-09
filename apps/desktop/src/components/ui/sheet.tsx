@@ -2,6 +2,8 @@
 // The design has one sheet, at the right edge, so there is no `side`. Its parts keep shadcn's
 // names and `data-slot` attributes and take no `className`; the close is our ghost Button, in the
 // header.
+import { cva } from "class-variance-authority";
+import type { VariantProps } from "class-variance-authority";
 import { Dialog as SheetPrimitive } from "radix-ui";
 import type { ReactNode } from "react";
 
@@ -38,20 +40,37 @@ const SheetOverlay = ({
   />
 );
 
+const sheetContentVariants = cva(
+  "rounded-sheet border-sheet-border bg-sheet-bg shadow-overlay top-sheet right-sheet bottom-sheet py-sheet-y px-sheet fixed z-40 flex flex-col gap-6 overflow-hidden border outline-none",
+  {
+    defaultVariants: { size: "default" },
+    variants: {
+      size: {
+        /** `sheet.width`: the History sheet. */
+        default: "w-sheet",
+        /** `sheet.width-wide`: a sheet of diffs, such as What's new. */
+        wide: "w-sheet-wide",
+      },
+    },
+  }
+);
+
 /**
- * `sheet.width`, inset `sheet.inset` from the top, right and bottom, `sheet.bg` with
- * `sheet.border`, `sheet.radius`, `overlay.shadow` and `sheet.padding`. A column: the header,
- * then the content, which scrolls down only.
+ * `sheet.width` (`sheet.width-wide` for `size="wide"`), inset `sheet.inset` from the top, right
+ * and bottom, `sheet.bg` with `sheet.border`, `sheet.radius`, `overlay.shadow` and
+ * `sheet.padding`. A column: the header, then the content, which scrolls down only.
  */
 const SheetContent = ({
   children,
+  size,
   ...props
-}: OwnProps<typeof SheetPrimitive.Content>) => (
+}: OwnProps<typeof SheetPrimitive.Content> &
+  VariantProps<typeof sheetContentVariants>) => (
   <SheetPortal>
     <SheetOverlay />
     <SheetPrimitive.Content
       data-slot="sheet-content"
-      className="rounded-sheet border-sheet-border bg-sheet-bg shadow-overlay w-sheet top-sheet right-sheet bottom-sheet py-sheet-y px-sheet fixed z-40 flex flex-col gap-6 overflow-hidden border outline-none"
+      className={sheetContentVariants({ size })}
       {...props}
     >
       {children}
