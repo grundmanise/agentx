@@ -761,9 +761,9 @@ test.describe("the detail pane", () => {
         .or(titleRow)
         .getByText(/^(?:Removed from source|Source removed|Update waiting)$/u)
     ).toHaveCount(0);
-    // The title row: name, origin, the action row and the description, and nothing else.
+    // The title row: name, origin, the action row (Fork, Remove) and the description, and nothing else.
     await expect(titleRow).toHaveText(
-      /^Skill · Enabledgonezeta\/toolsRemoveLint SQL migrations before they run$/u
+      /^Skill · Enabledgonezeta\/toolsForkRemoveLint SQL migrations before they run$/u
     );
 
     // The adoption banner says where the skill came from: the title row leaves the origin out.
@@ -892,7 +892,12 @@ test.describe("settling a skill", { tag: RUNS_COMMANDS }, () => {
     await expect(forkBanner).toContainText(
       "It seems this skill was removed from the source."
     );
+    // Fork opens the Fork dialog, whose Fork runs the command.
     await forkBanner.getByRole("button", { name: "Fork" }).click();
+    await page
+      .getByRole("dialog", { name: "Fork gone" })
+      .getByRole("button", { name: "Fork" })
+      .click();
     await expect(
       toasts(page).getByText("Forked gone", { exact: true })
     ).toBeVisible();

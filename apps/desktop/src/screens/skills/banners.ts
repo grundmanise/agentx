@@ -40,7 +40,7 @@ export type BannerAction =
   | { kind: "adopt" }
   /** `source add <url>`, for a skill whose source was removed. */
   | { kind: "add-source"; source: string }
-  /** `skill fork <name>`, for a skill its source no longer holds. */
+  /** Fork, which opens the Fork dialog, for a skill its source no longer holds. */
   | { kind: "fork" };
 
 export interface Banner {
