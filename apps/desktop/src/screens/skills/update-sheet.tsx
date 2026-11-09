@@ -28,7 +28,8 @@ import { useAppStore } from "#/store/store.ts";
 const TITLE = "What's new";
 
 /** The note of an update from another machine, whose changes the CLI cannot diff. */
-export const FILES_ONLY_NOTE = "agentx shows these changes once you update";
+export const FILES_ONLY_NOTE =
+  "Changes from another machine can't be shown before you update.";
 
 const statusVariants = cva("type-technical-sm flex-none", {
   variants: {
