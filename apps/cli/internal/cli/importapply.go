@@ -37,8 +37,9 @@ var importActions = []string{importInstalled, importUpdated, importPlaced, impor
 // What the machine holds of each entry is read first, and is what each
 // import_skill event's state and local_commit report. Then the command asks
 // once, see confirmImport, before it writes or fetches anything, and only a
-// yes goes on: the settings are replaced, and every skill entry is applied,
-// see applyRun. Each change is made by the command that makes it on its own
+// yes goes on: the settings are replaced, the sources of the settings this
+// machine has not added are added, and every skill entry is applied, see
+// applyRun. Each change is made by the command that makes it on its own
 // – skill add, skill update, skill place and skill remove – each one
 // journaled mutation, so a run stopped part way leaves at most one
 // unfinished journal, which the next command finishes as it finishes any
@@ -69,14 +70,18 @@ func (inv *invocation) applySnapshot(ctx context.Context, origin string, doc sna
 		return mutationFailure(err)
 	}
 	inv.emitSettings(doc.Settings)
-	run := &applyRun{inv: inv, account: account}
+	adding, err := inv.unadded(ctx, doc.Settings)
+	if err != nil {
+		return err
+	}
+	run := newApplyRun(inv, account, adding)
 	if err := run.apply(ctx, states); err != nil {
 		return err
 	}
 	for _, st := range states {
 		inv.out.emit(st)
 	}
-	inv.printImported(ctx, origin, doc, states, doc.Settings, run.fetched)
+	inv.printImported(origin, doc, states, doc.Settings, run)
 	inv.summary = importSummary(origin, states)
 	return nil
 }
@@ -104,6 +109,11 @@ func (inv *invocation) applySnapshot(ctx context.Context, origin string, doc sna
 //   - An unmanaged skill has no source to install it from: one the library
 //     holds is placed, and any other is skipped.
 //
+// Before any entry is applied, every source an entry needs is fetched once,
+// and then every other source of the settings this machine has not added,
+// see unadded, is added by the steps of source add, so that the user never
+// has to add a source of the settings again by hand.
+//
 // A skill the snapshot does not list is left as it is, and MCP servers and
 // plugins are not applied.
 type applyRun struct {
@@ -123,6 +133,26 @@ type applyRun struct {
 	remote  string
 	tips    map[string]string
 	missing *failure
+	// The sources of the settings this machine had not added when they were
+	// written, see unadded, by canonical URL, and what became of each: the
+	// source event of its add, or why it could not be added. done counts the
+	// adds that ended, and total all of them, for the progress events.
+	adding map[string]bool
+	added  map[string]sourceEvent
+	failed map[string]*failure
+	done   int
+	total  int
+}
+
+// newApplyRun is the application of a snapshot whose settings set the
+// account remote account, adding the sources in adding.
+func newApplyRun(inv *invocation, account string, adding []home.Source) *applyRun {
+	r := &applyRun{inv: inv, account: account, fetched: map[string]bool{}, sources: map[string]*sharedFetch{},
+		adding: map[string]bool{}, added: map[string]sourceEvent{}, failed: map[string]*failure{}, total: len(adding)}
+	for _, src := range adding {
+		r.adding[src.URL] = true
+	}
+	return r
 }
 
 // sharedFetch is one shared source as the run fetched it, once, before any
@@ -137,15 +167,20 @@ type sharedFetch struct {
 // apply applies every entry of states and fills in what was done: the
 // action, the reason of a skip, and the placements after the run.
 func (r *applyRun) apply(ctx context.Context, states []importSkillEvent) error {
+	inv := r.inv
+	if len(states) > 0 {
+		if err := r.read(ctx, states); err != nil {
+			return err
+		}
+		if err := r.fetch(ctx, states); err != nil {
+			return err
+		}
+	}
+	if err := r.addRest(ctx); err != nil {
+		return err
+	}
 	if len(states) == 0 {
 		return nil
-	}
-	inv := r.inv
-	if err := r.read(ctx, states); err != nil {
-		return err
-	}
-	if err := r.fetch(ctx, states); err != nil {
-		return err
 	}
 	for i := range states {
 		if err := r.entry(ctx, &states[i]); err != nil {
@@ -216,7 +251,6 @@ func (r *applyRun) read(ctx context.Context, states []importSkillEvent) error {
 // reaches no remote. A source that cannot be fetched skips its entries; it
 // costs no other.
 func (r *applyRun) fetch(ctx context.Context, states []importSkillEvent) error {
-	r.sources, r.fetched = map[string]*sharedFetch{}, map[string]bool{}
 	account := false
 	for _, st := range states {
 		e := st.snapshotSkill
@@ -259,32 +293,45 @@ func (r *applyRun) fetchShared(ctx context.Context, url string) (*sharedFetch, e
 	if i := s.FindSource(url); i >= 0 {
 		fx.src.Ref = s.Sources[i].Pin
 	}
-	err = inv.quietly(func() error {
+	fx.err, err = r.reach(ctx, url, func() error {
 		var err error
 		fx.listing, fx.entry, err = inv.addSource(ctx, fx.src)
 		return err
 	})
-	if f, ok := skipped(ctx, err); ok {
-		fx.err = f
-		return fx, nil
-	} else if err != nil {
+	if err != nil {
 		return nil, err
 	}
-	r.fetched[url] = true
 	return fx, nil
 }
 
 // fetchAccount fetches the account remote, as skill add with no source does,
-// and reads the tip of each of your own skills it holds.
+// and reads the tip of each of your own skills it holds. An account remote
+// this machine has not added, see unadded, is added instead, as source add
+// --account adds it, which fetches it as well.
 func (r *applyRun) fetchAccount(ctx context.Context) error {
 	inv := r.inv
-	err := inv.quietly(func() error {
-		gitDir, entry, remote, err := inv.accountRemote(ctx)
-		if err != nil {
-			return err
-		}
-		if err := inv.fetchRemote(ctx, gitDir, remote, entry.URL); err != nil {
-			return err
+	entry, remote, ok, err := inv.accountSource()
+	if err != nil {
+		return err
+	}
+	if !ok {
+		r.missing = noRemoteRefusal()
+		return nil
+	}
+	r.missing, err = r.reach(ctx, entry.URL, func() error {
+		gitDir := gitx.AccountRepoPath(inv.dirs.Home)
+		if r.adding[entry.URL] {
+			if err := inv.addAccount(ctx, entry.URL); err != nil {
+				return err
+			}
+		} else {
+			var err error
+			if gitDir, entry, remote, err = inv.accountRemote(ctx); err != nil {
+				return err
+			}
+			if err := inv.fetchRemote(ctx, gitDir, remote, entry.URL); err != nil {
+				return err
+			}
 		}
 		if err := home.SyncExclude(gitDir, inv.systemFilesIgnored()); err != nil {
 			return accountRepoFailure(err)
@@ -294,14 +341,79 @@ func (r *applyRun) fetchAccount(ctx context.Context) error {
 			return accountRepoFailure(err)
 		}
 		r.gitDir, r.remote, r.tips = gitDir, remote, tips
-		r.fetched[entry.URL] = true
 		return nil
 	})
-	if f, ok := skipped(ctx, err); ok {
-		r.missing = f
-		return nil
-	}
 	return err
+}
+
+// addRest adds, once the entries' sources are fetched, every source of the
+// settings this machine had not added, see unadded, that no entry needed:
+// a shared source by the steps of source add, at the pin the settings
+// hold, and the account remote by those of source add --account. A source
+// fetched for an entry, or that could not be, is not reached again.
+func (r *applyRun) addRest(ctx context.Context) error {
+	inv := r.inv
+	s, err := inv.loadSettings()
+	if err != nil {
+		return err
+	}
+	for _, src := range s.Sources {
+		if _, failed := r.failed[src.URL]; !r.adding[src.URL] || failed || r.fetched[src.URL] {
+			continue
+		}
+		var err error
+		if src.Account {
+			_, err = r.reach(ctx, src.URL, func() error { return inv.addAccount(ctx, src.URL) })
+		} else {
+			_, err = r.reach(ctx, src.URL, func() error {
+				_, _, err := inv.addSource(ctx, source.Source{URL: src.URL, Ref: src.Pin})
+				return err
+			})
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// reach runs step, the steps of the command that adds or fetches the
+// source at url, quietly, see quietly, and returns why the source could not
+// be reached, nil when it was; an error is the run's, a stop included. A
+// source the run adds, see unadded, is reported as source add reports it,
+// by the source event its add emitted, and one that could not be added is a
+// warning with the reason: it costs no other source and no skill, and the
+// run goes on. Either way its add ends with a progress event of phase
+// fetch, so the last one the run emits counts up to its total.
+func (r *applyRun) reach(ctx context.Context, url string, step func() error) (*failure, error) {
+	out := r.inv.out
+	var ev *sourceEvent
+	err := r.inv.quietlyCatching(func(e any) {
+		if s, ok := e.(sourceEvent); ok {
+			ev = &s
+		}
+	}, step)
+	f, skip := skipped(ctx, err)
+	if err != nil && !skip {
+		return nil, err
+	}
+	if f == nil {
+		r.fetched[url] = true
+	}
+	if !r.adding[url] {
+		return f, nil
+	}
+	switch {
+	case f != nil:
+		r.failed[url] = f
+		out.warn("could not add a source of the imported settings: " + f.message)
+	case ev != nil:
+		r.added[url] = *ev
+		out.emit(*ev)
+	}
+	r.done++
+	out.emit(progressEvent{event: newEvent("progress"), Phase: phaseFetch, Subject: shownURL(url), Current: r.done, Total: r.total})
+	return f, nil
 }
 
 // entry applies one entry and records what was done. A step that refuses
@@ -702,8 +814,15 @@ func (r *applyRun) branchAt(ctx context.Context, ref string) (string, error) {
 // they would on their own. What the step says the run did is not this
 // run's either, so the summary is kept as it was.
 func (inv *invocation) quietly(step func() error) error {
+	return inv.quietlyCatching(nil, step)
+}
+
+// quietlyCatching is quietly, with every event the step emits handed to
+// catch, in either mode, so that the run can report what the step did in
+// its own way.
+func (inv *invocation) quietlyCatching(catch func(ev any), step func() error) error {
 	loud, summary := inv.out, inv.summary
-	inv.out = &writer{stdout: io.Discard, stderr: loud.stderr, env: loud.env, json: loud.json, verbose: loud.verbose, color: loud.color}
+	inv.out = &writer{stdout: io.Discard, stderr: loud.stderr, env: loud.env, json: loud.json, verbose: loud.verbose, color: loud.color, caught: catch}
 	defer func() { inv.out, inv.summary = loud, summary }()
 	return step()
 }

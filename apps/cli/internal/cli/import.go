@@ -72,6 +72,10 @@ func newImportCommand(inv *invocation) *cobra.Command {
 			"the reason. A skill the snapshot does not list is left as it is, and MCP\n" +
 			"servers and plugins are not applied. Settings whose account remote is this\n" +
 			"machine's repository, by another URL, keep this machine's URL of it.\n\n" +
+			"Every source the settings name that this machine has not added, the account\n" +
+			"remote included, is added as 'agentx source add' adds it, at the pin the\n" +
+			"settings hold. A source that cannot be reached is a warning, and the import\n" +
+			"goes on without it.\n\n" +
 			"With --machine <id>, read the snapshot from the branch machines/<id> of the\n" +
 			"account remote instead of a file, fetching that one branch and pushing\n" +
 			"nothing, so a credential that can only read is enough, and apply it as a\n" +
@@ -675,18 +679,28 @@ func (inv *invocation) askToImport(path string, doc snapshot, in io.Reader) erro
 		"run it again with --yes to import without asking")
 }
 
-// printImported writes the confirmation, then one row per entry of the
-// snapshot with what the import did, then the reason of each skip. Every
-// value the snapshot supplies is sanitised: agentx did not write it, and a
-// file handed from another machine may hold anything. settings are the
-// settings the machine now has, and fetched the sources the run fetched,
-// by canonical URL.
-func (inv *invocation) printImported(ctx context.Context, path string, doc snapshot, states []importSkillEvent, settings home.Settings, fetched map[string]bool) {
+// printImported writes the confirmation, then one line per source the
+// import added, then one row per entry of the snapshot with what the import
+// did, then the reason of each skip, and last the source add of each source
+// that could not be added. Every value the snapshot supplies is sanitised:
+// agentx did not write it, and a file handed from another machine may hold
+// anything. settings are the settings the import wrote, and run what it did
+// with their sources.
+func (inv *invocation) printImported(path string, doc snapshot, states []importSkillEvent, settings home.Settings, run *applyRun) {
 	out := inv.out
 	if doc.Machine != nil && doc.Machine.Label != "" {
 		out.done("imported the settings of " + out.paint(heading, sanitised(doc.Machine.Label)) + " from " + out.paint(heading, path))
 	} else {
 		out.done("imported the settings from " + out.paint(heading, path))
+	}
+	var failed []home.Source
+	for _, src := range settings.Sources {
+		if ev, ok := run.added[src.URL]; ok {
+			out.print("  ", addedLine(out, ev))
+		}
+		if _, ok := run.failed[src.URL]; ok {
+			failed = append(failed, src)
+		}
 	}
 	if len(states) == 0 {
 		out.print("No skills in the snapshot.")
@@ -704,42 +718,77 @@ func (inv *invocation) printImported(ctx context.Context, path string, doc snaps
 			}
 		}
 	}
-	printSourcesToAdd(out, inv.sourcesToAdd(ctx, settings, fetched))
+	printSourcesToAdd(out, failed)
 }
 
-// sourcesToAdd are the sources of settings this machine has not added,
-// which no skill of the import needed and so the run did not fetch: an
-// import restores the settings entry of a source and nothing of the source
-// itself, so on the machine an import just made such a source has no
-// remote in the account repo, or no account repo at all, and has to be
-// added again before a skill can be installed from it. A source whose
-// remote is there, as this machine wrote it, needs nothing.
-func (inv *invocation) sourcesToAdd(ctx context.Context, settings home.Settings, fetched map[string]bool) []home.Source {
+// addedLine is the line of one source an import added, ev being the source
+// event its add emitted: the source with its pin and how many skills it
+// holds, or for the account remote how many of your own skills it holds.
+func addedLine(out *writer, ev sourceEvent) string {
+	n := 0
+	if ev.Skills != nil {
+		n = *ev.Skills
+	}
+	what := "added source " + out.paint(heading, sanitised(ev.URL)) + pinned(out, sanitised(ev.Pin))
+	if ev.Account {
+		what = "added the account remote " + out.paint(heading, sanitised(ev.URL))
+	}
+	return what + ": " + out.paint(noteStyle, plural(n, "skill"))
+}
+
+// unadded is the sources of settings, the settings an import just wrote,
+// that this machine has not added: those the account repo holds no remote
+// of, or a remote that is not the one the entry wants, as an import of
+// settings naming another pin leaves it, and those it never fetched, whose
+// source ref it does not hold or, for the account remote, of which it holds
+// no remote-tracking branch and no record of a fetch, see forkCount. An
+// import restores the settings entry of a source alone, so on the machine
+// an import makes every source is one of these, and the import adds each
+// one. A source whose remote is there, as this machine wrote it, and that
+// was fetched needs nothing, so a second import of an unchanged snapshot
+// reaches no remote for it. The sources are in the settings' order.
+func (inv *invocation) unadded(ctx context.Context, settings home.Settings) ([]home.Source, error) {
+	gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home)
+	if err != nil {
+		return nil, accountRepoFailure(err)
+	}
 	var remotes map[string]source.Remote
-	if gitDir, exists, err := gitx.CheckAccountRepo(ctx, inv.git, inv.dirs.Home); err == nil && exists {
+	var commits map[string]string
+	if exists {
 		remotes = source.Remotes(ctx, inv.git, gitDir)
+		if commits, err = source.Commits(ctx, inv.git, gitDir); err != nil {
+			return nil, accountRepoFailure(err)
+		}
 	}
 	var missing []home.Source
 	for _, src := range settings.Sources {
-		if r, ok := remotes[source.ID(src.URL)]; fetched[src.URL] || ok && r == source.RemoteOf(src) {
+		id := source.ID(src.URL)
+		r, ok := remotes[id]
+		inLine, fetched := ok && r == source.RemoteOf(src), commits[id] != ""
+		if inLine && src.Account {
+			if _, fetched, err = inv.forkCount(ctx, gitDir, src, source.RemoteName(id)); err != nil {
+				return nil, accountRepoFailure(err)
+			}
+		}
+		if inLine && fetched {
 			continue
 		}
 		missing = append(missing, src)
 	}
-	return missing
+	return missing, nil
 }
 
-// printSourcesToAdd writes the closing line of an import that restored
-// sources this machine has not added, see sourcesToAdd, and under it the
-// source add that adds each one again. It is printed per source as the
-// settings now hold it: source add writes the pin its argument names, so
-// the bare URL would unpin the source this import just restored. The
-// account remote is attached again with source add --account.
+// printSourcesToAdd writes the closing line of an import that could not add
+// some sources of the settings, see unadded, and under it the source add
+// that adds each one again. It is printed per source as the settings hold
+// it: source add writes the pin its argument names, so the bare URL would
+// unpin the source this import restored. The account remote is attached
+// again with source add --account.
 func printSourcesToAdd(out *writer, sources []home.Source) {
 	if len(sources) == 0 {
 		return
 	}
-	out.print("  ", out.paint(muted, "add the other sources of the settings again before you install from them:"))
+	out.print("  ", out.paint(muted, "add these sources again before you install from them:"))
 	for _, src := range sources {
 		out.print("    ", out.paint(label, sourceAddLine(src)))
 	}

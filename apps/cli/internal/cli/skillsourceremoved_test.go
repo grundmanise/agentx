@@ -231,11 +231,11 @@ func TestSourceRemovedIsReadFromTheSettings(t *testing.T) {
 
 // TestImportedSettingsDecideSourceRemoved imports settings that do not hold
 // the source a managed skill came from, as the settings of another machine
-// may not, and then settings that do. Import writes nothing but the
-// settings, so the first leaves the skill source removed although no
-// source was removed here, and the second clears it although it fetches
-// nothing: an entry whose ref the account repo does not hold is a source
-// not fetched, not a source removed.
+// may not, and then settings that do, on a machine that cannot reach the
+// source. The first leaves the skill source removed although no source was
+// removed here, and the second clears it although it could not add the
+// source and so fetched nothing: an entry whose ref the account repo does
+// not hold is a source not fetched, not a source removed.
 func TestImportedSettingsDecideSourceRemoved(t *testing.T) {
 	t.Parallel()
 	_, elsewhere := plainExport(t)
@@ -249,6 +249,7 @@ func TestImportedSettingsDecideSourceRemoved(t *testing.T) {
 	equal(t, "inventory drift", drift(h.inventoryLibrary("alpha")), "source removed")
 
 	h.mustRun("source", "remove", s.url) // takes the ref the import left behind, and no entry
+	h.offline()
 	h.mustRun("import", here, "--yes")
 	if _, err := h.accountGitErr("rev-parse", "--verify", source.Ref(source.ID(s.url))); err == nil {
 		t.Fatal("the account repo holds the source ref; the test proves nothing")
