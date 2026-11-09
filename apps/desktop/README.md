@@ -27,6 +27,8 @@ The desktop app: a Tauri 2 window with a React and TypeScript frontend. Today it
 | `e2e/fixtures` | Inline inventories and events shared by several tests, typed by the generated event types |
 | `oxlint.config.ts`, `oxfmt.config.ts` | The lint and the formatter: [Ultracite](https://www.ultracite.ai)'s presets for oxlint and oxfmt, plus the design-system lint built on [`@shadcn/lint`](https://github.com/shadcn-ui/lint) and one rule of [`eslint-plugin-better-tailwindcss`](https://github.com/schoero/eslint-plugin-better-tailwindcss) |
 | `src-tauri` | The Rust side: the window and the CLI supervisor, which reads the login shell's environment, finds the CLI, runs one-shot commands and keeps the serve child open |
+| `src/screens/skills/create-dialog.tsx`, `src/lib/skill-name.ts` | The Create skill dialog, which the Skills and Add skills headers open: a name, checked against the CLI's name grammar in `skill-name.ts`, and a one-line description, which `skill new` turns into one of your skills. The new skill is selected once the inventory that follows lists it; a name the CLI refuses shows its message under Name |
+| `src/lib/problem-text.ts`, `src/components/problem-text.tsx` | A CLI refusal as the app says it: `problemSentence()` joins the message and the hint into one sentence-cased paragraph, and `ProblemText` shows it under a dialog's field; the error toast uses the same sentence |
 
 ## Develop
 

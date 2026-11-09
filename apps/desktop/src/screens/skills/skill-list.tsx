@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate } from "react-router";
 
 import type { Configuration } from "#/cli/events.gen.ts";
@@ -6,6 +7,7 @@ import { FilterChip, SortToggle } from "#/components/filter-controls.tsx";
 import { RefreshIcon } from "#/components/icons/refresh.tsx";
 import { SearchField } from "#/components/search-field.tsx";
 import { Button } from "#/components/ui/button.tsx";
+import { CreateSkillDialog } from "#/screens/skills/create-dialog.tsx";
 import { FilterPopover } from "#/screens/skills/filter-popover.tsx";
 import { forksOf, UNIVERSAL } from "#/screens/skills/projection.ts";
 import type {
@@ -101,7 +103,7 @@ const GroupHeader = ({
 );
 
 /**
- * The left column of the Skills screen: title and count, Check updates and Add, the search field, the
+ * The left column of the Skills screen: title and count, Check updates, Add and Create, the search field, the
  * filter row, and the rows in their groups. A fork made under a new name is one row, in YOUR
  * SKILLS; its original carries a marker for it.
  */
@@ -129,6 +131,7 @@ export const SkillList = ({
   onSelect: (row: SkillRow) => void;
 }) => {
   const navigate = useNavigate();
+  const [creating, setCreating] = useState(false);
   return (
     <section
       aria-label="Skills list"
@@ -144,7 +147,6 @@ export const SkillList = ({
             {rows.length}
           </span>
         </div>
-        {/* Create comes with the change that builds it. */}
         <div className="flex items-center gap-1">
           <CheckUpdates />
           <Button
@@ -155,6 +157,15 @@ export const SkillList = ({
             }}
           >
             Add
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setCreating(true);
+            }}
+          >
+            Create
           </Button>
         </div>
       </div>
@@ -230,6 +241,7 @@ export const SkillList = ({
           ))
         )}
       </nav>
+      <CreateSkillDialog open={creating} onOpenChange={setCreating} />
     </section>
   );
 };

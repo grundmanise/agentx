@@ -457,14 +457,12 @@ test.describe("Check updates", () => {
       ],
     });
     await checkButton(page).click();
+    // The app's own hint, in place of the CLI's, in one sentence-cased paragraph.
     await expect(
-      toasts(page).getByText("Couldn't reach zeta/tools", { exact: true })
-    ).toBeVisible();
-    // The app's own second line, in place of the CLI's hint.
-    await expect(
-      toasts(page).getByText("Verify that you can reach the source", {
-        exact: true,
-      })
+      toasts(page).getByText(
+        "Couldn't reach zeta/tools. Verify that you can reach the source.",
+        { exact: true }
+      )
     ).toBeVisible();
     await expect(toasts(page).getByText(hint)).toHaveCount(0);
     await expectOffered(page, "pdf", true);
