@@ -33,6 +33,29 @@ import { useAppStore } from "#/store/store.ts";
 /** The pending label of `skill new` from this dialog. */
 export const CREATE_SKILL_LABEL = "create skill";
 
+/**
+ * The longest description `skill new` takes. The Agent Skills specification gives a description
+ * 1 to 1024 characters; the CLI takes one line of at most 1024 bytes and has the last word.
+ */
+export const DESCRIPTION_LIMIT = 1024;
+
+/** What a description says, as the field states it under itself. */
+export const DESCRIPTION_HINT = `What it does and when to use it, in one or two sentences. Up to ${DESCRIPTION_LIMIT} characters.`;
+
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+/** Whether a description is longer than the limit, counted in characters as people see them, not bytes. */
+const overDescriptionLimit = (description: string) => {
+  let count = 0;
+  for (const _ of graphemes.segment(description.trim())) {
+    count += 1;
+    if (count > DESCRIPTION_LIMIT) {
+      return true;
+    }
+  }
+  return false;
+};
+
 /** Where a refusal shows: a refused name under Name, anything else under the fields. */
 interface Refusal {
   field: "name" | "form";
@@ -88,6 +111,8 @@ const CreateSkillForm = ({
   const nameId = useId();
   const nameHintId = useId();
   const descriptionId = useId();
+  const descriptionHintId = useId();
+  const tooLong = overDescriptionLimit(description);
   const broken = breaksSkillNameRule(name);
   const nameRefused = refusal?.field === "name";
 
@@ -95,6 +120,7 @@ const CreateSkillForm = ({
     if (
       pending ||
       !isSkillName(name) ||
+      tooLong ||
       CREATE_SKILL_LABEL in useAppStore.getState().pending
     ) {
       return;
@@ -177,11 +203,23 @@ const CreateSkillForm = ({
         <Input
           id={descriptionId}
           placeholder="What the skill is for, in one line"
+          aria-describedby={descriptionHintId}
+          aria-invalid={tooLong ? true : undefined}
           value={description}
           onChange={(e) => {
             setDescription(e.target.value);
           }}
         />
+        <p
+          id={descriptionHintId}
+          className={
+            tooLong
+              ? "type-secondary text-tone-danger-fg m-0"
+              : "type-secondary text-text-hint m-0"
+          }
+        >
+          {DESCRIPTION_HINT}
+        </p>
         {refusal?.field === "form" && <ProblemText problem={refusal.problem} />}
       </div>
       <DialogFooter>
@@ -191,7 +229,7 @@ const CreateSkillForm = ({
         <Button
           type="submit"
           variant="primary"
-          disabled={!isSkillName(name)}
+          disabled={!isSkillName(name) || tooLong}
           aria-busy={pending ? true : undefined}
         >
           {pending && <Spinner />}
@@ -225,7 +263,8 @@ export const CreateSkillDialog = ({
         <DialogHeader>
           <DialogTitle>Create skill</DialogTitle>
           <DialogDescription>
-            Only on this machine until you publish it.
+            Creates a skill of your own in your library and adds it to your
+            agents.
           </DialogDescription>
         </DialogHeader>
         <CreateSkillForm

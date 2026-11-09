@@ -125,7 +125,9 @@ test("Create in the Skills header runs skill new with the description and select
 }) => {
   await openDialog(cli, page);
   await expect(
-    dialog(page).getByText("Only on this machine until you publish it.")
+    dialog(page).getByText(
+      "Creates a skill of your own in your library and adds it to your agents."
+    )
   ).toBeVisible();
   await expect(nameField(page)).toBeFocused();
   await expect(createButton(page)).toBeDisabled();
@@ -276,6 +278,44 @@ test("the name is checked as the CLI checks it before Create runs anything", asy
   });
 
   // Cancel closes the dialog without running anything.
+  await dialog(page)
+    .getByRole("button", { exact: true, name: "Cancel" })
+    .click();
+  await expect(dialog(page)).toBeHidden();
+  expect(later(cli)).toEqual([]);
+});
+
+test("the description hint turns red and Create is disabled past 1024 characters", async ({
+  cli,
+  page,
+}) => {
+  await openDialog(cli, page);
+  const hint = dialog(page).getByText(
+    "What it does and when to use it, in one or two sentences. Up to 1024 characters."
+  );
+  await expect(hint).toBeVisible();
+  await expect(hint).toHaveClass(/text-text-hint/u);
+  await expect(descriptionField(page)).toHaveAccessibleDescription(
+    "What it does and when to use it, in one or two sentences. Up to 1024 characters."
+  );
+
+  await nameField(page).fill(NEW_SKILL);
+  // Counted in characters, not bytes: 1024 two-byte letters still fit.
+  await descriptionField(page).fill("é".repeat(1024));
+  await expect(createButton(page)).toBeEnabled();
+  await expect(descriptionField(page)).not.toHaveAttribute("aria-invalid");
+
+  await descriptionField(page).fill("a".repeat(1025));
+  await expect(hint).toHaveClass(/text-tone-danger-fg/u);
+  await expect(descriptionField(page)).toHaveAttribute("aria-invalid", "true");
+  await expect(createButton(page)).toBeDisabled();
+  await descriptionField(page).press("Enter");
+
+  await descriptionField(page).press("Backspace");
+  await expect(hint).toHaveClass(/text-text-hint/u);
+  await expect(descriptionField(page)).not.toHaveAttribute("aria-invalid");
+  await expect(createButton(page)).toBeEnabled();
+
   await dialog(page)
     .getByRole("button", { exact: true, name: "Cancel" })
     .click();

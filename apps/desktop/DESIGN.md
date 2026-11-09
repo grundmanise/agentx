@@ -829,6 +829,10 @@ A `card.bg` card, `file-card.radius`, 1px `card.border`, holding one row per fil
 
 `input.height`, `input.bg`, `input.border`, `input.radius`, padding 0 `input.padding-x`, 14px; focus `input.border-focus`. Mono for URLs and commands. Search field in lists: `input.search-height`, `input.search-radius`, `input.search-padding`, icon at left, placeholder `input.placeholder`.
 
+### Create skill dialog
+
+The Skills header's Create and the Add skills header's Create skill open it (`src/screens/skills/create-dialog.tsx`): title "Create skill", subtitle "Creates a skill of your own in your library and adds it to your agents." in `dialog.subtitle`. Two fields, each with its label in `type.secondary` `text.secondary` and a hint under it in `type.secondary` `text.hint`. Name, mono, focused on open, hint "1 to 64 lowercase letters, digits and single hyphens". Description, hint "What it does and when to use it, in one or two sentences. Up to 1024 characters.", counted in characters (the Agent Skills specification gives a description 1 to 1024 characters; `skill new --description` takes one line of at most 1024 bytes). A hint whose rule the field breaks turns `tone.danger.fg`, the field is `aria-invalid` and Create is disabled; a name the CLI refuses (exit 6) shows its message and hint under Name in place of the rule. Cancel (ghost) · Create (primary), pending until the inventory that follows lists the new skill.
+
 ## 7. Iconography
 
 Stroke icons on a 24 grid, `stroke-width` 1.75–2.25, round caps/joins, 14–18px rendered at the sizes below. Fill only for the "dot" glyph. No icon fonts, no emoji.
