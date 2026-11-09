@@ -5,11 +5,14 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 
 import { notify } from "#/components/toast.tsx";
 
+/** How the app names the file manager, as in "Show in Finder". */
+export const FILE_MANAGER = "Finder";
+
 /** Shows the file or directory at `absolutePath` selected in Finder. */
 export const revealInFinder = async (absolutePath: string) => {
   try {
     await revealItemInDir(absolutePath);
   } catch {
-    notify(`Couldn't show ${absolutePath} in Finder`);
+    notify(`Couldn't show ${absolutePath} in ${FILE_MANAGER}`);
   }
 };

@@ -1,12 +1,19 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "What the main window may do: drag itself by the title bar, show a path selected in Finder (the file manager elsewhere) through the opener plugin, and let the user pick a file to import in the native open dialog of the dialog plugin, which returns the path and reads nothing; it may not open URLs or files, save, or read or write a file itself.",
+  "description": "What the main window may do: drag itself by the title bar, show a path selected in Finder (the file manager elsewhere) through the opener plugin, open a file in the library or agentx home with the system's default application through the same plugin, and let the user pick a file to import in the native open dialog of the dialog plugin, which returns the path and reads nothing; it may not open URLs, open a file with a named application through the plugin, save, or read or write a file itself.",
   "windows": ["main"],
   "permissions": [
     "core:default",
     "core:window:allow-start-dragging",
     "opener:allow-reveal-item-in-dir",
+    {
+      "identifier": "opener:allow-open-path",
+      "allow": [
+        { "path": "$HOME/.agents/skills/**" },
+        { "path": "$HOME/.agentx/**" }
+      ]
+    },
     "dialog:allow-open"
   ]
 }

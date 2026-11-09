@@ -1,12 +1,16 @@
 // The Rust side hosts the window and supervises the CLI: it finds the CLI, reads the login shell's
 // environment, runs one-shot commands and keeps the serve child open. It has no file, git or
-// network code of its own beyond writing serve's log, and starts no program but the login shell
-// and agentx (ADR 0001). Its calls to the operating system beside that are the opener plugin,
-// which shows a path selected in Finder (the file manager elsewhere) when the user asks, and the
-// dialog plugin's open dialog, in which the user picks a file to import: it returns the path, and
-// the app passes it to the CLI without reading the file.
+// network code of its own beyond writing serve's log and the app's preferences, and starts no
+// program but the login shell, agentx and, when the user asks, the editor of their choice (ADR
+// 0001, ADR 0013). Its calls to the operating system beside that are the opener plugin, which
+// shows a path selected in Finder (the file manager elsewhere) and opens a skill's file in the
+// system's default application when the user asks, and the dialog plugin's open dialog, in which
+// the user picks a file to import: it returns the path, and the app passes it to the CLI without
+// reading the file.
 
+mod editor;
 mod logfile;
+mod preferences;
 mod shell;
 pub mod supervisor;
 
@@ -59,6 +63,60 @@ async fn serve_request(sup: Sup<'_>, line: String) -> Result<(), String> {
     sup.serve_request(&line).await
 }
 
+/// The app's preferences file, in the app's config directory.
+fn preferences_file(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    app.path()
+        .app_config_dir()
+        .map(|dir| dir.join(preferences::FILE_NAME))
+        .map_err(|err| err.to_string())
+}
+
+/// The app's preferences, or their defaults when none were saved.
+#[tauri::command(rename_all = "snake_case")]
+fn preferences_read(app: tauri::AppHandle) -> Result<preferences::Preferences, String> {
+    Ok(preferences::read(&preferences_file(&app)?))
+}
+
+/// Saves the app's preferences, replacing what was saved.
+#[tauri::command(rename_all = "snake_case")]
+fn preferences_write(
+    app: tauri::AppHandle,
+    preferences: preferences::Preferences,
+) -> Result<(), String> {
+    preferences::write(&preferences_file(&app)?, &preferences).map_err(|err| err.to_string())
+}
+
+/// The editors the app knows that are on this machine, in the order Settings lists them.
+#[tauri::command(rename_all = "snake_case")]
+async fn editor_detect(sup: Sup<'_>) -> Result<Vec<editor::Detected>, String> {
+    Ok(detected(&sup.login_env().await))
+}
+
+fn detected(env: &HashMap<String, String>) -> Vec<editor::Detected> {
+    let platform = editor::Platform::current();
+    let home = PathBuf::from(env.get("HOME").cloned().unwrap_or_default());
+    editor::detect(
+        platform,
+        &home,
+        env.get("PATH").map(String::as_str),
+        |candidate| editor::is_launcher(platform, candidate),
+    )
+}
+
+/// Opens the file at `path` with `editor`, an editor the app found or a command line; the system's
+/// default application is the opener plugin's. `path` must be an absolute path to a file that
+/// exists.
+#[tauri::command(rename_all = "snake_case")]
+async fn editor_open(sup: Sup<'_>, path: String, editor: editor::Editor) -> Result<(), String> {
+    let file = PathBuf::from(&path);
+    if !file.is_absolute() || !file.is_file() {
+        return Err(format!("{path} is not a file"));
+    }
+    let env = sup.login_env().await;
+    let words = editor::command_for(editor::Platform::current(), &editor, &detected(&env), &file)?;
+    editor::launch(&words, &env).await
+}
+
 /// Where serve's stderr is written: `~/Library/Logs/agentx` on macOS, `$XDG_STATE_HOME/agentx/logs`
 /// elsewhere.
 fn log_dir(env: &HashMap<String, String>) -> PathBuf {
@@ -108,7 +166,11 @@ pub fn run() {
             cli_run,
             cli_cancel,
             serve_start,
-            serve_request
+            serve_request,
+            preferences_read,
+            preferences_write,
+            editor_detect,
+            editor_open
         ])
         .build(tauri::generate_context!())
         .expect("error while building the agentx desktop app");

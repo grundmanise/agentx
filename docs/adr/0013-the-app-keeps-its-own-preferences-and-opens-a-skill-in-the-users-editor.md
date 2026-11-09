@@ -1,0 +1,22 @@
+---
+status: accepted
+date: 2026-11-09
+---
+
+# The desktop app keeps its own preferences in its config directory and opens a skill in the user's editor
+
+The desktop app opens a skill's `SKILL.md` in an editor when the user asks: Create and edit in the Create skill dialog, and Edit in the Skills detail pane. Which editor is the first thing the app decides on its own rather than through the CLI. It is an **app preference**, kept by the app in one JSON file, `preferences.json`, in the app's config directory (`~/Library/Application Support/dev.agentx.desktop` on macOS, `$XDG_CONFIG_HOME/dev.agentx.desktop`, by default `~/.config/dev.agentx.desktop`, on Linux). The Rust side reads and writes the whole file through two commands of its own, and a field the file lacks takes its default, so a later preference is a new field with no migration.
+
+The machine settings do not carry it. They are what the CLI decides by and what an export takes to another machine; no CLI command reads an editor, the CLI contract has no reason to name one, and an editor found on one machine may be missing on the next. The app does not read the shell's `EDITOR` either: a GUI app on macOS does not inherit the shell environment, and `EDITOR` usually names a terminal editor, which the app cannot show.
+
+The choice is one of three. **System default** opens the file with the system's application for its type through the opener plugin's open, which the main window may call only for a path under `$HOME/.agents/skills` or `$HOME/.agentx` and only with the default application. **An editor found on this machine** (VS Code, Cursor, Zed, Sublime Text) is detected by the Rust side, an application bundle in `/Applications` or `~/Applications` on macOS and a program on the login shell's `PATH` on Linux, and started by it, with `open -a <bundle> <file>` on macOS and `<program> <file>` on Linux. **A custom command** is a command line the user typed, which the Rust side splits into words as a shell would split them, without expanding a variable, a `~`, a glob or a command, and runs with the file's path as its last argument. No shell runs. An editor and a command get the login shell's environment, as the CLI does, so a program the terminal finds is found. One that cannot start, or exits with a failure within a second, is an editor that did not open the file, and the app says so with Show in Finder in its toast.
+
+This amends [ADR 0001](0001-go-cli-owns-machine-and-account-tauri-renders.md): beside the login shell and agentx, the Rust shell starts the editor the user chose, when the user asks, and the opener plugin opens a file of the library or agentx home in its default application. It reads nothing of the file it opens; the inventory that follows an edit shows what changed, as it does for an edit made anywhere else.
+
+## Considered and rejected
+
+The Tauri store plugin: a general key-value store the webview can write any key of, with its own permissions and a JavaScript API of resources, for a file that holds one object the app reads whole. A machine setting in the CLI's settings file: the CLI would carry a value it never uses, an export would take an editor to a machine that may not have it, and every change would be a CLI command. The opener plugin for a found editor as well, with `openWith`: its scope then has to allow any application, since the found program's path differs per machine, which also lets the webview open a library file with any program, and it cannot pass a custom command's arguments, so the Rust side runs those anyway.
+
+## Consequences
+
+The opener scope names the default places of the library and agentx home. With `AGENTX_LIBRARY` or `AGENTX_HOME` set elsewhere, System default cannot open the file, and the toast offers Show in Finder; an editor found or a custom command is not held to the scope. A custom command runs any program the user types, which is what it is for; the app never runs one the user did not choose in Settings.
