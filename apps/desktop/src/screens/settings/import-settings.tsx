@@ -174,7 +174,7 @@ const ImportFile = () => {
     <div className="flex flex-col gap-3">
       <span>
         <Button
-          variant="ghost"
+          variant="secondary"
           disabled={pending}
           aria-busy={pending ? true : undefined}
           onClick={() => {
