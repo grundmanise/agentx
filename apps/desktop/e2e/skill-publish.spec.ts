@@ -424,13 +424,14 @@ test.describe("outcomes", () => {
     });
   }
 
-  for (const [outcome, exitCode, code, message, hint] of [
+  for (const [outcome, exitCode, code, message, hint, sentence] of [
     [
       "declined",
       6,
       "refused",
       "the account remote declined skills/changelog: protected branch",
       "once the account remote takes it, run 'agentx skill publish changelog' again",
+      "The account remote declined skills/changelog: protected branch. Once the account remote takes it, run 'agentx skill publish changelog' again.",
     ],
     [
       "denied",
@@ -438,6 +439,7 @@ test.describe("outcomes", () => {
       "source",
       `the account remote ${ACCOUNT} did not let this machine push skills/changelog: permission denied`,
       "check that the git credential helper or SSH key used for it may push there",
+      `The account remote ${ACCOUNT} did not let this machine push skills/changelog: permission denied. Check that the git credential helper or SSH key used for it may push there.`,
     ],
   ] as const) {
     test(`${outcome} (exit ${exitCode}): the CLI's message and hint`, async ({
@@ -454,8 +456,10 @@ test.describe("outcomes", () => {
         })
       );
       await shown.getByRole("button", { name: "Publish" }).click();
-      await expect(toasts(page).getByText(message)).toBeVisible();
-      await expect(toasts(page).getByText(hint)).toBeVisible();
+      // The message and the hint as one sentence-cased paragraph.
+      await expect(
+        toasts(page).getByText(sentence, { exact: true })
+      ).toBeVisible();
     });
   }
 
