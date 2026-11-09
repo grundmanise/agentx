@@ -463,6 +463,34 @@ test.describe("outcomes", () => {
     });
   }
 
+  test("a failure whose message and hint start with skills' names keeps their case", async ({
+    cli,
+    page,
+  }) => {
+    await openSkill(cli, page, "changelog");
+    const shown = await openDialog(page, "changelog");
+    cli.register(
+      ["skill", "publish", "changelog"],
+      publishReply("changelog", undefined, {
+        error: {
+          code: "internal",
+          // "draft" is another skill in the library: the error toast keeps any skill's name.
+          hint: "draft went out in the same push; publish changelog again",
+          message: "changelog could not be published: the push was cut off",
+          type: "error",
+        },
+        exitCode: 10,
+      })
+    );
+    await shown.getByRole("button", { name: "Publish" }).click();
+    await expect(
+      toasts(page).getByText(
+        "changelog could not be published: the push was cut off. draft went out in the same push; publish changelog again.",
+        { exact: true }
+      )
+    ).toBeVisible();
+  });
+
   test("exit 6 with no account remote: Set an account remote, with Open Settings", async ({
     cli,
     page,

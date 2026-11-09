@@ -11,6 +11,7 @@ import { SearchIcon } from "#/components/icons/search.tsx";
 import { notify, notifyError } from "#/components/toast.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Input } from "#/components/ui/input.tsx";
+import { skillNamesOf } from "#/lib/problem-text.ts";
 import { ActionBar } from "#/screens/add/action-bar.tsx";
 import { AddSourceDialog } from "#/screens/add/add-source-dialog.tsx";
 import {
@@ -324,6 +325,11 @@ export const AddScreen = () => {
         notifyError({
           details: error.hint === undefined ? [] : [error.hint],
           hint: error.message,
+          // A skill's name that starts the CLI's message keeps its case.
+          keep: [
+            ...plan.names,
+            ...skillNamesOf(useAppStore.getState().inventory),
+          ],
           message: `Added ${installed.length} of ${count(plan.names.length, "skill")}`,
           warnings: outcome.logs
             .filter((l) => l.level === "warn")

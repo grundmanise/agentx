@@ -32,6 +32,8 @@ const AddSourceForm = ({
 }) => {
   const [url, setUrl] = useState("");
   const [problem, setProblem] = useState<Problem | undefined>();
+  // What was typed when it was refused: it keeps its case when it starts the CLI's words.
+  const [refused, setRefused] = useState("");
   const pending = usePending(ADD_SOURCE_LABEL);
 
   const submit = async () => {
@@ -66,6 +68,7 @@ const AddSourceForm = ({
     setProblem(
       error?.hint === undefined ? { message } : { hint: error.hint, message }
     );
+    setRefused(typed);
   };
 
   return (
@@ -90,7 +93,9 @@ const AddSourceForm = ({
         <p className="type-secondary text-text-hint m-0">
           Add #branch or #tag to pin it
         </p>
-        {problem !== undefined && <ProblemText problem={problem} />}
+        {problem !== undefined && (
+          <ProblemText problem={problem} keep={[refused]} />
+        )}
       </div>
       <DialogFooter>
         <DialogClose asChild>

@@ -61,6 +61,8 @@ const overDescriptionLimit = (description: string) => {
 interface Refusal {
   field: "name" | "form";
   problem: Problem;
+  /** The name typed when it was refused: it keeps its case when it starts the CLI's words. */
+  name: string;
 }
 
 /** The `skill new` command line: the description only when one is given. */
@@ -69,8 +71,8 @@ const createArgs = (name: string, description: string) =>
     ? ["skill", "new", name]
     : ["skill", "new", name, "--description", description];
 
-/** What went wrong, in the CLI's words. */
-const refusalOf = (outcome: Outcome): Refusal => {
+/** What went wrong with the skill `name`, in the CLI's words. */
+const refusalOf = (outcome: Outcome, name: string): Refusal => {
   const error = outcome.events.find((e) => e.type === "error");
   const message =
     error?.message ??
@@ -78,6 +80,7 @@ const refusalOf = (outcome: Outcome): Refusal => {
     `agentx skill new exited with code ${outcome.exitCode ?? "none"}`;
   return {
     field: outcome.exitCode === EXIT_CODES.refused ? "name" : "form",
+    name,
     problem:
       error?.hint === undefined ? { message } : { hint: error.hint, message },
   };
@@ -126,7 +129,7 @@ const CreateSkillForm = ({
     if (outcome.exitCode !== EXIT_CODES.ok) {
       // Another command holding the lock is the runner's toast, with its Retry.
       if (outcome.exitCode !== EXIT_CODES.locked && !outcome.cancelled) {
-        setRefusal(refusalOf(outcome));
+        setRefusal(refusalOf(outcome, name));
       }
       return;
     }
@@ -170,7 +173,7 @@ const CreateSkillForm = ({
         />
         <div id={nameHintId}>
           {nameRefused ? (
-            <ProblemText problem={refusal.problem} />
+            <ProblemText problem={refusal.problem} keep={[refusal.name]} />
           ) : (
             <p
               className={
@@ -211,7 +214,9 @@ const CreateSkillForm = ({
         >
           {DESCRIPTION_HINT}
         </p>
-        {refusal?.field === "form" && <ProblemText problem={refusal.problem} />}
+        {refusal?.field === "form" && (
+          <ProblemText problem={refusal.problem} keep={[refusal.name]} />
+        )}
       </div>
       <DialogFooter>
         <DialogClose asChild>

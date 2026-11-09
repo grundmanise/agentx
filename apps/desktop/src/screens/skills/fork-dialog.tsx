@@ -5,8 +5,8 @@
 // Use a new name on, and the screen redraws from the inventory that follows: the fork is selected
 // by the name the CLI reports, and shows once that inventory holds it. A refusal (exit 6), such as
 // a library entry that is a symlink, keeps the dialog open with the CLI's words as one
-// sentence-cased paragraph (`ProblemText`) and turns Use a new name on, since forking beside the
-// skill is the way out the CLI names.
+// sentence-cased paragraph (`ProblemText`), the skill's name and the new one keeping their case,
+// and turns Use a new name on, since forking beside the skill is the way out the CLI names.
 import { useEffect, useId, useRef, useState } from "react";
 import { create } from "zustand";
 
@@ -36,9 +36,31 @@ import { forkArgs, forkTarget, forkText } from "#/screens/skills/fork.ts";
 import { openSkill } from "#/screens/skills/open.ts";
 import type { SkillRow } from "#/screens/skills/projection.ts";
 import { usePending } from "#/store/runner.ts";
+import type { Outcome } from "#/store/runner.ts";
 import { runUntilSettled, useSettling } from "#/store/settle.ts";
 import { useAppStore } from "#/store/store.ts";
 import type { Problem } from "#/store/store.ts";
+
+/** What the CLI said when it refused a fork, and the names its words may start with. */
+interface Refusal {
+  problem: Problem;
+  /** The skill's name, and the new name typed, if any: each keeps its case. */
+  keep: string[];
+}
+
+/** The refusal of a fork that failed, in the CLI's words. */
+const refusalOf = (outcome: Outcome, keep: string[]): Refusal => {
+  const error = outcome.events.find((e) => e.type === "error");
+  const message =
+    error?.message ??
+    outcome.startError ??
+    `agentx skill fork exited with code ${outcome.exitCode ?? "none"}`;
+  return {
+    keep,
+    problem:
+      error?.hint === undefined ? { message } : { hint: error.hint, message },
+  };
+};
 
 /** The label of the Fork control for `row`: the runner's name for it. */
 export const forkLabel = (row: SkillRow) => `fork ${row.key}`;
@@ -95,7 +117,7 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
   const skills = useAppStore((s) => s.inventory?.skills);
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState("");
-  const [problem, setProblem] = useState<Problem | undefined>();
+  const [refusal, setRefusal] = useState<Refusal | undefined>();
   const pending = usePending(forkLabel(row));
   const nameRef = useRef<HTMLInputElement>(null);
   const switchId = useId();
@@ -112,7 +134,7 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
     if (pending || (renaming && !nameValid)) {
       return;
     }
-    setProblem(undefined);
+    setRefusal(undefined);
     const target = forkTarget(row, skills ?? []);
     const outcome = await runUntilSettled(
       forkArgs(target, renaming ? name : undefined),
@@ -141,14 +163,7 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
     if (outcome.exitCode === EXIT_CODES.locked) {
       return;
     }
-    const error = outcome.events.find((e) => e.type === "error");
-    const message =
-      error?.message ??
-      outcome.startError ??
-      `agentx skill fork exited with code ${outcome.exitCode ?? "none"}`;
-    setProblem(
-      error?.hint === undefined ? { message } : { hint: error.hint, message }
-    );
+    setRefusal(refusalOf(outcome, renaming ? [row.name, name] : [row.name]));
     if (outcome.exitCode === EXIT_CODES.refused) {
       setRenaming(true);
     }
@@ -201,7 +216,9 @@ const ForkForm = ({ row }: { row: SkillRow }) => {
             )}
           </>
         )}
-        {problem !== undefined && <ProblemText problem={problem} />}
+        {refusal !== undefined && (
+          <ProblemText problem={refusal.problem} keep={refusal.keep} />
+        )}
       </div>
       <DialogFooter>
         <DialogClose asChild>

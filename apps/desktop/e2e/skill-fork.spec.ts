@@ -221,9 +221,9 @@ test("refused in place: exit 6 keeps the dialog open with the CLI's words and tu
 
   await dialog.getByRole("button", { name: "Fork" }).click();
   const alert = dialog.getByRole("alert");
-  // The message and the hint as one sentence-cased paragraph.
+  // The message and the hint as one sentence-cased paragraph; the skill's name keeps its case.
   await expect(alert).toHaveText(
-    "Scratch is itself a Git repository, at /home/me/.agents/skills/scratch/.git. Move its .git out of the skill, or fork it beside the skill with --name <new>."
+    "scratch is itself a Git repository, at /home/me/.agents/skills/scratch/.git. Move its .git out of the skill, or fork it beside the skill with --name <new>."
   );
   await expect(
     dialog.getByRole("switch", { name: "Use a new name" })

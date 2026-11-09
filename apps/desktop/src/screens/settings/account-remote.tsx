@@ -119,6 +119,8 @@ const RemoteForm = ({
 }) => {
   const [url, setUrl] = useState(current ?? "");
   const [problem, setProblem] = useState<Problem | undefined>();
+  // The URL saved when it was refused: it keeps its case when it starts the CLI's words.
+  const [refused, setRefused] = useState("");
   const [confirming, setConfirming] = useState(false);
   const saving = usePending(SAVE_ACCOUNT_LABEL);
   const typed = url.trim();
@@ -142,6 +144,7 @@ const RemoteForm = ({
       return;
     }
     setProblem(saveProblem(typed, outcome));
+    setRefused(typed);
   };
 
   return (
@@ -186,7 +189,9 @@ const RemoteForm = ({
             Save
           </Button>
         </div>
-        {problem !== undefined && <ProblemText problem={problem} />}
+        {problem !== undefined && (
+          <ProblemText problem={problem} keep={[refused]} />
+        )}
       </form>
       <Confirm
         open={confirming}
