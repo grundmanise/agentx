@@ -136,8 +136,7 @@ type applyRun struct {
 	// The sources of the settings this machine had not added when they were
 	// written, see unadded, by canonical URL, and what became of each: the
 	// source event of its add, or why it could not be added. done counts the
-	// ones added and total the ones the run still expects to add, for the
-	// progress events.
+	// adds that ended, and total all of them, for the progress events.
 	adding map[string]bool
 	added  map[string]sourceEvent
 	failed map[string]*failure
@@ -382,9 +381,10 @@ func (r *applyRun) addRest(ctx context.Context) error {
 // source at url, quietly, see quietly, and returns why the source could not
 // be reached, nil when it was; an error is the run's, a stop included. A
 // source the run adds, see unadded, is reported as source add reports it,
-// by the source event its add emitted, followed by a progress event of
-// phase fetch, and one that could not be added is a warning with the
-// reason: it costs no other source and no skill, and the run goes on.
+// by the source event its add emitted, and one that could not be added is a
+// warning with the reason: it costs no other source and no skill, and the
+// run goes on. Either way its add ends with a progress event of phase
+// fetch, so the last one the run emits counts up to its total.
 func (r *applyRun) reach(ctx context.Context, url string, step func() error) (*failure, error) {
 	out := r.inv.out
 	var ev *sourceEvent
@@ -397,23 +397,23 @@ func (r *applyRun) reach(ctx context.Context, url string, step func() error) (*f
 	if err != nil && !skip {
 		return nil, err
 	}
-	adding := r.adding[url]
-	switch {
-	case f == nil:
+	if f == nil {
 		r.fetched[url] = true
-	case adding:
-		r.failed[url] = f
-		r.total-- // a step the run gave up on is taken out of the total
-		out.warn("could not add a source of the imported settings: " + f.message)
 	}
-	if f != nil || !adding || ev == nil {
+	if !r.adding[url] {
 		return f, nil
 	}
-	r.added[url] = *ev
+	switch {
+	case f != nil:
+		r.failed[url] = f
+		out.warn("could not add a source of the imported settings: " + f.message)
+	case ev != nil:
+		r.added[url] = *ev
+		out.emit(*ev)
+	}
 	r.done++
-	out.emit(*ev)
 	out.emit(progressEvent{event: newEvent("progress"), Phase: phaseFetch, Subject: shownURL(url), Current: r.done, Total: r.total})
-	return nil, nil
+	return f, nil
 }
 
 // entry applies one entry and records what was done. A step that refuses

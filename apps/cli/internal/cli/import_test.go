@@ -1219,8 +1219,8 @@ func TestImportAddsTheSourcesOfTheSettings(t *testing.T) {
 // account remote leaves no remote, and a shared source, which the settings
 // name, keeps the remote they want and nothing fetched. The text ends with
 // the source add of each one that could not be added, with its pin, and a
-// second import tries them again, with a warning event each. This is the
-// one test of the whole text of the sources an import adds.
+// second import tries them again, with a warning and a progress event each.
+// This is the one test of the whole text of the sources an import adds.
 func TestImportGoesOnWhenASourceCannotBeAdded(t *testing.T) {
 	t.Parallel()
 	h, s := installHarness(t)
@@ -1291,7 +1291,11 @@ func TestImportGoesOnWhenASourceCannotBeAdded(t *testing.T) {
 	if len(warned) != 2 || !strings.HasPrefix(warned[0], "could not add a source of the imported settings: ") {
 		t.Errorf("the second import warned %q, want one warning per source not added", warned)
 	}
-	equal(t, "the second import's events", strings.Join(to.types(to.events(again.stdout)), " "), "settings import_skill result")
+	// Each add that ended is a progress event, whether or not it added the
+	// source, so the last one counts up to the total.
+	equal(t, "the second import's events", strings.Join(to.types(to.events(again.stdout)), " "), "settings progress progress import_skill result")
+	last := to.eventsOfType(again.stdout, "progress")[1]
+	equal(t, "the last progress", fmt.Sprint(last["current"], " of ", last["total"]), "2 of 2")
 }
 
 // TestCommandsNameThePinOfASourceNeverFetched: settings can name a source
