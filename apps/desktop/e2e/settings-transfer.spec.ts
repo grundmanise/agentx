@@ -102,6 +102,31 @@ test("exports under the name given and toasts the path the CLI wrote", async ({
   expect(pluginCalls(cli)).toEqual([]);
 });
 
+test("a failed export shows the CLI's message and hint under the field, as one paragraph", async ({
+  cli,
+  page,
+}) => {
+  cli.register(["export", "agentx-export"], {
+    events: [
+      {
+        code: "internal",
+        hint: "check that you can write to the library",
+        message: `can't write ${LIBRARY}/agentx-export.json: permission denied`,
+        type: "error",
+      },
+    ],
+    exitCode: 10,
+  });
+  await openSettings(cli, page);
+  const section = exportSettings(page);
+  await section.getByRole("button", { exact: true, name: "Export" }).click();
+  // The message and the hint as one sentence-cased paragraph.
+  await expect(section.getByRole("alert")).toHaveText(
+    `Can't write ${LIBRARY}/agentx-export.json: permission denied. Check that you can write to the library.`
+  );
+  expect(later(cli)).toEqual([["export", "agentx-export", "--json"]]);
+});
+
 test("asks before it replaces a file in the library, then exports with --force", async ({
   cli,
   page,

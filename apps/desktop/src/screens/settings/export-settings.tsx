@@ -5,11 +5,12 @@
 import { useId, useState } from "react";
 
 import { EXIT_CODES } from "#/cli/events.gen.ts";
+import { ProblemText } from "#/components/problem-text.tsx";
 import { Spinner } from "#/components/spinner.tsx";
 import { Button } from "#/components/ui/button.tsx";
 import { Input } from "#/components/ui/input.tsx";
 import { Confirm } from "#/screens/settings/confirm.tsx";
-import { FieldProblem, SettingsSection } from "#/screens/settings/section.tsx";
+import { SettingsSection } from "#/screens/settings/section.tsx";
 import {
   DEFAULT_SNAPSHOT_NAME,
   isSnapshotName,
@@ -92,7 +93,7 @@ const ExportForm = () => {
           ? `Saved to your library as ${name}.json`
           : "Enter a file name without an extension or a slash"}
       </p>
-      {problem !== undefined && <FieldProblem {...problem} />}
+      {problem !== undefined && <ProblemText problem={problem} />}
       <Confirm
         open={overwrite}
         onOpenChange={setOverwrite}
