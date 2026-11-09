@@ -52,7 +52,9 @@ const openSettings = async (cli: MockCli, page: Page, ignore = true) => {
   cli.register(["machine"], { events: [machine()] });
   cli.register(["config", "list"], { events: [settings(ignore)] });
   await page.goto("/#/settings");
-  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Settings" })
+  ).toBeVisible();
   await expect(labelField(page)).toHaveValue(machineLabel);
   await expect(ignoreSwitch(page)).toBeVisible();
 };
@@ -70,6 +72,8 @@ test("each section shows what the store holds, and nothing runs on its own", asy
     /^Comparing edits/u,
     /^Storage/u,
     /^Command line/u,
+    /^Export settings/u,
+    /^Import settings/u,
   ]);
 
   const thisMachine = section(page, "This machine");
@@ -256,7 +260,9 @@ test("Run checks opens the startup checks in manual mode, and Open agentx comes 
   );
   await layer.getByRole("button", { name: "Open agentx" }).click();
   await expect(layer).toHaveCount(0);
-  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Settings" })
+  ).toBeVisible();
   await expect(page).toHaveURL(/#\/settings$/u);
   // The checks ran again: `version` and `doctor`, and no command of the page's own.
   expect(runs(cli, ["version"])).toBe(2);

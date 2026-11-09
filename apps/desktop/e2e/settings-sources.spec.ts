@@ -53,7 +53,9 @@ const openSettings = async (cli: MockCli, page: Page, listed = sources) => {
   cli.register(["source", "list"], { events: listed });
   cli.register(["source", "skills", ACME_ID], { events: acmeSkills });
   await page.goto("/#/settings");
-  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Settings" })
+  ).toBeVisible();
   // The store's read at launch and the section's own when it opens have both been answered.
   await expect
     .poll(
