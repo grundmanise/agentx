@@ -249,8 +249,7 @@ export interface CodePaneProps {
   label: string;
   /**
    * The file's content as it is; absent for a deleted file, and for a patch shown on its own,
-   * such as what an update changes or a comparison with an earlier version, whose hunks are then
-   * all the pane shows.
+   * such as what an update changes, whose hunks are then all the pane shows.
    */
   content?: string;
   /** The unified diff git wrote for the file, whose tints the pane shows. */

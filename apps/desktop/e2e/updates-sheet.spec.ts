@@ -156,7 +156,7 @@ test.describe("the What's new sheet", () => {
     await expect(sheet(page)).toContainText("release-notes");
     await expect(sheet(page)).toContainText("Oct 1");
     await expect(sheet(page)).toContainText(
-      "agentx shows these changes once you update"
+      "Changes from another machine can't be shown before you update."
     );
     const files = sheet(page).getByRole("list", { name: "Changed files" });
     await expect(files.getByRole("listitem")).toHaveText(["addedtemplate.md"]);
